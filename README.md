@@ -91,9 +91,9 @@ alf/                       Python package
   tools/                   17 registered tools
   tui/                     Textual app, widgets, screens, theme
   gateway/                 Telegram gateway (separate process)
+  skills/                  bundled skills (only `consolidate-memory`)
 docs/
   CONTEXT.md               full snapshot + v0.2 roadmap
-skills/                    bundled skills (only `consolidate-memory`)
 tests/                     pytest, ~70 tests, 2s
 ```
 
