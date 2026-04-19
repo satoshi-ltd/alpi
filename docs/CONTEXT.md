@@ -31,6 +31,13 @@ save in the moment via the `memory` tool (Hermes-style).
   skills created autonomously. No memory deletions without approval.
 - **Python stack.** No rewrite in Go — considered and rejected (loses
   litellm, tests, no real upside).
+- **No migrations.** alf is in active development; we ship for the
+  "market" (public use) only when Javi is proud of it. Until then:
+  schema changes, renames, and disk-layout shifts go in as clean
+  breaks — never with legacy-detection code, upgrade paths, or
+  compatibility shims. Anything from yesterday's iteration that lives
+  on disk gets cleaned up by hand, not by `ensure_home`. Keeps the
+  codebase honest and free of dead branches.
 
 ---
 
@@ -120,8 +127,7 @@ save in the moment via the `memory` tool (Hermes-style).
   dedup** plus **token-overlap dedup** (70% max-containment — catches
   paraphrases like "Vivo en Hua Hin" vs "Javi vive en Hua Hin"), no
   silent deletions. `.bak` snapshot before every mutating write.
-- **`PERSONALITY.md`** at home root (uppercase — migration auto-renames
-  `personality.md` / `SOUL.md` legacy). Edited by user or via `memory`
+- **`PERSONALITY.md`** at home root. Edited by user or via `memory`
   tool (target="PERSONALITY.md").
 - **Skills** under `~/.alf/skills/<category>/<name>/`. Agent-created
   skills land in `~/.alf/skills/_pending/<name>/` with `origin: agent`
@@ -177,7 +183,7 @@ Removed since v0.1 start: `test_reflect_unit.py`, `test_llm_reflect.py`
   notes), `PERSONALITY.md` (behavior/style). Hermes has 2 (user +
   memory) — we split personality because it's edited by user, not agent.
 - **UPPERCASE names** — follows `README.md` / `LICENSE` / `SKILL.md`
-  convention. Auto-migrates old lowercase files.
+  convention.
 - **Char limits, not token counts.** Model-independent.
 - **`§` delimiter.** Multiline-safe.
 - **Frozen snapshot in system prompt** (for prefix cache). Writes update
@@ -303,8 +309,7 @@ differently:
 ### Schedule daemon (`alf schedule start`)
 
 - **Separate process.** PID at `schedule/scheduler.pid`, logs at
-  `schedule/logs/scheduler.log`. Pre-v0.2 installs with a legacy
-  `~/.alf/cron/` get migrated on first bootstrap.
+  `schedule/logs/scheduler.log`.
 - **Lifecycle mirrors the gateway.** Runs only when the user starts it
   (`alf schedule start`) or installs it as a service (v0.3). No
   auto-spawn from TUI, gateway, or tools. Adding a job writes the file
@@ -510,7 +515,7 @@ uv tool install . --reinstall --no-cache
 alf/
 ├── __main__.py                  entry point: python -m alf
 ├── cli.py                       click CLI + bootstrap + `chat --once` for gateway
-├── home.py                      HOME_DIR resolution + personality_path (migration)
+├── home.py                      HOME_DIR resolution + profile paths
 ├── config.py                    YAML loader; ReflectConfig, ToolsConfig,
 │                                WebExtractToolConfig; resolve_model()
 ├── memory.py                    MemoryStore with dedup (two-tier), .bak,
@@ -665,12 +670,14 @@ question)` tool that sends the image + prompt to whichever model is
 active (if vision-capable). Falls back to "model is text-only" error.
 Useful for "lee el screenshot que he guardado".
 
-#### E. Multi-profile CLI
-`home.get_home(profile)` resolves correctly but no CLI wiring.
-Add: `alf profile create <name>` (bootstraps under
-`~/.alf/profiles/<name>/`), `alf profile use <name>` (updates the
-sticky profile file), `alf profile list`. Pairs with the `workspace`
-per-profile pattern.
+#### E. Multi-profile CLI ✅ shipped
+`alf profile list` and `alf profile create <name>` cover profile
+management. Resolution is fully explicit (``-p`` flag, ``ALF_PROFILE``
+env, or the default ``~/.alf``) — no sticky "current profile" file,
+no hidden state. Users who want persistence wire a shell alias
+(``alias alfw='alf -p work'``) or export ``ALF_PROFILE``. All the
+daemons (gateway, schedule) and their installed services already
+carry the profile in their label, so profiles truly coexist.
 
 ### Medium value
 
@@ -762,9 +769,6 @@ rápido". Low priority unless a concrete use case appears.
 - **The old `alf/model_selector.py` (questionary) is still used** by
   `alf model` CLI subcommand and `alf setup`. The TUI uses
   `alf/tui/model_screen.py` instead.
-- **`PERSONALITY.md` migration** runs at every bootstrap via
-  `home.personality_path()` — it moves legacy `personality.md` or
-  `SOUL.md` to `PERSONALITY.md` if the uppercase doesn't exist.
 - **`browser.py` is NOT registered.** File exists, tool class exists,
   but it's intentionally absent from the `alf/tools/__init__.py` import
   + registry loop. Don't be confused if the LLM doesn't mention it —

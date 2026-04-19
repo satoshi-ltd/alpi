@@ -131,7 +131,6 @@ def save(cfg: Config) -> None:
     data["model"] = cfg.model
     data["providers"] = cfg.providers
     data["fallback_models"] = cfg.fallback_models
-    data.pop("reflect", None)  # legacy key — no longer used
     data["tools"] = {
         "max_steps_per_turn": cfg.tools.max_steps_per_turn,
         "web_extract": {"model": cfg.tools.web_extract.model},
@@ -142,8 +141,6 @@ def save(cfg: Config) -> None:
         data["workspace"] = cfg.workspace
     else:
         data.pop("workspace", None)
-    # Remove legacy keys if still present.
-    data.pop("extract_model", None)
     cfg.config_path.write_text(yaml.safe_dump(data, sort_keys=False))
 
 

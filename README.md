@@ -31,6 +31,8 @@ uv tool install /path/to/alf --reinstall --no-cache
 alf                         # interactive TUI in the current directory
 alf --continue              # resume the last session
 alf --profile <name>        # use a named profile (multi-profile)
+alf profile list            # show profiles; marks the one this command resolved to
+alf profile create <name>   # bootstrap a new profile tree (same as first `alf -p <name>`)
 alf gateway setup           # configure the Telegram gateway
 alf gateway start           # run the gateway process
 alf schedule start          # run the schedule daemon (manual, like the gateway)
@@ -116,7 +118,7 @@ alf/                       Python package
   llm.py                   litellm stream + complete wrappers
   session.py               Turn / ToolLog dataclasses, persistence
   memory.py                MemoryStore with two-tier dedup + .bak
-  home.py                  profile resolution, PERSONALITY migration
+  home.py                  profile resolution
   config.py                YAML + workspace handling
   prompts/                 system prompt + skill templates
   tools/                   18 registered tools (incl. send_message)

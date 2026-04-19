@@ -22,9 +22,7 @@ explicitly starts it (``alf schedule start``) or installs it as a
 system service. Adding a job here writes to disk; the ``add`` response
 tells the user how to activate delivery if the daemon isn't live yet.
 
-On-disk directory is ``~/.alf/schedule/``. If you're upgrading from
-pre-v0.2 (``~/.alf/cron/``) ``home.ensure_home`` renames the legacy
-folder on first run.
+On-disk directory is ``~/.alf/schedule/``.
 """
 
 from __future__ import annotations

@@ -26,7 +26,6 @@ def _bootstrap(h: Path) -> None:
     home.ensure_home(h)
     config.seed_defaults(h)
     memory.MemoryStore(h).seed_defaults()
-    # Resolve PERSONALITY.md (with migration of legacy personality.md / SOUL.md).
     personality = home.personality_path(h)
     if not personality.exists():
         default = resources.files("alf.prompts").joinpath("default_personality.md").read_text()
@@ -566,19 +565,80 @@ def setup_cmd(ctx: click.Context) -> None:
 
 @main.group()
 def profile() -> None:
-    """Profile management (stub in v0)."""
+    """Profile management — each profile is a fully isolated ``~/.alf`` tree.
+
+    Switch profile per-invocation with ``-p <name>`` or with the
+    ``ALF_PROFILE`` env var. There is NO sticky "current profile":
+    every command explicitly targets one. Set up a shell alias if you
+    use one profile all day (e.g. ``alias alfw='alf -p work'``).
+    """
 
 
 @profile.command("list")
-def profile_list() -> None:
+@click.pass_context
+def profile_list(ctx: click.Context) -> None:
+    """List available profiles. Marks which one this invocation resolved to."""
+    active = ctx.obj.get("profile") or "default"
+
+    named: list[str] = []
     root = Path.home() / ".alf" / "profiles"
-    if not root.exists():
-        click.echo("default")
-        return
-    click.echo("default")
-    for p in sorted(root.iterdir()):
-        if p.is_dir():
-            click.echo(p.name)
+    if root.exists():
+        named = sorted(p.name for p in root.iterdir() if p.is_dir())
+
+    profiles = ["default", *named]
+    for name in profiles:
+        marker = "* " if name == active else "  "
+        home_path = (
+            Path.home() / ".alf" if name == "default"
+            else Path.home() / ".alf" / "profiles" / name
+        )
+        click.echo(f"{marker}{name:<12}  {home_path}")
+
+    if not named:
+        # Fresh install: nudge the user toward creating one if they want
+        # to. Profiles are opt-in — most people never need more than one.
+        click.echo("")
+        click.echo("Only the default profile exists. Profiles are optional —")
+        click.echo("useful if you want separate memories, bots, or schedules")
+        click.echo("for different contexts (work vs. personal, e.g.).")
+        click.echo("")
+        click.echo("Create one with:")
+        click.echo("  alf profile create work")
+        click.echo("  alf profile create personal")
+        click.echo("")
+        click.echo("Then use it per-invocation:")
+        click.echo("  alf -p work                  # open TUI in the work profile")
+        click.echo("  alias alfw='alf -p work'     # shell alias if you live there")
+
+
+@profile.command("create")
+@click.argument("name")
+def profile_create(name: str) -> None:
+    """Bootstrap a new profile directory with default config.
+
+    Equivalent to the first run of ``alf -p <name>`` — useful for
+    scripts that pre-provision a profile without launching the TUI.
+    """
+    if name in {"default", ""}:
+        raise click.ClickException("use a real name — 'default' is reserved")
+    if "/" in name or name.startswith("."):
+        raise click.ClickException(f"invalid profile name: {name!r}")
+
+    h = home.get_home(name)
+    if h.exists() and any(h.iterdir()):
+        raise click.ClickException(f"profile {name!r} already exists at {h}")
+
+    _bootstrap(h)
+    click.echo(f"created profile {name!r} at {h}")
+    click.echo(f"use it with: alf -p {name}")
+    click.echo("")
+    click.echo("Configure it:")
+    click.echo(f"  alf -p {name} setup                          "
+               f"# interactive (API keys + gateway)")
+    default_env = Path.home() / ".alf" / ".env"
+    if default_env.exists():
+        click.echo(f"  # — or, to reuse the default profile's setup:")
+        click.echo(f"  cp {default_env} {h / '.env'}")
 
 
 if __name__ == "__main__":
