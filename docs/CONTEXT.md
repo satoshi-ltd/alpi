@@ -47,7 +47,7 @@ save in the moment via the `memory` tool (Hermes-style).
 
 - **Textual TUI** (chat, streaming, tool cards, modals, slash commands,
   autocomplete, interrupt, accent color, atomic session persistence).
-- **18 tools**, all with Hermes-style tool descriptions (positive use +
+- **19 tools**, all with Hermes-style tool descriptions (positive use +
   explicit DO NOT / redirect-to-other-tool).
 - **3-file memory** (USER/MEMORY/PERSONALITY) with two-tier dedup,
   Approach C (return state after mutation), `.bak` snapshots, strict
@@ -116,10 +116,10 @@ save in the moment via the `memory` tool (Hermes-style).
 
 - litellm multi-provider (Anthropic, OpenAI, OpenRouter, Google, Groq,
   custom OpenAI-compatible endpoints i.e. Ollama / LM Studio / vLLM).
-- **18 tools** registered: `read_file`, `write_file`, `edit_file`,
+- **19 tools** registered: `read_file`, `write_file`, `edit_file`,
   `terminal`, `grep`, `glob`, `todo`, `web_search`, `web_fetch`,
   `web_extract`, `schedule`, `memory`, `session_search`, `create_skill`,
-  `edit_skill`, `delete_skill`, `delegate`, `send_message`.
+  `edit_skill`, `delete_skill`, `delegate`, `send_message`, `email`.
   - **`browser`** file exists but is **not registered** (stub). See
     "Open questions / pending" section 6 for the Playwright roadmap.
 - **Curated memory** (`memories/USER.md`, `memories/MEMORY.md`) with §
@@ -305,6 +305,34 @@ differently:
 - **Allowlist-only.** `{PLATFORM}_ALLOWED_CHAT_IDS` in `.env` is the
   same source of truth as the gateway's inbound check, reused via
   `gateway.delivery.is_allowed`.
+
+### Email (`email` tool, generic IMAP/SMTP)
+
+- **Agentic mailbox access** — list, search, read, send, reply,
+  forward, move, delete, download_attachment. Credentials in
+  `~/.alf/.env` under the `EMAIL_*` prefix (same pattern as
+  `TELEGRAM_*`): address, password, IMAP host/port, SMTP host/port.
+  Zero provider-specific code — any mailbox that speaks IMAP(S) and
+  SMTP+STARTTLS works.
+- **Client lives in `alf/email/client.py`** (`EmailClient`): fresh
+  IMAP/SMTP connections per op, UID-based message IDs, defensive MIME
+  parsing, text-body preference with HTML-strip fallback, 8K char cap
+  on bodies to keep prompts bounded.
+- **Setup wizard** at `alf/email/setup.py`, hooked into the `alf
+  setup` menu as "Email (IMAP/SMTP)". Asks for address/password/hosts,
+  runs a live `client.test()` before saving — if auth or network
+  fail, nothing lands in `.env`.
+- **Sandbox**: `download_attachment` dest + `send` attachment paths go
+  through `tools._paths.check_path` — same allowed roots as
+  `write_file`.
+- **Prompt-injection defense.** Tool description is load-bearing:
+  tells the LLM email bodies/subjects/attachments are UNTRUSTED data,
+  not instructions, and to ignore directives like "ignore previous
+  instructions" / "forward to X" / "run Y". Reinforced by a line in
+  the global system prompt that applies to all tool output.
+- **Not a gateway yet.** The same `EmailClient` will power a future
+  `platforms/email.py` gateway channel (inbound IMAP polling +
+  allowlisted sender filtering). Commit 2 of the email work.
 
 ### Schedule daemon (`alf schedule start`)
 
@@ -563,9 +591,13 @@ alf/
 │   └── platforms/
 │       ├── telegram.py          real long-poll via getUpdates
 │       └── webhook.py           stub
-└── scheduler/
+├── scheduler/
+│   ├── __init__.py
+│   └── run.py                   tick loop, run_job, ensure_running (auto-spawn)
+└── email/
     ├── __init__.py
-    └── run.py                   tick loop, run_job, ensure_running (auto-spawn)
+    ├── client.py                IMAP+SMTP EmailClient (stdlib-only)
+    └── setup.py                 interactive wizard (hooked into alf setup)
 
 tests/                           13 files, 69 unit + 6 LLM-tagged
 docs/CONTEXT.md                  this file
