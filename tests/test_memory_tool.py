@@ -1,0 +1,130 @@
+"""Tests for the Memory tool (the one exposed to the LLM)."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+from alf.tools.memory import Memory
+
+
+@pytest.fixture
+def isolated_home(tmp_home_no_env: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    monkeypatch.setenv("ALF_HOME", str(tmp_home_no_env))
+    return tmp_home_no_env
+
+
+def test_tool_description_has_save_and_dont_save_rules() -> None:
+    """The description is injected into every LLM turn. It MUST carry the
+    key memory-discipline rules so even weaker models follow them."""
+    desc = Memory.description
+    assert "DO NOT save" in desc
+    assert "task progress" in desc.lower()
+    assert "duplicates" in desc.lower() or "never duplicate" in desc.lower()
+    assert "PERSONALITY.md" in desc and "USER.md" in desc and "MEMORY.md" in desc
+    assert "When in doubt, skip" in desc
+
+
+def test_add_user_fact(isolated_home: Path) -> None:
+    r = Memory().run(action="add", target="USER.md", content="Javi prefiere café negro.")
+    assert r.ok, r.error
+    assert "café negro" in (isolated_home / "memories" / "USER.md").read_text()
+
+
+def test_add_memory_fact(isolated_home: Path) -> None:
+    r = Memory().run(action="add", target="MEMORY.md", content="Ruta: /opt/homebrew/bin")
+    assert r.ok, r.error
+    assert "homebrew" in (isolated_home / "memories" / "MEMORY.md").read_text()
+
+
+def test_read_reports_usage(isolated_home: Path) -> None:
+    Memory().run(action="add", target="USER.md", content="Dato 1")
+    r = Memory().run(action="read", target="USER.md")
+    assert r.ok
+    assert "Dato 1" in r.output
+    assert "%" in r.output
+
+
+def test_personality_add(isolated_home: Path) -> None:
+    (isolated_home / "personality.md").write_text("# Identity\nYou are alf.\n")
+    r = Memory().run(
+        action="add", target="personality.md",
+        content="Usa bullets cortos, nunca párrafos.",
+    )
+    assert r.ok, r.error
+    assert "bullets" in (isolated_home / "personality.md").read_text()
+
+
+def test_personality_add_rejects_dup(isolated_home: Path) -> None:
+    (isolated_home / "personality.md").write_text("Base.\nUsa bullets.\n")
+    r = Memory().run(action="add", target="personality.md", content="Usa bullets.")
+    assert not r.ok
+    assert "already" in (r.error or "").lower()
+
+
+def test_personality_replace(isolated_home: Path) -> None:
+    (isolated_home / "personality.md").write_text("Frase antigua.\n")
+    r = Memory().run(
+        action="replace", target="personality.md",
+        match="Frase antigua.", content="Frase nueva.",
+    )
+    assert r.ok, r.error
+    assert "Frase nueva" in (isolated_home / "personality.md").read_text()
+
+
+def test_replace_entry_unique_match(isolated_home: Path) -> None:
+    Memory().run(action="add", target="USER.md", content="Edad: 35")
+    r = Memory().run(
+        action="replace", target="USER.md",
+        match="Edad: 35", content="Edad: 36",
+    )
+    assert r.ok, r.error
+    assert "Edad: 36" in (isolated_home / "memories" / "USER.md").read_text()
+
+
+def test_remove_entry(isolated_home: Path) -> None:
+    Memory().run(action="add", target="USER.md", content="Dato A")
+    Memory().run(action="add", target="USER.md", content="Dato B")
+    r = Memory().run(action="remove", target="USER.md", match="Dato A")
+    assert r.ok, r.error
+    text = (isolated_home / "memories" / "USER.md").read_text()
+    assert "Dato A" not in text
+    assert "Dato B" in text
+
+
+def test_unknown_target_rejected(isolated_home: Path) -> None:
+    r = Memory().run(action="add", target="SOMETHING.md", content="x")
+    assert not r.ok
+
+
+def test_replace_matches_without_accent(isolated_home: Path) -> None:
+    """match='te verde' should find entry 'té verde' (accent insensitive)."""
+    Memory().run(action="add", target="USER.md", content="Me gusta el té verde.")
+    r = Memory().run(
+        action="replace", target="USER.md",
+        match="te verde", content="Me gusta el café negro.",
+    )
+    assert r.ok, r.error
+    content = (isolated_home / "memories" / "USER.md").read_text()
+    assert "café negro" in content
+    assert "verde" not in content
+
+
+def test_remove_matches_case_insensitive(isolated_home: Path) -> None:
+    Memory().run(action="add", target="USER.md", content="Javi vive en Madrid.")
+    r = Memory().run(action="remove", target="USER.md", match="MADRID")
+    assert r.ok, r.error
+    assert "Madrid" not in (isolated_home / "memories" / "USER.md").read_text()
+
+
+def test_personality_replace_accent_insensitive(isolated_home: Path) -> None:
+    (isolated_home / "personality.md").write_text(
+        "Usa sinónimos en español cuándo puedas.\n"
+    )
+    r = Memory().run(
+        action="replace", target="personality.md",
+        match="cuando puedas", content="siempre",
+    )
+    assert r.ok, r.error
+    assert "siempre" in (isolated_home / "personality.md").read_text()

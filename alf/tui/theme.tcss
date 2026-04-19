@@ -1,0 +1,136 @@
+/* alf — Textual CSS */
+
+Screen {
+    background: $surface;
+    layers: base overlay;
+}
+
+/* Static identity line — always at top. */
+AlfTopBar {
+    height: 1;
+    background: $surface;
+    color: $text-muted;
+    padding: 0 2;
+}
+
+/* Status bar sits just above the input. */
+AlfHeader {
+    height: 1;
+    background: $surface;
+    color: $text-muted;
+    padding: 0 2;
+}
+
+/* Chat scroll area — takes all remaining vertical space */
+#chat {
+    padding: 1 2;
+    height: 1fr;
+    scrollbar-size: 0 0;
+}
+
+UserMessage {
+    color: $accent;
+    text-style: bold;
+    margin: 1 0 1 0;         /* blank line above AND below the user input */
+    height: auto;
+}
+
+AssistantMessage {
+    margin: 1 0 0 0;         /* blank line between last tool and final response */
+    height: auto;
+    background: transparent;
+}
+
+AssistantMessage > Markdown {
+    background: transparent;
+    padding: 0;
+    margin: 0;
+}
+
+ErrorLine {
+    color: $error;
+    margin: 0;
+    height: auto;
+}
+
+DimLine {
+    color: $text-muted;
+    margin: 0;
+    height: auto;
+}
+
+/* Tool card — single line, tight */
+ToolCard {
+    height: 1;
+    margin: 0;
+    padding: 0;
+}
+
+ToolCard.-running {
+    color: $text;
+}
+
+ToolCard.-done {
+    color: $text;
+}
+
+ToolCard.-error {
+    color: $error;
+}
+
+/* Input: bordered box, sits below the status bar */
+Input {
+    background: $surface;
+    border: round $panel-lighten-2;
+    padding: 0 1;
+    height: 3;
+    margin: 0 1;
+}
+
+Input:focus {
+    background: $surface;
+    border: round $accent;
+}
+
+/* Modal screens */
+ModalScreen > Vertical {
+    background: $panel;
+    border: thick $accent;
+    padding: 1 2;
+    width: 90;
+    max-width: 90%;
+    height: auto;
+    max-height: 80%;
+}
+
+ModalScreen .modal-title {
+    color: $accent;
+    text-style: bold;
+    margin-bottom: 1;
+}
+
+ModalScreen .modal-hint {
+    color: $text-muted;
+    margin-top: 1;
+}
+
+ModalScreen OptionList {
+    background: $panel;
+    max-height: 24;
+    height: auto;
+}
+
+ModalScreen OptionList > .option-list--option-hover {
+    background: $panel-lighten-2;
+}
+
+ModalScreen OptionList > .option-list--option-highlighted {
+    background: $accent;
+    color: $text;
+    text-style: bold;
+}
+
+ModalScreen Input {
+    margin-top: 1;
+    background: $panel-lighten-1;
+}
