@@ -91,6 +91,8 @@ def arg_hint(tool_name: str, args: dict) -> str:
         return f"{action} {truncate(content, 30)}" if content else action
     if tool_name == "cron":
         return str(args.get("action", ""))
+    if tool_name == "delegate":
+        return truncate(str(args.get("brief", "")), 60)
     k, v = next(iter(args.items()))
     return truncate(f"{k}={v}", 40)
 

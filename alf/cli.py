@@ -143,22 +143,49 @@ def _continue_last_session(engine: Engine, h: Path, console=None) -> bool:
     return True
 
 
-def _run_once(h: Path, user_text: str) -> None:
-    """Non-interactive turn. Prints only the final assistant text to stdout.
+def _run_once(h: Path, user_text: str, emit_events: bool = False) -> None:
+    """Non-interactive turn. Prints the final assistant text to stdout.
 
     Used by the Telegram gateway, which spawns ``alf chat --once ...`` per
-    incoming message.
+    incoming message. When ``emit_events`` is set, the gateway gets a live
+    JSON-lines stream (one event per line) instead of only the final reply —
+    used to surface tool activity in Telegram. Each line is flushed so the
+    gateway can react in real time.
     """
+    import json
+
     _bootstrap(h)
     cfg = config.load(h)
     engine = Engine(home=h, cfg=cfg)
 
     parts: list[str] = []
 
+    from alf.tui.formatting import arg_hint
+
+    def _emit_event_line(ev: AgentEvent) -> None:
+        if ev.kind == "tool_start":
+            payload = {
+                "kind": "tool_start",
+                "name": ev.name,
+                "preview": arg_hint(ev.name, ev.args or {}),
+            }
+        elif ev.kind == "tool_end":
+            payload = {"kind": "tool_end", "name": ev.name, "ok": ev.ok}
+        elif ev.kind == "error":
+            payload = {"kind": "error", "text": ev.text}
+        elif ev.kind == "interrupted":
+            payload = {"kind": "interrupted"}
+        else:
+            return
+        sys.stdout.write(json.dumps(payload, ensure_ascii=False) + "\n")
+        sys.stdout.flush()
+
     def sink(ev: AgentEvent) -> None:
+        if emit_events:
+            _emit_event_line(ev)
         if ev.kind == "assistant_done" and ev.text.strip():
             parts.append(ev.text)
-        elif ev.kind == "error":
+        elif ev.kind == "error" and not emit_events:
             parts.append(f"[error] {ev.text}")
 
     engine.run_turn(user_text, emit=sink)
@@ -166,8 +193,16 @@ def _run_once(h: Path, user_text: str) -> None:
         engine.save_session()
     except Exception:
         pass
-    sys.stdout.write("\n\n".join(parts).strip() + "\n")
+
+    final = "\n\n".join(parts).strip()
+    if emit_events:
+        import json as _json
+        sys.stdout.write(_json.dumps({"kind": "reply", "text": final}) + "\n")
+    else:
+        sys.stdout.write(final + "\n")
     sys.stdout.flush()
+
+
 
 
 # ----------------------------------------------------------------------
@@ -194,14 +229,17 @@ def main(ctx: click.Context, profile: str | None, continue_last: bool) -> None:
 @main.command()
 @click.option("--once", "input_text", default=None,
               help="Run a single non-interactive turn and print the reply.")
+@click.option("--emit-events", is_flag=True, default=False,
+              help="With --once: stream JSON event lines to stdout (for the gateway).")
 @click.option("-c", "--continue", "continue_last", is_flag=True,
               help="Continue from the last session.")
 @click.pass_context
-def chat(ctx: click.Context, input_text: str | None, continue_last: bool) -> None:
+def chat(ctx: click.Context, input_text: str | None, emit_events: bool,
+         continue_last: bool) -> None:
     """Start an interactive chat session (or --once for one-shot mode)."""
     h: Path = ctx.obj["home"]
     if input_text is not None:
-        _run_once(h, input_text)
+        _run_once(h, input_text, emit_events=emit_events)
     else:
         _run_chat(h, continue_last=continue_last)
 

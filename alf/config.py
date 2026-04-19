@@ -33,6 +33,13 @@ DEFAULT_CONFIG: dict[str, Any] = {
         # rgb("..."). Empty = inherit from the current Textual theme.
         "accent": "#ff8800",
     },
+    "gateway": {
+        # Relay tool-call traces to Telegram as they happen (one short
+        # message per tool). Set to false to only deliver the final reply.
+        "show_tool_trace": True,
+        # Keep a "typing…" indicator on in the chat while alf is working.
+        "typing_indicator": True,
+    },
 }
 
 
@@ -55,6 +62,7 @@ class Config:
     providers: dict[str, Any] = field(default_factory=dict)
     tools: ToolsConfig = field(default_factory=ToolsConfig)
     tui: dict[str, Any] = field(default_factory=dict)
+    gateway: dict[str, Any] = field(default_factory=dict)
     workspace: str = ""      # "" → fall back to cwd
     raw: dict[str, Any] = field(default_factory=dict)
 
@@ -111,6 +119,7 @@ def load(home: Path) -> Config:
         providers=data.get("providers", DEFAULT_CONFIG["providers"]),
         tools=tools_cfg,
         tui=data.get("tui", DEFAULT_CONFIG["tui"]),
+        gateway={**DEFAULT_CONFIG["gateway"], **(data.get("gateway") or {})},
         workspace=str(data.get("workspace", "") or ""),
         raw=data,
     )
@@ -128,6 +137,7 @@ def save(cfg: Config) -> None:
         "web_extract": {"model": cfg.tools.web_extract.model},
     }
     data["tui"] = cfg.tui
+    data["gateway"] = cfg.gateway
     if cfg.workspace:
         data["workspace"] = cfg.workspace
     else:
@@ -176,7 +186,9 @@ def seed_defaults(home: Path) -> None:
             "OPENAI_API_KEY=\n"
             "OPENROUTER_API_KEY=\n"
             "OLLAMA_BASE_URL=http://localhost:11434\n"
-            "# Gateway (optional)\n"
+            "# Gateway (optional). The *_ALLOWED_CHAT_IDS lists are the\n"
+            "# allowlist — only chat IDs listed here can talk to alf.\n"
             "TELEGRAM_BOT_TOKEN=\n"
             "TELEGRAM_ALLOWED_CHAT_IDS=\n"
+            "WEBHOOK_ALLOWED_CHAT_IDS=\n"
         )

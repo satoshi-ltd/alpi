@@ -268,10 +268,22 @@ differently:
 ### Gateway
 
 - **Separate process.** PID file at `gateway/gateway.pid`.
-- **Subprocess per message.** Each Telegram message spawns
-  `alf chat --once "..."`, reads stdout, replies.
-- **Pairing allowlist** in `gateway/pairing.json` maps
-  `telegram:<chat_id>` → profile.
+- **Subprocess per message, streamed.** Each message spawns
+  `alf chat --once --emit-events "..."`. stdout is a JSON-lines stream
+  (`tool_start`, `tool_end`, `error`, `reply`) — the gateway reads it
+  line-by-line and relays tool activity to the chat as it happens.
+- **Tool trace in chat.** Each `tool_start` becomes a short Telegram
+  message (`◆ name · preview`). Muteable via `gateway.show_tool_trace`
+  in `config.yaml` (default `true`).
+- **Typing indicator.** While a turn is running, a background task
+  re-pings `sendChatAction` every 4s (Telegram's indicator drops after
+  ~5s). Muteable via `gateway.typing_indicator` (default `true`).
+- **Allowlist = env only.** `TELEGRAM_ALLOWED_CHAT_IDS` (and
+  `WEBHOOK_ALLOWED_CHAT_IDS`) in `~/.alf/.env`, comma-separated. No
+  `pairing.json`, no per-chat state file — `.env` is the single source
+  of truth for both the bot token and the allowlist. Fail-closed:
+  unset/empty var rejects every chat. When a dynamic pairing flow ever
+  lands (owner approves codes from CLI), reintroduce a store then.
 - **Env var `ALF_HOME`** passed to subprocesses to isolate profiles.
 
 ### `/compact`
@@ -479,7 +491,7 @@ alf/
 └── gateway/
     ├── run.py                   asyncio loop; loads .env; subprocess per msg
     ├── setup.py                 interactive Telegram config (questionary)
-    ├── base.py, delivery.py, pairing.py
+    ├── base.py, delivery.py
     └── platforms/
         ├── telegram.py          real long-poll via getUpdates
         └── webhook.py           stub
@@ -505,7 +517,7 @@ skills/<category>/<name>/        user skills (override bundled)
 sessions/*.json                  chat history, one per session
 cache/openrouter_models.json     24h TTL
 cron/{jobs.json, output/}
-gateway/{gateway.pid, pairing.json, logs/gateway.log}
+gateway/{gateway.pid, logs/gateway.log}
 ```
 
 ---

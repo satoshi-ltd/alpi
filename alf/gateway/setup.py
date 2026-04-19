@@ -1,7 +1,7 @@
 """Interactive setup for the Telegram gateway.
 
-Writes TELEGRAM_BOT_TOKEN and TELEGRAM_ALLOWED_CHAT_IDS to ~/.alf/.env,
-and pairs each allowed chat in ~/.alf/gateway/pairing.json.
+Writes TELEGRAM_BOT_TOKEN and TELEGRAM_ALLOWED_CHAT_IDS to ~/.alf/.env —
+the single source of truth for both secrets and allowlist.
 """
 
 from __future__ import annotations
@@ -11,7 +11,6 @@ from pathlib import Path
 import questionary
 from rich.console import Console
 
-from alf.gateway.pairing import PairingStore
 from alf.model_selector import _ask, _append_env
 
 _console = Console()
@@ -41,10 +40,6 @@ def run(home: Path) -> None:
     env_path = home / ".env"
     _append_env(env_path, "TELEGRAM_BOT_TOKEN", token)
     _append_env(env_path, "TELEGRAM_ALLOWED_CHAT_IDS", ",".join(chat_ids))
-
-    pairings = PairingStore(home)
-    for cid in chat_ids:
-        pairings.set("telegram", cid, profile="default", allow=True)
 
     _console.print(f"[green]✓[/green] saved token + {len(chat_ids)} chat(s) to [dim]{env_path}[/dim]")
     _console.print("[dim]Next:[/dim] [b]alf gateway start[/b]")

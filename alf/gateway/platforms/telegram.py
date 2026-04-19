@@ -67,6 +67,17 @@ class Telegram(Platform):
                         text=text,
                     )
 
+    async def send_typing(self, chat_id: str) -> None:
+        token = os.environ.get("TELEGRAM_BOT_TOKEN")
+        if not token:
+            return
+        url = API_BASE.format(token=token) + "/sendChatAction"
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                await client.post(url, json={"chat_id": chat_id, "action": "typing"})
+        except Exception as e:  # noqa: BLE001
+            log.debug("sendChatAction failed: %s", e)
+
     async def send(self, message: OutgoingMessage) -> None:
         token = os.environ.get("TELEGRAM_BOT_TOKEN")
         if not token:

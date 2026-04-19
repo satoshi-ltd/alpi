@@ -44,6 +44,7 @@ target-version = "py310"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra --strict-markers"
+asyncio_mode = "strict"
 markers = [
     "llm: test makes real LLM calls; requires --llm or ALF_LLM=1",
 ]

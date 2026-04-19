@@ -72,9 +72,28 @@ OPENROUTER_API_KEY=...
 GOOGLE_API_KEY=...
 GROQ_API_KEY=...
 OLLAMA_BASE_URL=http://localhost:11434     # local
+# Gateway (optional) — single source of truth for bot + allowlist:
+TELEGRAM_BOT_TOKEN=...
+TELEGRAM_ALLOWED_CHAT_IDS=12345,67890      # comma-separated, fail-closed
 ```
 
 Switch model any time with `/model` inside the TUI.
+
+## Gateway
+
+Relays Telegram messages to alf. Tool activity streams to the chat
+(`◆ memory · ...`) and a typing indicator stays on while alf works.
+Both are toggleable in `config.yaml`:
+
+```yaml
+gateway:
+  show_tool_trace: true
+  typing_indicator: true
+```
+
+The allowlist lives **only** in `~/.alf/.env` as `TELEGRAM_ALLOWED_CHAT_IDS`
+(fail-closed if unset). Run `alf gateway setup` to configure both
+interactively.
 
 ## Layout
 
