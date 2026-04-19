@@ -90,11 +90,12 @@ OLLAMA_BASE_URL=http://localhost:11434     # local
 # Gateway (optional) — single source of truth for bot + allowlist:
 TELEGRAM_BOT_TOKEN=...
 TELEGRAM_ALLOWED_CHAT_IDS=12345,67890      # comma-separated, fail-closed
-# Email tool (optional) — generic IMAP/SMTP, any provider:
+# Email (optional) — generic IMAP/SMTP, any provider:
 EMAIL_ADDRESS=you@yourprovider.com
 EMAIL_PASSWORD=...
 EMAIL_IMAP_HOST=imap.yourprovider.com
 EMAIL_SMTP_HOST=smtp.yourprovider.com
+EMAIL_ALLOWED_SENDERS=pepe@x.com,ana@y.com  # gateway inbound (fail-closed)
 ```
 
 Switch model any time with `/model` inside the TUI.

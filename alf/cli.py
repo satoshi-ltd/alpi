@@ -640,7 +640,11 @@ def _email_status() -> str:
     addr = os.environ.get("EMAIL_ADDRESS", "")
     if not addr:
         return "not set up"
-    return f"ready · {addr}"
+    senders = os.environ.get("EMAIL_ALLOWED_SENDERS", "")
+    n = len([s for s in senders.split(",") if s.strip()])
+    if n == 0:
+        return f"ready · {addr} · outbound only"
+    return f"ready · {addr} · {n} allowlisted sender{'s' if n != 1 else ''}"
 
 
 @main.group()

@@ -19,6 +19,7 @@ from typing import Any
 from alf import config as config_mod
 from alf.gateway import delivery
 from alf.gateway.base import IncomingMessage, OutgoingMessage, Platform
+from alf.gateway.platforms.email import Email
 from alf.gateway.platforms.telegram import Telegram
 from alf.gateway.platforms.webhook import Webhook
 
@@ -37,17 +38,25 @@ async def _handle_platform(platform: Platform, home: Path) -> None:
                 msg.platform, msg.external_chat_id,
             )
             continue
-        log.info("[%s] %s: %s", msg.platform, msg.external_user_id, msg.text[:100])
+        # Flatten newlines so multi-line inbound (email bodies with
+        # a Subject line + blank line + body) stays a single log entry.
+        preview = " ".join(msg.text.split())[:120]
+        log.info("[%s] %s: %s", msg.platform, msg.external_user_id, preview)
         asyncio.create_task(_process(platform, msg, home))
 
 
 async def _process(platform: Platform, msg: IncomingMessage, home: Path) -> None:
-    gw_cfg = _load_gateway_cfg(home)
+    # Per-platform UX config. Telegram has typing + tool traces;
+    # email (Commit 2 of this flow) has different concepts and reads
+    # its own sub-dict. We hydrate the platform's sub-dict once and
+    # default every flag from there — keeps this function platform-
+    # agnostic even though today only telegram uses the flags below.
+    platform_cfg = _load_platform_cfg(home, platform.name)
     typing_task: asyncio.Task | None = None
-    if gw_cfg.get("typing_indicator", True):
+    if platform_cfg.get("typing_indicator", True):
         typing_task = asyncio.create_task(_typing_loop(platform, msg.external_chat_id))
 
-    show_trace = bool(gw_cfg.get("show_tool_trace", True))
+    show_trace = bool(platform_cfg.get("show_tool_trace", True))
 
     try:
         reply = await _run_agent(msg, platform, home, show_trace=show_trace)
@@ -135,13 +144,19 @@ def _format_tool_trace(event: dict[str, Any]) -> str:
     return f"◆ {name}"
 
 
-def _load_gateway_cfg(home: Path) -> dict[str, Any]:
+def _load_platform_cfg(home: Path, platform: str) -> dict[str, Any]:
+    """Return the ``gateway.<platform>`` sub-dict merged with defaults.
+
+    Falls through to an empty dict on load failure — every caller
+    should supply its own defaults via ``.get(key, default)`` so a
+    transient config bug doesn't crash the gateway.
+    """
     try:
         cfg = config_mod.load(home)
-        return dict(cfg.gateway or {})
+        return dict((cfg.gateway or {}).get(platform, {}))
     except Exception as e:  # noqa: BLE001
-        log.warning("Could not load gateway config: %s", e)
-        return {"show_tool_trace": True, "typing_indicator": True}
+        log.warning("Could not load gateway config for %s: %s", platform, e)
+        return {}
 
 
 def _is_allowed(msg: IncomingMessage) -> bool:
@@ -153,7 +168,7 @@ def run(home: Path) -> None:
     _load_env(home)
     _write_pid(home)
     try:
-        platforms: list[Platform] = [Telegram(home), Webhook(home)]
+        platforms: list[Platform] = [Telegram(home), Email(home), Webhook(home)]
 
         async def _main() -> None:
             await asyncio.gather(*(_handle_platform(p, home) for p in platforms))

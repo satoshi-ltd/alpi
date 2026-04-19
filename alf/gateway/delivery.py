@@ -3,15 +3,18 @@
 Single source of truth for two things:
 
 - **Who is allowed to talk to alf.** The allowlist lives in
-  ``~/.alf/.env`` as ``{PLATFORM}_ALLOWED_CHAT_IDS`` (comma-separated).
-  Both the gateway listener and the ``send_message`` tool share this
-  check — fail-closed when the env var is missing or empty.
+  ``~/.alf/.env``, one env var per platform. Most platforms use the
+  natural ``{PLATFORM}_ALLOWED_CHAT_IDS`` shape (Telegram, webhook);
+  email uses ``EMAIL_ALLOWED_SENDERS`` because "sender address" is
+  the right vocabulary for an email. The gateway listener and the
+  ``send_message`` tool share this check — fail-closed when the env
+  var is missing or empty.
 
 - **How to actually send a message.** Gateway and tool both deliver
-  through ``send_to(platform, chat_id, text)``. It's a plain sync HTTP
-  call — no gateway process required, because "send an outgoing message
-  with our own bot token" adds zero inbound attack surface over what a
-  running gateway already exposes.
+  through ``send_to(platform, chat_id, text)``. Sync call — no
+  gateway process required, because "send an outgoing message with
+  our own bot token / mailbox creds" adds zero inbound attack
+  surface over what a running gateway already exposes.
 
 Split for reuse: ``format_for_telegram`` stays for chunking long
 messages to fit Telegram's 4096 char limit.
@@ -24,6 +27,19 @@ import os
 import httpx
 
 TELEGRAM_MAX_CHARS = 4096
+
+
+def _allowlist_env(platform: str) -> str:
+    """Env var holding the allowlist for ``platform``.
+
+    Email uses ``EMAIL_ALLOWED_SENDERS`` (sender addresses, not chat
+    ids); everything else follows the ``{PLATFORM}_ALLOWED_CHAT_IDS``
+    pattern. Central mapping so the setup wizards, the gateway run
+    loop, and the tool layer all agree.
+    """
+    if platform == "email":
+        return "EMAIL_ALLOWED_SENDERS"
+    return f"{platform.upper()}_ALLOWED_CHAT_IDS"
 
 
 class DeliveryError(Exception):
@@ -39,12 +55,16 @@ def allowed_chat_ids(platform: str) -> list[str]:
     """Return the ordered, de-duplicated allowlist for ``platform``.
 
     Empty list if the env var is unset/empty. Caller decides what to do
-    with an empty allowlist (usually: reject).
+    with an empty allowlist (usually: reject). Email addresses are
+    normalised to lowercase so allowlist matching doesn't care about
+    the casing a sender happened to use.
     """
-    raw = os.environ.get(f"{platform.upper()}_ALLOWED_CHAT_IDS", "")
+    raw = os.environ.get(_allowlist_env(platform), "")
     seen: list[str] = []
     for part in raw.split(","):
         cid = part.strip()
+        if platform == "email":
+            cid = cid.lower()
         if cid and cid not in seen:
             seen.append(cid)
     return seen
@@ -52,7 +72,8 @@ def allowed_chat_ids(platform: str) -> list[str]:
 
 def is_allowed(platform: str, chat_id: str) -> bool:
     """True iff ``chat_id`` is in the platform's allowlist."""
-    return chat_id in allowed_chat_ids(platform)
+    needle = chat_id.lower() if platform == "email" else chat_id
+    return needle in allowed_chat_ids(platform)
 
 
 def default_chat_id(platform: str) -> str | None:
@@ -92,17 +113,19 @@ def send_to(platform: str, chat_id: str, text: str) -> None:
 
     Sync API — safe to call from non-async contexts (tools, schedule
     scheduler). The gateway's async ``Platform.send`` uses the same
-    underlying HTTP call but on top of httpx's async client.
+    underlying HTTP/SMTP call but on top of an async wrapper.
     """
     if not is_allowed(platform, chat_id):
         raise DeliveryError(
-            f"chat {chat_id!r} is not in {platform.upper()}_ALLOWED_CHAT_IDS"
+            f"chat {chat_id!r} is not in {_allowlist_env(platform)}"
         )
     if not text or not text.strip():
         raise DeliveryError("empty message")
 
     if platform == "telegram":
         _send_telegram_sync(chat_id, text)
+    elif platform == "email":
+        _send_email_sync(chat_id, text)
     elif platform == "webhook":
         _send_webhook_sync(chat_id, text)
     else:
@@ -122,6 +145,25 @@ def _send_telegram_sync(chat_id: str, text: str) -> None:
                     f"telegram sendMessage failed "
                     f"(status={resp.status_code}): {resp.text[:200]}"
                 )
+
+
+def _send_email_sync(chat_id: str, text: str) -> None:
+    """Outbound email via SMTP using the EmailClient shared with the tool.
+
+    ``chat_id`` is the recipient address. Subject is a short ``[alf]``
+    prefix — proactive messages don't reply to an existing thread, so
+    there's no original subject to echo. For threaded replies the
+    ``email`` tool's ``reply`` action is the right path.
+    """
+    from alf.email.client import EmailClient, EmailError
+    try:
+        client = EmailClient.from_env()
+    except EmailError as e:
+        raise DeliveryError(str(e))
+    try:
+        client.send(to=[chat_id], subject="[alf]", body=text)
+    except EmailError as e:
+        raise DeliveryError(str(e))
 
 
 def _send_webhook_sync(chat_id: str, text: str) -> None:

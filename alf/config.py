@@ -33,12 +33,37 @@ DEFAULT_CONFIG: dict[str, Any] = {
         # rgb("..."). Empty = inherit from the current Textual theme.
         "accent": "#ff8800",
     },
+    # Gateway configuration is namespaced per platform so each channel
+    # can carry its own knobs without collisions. Flat keys under
+    # ``gateway`` would force us to rename fields the day another
+    # platform wanted a flag with the same name.
     "gateway": {
-        # Relay tool-call traces to Telegram as they happen (one short
-        # message per tool). Set to false to only deliver the final reply.
-        "show_tool_trace": True,
-        # Keep a "typing…" indicator on in the chat while alf is working.
-        "typing_indicator": True,
+        "telegram": {
+            # Relay tool-call traces to Telegram as they happen (one
+            # short message per tool). Set to false to only deliver the
+            # final reply.
+            "show_tool_trace": True,
+            # Keep a "typing…" indicator on in the chat while alf is
+            # working.
+            "typing_indicator": True,
+        },
+        "email": {
+            # Seconds between IMAP polls for new inbound mail. Hermes
+            # runs on 15s; 60s is a sensible personal-use default that
+            # keeps CPU/network noise low.
+            "poll_interval": 60,
+            # Mark processed messages as \Seen in IMAP after alf has
+            # replied, so your regular mail client treats them as read.
+            "mark_as_read": True,
+            # Tool-trace streaming defaults OFF for email — each trace
+            # is its own email, which is spam if a turn touches many
+            # tools. Only the final reply goes out. Users who really
+            # want per-tool emails can flip this to true.
+            "show_tool_trace": False,
+            # No "typing…" concept in IMAP/SMTP. Kept explicit so the
+            # gateway loop doesn't spawn a no-op heartbeat task.
+            "typing_indicator": False,
+        },
     },
 }
 
@@ -88,6 +113,21 @@ class Config:
         return self.home / "config.yaml"
 
 
+def _deep_merge(defaults: dict, user: dict | None) -> dict:
+    """Recursive merge: nested dicts merge key-by-key, everything else
+    lets the user value win. Needed because ``gateway`` is now a
+    two-level map (platform → flags) and a shallow merge would drop
+    the ``email`` defaults the moment the user writes a ``telegram``
+    block, or vice-versa."""
+    merged = dict(defaults)
+    for key, value in (user or {}).items():
+        if key in merged and isinstance(merged[key], dict) and isinstance(value, dict):
+            merged[key] = _deep_merge(merged[key], value)
+        else:
+            merged[key] = value
+    return merged
+
+
 def load(home: Path) -> Config:
     """Load config from ~/.alf/config.yaml and load .env into process env."""
     cfg_path = home / "config.yaml"
@@ -119,7 +159,7 @@ def load(home: Path) -> Config:
         providers=data.get("providers", DEFAULT_CONFIG["providers"]),
         tools=tools_cfg,
         tui=data.get("tui", DEFAULT_CONFIG["tui"]),
-        gateway={**DEFAULT_CONFIG["gateway"], **(data.get("gateway") or {})},
+        gateway=_deep_merge(DEFAULT_CONFIG["gateway"], data.get("gateway")),
         workspace=str(data.get("workspace", "") or ""),
         raw=data,
     )
@@ -183,9 +223,14 @@ def seed_defaults(home: Path) -> None:
             "OPENAI_API_KEY=\n"
             "OPENROUTER_API_KEY=\n"
             "OLLAMA_BASE_URL=http://localhost:11434\n"
-            "# Gateway (optional). The *_ALLOWED_CHAT_IDS lists are the\n"
-            "# allowlist — only chat IDs listed here can talk to alf.\n"
+            "# Gateway (optional). Allowlists are fail-closed — an empty\n"
+            "# list means nothing inbound is processed on that platform.\n"
             "TELEGRAM_BOT_TOKEN=\n"
             "TELEGRAM_ALLOWED_CHAT_IDS=\n"
+            "EMAIL_ADDRESS=\n"
+            "EMAIL_PASSWORD=\n"
+            "EMAIL_IMAP_HOST=\n"
+            "EMAIL_SMTP_HOST=\n"
+            "EMAIL_ALLOWED_SENDERS=\n"
             "WEBHOOK_ALLOWED_CHAT_IDS=\n"
         )
