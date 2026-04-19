@@ -46,6 +46,31 @@ _ENTER_CUSTOM_MODEL = "__custom_model__"
 _SKIP = "__skip__"
 
 
+def accent_style(accent: str) -> "questionary.Style | None":
+    """Return a questionary style that tints the ``◆`` pointer with the
+    given accent colour (hex ``#rrggbb`` or named). Empty ``accent``
+    returns None — questionary falls back to its default.
+
+    Exposed so non-model menus (``alf setup``, gateway submenu) can
+    share the same accent treatment as the model picker. Zero
+    dependency on Textual — prompt_toolkit Style understands hex
+    directly.
+    """
+    if not accent or not accent.strip():
+        return None
+    try:
+        from prompt_toolkit.styles import Style
+    except Exception:  # noqa: BLE001
+        return None
+    colour = accent.strip()
+    return Style([("pointer", f"fg:{colour} bold")])
+
+
+def _accent_style(cfg: "cfg_mod.Config"):
+    accent = (cfg.tui or {}).get("accent", "") if cfg else ""
+    return accent_style(accent)
+
+
 @dataclass
 class _Choice:
     name: str
@@ -62,7 +87,7 @@ def run(cfg: cfg_mod.Config) -> None:
 
     _ensure_key(cfg, provider)
 
-    model_id = _pick_model(provider)
+    model_id = _pick_model(provider, cfg)
     if model_id is None:
         _console.print("[dim]No change.[/dim]")
         return
@@ -90,15 +115,22 @@ def _pick_provider(cfg: cfg_mod.Config) -> Provider | None:
             value=p,
         ))
 
+    # "Custom" sits inline with the built-ins — it's just another way
+    # to register a provider, not a separate admin action. Same
+    # ``{:<14}`` column as the built-ins so it aligns visually.
+    choices.append(questionary.Choice(
+        title=f"{'Custom':<14} OpenAI-compatible endpoint (add a new one)",
+        value=_ADD_CUSTOM,
+    ))
+
     if custom:
-        choices.append(questionary.Separator("─── custom endpoints ───"))
+        choices.append(questionary.Separator("─── your custom endpoints ───"))
         for p in custom:
             tag = "   ← currently active" if p.name == active_head else ""
             choices.append(questionary.Choice(title=f"{p.display}{tag}", value=p))
 
-    choices.append(questionary.Separator(" "))
-    choices.append(questionary.Choice(title="+ Add custom endpoint", value=_ADD_CUSTOM))
     if custom or _any_saved_keys(builtin):
+        choices.append(questionary.Separator(" "))
         choices.append(questionary.Choice(title="- Remove saved provider/key", value=_REMOVE_SAVED))
     choices.append(questionary.Choice(title="  Cancel", value=_CANCEL))
 
@@ -106,6 +138,8 @@ def _pick_provider(cfg: cfg_mod.Config) -> Provider | None:
         "Select provider:",
         choices=choices,
         qmark="",
+        pointer="◆",
+        style=_accent_style(cfg),
         instruction="(↑↓ navigate  ENTER select  ESC cancel)",
     ))
 
@@ -124,7 +158,7 @@ def _pick_provider(cfg: cfg_mod.Config) -> Provider | None:
     return result  # a Provider instance
 
 
-def _pick_model(provider: Provider) -> str | None:
+def _pick_model(provider: Provider, cfg: cfg_mod.Config) -> str | None:
     _console.print(f"[dim]Fetching models from {provider.display}...[/dim]")
     models = provider.list_models()
     if not models:
@@ -146,6 +180,8 @@ def _pick_model(provider: Provider) -> str | None:
         "Select model:",
         choices=choices,
         qmark="",
+        pointer="◆",
+        style=_accent_style(cfg),
         instruction="(↑↓ navigate  ENTER select  ESC cancel)",
     ))
 

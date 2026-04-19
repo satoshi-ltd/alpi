@@ -541,15 +541,27 @@ def setup_cmd(ctx: click.Context) -> None:
     from alf.model_selector import _ask
     h: Path = ctx.obj["home"]
     _bootstrap(h)
+    from alf.model_selector import accent_style
     while True:
+        cfg = config.load(h)
+        model_status = cfg.model or "(not set)"
+        gw_status = _gateways_status()
         choice = _ask(questionary.select(
             "Configure:",
             choices=[
-                questionary.Choice(title="Model / Provider", value="model"),
-                questionary.Choice(title="Gateway (Telegram)", value="gateway"),
+                questionary.Choice(
+                    title=f"Model / Provider   · {model_status}",
+                    value="model",
+                ),
+                questionary.Choice(
+                    title=f"Gateways           · {gw_status}",
+                    value="gateways",
+                ),
                 questionary.Choice(title="Exit", value="exit"),
             ],
             qmark="",
+            pointer="◆",
+            style=accent_style((cfg.tui or {}).get("accent", "")),
             instruction="(↑↓ navigate  ENTER select  ESC cancel)",
         ))
         if choice in (None, "exit"):
@@ -558,9 +570,77 @@ def setup_cmd(ctx: click.Context) -> None:
             from alf import model_selector
             cfg = config.load(h)
             model_selector.run(cfg)
-        elif choice == "gateway":
-            from alf.gateway.setup import run as setup_run
-            setup_run(h)
+        elif choice == "gateways":
+            _gateways_setup(h)
+
+
+def _gateways_setup(h: Path) -> None:
+    """Sub-menu for platform-level credentials (Telegram, Email, …).
+
+    These are the surfaces alf talks to. Each one's credentials live in
+    ``~/.alf/.env`` and are shared by every consumer (gateway listener,
+    ``send_message`` tool, ``email`` tool, scheduled deliveries).
+    """
+    import questionary
+    from alf.model_selector import _ask, accent_style
+
+    cfg = config.load(h)
+    style = accent_style((cfg.tui or {}).get("accent", ""))
+    while True:
+        tg_status = _telegram_status()
+        em_status = _email_status()
+        choice = _ask(questionary.select(
+            "Gateway to configure:",
+            choices=[
+                questionary.Choice(
+                    title=f"Telegram  · {tg_status}",
+                    value="telegram",
+                ),
+                questionary.Choice(
+                    title=f"Email     · {em_status}",
+                    value="email",
+                ),
+                questionary.Choice(title="← Back", value="back"),
+            ],
+            qmark="",
+            pointer="◆",
+            style=style,
+            instruction="(↑↓ navigate  ENTER select  ESC cancel)",
+        ))
+        if choice in (None, "back"):
+            return
+        if choice == "telegram":
+            from alf.gateway.setup import run as telegram_setup
+            telegram_setup(h)
+        elif choice == "email":
+            from alf.email.setup import run as email_setup
+            email_setup(h)
+
+
+def _gateways_status() -> str:
+    """Short summary for the top-level menu line."""
+    parts = []
+    parts.append("Telegram ✓" if os.environ.get("TELEGRAM_BOT_TOKEN") else "Telegram —")
+    parts.append("Email ✓" if os.environ.get("EMAIL_ADDRESS") else "Email —")
+    return "  ".join(parts)
+
+
+def _telegram_status() -> str:
+    token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+    if not token:
+        return "not set up"
+    chats = os.environ.get("TELEGRAM_ALLOWED_CHAT_IDS", "")
+    n = len([c for c in chats.split(",") if c.strip()])
+    if n == 0:
+        return "ready · no one allowlisted yet"
+    return f"ready · {n} allowlisted chat{'s' if n != 1 else ''}"
+
+
+def _email_status() -> str:
+    addr = os.environ.get("EMAIL_ADDRESS", "")
+    if not addr:
+        return "not set up"
+    return f"ready · {addr}"
 
 
 @main.group()

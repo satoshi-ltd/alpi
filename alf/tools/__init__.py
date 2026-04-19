@@ -12,6 +12,7 @@ from alf.tools import (
     delete_skill,
     edit_file,
     edit_skill,
+    email as email_tool,
     glob as glob_tool,
     grep,
     memory as memory_tool,
@@ -80,6 +81,7 @@ for _mod in (
     delete_skill,
     delegate,
     send_message,
+    email_tool,
 ):
     _cls = getattr(_mod, "TOOL", None)
     if _cls is not None:

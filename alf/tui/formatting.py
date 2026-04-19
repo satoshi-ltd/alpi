@@ -96,6 +96,16 @@ def arg_hint(tool_name: str, args: dict) -> str:
             detail = args.get("expression") or f"{args.get('after_hours', '?')}h"
             return f"add · {kind} · {detail}"
         return action
+    if tool_name == "email":
+        action = str(args.get("action", ""))
+        parts = [action]
+        for key in ("from_", "subject", "uid", "dest_folder", "attachment_name"):
+            if args.get(key):
+                parts.append(truncate(str(args[key]), 30))
+                break
+        if action == "send" and args.get("recipients"):
+            parts.append(truncate(", ".join(args["recipients"]), 30))
+        return " · ".join(parts)
     if tool_name == "delegate":
         return truncate(str(args.get("brief", "")), 60)
     k, v = next(iter(args.items()))

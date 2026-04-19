@@ -37,6 +37,7 @@ alf gateway setup           # configure the Telegram gateway
 alf gateway start           # run the gateway process
 alf schedule start          # run the schedule daemon (manual, like the gateway)
 alf schedule status         # check the daemon + list jobs
+alf setup                   # interactive menu: model, gateway, email (IMAP/SMTP)
 
 # Persist across reboots (launchd on macOS, systemd --user on Linux):
 alf gateway install         # one-time, auto-starts + reanima al login
@@ -89,6 +90,11 @@ OLLAMA_BASE_URL=http://localhost:11434     # local
 # Gateway (optional) — single source of truth for bot + allowlist:
 TELEGRAM_BOT_TOKEN=...
 TELEGRAM_ALLOWED_CHAT_IDS=12345,67890      # comma-separated, fail-closed
+# Email tool (optional) — generic IMAP/SMTP, any provider:
+EMAIL_ADDRESS=you@yourprovider.com
+EMAIL_PASSWORD=...
+EMAIL_IMAP_HOST=imap.yourprovider.com
+EMAIL_SMTP_HOST=smtp.yourprovider.com
 ```
 
 Switch model any time with `/model` inside the TUI.
@@ -121,8 +127,9 @@ alf/                       Python package
   home.py                  profile resolution
   config.py                YAML + workspace handling
   prompts/                 system prompt + skill templates
-  tools/                   18 registered tools (incl. send_message)
+  tools/                   19 registered tools (incl. send_message, email)
   scheduler/               schedule daemon (tick loop, PID, run_job)
+  email/                   IMAP+SMTP client (shared by tool + future gateway)
   service.py               install/uninstall launchd/systemd units
   tui/                     Textual app, widgets, screens, theme
   gateway/                 Telegram gateway (separate process)
