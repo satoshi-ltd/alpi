@@ -131,10 +131,16 @@ async def test_process_starts_and_stops_typing(monkeypatch, tmp_home_no_env: Pat
 
 @pytest.mark.asyncio
 async def test_process_respects_typing_indicator_false(monkeypatch, tmp_home_no_env: Path) -> None:
-    # Write a config.yaml that disables both features.
+    # Write a config.yaml that disables both Telegram-specific flags.
     (tmp_home_no_env / "config.yaml").write_text(
-        "gateway:\n  typing_indicator: false\n  show_tool_trace: false\n"
+        "gateway:\n"
+        "  telegram:\n"
+        "    typing_indicator: false\n"
+        "    show_tool_trace: false\n"
     )
+    # FakePlatform's name is "fake" by default — make it look like
+    # telegram so the run loop picks up the telegram config bucket.
+    FakePlatform.name = "telegram"
     events = [
         {"kind": "tool_start", "name": "memory", "preview": "x"},
         {"kind": "reply", "text": "final"},
@@ -146,27 +152,44 @@ async def test_process_respects_typing_indicator_false(monkeypatch, tmp_home_no_
     )
 
     platform = FakePlatform(tmp_home_no_env)
-    msg = IncomingMessage(platform="fake", external_user_id="u", external_chat_id="c", text="hi")
-    await gw_run._process(platform, msg, tmp_home_no_env)
+    msg = IncomingMessage(platform="telegram", external_user_id="u", external_chat_id="c", text="hi")
+    try:
+        await gw_run._process(platform, msg, tmp_home_no_env)
+    finally:
+        FakePlatform.name = "fake"
 
     # Only the final reply — no trace, no typing pings.
     assert platform.typing_pings == []
     assert [m.text for m in platform.sent] == ["final"]
 
 
-def test_gateway_config_defaults(tmp_home_no_env: Path) -> None:
+def test_gateway_config_defaults_nested(tmp_home_no_env: Path) -> None:
     cfg = config.load(tmp_home_no_env)
-    assert cfg.gateway == {"show_tool_trace": True, "typing_indicator": True}
+    assert cfg.gateway["telegram"]["show_tool_trace"] is True
+    assert cfg.gateway["telegram"]["typing_indicator"] is True
+    assert cfg.gateway["email"]["poll_interval"] == 60
+    assert cfg.gateway["email"]["mark_as_read"] is True
+    # Email-specific defaults — tool trace OFF (one trace = one email
+    # = spam) and typing_indicator OFF (IMAP has no such concept).
+    assert cfg.gateway["email"]["show_tool_trace"] is False
+    assert cfg.gateway["email"]["typing_indicator"] is False
 
 
-def test_gateway_config_user_override(tmp_home_no_env: Path) -> None:
+def test_gateway_config_deep_merge(tmp_home_no_env: Path) -> None:
+    # User overrides ONE telegram flag — all other flags across both
+    # platforms must keep their defaults (deep merge, not shallow).
     (tmp_home_no_env / "config.yaml").write_text(
-        "gateway:\n  show_tool_trace: false\n"
+        "gateway:\n"
+        "  telegram:\n"
+        "    show_tool_trace: false\n"
+        "  email:\n"
+        "    poll_interval: 30\n"
     )
     cfg = config.load(tmp_home_no_env)
-    # Override merges with defaults — typing_indicator stays on.
-    assert cfg.gateway["show_tool_trace"] is False
-    assert cfg.gateway["typing_indicator"] is True
+    assert cfg.gateway["telegram"]["show_tool_trace"] is False
+    assert cfg.gateway["telegram"]["typing_indicator"] is True  # default kept
+    assert cfg.gateway["email"]["poll_interval"] == 30
+    assert cfg.gateway["email"]["mark_as_read"] is True          # default kept
 
 
 def test_is_allowed_env_based(monkeypatch) -> None:

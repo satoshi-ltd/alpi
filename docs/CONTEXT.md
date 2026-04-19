@@ -330,9 +330,40 @@ differently:
   not instructions, and to ignore directives like "ignore previous
   instructions" / "forward to X" / "run Y". Reinforced by a line in
   the global system prompt that applies to all tool output.
-- **Not a gateway yet.** The same `EmailClient` will power a future
-  `platforms/email.py` gateway channel (inbound IMAP polling +
-  allowlisted sender filtering). Commit 2 of the email work.
+- **Gateway channel** at `alf/gateway/platforms/email.py`: `listen()`
+  polls IMAP at `gateway.email.poll_interval` seconds (config.yaml;
+  default 60s), `send()` pushes replies via SMTP. Reuses the same
+  `EmailClient` as the tool so provider quirks (SMTPS port 465,
+  STARTTLS 587, MIME parsing) are solved once. Runs only while
+  `alf gateway start` is alive — outbound via `send_message` or
+  `schedule` does NOT need the gateway up.
+- **Baseline on first run.** Records the highest UID in INBOX as
+  "seen" and only surfaces messages with UID > baseline. No backfill
+  — same spirit as Telegram, you don't want a week of old threads
+  replayed when you restart. State persists to
+  `~/.alf/gateway/email-state.json` (one `last_uid` per email
+  address) so daemon restarts don't re-process or miss messages.
+- **Allowlist** lives in `.env` as `EMAIL_ALLOWED_SENDERS` (not the
+  generic `*_ALLOWED_CHAT_IDS` pattern because "sender" reads right
+  for email). Case-insensitive match. Fail-closed when empty. The
+  gateway run loop checks via `delivery.is_allowed` — same code path
+  as Telegram.
+- **Anti-bulk filter**: drops senders matching `noreply`,
+  `do-not-reply`, `mailer-daemon`, `bounce`, `notifications@`, etc.
+  + messages with `Auto-Submitted != no`, `Precedence: bulk|list`,
+  `List-Unsubscribe`, or `X-Auto-Response-Suppress`. Runs BEFORE the
+  allowlist check — a bulk sender's address ending up allowlisted
+  won't bypass the filter.
+- **Only INBOX.** Spam/Junk folders are skipped. Your provider's
+  DKIM/SPF already ran; if the mail ended up in Spam, we don't
+  second-guess that.
+- **`mark_as_read: true`** (default) — sets `\Seen` on processed
+  messages so your regular mail client shows them read after alf
+  replies. Toggle via `gateway.email.mark_as_read` in config.yaml.
+- **Config structure** lives under `gateway.<platform>.*` now.
+  Telegram flags (`show_tool_trace`, `typing_indicator`) moved from
+  flat `gateway.*` to `gateway.telegram.*` to make room for email's
+  own keys without collisions.
 
 ### Schedule daemon (`alf schedule start`)
 

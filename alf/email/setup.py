@@ -37,6 +37,7 @@ def run(home: Path) -> None:
     current_smtp = os.environ.get("EMAIL_SMTP_HOST", "")
     current_imap_port = os.environ.get("EMAIL_IMAP_PORT") or str(DEFAULT_IMAP_PORT)
     current_smtp_port = os.environ.get("EMAIL_SMTP_PORT") or str(DEFAULT_SMTP_PORT)
+    current_senders = os.environ.get("EMAIL_ALLOWED_SENDERS", "")
 
     address = _ask(questionary.text(
         "Email address:", default=current_addr,
@@ -79,6 +80,17 @@ def run(home: Path) -> None:
     ))
     smtp_port = int(smtp_port_raw) if smtp_port_raw else DEFAULT_SMTP_PORT
 
+    # Allowlist for the INBOUND gateway — outbound (send_message,
+    # schedule, email tool) works regardless. Empty = fail-closed
+    # gateway, but alf still sends *from* this mailbox just fine.
+    senders_raw = _ask(questionary.text(
+        "Allowed senders (comma-separated, empty = no inbound):",
+        default=current_senders,
+    ))
+    senders = ",".join(
+        s.strip().lower() for s in (senders_raw or "").split(",") if s.strip()
+    )
+
     _console.print("\n[dim]Testing IMAP + SMTP connections…[/dim]")
     client = EmailClient(
         address=address, password=password,
@@ -101,6 +113,7 @@ def run(home: Path) -> None:
         ("EMAIL_PASSWORD", password),
         ("EMAIL_IMAP_HOST", imap_host),
         ("EMAIL_SMTP_HOST", smtp_host),
+        ("EMAIL_ALLOWED_SENDERS", senders),
     ]
     if imap_port != DEFAULT_IMAP_PORT:
         writes.append(("EMAIL_IMAP_PORT", str(imap_port)))
