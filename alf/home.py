@@ -4,7 +4,7 @@ Resolves which ~/.alf/ directory the current invocation should use.
 
 Default profile lives at ``~/.alf``. Named profiles live at
 ``~/.alf/profiles/<name>`` and are fully isolated (own config, memories,
-skills, sessions, cron, gateway).
+skills, sessions, schedule, gateway).
 
 Resolution order:
 1. ``ALF_HOME`` env var (absolute override, skips profile logic)
@@ -48,11 +48,20 @@ def ensure_home(home: Path) -> None:
     Creates the full subtree. Seed files (PERSONALITY.md, config.yaml, memories/*.md)
     are written by their respective modules when they first need them.
     """
+    # One-time migration: v0.1 wrote jobs + logs under ``cron/``. We now
+    # use ``schedule/`` to match the user-facing terminology. If the old
+    # dir exists and the new one doesn't, move it. Safe to remove after
+    # everyone has run a v0.2+ alf at least once.
+    legacy = home / "cron"
+    target = home / "schedule"
+    if legacy.exists() and not target.exists():
+        legacy.rename(target)
+
     for sub in (
         "memories",
         "sessions",
         "skills",
-        "cron/output",
+        "schedule/output",
         "gateway/logs",
     ):
         (home / sub).mkdir(parents=True, exist_ok=True)

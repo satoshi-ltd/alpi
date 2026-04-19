@@ -338,6 +338,94 @@ def gateway_logs(ctx: click.Context, tail: int) -> None:
     click.echo("\n".join(lines))
 
 
+# ----------------------------------------------------------------------
+# Schedule daemon
+# ----------------------------------------------------------------------
+
+@main.group()
+def schedule() -> None:
+    """Schedule daemon (separate process that fires scheduled jobs)."""
+
+
+@schedule.command("start")
+@click.pass_context
+def schedule_start(ctx: click.Context) -> None:
+    """Start the schedule daemon (blocking)."""
+    from alf.scheduler.run import run as sch_run, pid_path
+    h: Path = ctx.obj["home"]
+    _bootstrap(h)
+    _check_not_running(pid_path(h))
+    sch_run(h)
+
+
+@schedule.command("stop")
+@click.pass_context
+def schedule_stop(ctx: click.Context) -> None:
+    """Stop a running schedule daemon."""
+    from alf.scheduler.run import stop as sch_stop
+    h: Path = ctx.obj["home"]
+    if sch_stop(h):
+        click.echo("schedule: SIGTERM sent")
+    else:
+        click.echo("schedule: not running")
+
+
+@schedule.command("status")
+@click.pass_context
+def schedule_status(ctx: click.Context) -> None:
+    """Show whether the daemon is running + list jobs."""
+    import json
+    from alf.scheduler.run import running_pid, jobs_path
+    h: Path = ctx.obj["home"]
+    pid = running_pid(h)
+    click.echo(f"schedule: {'running (pid ' + str(pid) + ')' if pid else 'stopped'}")
+    jp = jobs_path(h)
+    if jp.exists():
+        jobs = json.loads(jp.read_text() or "[]")
+        if jobs:
+            click.echo(f"jobs ({len(jobs)}):")
+            for j in jobs:
+                descr = j.get("expression") or f"after {j.get('after_hours')}h"
+                last = j.get("last_run_at") or "never"
+                click.echo(
+                    f"  {j.get('id', '?')}  [{j.get('kind', 'cron')}]  "
+                    f"{descr}  last={last}"
+                )
+        else:
+            click.echo("jobs: (none)")
+    else:
+        click.echo("jobs: (none)")
+
+
+@schedule.command("run-once")
+@click.pass_context
+def schedule_run_once(ctx: click.Context) -> None:
+    """Run one tick in-process (manual fire, no daemon needed)."""
+    from alf.scheduler.run import tick
+    h: Path = ctx.obj["home"]
+    _bootstrap(h)
+    results = tick(h)
+    if not results:
+        click.echo("schedule: nothing due")
+        return
+    for jid, ok, msg in results:
+        click.echo(f"  {jid}  {'OK' if ok else 'FAIL'}  {msg}")
+
+
+@schedule.command("logs")
+@click.option("-n", "--tail", default=50, help="Number of lines to show.")
+@click.pass_context
+def schedule_logs(ctx: click.Context, tail: int) -> None:
+    """Show the tail of the schedule daemon log."""
+    h: Path = ctx.obj["home"]
+    log_file = h / "schedule" / "logs" / "scheduler.log"
+    if not log_file.exists():
+        click.echo("schedule: no log yet")
+        return
+    lines = log_file.read_text().splitlines()[-tail:]
+    click.echo("\n".join(lines))
+
+
 def _check_not_running(pid_file: Path) -> None:
     if not pid_file.exists():
         return
@@ -347,7 +435,8 @@ def _check_not_running(pid_file: Path) -> None:
     except (ValueError, ProcessLookupError):
         pid_file.unlink(missing_ok=True)
         return
-    raise click.ClickException(f"gateway already running (pid {pid}). Use 'alf gateway stop' first.")
+    # Generic message — this helper is shared by gateway and schedule.
+    raise click.ClickException(f"process already running (pid {pid}).")
 
 
 # ----------------------------------------------------------------------

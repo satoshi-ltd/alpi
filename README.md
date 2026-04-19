@@ -33,7 +33,13 @@ alf --continue              # resume the last session
 alf --profile <name>        # use a named profile (multi-profile)
 alf gateway setup           # configure the Telegram gateway
 alf gateway start           # run the gateway process
+alf schedule start          # run the schedule daemon (manual, like the gateway)
+alf schedule status         # check the daemon + list jobs
 ```
+
+> `gateway` and `schedule` are independent processes with identical
+> lifecycle rules. Both start only when you ask them to (or when
+> installed as a service — v0.3).
 
 ## Key concepts
 
@@ -108,6 +114,7 @@ alf/                       Python package
   config.py                YAML + workspace handling
   prompts/                 system prompt + skill templates
   tools/                   18 registered tools (incl. send_message)
+  scheduler/               schedule daemon (tick loop, PID, run_job)
   tui/                     Textual app, widgets, screens, theme
   gateway/                 Telegram gateway (separate process)
   skills/                  bundled skills (only `consolidate-memory`)

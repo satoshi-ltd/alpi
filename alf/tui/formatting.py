@@ -89,8 +89,13 @@ def arg_hint(tool_name: str, args: dict) -> str:
         action = args.get("action", "")
         content = str(args.get("content", ""))
         return f"{action} {truncate(content, 30)}" if content else action
-    if tool_name == "cron":
-        return str(args.get("action", ""))
+    if tool_name == "schedule":
+        action = str(args.get("action", ""))
+        if action == "add":
+            kind = args.get("kind", "cron")
+            detail = args.get("expression") or f"{args.get('after_hours', '?')}h"
+            return f"add · {kind} · {detail}"
+        return action
     if tool_name == "delegate":
         return truncate(str(args.get("brief", "")), 60)
     k, v = next(iter(args.items()))
@@ -160,7 +165,7 @@ def result_hint(tool_name: str, output: str) -> str:
         lines = text.splitlines()
         return _escape_markup(truncate(lines[0] if lines else "", 60))
 
-    if tool_name == "cron":
+    if tool_name == "schedule":
         return _escape_markup(truncate(text.splitlines()[0], 60))
 
     if tool_name == "create_skill":

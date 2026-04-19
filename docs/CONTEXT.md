@@ -111,7 +111,7 @@ save in the moment via the `memory` tool (Hermes-style).
   custom OpenAI-compatible endpoints i.e. Ollama / LM Studio / vLLM).
 - **18 tools** registered: `read_file`, `write_file`, `edit_file`,
   `terminal`, `grep`, `glob`, `todo`, `web_search`, `web_fetch`,
-  `web_extract`, `cron`, `memory`, `session_search`, `create_skill`,
+  `web_extract`, `schedule`, `memory`, `session_search`, `create_skill`,
   `edit_skill`, `delete_skill`, `delegate`, `send_message`.
   - **`browser`** file exists but is **not registered** (stub). See
     "Open questions / pending" section 6 for the Playwright roadmap.
@@ -290,7 +290,7 @@ differently:
 
 - **Tool `send_message(text, platform=telegram, chat_id=…)`** — sends a
   message out to a paired chat. Used by the agent for long-running tool
-  completions ("your research is done") and by the cron scheduler for
+  completions ("your research is done") and by the schedule daemon for
   reminders + inactivity check-ins.
 - **Autosuficiente.** The tool posts to the platform API directly using
   the bot credentials in `.env`. Does NOT depend on the gateway
@@ -299,6 +299,45 @@ differently:
 - **Allowlist-only.** `{PLATFORM}_ALLOWED_CHAT_IDS` in `.env` is the
   same source of truth as the gateway's inbound check, reused via
   `gateway.delivery.is_allowed`.
+
+### Schedule daemon (`alf schedule start`)
+
+- **Separate process.** PID at `schedule/scheduler.pid`, logs at
+  `schedule/logs/scheduler.log`. Pre-v0.2 installs with a legacy
+  `~/.alf/cron/` get migrated on first bootstrap.
+- **Lifecycle mirrors the gateway.** Runs only when the user starts it
+  (`alf schedule start`) or installs it as a service (v0.3). No
+  auto-spawn from TUI, gateway, or tools. Adding a job writes the file
+  but delivery waits until the daemon is up — the `add` response tells
+  the user exactly how to activate.
+- **Independent of the gateway.** Killing the gateway doesn't kill the
+  daemon, and vice versa. Proactive outreach (`send_message`) doesn't
+  need the gateway listener up.
+- **CLI:** `alf schedule [start|stop|status|logs|run-once]`.
+- **`ensure_running(home)`** lives in `scheduler.run` as a helper for
+  the future `alf schedule install` flow; nothing calls it at runtime
+  today.
+- **Tick every 30s.** Reads `schedule/jobs.json`, fires due jobs, updates
+  `last_run_at` (even on failure, to avoid tight re-fire loops). Uses
+  `croniter` for expressions.
+- **Two job kinds:**
+  - `cron` — standard expression (`0 9 * * *`). First run fires on the
+    first tick after creation (nice feedback); subsequent runs anchor
+    off `last_run_at`.
+  - `inactivity` — fires once the newest `sessions/*.json` mtime is
+    older than `after_hours`. Per-job cooldown: won't re-fire within
+    `after_hours` of its own last fire.
+- **Execution model.** Shells out to `alf chat --once <wrapped prompt>`
+  so a crashing job can't take the daemon down. The prompt gets a tiny
+  `[SCHEDULED: …]` preamble so the agent knows the reply will be pushed
+  rather than displayed live.
+- **Delivery** goes through `gateway.delivery.send_to(platform,
+  chat_id, text)` — same path as the `send_message` tool. Default
+  `chat_id` is the first entry in `{PLATFORM}_ALLOWED_CHAT_IDS`.
+- **Persistence across reboot** is NOT solved in v0.2 — the detached
+  daemon dies on shutdown and is auto-respawned the next time the user
+  opens alf (TUI) or runs `alf gateway start`. OS-level services
+  (`alf gateway|schedule install`, launchd/systemd) are v0.3.
 
 ### `/compact`
 
@@ -485,7 +524,8 @@ alf/
 │   ├── terminal.py              run/background/status/output/kill
 │   ├── browser.py               STUB, not registered (v0.2 Playwright)
 │   └── <other>.py               read_file, write_file, edit_file, grep, glob,
-│                                todo, memory, web_*, cron, session_search
+│                                todo, memory, web_*, schedule, send_message,
+│                                session_search
 ├── skills/meta/consolidate-memory/SKILL.md    only bundled skill
 ├── prompts/
 │   ├── default_personality.md   seed for ~/.alf/PERSONALITY.md
@@ -502,13 +542,16 @@ alf/
 │   ├── model_screen.py          ProviderScreen + ModelListScreen + _ApiKeyScreen
 │   ├── formatting.py            arg_hint, result_hint, truncate, shorten_*
 │   └── theme.tcss               CSS for layout + OptionList + modals
-└── gateway/
-    ├── run.py                   asyncio loop; loads .env; subprocess per msg
-    ├── setup.py                 interactive Telegram config (questionary)
-    ├── base.py, delivery.py
-    └── platforms/
-        ├── telegram.py          real long-poll via getUpdates
-        └── webhook.py           stub
+├── gateway/
+│   ├── run.py                   asyncio loop; loads .env; subprocess per msg
+│   ├── setup.py                 interactive Telegram config (questionary)
+│   ├── base.py, delivery.py
+│   └── platforms/
+│       ├── telegram.py          real long-poll via getUpdates
+│       └── webhook.py           stub
+└── scheduler/
+    ├── __init__.py
+    └── run.py                   tick loop, run_job, ensure_running (auto-spawn)
 
 tests/                           13 files, 69 unit + 6 LLM-tagged
 docs/CONTEXT.md                  this file
@@ -530,7 +573,7 @@ memories/
 skills/<category>/<name>/        user skills (override bundled)
 sessions/*.json                  chat history, one per session
 cache/openrouter_models.json     24h TTL
-cron/{jobs.json, output/}
+schedule/{jobs.json, scheduler.pid, logs/scheduler.log, output/}
 gateway/{gateway.pid, logs/gateway.log}
 ```
 
@@ -585,7 +628,7 @@ notifications:
   - {kind: email, to: foo@bar.com}
 ```
 Unlocks "ping me when this long task finishes", "notify me at 9am
-about X" (combined with `cron`). Reuses the `TELEGRAM_BOT_TOKEN` you
+about X" (combined with `schedule`). Reuses the `TELEGRAM_BOT_TOKEN` you
 already have.
 
 #### B. Interactive browser (Playwright)

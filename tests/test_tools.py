@@ -18,9 +18,9 @@ from alf.tools.write_file import WriteFile
 
 EXPECTED_TOOLS = {
     "read_file", "write_file", "edit_file", "terminal", "grep", "glob",
-    "todo", "web_search", "web_fetch", "web_extract", "cron",
+    "todo", "web_search", "web_fetch", "web_extract", "schedule",
     "memory", "create_skill", "edit_skill", "delete_skill", "delegate",
-    "session_search",
+    "session_search", "send_message",
 }
 
 

@@ -1,6 +1,6 @@
 """send_message — deliver a message to a paired chat on an external platform.
 
-Used for proactive outreach: scheduled reminders from the cron scheduler,
+Used for proactive outreach: scheduled reminders from the schedule daemon,
 "I'm done with that long research" pings after a delegate, or the agent
 volunteering a check-in when it has something useful to say.
 

@@ -58,7 +58,7 @@ def is_allowed(platform: str, chat_id: str) -> bool:
 def default_chat_id(platform: str) -> str | None:
     """First allowed chat for ``platform`` — useful as a fallback target.
 
-    The cron scheduler and the ``send_message`` tool use this when the
+    The schedule daemon and the ``send_message`` tool use this when the
     caller didn't pick a specific chat.
     """
     ids = allowed_chat_ids(platform)
@@ -90,7 +90,7 @@ def format_for_telegram(text: str) -> list[str]:
 def send_to(platform: str, chat_id: str, text: str) -> None:
     """Deliver ``text`` to ``(platform, chat_id)``. Raises ``DeliveryError``.
 
-    Sync API — safe to call from non-async contexts (tools, cron
+    Sync API — safe to call from non-async contexts (tools, schedule
     scheduler). The gateway's async ``Platform.send`` uses the same
     underlying HTTP call but on top of httpx's async client.
     """

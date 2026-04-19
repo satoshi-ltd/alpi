@@ -8,7 +8,6 @@ from __future__ import annotations
 from alf.tools.base import Tool, ToolResult
 from alf.tools import (
     create_skill,
-    cron,
     delegate,
     delete_skill,
     edit_file,
@@ -17,6 +16,7 @@ from alf.tools import (
     grep,
     memory as memory_tool,
     read_file,
+    schedule as schedule_tool,
     send_message,
     session_search,
     terminal,
@@ -72,7 +72,7 @@ for _mod in (
     web_search,
     web_fetch,
     web_extract,
-    cron,
+    schedule_tool,
     memory_tool,
     session_search,
     create_skill,
