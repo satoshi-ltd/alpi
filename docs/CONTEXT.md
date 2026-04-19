@@ -40,7 +40,7 @@ save in the moment via the `memory` tool (Hermes-style).
 
 - **Textual TUI** (chat, streaming, tool cards, modals, slash commands,
   autocomplete, interrupt, accent color, atomic session persistence).
-- **17 tools**, all with Hermes-style tool descriptions (positive use +
+- **18 tools**, all with Hermes-style tool descriptions (positive use +
   explicit DO NOT / redirect-to-other-tool).
 - **3-file memory** (USER/MEMORY/PERSONALITY) with two-tier dedup,
   Approach C (return state after mutation), `.bak` snapshots, strict
@@ -109,10 +109,10 @@ save in the moment via the `memory` tool (Hermes-style).
 
 - litellm multi-provider (Anthropic, OpenAI, OpenRouter, Google, Groq,
   custom OpenAI-compatible endpoints i.e. Ollama / LM Studio / vLLM).
-- **17 tools** registered: `read_file`, `write_file`, `edit_file`,
+- **18 tools** registered: `read_file`, `write_file`, `edit_file`,
   `terminal`, `grep`, `glob`, `todo`, `web_search`, `web_fetch`,
   `web_extract`, `cron`, `memory`, `session_search`, `create_skill`,
-  `edit_skill`, `delete_skill`, `delegate`.
+  `edit_skill`, `delete_skill`, `delegate`, `send_message`.
   - **`browser`** file exists but is **not registered** (stub). See
     "Open questions / pending" section 6 for the Playwright roadmap.
 - **Curated memory** (`memories/USER.md`, `memories/MEMORY.md`) with §
@@ -285,6 +285,20 @@ differently:
   unset/empty var rejects every chat. When a dynamic pairing flow ever
   lands (owner approves codes from CLI), reintroduce a store then.
 - **Env var `ALF_HOME`** passed to subprocesses to isolate profiles.
+
+### Proactive outreach (`send_message` tool)
+
+- **Tool `send_message(text, platform=telegram, chat_id=…)`** — sends a
+  message out to a paired chat. Used by the agent for long-running tool
+  completions ("your research is done") and by the cron scheduler for
+  reminders + inactivity check-ins.
+- **Autosuficiente.** The tool posts to the platform API directly using
+  the bot credentials in `.env`. Does NOT depend on the gateway
+  listener being up — outbound posting adds zero inbound attack
+  surface, so there's no reason to route through the gateway process.
+- **Allowlist-only.** `{PLATFORM}_ALLOWED_CHAT_IDS` in `.env` is the
+  same source of truth as the gateway's inbound check, reused via
+  `gateway.delivery.is_allowed`.
 
 ### `/compact`
 

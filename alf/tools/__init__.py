@@ -17,6 +17,7 @@ from alf.tools import (
     grep,
     memory as memory_tool,
     read_file,
+    send_message,
     session_search,
     terminal,
     todo,
@@ -78,6 +79,7 @@ for _mod in (
     edit_skill,
     delete_skill,
     delegate,
+    send_message,
 ):
     _cls = getattr(_mod, "TOOL", None)
     if _cls is not None:

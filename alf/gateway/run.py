@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from alf import config as config_mod
+from alf.gateway import delivery
 from alf.gateway.base import IncomingMessage, OutgoingMessage, Platform
 from alf.gateway.platforms.telegram import Telegram
 from alf.gateway.platforms.webhook import Webhook
@@ -144,15 +145,7 @@ def _load_gateway_cfg(home: Path) -> dict[str, Any]:
 
 
 def _is_allowed(msg: IncomingMessage) -> bool:
-    """Check the incoming chat against the per-platform allowlist in env.
-
-    Each platform has its own env var (e.g. ``TELEGRAM_ALLOWED_CHAT_IDS``,
-    ``WEBHOOK_ALLOWED_CHAT_IDS``) — a comma-separated list of chat IDs.
-    Empty or unset → no chats are allowed (fail closed).
-    """
-    raw = os.environ.get(f"{msg.platform.upper()}_ALLOWED_CHAT_IDS", "")
-    allowed = {c.strip() for c in raw.split(",") if c.strip()}
-    return msg.external_chat_id in allowed
+    return delivery.is_allowed(msg.platform, msg.external_chat_id)
 
 
 def run(home: Path) -> None:

@@ -107,7 +107,7 @@ alf/                       Python package
   home.py                  profile resolution, PERSONALITY migration
   config.py                YAML + workspace handling
   prompts/                 system prompt + skill templates
-  tools/                   17 registered tools
+  tools/                   18 registered tools (incl. send_message)
   tui/                     Textual app, widgets, screens, theme
   gateway/                 Telegram gateway (separate process)
   skills/                  bundled skills (only `consolidate-memory`)
