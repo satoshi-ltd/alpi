@@ -220,6 +220,7 @@ def main(ctx: click.Context, profile: str | None, continue_last: bool) -> None:
     ctx.ensure_object(dict)
     h = home.get_home(profile)
     ctx.obj["home"] = h
+    ctx.obj["profile"] = profile or "default"
     ctx.obj["continue_last"] = continue_last
     _bootstrap(h)
     if ctx.invoked_subcommand is None:
@@ -308,20 +309,25 @@ def gateway_stop(ctx: click.Context) -> None:
 @gateway.command("status")
 @click.pass_context
 def gateway_status(ctx: click.Context) -> None:
-    """Show whether the gateway is running."""
+    """Show whether the gateway is running (and whether it's installed)."""
     from alf.gateway.run import pid_path
     h: Path = ctx.obj["home"]
     p = pid_path(h)
-    if not p.exists():
-        click.echo("gateway: stopped")
-        return
-    try:
-        pid = int(p.read_text().strip())
-        os.kill(pid, 0)
-        click.echo(f"gateway: running (pid {pid})")
-    except (ValueError, ProcessLookupError):
-        click.echo("gateway: stale pid file (not actually running)")
-        p.unlink(missing_ok=True)
+    _print_daemon_status("gateway", p, h, ctx.obj.get("profile") or "default")
+
+
+@gateway.command("install")
+@click.pass_context
+def gateway_install(ctx: click.Context) -> None:
+    """Install the gateway as a system service (launchd/systemd)."""
+    _install_daemon(ctx, "gateway")
+
+
+@gateway.command("uninstall")
+@click.pass_context
+def gateway_uninstall(ctx: click.Context) -> None:
+    """Stop + unregister the gateway system service."""
+    _uninstall_daemon(ctx, "gateway")
 
 
 @gateway.command("logs")
@@ -375,10 +381,9 @@ def schedule_stop(ctx: click.Context) -> None:
 def schedule_status(ctx: click.Context) -> None:
     """Show whether the daemon is running + list jobs."""
     import json
-    from alf.scheduler.run import running_pid, jobs_path
+    from alf.scheduler.run import pid_path, jobs_path
     h: Path = ctx.obj["home"]
-    pid = running_pid(h)
-    click.echo(f"schedule: {'running (pid ' + str(pid) + ')' if pid else 'stopped'}")
+    _print_daemon_status("schedule", pid_path(h), h, ctx.obj.get("profile") or "default")
     jp = jobs_path(h)
     if jp.exists():
         jobs = json.loads(jp.read_text() or "[]")
@@ -395,6 +400,20 @@ def schedule_status(ctx: click.Context) -> None:
             click.echo("jobs: (none)")
     else:
         click.echo("jobs: (none)")
+
+
+@schedule.command("install")
+@click.pass_context
+def schedule_install(ctx: click.Context) -> None:
+    """Install the schedule daemon as a system service (launchd/systemd)."""
+    _install_daemon(ctx, "schedule")
+
+
+@schedule.command("uninstall")
+@click.pass_context
+def schedule_uninstall(ctx: click.Context) -> None:
+    """Stop + unregister the schedule system service."""
+    _uninstall_daemon(ctx, "schedule")
 
 
 @schedule.command("run-once")
@@ -424,6 +443,78 @@ def schedule_logs(ctx: click.Context, tail: int) -> None:
         return
     lines = log_file.read_text().splitlines()[-tail:]
     click.echo("\n".join(lines))
+
+
+# ----------------------------------------------------------------------
+# Shared install / uninstall / status helpers
+# ----------------------------------------------------------------------
+
+def _running_pid_for(name: str, home: Path) -> int | None:
+    if name == "gateway":
+        from alf.gateway.run import pid_path
+        return _read_live_pid(pid_path(home))
+    from alf.scheduler.run import running_pid
+    return running_pid(home)
+
+
+def _read_live_pid(pid_file: Path) -> int | None:
+    if not pid_file.exists():
+        return None
+    try:
+        pid = int(pid_file.read_text().strip())
+        os.kill(pid, 0)
+        return pid
+    except (ValueError, ProcessLookupError):
+        pid_file.unlink(missing_ok=True)
+        return None
+    except PermissionError:
+        return pid
+
+
+def _install_daemon(ctx: click.Context, name: str) -> None:
+    from alf import service
+    h: Path = ctx.obj["home"]
+    profile: str = ctx.obj.get("profile") or "default"
+
+    if _running_pid_for(name, h):
+        raise click.ClickException(
+            f"{name} is running manually — stop it first with "
+            f"`alf {name} stop`, then re-run install."
+        )
+    if service.installed(name, profile):
+        raise click.ClickException(
+            f"{name} is already installed. "
+            f"Run `alf {name} uninstall` first if you want to reinstall."
+        )
+    try:
+        backend = service.install(name, h, profile)
+    except service.ServiceError as e:
+        raise click.ClickException(str(e))
+    label = service.service_label(name, profile)
+    click.echo(f"{name}: installed via {backend} ({label}) — auto-started")
+
+
+def _uninstall_daemon(ctx: click.Context, name: str) -> None:
+    from alf import service
+    h: Path = ctx.obj["home"]
+    profile: str = ctx.obj.get("profile") or "default"
+    try:
+        backend = service.uninstall(name, h, profile)
+    except service.ServiceError as e:
+        raise click.ClickException(str(e))
+    click.echo(f"{name}: uninstalled ({backend})")
+
+
+def _print_daemon_status(name: str, pid_file: Path, home: Path, profile: str) -> None:
+    from alf import service
+    pid = _read_live_pid(pid_file)
+    state = f"running (pid {pid})" if pid else "stopped"
+    backend = service.installed(name, profile)
+    installed_line = (
+        f"installed via {backend} ({service.service_label(name, profile)})"
+        if backend else "not installed"
+    )
+    click.echo(f"{name}: {state} — {installed_line}")
 
 
 def _check_not_running(pid_file: Path) -> None:

@@ -35,11 +35,17 @@ alf gateway setup           # configure the Telegram gateway
 alf gateway start           # run the gateway process
 alf schedule start          # run the schedule daemon (manual, like the gateway)
 alf schedule status         # check the daemon + list jobs
+
+# Persist across reboots (launchd on macOS, systemd --user on Linux):
+alf gateway install         # one-time, auto-starts + reanima al login
+alf schedule install
+alf gateway uninstall       # clean stop + unregister
+alf schedule uninstall
 ```
 
 > `gateway` and `schedule` are independent processes with identical
-> lifecycle rules. Both start only when you ask them to (or when
-> installed as a service — v0.3).
+> lifecycle rules. Install each one only if you want it to survive a
+> reboot — otherwise `start`/`stop` covers day-to-day use.
 
 ## Key concepts
 
@@ -115,6 +121,7 @@ alf/                       Python package
   prompts/                 system prompt + skill templates
   tools/                   18 registered tools (incl. send_message)
   scheduler/               schedule daemon (tick loop, PID, run_job)
+  service.py               install/uninstall launchd/systemd units
   tui/                     Textual app, widgets, screens, theme
   gateway/                 Telegram gateway (separate process)
   skills/                  bundled skills (only `consolidate-memory`)

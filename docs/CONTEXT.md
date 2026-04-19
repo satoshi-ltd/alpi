@@ -334,10 +334,19 @@ differently:
 - **Delivery** goes through `gateway.delivery.send_to(platform,
   chat_id, text)` — same path as the `send_message` tool. Default
   `chat_id` is the first entry in `{PLATFORM}_ALLOWED_CHAT_IDS`.
-- **Persistence across reboot** is NOT solved in v0.2 — the detached
-  daemon dies on shutdown and is auto-respawned the next time the user
-  opens alf (TUI) or runs `alf gateway start`. OS-level services
-  (`alf gateway|schedule install`, launchd/systemd) are v0.3.
+- **Persistence across reboot.** `alf gateway install` and
+  `alf schedule install` register the daemon as a system service —
+  launchd on macOS (`~/Library/LaunchAgents/com.alf.<name>.<profile>.plist`,
+  `RunAtLoad=true` + `KeepAlive=true`) or systemd --user on Linux
+  (`~/.config/systemd/user/alf-<name>-<profile>.service`,
+  `Restart=on-failure`). Auto-starts immediately and at every login.
+  Per-profile: the service label includes the profile so `alf -p work`
+  and `alf -p personal` coexist. Install refuses if the daemon is
+  already running manually (avoids orphan-PID races); `alf <name> stop`
+  first. Uninstall does the reverse — `launchctl bootout` /
+  `systemctl --user disable --now` + deletes the unit file. All the
+  logic lives in `alf/service.py`; the CLI glue is in
+  `_install_daemon` / `_uninstall_daemon` in `alf/cli.py`.
 
 ### `/compact`
 
