@@ -74,13 +74,15 @@ class Schedule(Tool):
         if action == "add":
             if not prompt:
                 return ToolResult(ok=False, output="", error="'prompt' is required")
+            from datetime import datetime, timezone
+            now_iso = datetime.now(timezone.utc).isoformat()
             job: dict = {
                 "id": uuid.uuid4().hex[:8],
                 "kind": kind or "cron",
                 "prompt": prompt,
                 "platform": (platform or "telegram").lower(),
                 "chat_id": chat_id or "",
-                "last_run_at": None,
+                "last_run_at": now_iso if (kind or "cron") == "cron" else None,
             }
             if job["kind"] == "cron":
                 if not expression:

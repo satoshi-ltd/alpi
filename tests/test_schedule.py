@@ -32,7 +32,11 @@ def test_cron_tool_add_cron_job_writes_jobs_json(tmp_home_no_env: Path) -> None:
     assert job["expression"] == "*/5 * * * *"
     assert job["chat_id"] == "12345"
     assert job["platform"] == "telegram"
-    assert job["last_run_at"] is None
+    # Seeded with "now" so the first fire is the next real cron slot,
+    # not the next 30s tick. ``None`` used to mean "fire immediately",
+    # which broke user intent for weekday-noon jobs scheduled mid-day.
+    assert job["last_run_at"] is not None
+    datetime.fromisoformat(job["last_run_at"])  # must parse clean
 
 
 def test_cron_tool_add_inactivity_job(tmp_home_no_env: Path) -> None:
@@ -86,6 +90,40 @@ def test_is_due_cron_skips_when_not_due(tmp_home_no_env: Path) -> None:
 def test_is_due_cron_bad_expression(tmp_home_no_env: Path) -> None:
     job = {"kind": "cron", "expression": "not-a-cron"}
     assert not scheduler.is_due(job, home=tmp_home_no_env)
+
+
+def test_is_due_cron_respects_local_timezone(tmp_home_no_env: Path) -> None:
+    """Cron expressions must be interpreted in the user's local time.
+
+    Regression test for the Hua Hin bug: ``10 12 * * 1-5`` meant "12:10
+    weekdays" in the user's local clock. The old ``_now()`` returned
+    UTC, so croniter treated the expression as 12:10 UTC (= 19:10
+    Thailand) — off by seven hours.
+    """
+    from datetime import timezone as _tz
+    from datetime import timedelta as _td
+
+    # Simulate a user in UTC+7. Anchor = yesterday 12:10:01 local, so
+    # the last fire was right after yesterday's slot → next slot is
+    # today 12:10 local.
+    local = _tz(_td(hours=7))
+    anchor = datetime(2026, 4, 19, 12, 10, 1, tzinfo=local)
+    job = {
+        "kind": "cron",
+        "expression": "10 12 * * *",
+        "last_run_at": anchor.isoformat(),
+    }
+
+    # At 12:11 local today, the 12:10 slot just passed → fire.
+    now_after = datetime(2026, 4, 20, 12, 11, 0, tzinfo=local)
+    assert scheduler.is_due(job, now=now_after, home=tmp_home_no_env)
+
+    # At 12:09 local today, the 12:10 slot is still ahead → don't fire.
+    # Critically: this would FIRE if the scheduler were treating the
+    # expression as UTC (12:10 UTC = 19:10 local, well past 12:09
+    # local → past due). The correct local-tz reading says not yet.
+    now_before = datetime(2026, 4, 20, 12, 9, 0, tzinfo=local)
+    assert not scheduler.is_due(job, now=now_before, home=tmp_home_no_env)
 
 
 def test_is_due_inactivity_fires_when_quiet(tmp_home_no_env: Path) -> None:
@@ -198,13 +236,17 @@ def test_tick_failure_still_updates_last_run(monkeypatch, tmp_home_no_env: Path)
 # --------------------------------------------------------------------
 
 
+def _events_stdout(events: list[dict]) -> str:
+    return "\n".join(json.dumps(e) for e in events)
+
+
 def test_run_job_delivers_reply(monkeypatch, tmp_home_no_env: Path) -> None:
     monkeypatch.setenv("TELEGRAM_ALLOWED_CHAT_IDS", "1")
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "x")
 
     class _FakeCompletedProcess:
         returncode = 0
-        stdout = "hello world"
+        stdout = _events_stdout([{"kind": "reply", "text": "hello world"}])
         stderr = ""
 
     monkeypatch.setattr(
@@ -230,7 +272,7 @@ def test_run_job_uses_default_chat_id(monkeypatch, tmp_home_no_env: Path) -> Non
 
     class _FakeCompletedProcess:
         returncode = 0
-        stdout = "hi"
+        stdout = _events_stdout([{"kind": "reply", "text": "hi"}])
         stderr = ""
 
     monkeypatch.setattr(
@@ -242,10 +284,46 @@ def test_run_job_uses_default_chat_id(monkeypatch, tmp_home_no_env: Path) -> Non
                         lambda p, c, t: sent.append((p, c, t)))
 
     job = {"id": "j", "kind": "cron", "prompt": "p",
-           "platform": "telegram", "chat_id": ""}  # no chat → default
+           "platform": "telegram", "chat_id": ""}
     ok, msg = scheduler.run_job(job, tmp_home_no_env)
     assert ok
     assert sent == [("telegram", "777", "hi")]
+
+
+def test_run_job_skips_delivery_when_send_message_used(
+        monkeypatch, tmp_home_no_env: Path) -> None:
+    """If the sub-agent called ``send_message`` during the scheduled
+    turn, the daemon must NOT also push the assistant's reply — that
+    was the "Mirai's standup" + "Mensaje enviado" duplicate bug.
+    """
+    monkeypatch.setenv("TELEGRAM_ALLOWED_CHAT_IDS", "1")
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "x")
+
+    class _FakeCompletedProcess:
+        returncode = 0
+        stdout = _events_stdout([
+            {"kind": "tool_start", "name": "send_message",
+             "preview": "telegram · Mirai's standup"},
+            {"kind": "tool_end", "name": "send_message", "ok": True},
+            {"kind": "reply", "text": "Mensaje enviado"},
+        ])
+        stderr = ""
+
+    monkeypatch.setattr(
+        scheduler.subprocess, "run",
+        lambda *a, **kw: _FakeCompletedProcess(),
+    )
+    sent = []
+    monkeypatch.setattr(delivery, "send_to",
+                        lambda p, c, t: sent.append((p, c, t)))
+
+    job = {"id": "j", "kind": "cron", "prompt": "send 'x' via telegram",
+           "platform": "telegram", "chat_id": "1"}
+    ok, msg = scheduler.run_job(job, tmp_home_no_env)
+    assert ok
+    assert sent == []
+    assert "send_message" in msg
+    assert "no duplicate" in msg
 
 
 # --------------------------------------------------------------------

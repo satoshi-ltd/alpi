@@ -62,7 +62,7 @@ def _save_jobs(home: Path, jobs: list[dict]) -> None:
 
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now().astimezone()
 
 
 def _parse_iso(s: str | None) -> datetime | None:
@@ -95,9 +95,10 @@ def is_due(job: dict, now: datetime | None = None, home: Path | None = None) -> 
         # last run as the anchor.
         if last is None:
             return True
-        next_run = croniter(expr, last).get_next(datetime)
+        anchor = last.astimezone(now.tzinfo) if last.tzinfo else last.replace(tzinfo=now.tzinfo)
+        next_run = croniter(expr, anchor).get_next(datetime)
         if next_run.tzinfo is None:
-            next_run = next_run.replace(tzinfo=timezone.utc)
+            next_run = next_run.replace(tzinfo=now.tzinfo)
         return next_run <= now
 
     if kind == "inactivity":
@@ -135,12 +136,12 @@ def run_job(job: dict, home: Path) -> tuple[bool, str]:
     if not prompt:
         return False, "empty prompt"
 
-    # Prepend a system-ish nudge so the agent knows this is a scheduled
-    # run and doesn't talk back as if the user were waiting synchronously.
-    # Kept minimal — long preambles contaminate the main prompt cache.
     wrapped = (
         "[SCHEDULED: running from cron; user is not watching live. "
-        "Answer concisely; the reply will be pushed to their chat.]\n\n"
+        "Answer concisely; the reply is auto-delivered to their chat. "
+        "If the job is purely to deliver text, just write the text as "
+        "the reply — do NOT also call `send_message`; that would "
+        "send it twice.]\n\n"
         + prompt
     )
 
@@ -148,7 +149,7 @@ def run_job(job: dict, home: Path) -> tuple[bool, str]:
     env["ALF_HOME"] = str(home)
     try:
         proc = subprocess.run(
-            [sys.executable, "-m", "alf", "chat", "--once", wrapped],
+            [sys.executable, "-m", "alf", "chat", "--once", wrapped, "--emit-events"],
             env=env, capture_output=True, text=True, timeout=600,
         )
     except subprocess.TimeoutExpired:
@@ -156,7 +157,11 @@ def run_job(job: dict, home: Path) -> tuple[bool, str]:
     if proc.returncode != 0:
         return False, f"agent rc={proc.returncode}: {proc.stderr[:300]}"
 
-    reply = (proc.stdout or "").strip()
+    already_delivered, reply = _parse_events(proc.stdout or "")
+
+    if already_delivered:
+        return True, "agent delivered via send_message; no duplicate reply pushed"
+
     if not reply:
         return False, "agent produced no reply"
 
@@ -170,6 +175,26 @@ def run_job(job: dict, home: Path) -> tuple[bool, str]:
     except delivery.DeliveryError as e:
         return False, f"delivery failed: {e}"
     return True, f"delivered to {platform}:{chat_id}"
+
+
+def _parse_events(stdout: str) -> tuple[bool, str]:
+    """Return (send_message_used, final_reply_text) from --emit-events output."""
+    sent_via_tool = False
+    reply = ""
+    for line in stdout.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            ev = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        kind = ev.get("kind")
+        if kind == "tool_start" and ev.get("name") == "send_message":
+            sent_via_tool = True
+        elif kind == "reply":
+            reply = (ev.get("text") or "").strip()
+    return sent_via_tool, reply
 
 
 # Tick + main loop
