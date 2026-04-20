@@ -22,7 +22,8 @@ class WebFetch(Tool):
     name = "web_fetch"
     description = (
         "Fetch a URL as clean Markdown. Use when you need to SEE the full "
-        "page content (the user asked \"pásame la página\", \"muéstrame\").\n"
+        "page content (the user asked \"show me the page\", \"give me the "
+        "full markdown\").\n"
         "\n"
         "DO NOT use for:\n"
         "  • answering a specific question about the page → use "

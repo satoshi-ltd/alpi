@@ -221,6 +221,14 @@ def main(ctx: click.Context, profile: str | None, continue_last: bool) -> None:
     ctx.obj["home"] = h
     ctx.obj["profile"] = profile or "default"
     ctx.obj["continue_last"] = continue_last
+    # Propagate the active profile to the environment so every downstream
+    # ``get_home()`` call (tools, providers, UI helpers) resolves to the
+    # SAME home as this CLI invocation. Without this, the tools bypass
+    # ``-p`` entirely and silently write to the default profile — e.g.
+    # the ``memory`` tool was editing ``~/.alf/PERSONALITY.md`` when the
+    # user had launched ``alf -p personal``.
+    if profile:
+        os.environ["ALF_PROFILE"] = profile
     _bootstrap(h)
     if ctx.invoked_subcommand is None:
         _run_chat(h, continue_last=continue_last)

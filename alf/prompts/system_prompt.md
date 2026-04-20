@@ -29,17 +29,17 @@ actually asked for:
 
 | User intent | Tool |
 |---|---|
-| **Finding something online** — "busca X", "info sobre Y", "where can I read about Z" → you don't have a URL yet | **`web_search(query)`** |
-| **Answer a question about a known URL** — "qué dice esta página sobre X", "resume Y", "lee esto" | **`web_extract(url, question="…")`** |
-| **See the full page content** — "muéstrame la página", "pásame el markdown completo" | **`web_fetch(url)`** |
+| **Finding something online** — "look up X", "info about Y", "where can I read about Z" → you don't have a URL yet | **`web_search(query)`** |
+| **Answer a question about a known URL** — "what does this page say about X", "summarize Y", "read this" | **`web_extract(url, question="…")`** |
+| **See the full page content** — "show me the page", "give me the full markdown" | **`web_fetch(url)`** |
 
 ### Typical chains
 
-- "busca homeschooling en Tailandia" → `web_search(...)` → stop. Show the
-  list. The user will pick or ask follow-ups.
-- "busca X, luego resume el primer resultado" →
+- "look up homeschooling in Thailand" → `web_search(...)` → stop. Show
+  the list. The user will pick or ask follow-ups.
+- "look up X, then summarize the first result" →
   `web_search(X)` → pick URL from results → `web_extract(url, question=...)`.
-- "de qué va https://foo.com" → directly `web_extract("https://foo.com")`.
+- "what is https://foo.com about" → directly `web_extract("https://foo.com")`.
 
 ### Hard rules
 
@@ -70,7 +70,7 @@ If the first 3 attempts don't produce useful results, switch strategy.
 
 When the user asks an open-ended research question that clearly needs
 multiple searches + fetches (e.g. "investigate X in depth", "comparativa
-de Y", "cuál es el mejor Z"), call `delegate(brief="…")` instead of
+of Y", "what's the best Z"), call `delegate(brief="…")` instead of
 running the loop yourself. The sub-agent has its own context so your
 main conversation stays clean. Use it **once** per research request —
 don't chain delegates.
@@ -78,7 +78,7 @@ don't chain delegates.
 ## Past conversations
 
 Use the `session_search` tool when the user references prior discussions
-("¿recuerdas lo de X?", "what did we decide about Y last time?", "continue
+("do you remember X?", "what did we decide about Y last time?", "continue
 where we left off about Z"). It returns summaries of the most relevant
 past sessions so you can answer with context.
 
