@@ -16,6 +16,7 @@ def _strip_ansi(s: str) -> str:
     return _ANSI_RE.sub("", s)
 
 from alf.home import get_home
+from alf.tools._guards import check_command
 from alf.tools.base import Tool, ToolResult
 
 
@@ -100,6 +101,12 @@ class Terminal(Tool):
     def _run_fg(self, command: str, timeout: int, cwd: str | None) -> ToolResult:
         if not command:
             return ToolResult(ok=False, output="", error="command is required")
+        safe, reason = check_command(command)
+        if not safe:
+            return ToolResult(
+                ok=False, output="",
+                error=f"refused: {reason}. Ask the user to confirm in chat and then run a narrower command.",
+            )
         try:
             proc = subprocess.run(
                 command, shell=True, capture_output=True, text=True,
@@ -120,6 +127,12 @@ class Terminal(Tool):
     def _run_bg(self, command: str, cwd: str | None) -> ToolResult:
         if not command:
             return ToolResult(ok=False, output="", error="command is required")
+        safe, reason = check_command(command)
+        if not safe:
+            return ToolResult(
+                ok=False, output="",
+                error=f"refused: {reason}. Ask the user to confirm in chat and then run a narrower command.",
+            )
         log = tempfile.NamedTemporaryFile(
             prefix="alf-bg-", suffix=".log", dir=_bg_dir(), delete=False,
         )
