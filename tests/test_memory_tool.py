@@ -15,15 +15,26 @@ def isolated_home(tmp_home_no_env: Path, monkeypatch: pytest.MonkeyPatch) -> Pat
     return tmp_home_no_env
 
 
-def test_tool_description_has_save_and_dont_save_rules() -> None:
-    """The description is injected into every LLM turn. It MUST carry the
-    key memory-discipline rules so even weaker models follow them."""
+def test_tool_description_carries_core_rules() -> None:
+    """The description is injected into every LLM turn. The wording has
+    been pruned Hermes-style, but the load-bearing invariants must
+    survive so even weaker models follow them:
+
+    - All three targets named and discoverable by filename.
+    - The no-duplication rule (a fact belongs to exactly one file).
+    - The "skip" list signalling what NOT to persist.
+    - The explicit "acknowledgement != persistence" rule (otherwise
+      small models confirm in text and never call the tool).
+    - The replace-match-verbatim rule (otherwise models hallucinate
+      match strings and corrupt the file).
+    """
     desc = Memory.description
-    assert "DO NOT save" in desc
-    assert "task progress" in desc.lower()
-    assert "duplicates" in desc.lower() or "never duplicate" in desc.lower()
-    assert "PERSONALITY.md" in desc and "USER.md" in desc and "MEMORY.md" in desc
-    assert "When in doubt, skip" in desc
+    assert "USER.md" in desc and "MEMORY.md" in desc and "PERSONALITY.md" in desc
+    assert "never duplicate" in desc.lower()
+    assert "skip:" in desc.lower() or "skip " in desc.lower()
+    assert "session progress" in desc.lower()
+    assert "acknowledgement" in desc.lower() and "lost" in desc.lower()
+    assert "verbatim" in desc.lower()
 
 
 def test_add_user_fact(isolated_home: Path) -> None:
