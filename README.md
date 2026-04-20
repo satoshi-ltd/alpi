@@ -37,7 +37,9 @@ alf gateway setup           # configure the Telegram gateway
 alf gateway start           # run the gateway process
 alf schedule start          # run the schedule daemon (manual, like the gateway)
 alf schedule status         # check the daemon + list jobs
-alf setup                   # interactive menu: model, gateway, email (IMAP/SMTP)
+alf setup                   # interactive menu: model, gateways, MCPs
+alf mcp list                # show configured MCP servers
+alf mcp test <name>         # spawn + list tools of one server
 
 # Persist across reboots (launchd on macOS, systemd --user on Linux):
 alf gateway install         # one-time, auto-starts + reanima al login
@@ -130,7 +132,8 @@ alf/                       Python package
   prompts/                 system prompt + skill templates
   tools/                   19 registered tools (incl. send_message, email)
   scheduler/               schedule daemon (tick loop, PID, run_job)
-  email/                   IMAP+SMTP client (shared by tool + future gateway)
+  email/                   IMAP+SMTP client (shared by tool + gateway)
+  mcp/                     MCP client (stdio JSON-RPC) + registry + setup
   service.py               install/uninstall launchd/systemd units
   tui/                     Textual app, widgets, screens, theme
   gateway/                 Telegram gateway (separate process)

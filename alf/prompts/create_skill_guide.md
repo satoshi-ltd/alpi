@@ -39,3 +39,24 @@ skill. Never create one proactively.
 
 - Report the final path and the frontmatter. Tell the user which env vars
   they need to add to `~/.alf/.env` before the skill can run.
+
+## External services (MCPs)
+
+If the skill needs an external service (GitHub, Notion, a database,
+a SaaS API), first check whether an MCP server exists for it (search
+the Anthropic registry or common names like
+`@modelcontextprotocol/server-<name>`, `mcp-server-<name>`). If one
+does:
+
+1. Document it as a **Prerequisite** at the top of SKILL.md — not as
+   a step the skill performs. Example:
+
+       ## Prerequisites
+       - `github` MCP server configured in `config.yaml`
+         (see `alf setup → MCPs`). Needs `GITHUB_TOKEN` in `.env`.
+
+2. In the skill body, assume the MCP's tools are already registered
+   (`github:create_issue`, etc.) and invoke them directly.
+
+Skills REFERENCE MCPs; they never install or configure them. The user
+adds MCPs once via `alf setup → MCPs`; skills use them afterwards.

@@ -344,6 +344,81 @@ def gateway_logs(ctx: click.Context, tail: int) -> None:
 
 
 # ----------------------------------------------------------------------
+# MCP servers
+# ----------------------------------------------------------------------
+
+@main.group()
+def mcp() -> None:
+    """Inspect + manage configured MCP servers."""
+
+
+@mcp.command("list")
+@click.pass_context
+def mcp_list(ctx: click.Context) -> None:
+    """List configured MCP servers (from config.yaml)."""
+    h: Path = ctx.obj["home"]
+    cfg = config.load(h)
+    servers = (cfg.raw.get("mcp") or {}).get("servers") or {}
+    if not servers:
+        click.echo("mcp: no servers configured. Run `alf setup` → MCPs.")
+        return
+    click.echo(f"mcp: {len(servers)} server(s)")
+    for name, spec in sorted(servers.items()):
+        cmd = spec.get("command", "?")
+        args = " ".join(spec.get("args") or [])
+        click.echo(f"  {name:<14} {cmd} {args}".rstrip())
+
+
+@mcp.command("test")
+@click.argument("name")
+@click.pass_context
+def mcp_test(ctx: click.Context, name: str) -> None:
+    """Spawn one MCP server, list its tools, then stop it."""
+    from alf.mcp.client import MCPClient, MCPError
+    h: Path = ctx.obj["home"]
+    cfg = config.load(h)
+    spec = ((cfg.raw.get("mcp") or {}).get("servers") or {}).get(name)
+    if not spec:
+        raise click.ClickException(f"no server {name!r} in config.yaml")
+    client = MCPClient(
+        name=name,
+        command=spec.get("command", ""),
+        args=list(spec.get("args") or []),
+        env=dict(spec.get("env") or {}),
+    )
+    try:
+        client.start()
+    except MCPError as e:
+        raise click.ClickException(str(e))
+    try:
+        tools_ = client.list_tools()
+        click.echo(f"{name}: ok ({len(tools_)} tool{'s' if len(tools_) != 1 else ''})")
+        for t in tools_:
+            click.echo(f"  {name}:{t.name}")
+    finally:
+        client.stop()
+
+
+@mcp.command("remove")
+@click.argument("name")
+@click.pass_context
+def mcp_remove(ctx: click.Context, name: str) -> None:
+    """Remove an MCP server from config.yaml."""
+    import yaml
+    h: Path = ctx.obj["home"]
+    cfg_path = h / "config.yaml"
+    if not cfg_path.exists():
+        raise click.ClickException("no config.yaml")
+    data = yaml.safe_load(cfg_path.read_text()) or {}
+    servers = ((data.get("mcp") or {}).get("servers") or {})
+    if name not in servers:
+        raise click.ClickException(f"no server {name!r}")
+    del servers[name]
+    cfg_path.write_text(yaml.safe_dump(data, sort_keys=False))
+    click.echo(f"mcp: removed {name}")
+
+
+# ----------------------------------------------------------------------
 # Schedule daemon
 # ----------------------------------------------------------------------
 
@@ -557,6 +632,10 @@ def setup_cmd(ctx: click.Context) -> None:
                     title=f"Gateways           · {gw_status}",
                     value="gateways",
                 ),
+                questionary.Choice(
+                    title=f"MCPs               · {_mcp_status()}",
+                    value="mcps",
+                ),
                 questionary.Choice(title="Exit", value="exit"),
             ],
             qmark="",
@@ -572,6 +651,9 @@ def setup_cmd(ctx: click.Context) -> None:
             model_selector.run(cfg)
         elif choice == "gateways":
             _gateways_setup(h)
+        elif choice == "mcps":
+            from alf.mcp.setup import run as mcp_setup_run
+            mcp_setup_run(h)
 
 
 def _gateways_setup(h: Path) -> None:
@@ -634,6 +716,19 @@ def _telegram_status() -> str:
     if n == 0:
         return "ready · no one allowlisted yet"
     return f"ready · {n} allowlisted chat{'s' if n != 1 else ''}"
+
+
+def _mcp_status() -> str:
+    """One-line summary of configured MCP servers."""
+    h = home.get_home()
+    try:
+        cfg = config.load(h)
+    except Exception:  # noqa: BLE001
+        return "?"
+    servers = (cfg.raw.get("mcp") or {}).get("servers") or {}
+    if not servers:
+        return "none"
+    return f"{len(servers)} server{'s' if len(servers) != 1 else ''}"
 
 
 def _email_status() -> str:

@@ -33,6 +33,14 @@ DEFAULT_CONFIG: dict[str, Any] = {
         # rgb("..."). Empty = inherit from the current Textual theme.
         "accent": "#ff8800",
     },
+    # MCP (Model Context Protocol) servers the user has opted into.
+    # Blank by default — alf ships with zero pre-connected MCPs.
+    # Users add them via ``alf setup → MCPs`` or by editing this file
+    # directly. Secrets go in ``.env`` and are referenced here with
+    # the ``env:VAR_NAME`` placeholder.
+    "mcp": {
+        "servers": {},
+    },
     # Gateway configuration is namespaced per platform so each channel
     # can carry its own knobs without collisions. Flat keys under
     # ``gateway`` would force us to rename fields the day another

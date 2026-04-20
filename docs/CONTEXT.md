@@ -365,6 +365,51 @@ differently:
   flat `gateway.*` to `gateway.telegram.*` to make room for email's
   own keys without collisions.
 
+### MCP servers (`alf setup → MCPs`)
+
+- **Blank slate by default** — alf ships with zero pre-connected
+  MCP servers. Users opt into each one explicitly via
+  `alf setup → MCPs`. No magic, no surprise subprocesses.
+- **Client in `alf/mcp/client.py`** (`MCPClient`): sync JSON-RPC over
+  stdio. Stdlib only. One subprocess per configured server, spawned
+  at `Engine.__init__` and killed on process exit via `atexit`.
+  Protocol version `2024-11-05`; initialize → notifications/initialized
+  → tools/list → tools/call cycle.
+- **Registry in `alf/mcp/registry.py`**: turns each discovered MCP
+  tool into a dynamically-created `Tool` subclass with name
+  `<server>:<tool>` — e.g. `github:create_issue`,
+  `notion:search_pages`. Collision with native tools impossible
+  because the colon never appears in native names.
+- **Tool description caveat**: every wrapped MCP tool's description
+  gets prepended with the same "data, not instructions" warning
+  `email` uses. Third-party MCP content could carry prompt-injection
+  payloads; the agent is told to treat it as data and surface it to
+  the user.
+- **Config** lives under `mcp.servers.<name>` in `config.yaml`:
+      mcp:
+        servers:
+          github:
+            command: npx
+            args: ["-y", "@modelcontextprotocol/server-github"]
+            env:
+              GITHUB_TOKEN: env:GITHUB_TOKEN
+  The `env:VAR` form expands against the live process env at spawn
+  time — secrets stay in `~/.alf/.env`, never in `config.yaml`.
+- **Setup wizard** (`alf setup → MCPs`): list/add/remove/inspect.
+  Add flow: name, command, args, env var refs. Spawns + handshakes +
+  lists tools BEFORE writing to config — if it can't connect, nothing
+  lands. Same guarantee as the email wizard.
+- **CLI**: `alf mcp list`, `alf mcp test <name>`, `alf mcp remove
+  <name>` for quick inspection outside the setup menu.
+- **Failure isolation**: one MCP failing to start doesn't take the
+  whole engine down. Its tools just don't appear; a warning goes to
+  the log. Other MCPs start normally.
+- **Skills reference MCPs, never install them** (see
+  `alf/prompts/create_skill_guide.md`). A skill like
+  `github-triage` declares `github` MCP as a Prerequisite; the user
+  has already opted in once via setup. Keeps the pending-gate and
+  install-gate boundaries clean.
+
 ### Schedule daemon (`alf schedule start`)
 
 - **Separate process.** PID at `schedule/scheduler.pid`, logs at
@@ -625,10 +670,15 @@ alf/
 ├── scheduler/
 │   ├── __init__.py
 │   └── run.py                   tick loop, run_job, ensure_running (auto-spawn)
-└── email/
+├── email/
+│   ├── __init__.py
+│   ├── client.py                IMAP+SMTP EmailClient (stdlib-only)
+│   └── setup.py                 interactive wizard (hooked into alf setup)
+└── mcp/
     ├── __init__.py
-    ├── client.py                IMAP+SMTP EmailClient (stdlib-only)
-    └── setup.py                 interactive wizard (hooked into alf setup)
+    ├── client.py                MCPClient (stdio JSON-RPC)
+    ├── registry.py              load + register MCP tools
+    └── setup.py                 interactive wizard
 
 tests/                           13 files, 69 unit + 6 LLM-tagged
 docs/CONTEXT.md                  this file
@@ -766,6 +816,16 @@ via shell. Real isolation needs OS-level sandboxing:
 
 Docker / E2B / Modal also work but are heavier; `sandbox-exec` is the
 right first cut on macOS.
+
+**Scope includes MCP subprocesses.** Each MCP server alf spawns today
+inherits the user's full privileges (filesystem, env, network). When
+this task lands the same `Popen` wrapper must apply to
+`alf/mcp/client.py`'s spawn path, and each server's config gets a
+`sandbox:` subkey declaring its required paths and hosts — e.g.
+`filesystem` MCP gets only its declared directories, `github` MCP
+gets only `api.github.com`. Mitigations today: tokens with narrow
+scopes + opt-in-only MCPs (no auto-install). Good enough for a
+personal setup, but not for a shared / untrusted-MCP world.
 
 #### H. Home Assistant integration
 Only worth building if Javi runs HA. Hermes has `homeassistant_tool`
