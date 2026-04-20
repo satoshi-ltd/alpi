@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from alf.tools._guards import check_url, scan_injection
 from alf.tools.base import Tool, ToolResult
 
 JINA_BASE = "https://r.jina.ai/"
@@ -44,17 +45,27 @@ class WebFetch(Tool):
         raw: bool = False,
     ) -> ToolResult:
         from alf.tools._state import emit_state
+        safe, reason = check_url(url)
+        if not safe:
+            return ToolResult(ok=False, output="", error=f"refused: {reason}")
+
         if raw:
             emit_state("reading raw HTML…")
-            return _direct_fetch(url, max_bytes, raw=True, strip_links=strip_links)
+            result = _direct_fetch(url, max_bytes, raw=True, strip_links=strip_links)
+        else:
+            emit_state("reading page…")
+            jina = _jina_fetch(url, max_bytes)
+            if jina is not None:
+                result = ToolResult(ok=True, output=jina)
+            else:
+                emit_state("reader unreachable — trying direct", error=True)
+                result = _direct_fetch(url, max_bytes, raw=False, strip_links=strip_links)
 
-        emit_state("reading page…")
-        jina = _jina_fetch(url, max_bytes)
-        if jina is not None:
-            return ToolResult(ok=True, output=jina)
-
-        emit_state("reader unreachable — trying direct", error=True)
-        return _direct_fetch(url, max_bytes, raw=False, strip_links=strip_links)
+        if result.ok:
+            warning = scan_injection(result.output)
+            if warning:
+                result = ToolResult(ok=True, output=f"{warning}\n\n{result.output}")
+        return result
 
 
 def _jina_fetch(url: str, max_bytes: int) -> str | None:

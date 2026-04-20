@@ -132,7 +132,12 @@ def _dispatch(client: EmailClient, action: str, kw: dict) -> ToolResult:
     if action == "read":
         uid = _require(kw, "uid")
         msg = client.read(uid, folder=folder)
-        return ToolResult(ok=True, output=json.dumps(_msg_json(msg), indent=2))
+        body = json.dumps(_msg_json(msg), indent=2)
+        from alf.tools._guards import scan_injection
+        warning = scan_injection(body)
+        if warning:
+            body = f"{warning}\n\n{body}"
+        return ToolResult(ok=True, output=body)
 
     if action == "send":
         recipients = _require_list(kw, "recipients")
