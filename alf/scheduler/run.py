@@ -101,6 +101,18 @@ def is_due(job: dict, now: datetime | None = None, home: Path | None = None) -> 
             next_run = next_run.replace(tzinfo=now.tzinfo)
         return next_run <= now
 
+    if kind == "once":
+        # Fires once when run_at is reached, then tick() deletes it.
+        # last_run_at is a guard in case deletion failed on a previous tick.
+        if last is not None:
+            return False
+        run_at = _parse_iso(job.get("run_at"))
+        if run_at is None:
+            return False
+        if run_at.tzinfo is None:
+            run_at = run_at.replace(tzinfo=now.tzinfo)
+        return run_at <= now
+
     if kind == "inactivity":
         after_hours = float(job.get("after_hours") or 0)
         if after_hours <= 0 or home is None:
@@ -204,11 +216,13 @@ def tick(home: Path, now: datetime | None = None) -> list[tuple[str, bool, str]]
     """Run one pass: fire every due job, persist ``last_run_at`` on success."""
     now = now or _now()
     jobs = _load_jobs(home)
+    kept: list[dict] = []
     results: list[tuple[str, bool, str]] = []
     changed = False
 
     for job in jobs:
         if not is_due(job, now=now, home=home):
+            kept.append(job)
             continue
         job_id = job.get("id", "?")
         log.info("firing job %s (%s)", job_id, job.get("kind", "cron"))
@@ -218,9 +232,14 @@ def tick(home: Path, now: datetime | None = None) -> list[tuple[str, bool, str]]
         job["last_run_at"] = now.isoformat()
         changed = True
         results.append((job_id, ok, msg))
+        # One-shot jobs die after a successful fire; on failure, keep so
+        # the next tick retries.
+        if job.get("kind") == "once" and ok:
+            continue
+        kept.append(job)
 
     if changed:
-        _save_jobs(home, jobs)
+        _save_jobs(home, kept)
     return results
 
 

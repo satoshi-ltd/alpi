@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import uuid
+from typing import Any
 
 from alf.home import get_home
 from alf.tools.base import Tool, ToolResult
@@ -19,12 +20,18 @@ class Schedule(Tool):
         "Actions: list, add, remove.\n"
         "\n"
         "Pick `kind`:\n"
-        "  cron       — cron expression (field: `expression`, e.g. '0 9 * * *')\n"
+        "  once       — fires on a single date/time, then deletes itself "
+        "(field: `run_at`, ISO 8601, e.g. '2026-04-21T09:00:00')\n"
+        "  cron       — recurring cron expression (field: `expression`, e.g. '0 9 * * *')\n"
         "  inactivity — fires after N hours of user silence (field: `after_hours`)\n"
         "\n"
-        "Cron expressions are evaluated in the USER'S LOCAL timezone. "
-        "When the user says \"at 2pm\" write `0 14 * * *`, not a UTC "
-        "conversion.\n"
+        "Rule of thumb: user named a specific date or said \"in 10 min / "
+        "tomorrow at 9 / the 25th\" → `once`. User said \"every day / "
+        "every Monday / at 5pm\" without a date → `cron`.\n"
+        "\n"
+        "Times are evaluated in the machine's local timezone. When the "
+        "user says \"at 2pm\" write `0 14 * * *` for cron or "
+        "`...T14:00:00` for once — do NOT convert to UTC.\n"
         "\n"
         "`prompt` is what alf should do when the job fires. Its reply "
         "is AUTO-DELIVERED to `platform` + `chat_id` (defaults: telegram "
@@ -37,9 +44,13 @@ class Schedule(Tool):
             "action": {"type": "string", "enum": ["list", "add", "remove"]},
             "kind": {
                 "type": "string",
-                "enum": ["cron", "inactivity"],
+                "enum": ["once", "cron", "inactivity"],
                 "description": "Job kind. Default: cron.",
                 "default": "cron",
+            },
+            "run_at": {
+                "type": "string",
+                "description": "ISO 8601 datetime for kind=once, e.g. '2026-04-21T09:00:00'. Interpreted in the machine's local tz if naive.",
             },
             "expression": {
                 "type": "string",
@@ -67,10 +78,26 @@ class Schedule(Tool):
         "required": ["action"],
     }
 
+    @classmethod
+    def schema(cls) -> dict[str, Any]:
+        """Inject current local time so the LLM can resolve relative phrases
+        ("in 10 min", "tomorrow at 9", "next Monday") to correct absolute
+        times. Without this, the LLM has no grounding for today's date."""
+        from datetime import datetime
+        now = datetime.now().astimezone()
+        preamble = (
+            f"Current time: {now.strftime('%Y-%m-%d %H:%M:%S %z')}. "
+            f"Use this as the reference for any relative phrase like "
+            f"\"in N minutes\", \"tonight\", \"tomorrow\", \"next Monday\".\n\n"
+        )
+        base = super().schema()
+        base["function"]["description"] = preamble + base["function"]["description"]
+        return base
+
     def run(self, action: str, kind: str = "cron", expression: str = "",
             after_hours: float | None = None, prompt: str = "",
             platform: str = "telegram", chat_id: str = "",
-            id: str | None = None) -> ToolResult:
+            run_at: str = "", id: str | None = None) -> ToolResult:
         home = get_home()
         jobs_path = home / "schedule" / "jobs.json"
         jobs_path.parent.mkdir(parents=True, exist_ok=True)
@@ -99,6 +126,20 @@ class Schedule(Tool):
                         error="'expression' is required for kind=cron",
                     )
                 job["expression"] = expression
+            elif job["kind"] == "once":
+                if not run_at:
+                    return ToolResult(
+                        ok=False, output="",
+                        error="'run_at' (ISO 8601) is required for kind=once",
+                    )
+                try:
+                    datetime.fromisoformat(run_at)
+                except ValueError:
+                    return ToolResult(
+                        ok=False, output="",
+                        error=f"'run_at' is not a valid ISO 8601 datetime: {run_at!r}",
+                    )
+                job["run_at"] = run_at
             elif job["kind"] == "inactivity":
                 if after_hours is None or after_hours <= 0:
                     return ToolResult(
