@@ -100,7 +100,7 @@ class AlfApp(App):
         from textual.suggester import SuggestFromList
         from alf import __version__ as alf_version
         slash_commands = [
-            "/help", "/memory", "/tools", "/cost", "/clear",
+            "/help", "/memory", "/tools", "/cost", "/clear", "/new",
             "/compact", "/skills", "/model", "/workspace",
             "/exit", "/quit",
         ]
@@ -175,7 +175,7 @@ class AlfApp(App):
         self._mount_message(UserMessage(text))
         # Immediate activity feedback — removed as soon as the first
         # assistant_delta or tool_start arrives.
-        self._thinking = ThinkingIndicator()
+        self._thinking = ThinkingIndicator(accent=self._accent_color())
         self._mount_message(self._thinking)
         # Always jump to the bottom on new input — even if the user was
         # scrolled up reading history and their new message would otherwise
@@ -326,6 +326,7 @@ class AlfApp(App):
             "tools": lambda _a: self.push_screen(ToolsScreen()),
             "cost": lambda _a: self.push_screen(CostScreen(self.engine.session)),
             "clear": lambda _a: self._cmd_clear(),
+            "new": lambda _a: self._cmd_new(),
             "compact": lambda _a: self._cmd_compact(),
             "skills": lambda _a: self._cmd_skills(),
             "model": lambda _a: self._cmd_model(),
@@ -346,6 +347,13 @@ class AlfApp(App):
             m for m in self.engine.session.messages if m.get("role") == "system"
         ]
         chat.mount(DimLine("(chat cleared)"))
+
+    def _cmd_new(self) -> None:
+        self.engine.reset_session()
+        chat = self.query_one("#chat", VerticalScroll)
+        chat.remove_children()
+        chat.mount(DimLine(f"(new session — {self.engine.session.id})"))
+        self._update_header()
 
     def _cmd_compact(self) -> None:
         # Mount a ToolCard so the user sees compact with the same visual

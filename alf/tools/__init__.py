@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from alf.tools.base import Tool, ToolResult
 from alf.tools import (
+    config as config_tool,
     create_skill,
     delegate,
     delete_skill,
@@ -79,6 +80,7 @@ for _mod in (
     delegate,
     send_message,
     email_tool,
+    config_tool,
 ):
     _cls = getattr(_mod, "TOOL", None)
     if _cls is not None:

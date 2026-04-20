@@ -12,67 +12,40 @@ from dotenv import load_dotenv
 DEFAULT_CONFIG: dict[str, Any] = {
     "model": "openrouter/xiaomi/mimo-v2-flash",
     "fallback_models": [],
-    # Optional: lock alf's filesystem scope to this directory regardless of
-    # where it was launched. Useful for role-based profiles (work points at
-    # ~/git, personal at ~/Documents, etc.) and for headless gateways.
-    # Empty / unset → sandbox uses ``os.getcwd()`` at launch instead.
     "workspace": "",
     "providers": {"custom": []},
     "tools": {
         "max_steps_per_turn": 40,
-        "web_extract": {
-            # Empty → use the main `model`. Override with a cheap/fast model
-            # (e.g. openrouter/google/gemini-2.0-flash-exp:free) to save cost.
-            "model": "",
-        },
+        "web_extract": {"model": ""},
     },
     "tui": {
         "show_cost": True,
         "show_tokens": True,
-        # Any Textual/CSS color value: named ("orange"), hex ("#ff8800"),
-        # rgb("..."). Empty = inherit from the current Textual theme.
         "accent": "#ff8800",
     },
-    # MCP (Model Context Protocol) servers the user has opted into.
-    # Blank by default — alf ships with zero pre-connected MCPs.
-    # Users add them via ``alf setup → MCPs`` or by editing this file
-    # directly. Secrets go in ``.env`` and are referenced here with
-    # the ``env:VAR_NAME`` placeholder.
     "mcp": {
         "servers": {},
     },
-    # Gateway configuration is namespaced per platform so each channel
-    # can carry its own knobs without collisions. Flat keys under
-    # ``gateway`` would force us to rename fields the day another
-    # platform wanted a flag with the same name.
     "gateway": {
         "telegram": {
-            # Relay tool-call traces to Telegram as they happen (one
-            # short message per tool). Set to false to only deliver the
-            # final reply.
             "show_tool_trace": True,
-            # Keep a "typing…" indicator on in the chat while alf is
-            # working.
             "typing_indicator": True,
         },
         "email": {
-            # Seconds between IMAP polls for new inbound mail. Hermes
-            # runs on 15s; 60s is a sensible personal-use default that
-            # keeps CPU/network noise low.
             "poll_interval": 60,
-            # Mark processed messages as \Seen in IMAP after alf has
-            # replied, so your regular mail client treats them as read.
             "mark_as_read": True,
-            # Tool-trace streaming defaults OFF for email — each trace
-            # is its own email, which is spam if a turn touches many
-            # tools. Only the final reply goes out. Users who really
-            # want per-tool emails can flip this to true.
             "show_tool_trace": False,
-            # No "typing…" concept in IMAP/SMTP. Kept explicit so the
-            # gateway loop doesn't spawn a no-op heartbeat task.
             "typing_indicator": False,
         },
     },
+}
+
+
+SEED_CONFIG: dict[str, Any] = {
+    "model": DEFAULT_CONFIG["model"],
+    "providers": {"custom": []},
+    "mcp": {"servers": {}},
+    "gateway": DEFAULT_CONFIG["gateway"],
 }
 
 
@@ -139,10 +112,10 @@ def load(home: Path) -> Config:
     if env_path.exists():
         load_dotenv(env_path, override=False)
 
-    data: dict[str, Any] = dict(DEFAULT_CONFIG)
+    user_data: dict[str, Any] = {}
     if cfg_path.exists():
         user_data = yaml.safe_load(cfg_path.read_text()) or {}
-        data.update(user_data)
+    data = _deep_merge(DEFAULT_CONFIG, user_data)
 
     tools_raw = data.get("tools") or {}
     web_extract_raw = tools_raw.get("web_extract") or {}
@@ -162,29 +135,47 @@ def load(home: Path) -> Config:
         providers=data.get("providers", DEFAULT_CONFIG["providers"]),
         tools=tools_cfg,
         tui=data.get("tui", DEFAULT_CONFIG["tui"]),
-        gateway=_deep_merge(DEFAULT_CONFIG["gateway"], data.get("gateway")),
+        gateway=data.get("gateway", DEFAULT_CONFIG["gateway"]),
         workspace=str(data.get("workspace", "") or ""),
-        raw=data,
+        raw=user_data,
     )
 
 
 def save(cfg: Config) -> None:
-    """Persist the given Config back to ~/.alf/config.yaml."""
-    data: dict[str, Any] = dict(cfg.raw)
-    data["model"] = cfg.model
-    data["providers"] = cfg.providers
-    data["fallback_models"] = cfg.fallback_models
-    data["tools"] = {
-        "max_steps_per_turn": cfg.tools.max_steps_per_turn,
-        "web_extract": {"model": cfg.tools.web_extract.model},
+    """Persist cfg to ~/.alf/config.yaml. Only non-default values survive."""
+    data: dict[str, Any] = {
+        "model": cfg.model,
+        "providers": cfg.providers,
+        "mcp": cfg.raw.get("mcp", {"servers": {}}),
+        "gateway": cfg.gateway,
     }
-    data["tui"] = cfg.tui
-    data["gateway"] = cfg.gateway
     if cfg.workspace:
         data["workspace"] = cfg.workspace
-    else:
-        data.pop("workspace", None)
+    if cfg.fallback_models:
+        data["fallback_models"] = cfg.fallback_models
+
+    tools_delta = _tools_delta(cfg)
+    if tools_delta:
+        data["tools"] = tools_delta
+
+    tui_delta = {
+        k: v for k, v in (cfg.tui or {}).items()
+        if v != DEFAULT_CONFIG["tui"].get(k)
+    }
+    if tui_delta:
+        data["tui"] = tui_delta
+
     cfg.config_path.write_text(yaml.safe_dump(data, sort_keys=False))
+
+
+def _tools_delta(cfg: Config) -> dict:
+    out: dict[str, Any] = {}
+    d = DEFAULT_CONFIG["tools"]
+    if cfg.tools.max_steps_per_turn != d["max_steps_per_turn"]:
+        out["max_steps_per_turn"] = cfg.tools.max_steps_per_turn
+    if cfg.tools.web_extract.model != d["web_extract"]["model"]:
+        out["web_extract"] = {"model": cfg.tools.web_extract.model}
+    return out
 
 
 def resolve_model(cfg: Config) -> dict[str, Any]:
@@ -212,7 +203,7 @@ def seed_defaults(home: Path) -> None:
     """Write starter config.yaml and .env.example on first run."""
     cfg_path = home / "config.yaml"
     if not cfg_path.exists():
-        cfg_path.write_text(yaml.safe_dump(DEFAULT_CONFIG, sort_keys=False))
+        cfg_path.write_text(yaml.safe_dump(SEED_CONFIG, sort_keys=False))
 
     example_env = home / ".env.example"
     if not example_env.exists():
