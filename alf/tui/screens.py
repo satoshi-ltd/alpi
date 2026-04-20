@@ -256,7 +256,6 @@ class _SkillBodyScreen(ModalScreen):
 
 
 def _read_frontmatter(path: Path) -> dict:
-    """Minimal YAML-ish frontmatter parser — handles the subset we write."""
     if not path.exists():
         return {}
     text = path.read_text()

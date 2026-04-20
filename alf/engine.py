@@ -1,9 +1,4 @@
-"""Agent turn runner.
-
-Owns the Session and runs one turn at a time (user input → possibly many LLM
-calls with tool-use loop). It emits events via a callback so the caller
-(CLI / gateway / tests) renders progress without knowing how the loop works.
-"""
+"""Agent turn runner."""
 
 from __future__ import annotations
 
@@ -20,12 +15,6 @@ from alf.session import ToolLog, truncate_result
 
 
 def _maybe_load_mcps(cfg: cfg_mod.Config) -> list:
-    """Spawn+register configured MCP servers. Never fatal.
-
-    Kept isolated so a user who hasn't touched MCPs pays no import
-    cost (the deep import below only runs if there's at least one
-    entry in ``mcp.servers``).
-    """
     servers = (cfg.raw.get("mcp") or {}).get("servers") or {}
     if not servers:
         return []
@@ -75,21 +64,8 @@ class Engine:
         """Ask the current run_turn() to stop at the next check-point."""
         self.interrupt_requested = True
 
-    # ------------------------------------------------------------------
-    # Public API
-    # ------------------------------------------------------------------
-
     def run_turn(self, user_text: str, emit: EventSink) -> None:
-        """Run a full user turn. Blocking — call from a worker thread.
-
-        Streams assistant tokens via ``assistant_delta`` events and emits
-        ``tool_start`` / ``tool_end`` per tool invocation.
-
-        Serialized: if another turn is still running (common when the user
-        interrupted it and immediately sent a new message), this blocks
-        until the previous turn releases the lock. The in-flight turn
-        should exit quickly because ``interrupt_requested`` is set.
-        """
+        """Run a full user turn. Blocking — call from a worker thread."""
         with self._turn_lock:
             self._run_turn_locked(user_text, emit)
 
@@ -282,20 +258,12 @@ class Engine:
             )
 
     def _finalize_interrupt(self, emit: EventSink) -> None:
-        """Emit a terminal 'interrupted' event and reset the flag.
-
-        Caller is expected to return immediately after this.
-        """
         emit(AgentEvent(kind="interrupted",
                         text="Turn interrupted by new user input."))
         self.interrupt_requested = False
 
     def save_session(self) -> Path:
         return self.session.save()
-
-    # ------------------------------------------------------------------
-    # Helpers
-    # ------------------------------------------------------------------
 
     def _build_system_prompt(self) -> str:
         from importlib import resources

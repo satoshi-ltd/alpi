@@ -1,28 +1,4 @@
-"""EmailClient — IMAP + SMTP wrapper built on Python stdlib.
-
-Generic IMAP/SMTP only — zero provider-specific logic. Any mailbox
-that speaks IMAP(S) for reading and SMTP+STARTTLS for sending works:
-Gmail, Outlook, iCloud, Fastmail, Proton Mail via Bridge, self-hosted,
-corporate Exchange, whatever. The user configures hosts + credentials
-in ``~/.alf/.env``; this module just uses them.
-
-Design notes:
-
-- **UIDs, not sequence numbers.** All public IDs are IMAP UIDs (stable
-  across session boundaries). The ``id`` string we hand to the agent
-  and get back is ``str(uid)``.
-- **Fresh connections per operation.** No connection pool. Each public
-  method opens IMAP/SMTP, does its thing, closes. Simple, safe, and
-  good enough for tool-level usage that's one call per agent turn.
-- **Defensive parsing.** Real mailboxes contain old, malformed, or
-  weirdly-encoded mail. Every field accessor falls back gracefully
-  rather than propagating parse errors up to the agent.
-- **Plain text preferred for bodies.** When a message is multipart we
-  pick ``text/plain`` first, ``text/html`` (stripped) as fallback. The
-  agent doesn't need HTML.
-- **Stdlib only.** No ``email-validator``, no ``html2text`` — keeps
-  the dependency surface zero for this subsystem.
-"""
+"""EmailClient — IMAP + SMTP wrapper built on Python stdlib."""
 
 from __future__ import annotations
 
@@ -53,9 +29,7 @@ DEFAULT_SMTP_PORT = 587
 MAX_BODY_CHARS = 8000
 
 
-# ----------------------------------------------------------------------
 # Data classes
-# ----------------------------------------------------------------------
 
 
 @dataclass
@@ -89,10 +63,6 @@ class EmailMessageFull:
     folder: str = "INBOX"
 
 
-# ----------------------------------------------------------------------
-# Public client
-# ----------------------------------------------------------------------
-
 
 class EmailClient:
     """IMAP+SMTP operations against a single mailbox."""
@@ -117,18 +87,11 @@ class EmailClient:
         self.imap_port = imap_port
         self.smtp_port = smtp_port
 
-    # ------------------------------------------------------------------
     # Construction from environment
-    # ------------------------------------------------------------------
 
     @classmethod
     def from_env(cls) -> "EmailClient":
-        """Build a client from ``EMAIL_*`` variables in the current env.
-
-        Raises ``EmailError`` with a clear message if anything's missing
-        — the ``email`` tool surfaces that straight to the agent so the
-        user sees "please run `alf setup`" instead of a stack trace.
-        """
+        """Build a client from ``EMAIL_*`` variables in the current env."""
         addr = os.environ.get("EMAIL_ADDRESS", "").strip()
         pwd = os.environ.get("EMAIL_PASSWORD", "")
         imap = os.environ.get("EMAIL_IMAP_HOST", "").strip()
@@ -153,9 +116,7 @@ class EmailClient:
             smtp_port=int(os.environ.get("EMAIL_SMTP_PORT") or DEFAULT_SMTP_PORT),
         )
 
-    # ------------------------------------------------------------------
     # Connectivity test (used by the setup wizard)
-    # ------------------------------------------------------------------
 
     def test(self) -> None:
         """Open + login on IMAP and SMTP. Raises ``EmailError`` on failure."""
@@ -174,9 +135,7 @@ class EmailClient:
         except (OSError, ssl.SSLError) as e:
             raise EmailError(f"SMTP connect failed: {e}")
 
-    # ------------------------------------------------------------------
     # Read-side: list + search + read + download_attachment
-    # ------------------------------------------------------------------
 
     def list(
         self, folder: str = "INBOX",
@@ -195,11 +154,7 @@ class EmailClient:
         from_: str = "", to: str = "", subject: str = "",
         body: str = "", since: str = "", unread_only: bool = False,
     ) -> list[EmailEnvelope]:
-        """Basic header/body search — translated to IMAP criteria.
-
-        Args map to IMAP SEARCH keywords. ``since`` accepts ``YYYY-MM-DD``
-        or an IMAP date like ``01-Jan-2026``. Empty args are ignored.
-        """
+        """Basic header/body search — translated to IMAP criteria."""
         query: list[Any] = []
         if unread_only:
             query.append("UNSEEN")
@@ -251,9 +206,7 @@ class EmailClient:
                 f"attachment {attachment_name!r} not found on message {uid}"
             )
 
-    # ------------------------------------------------------------------
     # Write-side: send / reply / forward
-    # ------------------------------------------------------------------
 
     def send(
         self, to: list[str], subject: str, body: str,
@@ -318,9 +271,7 @@ class EmailClient:
         )
         self.send(to=to, subject=subject, body=wrapped)
 
-    # ------------------------------------------------------------------
     # Organize: move + delete
-    # ------------------------------------------------------------------
 
     def move(self, uid: str, dest_folder: str, folder: str = "INBOX") -> None:
         with self._imap() as imap:
@@ -348,10 +299,6 @@ class EmailClient:
         raise EmailError(
             "could not find a Trash folder; use `move` with an explicit folder"
         )
-
-    # ------------------------------------------------------------------
-    # Internals
-    # ------------------------------------------------------------------
 
     def _imap(self) -> "_ImapCtx":
         return _ImapCtx(self)
@@ -418,9 +365,7 @@ class EmailClient:
         return email.message_from_bytes(raw, policy=email.policy.default)
 
 
-# ----------------------------------------------------------------------
 # Connection context managers (thin; tests can monkeypatch easily)
-# ----------------------------------------------------------------------
 
 
 class _ImapCtx:
@@ -501,10 +446,6 @@ class _SmtpCtx:
             pass
 
 
-# ----------------------------------------------------------------------
-# Parsing helpers
-# ----------------------------------------------------------------------
-
 
 def _decode_header(raw: str) -> str:
     if not raw:
@@ -526,7 +467,6 @@ def _decode_header(raw: str) -> str:
 
 
 def _clean_addr(raw: str) -> str:
-    """Return ``pepe@x.com`` from ``"Pepe" <pepe@x.com>``. Empty on parse fail."""
     if not raw:
         return ""
     _, addr = email.utils.parseaddr(_decode_header(raw))
@@ -548,14 +488,12 @@ def _parse_date(raw: str) -> datetime | None:
 
 
 def _imap_folder(folder: str) -> str:
-    """Quote folder names with spaces (IMAP wants them quoted)."""
     if " " in folder or "/" in folder:
         return f'"{folder}"'
     return folder
 
 
 def _imap_date(value: str) -> str:
-    """Accept ``YYYY-MM-DD`` or ``DD-MON-YYYY``; return IMAP format."""
     try:
         dt = datetime.strptime(value, "%Y-%m-%d")
     except ValueError:
@@ -564,13 +502,11 @@ def _imap_date(value: str) -> str:
 
 
 def _extract_field(meta: str, key: str) -> str:
-    """Pull ``UID 42`` style fields out of IMAP FETCH metadata."""
     m = re.search(rf"{re.escape(key)} (\S+)", meta)
     return m.group(1) if m else ""
 
 
 def _extract_parens(meta: str, key: str) -> str:
-    """Pull ``FLAGS (\\Seen \\Answered)`` style groups."""
     m = re.search(rf"{re.escape(key)} \(([^)]*)\)", meta)
     return m.group(1) if m else ""
 
@@ -600,8 +536,6 @@ def _parse_full(msg: EmailMessage, uid: str, folder: str) -> EmailMessageFull:
 
 
 def _pick_body(msg: EmailMessage) -> tuple[str, bool]:
-    """Return (body_text, truncated). Prefers text/plain, falls back to
-    a naive HTML → text strip for text/html-only messages."""
     plain = msg.get_body(preferencelist=("plain",))
     if plain is not None:
         text = _coerce_str(plain)

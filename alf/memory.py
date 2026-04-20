@@ -1,14 +1,4 @@
-"""Persistent memory — USER.md and MEMORY.md with char limits.
-
-Design (mirrors Hermes):
-- Two files: USER.md (who the user is) and MEMORY.md (agent's own notes).
-- Character limits, not tokens, for model-independence.
-- Entries separated by the § delimiter; entries can be multiline.
-- Frozen snapshot: callers read memory once at session start and inject it
-  into the system prompt. Mid-session writes hit disk but do NOT update the
-  already-sent prompt — this preserves the prefix cache.
-- File locking (fcntl) to avoid corruption under concurrent writes.
-"""
+"""Persistent memory — USER.md and MEMORY.md with char limits."""
 
 from __future__ import annotations
 
@@ -102,7 +92,6 @@ def _read(path: Path) -> str:
 
 
 def _clean_entry(content: str) -> str:
-    """Strip headers, template cruft and excess whitespace from a proposed entry."""
     lines = []
     for raw in (content or "").splitlines():
         stripped = raw.strip()
@@ -120,13 +109,6 @@ def _clean_entry(content: str) -> str:
 
 
 def _is_duplicate(existing: str, new_entry: str) -> bool:
-    """True if the new entry is substantially the same as an existing one.
-
-    Two-tier check:
-      1. Normalized substring (catches "Hua Hin" vs "Hua Hin.").
-      2. Content-token Jaccard overlap ≥ 0.6 (catches paraphrases like
-         "Javi vive en Hua Hin" vs "Me llamo Javi. Vivo en Hua Hin.").
-    """
     needle_norm = _normalize_for_dedup(new_entry)
     if not needle_norm:
         return True
@@ -162,7 +144,6 @@ _STOPWORDS = frozenset({
 
 
 def _content_tokens(s: str) -> set[str]:
-    """Lowercase, accent-free word tokens minus stopwords. Used for dup check."""
     import re
     folded = _fold(s)
     words = re.findall(r"[a-z0-9]+", folded)
@@ -174,7 +155,6 @@ def _normalize_for_dedup(s: str) -> str:
 
 
 def _fold(s: str) -> str:
-    """Case-fold + strip accents so "Té Verde" == "te verde"."""
     import unicodedata
     normalized = unicodedata.normalize("NFD", s)
     return "".join(c for c in normalized if unicodedata.category(c) != "Mn").casefold()
@@ -196,11 +176,7 @@ def fuzzy_find_unique_entry(entries: list[str], match: str) -> int:
 
 
 def backup_file(path: Path) -> Path | None:
-    """Snapshot ``path`` to ``path.bak`` before a mutating write.
-
-    Keeps a single rolling backup — next write overwrites it. Silent no-op
-    if the source doesn't exist yet (first write creates no backup).
-    """
+    """Snapshot ``path`` to ``path.bak`` before a mutating write."""
     if not path.exists():
         return None
     bak = path.with_suffix(path.suffix + ".bak")

@@ -122,11 +122,6 @@ class Config:
 
 
 def _deep_merge(defaults: dict, user: dict | None) -> dict:
-    """Recursive merge: nested dicts merge key-by-key, everything else
-    lets the user value win. Needed because ``gateway`` is now a
-    two-level map (platform → flags) and a shallow merge would drop
-    the ``email`` defaults the moment the user writes a ``telegram``
-    block, or vice-versa."""
     merged = dict(defaults)
     for key, value in (user or {}).items():
         if key in merged and isinstance(merged[key], dict) and isinstance(value, dict):
@@ -193,11 +188,7 @@ def save(cfg: Config) -> None:
 
 
 def resolve_model(cfg: Config) -> dict[str, Any]:
-    """Return the litellm.completion kwargs for the currently selected model.
-
-    Handles custom OpenAI-compatible endpoints by turning a model id of the
-    form ``<custom_name>/<model>`` into ``openai/<model>`` + ``api_base``.
-    """
+    """Return the litellm.completion kwargs for the currently selected model."""
     import os
 
     model_str = cfg.model

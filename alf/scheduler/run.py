@@ -1,29 +1,4 @@
-"""Schedule daemon — polls ``jobs.json`` every TICK_SECONDS, fires due jobs.
-
-Mirrors the separation of concerns we use for the gateway: the daemon
-is its own process (``alf schedule start``), writes a PID file, and
-logs to ``~/.alf/schedule/logs/scheduler.log``. Per-job execution shells out to
-``alf chat --once <prompt>`` — same subprocess model as the gateway,
-which means the daemon stays tiny and a crashing job can't bring it
-down.
-
-Kinds of jobs:
-
-- **cron** — fires when the cron expression's next run is <= now. Uses
-  ``croniter`` anchored on ``last_run_at`` (or first-tick on first fire).
-- **inactivity** — fires once the newest session file's mtime is older
-  than ``after_hours``. Per-job cooldown: won't re-fire until another
-  ``after_hours`` have passed since its last fire.
-
-Delivery goes through ``gateway.delivery.send_to`` — the daemon does
-NOT depend on the gateway listener being up. Bot token and allowlist
-come straight from ``~/.alf/.env``.
-
-``ensure_running(home)`` spawns a detached daemon if none exists. It's
-kept here as a helper for the future ``alf schedule install`` flow
-(launchd/systemd service) but nothing calls it at runtime today — the
-daemon's lifecycle is fully under user control, mirroring the gateway.
-"""
+"""Schedule daemon — polls ``jobs.json`` every TICK_SECONDS, fires due jobs."""
 
 from __future__ import annotations
 
@@ -50,10 +25,6 @@ log = logging.getLogger("alf.schedule")
 TICK_SECONDS = 30
 
 
-# ----------------------------------------------------------------------
-# Paths
-# ----------------------------------------------------------------------
-
 
 def jobs_path(home: Path) -> Path:
     return home / "schedule" / "jobs.json"
@@ -66,10 +37,6 @@ def pid_path(home: Path) -> Path:
 def _sessions_dir(home: Path) -> Path:
     return home / "sessions"
 
-
-# ----------------------------------------------------------------------
-# Job store helpers
-# ----------------------------------------------------------------------
 
 
 def _load_jobs(home: Path) -> list[dict]:
@@ -92,10 +59,6 @@ def _save_jobs(home: Path, jobs: list[dict]) -> None:
     tmp.write_text(json.dumps(jobs, indent=2))
     tmp.replace(p)
 
-
-# ----------------------------------------------------------------------
-# Due-time logic
-# ----------------------------------------------------------------------
 
 
 def _now() -> datetime:
@@ -155,7 +118,6 @@ def is_due(job: dict, now: datetime | None = None, home: Path | None = None) -> 
 
 
 def _last_user_activity(home: Path) -> datetime | None:
-    """Most recent user message — approximated by newest session file mtime."""
     sdir = _sessions_dir(home)
     if not sdir.exists():
         return None
@@ -166,17 +128,9 @@ def _last_user_activity(home: Path) -> datetime | None:
     return datetime.fromtimestamp(newest.stat().st_mtime, tz=timezone.utc)
 
 
-# ----------------------------------------------------------------------
-# Execution
-# ----------------------------------------------------------------------
-
 
 def run_job(job: dict, home: Path) -> tuple[bool, str]:
-    """Invoke the prompt through ``alf chat --once`` and deliver the reply.
-
-    Returns ``(ok, message)``. Errors are swallowed to keep the scheduler
-    alive — a failing job logs and moves on.
-    """
+    """Invoke the prompt through ``alf chat --once`` and deliver the reply."""
     prompt = job.get("prompt", "").strip()
     if not prompt:
         return False, "empty prompt"
@@ -218,17 +172,11 @@ def run_job(job: dict, home: Path) -> tuple[bool, str]:
     return True, f"delivered to {platform}:{chat_id}"
 
 
-# ----------------------------------------------------------------------
 # Tick + main loop
-# ----------------------------------------------------------------------
 
 
 def tick(home: Path, now: datetime | None = None) -> list[tuple[str, bool, str]]:
-    """Run one pass: fire every due job, persist ``last_run_at`` on success.
-
-    Returns a list of ``(job_id, ok, message)`` for the tick — handy for
-    tests and for the scheduler log.
-    """
+    """Run one pass: fire every due job, persist ``last_run_at`` on success."""
     now = now or _now()
     jobs = _load_jobs(home)
     results: list[tuple[str, bool, str]] = []
@@ -276,9 +224,7 @@ def run(home: Path) -> None:
         _clear_pid(home)
 
 
-# ----------------------------------------------------------------------
 # PID + logging + env helpers (same shape as gateway)
-# ----------------------------------------------------------------------
 
 
 def _write_pid(home: Path) -> None:
@@ -316,9 +262,7 @@ def _configure_logging(home: Path) -> None:
     )
 
 
-# ----------------------------------------------------------------------
 # Process control (used by CLI start/stop/status)
-# ----------------------------------------------------------------------
 
 
 def running_pid(home: Path) -> int | None:
@@ -352,18 +296,7 @@ def stop(home: Path) -> bool:
 
 
 def ensure_running(home: Path) -> int | None:
-    """Spawn a detached schedule daemon if one is not already running.
-
-    Returns the PID (existing or new). Idempotent: a live PID means no
-    spawn. Called from the TUI bootstrap and from ``alf gateway start``
-    so schedules fire without the user needing to run
-    ``alf schedule start`` manually.
-
-    The child is detached with ``start_new_session=True`` so it survives
-    the parent (TUI or gateway) exiting. stdio goes to the scheduler's
-    log file — we deliberately don't inherit the parent's stdio because
-    the TUI controls the terminal.
-    """
+    """Spawn a detached schedule daemon if one is not already running."""
     pid = running_pid(home)
     if pid:
         return pid

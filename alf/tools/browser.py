@@ -1,19 +1,4 @@
-"""Headless browser tool — STUB, NOT REGISTERED.
-
-This file exists but is intentionally left out of the tool registry
-(``alf/tools/__init__.py``) until the Playwright implementation lands.
-An agent that can see the tool declaration but always gets an error back
-only wastes prompt budget and reasoning steps.
-
-When we're ready to ship v0.2:
-  1. Replace :class:`Browser.run` with a Playwright-backed implementation
-     (headless Chrome, persistent context under ``~/.alf/browser/``,
-     actions: text / screenshot / click / fill / navigate).
-  2. Add ``playwright`` to ``pyproject.toml``.
-  3. Re-add ``browser`` to the registry import + for-loop in
-     ``alf/tools/__init__.py``.
-  4. Document in ``docs/CONTEXT.md``.
-"""
+"""Headless browser tool — STUB, NOT REGISTERED."""
 
 from __future__ import annotations
 

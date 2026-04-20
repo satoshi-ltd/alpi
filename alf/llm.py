@@ -1,12 +1,4 @@
-"""Thin wrapper over litellm.
-
-Keeps provider choice (Anthropic, OpenAI, OpenRouter, Ollama) out of the rest
-of the codebase. Model strings use litellm conventions:
-    anthropic/claude-sonnet-4-6
-    openai/gpt-4o
-    openrouter/anthropic/claude-sonnet-4-5
-    ollama/llama3.1
-"""
+"""Thin wrapper over litellm."""
 
 from __future__ import annotations
 
@@ -25,7 +17,6 @@ class Completion:
 
 
 def _silence_litellm() -> None:
-    """Litellm prints init messages via raw FDs — silence at the fd level."""
     import logging
     import os
     import warnings
@@ -73,13 +64,7 @@ def stream(
     api_base: str | None = None,
     api_key: str | None = None,
 ):
-    """Yield streaming chunks. Each yield is a dict with:
-
-    - ``text_delta``: str (may be "")
-    - ``tool_calls_delta``: list of partial tool calls being built up
-    - ``usage``: Completion-like tokens/cost info (only on final chunk)
-    - ``finish_reason``: str | None (only on final chunk with real value)
-    """
+    """Yield streaming chunks from the LLM."""
     import os
     import litellm
 
@@ -173,11 +158,7 @@ def complete(
     api_base: str | None = None,
     api_key: str | None = None,
 ) -> Completion:
-    """Call the LLM and return a normalized Completion.
-
-    Provider defaults are used for max_tokens/temperature — we don't second-guess them.
-    ``api_base``/``api_key`` are passed through to litellm for custom endpoints.
-    """
+    """Call the LLM and return a normalized Completion."""
     import os
     import litellm
 

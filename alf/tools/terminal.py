@@ -1,13 +1,4 @@
-"""Terminal tool — run shell commands. Replaces the old `bash` tool.
-
-Supports two modes:
-
-- **foreground** (default): blocks up to ``timeout`` seconds, returns stdout/
-  stderr/exit code.
-- **background**: spawns the command detached, registers the PID, and returns
-  a handle. Later calls can use ``action="status"`` / ``"output"`` /
-  ``"kill"`` with the PID.
-"""
+"""Terminal tool — run shell commands in foreground or background."""
 
 from __future__ import annotations
 
@@ -18,10 +9,6 @@ import tempfile
 import time
 from pathlib import Path
 
-# Matches CSI / OSC / ESC sequences commonly emitted by colorized CLIs.
-# Stripped before the output reaches the LLM so styling doesn't pollute
-# reasoning. Files still land on disk with whatever bytes the command
-# wrote (we only sanitize the in-memory payload we hand back).
 _ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[a-zA-Z]|\x1b\][^\x07]*\x07|\x1b[@-_]")
 
 
@@ -39,13 +26,6 @@ def _bg_dir() -> Path:
 
 
 def _default_cwd() -> str:
-    """Where terminal commands start if the caller doesn't specify cwd.
-
-    The profile's workspace if configured, else the current cwd. This
-    doesn't sandbox the shell — absolute paths and ``~`` still work —
-    but relative paths and tools like ``ls`` without args stay inside
-    the intended area.
-    """
     try:
         from alf import config as cfg_mod
         cfg = cfg_mod.load(get_home())
@@ -117,10 +97,6 @@ class Terminal(Tool):
             return getattr(self, f"_{action}")(pid)
         return ToolResult(ok=False, output="", error=f"unknown action: {action}")
 
-    # ------------------------------------------------------------------
-    # Foreground
-    # ------------------------------------------------------------------
-
     def _run_fg(self, command: str, timeout: int, cwd: str | None) -> ToolResult:
         if not command:
             return ToolResult(ok=False, output="", error="command is required")
@@ -137,14 +113,9 @@ class Terminal(Tool):
         output += f"\n[exit {proc.returncode}]"
         if proc.returncode == 0:
             return ToolResult(ok=True, output=output)
-        # Build a short, human-readable error for the UI.
         stderr_first = (_strip_ansi(proc.stderr).strip().splitlines() or [""])[0]
         short_err = stderr_first or f"command failed (exit {proc.returncode})"
         return ToolResult(ok=False, output=output, error=short_err)
-
-    # ------------------------------------------------------------------
-    # Background
-    # ------------------------------------------------------------------
 
     def _run_bg(self, command: str, cwd: str | None) -> ToolResult:
         if not command:
@@ -156,7 +127,7 @@ class Terminal(Tool):
         proc = subprocess.Popen(
             command, shell=True, cwd=cwd or _default_cwd(),
             stdout=open(log.name, "ab"), stderr=subprocess.STDOUT,
-            start_new_session=True,  # detach from our session
+            start_new_session=True,
         )
         registry = _bg_dir() / f"{proc.pid}.meta"
         registry.write_text(
@@ -196,7 +167,6 @@ class Terminal(Tool):
         if not log or not Path(log).exists():
             return ToolResult(ok=False, output="", error=f"no log for pid {pid}")
         data = _strip_ansi(Path(log).read_text())
-        # Cap to last 8000 chars to avoid huge dumps.
         if len(data) > 8000:
             data = "…\n" + data[-8000:]
         return ToolResult(ok=True, output=data or "(no output yet)")
@@ -205,7 +175,7 @@ class Terminal(Tool):
         if not _pid_alive(pid):
             return ToolResult(ok=True, output=f"pid {pid} not running")
         try:
-            os.kill(pid, 15)  # SIGTERM
+            os.kill(pid, 15)
         except OSError as e:
             return ToolResult(ok=False, output="", error=f"kill failed: {e}")
         return ToolResult(ok=True, output=f"sent SIGTERM to pid {pid}")

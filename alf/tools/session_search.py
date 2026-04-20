@@ -1,9 +1,4 @@
-"""session_search — let alf look up past conversations.
-
-Simple file-scan across ``~/.alf/sessions/*.json``. Ranks by how often the
-query terms appear in the session's conversation. Returns the top matches
-with a snippet. No SQLite: fast enough at alf's scale, zero deps.
-"""
+"""session_search — let alf look up past conversations."""
 
 from __future__ import annotations
 
@@ -92,7 +87,6 @@ class SessionSearch(Tool):
 
 
 def _session_text(data: dict) -> str:
-    """Full searchable blob — user asks + alf replies from every turn."""
     parts: list[str] = []
     for t in data.get("turns", []):
         user = (t.get("user") or "").strip()
@@ -105,13 +99,6 @@ def _session_text(data: dict) -> str:
 
 
 def _thread_tail(data: dict, cap: int) -> str:
-    """Return the user+assistant thread of a session, tail-prioritized.
-
-    Each turn's tools are summarized as a one-line tools: <names> so the
-    agent can tell what alf did before without seeing raw outputs. If
-    the thread exceeds ``cap`` chars, whole turns are dropped from the
-    head so the agent always sees the *latest* state of the conversation.
-    """
     turns: list[str] = []
     for t in data.get("turns", []):
         user = (t.get("user") or "").strip()

@@ -1,15 +1,4 @@
-"""Tool base class + JSON-schema helpers.
-
-Every tool is a subclass of ``Tool`` living in its own module under
-``alf/tools/``. A tool declares:
-- ``name``: snake_case identifier (used by the LLM)
-- ``description``: one-line what it does (shown to the LLM)
-- ``parameters``: JSON schema for its arguments
-- ``run(**kwargs)``: the actual implementation
-
-Registration is automatic: every Tool subclass imported via
-``alf.tools`` is picked up by the registry.
-"""
+"""Tool base class + JSON-schema helpers."""
 
 from __future__ import annotations
 

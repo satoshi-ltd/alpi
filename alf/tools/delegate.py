@@ -1,17 +1,4 @@
-"""delegate — spawn a sub-agent for deep research.
-
-Runs a bounded mini-agent loop with its own tool subset (read-only web +
-search + extract) against the main LLM. Returns a synthesized report.
-The main conversation's context is preserved because the sub-agent has
-its own message list.
-
-Scope:
-- Tools available to the sub-agent: ``web_search``, ``web_fetch``,
-  ``web_extract``, ``read_file``, ``grep``, ``glob``. No write tools, no
-  memory tool, no terminal — a research assistant, not a worker.
-- Hard cap on tool steps (default 12) to avoid runaway cost.
-- Final assistant message is returned as the tool output.
-"""
+"""delegate — spawn a sub-agent for deep research."""
 
 from __future__ import annotations
 

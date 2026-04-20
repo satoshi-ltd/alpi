@@ -1,33 +1,4 @@
-"""Email platform adapter — inbound IMAP poll + outbound SMTP reply.
-
-Like Telegram, but the wire protocol is IMAP/SMTP instead of the Bot
-API. Reuses ``alf.email.client.EmailClient`` so the agentic ``email``
-tool and this gateway adapter share the same connection logic, MIME
-parsing, and provider quirks (SMTPS on port 465, etc.).
-
-Poll cadence comes from ``gateway.email.poll_interval`` in
-``config.yaml`` (default 60s). The first poll after startup is a
-baseline — we record the highest UID in INBOX and only surface
-messages with a UID strictly greater. No backfill of whatever
-accumulated while alf was off; if you want that, drop the state file.
-
-State persists to ``~/.alf/gateway/email-state.json`` so restarts
-don't reprocess or miss messages. One ``last_uid`` per email account
-(in practice, always one per profile).
-
-Filtering inside ``listen``:
-
-1. Only INBOX — skip Spam/Junk entirely. Your provider already ran
-   DKIM/SPF checks to decide that.
-2. Anti-bulk: drop newsletters, noreply senders, auto-responders,
-   bounce messages. Patterns are conservative but strict — if someone
-   you actually want pretends to be a noreply, whitelist them
-   explicitly in a different channel first.
-3. Allowlist check happens in the gateway run loop (``_is_allowed``),
-   same contract as Telegram. We DO NOT filter here, so the same
-   ``delivery.is_allowed`` logic can decide — keeping one source of
-   truth.
-"""
+"""Email platform adapter — inbound IMAP poll + outbound SMTP reply."""
 
 from __future__ import annotations
 
@@ -85,9 +56,7 @@ class Email(Platform):
         self._mark_as_read = True
         self._reload_config()
 
-    # ------------------------------------------------------------------
     # Listen — async IMAP poll driven by the gateway event loop
-    # ------------------------------------------------------------------
 
     async def listen(self) -> AsyncIterator[IncomingMessage]:
         if not os.environ.get("EMAIL_ADDRESS"):
@@ -155,9 +124,7 @@ class Email(Platform):
 
             await asyncio.sleep(self._poll_interval)
 
-    # ------------------------------------------------------------------
     # Send — used by the gateway to reply to the sender
-    # ------------------------------------------------------------------
 
     async def send(self, message: OutgoingMessage) -> None:
         def _do_send() -> None:
@@ -172,9 +139,7 @@ class Email(Platform):
         except EmailError as e:
             log.warning("email send failed: %s", e)
 
-    # ------------------------------------------------------------------
     # Sync IMAP helpers (run under asyncio.to_thread to avoid blocking)
-    # ------------------------------------------------------------------
 
     def _discover_baseline_uid(self) -> int:
         client = EmailClient.from_env()
@@ -184,7 +149,6 @@ class Email(Platform):
             return int(uids[-1]) if uids else 0
 
     def _poll_once(self, since_uid: int) -> list[tuple[str, object]]:
-        """Fetch messages with UID > ``since_uid``. Returns (uid, parsed)."""
         client = EmailClient.from_env()
         results: list[tuple[str, object]] = []
         with client._imap() as imap:
@@ -215,10 +179,6 @@ class Email(Platform):
             if typ != "OK":
                 raise EmailError(f"could not mark UID {uid} seen")
 
-    # ------------------------------------------------------------------
-    # State file
-    # ------------------------------------------------------------------
-
     def _load_last_uid(self) -> int | None:
         p = _state_path(self.home)
         if not p.exists():
@@ -247,17 +207,7 @@ class Email(Platform):
         tmp.write_text(json.dumps(data, indent=2))
         tmp.replace(p)
 
-    # ------------------------------------------------------------------
-    # Config reload
-    # ------------------------------------------------------------------
-
     def _reload_config(self) -> None:
-        """Refresh poll_interval + mark_as_read from ``config.yaml``.
-
-        Called from __init__. Cheap enough to call again from inside
-        the poll loop if we ever want hot-reloading, but today we keep
-        it boot-time only.
-        """
         try:
             from alf import config as config_mod
             cfg = config_mod.load(self.home)
@@ -270,13 +220,10 @@ class Email(Platform):
             log.warning("email: falling back to defaults (%s)", e)
 
 
-# ----------------------------------------------------------------------
 # Parsing + anti-bulk helpers
-# ----------------------------------------------------------------------
 
 
 def _extract(msg: object) -> tuple[str, str, str, dict[str, str]]:
-    """Return (sender, subject, body_text, headers_dict)."""
     sender = _clean_addr(getattr(msg, "__getitem__", lambda k: "")("From") or "")
     subject = _decode(getattr(msg, "__getitem__", lambda k: "")("Subject") or "")
     headers = {k: v for k, v in getattr(msg, "items", list)()}
@@ -314,7 +261,6 @@ _HTML_TAG_RE = re.compile(r"<[^>]+>")
 
 
 def _pick_body(msg: object) -> str:
-    """Return plain-text body, falling back to HTML-stripped."""
     plain = getattr(msg, "get_body", lambda **kw: None)(preferencelist=("plain",))
     if plain is not None:
         try:

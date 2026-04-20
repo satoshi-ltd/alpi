@@ -1,10 +1,4 @@
-"""delete_skill — remove a skill directory.
-
-Safety rules:
-- Only deletes ``origin: agent`` skills by default.
-- ``origin: user`` requires ``confirm_user_skill=True`` — the agent should
-  ask you out loud first.
-"""
+"""delete_skill — remove a skill directory."""
 
 from __future__ import annotations
 

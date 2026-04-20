@@ -1,29 +1,4 @@
-"""Tool-state emitter.
-
-Lets a running tool push short progress labels up to the UI without changing
-its ``run()`` signature. The engine wires ``set_emit`` around each tool call;
-tools import ``emit_state`` and call it whenever they enter a new phase.
-
-Example in a tool::
-
-    from alf.tools._state import emit_state
-
-    def run(self, url):
-        emit_state("fetching…")
-        body = download(url)
-        emit_state("parsing…")
-        return ToolResult(...)
-
-In the engine::
-
-    from alf.tools import _state as tool_state
-
-    tool_state.set_emit(lambda label: emit(AgentEvent(kind="tool_state", ...)))
-    try:
-        result = tools.execute(name, args)
-    finally:
-        tool_state.set_emit(None)
-"""
+"""Tool-state emitter."""
 
 from __future__ import annotations
 
@@ -80,11 +55,7 @@ def record_usage(input_tokens: int, output_tokens: int, cost_usd: float) -> None
 
 
 def emit_state(label: str, *, error: bool = False) -> None:
-    """Push a short progress label from a running tool to the UI.
-
-    Pass ``error=True`` for transient failure states so the UI can render
-    them in red while the tool continues (e.g. fallback attempt in progress).
-    """
+    """Push a short progress label from a running tool to the UI."""
     cb = _emit
     if cb is not None:
         try:

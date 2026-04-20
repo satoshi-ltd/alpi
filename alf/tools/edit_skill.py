@@ -1,12 +1,4 @@
-"""edit_skill — rewrite an existing skill's body.
-
-Safety rules:
-- Only touches ``origin: agent`` skills by default. For ``origin: user``
-  the agent must pass ``confirm_user_skill=True`` (a guard, not a gate —
-  the user still edits their own skills by hand or via a slash flow).
-- Runs the same security scanner as ``create_skill`` on the new body.
-- Writes a ``.bak`` next to ``SKILL.md`` before overwriting.
-"""
+"""edit_skill — rewrite an existing skill's body."""
 
 from __future__ import annotations
 
