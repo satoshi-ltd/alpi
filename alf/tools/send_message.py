@@ -9,9 +9,11 @@ from alf.tools.base import Tool, ToolResult
 class SendMessage(Tool):
     name = "send_message"
     description = (
-        "Send a text message to a paired external chat (Telegram). Use "
-        "for proactive messages outside the current session — scheduled "
-        "reminders, long-job completion pings, inactivity check-ins.\n"
+        "Send a text message to a paired external chat (Telegram). CALL "
+        "this tool — saying \"message sent\" without invoking it "
+        "sends nothing. Use for proactive messages outside the current "
+        "session — scheduled reminders, long-job completion pings, "
+        "inactivity check-ins.\n"
         "\n"
         "Not for replying inside the active conversation — just write "
         "the reply directly.\n"

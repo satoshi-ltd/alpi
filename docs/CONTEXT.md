@@ -22,6 +22,28 @@ skill categories, 30+ tools, SQLite state, curses UIs). **Does NOT do
 post-session reflect** — removed deliberately; the agent decides what to
 save in the moment via the `memory` tool (Hermes-style).
 
+## Language
+
+**All text inside the `alf/` source tree is written in English.** That
+includes code, docstrings, tool descriptions, system prompts, commit
+messages, CLI help, error messages, seed config comments — everything
+except actual user-facing output that the LLM generates at runtime
+(which follows the user's language).
+
+Why: `alf` is open-source, the LLM reads these strings at every turn,
+and examples embedded in tool descriptions bias the agent toward that
+language. A tool description with "saying \"lo recordaré\" without a
+tool call" nudges the model toward Spanish replies; the English
+equivalent keeps it neutral.
+
+This rule is load-bearing for tool descriptions (which ship to the
+LLM each turn) and for any prose the LLM reads. It's also the
+enforcement path for code readers who aren't native Spanish speakers.
+
+Sessions that accidentally seed Spanish strings into source get
+caught by grep at review time; fix with a direct English rewrite, no
+translation layer.
+
 ## Code conventions
 
 **No human-facing comments in `alf/` source.** The reader of this code is

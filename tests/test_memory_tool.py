@@ -33,7 +33,7 @@ def test_tool_description_carries_core_rules() -> None:
     assert "never duplicate" in desc.lower()
     assert "skip:" in desc.lower() or "skip " in desc.lower()
     assert "session progress" in desc.lower()
-    assert "acknowledgement" in desc.lower() and "lost" in desc.lower()
+    assert "call this tool" in desc.lower() and "lost" in desc.lower()
     assert "verbatim" in desc.lower()
 
 
