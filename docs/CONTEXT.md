@@ -22,6 +22,43 @@ skill categories, 30+ tools, SQLite state, curses UIs). **Does NOT do
 post-session reflect** — removed deliberately; the agent decides what to
 save in the moment via the `memory` tool (Hermes-style).
 
+## Code conventions
+
+**No human-facing comments in `alf/` source.** The reader of this code is
+an LLM — this Claude Code session, a future one, or a delegated
+sub-agent. Narrative prose, banner dividers, section labels, and
+"rationale" docstring essays are token tax with no corresponding
+benefit. Well-named identifiers carry the WHAT; commit messages and
+`docs/CONTEXT.md` carry the WHY that outlives a single change.
+
+Applies across `alf/`. Out of scope: `tests/` (executable spec), `docs/`
+(human-facing by design), tool `description` strings inside `Tool`
+subclasses (those ARE read by the LLM at every turn and deserve care).
+
+Allowed, rarely:
+- Class docstrings that document a contract the signature can't (often
+  `Tool` subclasses where `description` + `parameters` shape LLM behaviour).
+- A single-line module docstring for orientation.
+- An inline note pinning a concrete workaround to a concrete bug
+  ("questionary's `class:highlighted` flashes the accent tint — use
+  the list-title path to bypass it").
+
+Never:
+- `# ---- Section ----` banners.
+- `# Bootstrap` / `# Helpers` / `# Foo` section labels before a def.
+- Docstrings on private functions (names starting with `_`).
+- Multi-paragraph docstrings on public functions.
+- Restatement docstrings (`"""Return the workspace path."""` on a
+  function already named `workspace_path()`).
+- `# do the thing` above `do_the_thing()`.
+
+This policy was enforced repo-wide in commit `a07e40a` (–1,431 lines of
+comments). Future changes that add comments of the "banned" categories
+should be removed before merging — no exceptions for "this one is
+important", because every previous session made that same argument and
+we ended up with a 1,630-char `memory` tool description and 161 banner
+lines.
+
 ## CLI + UI conventions
 
 The CLI surface is small and stable. Verbs are shared across groups
