@@ -241,9 +241,10 @@ Mixing ``Exit`` / ``Back`` / ``Cancel`` within one context is a bug.
 - litellm multi-provider (Anthropic, OpenAI, OpenRouter, Google, Groq,
   custom OpenAI-compatible endpoints i.e. Ollama / LM Studio / vLLM).
 - **19 tools** registered: `read_file`, `write_file`, `edit_file`,
-  `terminal`, `grep`, `glob`, `todo`, `web_search`, `web_fetch`,
+  `terminal`, `search`, `todo`, `web_search`, `web_fetch`,
   `web_extract`, `schedule`, `memory`, `session_search`, `create_skill`,
-  `edit_skill`, `delete_skill`, `delegate`, `send_message`, `email`.
+  `edit_skill`, `delete_skill`, `delegate`, `send_message`, `email`,
+  `config`.
   - **`browser`** file exists but is **not registered** (stub). See
     "Open questions / pending" section 6 for the Playwright roadmap.
 - **Curated memory** (`memories/USER.md`, `memories/MEMORY.md`) with §
@@ -597,7 +598,7 @@ differently:
 - **When to use** (per system prompt): open-ended research needing
   multiple searches + fetches ("investigate X", "compare Y vs Z").
 - **Scope**: read-only toolset `{web_search, web_fetch, web_extract,
-  read_file, grep, glob}`. No memory/terminal/write. Enforced by
+  read_file, search}`. No memory/terminal/write. Enforced by
   `SUB_AGENT_TOOLS` allowlist.
 - **Budget**: 12 iterations *of LLM round-trips* (not tool calls — a
   parallel `search + 3 extracts` in one turn still counts as 1).

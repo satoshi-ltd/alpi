@@ -14,7 +14,7 @@ from alf.tools import _state as tool_state_mod
 
 SUB_AGENT_TOOLS = {
     "web_search", "web_fetch", "web_extract",
-    "read_file", "grep", "glob",
+    "read_file", "search",
 }
 
 DEFAULT_MAX_STEPS = 12

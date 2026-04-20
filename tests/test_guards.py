@@ -47,14 +47,17 @@ def test_check_command_rejects_dangerous(cmd: str) -> None:
     "rm -rf dist/",
     "rm temp.txt",
     "chmod 644 script.sh",
-    "grep -r foo src/",
     "python -m alf",
     "cat README.md",
     "echo hello",
+    "grep foo src/",
+    "find . -name '*.py'",
 ])
 def test_check_command_allows_safe(cmd: str) -> None:
     safe, reason = check_command(cmd)
     assert safe, f"expected ALLOW for {cmd!r}, got blocked: {reason}"
+
+
 
 
 @pytest.mark.parametrize("url", [

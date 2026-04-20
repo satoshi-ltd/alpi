@@ -30,7 +30,7 @@ def check_path(path: str) -> Path:
     roots = _allowed_roots()
     p = Path(path).expanduser()
     if not p.is_absolute():
-        p = Path.cwd() / p
+        p = roots[0] / p
     resolved = p.resolve()
     for root in roots:
         try:
