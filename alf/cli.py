@@ -208,14 +208,17 @@ def _run_once(h: Path, user_text: str, emit_events: bool = False) -> None:
 # Click subcommands
 # ----------------------------------------------------------------------
 
-@click.group(invoke_without_command=True)
-@click.option("-p", "--profile", default=None, help="Profile name (default: default).")
+@click.group(
+    invoke_without_command=True,
+    context_settings={"max_content_width": 100, "help_option_names": ["-h", "--help"]},
+)
+@click.option("-p", "--profile", default=None, help="Profile to use (default: default).")
 @click.option("-c", "--continue", "continue_last", is_flag=True,
-              help="Continue from the last session.")
+              help="Resume from the last session.")
 @click.version_option(__version__, prog_name="alf")
 @click.pass_context
 def main(ctx: click.Context, profile: str | None, continue_last: bool) -> None:
-    """alf — a slim AI agent."""
+    """alf — a slim personal AI agent."""
     ctx.ensure_object(dict)
     h = home.get_home(profile)
     ctx.obj["home"] = h
@@ -236,31 +239,23 @@ def main(ctx: click.Context, profile: str | None, continue_last: bool) -> None:
 
 @main.command()
 @click.option("--once", "input_text", default=None,
-              help="Run a single non-interactive turn and print the reply.")
-@click.option("--emit-events", is_flag=True, default=False,
-              help="With --once: stream JSON event lines to stdout (for the gateway).")
+              help="Run one turn and print the reply to stdout.")
+# Internal gateway-subprocess contract. Hidden from ``--help`` so the
+# public surface stays minimal; users who need one-shot mode use
+# ``--once`` alone. The gateway sets this flag when spawning so it
+# can parse tool activity from the agent's stdout.
+@click.option("--emit-events", is_flag=True, default=False, hidden=True)
 @click.option("-c", "--continue", "continue_last", is_flag=True,
-              help="Continue from the last session.")
+              help="Resume from the last session.")
 @click.pass_context
 def chat(ctx: click.Context, input_text: str | None, emit_events: bool,
          continue_last: bool) -> None:
-    """Start an interactive chat session (or --once for one-shot mode)."""
+    """Launch the TUI, or run one turn with ``--once "text"``."""
     h: Path = ctx.obj["home"]
     if input_text is not None:
         _run_once(h, input_text, emit_events=emit_events)
     else:
         _run_chat(h, continue_last=continue_last)
-
-
-@main.command("model")
-@click.pass_context
-def model_cmd(ctx: click.Context) -> None:
-    """Select the default model interactively."""
-    from alf import model_selector
-    h: Path = ctx.obj["home"]
-    _bootstrap(h)
-    cfg = config.load(h)
-    model_selector.run(cfg)
 
 
 # ----------------------------------------------------------------------
@@ -269,17 +264,7 @@ def model_cmd(ctx: click.Context) -> None:
 
 @main.group()
 def gateway() -> None:
-    """Gateway commands (separate process for external channels)."""
-
-
-@gateway.command("setup")
-@click.pass_context
-def gateway_setup(ctx: click.Context) -> None:
-    """Interactively configure the Telegram gateway."""
-    from alf.gateway.setup import run as setup_run
-    h: Path = ctx.obj["home"]
-    _bootstrap(h)
-    setup_run(h)
+    """Gateway daemon (inbound channels: Telegram, Email, …)."""
 
 
 @gateway.command("start")
@@ -357,7 +342,13 @@ def gateway_logs(ctx: click.Context, tail: int) -> None:
 
 @main.group()
 def mcp() -> None:
-    """Inspect + manage configured MCP servers."""
+    """Inspect configured MCP servers.
+
+    Read-only CLI for quick checks from a shell or script. Mutations
+    (add / edit / remove) live in ``alf setup → MCPs`` — same rule as
+    gateways: one interactive place where you change configuration,
+    CLI subcommands for inspection.
+    """
 
 
 @mcp.command("list")
@@ -407,32 +398,13 @@ def mcp_test(ctx: click.Context, name: str) -> None:
         client.stop()
 
 
-@mcp.command("remove")
-@click.argument("name")
-@click.pass_context
-def mcp_remove(ctx: click.Context, name: str) -> None:
-    """Remove an MCP server from config.yaml."""
-    import yaml
-    h: Path = ctx.obj["home"]
-    cfg_path = h / "config.yaml"
-    if not cfg_path.exists():
-        raise click.ClickException("no config.yaml")
-    data = yaml.safe_load(cfg_path.read_text()) or {}
-    servers = ((data.get("mcp") or {}).get("servers") or {})
-    if name not in servers:
-        raise click.ClickException(f"no server {name!r}")
-    del servers[name]
-    cfg_path.write_text(yaml.safe_dump(data, sort_keys=False))
-    click.echo(f"mcp: removed {name}")
-
-
 # ----------------------------------------------------------------------
 # Schedule daemon
 # ----------------------------------------------------------------------
 
 @main.group()
 def schedule() -> None:
-    """Schedule daemon (separate process that fires scheduled jobs)."""
+    """Schedule daemon (runs cron + inactivity jobs)."""
 
 
 @schedule.command("start")
@@ -619,44 +591,40 @@ def _check_not_running(pid_file: Path) -> None:
 @main.command("setup")
 @click.pass_context
 def setup_cmd(ctx: click.Context) -> None:
-    """Interactive setup — model, gateway, etc."""
-    import questionary
-    from alf.model_selector import _ask
+    """Interactive setup — model, gateways, MCPs.
+
+    The single entry point for per-profile configuration. Operates on
+    whichever profile the invocation targets (``-p`` / ``ALF_PROFILE``
+    / default). Profiles themselves are managed with ``alf profile``.
+    """
+    from alf import ui
     h: Path = ctx.obj["home"]
     _bootstrap(h)
-    from alf.model_selector import accent_style
+
+    profile_name = ctx.obj.get("profile") or "default"
     while True:
         cfg = config.load(h)
-        model_status = cfg.model or "(not set)"
-        gw_status = _gateways_status()
-        choice = _ask(questionary.select(
-            "Configure:",
-            choices=[
-                questionary.Choice(
-                    title=f"Model / Provider   · {model_status}",
-                    value="model",
-                ),
-                questionary.Choice(
-                    title=f"Gateways           · {gw_status}",
-                    value="gateways",
-                ),
-                questionary.Choice(
-                    title=f"MCPs               · {_mcp_status()}",
-                    value="mcps",
-                ),
-                questionary.Choice(title="Exit", value="exit"),
-            ],
-            qmark="",
-            pointer="◆",
-            style=accent_style((cfg.tui or {}).get("accent", "")),
-            instruction="(↑↓ navigate  ENTER select  ESC cancel)",
-        ))
-        if choice in (None, "exit"):
+        items = [
+            (ui.row("Model / Provider", cfg.model or "(not set)"), "model"),
+            (ui.row("Gateways", _gateways_status(h)), "gateways"),
+            (ui.row("MCPs", _mcp_status(h)), "mcps"),
+        ]
+        # Every title starts with ``alf`` as a lightweight brand +
+        # "you are here" marker. The active profile goes in the
+        # subtitle so the user always knows which one they're
+        # configuring without it bloating the title itself.
+        choice = ui.menu(
+            ui.crumb("setup"),
+            items,
+            subtitle=f"profile: {profile_name}",
+            home=h, close="Exit",
+        )
+        if choice is None:
+            _setup_farewell(profile_name, h)
             return
         if choice == "model":
             from alf import model_selector
-            cfg = config.load(h)
-            model_selector.run(cfg)
+            model_selector.run(config.load(h))
         elif choice == "gateways":
             _gateways_setup(h)
         elif choice == "mcps":
@@ -664,40 +632,41 @@ def setup_cmd(ctx: click.Context) -> None:
             mcp_setup_run(h)
 
 
+def _setup_farewell(profile: str, h: Path) -> None:
+    """One dim line pointing the user at the next command to run.
+
+    Keep it minimal — the user just closed setup, they don't need a
+    multi-paragraph sendoff. A single ``next: <command>`` hint
+    covers the 90% case; anyone who wants ``gateway start`` or more
+    advanced flows can read ``alf --help``.
+    """
+    from alf import ui as ui_mod
+
+    prefix = f"alf -p {profile}" if profile != "default" else "alf"
+    ui_mod._console.print(f"\n[dim]next:[/dim] {prefix}\n")
+
+
 def _gateways_setup(h: Path) -> None:
     """Sub-menu for platform-level credentials (Telegram, Email, …).
 
-    These are the surfaces alf talks to. Each one's credentials live in
-    ``~/.alf/.env`` and are shared by every consumer (gateway listener,
-    ``send_message`` tool, ``email`` tool, scheduled deliveries).
+    These are the surfaces alf talks to. Each one's credentials live
+    in ``~/.alf/.env`` and are shared by every consumer — gateway
+    listener, ``send_message`` tool, ``email`` tool, scheduled
+    deliveries.
     """
-    import questionary
-    from alf.model_selector import _ask, accent_style
-
-    cfg = config.load(h)
-    style = accent_style((cfg.tui or {}).get("accent", ""))
+    from alf import ui
     while True:
-        tg_status = _telegram_status()
-        em_status = _email_status()
-        choice = _ask(questionary.select(
-            "Gateway to configure:",
-            choices=[
-                questionary.Choice(
-                    title=f"Telegram  · {tg_status}",
-                    value="telegram",
-                ),
-                questionary.Choice(
-                    title=f"Email     · {em_status}",
-                    value="email",
-                ),
-                questionary.Choice(title="← Back", value="back"),
-            ],
-            qmark="",
-            pointer="◆",
-            style=style,
-            instruction="(↑↓ navigate  ENTER select  ESC cancel)",
-        ))
-        if choice in (None, "back"):
+        items = [
+            (ui.row("Telegram", _telegram_status(h)), "telegram"),
+            (ui.row("Email", _email_status(h)), "email"),
+        ]
+        choice = ui.menu(
+            ui.crumb("setup", "gateways"),
+            items,
+            subtitle="inbound channels alf listens on",
+            home=h, close="Back",
+        )
+        if choice is None:
             return
         if choice == "telegram":
             from alf.gateway.setup import run as telegram_setup
@@ -707,28 +676,52 @@ def _gateways_setup(h: Path) -> None:
             email_setup(h)
 
 
-def _gateways_status() -> str:
-    """Short summary for the top-level menu line."""
-    parts = []
-    parts.append("Telegram ✓" if os.environ.get("TELEGRAM_BOT_TOKEN") else "Telegram —")
-    parts.append("Email ✓" if os.environ.get("EMAIL_ADDRESS") else "Email —")
-    return "  ".join(parts)
+def _read_profile_env(h: Path) -> dict[str, str]:
+    """Parse ``<home>/.env`` into a dict WITHOUT touching ``os.environ``.
+
+    Status lines read from here so that ``alf -p personal setup`` shows
+    the personal profile's configured state — not whatever happens to
+    be in the shell's environment or was loaded for the default
+    profile earlier. ``os.environ`` is a runtime bag that leaks across
+    profiles within a process; the on-disk ``.env`` is the ground truth.
+    """
+    env_path = h / ".env"
+    if not env_path.exists():
+        return {}
+    out: dict[str, str] = {}
+    for line in env_path.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        out[key.strip()] = value.strip()
+    return out
 
 
-def _telegram_status() -> str:
-    token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
-    if not token:
+def _gateways_status(h: Path) -> str:
+    """Comma-separated list of gateway names configured in the profile."""
+    env = _read_profile_env(h)
+    names = []
+    if env.get("TELEGRAM_BOT_TOKEN"):
+        names.append("Telegram")
+    if env.get("EMAIL_ADDRESS"):
+        names.append("Email")
+    return ", ".join(names) if names else "none"
+
+
+def _telegram_status(h: Path) -> str:
+    env = _read_profile_env(h)
+    if not env.get("TELEGRAM_BOT_TOKEN"):
         return "not set up"
-    chats = os.environ.get("TELEGRAM_ALLOWED_CHAT_IDS", "")
+    chats = env.get("TELEGRAM_ALLOWED_CHAT_IDS", "")
     n = len([c for c in chats.split(",") if c.strip()])
     if n == 0:
         return "ready · no one allowlisted yet"
     return f"ready · {n} allowlisted chat{'s' if n != 1 else ''}"
 
 
-def _mcp_status() -> str:
-    """One-line summary of configured MCP servers."""
-    h = home.get_home()
+def _mcp_status(h: Path) -> str:
+    """List configured MCP server names from the profile's ``config.yaml``."""
     try:
         cfg = config.load(h)
     except Exception:  # noqa: BLE001
@@ -736,14 +729,15 @@ def _mcp_status() -> str:
     servers = (cfg.raw.get("mcp") or {}).get("servers") or {}
     if not servers:
         return "none"
-    return f"{len(servers)} server{'s' if len(servers) != 1 else ''}"
+    return ", ".join(sorted(servers.keys()))
 
 
-def _email_status() -> str:
-    addr = os.environ.get("EMAIL_ADDRESS", "")
+def _email_status(h: Path) -> str:
+    env = _read_profile_env(h)
+    addr = env.get("EMAIL_ADDRESS", "")
     if not addr:
         return "not set up"
-    senders = os.environ.get("EMAIL_ALLOWED_SENDERS", "")
+    senders = env.get("EMAIL_ALLOWED_SENDERS", "")
     n = len([s for s in senders.split(",") if s.strip()])
     if n == 0:
         return f"ready · {addr} · outbound only"
@@ -752,12 +746,10 @@ def _email_status() -> str:
 
 @main.group()
 def profile() -> None:
-    """Profile management — each profile is a fully isolated ``~/.alf`` tree.
+    """Manage profiles (list, create, remove).
 
-    Switch profile per-invocation with ``-p <name>`` or with the
-    ``ALF_PROFILE`` env var. There is NO sticky "current profile":
-    every command explicitly targets one. Set up a shell alias if you
-    use one profile all day (e.g. ``alias alfw='alf -p work'``).
+    Each profile is an isolated ``~/.alf`` tree. Switch per-invocation
+    with ``-p <name>`` or ``ALF_PROFILE``; no sticky state.
     """
 
 
@@ -826,6 +818,87 @@ def profile_create(name: str) -> None:
     if default_env.exists():
         click.echo(f"  # — or, to reuse the default profile's setup:")
         click.echo(f"  cp {default_env} {h / '.env'}")
+
+
+@profile.command("remove")
+@click.argument("name")
+def profile_remove(name: str) -> None:
+    """Permanently remove a profile directory after safety checks.
+
+    Refuses if ``default``, if any service (gateway/schedule) is
+    installed for the profile, or if the directory doesn't exist.
+    Prints a short contents summary and asks for confirmation before
+    deleting — there is no ``--force``: this is a human command and
+    a human should be the one to green-light irreversible deletion.
+    Scripts that want to skip the prompt should call ``rm -rf`` on
+    the profile directory directly.
+    """
+    import shutil
+
+    from alf import service, ui
+
+    if name in {"default", ""}:
+        raise click.ClickException("the default profile cannot be removed")
+    if "/" in name or name.startswith("."):
+        raise click.ClickException(f"invalid profile name: {name!r}")
+
+    h = home.get_home(name)
+    if not h.exists():
+        raise click.ClickException(f"profile {name!r} does not exist")
+
+    # Safety: refuse if the profile has a registered system service.
+    # Uninstalling them is an explicit step the user has to take so
+    # they understand what's being torn down.
+    installed = []
+    for daemon in ("gateway", "schedule"):
+        if service.installed(daemon, profile=name):
+            installed.append(daemon)
+    if installed:
+        svc_list = ", ".join(installed)
+        raise click.ClickException(
+            f"profile {name!r} has installed service(s): {svc_list}.\n"
+            f"Run `alf -p {name} {installed[0]} uninstall` first."
+        )
+
+    # Summary — user wants to see what they're losing before saying yes.
+    summary = _profile_summary(h)
+    ui.banner(f"Remove profile · {name}", subtitle=str(h))
+    for line in summary:
+        click.echo(f"  {line}")
+    click.echo("")
+    if not ui.confirm(f"Remove profile {name!r}? This cannot be undone.",
+                      default=False):
+        ui.cancelled()
+        return
+
+    shutil.rmtree(h)
+    ui.ok(f"removed profile {name!r} at {h}")
+
+
+def _profile_summary(home_dir: Path) -> list[str]:
+    """Tiny inventory of the profile's contents — surfaced in the
+    confirm prompt so the user isn't deleting blind."""
+    lines: list[str] = []
+    sessions = home_dir / "sessions"
+    if sessions.exists():
+        files = list(sessions.glob("*.json"))
+        lines.append(f"sessions: {len(files)} file(s)")
+    memories = home_dir / "memories"
+    if memories.exists():
+        files = list(memories.glob("*.md"))
+        lines.append(f"memories: {len(files)} file(s)")
+    skills = home_dir / "skills"
+    if skills.exists():
+        dirs = [p for p in skills.rglob("*") if p.is_dir() and p.parent == skills]
+        count = sum(1 for p in skills.rglob("SKILL.md"))
+        if count:
+            lines.append(f"skills:   {count} user-created")
+    env = home_dir / ".env"
+    if env.exists():
+        lines.append(f".env:     present (credentials will be deleted)")
+    if not lines:
+        lines.append("empty profile — nothing to lose.")
+    return lines
 
 
 if __name__ == "__main__":

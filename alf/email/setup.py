@@ -1,10 +1,10 @@
-"""Interactive setup for the email tool (IMAP + SMTP).
+"""Interactive setup for the email platform (IMAP + SMTP).
 
 Generic — no provider-specific branches. Asks the user for address,
-password, hosts, ports. Tests the connection at the end so they know
-the creds work before leaving the wizard. Everything lands in
-``~/.alf/.env`` under the ``EMAIL_*`` prefix — same source of truth
-as ``TELEGRAM_*``.
+password, hosts, ports, allowed senders. Tests the connection at the
+end so credentials are validated before they land in ``~/.alf/.env``.
+All values live under the ``EMAIL_*`` prefix — same source-of-truth
+pattern as ``TELEGRAM_*``.
 """
 
 from __future__ import annotations
@@ -12,23 +12,18 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-import questionary
-from rich.console import Console
-
-from alf.email.client import DEFAULT_IMAP_PORT, DEFAULT_SMTP_PORT, EmailClient, EmailError
-from alf.model_selector import _append_env, _ask
-
-_console = Console()
+from alf import ui
+from alf.email.client import (
+    DEFAULT_IMAP_PORT, DEFAULT_SMTP_PORT, EmailClient, EmailError,
+)
+from alf.model_selector import _append_env
 
 
 def run(home: Path) -> None:
-    _console.print("[b]Email setup[/b]  [dim](IMAP + SMTP)[/dim]")
-    _console.print(
-        "[dim]Alf speaks plain IMAP (read) and SMTP (send). Any mailbox "
-        "that supports both works — Gmail, Outlook, iCloud, Fastmail, "
-        "self-hosted, etc. You'll need the hosts + credentials from "
-        "your provider.\n"
-        "Existing values show as defaults — press ENTER to keep them.[/dim]\n"
+    ui.banner(
+        ui.crumb("setup", "gateways", "email"),
+        subtitle="IMAP + SMTP",
+        home=home,
     )
 
     current_addr = os.environ.get("EMAIL_ADDRESS", "")
@@ -39,72 +34,52 @@ def run(home: Path) -> None:
     current_smtp_port = os.environ.get("EMAIL_SMTP_PORT") or str(DEFAULT_SMTP_PORT)
     current_senders = os.environ.get("EMAIL_ALLOWED_SENDERS", "")
 
-    address = _ask(questionary.text(
-        "Email address:", default=current_addr,
-    ))
+    address = ui.text("Email address:", default=current_addr)
     if not address:
-        return _cancelled()
+        return ui.cancelled()
 
-    if current_pw:
-        _console.print(
-            f"[dim]Current password ends in …{current_pw[-4:]}  "
-            f"(press ENTER to keep, or paste a new one)[/dim]"
-        )
-        password = _ask(questionary.password("Password (or app password):")) or current_pw
-    else:
-        password = _ask(questionary.password("Password (or app password):"))
+    password = ui.password("Password (or app password):", current=current_pw)
     if not password:
-        return _cancelled()
+        return ui.cancelled()
 
-    imap_host = _ask(questionary.text(
-        "IMAP host (e.g. imap.yourprovider.com):",
-        default=current_imap,
-    ))
+    imap_host = ui.text("IMAP host (e.g. imap.yourprovider.com):", default=current_imap)
     if not imap_host:
-        return _cancelled()
+        return ui.cancelled()
 
-    imap_port_raw = _ask(questionary.text(
-        f"IMAP port:", default=current_imap_port,
-    ))
+    imap_port_raw = ui.text("IMAP port:", default=current_imap_port)
     imap_port = int(imap_port_raw) if imap_port_raw else DEFAULT_IMAP_PORT
 
-    smtp_host = _ask(questionary.text(
-        "SMTP host (e.g. smtp.yourprovider.com):",
-        default=current_smtp,
-    ))
+    smtp_host = ui.text("SMTP host (e.g. smtp.yourprovider.com):", default=current_smtp)
     if not smtp_host:
-        return _cancelled()
+        return ui.cancelled()
 
-    smtp_port_raw = _ask(questionary.text(
-        f"SMTP port:", default=current_smtp_port,
-    ))
+    smtp_port_raw = ui.text("SMTP port:", default=current_smtp_port)
     smtp_port = int(smtp_port_raw) if smtp_port_raw else DEFAULT_SMTP_PORT
 
-    # Allowlist for the INBOUND gateway — outbound (send_message,
-    # schedule, email tool) works regardless. Empty = fail-closed
-    # gateway, but alf still sends *from* this mailbox just fine.
-    senders_raw = _ask(questionary.text(
+    # Allowlist controls the INBOUND gateway only — outbound
+    # (send_message, schedule delivery, email tool) works regardless.
+    # Empty is a valid choice: "use email for outbound, never
+    # trigger alf from inbound".
+    senders_raw = ui.text(
         "Allowed senders (comma-separated, empty = no inbound):",
         default=current_senders,
-    ))
+    )
     senders = ",".join(
         s.strip().lower() for s in (senders_raw or "").split(",") if s.strip()
     )
 
-    _console.print("\n[dim]Testing IMAP + SMTP connections…[/dim]")
     client = EmailClient(
         address=address, password=password,
         imap_host=imap_host, smtp_host=smtp_host,
         imap_port=imap_port, smtp_port=smtp_port,
     )
     try:
-        client.test()
+        with ui.activity("Testing IMAP + SMTP connections…"):
+            client.test()
     except EmailError as e:
-        _console.print(f"[red]✗[/red] {e}")
-        _console.print(
-            "[yellow]Credentials look wrong or the server is unreachable. "
-            "Not saving anything.[/yellow]"
-        )
+        ui.fail(str(e))
+        ui.warn("Credentials look wrong or the server is unreachable. Not saving anything.")
+        ui.press_enter()
         return
 
     env = home / ".env"
@@ -121,17 +96,7 @@ def run(home: Path) -> None:
         writes.append(("EMAIL_SMTP_PORT", str(smtp_port)))
     for key, val in writes:
         _append_env(env, key, val)
-        # Also propagate to the live process so the setup menu's status
-        # line (which reads os.environ) reflects the new state right
-        # after the wizard returns — not only on the next alf launch.
         os.environ[key] = val
 
-    _console.print(f"[green]✓[/green] saved to [dim]{env}[/dim]")
-    _console.print(
-        "[dim]Inside alf, try:[/dim] "
-        "[b]\"list my 5 most recent unread emails\"[/b]"
-    )
-
-
-def _cancelled() -> None:
-    _console.print("[yellow]cancelled[/yellow]")
+    ui.saved(env)
+    ui.press_enter()

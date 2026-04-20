@@ -1,149 +1,126 @@
 """Interactive model selector.
 
-Two-step flow:
-  1. Pick a provider (built-in + saved custom endpoints + add/remove/cancel)
-  2. Pick a model within that provider (+ enter custom model name / skip)
+Two-step flow: pick a provider, then a model. Reads/writes
+``~/.alf/config.yaml`` and ``~/.alf/.env``.
 
-Reads/writes ``~/.alf/config.yaml`` and ``~/.alf/.env``.
+All prompts and menus go through ``alf.ui`` so the look and feel
+matches the rest of the setup flow. File-level env manipulation
+(``_append_env``, ``_remove_env_key``) stays here — those aren't UI
+primitives, they're ``.env`` editors used by this module and by the
+other wizards that collect credentials.
 """
 
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
 from pathlib import Path
-
-import questionary
-from prompt_toolkit.key_binding import KeyBindings
-from rich.console import Console
 
 from alf import config as cfg_mod
 from alf import providers as prov_mod
+from alf import ui
 from alf.providers.base import ModelInfo, Provider
 from alf.providers.custom import CustomProvider
 
-_console = Console()
-
-def _ask(question) -> object:
-    """Run a questionary Question after wiring ESC → cancel (returns None)."""
-    try:
-        app = question.application
-        app.key_bindings.add("escape", eager=True)(
-            lambda event: event.app.exit(result=None)
-        )
-    except Exception:
-        pass
-    try:
-        return question.unsafe_ask()
-    except KeyboardInterrupt:
-        return None
-
 
 _ADD_CUSTOM = "__add_custom__"
-_REMOVE_SAVED = "__remove_saved__"
-_CANCEL = "__cancel__"
+_MANAGE_SAVED = "__manage_saved__"
 _ENTER_CUSTOM_MODEL = "__custom_model__"
-_SKIP = "__skip__"
 
 
-def accent_style(accent: str) -> "questionary.Style | None":
-    """Return a questionary style that tints the ``◆`` pointer with the
-    given accent colour (hex ``#rrggbb`` or named). Empty ``accent``
-    returns None — questionary falls back to its default.
-
-    Exposed so non-model menus (``alf setup``, gateway submenu) can
-    share the same accent treatment as the model picker. Zero
-    dependency on Textual — prompt_toolkit Style understands hex
-    directly.
-    """
-    if not accent or not accent.strip():
-        return None
-    try:
-        from prompt_toolkit.styles import Style
-    except Exception:  # noqa: BLE001
-        return None
-    colour = accent.strip()
-    return Style([("pointer", f"fg:{colour} bold")])
+# Re-exported for back-compat with existing callers (wizards import
+# ``accent_style`` from here). New code should import from ``alf.ui``.
+def accent_style(accent: str):
+    return ui.accent_style(accent)
 
 
-def _accent_style(cfg: "cfg_mod.Config"):
-    accent = (cfg.tui or {}).get("accent", "") if cfg else ""
-    return accent_style(accent)
+def _ask(question):
+    """Back-compat alias — some legacy modules import this directly.
+    New code uses ``alf.ui`` helpers."""
+    return ui._ask(question)
 
 
-@dataclass
-class _Choice:
-    name: str
-    value: object
+# ----------------------------------------------------------------------
+# Entry point
+# ----------------------------------------------------------------------
 
 
 def run(cfg: cfg_mod.Config) -> None:
-    """Entry point. Blocks until the user selects or cancels."""
-    _console.print(f"[bold]Current model:[/bold] {cfg.model}")
+    """Block until the user selects a model or cancels."""
     provider = _pick_provider(cfg)
     if provider is None:
-        _console.print("[dim]No change.[/dim]")
+        ui.dim("No change.")
         return
 
     _ensure_key(cfg, provider)
 
     model_id = _pick_model(provider, cfg)
     if model_id is None:
-        _console.print("[dim]No change.[/dim]")
+        ui.dim("No change.")
         return
 
     cfg.model = model_id
     cfg_mod.save(cfg)
-    _console.print(f"[green]✓[/green] model set to [bold]{model_id}[/bold]")
+    ui.ok(f"model set to [b]{model_id}[/b]")
+
+
+# ----------------------------------------------------------------------
+# Provider picker
+# ----------------------------------------------------------------------
 
 
 def _pick_provider(cfg: cfg_mod.Config) -> Provider | None:
     builtin = prov_mod.builtin()
     custom = prov_mod.custom(cfg.providers.get("custom", []))
-
-    choices: list = []
     active_head = cfg.model.split("/", 1)[0]
 
+    items: list = []
     for p in builtin:
-        tag = ""
-        if p.api_key_env and not p.has_key():
-            tag = "   [key needed]"
+        # Status reads left-to-right: configured-state first, then
+        # the provider's own blurb, then any "[key needed]" warning.
+        # Putting "active" at the start makes it the first thing the
+        # eye catches as it scans the column.
+        parts = []
         if p.name == active_head:
-            tag = "   ← currently active" + tag
-        choices.append(questionary.Choice(
-            title=f"{p.display:<14} {p.description}{tag}",
-            value=p,
+            parts.append("active")
+        if p.api_key_env and p.has_key():
+            parts.append("key saved")
+        parts.append(p.description)
+        if p.api_key_env and not p.has_key():
+            parts.append("[key needed]")
+        items.append((ui.row(p.display, " · ".join(parts)), p))
+
+    # "Custom" inline with the built-ins — just another provider slot.
+    items.append((
+        ui.row("Custom", "OpenAI-compatible endpoint (add a new one)"),
+        _ADD_CUSTOM,
+    ))
+
+    for p in custom:
+        parts = []
+        if p.name == active_head:
+            parts.append("active")
+        parts.append(p.base_url if hasattr(p, "base_url") else "custom endpoint")
+        items.append((ui.row(p.display, " · ".join(parts)), p))
+
+    # Manage saved keys lives in its own row directly under the
+    # provider list — no separator, no submenu header. Treated as
+    # just another action the user can pick, on the same level as
+    # the providers themselves.
+    if custom or _any_saved_keys(builtin):
+        items.append((
+            ui.row("⋯ Manage saved keys", "remove endpoints or API keys"),
+            _MANAGE_SAVED,
         ))
 
-    # "Custom" sits inline with the built-ins — it's just another way
-    # to register a provider, not a separate admin action. Same
-    # ``{:<14}`` column as the built-ins so it aligns visually.
-    choices.append(questionary.Choice(
-        title=f"{'Custom':<14} OpenAI-compatible endpoint (add a new one)",
-        value=_ADD_CUSTOM,
-    ))
+    result = ui.menu(
+        ui.crumb("setup", "model"),
+        items,
+        subtitle=f"active: {cfg.model or 'none'}",
+        home=cfg.home,
+        close="Back",
+    )
 
-    if custom:
-        choices.append(questionary.Separator("─── your custom endpoints ───"))
-        for p in custom:
-            tag = "   ← currently active" if p.name == active_head else ""
-            choices.append(questionary.Choice(title=f"{p.display}{tag}", value=p))
-
-    if custom or _any_saved_keys(builtin):
-        choices.append(questionary.Separator(" "))
-        choices.append(questionary.Choice(title="- Remove saved provider/key", value=_REMOVE_SAVED))
-    choices.append(questionary.Choice(title="  Cancel", value=_CANCEL))
-
-    result = _ask(questionary.select(
-        "Select provider:",
-        choices=choices,
-        qmark="",
-        pointer="◆",
-        style=_accent_style(cfg),
-        instruction="(↑↓ navigate  ENTER select  ESC cancel)",
-    ))
-
-    if result is None or result == _CANCEL:
+    if result is None:
         return None
     if result == _ADD_CUSTOM:
         new_ep = _add_custom_endpoint(cfg)
@@ -151,63 +128,91 @@ def _pick_provider(cfg: cfg_mod.Config) -> Provider | None:
             return None
         cfg_mod.save(cfg)
         return new_ep
-    if result == _REMOVE_SAVED:
-        _remove_saved(cfg)
+    if result == _MANAGE_SAVED:
+        _manage_saved(cfg)
         cfg_mod.save(cfg)
         return None
     return result  # a Provider instance
 
 
+# ----------------------------------------------------------------------
+# Model picker
+# ----------------------------------------------------------------------
+
+
 def _pick_model(provider: Provider, cfg: cfg_mod.Config) -> str | None:
-    _console.print(f"[dim]Fetching models from {provider.display}...[/dim]")
+    ui.dim(f"Fetching models from {provider.display}…")
     models = provider.list_models()
+
+    current_suffix = ""
+    if cfg.model.startswith(f"{provider.name}/"):
+        current_suffix = cfg.model.split("/", 1)[1]
+
+    # No catalog (openrouter without API key, anthropic rate-limited,
+    # etc.) → drop the menu and prompt directly; there's nothing to
+    # pick from.
     if not models:
-        _console.print("[yellow]No models returned. You can enter a name manually.[/yellow]")
+        return _prompt_custom_model(provider, current_suffix)
 
-    choices = []
+    items: list = []
     for m in models:
-        title = f"{m.display}"
+        # Mark the currently active model so the user sees at a glance
+        # which row is live. Match against the fully-qualified id
+        # (``<provider>/<model>``) because that's how ``cfg.model`` is
+        # stored; some providers emit ``m.id`` already prefixed, others
+        # don't — normalise once.
+        qualified = m.id if "/" in m.id else f"{provider.name}/{m.id}"
+        status_parts = []
+        if qualified == cfg.model:
+            status_parts.append("active")
         if m.note:
-            title = f"{m.display:<50} {m.note}"
-        choices.append(questionary.Choice(title=title, value=m.id))
+            status_parts.append(m.note)
+        status = " · ".join(status_parts)
+        items.append((ui.row(m.display, status) if status else m.display, m.id))
 
-    if choices:
-        choices.append(questionary.Separator(" "))
-    choices.append(questionary.Choice(title="+ Enter custom model name", value=_ENTER_CUSTOM_MODEL))
-    choices.append(questionary.Choice(title="  Skip (keep current)", value=_SKIP))
+    items.append(("Custom model name", _ENTER_CUSTOM_MODEL))
 
-    result = _ask(questionary.select(
-        "Select model:",
-        choices=choices,
-        qmark="",
-        pointer="◆",
-        style=_accent_style(cfg),
-        instruction="(↑↓ navigate  ENTER select  ESC cancel)",
-    ))
+    result = ui.menu(
+        ui.crumb("setup", "model", provider.name),
+        items,
+        subtitle=f"pick a {provider.display} model",
+        home=cfg.home,
+        close="Back",
+    )
 
-    if result is None or result == _SKIP:
+    if result is None:
         return None
     if result == _ENTER_CUSTOM_MODEL:
-        raw = _ask(questionary.text("Model name:"))
-        if not raw:
-            return None
-        raw = raw.strip()
-        # Always prefix with the provider name unless it's already there.
-        if not raw.startswith(f"{provider.name}/"):
-            raw = f"{provider.name}/{raw}"
-        return raw
+        return _prompt_custom_model(provider, current_suffix)
     return result  # litellm-ready id
 
 
+def _prompt_custom_model(provider: Provider, current: str) -> str | None:
+    """Ask the user for a model id and qualify it with the provider prefix.
+
+    ``current`` hydrates the default so ENTER keeps the active model
+    (matches the gateway/MCP wizard pattern where the current value is
+    rendered in accent and editable in place).
+    """
+    raw = ui.text("Model name", default=current)
+    if not raw:
+        return None
+    raw = raw.strip()
+    if not raw.startswith(f"{provider.name}/"):
+        raw = f"{provider.name}/{raw}"
+    return raw
+
+
+# ----------------------------------------------------------------------
+# Key management
+# ----------------------------------------------------------------------
+
+
 def _ensure_key(cfg: cfg_mod.Config, provider: Provider) -> None:
-    """If the provider needs an API key and none is set, ask for it and persist."""
-    if not provider.api_key_env:
+    """If the provider needs an API key and none is set, ask + persist."""
+    if not provider.api_key_env or provider.has_key():
         return
-    if provider.has_key():
-        return
-    value = _ask(questionary.password(
-        f"Enter {provider.api_key_env} for {provider.display}:"
-    ))
+    value = ui.password(f"Enter {provider.api_key_env} for {provider.display}:")
     if not value:
         return
     _append_env(cfg.env_path, provider.api_key_env, value)
@@ -215,11 +220,10 @@ def _ensure_key(cfg: cfg_mod.Config, provider: Provider) -> None:
 
 
 def _append_env(env_path: Path, key: str, value: str) -> None:
-    lines: list[str] = []
-    if env_path.exists():
-        lines = env_path.read_text().splitlines()
-    out: list[str] = []
-    replaced = False
+    """Write or replace ``KEY=value`` in ``env_path``. Idempotent on
+    identical values (still re-writes the file; cost is trivial)."""
+    lines = env_path.read_text().splitlines() if env_path.exists() else []
+    out, replaced = [], False
     for line in lines:
         if line.startswith(f"{key}="):
             out.append(f"{key}={value}")
@@ -231,23 +235,41 @@ def _append_env(env_path: Path, key: str, value: str) -> None:
     env_path.write_text("\n".join(out) + "\n")
 
 
+def _remove_env_key(env_path: Path, key: str) -> None:
+    if not env_path.exists():
+        return
+    lines = [ln for ln in env_path.read_text().splitlines()
+             if not ln.startswith(f"{key}=")]
+    env_path.write_text("\n".join(lines) + ("\n" if lines else ""))
+
+
+def _any_saved_keys(builtin: list[Provider]) -> bool:
+    return any(p.has_key() for p in builtin if p.api_key_env)
+
+
+# ----------------------------------------------------------------------
+# Custom endpoint flow
+# ----------------------------------------------------------------------
+
+
 def _add_custom_endpoint(cfg: cfg_mod.Config) -> CustomProvider | None:
-    name = _ask(questionary.text("Endpoint name (short id, e.g. 'my-ollama'):"))
+    ui.banner(
+        ui.crumb("setup", "model", "custom"),
+        subtitle="OpenAI-compatible endpoint",
+        home=cfg.home,
+    )
+    name = ui.text("Endpoint name (short id, e.g. 'my-ollama')")
     if not name:
         return None
-    base_url = _ask(questionary.text(
-        "Base URL (e.g. http://localhost:11434/v1):"
-    ))
+    base_url = ui.text("Base URL (e.g. http://localhost:11434/v1):")
     if not base_url:
         return None
-    needs_key = _ask(questionary.confirm("Does this endpoint require an API key?", default=False))
+    needs_key = ui.confirm("Does this endpoint require an API key?", default=False)
     api_key_env = ""
     if needs_key:
-        api_key_env = _ask(questionary.text(
-            "Env var name for the key (e.g. MY_ENDPOINT_KEY):"
-        )) or ""
+        api_key_env = ui.text("Env var name for the key (e.g. MY_ENDPOINT_KEY):") or ""
         if api_key_env:
-            value = _ask(questionary.password(f"Value for {api_key_env} (stored in ~/.alf/.env):"))
+            value = ui.password(f"Value for {api_key_env} (stored in ~/.alf/.env):")
             if value:
                 _append_env(cfg.env_path, api_key_env, value)
                 os.environ[api_key_env] = value
@@ -262,49 +284,49 @@ def _add_custom_endpoint(cfg: cfg_mod.Config) -> CustomProvider | None:
     )
 
 
-def _remove_saved(cfg: cfg_mod.Config) -> None:
+# ----------------------------------------------------------------------
+# Manage saved (submenu, out of the main picker)
+# ----------------------------------------------------------------------
+
+
+def _manage_saved(cfg: cfg_mod.Config) -> None:
     builtin = prov_mod.builtin()
-    rows: list[questionary.Choice] = []
+
+    items: list = []
     for p in builtin:
         if p.api_key_env and os.environ.get(p.api_key_env):
-            rows.append(questionary.Choice(
-                title=f"Remove {p.api_key_env} (from .env)",
-                value=("key", p.api_key_env),
+            items.append((
+                ui.row(p.api_key_env, "API key in .env"),
+                ("key", p.api_key_env),
             ))
     for entry in cfg.providers.get("custom", []) or []:
         name = entry.get("name", "")
-        rows.append(questionary.Choice(
-            title=f"Remove custom endpoint '{name}'",
-            value=("custom", name),
+        items.append((
+            ui.row(name, "custom endpoint"),
+            ("custom", name),
         ))
-    if not rows:
-        _console.print("[dim]Nothing saved to remove.[/dim]")
-        return
-    rows.append(questionary.Separator(" "))
-    rows.append(questionary.Choice(title="Cancel", value=("cancel", None)))
 
-    choice = _ask(questionary.select("Remove what?", choices=rows, qmark=""))
-    if not choice or not isinstance(choice, tuple) or choice[0] == "cancel":
+    if not items:
+        ui.dim("Nothing saved to remove.")
+        return
+
+    choice = ui.menu(
+        ui.crumb("setup", "model", "saved"),
+        items,
+        subtitle="remove an API key or custom endpoint",
+        home=cfg.home,
+        close="Back",
+    )
+    if not choice or not isinstance(choice, tuple):
         return
     kind, target = choice
     if kind == "key":
         _remove_env_key(cfg.env_path, target)
         os.environ.pop(target, None)
-        _console.print(f"[green]✓[/green] removed {target} from .env")
+        ui.ok(f"removed {target} from .env")
     elif kind == "custom":
         cfg.providers["custom"] = [
             e for e in cfg.providers.get("custom", [])
             if e.get("name") != target
         ]
-        _console.print(f"[green]✓[/green] removed custom endpoint '{target}'")
-
-
-def _remove_env_key(env_path: Path, key: str) -> None:
-    if not env_path.exists():
-        return
-    lines = [ln for ln in env_path.read_text().splitlines() if not ln.startswith(f"{key}=")]
-    env_path.write_text("\n".join(lines) + ("\n" if lines else ""))
-
-
-def _any_saved_keys(builtin: list[Provider]) -> bool:
-    return any(p.has_key() for p in builtin if p.api_key_env)
+        ui.ok(f"removed custom endpoint '{target}'")

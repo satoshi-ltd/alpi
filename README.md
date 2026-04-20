@@ -31,15 +31,17 @@ uv tool install /path/to/alf --reinstall --no-cache
 alf                         # interactive TUI in the current directory
 alf --continue              # resume the last session
 alf --profile <name>        # use a named profile (multi-profile)
+alf chat --once "text"      # one-shot turn to stdout (pipe-friendly)
 alf profile list            # show profiles; marks the one this command resolved to
 alf profile create <name>   # bootstrap a new profile tree (same as first `alf -p <name>`)
+alf profile remove <name>   # delete a profile (safety checks + confirm)
 alf gateway setup           # configure the Telegram gateway
 alf gateway start           # run the gateway process
 alf schedule start          # run the schedule daemon (manual, like the gateway)
 alf schedule status         # check the daemon + list jobs
 alf setup                   # interactive menu: model, gateways, MCPs
-alf mcp list                # show configured MCP servers
-alf mcp test <name>         # spawn + list tools of one server
+alf mcp list                # show configured MCP servers (read-only)
+alf mcp test <name>         # spawn + list tools of one server (read-only)
 
 # Persist across reboots (launchd on macOS, systemd --user on Linux):
 alf gateway install         # one-time, auto-starts + reanima al login
@@ -135,6 +137,8 @@ alf/                       Python package
   email/                   IMAP+SMTP client (shared by tool + gateway)
   mcp/                     MCP client (stdio JSON-RPC) + registry + setup
   service.py               install/uninstall launchd/systemd units
+  ui.py                    shared wizard/menu primitives (banner, row,
+                           menu, text, password, ok/fail/saved)
   tui/                     Textual app, widgets, screens, theme
   gateway/                 Telegram gateway (separate process)
   skills/                  bundled skills (only `consolidate-memory`)
