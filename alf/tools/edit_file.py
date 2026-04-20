@@ -21,7 +21,9 @@ class EditFile(Tool):
         "\n"
         "DO NOT use edit_file for:\n"
         "  • memory files → use `memory(replace)`\n"
-        "  • skill bodies → use `edit_skill`"
+        "  • skill files (SKILL.md or anything in scripts/references/"
+        "assets/secrets/) → use `skill(action='edit'|'add_file')`. Direct "
+        "edits skip the security scanner."
     )
     parameters = {
         "type": "object",
@@ -38,6 +40,16 @@ class EditFile(Tool):
             p = check_path(path)
         except ValueError as e:
             return ToolResult(ok=False, output="", error=str(e))
+        if _is_skill_path(p):
+            return ToolResult(
+                ok=False, output="",
+                error=(
+                    "path is inside a skill directory — use "
+                    "`skill(action='edit')` for SKILL.md or "
+                    "`skill(action='add_file')` for scripts/references/"
+                    "assets/secrets. Direct edits bypass the security scanner."
+                ),
+            )
         if not p.exists():
             return ToolResult(ok=False, output="", error=f"File not found: {p}")
         text = p.read_text()
@@ -49,6 +61,16 @@ class EditFile(Tool):
                               error=f"old_string matches {count} times; make it unique")
         p.write_text(text.replace(old_string, new_string, 1))
         return ToolResult(ok=True, output=f"Edited {p}")
+
+
+def _is_skill_path(p: Path) -> bool:
+    from alf.home import get_home
+    skills_root = (get_home() / "skills").resolve()
+    try:
+        p.resolve().relative_to(skills_root)
+        return True
+    except ValueError:
+        return False
 
 
 TOOL = EditFile

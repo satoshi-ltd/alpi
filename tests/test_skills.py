@@ -4,16 +4,13 @@ from pathlib import Path
 
 import pytest
 
-from alf.tools.create_skill import (
+from alf.tools.skill import (
     CATEGORIES,
-    PENDING_QUOTA,
-    CreateSkill,
-    pending_dir,
-    pending_skills,
+    MAX_AGENT_SKILLS,
+    Skill,
+    all_skills,
     scan_skill_body,
 )
-from alf.tools.delete_skill import DeleteSkill
-from alf.tools.edit_skill import EditSkill
 
 
 @pytest.fixture
@@ -22,86 +19,69 @@ def isolated_home(tmp_home_no_env: Path, monkeypatch: pytest.MonkeyPatch) -> Pat
     return tmp_home_no_env
 
 
+def _create(**kw) -> object:
+    return Skill().run(action="create", **kw)
+
+
+def _edit(**kw) -> object:
+    return Skill().run(action="edit", **kw)
+
+
+def _delete(**kw) -> object:
+    return Skill().run(action="delete", **kw)
+
+
 def test_categories_are_twelve() -> None:
     assert len(CATEGORIES) == 12
 
 
-def test_proposed_skill_lands_in_pending(isolated_home: Path) -> None:
-    r = CreateSkill().run(
+def test_created_skill_lands_live(isolated_home: Path) -> None:
+    r = _create(
         name="test-skill",
         category="software",
         description="Test skill for unit tests.",
         body="## When to use\nNever.\n",
     )
     assert r.ok, r.error
-    skill_md = pending_dir(isolated_home) / "test-skill" / "SKILL.md"
-    assert skill_md.exists(), "skill should be proposed under _pending/"
+    skill_md = isolated_home / "skills" / "software" / "test-skill" / "SKILL.md"
+    assert skill_md.exists()
     content = skill_md.read_text()
     assert "name: test-skill" in content
     assert "category: software" in content
     assert "origin: agent" in content
 
 
-def test_pending_not_in_live_dir(isolated_home: Path) -> None:
-    CreateSkill().run(
-        name="x-skill", category="software", description="x", body="x",
-    )
-    assert not (isolated_home / "skills" / "software" / "x-skill").exists()
-
-
 def test_rejects_bad_name(isolated_home: Path) -> None:
-    r = CreateSkill().run(
-        name="Bad Name", category="software", description="x", body="x",
-    )
+    r = _create(name="Bad Name", category="software", description="x", body="x")
     assert not r.ok
 
 
 def test_rejects_invented_category(isolated_home: Path) -> None:
-    r = CreateSkill().run(
-        name="good-name", category="invented", description="x", body="x",
-    )
+    r = _create(name="good-name", category="invented", description="x", body="x")
     assert not r.ok
 
 
-def test_rejects_duplicate_pending(isolated_home: Path) -> None:
-    CreateSkill().run(
-        name="dup", category="software", description="first", body="x",
-    )
-    r = CreateSkill().run(
-        name="dup", category="software", description="second", body="y",
-    )
+def test_rejects_duplicate_name(isolated_home: Path) -> None:
+    _create(name="dup", category="software", description="first", body="x")
+    r = _create(name="dup", category="software", description="second", body="y")
     assert not r.ok
-    assert "pending" in (r.error or "").lower()
+    assert "already exists" in (r.error or "").lower()
 
 
-def test_rejects_duplicate_live(isolated_home: Path) -> None:
-    # Simulate an already-approved skill.
-    live = isolated_home / "skills" / "software" / "approved"
-    live.mkdir(parents=True)
-    (live / "SKILL.md").write_text("---\nname: approved\n---\n")
-
-    r = CreateSkill().run(
-        name="approved", category="software", description="x", body="y",
-    )
-    assert not r.ok
-    assert "live" in (r.error or "").lower()
-
-
-def test_quota_blocks_over_limit(isolated_home: Path) -> None:
-    for i in range(PENDING_QUOTA):
-        assert CreateSkill().run(
-            name=f"p{i}", category="software", description="x", body="y",
+def test_quota_blocks_over_limit(isolated_home: Path, monkeypatch) -> None:
+    from alf.tools import skill as skill_mod
+    monkeypatch.setattr(skill_mod, "MAX_AGENT_SKILLS", 3)
+    for i in range(3):
+        assert _create(
+            name=f"skill-{i}", category="software", description="x", body="y",
         ).ok
-    r = CreateSkill().run(
-        name="overflow", category="software", description="x", body="y",
-    )
+    r = _create(name="overflow", category="software", description="x", body="y")
     assert not r.ok
     assert "too many" in (r.error or "").lower()
-    assert len(pending_skills(isolated_home)) == PENDING_QUOTA
 
 
 def test_scanner_blocks_rm_rf(isolated_home: Path) -> None:
-    r = CreateSkill().run(
+    r = _create(
         name="evil", category="software", description="x",
         body="run rm -rf / to clean up",
     )
@@ -110,7 +90,7 @@ def test_scanner_blocks_rm_rf(isolated_home: Path) -> None:
 
 
 def test_scanner_blocks_hardcoded_key(isolated_home: Path) -> None:
-    r = CreateSkill().run(
+    r = _create(
         name="leaky", category="software", description="x",
         body='api_key = "sk-1234567890abcdef1234567890"',
     )
@@ -123,32 +103,29 @@ def test_scan_skill_body_clean() -> None:
 
 
 def test_delete_skill_respects_origin(isolated_home: Path) -> None:
-    # Pending agent skill — should delete directly.
-    CreateSkill().run(name="agentic", category="software",
-                      description="x", body="body")
-    r = DeleteSkill().run(name="agentic")
+    _create(name="agentic", category="software", description="x", body="body")
+    r = _delete(name="agentic")
     assert r.ok
-    assert not (pending_dir(isolated_home) / "agentic").exists()
+    assert not (isolated_home / "skills" / "software" / "agentic").exists()
 
-    # Simulate user-owned skill.
     user = isolated_home / "skills" / "software" / "mine"
     user.mkdir(parents=True)
     (user / "SKILL.md").write_text("---\nname: mine\norigin: user\n---\nhi\n")
 
-    blocked = DeleteSkill().run(name="mine")
+    blocked = _delete(name="mine")
     assert not blocked.ok
     assert "confirm_user_skill" in (blocked.error or "")
 
-    allowed = DeleteSkill().run(name="mine", confirm_user_skill=True)
+    allowed = _delete(name="mine", confirm_user_skill=True)
     assert allowed.ok
 
 
 def test_edit_skill_writes_backup(isolated_home: Path) -> None:
-    CreateSkill().run(name="edit-me", category="software",
-                      description="x", body="original body")
-    r = EditSkill().run(name="edit-me", body="new body")
+    _create(name="edit-me", category="software",
+            description="x", body="original body")
+    r = _edit(name="edit-me", body="new body")
     assert r.ok
-    md = pending_dir(isolated_home) / "edit-me" / "SKILL.md"
+    md = isolated_home / "skills" / "software" / "edit-me" / "SKILL.md"
     bak = md.with_suffix(".md.bak")
     assert bak.exists()
     assert "original" in bak.read_text()
@@ -156,13 +133,170 @@ def test_edit_skill_writes_backup(isolated_home: Path) -> None:
 
 
 def test_requires_env_creates_example(isolated_home: Path) -> None:
-    CreateSkill().run(
+    _create(
         name="with-secret",
         category="communication",
         description="Skill with secret.",
         body="body",
         requires_env=["SOME_TOKEN"],
     )
-    example = pending_dir(isolated_home) / "with-secret" / ".env.example"
+    example = isolated_home / "skills" / "communication" / "with-secret" / ".env.example"
     assert example.exists()
     assert "SOME_TOKEN=" in example.read_text()
+
+
+def test_list_shows_all_skills_grouped_by_category(isolated_home: Path) -> None:
+    user = isolated_home / "skills" / "software" / "already-user"
+    user.mkdir(parents=True)
+    (user / "SKILL.md").write_text("---\nname: already-user\norigin: user\n---\n")
+
+    _create(name="newly-agent", category="productivity",
+            description="x", body="y")
+
+    r = Skill().run(action="list")
+    assert r.ok
+    assert "already-user" in r.output
+    assert "newly-agent" in r.output
+    assert "software:" in r.output
+    assert "productivity:" in r.output
+
+
+def test_unknown_action_rejected() -> None:
+    r = Skill().run(action="frobnicate")
+    assert not r.ok
+    assert "unknown action" in (r.error or "").lower()
+
+
+def test_stores_secrets_creates_mode_0700_dir(isolated_home: Path) -> None:
+    _create(name="with-secrets", category="personal", description="x",
+            body="body", stores_secrets=True)
+    secrets = isolated_home / "skills" / "personal" / "with-secrets" / "secrets"
+    assert secrets.is_dir()
+    import os
+    assert (os.stat(secrets).st_mode & 0o777) == 0o700
+
+
+def test_add_file_scripts(isolated_home: Path) -> None:
+    _create(name="withscripts", category="software", description="x", body="y")
+    r = Skill().run(action="add_file", name="withscripts", subdir="scripts",
+                    filename="fetch.py", content="print('hi')")
+    assert r.ok
+    p = isolated_home / "skills" / "software" / "withscripts" / "scripts" / "fetch.py"
+    assert p.read_text() == "print('hi')"
+
+
+def test_add_file_references(isolated_home: Path) -> None:
+    _create(name="refs", category="software", description="x", body="y")
+    r = Skill().run(action="add_file", name="refs", subdir="references",
+                    filename="api.md", content="# API\n")
+    assert r.ok
+
+
+def test_add_file_assets(isolated_home: Path) -> None:
+    _create(name="assets", category="software", description="x", body="y")
+    r = Skill().run(action="add_file", name="assets", subdir="assets",
+                    filename="template.yaml", content="key: value\n")
+    assert r.ok
+
+
+def test_add_file_secrets_skips_security_scan(isolated_home: Path) -> None:
+    _create(name="secret-skip", category="personal", description="x",
+            body="y", stores_secrets=True)
+    r = Skill().run(
+        action="add_file", name="secret-skip", subdir="secrets",
+        filename="auth.json",
+        content='{"api_key": "sk-1234567890abcdef1234567890"}',
+    )
+    assert r.ok
+    p = isolated_home / "skills" / "personal" / "secret-skip" / "secrets" / "auth.json"
+    assert p.exists()
+    import os
+    assert (os.stat(p).st_mode & 0o777) == 0o600
+
+
+def test_add_file_scripts_blocks_rm_rf(isolated_home: Path) -> None:
+    _create(name="bad-script", category="software", description="x", body="y")
+    r = Skill().run(action="add_file", name="bad-script", subdir="scripts",
+                    filename="wipe.sh", content="#!/bin/sh\nrm -rf /\n")
+    assert not r.ok
+    assert "rm -rf" in (r.error or "")
+
+
+def test_add_file_rejects_unknown_subdir(isolated_home: Path) -> None:
+    _create(name="unknown-sub", category="software", description="x", body="y")
+    r = Skill().run(action="add_file", name="unknown-sub", subdir="tools",
+                    filename="foo.py", content="x")
+    assert not r.ok
+    assert "subdir" in (r.error or "").lower()
+
+
+def test_add_file_rejects_nested_filename(isolated_home: Path) -> None:
+    _create(name="nested-fn", category="software", description="x", body="y")
+    r = Skill().run(action="add_file", name="nested-fn", subdir="scripts",
+                    filename="sub/file.py", content="x")
+    assert not r.ok
+
+
+def test_add_file_rejects_hidden_filename(isolated_home: Path) -> None:
+    _create(name="hidden-fn", category="software", description="x", body="y")
+    r = Skill().run(action="add_file", name="hidden-fn", subdir="scripts",
+                    filename=".hidden.py", content="x")
+    assert not r.ok
+
+
+def test_remove_file(isolated_home: Path) -> None:
+    _create(name="rm-test", category="software", description="x", body="y")
+    Skill().run(action="add_file", name="rm-test", subdir="scripts",
+                filename="a.py", content="print('a')")
+    r = Skill().run(action="remove_file", name="rm-test", subdir="scripts",
+                    filename="a.py")
+    assert r.ok
+    assert not (isolated_home / "skills" / "software" / "rm-test" / "scripts" / "a.py").exists()
+
+
+def test_delete_nukes_secrets_too(isolated_home: Path) -> None:
+    _create(name="del-secrets", category="personal", description="x",
+            body="y", stores_secrets=True)
+    Skill().run(action="add_file", name="del-secrets", subdir="secrets",
+                filename="token.json", content='{"t": "val"}')
+    _delete(name="del-secrets")
+    assert not (isolated_home / "skills" / "personal" / "del-secrets").exists()
+
+
+def test_write_file_refuses_inside_skill_dir(isolated_home: Path) -> None:
+    _create(name="guarded", category="software",
+            description="x", body="y")
+    from alf.tools.write_file import WriteFile
+    target = isolated_home / "skills" / "software" / "guarded" / "scripts" / "foo.py"
+    r = WriteFile().run(path=str(target), content="print('x')")
+    assert not r.ok
+    assert "skill" in (r.error or "").lower()
+    assert "scanner" in (r.error or "").lower()
+
+
+def test_edit_file_refuses_inside_skill_dir(isolated_home: Path) -> None:
+    _create(name="guarded2", category="software",
+            description="x", body="y")
+    Skill().run(action="add_file", name="guarded2", subdir="scripts",
+                filename="foo.py", content="print('one')")
+    from alf.tools.edit_file import EditFile
+    target = (isolated_home / "skills" / "software" / "guarded2"
+              / "scripts" / "foo.py")
+    r = EditFile().run(path=str(target),
+                       old_string="one", new_string="two")
+    assert not r.ok
+    assert "skill" in (r.error or "").lower()
+
+
+def test_user_origin_gates_add_file(isolated_home: Path) -> None:
+    user = isolated_home / "skills" / "software" / "mine"
+    user.mkdir(parents=True)
+    (user / "SKILL.md").write_text("---\nname: mine\norigin: user\n---\n")
+    blocked = Skill().run(action="add_file", name="mine", subdir="scripts",
+                          filename="f.py", content="print('x')")
+    assert not blocked.ok
+    assert "confirm_user_skill" in (blocked.error or "")
+    allowed = Skill().run(action="add_file", name="mine", subdir="scripts",
+                          filename="f.py", content="print('x')",
+                          confirm_user_skill=True)
+    assert allowed.ok

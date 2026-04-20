@@ -240,11 +240,10 @@ Mixing ``Exit`` / ``Back`` / ``Cancel`` within one context is a bug.
 
 - litellm multi-provider (Anthropic, OpenAI, OpenRouter, Google, Groq,
   custom OpenAI-compatible endpoints i.e. Ollama / LM Studio / vLLM).
-- **19 tools** registered: `read_file`, `write_file`, `edit_file`,
+- **17 tools** registered: `read_file`, `write_file`, `edit_file`,
   `terminal`, `search`, `todo`, `web_search`, `web_fetch`,
-  `web_extract`, `schedule`, `memory`, `session_search`, `create_skill`,
-  `edit_skill`, `delete_skill`, `delegate`, `send_message`, `email`,
-  `config`.
+  `web_extract`, `schedule`, `memory`, `session_search`, `skill`,
+  `delegate`, `send_message`, `email`, `config`.
   - **`browser`** file exists but is **not registered** (stub). See
     "Open questions / pending" section 6 for the Playwright roadmap.
 - **Curated memory** (`memories/USER.md`, `memories/MEMORY.md`) with §
@@ -762,15 +761,14 @@ alf/
 ├── tools/
 │   ├── base.py                  Tool ABC + ToolResult
 │   ├── _state.py                set_emit / emit_state / set_interrupt_getter
-│   ├── create_skill.py          pending gate + origin + quota + scanner
-│   ├── edit_skill.py            rewrite body with origin-gate + .bak
-│   ├── delete_skill.py          rm dir with origin-gate
+│   ├── skill.py                 create/edit/delete/list — pending gate + origin + quota + scanner
+│   ├── search.py                content + filename search (ripgrep + stdlib fallback)
 │   ├── delegate.py              research sub-agent (read-only toolset)
 │   ├── terminal.py              run/background/status/output/kill
 │   ├── browser.py               STUB, not registered (v0.2 Playwright)
-│   └── <other>.py               read_file, write_file, edit_file, grep, glob,
-│                                todo, memory, web_*, schedule, send_message,
-│                                session_search
+│   └── <other>.py               read_file, write_file, edit_file, todo, memory,
+│                                web_*, schedule, send_message, session_search,
+│                                email, config
 ├── skills/meta/consolidate-memory/SKILL.md    only bundled skill
 ├── prompts/
 │   ├── default_personality.md   seed for ~/.alf/PERSONALITY.md
@@ -1108,6 +1106,49 @@ default".
 
 Don't graduate it silently — the security posture change deserves
 visibility.
+
+### Q. Skill self-review / validation
+
+Tier B models (mimo-v2-flash) happily publish skills with real bugs:
+threading race conditions (opening browser before the local callback
+server is listening), undeclared third-party imports (`import requests`
+when only stdlib is acceptable), incorrect setup instructions that
+contradict the docs the agent just fetched (e.g. "Authorization
+Callback Domain: localhost:8765" when the provider rejects port
+numbers in that field). The current mitigations — stdlib-preferred
+rule + security scanner + structured layout — catch the crude cases
+but not these.
+
+**For v0.3**, add a `skill(action="validate", name=...)` action and
+wire it into the `/skills` UI (`V` binding). The validator runs a
+battery of cheap checks:
+
+- `python -c "import <every top-level import in scripts/*.py>"` to
+  surface missing third-party deps.
+- `python -m py_compile scripts/*.py` for syntax.
+- `ast.parse` + walk looking for common foot-guns (race patterns in
+  OAuth: `webbrowser.open(...)` before a `.serve_forever()` /
+  `.handle_request()` on the same script).
+- Cross-check setup instructions in SKILL.md against the endpoints
+  the scripts actually hit (if SKILL.md mentions `localhost:8765` and
+  scripts bind to a different port, flag it).
+
+**Even more ambitious**: an optional `skill(action="review", name=...)`
+that spawns a `delegate()` sub-agent with a pre-canned prompt — *"You
+are reviewing this skill directory. Read SKILL.md and every file in
+scripts/. Return a bulleted list of bugs, race conditions, security
+issues, or setup instructions that contradict the code."* — and
+reports back. Costs one delegate call but catches real issues.
+
+Deliberately NOT for v0.1/v0.2:
+
+- Adding per-library OAuth/threading/etc guidance to the skill tool
+  description. That's feature creep — we'd end up with pages of
+  domain-specific rules. The stdlib-first line is the one exception
+  because it's a single, universally-applicable rule.
+- Blocking skill creation on validation failure. Users may
+  legitimately want to publish work-in-progress skills. Validation
+  reports should be advisory.
 
 ---
 

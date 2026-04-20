@@ -72,9 +72,12 @@ Updated inline during conversations via the `memory` tool. No
 post-session reflect. Snapshot is frozen per session (prefix cache).
 
 **Skills** — reusable recipes under `~/.alf/skills/<category>/<name>/`.
-Agent-created skills land in `~/.alf/skills/_pending/` and need user
-approval via `/skills` before going live. Each carries an `origin:
-agent | user` field.
+Each skill is a directory with `SKILL.md` plus up to four optional
+subdirs: `scripts/` (executable code), `references/` (markdown docs),
+`assets/` (templates / data), and `secrets/` (credentials, mode 0700,
+gitignored). Agent-created skills land in `~/.alf/skills/_pending/`
+and need user approval via `/skills` before going live. Full contract
+in [`docs/SKILLS.md`](docs/SKILLS.md).
 
 **Sessions** — JSON under `~/.alf/sessions/<id>.json`. Stored as a list
 of `turns` (`{user, tools, assistant}`); no raw OpenAI message thread

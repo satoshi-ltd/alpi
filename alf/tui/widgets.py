@@ -100,7 +100,7 @@ def _fmt_cost(cost: float) -> str:
 
 # Tools that represent "alf is learning something" — rendered with the
 # accent color so the user can see at a glance when memory/skills change.
-LEARNING_TOOLS = {"memory", "create_skill"}
+LEARNING_TOOLS = {"memory", "skill"}
 
 
 # Thinking indicator — shown immediately after a user message and removed

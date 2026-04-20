@@ -16,7 +16,9 @@ class WriteFile(Tool):
         "\n"
         "DO NOT use write_file for:\n"
         "  • USER.md / MEMORY.md / PERSONALITY.md → use `memory(add/replace)`\n"
-        "  • skill SKILL.md → use `create_skill` (new) or `edit_skill` (change)\n"
+        "  • skill files (SKILL.md or anything in scripts/references/"
+        "assets/secrets/) → use `skill(action='create'|'edit'|'add_file')`. "
+        "Direct writes skip the security scanner.\n"
         "  • paths outside the workspace → the call will be rejected"
     )
     parameters = {
@@ -33,6 +35,15 @@ class WriteFile(Tool):
             p = check_path(path)
         except ValueError as e:
             return ToolResult(ok=False, output="", error=str(e))
+        if _is_skill_path(p):
+            return ToolResult(
+                ok=False, output="",
+                error=(
+                    "path is inside a skill directory — use "
+                    "`skill(action='create'|'edit'|'add_file')` so the "
+                    "security scanner runs. Direct writes skip the scan."
+                ),
+            )
         p.parent.mkdir(parents=True, exist_ok=True)
         # Atomic overwrite: write to a sibling tmp file and os.replace onto
         # the target. If we crash mid-write the original is untouched.
@@ -41,6 +52,16 @@ class WriteFile(Tool):
         tmp.write_text(content)
         os.replace(tmp, p)
         return ToolResult(ok=True, output=f"Wrote {len(content):,} chars to {p}")
+
+
+def _is_skill_path(p: Path) -> bool:
+    from alf.home import get_home
+    skills_root = (get_home() / "skills").resolve()
+    try:
+        p.resolve().relative_to(skills_root)
+        return True
+    except ValueError:
+        return False
 
 
 TOOL = WriteFile

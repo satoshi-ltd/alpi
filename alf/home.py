@@ -30,6 +30,16 @@ def ensure_home(home: Path) -> None:
         "gateway/logs",
     ):
         (home / sub).mkdir(parents=True, exist_ok=True)
+    gi = home / ".gitignore"
+    if not gi.exists():
+        gi.write_text(
+            ".env\n"
+            "sessions/\n"
+            "schedule/output/\n"
+            "gateway/logs/\n"
+            "cache/\n"
+            "skills/**/secrets/\n"
+        )
 
 
 def personality_path(home: Path) -> Path:
