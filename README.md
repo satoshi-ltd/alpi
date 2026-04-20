@@ -104,6 +104,11 @@ EMAIL_ALLOWED_SENDERS=pepe@x.com,ana@y.com  # gateway inbound (fail-closed)
 
 Switch model any time with `/model` inside the TUI.
 
+Not every model is a good agent — tool-calling fluency and
+system-prompt adherence vary a lot across providers. See
+[`docs/MODELS.md`](docs/MODELS.md) for a tiered recommendation based
+on real OpenRouter usage data and hands-on testing.
+
 ## Gateway
 
 Relays Telegram messages to alf. Tool activity streams to the chat
