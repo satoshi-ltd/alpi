@@ -64,6 +64,15 @@ class Engine:
         """Ask the current run_turn() to stop at the next check-point."""
         self.interrupt_requested = True
 
+    def reset_session(self) -> None:
+        try:
+            self.save_session()
+        except Exception:
+            pass
+        self.session = session.Session(home=self.home, model=self.cfg.model)
+        self.session.messages.append({"role": "system", "content": self._system_prompt})
+        self.interrupt_requested = False
+
     def run_turn(self, user_text: str, emit: EventSink) -> None:
         """Run a full user turn. Blocking — call from a worker thread."""
         with self._turn_lock:

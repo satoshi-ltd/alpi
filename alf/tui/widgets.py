@@ -110,9 +110,10 @@ LEARNING_TOOLS = {"memory", "create_skill"}
 class ThinkingIndicator(Static):
     """Transient one-liner spinner + elapsed, shown while alf is 'thinking'."""
 
-    def __init__(self) -> None:
+    def __init__(self, accent: str = "") -> None:
         super().__init__("")
         self.started = time.time()
+        self.accent = accent
         self._timer = None
 
     def on_mount(self) -> None:
@@ -123,8 +124,9 @@ class ThinkingIndicator(Static):
         from alf.tui.formatting import fmt_duration
         frame = _SPINNER_FRAMES[int(time.time() * 6) % len(_SPINNER_FRAMES)]
         elapsed = fmt_duration(time.time() - self.started)
+        spinner_markup = f"[{self.accent}]{frame}[/{self.accent}]" if self.accent else frame
         self.update(Text.from_markup(
-            f"[dim]{frame}  thinking…  {elapsed}[/dim]"
+            f"{spinner_markup} [dim] thinking…  {elapsed}[/dim]"
         ))
 
     def stop(self) -> None:
@@ -213,6 +215,8 @@ class ToolCard(Widget):
                 diamond_style = "red"
             elif is_learning:
                 diamond_style = learn_color
+            elif self.accent:
+                diamond_style = self.accent
             else:
                 diamond_style = "cyan"
             name_style = f"bold {learn_color}" if is_learning else "bold"
@@ -236,9 +240,16 @@ class ToolCard(Widget):
                 icon_style = "red"
             elif is_learning:
                 icon_style = learn_color
+            elif self.accent:
+                icon_style = self.accent
             else:
                 icon_style = "cyan"
-            spinner_style = "red" if self._state_is_error else "yellow"
+            if self._state_is_error:
+                spinner_style = "red"
+            elif self.accent:
+                spinner_style = self.accent
+            else:
+                spinner_style = "yellow"
             label_style = "red" if self._state_is_error else "dim"
             name_style = f"bold {learn_color}" if is_learning else "bold"
 
