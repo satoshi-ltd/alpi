@@ -19,6 +19,20 @@ from alf import llm, memory, session, tools
 from alf.session import ToolLog, truncate_result
 
 
+def _maybe_load_mcps(cfg: cfg_mod.Config) -> list:
+    """Spawn+register configured MCP servers. Never fatal.
+
+    Kept isolated so a user who hasn't touched MCPs pays no import
+    cost (the deep import below only runs if there's at least one
+    entry in ``mcp.servers``).
+    """
+    servers = (cfg.raw.get("mcp") or {}).get("servers") or {}
+    if not servers:
+        return []
+    from alf.mcp import registry as mcp_registry
+    return mcp_registry.load_and_register(cfg)
+
+
 @dataclass
 class AgentEvent:
     kind: str                      # 'user' | 'assistant_delta' | 'assistant_done' | 'tool_start' | 'tool_state' | 'tool_end' | 'usage' | 'error' | 'done' | 'interrupted'
@@ -41,6 +55,10 @@ class Engine:
         self.home = home
         self.cfg = cfg
         self.session = session.Session(home=home, model=cfg.model)
+        # Spawn MCP servers the user configured and register their
+        # tools BEFORE we bake the system prompt, so the tool list in
+        # the prompt includes them.
+        self._mcp_clients = _maybe_load_mcps(cfg)
         self._system_prompt = self._build_system_prompt()
         self.session.messages.append({"role": "system", "content": self._system_prompt})
         # Cross-thread flag: the UI sets this to True on new user input while
