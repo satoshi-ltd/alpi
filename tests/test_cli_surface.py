@@ -61,3 +61,59 @@ def test_profile_subcommands_include_remove() -> None:
     assert result.exit_code == 0
     for sub in ("list", "create", "remove"):
         assert sub in result.output
+
+
+# ----------------------------------------------------------------------
+# Daemon workspace validation — fail fast before the daemon loops
+# ----------------------------------------------------------------------
+
+
+def test_gateway_start_rejects_missing_workspace(tmp_path, monkeypatch) -> None:
+    """Unset ``workspace`` must stop ``alf gateway start`` before it
+    writes a PID file or touches the network.
+
+    Rationale: a gateway with no workspace is a daemon that rejects
+    every tool call silently. Discovering that via ``tail -f`` an hour
+    later is strictly worse than a UsageError at the command boundary.
+    """
+    monkeypatch.setenv("ALF_HOME", str(tmp_path))
+    # Bare-minimum config: no workspace key at all.
+    (tmp_path / "config.yaml").write_text("model: openrouter/foo/bar\n")
+
+    result = CliRunner().invoke(cli.main, ["gateway", "start"])
+    assert result.exit_code != 0
+    assert "No workspace configured" in result.output
+    # Critical: PID file must NOT exist — the daemon aborted before
+    # ``_write_pid`` could fire.
+    assert not (tmp_path / "gateway" / "gateway.pid").exists()
+
+
+def test_gateway_start_rejects_nonexistent_workspace(tmp_path, monkeypatch) -> None:
+    """``workspace`` set but the directory is gone (typo, moved mount).
+
+    Same rationale as above — fail loudly, not silently.
+    """
+    monkeypatch.setenv("ALF_HOME", str(tmp_path))
+    (tmp_path / "config.yaml").write_text(
+        "model: openrouter/foo/bar\nworkspace: /no/such/dir\n"
+    )
+
+    result = CliRunner().invoke(cli.main, ["gateway", "start"])
+    assert result.exit_code != 0
+    assert "does not exist" in result.output
+    assert "/no/such/dir" in result.output
+
+
+def test_schedule_start_rejects_missing_workspace(tmp_path, monkeypatch) -> None:
+    """Schedule daemon carries the same invariant as the gateway.
+
+    Scheduled jobs spawn ``alf chat --once`` subprocesses — each one
+    needs a workspace. A silent daemon that never runs a single job is
+    a worse failure mode than refusing to start.
+    """
+    monkeypatch.setenv("ALF_HOME", str(tmp_path))
+    (tmp_path / "config.yaml").write_text("model: openrouter/foo/bar\n")
+
+    result = CliRunner().invoke(cli.main, ["schedule", "start"])
+    assert result.exit_code != 0
+    assert "No workspace configured" in result.output

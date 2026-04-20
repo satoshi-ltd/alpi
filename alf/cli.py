@@ -262,6 +262,42 @@ def chat(ctx: click.Context, input_text: str | None, emit_events: bool,
 # Gateway subcommands
 # ----------------------------------------------------------------------
 
+
+def _require_workspace(h: Path) -> None:
+    """Abort the command if the profile has no usable workspace.
+
+    Interactive runs can survive an unset workspace — the user runs
+    ``/workspace <path>`` to pin one at the start of the session.
+    Non-interactive daemons (gateway, schedule) have no such escape
+    hatch: every tool call silently refuses until the user notices
+    their Telegram inbox is dead. Fail loudly at the command boundary
+    so the operator sees the actual problem instead of debugging a
+    silent daemon.
+
+    Two failure modes we check:
+
+    1. ``workspace`` empty / unset — nothing for file tools to anchor to.
+    2. ``workspace`` set but the path does not exist — typo, moved
+       mountpoint, or a profile copied across machines.
+
+    No policy beyond that. The user picks the path; ``/`` is their call.
+    """
+    cfg = config.load(h)
+    wp = cfg.workspace_path
+    if wp is None:
+        raise click.UsageError(
+            "No workspace configured for this profile. "
+            "Run `alf setup` and pick a workspace, or set "
+            f"`workspace:` in {cfg.config_path} before starting the daemon."
+        )
+    if not wp.exists():
+        raise click.UsageError(
+            f"Workspace {wp} does not exist. "
+            "Create the directory or edit `workspace:` in "
+            f"{cfg.config_path}."
+        )
+
+
 @main.group()
 def gateway() -> None:
     """Gateway daemon (inbound channels: Telegram, Email, …)."""
@@ -274,6 +310,7 @@ def gateway_start(ctx: click.Context) -> None:
     from alf.gateway.run import run as gw_run, pid_path
     h: Path = ctx.obj["home"]
     _bootstrap(h)
+    _require_workspace(h)
     _check_not_running(pid_path(h))
     gw_run(h)
 
@@ -312,6 +349,9 @@ def gateway_status(ctx: click.Context) -> None:
 @click.pass_context
 def gateway_install(ctx: click.Context) -> None:
     """Install the gateway as a system service (launchd/systemd)."""
+    h: Path = ctx.obj["home"]
+    _bootstrap(h)
+    _require_workspace(h)
     _install_daemon(ctx, "gateway")
 
 
@@ -414,6 +454,7 @@ def schedule_start(ctx: click.Context) -> None:
     from alf.scheduler.run import run as sch_run, pid_path
     h: Path = ctx.obj["home"]
     _bootstrap(h)
+    _require_workspace(h)
     _check_not_running(pid_path(h))
     sch_run(h)
 
@@ -460,6 +501,9 @@ def schedule_status(ctx: click.Context) -> None:
 @click.pass_context
 def schedule_install(ctx: click.Context) -> None:
     """Install the schedule daemon as a system service (launchd/systemd)."""
+    h: Path = ctx.obj["home"]
+    _bootstrap(h)
+    _require_workspace(h)
     _install_daemon(ctx, "schedule")
 
 
