@@ -83,8 +83,15 @@ def arg_hint(tool_name: str, args: dict) -> str:
         return f"{base}  {payload}".rstrip()
     if tool_name == "session_search":
         return truncate(str(args.get("query", "")), 40)
-    if tool_name == "create_skill":
-        return f"{args.get('name', '')} · {args.get('category', '')}"
+    if tool_name == "skill":
+        action = args.get("action", "")
+        name = args.get("name", "")
+        cat = args.get("category", "")
+        if action == "create":
+            return f"create · {name} · {cat}".rstrip(" ·")
+        if action in ("edit", "delete"):
+            return f"{action} · {name}".rstrip(" ·")
+        return action
     if tool_name == "todo":
         action = args.get("action", "")
         content = str(args.get("content", ""))
@@ -172,7 +179,7 @@ def result_hint(tool_name: str, output: str) -> str:
     if tool_name == "schedule":
         return _escape_markup(truncate(text.splitlines()[0], 60))
 
-    if tool_name == "create_skill":
+    if tool_name == "skill":
         return _escape_markup(truncate(text, 60))
 
     lines = text.splitlines()

@@ -100,61 +100,40 @@ class ToolsScreen(ModalScreen):
 
 
 class SkillsScreen(ModalScreen):
-    """List live + pending skills. Approve/reject pending ones.
+    """List installed skills. View body or delete.
 
-    Key bindings on a highlighted pending row:
-      a — approve (move from _pending to <category>/<name>/)
-      r — reject (delete pending dir)
+    Key bindings on a highlighted row:
       v — view SKILL.md body
+      d — delete skill directory (asks for confirmation via press-twice)
     """
 
     BINDINGS = [
         Binding("escape,q", "dismiss", "close"),
-        Binding("a", "approve", "approve"),
-        Binding("r", "reject", "reject"),
+        Binding("d", "delete", "delete"),
         Binding("v", "view", "view"),
     ]
 
     def __init__(self, home: Path) -> None:
         super().__init__()
         self.home = home
-        # opt_id -> (kind, path)  kind ∈ {"pending", "live"}
-        self._items: dict[str, tuple[str, Path]] = {}
+        self._items: dict[str, Path] = {}
+        self._delete_armed: str | None = None
 
     def compose(self) -> ComposeResult:
         with Vertical():
             yield Static("Skills", classes="modal-title")
             yield OptionList(*self._build_options(), id="skills-options")
             yield Static(
-                "[dim]↑↓ navigate  a approve  r reject  v view  ESC close[/dim]",
+                "[dim]↑↓ navigate  v view  d delete (press twice)  ESC close[/dim]",
                 classes="modal-hint",
             )
 
     def _build_options(self) -> list[Option]:
-        from alf.tools.create_skill import pending_skills, pending_dir
-
         options: list[Option] = []
         self._items.clear()
 
-        pending = pending_skills(self.home)
-        if pending:
-            options.append(Option(Text("── pending approval ──", style="dim"), disabled=True))
-            for i, path in enumerate(pending):
-                meta = _read_frontmatter(path / "SKILL.md")
-                label = Text()
-                label.append(path.name, style="bold yellow")
-                cat = meta.get("category", "")
-                if cat:
-                    label.append(f"  {cat}", style="dim")
-                desc = meta.get("description", "")
-                if desc:
-                    label.append(f"  {desc}", style="dim")
-                opt_id = f"pending-{i}"
-                self._items[opt_id] = ("pending", path)
-                options.append(Option(label, id=opt_id))
-
         root = self.home / "skills"
-        live_entries: list[tuple[str, Path, dict]] = []
+        entries: list[tuple[str, Path, dict]] = []
         if root.exists():
             for cat in sorted(root.iterdir()):
                 if not cat.is_dir() or cat.name.startswith("_"):
@@ -163,30 +142,29 @@ class SkillsScreen(ModalScreen):
                     if not skill.is_dir():
                         continue
                     meta = _read_frontmatter(skill / "SKILL.md")
-                    live_entries.append((cat.name, skill, meta))
+                    entries.append((cat.name, skill, meta))
 
-        if live_entries:
-            if pending:
-                options.append(Option(Text(" ", style="dim"), disabled=True))
-            options.append(Option(Text("── installed ──", style="dim"), disabled=True))
-            for i, (cat, skill, meta) in enumerate(live_entries):
-                origin = meta.get("origin", "user")
-                label = Text()
-                label.append(skill.name, style="bold")
-                label.append(f"  {cat}", style="dim")
-                label.append(f"  ({origin})", style="green" if origin == "user" else "cyan")
-                desc = meta.get("description", "")
-                if desc:
-                    label.append(f"  {desc}", style="dim")
-                opt_id = f"live-{i}"
-                self._items[opt_id] = ("live", skill)
-                options.append(Option(label, id=opt_id))
+        current_cat = ""
+        for i, (cat, skill, meta) in enumerate(entries):
+            if cat != current_cat:
+                options.append(Option(Text(f"── {cat} ──", style="dim"), disabled=True))
+                current_cat = cat
+            origin = meta.get("origin", "user")
+            label = Text()
+            label.append(skill.name, style="bold")
+            label.append(f"  ({origin})", style="green" if origin == "user" else "cyan")
+            desc = meta.get("description", "")
+            if desc:
+                label.append(f"  {desc}", style="dim")
+            opt_id = f"skill-{i}"
+            self._items[opt_id] = skill
+            options.append(Option(label, id=opt_id))
 
         if not options:
             options.append(Option(Text("(no skills yet)", style="dim"), disabled=True))
         return options
 
-    def _selected_pending(self) -> Path | None:
+    def _selected_skill(self) -> Path | None:
         olist = self.query_one(OptionList)
         idx = olist.highlighted
         if idx is None:
@@ -194,42 +172,26 @@ class SkillsScreen(ModalScreen):
         opt = olist.get_option_at_index(idx)
         if opt.id is None:
             return None
-        kind, path = self._items.get(opt.id, ("", Path()))
-        return path if kind == "pending" else None
+        return self._items.get(opt.id)
 
-    def action_approve(self) -> None:
-        path = self._selected_pending()
+    def action_delete(self) -> None:
+        path = self._selected_skill()
         if path is None:
             return
-        meta = _read_frontmatter(path / "SKILL.md")
-        category = meta.get("category") or "meta"
-        dest = self.home / "skills" / category / path.name
-        if dest.exists():
-            self.notify(f"target exists: {dest} — rejecting instead", severity="warning")
-            shutil.rmtree(path, ignore_errors=True)
-        else:
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            shutil.move(str(path), str(dest))
-            self.notify(f"approved: {dest}", severity="information")
-        self._rebuild()
-
-    def action_reject(self) -> None:
-        path = self._selected_pending()
-        if path is None:
+        key = str(path)
+        if self._delete_armed != key:
+            self._delete_armed = key
+            self.notify(f"press d again to delete {path.name}", severity="warning")
             return
+        self._delete_armed = None
         shutil.rmtree(path, ignore_errors=True)
-        self.notify(f"rejected: {path.name}", severity="warning")
+        self.notify(f"deleted: {path.name}", severity="information")
         self._rebuild()
 
     def action_view(self) -> None:
-        olist = self.query_one(OptionList)
-        idx = olist.highlighted
-        if idx is None:
+        path = self._selected_skill()
+        if path is None:
             return
-        opt = olist.get_option_at_index(idx)
-        if opt.id is None or opt.id not in self._items:
-            return
-        _kind, path = self._items[opt.id]
         body_path = path / "SKILL.md"
         if not body_path.exists():
             return

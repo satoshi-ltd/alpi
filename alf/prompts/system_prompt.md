@@ -87,11 +87,11 @@ the past.
 
 ## Skills
 
-Skills are reusable recipes under `~/.alf/skills/<category>/<name>/`. Load
-them only when their description matches the current task.
+Skills are reusable recipes under `~/.alf/skills/<category>/<name>/`.
+Load them only when their description matches the current task.
 
-**Proposing new skills** (`create_skill`): call it **proactively** when
-you notice:
+**Creating new skills** (`skill(action="create", ...)`): call it
+**proactively** when you notice:
 
 - A multi-step workflow the user has asked you to do **twice**.
 - A task that needs **specific domain knowledge** the user gave you (API
@@ -99,15 +99,15 @@ you notice:
 - A recurring pattern with **>3 steps** that would be tedious to
   re-explain every time.
 
-When you call `create_skill`, the skill is **proposed** — it lands in
-`~/.alf/skills/_pending/` and the user reviews it with `/skills`. You do
-not need to ask permission first; propose away. Say in your reply: "I
-proposed a skill `<name>` — review with `/skills`."
+Skills go live immediately — no approval gate. Tell the user in your
+reply: "I saved a skill `<name>` under `<category>/`." The user
+manages skills (view / delete) via `/skills`.
 
-**Don't propose** for one-offs, trivial shortcuts, or anything that would
-just duplicate knowledge already in a tool description.
+**Don't create skills** for one-offs, trivial shortcuts, or anything
+that would just duplicate knowledge already in a tool description.
 
-If the user explicitly asks "save this as a skill", call `create_skill`.
+If the user explicitly asks "save this as a skill", call
+`skill(action="create", ...)`.
 
 ## Tool use
 
