@@ -1064,6 +1064,50 @@ rows). Don't split across versions — migration should land in one
 commit with all the hack-removals bundled, so the diff tells the
 story.
 
+### P. Graduate the OS sandbox out of experimental
+
+`tools.terminal.sandbox` ships in v0.1 as opt-in + experimental
+(default `false`). Shipping on by default was rejected for v0.1
+because the `sandbox-exec` profile (macOS) and the `bubblewrap`
+invocation (Linux) haven't been validated against the long tail of
+real commands users actually run: `git push` with SSH keys outside
+the workspace, `docker` touching `/var/run/docker.sock`, Homebrew
+Intel vs Apple Silicon paths, `npm install` with caches in
+`~/.npm`, `code --install-extension` writing to `~/.vscode/`, and
+so on. Each of these would break silently when someone flips the
+flag and erode trust in the agent faster than the security gain is
+worth.
+
+**For v0.3, revisit with data.** Goal: move the default to `true`
+without a regression wave.
+
+Scope when we attack it:
+
+- Collect a "golden set" of 30–50 real commands the agent runs in
+  a normal week (read from session history) and exercise each under
+  the sandbox. Anything that breaks gets a profile fix or an
+  explicit carve-out in docs.
+- Extend the macOS profile to cover Homebrew Apple Silicon
+  (`/opt/homebrew`) and Intel (`/usr/local`) paths and to allow
+  reads on the user's git config (`~/.gitconfig`, `~/.git-credentials`)
+  without opening the rest of `$HOME`.
+- Extend the Linux `bwrap` invocation similarly — bind-mount the
+  user's `.gitconfig` + `~/.npm` + `~/.cache` as RO so package
+  managers work.
+- Smoke-test on two real Linux distros (not just the Docker image
+  in `docs/sandbox-linux-test.md`): Ubuntu LTS and Fedora stable.
+- Add a first-run check: on `alf` boot with sandbox on, run a
+  trivial `echo ok` through the sandboxed path. If it fails, warn
+  loudly with a pointer to SECURITY.md and fall back to disabled.
+
+Once the golden set passes cleanly, flip `DEFAULT_CONFIG` to
+`sandbox: true`, drop the "experimental" wording from SECURITY.md
+and CONFIG.md, mention it in the v0.3 CHANGELOG as "tightened by
+default".
+
+Don't graduate it silently — the security posture change deserves
+visibility.
+
 ---
 
 ## Non-obvious things future-me should know

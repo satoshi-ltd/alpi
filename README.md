@@ -158,6 +158,20 @@ See `docs/CONTEXT.md` for:
 - the v0.2 roadmap (browser/Playwright, send_message, MCP, multimodal,
   OS-level sandbox, multi-profile CLI, …)
 
+## Security
+
+Two layers, layered by trust:
+
+- **Always on**: command denylist on `terminal`, SSRF block on
+  `web_fetch` / `web_extract`, prompt-injection scanner on email /
+  web content, path sandbox on file tools.
+- **Opt-in, experimental**: OS-level sandbox for `terminal`
+  (`sandbox-exec` on macOS, `bubblewrap` on Linux). Default **off**
+  — turn it on with `config(set, tools.terminal.sandbox, true)` once
+  you've checked your usual commands still work.
+
+Full model + platform notes in [`docs/SECURITY.md`](docs/SECURITY.md).
+
 ## Tests
 
 ```bash

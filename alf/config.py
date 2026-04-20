@@ -17,6 +17,10 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "tools": {
         "max_steps_per_turn": 40,
         "web_extract": {"model": ""},
+        "terminal": {
+            "sandbox": False,
+            "allow_network": False,
+        },
     },
     "tui": {
         "show_cost": True,

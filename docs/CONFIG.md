@@ -60,6 +60,14 @@ Three options, any of them works:
 |---|---|---|---|
 | `tools.max_steps_per_turn` | `40` | int | next turn |
 | `tools.web_extract.model` | `""` (use main) | string | next turn |
+| `tools.terminal.sandbox` | `false` | bool | next turn |
+| `tools.terminal.allow_network` | `false` | bool | next turn |
+
+`tools.terminal.sandbox` enables OS-level isolation on shell commands
+(macOS `sandbox-exec`, Linux `bubblewrap`). **Experimental** — see
+[SECURITY.md](SECURITY.md) for details, platform requirements, and
+what breaks when it's on. `allow_network` has no effect unless
+`sandbox` is on.
 
 ### TUI
 

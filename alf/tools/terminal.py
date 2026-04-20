@@ -17,6 +17,7 @@ def _strip_ansi(s: str) -> str:
 
 from alf.home import get_home
 from alf.tools._guards import check_command
+from alf.tools._sandbox import SandboxUnavailable, wrap_command
 from alf.tools.base import Tool, ToolResult
 
 
@@ -36,6 +37,38 @@ def _default_cwd() -> str:
     except Exception:
         pass
     return os.getcwd()
+
+
+def _sandbox_config() -> tuple[bool, bool]:
+    try:
+        from alf import config as cfg_mod
+        cfg = cfg_mod.load(get_home())
+        term = (cfg.raw.get("tools") or {}).get("terminal") or {}
+    except Exception:
+        term = {}
+    sandbox = bool(term.get("sandbox", False))
+    allow_network = bool(term.get("allow_network", False))
+    return sandbox, allow_network
+
+
+def _resolve_popen_args(command: str) -> list[str] | str:
+    sandbox_enabled, allow_network = _sandbox_config()
+    if not sandbox_enabled:
+        return command
+    try:
+        from alf import config as cfg_mod
+        cfg = cfg_mod.load(get_home())
+        wp = cfg.workspace_path
+    except Exception:
+        wp = None
+    if wp is None:
+        wp = Path(_default_cwd())
+    return wrap_command(
+        command,
+        workspace=wp,
+        alf_home=get_home(),
+        allow_network=allow_network,
+    )
 
 
 def _pid_alive(pid: int) -> bool:
@@ -108,8 +141,13 @@ class Terminal(Tool):
                 error=f"refused: {reason}. Ask the user to confirm in chat and then run a narrower command.",
             )
         try:
+            popen_args = _resolve_popen_args(command)
+        except SandboxUnavailable as e:
+            return ToolResult(ok=False, output="", error=str(e))
+        use_shell = isinstance(popen_args, str)
+        try:
             proc = subprocess.run(
-                command, shell=True, capture_output=True, text=True,
+                popen_args, shell=use_shell, capture_output=True, text=True,
                 timeout=timeout, cwd=cwd or _default_cwd(),
             )
         except subprocess.TimeoutExpired:
@@ -133,12 +171,17 @@ class Terminal(Tool):
                 ok=False, output="",
                 error=f"refused: {reason}. Ask the user to confirm in chat and then run a narrower command.",
             )
+        try:
+            popen_args = _resolve_popen_args(command)
+        except SandboxUnavailable as e:
+            return ToolResult(ok=False, output="", error=str(e))
+        use_shell = isinstance(popen_args, str)
         log = tempfile.NamedTemporaryFile(
             prefix="alf-bg-", suffix=".log", dir=_bg_dir(), delete=False,
         )
         log.close()
         proc = subprocess.Popen(
-            command, shell=True, cwd=cwd or _default_cwd(),
+            popen_args, shell=use_shell, cwd=cwd or _default_cwd(),
             stdout=open(log.name, "ab"), stderr=subprocess.STDOUT,
             start_new_session=True,
         )
