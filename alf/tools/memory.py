@@ -17,45 +17,26 @@ from alf.tools.base import Tool, ToolResult
 class Memory(Tool):
     name = "memory"
     description = (
-        "Persist things that reduce future user steering. Three targets, "
-        "pick exactly ONE per fact (never duplicate across targets):\n"
+        "Persist facts that apply beyond this turn. Three targets, pick "
+        "exactly one per fact — never duplicate across targets:\n"
         "\n"
-        "  USER.md         — stable facts about the user: name, location, "
-        "role, family, hardware, long-term preferences. Would still be "
-        "true with any other assistant.\n"
-        "  MEMORY.md       — environment/tool notes: commands, paths, API "
-        "quirks, workarounds. Would still be useful next session.\n"
-        "  PERSONALITY.md  — how YOU (alf) should behave: tone, style, "
-        "response length, language, identity.\n"
+        "  USER.md         — stable facts about the user (name, location, "
+        "role, long-term preferences). True regardless of assistant.\n"
+        "  MEMORY.md       — your notes about env/tools (paths, commands, "
+        "API quirks, workarounds).\n"
+        "  PERSONALITY.md  — how YOU behave (tone, style, length, language, "
+        "identity).\n"
         "\n"
         "Actions: read | add | replace | remove.\n"
         "\n"
-        "When the user gives an instruction or fact that applies beyond "
-        "this turn, CALL this tool — an acknowledgement in the reply "
-        "does not persist anything and is LOST at end of turn.\n"
+        "An acknowledgement in the reply does NOT persist anything — call "
+        "this tool or the fact is lost at end of turn.\n"
         "\n"
-        "DO NOT save:\n"
-        "  • task progress, session outcomes, or diary-style logs of what "
-        "was done in this turn. Use session_search for prior sessions.\n"
-        "  • rephrasings of what the user just said this turn.\n"
-        "  • facts that will be stale in a week.\n"
-        "  • duplicates — call read first if unsure.\n"
+        "Skip: session progress, restatements of the current turn, facts "
+        "stale within a week, duplicates (`read` first if unsure).\n"
         "\n"
-        "Concrete bad calls to avoid:\n"
-        "  ❌ add USER.md \"User asked for direct links\"\n"
-        "  ❌ add USER.md \"Usuario pide enlaces directos\"\n"
-        "  ❌ add USER.md \"User wants short answers\"  ← that's PERSONALITY\n"
-        "  ❌ add USER.md + add PERSONALITY.md with the same fact (pick one)\n"
-        "\n"
-        "Good calls:\n"
-        "  ✓ add USER.md \"Javi lives in Hua Hin.\"\n"
-        "  ✓ add PERSONALITY.md \"Prefer short answers, max 2 lines.\"\n"
-        "  ✓ add MEMORY.md \"The prod backend runs at 192.168.1.45.\"\n"
-        "\n"
-        "`replace` match must be verbatim text from a prior `read` or the "
-        "frozen snapshot — never invent a match string. If unsure, use add.\n"
-        "\n"
-        "When in doubt, skip. Junk in memory pollutes every future prompt."
+        "`replace` match must be verbatim from a prior `read` or the "
+        "frozen snapshot — never invent one. If unsure, use `add`."
     )
     parameters = {
         "type": "object",
@@ -67,13 +48,7 @@ class Memory(Tool):
             "target": {
                 "type": "string",
                 "enum": ["USER.md", "MEMORY.md", "PERSONALITY.md"],
-                "description": (
-                    "USER.md → who the user is (facts that outlive this "
-                    "assistant). MEMORY.md → your own notes about env/tools. "
-                    "PERSONALITY.md → how YOU should reply (tone, length, "
-                    "language, identity). Pick ONE, never save the same "
-                    "thing in two targets."
-                ),
+                "description": "See tool description for target semantics.",
             },
             "content": {
                 "type": "string",
