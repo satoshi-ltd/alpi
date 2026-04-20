@@ -22,6 +22,71 @@ skill categories, 30+ tools, SQLite state, curses UIs). **Does NOT do
 post-session reflect** — removed deliberately; the agent decides what to
 save in the moment via the `memory` tool (Hermes-style).
 
+## CLI + UI conventions
+
+The CLI surface is small and stable. Verbs are shared across groups
+so the user doesn't relearn per feature.
+
+**Commands** (user-facing, hidden plumbing marked internal):
+
+    alf                              → launch the TUI
+    alf -c / alf --continue          → launch the TUI, resume last session
+    alf -p <name>                    → profile flag, combinable with any command
+
+    alf chat                         → alias for `alf`
+    alf chat --once "<text>"         → one-shot turn to stdout (pipe-friendly)
+    alf chat --once ... --emit-events   (INTERNAL, hidden) gateway subprocess
+                                        contract: stdout becomes JSON-lines
+
+    alf setup                        → single interactive entry for per-profile
+                                        config: Model / Gateways / MCPs
+
+    alf profile list                 → list profiles, mark the active one
+    alf profile create <name>        → bootstrap a new profile tree
+    alf profile remove <name>        → delete after safety checks + confirm
+
+    alf gateway   start|stop|status|logs|install|uninstall
+    alf schedule  start|stop|status|logs|install|uninstall|run-once
+    alf mcp       list|test              (read-only; mutations live in `alf setup`)
+
+**Shape rules:**
+
+- Containers (profile) get ``list / create / remove`` verbs.
+- Daemons (gateway, schedule) get ``start / stop / status / logs /
+  install / uninstall``. Schedule adds ``run-once`` for manual ticks.
+- MCP gets ``list / test / remove`` — it has no daemon of its own
+  (servers spawn as children of the Engine) so no ``start/stop``.
+- Interactive wizards live under ``alf setup``. There is NO
+  duplicate per-feature wizard command — don't add ``alf model``
+  or ``alf gateway setup`` back; always ``alf setup → ...``.
+
+**UI module: ``alf/ui.py``.** Every interactive prompt and menu passes
+through it. Raw ``questionary.*`` is forbidden outside this module —
+enforced by convention. Helpers:
+
+- ``banner(title, subtitle, hint)`` — the wizard/menu header block.
+- ``menu(message, items, home, close)`` — questionary.select with our
+  ``◆`` pointer tinted by ``tui.accent`` and the standard
+  ``↑↓ / ENTER / ESC`` instruction line. The close item is added
+  automatically with value ``None``; callers treat ``None`` as "out".
+- ``text / password / confirm`` — input prompts with hydration semantics.
+  ``password(label, current=...)`` is "ENTER keeps the existing value";
+  everyone else uses ``default=current`` so empty input clears.
+- ``row(label, status)`` — left-pads the label to ``LABEL_WIDTH`` and
+  joins with ``·``. Menus across the app align columns because they
+  use this to build titles.
+- ``ok / fail / warn / dim / saved / cancelled`` — feedback lines with
+  the same Rich styling everywhere.
+
+**Menu close wording:**
+
+- Top-level menu (``alf setup``) → ``Exit`` (closes the program path).
+- Sub-menus (``Gateways:``, ``MCP servers:``, ``Manage saved keys``) →
+  ``← Back`` (returns to the parent).
+- Wizard aborted mid-flow (ESC, blank required field) → ``cancelled``.
+
+Mixing ``Exit`` / ``Back`` / ``Cancel`` within one context is a bug.
+
 ## Principles (set by Javi)
 
 - **Slim.** No over-engineering. Every feature must earn its keep.
@@ -399,8 +464,10 @@ differently:
   Add flow: name, command, args, env var refs. Spawns + handshakes +
   lists tools BEFORE writing to config — if it can't connect, nothing
   lands. Same guarantee as the email wizard.
-- **CLI**: `alf mcp list`, `alf mcp test <name>`, `alf mcp remove
-  <name>` for quick inspection outside the setup menu.
+- **CLI**: `alf mcp list` and `alf mcp test <name>` — read-only
+  inspection from a shell. Mutations (add / edit / remove) live in
+  ``alf setup → MCPs`` so there's one place where configuration
+  changes, not two.
 - **Failure isolation**: one MCP failing to start doesn't take the
   whole engine down. Its tools just don't appear; a warning goes to
   the log. Other MCPs start normally.
@@ -867,6 +934,66 @@ Out of scope for core agent. If added, lives in a separate surface
 A `generate_image(prompt, style)` tool using the active vision model
 or a dedicated endpoint (DALL-E, SD). Useful for "hazme un logo
 rápido". Low priority unless a concrete use case appears.
+
+---
+
+## v0.3 — planned
+
+### O. Drop `questionary` in favour of direct `prompt_toolkit`
+
+**Why revisit.** `questionary` was the right choice when setup was 3
+menus and 0 wizards. Now that `alf/ui.py` is the shared layer for
+every `setup` flow, we're fighting its defaults more than using them.
+Concrete hacks in `alf/ui.py` as of v0.2:
+
+1. `qmark=""` + empty `message` to suppress its prompt header.
+2. List-tuple titles `[(style, text)]` so it skips its own
+   `class:highlighted` wrap (see `common.py:459` in the questionary
+   source) — that's how muted Back/Exit titles survive the pointer.
+3. Style override for `class:close` / `class:highlighted close` /
+   `class:selected close` in `accent_style()`, just to keep the
+   close row from flashing accent.
+4. ANSI escape (`\033[1A\033[2K\r\n`) after every menu to wipe
+   questionary's post-selection echo — which our `qmark/message=""`
+   setup reduces to an orphan line with zero information.
+5. `_CLOSE_SENTINEL = object()` because `Choice.value=None` collapses
+   into "unset" and falls back to the title string.
+
+What `questionary` still gives us after those hacks: arrow-key
+navigation, ENTER/ESC bindings, cursor rendering, and scroll-if-long
+behaviour. All of that is ~150 LOC on top of `prompt_toolkit` (which
+we keep anyway — it's transitive via `rich` and questionary itself).
+
+**Scope.**
+
+- Reimplement `menu()` in `alf/ui.py` against `prompt_toolkit`
+  directly: `Application` + `Layout` with a single
+  `FormattedTextControl`, key bindings for ↑/↓/ENTER/ESC, render
+  that knows about pointer + styled titles. ~150 LOC.
+- Remove the 5 hacks listed above — they all evaporate.
+- Rewrite the 5 monkeypatched tests in `tests/test_ui.py` against
+  the new internal API. The current mocks pretend to be
+  `questionary.select`; the new ones mock our own menu loop, which
+  is simpler.
+- Drop `questionary` from `pyproject.toml`.
+- Leave `text() / password() / confirm()` on `rich.Prompt` — those
+  work well, no hacks, not in scope.
+
+**Risk budget.** Half-day to day of work.
+
+- Core rewrite + unit tests: 2-3h.
+- Manual testing across macOS Terminal, iTerm2, and one Linux
+  terminal (gnome-terminal or alacritty): 1-2h.
+- ESC handling on macOS default Terminal sometimes delays behind
+  the escape-sequence timeout — the exact sort of edge case
+  questionary abstracts away today. Budget 1-3h for surprises like
+  that.
+
+**Trigger.** Ship as part of v0.3 UI polish, or earlier if we hit
+hack #6 (e.g. we need disabled rows, separators, async-rendered
+rows). Don't split across versions — migration should land in one
+commit with all the hack-removals bundled, so the diff tells the
+story.
 
 ---
 

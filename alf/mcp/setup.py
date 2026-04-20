@@ -1,66 +1,56 @@
 """Interactive setup for MCP servers.
 
-Pattern mirrors the Telegram/Email wizards: ``alf setup`` menu →
-"MCPs" → list + add/remove. Writes to ``config.yaml`` under
-``mcp.servers.<name>``. Secrets go in ``.env`` — we never write a
-raw secret into config.yaml; env vars are referenced with the
-``env:VAR_NAME`` placeholder resolved at spawn time.
-
-The wizard tries to spawn the new server and list its tools before
-committing the config change. If the handshake fails we don't
-write anything — same contract as the email wizard (connection
-test guards the save).
+Lists configured servers; add/edit/remove each one. All prompts go
+through ``alf.ui`` for a consistent feel with the rest of the setup
+flow. Test-before-save contract: we spawn + handshake + list tools
+before touching ``config.yaml``. A failing handshake leaves the
+previous config intact (or writes nothing on a fresh add).
 """
 
 from __future__ import annotations
 
+import shlex
 from pathlib import Path
 from typing import Any
 
 import questionary
 import yaml
-from rich.console import Console
 
 from alf import config as cfg_mod
+from alf import ui
 from alf.mcp.client import MCPClient, MCPError
-from alf.model_selector import _append_env, _ask, accent_style
-
-_console = Console()
+from alf.model_selector import _append_env
 
 
 def run(home: Path) -> None:
-    """Top-level entry — list loop with add/remove/test/exit."""
+    """Top-level entry — list loop with add/remove/inspect."""
     while True:
         cfg = cfg_mod.load(home)
         servers = (cfg.raw.get("mcp") or {}).get("servers") or {}
-        style = accent_style((cfg.tui or {}).get("accent", ""))
 
-        choices = []
+        # Configured servers + add/remove actions live in a single
+        # list — no visual separator. Back at the bottom is already
+        # muted, which is enough to set it apart from the action
+        # items above it.
+        items: list = []
         for name in sorted(servers.keys()):
-            choices.append(questionary.Choice(
-                title=f"{name:<14} {_summarize(servers[name])}",
-                value=("use", name),
+            items.append((
+                ui.row(name, _summarize(servers[name])),
+                ("use", name),
             ))
+        items.append(("+ Add a server", ("add", None)))
         if servers:
-            choices.append(questionary.Separator(" "))
-        choices.append(questionary.Choice(title="+ Add a server", value=("add", None)))
-        if servers:
-            choices.append(questionary.Choice(title="- Remove a server", value=("remove", None)))
-        choices.append(questionary.Choice(title="  ← Back", value=("back", None)))
+            items.append(("- Remove a server", ("remove", None)))
 
-        result = _ask(questionary.select(
-            "MCP servers:",
-            choices=choices,
-            qmark="",
-            pointer="◆",
-            style=style,
-            instruction="(↑↓ navigate  ENTER select  ESC cancel)",
-        ))
+        result = ui.menu(
+            ui.crumb("setup", "mcp"),
+            items,
+            subtitle="user-configured Model Context Protocol servers",
+            home=home, close="Back",
+        )
         if result is None:
             return
         action, target = result
-        if action == "back":
-            return
         if action == "use":
             _edit(home, target, servers[target])
         elif action == "add":
@@ -70,12 +60,11 @@ def run(home: Path) -> None:
 
 
 # ----------------------------------------------------------------------
-# Actions
+# Add / edit flow (shared wizard)
 # ----------------------------------------------------------------------
 
 
 def _edit(home: Path, name: str, spec: dict) -> None:
-    """Re-enter the wizard for an existing server with fields prefilled."""
     _wizard(home, existing_name=name, existing_spec=spec)
 
 
@@ -84,184 +73,144 @@ def _wizard(
     existing_name: str | None,
     existing_spec: dict | None,
 ) -> None:
-    """Unified add/edit wizard. Hydrates from ``existing_spec`` when
-    editing an existing server; otherwise asks for a fresh name.
-
-    Contract: we ALWAYS spawn + handshake before persisting. If the
-    server can't start with the new values, nothing in config.yaml
-    changes — the previous spec is left untouched on edit.
-    """
     editing = existing_spec is not None
 
     if editing:
-        _console.print(
-            f"\n[b]Edit MCP server[/b]  [dim]{existing_name}[/dim]\n"
-            "[dim]Existing values show as defaults — press ENTER to "
-            "keep them. Env var mappings below let you keep or "
-            "replace each one individually.[/dim]\n"
+        ui.banner(
+            ui.crumb("setup", "mcp", existing_name),
+            subtitle="edit",
+            home=home,
         )
-        name = existing_name  # rename not supported; remove+re-add instead
+        name = existing_name  # rename not supported; remove + re-add instead
         current_command = str(existing_spec.get("command") or "")
         current_args = _join_args(list(existing_spec.get("args") or []))
         current_env = dict(existing_spec.get("env") or {})
     else:
-        _console.print(
-            "\n[dim]Add an MCP server. Alf will spawn it and list its "
-            "tools before saving — if the handshake fails nothing is "
-            "written to config.yaml.\n"
-            "Secrets should go in ~/.alf/.env; reference them here as "
-            "'env:VAR_NAME'.[/dim]\n"
+        ui.banner(
+            ui.crumb("setup", "mcp", "add"),
+            subtitle="add an MCP server",
+            home=home,
         )
-        name = _ask(questionary.text("Short name (e.g. github, notion):"))
+        name = ui.text("Short name (e.g. github, notion):")
         if not name:
-            return _cancelled()
+            return ui.cancelled()
         if ":" in name or "/" in name or name.startswith("."):
-            _console.print(f"[red]invalid name: {name!r}[/red]")
+            ui.fail(f"invalid name: {name!r}")
             return
         current_command = ""
         current_args = ""
         current_env = {}
 
-    command = _ask(questionary.text(
+    command = ui.text(
         "Command to run the server (e.g. npx, uvx, python):",
         default=current_command,
-    ))
+    )
     if not command:
-        return _cancelled()
+        return ui.cancelled()
 
-    args_raw = _ask(questionary.text(
+    args_raw = ui.text(
         "Arguments (space-separated; use quotes for multi-word):",
         default=current_args,
-    ))
-    args = _split_args(args_raw)
+    )
+    args = _split_args(args_raw or "")
 
     env_vars = _ask_env_vars(existing=current_env)
 
-    _console.print("\n[dim]Spawning and handshaking with the server…[/dim]")
     client = MCPClient(name=name, command=command, args=args, env=env_vars)
     try:
-        client.start()
+        with ui.activity(f"Spawning and handshaking with {name}…"):
+            client.start()
     except MCPError as e:
-        _console.print(f"[red]✗[/red] {e}")
-        _console.print(
-            "[yellow]Not saving anything. Check the command/args or "
-            "the env vars in .env.[/yellow]"
-        )
+        ui.fail(str(e))
+        ui.warn("Not saving anything. Check the command/args or env vars in .env.")
+        ui.press_enter()
         return
     tools = client.list_tools()
     client.stop()
 
-    _console.print(
-        f"[green]✓[/green] {name}: ready ({len(tools)} tool{'s' if len(tools) != 1 else ''})"
-    )
-    for t in tools[:10]:
-        _console.print(f"  [dim]·[/dim] {name}:{t.name}")
-    if len(tools) > 10:
-        _console.print(f"  [dim]… and {len(tools) - 10} more[/dim]")
-
     _persist(home, name, command, args, env_vars)
-    _console.print(
-        f"[dim]{'Updated' if editing else 'Saved'} config.yaml. "
-        f"Restart alf to load the tools.[/dim]"
-    )
-
-
-def _remove(home: Path, servers: dict) -> None:
-    choices = [questionary.Choice(title=n, value=n) for n in sorted(servers)]
-    choices.append(questionary.Choice(title="  ← Cancel", value=None))
-    name = _ask(questionary.select(
-        "Remove which server?", choices=choices, qmark="", pointer="◆",
-    ))
-    if not name:
-        return
-    _unpersist(home, name)
-    _console.print(f"[green]✓[/green] removed {name} from config.yaml")
-
-
-def _join_args(args: list[str]) -> str:
-    """Re-quote args with spaces so the prefill survives a round-trip
-    through shlex when the user just presses Enter."""
-    import shlex
-    return " ".join(shlex.quote(a) for a in args)
+    ui.ok(f"{name}: {len(tools)} tool{'s' if len(tools) != 1 else ''}")
+    ui.press_enter()
 
 
 # ----------------------------------------------------------------------
-# Env var collection — multi-value
+# Remove flow
+# ----------------------------------------------------------------------
+
+
+def _remove(home: Path, servers: dict) -> None:
+    items = [(n, n) for n in sorted(servers.keys())]
+    name = ui.menu(
+        ui.crumb("setup", "mcp", "remove"), items,
+        subtitle="select the one to drop from config.yaml",
+        home=home, close="Back",
+    )
+    if not name:
+        return
+    _unpersist(home, name)
+    ui.ok(f"removed {name} from config.yaml")
+
+
+# ----------------------------------------------------------------------
+# Env var collection (walk existing, then add loop)
 # ----------------------------------------------------------------------
 
 
 def _ask_env_vars(existing: dict[str, str] | None = None) -> dict[str, str]:
-    """Collect env var references for the server.
+    """Collect env var references.
 
-    On edit, iterate over ``existing`` first: for each mapping, offer
-    keep / replace / drop. Then enter the add loop to introduce new
-    vars. On add (no ``existing``), skip straight to the add loop.
+    Same pattern as the telegram/email wizards: for each known var we
+    show a password prompt hydrated with the current value. ENTER
+    keeps it (the existing ``env:`` reference in config stays put),
+    typing a new value writes to ``.env`` and re-uses the reference.
+    Then an add-loop for brand-new vars.
+
+    No drop option on purpose: editing ``config.yaml`` by hand or
+    removing + re-adding the server is the right path if the user
+    actually wants to delete a mapping. A drop flow belongs in an
+    advanced path, not the main wizard.
     """
+    import os
+
     existing = existing or {}
     out: dict[str, str] = {}
 
-    # Step 1 — walk existing mappings (edit mode only).
+    # 1) Walk existing mappings. Password prompt per var: ENTER keeps
+    #    the current .env value, typing replaces it.
     for var, ref in existing.items():
-        action = _ask(questionary.select(
-            f"Env var {var} (current: {ref}):",
-            choices=[
-                questionary.Choice(title="keep", value="keep"),
-                questionary.Choice(title="replace value", value="replace"),
-                questionary.Choice(title="drop", value="drop"),
-            ],
-            qmark="",
-            pointer="◆",
-            instruction="(↑↓ navigate  ENTER select)",
-        ))
-        if action in (None, "keep"):
+        current = os.environ.get(var, "")
+        value = ui.password(var, current=current)
+        if value is None:
+            # Ctrl-C mid-wizard. Preserve what we had so far.
             out[var] = ref
-        elif action == "drop":
             continue
-        elif action == "replace":
-            value = _ask(questionary.password(
-                f"New value for {var} (will update .env):",
-            ))
-            if value:
-                out[f"__inline__:{var}"] = value
-                out[var] = f"env:{var}"
-            else:
-                # User aborted mid-replace → keep the old one rather
-                # than dropping it silently.
-                out[var] = ref
+        if current and value == current:
+            # Kept.
+            out[var] = ref
+        elif value:
+            # Replaced — mark for .env write + re-use the ref shape.
+            out[f"__inline__:{var}"] = value
+            out[var] = f"env:{var}"
+        else:
+            # No current, empty input — keep the ref anyway so the
+            # server still sees the var name (resolves to empty).
+            out[var] = ref
 
-    # Step 2 — add loop for new vars (runs in both add and edit modes).
+    # 2) Add loop for new vars. Blank name finishes.
     while True:
-        var = _ask(questionary.text(
-            "Add another environment variable "
-            "(name, blank to finish):",
-        ))
+        var = ui.text("Add another env var (blank to finish)")
         if not var:
             return out
         var = var.strip()
         if not var or var in out:
             continue
 
-        existing_value = _ref_lookup(var)
-        if existing_value:
-            _console.print(f"  [dim]Found {var} in .env (ends …{existing_value[-4:]}).[/dim]")
-            if questionary.confirm(
-                f"Use the existing {var} from .env?",
-                default=True, qmark="",
-            ).ask():
-                out[var] = f"env:{var}"
-                continue
-
-        value = _ask(questionary.password(
-            f"Value for {var} (will be appended to .env):",
-        ))
-        if value is not None and value:
-            out[f"__inline__:{var}"] = value
+        current = os.environ.get(var, "")
+        value = ui.password(var, current=current)
+        if value:
+            if value != current:
+                out[f"__inline__:{var}"] = value
             out[var] = f"env:{var}"
-
-
-def _ref_lookup(var: str) -> str:
-    import os
-    return os.environ.get(var, "")
 
 
 # ----------------------------------------------------------------------
@@ -273,7 +222,7 @@ def _persist(
     home: Path, name: str, command: str, args: list[str],
     env_vars: dict[str, str],
 ) -> None:
-    # Write inline-provided secrets to .env first.
+    import os
     env_path = home / ".env"
     inline = {
         k[len("__inline__:"):]: v
@@ -281,10 +230,8 @@ def _persist(
     }
     for var, val in inline.items():
         _append_env(env_path, var, val)
-        import os
         os.environ[var] = val
 
-    # Strip inline markers from the spec written to config.yaml.
     cleaned_env = {
         k: v for k, v in env_vars.items() if not k.startswith("__inline__:")
     }
@@ -309,13 +256,12 @@ def _unpersist(home: Path, name: str) -> None:
         return
     data = yaml.safe_load(cfg_path.read_text()) or {}
     servers = ((data.get("mcp") or {}).get("servers") or {})
-    if name in servers:
-        del servers[name]
+    servers.pop(name, None)
     cfg_path.write_text(yaml.safe_dump(data, sort_keys=False))
 
 
 # ----------------------------------------------------------------------
-# Misc
+# Helpers
 # ----------------------------------------------------------------------
 
 
@@ -332,14 +278,11 @@ def _summarize(spec: Any) -> str:
 
 
 def _split_args(raw: str) -> list[str]:
-    """Shell-style tokenization without running anything."""
-    import shlex
     try:
         return shlex.split(raw or "")
     except ValueError:
-        # Unterminated quote or similar — fall back to a naive split.
         return (raw or "").split()
 
 
-def _cancelled() -> None:
-    _console.print("[yellow]cancelled[/yellow]")
+def _join_args(args: list[str]) -> str:
+    return " ".join(shlex.quote(a) for a in args)

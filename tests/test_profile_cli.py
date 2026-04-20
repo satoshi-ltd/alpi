@@ -79,3 +79,92 @@ def test_profile_create_refuses_if_exists(monkeypatch, tmp_path: Path) -> None:
     r2 = CliRunner().invoke(cli.main, ["profile", "create", "dup"])
     assert r2.exit_code != 0
     assert "already exists" in r2.output
+
+
+# --------------------------------------------------------------------
+# profile remove
+# --------------------------------------------------------------------
+
+
+def test_profile_remove_refuses_default(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(home, "_ROOT", tmp_path)
+    monkeypatch.delenv("ALF_HOME", raising=False)
+    monkeypatch.delenv("ALF_PROFILE", raising=False)
+    result = CliRunner().invoke(cli.main, ["profile", "remove", "default"])
+    assert result.exit_code != 0
+    assert "cannot be removed" in result.output
+
+
+def test_profile_remove_refuses_missing(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(home, "_ROOT", tmp_path)
+    monkeypatch.delenv("ALF_HOME", raising=False)
+    monkeypatch.delenv("ALF_PROFILE", raising=False)
+    result = CliRunner().invoke(cli.main, ["profile", "remove", "ghost"])
+    assert result.exit_code != 0
+    assert "does not exist" in result.output
+
+
+def test_profile_remove_refuses_invalid_name(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(home, "_ROOT", tmp_path)
+    monkeypatch.delenv("ALF_HOME", raising=False)
+    monkeypatch.delenv("ALF_PROFILE", raising=False)
+    for bad in ("a/b", ".hidden"):
+        result = CliRunner().invoke(cli.main, ["profile", "remove", bad])
+        assert result.exit_code != 0
+        assert "invalid" in result.output
+
+
+def test_profile_remove_refuses_if_service_installed(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(home, "_ROOT", tmp_path)
+    monkeypatch.delenv("ALF_HOME", raising=False)
+    monkeypatch.delenv("ALF_PROFILE", raising=False)
+
+    CliRunner().invoke(cli.main, ["profile", "create", "guarded"])
+
+    # Simulate: gateway service is installed for this profile.
+    from alf import service
+    monkeypatch.setattr(
+        service, "installed",
+        lambda name, profile="default": "launchd" if name == "gateway" else None,
+    )
+    result = CliRunner().invoke(cli.main, ["profile", "remove", "guarded"])
+    assert result.exit_code != 0
+    assert "installed service" in result.output
+    assert "gateway uninstall" in result.output
+
+
+def test_profile_remove_cancelled_leaves_directory(
+        monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(home, "_ROOT", tmp_path)
+    monkeypatch.delenv("ALF_HOME", raising=False)
+    monkeypatch.delenv("ALF_PROFILE", raising=False)
+
+    CliRunner().invoke(cli.main, ["profile", "create", "target"])
+    profile_dir = tmp_path / "profiles" / "target"
+    assert profile_dir.exists()
+
+    from alf import ui
+    monkeypatch.setattr(ui, "confirm", lambda *a, **kw: False)
+
+    result = CliRunner().invoke(cli.main, ["profile", "remove", "target"])
+    assert result.exit_code == 0
+    assert profile_dir.exists(), "profile must remain when user cancels"
+
+
+def test_profile_remove_deletes_when_confirmed(
+        monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(home, "_ROOT", tmp_path)
+    monkeypatch.delenv("ALF_HOME", raising=False)
+    monkeypatch.delenv("ALF_PROFILE", raising=False)
+
+    CliRunner().invoke(cli.main, ["profile", "create", "trash"])
+    profile_dir = tmp_path / "profiles" / "trash"
+    assert profile_dir.exists()
+
+    from alf import ui
+    monkeypatch.setattr(ui, "confirm", lambda *a, **kw: True)
+
+    result = CliRunner().invoke(cli.main, ["profile", "remove", "trash"])
+    assert result.exit_code == 0
+    assert not profile_dir.exists()
+    assert "removed" in result.output
