@@ -1,12 +1,4 @@
-"""web_extract — fetch a URL and return an LLM-summarized answer.
-
-Reduces tokens ~50-100x vs returning raw page content. Uses the provider
-configured in ``config.yaml``:
-- ``extract_model`` if set (e.g. ``openrouter/google/gemini-2.0-flash-exp:free``)
-- otherwise falls back to the chat model (``model``)
-
-Optionally accepts a ``question`` — the summary is focused on answering it.
-"""
+"""web_extract — fetch a URL and return an LLM-summarized answer."""
 
 from __future__ import annotations
 

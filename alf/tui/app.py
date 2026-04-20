@@ -1,14 +1,4 @@
-"""Main Textual App for alf.
-
-Minimal layout inspired by Textual's mother.py chat example:
-- Header (custom): title + live status (model/ctx/cost)
-- VerticalScroll (#chat): messages mount here
-- Input: user prompt
-- Footer: keybindings
-
-All chat-facing surface lives here. Slash commands are dispatched to
-helpers that push modal Screens or run synchronous tasks.
-"""
+"""Main Textual App for alf."""
 
 from __future__ import annotations
 
@@ -45,11 +35,6 @@ class EngineEvent(Message):
 
 
 def _copy_to_os_clipboard(text: str) -> str:
-    """Write to the OS clipboard using the first available native helper.
-
-    Returns the name of the method used, or "osc52-only" if no native
-    helper was available (so Textual's OSC-52 was the only channel).
-    """
     import shutil
     import subprocess
     import sys
@@ -103,10 +88,6 @@ class AlfApp(App):
         self._active_tools: dict[str, ToolCard] = {}
         self._thinking: ThinkingIndicator | None = None
 
-    # ------------------------------------------------------------------
-    # Layout
-    # ------------------------------------------------------------------
-
     def get_css_variables(self) -> dict[str, str]:
         # Let the user override the accent color from config.yaml (tui.accent).
         variables = super().get_css_variables()
@@ -139,15 +120,11 @@ class AlfApp(App):
         )
 
     def _effective_workspace(self) -> Path:
-        """Workspace the sandbox actually uses: profile config or cwd fallback."""
         import os
         wp = self.cfg.workspace_path
         return wp if wp is not None else Path(os.getcwd()).resolve()
 
     def _maybe_warn_workspace(self) -> None:
-        """One-liner warning if no workspace is configured. Scope = cwd in
-        that case, and the user should know — especially if cwd is $HOME or /.
-        """
         if self.cfg.workspace_path is not None:
             return
         cwd = self._effective_workspace()
@@ -158,7 +135,6 @@ class AlfApp(App):
         ))
 
     def _profile_name(self) -> str:
-        """Resolve the active profile name for display."""
         import os
         from alf.home import _ROOT  # pyright: ignore[reportPrivateUsage]
         if os.environ.get("ALF_HOME"):
@@ -181,10 +157,6 @@ class AlfApp(App):
         # Let session_search exclude the currently-active session file.
         from alf.tools import session_search
         session_search.set_current_session_id(self.engine.session.id)
-
-    # ------------------------------------------------------------------
-    # Input handling
-    # ------------------------------------------------------------------
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
         text = event.value.strip()
@@ -215,7 +187,6 @@ class AlfApp(App):
         self.call_after_refresh(self._run_turn, text)
 
     def _turn_in_progress(self) -> bool:
-        """True if a run_turn worker is still alive."""
         try:
             from textual.worker import WorkerState
         except Exception:
@@ -240,9 +211,7 @@ class AlfApp(App):
                 pass
             self._active_tools.pop(tid, None)
 
-    # ------------------------------------------------------------------
     # Engine worker
-    # ------------------------------------------------------------------
 
     @work(thread=True, exclusive=True, name="_run_turn")
     def _run_turn(self, text: str) -> None:
@@ -347,10 +316,6 @@ class AlfApp(App):
             card.finish(ev.output, ev.ok)
         self._scroll_end()
 
-    # ------------------------------------------------------------------
-    # Slash commands
-    # ------------------------------------------------------------------
-
     def _handle_slash(self, text: str) -> None:
         parts = text[1:].split(maxsplit=1)
         cmd = parts[0].lower() if parts else ""
@@ -448,8 +413,6 @@ class AlfApp(App):
             self._thinking = None
 
     def _drop_active_tool(self, tool_id: str) -> None:
-        """Helper so call_from_thread can inspect a real Python function
-        (built-in methods like dict.pop trip Textual's introspection)."""
         self._active_tools.pop(tool_id, None)
 
     def _after_compact(self, summary: str) -> None:
@@ -463,12 +426,6 @@ class AlfApp(App):
         self.push_screen(SkillsScreen(self.home))
 
     def _cmd_workspace(self, arg: str) -> None:
-        """``/workspace`` → prefills the input with ``/workspace <current>``
-        so you can edit the path inline and hit Enter.
-
-        Inline variants also work directly:
-        ``/workspace <path>`` and ``/workspace clear``.
-        """
         if not arg:
             suggested = self.cfg.workspace or str(self._effective_workspace())
             inp = self.query_one(Input)
@@ -514,7 +471,6 @@ class AlfApp(App):
         self._refresh_top_bar()
 
     def _refresh_top_bar(self) -> None:
-        """Rebuild the AlfTopBar so it reflects the new workspace."""
         from alf import __version__ as alf_version
         try:
             old = self.query_one(AlfTopBar)
@@ -536,10 +492,6 @@ class AlfApp(App):
         from alf.tui.model_screen import ProviderScreen
         self.cfg = config.load(self.home)
         self.push_screen(ProviderScreen(self.cfg, self.home))
-
-    # ------------------------------------------------------------------
-    # Helpers
-    # ------------------------------------------------------------------
 
     def _update_header(self) -> None:
         hdr = self.query_one(AlfHeader)
@@ -587,14 +539,7 @@ class AlfApp(App):
         self._cmd_clear()
 
     def action_copy_last(self) -> None:
-        """Copy the last assistant response to the system clipboard.
-
-        Tries 3 strategies in order:
-        1. Native OS clipboard via `pbcopy` (macOS) / `xclip` / `wl-copy`.
-        2. Textual's OSC-52 clipboard (works if the terminal supports it).
-        3. If both fail, show the text in a modal so the user can
-           select+copy manually.
-        """
+        """Copy the last assistant response to the system clipboard."""
         chat = self.query_one("#chat", VerticalScroll)
         last_text = ""
         for child in reversed(list(chat.children)):
@@ -628,10 +573,6 @@ class AlfApp(App):
         except Exception:
             pass
         self.exit()
-
-    # ------------------------------------------------------------------
-    # Resume
-    # ------------------------------------------------------------------
 
     def _resume_last_session(self) -> None:
         from alf.cli import _continue_last_session

@@ -42,11 +42,5 @@ class Platform(abc.ABC):
     async def send(self, message: OutgoingMessage) -> None: ...
 
     async def send_typing(self, chat_id: str) -> None:
-        """Optional: signal that the agent is working.
-
-        Platforms without a typing concept (webhook) just no-op. Telegram
-        overrides this to hit ``sendChatAction`` — the indicator lasts ~5s
-        per call, so the gateway re-pings it on a loop while a turn is in
-        flight.
-        """
+        """Optional: signal that the agent is working."""
         return None

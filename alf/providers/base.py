@@ -1,12 +1,4 @@
-"""Provider metadata — used by the model selector only.
-
-These classes describe *how to pick a model*, not how to call the LLM. The
-actual chat call still goes through litellm (see `alf.llm`). Providers here
-answer 3 questions:
-  1. Do I need an API key? Under which env var?
-  2. Give me the list of models the user can pick.
-  3. What litellm model id do I emit for each?
-"""
+"""Provider metadata — used by the model selector only."""
 
 from __future__ import annotations
 

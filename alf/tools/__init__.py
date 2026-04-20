@@ -1,7 +1,4 @@
-"""Tool registry.
-
-Imports all tool modules and exposes a registry for the LLM loop.
-"""
+"""Tool registry."""
 
 from __future__ import annotations
 

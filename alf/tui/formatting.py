@@ -113,13 +113,7 @@ def arg_hint(tool_name: str, args: dict) -> str:
 
 
 def result_hint(tool_name: str, output: str) -> str:
-    """One-line result summary, with Rich markup.
-
-    IMPORTANT: any user/tool-controlled substring interpolated into the
-    returned markup MUST be wrapped in ``_escape_markup()`` so that
-    characters like ``[`` and ``]`` in the output don't break Rich's
-    markup parser during rendering.
-    """
+    """One-line result summary, with Rich markup."""
     text = output.strip()
     if not text:
         return "[dim]ok[/dim]"

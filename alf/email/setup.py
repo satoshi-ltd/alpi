@@ -1,11 +1,4 @@
-"""Interactive setup for the email platform (IMAP + SMTP).
-
-Generic — no provider-specific branches. Asks the user for address,
-password, hosts, ports, allowed senders. Tests the connection at the
-end so credentials are validated before they land in ``~/.alf/.env``.
-All values live under the ``EMAIL_*`` prefix — same source-of-truth
-pattern as ``TELEGRAM_*``.
-"""
+"""Interactive setup for the email platform (IMAP + SMTP)."""
 
 from __future__ import annotations
 

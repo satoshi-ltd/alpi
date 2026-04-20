@@ -12,9 +12,7 @@ from textual.widget import Widget
 from textual.widgets import Markdown, Static
 
 
-# ----------------------------------------------------------------------
 # User & assistant messages
-# ----------------------------------------------------------------------
 
 class UserMessage(Static):
     """User input row, rendered with a green chevron."""
@@ -85,17 +83,12 @@ class DimLine(Static):
         super().__init__(Text(text, style="dim"))
 
 
-# ----------------------------------------------------------------------
 # Tool card — spinner while running, result when done
-# ----------------------------------------------------------------------
 
 _SPINNER_FRAMES = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
 
 
 def _fmt_cost(cost: float) -> str:
-    """Adaptive cost formatting: micro-cents for tiny amounts, cents for
-    sub-dollar, dollars when ≥ $1. Matches how people actually read cost.
-    """
     if cost <= 0:
         return "$0"
     if cost < 0.01:
@@ -110,11 +103,9 @@ def _fmt_cost(cost: float) -> str:
 LEARNING_TOOLS = {"memory", "create_skill"}
 
 
-# ----------------------------------------------------------------------
 # Thinking indicator — shown immediately after a user message and removed
 # on the first assistant_delta or tool_start. Gives feedback while the
 # LLM is receiving the prompt and deciding what to do.
-# ----------------------------------------------------------------------
 
 class ThinkingIndicator(Static):
     """Transient one-liner spinner + elapsed, shown while alf is 'thinking'."""
@@ -264,9 +255,7 @@ class ToolCard(Widget):
         return text
 
 
-# ----------------------------------------------------------------------
 # Static top header — identity line (version / profile / cwd)
-# ----------------------------------------------------------------------
 
 class AlfTopBar(Static):
     """Static identity line: version · profile · workspace.
@@ -294,9 +283,7 @@ class AlfTopBar(Static):
         super().__init__(Text.from_markup(markup))
 
 
-# ----------------------------------------------------------------------
 # Status bar — single line above the input
-# ----------------------------------------------------------------------
 
 class AlfHeader(Static):
     """Live status line: model · ctx · %context · cost."""

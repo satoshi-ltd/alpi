@@ -1,22 +1,4 @@
-"""send_message — deliver a message to a paired chat on an external platform.
-
-Used for proactive outreach: scheduled reminders from the schedule daemon,
-"I'm done with that long research" pings after a delegate, or the agent
-volunteering a check-in when it has something useful to say.
-
-Autosuficiente: the tool posts directly to the platform's API using the
-bot credentials in ``~/.alf/.env``. It does NOT require the gateway
-listener to be running — sending an outbound message with your own
-token adds zero inbound attack surface, so there's no reason to route
-through the gateway process.
-
-Safety:
-- Only chat IDs in ``{PLATFORM}_ALLOWED_CHAT_IDS`` can receive messages.
-- Empty / missing allowlist → every send is rejected (fail closed).
-- No ``platform`` argument → defaults to telegram if it has an allowlist.
-- No ``chat_id`` argument → defaults to the first allowed chat on that
-  platform (single-user ergonomic; explicit is still recommended).
-"""
+"""send_message — deliver a message to a paired chat on an external platform."""
 
 from __future__ import annotations
 

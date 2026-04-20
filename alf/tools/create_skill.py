@@ -1,21 +1,4 @@
-"""create_skill — the meta-tool that proposes a new skill.
-
-Agent-created skills land in ``~/.alf/skills/_pending/<name>/`` with
-``origin: agent`` frontmatter. The user reviews them with the `/skills`
-modal and approves (moved to ``<category>/<name>/``) or rejects (deleted).
-
-User-created skills (via direct file placement or a future slash flow)
-carry ``origin: user`` and skip the pending gate.
-
-Enforces the skill spec rigidly:
-- kebab-case name
-- category from the closed list (12 categories)
-- SKILL.md with required frontmatter (name, description, category,
-  version, origin, requires_env, tools, created_at)
-- secrets declared via ``requires_env`` (never written verbatim)
-- anti-duplication across live + pending
-- quota: max ``PENDING_QUOTA`` pending skills at a time
-"""
+"""create_skill — the meta-tool that proposes a new skill."""
 
 from __future__ import annotations
 
@@ -36,9 +19,7 @@ _NAME_RE = re.compile(r"^[a-z][a-z0-9-]{1,60}$")
 PENDING_QUOTA = 5  # max pending agent proposals at once
 
 
-# ----------------------------------------------------------------------
 # Security scanner
-# ----------------------------------------------------------------------
 
 # Patterns that smell dangerous in a SKILL.md body. Not a full sandbox —
 # just a cheap first line of defense against the most obvious foot-guns.

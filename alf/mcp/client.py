@@ -1,27 +1,4 @@
-"""MCPClient — stdio JSON-RPC client for MCP servers.
-
-One client per configured server. Lifecycle:
-
-    c = MCPClient(name="github", command="npx", args=["-y", "..."])
-    c.start()               # spawn subprocess, handshake, list tools
-    c.list_tools()          # -> list of tool schemas
-    c.call_tool(name, args) # -> {"content": [...], "isError": bool}
-    c.stop()                # SIGTERM the subprocess
-
-Only stdio transport in v0 — covers the bulk of the MCP ecosystem.
-SSE/HTTP can land later if we meet a server that needs it.
-
-Protocol: JSON-RPC 2.0 over line-delimited stdin/stdout. Every
-request gets an id, every response matches by id. Notifications
-(no id) are ignored for our purposes — we don't surface server-
-emitted events (progress updates, log lines) since the agent
-loop is synchronous and one-shot per tool call.
-
-Env-var references in the config (``env:GITHUB_TOKEN``) are
-expanded at ``start()`` against the current process env. Missing
-values are logged but not fatal — the MCP server itself will
-complain with an actionable error if it really needs the key.
-"""
+"""MCPClient — stdio JSON-RPC client for MCP servers."""
 
 from __future__ import annotations
 
@@ -78,10 +55,6 @@ class MCPClient:
         self._stderr_buf: list[str] = []
         self._stderr_lock = threading.Lock()
 
-    # ------------------------------------------------------------------
-    # Lifecycle
-    # ------------------------------------------------------------------
-
     def start(self, timeout: float = 45.0) -> None:
         """Spawn the subprocess, handshake, cache the tool list."""
         if self._proc is not None:
@@ -136,18 +109,12 @@ class MCPClient:
     def is_running(self) -> bool:
         return self._proc is not None and self._proc.poll() is None
 
-    # ------------------------------------------------------------------
-    # Public API
-    # ------------------------------------------------------------------
-
     def list_tools(self) -> list[ToolSpec]:
         return list(self._tools)
 
     def call_tool(self, tool_name: str, arguments: dict,
                   timeout: float = 60.0) -> dict[str, Any]:
-        """Invoke ``tool_name`` with ``arguments``. Returns the MCP result
-        object verbatim: ``{"content": [...], "isError": bool?}``.
-        """
+        """Invoke ``tool_name`` with ``arguments``. Returns the MCP result"""
         if not self.is_running():
             raise MCPError(f"{self.name}: server is not running")
         resp = self._request(
@@ -156,10 +123,6 @@ class MCPClient:
             timeout=timeout,
         )
         return resp  # tools/call result is the MCP CallToolResult directly
-
-    # ------------------------------------------------------------------
-    # Handshake
-    # ------------------------------------------------------------------
 
     def _handshake(self, timeout: float) -> None:
         self._request(
@@ -186,10 +149,6 @@ class MCPClient:
             ))
         return tools
 
-    # ------------------------------------------------------------------
-    # JSON-RPC
-    # ------------------------------------------------------------------
-
     def _request(self, method: str, params: dict, timeout: float) -> dict:
         with self._lock:
             self._req_id += 1
@@ -214,11 +173,6 @@ class MCPClient:
             raise MCPError(f"{self.name}: stdin write failed: {e}") from e
 
     def _wait_for(self, rid: int, timeout: float) -> dict:
-        """Read lines from stdout until we see a response matching rid.
-
-        We swallow notifications (no ``id``) and mismatched responses;
-        MCP servers can interleave telemetry we don't care about.
-        """
         assert self._proc is not None and self._proc.stdout is not None
         deadline = time.monotonic() + timeout
         while True:
@@ -250,9 +204,6 @@ class MCPClient:
             return msg.get("result", {})
 
     def _wrap_failure(self, reason: str) -> str:
-        """Build an actionable error message, appending stderr context
-        when we have any. Without this the user just saw 'server closed
-        stdout' and had no clue what actually went wrong."""
         base = f"{self.name}: {reason}"
         tail = self._stderr_tail()
         if tail:
@@ -285,16 +236,8 @@ class MCPClient:
             return "\n".join(lines)
 
 
-# ----------------------------------------------------------------------
-# Helpers
-# ----------------------------------------------------------------------
-
 
 def _build_env(spec: dict[str, str]) -> dict[str, str]:
-    """Expand ``env:VAR_NAME`` placeholders against the current process
-    env. Unknown ``env:`` refs resolve to empty strings and log a
-    warning; literal values pass through untouched.
-    """
     base = dict(os.environ)
     for key, value in spec.items():
         if isinstance(value, str) and value.startswith("env:"):

@@ -1,18 +1,4 @@
-"""Custom OpenAI-compatible endpoints (Ollama, LM Studio, vLLM, ...).
-
-A custom provider is defined in ``config.yaml`` under ``providers.custom``:
-
-    providers:
-      custom:
-        - name: my-ollama
-          base_url: http://localhost:11434/v1
-          api_key_env: ""       # empty = no auth
-
-The picker treats each saved endpoint as its own row. When the user picks a
-model under a custom endpoint, the resulting model id is
-``<endpoint_name>/<model>`` — ``alf.config.resolve_model`` expands that into
-``openai/<model>`` + ``api_base`` for litellm.
-"""
+"""Custom OpenAI-compatible endpoints (Ollama, LM Studio, vLLM, ...)."""
 
 from __future__ import annotations
 

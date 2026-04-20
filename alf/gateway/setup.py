@@ -1,10 +1,4 @@
-"""Interactive setup for the Telegram platform.
-
-Writes ``TELEGRAM_BOT_TOKEN`` and ``TELEGRAM_ALLOWED_CHAT_IDS`` to
-``~/.alf/.env`` — the single source of truth for both secrets and
-allowlist. These credentials power the gateway's inbound listener
-AND the outbound ``send_message`` tool; both read the same env vars.
-"""
+"""Interactive setup for the Telegram platform."""
 
 from __future__ import annotations
 

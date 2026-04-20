@@ -1,11 +1,4 @@
-"""Interactive setup for MCP servers.
-
-Lists configured servers; add/edit/remove each one. All prompts go
-through ``alf.ui`` for a consistent feel with the rest of the setup
-flow. Test-before-save contract: we spawn + handshake + list tools
-before touching ``config.yaml``. A failing handshake leaves the
-previous config intact (or writes nothing on a fresh add).
-"""
+"""Interactive setup for MCP servers."""
 
 from __future__ import annotations
 
@@ -59,9 +52,7 @@ def run(home: Path) -> None:
             _remove(home, servers)
 
 
-# ----------------------------------------------------------------------
 # Add / edit flow (shared wizard)
-# ----------------------------------------------------------------------
 
 
 def _edit(home: Path, name: str, spec: dict) -> None:
@@ -133,10 +124,6 @@ def _wizard(
     ui.press_enter()
 
 
-# ----------------------------------------------------------------------
-# Remove flow
-# ----------------------------------------------------------------------
-
 
 def _remove(home: Path, servers: dict) -> None:
     items = [(n, n) for n in sorted(servers.keys())]
@@ -151,25 +138,10 @@ def _remove(home: Path, servers: dict) -> None:
     ui.ok(f"removed {name} from config.yaml")
 
 
-# ----------------------------------------------------------------------
 # Env var collection (walk existing, then add loop)
-# ----------------------------------------------------------------------
 
 
 def _ask_env_vars(existing: dict[str, str] | None = None) -> dict[str, str]:
-    """Collect env var references.
-
-    Same pattern as the telegram/email wizards: for each known var we
-    show a password prompt hydrated with the current value. ENTER
-    keeps it (the existing ``env:`` reference in config stays put),
-    typing a new value writes to ``.env`` and re-uses the reference.
-    Then an add-loop for brand-new vars.
-
-    No drop option on purpose: editing ``config.yaml`` by hand or
-    removing + re-adding the server is the right path if the user
-    actually wants to delete a mapping. A drop flow belongs in an
-    advanced path, not the main wizard.
-    """
     import os
 
     existing = existing or {}
@@ -213,10 +185,6 @@ def _ask_env_vars(existing: dict[str, str] | None = None) -> dict[str, str]:
             out[var] = f"env:{var}"
 
 
-# ----------------------------------------------------------------------
-# Persistence
-# ----------------------------------------------------------------------
-
 
 def _persist(
     home: Path, name: str, command: str, args: list[str],
@@ -259,10 +227,6 @@ def _unpersist(home: Path, name: str) -> None:
     servers.pop(name, None)
     cfg_path.write_text(yaml.safe_dump(data, sort_keys=False))
 
-
-# ----------------------------------------------------------------------
-# Helpers
-# ----------------------------------------------------------------------
 
 
 def _summarize(spec: Any) -> str:

@@ -1,7 +1,4 @@
-"""In-memory todo list scoped to the current session.
-
-Not persisted between sessions. Helps the agent plan multi-step work.
-"""
+"""In-memory todo list scoped to the current session."""
 
 from __future__ import annotations
 

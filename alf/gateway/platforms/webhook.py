@@ -1,12 +1,4 @@
-"""Generic webhook adapter (skeleton).
-
-Exposes a local HTTP endpoint so anything can POST a message to alf:
-
-    POST /webhook
-    { "chat_id": "abc", "user_id": "javi", "text": "hello" }
-
-v0.1 will use FastAPI + uvicorn. v0 only defines the surface.
-"""
+"""Generic webhook adapter (skeleton)."""
 
 from __future__ import annotations
 

@@ -1,10 +1,4 @@
-"""Gateway entry point.
-
-Starts each enabled platform as an asyncio task. For every incoming message,
-the gateway spawns a subprocess running ``alf chat --once --input "<text>"``
-and sends stdout back to the platform. This keeps the gateway small and
-isolates agent crashes from the listener.
-"""
+"""Gateway entry point."""
 
 from __future__ import annotations
 
@@ -77,7 +71,6 @@ async def _process(platform: Platform, msg: IncomingMessage, home: Path) -> None
 
 
 async def _typing_loop(platform: Platform, chat_id: str) -> None:
-    """Keep the typing indicator alive until cancelled."""
     while True:
         try:
             await platform.send_typing(chat_id)
@@ -88,13 +81,6 @@ async def _typing_loop(platform: Platform, chat_id: str) -> None:
 
 async def _run_agent(msg: IncomingMessage, platform: Platform, home: Path,
                      show_trace: bool) -> str:
-    """Invoke ``alf chat --once --emit-events`` and stream events.
-
-    Each stdout line is a JSON object describing one event from the agent
-    loop (``tool_start`` / ``tool_end`` / ``error`` / ``reply``). We relay
-    tool activity to the chat as it happens (when ``show_trace``) and
-    return the final reply text for the caller to deliver.
-    """
     env = dict(os.environ)
     env["ALF_HOME"] = str(home)
     proc = await asyncio.create_subprocess_exec(
@@ -145,12 +131,6 @@ def _format_tool_trace(event: dict[str, Any]) -> str:
 
 
 def _load_platform_cfg(home: Path, platform: str) -> dict[str, Any]:
-    """Return the ``gateway.<platform>`` sub-dict merged with defaults.
-
-    Falls through to an empty dict on load failure — every caller
-    should supply its own defaults via ``.get(key, default)`` so a
-    transient config bug doesn't crash the gateway.
-    """
     try:
         cfg = config_mod.load(home)
         return dict((cfg.gateway or {}).get(platform, {}))
@@ -181,9 +161,7 @@ def run(home: Path) -> None:
         _clear_pid(home)
 
 
-# ----------------------------------------------------------------------
 # PID file helpers (used by start/stop/status commands)
-# ----------------------------------------------------------------------
 
 def pid_path(home: Path) -> Path:
     return home / "gateway" / "gateway.pid"

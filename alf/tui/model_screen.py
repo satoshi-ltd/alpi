@@ -1,8 +1,4 @@
-"""Native Textual screens for picking provider + model.
-
-Built on :class:`textual.widgets.OptionList`, which is Textual's idiomatic
-widget for "pick one from a list" flows.
-"""
+"""Native Textual screens for picking provider + model."""
 
 from __future__ import annotations
 

@@ -1,18 +1,4 @@
-"""Session state — turns-based storage.
-
-A session is a list of :class:`Turn`\\s. Each turn is one user input, the
-tools/skills alf ran, and alf's final reply. That's the full log — we do
-*not* persist the raw OpenAI-style message thread (with huge tool
-outputs) because it bloats disk without giving anything session-search
-or humans actually need.
-
-Runtime state (:attr:`Session.messages`) still holds OpenAI messages —
-the LLM API needs that format — but ``save()`` only writes turns. On
-``--continue`` we rebuild a lean ``messages`` list from turns (system +
-[user, assistant] per turn, no tool messages). The LLM on resume sees a
-clean chat history; it can't reproduce the exact tool trace but the
-assistant's own words carry the conclusions forward.
-"""
+"""Session state — turns-based storage."""
 
 from __future__ import annotations
 

@@ -1,37 +1,4 @@
-"""OS-level service install/uninstall for ``gateway`` and ``schedule``.
-
-Picks the right backend by platform and hides the details behind a tiny
-API that the CLI glues onto both daemons:
-
-    install(name, home, profile)     # writes + loads service, auto-starts
-    uninstall(name, home, profile)   # unloads + deletes
-    installed(name, home, profile)   # 'launchd' | 'systemd' | None
-
-``name`` is the daemon short name (``"gateway"`` or ``"schedule"``).
-Per-profile: the service label includes the profile so the same machine
-can run ``alf -p work schedule install`` and ``alf -p personal schedule
-install`` as two independent services.
-
-Backends:
-- **launchd (macOS)**: writes ``~/Library/LaunchAgents/com.alf.<name>.<profile>.plist``
-  with ``RunAtLoad=true`` + ``KeepAlive=true`` so it starts at login and
-  respawns if it crashes. ``launchctl bootstrap`` to load, ``bootout``
-  to unload. Uses the modern gui/$UID domain, not the deprecated
-  ``launchctl load``.
-- **systemd user (Linux)**: writes
-  ``~/.config/systemd/user/alf-<name>-<profile>.service`` with
-  ``Restart=on-failure`` + ``WantedBy=default.target``. ``systemctl
-  --user enable --now`` to install+start.
-
-Nothing here shells out during import — backend detection is a pure
-platform check. Tests can mock the two ``subprocess.run`` wrappers to
-verify file content and commands without touching the real OS.
-
-When the user already has the daemon running manually (via
-``alf <name> start``), install refuses and tells them to stop it first:
-otherwise launchd/systemd would race with the manual process and
-create orphan PID files.
-"""
+"""OS-level service install/uninstall for ``gateway`` and ``schedule``."""
 
 from __future__ import annotations
 
@@ -46,10 +13,6 @@ from pathlib import Path
 class ServiceError(Exception):
     """Raised for any install/uninstall failure that the CLI should surface."""
 
-
-# ----------------------------------------------------------------------
-# Public API
-# ----------------------------------------------------------------------
 
 
 def install(name: str, home: Path, profile: str = "default") -> str:
@@ -81,12 +44,7 @@ def uninstall(name: str, home: Path, profile: str = "default") -> str:
 
 
 def installed(name: str, profile: str = "default") -> str | None:
-    """Return the backend name if a service unit exists on disk, else None.
-
-    Only checks for the presence of the unit file — doesn't verify that
-    the daemon is actively loaded/running. Combine with the daemon's own
-    ``running_pid()`` for a full view.
-    """
+    """Return the backend name if a service unit exists on disk, else None."""
     _validate_name(name)
     backend = _detect_backend()
     if backend == "launchd" and _launchd_plist_path(name, profile).exists():
@@ -96,9 +54,7 @@ def installed(name: str, profile: str = "default") -> str | None:
     return None
 
 
-# ----------------------------------------------------------------------
 # Backend detection + common helpers
-# ----------------------------------------------------------------------
 
 
 def _detect_backend() -> str | None:
@@ -116,12 +72,6 @@ def _validate_name(name: str) -> None:
 
 
 def _locate_alf() -> str:
-    """Return the absolute path of the ``alf`` executable on PATH.
-
-    launchd and systemd run with a minimal PATH, so hard-coding the
-    fully resolved path at install time avoids "command not found" at
-    service-start time.
-    """
     path = shutil.which("alf")
     if not path:
         # Fallback to ``<python> -m alf`` — works from a venv/isolated
@@ -137,9 +87,7 @@ def service_label(name: str, profile: str) -> str:
     return f"alf-{name}-{profile}"
 
 
-# ----------------------------------------------------------------------
 # launchd (macOS)
-# ----------------------------------------------------------------------
 
 
 _PLIST_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
@@ -219,9 +167,7 @@ def _launchd_uninstall(name: str, profile: str) -> None:
     plist.unlink(missing_ok=True)
 
 
-# ----------------------------------------------------------------------
 # systemd --user (Linux)
-# ----------------------------------------------------------------------
 
 
 _UNIT_TEMPLATE = """[Unit]
@@ -292,7 +238,6 @@ def _systemd_uninstall(name: str, profile: str) -> None:
 
 
 def _systemd_hint(result: subprocess.CompletedProcess) -> str:
-    """Extra hint if we detect a systemd-not-available environment."""
     combined = (result.stderr or "") + (result.stdout or "")
     if "Failed to connect to bus" in combined or "No such file" in combined:
         return (
@@ -303,25 +248,18 @@ def _systemd_hint(result: subprocess.CompletedProcess) -> str:
     return ""
 
 
-# ----------------------------------------------------------------------
-# Shared
-# ----------------------------------------------------------------------
-
 
 def _log_path(name: str, home: Path) -> Path:
-    """Where the service's stdout+stderr go."""
     if name == "gateway":
         return home / "gateway" / "logs" / "gateway.log"
     return home / "schedule" / "logs" / "scheduler.log"
 
 
 def _program_args_xml(alf_bin: str, name: str) -> str:
-    """Render ProgramArguments as indented <string>...</string> lines."""
     # alf_bin may be ``/path/to/alf`` or ``<python> -m alf`` — split it.
     parts = alf_bin.split() + [name, "start"]
     return "\n".join(f"    <string>{p}</string>" for p in parts)
 
 
 def _run(args: list[str], check: bool = True) -> subprocess.CompletedProcess:
-    """Thin wrapper around ``subprocess.run`` — exists so tests can mock it."""
     return subprocess.run(args, capture_output=True, text=True, check=check)

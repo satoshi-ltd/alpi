@@ -58,7 +58,6 @@ class ReadFile(Tool):
 
 
 def _looks_binary(blob: bytes) -> bool:
-    """Heuristic: null byte, or >30% non-text bytes in the first chunk."""
     if not blob:
         return False
     if b"\x00" in blob:

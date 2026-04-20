@@ -1,24 +1,4 @@
-"""web_search — DuckDuckGo search (no API key required).
-
-Uses the ``ddgs`` library (the maintained successor of ``duckduckgo-search``).
-Returns a compact Markdown list of results (title + URL + snippet). Ideal
-precursor to ``web_extract`` — search first, then extract the most relevant
-result.
-
-Search-quality tweaks on top of raw DDG:
-
-- Domain-level dedup so a single site (Reddit, StackOverflow, Wikipedia)
-  can't monopolise the page and starve diverse sources.
-- Explicit ``safesearch="moderate"`` — the backend default drifts across
-  ``ddgs`` versions; pinning it keeps results reproducible.
-
-Deliberately NOT exposing a ``region`` parameter. Models conflate the
-language of the query with the location of the user ("user wrote in
-Spanish → region=es-es") — a bad assumption for anyone who lives
-abroad and writes in their native tongue. The worldwide default
-(``wt-wt``) handles this by not pretending to know where "local"
-means.
-"""
+"""web_search — DuckDuckGo search, no API key."""
 
 from __future__ import annotations
 
@@ -27,8 +7,7 @@ from urllib.parse import urlparse
 from alf.tools.base import Tool, ToolResult
 
 
-_MAX_PER_DOMAIN = 2         # cap per-domain; the 3rd hit from the same site
-                            # rarely adds signal and usually starves diversity
+_MAX_PER_DOMAIN = 2
 
 
 class WebSearch(Tool):
@@ -85,12 +64,6 @@ class WebSearch(Tool):
 
 
 def _run_query(query: str, max_results: int) -> list | None:
-    """Wrap the ddgs call with explicit safesearch and error handling.
-
-    Returns ``None`` on a backend exception so the caller can surface a
-    real error; returns ``[]`` on a clean zero-results response so the
-    caller can decide whether to give up or retry.
-    """
     try:
         from ddgs import DDGS
     except ImportError:
@@ -107,14 +80,6 @@ def _run_query(query: str, max_results: int) -> list | None:
 
 
 def _dedup_by_domain(results: list, cap: int) -> list:
-    """Limit each domain to ``cap`` hits; first-seen wins.
-
-    Rationale: DDG frequently returns 4-5 Reddit threads or 3+
-    StackOverflow questions in a row for coding queries, flooding the
-    first page. The 3rd/4th hit from the same site rarely teaches
-    anything the 1st/2nd didn't already cover, and pushes genuinely
-    diverse sources off the list the LLM sees.
-    """
     seen: dict[str, int] = {}
     out: list = []
     for r in results:
@@ -123,8 +88,6 @@ def _dedup_by_domain(results: list, cap: int) -> list:
             host = urlparse(url).netloc.lower()
         except Exception:  # noqa: BLE001
             host = ""
-        # Normalise ``www.`` so www.reddit.com and reddit.com collapse
-        # into a single bucket instead of being counted separately.
         if host.startswith("www."):
             host = host[4:]
         count = seen.get(host, 0)

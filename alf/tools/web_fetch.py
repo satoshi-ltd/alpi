@@ -1,15 +1,4 @@
-"""web_fetch — fetch a URL and return Markdown.
-
-Strategy:
-1. First try **Jina Reader** (``r.jina.ai/<url>``) — a free proxy that
-   returns clean LLM-friendly Markdown even for JS-heavy or bot-protected
-   pages. No API key.
-2. If Jina is unreachable or rate-limited, fall back to direct ``httpx.GET``
-   + ``html2text`` conversion.
-
-``raw=True`` always uses the direct httpx path (since Jina only returns
-Markdown).
-"""
+"""web_fetch — fetch a URL and return Markdown."""
 
 from __future__ import annotations
 
@@ -69,7 +58,6 @@ class WebFetch(Tool):
 
 
 def _jina_fetch(url: str, max_bytes: int) -> str | None:
-    """Return Markdown from Jina Reader, or None if it fails."""
     import httpx
     proxy_url = JINA_BASE + url
     try:

@@ -1,14 +1,4 @@
-"""Interactive model selector.
-
-Two-step flow: pick a provider, then a model. Reads/writes
-``~/.alf/config.yaml`` and ``~/.alf/.env``.
-
-All prompts and menus go through ``alf.ui`` so the look and feel
-matches the rest of the setup flow. File-level env manipulation
-(``_append_env``, ``_remove_env_key``) stays here — those aren't UI
-primitives, they're ``.env`` editors used by this module and by the
-other wizards that collect credentials.
-"""
+"""Interactive model selector."""
 
 from __future__ import annotations
 
@@ -34,14 +24,8 @@ def accent_style(accent: str):
 
 
 def _ask(question):
-    """Back-compat alias — some legacy modules import this directly.
-    New code uses ``alf.ui`` helpers."""
     return ui._ask(question)
 
-
-# ----------------------------------------------------------------------
-# Entry point
-# ----------------------------------------------------------------------
 
 
 def run(cfg: cfg_mod.Config) -> None:
@@ -62,10 +46,6 @@ def run(cfg: cfg_mod.Config) -> None:
     cfg_mod.save(cfg)
     ui.ok(f"model set to [b]{model_id}[/b]")
 
-
-# ----------------------------------------------------------------------
-# Provider picker
-# ----------------------------------------------------------------------
 
 
 def _pick_provider(cfg: cfg_mod.Config) -> Provider | None:
@@ -135,10 +115,6 @@ def _pick_provider(cfg: cfg_mod.Config) -> Provider | None:
     return result  # a Provider instance
 
 
-# ----------------------------------------------------------------------
-# Model picker
-# ----------------------------------------------------------------------
-
 
 def _pick_model(provider: Provider, cfg: cfg_mod.Config) -> str | None:
     ui.dim(f"Fetching models from {provider.display}…")
@@ -188,12 +164,6 @@ def _pick_model(provider: Provider, cfg: cfg_mod.Config) -> str | None:
 
 
 def _prompt_custom_model(provider: Provider, current: str) -> str | None:
-    """Ask the user for a model id and qualify it with the provider prefix.
-
-    ``current`` hydrates the default so ENTER keeps the active model
-    (matches the gateway/MCP wizard pattern where the current value is
-    rendered in accent and editable in place).
-    """
     raw = ui.text("Model name", default=current)
     if not raw:
         return None
@@ -203,13 +173,8 @@ def _prompt_custom_model(provider: Provider, current: str) -> str | None:
     return raw
 
 
-# ----------------------------------------------------------------------
-# Key management
-# ----------------------------------------------------------------------
-
 
 def _ensure_key(cfg: cfg_mod.Config, provider: Provider) -> None:
-    """If the provider needs an API key and none is set, ask + persist."""
     if not provider.api_key_env or provider.has_key():
         return
     value = ui.password(f"Enter {provider.api_key_env} for {provider.display}:")
@@ -220,8 +185,6 @@ def _ensure_key(cfg: cfg_mod.Config, provider: Provider) -> None:
 
 
 def _append_env(env_path: Path, key: str, value: str) -> None:
-    """Write or replace ``KEY=value`` in ``env_path``. Idempotent on
-    identical values (still re-writes the file; cost is trivial)."""
     lines = env_path.read_text().splitlines() if env_path.exists() else []
     out, replaced = [], False
     for line in lines:
@@ -246,10 +209,6 @@ def _remove_env_key(env_path: Path, key: str) -> None:
 def _any_saved_keys(builtin: list[Provider]) -> bool:
     return any(p.has_key() for p in builtin if p.api_key_env)
 
-
-# ----------------------------------------------------------------------
-# Custom endpoint flow
-# ----------------------------------------------------------------------
 
 
 def _add_custom_endpoint(cfg: cfg_mod.Config) -> CustomProvider | None:
@@ -284,9 +243,7 @@ def _add_custom_endpoint(cfg: cfg_mod.Config) -> CustomProvider | None:
     )
 
 
-# ----------------------------------------------------------------------
 # Manage saved (submenu, out of the main picker)
-# ----------------------------------------------------------------------
 
 
 def _manage_saved(cfg: cfg_mod.Config) -> None:

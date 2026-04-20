@@ -1,11 +1,4 @@
-"""Memory tool — read/add/replace/remove entries in USER.md and MEMORY.md.
-
-Writes go to ~/.alf/memories/*.md immediately. They do NOT refresh the current
-session's system prompt — the snapshot there is frozen on purpose (prefix
-cache). The next session will see the new memory.
-
-Entries are delimited by the § section sign and can be multiline.
-"""
+"""Memory tool — read/add/replace/remove entries in USER.md and MEMORY.md."""
 
 from __future__ import annotations
 
@@ -114,12 +107,6 @@ class Memory(Tool):
             return ToolResult(ok=False, output="", error=str(e))
 
     def _state_snapshot(self, store: MemoryStore, target: str) -> str:
-        """Return usage + the full current contents of the file.
-
-        Giving the agent the full current state after every mutation means it
-        sees reality in its next turn — no reliance on the frozen snapshot in
-        the system prompt (which went stale when we wrote to disk).
-        """
         used, limit = store.usage()[target]
         pct = int(used / limit * 100) if limit else 0
         hint = " — run the consolidate-memory skill" if pct >= 80 else ""
@@ -131,9 +118,6 @@ class Memory(Tool):
 
 
 def _locate_literal(text: str, match: str) -> str | None:
-    """Find a substring in `text` that fuzzy-matches `match` and return its
-    exact literal slice. None if no match. Case + accent insensitive.
-    """
     import unicodedata
     from alf.memory import _fold
 
@@ -156,7 +140,6 @@ def _personality_state(text: str) -> str:
 
 
 def _handle_personality(home, action: str, content: str, match: str) -> ToolResult:
-    """PERSONALITY.md is free-form markdown, not § entries. Simpler ops."""
     from alf.home import personality_path
     path = personality_path(home)
     text = path.read_text() if path.exists() else ""

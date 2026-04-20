@@ -1,29 +1,4 @@
-"""schedule tool — manage scheduled jobs in ~/.alf/schedule/jobs.json.
-
-Jobs are plain dicts on disk. A separate ``alf schedule start`` process
-(the daemon) reads the same file, fires due jobs, and delivers their
-output through ``gateway.delivery.send_to`` — so the daemon works
-whether or not the gateway listener is running.
-
-Two kinds of jobs:
-
-- **cron** (default): fires on a standard cron expression
-  (``0 9 * * *`` etc., parsed by ``croniter``).
-- **inactivity**: fires once ``after_hours`` of user silence have passed
-  (source of truth: mtime of the most recent file in ``sessions/``).
-  A per-job cooldown equal to ``after_hours`` prevents re-spam.
-
-On fire the daemon runs the prompt through ``alf chat --once`` and
-sends the reply to ``(platform, chat_id)``. If ``chat_id`` is omitted
-the daemon uses the first allowlisted chat for that platform.
-
-The daemon's lifecycle mirrors the gateway's: it only runs if the user
-explicitly starts it (``alf schedule start``) or installs it as a
-system service. Adding a job here writes to disk; the ``add`` response
-tells the user how to activate delivery if the daemon isn't live yet.
-
-On-disk directory is ``~/.alf/schedule/``.
-"""
+"""schedule tool — manage scheduled jobs in ~/.alf/schedule/jobs.json."""
 
 from __future__ import annotations
 

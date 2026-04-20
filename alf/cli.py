@@ -1,9 +1,4 @@
-"""alf — CLI entry point.
-
-The interactive chat runs in a Textual app (see ``alf.tui.app``). This module
-keeps the click-based CLI (subcommands + bootstrap + gateway + --once mode
-for the Telegram gateway subprocess).
-"""
+"""alf — CLI entry point."""
 
 from __future__ import annotations
 
@@ -18,10 +13,6 @@ from alf import __version__, config, home, memory
 from alf.engine import AgentEvent, Engine
 
 
-# ----------------------------------------------------------------------
-# Bootstrap
-# ----------------------------------------------------------------------
-
 def _bootstrap(h: Path) -> None:
     home.ensure_home(h)
     config.seed_defaults(h)
@@ -31,10 +22,6 @@ def _bootstrap(h: Path) -> None:
         default = resources.files("alf.prompts").joinpath("default_personality.md").read_text()
         personality.write_text(default)
 
-
-# ----------------------------------------------------------------------
-# Chat entry point
-# ----------------------------------------------------------------------
 
 def _run_chat(h: Path, continue_last: bool = False) -> None:
     _bootstrap(h)
@@ -52,12 +39,6 @@ def _run_chat(h: Path, continue_last: bool = False) -> None:
 
 
 def _restore_terminal() -> None:
-    """Send escape codes to disable any mouse / paste modes that Textual may
-    have left behind when it exited (or crashed).
-
-    Without this, the user's terminal keeps printing raw ANSI escape bytes
-    every time they move the mouse or paste.
-    """
     try:
         seqs = (
             "\033[?1000l"   # disable X10 mouse reporting
@@ -75,17 +56,6 @@ def _restore_terminal() -> None:
 
 
 def _continue_last_session(engine: Engine, h: Path, console=None) -> bool:
-    """Load the most recent saved session into ``engine``.
-
-    Reads the turns log and rebuilds a lean OpenAI message list
-    (``system + [user, assistant] × N``) for the LLM. Tool messages are
-    NOT reconstructed — the assistant's reply already carries the
-    conclusions from its tool use, and reproducing raw tool outputs
-    would bloat the resumed context for no added value.
-
-    Imported by :class:`alf.tui.app.AlfApp` (interactive resume) and
-    used directly in tests.
-    """
     import json
     from alf.session import load_turns
 
@@ -143,14 +113,6 @@ def _continue_last_session(engine: Engine, h: Path, console=None) -> bool:
 
 
 def _run_once(h: Path, user_text: str, emit_events: bool = False) -> None:
-    """Non-interactive turn. Prints the final assistant text to stdout.
-
-    Used by the Telegram gateway, which spawns ``alf chat --once ...`` per
-    incoming message. When ``emit_events`` is set, the gateway gets a live
-    JSON-lines stream (one event per line) instead of only the final reply —
-    used to surface tool activity in Telegram. Each line is flushed so the
-    gateway can react in real time.
-    """
     import json
 
     _bootstrap(h)
@@ -204,9 +166,7 @@ def _run_once(h: Path, user_text: str, emit_events: bool = False) -> None:
 
 
 
-# ----------------------------------------------------------------------
 # Click subcommands
-# ----------------------------------------------------------------------
 
 @click.group(
     invoke_without_command=True,
@@ -258,30 +218,8 @@ def chat(ctx: click.Context, input_text: str | None, emit_events: bool,
         _run_chat(h, continue_last=continue_last)
 
 
-# ----------------------------------------------------------------------
-# Gateway subcommands
-# ----------------------------------------------------------------------
-
 
 def _require_workspace(h: Path) -> None:
-    """Abort the command if the profile has no usable workspace.
-
-    Interactive runs can survive an unset workspace — the user runs
-    ``/workspace <path>`` to pin one at the start of the session.
-    Non-interactive daemons (gateway, schedule) have no such escape
-    hatch: every tool call silently refuses until the user notices
-    their Telegram inbox is dead. Fail loudly at the command boundary
-    so the operator sees the actual problem instead of debugging a
-    silent daemon.
-
-    Two failure modes we check:
-
-    1. ``workspace`` empty / unset — nothing for file tools to anchor to.
-    2. ``workspace`` set but the path does not exist — typo, moved
-       mountpoint, or a profile copied across machines.
-
-    No policy beyond that. The user picks the path; ``/`` is their call.
-    """
     cfg = config.load(h)
     wp = cfg.workspace_path
     if wp is None:
@@ -376,19 +314,11 @@ def gateway_logs(ctx: click.Context, tail: int) -> None:
     click.echo("\n".join(lines))
 
 
-# ----------------------------------------------------------------------
 # MCP servers
-# ----------------------------------------------------------------------
 
 @main.group()
 def mcp() -> None:
-    """Inspect configured MCP servers.
-
-    Read-only CLI for quick checks from a shell or script. Mutations
-    (add / edit / remove) live in ``alf setup → MCPs`` — same rule as
-    gateways: one interactive place where you change configuration,
-    CLI subcommands for inspection.
-    """
+    """Inspect configured MCP servers."""
 
 
 @mcp.command("list")
@@ -438,9 +368,7 @@ def mcp_test(ctx: click.Context, name: str) -> None:
         client.stop()
 
 
-# ----------------------------------------------------------------------
 # Schedule daemon
-# ----------------------------------------------------------------------
 
 @main.group()
 def schedule() -> None:
@@ -543,9 +471,7 @@ def schedule_logs(ctx: click.Context, tail: int) -> None:
     click.echo("\n".join(lines))
 
 
-# ----------------------------------------------------------------------
 # Shared install / uninstall / status helpers
-# ----------------------------------------------------------------------
 
 def _running_pid_for(name: str, home: Path) -> int | None:
     if name == "gateway":
@@ -628,19 +554,12 @@ def _check_not_running(pid_file: Path) -> None:
     raise click.ClickException(f"process already running (pid {pid}).")
 
 
-# ----------------------------------------------------------------------
 # setup / profile
-# ----------------------------------------------------------------------
 
 @main.command("setup")
 @click.pass_context
 def setup_cmd(ctx: click.Context) -> None:
-    """Interactive setup — model, gateways, MCPs.
-
-    The single entry point for per-profile configuration. Operates on
-    whichever profile the invocation targets (``-p`` / ``ALF_PROFILE``
-    / default). Profiles themselves are managed with ``alf profile``.
-    """
+    """Interactive setup — model, gateways, MCPs."""
     from alf import ui
     h: Path = ctx.obj["home"]
     _bootstrap(h)
@@ -677,13 +596,6 @@ def setup_cmd(ctx: click.Context) -> None:
 
 
 def _setup_farewell(profile: str, h: Path) -> None:
-    """One dim line pointing the user at the next command to run.
-
-    Keep it minimal — the user just closed setup, they don't need a
-    multi-paragraph sendoff. A single ``next: <command>`` hint
-    covers the 90% case; anyone who wants ``gateway start`` or more
-    advanced flows can read ``alf --help``.
-    """
     from alf import ui as ui_mod
 
     prefix = f"alf -p {profile}" if profile != "default" else "alf"
@@ -691,13 +603,6 @@ def _setup_farewell(profile: str, h: Path) -> None:
 
 
 def _gateways_setup(h: Path) -> None:
-    """Sub-menu for platform-level credentials (Telegram, Email, …).
-
-    These are the surfaces alf talks to. Each one's credentials live
-    in ``~/.alf/.env`` and are shared by every consumer — gateway
-    listener, ``send_message`` tool, ``email`` tool, scheduled
-    deliveries.
-    """
     from alf import ui
     while True:
         items = [
@@ -721,14 +626,6 @@ def _gateways_setup(h: Path) -> None:
 
 
 def _read_profile_env(h: Path) -> dict[str, str]:
-    """Parse ``<home>/.env`` into a dict WITHOUT touching ``os.environ``.
-
-    Status lines read from here so that ``alf -p personal setup`` shows
-    the personal profile's configured state — not whatever happens to
-    be in the shell's environment or was loaded for the default
-    profile earlier. ``os.environ`` is a runtime bag that leaks across
-    profiles within a process; the on-disk ``.env`` is the ground truth.
-    """
     env_path = h / ".env"
     if not env_path.exists():
         return {}
@@ -743,7 +640,6 @@ def _read_profile_env(h: Path) -> dict[str, str]:
 
 
 def _gateways_status(h: Path) -> str:
-    """Comma-separated list of gateway names configured in the profile."""
     env = _read_profile_env(h)
     names = []
     if env.get("TELEGRAM_BOT_TOKEN"):
@@ -765,7 +661,6 @@ def _telegram_status(h: Path) -> str:
 
 
 def _mcp_status(h: Path) -> str:
-    """List configured MCP server names from the profile's ``config.yaml``."""
     try:
         cfg = config.load(h)
     except Exception:  # noqa: BLE001
@@ -790,11 +685,7 @@ def _email_status(h: Path) -> str:
 
 @main.group()
 def profile() -> None:
-    """Manage profiles (list, create, remove).
-
-    Each profile is an isolated ``~/.alf`` tree. Switch per-invocation
-    with ``-p <name>`` or ``ALF_PROFILE``; no sticky state.
-    """
+    """Manage profiles (list, create, remove)."""
 
 
 @profile.command("list")
@@ -837,11 +728,7 @@ def profile_list(ctx: click.Context) -> None:
 @profile.command("create")
 @click.argument("name")
 def profile_create(name: str) -> None:
-    """Bootstrap a new profile directory with default config.
-
-    Equivalent to the first run of ``alf -p <name>`` — useful for
-    scripts that pre-provision a profile without launching the TUI.
-    """
+    """Bootstrap a new profile directory with default config."""
     if name in {"default", ""}:
         raise click.ClickException("use a real name — 'default' is reserved")
     if "/" in name or name.startswith("."):
@@ -867,16 +754,7 @@ def profile_create(name: str) -> None:
 @profile.command("remove")
 @click.argument("name")
 def profile_remove(name: str) -> None:
-    """Permanently remove a profile directory after safety checks.
-
-    Refuses if ``default``, if any service (gateway/schedule) is
-    installed for the profile, or if the directory doesn't exist.
-    Prints a short contents summary and asks for confirmation before
-    deleting — there is no ``--force``: this is a human command and
-    a human should be the one to green-light irreversible deletion.
-    Scripts that want to skip the prompt should call ``rm -rf`` on
-    the profile directory directly.
-    """
+    """Permanently remove a profile directory after safety checks."""
     import shutil
 
     from alf import service, ui
@@ -920,8 +798,6 @@ def profile_remove(name: str) -> None:
 
 
 def _profile_summary(home_dir: Path) -> list[str]:
-    """Tiny inventory of the profile's contents — surfaced in the
-    confirm prompt so the user isn't deleting blind."""
     lines: list[str] = []
     sessions = home_dir / "sessions"
     if sessions.exists():
