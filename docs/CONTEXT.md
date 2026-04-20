@@ -801,6 +801,16 @@ gateway/{gateway.pid, logs/gateway.log}
 - **`.bak` sibling on every `write_file`.** Tried it, rejected —
   clutters every directory alf writes in. Kept `.bak` only on memory
   files (USER/MEMORY/PERSONALITY) where it actually pays off.
+- **`alf setup → Identity` wizard (or `$EDITOR` shortcut) for editing
+  `PERSONALITY.md`.** Rejected after considering. The `memory` tool
+  already mutates `PERSONALITY.md` from inside the chat, and the LLM
+  captures nuance ("less formal but not jokey; respect my code-switching")
+  that a form can't. A wizard would duplicate the tool's mutation path
+  and double our surface for bugs when the file format evolves. Users
+  rename their agent conversationally — same mental model as the rest
+  of the product. The real bug that motivated this proposal (Lucía
+  identity silently lost) was the `ALF_PROFILE` propagation gap — fixed
+  in commit 1470bdb, not by adding UI.
 
 ---
 
