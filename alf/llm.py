@@ -106,9 +106,15 @@ def stream(
         choice = chunk.choices[0]
         delta = getattr(choice, "delta", None)
         text_delta = ""
+        reasoning_delta = ""
         tc_deltas = []
         if delta is not None:
             text_delta = getattr(delta, "content", "") or ""
+            reasoning_delta = (
+                getattr(delta, "reasoning_content", None)
+                or getattr(delta, "reasoning", None)
+                or ""
+            )
             raw_tcs = getattr(delta, "tool_calls", None) or []
             for tc in raw_tcs:
                 idx = getattr(tc, "index", 0) or 0
@@ -126,6 +132,7 @@ def stream(
                 tc_deltas.append(entry)
         yield {
             "text_delta": text_delta,
+            "reasoning_delta": reasoning_delta,
             "tool_calls_delta": tc_deltas,
             "finish_reason": getattr(choice, "finish_reason", None),
         }

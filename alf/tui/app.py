@@ -20,6 +20,7 @@ from alf.tui.widgets import (
     AssistantMessage,
     DimLine,
     ErrorLine,
+    ReasoningLine,
     ThinkingIndicator,
     ToolCard,
     UserMessage,
@@ -241,6 +242,10 @@ class AlfApp(App):
         if ev.kind in ("assistant_delta", "tool_start", "error",
                        "done", "interrupted"):
             self._stop_thinking()
+        if ev.kind == "reasoning_delta":
+            if self._thinking is not None:
+                self._thinking.append_reasoning(ev.text)
+            return
         if ev.kind == "assistant_delta":
             self._on_assistant_delta(ev.text)
         elif ev.kind == "assistant_done":
@@ -288,15 +293,16 @@ class AlfApp(App):
             self.call_after_refresh(self._scroll_end)
 
     def _on_tool_start(self, ev: AgentEvent) -> None:
-        # Intermediate reasoning text (streamed between tool calls) is
-        # noise — collapse it. The tool line tells the user what's happening.
-        # Only the FINAL assistant text (after all tools finish) stays.
+        reasoning = ""
         if self._current_assistant is not None:
+            reasoning = (self._current_assistant.text or "").strip()
             try:
                 self._current_assistant.remove()
             except Exception:
                 pass
             self._current_assistant = None
+        if reasoning:
+            self._mount_message(ReasoningLine(reasoning))
         card = ToolCard(tool_id=ev.tool_id, name=ev.name, args=ev.args,
                         accent=self._accent_color())
         self._active_tools[ev.tool_id] = card

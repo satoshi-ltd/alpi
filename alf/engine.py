@@ -24,7 +24,7 @@ def _maybe_load_mcps(cfg: cfg_mod.Config) -> list:
 
 @dataclass
 class AgentEvent:
-    kind: str                      # 'user' | 'assistant_delta' | 'assistant_done' | 'tool_start' | 'tool_state' | 'tool_end' | 'usage' | 'error' | 'done' | 'interrupted'
+    kind: str                      # 'user' | 'reasoning_delta' | 'assistant_delta' | 'assistant_done' | 'tool_start' | 'tool_state' | 'tool_end' | 'usage' | 'error' | 'done' | 'interrupted'
     text: str = ""
     name: str = ""                 # tool name for tool_* events
     args: dict = field(default_factory=dict)
@@ -113,6 +113,9 @@ class Engine:
                         if chunk.get("final"):
                             final = chunk
                             continue
+                        reasoning_delta = chunk.get("reasoning_delta") or ""
+                        if reasoning_delta:
+                            emit(AgentEvent(kind="reasoning_delta", text=reasoning_delta))
                         text_delta = chunk.get("text_delta") or ""
                         if text_delta:
                             accumulated_text.append(text_delta)
