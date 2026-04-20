@@ -27,15 +27,15 @@ from alf.tools.base import Tool, ToolResult
 class SendMessage(Tool):
     name = "send_message"
     description = (
-        "Send a text message to a paired external chat (Telegram today; "
-        "webhook and future platforms reuse the same call). Use for "
-        "proactive messages the user should see outside the current "
-        "session — scheduled reminders, long-job completion pings, "
-        "inactivity check-ins. DO NOT use to reply inside the active "
-        "conversation: just write the reply directly. The target must be "
-        "on the allowlist (TELEGRAM_ALLOWED_CHAT_IDS etc.), otherwise "
-        "this fails. If you omit platform/chat_id the tool picks the "
-        "first allowed Telegram chat."
+        "Send a text message to a paired external chat (Telegram). Use "
+        "for proactive messages outside the current session — scheduled "
+        "reminders, long-job completion pings, inactivity check-ins.\n"
+        "\n"
+        "Not for replying inside the active conversation — just write "
+        "the reply directly.\n"
+        "\n"
+        "Target must be on the allowlist (`TELEGRAM_ALLOWED_CHAT_IDS`). "
+        "Omit `platform`/`chat_id` to default to the first allowed chat."
     )
     parameters = {
         "type": "object",
