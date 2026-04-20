@@ -9,18 +9,17 @@ import pytest
 from alf import tools
 from alf.tools.terminal import Terminal
 from alf.tools.edit_file import EditFile
-from alf.tools.glob import Glob
-from alf.tools.grep import Grep
 from alf.tools.read_file import ReadFile
+from alf.tools.search import Search
 from alf.tools.todo import Todo, _TODOS
 from alf.tools.write_file import WriteFile
 
 
 EXPECTED_TOOLS = {
-    "read_file", "write_file", "edit_file", "terminal", "grep", "glob",
+    "read_file", "write_file", "edit_file", "terminal", "search",
     "todo", "web_search", "web_fetch", "web_extract", "schedule",
     "memory", "create_skill", "edit_skill", "delete_skill", "delegate",
-    "session_search", "send_message", "email",
+    "session_search", "send_message", "email", "config",
 }
 
 
@@ -83,16 +82,43 @@ def test_terminal_background_and_kill(
         Terminal().run(action="kill", pid=pid)
 
 
-def test_grep_finds_pattern() -> None:
+def test_search_content_finds_pattern() -> None:
     repo_root = Path(__file__).resolve().parent.parent / "alf"
-    r = Grep().run(pattern="def run", path=str(repo_root))
+    r = Search().run(pattern="def run", path=str(repo_root), target="content")
     assert r.ok and "def run" in r.output
 
 
-def test_glob_finds_py_files() -> None:
+def test_search_filename_finds_py_files() -> None:
     repo_root = Path(__file__).resolve().parent.parent / "alf"
-    r = Glob().run(pattern="**/*.py", path=str(repo_root))
+    r = Search().run(pattern="*.py", path=str(repo_root), target="files")
     assert r.ok and "cli.py" in r.output
+
+
+def test_search_filename_case_insensitive_default_on_darwin_and_win(
+    tmp_home_no_env: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    (tmp_home_no_env / "Documents").mkdir()
+    (tmp_home_no_env / "Documents" / "note.md").write_text("x")
+    from alf.tools import search as search_mod
+    monkeypatch.setattr(search_mod, "_case_insensitive_default", lambda: True)
+    r = Search().run(pattern="documents/*.md",
+                     path=str(tmp_home_no_env), target="files")
+    assert r.ok
+    assert "note.md" in r.output
+
+
+def test_search_filename_case_sensitive_when_forced(
+    tmp_home_no_env: Path,
+) -> None:
+    (tmp_home_no_env / "Documents").mkdir()
+    (tmp_home_no_env / "Documents" / "note.md").write_text("x")
+    r = Search().run(
+        pattern="documents/*.md",
+        path=str(tmp_home_no_env), target="files",
+        case_sensitive=True,
+    )
+    assert r.ok
+    assert "note.md" not in r.output
 
 
 def test_todo_lifecycle() -> None:
@@ -126,17 +152,16 @@ def test_terminal_strips_ansi() -> None:
     assert "\x1b" not in r.output
 
 
-def test_glob_excludes_noise(tmp_home_no_env: Path) -> None:
+def test_search_excludes_noise(tmp_home_no_env: Path) -> None:
     (tmp_home_no_env / "src").mkdir()
     (tmp_home_no_env / "src" / "real.py").write_text("x")
     (tmp_home_no_env / "node_modules").mkdir()
     (tmp_home_no_env / "node_modules" / "junk.py").write_text("x")
-    r = Glob().run(pattern="**/*.py", path=str(tmp_home_no_env))
+    r = Search().run(pattern="*.py", path=str(tmp_home_no_env), target="files")
     assert "real.py" in r.output
     assert "node_modules" not in r.output
-    # Opt-in sees everything.
-    r2 = Glob().run(pattern="**/*.py", path=str(tmp_home_no_env),
-                    include_noise=True)
+    r2 = Search().run(pattern="*.py", path=str(tmp_home_no_env),
+                      target="files", include_noise=True)
     assert "node_modules" in r2.output
 
 

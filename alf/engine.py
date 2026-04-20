@@ -305,12 +305,17 @@ class Engine:
                 "explicitly ask with a full path."
             )
         else:
+            import os as _os
+            cwd = _os.getcwd()
             env_parts.append(
-                "- **workspace**: NOT SET. Ask the user to run `/workspace <path>` "
-                "to pin a directory. Until then, refuse file/terminal tool calls "
-                "that reference any path — you don't have enough context."
+                f"- **workspace**: NOT SET — falling back to your current "
+                f"working directory: `{cwd}`. Relative paths you pass to "
+                "tools resolve from there. Use ABSOLUTE paths when the "
+                "user mentions a location outside cwd. Suggest "
+                "`/workspace <path>` to the user if they want a stable "
+                "sandbox."
             )
-            env_parts.append(f"- **profile home**: `{self.home}`")
+            env_parts.append(f"- **profile home** (memory/skills/config): `{self.home}`")
         env = "\n".join(env_parts)
 
         parts = [personality.strip(), base.strip(), env]
