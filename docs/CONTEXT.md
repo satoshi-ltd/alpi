@@ -906,11 +906,92 @@ the registry import list). To ship:
 Enables online shopping, logins, form-filling — things that today
 fail because `web_fetch` is read-only.
 
-#### C. web_search quality (Tavily / Brave)
-DDG via `ddgs` works but quality is variable (bad queries → TikToks).
-Drop in Tavily (1000/mo free) or Brave Search as a fallback provider:
-if DDG returns <3 results, retry via Tavily. API-key optional in
-`.env`.
+#### C. OpenAI Codex provider (ChatGPT subscription auth)
+Today alf speaks to every provider via LiteLLM with an API key. That
+means OpenAI is only usable by paying per-token against
+`api.openai.com`. Hermes supports a second path — auth against the
+user's **ChatGPT Plus/Pro subscription** using the same endpoints the
+official Codex CLI uses. For a personal agent this is a big deal:
+already-paid-for quota instead of metered tokens.
+
+**How it works (reverse-engineered, not a public OpenAI API).**
+
+1. **Auth — OAuth2 device code** against `auth.openai.com` using the
+   Codex CLI's public `client_id` (`app_EMoamEEZ73f0CkXaXp7hrann`).
+   User opens a URL + types a code → we poll → we get
+   `access_token` + `refresh_token`. Reference:
+   `/Users/javi/.hermes/hermes-agent/hermes_cli/auth.py` lines 2999–3119
+   (`_codex_device_code_login`) and 1615–1675
+   (`resolve_codex_runtime_credentials`).
+2. **Token storage** — `~/.alf/auth.json` with `fcntl` file lock so
+   gateway + TUI + schedule daemon don't race on refresh. Refresh 120s
+   before expiry; on 401 force-refresh + retry once.
+3. **Inference endpoint** — `https://chatgpt.com/backend-api/codex`
+   (NOT `api.openai.com`). That's the backend your ChatGPT
+   subscription actually consumes.
+4. **Wire protocol** — **Responses API with event streaming**
+   (`client.responses.stream(...)`), not `chat/completions`. This is
+   the part LiteLLM does NOT cover cleanly, so this provider has to
+   bypass LiteLLM and use the OpenAI SDK directly. Reference:
+   `/Users/javi/.hermes/hermes-agent/run_agent.py:4592`
+   (`_run_codex_stream`).
+
+**Config schema** (new provider entry):
+```yaml
+model: openai-codex/gpt-5
+# api_key field is ignored for this provider — tokens live in auth.json
+```
+`alf auth openai-codex` triggers the device-code flow and writes
+`auth.json`; after that it's transparent.
+
+**Implementation shape in alf.**
+
+- `alf/auth/codex.py` — port of Hermes's auth module:
+  `device_code_login()`, `resolve_runtime_credentials(force_refresh,
+  refresh_skew)`, locked read/write of `~/.alf/auth.json`.
+- `alf/providers/openai_codex.py` — new `Provider` subclass with
+  `auth_type = "oauth_external"`, lists gpt-5 family models.
+- `alf/llm.py` — today a thin LiteLLM wrapper. Add a transport
+  dispatch: when the model id prefix is `openai-codex/`, resolve
+  credentials from the auth store and call
+  `openai.OpenAI(api_key=access_token,
+  base_url="https://chatgpt.com/backend-api/codex").responses.stream(...)`
+  instead of `litellm.completion`. Normalize the event stream
+  (`response.output_item.added` with `type=function_call`, etc.) into
+  the same `{text_delta, tool_calls_delta, finish_reason}` shape that
+  `stream()` already yields, so `engine.py` doesn't need to care which
+  transport ran.
+- CLI: `alf auth openai-codex [login|logout|status]`.
+
+**Effort.** 1–2 days. Auth module is almost a literal port from
+Hermes. The unknown is event-stream normalization — the Responses API
+emits a richer set of events than chat/completions, and we need to
+map function-call streaming precisely so tool use survives the
+round-trip.
+
+**Risks (document them — don't discover them later).**
+
+- **ToS grey area.** `chatgpt.com/backend-api/codex` is not a public,
+  bindable-by-third-parties API. OpenAI can rotate the Codex `client_id`,
+  start filtering by User-Agent, or tighten the device flow at any
+  moment. If that happens the provider breaks and the user falls back
+  to pay-per-token OpenAI or another provider. Acceptable for a
+  personal agent; NOT acceptable to recommend for a hosted / shared
+  deployment.
+- **Two transports to maintain.** `engine.py` gets a second code path
+  for streaming (LiteLLM vs OpenAI Responses). Contain it behind a
+  `Transport` protocol so the dispatch happens once, in `llm.py`, not
+  sprinkled across the codebase.
+- **Token liveness across processes.** Gateway, TUI, and schedule
+  daemon each open `auth.json` independently. The file lock prevents
+  torn writes but not stale reads — every transport call must
+  re-resolve credentials (or accept that it's cheap to re-read on
+  each call).
+
+**Ship order.** Auth module + CLI first (can be tested standalone:
+run `alf auth openai-codex`, verify `auth.json` is written, verify
+refresh works). Then provider + transport dispatch. Then end-to-end
+smoke test with a real `gpt-5` call through the agent loop.
 
 #### D. Vision (`read_image`)
 ~50 lines. LiteLLM already supports vision models. A `read_image(path,
@@ -986,11 +1067,30 @@ streaming is very fast + tool cards animate simultaneously.
 `call_after_refresh` + dual timers cover most cases; watch for
 regressions.
 
-#### L. Reasoning-as-state
-The LLM often emits text between tool calls ("let me try X
-instead…"). Currently discarded. Could be surfaced as the state
-label of the NEXT tool card. Adds personality. Javi said "pensamos
-luego".
+#### L. Reasoning-as-state ✅ shipped
+Two channels of model thinking are now surfaced in the TUI instead
+of being discarded:
+
+1. **Inter-tool prose** — text the model emits between tool calls
+   (`assistant_delta` chunks) is demoted from a full Markdown
+   `AssistantMessage` to a compact dim `ReasoningLine` as soon as
+   the next `tool_start` arrives. One `»` line per agent step,
+   truncated to 400 chars. Multi-step turns get one preamble per
+   step (correct — each reflects a real LLM iteration).
+2. **Chain-of-thought tokens** — for models that emit
+   `reasoning_content` separately (OpenAI o-series, DeepSeek-R1,
+   Claude extended thinking), the latest 80 chars of that stream
+   replace the literal `thinking…` label inside the live spinner.
+   Tail view, so the indicator stays single-height regardless of how
+   verbose the CoT gets. Dropped the moment the first `content`
+   token or tool call arrives.
+
+Plumbing: `alf/llm.py` captures `reasoning_content` / `reasoning`
+into a new `reasoning_delta` field in the stream dict;
+`alf/engine.py` emits it as `AgentEvent(kind="reasoning_delta")`;
+`alf/tui/app.py` routes it to `ThinkingIndicator.append_reasoning()`
+without stopping the indicator; `alf/tui/widgets.py` hosts the new
+`ReasoningLine` widget and the tail-view logic.
 
 #### M. TTS / STT / voice-mode
 Out of scope for core agent. If added, lives in a separate surface

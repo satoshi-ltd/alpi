@@ -83,6 +83,17 @@ class DimLine(Static):
         super().__init__(Text(text, style="dim"))
 
 
+class ReasoningLine(Static):
+    MAX_CHARS = 400
+
+    def __init__(self, text: str) -> None:
+        from rich.markup import escape
+        compact = " ".join(text.split())
+        if len(compact) > self.MAX_CHARS:
+            compact = compact[: self.MAX_CHARS - 1] + "…"
+        super().__init__(Text.from_markup(f"[dim]» {escape(compact)}[/dim]"))
+
+
 # Tool card — spinner while running, result when done
 
 _SPINNER_FRAMES = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
@@ -108,26 +119,39 @@ LEARNING_TOOLS = {"memory", "skill"}
 # LLM is receiving the prompt and deciding what to do.
 
 class ThinkingIndicator(Static):
-    """Transient one-liner spinner + elapsed, shown while alf is 'thinking'."""
+    _REASONING_TAIL_CHARS = 80
 
     def __init__(self, accent: str = "") -> None:
         super().__init__("")
         self.started = time.time()
         self.accent = accent
         self._timer = None
+        self._reasoning: str = ""
 
     def on_mount(self) -> None:
         self._tick()
         self._timer = self.set_interval(1 / 6, self._tick)
 
+    def append_reasoning(self, delta: str) -> None:
+        if not delta:
+            return
+        self._reasoning += delta
+
     def _tick(self) -> None:
+        from rich.markup import escape
         from alf.tui.formatting import fmt_duration
         frame = _SPINNER_FRAMES[int(time.time() * 6) % len(_SPINNER_FRAMES)]
         elapsed = fmt_duration(time.time() - self.started)
         spinner_markup = f"[{self.accent}]{frame}[/{self.accent}]" if self.accent else frame
-        self.update(Text.from_markup(
-            f"{spinner_markup} [dim] thinking…  {elapsed}[/dim]"
-        ))
+        if self._reasoning:
+            compact = " ".join(self._reasoning.split())
+            tail = compact[-self._REASONING_TAIL_CHARS:]
+            if len(compact) > self._REASONING_TAIL_CHARS:
+                tail = "…" + tail
+            body = f"[dim]{escape(tail)}[/dim]  [dim]{elapsed}[/dim]"
+        else:
+            body = f"[dim] thinking…  {elapsed}[/dim]"
+        self.update(Text.from_markup(f"{spinner_markup} {body}"))
 
     def stop(self) -> None:
         if self._timer is not None:

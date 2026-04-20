@@ -59,6 +59,13 @@ DimLine {
     height: auto;
 }
 
+ReasoningLine {
+    color: $text-muted;
+    margin: 0 0 1 0;
+    padding: 0;
+    height: auto;
+}
+
 /* Tool card — single line, tight */
 ToolCard {
     height: 1;
