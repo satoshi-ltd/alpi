@@ -32,19 +32,15 @@ def set_current_session_id(sid: str | None) -> None:
 class SessionSearch(Tool):
     name = "session_search"
     description = (
-        "Search past conversations (stored under ~/.alf/sessions). Returns "
-        "the user/assistant thread of matching sessions (tail-prioritized), "
-        "not raw tool outputs.\n"
+        "Search past conversations (under ~/.alf/sessions). Returns the "
+        "user/assistant thread of matching sessions (tail-prioritized).\n"
         "\n"
-        "Use PROACTIVELY when the user references the past:\n"
-        "  • \"remember when…\", \"do you remember X?\"\n"
-        "  • \"continue where we left off\", \"pick up from yesterday\"\n"
-        "  • \"we agreed on Y\"\n"
+        "Use PROACTIVELY when the user references the past: \"remember "
+        "when\", \"continue where we left off\", \"we agreed on X\".\n"
         "\n"
-        "DO NOT use speculatively — only when the user explicitly references "
-        "prior work. If the tool finds a matching session, TRUST the thread "
-        "it returns — don't re-run web_search/web_extract to rediscover info "
-        "that's already in the tail."
+        "Do NOT use speculatively. If a session matches, TRUST the thread "
+        "it returns — don't re-run web_search/web_extract to rediscover "
+        "info that's already there."
     )
     parameters = {
         "type": "object",

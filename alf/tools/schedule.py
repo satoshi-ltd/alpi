@@ -37,17 +37,16 @@ from alf.tools.base import Tool, ToolResult
 class Schedule(Tool):
     name = "schedule"
     description = (
-        "Schedule a proactive job. Actions: list, add, remove. Pick "
-        "`kind`: 'cron' for a standard cron expression (field: "
-        "`expression`, e.g. '0 9 * * *') or 'inactivity' for a check-in "
-        "after N hours of user silence (field: `after_hours`). `prompt` "
-        "is what alf should do or compute when the job fires — its "
-        "reply is AUTO-DELIVERED to `platform` + `chat_id` (defaults: "
-        "telegram + first allowlisted chat). DO NOT include 'send to "
-        "telegram' or similar in the prompt: delivery is automatic and "
-        "adding it causes duplicate messages (one from `send_message`, "
-        "one from the daemon). Use this tool when the user asks for "
-        "reminders, recurring check-ins, or proactive outreach."
+        "Schedule a proactive job. Actions: list, add, remove.\n"
+        "\n"
+        "Pick `kind`:\n"
+        "  cron       — cron expression (field: `expression`, e.g. '0 9 * * *')\n"
+        "  inactivity — fires after N hours of user silence (field: `after_hours`)\n"
+        "\n"
+        "`prompt` is what alf should do when the job fires. Its reply "
+        "is AUTO-DELIVERED to `platform` + `chat_id` (defaults: telegram "
+        "+ first allowlisted chat). Do NOT include 'send to telegram' "
+        "in the prompt — delivery is automatic; adding it sends twice."
     )
     parameters = {
         "type": "object",
