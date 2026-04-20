@@ -20,6 +20,8 @@ _EDITABLE: dict[str, dict] = {
     "fallback_models":                 {"type": "list[str]","effect": _NEXT_TURN},
     "tools.max_steps_per_turn":        {"type": "int",      "effect": _NEXT_TURN},
     "tools.web_extract.model":         {"type": "str",      "effect": _NEXT_TURN},
+    "tools.terminal.sandbox":          {"type": "bool",     "effect": _NEXT_TURN},
+    "tools.terminal.allow_network":    {"type": "bool",     "effect": _NEXT_TURN},
     "tui.show_cost":                   {"type": "bool",     "effect": _NEXT_SESSION},
     "tui.show_tokens":                 {"type": "bool",     "effect": _NEXT_SESSION},
     "tui.accent":                      {"type": "str",      "effect": _NEXT_SESSION},
