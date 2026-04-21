@@ -303,6 +303,12 @@ class Skill(Tool):
         "  list        — show every skill grouped by category.\n"
         "  view        — return SKILL.md (no file= arg) or a specific "
         "                skill file. Read-only, cheaper than read_file.\n"
+        "  validate    — run cheap correctness checks on a skill's "
+        "                scripts/*.py: syntax (py_compile), missing imports "
+        "                (AST + find_spec), OAuth race patterns "
+        "                (webbrowser.open before serve_forever), and port "
+        "                coherence between SKILL.md and bind() calls. "
+        "                Non-blocking: just reports findings.\n"
         "\n"
         "NEVER use `edit_file`/`write_file` on paths inside a skill "
         "directory — they bypass the scanner. Always go through this "
@@ -319,7 +325,7 @@ class Skill(Tool):
                 "type": "string",
                 "enum": [
                     "create", "edit", "patch", "add_file", "remove_file",
-                    "delete", "list", "view",
+                    "delete", "list", "view", "validate",
                 ],
             },
             "name": {"type": "string", "description": "Skill name (kebab-case)."},
@@ -424,6 +430,8 @@ class Skill(Tool):
                                 confirm_user_skill)
         if action == "delete":
             return _delete(home, name, confirm_user_skill)
+        if action == "validate":
+            return _validate(home, name)
         return ToolResult(ok=False, output="", error=f"unknown action: {action}")
 
 
@@ -758,6 +766,19 @@ def _delete(
         return ToolResult(ok=False, output="", error=err)
     shutil.rmtree(skill_dir, ignore_errors=True)
     return ToolResult(ok=True, output=f"deleted {skill_dir}")
+
+
+def _validate(home: Path, name: str) -> ToolResult:
+    if not name:
+        return ToolResult(ok=False, output="", error="'name' is required")
+    skill_dir = _find_skill(home, name)
+    if skill_dir is None:
+        return ToolResult(ok=False, output="", error=f"skill not found: {name}")
+    from alpi.tools._skill_validate import validate_skill
+    findings = validate_skill(skill_dir)
+    if not findings:
+        return ToolResult(ok=True, output="(no issues)")
+    return ToolResult(ok=True, output="\n".join(findings))
 
 
 TOOL = Skill

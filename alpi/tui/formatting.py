@@ -114,7 +114,7 @@ def arg_hint(tool_name: str, args: dict) -> str:
         cat = args.get("category", "")
         if action == "create":
             return f"create · {name} · {cat}".rstrip(" ·")
-        if action in ("edit", "delete"):
+        if action in ("edit", "delete", "validate", "view"):
             return f"{action} · {name}".rstrip(" ·")
         return action
     if tool_name == "todo":
