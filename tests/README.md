@@ -35,7 +35,7 @@ $PY -m pytest
 $PY -m pytest --llm
 
 # Or equivalently:
-ALF_LLM=1 $PY -m pytest --llm
+ALPI_LLM=1 $PY -m pytest --llm
 
 # A specific file
 $PY -m pytest tests/test_memory.py -v
@@ -47,7 +47,7 @@ $PY -m pytest tests/test_memory.py::test_add_rejects_exact_duplicate -v
 ## Fixtures
 
 - **`tmp_home_no_env`** — fresh temp alf home, no `.env` copied. Use for unit tests that must not talk to any LLM.
-- **`tmp_home`** — same, but copies `~/.alf/.env` in so LLM calls work. Use for `--llm` tests.
+- **`tmp_home`** — same, but copies `~/.alpi/.env` in so LLM calls work. Use for `--llm` tests.
 - `_reset_session_search_state` runs automatically before each test to avoid state leaking.
 
 ## Adding tests

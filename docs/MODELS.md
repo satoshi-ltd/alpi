@@ -96,10 +96,10 @@ drift from real usage):
 
 Three ways, any of them works:
 
-- `alf setup` → Model / Provider → pick provider, pick model.
+- `alpi setup` → Model / Provider → pick provider, pick model.
 - `/model` slash command inside the TUI.
-- Edit `model:` in `~/.alf/config.yaml` (or
-  `~/.alf/profiles/<name>/config.yaml`).
+- Edit `model:` in `~/.alpi/config.yaml` (or
+  `~/.alpi/profiles/<name>/config.yaml`).
 
-The choice is per-profile. `alf -p work` can run Claude Sonnet
-while `alf -p personal` runs MiMo-V2-Flash — no interference.
+The choice is per-profile. `alpi -p work` can run Claude Sonnet
+while `alpi -p personal` runs MiMo-V2-Flash — no interference.

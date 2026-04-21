@@ -22,9 +22,9 @@ from typing import Any
 
 import pytest
 
-from alf.email import client as email_client
-from alf.email.client import EmailClient, EmailError
-from alf.tools.email import Email
+from alpi.email import client as email_client
+from alpi.email.client import EmailClient, EmailError
+from alpi.tools.email import Email
 
 
 # --------------------------------------------------------------------
@@ -398,7 +398,7 @@ def test_tool_surfaces_config_error_cleanly(monkeypatch) -> None:
     result = Email().run(action="list")
     assert not result.ok
     assert "email not configured" in result.error
-    assert "alf setup" in result.error.lower()
+    assert "alpi setup" in result.error.lower()
 
 
 def test_tool_requires_uid_for_read(monkeypatch) -> None:
@@ -428,19 +428,19 @@ def test_tool_unknown_action(monkeypatch) -> None:
 
 def test_decode_header_handles_utf8() -> None:
     encoded = "=?utf-8?b?SG9sYSDCoQ==?="
-    from alf.email.client import _decode_header
+    from alpi.email.client import _decode_header
     assert _decode_header(encoded) == "Hola ¡"
 
 
 def test_clean_addr_extracts_email() -> None:
-    from alf.email.client import _clean_addr
+    from alpi.email.client import _clean_addr
     assert _clean_addr('"Pepe" <Pepe@X.COM>') == "pepe@x.com"
     assert _clean_addr("pepe@x.com") == "pepe@x.com"
     assert _clean_addr("") == ""
 
 
 def test_imap_date_converts_iso_to_rfc() -> None:
-    from alf.email.client import _imap_date
+    from alpi.email.client import _imap_date
     assert _imap_date("2026-04-20") == "20-Apr-2026"
     # Pass-through when already in IMAP format
     assert _imap_date("20-Apr-2026") == "20-Apr-2026"

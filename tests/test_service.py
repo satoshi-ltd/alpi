@@ -17,7 +17,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from alf import service
+from alpi import service
 
 
 # --------------------------------------------------------------------
@@ -155,7 +155,7 @@ def test_systemd_install_writes_unit_and_enables(
     content = unit.read_text()
     assert "alf gateway daemon (personal)" in content
     assert f"ExecStart=/home/x/.local/bin/alf gateway start" in content
-    assert f"Environment=ALF_HOME={fake_home}" in content
+    assert f"Environment=ALPI_HOME={fake_home}" in content
     assert "Restart=on-failure" in content
     assert "WantedBy=default.target" in content
 
@@ -247,5 +247,5 @@ def test_service_label_varies_by_platform(monkeypatch) -> None:
 def test_locate_alf_falls_back_to_python_dash_m(monkeypatch) -> None:
     monkeypatch.setattr(service.shutil, "which", lambda n: None)
     path = service._locate_alf()
-    assert "-m alf" in path
+    assert "-m alpi" in path
     assert path.split()[0].endswith("python") or "python" in path.split()[0]

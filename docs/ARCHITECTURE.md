@@ -69,11 +69,11 @@ alf schedule  start|stop|status|logs|install|uninstall|run-once
 alf mcp       list|test|remove
 ```
 
-**Shape rules:** containers (profile) get `list/create/remove`. Daemons (gateway, schedule) get `start/stop/status/logs/install/uninstall`. Schedule adds `run-once`. MCP has no daemon (servers spawn as Engine children) so no `start/stop`. Interactive wizards live exclusively under `alf setup`; never add a per-feature wizard command.
+**Shape rules:** containers (profile) get `list/create/remove`. Daemons (gateway, schedule) get `start/stop/status/logs/install/uninstall`. Schedule adds `run-once`. MCP has no daemon (servers spawn as Engine children) so no `start/stop`. Interactive wizards live exclusively under `alpi setup`; never add a per-feature wizard command.
 
 **`alf/ui.py`** is the shared interactive layer. Raw `questionary.*` is forbidden outside it. Helpers: `banner`, `menu`, `text`, `password`, `confirm`, `row`, `ok/fail/warn/dim/saved/cancelled`. The close item is added automatically with value `None` (callers treat `None` as "out").
 
-**Menu close wording**: top-level (`alf setup`) → `Exit`. Sub-menus (`Gateways:`, `MCP servers:`, `Manage saved keys`) → `← Back`. Wizard aborted mid-flow → `cancelled`. Mixing `Exit/Back/Cancel` in one context is a bug.
+**Menu close wording**: top-level (`alpi setup`) → `Exit`. Sub-menus (`Gateways:`, `MCP servers:`, `Manage saved keys`) → `← Back`. Wizard aborted mid-flow → `cancelled`. Mixing `Exit/Back/Cancel` in one context is a bug.
 
 ## File layout
 
@@ -114,10 +114,10 @@ alf/
 └── skills/                 bundled skills (only `meta/consolidate-memory`)
 ```
 
-## Profile home layout (`~/.alf/` or `~/.alf/profiles/<name>/`)
+## Profile home layout (`~/.alpi/` or `~/.alpi/profiles/<name>/`)
 
 ```
-~/.alf/                     default profile root
+~/.alpi/                     default profile root
 ├── .env                    API keys, gateway tokens, allowlists
 ├── config.yaml             model + tools + tui + mcp + gateway
 ├── memory/                 USER.md, MEMORY.md, PERSONALITY.md (+ .bak)
@@ -128,7 +128,7 @@ alf/
 ├── run/                    background process registry, gateway/schedule pids
 └── logs/                   gateway.log, schedule.log (rotated at 1MB)
 
-~/.alf/profiles/<name>/     same layout, isolated per profile
+~/.alpi/profiles/<name>/     same layout, isolated per profile
 ```
 
 ## Core systems
@@ -244,11 +244,11 @@ Textual 8.2.x. Layout: `AlfTopBar` (identity) + chat scroll (`VerticalScroll.anc
 
 ### Gateway (`alf/gateway/`)
 
-Separate process from the TUI. `alf gateway start` runs an event loop that listens to platforms (Telegram long-poll, IMAP polling) and spawns `alf chat --once --emit-events` per incoming message. Tool traces stream as `◆ {tool} · {arg_hint}` messages; typing indicator stays on while the subprocess works.
+Separate process from the TUI. `alpi gateway start` runs an event loop that listens to platforms (Telegram long-poll, IMAP polling) and spawns `alf chat --once --emit-events` per incoming message. Tool traces stream as `◆ {tool} · {arg_hint}` messages; typing indicator stays on while the subprocess works.
 
 Allowlist: `TELEGRAM_ALLOWED_CHAT_IDS` and `EMAIL_ALLOWED_SENDERS` in `.env`, fail-closed if unset. Per-platform config under `gateway.{telegram,email}` in `config.yaml` (`show_tool_trace`, `typing_indicator`, etc.).
 
-`alf gateway install/uninstall` registers a launchd (macOS) or systemd-user (Linux) unit so the gateway survives reboot.
+`alpi gateway install/uninstall` registers a launchd (macOS) or systemd-user (Linux) unit so the gateway survives reboot.
 
 ### Schedule (`alf/scheduler/`)
 
@@ -267,7 +267,7 @@ Turn-based JSON: `turns: [{at, user, tools[], assistant}]` plus cumulative metri
 Two layers:
 
 - **Layer 1 — application guards (always on).** `_guards._DANGEROUS` denylist on terminal (rm -rf, pipe-to-interpreter, fork bomb, ...). SSRF block on web_fetch/web_extract (RFC 1918, link-local, cloud metadata). Prompt-injection scan on email + web content. Sensitive-path denylist on file tools (`_paths.py`).
-- **Layer 2 — OS sandbox (opt-in, experimental).** `tools.terminal.sandbox: true` wraps shell commands in `sandbox-exec` (macOS) or `bubblewrap` (Linux). Read/write limited to workspace + `~/.alf/` + `/tmp`; network denied by default. Off by default until validated against the long tail of common commands.
+- **Layer 2 — OS sandbox (opt-in, experimental).** `tools.terminal.sandbox: true` wraps shell commands in `sandbox-exec` (macOS) or `bubblewrap` (Linux). Read/write limited to workspace + `~/.alpi/` + `/tmp`; network denied by default. Off by default until validated against the long tail of common commands.
 
 Threat model: prompt injection via email/web content + direct user input (trusted) + network adversaries (out of scope, personal-use posture). Full discussion in [SECURITY.md](SECURITY.md).
 
@@ -275,7 +275,7 @@ Threat model: prompt injection via email/web content + direct user input (truste
 
 ### Profiles
 
-`alf -p <name>` resolves home to `~/.alf/profiles/<name>/`. `ALF_PROFILE` env var is the same. No sticky "current profile" file — resolution is fully explicit. Daemons (gateway, schedule) carry the profile name in their launchd/systemd label so multiple profiles coexist without colliding.
+`alpi -p <name>` resolves home to `~/.alpi/profiles/<name>/`. `ALPI_PROFILE` env var is the same. No sticky "current profile" file — resolution is fully explicit. Daemons (gateway, schedule) carry the profile name in their launchd/systemd label so multiple profiles coexist without colliding.
 
 ### Workspace
 
@@ -292,7 +292,7 @@ These are GLOBALS — concurrent tool calls would race. The current design is si
 `tests/` runs via `pytest`. ~340 tests, ~2s. `--llm` flag enables real-LLM integration tests (a few cents on free models).
 
 Key fixtures (`tests/conftest.py`):
-- `tmp_home_no_env` — isolated `~/.alf/` rooted at a tmp dir, no `.env` (safe for unit tests).
+- `tmp_home_no_env` — isolated `~/.alpi/` rooted at a tmp dir, no `.env` (safe for unit tests).
 - `tmp_home` — same with the user's `.env` copied (for LLM tests).
 
 ## Non-obvious things to know
@@ -304,4 +304,4 @@ Key fixtures (`tests/conftest.py`):
 - `cfg` must be loaded BEFORE `super().__init__()` on `AlfApp`. The theme is then registered immediately after, in `__init__` rather than `on_mount`, because child widgets read `self.app.theme_variables` during their own mount (which fires first). `self.get_css_variables()` is called explicitly to rebuild the var dict synchronously — setting `self.theme` alone schedules the refresh for the next event-loop tick.
 - `browser.py` exists but is intentionally NOT in the registry. Reactivate when Playwright lands (ROADMAP §B).
 - Gateway subprocess uses `alf chat --once --emit-events` — separate codepath from the TUI, simpler, non-streaming. Changes to TUI feel don't affect gateway.
-- `ALF_HOME` env var routes daemons + tests to a specific profile root.
+- `ALPI_HOME` env var routes daemons + tests to a specific profile root.

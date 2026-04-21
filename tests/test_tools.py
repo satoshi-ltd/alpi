@@ -6,13 +6,13 @@ from pathlib import Path
 
 import pytest
 
-from alf import tools
-from alf.tools.terminal import Terminal
-from alf.tools.edit_file import EditFile
-from alf.tools.read_file import ReadFile
-from alf.tools.search import Search
-from alf.tools.todo import Todo, _TODOS
-from alf.tools.write_file import WriteFile
+from alpi import tools
+from alpi.tools.terminal import Terminal
+from alpi.tools.edit_file import EditFile
+from alpi.tools.read_file import ReadFile
+from alpi.tools.search import Search
+from alpi.tools.todo import Todo, _TODOS
+from alpi.tools.write_file import WriteFile
 
 
 EXPECTED_TOOLS = {
@@ -71,7 +71,7 @@ def test_terminal_failure_surfaces_exit_code() -> None:
 def test_terminal_background_and_kill(
     tmp_home_no_env: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("ALF_HOME", str(tmp_home_no_env))
+    monkeypatch.setenv("ALPI_HOME", str(tmp_home_no_env))
     r = Terminal().run(action="background", command="sleep 30")
     assert r.ok
     pid = int(r.output.split("pid=")[1].split()[0])
@@ -83,13 +83,13 @@ def test_terminal_background_and_kill(
 
 
 def test_search_content_finds_pattern() -> None:
-    repo_root = Path(__file__).resolve().parent.parent / "alf"
+    repo_root = Path(__file__).resolve().parent.parent / "alpi"
     r = Search().run(pattern="def run", path=str(repo_root), target="content")
     assert r.ok and "def run" in r.output
 
 
 def test_search_filename_finds_py_files() -> None:
-    repo_root = Path(__file__).resolve().parent.parent / "alf"
+    repo_root = Path(__file__).resolve().parent.parent / "alpi"
     r = Search().run(pattern="*.py", path=str(repo_root), target="files")
     assert r.ok and "cli.py" in r.output
 
@@ -189,8 +189,8 @@ def test_schemas_shape() -> None:
 
 
 def test_research_depth_resolves_from_config(tmp_home_no_env) -> None:
-    from alf.tools.research import _resolve_depth, DEPTH_STEPS_DEFAULTS
-    from alf import config as cfg_mod
+    from alpi.tools.research import _resolve_depth, DEPTH_STEPS_DEFAULTS
+    from alpi import config as cfg_mod
     cfg = cfg_mod.load(tmp_home_no_env)
     for d in ("quick", "normal", "deep"):
         assert _resolve_depth(cfg, d) == DEPTH_STEPS_DEFAULTS[d]
@@ -200,8 +200,8 @@ def test_research_depth_honors_user_overrides(tmp_home_no_env) -> None:
     (tmp_home_no_env / "config.yaml").write_text(
         "tools:\n  research:\n    deep_steps: 60\n    quick_steps: 3\n"
     )
-    from alf.tools.research import _resolve_depth
-    from alf import config as cfg_mod
+    from alpi.tools.research import _resolve_depth
+    from alpi import config as cfg_mod
     cfg = cfg_mod.load(tmp_home_no_env)
     assert _resolve_depth(cfg, "quick") == 3
     assert _resolve_depth(cfg, "normal") == 15
@@ -209,21 +209,21 @@ def test_research_depth_honors_user_overrides(tmp_home_no_env) -> None:
 
 
 def test_research_rejects_unknown_depth() -> None:
-    from alf.tools.research import Research
+    from alpi.tools.research import Research
     r = Research().run(brief="x", depth="superdeep")
     assert not r.ok
     assert "depth" in (r.error or "")
 
 
 def test_read_image_rejects_missing_file(tmp_home_no_env: Path) -> None:
-    from alf.tools.read_image import ReadImage
+    from alpi.tools.read_image import ReadImage
     r = ReadImage().run(path=str(tmp_home_no_env / "nope.png"), question="what is this?")
     assert not r.ok
     assert "no such file" in (r.error or "")
 
 
 def test_read_image_rejects_non_image_extension(tmp_home_no_env: Path) -> None:
-    from alf.tools.read_image import ReadImage
+    from alpi.tools.read_image import ReadImage
     f = tmp_home_no_env / "data.txt"
     f.write_text("hi")
     r = ReadImage().run(path=str(f), question="?")
@@ -232,7 +232,7 @@ def test_read_image_rejects_non_image_extension(tmp_home_no_env: Path) -> None:
 
 
 def test_read_image_rejects_bad_magic_bytes(tmp_home_no_env: Path) -> None:
-    from alf.tools.read_image import ReadImage
+    from alpi.tools.read_image import ReadImage
     f = tmp_home_no_env / "fake.png"
     f.write_bytes(b"not really a png")
     r = ReadImage().run(path=str(f), question="?")
@@ -243,8 +243,8 @@ def test_read_image_rejects_bad_magic_bytes(tmp_home_no_env: Path) -> None:
 def test_read_image_surfaces_vision_error_with_hint(
     tmp_home_no_env: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from alf import llm
-    from alf.tools.read_image import ReadImage, MAGIC_BYTES
+    from alpi import llm
+    from alpi.tools.read_image import ReadImage, MAGIC_BYTES
     f = tmp_home_no_env / "pic.png"
     f.write_bytes(MAGIC_BYTES["image/png"] + b"\x00" * 100)
 
@@ -261,9 +261,9 @@ def test_read_image_surfaces_vision_error_with_hint(
 def test_read_image_calls_llm_with_multimodal_content(
     tmp_home_no_env: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from alf import llm
-    from alf.llm import Completion
-    from alf.tools.read_image import ReadImage, MAGIC_BYTES
+    from alpi import llm
+    from alpi.llm import Completion
+    from alpi.tools.read_image import ReadImage, MAGIC_BYTES
 
     f = tmp_home_no_env / "pic.png"
     f.write_bytes(MAGIC_BYTES["image/png"] + b"\x00" * 100)
@@ -292,9 +292,9 @@ def test_read_image_calls_llm_with_multimodal_content(
 def test_read_image_accepts_svg(
     tmp_home_no_env: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from alf import llm
-    from alf.llm import Completion
-    from alf.tools.read_image import ReadImage
+    from alpi import llm
+    from alpi.llm import Completion
+    from alpi.tools.read_image import ReadImage
 
     f = tmp_home_no_env / "vec.svg"
     f.write_text('<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg"><rect/></svg>')
@@ -312,7 +312,7 @@ def test_read_image_accepts_svg(
 
 
 def test_read_image_blocks_private_url() -> None:
-    from alf.tools.read_image import ReadImage
+    from alpi.tools.read_image import ReadImage
     r = ReadImage().run(path="http://127.0.0.1/foo.png", question="?")
     assert not r.ok
     assert "URL blocked" in (r.error or "") or "private" in (r.error or "").lower()
@@ -321,8 +321,8 @@ def test_read_image_blocks_private_url() -> None:
 def test_read_image_rejects_non_image_url(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from alf.tools import read_image as read_image_mod
-    from alf.tools.read_image import ReadImage
+    from alpi.tools import read_image as read_image_mod
+    from alpi.tools.read_image import ReadImage
 
     monkeypatch.setattr(
         read_image_mod, "_download", lambda url: b"not an image",
@@ -339,9 +339,9 @@ def test_read_image_uses_override_model_when_set(
         'model: openrouter/a/b\n'
         'tools:\n  read_image:\n    model: openrouter/x/vision\n'
     )
-    from alf import llm
-    from alf.llm import Completion
-    from alf.tools.read_image import ReadImage, MAGIC_BYTES
+    from alpi import llm
+    from alpi.llm import Completion
+    from alpi.tools.read_image import ReadImage, MAGIC_BYTES
 
     f = tmp_home_no_env / "pic.png"
     f.write_bytes(MAGIC_BYTES["image/png"] + b"\x00" * 100)
@@ -368,9 +368,9 @@ def test_read_image_falls_back_to_main_when_override_fails(
         'model: openrouter/a/b\n'
         'tools:\n  read_image:\n    model: openrouter/x/broken\n'
     )
-    from alf import llm
-    from alf.llm import Completion
-    from alf.tools.read_image import ReadImage, MAGIC_BYTES
+    from alpi import llm
+    from alpi.llm import Completion
+    from alpi.tools.read_image import ReadImage, MAGIC_BYTES
 
     f = tmp_home_no_env / "pic.png"
     f.write_bytes(MAGIC_BYTES["image/png"] + b"\x00" * 100)
@@ -396,14 +396,14 @@ def test_read_image_falls_back_to_main_when_override_fails(
 
 
 def test_delegate_rejects_unknown_toolset() -> None:
-    from alf.tools.delegate import Delegate
+    from alpi.tools.delegate import Delegate
     r = Delegate().run(goal="x", toolsets=["pollo"])
     assert not r.ok
     assert "pollo" in (r.error or "")
 
 
 def test_delegate_resolves_toolsets_and_filters_blocked() -> None:
-    from alf.tools.delegate import _resolve_tools, BLOCKED_FOR_DELEGATE
+    from alpi.tools.delegate import _resolve_tools, BLOCKED_FOR_DELEGATE
     names, unknown = _resolve_tools(["file", "web"])
     assert not unknown
     assert {"read_file", "write_file", "edit_file", "search"} <= names
@@ -412,7 +412,7 @@ def test_delegate_resolves_toolsets_and_filters_blocked() -> None:
 
 
 def test_delegate_defaults_to_file_plus_web() -> None:
-    from alf.tools.delegate import _resolve_tools
+    from alpi.tools.delegate import _resolve_tools
     names, _ = _resolve_tools(None)
     assert "write_file" in names
     assert "web_search" in names
@@ -422,11 +422,11 @@ def test_delegate_defaults_to_file_plus_web() -> None:
 def test_delegate_prefixes_inner_emit_with_step_counter(
     tmp_home_no_env: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from alf import llm
-    from alf.llm import Completion
-    from alf.tools import _state as tool_state_mod
-    from alf.tools import delegate as delegate_mod
-    from alf.tools.delegate import Delegate
+    from alpi import llm
+    from alpi.llm import Completion
+    from alpi.tools import _state as tool_state_mod
+    from alpi.tools import delegate as delegate_mod
+    from alpi.tools.delegate import Delegate
 
     captured: list[str] = []
     tool_state_mod.set_emit(lambda label, error: captured.append(label))
@@ -446,11 +446,11 @@ def test_delegate_prefixes_inner_emit_with_step_counter(
 
     def _fake_execute(name: str, args: dict):
         tool_state_mod.emit_state("writing file…")
-        from alf.tools.base import ToolResult
+        from alpi.tools.base import ToolResult
         return ToolResult(ok=True, output="written")
 
     monkeypatch.setattr(delegate_mod, "execute", _fake_execute, raising=False)
-    import alf.tools as tools_pkg
+    import alpi.tools as tools_pkg
     monkeypatch.setattr(tools_pkg, "execute", _fake_execute, raising=False)
 
     result = Delegate().run(goal="write y to x", toolsets=["file"])
@@ -463,11 +463,11 @@ def test_delegate_prefixes_inner_emit_with_step_counter(
 def test_research_prefixes_inner_emit_with_step_counter(
     tmp_home_no_env: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from alf import llm
-    from alf.llm import Completion
-    from alf.tools import _state as tool_state_mod
-    from alf.tools import research as research_mod
-    from alf.tools.research import Research
+    from alpi import llm
+    from alpi.llm import Completion
+    from alpi.tools import _state as tool_state_mod
+    from alpi.tools import research as research_mod
+    from alpi.tools.research import Research
 
     captured: list[str] = []
     tool_state_mod.set_emit(lambda label, error: captured.append(label))
@@ -487,11 +487,11 @@ def test_research_prefixes_inner_emit_with_step_counter(
 
     def _fake_execute(name: str, args: dict):
         tool_state_mod.emit_state("searching the web…")
-        from alf.tools.base import ToolResult
+        from alpi.tools.base import ToolResult
         return ToolResult(ok=True, output="hit")
 
     monkeypatch.setattr(research_mod, "execute", _fake_execute, raising=False)
-    import alf.tools as tools_pkg
+    import alpi.tools as tools_pkg
     monkeypatch.setattr(tools_pkg, "execute", _fake_execute, raising=False)
 
     result = Research().run(brief="test", depth="quick")

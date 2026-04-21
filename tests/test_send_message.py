@@ -7,8 +7,8 @@ from unittest.mock import patch
 
 import pytest
 
-from alf.gateway import delivery
-from alf.tools.send_message import SendMessage
+from alpi.gateway import delivery
+from alpi.tools.send_message import SendMessage
 
 
 def test_allowed_chat_ids_and_default(monkeypatch) -> None:

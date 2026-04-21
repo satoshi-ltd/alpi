@@ -6,13 +6,13 @@ from pathlib import Path
 
 from click.testing import CliRunner
 
-from alf import cli, home
+from alpi import cli, home
 
 
 def test_profile_list_shows_default_only(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setattr(home, "_ROOT", tmp_path)
-    monkeypatch.setenv("ALF_HOME", str(tmp_path))
-    monkeypatch.delenv("ALF_PROFILE", raising=False)
+    monkeypatch.setenv("ALPI_HOME", str(tmp_path))
+    monkeypatch.delenv("ALPI_PROFILE", raising=False)
 
     result = CliRunner().invoke(cli.main, ["profile", "list"])
     assert result.exit_code == 0
@@ -22,8 +22,8 @@ def test_profile_list_shows_default_only(monkeypatch, tmp_path: Path) -> None:
 
 def test_profile_list_enumerates_existing(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setattr(home, "_ROOT", tmp_path)
-    monkeypatch.setenv("ALF_HOME", str(tmp_path))
-    monkeypatch.delenv("ALF_PROFILE", raising=False)
+    monkeypatch.setenv("ALPI_HOME", str(tmp_path))
+    monkeypatch.delenv("ALPI_PROFILE", raising=False)
     monkeypatch.setattr(
         "pathlib.Path.home", lambda: tmp_path.parent,
     )
@@ -42,10 +42,10 @@ def test_profile_list_enumerates_existing(monkeypatch, tmp_path: Path) -> None:
 
 def test_profile_create_bootstraps_directory(monkeypatch, tmp_path: Path) -> None:
     # Make _ROOT point to tmp_path so profile resolution lands inside it,
-    # and clear ALF_HOME so the override doesn't short-circuit the logic.
+    # and clear ALPI_HOME so the override doesn't short-circuit the logic.
     monkeypatch.setattr(home, "_ROOT", tmp_path)
-    monkeypatch.delenv("ALF_HOME", raising=False)
-    monkeypatch.delenv("ALF_PROFILE", raising=False)
+    monkeypatch.delenv("ALPI_HOME", raising=False)
+    monkeypatch.delenv("ALPI_PROFILE", raising=False)
 
     result = CliRunner().invoke(cli.main, ["profile", "create", "experiment"])
     assert result.exit_code == 0, result.output
@@ -71,8 +71,8 @@ def test_profile_create_rejects_bad_names(monkeypatch, tmp_path: Path) -> None:
 
 def test_profile_create_refuses_if_exists(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setattr(home, "_ROOT", tmp_path)
-    monkeypatch.delenv("ALF_HOME", raising=False)
-    monkeypatch.delenv("ALF_PROFILE", raising=False)
+    monkeypatch.delenv("ALPI_HOME", raising=False)
+    monkeypatch.delenv("ALPI_PROFILE", raising=False)
 
     r1 = CliRunner().invoke(cli.main, ["profile", "create", "dup"])
     assert r1.exit_code == 0, r1.output
@@ -88,8 +88,8 @@ def test_profile_create_refuses_if_exists(monkeypatch, tmp_path: Path) -> None:
 
 def test_profile_remove_refuses_default(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setattr(home, "_ROOT", tmp_path)
-    monkeypatch.delenv("ALF_HOME", raising=False)
-    monkeypatch.delenv("ALF_PROFILE", raising=False)
+    monkeypatch.delenv("ALPI_HOME", raising=False)
+    monkeypatch.delenv("ALPI_PROFILE", raising=False)
     result = CliRunner().invoke(cli.main, ["profile", "remove", "default"])
     assert result.exit_code != 0
     assert "cannot be removed" in result.output
@@ -97,8 +97,8 @@ def test_profile_remove_refuses_default(monkeypatch, tmp_path: Path) -> None:
 
 def test_profile_remove_refuses_missing(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setattr(home, "_ROOT", tmp_path)
-    monkeypatch.delenv("ALF_HOME", raising=False)
-    monkeypatch.delenv("ALF_PROFILE", raising=False)
+    monkeypatch.delenv("ALPI_HOME", raising=False)
+    monkeypatch.delenv("ALPI_PROFILE", raising=False)
     result = CliRunner().invoke(cli.main, ["profile", "remove", "ghost"])
     assert result.exit_code != 0
     assert "does not exist" in result.output
@@ -106,8 +106,8 @@ def test_profile_remove_refuses_missing(monkeypatch, tmp_path: Path) -> None:
 
 def test_profile_remove_refuses_invalid_name(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setattr(home, "_ROOT", tmp_path)
-    monkeypatch.delenv("ALF_HOME", raising=False)
-    monkeypatch.delenv("ALF_PROFILE", raising=False)
+    monkeypatch.delenv("ALPI_HOME", raising=False)
+    monkeypatch.delenv("ALPI_PROFILE", raising=False)
     for bad in ("a/b", ".hidden"):
         result = CliRunner().invoke(cli.main, ["profile", "remove", bad])
         assert result.exit_code != 0
@@ -116,13 +116,13 @@ def test_profile_remove_refuses_invalid_name(monkeypatch, tmp_path: Path) -> Non
 
 def test_profile_remove_refuses_if_service_installed(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setattr(home, "_ROOT", tmp_path)
-    monkeypatch.delenv("ALF_HOME", raising=False)
-    monkeypatch.delenv("ALF_PROFILE", raising=False)
+    monkeypatch.delenv("ALPI_HOME", raising=False)
+    monkeypatch.delenv("ALPI_PROFILE", raising=False)
 
     CliRunner().invoke(cli.main, ["profile", "create", "guarded"])
 
     # Simulate: gateway service is installed for this profile.
-    from alf import service
+    from alpi import service
     monkeypatch.setattr(
         service, "installed",
         lambda name, profile="default": "launchd" if name == "gateway" else None,
@@ -136,14 +136,14 @@ def test_profile_remove_refuses_if_service_installed(monkeypatch, tmp_path: Path
 def test_profile_remove_cancelled_leaves_directory(
         monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setattr(home, "_ROOT", tmp_path)
-    monkeypatch.delenv("ALF_HOME", raising=False)
-    monkeypatch.delenv("ALF_PROFILE", raising=False)
+    monkeypatch.delenv("ALPI_HOME", raising=False)
+    monkeypatch.delenv("ALPI_PROFILE", raising=False)
 
     CliRunner().invoke(cli.main, ["profile", "create", "target"])
     profile_dir = tmp_path / "profiles" / "target"
     assert profile_dir.exists()
 
-    from alf import ui
+    from alpi import ui
     monkeypatch.setattr(ui, "confirm", lambda *a, **kw: False)
 
     result = CliRunner().invoke(cli.main, ["profile", "remove", "target"])
@@ -154,14 +154,14 @@ def test_profile_remove_cancelled_leaves_directory(
 def test_profile_remove_deletes_when_confirmed(
         monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setattr(home, "_ROOT", tmp_path)
-    monkeypatch.delenv("ALF_HOME", raising=False)
-    monkeypatch.delenv("ALF_PROFILE", raising=False)
+    monkeypatch.delenv("ALPI_HOME", raising=False)
+    monkeypatch.delenv("ALPI_PROFILE", raising=False)
 
     CliRunner().invoke(cli.main, ["profile", "create", "trash"])
     profile_dir = tmp_path / "profiles" / "trash"
     assert profile_dir.exists()
 
-    from alf import ui
+    from alpi import ui
     monkeypatch.setattr(ui, "confirm", lambda *a, **kw: True)
 
     result = CliRunner().invoke(cli.main, ["profile", "remove", "trash"])

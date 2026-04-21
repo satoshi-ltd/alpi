@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from alf.tools.skill import (
+from alpi.tools.skill import (
     CATEGORIES,
     MAX_AGENT_SKILLS,
     Skill,
@@ -15,7 +15,7 @@ from alf.tools.skill import (
 
 @pytest.fixture
 def isolated_home(tmp_home_no_env: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    monkeypatch.setenv("ALF_HOME", str(tmp_home_no_env))
+    monkeypatch.setenv("ALPI_HOME", str(tmp_home_no_env))
     return tmp_home_no_env
 
 
@@ -70,7 +70,7 @@ def test_rejects_duplicate_name(isolated_home: Path) -> None:
 
 
 def test_quota_blocks_over_limit(isolated_home: Path, monkeypatch) -> None:
-    from alf.tools import skill as skill_mod
+    from alpi.tools import skill as skill_mod
     monkeypatch.setattr(skill_mod, "MAX_AGENT_SKILLS", 3)
     for i in range(3):
         assert _create(
@@ -267,7 +267,7 @@ def test_delete_nukes_secrets_too(isolated_home: Path) -> None:
 def test_write_file_refuses_inside_skill_dir(isolated_home: Path) -> None:
     _create(name="guarded", category="software",
             description="x", body="y")
-    from alf.tools.write_file import WriteFile
+    from alpi.tools.write_file import WriteFile
     target = isolated_home / "skills" / "software" / "guarded" / "scripts" / "foo.py"
     r = WriteFile().run(path=str(target), content="print('x')")
     assert not r.ok
@@ -280,7 +280,7 @@ def test_edit_file_refuses_inside_skill_dir(isolated_home: Path) -> None:
             description="x", body="y")
     Skill().run(action="add_file", name="guarded2", subdir="scripts",
                 filename="foo.py", content="print('one')")
-    from alf.tools.edit_file import EditFile
+    from alpi.tools.edit_file import EditFile
     target = (isolated_home / "skills" / "software" / "guarded2"
               / "scripts" / "foo.py")
     r = EditFile().run(path=str(target),
@@ -412,12 +412,12 @@ def test_scanner_detects_github_pat(isolated_home: Path) -> None:
 
 
 def test_skills_index_block_empty(tmp_path) -> None:
-    from alf.tools.skill import skills_index_block
+    from alpi.tools.skill import skills_index_block
     assert skills_index_block(tmp_path) == ""
 
 
 def test_skills_index_block_lists_existing(isolated_home: Path) -> None:
-    from alf.tools.skill import skills_index_block
+    from alpi.tools.skill import skills_index_block
     _create(name="alpha", category="creative", description="alpha skill", body="x")
     _create(name="beta", category="creative", description="beta skill", body="y")
     _create(name="gamma", category="software", description="gamma skill", body="z")
@@ -431,7 +431,7 @@ def test_skills_index_block_lists_existing(isolated_home: Path) -> None:
 
 
 def test_skills_index_block_works_under_profile_home(tmp_path) -> None:
-    from alf.tools.skill import skills_index_block, all_skills
+    from alpi.tools.skill import skills_index_block, all_skills
     profile_home = tmp_path / "profiles" / "work"
     skills_dir = profile_home / "skills" / "personal" / "demo"
     skills_dir.mkdir(parents=True)
