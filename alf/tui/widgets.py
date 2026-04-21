@@ -275,6 +275,9 @@ class AlfHeader(Static):
     def on_mount(self) -> None:
         self._refresh()
 
+    def on_resize(self, event) -> None:  # noqa: ARG002
+        self._refresh()
+
     def update_usage(self, model: str, tokens: int, cost: float,
                      ctx_window: int = 200_000) -> None:
         self._model = model
@@ -284,27 +287,36 @@ class AlfHeader(Static):
         self._refresh()
 
     def _refresh(self) -> None:
-        from alf.tui.formatting import fmt_count, bar_10
+        from alf.tui.formatting import fmt_count, bar
         tv = self.app.theme_variables
         accent = tv.get("accent", "cyan")
         warning = tv.get("warning", "yellow")
         error = tv.get("error", "red")
         muted = tv.get("text-muted", "")
         pct = int(self._tokens / self._ctx_window * 100) if self._ctx_window else 0
-        model_short = self._model.split("/")[-1] if self._model else "—"
-        bar = bar_10(self._tokens, self._ctx_window)
+        width = self.size.width or 80
+        wide = width >= 100
+        narrow = width < 60
+        if wide:
+            model_label = self._model if self._model else "—"
+        else:
+            model_label = self._model.split("/")[-1] if self._model else "—"
+        bar_cells = 5 if narrow else 10
+        bar_str = bar(self._tokens, self._ctx_window, bar_cells)
         if pct >= 80:
             bar_color = error
         elif pct >= 60:
             bar_color = warning
         else:
             bar_color = accent
+        sep = f"  [{muted}]│[/{muted}]  "
+        ctx_label = f"[{muted}]ctx[/{muted}] " if not narrow else ""
         markup = (
-            f"[{accent}]◆[/{accent}] [b {accent}]{model_short}[/b {accent}]  "
-            f"[{muted}]│[/{muted}]  "
-            f"[{muted}]ctx[/{muted}] {fmt_count(self._tokens)}/{fmt_count(self._ctx_window)}  "
-            f"[{bar_color}]{bar}[/{bar_color}] [{muted}]{pct}%[/{muted}]  "
-            f"[{muted}]│[/{muted}]  "
+            f"[{accent}]◆[/{accent}] [b {accent}]{model_label}[/b {accent}]"
+            f"{sep}"
+            f"{ctx_label}{fmt_count(self._tokens)}/{fmt_count(self._ctx_window)}  "
+            f"[{bar_color}]{bar_str}[/{bar_color}] [{muted}]{pct}%[/{muted}]"
+            f"{sep}"
             f"[{muted}]{_fmt_cost(self._cost)}[/{muted}]"
         )
         self.update(Text.from_markup(markup))
