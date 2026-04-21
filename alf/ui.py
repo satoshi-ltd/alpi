@@ -141,6 +141,17 @@ def row(label: str, status: str = ""):
     ]
 
 
+def row_accent(label: str, status: str, accent: str):
+    """Row with label styled in accent — used for the active entry."""
+    if not accent or not accent.strip():
+        return row(label, status)
+    left = f"{label:<{LABEL_WIDTH}}"
+    parts = [(f"fg:{accent.strip()} bold", left)]
+    if status:
+        parts.append((_MUTED_STYLE, f" · {status}"))
+    return parts
+
+
 
 def menu(
     title: str,

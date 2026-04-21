@@ -133,8 +133,34 @@ class AlfApp(App):
         cwd = self._effective_workspace()
         short = str(cwd).replace(str(Path.home()), "~")
         self._mount_message(ErrorLine(
-            f"⚠ no workspace set — alf can touch everything under {short}. "
+            f"no workspace set — alf can touch everything under {short}. "
             f"Run /workspace <path> to narrow the scope."
+        ))
+
+    def _maybe_warn_model(self) -> None:
+        model = (self.cfg.model or "").strip()
+        if not model:
+            self._mount_message(ErrorLine(
+                "no model configured. Run `alf setup` to add a provider "
+                "and pick a model, or /model to switch among configured ones."
+            ))
+            return
+        head = model.split("/", 1)[0]
+        from alf import providers as prov_mod
+        for p in prov_mod.builtin():
+            if p.name == head:
+                if p.api_key_env and not p.has_key():
+                    self._mount_message(ErrorLine(
+                        f"model `{model}` needs {p.api_key_env} — "
+                        f"not set. Run `alf setup` to add the key."
+                    ))
+                return
+        customs = self.cfg.providers.get("custom", []) or []
+        if any((c.get("name") or "") == head for c in customs):
+            return
+        self._mount_message(ErrorLine(
+            f"model `{model}` points at unknown provider `{head}`. "
+            f"Run `alf setup`."
         ))
 
     def _install_theme(self) -> None:
@@ -165,6 +191,7 @@ class AlfApp(App):
         self.query_one(Input).focus()
         self._update_header()
         self._maybe_warn_workspace()
+        self._maybe_warn_model()
 
         self.query_one("#chat", VerticalScroll).anchor()
 
@@ -322,6 +349,10 @@ class AlfApp(App):
         chat.mount(DimLine("(chat cleared)"))
 
     def _cmd_new(self) -> None:
+        # Reload cfg from disk so any session-only `/model` switch is
+        # forgotten — /new returns to the saved default.
+        self.cfg = config.load(self.home)
+        self.engine.cfg = self.cfg
         self.engine.reset_session()
         chat = self.query_one("#chat", VerticalScroll)
         chat.remove_children()
@@ -477,9 +508,9 @@ class AlfApp(App):
         )
 
     def _cmd_model(self) -> None:
-        from alf.tui.model_screen import ProviderScreen
+        from alf.tui.model_panel import ProviderPanel
         self.cfg = config.load(self.home)
-        self.push_screen(ProviderScreen(self.cfg, self.home))
+        self._show_panel(ProviderPanel(self.cfg, self.home))
 
     def _update_header(self) -> None:
         hdr = self.query_one(AlfHeader)
