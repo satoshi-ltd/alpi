@@ -140,6 +140,18 @@ def arg_hint(tool_name: str, args: dict) -> str:
         return " · ".join(parts)
     if tool_name == "research":
         return truncate(str(args.get("brief", "")), 60)
+    if tool_name == "browser":
+        action = str(args.get("action", ""))
+        if action == "navigate":
+            return f"navigate · {shorten_url(str(args.get('url', '')))}"
+        if action in ("click", "type"):
+            label = args.get("name") or args.get("text") or args.get("role") or ""
+            return f"{action} · {truncate(str(label), 40)}"
+        if action == "scroll":
+            return f"scroll · {args.get('direction', 'down')}"
+        if action == "press":
+            return f"press · {args.get('key', '')}"
+        return action
     k, v = next(iter(args.items()))
     return truncate(f"{k}={v}", 40)
 

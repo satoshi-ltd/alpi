@@ -7,7 +7,7 @@ research sub-agent.
 **Positioned as a lighter, improved version of Nous Research's
 [Hermes](https://github.com/NousResearch/hermes-agent).** Hermes is
 the canonical reference codebase — kept locally at
-**`~/git/hermes-agent/`** so alf development can read it directly when
+**`~/git/hermes-agent/`** so alpi development can read it directly when
 designing a feature. Workflow: read Hermes, evaluate critically, port
 a leaner version. Kept: the ideas that earn their keep (tool-calling
 loop, curated memory, separate gateway process, multi-provider LLM via
@@ -28,31 +28,34 @@ what's planned.
 uv tool install /path/to/alf
 # After any code change
 uv tool install /path/to/alf --reinstall --no-cache
+
+# One-time — Chromium for the `browser` tool (~200MB)
+playwright install chromium
 ```
 
 ## Run
 
 ```bash
-alf                         # interactive TUI in the current directory
-alf --continue              # resume the last session
-alf -p <name>               # use a named profile (multi-profile)
-alf chat --once "text"      # one-shot turn to stdout (pipe-friendly)
+alpi                         # interactive TUI in the current directory
+alpi --continue              # resume the last session
+alpi -p <name>               # use a named profile (multi-profile)
+alpi chat --once "text"      # one-shot turn to stdout (pipe-friendly)
 
-alf profile list            # show profiles, mark the active one
-alf profile create <name>   # bootstrap a new profile tree
-alf profile remove <name>   # delete after safety checks + confirm
+alpi profile list            # show profiles, mark the active one
+alpi profile create <name>   # bootstrap a new profile tree
+alpi profile remove <name>   # delete after safety checks + confirm
 
-alf setup                   # interactive menu: model, gateways, MCPs
+alpi setup                   # interactive menu: model, gateways, MCPs
 
-alf gateway start           # run the Telegram/email gateway process
-alf schedule start          # run the schedule daemon
-alf mcp list                # list configured MCP servers (read-only)
+alpi gateway start           # run the Telegram/email gateway process
+alpi schedule start          # run the schedule daemon
+alpi mcp list                # list configured MCP servers (read-only)
 
 # Persist across reboots (launchd on macOS, systemd --user on Linux):
-alf gateway install         # one-time, auto-starts at login
-alf schedule install
-alf gateway uninstall
-alf schedule uninstall
+alpi gateway install         # one-time, auto-starts at login
+alpi schedule install
+alpi gateway uninstall
+alpi schedule uninstall
 ```
 
 `gateway` and `schedule` are independent processes with the same
@@ -71,8 +74,8 @@ Full security model in [docs/SECURITY.md](docs/SECURITY.md).
 **Memory** — three files under `~/.alpi/memory/`:
 
 - `USER.md` — who the user is.
-- `MEMORY.md` — alf's own notes (env quirks, commands, incidents).
-- `PERSONALITY.md` — how alf should respond.
+- `MEMORY.md` — alpi's own notes (env quirks, commands, incidents).
+- `PERSONALITY.md` — how alpi should respond.
 
 Updated inline during conversations via the `memory` tool. No
 post-session reflect. Snapshot frozen per session for prefix cache.
@@ -122,8 +125,8 @@ Switch model any time with `/model` inside the TUI. Tier guidance in
 
 ## Gateway
 
-Relays Telegram and email messages to alf. Tool activity streams to the
-chat (`◆ memory · ...`) and a typing indicator stays on while alf works.
+Relays Telegram and email messages to alpi. Tool activity streams to the
+chat (`◆ memory · ...`) and a typing indicator stays on while alpi works.
 Both toggleable in `config.yaml` per platform:
 
 ```yaml

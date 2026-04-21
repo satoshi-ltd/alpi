@@ -18,6 +18,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "max_steps_per_turn": 40,
         "web_extract": {"model": ""},
         "read_image": {"model": ""},
+        "browser": {"vision": False},
         "terminal": {
             "sandbox": False,
             "allow_network": False,
@@ -78,11 +79,17 @@ class TerminalToolConfig:
 
 
 @dataclass
+class BrowserToolConfig:
+    vision: bool = False
+
+
+@dataclass
 class ToolsConfig:
     max_steps_per_turn: int = 40   # ceiling on tool-calls per user turn
     web_extract: WebExtractToolConfig = field(default_factory=WebExtractToolConfig)
     read_image: ReadImageToolConfig = field(default_factory=ReadImageToolConfig)
     terminal: TerminalToolConfig = field(default_factory=TerminalToolConfig)
+    browser: BrowserToolConfig = field(default_factory=BrowserToolConfig)
 
 
 @dataclass
@@ -146,6 +153,7 @@ def load(home: Path) -> Config:
     web_extract_raw = tools_raw.get("web_extract") or {}
     read_image_raw = tools_raw.get("read_image") or {}
     terminal_raw = tools_raw.get("terminal") or {}
+    browser_raw = tools_raw.get("browser") or {}
     tools_cfg = ToolsConfig(
         max_steps_per_turn=int(tools_raw.get(
             "max_steps_per_turn", DEFAULT_CONFIG["tools"]["max_steps_per_turn"]
@@ -159,6 +167,9 @@ def load(home: Path) -> Config:
         terminal=TerminalToolConfig(
             sandbox=bool(terminal_raw.get("sandbox", False)),
             allow_network=bool(terminal_raw.get("allow_network", False)),
+        ),
+        browser=BrowserToolConfig(
+            vision=bool(browser_raw.get("vision", False)),
         ),
     )
 
@@ -219,6 +230,8 @@ def _tools_delta(cfg: Config) -> dict:
         term_out["allow_network"] = cfg.tools.terminal.allow_network
     if term_out:
         out["terminal"] = term_out
+    if cfg.tools.browser.vision != d["browser"]["vision"]:
+        out["browser"] = {"vision": cfg.tools.browser.vision}
     return out
 
 
