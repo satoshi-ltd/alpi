@@ -222,12 +222,13 @@ class ToolCard(Widget):
 
 class AlfTopBar(Static):
     def __init__(self, version: str, profile: str, path: str,
-                 workspace_set: bool) -> None:
+                 workspace_set: bool, sandbox: bool = False) -> None:
         super().__init__("")
         self._version = version
         self._profile = profile
         self._path = path
         self._workspace_set = workspace_set
+        self._sandbox = sandbox
 
     def on_mount(self) -> None:
         self._refresh()
@@ -235,10 +236,12 @@ class AlfTopBar(Static):
     def on_resize(self, event) -> None:  # noqa: ARG002
         self._refresh()
 
-    def set_state(self, *, profile: str, path: str, workspace_set: bool) -> None:
+    def set_state(self, *, profile: str, path: str, workspace_set: bool,
+                  sandbox: bool = False) -> None:
         self._profile = profile
         self._path = path
         self._workspace_set = workspace_set
+        self._sandbox = sandbox
         self._refresh()
 
     def _refresh(self) -> None:
@@ -247,6 +250,7 @@ class AlfTopBar(Static):
         accent = tv.get("accent", "")
         muted = tv.get("text-muted", "")
         error = tv.get("error", "red")
+        success = tv.get("success", "green")
         width = self.size.width or 80
         narrow = width < 60
         if self._workspace_set:
@@ -266,6 +270,10 @@ class AlfTopBar(Static):
             f"[b]alf[/b] [{muted}]{escape(self._version)}[/{muted}]"
             f"{sep}"
             f"{profile_label}{profile_txt}"
+        )
+        if self._sandbox:
+            markup += f"{sep}[{success}]sandbox[/{success}]"
+        markup += (
             f"{sep}"
             f"{workspace_label}{workspace_txt}"
         )

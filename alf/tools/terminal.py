@@ -43,12 +43,9 @@ def _sandbox_config() -> tuple[bool, bool]:
     try:
         from alf import config as cfg_mod
         cfg = cfg_mod.load(get_home())
-        term = (cfg.raw.get("tools") or {}).get("terminal") or {}
+        return cfg.tools.terminal.sandbox, cfg.tools.terminal.allow_network
     except Exception:
-        term = {}
-    sandbox = bool(term.get("sandbox", False))
-    allow_network = bool(term.get("allow_network", False))
-    return sandbox, allow_network
+        return False, False
 
 
 def _resolve_popen_args(command: str) -> list[str] | str:

@@ -113,24 +113,6 @@ Stealth Firefox fork for Cloudflare-protected sites. Hold until B (Playwright) i
 
 ## Next — v0.3 planned
 
-### P. Graduate the OS sandbox out of experimental
-
-`tools.terminal.sandbox` ships in v0.1 as opt-in + experimental. Default-on was rejected because the `sandbox-exec` profile (macOS) and `bubblewrap` invocation (Linux) haven't been validated against the long tail of real commands: `git push` with SSH keys outside the workspace, `docker` touching `/var/run/docker.sock`, Homebrew Intel vs Apple Silicon, `npm install` cache in `~/.npm`, `code --install-extension` writing `~/.vscode/`, etc.
-
-**For v0.3, revisit with data.** Goal: move default to `true` without a regression wave.
-
-Scope:
-
-- Collect a "golden set" of 30-50 real commands the agent runs in a normal week. Exercise each under sandbox. Anything that breaks gets a profile fix or an explicit carve-out in docs.
-- Extend macOS profile to cover Homebrew Apple Silicon (`/opt/homebrew`) and Intel (`/usr/local`); allow reads on `~/.gitconfig` and `~/.git-credentials` without opening the rest of `$HOME`.
-- Extend Linux `bwrap` similarly — bind-mount `~/.gitconfig` + `~/.npm` + `~/.cache` as RO so package managers work.
-- Smoke-test on Ubuntu LTS and Fedora stable (not just the Docker test image).
-- First-run check: with sandbox on, run `echo ok` through the sandboxed path. If it fails, warn loudly with a pointer to SECURITY.md and fall back to disabled.
-
-Once the golden set passes cleanly, flip `DEFAULT_CONFIG` to `sandbox: true`, drop "experimental" wording in SECURITY.md / CONFIG.md, mention in v0.3 CHANGELOG as "tightened by default".
-
-Don't graduate it silently — the security posture change deserves visibility.
-
 ### Q. Skill self-review / validation
 
 Tier B models happily publish skills with real bugs: threading races (opening browser before the local callback server is listening), undeclared third-party imports (`import requests` when only stdlib is acceptable), incorrect setup instructions that contradict the docs the agent just fetched (e.g. "Authorization Callback Domain: localhost:8765" when the provider rejects port numbers in that field).
@@ -202,3 +184,4 @@ First usable cut. Textual TUI, 3-file memory with two-tier dedup, skill system w
 | (next)  | `AlfHeader` responsive — 3 width tiers: wide (≥100) shows full `provider/model` path, medium keeps the short name, narrow (<60) drops the `ctx` label and halves the bar to 5 cells; `│` separators preserved across all tiers (v0.2.8) |
 | (next)  | `AlfTopBar` responsive — narrow (<60) drops `profile` / `workspace` labels, keeps values + `│` separators; matches `AlfHeader` policy (v0.2.9) |
 | (next)  | Drop `questionary`; `menu()` reimplemented directly on `prompt_toolkit` (O). Removes 5 workarounds in `ui.py` (empty qmark, FormattedText close hack, ANSI wipe, close sentinel, style overrides). Dependency gone from `pyproject.toml` (v0.2.10) |
+| (next)  | Sandbox polish (P closed): `alf setup → Sandbox` to toggle per profile, TUI top bar shows `sandbox on/off` next to workspace, `TerminalToolConfig` dataclass for clean `save()` delta, SECURITY.md + CONFIG.md drop "experimental" wording and reposition as "recommended for unattended profiles" (v0.2.11). Default stays `false` — dev workflows vary too much to pick a universal profile; the kill scenario is unattended runs, not interactive chat. |

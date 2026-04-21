@@ -113,6 +113,7 @@ class AlfApp(App):
             profile=self._profile_name(),
             path=str(self._effective_workspace()),
             workspace_set=self.cfg.workspace_path is not None,
+            sandbox=self.cfg.tools.terminal.sandbox,
         )
         with VerticalScroll(id="chat"):
             pass
@@ -507,6 +508,7 @@ class AlfApp(App):
             profile=self._profile_name(),
             path=str(self._effective_workspace()),
             workspace_set=self.cfg.workspace_path is not None,
+            sandbox=self.cfg.tools.terminal.sandbox,
         )
 
     def _cmd_model(self) -> None:
