@@ -1,35 +1,39 @@
-"""Tool-state emitter."""
+"""Tool-state emitter — ContextVar-backed so parallel sub-agents don't race."""
 
 from __future__ import annotations
 
+from contextvars import ContextVar
 from typing import Callable, Optional
 
-# Callback signature: (label: str, is_error: bool) -> None
-_emit: Optional[Callable[[str, bool], None]] = None
-# Predicate returning True if the surrounding turn has been interrupted.
-# Long-running tools (e.g. delegate) poll this to exit early.
-_interrupt_getter: Optional[Callable[[], bool]] = None
-# Usage reporter: (input_tokens, output_tokens, cost_usd) -> None.
-# Tools that spin up their own LLM calls (delegate) use this so the
-# enclosing session's total cost reflects the sub-agent's burn.
-_usage_sink: Optional[Callable[[int, int, float], None]] = None
+EmitFn = Callable[[str, bool], None]
+InterruptFn = Callable[[], bool]
+UsageFn = Callable[[int, int, float], None]
+
+_emit: ContextVar[Optional[EmitFn]] = ContextVar("alpi_emit", default=None)
+_interrupt_getter: ContextVar[Optional[InterruptFn]] = ContextVar(
+    "alpi_interrupt", default=None,
+)
+_usage_sink: ContextVar[Optional[UsageFn]] = ContextVar("alpi_usage", default=None)
 
 
-def set_emit(callback: Optional[Callable[[str, bool], None]]) -> None:
-    """Register (or clear) the state emitter for the current tool call."""
-    global _emit
-    _emit = callback
+def get_emit() -> Optional[EmitFn]:
+    return _emit.get()
 
 
-def set_interrupt_getter(getter: Optional[Callable[[], bool]]) -> None:
-    """Register a predicate the tool can poll to detect user interrupts."""
-    global _interrupt_getter
-    _interrupt_getter = getter
+def set_emit(callback: Optional[EmitFn]) -> None:
+    _emit.set(callback)
+
+
+def get_interrupt_getter() -> Optional[InterruptFn]:
+    return _interrupt_getter.get()
+
+
+def set_interrupt_getter(getter: Optional[InterruptFn]) -> None:
+    _interrupt_getter.set(getter)
 
 
 def is_interrupted() -> bool:
-    """True if the user asked to cancel the current turn."""
-    g = _interrupt_getter
+    g = _interrupt_getter.get()
     if g is None:
         return False
     try:
@@ -38,15 +42,16 @@ def is_interrupted() -> bool:
         return False
 
 
-def set_usage_sink(sink: Optional[Callable[[int, int, float], None]]) -> None:
-    """Register (or clear) a sink that receives sub-LLM usage from tools."""
-    global _usage_sink
-    _usage_sink = sink
+def get_usage_sink() -> Optional[UsageFn]:
+    return _usage_sink.get()
+
+
+def set_usage_sink(sink: Optional[UsageFn]) -> None:
+    _usage_sink.set(sink)
 
 
 def record_usage(input_tokens: int, output_tokens: int, cost_usd: float) -> None:
-    """Report LLM usage from inside a tool so the session cost reflects it."""
-    sink = _usage_sink
+    sink = _usage_sink.get()
     if sink is not None:
         try:
             sink(int(input_tokens), int(output_tokens), float(cost_usd))
@@ -55,8 +60,7 @@ def record_usage(input_tokens: int, output_tokens: int, cost_usd: float) -> None
 
 
 def emit_state(label: str, *, error: bool = False) -> None:
-    """Push a short progress label from a running tool to the UI."""
-    cb = _emit
+    cb = _emit.get()
     if cb is not None:
         try:
             cb(label, error)

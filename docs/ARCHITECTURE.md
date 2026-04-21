@@ -96,7 +96,7 @@ alf/
 │   └── {anthropic,openai,google,groq,openrouter,custom}.py
 ├── tools/
 │   ├── base.py             Tool ABC + ToolResult
-│   ├── _state.py           emit_state, set_emit, set_interrupt_getter
+│   ├── _state.py           ContextVar-backed emit / interrupt / usage (per-thread isolated for batch sub-agents)
 │   ├── _paths.py           resolve_path + sensitive-path denylist
 │   ├── _guards.py          terminal denylist, SSRF, prompt-injection scan
 │   ├── _sandbox.py         OS-level sandbox wrapper (opt-in)
@@ -192,6 +192,8 @@ Spawns a sub-agent with a read-only toolset (`web_search`, `web_fetch`, `web_ext
 
 **Interrupt**: polls `tool_state.is_interrupted()` between iterations and between tools; returns `[research: interrupted]` on the first hit. **State label** during execution: `<depth> · step N/M`; while an inner tool runs its own `emit_state` label gets auto-prefixed with `step N/M · …` via a wrapped `_emit` installed for the duration of each tool-call batch (restored in a `finally`).
 
+**Batch mode** (v0.2.18): `tasks: [{brief, depth}]` up to 3 runs concurrently — see the Delegate section below for the shared ThreadPoolExecutor design (same pattern applies here).
+
 ### Vision (`alf/tools/read_image.py`)
 
 `read_image(path, question)` runs the current (or override) model in multimodal mode on an image and returns a text answer. `path` can be a local file OR an `http(s)` URL — URLs go through `check_url()` for SSRF (metadata hosts + private IPs blocked, redirects re-validated via httpx `event_hooks`).
@@ -219,7 +221,7 @@ Sibling to `research`, but can mutate: spawn a focused sub-agent with a chosen t
 
 **System prompt** is built from a single template plus the workspace root (when set): relative paths resolve under workspace, absolute paths go where the goal says, and the sub-agent is explicitly warned not to invent `/workspace/...` style roots.
 
-**Batch parallel mode is deliberately not shipped** (ROADMAP §R.3). Running sub-agents concurrently races on the module-level globals in `tool_state.py`; shipping `tasks: [{...}]` requires first porting `_emit`, `_interrupt_getter`, `_usage_sink` to `contextvars.ContextVar` so each thread gets its own view. The loop itself needs no structural change once that's done.
+**Batch parallel mode** (v0.2.18). Both `research` and `delegate` accept `tasks: [...]` (up to 3) and run them concurrently via `ThreadPoolExecutor(max_workers=3)`. Isolation is provided by `_state.py`: `_emit`, `_interrupt_getter`, `_usage_sink` are `contextvars.ContextVar`, so each worker thread sees its own values without racing on module globals. Workers re-seed `interrupt_getter` + `usage_sink` from the parent context (Python's `ThreadPoolExecutor` doesn't propagate ContextVars automatically) and install a per-task prefixed `emit` so TUI progress lines read `[i/N] <tag> · <msg>`. Results aggregate into one markdown report with per-task sections; per-task failures are captured inline as `[failed: <error>]` instead of aborting the batch. Cap is hardcoded at 3 — bumping would need a config knob *and* would multiply LLM cost linearly; not a default worth moving.
 
 ### TUI (`alf/tui/`)
 
