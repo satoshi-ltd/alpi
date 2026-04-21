@@ -17,6 +17,7 @@ from alf.tui.screens import (
     CostPanel,
     FloatingPanel,
     HelpPanel,
+    McpPanel,
     MemoryPanel,
     SkillsPanel,
     ToolsPanel,
@@ -103,7 +104,7 @@ class AlfApp(App):
         from textual.suggester import SuggestFromList
         from alf import __version__ as alf_version
         slash_commands = [
-            "/help", "/memory", "/tools", "/cost", "/clear", "/new",
+            "/help", "/memory", "/tools", "/mcps", "/cost", "/clear", "/new",
             "/compact", "/skills", "/model", "/workspace",
             "/exit", "/quit",
         ]
@@ -324,6 +325,7 @@ class AlfApp(App):
             "help": lambda _a: self._show_panel(HelpPanel()),
             "memory": lambda _a: self._show_panel(MemoryPanel(self.home)),
             "tools": lambda _a: self._show_panel(ToolsPanel()),
+            "mcps": lambda _a: self._show_panel(McpPanel(self.engine._mcp_clients)),
             "cost": lambda _a: self._show_panel(CostPanel(self.engine.session)),
             "clear": lambda _a: self._cmd_clear(),
             "new": lambda _a: self._cmd_new(),

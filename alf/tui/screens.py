@@ -112,6 +112,7 @@ class HelpPanel(FloatingPanel):
             "- `/help` — this panel\n"
             "- `/memory` — show USER.md, MEMORY.md and personality.md\n"
             "- `/tools` — list available tools\n"
+            "- `/mcps` — list running MCP servers\n"
             "- `/cost` — session cost breakdown\n"
             "- `/skills` — list installed skills\n"
             "- `/clear` — clear chat history (keeps session)\n"
@@ -172,6 +173,34 @@ class ToolsPanel(FloatingPanel):
             for cls in tools.all_tools():
                 yield Static(cls.name, classes="entry-name")
                 yield Static(_short(cls.description), classes="entry-desc")
+
+
+class McpPanel(FloatingPanel):
+    panel_title = "/mcps"
+
+    def __init__(self, clients: list) -> None:
+        super().__init__()
+        self.clients = clients
+
+    def compose_body(self) -> ComposeResult:
+        if not self.clients:
+            yield Static(
+                "No MCP servers running. Run `alf setup` from the shell "
+                "and pick 'MCP servers' to add one.",
+                classes="entry-desc",
+            )
+            return
+        with VerticalScroll():
+            for client in self.clients:
+                tools = client.list_tools()
+                status = "running" if client.is_running() else "stopped"
+                summary = f"{status} · {len(tools)} tool{'' if len(tools) == 1 else 's'}"
+                if tools:
+                    summary += " — " + ", ".join(t.name for t in tools[:6])
+                    if len(tools) > 6:
+                        summary += f", +{len(tools) - 6} more"
+                yield Static(client.name, classes="entry-name")
+                yield Static(summary, classes="entry-desc")
 
 
 def _short(desc: str, max_chars: int = 130) -> str:
