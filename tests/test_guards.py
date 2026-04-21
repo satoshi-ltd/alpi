@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 import pytest
 
-from alf.tools._guards import check_command, check_url, scan_injection
+from alpi.tools._guards import check_command, check_url, scan_injection
 
 
 @pytest.mark.parametrize("cmd", [
@@ -47,7 +47,7 @@ def test_check_command_rejects_dangerous(cmd: str) -> None:
     "rm -rf dist/",
     "rm temp.txt",
     "chmod 644 script.sh",
-    "python -m alf",
+    "python -m alpi",
     "cat README.md",
     "echo hello",
     "grep foo src/",
@@ -70,7 +70,7 @@ def test_check_command_allows_safe(cmd: str) -> None:
     "http://localhost/secrets",
 ])
 def test_check_url_blocks_private_and_metadata(url: str) -> None:
-    with patch("alf.tools._guards.socket.gethostbyname") as gethost:
+    with patch("alpi.tools._guards.socket.gethostbyname") as gethost:
         gethost.side_effect = lambda h: {
             "localhost": "127.0.0.1",
             "metadata.google.internal": "169.254.169.254",
@@ -81,7 +81,7 @@ def test_check_url_blocks_private_and_metadata(url: str) -> None:
 
 
 def test_check_url_allows_public_domain() -> None:
-    with patch("alf.tools._guards.socket.gethostbyname",
+    with patch("alpi.tools._guards.socket.gethostbyname",
                return_value="93.184.216.34"):
         safe, reason = check_url("https://example.com/path")
     assert safe
@@ -89,7 +89,7 @@ def test_check_url_allows_public_domain() -> None:
 
 
 def test_check_url_resolves_hostname_to_private_ip_and_blocks() -> None:
-    with patch("alf.tools._guards.socket.gethostbyname",
+    with patch("alpi.tools._guards.socket.gethostbyname",
                return_value="10.0.0.42"):
         safe, reason = check_url("https://sneaky.attacker.com/")
     assert not safe
@@ -146,7 +146,7 @@ def test_scan_injection_warning_preamble_is_self_contained() -> None:
 
 
 def test_terminal_tool_refuses_dangerous_command(tmp_path) -> None:
-    from alf.tools.terminal import Terminal
+    from alpi.tools.terminal import Terminal
     r = Terminal().run(action="run", command="rm -rf ~")
     assert not r.ok
     assert "refused" in r.error
@@ -154,8 +154,8 @@ def test_terminal_tool_refuses_dangerous_command(tmp_path) -> None:
 
 
 def test_terminal_tool_runs_safe_command(tmp_path, monkeypatch) -> None:
-    monkeypatch.setenv("ALF_HOME", str(tmp_path))
-    from alf.tools.terminal import Terminal
+    monkeypatch.setenv("ALPI_HOME", str(tmp_path))
+    from alpi.tools.terminal import Terminal
     r = Terminal().run(action="run", command="echo hello",
                        cwd=str(tmp_path), timeout=5)
     assert r.ok

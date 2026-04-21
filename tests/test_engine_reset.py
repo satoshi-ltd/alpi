@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from alf import config, home, memory
-from alf.engine import Engine
+from alpi import config, home, memory
+from alpi.engine import Engine
 
 
 @pytest.fixture

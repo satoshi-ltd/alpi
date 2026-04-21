@@ -1,7 +1,7 @@
 # Configuration reference
 
-alf's settings live in `~/.alf/config.yaml` (or
-`~/.alf/profiles/<name>/config.yaml` for non-default profiles). This
+alf's settings live in `~/.alpi/config.yaml` (or
+`~/.alpi/profiles/<name>/config.yaml` for non-default profiles). This
 page lists every knob, its default, and what it controls.
 
 ## What ships in the YAML
@@ -37,10 +37,10 @@ Three options, any of them works:
 
 - **Chat**: ask alf. "change max_steps_per_turn to 60", "set the
   accent to Facebook blue". The `config` tool handles it.
-- **CLI wizards**: `alf setup` covers model selection, gateway
+- **CLI wizards**: `alpi setup` covers model selection, gateway
   credentials, and MCP servers. The scalar knobs below go through
   the `config` tool instead.
-- **Edit the YAML**: open `~/.alf/config.yaml` and change values
+- **Edit the YAML**: open `~/.alpi/config.yaml` and change values
   manually. Restart whatever surface was affected.
 
 ## Reference
@@ -52,7 +52,7 @@ Three options, any of them works:
 | `model` | `openrouter/xiaomi/mimo-v2-flash` | string | next session |
 | `workspace` | `""` (cwd at launch) | string | next session |
 | `fallback_models` | `[]` | list of strings | next turn |
-| `providers.custom` | `[]` | list of objects — `alf setup` only | next session |
+| `providers.custom` | `[]` | list of objects — `alpi setup` only | next session |
 
 ### Tools
 
@@ -138,5 +138,5 @@ reasoning, so this flag has no effect there.
 
 - **next turn** — change is live on the agent's next response.
 - **next session** — restart `alf` to pick it up.
-- **next gateway restart** — `alf gateway stop && alf gateway start`
+- **next gateway restart** — `alpi gateway stop && alf gateway start`
   (or reload the service if installed as a daemon).

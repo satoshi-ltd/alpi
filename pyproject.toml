@@ -1,6 +1,6 @@
 [project]
-name = "alf"
-version = "0.2.11"
+name = "alpi"
+version = "0.2.12"
 description = "A slim, self-improving AI agent"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -25,17 +25,17 @@ gateway = ["python-telegram-bot>=21.0", "fastapi>=0.110.0", "uvicorn>=0.27.0"]
 dev = ["pytest>=8.0", "pytest-asyncio>=0.23", "ruff>=0.3.0"]
 
 [project.scripts]
-alf = "alf.__main__:main"
+alpi = "alpi.__main__:main"
 
 [build-system]
 requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
-include = ["alf*"]
+include = ["alpi*"]
 
 [tool.setuptools.package-data]
-alf = ["prompts/*.md", "skills/**/*.md", "tui/*.tcss"]
+alpi = ["prompts/*.md", "skills/**/*.md", "tui/*.tcss"]
 
 [tool.ruff]
 line-length = 100
@@ -46,5 +46,5 @@ testpaths = ["tests"]
 addopts = "-ra --strict-markers"
 asyncio_mode = "strict"
 markers = [
-    "llm: test makes real LLM calls; requires --llm or ALF_LLM=1",
+    "llm: test makes real LLM calls; requires --llm or ALPI_LLM=1",
 ]

@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from alf import memory
+from alpi import memory
 
 
 @pytest.fixture

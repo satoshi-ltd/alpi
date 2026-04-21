@@ -21,9 +21,9 @@ from typing import Any
 
 import pytest
 
-from alf.gateway import delivery
-from alf.gateway.base import IncomingMessage, OutgoingMessage
-from alf.gateway.platforms import email as email_platform
+from alpi.gateway import delivery
+from alpi.gateway.base import IncomingMessage, OutgoingMessage
+from alpi.gateway.platforms import email as email_platform
 
 
 # --------------------------------------------------------------------
@@ -90,7 +90,7 @@ def patch_imap(monkeypatch):
         holder["imap"] = _FakeIMAP()
         return holder["imap"]
 
-    import alf.email.client as client_mod
+    import alpi.email.client as client_mod
     monkeypatch.setattr(client_mod.imaplib, "IMAP4_SSL", factory)
     return holder
 
@@ -116,7 +116,7 @@ def test_discover_baseline_returns_latest_uid(env, patch_imap, tmp_path: Path) -
         imap.uids_in_box = {"7": b"", "8": b"", "9": b""}
         imap_holder["imap"] = imap
         return imap
-    import alf.email.client as client_mod
+    import alpi.email.client as client_mod
     client_mod.imaplib.IMAP4_SSL = factory_with_state  # type: ignore[assignment]
 
     platform = email_platform.Email(tmp_path)
@@ -134,7 +134,7 @@ def test_poll_once_returns_only_messages_after_last_uid(env, tmp_path: Path, mon
         imap.search_responses[("UID", "6:*")] = ["6"]
         return imap
 
-    import alf.email.client as client_mod
+    import alpi.email.client as client_mod
     monkeypatch.setattr(client_mod.imaplib, "IMAP4_SSL", factory)
 
     platform = email_platform.Email(tmp_path)
@@ -239,7 +239,7 @@ def test_delivery_send_to_email_dispatches(monkeypatch, tmp_path: Path) -> None:
             sends.append({"to": to, "subject": subject, "body": body})
 
     # Patch the lazy import inside _send_email_sync.
-    import alf.email.client as client_mod
+    import alpi.email.client as client_mod
     monkeypatch.setattr(client_mod, "EmailClient", _FakeClient)
 
     delivery.send_to("email", "pepe@x.com", "hello")

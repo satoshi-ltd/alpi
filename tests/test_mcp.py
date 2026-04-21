@@ -23,9 +23,9 @@ from typing import Any
 
 import pytest
 
-from alf.mcp import client as mcp_client
-from alf.mcp import registry as mcp_registry
-from alf.tools import _TOOLS
+from alpi.mcp import client as mcp_client
+from alpi.mcp import registry as mcp_registry
+from alpi.tools import _TOOLS
 
 
 # --------------------------------------------------------------------
@@ -384,6 +384,6 @@ def test_render_content_handles_empty() -> None:
 
 
 def test_config_default_has_empty_mcp_servers(tmp_home_no_env: Path) -> None:
-    from alf import config
+    from alpi import config
     cfg = config.load(tmp_home_no_env)
     assert cfg.raw.get("mcp", {}).get("servers", {}) == {}

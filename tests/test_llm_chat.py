@@ -1,6 +1,6 @@
 """End-to-end chat tests — make real LLM calls.
 
-Skipped unless pytest is run with --llm or ALF_LLM=1.
+Skipped unless pytest is run with --llm or ALPI_LLM=1.
 """
 
 from __future__ import annotations
@@ -14,12 +14,12 @@ import pytest
 
 pytestmark = pytest.mark.llm
 
-ALF_BIN = "/Users/javi/.local/bin/alf"
+ALF_BIN = os.environ.get("ALPI_BIN", "alpi")
 
 
 def _run_once(home: Path, prompt: str, timeout: int = 90) -> tuple[int, str]:
     env = dict(os.environ)
-    env["ALF_HOME"] = str(home)
+    env["ALPI_HOME"] = str(home)
     r = subprocess.run(
         [ALF_BIN, "chat", "--once", prompt],
         capture_output=True, text=True, timeout=timeout, env=env,

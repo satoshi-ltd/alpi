@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from alf import config
+from alpi import config
 
 
 def test_seed_writes_defaults(tmp_home_no_env: Path) -> None:

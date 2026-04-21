@@ -1,6 +1,6 @@
 # Skills — how alf learns reusable recipes
 
-A **skill** is a directory under `~/.alf/skills/<category>/<name>/` that
+A **skill** is a directory under `~/.alpi/skills/<category>/<name>/` that
 teaches alf how to do something. The agent creates skills via the
 `skill` tool; they go live under their declared category immediately.
 The user manages them (view / delete) with `/skills`. There is no
@@ -14,7 +14,7 @@ Every skill lives in a directory with one required file and up to four
 optional subdirectories:
 
 ```
-~/.alf/skills/<category>/<name>/
+~/.alpi/skills/<category>/<name>/
   SKILL.md              # REQUIRED — prose instructions the agent reads
   scripts/              # OPTIONAL — executable code the skill invokes
   references/           # OPTIONAL — markdown docs the skill consults
@@ -56,7 +56,7 @@ description: Fetch daily health metrics from the Whoop API via OAuth.
 category: personal
 version: 0.1.0
 origin: agent                   # "agent" (proposed) or "user" (hand-written)
-requires_env: []                # pre-provisioned env vars in ~/.alf/.env
+requires_env: []                # pre-provisioned env vars in ~/.alpi/.env
 tools: [read_file, terminal]    # tools the skill is allowed to call
 stores_secrets: true            # if true, secrets/ is created mode 0700
 created_at: 2026-04-20
@@ -70,14 +70,14 @@ matches against the current task to decide whether to load the skill.
 
 ### `requires_env`
 
-Names of env vars the skill expects in `~/.alf/.env`. Use this for
+Names of env vars the skill expects in `~/.alpi/.env`. Use this for
 **pre-provisioned** secrets — API keys you paste in manually:
 
 ```yaml
 requires_env: [WHOOP_CLIENT_ID, WHOOP_CLIENT_SECRET]
 ```
 
-Values never land in the skill directory. `~/.alf/.env` is the single
+Values never land in the skill directory. `~/.alpi/.env` is the single
 source of truth for pre-provisioned static secrets.
 
 ### `stores_secrets`
@@ -96,8 +96,8 @@ Two separate stores, two clear purposes:
 
 | Store | Purpose | Lifecycle |
 |---|---|---|
-| `~/.alf/.env` | Pre-provisioned static secrets declared in `requires_env`. User pastes the value in once. | Edited by hand. Shared across skills if they reference the same var. |
-| `~/.alf/skills/<cat>/<name>/secrets/` | Runtime-generated credentials (OAuth access+refresh, session blobs). Per-skill, never shared. | Created at runtime by scripts. Wiped when the skill is deleted. |
+| `~/.alpi/.env` | Pre-provisioned static secrets declared in `requires_env`. User pastes the value in once. | Edited by hand. Shared across skills if they reference the same var. |
+| `~/.alpi/skills/<cat>/<name>/secrets/` | Runtime-generated credentials (OAuth access+refresh, session blobs). Per-skill, never shared. | Created at runtime by scripts. Wiped when the skill is deleted. |
 
 **Never** hardcode secrets inside `SKILL.md`, `scripts/`, `references/`,
 or `assets/`. The security scanner rejects the most obvious patterns
@@ -123,7 +123,7 @@ skill(action="list")
 ### Creating a skill
 
 `create` writes **only** `SKILL.md` and goes live immediately under
-`~/.alf/skills/<category>/<name>/`. Subdirectories come later via
+`~/.alpi/skills/<category>/<name>/`. Subdirectories come later via
 `add_file`. A just-created skill has no scripts, no references, no
 assets, no secrets (unless `stores_secrets=true`, which creates the
 empty `secrets/` directory alongside SKILL.md).
@@ -202,7 +202,7 @@ skill(action="add_file", name="whoop-integration",
 The resulting directory:
 
 ```
-~/.alf/skills/personal/whoop-integration/
+~/.alpi/skills/personal/whoop-integration/
   SKILL.md
   scripts/
     oauth.py
@@ -232,7 +232,7 @@ residue left behind.
 - Extensions outside the allowed 4 (`tools/`, `data/`, `cache/`,
   `output/`, `logs/`). Ephemeral output is the workspace's job, not
   the skill's.
-- Credentials anywhere outside `secrets/` (or `~/.alf/.env` for
+- Credentials anywhere outside `secrets/` (or `~/.alpi/.env` for
   pre-provisioned ones).
 - Files in `scripts/` / `references/` / `assets/` that contain
   hardcoded API keys, passwords, or tokens. Security scanner blocks.
@@ -245,7 +245,7 @@ richer ones, reshape:
 
 | Hermes | alf |
 |---|---|
-| `skills/<cat>/<name>/SKILL.md` | `~/.alf/skills/<cat>/<name>/SKILL.md` |
+| `skills/<cat>/<name>/SKILL.md` | `~/.alpi/skills/<cat>/<name>/SKILL.md` |
 | `skills/<cat>/<name>/scripts/*.py` | `scripts/*.py` (flat, no subdirs) |
 | `skills/<cat>/<name>/references/*.md` | `references/*.md` (flat) |
 | `skills/<cat>/<name>/templates/<subfolder>/*` | `assets/*` (flatten, prefix filenames if needed) |

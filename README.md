@@ -1,4 +1,4 @@
-# alf
+# alpi
 
 A slim personal AI agent. Terminal + Telegram + email. Inline-learning
 memory, live skills with a security scanner and a quota, and a read-only
@@ -68,7 +68,7 @@ wall**: absolute paths reach anywhere except a sensitive-path denylist
 isolation is the opt-in OS sandbox (`tools.terminal.sandbox: true`).
 Full security model in [docs/SECURITY.md](docs/SECURITY.md).
 
-**Memory** — three files under `~/.alf/memory/`:
+**Memory** — three files under `~/.alpi/memory/`:
 
 - `USER.md` — who the user is.
 - `MEMORY.md` — alf's own notes (env quirks, commands, incidents).
@@ -77,7 +77,7 @@ Full security model in [docs/SECURITY.md](docs/SECURITY.md).
 Updated inline during conversations via the `memory` tool. No
 post-session reflect. Snapshot frozen per session for prefix cache.
 
-**Skills** — reusable recipes under `~/.alf/skills/<category>/<name>/`.
+**Skills** — reusable recipes under `~/.alpi/skills/<category>/<name>/`.
 Each skill is a directory with `SKILL.md` plus optional `scripts/`,
 `references/`, `assets/`, `secrets/` (mode 0700, gitignored), `state/`
 (gitignored runtime persistence). Live by default — no approval gate;
@@ -85,7 +85,7 @@ the security scanner is the gate. Auto-injected into the system prompt
 so the agent sees its toolbox without having to discover it. Full
 contract in [docs/SKILLS.md](docs/SKILLS.md).
 
-**Sessions** — JSON under `~/.alf/sessions/<id>.json` as a list of
+**Sessions** — JSON under `~/.alpi/sessions/<id>.json` as a list of
 turns. `--continue` resumes the most recent.
 
 **Research** — `research(brief, depth)` spawns a read-only sub-agent
@@ -95,7 +95,7 @@ report; the main agent never sees the intermediate trace.
 
 ## Providers
 
-Any LiteLLM-supported provider — set the relevant key in `~/.alf/.env`:
+Any LiteLLM-supported provider — set the relevant key in `~/.alpi/.env`:
 
 ```bash
 ANTHROPIC_API_KEY=...
@@ -137,8 +137,8 @@ gateway:
     show_tool_trace: false
 ```
 
-Allowlists live in `~/.alf/.env` (fail-closed if unset). Run
-`alf setup` for interactive configuration.
+Allowlists live in `~/.alpi/.env` (fail-closed if unset). Run
+`alpi setup` for interactive configuration.
 
 ## Documentation
 

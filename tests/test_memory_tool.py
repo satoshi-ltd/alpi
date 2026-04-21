@@ -6,12 +6,12 @@ from pathlib import Path
 
 import pytest
 
-from alf.tools.memory import Memory
+from alpi.tools.memory import Memory
 
 
 @pytest.fixture
 def isolated_home(tmp_home_no_env: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    monkeypatch.setenv("ALF_HOME", str(tmp_home_no_env))
+    monkeypatch.setenv("ALPI_HOME", str(tmp_home_no_env))
     return tmp_home_no_env
 
 

@@ -1,4 +1,4 @@
-"""Guardrails on what ``alf --help`` shows the user.
+"""Guardrails on what ``alpi --help`` shows the user.
 
 Dropped commands should be gone; hidden options should not appear.
 This test locks the CLI surface so a future refactor doesn't
@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from click.testing import CliRunner
 
-from alf import cli
+from alpi import cli
 
 
 def test_top_level_help_shows_only_canonical_commands() -> None:
@@ -69,14 +69,14 @@ def test_profile_subcommands_include_remove() -> None:
 
 
 def test_gateway_start_rejects_missing_workspace(tmp_path, monkeypatch) -> None:
-    """Unset ``workspace`` must stop ``alf gateway start`` before it
+    """Unset ``workspace`` must stop ``alpi gateway start`` before it
     writes a PID file or touches the network.
 
     Rationale: a gateway with no workspace is a daemon that rejects
     every tool call silently. Discovering that via ``tail -f`` an hour
     later is strictly worse than a UsageError at the command boundary.
     """
-    monkeypatch.setenv("ALF_HOME", str(tmp_path))
+    monkeypatch.setenv("ALPI_HOME", str(tmp_path))
     # Bare-minimum config: no workspace key at all.
     (tmp_path / "config.yaml").write_text("model: openrouter/foo/bar\n")
 
@@ -93,7 +93,7 @@ def test_gateway_start_rejects_nonexistent_workspace(tmp_path, monkeypatch) -> N
 
     Same rationale as above — fail loudly, not silently.
     """
-    monkeypatch.setenv("ALF_HOME", str(tmp_path))
+    monkeypatch.setenv("ALPI_HOME", str(tmp_path))
     (tmp_path / "config.yaml").write_text(
         "model: openrouter/foo/bar\nworkspace: /no/such/dir\n"
     )
@@ -111,7 +111,7 @@ def test_schedule_start_rejects_missing_workspace(tmp_path, monkeypatch) -> None
     needs a workspace. A silent daemon that never runs a single job is
     a worse failure mode than refusing to start.
     """
-    monkeypatch.setenv("ALF_HOME", str(tmp_path))
+    monkeypatch.setenv("ALPI_HOME", str(tmp_path))
     (tmp_path / "config.yaml").write_text("model: openrouter/foo/bar\n")
 
     result = CliRunner().invoke(cli.main, ["schedule", "start"])

@@ -10,9 +10,9 @@ from pathlib import Path
 
 import pytest
 
-from alf.gateway import delivery
-from alf.scheduler import run as scheduler
-from alf.tools.schedule import Schedule
+from alpi.gateway import delivery
+from alpi.scheduler import run as scheduler
+from alpi.tools.schedule import Schedule
 
 
 # --------------------------------------------------------------------
@@ -366,9 +366,9 @@ def test_ensure_running_spawns_detached_when_dead(
     assert captured["kwargs"].get("start_new_session") is True
     # stdin closed so the child can't block on input.
     assert captured["kwargs"].get("stdin") is scheduler.subprocess.DEVNULL
-    # Child inherits ALF_HOME so it writes to the right profile.
+    # Child inherits ALPI_HOME so it writes to the right profile.
     env = captured["kwargs"].get("env") or {}
-    assert env.get("ALF_HOME") == str(tmp_home_no_env)
+    assert env.get("ALPI_HOME") == str(tmp_home_no_env)
     # Command invoked is `alf schedule start`.
     assert "schedule" in captured["args"]
     assert "start" in captured["args"]

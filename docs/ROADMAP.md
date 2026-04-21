@@ -51,7 +51,7 @@ Once those land + a fresh CHANGELOG entry summarises v0.2, bump to
 
 `alf/tools/browser.py` is a stub; not registered. To ship:
 
-1. Replace `Browser.run` with a Playwright impl: headless Chrome, persistent context under `~/.alf/browser/`, actions `text | screenshot | click | fill | navigate`.
+1. Replace `Browser.run` with a Playwright impl: headless Chrome, persistent context under `~/.alpi/browser/`, actions `text | screenshot | click | fill | navigate`.
 2. Add `playwright` to `pyproject.toml` (+ one-time `playwright install chromium`).
 3. Re-register `browser` in `alf/tools/__init__.py`.
 
@@ -64,7 +64,7 @@ Today alf goes through LiteLLM with API keys → OpenAI is metered per token. He
 **Mechanics (reverse-engineered, not a public OpenAI API):**
 
 1. **Auth** — OAuth2 device code against `auth.openai.com` with the Codex CLI's public `client_id` (`app_EMoamEEZ73f0CkXaXp7hrann`). User opens URL + types code → poll → `access_token` + `refresh_token`. Reference: `~/git/hermes-agent/hermes_cli/auth.py:2999-3119` (`_codex_device_code_login`) and `:1615-1675` (`resolve_codex_runtime_credentials`).
-2. **Storage** — `~/.alf/auth.json` with `fcntl` file lock (gateway + TUI + schedule daemon must not race on refresh). Refresh 120s before expiry; on 401 force-refresh + retry once.
+2. **Storage** — `~/.alpi/auth.json` with `fcntl` file lock (gateway + TUI + schedule daemon must not race on refresh). Refresh 120s before expiry; on 401 force-refresh + retry once.
 3. **Endpoint** — `https://chatgpt.com/backend-api/codex` (NOT `api.openai.com`).
 4. **Wire protocol** — Responses API with event streaming (`client.responses.stream(...)`), not chat/completions. **LiteLLM does not cover this cleanly** → bypass LiteLLM, use the OpenAI SDK directly. Reference: `~/git/hermes-agent/run_agent.py:4592` (`_run_codex_stream`).
 
@@ -73,7 +73,7 @@ Today alf goes through LiteLLM with API keys → OpenAI is metered per token. He
 - `alf/auth/codex.py` — port from Hermes: `device_code_login()`, `resolve_runtime_credentials(force_refresh, refresh_skew)`, locked R/W of `auth.json`.
 - `alf/providers/openai_codex.py` — new `Provider` subclass with `auth_type = "oauth_external"`, lists gpt-5 family.
 - `alf/llm.py` — add a transport dispatch: when model id prefix is `openai-codex/`, resolve credentials and call `openai.OpenAI(...).responses.stream(...)` instead of `litellm.completion`. Normalise the event stream (`response.output_item.added` with `type=function_call`, etc.) into the same `{text_delta, tool_calls_delta, finish_reason}` shape `stream()` already yields.
-- CLI: `alf auth openai-codex [login|logout|status]`.
+- CLI: `alpi auth openai-codex [login|logout|status]`.
 
 **Effort.** 1-2 days. Auth module is almost a literal port. The unknown is event-stream normalisation — Responses API emits a richer set of events than chat/completions.
 

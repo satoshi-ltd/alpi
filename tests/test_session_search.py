@@ -7,12 +7,12 @@ from pathlib import Path
 
 import pytest
 
-import alf.tools.session_search as ss
+import alpi.tools.session_search as ss
 
 
 @pytest.fixture
 def isolated_home(tmp_home_no_env: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    monkeypatch.setenv("ALF_HOME", str(tmp_home_no_env))
+    monkeypatch.setenv("ALPI_HOME", str(tmp_home_no_env))
     (tmp_home_no_env / "sessions").mkdir(exist_ok=True)
     return tmp_home_no_env
 

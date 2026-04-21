@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from alf.tools.config import Config
+from alpi.tools.config import Config
 
 
 @pytest.fixture

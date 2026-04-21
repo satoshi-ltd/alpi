@@ -10,10 +10,10 @@ from typing import Any
 
 import pytest
 
-from alf import config
-from alf.gateway import run as gw_run
-from alf.tui.formatting import arg_hint
-from alf.gateway.base import IncomingMessage, OutgoingMessage, Platform
+from alpi import config
+from alpi.gateway import run as gw_run
+from alpi.tui.formatting import arg_hint
+from alpi.gateway.base import IncomingMessage, OutgoingMessage, Platform
 
 
 class FakePlatform(Platform):
@@ -260,20 +260,20 @@ def test_arg_hint_terminal_detects_skill_in_default_home() -> None:
     # cd-then-relative-script pattern: only the skill name is captured
     # (the script comes from a relative path after the cd, not from the
     # absolute /skills/.../scripts/foo.py shape).
-    cmd = "cd /Users/foo/.alf/skills/creative/joker && python3 scripts/run.py"
+    cmd = "cd /Users/foo/.alpi/skills/creative/joker && python3 scripts/run.py"
     hint = arg_hint("terminal", {"command": cmd})
     assert "skill: joker" in hint
 
 
 def test_arg_hint_terminal_detects_skill_with_full_script_path() -> None:
-    cmd = "python3 /Users/foo/.alf/skills/software/lint/scripts/check.py"
+    cmd = "python3 /Users/foo/.alpi/skills/software/lint/scripts/check.py"
     hint = arg_hint("terminal", {"command": cmd})
     assert "skill: lint" in hint
     assert "check.py" in hint
 
 
 def test_arg_hint_terminal_detects_skill_in_profile_home() -> None:
-    cmd = "python3 /Users/foo/.alf/profiles/work/skills/software/lint/scripts/check.py"
+    cmd = "python3 /Users/foo/.alpi/profiles/work/skills/software/lint/scripts/check.py"
     hint = arg_hint("terminal", {"command": cmd})
     assert "skill: lint" in hint
     assert "check.py" in hint

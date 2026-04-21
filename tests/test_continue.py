@@ -8,9 +8,9 @@ from pathlib import Path
 import pytest
 from rich.console import Console
 
-from alf import config, home, memory
-from alf.cli import _continue_last_session
-from alf.engine import Engine
+from alpi import config, home, memory
+from alpi.cli import _continue_last_session
+from alpi.engine import Engine
 
 
 @pytest.fixture

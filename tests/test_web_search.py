@@ -21,14 +21,14 @@ from types import SimpleNamespace
 
 import pytest
 
-from alf.tools import web_search as ws
+from alpi.tools import web_search as ws
 
 
 @pytest.fixture(autouse=True)
 def _quiet_state(monkeypatch):
     """``emit_state`` writes to the global event bus. Silence it so the
     tests don't need to mount a fake event sink."""
-    monkeypatch.setattr("alf.tools._state.emit_state", lambda *_a, **_kw: None)
+    monkeypatch.setattr("alpi.tools._state.emit_state", lambda *_a, **_kw: None)
 
 
 def _fake_ddgs(results):

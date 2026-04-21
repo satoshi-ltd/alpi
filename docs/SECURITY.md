@@ -46,7 +46,7 @@ doesn't reach:
 
 Wraps `terminal` subprocess calls in a native OS sandbox so the
 kernel refuses the syscalls, not just the regex above. Read/write
-access is limited to `workspace` + `~/.alf/` + `/tmp`; network is
+access is limited to `workspace` + `~/.alpi/` + `/tmp`; network is
 denied by default.
 
 **Status: stable, opt-in.** Defaults to off because real-world dev
@@ -68,11 +68,11 @@ alf's multi-profile CLI makes this ergonomic:
 
 - `alf` — your main interactive dev profile. Sandbox off. Full access
   to your usual tooling.
-- `alf -p watchdog` — the profile your Telegram / schedule daemon
+- `alpi -p watchdog` — the profile your Telegram / schedule daemon
   runs under. Sandbox on. Denies `~/.ssh`, writes outside
   `workspace`, network (unless you opt in).
 
-Each profile has its own `~/.alf/profiles/<name>/config.yaml`, so
+Each profile has its own `~/.alpi/profiles/<name>/config.yaml`, so
 the sandbox flag is set independently.
 
 ### Enabling
@@ -83,7 +83,7 @@ Chat (applies to the current profile's config): "turn on the
 terminal sandbox" → agent calls `config(set,
 tools.terminal.sandbox, true)`.
 
-YAML (direct): set in `~/.alf/profiles/<name>/config.yaml`:
+YAML (direct): set in `~/.alpi/profiles/<name>/config.yaml`:
 ```yaml
 tools:
   terminal:
@@ -129,7 +129,7 @@ distros; some hardened configs disable them).
   network stack in the process. `curl: (6) Could not resolve host`.
 - `git status` inside the workspace → works normally.
 - `npm install` → works if the package cache is under workspace or
-  `~/.alf/`, otherwise fails.
+  `~/.alpi/`, otherwise fails.
 
 ### Testing the Linux path from macOS
 
