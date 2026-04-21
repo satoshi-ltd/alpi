@@ -24,11 +24,20 @@ Audience: Javi (product) + me (Claude across sessions).
 | J | Anti-bot browsing (camoufox) | 🔵 backlog — depends on B |
 | K | Scroll resilience under heavy streaming | ✅ shipped (commit 9ed4139 — `VerticalScroll.anchor()`) |
 | L | Reasoning-as-state (TUI) | ✅ shipped (commits 62f7fa7 + fd1fec4) |
-| M | TTS / STT / voice-mode | ❌ out of scope for core agent |
+| M | TTS / STT / voice-mode (local-first) | 🔵 backlog — opt-in, ⏸ pending user confirmation |
 | N | Image generation | 🔵 backlog — no concrete use case yet |
 | R.1 | Research step-counter in state label | ✅ shipped (v0.2.2) |
 | R.2 | `delegate` — write-capable sub-agent | ✅ shipped (v0.2.3, named `delegate` not `delegate_task`) |
 | R.3 | Batch parallel sub-agents (`tasks[]`) | ✅ shipped (v0.2.18) |
+| T | Gmail API (OAuth2) gateway | 🔵 backlog — replaces IMAP as app-passwords sunset |
+| U | Signal gateway (signal-cli) | 🔵 backlog — requires dedicated phone number |
+| V | Anthropic subscription OAuth | 🔵 backlog — ToS-gray, wait for official |
+| W | Approval system (dangerous cmd + session allowlist) | 🔵 backlog |
+| X | Schedule prompt threat-scan | 🔵 backlog |
+| Y | Tool result budget / truncation | 🔵 backlog |
+| Z | OSV malware check (skills + MCP installers) | 🔵 backlog |
+| Σ.1 | Mixture-of-agents tool (ensemble inference) | 🔵 bola extra — not planned, tracked for later |
+| Σ.2 | RL training / fine-tuning hooks | 🔵 bola extra — not planned, tracked for later |
 
 ### What's left to call v0.2 done
 
@@ -38,10 +47,10 @@ release. The bar for "ship v0.2" is **clean docs + version bump +
 real-use validation across a few sessions** — not feature
 exhaustiveness.
 
-**Nothing open for v0.2.** Everything the roadmap promised is in. Backlog items (B, C, H, J, N, O, P, Q, R.3) all roll forward to v0.3.
+**Nothing open for v0.2.** Everything the original roadmap promised is shipped. Items still in the backlog — **C** (Codex OAuth), **H** (Home Assistant), **J** (camoufox), **M** (voice), **N** (image gen), **S** (read_image auto-resize), **T** (Gmail OAuth), **U** (Signal), **V** (Anthropic OAuth — ToS gray), **W** (approval system), **X** (schedule threat-scan), **Y** (tool budget), **Z** (OSV malware), **Σ.1/Σ.2** (bola extra) — roll forward to v0.3.
 
-Once those land + a fresh CHANGELOG entry summarises v0.2, bump to
-`v0.3.0` and reopen the table for the next cycle.
+Once the v0.3 cycle picks up a few of those + a fresh CHANGELOG
+entry summarises v0.2, bump to `v0.3.0` and reopen the table.
 
 ---
 
@@ -89,6 +98,23 @@ v0.2.16 shipped `playwright-stealth` on by default, which beats ~80% of basic de
 
 `generate_image(prompt, style)` using the active vision model or a dedicated endpoint (DALL-E, SD). Useful for "hazme un logo rápido". Low priority unless a concrete use case appears.
 
+### M. TTS / STT / voice-mode (local-first, opt-in)
+
+Hermes ships ~3000 LOC of voice (7 TTS providers, 3 STT tiers, full voice-mode). Too thick for alpi. Scope for us:
+
+- **TTS:** two providers only — Edge TTS (free online, zero setup) and NeuTTS (local, subprocess isolation so the 500MB model doesn't bloat alpi's RAM, supports voice cloning from a reference audio). Config knob `tools.voice.tts_provider: edge|neutts`.
+- **STT:** `faster-whisper` local, no cloud. Small model (base) by default, configurable. No Groq/OpenAI fallback — if local fails we fail explicitly.
+- **Voice mode:** push-to-talk only (no wake-word). Activated with `alpi --voice` or `/voice` slash in TUI. Mic → STT → LLM → TTS → speaker. Never always-listening.
+
+**Real-world applications** (why ship this at all):
+- Cooking, driving, DIY, walking — hands-busy scenarios where the TUI is unusable.
+- Dictating quick thoughts to memory while multitasking.
+- Sick-in-bed / accessibility.
+
+**Out of scope:** wake-word, continuous ambient listening, multi-voice synthesis, phone-mode (mic+speaker on separate hardware). Keep it simple.
+
+**Estimated LOC:** ~250 for the full pipeline (TTS dispatcher + STT wrapper + voice-mode loop + config).
+
 ---
 
 ## Next — v0.3 planned
@@ -102,6 +128,90 @@ Vision-model cost scales with image resolution: a 4K screenshot costs ~9× more 
 **Why not in v0.2.** Adding Pillow as a required dep + config knob + resize logic + tests is a non-trivial chunk for what is an optimisation, not a correctness fix. Users with 4K screenshots pay more tokens; that's it. Ship when we have a real "this is getting expensive" signal from usage.
 
 **Reference.** Hermes' `_resize_image_for_vision` in `tools/vision_tools.py` does a reactive version (resize only after the API rejects with "too large"); our take would be proactive (resize any time we could).
+
+### T. Gmail API (OAuth2) gateway
+
+IMAP + app-specific-passwords is deprecated on Google (new tenants can't generate them; existing ones get pressure to migrate). A Gmail API channel gives us scoped OAuth (`gmail.send` alone, or `gmail.readonly`), no password storage, revocable per-app from the user's Google account settings.
+
+**Scope.** Parallel channel to the existing IMAP/SMTP gateway — does not replace it. New `alpi/gateway/platforms/gmail.py` + OAuth callback server (ephemeral localhost port) for the install flow, refresh token stored in `~/.alpi/profiles/<name>/auth/gmail.json` with `fcntl` lock. First-run: `alpi setup → Gateways → Gmail` opens a browser for consent. Inbound polling via `users.messages.list` with `is:unread` filter. Outbound via `users.messages.send`.
+
+**Estimated LOC:** ~300. Dep: `google-api-python-client` + `google-auth-oauthlib` (~2 MB combined).
+
+### U. Signal gateway (signal-cli)
+
+Signal has the best security posture of any consumer messenger, but integration requires a **dedicated phone number for the bot** (you can't bot your own number — Signal won't allow two sessions simultaneously in a useful way). signal-cli runs as a local daemon exposing an HTTP/JSON-RPC endpoint; we just POST/GET messages.
+
+**Scope.** `alpi/gateway/platforms/signal.py` talking to a locally-running `signal-cli daemon --http 127.0.0.1:…`. First-run: user registers a bot number, follows signal-cli's captcha + SMS verify flow once (`signal-cli -u <num> register`), then `alpi setup → Gateways → Signal` stores the daemon URL + allowlist of sender numbers.
+
+**Estimated LOC:** ~200 (HTTP client + polling loop + send).
+
+**Blocker:** requires extra SIM / VoIP number. Real cost: ~$5/mo (Twilio / JustCall). Nicho unless you want E2EE + self-hosted.
+
+### V. Anthropic subscription OAuth (ToS-gray)
+
+Anthropic does not offer a public OAuth flow against Claude Pro/Max/Team quotas. Claude Code CLI uses a private OAuth against `claude.ai` but it's baked into the official client — not advertised as a bindable API. Reverse-engineering the flow is technically feasible (client_id discovery, device-code poll, session token) but:
+
+- **ToS grey**: Anthropic can (and will, if pattern detected) revoke the reverse-engineered client_id. Same category as hermes' Codex path.
+- **Value only if you already pay Pro/Max**: otherwise you still pay API tokens, just via a different endpoint.
+- **Breakage risk is permanent**: every Anthropic update can invalidate the flow.
+
+**Do not ship until Anthropic offers an official OAuth.** Documented here so nobody spends a sprint on it without reading this warning first. If it ever becomes officially supported, the implementation mirrors C (OpenAI Codex): `alpi/auth/anthropic.py` with device-code login, `alpi/providers/anthropic_oauth.py` as a second provider subclass, transport dispatch in `llm.py` when model prefix is `anthropic-oauth/…`.
+
+### W. Approval system (dangerous cmd + session allowlist)
+
+Today the `terminal` tool has a static denylist (`_guards.py`) that blocks known-destructive patterns. It's binary: allowed or blocked. Real-world agent runs hit a middle ground — commands that *look* dangerous but are legitimate (`rm -rf node_modules` inside the workspace, `sudo systemctl restart X` on a dev VM). Today those get blocked forever; users would want "yes, approve once for this session."
+
+**Scope.**
+- A pattern-based scanner classifies each terminal call as `safe` | `caution` | `dangerous` (reuse patterns from existing `_guards.py`, extend with the hermes list).
+- `caution` commands pause with a prompt: `[approve once] [approve for this session] [block]`. Session allowlist stored in-memory, discarded on restart.
+- `dangerous` blocked by default; bypassable only with an explicit `--yolo` flag or per-pattern config entry.
+- Works consistently in TUI (interactive) and gateway (auto-block if unattended, never auto-approve `dangerous`).
+
+**Estimated LOC:** ~150. Fits naturally alongside the existing sandbox (P — layer 2).
+
+### X. Schedule prompt threat-scan
+
+Cron jobs run unattended with full tool access. A prompt-injected email or a skill that silently mutates its trigger could insert exfiltration instructions that nobody sees until after the fact. Scan the scheduled prompt at save time AND at fire time for:
+
+- Known injection patterns (ignore previous / override system / disregard rules).
+- Exfil markers (URL with `?data=`, `$ENV_VAR` referencing secrets).
+- Invisible Unicode.
+
+Refuse to save if found; on fire-time hit, log + skip. ~50 LOC — reuses the existing `scan_skill_body` patterns.
+
+### Y. Tool result budget / truncation
+
+Today a `read_file` on a 5 MB log, or a `web_fetch` on a giant HTML page, dumps the raw payload into context and can single-handedly blow up a turn. Hermes has a 3-tier budget (per-result char cap, per-turn budget, inline preview of N chars) that prevents this.
+
+**Scope.**
+- `tools.budget.per_result_chars: 100_000` (default). If exceeded, truncate with `… [N chars elided]` suffix.
+- `tools.budget.per_turn_chars: 200_000` (default). Summed across all tool returns in one turn; if exceeded, subsequent calls get shorter truncation.
+- Per-tool override via `tools.<name>.max_result_chars`: e.g. set `read_file` to `∞` (no cap) so the LLM can pull the raw source when it explicitly wants to.
+- Inline preview in the TUI tool card (first 1.5K chars) — already mostly there, formalise it.
+
+~100 LOC in a new `alpi/tools/_budget.py`, wired into `execute()` in `tools/__init__.py`.
+
+### Z. OSV malware check (skills + MCP installers)
+
+When a skill's `scripts/*.py` imports a third-party package, or an MCP server spec runs `npx -y <pkg>` / `uvx <pkg>`, we're one typo away from installing a name-squatted malicious package. Google's OSV database has an up-to-date MAL-* feed (confirmed malicious packages, not just CVEs).
+
+**Scope.** At the moment a skill is `create`d or an MCP server is added, scan: extract package names from `scripts/*.py` imports, from MCP `args` (`-y @foo/bar`), and from `requirements.txt` if present. POST to `https://api.osv.dev/v1/query` for each with ecosystem=`PyPI|npm`. If any response contains `id` starting with `MAL-`, refuse to save (or refuse to install) and surface the advisory URL.
+
+Fail-open: if OSV is unreachable, proceed with a warning. Don't block on network issues — that's a worse UX than the risk the check covers.
+
+**Estimated LOC:** ~50. Dep: none (just httpx which is already present).
+
+### Σ.1. Mixture-of-agents (bola extra)
+
+Spawn multiple LLMs on the same prompt, aggregate answers with a final synthesizer. Hermes has this as `mixture_of_agents_tool.py`. Use case: hard decisions where one model is weak and you want "wisdom of crowds" at 3× cost.
+
+Not planned — tracked here because it's a known technique and might become useful if we hit a ceiling on single-model research quality.
+
+### Σ.2. RL training / fine-tuning hooks (bola extra)
+
+Hermes has `rl_training_tool.py` for recording agent runs and building training datasets. If we ever want to fine-tune a smaller local model on your actual conversation patterns, the dataset-collection scaffold would live here.
+
+Not planned. Research-grade, irrelevant for everyday personal use.
 
 ---
 
@@ -120,6 +230,9 @@ Vision-model cost scales with image resolution: a 4K screenshot costs ~9× more 
 - **Regex-gating shell commands** to enforce sandbox. Too many false positives (legitimate `..`, env-var expansion, command substitution). Real enforcement needs OS-level sandbox (G).
 - **`.bak` sibling on every `write_file`.** Tried it, rejected — clutters every directory alf writes in. Kept only on memory files where it pays off.
 - **`alf setup → Identity` wizard for editing PERSONALITY.md.** Rejected after consideration. The `memory` tool already mutates `PERSONALITY.md` from inside chat, and the LLM captures nuance ("less formal but not jokey; respect my code-switching") that a form can't.
+- **WhatsApp gateway.** Meta Business API requires company verification + is expensive; `whatsapp-web.js` / Baileys are reverse-engineered with frequent bans, and the attack surface is catastrophic (a compromised bot leaks every chat). Not worth shipping for a personal agent.
+- **Discord gateway.** Bot tokens grant full server access — same blast-radius profile as Telegram with no added value, since Telegram covers the "messaging gateway" role already.
+- **Slack gateway.** Enterprise-focused, per-workspace tokens with broad scopes, operationally heavy. No real personal-agent use case.
 
 ---
 
