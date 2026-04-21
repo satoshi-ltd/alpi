@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 from alpi import config as cfg_mod
@@ -10,6 +11,8 @@ from alpi import llm
 from alpi.home import get_home
 from alpi.tools.base import Tool, ToolResult
 from alpi.tools import _state as tool_state_mod
+
+MAX_PARALLEL_TASKS = 3
 
 
 SUB_AGENT_TOOLS = {
@@ -70,14 +73,17 @@ class Research(Tool):
         "The exact iteration count per depth is a user knob in "
         "~/.alpi/config.yaml under `tools.research.{quick,normal,deep}_steps` "
         "(defaults: quick=8, normal=15, deep=30). Don't pass the step count "
-        "— pick the depth name."
+        "— pick the depth name.\n"
+        "\n"
+        "For multiple independent investigations, pass `tasks: [{brief, depth}]` "
+        "(up to 3) to run them in parallel. Use single-task mode otherwise."
     )
     parameters = {
         "type": "object",
         "properties": {
             "brief": {
                 "type": "string",
-                "description": "The research question / goal. Be specific.",
+                "description": "The research question / goal. Single-task mode. Required unless `tasks` is set.",
             },
             "depth": {
                 "type": "string",
@@ -88,11 +94,89 @@ class Research(Tool):
                     "comparative, deep = exhaustive."
                 ),
             },
+            "tasks": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "brief": {"type": "string"},
+                        "depth": {
+                            "type": "string",
+                            "enum": ["quick", "normal", "deep"],
+                        },
+                    },
+                    "required": ["brief"],
+                },
+                "description": (
+                    f"Up to {MAX_PARALLEL_TASKS} independent briefs to "
+                    "investigate in parallel. Mutually exclusive with "
+                    "top-level brief/depth."
+                ),
+            },
         },
-        "required": ["brief"],
     }
 
-    def run(self, brief: str, depth: str = "normal") -> ToolResult:
+    def run(
+        self,
+        brief: str = "",
+        depth: str = "normal",
+        tasks: list[dict] | None = None,
+    ) -> ToolResult:
+        if tasks:
+            return self._run_batch(tasks)
+        if not brief:
+            return ToolResult(
+                ok=False, output="",
+                error="'brief' required when not using 'tasks'",
+            )
+        return self._run_single(brief, depth)
+
+    def _run_batch(self, tasks: list[dict]) -> ToolResult:
+        if len(tasks) > MAX_PARALLEL_TASKS:
+            return ToolResult(
+                ok=False, output="",
+                error=f"max {MAX_PARALLEL_TASKS} parallel tasks; got {len(tasks)}",
+            )
+        for i, t in enumerate(tasks):
+            if not isinstance(t, dict) or not t.get("brief"):
+                return ToolResult(
+                    ok=False, output="",
+                    error=f"task {i} missing 'brief'",
+                )
+
+        parent_emit = tool_state_mod.get_emit()
+        parent_interrupt = tool_state_mod.get_interrupt_getter()
+        parent_usage = tool_state_mod.get_usage_sink()
+        total = len(tasks)
+
+        def _worker(idx: int, task: dict) -> ToolResult:
+            tool_state_mod.set_interrupt_getter(parent_interrupt)
+            tool_state_mod.set_usage_sink(parent_usage)
+            label = f"[{idx + 1}/{total}]"
+            tag = task.get("brief", "")[:30]
+
+            def _prefixed(msg: str, error: bool = False,
+                          _p: str = label, _tag: str = tag,
+                          _outer: Any = parent_emit) -> None:
+                if _outer is not None:
+                    _outer(f"{_p} {_tag} · {msg}", error)
+
+            tool_state_mod.set_emit(_prefixed)
+            return self._run_single(task["brief"], task.get("depth", "normal"))
+
+        with ThreadPoolExecutor(max_workers=min(MAX_PARALLEL_TASKS, total)) as ex:
+            results = list(ex.map(
+                lambda it: _worker(it[0], it[1]),
+                enumerate(tasks),
+            ))
+
+        parts: list[str] = []
+        for i, (task, r) in enumerate(zip(tasks, results)):
+            body = r.output if r.ok else f"[failed: {r.error}]"
+            parts.append(f"## Task {i + 1}: {task['brief']}\n\n{body}")
+        return ToolResult(ok=True, output="\n\n---\n\n".join(parts))
+
+    def _run_single(self, brief: str, depth: str = "normal") -> ToolResult:
         from alpi.tools import execute, schemas as all_schemas
 
         if depth not in DEPTH_STEPS_DEFAULTS:
@@ -152,7 +236,7 @@ class Research(Tool):
                 final_text = content
                 break
 
-            outer_emit = tool_state_mod._emit  # noqa: SLF001
+            outer_emit = tool_state_mod.get_emit()
 
             def _prefixed(label: str, error: bool = False,
                           _outer: Any = outer_emit, _p: str = prefix) -> None:

@@ -28,7 +28,7 @@ Audience: Javi (product) + me (Claude across sessions).
 | N | Image generation | 🔵 backlog — no concrete use case yet |
 | R.1 | Research step-counter in state label | ✅ shipped (v0.2.2) |
 | R.2 | `delegate` — write-capable sub-agent | ✅ shipped (v0.2.3, named `delegate` not `delegate_task`) |
-| R.3 | Batch parallel sub-agents (`tasks[]`) | 🔵 backlog — see below |
+| R.3 | Batch parallel sub-agents (`tasks[]`) | ✅ shipped (v0.2.18) |
 
 ### What's left to call v0.2 done
 
@@ -74,18 +74,6 @@ Today alf goes through LiteLLM with API keys → OpenAI is metered per token. He
 - **Token liveness across processes.** Gateway / TUI / schedule each open `auth.json` independently. The lock prevents torn writes but not stale reads — every transport call must re-resolve credentials.
 
 **Ship order.** Auth + CLI first (testable standalone). Then provider + transport dispatch. Then end-to-end smoke with real `gpt-5` through the agent loop.
-
-### R.3. Batch parallel sub-agents (`tasks[]`)
-
-Applies to both `research` and `delegate` once shipped. `tasks: [{brief, depth}]` (or `{goal, toolsets}` for delegate) up to 3 concurrent via `ThreadPoolExecutor(max_workers=3)`. Aggregate results, propagate interrupt to all children on cancel.
-
-**The real cost is the refactor of `alpi/tools/_state.py`.** `_emit`, `_interrupt_getter`, `_usage_sink` are module-level globals — multiple subagents in parallel race on them. Move to `contextvars.ContextVar` (preferred) so each thread gets its own view. Touches ~15 sites that call `emit_state` (web_search, web_fetch, web_extract, search, research, delegate, schedule, ...). Mechanical, non-destructive.
-
-The refactor is also useful on its own: cleaner tests, better observability when nested tools run.
-
-Both `research.py` and `delegate.py` have the single-task loop structured so `tasks[]` can layer on top with no structural change once state is context-local. See the module docstring in `alpi/tools/delegate.py` for the exact handoff point.
-
-Cost: 1-2 days + 1 day refactor. Risk: medium-high. Niche for personal use.
 
 ### H. Home Assistant integration
 
@@ -171,3 +159,4 @@ First usable cut. Textual TUI, 3-file memory with two-tier dedup, skill system w
 | (next)  | Ollama as a first-class provider (replaces the generic "Custom OpenAI-compatible endpoint" slot). Multiple named servers per profile (`home`, `gpu-box`, remote…), each with its own URL; model id becomes `<server-name>/<model>`. Live listing via `/api/tags` at setup time. Auto-resolves `num_ctx` from `/api/show` on every request so the model sees the full prompt instead of Ollama's 2K default — was the root cause of "never replies" with large system prompts. TUI header reads the resolved ctx as `ctx_window`; cost line hidden when `<= 0` for local models. `providers.custom` deleted entirely — no backwards-compat, no migration. ⚠ known limitation: small Ollama models (<7B) still hallucinate tool names regardless of transport (v0.2.15) |
 | (next)  | `browser` tool shipped (B closed). Playwright + Chromium, 9 actions: `navigate`, `snapshot`, `click`, `type`, `scroll`, `press`, `screenshot`, `close`, `logout`. Uses Playwright's native `aria_snapshot()` for LLM-friendly page representation; targets elements by `role` + accessible `name` (or by visible `text`) — robust across re-renders, no fragile CSS selectors. `playwright-stealth` patches applied by default (navigator.webdriver hidden, plugins populated, etc.) so Cloudflare-lite protection doesn't block us. `screenshot` saves a PNG and returns the path; when `tools.browser.vision=true` in the profile's config, passing a `question` auto-chains the screenshot to `read_image` — otherwise path-only with a hint. Per-profile storage at `~/.alpi/profiles/<name>/browser/state.json` so cookies stay isolated across profiles. Single dedicated worker thread (`ThreadPoolExecutor(1)`) funnels every call to Playwright's sync API — sidesteps the "Cannot switch to a different thread" greenlet restriction in the TUI where each turn runs in a fresh Textual worker. SSRF via existing `check_url()`. ~400 LOC vs hermes' 2984 — deliberately dropped multi-provider abstraction, daemon process, `@e1` refs, LLM summarization, JS/console eval, Browserbase/BrowserUse cloud, orphan reaper (v0.2.16) |
 | (next)  | `skill(action="validate")` shipped (Q closed). Four cheap correctness checks on a skill's `scripts/*.py`: `py_compile` for syntax, AST-walk + `find_spec` for missing third-party imports, OAuth race pattern (`webbrowser.open` before `serve_forever`/`handle_request`), and port coherence between `localhost:NNNN` mentioned in `SKILL.md` and `bind()` calls in code. Non-blocking — reports findings so the LLM decides what to do. ~150 LOC in `_skill_validate.py`. Did not port the 65-regex security scanner from hermes (we already had our own), nor the LLM-as-reviewer pattern (overlaps with asking alpi in chat "revisa esta skill") (v0.2.17) |
+| (next)  | Batch parallel sub-agents shipped (R.3 closed). `research` and `delegate` now accept `tasks: [...]` (up to 3) and run them concurrently via `ThreadPoolExecutor(max_workers=3)`. Results aggregate into one report with per-task sections; failures are captured inline instead of short-circuiting the batch. Prerequisite: `alpi/tools/_state.py` refactored from module-global `_emit`/`_interrupt_getter`/`_usage_sink` to `contextvars.ContextVar`, so two workers can have distinct emit callbacks without racing. Worker threads re-seed `interrupt_getter` + `usage_sink` from the parent context (Python's `ThreadPoolExecutor` does not auto-propagate ContextVars) and install a per-task prefixed `emit`. Existing callers unchanged — the public API is identical; only `research.py` and `delegate.py` added `get_emit()` instead of reading `_emit` directly (v0.2.18) |

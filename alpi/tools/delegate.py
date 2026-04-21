@@ -1,19 +1,9 @@
-"""delegate — spawn a write-capable sub-agent for bounded work.
-
-Batch/parallel mode (ROADMAP R.3) is intentionally NOT implemented here.
-`alf/tools/_state.py` exposes `_emit`, `_interrupt_getter` and
-`_usage_sink` as module-level globals; spawning multiple sub-agent
-threads in parallel would race on them. The refactor required to ship
-batch mode is: move those globals to `contextvars.ContextVar` so each
-thread gets its own view, then layer a `tasks: [{goal, toolsets}]`
-param with `ThreadPoolExecutor(max_workers=N)` on top of the loop
-below. The loop itself needs no structural change — only the state
-layer.
-"""
+"""delegate — spawn a write-capable sub-agent for bounded work."""
 
 from __future__ import annotations
 
 import json
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
@@ -22,6 +12,8 @@ from alpi import llm
 from alpi.home import get_home
 from alpi.tools.base import Tool, ToolResult
 from alpi.tools import _state as tool_state_mod
+
+MAX_PARALLEL_TASKS = 3
 
 
 TOOLSET_PRESETS: dict[str, set[str]] = {
@@ -104,7 +96,10 @@ class Delegate(Tool):
         "\n"
         "IMPORTANT: the sub-agent knows nothing about your conversation. "
         "Pass every relevant fact (file paths, error messages, decisions, "
-        "project structure) via `context`."
+        "project structure) via `context`.\n"
+        "\n"
+        "For independent parallel work, pass `tasks: [{goal, context, "
+        "toolsets}]` (up to 3) and they run concurrently."
     )
     parameters = {
         "type": "object",
@@ -113,7 +108,8 @@ class Delegate(Tool):
                 "type": "string",
                 "description": (
                     "What to accomplish. Specific and self-contained; "
-                    "the sub-agent has no memory of your chat."
+                    "the sub-agent has no memory of your chat. Required "
+                    "unless `tasks` is set."
                 ),
             },
             "context": {
@@ -130,11 +126,95 @@ class Delegate(Tool):
                     "Capabilities the sub-agent gets. Default: ['file', 'web']."
                 ),
             },
+            "tasks": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "goal": {"type": "string"},
+                        "context": {"type": "string"},
+                        "toolsets": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                        },
+                    },
+                    "required": ["goal"],
+                },
+                "description": (
+                    f"Up to {MAX_PARALLEL_TASKS} independent sub-agent "
+                    "tasks to run in parallel. Mutually exclusive with "
+                    "top-level goal/context/toolsets."
+                ),
+            },
         },
-        "required": ["goal"],
     }
 
     def run(
+        self,
+        goal: str = "",
+        context: str = "",
+        toolsets: list[str] | None = None,
+        tasks: list[dict] | None = None,
+    ) -> ToolResult:
+        if tasks:
+            return self._run_batch(tasks)
+        if not goal:
+            return ToolResult(
+                ok=False, output="",
+                error="'goal' required when not using 'tasks'",
+            )
+        return self._run_single(goal, context, toolsets)
+
+    def _run_batch(self, tasks: list[dict]) -> ToolResult:
+        if len(tasks) > MAX_PARALLEL_TASKS:
+            return ToolResult(
+                ok=False, output="",
+                error=f"max {MAX_PARALLEL_TASKS} parallel tasks; got {len(tasks)}",
+            )
+        for i, t in enumerate(tasks):
+            if not isinstance(t, dict) or not t.get("goal"):
+                return ToolResult(
+                    ok=False, output="",
+                    error=f"task {i} missing 'goal'",
+                )
+
+        parent_emit = tool_state_mod.get_emit()
+        parent_interrupt = tool_state_mod.get_interrupt_getter()
+        parent_usage = tool_state_mod.get_usage_sink()
+        total = len(tasks)
+
+        def _worker(idx: int, task: dict) -> ToolResult:
+            tool_state_mod.set_interrupt_getter(parent_interrupt)
+            tool_state_mod.set_usage_sink(parent_usage)
+            label = f"[{idx + 1}/{total}]"
+            tag = task.get("goal", "")[:30]
+
+            def _prefixed(msg: str, error: bool = False,
+                          _p: str = label, _tag: str = tag,
+                          _outer: Any = parent_emit) -> None:
+                if _outer is not None:
+                    _outer(f"{_p} {_tag} · {msg}", error)
+
+            tool_state_mod.set_emit(_prefixed)
+            return self._run_single(
+                task["goal"],
+                task.get("context", ""),
+                task.get("toolsets"),
+            )
+
+        with ThreadPoolExecutor(max_workers=min(MAX_PARALLEL_TASKS, total)) as ex:
+            results = list(ex.map(
+                lambda it: _worker(it[0], it[1]),
+                enumerate(tasks),
+            ))
+
+        parts: list[str] = []
+        for i, (task, r) in enumerate(zip(tasks, results)):
+            body = r.output if r.ok else f"[failed: {r.error}]"
+            parts.append(f"## Task {i + 1}: {task['goal']}\n\n{body}")
+        return ToolResult(ok=True, output="\n\n---\n\n".join(parts))
+
+    def _run_single(
         self,
         goal: str,
         context: str = "",
@@ -206,7 +286,7 @@ class Delegate(Tool):
                 final_text = content
                 break
 
-            outer_emit = tool_state_mod._emit  # noqa: SLF001
+            outer_emit = tool_state_mod.get_emit()
 
             def _prefixed(label: str, error: bool = False,
                           _outer: Any = outer_emit, _p: str = prefix) -> None:
