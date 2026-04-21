@@ -17,6 +17,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "tools": {
         "max_steps_per_turn": 40,
         "web_extract": {"model": ""},
+        "read_image": {"model": ""},
         "terminal": {
             "sandbox": False,
             "allow_network": False,
@@ -66,9 +67,15 @@ class WebExtractToolConfig:
 
 
 @dataclass
+class ReadImageToolConfig:
+    model: str = ""  # empty = use main model
+
+
+@dataclass
 class ToolsConfig:
     max_steps_per_turn: int = 40   # ceiling on tool-calls per user turn
     web_extract: WebExtractToolConfig = field(default_factory=WebExtractToolConfig)
+    read_image: ReadImageToolConfig = field(default_factory=ReadImageToolConfig)
 
 
 @dataclass
@@ -130,12 +137,16 @@ def load(home: Path) -> Config:
 
     tools_raw = data.get("tools") or {}
     web_extract_raw = tools_raw.get("web_extract") or {}
+    read_image_raw = tools_raw.get("read_image") or {}
     tools_cfg = ToolsConfig(
         max_steps_per_turn=int(tools_raw.get(
             "max_steps_per_turn", DEFAULT_CONFIG["tools"]["max_steps_per_turn"]
         )),
         web_extract=WebExtractToolConfig(
             model=str(web_extract_raw.get("model", "") or ""),
+        ),
+        read_image=ReadImageToolConfig(
+            model=str(read_image_raw.get("model", "") or ""),
         ),
     )
 
@@ -186,6 +197,8 @@ def _tools_delta(cfg: Config) -> dict:
         out["max_steps_per_turn"] = cfg.tools.max_steps_per_turn
     if cfg.tools.web_extract.model != d["web_extract"]["model"]:
         out["web_extract"] = {"model": cfg.tools.web_extract.model}
+    if cfg.tools.read_image.model != d["read_image"]["model"]:
+        out["read_image"] = {"model": cfg.tools.read_image.model}
     return out
 
 

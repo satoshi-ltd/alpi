@@ -60,6 +60,7 @@ Three options, any of them works:
 |---|---|---|---|
 | `tools.max_steps_per_turn` | `40` | int | next turn |
 | `tools.web_extract.model` | `""` (use main) | string | next turn |
+| `tools.read_image.model` | `""` (use main) | string | next turn |
 | `tools.terminal.sandbox` | `false` | bool | next turn |
 | `tools.terminal.allow_network` | `false` | bool | next turn |
 | `tools.research.quick_steps` | `8` | int | next turn |

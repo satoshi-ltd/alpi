@@ -15,7 +15,7 @@ Audience: Javi (product) + me (Claude across sessions).
 | A | `send_message` outbound messaging | ✅ shipped (commit 6e31ace) |
 | B | Interactive browser (Playwright) | 🔵 backlog — see below |
 | C | OpenAI Codex provider (ChatGPT subscription auth) | 🔵 backlog — see below |
-| D | Vision (`read_image`) | 🔵 backlog — see below |
+| D | Vision (`read_image`) | ✅ shipped (v0.2.4) |
 | E | Multi-profile CLI | ✅ shipped (commit 630f97c) |
 | F | Gateway workspace validation | ✅ shipped (commit 04bdaba) |
 | G | Terminal + code execution OS sandbox | ✅ shipped opt-in/experimental (commit e78b428) |
@@ -38,10 +38,7 @@ release. The bar for "ship v0.2" is **clean docs + version bump +
 real-use validation across a few sessions** — not feature
 exhaustiveness.
 
-**Open work that would make sense to land before closing v0.2:**
-
-- **D** (vision `read_image`) — ~50 LOC, unblocks "lee este screenshot".
-- Anything else: defer to v0.3.
+**Nothing open for v0.2.** Everything the roadmap promised is in. Backlog items (B, C, H, J, N, O, P, Q, R.3) all roll forward to v0.3.
 
 Once those land + a fresh CHANGELOG entry summarises v0.2, bump to
 `v0.3.0` and reopen the table for the next cycle.
@@ -87,10 +84,6 @@ Today alf goes through LiteLLM with API keys → OpenAI is metered per token. He
 - **Token liveness across processes.** Gateway / TUI / schedule each open `auth.json` independently. The lock prevents torn writes but not stale reads — every transport call must re-resolve credentials.
 
 **Ship order.** Auth + CLI first (testable standalone). Then provider + transport dispatch. Then end-to-end smoke with real `gpt-5` through the agent loop.
-
-### D. Vision (`read_image`)
-
-~50 LOC. LiteLLM already supports vision models. A `read_image(path, question)` tool sends image + prompt to whichever model is active (if vision-capable). Falls back to "model is text-only" error. Useful for "lee el screenshot que he guardado".
 
 ### R.3. Batch parallel sub-agents (`tasks[]`)
 
@@ -171,6 +164,16 @@ Current mitigations — stdlib-preferred rule + security scanner + structured la
 
 **Even more ambitious:** `skill(action="review", name=...)` that spawns a `research()` sub-agent with a pre-canned prompt — "You are reviewing skill X. Read its SKILL.md and scripts/. Return a bulleted list of bugs, race conditions, security issues, or setup instructions that contradict the code." — and reports back. One research call per review; catches real issues.
 
+### S. `read_image` auto-resize (cost saver)
+
+Vision-model cost scales with image resolution: a 4K screenshot costs ~9× more tokens than its 1K version for the same content. Right now `read_image` sends the original bytes to the LLM, so a photo of a receipt at phone-native resolution burns tokens that contribute nothing to the answer.
+
+**Scope.** Add Pillow as a main dependency (~3 MB). Add `tools.read_image.auto_resize: true` to config (default on). When set, downscale any image whose longer edge exceeds a target (Anthropic recommends ~1568px, which also matches OpenAI's 512/768/2048 tile grid well) before base64-encoding. Preserve aspect ratio, reuse format where possible (RGBA→RGB for JPEG), JPEG quality 85.
+
+**Why not in v0.2.** Adding Pillow as a required dep + config knob + resize logic + tests is a non-trivial chunk for what is an optimisation, not a correctness fix. Users with 4K screenshots pay more tokens; that's it. Ship when we have a real "this is getting expensive" signal from usage.
+
+**Reference.** Hermes' `_resize_image_for_vision` in `tools/vision_tools.py` does a reactive version (resize only after the API rejects with "too large"); our take would be proactive (resize any time we could).
+
 ---
 
 ## Decisions discarded — don't relitigate
@@ -212,3 +215,4 @@ First usable cut. Textual TUI, 3-file memory with two-tier dedup, skill system w
 | 9ed4139 | TUI: theme system + floating panels + anchored scroll + MarkdownStream (v0.2.1) |
 | (next)  | Research: prefix inner `emit_state` with `step N/M · …` during tool loop (v0.2.2, R.1) |
 | (next)  | `delegate` tool: write-capable sub-agent with file/terminal/web toolsets (v0.2.3, R.2) |
+| (next)  | `read_image` tool: vision-capable image analysis, local path + http(s) URL with SSRF guard, SVG, model override (v0.2.4, D) |
