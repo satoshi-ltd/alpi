@@ -21,6 +21,11 @@ DEFAULT_CONFIG: dict[str, Any] = {
             "sandbox": False,
             "allow_network": False,
         },
+        "research": {
+            "quick_steps": 8,
+            "normal_steps": 15,
+            "deep_steps": 30,
+        },
     },
     "tui": {
         "show_cost": True,

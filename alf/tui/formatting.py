@@ -113,7 +113,7 @@ def arg_hint(tool_name: str, args: dict) -> str:
         if action == "send" and args.get("recipients"):
             parts.append(truncate(", ".join(args["recipients"]), 30))
         return " · ".join(parts)
-    if tool_name == "delegate":
+    if tool_name == "research":
         return truncate(str(args.get("brief", "")), 60)
     k, v = next(iter(args.items()))
     return truncate(f"{k}={v}", 40)

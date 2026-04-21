@@ -66,14 +66,16 @@ exist. If you get **2 empty responses in a row for the same topic**:
 Never loop web_search more than **3 times** for a single user question.
 If the first 3 attempts don't produce useful results, switch strategy.
 
-### Deep research — use `delegate`
+### Deep research — use `research`
 
 When the user asks an open-ended research question that clearly needs
 multiple searches + fetches (e.g. "investigate X in depth", "comparativa
-of Y", "what's the best Z"), call `delegate(brief="…")` instead of
-running the loop yourself. The sub-agent has its own context so your
-main conversation stays clean. Use it **once** per research request —
-don't chain delegates.
+of Y", "what's the best Z"), call `research(brief="…", depth="…")`
+instead of running the loop yourself. Pick `depth` from the user's
+intent: `quick` (single-answer), `normal` (comparative — default),
+`deep` (exhaustive surveys, "estudio profundo"). The sub-agent has its
+own context so your main conversation stays clean. Use it **once** per
+research request — don't chain.
 
 ## Past conversations
 

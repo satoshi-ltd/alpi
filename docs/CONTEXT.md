@@ -224,7 +224,7 @@ Mixing ``Exit`` / ``Back`` / ``Cancel`` within one context is a bug.
 - **Interrupt on new input:** typing a new message while a turn is still
   running cancels the current work and starts fresh. `engine.interrupt_requested`
   is polled at 3 points (between LLM iterations, mid-stream, between
-  tool calls). Long-running tools (e.g. `delegate`) poll
+  tool calls). Long-running tools (e.g. `research`) poll
   `tool_state.is_interrupted()` and abort early. Active ToolCards get
   `finish("[interrupted]")` immediately for visual feedback.
 - **Accent color** from `tui.accent` in `config.yaml` (default `#ff8800`).
@@ -245,7 +245,7 @@ Mixing ``Exit`` / ``Back`` / ``Cancel`` within one context is a bug.
 - **17 tools** registered: `read_file`, `write_file`, `edit_file`,
   `terminal`, `search`, `todo`, `web_search`, `web_fetch`,
   `web_extract`, `schedule`, `memory`, `session_search`, `skill`,
-  `delegate`, `send_message`, `email`, `config`.
+  `research`, `send_message`, `email`, `config`.
   - **`browser`** file exists but is **not registered** (stub). See
     "Open questions / pending" section 6 for the Playwright roadmap.
 - **Curated memory** (`memories/USER.md`, `memories/MEMORY.md`) with §
@@ -432,7 +432,7 @@ agent` convention are the safety net.
 - **Engine flag** `interrupt_requested` polled at 3 check-points:
   before each LLM iteration, mid-stream (`llm.stream` loop breaks on
   flag), and between tool calls within a step.
-- **Long-running tools** (`delegate`) poll
+- **Long-running tools** (`research`) poll
   `alf.tools._state.is_interrupted()` between internal LLM iterations
   and between sub-tool executions. The engine sets the getter around
   the outer tool call so the flag propagates automatically.
@@ -643,21 +643,31 @@ agent` convention are the safety net.
   `call_from_thread` — Textual inspects signatures and built-ins trip it.
   Wrap in a regular method (see `_drop_active_tool`).
 
-### Delegate (research sub-agent)
+### Research (read-only sub-agent)
 
 - **When to use** (per system prompt): open-ended research needing
-  multiple searches + fetches ("investigate X", "compare Y vs Z").
+  multiple searches + fetches ("investigate X", "compare Y vs Z",
+  "haz un estudio profundo sobre Z").
 - **Scope**: read-only toolset `{web_search, web_fetch, web_extract,
   read_file, search}`. No memory/terminal/write. Enforced by
   `SUB_AGENT_TOOLS` allowlist.
-- **Budget**: 12 iterations *of LLM round-trips* (not tool calls — a
-  parallel `search + 3 extracts` in one turn still counts as 1).
-- **Synthesis fallback**: when budget runs out, delegate forces one
-  final no-tools `llm.complete()` with "stop researching, report now
-  with what you have". Avoids the "[delegate gave up]" footgun where
-  the main agent retries the whole thing.
-- **Interrupt**: polls `tool_state.is_interrupted()` between iterations
-  and between tools; returns "[delegate: interrupted]" on the first hit.
+- **Depth tiers**: model picks `depth="quick" | "normal" | "deep"`;
+  the integer per tier comes from
+  `tools.research.{quick,normal,deep}_steps` in `config.yaml`
+  (defaults 8 / 15 / 30). One iteration = one LLM round-trip
+  (a `search + 3 extracts` parallel call inside one assistant
+  message still counts as 1).
+- **Synthesis fallback**: when the budget runs out, research forces
+  one final no-tools `llm.complete()` with "stop investigating,
+  report now with what you have". Avoids the "[research gave up]"
+  footgun where the main agent retries the whole thing.
+- **Interrupt**: polls `tool_state.is_interrupted()` between
+  iterations and between tools; returns "[research: interrupted]"
+  on the first hit.
+- **State label** during execution: `"<depth> · step N/M"` emitted
+  at the start of every iteration. Inner tools (`web_search` etc.)
+  override it briefly with their own labels — that's a known UX
+  rough edge tracked in the v0.2 R.1 follow-up.
 
 ### Terminal tool
 
@@ -819,9 +829,9 @@ alf/
 ├── tools/
 │   ├── base.py                  Tool ABC + ToolResult
 │   ├── _state.py                set_emit / emit_state / set_interrupt_getter
-│   ├── skill.py                 create/edit/delete/list — pending gate + origin + quota + scanner
+│   ├── skill.py                 create/edit/patch/add_file/view/delete/list — scanner + origin + quota
 │   ├── search.py                content + filename search (ripgrep + stdlib fallback)
-│   ├── delegate.py              research sub-agent (read-only toolset)
+│   ├── research.py              read-only sub-agent (depth: quick/normal/deep)
 │   ├── terminal.py              run/background/status/output/kill
 │   ├── browser.py               STUB, not registered (v0.2 Playwright)
 │   └── <other>.py               read_file, write_file, edit_file, todo, memory,
@@ -831,7 +841,7 @@ alf/
 ├── prompts/
 │   ├── default_personality.md   seed for ~/.alf/PERSONALITY.md
 │   ├── system_prompt.md         tool-use + inline memory/skill triggers +
-│                                delegate guidance
+│                                research guidance
 │   ├── create_skill_guide.md    rules for create_skill
 │   └── skill_template.md
 ├── tui/
@@ -1176,6 +1186,80 @@ A `generate_image(prompt, style)` tool using the active vision model
 or a dedicated endpoint (DALL-E, SD). Useful for "hazme un logo
 rápido". Low priority unless a concrete use case appears.
 
+#### R. Research tool — follow-ups
+
+The v0.2 launch of `research` (renamed from `delegate`) shipped with
+a read-only sub-agent, `depth` enum (`quick` / `normal` / `deep`)
+driving iteration count via `tools.research.{quick,normal,deep}_steps`
+in `config.yaml`, fixed system-prompt bug (was naming `grep`/`glob`
+which no longer exist), and a narrow scope — single sub-agent, read
+only, no batch. Three follow-ups intentionally deferred:
+
+**R.1 — Step-counter in live state label.** Cost: 2-4h. Risk: low.
+
+Today the research ToolCard shows whatever the innermost tool emits
+(e.g. `"searching the web…"`) with no sense of how deep into the
+budget we are. Wrap the `emit_state` callback inside the research
+subloop so every inner label is prefixed with `step N/M · <inner>`.
+Implementation sits in `alf/tools/research.py` — capture the engine-
+set emit callback, install a wrapper that prefixes with the current
+step counter before delegating, restore after the tool call.
+Testable with 2-3 cases. Ship first among the three follow-ups.
+
+**R.2 — `delegate_task` — write-capable sub-agents.** Cost: 1-2 days.
+Risk: medium.
+
+A second tool alongside `research`, write-capable. Schema:
+`brief` + `toolsets: ["file", "terminal", "web"]` enum. Map internal
+toolset names → concrete tool sets (`"file"` → read_file + write_file
++ edit_file + search, `"terminal"` → terminal, etc.). Reuses the
+research subloop infrastructure; different system prompt allowing
+mutations. Use-case: "refactor module X", "generate project scaffold
+following template Y".
+
+Two real gotchas:
+
+1. **Security posture**: a sub-agent with `write_file` plus prompt
+   injection can mutate the FS without user-in-the-loop. alf's Layer 1
+   sensitive-path denylist is the only wall; no per-write confirmation
+   today. Decision point before implementing: (a) trust the denylist,
+   consistent with how the main agent operates, or (b) add first-write
+   confirmation gate per sub-agent invocation. For personal-agent
+   scope (a) is probably sufficient — align with the rest of alf's
+   threat model.
+2. **Testing surface**: subagent writes need isolated FS fixtures +
+   LLM mocks. Adds test complexity; budget 3-4 hours for coverage.
+
+Only ship if a concrete use-case materialises ("I need alf to delegate
+a multi-file refactor"). Absent that, this stays backlog.
+
+**R.3 — Batch parallel (`tasks[]`).** Cost: 1-2 days + 1 day refactor.
+Risk: medium-high.
+
+Hermes-style: `tasks: [{brief, depth}]` up to 3 running concurrently
+via `ThreadPoolExecutor(max_workers=3)`. Aggregates the reports,
+propagates interrupts to all children on cancel.
+
+**The real bill is the refactor of `alf/tools/_state.py`.** Today
+`set_emit`, `set_interrupt_getter`, `set_usage_sink` are module-level
+globals — three subagents running in parallel race on them: one
+subagent's `emit_state` pisa the callback the other is using, usage
+gets attributed to the wrong card. Fix: move to `contextvars`
+(preferred, per-coroutine/thread isolation) or thread-locals. That
+refactor touches every tool that calls `emit_state` — ~15 sites
+across web_search, web_fetch, web_extract, search, research,
+schedule, etc. Not destructive (same API, different storage) but
+mechanical.
+
+The refactor is also useful on its own: cleaner tests, better
+observability when nested tools run. Worth doing when either (a)
+we genuinely need batch parallel, or (b) we hit a bug traceable to
+the current globals. Don't do it in isolation; bundle with the use
+case.
+
+Lowest-priority of the three follow-ups — niche for a personal
+agent, highest cost, most fragile.
+
 ---
 
 ## v0.3 — planned
@@ -1307,11 +1391,11 @@ battery of cheap checks:
   scripts bind to a different port, flag it).
 
 **Even more ambitious**: an optional `skill(action="review", name=...)`
-that spawns a `delegate()` sub-agent with a pre-canned prompt — *"You
+that spawns a `research()` sub-agent with a pre-canned prompt — *"You
 are reviewing this skill directory. Read SKILL.md and every file in
 scripts/. Return a bulleted list of bugs, race conditions, security
 issues, or setup instructions that contradict the code."* — and
-reports back. Costs one delegate call but catches real issues.
+reports back. Costs one research call but catches real issues.
 
 Deliberately NOT for v0.1/v0.2:
 
@@ -1415,9 +1499,11 @@ Deliberately NOT for v0.1/v0.2:
 28. **`write_file` atomic overwrite** (`tmp + os.replace`, no `.bak`).
 29. **`glob` / `grep` default excludes** (`.git`, `node_modules`,
     `.venv`, etc.); `include_noise=true` to opt in.
-30. **`delegate` tool** for deep research. Read-only sub-toolset,
-    12-iteration budget (counted by LLM round-trips), synthesis
-    fallback when budget runs out. Honors engine interrupt via
+30. **`research` tool** for deep investigation (renamed from
+    `delegate` in v0.2). Read-only sub-toolset, depth-tiered budget
+    (`quick` / `normal` / `deep` driven by
+    `tools.research.{tier}_steps` config), synthesis fallback when
+    budget runs out. Honors engine interrupt via
     `tool_state.is_interrupted()`.
 31. **Interrupt on new input**: flag polled at 3 points in engine,
     immediate visual feedback (DimLine + cards marked `[interrupted]`),
