@@ -177,13 +177,15 @@ Mixing ``Exit`` / ``Back`` / ``Cancel`` within one context is a bug.
   Approach C (return state after mutation), `.bak` snapshots, strict
   hygiene rules, disambiguation rule for preferences.
 - **Inline learning** (no post-session reflect): agent calls `memory` /
-  `create_skill` during the conversation based on triggers.
-- **Skills with pending gate**: agent-created skills land in
-  `~/.alf/skills/_pending/`, user approves via `/skills` modal. Quota,
-  security scanner, `origin: agent|user` field.
-- **Workspace sandbox**: file tools limited to workspace + `~/.alf/`.
-  `/workspace` slash to set; terminal soft-hardened with `cwd=workspace`
-  + prompt discouragement (not hard isolation — see v0.2 §3).
+  `skill(create)` during the conversation based on triggers.
+- **Skills — live by default**: agent-created skills land directly
+  under `~/.alf/skills/<category>/<name>/` with `origin: agent`
+  frontmatter, a security scanner checks on every write, and a quota
+  caps how many agent-owned skills coexist.
+- **File tools follow terminal's posture**: shared sensitive-path
+  denylist (`/etc`, SSH keys, creds, …); no workspace wall. Real
+  workspace-only isolation is available via the opt-in OS sandbox
+  (Layer 2 in `docs/SECURITY.md`).
 - **Turn-based session format**: `turns: [{user, tools[], assistant}]`
   stored; resume rebuilds clean `system + user/assistant × N` messages.
   Small files (~5-10× smaller than the old message log).
@@ -204,7 +206,7 @@ Mixing ``Exit`` / ``Back`` / ``Cancel`` within one context is a bug.
   spinner + elapsed ticker that refreshes 4×/s (reduced from 10× for
   event-loop health). Shows **tool_state labels** while running, switches
   to final result line on completion. Accent color on diamond + name for
-  `memory` and `create_skill` (learning tools) so the user sees when alf
+  `memory` and `skill` (learning tools) so the user sees when alf
   is growing.
 - **Slash autocompletion** via Textual's built-in `SuggestFromList` — type
   `/he` → ghost `/help`, right arrow accepts.
@@ -213,8 +215,8 @@ Mixing ``Exit`` / ``Back`` / ``Cancel`` within one context is a bug.
   `ModalScreen[str]`.
 - **`/help`, `/memory`, `/tools`, `/cost`, `/skills`** are `ModalScreen`s
   (`alf/tui/screens.py`). `Esc` closes.
-  - **`/skills`** lists live + pending skills. Keys: `a` approve, `r`
-    reject, `v` view SKILL.md body.
+  - **`/skills`** lists every installed skill grouped by category,
+    with a `v` key to view SKILL.md body.
 - **Slash commands** also: `/clear`, `/compact`, `/exit`. **No
   `/reflect`** (removed — reflection is inline during conversation).
 - **`/compact`** mounts a ToolCard of its own so the user sees the
@@ -253,19 +255,20 @@ Mixing ``Exit`` / ``Back`` / ``Cancel`` within one context is a bug.
   silent deletions. `.bak` snapshot before every mutating write.
 - **`PERSONALITY.md`** at home root. Edited by user or via `memory`
   tool (target="PERSONALITY.md").
-- **Skills** under `~/.alf/skills/<category>/<name>/`. Agent-created
-  skills land in `~/.alf/skills/_pending/<name>/` with `origin: agent`
-  frontmatter — the user reviews with `/skills` (approve → moves to
-  live category dir; reject → deletes). User-owned skills carry
-  `origin: user` and require `confirm_user_skill=true` on `edit_skill`
-  or `delete_skill`. Quota: max 5 pending at a time. Security scanner
-  (regex) blocks obvious foot-guns (rm -rf, fork bomb, curl|sh, eval,
-  hardcoded keys) before writing.
+- **Skills** under `~/.alf/skills/<category>/<name>/`. All skills are
+  live — no pending/approval state. The `origin` field in the
+  frontmatter distinguishes `agent` (self-created) from `user` (hand-
+  authored); modifications to user skills require
+  `confirm_user_skill=true`. Subdirs: `scripts/`, `references/`,
+  `assets/`, `secrets/` (mode 0700, gitignored, scan skipped),
+  `state/` (gitignored, scan skipped, runtime persistence). Security
+  scanner runs on every `create`/`add_file`/`patch`. Quota caps
+  agent-owned skills.
 - **Inline learning, not post-session reflect.** The system prompt tells
-  the agent to call `memory(add, ...)` and `create_skill(...)` during
-  the conversation whenever the triggers apply. The `/reflect` post-
-  session pass was removed — it added complexity and Hermes doesn't do
-  it either.
+  the agent to call `memory(add, ...)` and `skill(action='create', ...)`
+  during the conversation whenever the triggers apply. The `/reflect`
+  post-session pass was removed — it added complexity and Hermes doesn't
+  do it either.
 - **Sessions** auto-saved under `sessions/*.json`; empty sessions (no
   user message) are NOT saved. `alf -c` / `--continue` resumes the last
   one (adopts its id, doesn't fork). Replays user/assistant turns
@@ -350,30 +353,77 @@ Removed since v0.1 start: `test_reflect_unit.py`, `test_llm_reflect.py`
   for "answer about URL", `web_fetch` for "show full page". **Hard rule**:
   never `bash curl` for HTTP(S).
 
-### Skills — pending gate + origin (our main differentiation vs Hermes)
+### Skills
 
-Hermes' `skill_manager_tool` writes skills directly to the live dir.
-Users have complained the agent creates them unilaterally. alf does it
-differently:
+One unified `skill` tool ([alf/tools/skill.py](alf/tools/skill.py))
+covers the full lifecycle: `create`, `edit` (SKILL.md body), `patch`
+(targeted find-and-replace inside any skill file), `add_file`,
+`remove_file`, `delete`, `list`, `view`. Skills live under
+`~/.alf/skills/<category>/<name>/` and are live-by-default — no
+pending/approval state (that design existed briefly in early v0.1
+and was removed; the friction outweighed the benefit).
 
-- **`create_skill`** writes to `~/.alf/skills/_pending/<name>/` (NOT
-  live) with `origin: agent` frontmatter.
-- **`/skills` modal** lists pending at top (yellow) and installed below
-  (with `origin: agent` cyan or `origin: user` green). Keys: `a`
-  approve → moves dir to `<category>/<name>/`; `r` reject → deletes;
-  `v` view SKILL.md.
-- **Quota**: max 5 pending at once. The agent gets an error if it tries
-  to exceed.
-- **Anti-duplication** across live + pending — no collision by name.
-- **Security scanner** ([create_skill.py:scan_skill_body](alf/tools/create_skill.py))
-  rejects obvious foot-guns before writing: `rm -rf`, fork bomb,
-  `curl|sh`, `eval()`, `exec()`, `__import__()`, hardcoded API keys.
-- **`edit_skill` / `delete_skill`**: agent-owned skills edit/delete
-  directly; user-owned (`origin: user` or unknown) require
-  `confirm_user_skill=true`. `edit_skill` keeps frontmatter intact,
-  replaces body only, and writes a `.bak` next to `SKILL.md`.
-- The system prompt tells the agent it **doesn't need to ask** before
-  calling `create_skill` — the pending gate is the ask.
+**Frontmatter** auto-populated on `create`:
+
+- `name`, `description`, `category` (required, from a fixed enum
+  plus `miscellaneous` as fallback).
+- `version: 0.1.0`, `origin: agent|user`, `created_at`.
+- `requires_env: []`, `tools: []`, `stores_secrets: bool`.
+
+**Subdirectory contract**:
+
+- `scripts/` — executable (python/bash). Scanned.
+- `references/` — docs/data the LLM reads as context. Scanned.
+- `assets/` — static files (templates, images, seed data). Scanned.
+- `secrets/` — credentials, mode `0o700`, gitignored, scanner
+  **skipped by design** (opaque to detect creds-as-values).
+- `state/` — runtime persistence (caches, counters, histories),
+  gitignored, scanner skipped. **No enforced schema** — the skill
+  author picks the shape. Convention (recommendation, not
+  validated): `.jsonl` for append-only logs, `.json` for
+  structured snapshots, `.db` for SQLite. The authoritative schema
+  lives in the scripts that touch state/. A `## State` section in
+  SKILL.md is the canonical place to describe what lives there,
+  what's regenerable, and what rotation the skill expects — so
+  the LLM sees it on context load without reading the scripts.
+
+A `.gitignore` inside the skill dir lists `secrets/` and `state/`
+so `git add` of the skills tree never drags creds or runtime state.
+
+**Provenance & guards**:
+
+- `origin: agent` skills may be edited/deleted freely by the agent.
+- `origin: user` (default for manually-authored skills) require
+  explicit `confirm_user_skill=true` on every mutating action.
+- `MAX_AGENT_SKILLS = 40` quota enforced at `create` time.
+- Anti-duplication by name across every category.
+
+**Security scanner** ([alf/tools/skill.py:_SCANNER](alf/tools/skill.py))
+runs on `create`, `add_file`, `patch` for every file NOT in
+`secrets/` or `state/`. Covers (~50 patterns): destructive shell
+(`rm -rf`, mkfs, dd, chmod 777, etc.), credential exfiltration
+(curl/wget piping env vars or `~/.ssh`/`~/.aws`), prompt injection
+("ignore previous instructions", role hijack), persistence (crontab,
+shell rc, authorized_keys, systemd, launchd), reverse shells (nc,
+socat, bash /dev/tcp), obfuscation (base64 decode pipes, `eval`/
+`exec`, `__import__`), process execution (subprocess, os.system),
+and hardcoded credentials.
+
+**Atomic writes**: every mutating operation writes to a temp file
+in the same directory and `os.replace`s onto the target, so a crash
+or interruption leaves the original file untouched.
+
+**Size limits**: 1 MiB per supporting file, 100k chars for SKILL.md
+body. Larger payloads go to `assets/` + reference from SKILL.md.
+
+**`view` action** lets the LLM load SKILL.md or any single skill
+file into context on demand (progressive disclosure) — cheaper than
+`read_file` because the tool handles path resolution from
+`name` + optional `file` argument.
+
+**System prompt** tells the agent it doesn't need to ask before
+calling `skill(action='create')` — the scanner + quota + `origin:
+agent` convention are the safety net.
 
 ### Interrupt
 
