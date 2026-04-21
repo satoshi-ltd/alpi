@@ -123,9 +123,8 @@ class Research(Tool):
                     "[research: interrupted by user before completing]"
                 ))
             iteration += 1
-            tool_state_mod.emit_state(
-                f"{depth} · step {iteration}/{max_steps}",
-            )
+            prefix = f"step {iteration}/{max_steps}"
+            tool_state_mod.emit_state(f"{depth} · {prefix}")
             try:
                 out = llm.complete(
                     messages=messages, tools=tools_schema, **call_kwargs
@@ -153,26 +152,37 @@ class Research(Tool):
                 final_text = content
                 break
 
-            for tc in tool_calls:
-                if tool_state_mod.is_interrupted():
-                    return ToolResult(ok=True, output=(
-                        "[research: interrupted by user mid-investigation]"
-                    ))
-                name = tc["name"]
-                if name not in SUB_AGENT_TOOLS:
-                    payload = f"ERROR: tool '{name}' not available to research sub-agent"
-                else:
-                    try:
-                        args = json.loads(tc["arguments"]) if tc["arguments"] else {}
-                    except json.JSONDecodeError:
-                        args = {}
-                    result = execute(name, args)
-                    payload = result.output if result.ok else f"ERROR: {result.error}"
-                    payload = payload[:10_000]
-                messages.append({
-                    "role": "tool", "tool_call_id": tc["id"],
-                    "name": name, "content": payload,
-                })
+            outer_emit = tool_state_mod._emit  # noqa: SLF001
+
+            def _prefixed(label: str, error: bool = False,
+                          _outer: Any = outer_emit, _p: str = prefix) -> None:
+                if _outer is not None:
+                    _outer(f"{_p} · {label}", error)
+
+            tool_state_mod.set_emit(_prefixed)
+            try:
+                for tc in tool_calls:
+                    if tool_state_mod.is_interrupted():
+                        return ToolResult(ok=True, output=(
+                            "[research: interrupted by user mid-investigation]"
+                        ))
+                    name = tc["name"]
+                    if name not in SUB_AGENT_TOOLS:
+                        payload = f"ERROR: tool '{name}' not available to research sub-agent"
+                    else:
+                        try:
+                            args = json.loads(tc["arguments"]) if tc["arguments"] else {}
+                        except json.JSONDecodeError:
+                            args = {}
+                        result = execute(name, args)
+                        payload = result.output if result.ok else f"ERROR: {result.error}"
+                        payload = payload[:10_000]
+                    messages.append({
+                        "role": "tool", "tool_call_id": tc["id"],
+                        "name": name, "content": payload,
+                    })
+            finally:
+                tool_state_mod.set_emit(outer_emit)
 
         if not final_text:
             tool_state_mod.emit_state("writing final report…")

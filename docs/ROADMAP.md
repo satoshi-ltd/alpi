@@ -22,11 +22,13 @@ Audience: Javi (product) + me (Claude across sessions).
 | H | Home Assistant integration | ⏸ blocked on user confirmation |
 | I | MCP client | ✅ shipped (commit 0d376ac) |
 | J | Anti-bot browsing (camoufox) | 🔵 backlog — depends on B |
-| K | Scroll resilience under heavy streaming | 🔵 backlog — watch for regressions |
+| K | Scroll resilience under heavy streaming | ✅ shipped (commit 9ed4139 — `VerticalScroll.anchor()`) |
 | L | Reasoning-as-state (TUI) | ✅ shipped (commits 62f7fa7 + fd1fec4) |
 | M | TTS / STT / voice-mode | ❌ out of scope for core agent |
 | N | Image generation | 🔵 backlog — no concrete use case yet |
-| R | Research tool follow-ups (R.1 / R.2 / R.3) | 🔵 backlog — see below |
+| R.1 | Research step-counter in state label | ✅ shipped (v0.2.2) |
+| R.2 | `delegate_task` — write-capable sub-agents | 🔵 backlog — see below |
+| R.3 | Batch parallel research (`tasks[]`) | 🔵 backlog — see below |
 
 ### What's left to call v0.2 done
 
@@ -38,7 +40,6 @@ exhaustiveness.
 
 **Open work that would make sense to land before closing v0.2:**
 
-- **R.1** (research step-counter in state label) — 2-4h, low risk, very visible UX win.
 - **D** (vision `read_image`) — ~50 LOC, unblocks "lee este screenshot".
 - Anything else: defer to v0.3.
 
@@ -91,12 +92,6 @@ Today alf goes through LiteLLM with API keys → OpenAI is metered per token. He
 
 ~50 LOC. LiteLLM already supports vision models. A `read_image(path, question)` tool sends image + prompt to whichever model is active (if vision-capable). Falls back to "model is text-only" error. Useful for "lee el screenshot que he guardado".
 
-### R.1. Research step-counter in live state label
-
-The `research` ToolCard currently shows whatever inner tool is running (`searching the web…`) with no sense of progress. Wrap the `emit_state` callback inside the research subloop so every inner label is prefixed with `step N/M · <inner>`. Capture the engine-set callback, install a wrapping closure for the duration of each tool call, restore after.
-
-Cost: 2-4h. Risk: low. Tests: 2-3 cases. **Ship first among the three R follow-ups.**
-
 ### R.2. `delegate_task` — write-capable sub-agents
 
 Sibling to `research`. Schema: `brief` + `toolsets: ["file", "terminal", "web"]`. Map toolset names → concrete tool sets (`"file"` → read_file + write_file + edit_file + search, `"terminal"` → terminal). Reuses research subloop infra; different system prompt allowing mutations.
@@ -127,10 +122,6 @@ Only if Javi runs HA. Hermes has `homeassistant_tool` as reference. Requires `HA
 ### J. Anti-bot browsing (camoufox)
 
 Stealth Firefox fork for Cloudflare-protected sites. Hold until B (Playwright) is proven useful. Free but heavy (+200MB binary).
-
-### K. Scroll resilience under heavy streaming
-
-`call_after_refresh` + dual timers cover most cases today. Watch for regressions when streaming is fast + tool cards animate concurrently.
 
 ### N. Image generation
 
@@ -229,3 +220,5 @@ First usable cut. Textual TUI, 3-file memory with two-tier dedup, skill system w
 | fd1fec4 | TUI: reasoning persists across sessions, `show_reasoning` toggle, tighter layout |
 | d2ceb74 | Tools: rename `delegate` → `research`, depth tiers driven by config |
 | 4035327 | Skills: auto-inject index into system prompt + render skill name in tool cards |
+| 9ed4139 | TUI: theme system + floating panels + anchored scroll + MarkdownStream (v0.2.1) |
+| (next)  | Research: prefix inner `emit_state` with `step N/M · …` during tool loop (v0.2.2, R.1) |

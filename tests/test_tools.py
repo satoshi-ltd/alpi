@@ -213,3 +213,45 @@ def test_research_rejects_unknown_depth() -> None:
     r = Research().run(brief="x", depth="superdeep")
     assert not r.ok
     assert "depth" in (r.error or "")
+
+
+def test_research_prefixes_inner_emit_with_step_counter(
+    tmp_home_no_env: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from alf import llm
+    from alf.llm import Completion
+    from alf.tools import _state as tool_state_mod
+    from alf.tools import research as research_mod
+    from alf.tools.research import Research
+
+    captured: list[str] = []
+    tool_state_mod.set_emit(lambda label, error: captured.append(label))
+
+    calls = iter([
+        Completion(
+            content="", input_tokens=1, output_tokens=1, cost_usd=0.0, raw=None,
+            tool_calls=[{"id": "c1", "name": "web_search",
+                         "arguments": '{"query": "x"}'}],
+        ),
+        Completion(
+            content="final report", input_tokens=1, output_tokens=1,
+            cost_usd=0.0, raw=None, tool_calls=[],
+        ),
+    ])
+    monkeypatch.setattr(llm, "complete", lambda **_: next(calls))
+
+    def _fake_execute(name: str, args: dict):
+        tool_state_mod.emit_state("searching the web…")
+        from alf.tools.base import ToolResult
+        return ToolResult(ok=True, output="hit")
+
+    monkeypatch.setattr(research_mod, "execute", _fake_execute, raising=False)
+    import alf.tools as tools_pkg
+    monkeypatch.setattr(tools_pkg, "execute", _fake_execute, raising=False)
+
+    result = Research().run(brief="test", depth="quick")
+    assert result.ok
+    assert any("step 1/" in s and "searching the web…" in s for s in captured), (
+        f"expected prefixed inner label, got: {captured}"
+    )
+    assert any(s.startswith("quick · step 1/") for s in captured)
