@@ -37,6 +37,9 @@ class FloatingPanel(Container):
         padding: 1 2;
         margin: 0;
     }
+    FloatingPanel:light > .panel-frame > .panel-header {
+        background: $surface-darken-1;
+    }
     FloatingPanel > .panel-frame > .panel-header > .panel-title {
         color: $foreground;
         text-style: bold;
