@@ -194,20 +194,22 @@ Spawns a sub-agent with a read-only toolset (`web_search`, `web_fetch`, `web_ext
 
 ### TUI (`alf/tui/`)
 
-Textual 8.2.x. Layout: `AlfTopBar` (identity) + chat scroll + `AlfHeader` (status: model · ctx · cost) + `Input` (bordered).
+Textual 8.2.x. Layout: `AlfTopBar` (identity) + chat scroll (`VerticalScroll.anchor()` auto-follows new content) + `AlfHeader` (status: model · ctx · cost) + `#chat-input` (flat slab, accent-tinted bg on focus).
 
-**Live tool cards** (`ToolCard` in `widgets.py`): single line, spinner + elapsed at 6 Hz, `tool_state` labels while running, switches to result line on completion. `LEARNING_TOOLS = {"memory", "skill"}` get the accent color so the user sees in-flight learning.
+**Theme** (`themes.py`): `build_theme(accent, dark)` factory returns a Textual `Theme` from a single accent hex + dark/light flag. Registered in `AlfApp.__init__` (not `on_mount` — child widgets read `theme_variables` during their own mount). Widgets read `self.app.theme_variables` at render time instead of taking colors as params, so `tui.accent` or `tui.theme` changes propagate without rewiring.
+
+**Live tool cards** (`ToolCard` in `widgets.py`): single line, spinner + elapsed at 6 Hz, `tool_state` labels while running, switches to result line on completion. `◆` uses `$accent-darken-1` for non-error, `$error` for failures.
+
+**Assistant streaming**: `AssistantMessage` uses Textual's native `Markdown.get_stream()` — async queue that coalesces fragments when deltas arrive faster than the widget can render. Parser runs on new fragments only, not the full buffer.
 
 **Reasoning surface**:
-- Inter-tool prose is demoted from a Markdown widget to a compact dim `ReasoningLine` (`» …`) above the next tool card. Persisted in `ToolLog.reasoning` (first tool of each batch carries the text); replayed on `--continue`.
+- Inter-tool prose is demoted to a `ReasoningLine` (`» …`) above the next tool card in `$text-muted`. Persisted in `ToolLog.reasoning` (first tool of each batch carries the text); replayed on `--continue`.
 - For models emitting `reasoning_content` separately (R1, o-series, Claude extended thinking), the tail (last 80 chars) replaces `thinking…` inside the live spinner. Dropped when the first content token or tool call arrives.
 - `tui.show_reasoning` (default `true`) hides both channels when `false`; data is still persisted, the engine still emits.
 
-**Slash commands**: `/help`, `/memory`, `/tools`, `/cost`, `/skills`, `/clear`, `/new`, `/compact`, `/model`, `/workspace`, `/exit`. `/skills` lists installed skills grouped by category with `v` to view SKILL.md.
+**Slash commands**: `/help`, `/memory`, `/tools`, `/cost`, `/skills`, `/clear`, `/new`, `/compact`, `/model`, `/workspace`, `/exit`. The five info panels (`FloatingPanel` in `screens.py`) are read-only containers on the overlay layer, docked above the input strip, dismissed by Esc or click-outside. Header (`$surface-lighten-1` tint) shows the command name; body scrolls with `max-height: 18`. `/model` stays as a `ModalScreen` (multi-step wizard).
 
 **Interrupt on new input**: typing while a turn runs cancels it. `engine.interrupt_requested` polled at 3 points; long-running tools (`research`) poll `tool_state.is_interrupted()`. Skipped tool calls get a `[skipped — user interrupted]` tool message to preserve OpenAI's pairing invariant.
-
-**Accent**: `tui.accent` (default `#ff8800`) applied to input border, user message, header model highlight, learning-tool cards. Context bar shifts color: accent → yellow at 60% → red at 80%.
 
 **`Ctrl+Y`** copies last assistant reply (pbcopy/wl-copy/xclip/xsel/OSC-52 fallback chain). `Ctrl+L` clears.
 
@@ -270,7 +272,7 @@ Key fixtures (`tests/conftest.py`):
 - Tool results are capped at 10,000 chars in `engine.py` before going into the LLM message thread.
 - `last_ctx_tokens` (current prompt size) ≠ cumulative `input_tokens`. Header shows the former.
 - `call_from_thread` + Python built-in methods (e.g. `dict.pop`) crashes Textual; always wrap in a regular function.
-- `cfg` must be loaded BEFORE `super().__init__()` on `AlfApp`. Textual calls `get_css_variables()` from its constructor and that reads `self.cfg.tui.accent`.
+- `cfg` must be loaded BEFORE `super().__init__()` on `AlfApp`. The theme is then registered immediately after, in `__init__` rather than `on_mount`, because child widgets read `self.app.theme_variables` during their own mount (which fires first). `self.get_css_variables()` is called explicitly to rebuild the var dict synchronously — setting `self.theme` alone schedules the refresh for the next event-loop tick.
 - `browser.py` exists but is intentionally NOT in the registry. Reactivate when Playwright lands (ROADMAP §B).
 - Gateway subprocess uses `alf chat --once --emit-events` — separate codepath from the TUI, simpler, non-streaming. Changes to TUI feel don't affect gateway.
 - `ALF_HOME` env var routes daemons + tests to a specific profile root.

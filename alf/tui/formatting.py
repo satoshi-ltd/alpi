@@ -139,23 +139,22 @@ def arg_hint(tool_name: str, args: dict) -> str:
     return truncate(f"{k}={v}", 40)
 
 
-def result_hint(tool_name: str, output: str) -> str:
-    """One-line result summary, with Rich markup."""
+def result_hint(tool_name: str, output: str, muted: str = "dim") -> str:
     text = output.strip()
     if not text:
-        return "[dim]ok[/dim]"
+        return f"[{muted}]ok[/{muted}]"
 
     if tool_name == "terminal":
         lines = [ln for ln in text.splitlines() if not ln.startswith("[exit ")]
         if not lines:
-            return "[dim]ok[/dim]"
+            return f"[{muted}]ok[/{muted}]"
         extra = len(lines) - 1
         hint = _escape_markup(truncate(lines[0], 60))
-        return f"{hint}" + (f"  [dim]+{extra} lines[/dim]" if extra else "")
+        return f"{hint}" + (f"  [{muted}]+{extra} lines[/{muted}]" if extra else "")
 
     if tool_name == "read_file":
         n = text.count("\n") + 1
-        return f"[dim]{n} lines[/dim]"
+        return f"[{muted}]{n} lines[/{muted}]"
 
     if tool_name == "write_file":
         return _escape_markup(truncate(text, 60))
@@ -165,32 +164,32 @@ def result_hint(tool_name: str, output: str) -> str:
 
     if tool_name == "web_fetch":
         lines = text.count("\n") + 1
-        return f"[dim]{lines} lines · {len(output):,} chars[/dim]"
+        return f"[{muted}]{lines} lines · {len(output):,} chars[/{muted}]"
 
     if tool_name == "web_extract":
         lines = text.count("\n") + 1
-        return f"[dim]{lines} lines · {len(output):,} chars extracted[/dim]"
+        return f"[{muted}]{lines} lines · {len(output):,} chars extracted[/{muted}]"
 
     if tool_name == "grep":
         if "(no matches)" in text:
-            return "[dim]0 matches[/dim]"
+            return f"[{muted}]0 matches[/{muted}]"
         n = text.count("\n") + 1
-        return f"[dim]{n} matches[/dim]"
+        return f"[{muted}]{n} matches[/{muted}]"
 
     if tool_name == "glob":
         if "(no matches)" in text:
-            return "[dim]0 files[/dim]"
+            return f"[{muted}]0 files[/{muted}]"
         n = text.count("\n") + 1
-        return f"[dim]{n} files[/dim]"
+        return f"[{muted}]{n} files[/{muted}]"
 
     if tool_name == "memory":
         return _escape_markup(truncate(text.splitlines()[0], 60))
 
     if tool_name == "session_search":
         if "no past sessions" in text.lower():
-            return "[dim]no matches[/dim]"
+            return f"[{muted}]no matches[/{muted}]"
         hits = max(text.count("  score"), text.count("] session "))
-        return f"[dim]{hits or 1} past session(s)[/dim]"
+        return f"[{muted}]{hits or 1} past session(s)[/{muted}]"
 
     if tool_name == "todo":
         lines = text.splitlines()
@@ -205,4 +204,4 @@ def result_hint(tool_name: str, output: str) -> str:
     lines = text.splitlines()
     hint = _escape_markup(truncate(lines[0], 60))
     extra = len(lines) - 1
-    return hint + (f"  [dim]+{extra} more[/dim]" if extra else "")
+    return hint + (f"  [{muted}]+{extra} more[/{muted}]" if extra else "")

@@ -32,13 +32,15 @@ class ProviderScreen(ModalScreen):
             yield Static("Select provider", classes="modal-title")
             yield OptionList(*self._build_options(), id="provider-options")
             yield Static(
-                "[dim]↑↓ navigate  ENTER select  ESC cancel[/dim]",
+                "↑↓ navigate  ENTER select  ESC cancel",
                 classes="modal-hint",
             )
 
     def _build_options(self) -> list[Option]:
-        from rich.markup import escape
         active_head = self.cfg.model.split("/", 1)[0]
+        tv = self.app.theme_variables
+        muted = tv.get("text-muted", "")
+        success = tv.get("success", "green")
         options: list[Option] = []
 
         for p in prov_mod.builtin():
@@ -46,19 +48,19 @@ class ProviderScreen(ModalScreen):
             label = Text()
             label.append(f"{p.display:<14}", style="bold")
             label.append("  ")
-            label.append(p.description, style="dim")
+            label.append(p.description, style=muted)
             if p.name == active_head:
                 label.append("  ")
-                label.append("← active", style="green")
+                label.append("← active", style=success)
             if p.api_key_env and not p.has_key():
                 label.append("  ")
-                label.append("(key needed)", style="dim")
+                label.append("(key needed)", style=muted)
             options.append(Option(label, id=p.name))
 
         customs = prov_mod.custom(self.cfg.providers.get("custom", []))
         if customs:
             options.append(Option(
-                Text("── custom endpoints ──", style="dim"),
+                Text("── custom endpoints ──", style=muted),
                 disabled=True,
             ))
             for p in customs:
@@ -66,7 +68,7 @@ class ProviderScreen(ModalScreen):
                 label = Text(p.display)
                 if p.name == active_head:
                     label.append("  ")
-                    label.append("← active", style="green")
+                    label.append("← active", style=success)
                 options.append(Option(label, id=p.name))
 
         return options
@@ -112,13 +114,13 @@ class ModelListScreen(ModalScreen):
     def compose(self) -> ComposeResult:
         with Vertical():
             yield Static(
-                Text.from_markup(f"Select model  [dim]({self.provider.display})[/dim]"),
+                Text.from_markup(f"Select model  ({self.provider.display})"),
                 classes="modal-title",
             )
-            yield Static("[dim]Fetching models…[/dim]", id="fetch-status")
+            yield Static("Fetching models…", id="fetch-status", classes="modal-hint")
             yield OptionList(id="model-options")
             yield Static(
-                "[dim]↑↓ navigate  ENTER select  ESC back[/dim]",
+                "↑↓ navigate  ENTER select  ESC back",
                 classes="modal-hint",
             )
 
@@ -126,13 +128,17 @@ class ModelListScreen(ModalScreen):
         self._load_models()
 
     def _load_models(self) -> None:
+        tv = self.app.theme_variables
+        error = tv.get("error", "red")
+        success = tv.get("success", "green")
+        muted = tv.get("text-muted", "")
         try:
             models = self.provider.list_models()
         except Exception as e:  # noqa: BLE001
             status = self.query_one("#fetch-status", Static)
             err = Text()
-            err.append("failed to load models: ", style="red")
-            err.append(str(e), style="red")
+            err.append("failed to load models: ", style=error)
+            err.append(str(e), style=error)
             status.update(err)
             return
 
@@ -145,10 +151,10 @@ class ModelListScreen(ModalScreen):
             label.append(m.display, style="bold")
             if m.note:
                 label.append("  ")
-                label.append(m.note, style="dim")
+                label.append(m.note, style=muted)
             if m.id == active:
                 label.append("  ")
-                label.append("← active", style="green")
+                label.append("← active", style=success)
             olist.add_option(Option(label, id=opt_id))
 
         try:
@@ -195,13 +201,13 @@ class _ApiKeyScreen(ModalScreen[str]):
             )
             yield Static(
                 Text.from_markup(
-                    f"[dim]Paste the value for[/dim] [b]{self.env_name}[/b]. "
-                    "Saved to [dim]~/.alf/.env[/dim]."
+                    f"Paste the value for [b]{self.env_name}[/b]. "
+                    "Saved to ~/.alf/.env."
                 ),
             )
             yield Input(password=True, id="key-input")
             yield Static(
-                "[dim]ENTER save  ESC cancel[/dim]",
+                "ENTER save  ESC cancel",
                 classes="modal-hint",
             )
 

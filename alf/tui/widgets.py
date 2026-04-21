@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import time
 from pathlib import Path
 
@@ -12,61 +13,37 @@ from textual.widget import Widget
 from textual.widgets import Markdown, Static
 
 
-# User & assistant messages
-
 class UserMessage(Static):
-    """User input row, rendered with a green chevron."""
-
     def __init__(self, text: str) -> None:
         super().__init__(Text.assemble(("› ", "bold"), (text, "bold")))
 
 
 class AssistantMessage(Widget):
-    """Markdown-rendered assistant response. Supports incremental streaming.
-
-    Accepts an ``initial`` string so callers can mount a widget with its
-    final text already set (used during session resume). Streaming callers
-    create it with no args and then call :meth:`append` repeatedly.
-
-    Markdown is expensive to re-parse; calling ``_md.update()`` on every
-    token stalls the event loop and makes the whole UI jumpy. We batch
-    appends and flush at most ``_FLUSH_EVERY_S`` seconds — the buffer
-    keeps accumulating, the widget repaints at a sustainable cadence.
-    """
-
-    _FLUSH_EVERY_S = 0.08  # ~12 Hz max repaints
-
     def __init__(self, initial: str = "") -> None:
         super().__init__()
         self._md: Markdown | None = None
+        self._initial: str = initial
         self._buffer: str = initial
-        self._last_flushed: str = initial
-        self._flush_scheduled: bool = False
+        self._stream = None
 
     def compose(self) -> ComposeResult:
-        self._md = Markdown(self._buffer)
+        self._md = Markdown(self._initial)
         yield self._md
 
+    def on_mount(self) -> None:
+        assert self._md is not None
+        self._stream = Markdown.get_stream(self._md)
+
+    async def on_unmount(self) -> None:
+        if self._stream is not None:
+            await self._stream.stop()
+            self._stream = None
+
     def append(self, delta: str) -> None:
-        if not delta:
+        if not delta or self._stream is None:
             return
         self._buffer += delta
-        self._schedule_flush()
-
-    def _schedule_flush(self) -> None:
-        if self._flush_scheduled or self._md is None:
-            return
-        self._flush_scheduled = True
-        self.set_timer(self._FLUSH_EVERY_S, self._flush)
-
-    def _flush(self) -> None:
-        self._flush_scheduled = False
-        if self._md is None:
-            return
-        if self._buffer == self._last_flushed:
-            return
-        self._md.update(self._buffer)
-        self._last_flushed = self._buffer
+        asyncio.create_task(self._stream.write(delta))
 
     @property
     def text(self) -> str:
@@ -75,26 +52,23 @@ class AssistantMessage(Widget):
 
 class ErrorLine(Static):
     def __init__(self, text: str) -> None:
-        super().__init__(Text.assemble(("✗ ", "bold red"), (text, "red")))
+        super().__init__(Text.assemble(("✗ ", "bold"), (text, "")))
 
 
 class DimLine(Static):
     def __init__(self, text: str) -> None:
-        super().__init__(Text(text, style="dim"))
+        super().__init__(Text(text))
 
 
 class ReasoningLine(Static):
     MAX_CHARS = 400
 
     def __init__(self, text: str) -> None:
-        from rich.markup import escape
         compact = " ".join(text.split())
         if len(compact) > self.MAX_CHARS:
             compact = compact[: self.MAX_CHARS - 1] + "…"
-        super().__init__(Text.from_markup(f"[dim]» {escape(compact)}[/dim]"))
+        super().__init__(Text(f"» {compact}"))
 
-
-# Tool card — spinner while running, result when done
 
 _SPINNER_FRAMES = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
 
@@ -103,28 +77,18 @@ def _fmt_cost(cost: float) -> str:
     if cost <= 0:
         return "$0"
     if cost < 0.01:
-        return f"${cost:.4f}"       # $0.0003 — precision for micro-costs
+        return f"${cost:.4f}"
     if cost < 1:
-        return f"${cost:.3f}"       # $0.234 — mid range
-    return f"${cost:.2f}"           # $12.34 — dollars
+        return f"${cost:.3f}"
+    return f"${cost:.2f}"
 
-
-# Tools that represent "alf is learning something" — rendered with the
-# accent color so the user can see at a glance when memory/skills change.
-LEARNING_TOOLS = {"memory", "skill"}
-
-
-# Thinking indicator — shown immediately after a user message and removed
-# on the first assistant_delta or tool_start. Gives feedback while the
-# LLM is receiving the prompt and deciding what to do.
 
 class ThinkingIndicator(Static):
     _REASONING_TAIL_CHARS = 80
 
-    def __init__(self, accent: str = "") -> None:
+    def __init__(self) -> None:
         super().__init__("")
         self.started = time.time()
-        self.accent = accent
         self._timer = None
         self._reasoning: str = ""
 
@@ -140,48 +104,37 @@ class ThinkingIndicator(Static):
     def _tick(self) -> None:
         from rich.markup import escape
         from alf.tui.formatting import fmt_duration
+        tv = self.app.theme_variables
+        accent = tv.get("accent", "")
+        muted = tv.get("text-muted", "")
         frame = _SPINNER_FRAMES[int(time.time() * 6) % len(_SPINNER_FRAMES)]
         elapsed = fmt_duration(time.time() - self.started)
-        spinner_markup = f"[{self.accent}]{frame}[/{self.accent}]" if self.accent else frame
+        spinner_markup = f"[{accent}]{frame}[/{accent}]" if accent else frame
         if self._reasoning:
             compact = " ".join(self._reasoning.split())
             tail = compact[-self._REASONING_TAIL_CHARS:]
             if len(compact) > self._REASONING_TAIL_CHARS:
                 tail = "…" + tail
-            body = f"[dim]{escape(tail)}[/dim]  [dim]{elapsed}[/dim]"
+            body = f"[{muted}]{escape(tail)}  {elapsed}[/{muted}]"
         else:
-            body = f"[dim] thinking…  {elapsed}[/dim]"
+            body = f"[{muted}] thinking…  {elapsed}[/{muted}]"
         self.update(Text.from_markup(f"{spinner_markup} {body}"))
 
     def stop(self) -> None:
         if self._timer is not None:
-            try:
-                self._timer.stop()
-            except Exception:
-                pass
+            self._timer.stop()
             self._timer = None
-        try:
-            self.remove()
-        except Exception:
-            pass
+        self.remove()
 
 
 class ToolCard(Widget):
-    """Single-line live tool invocation indicator.
-
-    Shows: ◆ tool_name   args   ⠋   elapsed
-    When the tool completes, switches to: ◆ tool_name   args   →   result   dur
-    """
-
     TOOL_COL_WIDTH = 14
 
-    def __init__(self, tool_id: str, name: str, args: dict,
-                 accent: str = "") -> None:
+    def __init__(self, tool_id: str, name: str, args: dict) -> None:
         super().__init__()
         self.tool_id = tool_id
         self.tool_name = name
         self.args = args
-        self.accent = accent
         self.started = time.time()
         self._done = False
         self._result_markup: str = ""
@@ -192,8 +145,6 @@ class ToolCard(Widget):
         self.add_class("-running")
 
     def on_mount(self) -> None:
-        # Re-render 6×/s — smoother spinner + visible ms ticking, still
-        # cheap enough that many live cards don't saturate the event loop.
         self._timer = self.set_interval(1 / 6, self._tick)
 
     def _tick(self) -> None:
@@ -207,162 +158,153 @@ class ToolCard(Widget):
 
     def finish(self, output: str, ok: bool, *, skip_duration: bool = False) -> None:
         self._done = True
-        # Set to None when we don't have a real duration (e.g. replaying a
-        # saved session on --continue). render() hides the duration if None.
+        # None signals "no real duration" (e.g. --continue replay); render() hides it.
         self._elapsed_final = None if skip_duration else (time.time() - self.started)
         from rich.markup import escape
         from alf.tui.formatting import result_hint, truncate
+        tv = self.app.theme_variables
+        error_color = tv.get("error", "red")
+        muted = tv.get("text-muted", "dim")
         if ok:
-            self._result_markup = result_hint(self.tool_name, output)
+            self._result_markup = result_hint(self.tool_name, output, muted=muted)
         else:
-            # Strip the "ERROR:" prefix the engine adds — the red ✗ already says it.
             msg = output.removeprefix("ERROR:").strip() or "failed"
-            self._result_markup = f"[red]✗ {escape(truncate(msg, 80))}[/red]"
+            self._result_markup = (
+                f"[{error_color}]✗ {escape(truncate(msg, 80))}[/{error_color}]"
+            )
         if self._timer is not None:
-            try:
-                self._timer.stop()
-            except Exception:
-                pass
+            self._timer.stop()
         self.remove_class("-running")
         self.add_class("-error" if not ok else "-done")
         self.refresh()
 
     def render(self):
         from alf.tui.formatting import arg_hint, fmt_duration
+        tv = self.app.theme_variables
+        accent = tv.get("accent", "cyan")
+        accent_muted = tv.get("accent-darken-1", accent)
+        muted = tv.get("text-muted", "")
+        error_color = tv.get("error", "red")
         arg = arg_hint(self.tool_name, self.args)
         name_col = self.tool_name.ljust(self.TOOL_COL_WIDTH)
-        is_learning = self.tool_name in LEARNING_TOOLS and bool(self.accent)
-        learn_color = self.accent if is_learning else ""
         text = Text()
         if self._done:
-            if "-error" in self.classes:
-                diamond_style = "red"
-            elif is_learning:
-                diamond_style = learn_color
-            elif self.accent:
-                diamond_style = self.accent
-            else:
-                diamond_style = "cyan"
-            name_style = f"bold {learn_color}" if is_learning else "bold"
+            is_error = "-error" in self.classes
+            diamond_style = error_color if is_error else accent_muted
             text.append("◆ ", style=diamond_style)
-            text.append(name_col, style=name_style)
+            text.append(name_col, style="bold")
             text.append(" ")
-            text.append(arg, style="dim")
+            text.append(arg, style=muted)
             text.append("  ")
-            text.append("→", style="dim")
+            text.append("→", style=muted)
             text.append("  ")
             text.append_text(Text.from_markup(self._result_markup))
-            # Only show duration when we actually measured it.
             if self._elapsed_final is not None and self._elapsed_final > 0:
-                text.append(f"   {fmt_duration(self._elapsed_final)}", style="dim")
+                text.append(f"   {fmt_duration(self._elapsed_final)}", style=muted)
         else:
             elapsed = time.time() - self.started
-            # Spinner frame advances at the refresh rate (6 Hz) — avoids
-            # aliasing against the tick interval.
             frame = _SPINNER_FRAMES[int(time.time() * 6) % len(_SPINNER_FRAMES)]
-            if self._state_is_error:
-                icon_style = "red"
-            elif is_learning:
-                icon_style = learn_color
-            elif self.accent:
-                icon_style = self.accent
-            else:
-                icon_style = "cyan"
-            if self._state_is_error:
-                spinner_style = "red"
-            elif self.accent:
-                spinner_style = self.accent
-            else:
-                spinner_style = "yellow"
-            label_style = "red" if self._state_is_error else "dim"
-            name_style = f"bold {learn_color}" if is_learning else "bold"
+            icon_style = error_color if self._state_is_error else accent_muted
+            spinner_style = error_color if self._state_is_error else accent
+            label_style = error_color if self._state_is_error else muted
 
             text.append("◆ ", style=icon_style)
-            text.append(name_col, style=name_style)
+            text.append(name_col, style="bold")
             text.append(" ")
-            # While running, show the live state label instead of args.
             live = self._state_label or arg
             text.append(live, style=label_style)
             text.append("  ")
             text.append(frame, style=spinner_style)
             text.append("  ")
-            text.append(fmt_duration(elapsed), style="dim")
+            text.append(fmt_duration(elapsed), style=muted)
         return text
 
 
-# Static top header — identity line (version / profile / cwd)
-
 class AlfTopBar(Static):
-    """Static identity line: version · profile · workspace.
-
-    Always shows the ``workspace`` label — never falls back to cwd. When
-    no workspace is configured the slot reads ``not set`` in warning
-    colour so the user knows to run ``/workspace <path>``.
-    """
-
     def __init__(self, version: str, profile: str, path: str,
                  workspace_set: bool) -> None:
+        super().__init__("")
+        self._version = version
+        self._profile = profile
+        self._path = path
+        self._workspace_set = workspace_set
+
+    def on_mount(self) -> None:
+        self._refresh()
+
+    def set_state(self, *, profile: str, path: str, workspace_set: bool) -> None:
+        self._profile = profile
+        self._path = path
+        self._workspace_set = workspace_set
+        self._refresh()
+
+    def _refresh(self) -> None:
         from rich.markup import escape
-        if workspace_set:
-            short = str(path).replace(str(Path.home()), "~")
+        tv = self.app.theme_variables
+        accent = tv.get("accent", "")
+        muted = tv.get("text-muted", "")
+        error = tv.get("error", "red")
+        if self._workspace_set:
+            short = str(self._path).replace(str(Path.home()), "~")
             workspace_txt = escape(short)
         else:
-            workspace_txt = "[red]not set[/red]"
-        markup = (
-            f"[b]alf[/b] [dim]{escape(version)}[/dim]  "
-            f"[dim]│[/dim]  "
-            f"[dim]profile[/dim] {escape(profile)}  "
-            f"[dim]│[/dim]  "
-            f"[dim]workspace[/dim] {workspace_txt}"
+            workspace_txt = f"[{error}]not set[/{error}]"
+        profile_esc = escape(self._profile)
+        profile_txt = (
+            f"[b {accent}]{profile_esc}[/b {accent}]"
+            if accent else f"[b]{profile_esc}[/b]"
         )
-        super().__init__(Text.from_markup(markup))
+        markup = (
+            f"[b]alf[/b] [{muted}]{escape(self._version)}[/{muted}]  "
+            f"[{muted}]│[/{muted}]  "
+            f"[{muted}]profile[/{muted}] {profile_txt}  "
+            f"[{muted}]│[/{muted}]  "
+            f"[{muted}]workspace[/{muted}] {workspace_txt}"
+        )
+        self.update(Text.from_markup(markup))
 
-
-# Status bar — single line above the input
 
 class AlfHeader(Static):
-    """Live status line: model · ctx · %context · cost."""
-
     def __init__(self) -> None:
         super().__init__("")
         self._model: str = ""
         self._tokens: int = 0
         self._cost: float = 0.0
         self._ctx_window: int = 200_000
-        self._accent: str = "yellow"
 
     def on_mount(self) -> None:
         self._refresh()
 
     def update_usage(self, model: str, tokens: int, cost: float,
-                     ctx_window: int = 200_000, accent: str = "") -> None:
+                     ctx_window: int = 200_000) -> None:
         self._model = model
         self._tokens = tokens
         self._cost = cost
         self._ctx_window = ctx_window
-        if accent:
-            self._accent = accent
         self._refresh()
 
     def _refresh(self) -> None:
         from alf.tui.formatting import fmt_count, bar_10
+        tv = self.app.theme_variables
+        accent = tv.get("accent", "cyan")
+        warning = tv.get("warning", "yellow")
+        error = tv.get("error", "red")
+        muted = tv.get("text-muted", "")
         pct = int(self._tokens / self._ctx_window * 100) if self._ctx_window else 0
         model_short = self._model.split("/")[-1] if self._model else "—"
         bar = bar_10(self._tokens, self._ctx_window)
-        accent = self._accent
-        # Bar color shifts with context fill: accent → amber at 60% → red at 80%.
         if pct >= 80:
-            bar_color = "red"
+            bar_color = error
         elif pct >= 60:
-            bar_color = "yellow"
+            bar_color = warning
         else:
             bar_color = accent
         markup = (
             f"[{accent}]◆[/{accent}] [b {accent}]{model_short}[/b {accent}]  "
-            f"[dim]│[/dim]  "
-            f"[dim]ctx[/dim] {fmt_count(self._tokens)}/{fmt_count(self._ctx_window)}  "
-            f"[{bar_color}]{bar}[/{bar_color}] [dim]{pct}%[/dim]  "
-            f"[dim]│[/dim]  "
-            f"[dim]{_fmt_cost(self._cost)}[/dim]"
+            f"[{muted}]│[/{muted}]  "
+            f"[{muted}]ctx[/{muted}] {fmt_count(self._tokens)}/{fmt_count(self._ctx_window)}  "
+            f"[{bar_color}]{bar}[/{bar_color}] [{muted}]{pct}%[/{muted}]  "
+            f"[{muted}]│[/{muted}]  "
+            f"[{muted}]{_fmt_cost(self._cost)}[/{muted}]"
         )
         self.update(Text.from_markup(markup))

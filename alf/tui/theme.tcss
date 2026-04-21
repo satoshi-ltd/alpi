@@ -1,27 +1,35 @@
-/* alf — Textual CSS */
-
 Screen {
-    background: $surface;
+    background: $background;
     layers: base overlay;
 }
 
-/* Static identity line — always at top. */
 AlfTopBar {
-    height: 1;
-    background: $surface;
+    height: 2;
+    background: $background;
     color: $text-muted;
-    padding: 0 2;
+    padding: 1 2 0 2;
 }
 
-/* Status bar sits just above the input. */
 AlfHeader {
     height: 1;
-    background: $surface;
+    background: $background;
     color: $text-muted;
     padding: 0 2;
 }
 
-/* Chat scroll area — takes all remaining vertical space */
+AssistantMessage MarkdownBullet {
+    color: $text-muted;
+}
+AssistantMessage MarkdownBlock > .code_inline {
+    background: transparent;
+    color: $accent-darken-1;
+    text-style: none;
+}
+AssistantMessage MarkdownHeader {
+    background: transparent;
+    border: none;
+}
+
 #chat {
     padding: 1 2;
     height: 1fr;
@@ -31,12 +39,12 @@ AlfHeader {
 UserMessage {
     color: $accent;
     text-style: bold;
-    margin: 1 0 1 0;         /* blank line above AND below the user input */
+    margin: 1 0 1 0;
     height: auto;
 }
 
 AssistantMessage {
-    margin: 1 0 0 0;         /* blank line between last tool and final response */
+    margin: 1 0 0 0;
     height: auto;
     background: transparent;
 }
@@ -66,7 +74,6 @@ ReasoningLine {
     height: auto;
 }
 
-/* Tool card — single line, tight */
 ToolCard {
     height: 1;
     margin: 0;
@@ -74,34 +81,33 @@ ToolCard {
 }
 
 ToolCard.-running {
-    color: $text;
+    color: $foreground;
 }
 
 ToolCard.-done {
-    color: $text;
+    color: $foreground;
 }
 
 ToolCard.-error {
     color: $error;
 }
 
-/* Input: bordered box, sits below the status bar */
-Input {
+#chat-input {
     background: $surface;
-    border: round $panel-lighten-2;
-    padding: 0 1;
+    color: $foreground;
+    border: none;
+    padding: 1 2;
     height: 3;
-    margin: 0 1;
+    margin: 1 1;
+    scrollbar-size-horizontal: 0;
 }
 
-Input:focus {
-    background: $surface;
-    border: round $accent;
+#chat-input:focus {
+    background-tint: $accent 15%;
 }
 
-/* Modal screens */
 ModalScreen > Vertical {
-    background: $panel;
+    background: $surface;
     border: thick $accent;
     padding: 1 2;
     width: 90;
@@ -122,22 +128,22 @@ ModalScreen .modal-hint {
 }
 
 ModalScreen OptionList {
-    background: $panel;
+    background: $surface;
     max-height: 24;
     height: auto;
 }
 
 ModalScreen OptionList > .option-list--option-hover {
-    background: $panel-lighten-2;
+    background: $surface-lighten-1;
 }
 
 ModalScreen OptionList > .option-list--option-highlighted {
     background: $accent;
-    color: $text;
+    color: $foreground;
     text-style: bold;
 }
 
 ModalScreen Input {
     margin-top: 1;
-    background: $panel-lighten-1;
+    background: $surface-lighten-1;
 }
