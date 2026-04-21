@@ -72,10 +72,17 @@ class ReadImageToolConfig:
 
 
 @dataclass
+class TerminalToolConfig:
+    sandbox: bool = False
+    allow_network: bool = False
+
+
+@dataclass
 class ToolsConfig:
     max_steps_per_turn: int = 40   # ceiling on tool-calls per user turn
     web_extract: WebExtractToolConfig = field(default_factory=WebExtractToolConfig)
     read_image: ReadImageToolConfig = field(default_factory=ReadImageToolConfig)
+    terminal: TerminalToolConfig = field(default_factory=TerminalToolConfig)
 
 
 @dataclass
@@ -138,6 +145,7 @@ def load(home: Path) -> Config:
     tools_raw = data.get("tools") or {}
     web_extract_raw = tools_raw.get("web_extract") or {}
     read_image_raw = tools_raw.get("read_image") or {}
+    terminal_raw = tools_raw.get("terminal") or {}
     tools_cfg = ToolsConfig(
         max_steps_per_turn=int(tools_raw.get(
             "max_steps_per_turn", DEFAULT_CONFIG["tools"]["max_steps_per_turn"]
@@ -147,6 +155,10 @@ def load(home: Path) -> Config:
         ),
         read_image=ReadImageToolConfig(
             model=str(read_image_raw.get("model", "") or ""),
+        ),
+        terminal=TerminalToolConfig(
+            sandbox=bool(terminal_raw.get("sandbox", False)),
+            allow_network=bool(terminal_raw.get("allow_network", False)),
         ),
     )
 
@@ -199,6 +211,14 @@ def _tools_delta(cfg: Config) -> dict:
         out["web_extract"] = {"model": cfg.tools.web_extract.model}
     if cfg.tools.read_image.model != d["read_image"]["model"]:
         out["read_image"] = {"model": cfg.tools.read_image.model}
+    term_d = d["terminal"]
+    term_out: dict[str, Any] = {}
+    if cfg.tools.terminal.sandbox != term_d["sandbox"]:
+        term_out["sandbox"] = cfg.tools.terminal.sandbox
+    if cfg.tools.terminal.allow_network != term_d["allow_network"]:
+        term_out["allow_network"] = cfg.tools.terminal.allow_network
+    if term_out:
+        out["terminal"] = term_out
     return out
 
 

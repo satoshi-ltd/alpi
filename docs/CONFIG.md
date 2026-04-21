@@ -68,10 +68,12 @@ Three options, any of them works:
 | `tools.research.deep_steps` | `30` | int | next turn |
 
 `tools.terminal.sandbox` enables OS-level isolation on shell commands
-(macOS `sandbox-exec`, Linux `bubblewrap`). **Experimental** — see
-[SECURITY.md](SECURITY.md) for details, platform requirements, and
-what breaks when it's on. `allow_network` has no effect unless
-`sandbox` is on.
+(macOS `sandbox-exec`, Linux `bubblewrap`). Toggle via `alf setup →
+Sandbox`, or directly in YAML. The TUI top bar shows the current
+state (`sandbox on` / `off`). Most useful on profiles that run
+unattended (gateway, schedule, sub-agents) — see
+[SECURITY.md](SECURITY.md) for the recommended pattern + platform
+requirements. `allow_network` has no effect unless `sandbox` is on.
 
 `tools.research.{quick,normal,deep}_steps` control the iteration
 budget of the `research` sub-agent. The agent picks the depth tier

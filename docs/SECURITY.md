@@ -42,34 +42,61 @@ doesn't reach:
   and outside-workspace project dirs — is allowed, same as terminal.
   Workspace-only isolation lives in Layer 2 (OS sandbox).
 
-## Layer 2 — OS sandbox (opt-in, experimental)
+## Layer 2 — OS sandbox (opt-in, per profile)
 
 Wraps `terminal` subprocess calls in a native OS sandbox so the
 kernel refuses the syscalls, not just the regex above. Read/write
 access is limited to `workspace` + `~/.alf/` + `/tmp`; network is
 denied by default.
 
-**Status: experimental.** The default is **off** because we haven't
-yet verified the profile against the long tail of real-world
-commands (git push with SSH keys outside workspace, docker socket
-access, Homebrew/system package paths across macOS versions, distro
-variants on Linux). Turn it on once you've checked it doesn't break
-your usual flows.
+**Status: stable, opt-in.** Defaults to off because real-world dev
+workflows vary too much to pick a profile that never breaks: `git
+push` over SSH relies on `~/.ssh`, Apple Silicon Homebrew lives in
+`/opt/homebrew`, `docker` needs `/var/run/docker.sock`, npm wants
+`~/.npm`. For interactive chat where you approve every command, the
+Layer 1 denylist is already sufficient.
+
+**Where it really earns its keep: unattended profiles.** Telegram
+gateway, schedule daemon, `research` / `delegate` sub-agents — these
+run without a human approving each command. A prompt-injected email
+or a hallucinating sub-agent can issue `rm -rf ~/anything` with no
+veto. Layer 2 is the kernel-level veto you want there.
+
+### Recommended pattern: one profile per posture
+
+alf's multi-profile CLI makes this ergonomic:
+
+- `alf` — your main interactive dev profile. Sandbox off. Full access
+  to your usual tooling.
+- `alf -p watchdog` — the profile your Telegram / schedule daemon
+  runs under. Sandbox on. Denies `~/.ssh`, writes outside
+  `workspace`, network (unless you opt in).
+
+Each profile has its own `~/.alf/profiles/<name>/config.yaml`, so
+the sandbox flag is set independently.
 
 ### Enabling
 
-Chat: "turn on the terminal sandbox" → agent calls
-`config(set, tools.terminal.sandbox, true)`.
+Interactive: `alf setup → Sandbox` → toggle on/off + network.
 
-YAML: set in `~/.alf/config.yaml`:
+Chat (applies to the current profile's config): "turn on the
+terminal sandbox" → agent calls `config(set,
+tools.terminal.sandbox, true)`.
+
+YAML (direct): set in `~/.alf/profiles/<name>/config.yaml`:
 ```yaml
 tools:
   terminal:
     sandbox: true
-    allow_network: false   # flip to true if you need git push / npm install from shell
+    allow_network: false   # flip to true if the profile needs git push / npm install
 ```
 
-CLI: `alf` → type the setting directly once the config tool lands.
+### TUI feedback
+
+The top bar shows the current profile's sandbox state next to the
+workspace: `sandbox on` in green when active, `sandbox off` in muted
+grey when not. Quick visual confirmation you're in the posture you
+think you're in.
 
 ### Platform support
 

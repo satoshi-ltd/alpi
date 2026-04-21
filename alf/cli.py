@@ -571,6 +571,7 @@ def setup_cmd(ctx: click.Context) -> None:
             (ui.row("Model / Provider", cfg.model or "(not set)"), "model"),
             (ui.row("Gateways", _gateways_status(h)), "gateways"),
             (ui.row("MCPs", _mcp_status(h)), "mcps"),
+            (ui.row("Sandbox", _sandbox_status(cfg)), "sandbox"),
         ]
         # Every title starts with ``alf`` as a lightweight brand +
         # "you are here" marker. The active profile goes in the
@@ -593,6 +594,8 @@ def setup_cmd(ctx: click.Context) -> None:
         elif choice == "mcps":
             from alf.mcp.setup import run as mcp_setup_run
             mcp_setup_run(h)
+        elif choice == "sandbox":
+            _sandbox_setup(h)
 
 
 def _setup_farewell(profile: str, h: Path) -> None:
@@ -669,6 +672,87 @@ def _mcp_status(h: Path) -> str:
     if not servers:
         return "none"
     return ", ".join(sorted(servers.keys()))
+
+
+def _sandbox_status(cfg: config.Config) -> str:
+    term = cfg.tools.terminal
+    if not term.sandbox:
+        return "off"
+    net = "network on" if term.allow_network else "network off"
+    return f"on · {net}"
+
+
+def _sandbox_setup(h: Path) -> None:
+    """Pick the desired sandbox posture for the current profile."""
+    from alf import ui
+    cfg = config.load(h)
+    term = cfg.tools.terminal
+
+    ui.banner(
+        ui.crumb("setup", "sandbox"),
+        subtitle=_sandbox_status(cfg),
+        home=h,
+    )
+    ui.dim(
+        "Wraps shell commands in sandbox-exec (macOS) or bubblewrap (Linux) so\n"
+        "the kernel blocks writes outside your workspace + ~/.alf, and denies\n"
+        "network unless you opt in.\n\n"
+        "Recommended for profiles that run unattended — Telegram gateway,\n"
+        "schedule daemon, research / delegate sub-agents. For interactive chat\n"
+        "where you approve every command, the denylist (Layer 1) is already\n"
+        "sufficient.\n\n"
+        "Trade-offs when enabled: git push over SSH (~/.ssh denied), Homebrew\n"
+        "on Apple Silicon, and docker commands may break. Keep it off in your\n"
+        "main dev profile."
+    )
+    ui._console.print("")
+
+    choice = ui.menu(
+        "",
+        [
+            ("Enable sandbox", "enable"),
+            ("Disable sandbox", "disable"),
+        ],
+        home=h, close="Back",
+    )
+    if choice is None:
+        return
+    if choice == "disable":
+        cfg.tools.terminal.sandbox = False
+        cfg.tools.terminal.allow_network = False
+        config.save(cfg)
+        return
+    # choice == "enable" — ask about network next.
+    cfg.tools.terminal.sandbox = True
+    config.save(cfg)
+
+    ui.banner(
+        ui.crumb("setup", "sandbox", "network"),
+        subtitle="allow network inside the sandbox?",
+        home=h,
+    )
+    ui.dim(
+        "Denied → sub-processes can't open sockets. Safest default; blocks any\n"
+        "exfil attempt by a compromised command.\n\n"
+        "Allowed → sub-processes can reach the internet. Needed for git push,\n"
+        "npm / pip install, curl, docker pull, etc. Most unattended profiles\n"
+        "still need this because they fetch external data."
+    )
+    ui._console.print("")
+
+    net = ui.menu(
+        "",
+        [
+            ("Deny network (isolated)", "deny"),
+            ("Allow network (git push, npm, curl…)", "allow"),
+        ],
+        home=h, close="Back",
+    )
+    if net is None:
+        # User ESC'd — leave sandbox enabled with the previous network value.
+        return
+    cfg.tools.terminal.allow_network = (net == "allow")
+    config.save(cfg)
 
 
 def _email_status(h: Path) -> str:
