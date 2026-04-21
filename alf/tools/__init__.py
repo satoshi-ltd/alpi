@@ -11,6 +11,7 @@ from alf.tools import (
     email as email_tool,
     memory as memory_tool,
     read_file,
+    read_image,
     schedule as schedule_tool,
     search,
     send_message,
@@ -60,6 +61,7 @@ def execute(name: str, arguments: dict) -> ToolResult:
 # Register every tool exposed by the sibling modules.
 for _mod in (
     read_file,
+    read_image,
     write_file,
     edit_file,
     terminal,

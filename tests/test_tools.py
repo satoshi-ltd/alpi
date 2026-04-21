@@ -16,7 +16,7 @@ from alf.tools.write_file import WriteFile
 
 
 EXPECTED_TOOLS = {
-    "read_file", "write_file", "edit_file", "terminal", "search",
+    "read_file", "read_image", "write_file", "edit_file", "terminal", "search",
     "todo", "web_search", "web_fetch", "web_extract", "schedule",
     "memory", "skill", "research", "delegate",
     "session_search", "send_message", "email", "config",
@@ -213,6 +213,186 @@ def test_research_rejects_unknown_depth() -> None:
     r = Research().run(brief="x", depth="superdeep")
     assert not r.ok
     assert "depth" in (r.error or "")
+
+
+def test_read_image_rejects_missing_file(tmp_home_no_env: Path) -> None:
+    from alf.tools.read_image import ReadImage
+    r = ReadImage().run(path=str(tmp_home_no_env / "nope.png"), question="what is this?")
+    assert not r.ok
+    assert "no such file" in (r.error or "")
+
+
+def test_read_image_rejects_non_image_extension(tmp_home_no_env: Path) -> None:
+    from alf.tools.read_image import ReadImage
+    f = tmp_home_no_env / "data.txt"
+    f.write_text("hi")
+    r = ReadImage().run(path=str(f), question="?")
+    assert not r.ok
+    assert "not an image" in (r.error or "")
+
+
+def test_read_image_rejects_bad_magic_bytes(tmp_home_no_env: Path) -> None:
+    from alf.tools.read_image import ReadImage
+    f = tmp_home_no_env / "fake.png"
+    f.write_bytes(b"not really a png")
+    r = ReadImage().run(path=str(f), question="?")
+    assert not r.ok
+    assert "don't match" in (r.error or "")
+
+
+def test_read_image_surfaces_vision_error_with_hint(
+    tmp_home_no_env: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from alf import llm
+    from alf.tools.read_image import ReadImage, MAGIC_BYTES
+    f = tmp_home_no_env / "pic.png"
+    f.write_bytes(MAGIC_BYTES["image/png"] + b"\x00" * 100)
+
+    def _boom(**_):
+        raise RuntimeError("model does not support image input")
+
+    monkeypatch.setattr(llm, "complete", _boom)
+    r = ReadImage().run(path=str(f), question="?")
+    assert not r.ok
+    assert "vision LLM call failed" in (r.error or "")
+    assert "/model" in (r.error or "")
+
+
+def test_read_image_calls_llm_with_multimodal_content(
+    tmp_home_no_env: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from alf import llm
+    from alf.llm import Completion
+    from alf.tools.read_image import ReadImage, MAGIC_BYTES
+
+    f = tmp_home_no_env / "pic.png"
+    f.write_bytes(MAGIC_BYTES["image/png"] + b"\x00" * 100)
+
+    captured: dict = {}
+
+    def _fake_complete(**kwargs):
+        captured.update(kwargs)
+        return Completion(
+            content="A white square.", input_tokens=1, output_tokens=1,
+            cost_usd=0.0, raw=None, tool_calls=[],
+        )
+
+    monkeypatch.setattr(llm, "complete", _fake_complete)
+    r = ReadImage().run(path=str(f), question="what is this?")
+    assert r.ok
+    assert r.output == "A white square."
+    msg = captured["messages"][0]
+    assert msg["role"] == "user"
+    parts = msg["content"]
+    assert parts[0]["type"] == "text" and parts[0]["text"] == "what is this?"
+    assert parts[1]["type"] == "image_url"
+    assert parts[1]["image_url"]["url"].startswith("data:image/png;base64,")
+
+
+def test_read_image_accepts_svg(
+    tmp_home_no_env: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from alf import llm
+    from alf.llm import Completion
+    from alf.tools.read_image import ReadImage
+
+    f = tmp_home_no_env / "vec.svg"
+    f.write_text('<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg"><rect/></svg>')
+
+    def _fake_complete(**kwargs):
+        return Completion(
+            content="A rectangle.", input_tokens=1, output_tokens=1,
+            cost_usd=0.0, raw=None, tool_calls=[],
+        )
+
+    monkeypatch.setattr(llm, "complete", _fake_complete)
+    r = ReadImage().run(path=str(f), question="what?")
+    assert r.ok
+    assert r.output == "A rectangle."
+
+
+def test_read_image_blocks_private_url() -> None:
+    from alf.tools.read_image import ReadImage
+    r = ReadImage().run(path="http://127.0.0.1/foo.png", question="?")
+    assert not r.ok
+    assert "URL blocked" in (r.error or "") or "private" in (r.error or "").lower()
+
+
+def test_read_image_rejects_non_image_url(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from alf.tools import read_image as read_image_mod
+    from alf.tools.read_image import ReadImage
+
+    monkeypatch.setattr(
+        read_image_mod, "_download", lambda url: b"not an image",
+    )
+    r = ReadImage().run(path="https://example.com/x.png", question="?")
+    assert not r.ok
+    assert "don't match" in (r.error or "")
+
+
+def test_read_image_uses_override_model_when_set(
+    tmp_home_no_env: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    (tmp_home_no_env / "config.yaml").write_text(
+        'model: openrouter/a/b\n'
+        'tools:\n  read_image:\n    model: openrouter/x/vision\n'
+    )
+    from alf import llm
+    from alf.llm import Completion
+    from alf.tools.read_image import ReadImage, MAGIC_BYTES
+
+    f = tmp_home_no_env / "pic.png"
+    f.write_bytes(MAGIC_BYTES["image/png"] + b"\x00" * 100)
+
+    captured: dict = {}
+
+    def _fake_complete(**kwargs):
+        captured.update(kwargs)
+        return Completion(
+            content="seen.", input_tokens=1, output_tokens=1,
+            cost_usd=0.0, raw=None, tool_calls=[],
+        )
+
+    monkeypatch.setattr(llm, "complete", _fake_complete)
+    r = ReadImage().run(path=str(f), question="?")
+    assert r.ok
+    assert captured.get("model") == "openrouter/x/vision"
+
+
+def test_read_image_falls_back_to_main_when_override_fails(
+    tmp_home_no_env: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    (tmp_home_no_env / "config.yaml").write_text(
+        'model: openrouter/a/b\n'
+        'tools:\n  read_image:\n    model: openrouter/x/broken\n'
+    )
+    from alf import llm
+    from alf.llm import Completion
+    from alf.tools.read_image import ReadImage, MAGIC_BYTES
+
+    f = tmp_home_no_env / "pic.png"
+    f.write_bytes(MAGIC_BYTES["image/png"] + b"\x00" * 100)
+
+    calls: list[str] = []
+
+    def _fake_complete(**kwargs):
+        model = kwargs.get("model", "")
+        calls.append(model)
+        if model == "openrouter/x/broken":
+            raise RuntimeError("bad")
+        return Completion(
+            content="main answer", input_tokens=1, output_tokens=1,
+            cost_usd=0.0, raw=None, tool_calls=[],
+        )
+
+    monkeypatch.setattr(llm, "complete", _fake_complete)
+    r = ReadImage().run(path=str(f), question="?")
+    assert r.ok
+    assert "main answer" in r.output
+    assert "fallback" in r.output
+    assert calls == ["openrouter/x/broken", "openrouter/a/b"]
 
 
 def test_delegate_rejects_unknown_toolset() -> None:
