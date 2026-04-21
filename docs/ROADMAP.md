@@ -49,11 +49,11 @@ Once those land + a fresh CHANGELOG entry summarises v0.2, bump to
 
 ### B. Interactive browser (Playwright)
 
-`alf/tools/browser.py` is a stub; not registered. To ship:
+`alpi/tools/browser.py` is a stub; not registered. To ship:
 
 1. Replace `Browser.run` with a Playwright impl: headless Chrome, persistent context under `~/.alpi/browser/`, actions `text | screenshot | click | fill | navigate`.
 2. Add `playwright` to `pyproject.toml` (+ one-time `playwright install chromium`).
-3. Re-register `browser` in `alf/tools/__init__.py`.
+3. Re-register `browser` in `alpi/tools/__init__.py`.
 
 Unlocks online shopping, logins, form-filling — things `web_fetch` (read-only) can't do.
 
@@ -70,9 +70,9 @@ Today alf goes through LiteLLM with API keys → OpenAI is metered per token. He
 
 **Implementation shape:**
 
-- `alf/auth/codex.py` — port from Hermes: `device_code_login()`, `resolve_runtime_credentials(force_refresh, refresh_skew)`, locked R/W of `auth.json`.
-- `alf/providers/openai_codex.py` — new `Provider` subclass with `auth_type = "oauth_external"`, lists gpt-5 family.
-- `alf/llm.py` — add a transport dispatch: when model id prefix is `openai-codex/`, resolve credentials and call `openai.OpenAI(...).responses.stream(...)` instead of `litellm.completion`. Normalise the event stream (`response.output_item.added` with `type=function_call`, etc.) into the same `{text_delta, tool_calls_delta, finish_reason}` shape `stream()` already yields.
+- `alpi/auth/codex.py` — port from Hermes: `device_code_login()`, `resolve_runtime_credentials(force_refresh, refresh_skew)`, locked R/W of `auth.json`.
+- `alpi/providers/openai_codex.py` — new `Provider` subclass with `auth_type = "oauth_external"`, lists gpt-5 family.
+- `alpi/llm.py` — add a transport dispatch: when model id prefix is `openai-codex/`, resolve credentials and call `openai.OpenAI(...).responses.stream(...)` instead of `litellm.completion`. Normalise the event stream (`response.output_item.added` with `type=function_call`, etc.) into the same `{text_delta, tool_calls_delta, finish_reason}` shape `stream()` already yields.
 - CLI: `alpi auth openai-codex [login|logout|status]`.
 
 **Effort.** 1-2 days. Auth module is almost a literal port. The unknown is event-stream normalisation — Responses API emits a richer set of events than chat/completions.
@@ -89,11 +89,11 @@ Today alf goes through LiteLLM with API keys → OpenAI is metered per token. He
 
 Applies to both `research` and `delegate` once shipped. `tasks: [{brief, depth}]` (or `{goal, toolsets}` for delegate) up to 3 concurrent via `ThreadPoolExecutor(max_workers=3)`. Aggregate results, propagate interrupt to all children on cancel.
 
-**The real cost is the refactor of `alf/tools/_state.py`.** `_emit`, `_interrupt_getter`, `_usage_sink` are module-level globals — multiple subagents in parallel race on them. Move to `contextvars.ContextVar` (preferred) so each thread gets its own view. Touches ~15 sites that call `emit_state` (web_search, web_fetch, web_extract, search, research, delegate, schedule, ...). Mechanical, non-destructive.
+**The real cost is the refactor of `alpi/tools/_state.py`.** `_emit`, `_interrupt_getter`, `_usage_sink` are module-level globals — multiple subagents in parallel race on them. Move to `contextvars.ContextVar` (preferred) so each thread gets its own view. Touches ~15 sites that call `emit_state` (web_search, web_fetch, web_extract, search, research, delegate, schedule, ...). Mechanical, non-destructive.
 
 The refactor is also useful on its own: cleaner tests, better observability when nested tools run.
 
-Both `research.py` and `delegate.py` have the single-task loop structured so `tasks[]` can layer on top with no structural change once state is context-local. See the module docstring in `alf/tools/delegate.py` for the exact handoff point.
+Both `research.py` and `delegate.py` have the single-task loop structured so `tasks[]` can layer on top with no structural change once state is context-local. See the module docstring in `alpi/tools/delegate.py` for the exact handoff point.
 
 Cost: 1-2 days + 1 day refactor. Risk: medium-high. Niche for personal use.
 
@@ -189,3 +189,4 @@ First usable cut. Textual TUI, 3-file memory with two-tier dedup, skill system w
 | (next)  | Remove the `config` tool (199 LOC + 112 LOC of tests). Config surface is now two-channel: `alpi setup` for structured settings (model, gateways, MCP, sandbox) + direct YAML edits for cosmetic knobs (`tui.*`, `max_steps_per_turn`, `poll_interval`, `fallback_models`). The conversational "change the accent to Facebook blue" case wasn't worth the tool-attention budget (v0.2.13) |
 | (next)  | `/tools` panel filters out MCP-registered tools (`<server>:<tool>` shape) — they live in `/mcps`. Keeps `/tools` focused on alpi's own surface (v0.2.14) |
 | (next)  | `todo` tool: `done: bool` → `status: pending\|in_progress\|completed` with a new `start` action. The description already promised "only ONE in_progress at a time" but the tool had no way to mark it — now the invariant is tool-enforced. Deliberately did not port hermes' IDs, merge mode, dedup, or /compact re-injection (v0.2.15) |
+| (next)  | Ollama as a first-class provider (replaces the generic "Custom OpenAI-compatible endpoint" slot). Multiple named servers per profile (`home`, `gpu-box`, remote…), each with its own URL; model id becomes `<server-name>/<model>`. Live listing via `/api/tags` at setup time. Auto-resolves `num_ctx` from `/api/show` on every request so the model sees the full prompt instead of Ollama's 2K default — was the root cause of "never replies" with large system prompts. TUI header reads the resolved ctx as `ctx_window`; cost line hidden when `<= 0` for local models. `providers.custom` deleted entirely — no backwards-compat, no migration. ⚠ known limitation: small Ollama models (<7B) still hallucinate tool names regardless of transport (v0.2.16) |

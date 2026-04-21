@@ -9,11 +9,10 @@ from alpi import config as cfg_mod
 from alpi import providers as prov_mod
 from alpi import ui
 from alpi.providers.base import ModelInfo, Provider
-from alpi.providers.custom import CustomProvider
 
 
-_ADD_CUSTOM = "__add_custom__"
 _MANAGE_SAVED = "__manage_saved__"
+_ADD_OLLAMA = "__add_ollama__"
 _ENTER_CUSTOM_MODEL = "__custom_model__"
 
 
@@ -64,7 +63,7 @@ def _remember_openrouter_model(cfg: cfg_mod.Config, model_id: str) -> None:
 
 def _pick_provider(cfg: cfg_mod.Config) -> Provider | None:
     builtin = prov_mod.builtin()
-    custom = prov_mod.custom(cfg.providers.get("custom", []))
+    ollamas = prov_mod.ollama(cfg.providers.get("ollama", []))
     active_head = cfg.model.split("/", 1)[0]
     accent = (cfg.tui or {}).get("accent", "") or ""
 
@@ -84,26 +83,20 @@ def _pick_provider(cfg: cfg_mod.Config) -> Provider | None:
             p,
         ))
 
-    # Existing customs come right after the builtins — they're already
-    # configured, just another provider slot.
-    for p in custom:
-        status = p.base_url if hasattr(p, "base_url") else "custom endpoint"
+    for p in ollamas:
         items.append((
-            _row(p.name, status, p.name == active_head),
+            _row(p.name, p.url, p.name == active_head),
             p,
         ))
 
-    # "Custom" (add new) sits below existing ones — its label makes the
-    # "new one" intent explicit.
     items.append((
-        ui.row("Custom", "OpenAI-compatible endpoint (add a new one)"),
-        _ADD_CUSTOM,
+        ui.row("Add Ollama", "register a local or remote Ollama server"),
+        _ADD_OLLAMA,
     ))
 
-    # Manage saved keys lives below everything, just another action row.
-    if custom or _any_saved_keys(builtin):
+    if ollamas or _any_saved_keys(builtin):
         items.append((
-            ui.row("Remove keys", "delete API keys or custom endpoints"),
+            ui.row("Remove keys", "delete API keys or Ollama servers"),
             _MANAGE_SAVED,
         ))
 
@@ -117,8 +110,8 @@ def _pick_provider(cfg: cfg_mod.Config) -> Provider | None:
 
     if result is None:
         return None
-    if result == _ADD_CUSTOM:
-        new_ep = _add_custom_endpoint(cfg)
+    if result == _ADD_OLLAMA:
+        new_ep = _add_ollama_connection(cfg)
         if new_ep is None:
             return None
         cfg_mod.save(cfg)
@@ -127,7 +120,7 @@ def _pick_provider(cfg: cfg_mod.Config) -> Provider | None:
         _manage_saved(cfg)
         cfg_mod.save(cfg)
         return None
-    return result  # a Provider instance
+    return result
 
 
 
@@ -195,6 +188,31 @@ def _ensure_key(cfg: cfg_mod.Config, provider: Provider) -> None:
     os.environ[provider.api_key_env] = value
 
 
+def _add_ollama_connection(cfg: cfg_mod.Config):
+    from alpi.providers.ollama import DEFAULT_URL, OllamaProvider
+    ui.banner(
+        ui.crumb("setup", "model", "ollama"),
+        subtitle="add an Ollama server",
+        home=cfg.home,
+    )
+    name = ui.text("Server name (short id, e.g. 'local', 'home-gpu')")
+    if not name:
+        return None
+    name = name.strip()
+    taken = {e.get("name") for e in cfg.providers.get("ollama", []) or []}
+    if name in taken:
+        ui.fail(f"a connection named {name!r} already exists")
+        ui.press_enter()
+        return None
+    url = ui.text("URL", default=DEFAULT_URL)
+    if not url:
+        return None
+    url = url.strip().rstrip("/")
+    entry = {"name": name, "url": url}
+    cfg.providers.setdefault("ollama", []).append(entry)
+    return OllamaProvider(name=name, url=url)
+
+
 def _append_env(env_path: Path, key: str, value: str) -> None:
     lines = env_path.read_text().splitlines() if env_path.exists() else []
     out, replaced = [], False
@@ -222,38 +240,6 @@ def _any_saved_keys(builtin: list[Provider]) -> bool:
 
 
 
-def _add_custom_endpoint(cfg: cfg_mod.Config) -> CustomProvider | None:
-    ui.banner(
-        ui.crumb("setup", "model", "custom"),
-        subtitle="OpenAI-compatible endpoint",
-        home=cfg.home,
-    )
-    name = ui.text("Endpoint name (short id, e.g. 'my-ollama')")
-    if not name:
-        return None
-    base_url = ui.text("Base URL (e.g. http://localhost:11434/v1):")
-    if not base_url:
-        return None
-    needs_key = ui.confirm("Does this endpoint require an API key?", default=False)
-    api_key_env = ""
-    if needs_key:
-        api_key_env = ui.text("Env var name for the key (e.g. MY_ENDPOINT_KEY):") or ""
-        if api_key_env:
-            value = ui.password(f"Value for {api_key_env} (stored in ~/.alpi/.env):")
-            if value:
-                _append_env(cfg.env_path, api_key_env, value)
-                os.environ[api_key_env] = value
-
-    entry = {"name": name, "base_url": base_url, "api_key_env": api_key_env}
-    cfg.providers.setdefault("custom", []).append(entry)
-    return CustomProvider(
-        name=name,
-        display=f"{name}  ({base_url})",
-        base_url=base_url,
-        api_key_env=api_key_env,
-    )
-
-
 # Manage saved (submenu, out of the main picker)
 
 
@@ -267,11 +253,11 @@ def _manage_saved(cfg: cfg_mod.Config) -> None:
                 ui.row(p.api_key_env, "API key in .env"),
                 ("key", p.api_key_env),
             ))
-    for entry in cfg.providers.get("custom", []) or []:
+    for entry in cfg.providers.get("ollama", []) or []:
         name = entry.get("name", "")
         items.append((
-            ui.row(name, "custom endpoint"),
-            ("custom", name),
+            ui.row(name, f"ollama · {entry.get('url', '')}"),
+            ("ollama", name),
         ))
 
     if not items:
@@ -281,7 +267,7 @@ def _manage_saved(cfg: cfg_mod.Config) -> None:
     choice = ui.menu(
         ui.crumb("setup", "model", "saved"),
         items,
-        subtitle="remove an API key or custom endpoint",
+        subtitle="remove an API key or Ollama server",
         home=cfg.home,
         close="Back",
     )
@@ -292,9 +278,9 @@ def _manage_saved(cfg: cfg_mod.Config) -> None:
         _remove_env_key(cfg.env_path, target)
         os.environ.pop(target, None)
         ui.ok(f"removed {target} from .env")
-    elif kind == "custom":
-        cfg.providers["custom"] = [
-            e for e in cfg.providers.get("custom", [])
+    elif kind == "ollama":
+        cfg.providers["ollama"] = [
+            e for e in cfg.providers.get("ollama", [])
             if e.get("name") != target
         ]
-        ui.ok(f"removed custom endpoint '{target}'")
+        ui.ok(f"removed ollama server '{target}'")

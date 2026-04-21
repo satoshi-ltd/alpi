@@ -157,8 +157,8 @@ class AlfApp(App):
                         f"not set. Run `alpi setup` to add the key."
                     ))
                 return
-        customs = self.cfg.providers.get("custom", []) or []
-        if any((c.get("name") or "") == head for c in customs):
+        ollamas = self.cfg.providers.get("ollama", []) or []
+        if any((e.get("name") or "") == head for e in ollamas):
             return
         self._mount_message(ErrorLine(
             f"model `{model}` points at unknown provider `{head}`. "
@@ -523,7 +523,16 @@ class AlfApp(App):
             model=s.model,
             tokens=s.last_ctx_tokens,
             cost=s.cost_usd,
+            ctx_window=self._resolve_ctx_window(s.model),
         )
+
+    def _resolve_ctx_window(self, model: str) -> int:
+        head, _, rest = model.partition("/")
+        for entry in self.cfg.providers.get("ollama", []) or []:
+            if entry.get("name") == head:
+                from alpi.providers.ollama import resolve_num_ctx
+                return resolve_num_ctx(entry.get("url", ""), rest)
+        return 200_000
 
     def _mount_message(self, widget) -> None:
         self.query_one("#chat", VerticalScroll).mount(widget)
