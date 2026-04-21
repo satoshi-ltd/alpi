@@ -36,11 +36,8 @@ BLOCKED_FOR_DELEGATE: frozenset[str] = frozenset({
     "schedule",
     "send_message",
     "skill",
-    "config",
     "session_search",
     "email",
-    # _TODOS is a module-level global shared with the main agent; a
-    # sub-agent adding/clearing items would pollute the outer session.
     "todo",
 })
 
@@ -103,7 +100,7 @@ class Delegate(Tool):
         "Default: ['file', 'web'].\n"
         "\n"
         "The sub-agent CANNOT call: delegate (no recursion), memory, "
-        "skill, schedule, send_message, email, config, session_search.\n"
+        "skill, schedule, send_message, email, session_search.\n"
         "\n"
         "IMPORTANT: the sub-agent knows nothing about your conversation. "
         "Pass every relevant fact (file paths, error messages, decisions, "

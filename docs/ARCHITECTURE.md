@@ -213,7 +213,7 @@ Sibling to `research`, but can mutate: spawn a focused sub-agent with a chosen t
 - `terminal` → `terminal`
 - `web` → `web_search`, `web_fetch`, `web_extract`
 
-**Blocked for sub-agents**: `delegate` (no recursion), `memory`, `skill`, `schedule`, `send_message`, `email`, `config`, `session_search`, `todo` (shared global state). `research` is not in any preset either — if you need deep investigation inside a delegate task today, do it in the main agent first and pass findings via `context`.
+**Blocked for sub-agents**: `delegate` (no recursion), `memory`, `skill`, `schedule`, `send_message`, `email`, `session_search`, `todo` (shared global state). `research` is not in any preset either — if you need deep investigation inside a delegate task today, do it in the main agent first and pass findings via `context`.
 
 **Budget**: hardcoded `MAX_STEPS = 30`. No config knob — it's a ceiling, not a target (sub-agent stops when done). If a real case needs more, bump the constant.
 
