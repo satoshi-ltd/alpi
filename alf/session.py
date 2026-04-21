@@ -22,6 +22,7 @@ class ToolLog:
     result: str           # short hint — not the full raw output
     ok: bool
     duration_s: float
+    reasoning: str = ""   # inter-tool prose; non-empty only on the first tool of a batch
 
 
 @dataclass
@@ -109,6 +110,7 @@ class Session:
                             "at": tl.at, "name": tl.name, "args": tl.args,
                             "result": tl.result, "ok": tl.ok,
                             "duration_s": round(tl.duration_s, 3),
+                            **({"reasoning": tl.reasoning} if tl.reasoning else {}),
                         }
                         for tl in t.tools
                     ],
@@ -132,6 +134,7 @@ def load_turns(data: dict[str, Any]) -> list[Turn]:
                 result=str(tl.get("result", "")),
                 ok=bool(tl.get("ok", True)),
                 duration_s=float(tl.get("duration_s", 0)),
+                reasoning=str(tl.get("reasoning", "")),
             )
             for tl in (t.get("tools") or [])
         ]

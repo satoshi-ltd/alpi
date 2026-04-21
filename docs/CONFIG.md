@@ -75,7 +75,25 @@ what breaks when it's on. `allow_network` has no effect unless
 |---|---|---|---|
 | `tui.show_cost` | `true` | bool | next session |
 | `tui.show_tokens` | `true` | bool | next session |
+| `tui.show_reasoning` | `true` | bool | next session |
 | `tui.accent` | `#ff8800` | CSS color (hex / named / rgb) | next session |
+
+`tui.show_reasoning` controls two channels of model-thinking output:
+
+1. **Inter-tool prose** — the dim `» …` line that appears above a
+   tool card with whatever text the model emitted between tool
+   calls.
+2. **Streamed chain-of-thought** — for reasoning models
+   (DeepSeek-R1, OpenAI o-series, Claude extended thinking), the
+   tail of `reasoning_content` scrolls live inside the
+   `thinking…` indicator.
+
+When `false`, both are hidden from the screen. The reasoning is
+**still persisted** to the session file (`sessions/*.json`) so that
+re-enabling the flag later brings it back on replay, and so that
+debug inspection (`cat sessions/<id>.json`) always has the full
+context. Gateway surfaces (Telegram, Email) never rendered
+reasoning, so this flag has no effect there.
 
 ### Gateway — Telegram
 

@@ -1150,6 +1150,21 @@ into a new `reasoning_delta` field in the stream dict;
 without stopping the indicator; `alf/tui/widgets.py` hosts the new
 `ReasoningLine` widget and the tail-view logic.
 
+**Persistence + resume.** The inter-tool prose is stored on
+`ToolLog.reasoning` (the first tool of each batch carries the
+reasoning text, subsequent tools in the same batch store `""`).
+`session.save()` writes it only when non-empty. On `alf --continue`
+the TUI replays it as a `ReasoningLine` before the corresponding
+tool card. Old session files without the field load with
+`reasoning=""` and simply don't render any preamble.
+
+**Toggle.** `tui.show_reasoning` (default `true`) hides both
+channels from the UI when `false`. Data is still persisted and the
+event still fires — only the render is skipped. Re-enabling on a
+past session brings the `»` back on the next replay. Gateway
+surfaces never rendered reasoning, so the flag is a pure-TUI
+concern.
+
 #### M. TTS / STT / voice-mode
 Out of scope for core agent. If added, lives in a separate surface
 (voice gateway) — don't pollute the TUI.
