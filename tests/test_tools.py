@@ -19,7 +19,7 @@ EXPECTED_TOOLS = {
     "read_file", "read_image", "write_file", "edit_file", "terminal", "search",
     "todo", "web_search", "web_fetch", "web_extract", "schedule",
     "memory", "skill", "research", "delegate",
-    "session_search", "send_message", "email", "config",
+    "session_search", "send_message", "email",
 }
 
 

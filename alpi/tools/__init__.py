@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from alpi.tools.base import Tool, ToolResult
 from alpi.tools import (
-    config as config_tool,
     delegate,
     research,
     edit_file,
@@ -78,7 +77,6 @@ for _mod in (
     delegate,
     send_message,
     email_tool,
-    config_tool,
 ):
     _cls = getattr(_mod, "TOOL", None)
     if _cls is not None:
