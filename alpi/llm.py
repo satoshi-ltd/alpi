@@ -79,6 +79,14 @@ def stream(
         kwargs["tool_choice"] = "auto"
     if api_base:
         kwargs["api_base"] = api_base
+        from alpi.providers.ollama import is_ollama, resolve_num_ctx
+        if is_ollama(api_base):
+            raw_model = model.split("/", 1)[1] if "/" in model else model
+            kwargs["extra_body"] = {
+                "options": {
+                    "num_ctx": resolve_num_ctx(api_base, raw_model),
+                },
+            }
     if api_key:
         kwargs["api_key"] = api_key
 

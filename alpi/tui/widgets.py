@@ -332,7 +332,7 @@ class AlfHeader(Static):
             f"{sep}"
             f"{ctx_label}{fmt_count(self._tokens)}/{fmt_count(self._ctx_window)}  "
             f"[{bar_color}]{bar_str}[/{bar_color}] [{muted}]{pct}%[/{muted}]"
-            f"{sep}"
-            f"[{muted}]{_fmt_cost(self._cost)}[/{muted}]"
         )
+        if self._cost > 0:
+            markup += f"{sep}[{muted}]{_fmt_cost(self._cost)}[/{muted}]"
         self.update(Text.from_markup(markup))

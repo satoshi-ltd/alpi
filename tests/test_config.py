@@ -44,14 +44,15 @@ def test_resolve_model_plain() -> None:
     assert kwargs == {"model": "anthropic/claude-sonnet-4-6"}
 
 
-def test_resolve_model_custom_endpoint() -> None:
+def test_resolve_model_ollama() -> None:
     cfg = config.Config(
         home=Path("/tmp"),
-        model="my-ollama/llama3.1",
-        providers={"custom": [
-            {"name": "my-ollama", "base_url": "http://localhost:11434/v1", "api_key_env": ""}
+        model="home/llama3.1",
+        providers={"ollama": [
+            {"name": "home", "url": "http://localhost:11434"}
         ]},
     )
     kwargs = config.resolve_model(cfg)
     assert kwargs["model"] == "openai/llama3.1"
     assert kwargs["api_base"] == "http://localhost:11434/v1"
+    assert kwargs["api_key"] == "dummy"

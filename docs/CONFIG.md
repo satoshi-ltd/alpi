@@ -13,7 +13,7 @@ visibility:
 ```yaml
 model: openrouter/xiaomi/mimo-v2-flash
 providers:
-  custom: []
+  ollama: []
 mcp:
   servers: {}
 gateway:
@@ -53,7 +53,8 @@ Two options:
 | `model` | `openrouter/xiaomi/mimo-v2-flash` | string | next session |
 | `workspace` | `""` (cwd at launch) | string | next session |
 | `fallback_models` | `[]` | list of strings | next turn |
-| `providers.custom` | `[]` | list of objects — `alpi setup` only | next session |
+| `providers.ollama` | `[]` | list of `{name, url}` — one per Ollama server | next session |
+| `providers.openrouter.models` | `[]` | list of OpenRouter model ids the user has picked | next session |
 
 ### Tools
 
@@ -129,11 +130,26 @@ reasoning, so this flag has no effect there.
 | `gateway.email.show_tool_trace` | `false` | Each trace would be its own email — spam if a turn touches many tools. Only the final reply goes out. |
 | `gateway.email.typing_indicator` | `false` | No "typing…" concept over IMAP/SMTP. Kept explicit so the gateway loop doesn't spawn a no-op heartbeat. |
 
+### Ollama
+
+Ollama is a first-class provider. One entry per server — local, remote, different ports — each with its own user-chosen `name` that becomes the model prefix (`home/gemma4:e4b`, `gpu-box/qwen3:14b`). On every request against an Ollama server, `num_ctx` is auto-resolved from `/api/show` and injected so the model sees the full prompt instead of being truncated to Ollama's 2K default.
+
+```yaml
+providers:
+  ollama:
+    - name: home
+      url: http://localhost:11434
+    - name: gpu-box
+      url: http://192.168.1.50:11434
+```
+
+Add via `alpi setup → Model → Add Ollama`. Remove via `alpi setup → Model → Remove keys`.
+
 ### MCP
 
 | Key | Default | Notes |
 |---|---|---|
-| `mcp.servers` | `{}` | Map of `<name> → {command, args, env}`. Secrets in `env` use the `env:VAR_NAME` reference. Add via `alf setup → MCPs` — hand-editing is supported but the wizard is easier. |
+| `mcp.servers` | `{}` | Map of `<name> → {command, args, env}`. Secrets in `env` use the `env:VAR_NAME` reference. Add via `alpi setup → MCPs` — hand-editing is supported but the wizard is easier. |
 
 ## Takes-effect cheat sheet
 

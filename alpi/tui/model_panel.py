@@ -46,7 +46,7 @@ class ProviderPanel(FloatingPanel):
         if not options:
             yield Static(
                 "No providers configured yet. Run `alpi setup` from the "
-                "shell to add one (API key or custom endpoint). /model "
+                "shell to add one (API key or Ollama server). /model "
                 "here only switches between providers already set up.",
                 classes="entry-desc",
             )
@@ -89,12 +89,12 @@ class ProviderPanel(FloatingPanel):
                 self._active_idx = len(options)
             options.append(Option(label, id=p.name))
 
-        for p in prov_mod.custom(self.cfg.providers.get("custom", [])):
+        for p in prov_mod.ollama(self.cfg.providers.get("ollama", [])):
             self._providers[p.name] = p
             label = Text()
             label.append(f"{p.name:<14}", style="bold")
             label.append("  ")
-            label.append(p.base_url)
+            label.append(p.url)
             if p.name == active_head:
                 self._active_idx = len(options)
             options.append(Option(label, id=p.name))

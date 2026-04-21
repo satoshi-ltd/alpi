@@ -13,7 +13,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "model": "openrouter/xiaomi/mimo-v2-flash",
     "fallback_models": [],
     "workspace": "",
-    "providers": {"custom": []},
+    "providers": {"ollama": []},
     "tools": {
         "max_steps_per_turn": 40,
         "web_extract": {"model": ""},
@@ -55,7 +55,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
 
 SEED_CONFIG: dict[str, Any] = {
     "model": DEFAULT_CONFIG["model"],
-    "providers": {"custom": []},
+    "providers": {"ollama": []},
     "mcp": {"servers": {}},
     "gateway": DEFAULT_CONFIG["gateway"],
 }
@@ -224,21 +224,17 @@ def _tools_delta(cfg: Config) -> dict:
 
 def resolve_model(cfg: Config) -> dict[str, Any]:
     """Return the litellm.completion kwargs for the currently selected model."""
-    import os
-
     model_str = cfg.model
-    custom_eps = {c.get("name"): c for c in cfg.providers.get("custom", [])}
-
     head, _, rest = model_str.partition("/")
-    if head in custom_eps:
-        ep = custom_eps[head]
-        extras: dict[str, Any] = {
+
+    ollama_eps = {c.get("name"): c for c in cfg.providers.get("ollama", [])}
+    if head in ollama_eps:
+        ep = ollama_eps[head]
+        return {
             "model": f"openai/{rest}",
-            "api_base": ep.get("base_url", ""),
+            "api_base": ep.get("url", "").rstrip("/") + "/v1",
+            "api_key": "dummy",
         }
-        key_env = ep.get("api_key_env") or ""
-        extras["api_key"] = os.environ.get(key_env, "dummy") if key_env else "dummy"
-        return extras
 
     return {"model": model_str}
 

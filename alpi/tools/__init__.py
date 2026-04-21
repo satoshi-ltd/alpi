@@ -48,7 +48,12 @@ def execute(name: str, arguments: dict) -> ToolResult:
     """Execute a tool by name. Unknown names return an error result."""
     cls = _TOOLS.get(name)
     if cls is None:
-        return ToolResult(ok=False, output="", error=f"unknown tool: {name}")
+        available = ", ".join(sorted(_TOOLS.keys()))
+        return ToolResult(
+            ok=False,
+            output="",
+            error=f"unknown tool: {name}. Available tools: {available}",
+        )
     try:
         return cls().run(**arguments)
     except TypeError as e:
