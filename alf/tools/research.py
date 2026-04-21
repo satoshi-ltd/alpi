@@ -1,4 +1,4 @@
-"""delegate — spawn a sub-agent for deep research."""
+"""research — spawn a read-only sub-agent for deep investigation."""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ SUB_AGENT_TOOLS = {
     "read_file", "search",
 }
 
-DEFAULT_MAX_STEPS = 12
+DEPTH_STEPS_DEFAULTS = {"quick": 8, "normal": 15, "deep": 30}
 
 SYSTEM_PROMPT = """\
 You are a research sub-agent. You were spawned by the main agent to go
@@ -25,7 +25,7 @@ deep on a specific topic and return a synthesized answer.
 
 Constraints:
 - You have access to read-only tools only: web_search, web_fetch,
-  web_extract, read_file, grep, glob.
+  web_extract, read_file, search.
 - You must not call memory, terminal, or any write tool.
 - Work focused: answer the research brief and stop. Do not exceed the
   tool-step budget.
@@ -34,12 +34,43 @@ Constraints:
 """
 
 
-class Delegate(Tool):
-    name = "delegate"
+def _resolve_depth(cfg: cfg_mod.Config, depth: str) -> int:
+    research_cfg = (cfg.raw.get("tools") or {}).get("research") or {}
+    key = f"{depth}_steps"
+    val = research_cfg.get(key, DEPTH_STEPS_DEFAULTS[depth])
+    try:
+        n = int(val)
+    except (TypeError, ValueError):
+        n = DEPTH_STEPS_DEFAULTS[depth]
+    return max(1, n)
+
+
+class Research(Tool):
+    name = "research"
     description = (
-        "Spawn a read-only research sub-agent with its own context. Use for "
-        "open-ended investigations (several searches + fetches) so they do "
-        "not pollute the main conversation. Returns a synthesized report."
+        "Spawn a read-only sub-agent to investigate a topic and return a "
+        "synthesized report with citations. Use for questions that would "
+        "otherwise flood your context with intermediate search / fetch "
+        "results.\n"
+        "\n"
+        "The sub-agent has web_search, web_fetch, web_extract, read_file, "
+        "search. It CANNOT write, use terminal, or call memory / skill / "
+        "send_message. It returns a single final report — you do not see "
+        "its intermediate tool trace.\n"
+        "\n"
+        "Pick `depth` based on the user's intent:\n"
+        "  - quick   — single-answer lookups (\"find docs for X\", \"what's\n"
+        "              the syntax of Y\"). Fastest, cheapest.\n"
+        "  - normal  — comparative / multi-source research (\"compare X\n"
+        "              vs Y\", \"free APIs for Z\"). Default.\n"
+        "  - deep    — exhaustive surveys (\"comprehensive analysis of X\",\n"
+        "              \"survey state of the art for Y\", \"haz un estudio\n"
+        "              profundo sobre Z\"). Most tokens, most wall time.\n"
+        "\n"
+        "The exact iteration count per depth is a user knob in "
+        "~/.alf/config.yaml under `tools.research.{quick,normal,deep}_steps` "
+        "(defaults: quick=8, normal=15, deep=30). Don't pass the step count "
+        "— pick the depth name."
     )
     parameters = {
         "type": "object",
@@ -48,20 +79,31 @@ class Delegate(Tool):
                 "type": "string",
                 "description": "The research question / goal. Be specific.",
             },
-            "max_steps": {
-                "type": "integer",
-                "description": f"Hard cap on tool-steps (default {DEFAULT_MAX_STEPS}).",
-                "default": DEFAULT_MAX_STEPS,
+            "depth": {
+                "type": "string",
+                "enum": ["quick", "normal", "deep"],
+                "default": "normal",
+                "description": (
+                    "Budget tier. quick = single-answer, normal = "
+                    "comparative, deep = exhaustive."
+                ),
             },
         },
         "required": ["brief"],
     }
 
-    def run(self, brief: str, max_steps: int = DEFAULT_MAX_STEPS) -> ToolResult:
+    def run(self, brief: str, depth: str = "normal") -> ToolResult:
         from alf.tools import execute, schemas as all_schemas
+
+        if depth not in DEPTH_STEPS_DEFAULTS:
+            return ToolResult(
+                ok=False, output="",
+                error=f"depth must be one of: {sorted(DEPTH_STEPS_DEFAULTS)}",
+            )
 
         cfg = cfg_mod.load(get_home())
         call_kwargs = cfg_mod.resolve_model(cfg)
+        max_steps = _resolve_depth(cfg, depth)
 
         tools_schema = [
             s for s in all_schemas()
@@ -78,17 +120,19 @@ class Delegate(Tool):
         while iteration < max_steps:
             if tool_state_mod.is_interrupted():
                 return ToolResult(ok=True, output=(
-                    "[delegate: interrupted by user before completing research]"
+                    "[research: interrupted by user before completing]"
                 ))
             iteration += 1
-            tool_state_mod.emit_state(f"researching · step {iteration}/{max_steps}")
+            tool_state_mod.emit_state(
+                f"{depth} · step {iteration}/{max_steps}",
+            )
             try:
                 out = llm.complete(
                     messages=messages, tools=tools_schema, **call_kwargs
                 )
             except Exception as e:  # noqa: BLE001
                 return ToolResult(ok=False, output="",
-                                  error=f"delegate LLM call failed: {e}")
+                                  error=f"research LLM call failed: {e}")
             tool_state_mod.record_usage(
                 out.input_tokens, out.output_tokens, out.cost_usd,
             )
@@ -109,17 +153,14 @@ class Delegate(Tool):
                 final_text = content
                 break
 
-            # Execute every tool call in this turn — they count as one
-            # iteration total (not one each). Hard cap is the number of
-            # LLM round-trips, not individual tool executions.
             for tc in tool_calls:
                 if tool_state_mod.is_interrupted():
                     return ToolResult(ok=True, output=(
-                        "[delegate: interrupted by user mid-research]"
+                        "[research: interrupted by user mid-investigation]"
                     ))
                 name = tc["name"]
                 if name not in SUB_AGENT_TOOLS:
-                    payload = f"ERROR: tool '{name}' not available to delegate"
+                    payload = f"ERROR: tool '{name}' not available to research sub-agent"
                 else:
                     try:
                         args = json.loads(tc["arguments"]) if tc["arguments"] else {}
@@ -134,13 +175,11 @@ class Delegate(Tool):
                 })
 
         if not final_text:
-            # Cap hit — force one last synthesis call (no tools) so the
-            # main agent gets useful findings instead of "gave up".
             tool_state_mod.emit_state("writing final report…")
             messages.append({
                 "role": "user",
                 "content": (
-                    f"You've used your {max_steps}-iteration research budget. "
+                    f"You've used your {max_steps}-iteration budget. "
                     "Stop investigating and write your final report now with "
                     "what you've gathered. Cite URLs. Do not call any tools."
                 ),
@@ -150,13 +189,13 @@ class Delegate(Tool):
                 final_text = out.content or ""
             except Exception as e:  # noqa: BLE001
                 return ToolResult(ok=False, output="",
-                                  error=f"delegate synthesis failed: {e}")
+                                  error=f"research synthesis failed: {e}")
             tool_state_mod.record_usage(
                 out.input_tokens, out.output_tokens, out.cost_usd,
             )
             if not final_text:
-                final_text = f"[delegate: {max_steps}-step budget exhausted, no synthesis available]"
+                final_text = f"[research: {max_steps}-step budget exhausted, no synthesis]"
         return ToolResult(ok=True, output=final_text)
 
 
-TOOL = Delegate
+TOOL = Research

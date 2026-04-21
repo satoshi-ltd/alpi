@@ -62,12 +62,25 @@ Three options, any of them works:
 | `tools.web_extract.model` | `""` (use main) | string | next turn |
 | `tools.terminal.sandbox` | `false` | bool | next turn |
 | `tools.terminal.allow_network` | `false` | bool | next turn |
+| `tools.research.quick_steps` | `8` | int | next turn |
+| `tools.research.normal_steps` | `15` | int | next turn |
+| `tools.research.deep_steps` | `30` | int | next turn |
 
 `tools.terminal.sandbox` enables OS-level isolation on shell commands
 (macOS `sandbox-exec`, Linux `bubblewrap`). **Experimental** — see
 [SECURITY.md](SECURITY.md) for details, platform requirements, and
 what breaks when it's on. `allow_network` has no effect unless
 `sandbox` is on.
+
+`tools.research.{quick,normal,deep}_steps` control the iteration
+budget of the `research` sub-agent. The agent picks the depth tier
+based on the user's intent (`quick` for single-answer lookups,
+`normal` for comparative research, `deep` for exhaustive surveys);
+the integer per tier is your knob. Bumping `deep_steps` to 60 if
+you want even deeper investigations is fine; dropping `quick_steps`
+to 3 if you mainly use a tier-A model and want minimum latency on
+trivial questions is also fine. Default tiers are tuned for
+mimo-class models on read-only research.
 
 ### TUI
 

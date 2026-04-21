@@ -18,7 +18,7 @@ from alf.tools.write_file import WriteFile
 EXPECTED_TOOLS = {
     "read_file", "write_file", "edit_file", "terminal", "search",
     "todo", "web_search", "web_fetch", "web_extract", "schedule",
-    "memory", "skill", "delegate",
+    "memory", "skill", "research",
     "session_search", "send_message", "email", "config",
 }
 
@@ -186,3 +186,30 @@ def test_schemas_shape() -> None:
     schemas = tools.schemas()
     assert all("type" in s and s["type"] == "function" for s in schemas)
     assert all("function" in s and "name" in s["function"] for s in schemas)
+
+
+def test_research_depth_resolves_from_config(tmp_home_no_env) -> None:
+    from alf.tools.research import _resolve_depth, DEPTH_STEPS_DEFAULTS
+    from alf import config as cfg_mod
+    cfg = cfg_mod.load(tmp_home_no_env)
+    for d in ("quick", "normal", "deep"):
+        assert _resolve_depth(cfg, d) == DEPTH_STEPS_DEFAULTS[d]
+
+
+def test_research_depth_honors_user_overrides(tmp_home_no_env) -> None:
+    (tmp_home_no_env / "config.yaml").write_text(
+        "tools:\n  research:\n    deep_steps: 60\n    quick_steps: 3\n"
+    )
+    from alf.tools.research import _resolve_depth
+    from alf import config as cfg_mod
+    cfg = cfg_mod.load(tmp_home_no_env)
+    assert _resolve_depth(cfg, "quick") == 3
+    assert _resolve_depth(cfg, "normal") == 15
+    assert _resolve_depth(cfg, "deep") == 60
+
+
+def test_research_rejects_unknown_depth() -> None:
+    from alf.tools.research import Research
+    r = Research().run(brief="x", depth="superdeep")
+    assert not r.ok
+    assert "depth" in (r.error or "")

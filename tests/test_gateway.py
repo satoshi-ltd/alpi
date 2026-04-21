@@ -215,12 +215,12 @@ def test_is_allowed_env_based(monkeypatch) -> None:
     assert gw_run._is_allowed(msg) is False
 
 
-def test_arg_hint_handles_delegate_brief() -> None:
-    # Regression: delegate used to fall through to the generic first-arg
-    # fallback and show "5" (max_steps) instead of the actual brief.
-    hint = arg_hint("delegate", {"max_steps": 5, "brief": "best beach hours"})
+def test_arg_hint_handles_research_brief() -> None:
+    # Regression: research used to fall through to the generic first-arg
+    # fallback and show another field instead of the actual brief.
+    hint = arg_hint("research", {"depth": "deep", "brief": "best beach hours"})
     assert "best beach hours" in hint
-    assert "5" not in hint
+    assert "deep" not in hint
 
 
 def test_arg_hint_known_tools() -> None:
