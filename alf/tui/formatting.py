@@ -48,10 +48,15 @@ def fmt_count(n: int) -> str:
 
 
 def bar_10(n: int, total: int) -> str:
+    return bar(n, total, 10)
+
+
+def bar(n: int, total: int, cells: int) -> str:
+    cells = max(1, cells)
     if total <= 0:
-        return "▓" + "░" * 9
-    filled = max(0, min(10, n * 10 // total))
-    return "▓" * filled + "░" * (10 - filled)
+        return "▓" + "░" * (cells - 1)
+    filled = max(0, min(cells, n * cells // total))
+    return "▓" * filled + "░" * (cells - filled)
 
 
 _SKILL_PATH_RE = __import__("re").compile(
