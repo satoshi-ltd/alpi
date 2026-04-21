@@ -6,7 +6,6 @@ import shlex
 from pathlib import Path
 from typing import Any
 
-import questionary
 import yaml
 
 from alf import config as cfg_mod

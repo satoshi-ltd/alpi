@@ -1,6 +1,6 @@
 [project]
 name = "alf"
-version = "0.2.9"
+version = "0.2.10"
 description = "A slim, self-improving AI agent"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -14,7 +14,6 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "httpx>=0.27.0",
     "click>=8.1.0",
-    "questionary>=2.0.0",
     "html2text>=2024.2.26",
     "textual>=0.86.0",
     "ddgs>=9.0.0",

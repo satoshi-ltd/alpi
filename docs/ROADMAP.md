@@ -113,26 +113,6 @@ Stealth Firefox fork for Cloudflare-protected sites. Hold until B (Playwright) i
 
 ## Next — v0.3 planned
 
-### O. Drop `questionary` in favour of direct `prompt_toolkit`
-
-`questionary` was the right choice when setup was 3 menus and 0 wizards. Now that `alf/ui.py` is the shared layer for every setup flow, we're fighting its defaults more than using them.
-
-Concrete hacks in `alf/ui.py` as of v0.2:
-
-1. `qmark=""` + empty `message` to suppress its prompt header.
-2. List-tuple titles `[(style, text)]` so it skips its own `class:highlighted` wrap.
-3. Style override for `class:close` / `class:highlighted close` / `class:selected close` to keep the close row from flashing accent.
-4. ANSI escape (`\033[1A\033[2K\r\n`) after every menu to wipe questionary's post-selection echo.
-5. `_CLOSE_SENTINEL = object()` because `Choice.value=None` collapses into "unset" and falls back to the title string.
-
-What `questionary` still gives us after those hacks: arrow-key nav, ENTER/ESC, cursor rendering, scroll-if-long. All ~150 LOC on top of `prompt_toolkit` (which we keep transitively).
-
-**Scope.** Reimplement `menu()` directly against `prompt_toolkit`. Remove the 5 hacks. Rewrite the 5 monkeypatched UI tests. Drop `questionary` from `pyproject.toml`. Leave `text/password/confirm` on `rich.Prompt`.
-
-**Risk budget.** Half-day to a day. ESC handling on macOS Terminal sometimes delays behind escape-sequence timeout — exactly the edge questionary abstracts. Budget 1-3h for surprises.
-
-**Trigger.** v0.3 UI polish, or earlier if we hit hack #6.
-
 ### P. Graduate the OS sandbox out of experimental
 
 `tools.terminal.sandbox` ships in v0.1 as opt-in + experimental. Default-on was rejected because the `sandbox-exec` profile (macOS) and `bubblewrap` invocation (Linux) haven't been validated against the long tail of real commands: `git push` with SSH keys outside the workspace, `docker` touching `/var/run/docker.sock`, Homebrew Intel vs Apple Silicon, `npm install` cache in `~/.npm`, `code --install-extension` writing `~/.vscode/`, etc.
@@ -221,3 +201,4 @@ First usable cut. Textual TUI, 3-file memory with two-tier dedup, skill system w
 | (next)  | Panel header elevation flips direction in light mode — `$surface-lighten-1` in dark, `$surface-darken-1` in light, so the header always contrasts with the body (v0.2.7) |
 | (next)  | `AlfHeader` responsive — 3 width tiers: wide (≥100) shows full `provider/model` path, medium keeps the short name, narrow (<60) drops the `ctx` label and halves the bar to 5 cells; `│` separators preserved across all tiers (v0.2.8) |
 | (next)  | `AlfTopBar` responsive — narrow (<60) drops `profile` / `workspace` labels, keeps values + `│` separators; matches `AlfHeader` policy (v0.2.9) |
+| (next)  | Drop `questionary`; `menu()` reimplemented directly on `prompt_toolkit` (O). Removes 5 workarounds in `ui.py` (empty qmark, FormattedText close hack, ANSI wipe, close sentinel, style overrides). Dependency gone from `pyproject.toml` (v0.2.10) |
