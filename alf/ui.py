@@ -2,45 +2,24 @@
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 from typing import Any, Sequence
 
-import questionary
 from rich.console import Console
 from rich.prompt import Confirm, Prompt
 from rich.text import Text
 from rich.theme import Theme
 
-# Palette
-# Only five semantic colours are allowed anywhere in the UI:
-#   accent   — profile identity, tints ``alf`` prefix + menu pointer
-#   default  — normal text (terminal's foreground colour)
-#   muted    — ``dim`` grey — hints, subtitles, Back/Exit, statuses
-#   error    — ``red`` — rejected / failed
-#   success  — ``green`` — saved / ok
-# Everything else (rich's default magenta for ``[brackets]`` prompt
-# defaults, cyan for quoted strings, blue for URLs, yellow for
-# repr numbers) is explicitly overridden below so the setup flow
-# looks consistent instead of the Python REPL of colours rich ships
-# by default.
-
 _THEME = Theme(
     {
-        # Semantic aliases.
         "muted": "dim",
         "error": "red",
         "success": "green",
-        # Strip rich's rainbow defaults — all the prompt chrome drops
-        # to dim so it reads as "contextual info, not actionable".
         "prompt": "default",
         "prompt.default": "dim",
         "prompt.choices": "dim",
         "prompt.invalid": "red",
         "prompt.invalid.choice": "red",
-        # Kill rich's repr auto-highlighting (`"quoted"` in cyan,
-        # numbers in yellow, URLs in blue, etc.). We want plain text
-        # unless we marked it up explicitly.
         "repr.str": "default",
         "repr.number": "default",
         "repr.bool_true": "default",
@@ -55,36 +34,17 @@ _THEME = Theme(
     }
 )
 
-# ``highlight=False`` also disables rich's automatic regex-based repr
-# detection, so ``'some string'`` stops coming out cyan even when it
-# matches rich's Python-literal patterns.
 _console = Console(theme=_THEME, highlight=False)
 
-# Muted foreground for Back/Exit labels so they fade compared to the
-# action rows. Neutral grey works on light and dark terminals.
 _MUTED_STYLE = "fg:#888888"
 
-# Sentinel used as the Choice.value for the auto-appended close row.
-# Can't be ``None`` — questionary.Choice treats ``value=None`` as
-# "unset" and falls back to the title, which for our FormattedText
-# close label resolves to the string "← Back" / "← Exit". Using a
-# unique object avoids that collision and lets ``menu()`` return
-# ``None`` to the caller consistently.
-_CLOSE_SENTINEL = object()
-
-# Width used for menu labels before the status ``·`` separator. Chosen
-# so the longest label in any current menu (``Model / Provider``,
-# ``OpenRouter``, ``Telegram``, ``filesystem``) fits without truncation
-# while still leaving a single alignment grid across screens.
 LABEL_WIDTH = 16
 
 POINTER = "◆"
 NAV_HINT = "(↑↓ navigate  ENTER select  ESC cancel)"
 
 
-
 def crumb(*parts: str) -> str:
-    """Build the canonical ``alf v<version> > section > subsection``"""
     from alf import __version__
     segments = [f"alf v{__version__}", *[p for p in parts if p]]
     return " › ".join(segments)
@@ -92,12 +52,7 @@ def crumb(*parts: str) -> str:
 
 def banner(title: str, subtitle: str = "", hint: str = "",
            home: Path | None = None) -> None:
-    """Clear-screen + render a wizard/menu header."""
     _console.clear()
-    # Title + description on ONE line: breadcrumb bold (with ``alf``
-    # accent-tinted), then a muted ``› description`` tail. Keeps the
-    # header tight — every screen starts with 1 canonical line of
-    # context instead of 2 competing ones.
     line = _render_title(title, home=home)
     if subtitle:
         line += f"[dim] › {subtitle}[/dim]"
@@ -125,13 +80,10 @@ def _accent_hex(home: Path | None) -> str:
         return ""
 
 
-# Trailing ``(...)`` inside a label — stripped when a default is
-# already supplied since the hint is only useful on first setup.
 _TRAILING_PAREN = __import__("re").compile(r"\s*\([^)]*\)\s*$")
 
 
 def row(label: str, status: str = ""):
-    """Build a menu-row title."""
     if not status:
         return label
     left = f"{label:<{LABEL_WIDTH}}"
@@ -142,7 +94,6 @@ def row(label: str, status: str = ""):
 
 
 def row_accent(label: str, status: str, accent: str):
-    """Row with label styled in accent — used for the active entry."""
     if not accent or not accent.strip():
         return row(label, status)
     left = f"{label:<{LABEL_WIDTH}}"
@@ -151,6 +102,9 @@ def row_accent(label: str, status: str, accent: str):
         parts.append((_MUTED_STYLE, f" · {status}"))
     return parts
 
+
+# Separator sentinel — pass `None` in the items list to get a blank row.
+_SEPARATOR = object()
 
 
 def menu(
@@ -161,128 +115,190 @@ def menu(
     home: Path | None = None,
     close: str = "Exit",
 ) -> Any:
-    """Render a banner + a questionary.select + a muted close item."""
+    """Render a banner + arrow-key select list + muted close row.
+
+    Items accept the same shapes as before:
+        - ``(label, value)``
+        - ``(label, value, status)`` → rendered via ``row(label, status)``
+        - ``None`` → blank separator row
+        - bare string → used as both label and value
+    """
     if title:
-        # Canonical header block:
-        #   alf v0.1.0 › setup › gateways › inbound channels alf listens on   ← bold crumb + muted tail
-        #   (↑↓ navigate  ENTER select  ESC cancel)                           ← muted hint
-        # Questionary renders an (empty) prompt line of its own right
-        # below — that's the single separator between header and
-        # options. Printing our own blank here doubled the gap.
         _console.clear()
         line = _render_title(title, home=home)
         if subtitle:
             line += f"[dim] › {subtitle}[/dim]"
         _console.print(line)
         _console.print(f"[dim]{NAV_HINT}[/dim]")
+        _console.print("")
 
-    style = _style_for(home)
-    choices = []
+    entries: list[tuple[Any, Any, bool]] = []  # (title_ft, value, selectable)
     for item in items:
         if item is None:
-            choices.append(questionary.Separator(" "))
-        elif isinstance(item, (questionary.Choice, questionary.Separator)):
-            choices.append(item)
+            entries.append((" ", _SEPARATOR, False))
         elif isinstance(item, tuple):
             if len(item) == 3:
                 label, value, status = item
-                choices.append(questionary.Choice(
-                    title=row(str(label), str(status or "")),
-                    value=value,
-                ))
+                entries.append((row(str(label), str(status or "")), value, True))
             elif len(item) == 2:
                 label, value = item
-                # Labels can be either plain strings OR pre-built
-                # ``row()`` output (a list of ``(style, text)`` tuples
-                # for mixed styling). str()-ing the list would turn
-                # it into Python ``repr`` — which is exactly what the
-                # user saw rendered verbatim in the menu. Pass lists
-                # through; only coerce genuinely bare values.
-                if isinstance(label, (list, str)):
-                    choices.append(questionary.Choice(title=label, value=value))
-                else:
-                    choices.append(questionary.Choice(title=str(label), value=value))
+                entries.append((label, value, True))
         else:
-            # Bare string — use as both label and value.
-            choices.append(questionary.Choice(title=str(item), value=item))
+            entries.append((str(item), item, True))
 
-    # Close item — separated from content by a blank separator, and
-    # rendered in a muted colour so it visually fades to the
-    # background. The ``class:separator`` tag is applied to the row so
-    # our stylesheet below can dim it without having to patch every
-    # caller.
+    close_sentinel: Any = object()
     if close:
-        # Close sits directly below the last option — no blank
-        # separator above it. The muted colour already sets it apart
-        # visually; adding a gap just wastes vertical space.
-        choices.append(questionary.Choice(
-            title=[(f"class:close {_MUTED_STYLE}", close)],
-            value=_CLOSE_SENTINEL,
+        entries.append((
+            [(_MUTED_STYLE, close)],
+            close_sentinel,
+            True,
         ))
 
-    # Empty ``message`` + ``qmark=""`` yields no duplicate prompt line
-    # above the choices — the banner IS the title.
-    result = _ask(questionary.select(
-        "",
-        choices=choices,
-        qmark="",
-        pointer=POINTER,
-        style=style,
-        instruction=" ",
-    ))
-    # Questionary's post-selection echo renders the chosen title under
-    # ``class:answer`` and leaves it on screen. Style overrides can
-    # recolour it but not hide it — so we wipe the line ourselves
-    # (cursor up one row, erase entire line, cursor to column 0) the
-    # moment the prompt returns. Downstream wizards can then print
-    # straight into the vacated spot and the selection reads as a
-    # transient choice, not a persistent headline.
-    try:
-        # Trailing newline keeps the wiped line as a visible blank
-        # separator between the menu above and whatever prompt comes
-        # next — otherwise downstream output glues against the nav
-        # hint and the page reads cramped.
-        sys.stdout.write("\033[1A\033[2K\r\n")
-        sys.stdout.flush()
-    except Exception:  # noqa: BLE001
-        pass
-    if result is _CLOSE_SENTINEL:
+    result = _run_select(entries, home=home)
+    if result is None or result is close_sentinel:
         return None
     return result
 
 
+def _run_select(entries, *, home: Path | None):
+    from prompt_toolkit.application import Application
+    from prompt_toolkit.key_binding import KeyBindings
+    from prompt_toolkit.layout import Layout
+    from prompt_toolkit.layout.containers import HSplit, Window
+    from prompt_toolkit.layout.controls import FormattedTextControl
 
-def text(label: str, default: str = "") -> str | None:
-    """Ask for free text. Rich's ``Prompt.ask`` renders cleanly"""
-    clean = _clean_label(label)
-    if default:
-        # User has a hydrated value — strip any trailing ``(...)``
-        # hint from the label. The ``(e.g. ...)`` reminder is useful
-        # on first setup and noise once the user knows the format.
-        clean = _TRAILING_PAREN.sub("", clean).rstrip()
+    accent = _accent_hex(home)
+    selectable_idx = [i for i, (_, _, sel) in enumerate(entries) if sel]
+    if not selectable_idx:
+        return None
+    state = {"cursor": selectable_idx[0]}
+
+    def _render():
+        out: list[tuple[str, str]] = []
+        for i, (title_ft, _, selectable) in enumerate(entries):
+            is_cursor = (i == state["cursor"])
+            pointer = f"{POINTER} " if is_cursor else "  "
+            pointer_style = (
+                f"fg:{accent} bold" if (is_cursor and accent) else
+                ("bold" if is_cursor else "")
+            )
+            if not selectable:
+                out.append(("", pointer))
+            else:
+                out.append((pointer_style, pointer))
+            if isinstance(title_ft, list):
+                for style, text in title_ft:
+                    out.append((style, text))
+            else:
+                out.append(("", str(title_ft)))
+            out.append(("", "\n"))
+        # Strip final newline so the control doesn't render an extra
+        # blank row under the last entry.
+        if out and out[-1] == ("", "\n"):
+            out.pop()
+        return out
+
+    kb = KeyBindings()
+
+    def _move(delta: int) -> None:
+        pos = selectable_idx.index(state["cursor"])
+        pos = (pos + delta) % len(selectable_idx)
+        state["cursor"] = selectable_idx[pos]
+
+    @kb.add("up")
+    @kb.add("c-p")
+    @kb.add("k")
+    def _(event):  # noqa: ARG001
+        _move(-1)
+
+    @kb.add("down")
+    @kb.add("c-n")
+    @kb.add("j")
+    def _(event):  # noqa: ARG001
+        _move(1)
+
+    @kb.add("home")
+    def _(event):  # noqa: ARG001
+        state["cursor"] = selectable_idx[0]
+
+    @kb.add("end")
+    def _(event):  # noqa: ARG001
+        state["cursor"] = selectable_idx[-1]
+
+    @kb.add("enter")
+    def _(event) -> None:
+        _, value, _ = entries[state["cursor"]]
+        event.app.exit(result=value)
+
+    @kb.add("escape", eager=True)
+    @kb.add("c-c")
+    @kb.add("c-d")
+    @kb.add("q")
+    def _(event) -> None:
+        event.app.exit(result=None)
+
+    control = FormattedTextControl(_render, focusable=True, show_cursor=False)
+    layout = Layout(HSplit([Window(content=control, always_hide_cursor=True)]))
+    app = Application(
+        layout=layout,
+        key_bindings=kb,
+        full_screen=False,
+        mouse_support=False,
+    )
     try:
-        prompt_arg = _styled_prompt(clean, default)
-        return Prompt.ask(
-            prompt_arg,
-            default=default or None,
-            show_default=not bool(default),  # we embed it styled ourselves
-            console=_console,
-        )
-    except (KeyboardInterrupt, EOFError):
+        return app.run()
+    except KeyboardInterrupt:
         return None
 
 
+def text(label: str, default: str = "") -> str | None:
+    """Single-line free-text input. ENTER submits, ESC/Ctrl-C return None.
+
+    When ``default`` is provided and the user submits empty input, the
+    default is returned.
+    """
+    from prompt_toolkit import PromptSession
+    from prompt_toolkit.formatted_text import FormattedText
+    from prompt_toolkit.key_binding import KeyBindings
+
+    clean = _clean_label(label)
+    if default:
+        clean = _TRAILING_PAREN.sub("", clean).rstrip()
+
+    accent = _accent_hex(None) or ""
+    fragments: list[tuple[str, str]] = [("", clean)]
+    if default:
+        default_style = f"fg:{accent}" if accent else _MUTED_STYLE
+        fragments.append(("", " ("))
+        fragments.append((default_style, default))
+        fragments.append(("", ")"))
+    fragments.append(("", ": "))
+
+    kb = KeyBindings()
+
+    @kb.add("escape", eager=True)
+    def _(event) -> None:
+        event.app.exit(result=None)
+
+    try:
+        session = PromptSession(FormattedText(fragments), key_bindings=kb)
+        result = session.prompt()
+    except (KeyboardInterrupt, EOFError):
+        return None
+    if result is None:
+        return None
+    if default and result == "":
+        return default
+    return result
+
+
 def password(label: str, current: str = "") -> str | None:
-    """Secret input with ``keep-current`` semantics."""
     import getpass
 
     clean = _clean_label(label)
     if current:
         clean = _TRAILING_PAREN.sub("", clean).rstrip()
 
-    # Render the prompt (with optional styled hint) via rich so the
-    # accent colour still applies — then feed an EMPTY string as the
-    # getpass prompt so it doesn't print anything of its own.
     if current:
         _console.print(
             _styled_prompt(clean, f"…{current[-4:]}"),
@@ -318,14 +334,10 @@ def _clean_label(label: str) -> str:
 
 
 def confirm(label: str, default: bool = True) -> bool:
-    """Yes/No prompt. Ctrl-C returns ``default``."""
     try:
         return Confirm.ask(label, default=default, console=_console)
     except (KeyboardInterrupt, EOFError):
         return default
-
-
-# Feedback — consistent success/error/status affordances
 
 
 def ok(message: str) -> None:
@@ -353,12 +365,10 @@ def cancelled() -> None:
 
 
 def activity(message: str):
-    """Spinner context manager for slow operations."""
     return _console.status(f"[dim]{message}[/dim]")
 
 
 def press_enter(message: str = "Press ENTER to continue") -> None:
-    """Hold the current screen until the user acks."""
     _console.print(f"\n[dim]{message}[/dim]", end="")
     try:
         input()
@@ -366,9 +376,10 @@ def press_enter(message: str = "Press ENTER to continue") -> None:
         pass
 
 
-
 def accent_style(accent: str):
-    """Return a prompt_toolkit Style that tints the ``◆`` pointer with"""
+    """Legacy — returns a prompt_toolkit Style or None. Retained because
+    a couple of model-selector helpers still import it to tint prompts
+    outside of ``menu()``."""
     if not accent or not accent.strip():
         return None
     try:
@@ -377,38 +388,4 @@ def accent_style(accent: str):
         return None
     return Style([
         ("pointer", f"fg:{accent.strip()} bold"),
-        # Questionary applies ``class:highlighted`` (not ``selected``)
-        # to the row under the cursor. Pin both variants to the muted
-        # grey so the Back/Exit title never flashes in the accent tint.
-        ("close", _MUTED_STYLE),
-        ("highlighted close", _MUTED_STYLE),
-        ("selected close", _MUTED_STYLE),
     ])
-
-
-def _style_for(home: Path | None):
-    try:
-        from alf import config as config_mod
-        from alf import home as home_mod
-        resolved = home or home_mod.get_home()
-        cfg = config_mod.load(resolved)
-        return accent_style((cfg.tui or {}).get("accent", ""))
-    except Exception:  # noqa: BLE001
-        return None
-
-
-# ESC-aware question asker (single place)
-
-
-def _ask(question) -> Any:
-    try:
-        app = question.application
-        app.key_bindings.add("escape", eager=True)(
-            lambda event: event.app.exit(result=None)
-        )
-    except Exception:  # noqa: BLE001
-        pass
-    try:
-        return question.unsafe_ask()
-    except KeyboardInterrupt:
-        return None

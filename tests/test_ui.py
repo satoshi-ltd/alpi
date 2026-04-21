@@ -2,7 +2,7 @@
 
 UI is hard to test exhaustively without rendering a real terminal.
 We focus on the pure bits: row formatting, accent_style, and the
-password ``keep-current`` semantics (via a monkeypatched questionary).
+password ``keep-current`` semantics.
 """
 
 from __future__ import annotations
@@ -119,36 +119,55 @@ def test_password_ctrl_c_returns_none(monkeypatch) -> None:
 # --------------------------------------------------------------------
 
 
+def _fake_session(monkeypatch, *, result: str | None, capture: dict | None = None):
+    """Stub ``PromptSession`` so ``text()`` returns ``result`` without a TTY."""
+    import prompt_toolkit
+
+    class _S:
+        def __init__(self, message=None, **_kw):
+            if capture is not None:
+                capture["message"] = message
+
+        def prompt(self):
+            return result
+
+    monkeypatch.setattr(prompt_toolkit, "PromptSession", _S)
+
+
 def test_text_returns_default_when_empty(monkeypatch) -> None:
-    # rich.Prompt.ask returns the default when the user just presses
-    # Enter — we rely on that behaviour.
-    monkeypatch.setattr(ui.Prompt, "ask", lambda *a, **kw: kw.get("default", ""))
+    _fake_session(monkeypatch, result="")
     assert ui.text("name:", default="alice") == "alice"
 
 
 def test_text_strips_trailing_colon(monkeypatch) -> None:
-    """Rich's Prompt.ask adds ``": "`` automatically. Labels that
-    ship with ``:`` already (``"Email address:"``) would render as
-    ``"Email address:: "`` if we didn't strip. Guard against the
-    regression explicitly — future callers will write ``"X:"`` out of
-    habit."""
+    """Labels that ship with ``:`` already (``"Email address:"``) must
+    not render double-colons once we append our own prompt ``": "``."""
     captured: dict = {}
-    def fake_ask(prompt, **kw):
-        # Prompt is a rich.Text or str depending on whether a default
-        # is in play. Both stringify to the plain label for asserting.
-        captured["prompt"] = str(prompt) if not isinstance(prompt, str) else prompt
-        return ""
-    monkeypatch.setattr(ui.Prompt, "ask", fake_ask)
+    _fake_session(monkeypatch, result="", capture=captured)
+
     ui.text("Email address:")
-    assert captured["prompt"] == "Email address"
-    ui.text("  Trim me:\t")
-    assert captured["prompt"] == "  Trim me"   # only trailing is stripped
+    text = "".join(chunk for _, chunk in captured["message"])
+    assert text.startswith("Email address: ")
+    assert "::" not in text
 
 
 def test_text_ctrl_c_returns_none(monkeypatch) -> None:
-    def boom(*a, **kw):
-        raise KeyboardInterrupt
-    monkeypatch.setattr(ui.Prompt, "ask", boom)
+    import prompt_toolkit
+
+    class _S:
+        def __init__(self, *a, **kw):
+            pass
+
+        def prompt(self):
+            raise KeyboardInterrupt
+
+    monkeypatch.setattr(prompt_toolkit, "PromptSession", _S)
+    assert ui.text("name:") is None
+
+
+def test_text_escape_returns_none(monkeypatch) -> None:
+    # prompt_toolkit returns None from app.exit(result=None) on ESC.
+    _fake_session(monkeypatch, result=None)
     assert ui.text("name:") is None
 
 
@@ -170,95 +189,80 @@ def test_confirm_ctrl_c_returns_default(monkeypatch) -> None:
 # --------------------------------------------------------------------
 
 
-def test_menu_appends_close_choice(monkeypatch) -> None:
-    """The close item is added automatically, carries the Back/Exit
-    label, and its title is styled muted via FormattedText tuples."""
+def test_menu_appends_close_entry(monkeypatch) -> None:
+    """The close row is added automatically, styled muted, and picking
+    it returns ``None`` to the caller."""
     captured: dict = {}
 
-    class _FakeQ:
-        def __init__(self, choices):
-            captured["choices"] = choices
+    def fake_run_select(entries, *, home):
+        captured["entries"] = entries
+        # Simulate user picking the close entry.
+        return entries[-1][1]
 
-        def unsafe_ask(self):
-            return None
+    monkeypatch.setattr(ui, "_run_select", fake_run_select)
+    result = ui.menu("pick", [("Item", "v")], home=None, close="Back")
+    assert result is None
 
-        @property
-        def application(self):
-            raise AttributeError  # bypass ESC wiring
-
-    def fake_select(message, choices, **kwargs):
-        return _FakeQ(choices)
-
-    monkeypatch.setattr(ui.questionary, "select", fake_select)
-    ui.menu("pick", [("Item", "v")], home=None, close="Back")
-
-    # Last choice is the close row. Its title is FormattedText (a
-    # list of (style, text) tuples), NOT a plain string — that's how
-    # we dim the Back/Exit label without patching every caller.
-    close = captured["choices"][-1]
-    assert close.value is ui._CLOSE_SENTINEL
-    text = "".join(chunk for _, chunk in close.title)
+    close_title, _close_value, selectable = captured["entries"][-1]
+    assert selectable is True
+    text = "".join(chunk for _, chunk in close_title)
     assert "Back" in text
 
 
 def test_menu_preserves_list_title_from_row(monkeypatch) -> None:
-    """Regression: when the caller passes ``(ui.row(...), value)`` the
-    list-of-tuples title used to be str()-ified, which produced the
-    literal Python repr (``[('', 'X'), ('fg:#888888', ' · Y')]``) in
-    the rendered menu. Lists must pass through untouched so questionary
-    can extend its tokens and render the mixed styles."""
+    """``(ui.row(...), value)`` must reach the renderer as a list of
+    ``(style, text)`` chunks so the mixed styles render instead of
+    being str()-ified to their Python repr."""
     captured: dict = {}
 
-    class _FakeQ:
-        def __init__(self, choices):
-            captured["choices"] = choices
+    def fake_run_select(entries, *, home):
+        captured["entries"] = entries
+        return None
 
-        def unsafe_ask(self):
-            return None
-
-        @property
-        def application(self):
-            raise AttributeError
-
-    monkeypatch.setattr(
-        ui.questionary, "select",
-        lambda message, choices, **kw: _FakeQ(choices),
-    )
+    monkeypatch.setattr(ui, "_run_select", fake_run_select)
 
     styled_title = ui.row("Label", "status")
     assert isinstance(styled_title, list)
 
     ui.menu("pick", [(styled_title, "v")], home=None, close=None)
 
-    first = captured["choices"][0]
-    assert isinstance(first.title, list), (
-        "row() output must reach questionary as a list so its mixed "
-        "(style, text) chunks render styled instead of repr-printed"
-    )
+    first_title, _v, _sel = captured["entries"][0]
+    assert isinstance(first_title, list)
 
 
 def test_menu_close_uses_muted_style(monkeypatch) -> None:
     captured: dict = {}
 
-    class _FakeQ:
-        def __init__(self, choices):
-            captured["choices"] = choices
+    def fake_run_select(entries, *, home):
+        captured["entries"] = entries
+        return None
 
-        def unsafe_ask(self):
-            return None
-
-        @property
-        def application(self):
-            raise AttributeError
-
-    monkeypatch.setattr(
-        ui.questionary, "select",
-        lambda message, choices, **kw: _FakeQ(choices),
-    )
+    monkeypatch.setattr(ui, "_run_select", fake_run_select)
     ui.menu("pick", [("Item", "v")], home=None, close="Exit")
 
-    close = captured["choices"][-1]
-    styles = [style for style, _ in close.title]
-    # Every chunk on the close row uses the muted fg style so the
-    # Back/Exit label visually fades vs the action rows above it.
+    close_title, _v, _sel = captured["entries"][-1]
+    styles = [style for style, _ in close_title]
     assert all(ui._MUTED_STYLE in s for s in styles)
+
+
+def test_menu_selection_returns_value(monkeypatch) -> None:
+    def fake_run_select(entries, *, home):
+        # Pick first entry.
+        return entries[0][1]
+
+    monkeypatch.setattr(ui, "_run_select", fake_run_select)
+    result = ui.menu("pick", [("Item", "v")], home=None, close=None)
+    assert result == "v"
+
+
+def test_menu_none_item_becomes_separator(monkeypatch) -> None:
+    captured: dict = {}
+
+    def fake_run_select(entries, *, home):
+        captured["entries"] = entries
+        return None
+
+    monkeypatch.setattr(ui, "_run_select", fake_run_select)
+    ui.menu("pick", [("A", "a"), None, ("B", "b")], home=None, close=None)
+    # Middle entry is a non-selectable separator.
+    assert captured["entries"][1][2] is False
