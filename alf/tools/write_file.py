@@ -3,23 +3,24 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from alf.tools._paths import check_path
+from alf.tools._paths import resolve_path
 from alf.tools.base import Tool, ToolResult
 
 
 class WriteFile(Tool):
     name = "write_file"
     description = (
-        "Create or OVERWRITE a file (atomic: tmp + rename). Workspace only.\n"
+        "Create or OVERWRITE a file (atomic: tmp + rename).\n"
         "\n"
-        "Use `edit_file` for targeted changes — don't read + rewrite.\n"
+        "Relative paths root at the workspace; absolute paths work anywhere "
+        "except sensitive system locations (/etc, SSH keys, etc.). Use "
+        "`edit_file` for targeted changes — don't read + rewrite.\n"
         "\n"
         "DO NOT use write_file for:\n"
         "  • USER.md / MEMORY.md / PERSONALITY.md → use `memory(add/replace)`\n"
         "  • skill files (SKILL.md or anything in scripts/references/"
         "assets/secrets/) → use `skill(action='create'|'edit'|'add_file')`. "
-        "Direct writes skip the security scanner.\n"
-        "  • paths outside the workspace → the call will be rejected"
+        "Direct writes skip the security scanner."
     )
     parameters = {
         "type": "object",
@@ -32,7 +33,7 @@ class WriteFile(Tool):
 
     def run(self, path: str, content: str) -> ToolResult:
         try:
-            p = check_path(path)
+            p = resolve_path(path)
         except ValueError as e:
             return ToolResult(ok=False, output="", error=str(e))
         if _is_skill_path(p):

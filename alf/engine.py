@@ -295,28 +295,26 @@ class Engine:
         workspace = self.cfg.workspace_path
         env_parts = ["# ENVIRONMENT"]
         if workspace is not None:
-            env_parts.append(f"- **workspace** (your only filesystem root): `{workspace}`")
+            env_parts.append(f"- **workspace** (default root for relative paths): `{workspace}`")
             env_parts.append(f"- **profile home** (memory/skills/config): `{self.home}`")
             env_parts.append(
-                "- **Path rule**: every path the user mentions is relative "
-                "to the workspace unless it's clearly a system path "
-                "(`/etc/...`, `/usr/...`, etc.). User-style references like "
-                "`/mirai`, `foo/`, `my-project` → resolve as "
-                f"`{workspace}/mirai`, `{workspace}/foo/`, etc. Do **not** "
-                "run commands from outside the workspace, and do not reach "
-                "into the user's home with `~/Documents` etc. unless they "
-                "explicitly ask with a full path."
+                "- **Path rule**: relative paths (`foo/`, `my-project`) "
+                f"resolve from the workspace (`{workspace}/foo/`). Absolute "
+                "paths work anywhere the OS lets you read/write — including "
+                "`~/Documents`, `/tmp`, other project dirs — except sensitive "
+                "system locations (`/etc`, SSH keys, credentials) which are "
+                "denied. Prefer the workspace for the user's main context; "
+                "reach outside only when they ask for a specific path."
             )
         else:
             import os as _os
             cwd = _os.getcwd()
             env_parts.append(
                 f"- **workspace**: NOT SET — falling back to your current "
-                f"working directory: `{cwd}`. Relative paths you pass to "
-                "tools resolve from there. Use ABSOLUTE paths when the "
-                "user mentions a location outside cwd. Suggest "
-                "`/workspace <path>` to the user if they want a stable "
-                "sandbox."
+                f"working directory: `{cwd}`. Relative paths resolve from "
+                "there. Absolute paths work anywhere except sensitive "
+                "system locations. Suggest `/workspace <path>` to the user "
+                "if they want a stable root."
             )
             env_parts.append(f"- **profile home** (memory/skills/config): `{self.home}`")
         env = "\n".join(env_parts)

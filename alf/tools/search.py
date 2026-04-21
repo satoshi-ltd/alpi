@@ -3,14 +3,12 @@
 from __future__ import annotations
 
 import fnmatch
-import os
 import re
 import shutil
 import subprocess
-import sys
 from pathlib import Path
 
-from alf.tools._paths import check_path
+from alf.tools._paths import resolve_path, suggest_similar_paths
 from alf.tools.base import Tool, ToolResult
 
 
@@ -21,27 +19,43 @@ _EXCLUDES = (
 )
 
 
-def _case_insensitive_default() -> bool:
-    return sys.platform == "darwin" or os.name == "nt"
+_TARGET_ALIASES = {
+    "content": "content", "grep": "content", "rg": "content",
+    "files": "files", "find": "files", "glob": "files", "ls": "files",
+}
+
+
+def _not_found_error(root: Path) -> str:
+    hints = suggest_similar_paths(root)
+    msg = f"path {str(root)!r} does not exist"
+    if hints:
+        msg += ". Similar: " + ", ".join(hints)
+    return msg
+
+
+def _smart_case(pattern: str, override: bool | None) -> bool:
+    if override is not None:
+        return override
+    return any(c.isupper() for c in pattern)
 
 
 class Search(Tool):
     name = "search"
     description = (
         "Search file contents or find files by name. Use this instead "
-        "of grep/rg/find/ls in terminal. Ripgrep-backed, workspace-"
-        "sandboxed, skips noise dirs (.git, node_modules, .venv, "
-        "build, dist, etc.).\n"
+        "of grep/rg/find/ls in terminal. Ripgrep-backed (content), "
+        "stdlib glob (files). Skips noise dirs by default "
+        "(.git, node_modules, .venv, build, dist, etc.).\n"
         "\n"
-        "Content search (target='content', default): Regex search "
-        "inside files. Restrict scanned files with file_glob='*.py'.\n"
+        "Content search (target='content' | 'grep'): regex inside "
+        "files. Restrict scanned files with file_glob='*.py'.\n"
         "\n"
-        "File search (target='files'): Find files by glob pattern "
-        "(e.g., '*.py', '*config*', 'src/**/*.ts'). Also use this "
-        "instead of ls.\n"
+        "File search (target='files' | 'find' | 'glob' | 'ls'): find "
+        "files by glob pattern (e.g., '*.py', '*config*', "
+        "'src/**/*.ts').\n"
         "\n"
-        "Case-insensitive by default on macOS/Windows, case-sensitive "
-        "on Linux. Override with case_sensitive."
+        "Case: smart by default — lowercase pattern is case-insensitive, "
+        "mixed-case is sensitive. Override with case_sensitive."
     )
     parameters = {
         "type": "object",
@@ -59,7 +73,7 @@ class Search(Tool):
             },
             "case_sensitive": {
                 "type": "boolean",
-                "description": "Override the platform default.",
+                "description": "Override smart-case.",
             },
             "limit": {"type": "integer", "default": 200},
             "include_noise": {"type": "boolean", "default": False},
@@ -78,18 +92,19 @@ class Search(Tool):
         include_noise: bool = False,
     ) -> ToolResult:
         try:
-            root = check_path(path)
+            root = resolve_path(path)
         except ValueError as e:
             return ToolResult(ok=False, output="", error=str(e))
-        if case_sensitive is None:
-            case_sensitive = not _case_insensitive_default()
-        if target == "files":
-            return _search_filenames(pattern, root, case_sensitive, limit, include_noise)
-        if target == "content":
-            return _search_content(
-                pattern, root, file_glob, case_sensitive, limit, include_noise,
+        resolved_target = _TARGET_ALIASES.get(target)
+        if resolved_target is None:
+            return ToolResult(
+                ok=False, output="",
+                error=f"unknown target {target!r}. Use 'content' or 'files'.",
             )
-        return ToolResult(ok=False, output="", error=f"unknown target: {target}")
+        case = _smart_case(pattern, case_sensitive)
+        if resolved_target == "files":
+            return _search_filenames(pattern, root, case, limit, include_noise)
+        return _search_content(pattern, root, file_glob, case, limit, include_noise)
 
 
 def _is_excluded(p: Path, root: Path) -> bool:
@@ -108,13 +123,52 @@ def _search_filenames(
     include_noise: bool,
 ) -> ToolResult:
     if not root.exists():
-        return ToolResult(
-            ok=False, output="",
-            error=f"path {str(root)!r} does not exist. Check the path argument you passed.",
-        )
+        return ToolResult(ok=False, output="", error=_not_found_error(root))
     if not root.is_dir():
         return ToolResult(ok=False, output="", error=f"not a directory: {root}")
+    if shutil.which("rg") is not None:
+        rg_result = _search_filenames_rg(
+            pattern, root, case_sensitive, limit, include_noise,
+        )
+        if rg_result is not None:
+            return rg_result
+    return _search_filenames_stdlib(
+        pattern, root, case_sensitive, limit, include_noise,
+    )
 
+
+def _search_filenames_rg(
+    pattern: str,
+    root: Path,
+    case_sensitive: bool,
+    limit: int,
+    include_noise: bool,
+) -> ToolResult | None:
+    cmd = ["rg", "--files"]
+    cmd.extend(["--glob" if case_sensitive else "--iglob", pattern])
+    if not include_noise:
+        for d in _EXCLUDES:
+            cmd.extend(["--glob", f"!{d}"])
+    cmd.append(str(root))
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+    except FileNotFoundError:
+        return None
+    if proc.returncode not in (0, 1):
+        return ToolResult(ok=False, output=proc.stdout, error=proc.stderr.strip())
+    lines = [ln for ln in proc.stdout.splitlines() if ln]
+    lines.sort()
+    lines = lines[:limit]
+    return ToolResult(ok=True, output="\n".join(lines) or "(no matches)")
+
+
+def _search_filenames_stdlib(
+    pattern: str,
+    root: Path,
+    case_sensitive: bool,
+    limit: int,
+    include_noise: bool,
+) -> ToolResult:
     flags = 0 if case_sensitive else re.IGNORECASE
     name_regex = re.compile(fnmatch.translate(pattern), flags)
     path_regex = re.compile(fnmatch.translate(pattern.lstrip("./")), flags)
@@ -165,8 +219,7 @@ def _search_content_rg(
     include_noise: bool,
 ) -> ToolResult | None:
     cmd = ["rg", "--line-number", "--no-heading", "-m", str(limit)]
-    if not case_sensitive:
-        cmd.append("-i")
+    cmd.append("-s" if case_sensitive else "-i")
     if file_glob:
         cmd.extend(["--glob", file_glob])
     if not include_noise:
@@ -201,10 +254,7 @@ def _search_content_stdlib(
 
     matches: list[str] = []
     if not root.exists():
-        return ToolResult(
-            ok=False, output="",
-            error=f"path {str(root)!r} does not exist. Check the path argument you passed.",
-        )
+        return ToolResult(ok=False, output="", error=_not_found_error(root))
     if root.is_file():
         candidates = [root]
     else:

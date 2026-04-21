@@ -94,17 +94,26 @@ def test_search_filename_finds_py_files() -> None:
     assert r.ok and "cli.py" in r.output
 
 
-def test_search_filename_case_insensitive_default_on_darwin_and_win(
-    tmp_home_no_env: Path, monkeypatch: pytest.MonkeyPatch,
+def test_search_filename_smart_case_lowercase_is_insensitive(
+    tmp_home_no_env: Path,
 ) -> None:
     (tmp_home_no_env / "Documents").mkdir()
     (tmp_home_no_env / "Documents" / "note.md").write_text("x")
-    from alf.tools import search as search_mod
-    monkeypatch.setattr(search_mod, "_case_insensitive_default", lambda: True)
     r = Search().run(pattern="documents/*.md",
                      path=str(tmp_home_no_env), target="files")
     assert r.ok
     assert "note.md" in r.output
+
+
+def test_search_filename_smart_case_mixed_case_is_sensitive(
+    tmp_home_no_env: Path,
+) -> None:
+    (tmp_home_no_env / "Documents").mkdir()
+    (tmp_home_no_env / "Documents" / "note.md").write_text("x")
+    r = Search().run(pattern="Documents/*.MD",
+                     path=str(tmp_home_no_env), target="files")
+    assert r.ok
+    assert "note.md" not in r.output
 
 
 def test_search_filename_case_sensitive_when_forced(
@@ -119,6 +128,14 @@ def test_search_filename_case_sensitive_when_forced(
     )
     assert r.ok
     assert "note.md" not in r.output
+
+
+def test_search_target_aliases(tmp_home_no_env: Path) -> None:
+    (tmp_home_no_env / "foo.py").write_text("x = 1\n")
+    r = Search().run(pattern="*.py", path=str(tmp_home_no_env), target="find")
+    assert r.ok and "foo.py" in r.output
+    r = Search().run(pattern="x = 1", path=str(tmp_home_no_env), target="grep")
+    assert r.ok and "foo.py" in r.output
 
 
 def test_todo_lifecycle() -> None:

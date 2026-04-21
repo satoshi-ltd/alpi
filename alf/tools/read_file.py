@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from alf.tools._paths import check_path
+from alf.tools._paths import resolve_path, suggest_similar_paths
 from alf.tools.base import Tool, ToolResult
 
 
@@ -11,9 +11,10 @@ class ReadFile(Tool):
     description = (
         "Read a file from disk. Use this instead of `terminal cat/head/tail`.\n"
         "\n"
-        "Paths must be inside the workspace or ~/.alf/ — paths outside are "
-        "rejected. Binary files are refused early (null byte or >30% "
-        "non-text bytes in the first 8KB). For very large files use "
+        "Relative paths root at the workspace; absolute paths work anywhere "
+        "except sensitive system locations (/etc, SSH keys, .aws/credentials, "
+        "docker sockets, etc.). Binary files are refused early (null byte or "
+        ">30% non-text bytes in the first 8KB). For very large files use "
         "`offset` + `limit` to read a slice.\n"
         "\n"
         "DO NOT use read_file for:\n"
@@ -32,11 +33,15 @@ class ReadFile(Tool):
 
     def run(self, path: str, offset: int = 0, limit: int = 2000) -> ToolResult:
         try:
-            p = check_path(path)
+            p = resolve_path(path)
         except ValueError as e:
             return ToolResult(ok=False, output="", error=str(e))
         if not p.exists():
-            return ToolResult(ok=False, output="", error=f"File not found: {p}")
+            hints = suggest_similar_paths(p)
+            msg = f"File not found: {p}"
+            if hints:
+                msg += ". Similar: " + ", ".join(hints)
+            return ToolResult(ok=False, output="", error=msg)
         # Sniff the first few KB to refuse binaries early (PNG, ZIP, PDF,
         # compiled binaries, etc.) — otherwise we'd dump garbage into the
         # LLM context.

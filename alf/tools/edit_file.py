@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from alf.tools._paths import check_path
+from alf.tools._paths import resolve_path, suggest_similar_paths
 from alf.tools.base import Tool, ToolResult
 
 
@@ -11,9 +11,11 @@ class EditFile(Tool):
     description = (
         "Targeted edit: replace an exact string with a new one in a file. "
         "The match must be unique in the file (single occurrence). Writes "
-        "a `.bak` sibling before overwriting. Workspace only.\n"
+        "a `.bak` sibling before overwriting.\n"
         "\n"
-        "Use this instead of `terminal sed/awk/perl -i`.\n"
+        "Relative paths root at the workspace; absolute paths work anywhere "
+        "except sensitive system locations. Use this instead of "
+        "`terminal sed/awk/perl -i`.\n"
         "\n"
         "If `old_string` matches 0 or >1 times → the call fails. In that "
         "case, widen the context in `old_string` with surrounding lines "
@@ -37,7 +39,7 @@ class EditFile(Tool):
 
     def run(self, path: str, old_string: str, new_string: str) -> ToolResult:
         try:
-            p = check_path(path)
+            p = resolve_path(path)
         except ValueError as e:
             return ToolResult(ok=False, output="", error=str(e))
         if _is_skill_path(p):
@@ -51,7 +53,11 @@ class EditFile(Tool):
                 ),
             )
         if not p.exists():
-            return ToolResult(ok=False, output="", error=f"File not found: {p}")
+            hints = suggest_similar_paths(p)
+            msg = f"File not found: {p}"
+            if hints:
+                msg += ". Similar: " + ", ".join(hints)
+            return ToolResult(ok=False, output="", error=msg)
         text = p.read_text()
         count = text.count(old_string)
         if count == 0:

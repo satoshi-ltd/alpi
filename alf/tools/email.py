@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 
 from alf.email.client import EmailClient, EmailError, EmailMessageFull
-from alf.tools._paths import check_path
+from alf.tools._paths import resolve_path
 from alf.tools.base import Tool, ToolResult
 
 
@@ -95,7 +95,6 @@ class Email(Tool):
         except EmailError as e:
             return ToolResult(ok=False, output="", error=str(e))
         except ValueError as e:
-            # Raised by check_path() on sandbox escape.
             return ToolResult(ok=False, output="", error=str(e))
 
 
@@ -143,7 +142,7 @@ def _dispatch(client: EmailClient, action: str, kw: dict) -> ToolResult:
         recipients = _require_list(kw, "recipients")
         subject = _require(kw, "subject_new")
         body = _require(kw, "message_body")
-        attachments = [check_path(p) for p in kw.get("attachments") or []]
+        attachments = [resolve_path(p) for p in kw.get("attachments") or []]
         client.send(
             to=recipients,
             cc=list(kw.get("cc") or []),
@@ -188,7 +187,7 @@ def _dispatch(client: EmailClient, action: str, kw: dict) -> ToolResult:
     if action == "download_attachment":
         uid = _require(kw, "uid")
         name = _require(kw, "attachment_name")
-        dest = check_path(_require(kw, "dest_path"))
+        dest = resolve_path(_require(kw, "dest_path"))
         client.download_attachment(
             uid=uid, attachment_name=name, dest=dest, folder=folder,
         )
