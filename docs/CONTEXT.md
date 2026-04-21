@@ -255,15 +255,35 @@ Mixing ``Exit`` / ``Back`` / ``Cancel`` within one context is a bug.
   silent deletions. `.bak` snapshot before every mutating write.
 - **`PERSONALITY.md`** at home root. Edited by user or via `memory`
   tool (target="PERSONALITY.md").
-- **Skills** under `~/.alf/skills/<category>/<name>/`. All skills are
-  live — no pending/approval state. The `origin` field in the
-  frontmatter distinguishes `agent` (self-created) from `user` (hand-
-  authored); modifications to user skills require
+- **Skills** under `~/.alf/skills/<category>/<name>/` (or
+  `~/.alf/profiles/<profile>/skills/...` when running with `-p`).
+  All skills are live — no pending/approval state. The `origin`
+  field in the frontmatter distinguishes `agent` (self-created)
+  from `user` (hand-authored); modifications to user skills require
   `confirm_user_skill=true`. Subdirs: `scripts/`, `references/`,
   `assets/`, `secrets/` (mode 0700, gitignored, scan skipped),
   `state/` (gitignored, scan skipped, runtime persistence). Security
   scanner runs on every `create`/`add_file`/`patch`. Quota caps
   agent-owned skills.
+- **Skills auto-injected into the system prompt.** Every session
+  start, `skills_index_block(home)` builds a compact `name:
+  description` list grouped by category and prepends it as
+  `# AVAILABLE SKILLS`. The model sees its toolbox of installed
+  skills without having to call `skill(action='list')`. Without
+  this, mimo-class models routinely went straight to
+  `web_search`/`terminal` even when a perfect skill existed.
+  Inspired by hermes's `build_skills_system_prompt` (agent/
+  prompt_builder.py:589). No on-disk cache yet — rebuild on each
+  session start; cheap because skills tree is bounded by the 40-
+  skill quota.
+- **Skill execution shows the skill name in the TUI.** When a
+  `terminal` command's path matches `.alf/(profiles/<p>/)?skills/
+  <cat>/<name>/...`, the ToolCard's arg hint renders as
+  `skill: <name>` (or `skill: <name> · <script>` if the script is
+  the full path). Tool name stays `terminal` — the rewrite is
+  display-only, in `alf/tui/formatting.py`. A user no longer has
+  to parse `cd /Users/javi/.alf/profiles/alf/skills/...` to know
+  which skill is running.
 - **Inline learning, not post-session reflect.** The system prompt tells
   the agent to call `memory(add, ...)` and `skill(action='create', ...)`
   during the conversation whenever the triggers apply. The `/reflect`

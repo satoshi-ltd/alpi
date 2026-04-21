@@ -54,6 +54,22 @@ def bar_10(n: int, total: int) -> str:
     return "▓" * filled + "░" * (10 - filled)
 
 
+_SKILL_PATH_RE = __import__("re").compile(
+    r"\.alf/(?:profiles/[^/\s]+/)?skills/[^/\s]+/([^/\s]+)(?:/scripts/([^\s/]+))?",
+)
+
+
+def _skill_hint_from_terminal(command: str) -> str | None:
+    m = _SKILL_PATH_RE.search(command)
+    if not m:
+        return None
+    name = m.group(1)
+    script = m.group(2) or ""
+    if script:
+        return f"skill: {name} · {script}"
+    return f"skill: {name}"
+
+
 def arg_hint(tool_name: str, args: dict) -> str:
     if not args:
         return ""
@@ -61,7 +77,11 @@ def arg_hint(tool_name: str, args: dict) -> str:
         action = args.get("action", "run")
         if action in ("run", "background"):
             prefix = "bg " if action == "background" else ""
-            return prefix + truncate(str(args.get("command", "")), 40)
+            cmd = str(args.get("command", ""))
+            skill_hint = _skill_hint_from_terminal(cmd)
+            if skill_hint:
+                return prefix + skill_hint
+            return prefix + truncate(cmd, 40)
         pid = args.get("pid", "")
         return f"{action} pid={pid}"
     if tool_name in {"read_file", "write_file", "edit_file"}:
