@@ -90,6 +90,7 @@ mimo-class models on read-only research.
 | `tui.show_tokens` | `true` | bool | next session |
 | `tui.show_reasoning` | `true` | bool | next session |
 | `tui.accent` | `#ff8800` | CSS color (hex / named / rgb) | next session |
+| `tui.theme` | `dark` | `dark` \| `light` | next session |
 
 `tui.show_reasoning` controls two channels of model-thinking output:
 

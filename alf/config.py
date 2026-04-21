@@ -32,6 +32,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "show_tokens": True,
         "show_reasoning": True,
         "accent": "#ff8800",
+        "theme": "dark",
     },
     "mcp": {
         "servers": {},
