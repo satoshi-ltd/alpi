@@ -186,7 +186,9 @@ class Engine:
                     ))
                 tool_state_mod.set_usage_sink(_absorb_usage)
 
-                for tc in tool_calls:
+                batch_reasoning = content
+                for i, tc in enumerate(tool_calls):
+                    reasoning_for_this_tool = batch_reasoning if i == 0 else ""
                     if self.interrupt_requested:
                         skip_msg = "[skipped — user interrupted]"
                         self.session.messages.append({
@@ -203,6 +205,7 @@ class Engine:
                             at=time.time(), name=tc["name"],
                             args=args_skipped, result=skip_msg,
                             ok=False, duration_s=0.0,
+                            reasoning=reasoning_for_this_tool,
                         ))
                         emit(AgentEvent(
                             kind="tool_end", name=tc["name"], args={},
@@ -245,6 +248,7 @@ class Engine:
                         at=tool_started, name=name, args=args,
                         result=truncate_result(payload),
                         ok=result.ok, duration_s=duration,
+                        reasoning=reasoning_for_this_tool,
                     ))
                     emit(AgentEvent(
                         kind="tool_end", name=name, args=args,

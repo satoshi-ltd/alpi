@@ -243,7 +243,7 @@ class AlfApp(App):
                        "done", "interrupted"):
             self._stop_thinking()
         if ev.kind == "reasoning_delta":
-            if self._thinking is not None:
+            if self._thinking is not None and self._show_reasoning():
                 self._thinking.append_reasoning(ev.text)
             return
         if ev.kind == "assistant_delta":
@@ -301,7 +301,7 @@ class AlfApp(App):
             except Exception:
                 pass
             self._current_assistant = None
-        if reasoning:
+        if reasoning and self._show_reasoning():
             self._mount_message(ReasoningLine(reasoning))
         card = ToolCard(tool_id=ev.tool_id, name=ev.name, args=ev.args,
                         accent=self._accent_color())
@@ -310,6 +310,9 @@ class AlfApp(App):
 
     def _accent_color(self) -> str:
         return (self.cfg.tui or {}).get("accent") or ""
+
+    def _show_reasoning(self) -> bool:
+        return bool((self.cfg.tui or {}).get("show_reasoning", True))
 
     def _on_tool_state(self, ev: AgentEvent) -> None:
         card = self._active_tools.get(ev.tool_id)
@@ -605,6 +608,8 @@ class AlfApp(App):
             if t.user:
                 self._mount_message(UserMessage(t.user))
             for tl in t.tools:
+                if tl.reasoning and self._show_reasoning():
+                    self._mount_message(ReasoningLine(tl.reasoning))
                 card = ToolCard(
                     tool_id=f"replay-{id(tl)}", name=tl.name,
                     args=tl.args, accent=accent,

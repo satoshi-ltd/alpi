@@ -25,6 +25,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "tui": {
         "show_cost": True,
         "show_tokens": True,
+        "show_reasoning": True,
         "accent": "#ff8800",
     },
     "mcp": {
