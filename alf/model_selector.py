@@ -43,8 +43,22 @@ def run(cfg: cfg_mod.Config) -> None:
         return
 
     cfg.model = model_id
+    _remember_openrouter_model(cfg, model_id)
     cfg_mod.save(cfg)
     ui.ok(f"model set to [b]{model_id}[/b]")
+
+
+def _remember_openrouter_model(cfg: cfg_mod.Config, model_id: str) -> None:
+    if not model_id.startswith("openrouter/"):
+        return
+    suffix = model_id.split("/", 1)[1]
+    if not suffix:
+        return
+    or_cfg = cfg.providers.setdefault("openrouter", {})
+    models = or_cfg.setdefault("models", [])
+    if suffix in models:
+        models.remove(suffix)
+    models.insert(0, suffix)
 
 
 
@@ -52,43 +66,44 @@ def _pick_provider(cfg: cfg_mod.Config) -> Provider | None:
     builtin = prov_mod.builtin()
     custom = prov_mod.custom(cfg.providers.get("custom", []))
     active_head = cfg.model.split("/", 1)[0]
+    accent = (cfg.tui or {}).get("accent", "") or ""
+
+    def _row(label: str, status: str, active: bool):
+        return ui.row_accent(label, status, accent) if active else ui.row(label, status)
 
     items: list = []
     for p in builtin:
-        # Status reads left-to-right: configured-state first, then
-        # the provider's own blurb, then any "[key needed]" warning.
-        # Putting "active" at the start makes it the first thing the
-        # eye catches as it scans the column.
         parts = []
-        if p.name == active_head:
-            parts.append("active")
         if p.api_key_env and p.has_key():
             parts.append("key saved")
         parts.append(p.description)
         if p.api_key_env and not p.has_key():
             parts.append("[key needed]")
-        items.append((ui.row(p.display, " · ".join(parts)), p))
+        items.append((
+            _row(p.display, " · ".join(parts), p.name == active_head),
+            p,
+        ))
 
-    # "Custom" inline with the built-ins — just another provider slot.
+    # Existing customs come right after the builtins — they're already
+    # configured, just another provider slot.
+    for p in custom:
+        status = p.base_url if hasattr(p, "base_url") else "custom endpoint"
+        items.append((
+            _row(p.name, status, p.name == active_head),
+            p,
+        ))
+
+    # "Custom" (add new) sits below existing ones — its label makes the
+    # "new one" intent explicit.
     items.append((
         ui.row("Custom", "OpenAI-compatible endpoint (add a new one)"),
         _ADD_CUSTOM,
     ))
 
-    for p in custom:
-        parts = []
-        if p.name == active_head:
-            parts.append("active")
-        parts.append(p.base_url if hasattr(p, "base_url") else "custom endpoint")
-        items.append((ui.row(p.display, " · ".join(parts)), p))
-
-    # Manage saved keys lives in its own row directly under the
-    # provider list — no separator, no submenu header. Treated as
-    # just another action the user can pick, on the same level as
-    # the providers themselves.
+    # Manage saved keys lives below everything, just another action row.
     if custom or _any_saved_keys(builtin):
         items.append((
-            ui.row("⋯ Manage saved keys", "remove endpoints or API keys"),
+            ui.row("Remove keys", "delete API keys or custom endpoints"),
             _MANAGE_SAVED,
         ))
 
@@ -124,27 +139,23 @@ def _pick_model(provider: Provider, cfg: cfg_mod.Config) -> str | None:
     if cfg.model.startswith(f"{provider.name}/"):
         current_suffix = cfg.model.split("/", 1)[1]
 
-    # No catalog (openrouter without API key, anthropic rate-limited,
-    # etc.) → drop the menu and prompt directly; there's nothing to
-    # pick from.
+    # Empty list (openrouter without registered models, fetch failed,
+    # etc.) → drop the menu and prompt directly.
     if not models:
         return _prompt_custom_model(provider, current_suffix)
 
+    accent = (cfg.tui or {}).get("accent", "") or ""
     items: list = []
     for m in models:
-        # Mark the currently active model so the user sees at a glance
-        # which row is live. Match against the fully-qualified id
-        # (``<provider>/<model>``) because that's how ``cfg.model`` is
-        # stored; some providers emit ``m.id`` already prefixed, others
-        # don't — normalise once.
         qualified = m.id if "/" in m.id else f"{provider.name}/{m.id}"
-        status_parts = []
-        if qualified == cfg.model:
-            status_parts.append("active")
-        if m.note:
-            status_parts.append(m.note)
-        status = " · ".join(status_parts)
-        items.append((ui.row(m.display, status) if status else m.display, m.id))
+        is_active = qualified == cfg.model
+        status = m.note or ""
+        if is_active:
+            items.append((ui.row_accent(m.display, status, accent), m.id))
+        elif status:
+            items.append((ui.row(m.display, status), m.id))
+        else:
+            items.append((m.display, m.id))
 
     items.append(("Custom model name", _ENTER_CUSTOM_MODEL))
 

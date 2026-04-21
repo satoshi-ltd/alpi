@@ -57,7 +57,7 @@ AssistantMessage > Markdown {
 
 ErrorLine {
     color: $error;
-    margin: 0;
+    margin: 1 0 0 0;
     height: auto;
 }
 
@@ -106,44 +106,16 @@ ToolCard.-error {
     background-tint: $accent 15%;
 }
 
-ModalScreen > Vertical {
-    background: $surface;
-    border: thick $accent;
-    padding: 1 2;
-    width: 90;
-    max-width: 90%;
-    height: auto;
-    max-height: 80%;
-}
-
-ModalScreen .modal-title {
-    color: $accent;
-    text-style: bold;
-    margin-bottom: 1;
-}
-
-ModalScreen .modal-hint {
+OptionList > .option-list--option {
     color: $text-muted;
-    margin-top: 1;
 }
 
-ModalScreen OptionList {
-    background: $surface;
-    max-height: 24;
-    height: auto;
-}
-
-ModalScreen OptionList > .option-list--option-hover {
+OptionList > .option-list--option-hover {
     background: $surface-lighten-1;
 }
 
-ModalScreen OptionList > .option-list--option-highlighted {
+OptionList > .option-list--option-highlighted {
     background: $accent;
     color: $foreground;
     text-style: bold;
-}
-
-ModalScreen Input {
-    margin-top: 1;
-    background: $surface-lighten-1;
 }
