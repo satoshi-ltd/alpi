@@ -409,3 +409,35 @@ def test_scanner_detects_github_pat(isolated_home: Path) -> None:
                 body="use ghp_abcdefghij0123456789ABCDEF for auth")
     assert not r.ok
     assert "github pat" in (r.error or "")
+
+
+def test_skills_index_block_empty(tmp_path) -> None:
+    from alf.tools.skill import skills_index_block
+    assert skills_index_block(tmp_path) == ""
+
+
+def test_skills_index_block_lists_existing(isolated_home: Path) -> None:
+    from alf.tools.skill import skills_index_block
+    _create(name="alpha", category="creative", description="alpha skill", body="x")
+    _create(name="beta", category="creative", description="beta skill", body="y")
+    _create(name="gamma", category="software", description="gamma skill", body="z")
+    block = skills_index_block(isolated_home)
+    assert "AVAILABLE SKILLS" in block
+    assert "creative:" in block
+    assert "software:" in block
+    assert "alpha: alpha skill" in block
+    assert "beta: beta skill" in block
+    assert "gamma: gamma skill" in block
+
+
+def test_skills_index_block_works_under_profile_home(tmp_path) -> None:
+    from alf.tools.skill import skills_index_block, all_skills
+    profile_home = tmp_path / "profiles" / "work"
+    skills_dir = profile_home / "skills" / "personal" / "demo"
+    skills_dir.mkdir(parents=True)
+    (skills_dir / "SKILL.md").write_text(
+        "---\nname: demo\ndescription: a demo\ncategory: personal\norigin: agent\n---\nbody"
+    )
+    assert all_skills(profile_home), "skill not discovered under profile home"
+    block = skills_index_block(profile_home)
+    assert "demo: a demo" in block

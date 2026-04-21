@@ -324,6 +324,10 @@ class Engine:
         env = "\n".join(env_parts)
 
         parts = [personality.strip(), base.strip(), env]
+        from alf.tools.skill import skills_index_block
+        skills_block = skills_index_block(self.home)
+        if skills_block:
+            parts.append(skills_block)
         if snap["USER.md"].strip():
             parts.append("# USER PROFILE\n" + snap["USER.md"].strip())
         if snap["MEMORY.md"].strip():

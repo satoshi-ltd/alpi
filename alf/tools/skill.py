@@ -151,6 +151,43 @@ def agent_skill_count(home: Path) -> int:
     return n
 
 
+def skills_index_block(home: Path) -> str:
+    """Compact skills index suitable for injection into the system prompt.
+
+    Empty string when the user has no skills yet. Otherwise a markdown
+    block grouping skills by category, listing `name: description`
+    entries the agent should consider before reaching for general tools.
+    """
+    skills = all_skills(home)
+    if not skills:
+        return ""
+    by_cat: dict[str, list[tuple[str, str]]] = {}
+    for p in skills:
+        meta = _frontmatter(p / "SKILL.md")
+        name = meta.get("name") or p.name
+        desc = meta.get("description") or ""
+        cat = meta.get("category") or "miscellaneous"
+        by_cat.setdefault(cat, []).append((name, desc))
+    lines = [
+        "# AVAILABLE SKILLS",
+        "Before reaching for general tools (web_search, terminal, "
+        "research) check this list. When a skill matches the user's "
+        "request, prefer it: load the SKILL.md with "
+        "`skill(action='view', name=...)` and follow its instructions. "
+        "Skills carry the user's preferred approach for recurring tasks "
+        "and often hold cached state from previous runs.",
+        "",
+    ]
+    for cat in sorted(by_cat):
+        lines.append(f"  {cat}:")
+        for name, desc in sorted(by_cat[cat]):
+            if desc:
+                lines.append(f"    - {name}: {desc}")
+            else:
+                lines.append(f"    - {name}")
+    return "\n".join(lines)
+
+
 def _find_skill(home: Path, name: str) -> Path | None:
     for p in all_skills(home):
         if p.name == name:

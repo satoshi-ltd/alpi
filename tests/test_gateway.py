@@ -254,3 +254,32 @@ def _fake_subprocess(lines: list[bytes], read_delay: float = 0.0):
         return proc
 
     return _creator
+
+
+def test_arg_hint_terminal_detects_skill_in_default_home() -> None:
+    # cd-then-relative-script pattern: only the skill name is captured
+    # (the script comes from a relative path after the cd, not from the
+    # absolute /skills/.../scripts/foo.py shape).
+    cmd = "cd /Users/foo/.alf/skills/creative/joker && python3 scripts/run.py"
+    hint = arg_hint("terminal", {"command": cmd})
+    assert "skill: joker" in hint
+
+
+def test_arg_hint_terminal_detects_skill_with_full_script_path() -> None:
+    cmd = "python3 /Users/foo/.alf/skills/software/lint/scripts/check.py"
+    hint = arg_hint("terminal", {"command": cmd})
+    assert "skill: lint" in hint
+    assert "check.py" in hint
+
+
+def test_arg_hint_terminal_detects_skill_in_profile_home() -> None:
+    cmd = "python3 /Users/foo/.alf/profiles/work/skills/software/lint/scripts/check.py"
+    hint = arg_hint("terminal", {"command": cmd})
+    assert "skill: lint" in hint
+    assert "check.py" in hint
+
+
+def test_arg_hint_terminal_falls_back_when_no_skill_path() -> None:
+    hint = arg_hint("terminal", {"command": "ls /tmp"})
+    assert "skill" not in hint.lower()
+    assert "ls /tmp" in hint
