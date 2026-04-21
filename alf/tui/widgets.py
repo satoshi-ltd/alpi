@@ -232,6 +232,9 @@ class AlfTopBar(Static):
     def on_mount(self) -> None:
         self._refresh()
 
+    def on_resize(self, event) -> None:  # noqa: ARG002
+        self._refresh()
+
     def set_state(self, *, profile: str, path: str, workspace_set: bool) -> None:
         self._profile = profile
         self._path = path
@@ -244,6 +247,8 @@ class AlfTopBar(Static):
         accent = tv.get("accent", "")
         muted = tv.get("text-muted", "")
         error = tv.get("error", "red")
+        width = self.size.width or 80
+        narrow = width < 60
         if self._workspace_set:
             short = str(self._path).replace(str(Path.home()), "~")
             workspace_txt = escape(short)
@@ -254,12 +259,15 @@ class AlfTopBar(Static):
             f"[b {accent}]{profile_esc}[/b {accent}]"
             if accent else f"[b]{profile_esc}[/b]"
         )
+        sep = f"  [{muted}]│[/{muted}]  "
+        profile_label = "" if narrow else f"[{muted}]profile[/{muted}] "
+        workspace_label = "" if narrow else f"[{muted}]workspace[/{muted}] "
         markup = (
-            f"[b]alf[/b] [{muted}]{escape(self._version)}[/{muted}]  "
-            f"[{muted}]│[/{muted}]  "
-            f"[{muted}]profile[/{muted}] {profile_txt}  "
-            f"[{muted}]│[/{muted}]  "
-            f"[{muted}]workspace[/{muted}] {workspace_txt}"
+            f"[b]alf[/b] [{muted}]{escape(self._version)}[/{muted}]"
+            f"{sep}"
+            f"{profile_label}{profile_txt}"
+            f"{sep}"
+            f"{workspace_label}{workspace_txt}"
         )
         self.update(Text.from_markup(markup))
 
