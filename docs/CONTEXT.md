@@ -446,9 +446,10 @@ differently:
   setup` menu as "Email (IMAP/SMTP)". Asks for address/password/hosts,
   runs a live `client.test()` before saving — if auth or network
   fail, nothing lands in `.env`.
-- **Sandbox**: `download_attachment` dest + `send` attachment paths go
-  through `tools._paths.check_path` — same allowed roots as
-  `write_file`.
+- **Sensitive-path denylist**: `download_attachment` dest + `send`
+  attachment paths go through `tools._paths.resolve_path` — same
+  denylist as the other file tools. No workspace restriction; blocks
+  `/etc`, SSH keys, credentials, etc.
 - **Prompt-injection defense.** Tool description is load-bearing:
   tells the LLM email bodies/subjects/attachments are UNTRUSTED data,
   not instructions, and to ignore directives like "ignore previous
@@ -649,21 +650,35 @@ differently:
 - System prompt includes: **"Read before add when unsure"** — the agent
   is nudged to call `memory(read)` first if uncertainty about dup.
 
-### Filesystem sandbox
+### Filesystem access
 
-alf can only operate on files inside approved roots:
+File tools (``read_file``, ``write_file``, ``edit_file``, ``search``,
+email attachment download) go through
+``alf/tools/_paths.py :: resolve_path``:
 
-1. **Primary root** — one of:
-   * ``cfg.workspace`` from the profile's ``config.yaml`` if set
-     (e.g. ``workspace: ~/git``). Overrides cwd entirely.
-   * Otherwise ``os.getcwd()`` at the time of the call (whatever
-     directory alf was launched from).
-2. **Profile home** — ``~/.alf/`` (or ``~/.alf/profiles/<name>/``).
-   alf must be able to inspect its own skills, memories and sessions.
+1. **Relative paths root at the workspace** — ``cfg.workspace`` from
+   the profile's ``config.yaml`` if set (e.g. ``workspace: ~/git``);
+   otherwise ``os.getcwd()`` at the time of the call.
+2. **Absolute paths go anywhere** except a sensitive-path denylist:
+   ``/etc``, ``/boot``, ``/sys``, ``/proc``, ``/usr/lib/systemd``,
+   ``/System``, ``/private/etc``, docker sockets, SSH private keys
+   (``~/.ssh/id_*``, ``*_key``, ``*_ed25519``), ``*.pem /.p12 /.pfx``,
+   ``~/.aws/credentials``, ``~/.gnupg/``.
+3. **Profile home** (``~/.alf/``) is reached directly by
+   ``skill``/``config``/``memory`` via ``alf.home.get_home()``, not via
+   ``resolve_path``. These tools always see their own data regardless
+   of workspace.
 
-File tools (``read_file``, ``write_file``, ``edit_file``, ``glob``,
-``grep``) validate via ``alf/tools/_paths.py :: check_path``. Anything
-outside both roots is rejected with a clear message.
+This matches terminal's posture: any path the shell would let you
+touch, file tools let you touch. The workspace is a starting point for
+relative paths, not a wall. Real workspace-only isolation lives in the
+opt-in OS sandbox (Layer 2 in ``docs/SECURITY.md``).
+
+**Error ergonomics** — when a path doesn't exist, ``read_file``,
+``edit_file``, and ``search`` list the parent directory and suggest
+siblings by fuzzy basename match ("Similar: …"). Ported from Hermes's
+``file_operations.py``. Turns dead-ends into next steps instead of
+pushing the agent into ``terminal ls``.
 
 **`/workspace` slash** (TUI):
 - ``/workspace`` → show the effective root.
@@ -675,17 +690,10 @@ outside both roots is rejected with a clear message.
 ``ErrorLine`` appears at the top of the chat telling the user cwd is
 the scope. Forces a conscious choice.
 
-**Caveat — terminal tool is NOT sandboxed.** The shell can reach
-anywhere via ``cat ../foo``, ``$HOME``, command substitution, etc.
-Regex-gating shell commands would be false security. The system prompt
-tells alf not to use ``terminal`` to bypass a blocked file tool, but
-that's prompt-level only.
-
 **Gateway**: today, the gateway subprocess inherits cwd from the
-service (launchd/systemd) — non-deterministic. If you paired a profile
-without a workspace, alf will sandbox to whatever cwd the service got.
-Set ``workspace`` on any gateway-paired profile. A future change may
-force validation at ``alf gateway start``.
+service (launchd/systemd) — non-deterministic. ``alf gateway start``
+validates every paired profile has a ``workspace`` configured and
+refuses to start otherwise.
 
 ### Status bar
 

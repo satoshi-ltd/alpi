@@ -32,9 +32,15 @@ doesn't reach:
   SECURITY WARNING header telling the LLM to treat the content as
   untrusted data.
 
-- **Path sandbox** on file tools (`read_file`, `write_file`,
-  `edit_file`, `grep`, `glob`, email attachment download). Refuses
-  paths outside `workspace` + `~/.alf/`.
+- **Sensitive-path denylist** on file tools (`read_file`, `write_file`,
+  `edit_file`, `search`, email attachment download). Matches terminal's
+  posture: paths under `/etc`, `/boot`, `/sys`, `/proc`,
+  `/usr/lib/systemd`, `/System`, `/private/etc`, the docker sockets,
+  SSH private keys (`~/.ssh/id_*`, `*_key`, `*_ed25519`), `*.pem /
+  *.p12 / *.pfx`, `~/.aws/credentials`, `~/.gnupg/` are refused
+  everywhere. Anything else — including arbitrary `$HOME` paths, `/tmp`,
+  and outside-workspace project dirs — is allowed, same as terminal.
+  Workspace-only isolation lives in Layer 2 (OS sandbox).
 
 ## Layer 2 — OS sandbox (opt-in, experimental)
 
