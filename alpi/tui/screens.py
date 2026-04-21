@@ -174,6 +174,8 @@ class ToolsPanel(FloatingPanel):
         from alpi import tools
         with VerticalScroll():
             for cls in tools.all_tools():
+                if ":" in cls.name:
+                    continue
                 yield Static(cls.name, classes="entry-name")
                 yield Static(_short(cls.description), classes="entry-desc")
 
