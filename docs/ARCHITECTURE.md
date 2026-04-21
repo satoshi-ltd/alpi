@@ -190,7 +190,24 @@ Spawns a sub-agent with a read-only toolset (`web_search`, `web_fetch`, `web_ext
 
 **Synthesis fallback**: when the budget runs out, research forces one final no-tools `llm.complete()` with "stop investigating, report now". Avoids the "[research gave up]" footgun where the main agent retries the whole thing.
 
-**Interrupt**: polls `tool_state.is_interrupted()` between iterations and between tools; returns `[research: interrupted]` on the first hit. **State label** during execution: `"<depth> · step N/M"` (the inner-tool override that hides this between iterations is tracked in [ROADMAP.md §R.1](ROADMAP.md)).
+**Interrupt**: polls `tool_state.is_interrupted()` between iterations and between tools; returns `[research: interrupted]` on the first hit. **State label** during execution: `<depth> · step N/M`; while an inner tool runs its own `emit_state` label gets auto-prefixed with `step N/M · …` via a wrapped `_emit` installed for the duration of each tool-call batch (restored in a `finally`).
+
+### Delegate (write-capable sub-agent, `alf/tools/delegate.py`)
+
+Sibling to `research`, but can mutate: spawn a focused sub-agent with a chosen toolset, get back a summary. Used when a task would otherwise flood the parent context (multi-file refactors, fetch+parse+write pipelines, skills that generate several output files, iterative debug loops).
+
+**Toolsets** (callable presets via the `toolsets` param, default `["file", "web"]`):
+- `file` → `read_file`, `write_file`, `edit_file`, `search`
+- `terminal` → `terminal`
+- `web` → `web_search`, `web_fetch`, `web_extract`
+
+**Blocked for sub-agents**: `delegate` (no recursion), `memory`, `skill`, `schedule`, `send_message`, `email`, `config`, `session_search`, `todo` (shared global state). `research` is not in any preset either — if you need deep investigation inside a delegate task today, do it in the main agent first and pass findings via `context`.
+
+**Budget**: hardcoded `MAX_STEPS = 30`. No config knob — it's a ceiling, not a target (sub-agent stops when done). If a real case needs more, bump the constant.
+
+**System prompt** is built from a single template plus the workspace root (when set): relative paths resolve under workspace, absolute paths go where the goal says, and the sub-agent is explicitly warned not to invent `/workspace/...` style roots.
+
+**Batch parallel mode is deliberately not shipped** (ROADMAP §R.3). Running sub-agents concurrently races on the module-level globals in `tool_state.py`; shipping `tasks: [{...}]` requires first porting `_emit`, `_interrupt_getter`, `_usage_sink` to `contextvars.ContextVar` so each thread gets its own view. The loop itself needs no structural change once that's done.
 
 ### TUI (`alf/tui/`)
 

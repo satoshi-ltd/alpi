@@ -27,8 +27,8 @@ Audience: Javi (product) + me (Claude across sessions).
 | M | TTS / STT / voice-mode | ❌ out of scope for core agent |
 | N | Image generation | 🔵 backlog — no concrete use case yet |
 | R.1 | Research step-counter in state label | ✅ shipped (v0.2.2) |
-| R.2 | `delegate_task` — write-capable sub-agents | 🔵 backlog — see below |
-| R.3 | Batch parallel research (`tasks[]`) | 🔵 backlog — see below |
+| R.2 | `delegate` — write-capable sub-agent | ✅ shipped (v0.2.3, named `delegate` not `delegate_task`) |
+| R.3 | Batch parallel sub-agents (`tasks[]`) | 🔵 backlog — see below |
 
 ### What's left to call v0.2 done
 
@@ -92,28 +92,17 @@ Today alf goes through LiteLLM with API keys → OpenAI is metered per token. He
 
 ~50 LOC. LiteLLM already supports vision models. A `read_image(path, question)` tool sends image + prompt to whichever model is active (if vision-capable). Falls back to "model is text-only" error. Useful for "lee el screenshot que he guardado".
 
-### R.2. `delegate_task` — write-capable sub-agents
+### R.3. Batch parallel sub-agents (`tasks[]`)
 
-Sibling to `research`. Schema: `brief` + `toolsets: ["file", "terminal", "web"]`. Map toolset names → concrete tool sets (`"file"` → read_file + write_file + edit_file + search, `"terminal"` → terminal). Reuses research subloop infra; different system prompt allowing mutations.
+Applies to both `research` and `delegate` once shipped. `tasks: [{brief, depth}]` (or `{goal, toolsets}` for delegate) up to 3 concurrent via `ThreadPoolExecutor(max_workers=3)`. Aggregate results, propagate interrupt to all children on cancel.
 
-Use case: "refactor module X", "generate project scaffold from template Y". Only ship if a concrete need materialises.
-
-**Gotchas:**
-
-1. **Security posture.** Sub-agent with `write_file` + prompt injection can mutate FS without user-in-the-loop. Layer 1 sensitive-path denylist is the only wall today. Decision before implementing: (a) trust the denylist (consistent with the main agent), or (b) add first-write confirmation per sub-agent invocation. For personal-agent scope (a) is probably sufficient.
-2. **Testing.** Sub-agent writes need isolated FS fixtures + LLM mocks. ~3-4h test budget.
-
-Cost: 1-2 days. Risk: medium. Backlog until a use case lands.
-
-### R.3. Batch parallel research (`tasks[]`)
-
-Hermes-style: `tasks: [{brief, depth}]` up to 3 concurrent via `ThreadPoolExecutor(max_workers=3)`. Aggregate reports, propagate interrupt to all children on cancel.
-
-**The real cost is the refactor of `alf/tools/_state.py`.** `set_emit`, `set_interrupt_getter`, `set_usage_sink` are module-level globals — three subagents in parallel race on them. Move to `contextvars` (preferred) or thread-locals. Touches ~15 sites that call `emit_state` (web_search, web_fetch, web_extract, search, research, schedule, ...). Mechanical, non-destructive, but real.
+**The real cost is the refactor of `alf/tools/_state.py`.** `_emit`, `_interrupt_getter`, `_usage_sink` are module-level globals — multiple subagents in parallel race on them. Move to `contextvars.ContextVar` (preferred) so each thread gets its own view. Touches ~15 sites that call `emit_state` (web_search, web_fetch, web_extract, search, research, delegate, schedule, ...). Mechanical, non-destructive.
 
 The refactor is also useful on its own: cleaner tests, better observability when nested tools run.
 
-Cost: 1-2 days + 1 day refactor. Risk: medium-high. Lowest priority of the three R follow-ups — niche for personal use.
+Both `research.py` and `delegate.py` have the single-task loop structured so `tasks[]` can layer on top with no structural change once state is context-local. See the module docstring in `alf/tools/delegate.py` for the exact handoff point.
+
+Cost: 1-2 days + 1 day refactor. Risk: medium-high. Niche for personal use.
 
 ### H. Home Assistant integration
 
@@ -222,3 +211,4 @@ First usable cut. Textual TUI, 3-file memory with two-tier dedup, skill system w
 | 4035327 | Skills: auto-inject index into system prompt + render skill name in tool cards |
 | 9ed4139 | TUI: theme system + floating panels + anchored scroll + MarkdownStream (v0.2.1) |
 | (next)  | Research: prefix inner `emit_state` with `step N/M · …` during tool loop (v0.2.2, R.1) |
+| (next)  | `delegate` tool: write-capable sub-agent with file/terminal/web toolsets (v0.2.3, R.2) |

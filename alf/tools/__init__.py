@@ -5,6 +5,7 @@ from __future__ import annotations
 from alf.tools.base import Tool, ToolResult
 from alf.tools import (
     config as config_tool,
+    delegate,
     research,
     edit_file,
     email as email_tool,
@@ -72,6 +73,7 @@ for _mod in (
     session_search,
     skill_tool,
     research,
+    delegate,
     send_message,
     email_tool,
     config_tool,
