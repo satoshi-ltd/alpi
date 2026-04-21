@@ -13,7 +13,7 @@ Audience: Javi (product) + me (Claude across sessions).
 | ID | Item | Status |
 |---|---|---|
 | A | `send_message` outbound messaging | ✅ shipped (commit 6e31ace) |
-| B | Interactive browser (Playwright) | 🔵 backlog — see below |
+| B | Interactive browser (Playwright) | ✅ shipped (v0.2.16) |
 | C | OpenAI Codex provider (ChatGPT subscription auth) | 🔵 backlog — see below |
 | D | Vision (`read_image`) | ✅ shipped (v0.2.4) |
 | E | Multi-profile CLI | ✅ shipped (commit 630f97c) |
@@ -46,16 +46,6 @@ Once those land + a fresh CHANGELOG entry summarises v0.2, bump to
 ---
 
 ## Backlog — high value, on deck
-
-### B. Interactive browser (Playwright)
-
-`alpi/tools/browser.py` is a stub; not registered. To ship:
-
-1. Replace `Browser.run` with a Playwright impl: headless Chrome, persistent context under `~/.alpi/browser/`, actions `text | screenshot | click | fill | navigate`.
-2. Add `playwright` to `pyproject.toml` (+ one-time `playwright install chromium`).
-3. Re-register `browser` in `alpi/tools/__init__.py`.
-
-Unlocks online shopping, logins, form-filling — things `web_fetch` (read-only) can't do.
 
 ### C. OpenAI Codex provider (ChatGPT subscription auth)
 
@@ -103,7 +93,9 @@ Only if Javi runs HA. Hermes has `homeassistant_tool` as reference. Requires `HA
 
 ### J. Anti-bot browsing (camoufox)
 
-Stealth Firefox fork for Cloudflare-protected sites. Hold until B (Playwright) is proven useful. Free but heavy (+200MB binary).
+Firefox fork with C++ fingerprint patches for sites that block plain Chromium even with `playwright-stealth` (Cloudflare Turnstile, DataDome, PerimeterX). Free but heavy: +230MB Firefox binary aside from Playwright's own Chromium, separate Python wrapper, and camoufox periodically breaks when the anti-bot vendors update.
+
+v0.2.16 shipped `playwright-stealth` on by default, which beats ~80% of basic detection (navigator.webdriver, plugins, UA-CH, WebGL vendor overrides). Activate camoufox only when a concrete site breaks through that. Alternatives to consider at that point, in order of effort: manual cookie import (user logs in on their real browser, exports cookies, imports into alpi), `patchright` (newer Chromium-based stealth fork), Browserbase cloud (paid, residential IPs), camoufox.
 
 ### N. Image generation
 
@@ -189,4 +181,5 @@ First usable cut. Textual TUI, 3-file memory with two-tier dedup, skill system w
 | (next)  | Remove the `config` tool (199 LOC + 112 LOC of tests). Config surface is now two-channel: `alpi setup` for structured settings (model, gateways, MCP, sandbox) + direct YAML edits for cosmetic knobs (`tui.*`, `max_steps_per_turn`, `poll_interval`, `fallback_models`). The conversational "change the accent to Facebook blue" case wasn't worth the tool-attention budget (v0.2.13) |
 | (next)  | `/tools` panel filters out MCP-registered tools (`<server>:<tool>` shape) — they live in `/mcps`. Keeps `/tools` focused on alpi's own surface (v0.2.14) |
 | (next)  | `todo` tool: `done: bool` → `status: pending\|in_progress\|completed` with a new `start` action. The description already promised "only ONE in_progress at a time" but the tool had no way to mark it — now the invariant is tool-enforced. Deliberately did not port hermes' IDs, merge mode, dedup, or /compact re-injection (v0.2.15) |
-| (next)  | Ollama as a first-class provider (replaces the generic "Custom OpenAI-compatible endpoint" slot). Multiple named servers per profile (`home`, `gpu-box`, remote…), each with its own URL; model id becomes `<server-name>/<model>`. Live listing via `/api/tags` at setup time. Auto-resolves `num_ctx` from `/api/show` on every request so the model sees the full prompt instead of Ollama's 2K default — was the root cause of "never replies" with large system prompts. TUI header reads the resolved ctx as `ctx_window`; cost line hidden when `<= 0` for local models. `providers.custom` deleted entirely — no backwards-compat, no migration. ⚠ known limitation: small Ollama models (<7B) still hallucinate tool names regardless of transport (v0.2.16) |
+| (next)  | Ollama as a first-class provider (replaces the generic "Custom OpenAI-compatible endpoint" slot). Multiple named servers per profile (`home`, `gpu-box`, remote…), each with its own URL; model id becomes `<server-name>/<model>`. Live listing via `/api/tags` at setup time. Auto-resolves `num_ctx` from `/api/show` on every request so the model sees the full prompt instead of Ollama's 2K default — was the root cause of "never replies" with large system prompts. TUI header reads the resolved ctx as `ctx_window`; cost line hidden when `<= 0` for local models. `providers.custom` deleted entirely — no backwards-compat, no migration. ⚠ known limitation: small Ollama models (<7B) still hallucinate tool names regardless of transport (v0.2.15) |
+| (next)  | `browser` tool shipped (B closed). Playwright + Chromium, 9 actions: `navigate`, `snapshot`, `click`, `type`, `scroll`, `press`, `screenshot`, `close`, `logout`. Uses Playwright's native `aria_snapshot()` for LLM-friendly page representation; targets elements by `role` + accessible `name` (or by visible `text`) — robust across re-renders, no fragile CSS selectors. `playwright-stealth` patches applied by default (navigator.webdriver hidden, plugins populated, etc.) so Cloudflare-lite protection doesn't block us. `screenshot` saves a PNG and returns the path; when `tools.browser.vision=true` in the profile's config, passing a `question` auto-chains the screenshot to `read_image` — otherwise path-only with a hint. Per-profile storage at `~/.alpi/profiles/<name>/browser/state.json` so cookies stay isolated across profiles. Single dedicated worker thread (`ThreadPoolExecutor(1)`) funnels every call to Playwright's sync API — sidesteps the "Cannot switch to a different thread" greenlet restriction in the TUI where each turn runs in a fresh Textual worker. SSRF via existing `check_url()`. ~400 LOC vs hermes' 2984 — deliberately dropped multi-provider abstraction, daemon process, `@e1` refs, LLM summarization, JS/console eval, Browserbase/BrowserUse cloud, orphan reaper (v0.2.16) |

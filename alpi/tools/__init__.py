@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from alpi.tools.base import Tool, ToolResult
 from alpi.tools import (
+    browser,
     delegate,
     research,
     edit_file,
@@ -74,6 +75,7 @@ for _mod in (
     web_search,
     web_fetch,
     web_extract,
+    browser,
     schedule_tool,
     memory_tool,
     session_search,

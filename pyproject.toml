@@ -1,6 +1,6 @@
 [project]
 name = "alpi"
-version = "0.2.15"
+version = "0.2.16"
 description = "A slim, self-improving AI agent"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -18,6 +18,8 @@ dependencies = [
     "textual>=0.86.0",
     "ddgs>=9.0.0",
     "croniter>=2.0.0",
+    "playwright>=1.44",
+    "playwright-stealth>=1.0.6",
 ]
 
 [project.optional-dependencies]

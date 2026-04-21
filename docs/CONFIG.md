@@ -65,6 +65,7 @@ Two options:
 | `tools.read_image.model` | `""` (use main) | string | next turn |
 | `tools.terminal.sandbox` | `false` | bool | next turn |
 | `tools.terminal.allow_network` | `false` | bool | next turn |
+| `tools.browser.vision` | `false` | bool | next turn |
 | `tools.research.quick_steps` | `8` | int | next turn |
 | `tools.research.normal_steps` | `15` | int | next turn |
 | `tools.research.deep_steps` | `30` | int | next turn |
@@ -76,6 +77,8 @@ state (`sandbox on` / `off`). Most useful on profiles that run
 unattended (gateway, schedule, sub-agents) — see
 [SECURITY.md](SECURITY.md) for the recommended pattern + platform
 requirements. `allow_network` has no effect unless `sandbox` is on.
+
+`tools.browser.vision` lets the `browser(screenshot, question=…)` action auto-chain the screenshot into the vision model (`tools.read_image.model` or the active main model) and return the answer instead of the file path. When `false` (default), `screenshot` always returns the path and a hint pointing at `read_image` so the LLM can decide whether to pay for vision per call. Useful to turn on in an exploratory profile; keep off in watchdog/gateway profiles so the agent doesn't burn vision tokens silently.
 
 `tools.research.{quick,normal,deep}_steps` control the iteration
 budget of the `research` sub-agent. The agent picks the depth tier
