@@ -77,11 +77,7 @@ the sandbox flag is set independently.
 
 ### Enabling
 
-Interactive: `alf setup → Sandbox` → toggle on/off + network.
-
-Chat (applies to the current profile's config): "turn on the
-terminal sandbox" → agent calls `config(set,
-tools.terminal.sandbox, true)`.
+Interactive: `alpi setup → Sandbox` → toggle on/off + network.
 
 YAML (direct): set in `~/.alpi/profiles/<name>/config.yaml`:
 ```yaml

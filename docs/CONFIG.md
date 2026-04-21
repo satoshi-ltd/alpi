@@ -33,15 +33,16 @@ only when you want to override it.
 
 ## How to change settings
 
-Three options, any of them works:
+Two options:
 
-- **Chat**: ask alf. "change max_steps_per_turn to 60", "set the
-  accent to Facebook blue". The `config` tool handles it.
 - **CLI wizards**: `alpi setup` covers model selection, gateway
-  credentials, and MCP servers. The scalar knobs below go through
-  the `config` tool instead.
-- **Edit the YAML**: open `~/.alpi/config.yaml` and change values
-  manually. Restart whatever surface was affected.
+  credentials, MCP servers, and sandbox posture — the settings that
+  benefit from structured flows or secret handling.
+- **Edit the YAML**: open `~/.alpi/config.yaml` (or
+  `~/.alpi/profiles/<name>/config.yaml` for non-default profiles)
+  and change values manually. Restart whatever surface was affected.
+  Cosmetic knobs (`tui.*`, `tools.max_steps_per_turn`,
+  `gateway.email.poll_interval`, `fallback_models`) live here.
 
 ## Reference
 
