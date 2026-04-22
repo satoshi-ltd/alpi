@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from typing import Any
 
 from alpi import config as cfg_mod
 from alpi import providers as prov_mod
@@ -44,7 +45,7 @@ def run(cfg: cfg_mod.Config) -> None:
     cfg.model = model_id
     _remember_openrouter_model(cfg, model_id)
     cfg_mod.save(cfg)
-    ui.ok(f"model set to [b]{model_id}[/b]")
+    ui.ok_and_wait(f"model set to [b]{model_id}[/b]")
 
 
 def _remember_openrouter_model(cfg: cfg_mod.Config, model_id: str) -> None:
@@ -67,23 +68,11 @@ def _pick_provider(cfg: cfg_mod.Config) -> Provider | None:
     active_head = cfg.model.split("/", 1)[0]
     accent = (cfg.tui or {}).get("accent", "") or ""
 
-    def _row(label: str, status: str, active: bool):
-        return ui.row_accent(label, status, accent) if active else ui.row(label, status)
-
-    items: list = []
-
+    collected: list[tuple[str, str, Any, bool]] = []  # (label, status, value, active)
     for p in ollamas:
-        items.append((
-            _row(p.name, f"ollama · {p.url}", p.name == active_head),
-            p,
-        ))
-    items.append((
-        ui.row("Add Ollama", "local or remote — private, offline-first"),
-        _ADD_OLLAMA,
-    ))
-
-    items.append(None)  # separator between local and cloud providers
-
+        collected.append((p.name, f"ollama · {p.url}", p, p.name == active_head))
+    collected.append(("Add Ollama", "local or remote — private, offline-first",
+                      _ADD_OLLAMA, False))
     for p in builtin:
         parts = []
         if p.api_key_env and p.has_key():
@@ -91,16 +80,27 @@ def _pick_provider(cfg: cfg_mod.Config) -> Provider | None:
         parts.append(p.description)
         if p.api_key_env and not p.has_key():
             parts.append("[key needed]")
-        items.append((
-            _row(p.display, " · ".join(parts), p.name == active_head),
-            p,
-        ))
-
+        collected.append((p.display, " · ".join(parts), p, p.name == active_head))
     if ollamas or _any_saved_keys(builtin):
-        items.append((
-            ui.row("Remove keys", "delete API keys or Ollama servers"),
-            _MANAGE_SAVED,
-        ))
+        collected.append(("Remove keys", "delete API keys or Ollama servers",
+                          _MANAGE_SAVED, False))
+
+    width = max((len(lab) for lab, status, _v, _a in collected if status), default=0)
+
+    items: list = []
+    for i, (label, status, value, active) in enumerate(collected):
+        # Keep the visual separator between the last Ollama entry
+        # ("Add Ollama") and the first cloud provider.
+        if i > 0 and value is not _ADD_OLLAMA and collected[i - 1][2] is _ADD_OLLAMA:
+            items.append(None)
+        if active:
+            items.append((
+                ui.row_accent(label, status, accent, width=width), value,
+            ))
+        else:
+            items.append((
+                ui.row(label, status, width=width), value,
+            ))
 
     result = ui.menu(
         ui.crumb("setup", "model"),
@@ -140,19 +140,28 @@ def _pick_model(provider: Provider, cfg: cfg_mod.Config) -> str | None:
         return _prompt_custom_model(provider, current_suffix)
 
     accent = (cfg.tui or {}).get("accent", "") or ""
-    items: list = []
+
+    collected: list[tuple[str, str, str, bool]] = []
     for m in models:
         qualified = m.id if "/" in m.id else f"{provider.name}/{m.id}"
-        is_active = qualified == cfg.model
-        status = m.note or ""
-        if is_active:
-            items.append((ui.row_accent(m.display, status, accent), m.id))
-        elif status:
-            items.append((ui.row(m.display, status), m.id))
-        else:
-            items.append((m.display, m.id))
+        collected.append((
+            m.display, m.note or "", m.id, qualified == cfg.model,
+        ))
+    collected.append(("Custom model name", "type it yourself",
+                      _ENTER_CUSTOM_MODEL, False))
 
-    items.append(("Custom model name", _ENTER_CUSTOM_MODEL))
+    width = max((len(lab) for lab, status, _v, _a in collected if status), default=0)
+
+    items: list = []
+    for label, status, value, active in collected:
+        if active:
+            items.append((
+                ui.row_accent(label, status, accent, width=width), value,
+            ))
+        else:
+            items.append((
+                ui.row(label, status, width=width), value,
+            ))
 
     result = ui.menu(
         ui.crumb("setup", "model", provider.name),
@@ -251,16 +260,10 @@ def _manage_saved(cfg: cfg_mod.Config) -> None:
     items: list = []
     for p in builtin:
         if p.api_key_env and os.environ.get(p.api_key_env):
-            items.append((
-                ui.row(p.api_key_env, "API key in .env"),
-                ("key", p.api_key_env),
-            ))
+            items.append((p.api_key_env, ("key", p.api_key_env), "API key in .env"))
     for entry in cfg.providers.get("ollama", []) or []:
         name = entry.get("name", "")
-        items.append((
-            ui.row(name, f"ollama · {entry.get('url', '')}"),
-            ("ollama", name),
-        ))
+        items.append((name, ("ollama", name), f"ollama · {entry.get('url', '')}"))
 
     if not items:
         ui.dim("Nothing saved to remove.")
@@ -279,10 +282,10 @@ def _manage_saved(cfg: cfg_mod.Config) -> None:
     if kind == "key":
         _remove_env_key(cfg.env_path, target)
         os.environ.pop(target, None)
-        ui.ok(f"removed {target} from .env")
+        ui.ok_and_wait(f"removed {target} from .env")
     elif kind == "ollama":
         cfg.providers["ollama"] = [
             e for e in cfg.providers.get("ollama", [])
             if e.get("name") != target
         ]
-        ui.ok(f"removed ollama server '{target}'")
+        ui.ok_and_wait(f"removed ollama server '{target}'")

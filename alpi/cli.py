@@ -325,6 +325,7 @@ def mcp() -> None:
 @click.pass_context
 def mcp_list(ctx: click.Context) -> None:
     """List configured MCP servers (from config.yaml)."""
+    from alpi import ui
     h: Path = ctx.obj["home"]
     cfg = config.load(h)
     servers = (cfg.raw.get("mcp") or {}).get("servers") or {}
@@ -332,10 +333,12 @@ def mcp_list(ctx: click.Context) -> None:
         click.echo("mcp: no servers configured. Run `alpi setup` → MCPs.")
         return
     click.echo(f"mcp: {len(servers)} server(s)")
+    rows: list[list[str]] = []
     for name, spec in sorted(servers.items()):
         cmd = spec.get("command", "?")
         args = " ".join(spec.get("args") or [])
-        click.echo(f"  {name:<14} {cmd} {args}".rstrip())
+        rows.append([name, cmd, args])
+    ui.columns(rows)
 
 
 @mcp.command("test")
@@ -568,14 +571,14 @@ def setup_cmd(ctx: click.Context) -> None:
     while True:
         cfg = config.load(h)
         items = [
-            (ui.row("Model / Provider", cfg.model or "(not set)"), "model"),
-            (ui.row("Gateways", _gateways_status(h)), "gateways"),
-            (ui.row("MCPs", _mcp_status(h)), "mcps"),
-            (ui.row("Voice", _voice_status(cfg)), "voice"),
+            ("Model / Provider", "model", cfg.model or "(not set)"),
+            ("Gateways", "gateways", _gateways_status(h)),
+            ("Voice", "voice", _voice_status(cfg)),
+            ("MCPs", "mcps", _mcp_status(h)),
             None,
-            (ui.row("Sandbox", _sandbox_status(cfg)), "sandbox"),
-            (ui.row("Gateway service", _gateway_service_status(h)), "gateway-service"),
-            (ui.row("Cleanup", _cleanup_status(h)), "cleanup"),
+            ("Sandbox", "sandbox", _sandbox_status(cfg)),
+            ("Gateway service", "gateway-service", _gateway_service_status(h)),
+            ("Cleanup", "cleanup", _cleanup_status(h)),
         ]
         # Every title starts with ``alpi`` as a lightweight brand +
         # "you are here" marker. The active profile goes in the
@@ -619,9 +622,9 @@ def _gateways_setup(h: Path) -> None:
     from alpi import ui
     while True:
         items = [
-            (ui.row("Telegram", _telegram_status(h)), "telegram"),
-            (ui.row("IMAP", _email_status(h)), "imap"),
-            (ui.row("Gmail", _gmail_status(h)), "gmail"),
+            ("Telegram", "telegram", _telegram_status(h)),
+            ("IMAP", "imap", _email_status(h)),
+            ("Gmail", "gmail", _gmail_status(h)),
         ]
         choice = ui.menu(
             ui.crumb("setup", "gateways"),
@@ -653,47 +656,47 @@ def _gateway_service_status(h: Path) -> str:
 def _gateway_service_setup(h: Path) -> None:
     from alpi import service, ui
     if not _any_gateway_ready(h):
-        ui.fail(
+        ui.fail_and_wait(
             "no gateway configured yet — set up Telegram, IMAP, or Gmail first"
         )
-        ui.press_enter()
         return
 
     profile_name = _profile_from_home(h)
-    backend = service.installed("gateway", profile_name)
+    while True:
+        backend = service.installed("gateway", profile_name)
 
-    ui.banner(
-        ui.crumb("setup", "gateway-service"),
-        subtitle=_gateway_service_status(h),
-        home=h,
-    )
-    ui.dim(
-        "Registers the gateway daemon (`alpi gateway start`) with your\n"
-        "OS so it runs on boot and restarts on crash. macOS: launchd\n"
-        "plist under ~/Library/LaunchAgents/. Linux: systemd --user unit\n"
-        "under ~/.config/systemd/user/. The current profile is the one\n"
-        "that gets wired up."
-    )
-    ui._console.print("")
+        ui.banner(
+            ui.crumb("setup", "gateway-service"),
+            subtitle=_gateway_service_status(h),
+            home=h,
+        )
+        ui.dim(
+            "Registers the gateway daemon (`alpi gateway start`) with your\n"
+            "OS so it runs on boot and restarts on crash. macOS: launchd\n"
+            "plist under ~/Library/LaunchAgents/. Linux: systemd --user unit\n"
+            "under ~/.config/systemd/user/. The current profile is the one\n"
+            "that gets wired up."
+        )
+        ui._console.print("")
 
-    if backend:
-        items = [("Uninstall", "remove-service")]
-    else:
-        items = [("Install", "add-service")]
+        if backend:
+            items = [("Uninstall", "remove-service", f"running via {backend}")]
+        else:
+            items = [("Install", "add-service", "register + start now")]
 
-    choice = ui.menu("", items, home=h, close="Back")
-    if choice is None:
+        choice = ui.menu("", items, home=h, close="Back")
+        if choice is None:
+            return
+        try:
+            if choice == "add-service":
+                kind = service.install("gateway", h, profile_name)
+                ui.ok_and_wait(f"gateway service installed via {kind}")
+            elif choice == "remove-service":
+                kind = service.uninstall("gateway", h, profile_name)
+                ui.ok_and_wait(f"gateway service uninstalled ({kind})")
+        except Exception as e:  # noqa: BLE001
+            ui.fail_and_wait(str(e))
         return
-    try:
-        if choice == "add-service":
-            kind = service.install("gateway", h, profile_name)
-            ui.ok(f"gateway service installed via {kind}")
-        elif choice == "remove-service":
-            kind = service.uninstall("gateway", h, profile_name)
-            ui.ok(f"gateway service uninstalled ({kind})")
-    except Exception as e:  # noqa: BLE001
-        ui.fail(str(e))
-    ui.press_enter()
 
 
 def _profile_from_home(h: Path) -> str:
@@ -777,74 +780,79 @@ def _sandbox_status(cfg: config.Config) -> str:
 def _sandbox_setup(h: Path) -> None:
     """Pick the desired sandbox posture for the current profile."""
     from alpi import ui
-    cfg = config.load(h)
-    term = cfg.tools.terminal
+    while True:
+        cfg = config.load(h)
 
-    ui.banner(
-        ui.crumb("setup", "sandbox"),
-        subtitle=_sandbox_status(cfg),
-        home=h,
-    )
-    ui.dim(
-        "Wraps shell commands in sandbox-exec (macOS) or bubblewrap (Linux) so\n"
-        "the kernel blocks writes outside your workspace + ~/.alpi, and denies\n"
-        "network unless you opt in.\n\n"
-        "Recommended for profiles that run unattended — Telegram gateway,\n"
-        "schedule daemon, research / delegate sub-agents. For interactive chat\n"
-        "where you approve every command, the denylist (Layer 1) is already\n"
-        "sufficient.\n\n"
-        "Trade-offs when enabled: git push over SSH (~/.ssh denied), Homebrew\n"
-        "on Apple Silicon, and docker commands may break. Keep it off in your\n"
-        "main dev profile."
-    )
-    ui._console.print("")
+        ui.banner(
+            ui.crumb("setup", "sandbox"),
+            subtitle=_sandbox_status(cfg),
+            home=h,
+        )
+        ui.dim(
+            "Wraps shell commands in sandbox-exec (macOS) or bubblewrap (Linux) so\n"
+            "the kernel blocks writes outside your workspace + ~/.alpi, and denies\n"
+            "network unless you opt in.\n\n"
+            "Recommended for profiles that run unattended — Telegram gateway,\n"
+            "schedule daemon, research / delegate sub-agents. For interactive chat\n"
+            "where you approve every command, the denylist (Layer 1) is already\n"
+            "sufficient.\n\n"
+            "Trade-offs when enabled: git push over SSH (~/.ssh denied), Homebrew\n"
+            "on Apple Silicon, and docker commands may break. Keep it off in your\n"
+            "main dev profile."
+        )
+        ui._console.print("")
 
-    choice = ui.menu(
-        "",
-        [
-            ("Enable sandbox", "enable"),
-            ("Disable sandbox", "disable"),
-        ],
-        home=h, close="Back",
-    )
-    if choice is None:
-        return
-    if choice == "disable":
-        cfg.tools.terminal.sandbox = False
-        cfg.tools.terminal.allow_network = False
+        choice = ui.menu(
+            "",
+            [
+                ("Enable sandbox", "enable"),
+                ("Disable sandbox", "disable"),
+            ],
+            home=h, close="Back",
+        )
+        if choice is None:
+            return
+        if choice == "disable":
+            cfg.tools.terminal.sandbox = False
+            cfg.tools.terminal.allow_network = False
+            config.save(cfg)
+            ui.ok_and_wait("sandbox disabled")
+            return
+
+        cfg.tools.terminal.sandbox = True
         config.save(cfg)
-        return
-    # choice == "enable" — ask about network next.
-    cfg.tools.terminal.sandbox = True
-    config.save(cfg)
 
-    ui.banner(
-        ui.crumb("setup", "sandbox", "network"),
-        subtitle="allow network inside the sandbox?",
-        home=h,
-    )
-    ui.dim(
-        "Denied → sub-processes can't open sockets. Safest default; blocks any\n"
-        "exfil attempt by a compromised command.\n\n"
-        "Allowed → sub-processes can reach the internet. Needed for git push,\n"
-        "npm / pip install, curl, docker pull, etc. Most unattended profiles\n"
-        "still need this because they fetch external data."
-    )
-    ui._console.print("")
+        ui.banner(
+            ui.crumb("setup", "sandbox", "network"),
+            subtitle="allow network inside the sandbox?",
+            home=h,
+        )
+        ui.dim(
+            "Denied → sub-processes can't open sockets. Safest default; blocks any\n"
+            "exfil attempt by a compromised command.\n\n"
+            "Allowed → sub-processes can reach the internet. Needed for git push,\n"
+            "npm / pip install, curl, docker pull, etc. Most unattended profiles\n"
+            "still need this because they fetch external data."
+        )
+        ui._console.print("")
 
-    net = ui.menu(
-        "",
-        [
-            ("Deny network (isolated)", "deny"),
-            ("Allow network (git push, npm, curl…)", "allow"),
-        ],
-        home=h, close="Back",
-    )
-    if net is None:
-        # User ESC'd — leave sandbox enabled with the previous network value.
+        net = ui.menu(
+            "",
+            [
+                ("Deny network (isolated)", "deny"),
+                ("Allow network (git push, npm, curl…)", "allow"),
+            ],
+            home=h, close="Back",
+        )
+        if net is None:
+            return
+        cfg.tools.terminal.allow_network = (net == "allow")
+        config.save(cfg)
+        ui.ok_and_wait(
+            f"sandbox enabled · network "
+            f"{'on' if cfg.tools.terminal.allow_network else 'off'}"
+        )
         return
-    cfg.tools.terminal.allow_network = (net == "allow")
-    config.save(cfg)
 
 
 _VOICE_SHORTLIST: list[tuple[str, str, str]] = [
@@ -877,46 +885,58 @@ def _voice_status(cfg: config.Config) -> str:
 def _voice_setup(h: Path) -> None:
     """Pick the Edge TTS voice + autoplay toggle for the `tts` tool."""
     from alpi import ui
-    cfg = config.load(h)
+    while True:
+        cfg = config.load(h)
 
-    ui.banner(
-        ui.crumb("setup", "voice"),
-        subtitle=_voice_status(cfg),
-        home=h,
-    )
-    ui.dim(
-        "Default voice for audio output + autoplay toggle. Any pick is "
-        "permanent until you change it here."
-    )
-    ui._console.print("")
+        ui.banner(
+            ui.crumb("setup", "voice"),
+            subtitle=_voice_status(cfg),
+            home=h,
+        )
+        ui.dim(
+            "Default voice for audio output + autoplay toggle. Any pick is "
+            "permanent until you change it here."
+        )
+        ui._console.print("")
 
-    items: list[tuple[str, str]] = []
-    for vid, name, desc in _VOICE_SHORTLIST:
-        marker = " ✓" if vid == cfg.tools.tts.voice else ""
-        items.append((ui.row(name + marker, desc), vid))
-    items.append((
-        ui.row(
+        accent = (cfg.tui or {}).get("accent", "") or ""
+        collected: list[tuple[str, str, str, bool]] = []
+        for vid, name, desc in _VOICE_SHORTLIST:
+            collected.append((name, desc, vid, vid == cfg.tools.tts.voice))
+        collected.append((
             "Autoplay: " + ("on" if cfg.tools.tts.autoplay else "off"),
             "toggle speaker playback",
-        ),
-        "__autoplay__",
-    ))
+            "__autoplay__", False,
+        ))
+        width = max(len(lab) for lab, _s, _v, _a in collected)
 
-    choice = ui.menu(
-        "",
-        items,
-        home=h, close="Back",
-    )
-    if choice is None:
-        return
+        items: list = []
+        for label, status, value, active in collected:
+            if active:
+                items.append((
+                    ui.row_accent(label, status, accent, width=width), value,
+                ))
+            else:
+                items.append((
+                    ui.row(label, status, width=width), value,
+                ))
 
-    if choice == "__autoplay__":
-        cfg.tools.tts.autoplay = not cfg.tools.tts.autoplay
+        choice = ui.menu("", items, home=h, close="Back")
+        if choice is None:
+            return
+
+        if choice == "__autoplay__":
+            cfg.tools.tts.autoplay = not cfg.tools.tts.autoplay
+            config.save(cfg)
+            ui.ok_and_wait(
+                f"autoplay {'on' if cfg.tools.tts.autoplay else 'off'}"
+            )
+            return
+
+        cfg.tools.tts.voice = choice
         config.save(cfg)
+        ui.ok_and_wait(f"voice set to {_voice_display(cfg.tools.tts.voice)}")
         return
-
-    cfg.tools.tts.voice = choice
-    config.save(cfg)
 
 
 _SESSION_STALE_DAYS = 30
@@ -1016,7 +1036,7 @@ def _cleanup_setup(h: Path) -> None:
                 status = "empty"
             else:
                 status = f"{home_mod.format_bytes(c['size'])} · {n} file{'s' if n != 1 else ''}"
-            items.append((ui.row(c["label"], status), c["key"]))
+            items.append((c["label"], c["key"], status))
 
         choice = ui.menu(
             ui.crumb("setup", "cleanup"),
@@ -1045,7 +1065,7 @@ def _cleanup_setup(h: Path) -> None:
                 deleted += 1
             except OSError as e:  # noqa: BLE001
                 ui.fail(f"could not delete {p.name}: {e}")
-        ui.ok(f"removed {deleted} file(s) from {target['label']}")
+        ui.ok_and_wait(f"removed {deleted} file(s) from {target['label']}")
 
 
 def _email_status(h: Path) -> str:
@@ -1088,8 +1108,7 @@ def profile() -> None:
 @click.pass_context
 def profile_list(ctx: click.Context) -> None:
     """List available profiles with their model, size, and path."""
-    from rich.console import Console
-    from alpi import config as cfg_mod, home as home_mod
+    from alpi import config as cfg_mod, home as home_mod, ui
 
     active = ctx.obj.get("profile") or "default"
 
@@ -1098,9 +1117,8 @@ def profile_list(ctx: click.Context) -> None:
     if root.exists():
         named = sorted(p.name for p in root.iterdir() if p.is_dir())
 
-    profiles = ["default", *named]
-    rows: list[tuple[str, str, str, str, str, bool]] = []
-    for name in profiles:
+    rows: list[list[str]] = []
+    for name in ["default", *named]:
         home_path = (
             Path.home() / ".alpi" if name == "default"
             else Path.home() / ".alpi" / "profiles" / name
@@ -1112,23 +1130,17 @@ def profile_list(ctx: click.Context) -> None:
         except Exception:  # noqa: BLE001
             accent = "#ff8800"
             model = "(unreadable)"
-        size = home_mod.profile_size_label(home_path)
-        short = home_mod.shorten_home(home_path)
-        rows.append((accent, name, model, size, short, name == active))
+        glyph = "◆" if name == active else "◇"
+        name_cell = f"[b]{name}[/b]" if name == active else name
+        rows.append([
+            f"[{accent}]{glyph}[/{accent}]",
+            name_cell,
+            model,
+            home_mod.profile_size_label(home_path),
+            home_mod.shorten_home(home_path),
+        ])
 
-    name_w = max(len(r[1]) for r in rows)
-    model_w = max(len(r[2]) for r in rows)
-    size_w = max(len(r[3]) for r in rows)
-    console = Console()
-    for accent, name, model, size, short, is_active in rows:
-        glyph = "◆" if is_active else "◇"
-        console.print(
-            f"[{accent}]{glyph}[/{accent}] "
-            f"{name:<{name_w}}  "
-            f"{model:<{model_w}}  "
-            f"{size:>{size_w}}  "
-            f"{short}"
-        )
+    ui.columns(rows)
 
     if not named:
         # Fresh install: nudge the user toward creating one if they want
