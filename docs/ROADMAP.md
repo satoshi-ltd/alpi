@@ -21,11 +21,14 @@ Audience: Javi (product) + me (Claude across sessions).
 | G | Terminal + code execution OS sandbox | ✅ shipped opt-in/experimental (commit e78b428) |
 | H | Home Assistant integration | ⏸ blocked on user confirmation |
 | I | MCP client | ✅ shipped (commit 0d376ac) |
-| J | Anti-bot browsing (camoufox) | 🔵 backlog — depends on B |
+| J | Anti-bot browsing (camoufox) | ❌ dismissed — humanised Playwright (v0.2.36) covers the real detection surface; camoufox adds +230 MB Firefox for marginal gain |
 | K | Scroll resilience under heavy streaming | ✅ shipped (commit 9ed4139 — `VerticalScroll.anchor()`) |
 | L | Reasoning-as-state (TUI) | ✅ shipped (commits 62f7fa7 + fd1fec4) |
 | M | TTS / STT / voice-mode (local-first) | ✅ shipped (v0.2.25, 2 tools + Telegram voice inbound/outbound, no continuous voice mode) |
 | N | Image generation | 🔵 backlog — no concrete use case yet |
+| AA | Cleanup wizard (`alpi setup → Cleanup`) | 🔵 backlog — now that the top bar surfaces profile size |
+| AB | Gateway vs TUI profile split wizard | 🔵 backlog — make unattended gateway install one-click |
+| AC | Auto-generated CHANGELOG.md from commits | 🔵 backlog — release-cycle polish |
 | R.1 | Research step-counter in state label | ✅ shipped (v0.2.2) |
 | R.2 | `delegate` — write-capable sub-agent | ✅ shipped (v0.2.3, named `delegate` not `delegate_task`) |
 | R.3 | Batch parallel sub-agents (`tasks[]`) | ✅ shipped (v0.2.18) |
@@ -48,7 +51,7 @@ release. The bar for "ship v0.2" is **clean docs + version bump +
 real-use validation across a few sessions** — not feature
 exhaustiveness.
 
-**Nothing open for v0.2.** Everything the original roadmap promised is shipped. Items still in the backlog — **H** (Home Assistant), **J** (camoufox), **N** (image gen), **U** (Signal), **W** (approval system), **Σ.1/Σ.2** (bola extra) — roll forward to v0.3. **C** (OpenAI Codex OAuth) and **V** (Anthropic OAuth) were rejected on ToS grounds — see Principles section.
+**Nothing open for v0.2.** Everything the original roadmap promised is shipped. Items still in the backlog — **H** (Home Assistant), **N** (image gen), **U** (Signal), **W** (approval system), **AA** (Cleanup wizard), **AB** (Gateway profile split), **AC** (CHANGELOG auto-gen), **Σ.1/Σ.2** (bola extra) — roll forward to v0.3. **C** (OpenAI Codex OAuth), **V** (Anthropic OAuth), and **J** (camoufox) were rejected — C/V on ToS grounds (see Principles), J after humanised Playwright made it redundant.
 
 Once the v0.3 cycle picks up a few of those + a fresh CHANGELOG
 entry summarises v0.2, bump to `v0.3.0` and reopen the table.
@@ -73,15 +76,21 @@ The competitor landscape (hermes, similar third-party agents) routinely ships "C
 
 Only if Javi runs HA. Hermes has `homeassistant_tool` as reference. Requires `HA_URL` + long-lived token in `.env`. Typical uses: read sensors, toggle lights/scenes, query occupancy. **Waiting on Javi confirming.**
 
-### J. Anti-bot browsing (camoufox)
-
-Firefox fork with C++ fingerprint patches for sites that block plain Chromium even with `playwright-stealth` (Cloudflare Turnstile, DataDome, PerimeterX). Free but heavy: +230MB Firefox binary aside from Playwright's own Chromium, separate Python wrapper, and camoufox periodically breaks when the anti-bot vendors update.
-
-v0.2.16 shipped `playwright-stealth` on by default, which beats ~80% of basic detection (navigator.webdriver, plugins, UA-CH, WebGL vendor overrides). Activate camoufox only when a concrete site breaks through that. Alternatives to consider at that point, in order of effort: manual cookie import (user logs in on their real browser, exports cookies, imports into alpi), `patchright` (newer Chromium-based stealth fork), Browserbase cloud (paid, residential IPs), camoufox.
-
 ### N. Image generation
 
 `generate_image(prompt, style)` using the active vision model or a dedicated endpoint (DALL-E, SD). Useful for "hazme un logo rápido". Low priority unless a concrete use case appears.
+
+### AA. Cleanup wizard
+
+`alpi setup → Cleanup` — an interactive pass over the active profile's heavy dirs (`cache/tts/`, `cache/`, old `sessions/*.json`, `schedule/output/`, `gateway/logs/`) with size + mtime per entry and a "[delete] [keep]" toggle. The top-bar profile size (v0.2.31) makes the ballooning visible; this wizard lets the user act on it without rm-ing by hand. Could reuse `home.profile_size_label` infrastructure. Estimated ~150 LOC.
+
+### AB. Gateway vs TUI profile split wizard
+
+Today a user running alpi both interactively and as a gateway daemon runs both under the same profile (same model, same memory, same cache). The gateway often wants: leaner model, stricter sandbox, offline `allow_network=false`, different allowlist. Manual today. Proposal: `alpi setup → Gateway install` wizard that (a) creates a dedicated profile (e.g. `gateway`), (b) copies relevant `.env` subset, (c) registers a launchd/systemd unit pointing at `alpi -p gateway gateway start`, (d) suggests a conservative model + sandbox preset. Saves a lot of manual ops for hostile-environment setups. Estimated ~200 LOC.
+
+### AC. Auto-generated CHANGELOG.md from commits
+
+Every patch bump commits with a descriptive subject already. A script (`alpi release notes` or a git hook) that collects commits between two tags and renders a `CHANGELOG.md` stanza would let us stop writing release prose twice (once in the commit, once in ROADMAP). Group by type (feat / fix / tidy) via a lightweight prefix heuristic on commit subjects. Estimated ~80 LOC.
 
 ## Next — v0.3 planned
 
@@ -207,3 +216,5 @@ First usable cut. Textual TUI, 3-file memory with two-tier dedup, skill system w
 | (next)  | `alpi profile list` redesigned. Replaces old `* name /full/path` with: `◆` (solid) or `◇` (hollow) glyph in the profile's `tui.accent` colour, name, active model, disk size, and home-abbreviated path (`/Users/javi` → `~`, portable). Diamond shape carries the active/inactive distinction even in non-colour terminals. Rest of the row is plain — no dim, no bold, no per-column colours. Extracted `format_bytes`, `profile_size_label` (30 s cache, excludes sibling profiles when counting default), `shorten_home` from `alpi/tui/app.py` into `alpi/home.py` so CLI + TUI share one source. (v0.2.33) |
 
 | (next)  | Telegram gateway offset now persists across restarts. Before, `self._offset = 0` on every `__init__` meant every restart replayed the last 24 h of unacked updates from Telegram — the bot answered the same inbound twice, the user saw ghost "hi" / "Hello" echoes. Saved to `~/.alpi/gateway/telegram-state.json` (matches the IMAP / Gmail pattern which already persisted UID / historyId). Offset written after each update is consumed so a mid-loop crash doesn't lose progress. Also added a one-shot "catching up on N message(s) from backlog" log on the first non-empty poll after startup, on all three platforms (telegram, imap, gmail) — makes it obvious when the agent is answering accumulated offline traffic vs real-time arrivals. Startup log now also includes the restored offset value for telegram so operators can spot a misconfigured state file. 458 tests green (v0.2.34) |
+
+| (next)  | Humanised Playwright typing. `browser(type=...)` used `loc.fill(text)` which pastes the whole string instantly — a loud bot signature that anti-bot vendors (Cloudflare Turnstile, DataDome, PerimeterX) gate on. Replaced with `loc.clear()` + `loc.press_sequentially(text, delay=random.randint(lo, hi))` — letter by letter with a per-call random delay in ms. Config knobs: `tools.browser.human_typing` (default `true`) and `tools.browser.typing_delay_ms: [30, 80]` (jitter range). A small random 150-400 ms pause is also inserted before `press(Enter)` to avoid instant-submit after typing. Camoufox (J) dismissed from the backlog as a result — humanised playwright + stealth cover the real detection surface without the +230 MB Firefox binary. Three new backlog items (AA Cleanup wizard, AB Gateway profile split wizard, AC CHANGELOG auto-gen) added, all low-priority polish. Config loader reads YAML directly instead of going through `config.load()` to avoid `load_dotenv` polluting the process env (same trick as `require_network`). 459 tests green (v0.2.36) |
