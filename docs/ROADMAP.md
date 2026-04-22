@@ -29,6 +29,7 @@ Audience: Javi (product) + me (Claude across sessions).
 | R.1 | Research step-counter in state label | ✅ shipped (v0.2.2) |
 | R.2 | `delegate` — write-capable sub-agent | ✅ shipped (v0.2.3, named `delegate` not `delegate_task`) |
 | R.3 | Batch parallel sub-agents (`tasks[]`) | ✅ shipped (v0.2.18) |
+| S | `read_image` auto-resize (cost saver) | ✅ shipped (v0.2.21) |
 | T | Gmail API (OAuth2) gateway | 🔵 backlog — replaces IMAP as app-passwords sunset |
 | U | Signal gateway (signal-cli) | 🔵 backlog — requires dedicated phone number |
 | V | Anthropic subscription OAuth | 🔵 backlog — ToS-gray, wait for official |
@@ -47,7 +48,7 @@ release. The bar for "ship v0.2" is **clean docs + version bump +
 real-use validation across a few sessions** — not feature
 exhaustiveness.
 
-**Nothing open for v0.2.** Everything the original roadmap promised is shipped. Items still in the backlog — **C** (Codex OAuth), **H** (Home Assistant), **J** (camoufox), **M** (voice), **N** (image gen), **S** (read_image auto-resize), **T** (Gmail OAuth), **U** (Signal), **V** (Anthropic OAuth — ToS gray), **W** (approval system), **Σ.1/Σ.2** (bola extra) — roll forward to v0.3.
+**Nothing open for v0.2.** Everything the original roadmap promised is shipped. Items still in the backlog — **C** (Codex OAuth), **H** (Home Assistant), **J** (camoufox), **M** (voice), **N** (image gen), **T** (Gmail OAuth), **U** (Signal), **V** (Anthropic OAuth — ToS gray), **W** (approval system), **Σ.1/Σ.2** (bola extra) — roll forward to v0.3.
 
 Once the v0.3 cycle picks up a few of those + a fresh CHANGELOG
 entry summarises v0.2, bump to `v0.3.0` and reopen the table.
@@ -119,15 +120,6 @@ Hermes ships ~3000 LOC of voice (7 TTS providers, 3 STT tiers, full voice-mode).
 
 ## Next — v0.3 planned
 
-### S. `read_image` auto-resize (cost saver)
-
-Vision-model cost scales with image resolution: a 4K screenshot costs ~9× more tokens than its 1K version for the same content. Right now `read_image` sends the original bytes to the LLM, so a photo of a receipt at phone-native resolution burns tokens that contribute nothing to the answer.
-
-**Scope.** Add Pillow as a main dependency (~3 MB). Add `tools.read_image.auto_resize: true` to config (default on). When set, downscale any image whose longer edge exceeds a target (Anthropic recommends ~1568px, which also matches OpenAI's 512/768/2048 tile grid well) before base64-encoding. Preserve aspect ratio, reuse format where possible (RGBA→RGB for JPEG), JPEG quality 85.
-
-**Why not in v0.2.** Adding Pillow as a required dep + config knob + resize logic + tests is a non-trivial chunk for what is an optimisation, not a correctness fix. Users with 4K screenshots pay more tokens; that's it. Ship when we have a real "this is getting expensive" signal from usage.
-
-**Reference.** Hermes' `_resize_image_for_vision` in `tools/vision_tools.py` does a reactive version (resize only after the API rejects with "too large"); our take would be proactive (resize any time we could).
 
 ### T. Gmail API (OAuth2) gateway
 
@@ -243,3 +235,4 @@ First usable cut. Textual TUI, 3-file memory with two-tier dedup, skill system w
 | (next)  | Batch parallel sub-agents shipped (R.3 closed). `research` and `delegate` now accept `tasks: [...]` (up to 3) and run them concurrently via `ThreadPoolExecutor(max_workers=3)`. Results aggregate into one report with per-task sections; failures are captured inline instead of short-circuiting the batch. Prerequisite: `alpi/tools/_state.py` refactored from module-global `_emit`/`_interrupt_getter`/`_usage_sink` to `contextvars.ContextVar`, so two workers can have distinct emit callbacks without racing. Worker threads re-seed `interrupt_getter` + `usage_sink` from the parent context (Python's `ThreadPoolExecutor` does not auto-propagate ContextVars) and install a per-task prefixed `emit`. Existing callers unchanged — the public API is identical; only `research.py` and `delegate.py` added `get_emit()` instead of reading `_emit` directly (v0.2.18) |
 | (next)  | Roadmap sweep: extended backlog with 9 new items (TTS/STT local, Gmail OAuth, Signal, Anthropic OAuth as ToS-gray, approval system, schedule threat-scan, tool budget, OSV malware, bola extra). Discarded WhatsApp/Discord/Slack with rationale (v0.2.19) |
 | (next)  | Security hardening pack — three items shipped together (Y + Z + X, ~200 LOC): (1) **Tool result budget** in `alpi/tools/_budget.py` — `tools.budget.per_result_chars: 100_000` default, per-tool override via `tools.<name>.max_result_chars` (e.g. `-1` for unlimited on `read_file`), replaces the three hardcoded `[:10_000]` sites across engine/research/delegate with a clean elided suffix; (2) **OSV malware check** in `alpi/tools/_osv.py` — `api.osv.dev` query on skill `scripts/*.py` imports and MCP `npx` args at save time, blocks on MAL-* findings, fails open on network errors; (3) **Schedule prompt threat-scan** — reuses `scan_skill_body` patterns at both save and fire time so prompt-injected cron jobs don't escape into unattended runs. 17 new tests, 402 green total (v0.2.20) |
+| (next)  | `read_image` auto-resize shipped (S closed). Pillow added as main dep (~3 MB). When `tools.read_image.auto_resize` (default `true`), any input image with a longer edge over `tools.read_image.max_edge` (default 1568 px — matches Anthropic's recommendation) is downscaled before base64-encoding. Aspect ratio preserved; PNGs with alpha stay PNG; everything else round-trips through JPEG q=85; SVG passthrough. Proactive (vs hermes' reactive "resize after API rejects too-large"). Typical saving: ~9× input-token cost on a 4K screenshot. 7 new tests, 409 green (v0.2.21) |

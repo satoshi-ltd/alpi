@@ -17,7 +17,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "tools": {
         "max_steps_per_turn": 40,
         "web_extract": {"model": ""},
-        "read_image": {"model": ""},
+        "read_image": {"model": "", "auto_resize": True, "max_edge": 1568},
         "browser": {"vision": False},
         "terminal": {
             "sandbox": False,
@@ -70,6 +70,8 @@ class WebExtractToolConfig:
 @dataclass
 class ReadImageToolConfig:
     model: str = ""  # empty = use main model
+    auto_resize: bool = True
+    max_edge: int = 1568  # pixels; Anthropic's recommended upper bound
 
 
 @dataclass
@@ -163,6 +165,8 @@ def load(home: Path) -> Config:
         ),
         read_image=ReadImageToolConfig(
             model=str(read_image_raw.get("model", "") or ""),
+            auto_resize=bool(read_image_raw.get("auto_resize", True)),
+            max_edge=int(read_image_raw.get("max_edge", 1568)),
         ),
         terminal=TerminalToolConfig(
             sandbox=bool(terminal_raw.get("sandbox", False)),
@@ -220,8 +224,15 @@ def _tools_delta(cfg: Config) -> dict:
         out["max_steps_per_turn"] = cfg.tools.max_steps_per_turn
     if cfg.tools.web_extract.model != d["web_extract"]["model"]:
         out["web_extract"] = {"model": cfg.tools.web_extract.model}
+    ri_out: dict[str, Any] = {}
     if cfg.tools.read_image.model != d["read_image"]["model"]:
-        out["read_image"] = {"model": cfg.tools.read_image.model}
+        ri_out["model"] = cfg.tools.read_image.model
+    if cfg.tools.read_image.auto_resize != d["read_image"]["auto_resize"]:
+        ri_out["auto_resize"] = cfg.tools.read_image.auto_resize
+    if cfg.tools.read_image.max_edge != d["read_image"]["max_edge"]:
+        ri_out["max_edge"] = cfg.tools.read_image.max_edge
+    if ri_out:
+        out["read_image"] = ri_out
     term_d = d["terminal"]
     term_out: dict[str, Any] = {}
     if cfg.tools.terminal.sandbox != term_d["sandbox"]:

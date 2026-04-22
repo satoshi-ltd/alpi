@@ -30,6 +30,39 @@ MAX_BYTES = 20 * 1024 * 1024
 DOWNLOAD_TIMEOUT = 20.0
 
 
+def _maybe_resize(data: bytes, mime: str, max_edge: int) -> tuple[bytes, str]:
+    """Downscale if the longer edge exceeds *max_edge*; else return as-is.
+
+    Skips SVG (vector) and any format Pillow can't round-trip. Returns
+    the same ``data, mime`` pair on failure so the caller can proceed."""
+    if mime == "image/svg+xml" or max_edge <= 0:
+        return data, mime
+    try:
+        import io
+        from PIL import Image
+    except Exception:  # noqa: BLE001
+        return data, mime
+    try:
+        with Image.open(io.BytesIO(data)) as img:
+            w, h = img.size
+            longer = max(w, h)
+            if longer <= max_edge:
+                return data, mime
+            ratio = max_edge / longer
+            new_size = (max(1, round(w * ratio)), max(1, round(h * ratio)))
+            resized = img.resize(new_size, Image.LANCZOS)
+            buf = io.BytesIO()
+            if mime == "image/png" and resized.mode in ("RGBA", "LA", "P"):
+                resized.save(buf, format="PNG", optimize=True)
+                return buf.getvalue(), "image/png"
+            if resized.mode in ("RGBA", "LA", "P"):
+                resized = resized.convert("RGB")
+            resized.save(buf, format="JPEG", quality=85, optimize=True)
+            return buf.getvalue(), "image/jpeg"
+    except Exception:  # noqa: BLE001
+        return data, mime
+
+
 def _sniff_mime(data: bytes) -> str | None:
     if data.startswith(MAGIC_BYTES["image/png"]):
         return "image/png"
@@ -172,6 +205,14 @@ class ReadImage(Tool):
         cfg = cfg_mod.load(get_home())
         override = cfg.tools.read_image.model.strip()
         main_kwargs = cfg_mod.resolve_model(cfg)
+
+        if cfg.tools.read_image.auto_resize:
+            before = len(data)
+            data, mime = _maybe_resize(data, mime, cfg.tools.read_image.max_edge)
+            if len(data) < before:
+                tool_state_mod.emit_state(
+                    f"resized image ({before:,} → {len(data):,} bytes)"
+                )
 
         tool_state_mod.emit_state("analyzing image…")
         b64 = base64.b64encode(data).decode("ascii")
