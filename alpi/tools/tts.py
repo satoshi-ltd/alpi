@@ -160,53 +160,47 @@ class Tts(Tool):
         chosen_voice = (voice or cfg.tools.tts.voice).strip()
         chosen_rate = _normalize_prosody(cfg.tools.tts.rate)
         chosen_pitch = _normalize_prosody(cfg.tools.tts.pitch)
-        fmt = "ogg" if os.environ.get("ALPI_GATEWAY") == "1" else "mp3"
+        is_gateway = os.environ.get("ALPI_GATEWAY") == "1"
+        fmt = "ogg" if is_gateway else "mp3"
 
         cache = _cache_dir(home)
         key = _cache_key(text, chosen_voice, chosen_rate, chosen_pitch, fmt)
         out_path = cache / f"{key}.{fmt}"
 
-        mp3_path = cache / f"{key}.mp3"
-        cache_hit = out_path.exists() and out_path.stat().st_size > 0
-
-        if not cache_hit:
+        if not (out_path.exists() and out_path.stat().st_size > 0):
             tool_state_mod.emit_state(f"synthesizing ({chosen_voice})…")
+            mp3_tmp = cache / f"{key}.mp3" if fmt == "ogg" else out_path
             try:
                 asyncio.run(_synthesize(
-                    text, chosen_voice, mp3_path,
+                    text, chosen_voice, mp3_tmp,
                     rate=chosen_rate, pitch=chosen_pitch,
                 ))
             except Exception as e:  # noqa: BLE001
-                if mp3_path.exists():
-                    try: mp3_path.unlink()
+                if mp3_tmp.exists():
+                    try: mp3_tmp.unlink()
                     except OSError: pass
                 return ToolResult(ok=False, output="", error=f"edge-tts failed: {e}")
-            if not mp3_path.exists() or mp3_path.stat().st_size == 0:
+            if not mp3_tmp.exists() or mp3_tmp.stat().st_size == 0:
                 return ToolResult(ok=False, output="", error="edge-tts produced empty file")
+            if fmt == "ogg":
+                tool_state_mod.emit_state("converting to ogg…")
+                ok_conv, detail = _convert_mp3_to_ogg(mp3_tmp, out_path)
+                if not ok_conv:
+                    return ToolResult(
+                        ok=False, output="",
+                        error=f"ogg conversion failed ({detail})",
+                    )
+                try: mp3_tmp.unlink()
+                except OSError: pass
 
-        play_path = mp3_path if mp3_path.exists() else out_path
-        if cfg.tools.tts.autoplay:
-            tool_state_mod.emit_state("playing…")
-            ok, detail = _play_blocking(play_path)
-            play_result = (
-                f"played via {detail}" if ok
-                else f"autoplay failed: {detail}"
-            )
-        else:
-            play_result = "saved"
+        if is_gateway or not cfg.tools.tts.autoplay:
+            return ToolResult(ok=True, output=f"saved → {out_path}")
 
-        if fmt == "ogg" and not cache_hit:
-            tool_state_mod.emit_state("converting to ogg…")
-            ok_conv, detail = _convert_mp3_to_ogg(mp3_path, out_path)
-            if not ok_conv:
-                return ToolResult(
-                    ok=False, output="",
-                    error=f"ogg conversion failed ({detail}); mp3 kept at {mp3_path}",
-                )
-            try: mp3_path.unlink()
-            except OSError: pass
-
-        return ToolResult(ok=True, output=f"{play_result} → {out_path}")
+        tool_state_mod.emit_state("playing…")
+        ok, detail = _play_blocking(out_path)
+        if ok:
+            return ToolResult(ok=True, output=f"played via {detail} → {out_path}")
+        return ToolResult(ok=True, output=f"saved → {out_path} (autoplay failed: {detail})")
 
 
 TOOL = Tts

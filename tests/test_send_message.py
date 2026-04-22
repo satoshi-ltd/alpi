@@ -118,7 +118,7 @@ def test_send_message_tool_uses_default_chat(monkeypatch) -> None:
     result = SendMessage().run(text="ping")
     assert result.ok
     assert called["args"] == ("telegram", "42", "ping", None)
-    assert "telegram:42" in result.output
+    assert result.output == "delivered"
 
 
 def test_send_message_tool_explicit_platform_chat(monkeypatch) -> None:
@@ -152,7 +152,7 @@ def test_send_message_tool_attachment_passes_through(monkeypatch, tmp_path: Path
     result = SendMessage().run(text="", attachment=str(audio))
     assert result.ok
     assert calls[0][3] == str(audio)
-    assert "attachment" in result.output
+    assert result.output == "delivered"
 
 
 def test_send_to_attachment_missing_file(monkeypatch) -> None:
