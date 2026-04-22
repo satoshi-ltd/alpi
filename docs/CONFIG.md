@@ -36,12 +36,15 @@ only when you want to override it.
 Two options:
 
 - **CLI wizards**: `alpi setup` covers model selection, gateway
-  credentials, MCP servers, sandbox posture, voice, and disk cleanup
-  — the settings that benefit from structured flows or secret
-  handling. `alpi setup → Cleanup` inspects the profile's heavy dirs
-  (audio cache, old sessions, gateway logs, schedule output), shows
-  reclaimable size per category, and deletes after one-shot
-  confirmation.
+  credentials, MCP servers, sandbox posture, voice, disk cleanup, and
+  installing the gateway daemon as an OS-level service. `alpi setup →
+  Cleanup` inspects the profile's heavy dirs (audio cache, old
+  sessions, gateway logs, schedule output) and deletes after one-shot
+  confirmation. `alpi setup → Gateway service` registers the gateway
+  daemon under launchd (macOS) or systemd --user (Linux) for the
+  active profile, so it starts on boot and restarts on crash — only
+  after at least one gateway channel (Telegram / IMAP / Gmail) has
+  credentials set. Uninstall from the same menu.
 - **Edit the YAML**: open `~/.alpi/config.yaml` (or
   `~/.alpi/profiles/<name>/config.yaml` for non-default profiles)
   and change values manually. Restart whatever surface was affected.

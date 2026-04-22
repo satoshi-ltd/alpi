@@ -27,7 +27,7 @@ Audience: Javi (product) + me (Claude across sessions).
 | M | TTS / STT / voice-mode (local-first) | ✅ shipped (v0.2.25, 2 tools + Telegram voice inbound/outbound, no continuous voice mode) |
 | N | Image generation | 🔵 backlog — no concrete use case yet |
 | AA | Cleanup wizard (`alpi setup → Cleanup`) | ✅ shipped (v0.2.39) |
-| AB | Gateway vs TUI profile split wizard | 🔵 backlog — make unattended gateway install one-click |
+| AB | Gateway service install/uninstall wizard | ✅ shipped (v0.2.40, simpler scope than originally drafted — per-profile toggle, not a full split) |
 | AC | Auto-generated CHANGELOG.md from commits | 🔵 backlog — release-cycle polish |
 | R.1 | Research step-counter in state label | ✅ shipped (v0.2.2) |
 | R.2 | `delegate` — write-capable sub-agent | ✅ shipped (v0.2.3, named `delegate` not `delegate_task`) |
@@ -51,7 +51,7 @@ release. The bar for "ship v0.2" is **clean docs + version bump +
 real-use validation across a few sessions** — not feature
 exhaustiveness.
 
-**Nothing open for v0.2.** Everything the original roadmap promised is shipped. Items still in the backlog — **H** (Home Assistant), **N** (image gen), **U** (Signal), **AB** (Gateway profile split), **AC** (CHANGELOG auto-gen), **Σ.1/Σ.2** (bola extra) — roll forward to v0.3. **C** (OpenAI Codex OAuth), **V** (Anthropic OAuth), and **J** (camoufox) were rejected — C/V on ToS grounds (see Principles), J after humanised Playwright made it redundant.
+**Nothing open for v0.2.** Everything the original roadmap promised is shipped. Items still in the backlog — **H** (Home Assistant), **N** (image gen), **U** (Signal), **AC** (CHANGELOG auto-gen), **Σ.1/Σ.2** (bola extra) — roll forward to v0.3. **C** (OpenAI Codex OAuth), **V** (Anthropic OAuth), and **J** (camoufox) were rejected — C/V on ToS grounds (see Principles), J after humanised Playwright made it redundant.
 
 Once the v0.3 cycle picks up a few of those + a fresh CHANGELOG
 entry summarises v0.2, bump to `v0.3.0` and reopen the table.
@@ -79,10 +79,6 @@ Only if Javi runs HA. Hermes has `homeassistant_tool` as reference. Requires `HA
 ### N. Image generation
 
 `generate_image(prompt, style)` using the active vision model or a dedicated endpoint (DALL-E, SD). Useful for "hazme un logo rápido". Low priority unless a concrete use case appears.
-
-### AB. Gateway vs TUI profile split wizard
-
-Today a user running alpi both interactively and as a gateway daemon runs both under the same profile (same model, same memory, same cache). The gateway often wants: leaner model, stricter sandbox, offline `allow_network=false`, different allowlist. Manual today. Proposal: `alpi setup → Gateway install` wizard that (a) creates a dedicated profile (e.g. `gateway`), (b) copies relevant `.env` subset, (c) registers a launchd/systemd unit pointing at `alpi -p gateway gateway start`, (d) suggests a conservative model + sandbox preset. Saves a lot of manual ops for hostile-environment setups. Estimated ~200 LOC.
 
 ### AC. Auto-generated CHANGELOG.md from commits
 
@@ -206,3 +202,5 @@ First usable cut. Textual TUI, 3-file memory with two-tier dedup, skill system w
 | (next)  | Approval panel polish + YOLO removal. The `ApprovalPanel` now mirrors `/model`: minimal CSS (transparent OptionList, `compact=True` row height, `max-height: 18`), option labels built with `rich.Text` bold name + muted hint, panel title carries severity + matched pattern (`⚠ CAUTION · recursive rm`). Command shown as an `entry-desc` static above the list with margin-bottom 1. Focus timed via `call_after_refresh` so Enter works first-shot (was stolen by `_show_panel`'s `set_focus(None)` before). Removed the `ALPI_YOLO` escape hatch — dangerous severity is now always-always blocked; if the user genuinely needs `mkfs` they run it from their shell, not through the agent. Also compressed the `terminal` rule in `system_prompt.md` from 7 lines to 2: "Don't refuse destructive commands in chat. `terminal` has a built-in approval gate that pauses for user confirmation. Just call it." (v0.2.38) |
 
 | (next)  | AA shipped: Cleanup wizard (`alpi setup → Cleanup`). Scans the active profile's heavy directories — audio cache (tts output + inbound Telegram voice notes), sessions older than 30 days, gateway logs, schedule output — and shows each category with reclaimable size + file count in the setup menu. Picking a category opens a confirmation prompt ("Delete N file(s) · X from <label>?"); on yes, unlinks them and refreshes the list. Reuses `home.format_bytes` / `shorten_home`. Entry in the setup main menu shows the total reclaimable ("Cleanup · 1.8MB reclaimable" or "nothing to clean"). No automatic cleanup — only user-triggered; conservative by design. ~120 LOC. (v0.2.39) |
+
+| (next)  | AB shipped: `alpi setup → Gateway service`. Simpler scope than the original "gateway vs TUI profile split" plan in the roadmap — we realised forcing a different model for the gateway breaks profile identity (a user talking to their `work` profile over Telegram should get the same model and memory as when they talk to it from the TUI). What users actually need is just the service registration automated. One toggle in the setup main menu: **Install** writes the launchd plist (macOS) or systemd `--user` unit (Linux) pointing at `alpi -p <profile> gateway start`; **Uninstall** removes it. Status line shows `running via launchd` / `not installed` / `no gateway configured` so the user sees state at a glance. Gated on at least one gateway channel (Telegram / IMAP / Gmail) having credentials; picking it before that shows an error and nudges them to configure first. Setup main menu reorganised into two groups separated by a blank line: config on top (Model, Gateways, MCPs, Voice), operational below (Sandbox, Gateway service, Cleanup). ~80 LOC. (v0.2.40) |
