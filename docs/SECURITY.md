@@ -10,12 +10,26 @@ Live inside the Python process, can't be disabled without editing
 source. Cover the attack vectors that an OS sandbox around `terminal`
 doesn't reach:
 
-- **Command denylist** on `terminal`. Rejects recursive `rm` against
-  `/`, `~`, `$HOME`; `chmod 777`; recursive `chown` on system paths;
-  `mkfs`; `dd` to block devices; pipe-to-interpreter (`curl | sh`,
-  `wget | bash`, etc.); fork bombs; writes to `/etc /var /usr /boot
-  /sys /proc`; reads of SSH private keys; SQL `DROP` / `TRUNCATE`.
-  Blocked commands return a clear error the LLM relays to the user.
+- **Command approval system** on `terminal` (v0.2.37). Every shell
+  command is classified into three severities:
+
+  - **safe**: runs without prompting.
+  - **caution**: `rm -rf <dir>`, `chmod 777`, `sudo <cmd>`,
+    `git push --force`, `git reset --hard`, SQL `DROP` / `TRUNCATE`,
+    `kill -9`, etc. Prompts the user in the TUI with four options:
+    `Once` / `Session` / `Always` / `Deny`. Session approvals live
+    in-memory; `Always` persists the pattern description to
+    `tools.terminal.approval.allowlist` in `config.yaml`. On
+    non-interactive surfaces (gateway, schedule) caution commands
+    auto-deny with a clear error.
+  - **dangerous**: `mkfs`, `dd of=/dev/…`, fork bombs, pipe-to-
+    interpreter (`curl | sh`), recursive `chmod`/`chown` on `/`,
+    reads of SSH private keys, writes to `/etc /var /usr /boot /sys
+    /proc`. Always blocked. Override only via `ALPI_YOLO=1` in the
+    environment — no per-pattern allowlist on purpose.
+
+  Replaces the previous hard denylist. See `docs/CONFIG.md` for the
+  allowlist format and surface-specific behaviour.
 
 - **SSRF block** on `web_fetch` / `web_extract`. Rejects URLs pointing
   to RFC 1918 private ranges, loopback, link-local, and cloud

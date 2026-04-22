@@ -26,6 +26,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "terminal": {
             "sandbox": False,
             "allow_network": False,
+            "approval": {"allowlist": []},
         },
         "research": {
             "quick_steps": 8,

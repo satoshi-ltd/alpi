@@ -208,6 +208,34 @@ class AlpiApp(App):
         from alpi.tools import session_search
         session_search.set_current_session_id(self.engine.session.id)
 
+        from alpi.tools._approval import set_prompt_callback
+        set_prompt_callback(self._approval_prompt_blocking)
+
+    async def on_unmount(self) -> None:
+        from alpi.tools._approval import set_prompt_callback
+        set_prompt_callback(None)
+
+    def _approval_prompt_blocking(self, command: str, pattern: str, severity) -> str:
+        import threading
+        from alpi.tui.screens import ApprovalPanel
+
+        result: list[str] = ["deny"]
+        done = threading.Event()
+        sev_str = severity.value if hasattr(severity, "value") else str(severity)
+
+        def _on_choice(choice: str) -> None:
+            result[0] = choice or "deny"
+            done.set()
+
+        def _show() -> None:
+            self._show_panel(ApprovalPanel(command, pattern, sev_str, _on_choice))
+
+        self.call_from_thread(_show)
+        if not done.wait(60):
+            self.call_from_thread(self._dismiss_panels)
+            return "deny"
+        return result[0]
+
     def on_input_submitted(self, event: Input.Submitted) -> None:
         text = event.value.strip()
         event.input.value = ""
