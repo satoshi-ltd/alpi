@@ -112,12 +112,20 @@ OLLAMA_BASE_URL=http://localhost:11434     # local
 TELEGRAM_BOT_TOKEN=...
 TELEGRAM_ALLOWED_CHAT_IDS=12345,67890      # comma-separated, fail-closed
 
-# Email (optional) — generic IMAP/SMTP:
+# Email (optional, pick ONE or BOTH).
+# IMAP/SMTP — generic provider (password or app-password):
 IMAP_ADDRESS=you@yourprovider.com
 IMAP_PASSWORD=...
 IMAP_HOST=imap.yourprovider.com
 SMTP_HOST=smtp.yourprovider.com
-IMAP_ALLOWED_SENDERS=pepe@x.com,ana@y.com  # gateway inbound (fail-closed)
+IMAP_ALLOWED_SENDERS=pepe@x.com,ana@y.com    # fail-closed inbound allowlist
+
+# Gmail API (OAuth2) — scoped, no password stored:
+GMAIL_CLIENT_ID=...apps.googleusercontent.com
+GMAIL_CLIENT_SECRET=GOCSPX-...
+GMAIL_ALLOWED_SENDERS=pepe@x.com,ana@y.com   # fail-closed inbound allowlist
+# The refresh token is stored per profile under ~/.alpi/.../gmail_token.json
+# after a one-off browser consent via `alpi setup → Gateways → Gmail`.
 ```
 
 Switch model any time with `/model` inside the TUI. Tier guidance in

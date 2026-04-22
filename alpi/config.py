@@ -50,6 +50,12 @@ DEFAULT_CONFIG: dict[str, Any] = {
             "show_tool_trace": False,
             "typing_indicator": False,
         },
+        "gmail": {
+            "poll_interval": 60,
+            "mark_as_read": True,
+            "show_tool_trace": False,
+            "typing_indicator": False,
+        },
     },
 }
 
@@ -286,5 +292,8 @@ def seed_defaults(home: Path) -> None:
             "IMAP_HOST=\n"
             "SMTP_HOST=\n"
             "IMAP_ALLOWED_SENDERS=\n"
+            "GMAIL_CLIENT_ID=\n"
+            "GMAIL_CLIENT_SECRET=\n"
+            "GMAIL_ALLOWED_SENDERS=\n"
             "WEBHOOK_ALLOWED_CHAT_IDS=\n"
         )

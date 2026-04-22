@@ -12,6 +12,8 @@ TELEGRAM_MAX_CHARS = 4096
 def _allowlist_env(platform: str) -> str:
     if platform == "email":
         return "IMAP_ALLOWED_SENDERS"
+    if platform == "gmail":
+        return "GMAIL_ALLOWED_SENDERS"
     return f"{platform.upper()}_ALLOWED_CHAT_IDS"
 
 
@@ -26,7 +28,7 @@ def allowed_chat_ids(platform: str) -> list[str]:
     seen: list[str] = []
     for part in raw.split(","):
         cid = part.strip()
-        if platform == "email":
+        if platform in ("email", "gmail"):
             cid = cid.lower()
         if cid and cid not in seen:
             seen.append(cid)
@@ -35,7 +37,7 @@ def allowed_chat_ids(platform: str) -> list[str]:
 
 def is_allowed(platform: str, chat_id: str) -> bool:
     """True iff ``chat_id`` is in the platform's allowlist."""
-    needle = chat_id.lower() if platform == "email" else chat_id
+    needle = chat_id.lower() if platform in ("email", "gmail") else chat_id
     return needle in allowed_chat_ids(platform)
 
 
@@ -74,6 +76,8 @@ def send_to(platform: str, chat_id: str, text: str) -> None:
         _send_telegram_sync(chat_id, text)
     elif platform == "email":
         _send_email_sync(chat_id, text)
+    elif platform == "gmail":
+        _send_gmail_sync(chat_id, text)
     elif platform == "webhook":
         _send_webhook_sync(chat_id, text)
     else:
@@ -104,6 +108,15 @@ def _send_email_sync(chat_id: str, text: str) -> None:
     try:
         client.send(to=[chat_id], subject="[alf]", body=text)
     except ImapError as e:
+        raise DeliveryError(str(e))
+
+
+def _send_gmail_sync(chat_id: str, text: str) -> None:
+    from alpi.home import get_home
+    from alpi.mail.gmail import GmailClient, GmailError
+    try:
+        GmailClient(get_home()).send(to=[chat_id], subject="[alf]", body=text)
+    except GmailError as e:
         raise DeliveryError(str(e))
 
 

@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import abc
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import AsyncIterator
+from typing import Any, AsyncIterator, Awaitable, Callable
 
 
 @dataclass
@@ -15,6 +15,11 @@ class IncomingMessage:
     external_chat_id: str
     text: str
     reply_to: str | None = None
+    # Optional per-platform commit hook. Called *after* allowlist passes
+    # and before agent dispatch — used by mail platforms to mark \Seen /
+    # remove UNREAD only on messages we actually own. Never called for
+    # disallowed senders so we don't touch unrelated inbox traffic.
+    ack: Callable[[], Awaitable[Any]] | None = field(default=None, repr=False)
 
 
 @dataclass

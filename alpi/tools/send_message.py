@@ -30,7 +30,7 @@ class SendMessage(Tool):
             },
             "platform": {
                 "type": "string",
-                "description": "telegram | webhook. Defaults to telegram.",
+                "description": "telegram | email | gmail | webhook. Defaults to telegram.",
                 "default": "telegram",
             },
             "chat_id": {

@@ -611,6 +611,7 @@ def _gateways_setup(h: Path) -> None:
         items = [
             (ui.row("Telegram", _telegram_status(h)), "telegram"),
             (ui.row("IMAP", _email_status(h)), "imap"),
+            (ui.row("Gmail", _gmail_status(h)), "gmail"),
         ]
         choice = ui.menu(
             ui.crumb("setup", "gateways"),
@@ -626,6 +627,9 @@ def _gateways_setup(h: Path) -> None:
         elif choice == "imap":
             from alpi.mail.setup import run as email_setup
             email_setup(h)
+        elif choice == "gmail":
+            from alpi.mail.gmail_setup import run as gmail_setup
+            gmail_setup(h)
 
 
 def _read_profile_env(h: Path) -> dict[str, str]:
@@ -643,12 +647,15 @@ def _read_profile_env(h: Path) -> dict[str, str]:
 
 
 def _gateways_status(h: Path) -> str:
+    from alpi.mail.gmail_auth import token_path
     env = _read_profile_env(h)
     names = []
     if env.get("TELEGRAM_BOT_TOKEN"):
         names.append("Telegram")
     if env.get("IMAP_ADDRESS"):
-        names.append("Email")
+        names.append("IMAP")
+    if env.get("GMAIL_CLIENT_ID") and token_path(h).exists():
+        names.append("Gmail")
     return ", ".join(names) if names else "none"
 
 
@@ -761,6 +768,25 @@ def _email_status(h: Path) -> str:
     if not addr:
         return "not set up"
     senders = env.get("IMAP_ALLOWED_SENDERS", "")
+    n = len([s for s in senders.split(",") if s.strip()])
+    if n == 0:
+        return f"ready · {addr} · outbound only"
+    return f"ready · {addr} · {n} allowlisted sender{'s' if n != 1 else ''}"
+
+
+def _gmail_status(h: Path) -> str:
+    from alpi.mail.gmail_auth import token_path
+    env = _read_profile_env(h)
+    if not env.get("GMAIL_CLIENT_ID") or not env.get("GMAIL_CLIENT_SECRET"):
+        return "not set up"
+    if not token_path(h).exists():
+        return "credentials present · not authorized"
+    try:
+        from alpi.mail.gmail_auth import get_email
+        addr = get_email(h) or "?"
+    except Exception:  # noqa: BLE001
+        addr = "?"
+    senders = env.get("GMAIL_ALLOWED_SENDERS", "")
     n = len([s for s in senders.split(",") if s.strip()])
     if n == 0:
         return f"ready · {addr} · outbound only"

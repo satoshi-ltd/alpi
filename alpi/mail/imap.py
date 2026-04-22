@@ -104,8 +104,8 @@ class ImapClient:
         ]
         if missing:
             raise ImapError(
-                f"email not configured: missing {', '.join(missing)} in "
-                f"~/.alpi/.env. Run `alpi setup` and pick 'Email (IMAP/SMTP)'."
+                f"IMAP not configured: missing {', '.join(missing)} in "
+                f"~/.alpi/.env. Run `alpi setup → Gateways → IMAP`."
             )
         return cls(
             address=addr,
