@@ -71,6 +71,19 @@ def _pick_provider(cfg: cfg_mod.Config) -> Provider | None:
         return ui.row_accent(label, status, accent) if active else ui.row(label, status)
 
     items: list = []
+
+    for p in ollamas:
+        items.append((
+            _row(p.name, f"ollama · {p.url}", p.name == active_head),
+            p,
+        ))
+    items.append((
+        ui.row("Add Ollama", "local or remote — private, offline-first"),
+        _ADD_OLLAMA,
+    ))
+
+    items.append(None)  # separator between local and cloud providers
+
     for p in builtin:
         parts = []
         if p.api_key_env and p.has_key():
@@ -82,17 +95,6 @@ def _pick_provider(cfg: cfg_mod.Config) -> Provider | None:
             _row(p.display, " · ".join(parts), p.name == active_head),
             p,
         ))
-
-    for p in ollamas:
-        items.append((
-            _row(p.name, p.url, p.name == active_head),
-            p,
-        ))
-
-    items.append((
-        ui.row("Add Ollama", "register a local or remote Ollama server"),
-        _ADD_OLLAMA,
-    ))
 
     if ollamas or _any_saved_keys(builtin):
         items.append((
