@@ -14,7 +14,6 @@ from alpi.tools._approval import Severity, check, classify
 def _isolate(monkeypatch, tmp_path: Path) -> None:
     import alpi.home as home_mod
     monkeypatch.setattr(home_mod, "_ROOT", tmp_path)
-    monkeypatch.delenv("ALPI_YOLO", raising=False)
     _approval.clear_session_allowlist()
     _approval.set_prompt_callback(None)
 
@@ -30,13 +29,6 @@ def test_dangerous_blocked_without_yolo() -> None:
     assert not d.allowed
     assert d.severity == Severity.DANGEROUS
     assert "mkfs" in d.reason.lower()
-
-
-def test_yolo_bypasses_dangerous(monkeypatch) -> None:
-    monkeypatch.setenv("ALPI_YOLO", "1")
-    d = check("mkfs.ext4 /dev/sda1")
-    assert d.allowed
-    assert "YOLO" in d.reason
 
 
 def test_caution_denied_without_callback() -> None:
