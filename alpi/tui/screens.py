@@ -289,3 +289,75 @@ def _read_frontmatter(path: Path) -> dict:
         k, v = line.split(":", 1)
         meta[k.strip()] = v.strip()
     return meta
+
+
+from textual.widgets import OptionList
+from textual.widgets.option_list import Option
+
+
+class ApprovalPanel(FloatingPanel):
+    panel_title = "⚠ approval required"
+
+    DEFAULT_CSS = """
+    ApprovalPanel .approval-pattern {
+        color: $text-muted;
+        height: 1;
+        margin-bottom: 1;
+    }
+    ApprovalPanel .approval-command {
+        background: $surface-lighten-1;
+        color: $foreground;
+        padding: 0 1;
+        margin-bottom: 1;
+        height: auto;
+    }
+    ApprovalPanel OptionList {
+        background: transparent;
+        border: none;
+        padding: 0;
+        margin: 0;
+        height: auto;
+    }
+    ApprovalPanel OptionList > .option-list--option-highlighted {
+        background: $accent;
+        color: $foreground;
+        text-style: bold;
+    }
+    """
+
+    _OPTIONS: list[tuple[str, str, str]] = [
+        ("once",    "Once",    "approve just this one call"),
+        ("session", "Session", "approve for this session"),
+        ("always",  "Always",  "persist to config.yaml allowlist"),
+        ("deny",    "Deny",    "refuse"),
+    ]
+
+    def __init__(self, command: str, pattern: str, severity: str,
+                 on_choice) -> None:
+        super().__init__()
+        self._command = command
+        self._pattern = pattern
+        self._severity = severity
+        self._on_choice = on_choice
+        self.panel_title = f"⚠ {severity.upper()} — approval required"
+
+    def compose_body(self) -> ComposeResult:
+        yield Static(f"matched: {self._pattern}", classes="approval-pattern")
+        yield Static(self._command, classes="approval-command")
+        yield OptionList(
+            *[Option(f"{lab:<8}  {hint}", id=key) for key, lab, hint in self._OPTIONS],
+            id="approval-options",
+        )
+
+    def on_mount(self) -> None:
+        try:
+            self.query_one(OptionList).focus()
+        except Exception:  # noqa: BLE001
+            pass
+
+    def on_option_list_option_selected(
+        self, event: OptionList.OptionSelected,
+    ) -> None:
+        choice = event.option.id or "deny"
+        self.remove()
+        self._on_choice(choice)

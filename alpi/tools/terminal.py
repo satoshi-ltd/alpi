@@ -16,7 +16,7 @@ def _strip_ansi(s: str) -> str:
     return _ANSI_RE.sub("", s)
 
 from alpi.home import get_home
-from alpi.tools._guards import check_command
+from alpi.tools._approval import Severity, check as approval_check
 from alpi.tools._sandbox import SandboxUnavailable, wrap_command
 from alpi.tools.base import Tool, ToolResult
 
@@ -139,11 +139,11 @@ class Terminal(Tool):
     def _run_fg(self, command: str, timeout: int, cwd: str | None) -> ToolResult:
         if not command:
             return ToolResult(ok=False, output="", error="command is required")
-        safe, reason = check_command(command)
-        if not safe:
+        decision = approval_check(command)
+        if not decision.allowed:
             return ToolResult(
                 ok=False, output="",
-                error=f"refused: {reason}. Ask the user to confirm in chat and then run a narrower command.",
+                error=f"refused ({decision.severity.value}): {decision.reason}",
             )
         try:
             popen_args = _resolve_popen_args(command)
@@ -170,11 +170,11 @@ class Terminal(Tool):
     def _run_bg(self, command: str, cwd: str | None) -> ToolResult:
         if not command:
             return ToolResult(ok=False, output="", error="command is required")
-        safe, reason = check_command(command)
-        if not safe:
+        decision = approval_check(command)
+        if not decision.allowed:
             return ToolResult(
                 ok=False, output="",
-                error=f"refused: {reason}. Ask the user to confirm in chat and then run a narrower command.",
+                error=f"refused ({decision.severity.value}): {decision.reason}",
             )
         try:
             popen_args = _resolve_popen_args(command)

@@ -67,6 +67,7 @@ Two options:
 | `tools.read_image.max_edge` | `1568` | int (pixels; `0` disables) | next turn |
 | `tools.terminal.sandbox` | `false` | bool | next turn |
 | `tools.terminal.allow_network` | `false` | bool | next turn |
+| `tools.terminal.approval.allowlist` | `[]` | list of pattern descriptions | next turn |
 | `tools.browser.vision` | `false` | bool | next turn |
 | `tools.research.quick_steps` | `8` | int | next turn |
 | `tools.research.normal_steps` | `15` | int | next turn |
@@ -113,6 +114,57 @@ network:
 
 The TUI top bar shows `offline` instead of `sandbox` when network is
 locked, so unattended profiles can be audited at a glance.
+
+`tools.terminal.approval` controls the **command approval system** — a
+layer on top of the sandbox that gives the user a chance to approve
+borderline destructive commands instead of blocking them outright.
+Each `terminal` call is classified by a small pattern list into three
+severities:
+
+- **safe** (default, no match) — runs without prompting.
+- **caution** — matches a pattern that's often legitimate but
+  sometimes destructive. Examples: `rm -rf <dir>`, `chmod 777`,
+  `sudo <cmd>`, `git push --force`, `git reset --hard`,
+  `DROP TABLE`, `kill -9`. These pause for user approval in the TUI
+  with four options: `Once` (this call only), `Session` (allowlist
+  the pattern until restart), `Always` (persist the pattern
+  description to `tools.terminal.approval.allowlist` in config), or
+  `Deny` (abort the tool call). On non-interactive surfaces
+  (gateway, schedule) these auto-deny with a clear error telling the
+  user to rerun from the TUI or edit the config allowlist.
+- **dangerous** — matches a pattern that's almost never legitimate.
+  Examples: `mkfs`, `dd of=/dev/…`, fork bomb, pipe-to-interpreter
+  from an unknown URL (`curl … | bash`), recursive chmod / chown on
+  `/`, reading SSH private keys, writes into `/etc` or `/var`. These
+  are **always blocked**. The only override is `ALPI_YOLO=1` in the
+  environment; there's no per-pattern allowlist for dangerous
+  severity on purpose.
+
+The allowlist is a list of **pattern descriptions** (the human label
+attached to each regex) rather than raw regex strings — so the config
+file is readable and forward-compatible if the regex is tightened
+later. Example:
+
+```yaml
+tools:
+  terminal:
+    approval:
+      allowlist:
+        - recursive rm        # I routinely rm -rf node_modules
+        - git force-push      # OK, I know what I'm doing
+```
+
+Session approvals live in memory (a module-level set) and die with
+the TUI process. Permanent approvals persist to `config.yaml` via the
+`Always` button. Dangerous commands never get an allowlist entry.
+
+This layer composes with the sandbox (`tools.terminal.sandbox`): the
+sandbox is an OS-level boundary (network, filesystem writes outside
+workspace) that catches what the approval layer misses; approval is
+user-in-loop for the subset of commands that are legitimately
+destructive inside the allowed scope. Both can be on at once; the
+approval check runs first so the user sees the prompt before the
+sandbox has a chance to refuse.
 
 `tools.browser.vision` lets the `browser(screenshot, question=…)` action auto-chain the screenshot into the vision model (`tools.read_image.model` or the active main model) and return the answer instead of the file path. When `false` (default), `screenshot` always returns the path and a hint pointing at `read_image` so the LLM can decide whether to pay for vision per call. Useful to turn on in an exploratory profile; keep off in watchdog/gateway profiles so the agent doesn't burn vision tokens silently.
 
