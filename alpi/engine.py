@@ -11,6 +11,7 @@ from typing import Any, Callable
 
 from alpi import config as cfg_mod
 from alpi import llm, memory, session, tools
+from alpi.tools._budget import apply as _budget_apply
 from alpi.session import ToolLog, truncate_result
 
 
@@ -237,7 +238,7 @@ class Engine:
                     duration = time.time() - tool_started
 
                     payload = result.output if result.ok else f"ERROR: {result.error}"
-                    payload = payload[:10_000]
+                    payload = _budget_apply(name, payload)
                     self.session.messages.append({
                         "role": "tool",
                         "tool_call_id": tid,

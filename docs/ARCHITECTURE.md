@@ -99,6 +99,8 @@ alf/
 │   ├── _state.py           ContextVar-backed emit / interrupt / usage (per-thread isolated for batch sub-agents)
 │   ├── _paths.py           resolve_path + sensitive-path denylist
 │   ├── _guards.py          terminal denylist, SSRF, prompt-injection scan
+│   ├── _budget.py          per-result char cap for LLM context (100K default, per-tool override)
+│   ├── _osv.py             OSV malware query for PyPI/npm names before skill/MCP install
 │   ├── _sandbox.py         OS-level sandbox wrapper (opt-in)
 │   ├── skill.py            create/edit/patch/add_file/remove_file/delete/list/view + scanner + quota
 │   ├── search.py           content + filename search (rg + stdlib fallback)

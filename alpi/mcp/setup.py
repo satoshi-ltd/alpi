@@ -104,6 +104,16 @@ def _wizard(
     )
     args = _split_args(args_raw or "")
 
+    from alpi.tools._osv import check, extract_npm_args
+    if command in ("npx", "npm") or any(a.endswith("npx") for a in [command]):
+        advisories = [a for a in check("npm", extract_npm_args(args)) if a.startswith("✗")]
+        if advisories:
+            ui.fail("OSV malware check blocked this server:")
+            for a in advisories:
+                ui.fail("  " + a)
+            ui.press_enter()
+            return
+
     env_vars = _ask_env_vars(existing=current_env)
 
     client = MCPClient(name=name, command=command, args=args, env=env_vars)
