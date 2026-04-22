@@ -284,8 +284,8 @@ def test_registry_registers_prefixed_tools(server_and_patch) -> None:
     })
     clients = mcp_registry.load_and_register(cfg)
     try:
-        assert "github:create_issue" in _TOOLS
-        cls = _TOOLS["github:create_issue"]
+        assert "github__create_issue" in _TOOLS
+        cls = _TOOLS["github__create_issue"]
         assert cls.description.startswith("Create an issue")
         # Description picks up the untrusted-content caveat.
         assert "CRITICAL" in cls.description
@@ -306,7 +306,7 @@ def test_wrapped_tool_calls_delegates_to_client(server_and_patch) -> None:
     })
     clients = mcp_registry.load_and_register(cfg)
     try:
-        tool_cls = _TOOLS["x:ping"]
+        tool_cls = _TOOLS["x__ping"]
         result = tool_cls().run(arg1="foo")
         assert result.ok is True
         assert result.output == "pong"
@@ -344,8 +344,8 @@ def test_registry_isolates_failing_server(monkeypatch) -> None:
     try:
         names = [c.name for c in clients]
         assert names == ["works"]
-        assert "works:ok" in _TOOLS
-        assert "broken:ok" not in _TOOLS
+        assert "works__ok" in _TOOLS
+        assert "broken__ok" not in _TOOLS
     finally:
         for c in clients:
             c.stop()

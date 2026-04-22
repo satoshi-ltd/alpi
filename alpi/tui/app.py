@@ -533,6 +533,14 @@ class AlfApp(App):
             if entry.get("name") == head:
                 from alpi.providers.ollama import resolve_num_ctx
                 return resolve_num_ctx(entry.get("url", ""), rest)
+        try:
+            import litellm
+            for key in (model, rest, f"{head}/{rest}"):
+                info = litellm.model_cost.get(key)
+                if info and info.get("max_input_tokens"):
+                    return int(info["max_input_tokens"])
+        except Exception:  # noqa: BLE001
+            pass
         return 200_000
 
     def _mount_message(self, widget) -> None:
