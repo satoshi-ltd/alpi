@@ -29,7 +29,13 @@ class SendMessage(Tool):
         "caption (truncated at 1024 chars by Telegram).\n"
         "\n"
         "Target must be on the allowlist (`TELEGRAM_ALLOWED_CHAT_IDS`). "
-        "Omit `platform`/`chat_id` to default to the first allowed chat."
+        "Omit `platform`/`chat_id` to default to the first allowed chat.\n"
+        "\n"
+        "After calling this tool, the message or attachment IS your "
+        "reply — do NOT narrate what happened in follow-up text ('I sent "
+        "you an audio', 'Hecho, enviado a Telegram', file paths, chat "
+        "ids, etc.). The user already sees the message arrive. On "
+        "success just stay silent or say at most one short word."
     )
     parameters = {
         "type": "object",
@@ -83,10 +89,7 @@ class SendMessage(Tool):
             delivery.send_to(platform, target, text, attachment=attachment)
         except delivery.DeliveryError as e:
             return ToolResult(ok=False, output="", error=str(e))
-        label = f"sent to {platform}:{target}"
-        if attachment:
-            label += f" (attachment: {attachment})"
-        return ToolResult(ok=True, output=label)
+        return ToolResult(ok=True, output="delivered")
 
 
 TOOL = SendMessage
