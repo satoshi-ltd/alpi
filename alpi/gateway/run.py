@@ -13,6 +13,7 @@ from typing import Any
 from alpi import config as config_mod
 from alpi.gateway import delivery
 from alpi.gateway.base import IncomingMessage, OutgoingMessage, Platform
+from alpi.gateway.platforms.gmail import Gmail
 from alpi.gateway.platforms.imap import Imap
 from alpi.gateway.platforms.telegram import Telegram
 from alpi.gateway.platforms.webhook import Webhook
@@ -32,6 +33,8 @@ async def _handle_platform(platform: Platform, home: Path) -> None:
                 msg.platform, msg.external_chat_id,
             )
             continue
+        if msg.ack is not None:
+            await msg.ack()
         # Flatten newlines so multi-line inbound (email bodies with
         # a Subject line + blank line + body) stays a single log entry.
         preview = " ".join(msg.text.split())[:120]
@@ -148,7 +151,7 @@ def run(home: Path) -> None:
     _load_env(home)
     _write_pid(home)
     try:
-        platforms: list[Platform] = [Telegram(home), Imap(home), Webhook(home)]
+        platforms: list[Platform] = [Telegram(home), Imap(home), Gmail(home), Webhook(home)]
 
         async def _main() -> None:
             await asyncio.gather(*(_handle_platform(p, home) for p in platforms))

@@ -30,7 +30,7 @@ Audience: Javi (product) + me (Claude across sessions).
 | R.2 | `delegate` — write-capable sub-agent | ✅ shipped (v0.2.3, named `delegate` not `delegate_task`) |
 | R.3 | Batch parallel sub-agents (`tasks[]`) | ✅ shipped (v0.2.18) |
 | S | `read_image` auto-resize (cost saver) | ✅ shipped (v0.2.21) |
-| T | Gmail API (OAuth2) gateway | 🔵 backlog — replaces IMAP as app-passwords sunset |
+| T | Gmail API (OAuth2) gateway | ✅ shipped (v0.2.23, 2 commits: T.1 rename + T.2 full Gmail) |
 | U | Signal gateway (signal-cli) | 🔵 backlog — requires dedicated phone number |
 | V | Anthropic subscription OAuth | 🔵 backlog — ToS-gray, wait for official |
 | W | Approval system (dangerous cmd + session allowlist) | 🔵 backlog |
@@ -48,7 +48,7 @@ release. The bar for "ship v0.2" is **clean docs + version bump +
 real-use validation across a few sessions** — not feature
 exhaustiveness.
 
-**Nothing open for v0.2.** Everything the original roadmap promised is shipped. Items still in the backlog — **C** (Codex OAuth), **H** (Home Assistant), **J** (camoufox), **M** (voice), **N** (image gen), **T** (Gmail OAuth), **U** (Signal), **V** (Anthropic OAuth — ToS gray), **W** (approval system), **Σ.1/Σ.2** (bola extra) — roll forward to v0.3.
+**Nothing open for v0.2.** Everything the original roadmap promised is shipped. Items still in the backlog — **C** (Codex OAuth), **H** (Home Assistant), **J** (camoufox), **M** (voice), **N** (image gen), **U** (Signal), **V** (Anthropic OAuth — ToS gray), **W** (approval system), **Σ.1/Σ.2** (bola extra) — roll forward to v0.3.
 
 Once the v0.3 cycle picks up a few of those + a fresh CHANGELOG
 entry summarises v0.2, bump to `v0.3.0` and reopen the table.
@@ -121,13 +121,6 @@ Hermes ships ~3000 LOC of voice (7 TTS providers, 3 STT tiers, full voice-mode).
 ## Next — v0.3 planned
 
 
-### T. Gmail API (OAuth2) gateway
-
-IMAP + app-specific-passwords is deprecated on Google (new tenants can't generate them; existing ones get pressure to migrate). A Gmail API channel gives us scoped OAuth (`gmail.send` alone, or `gmail.readonly`), no password storage, revocable per-app from the user's Google account settings.
-
-**Scope.** Parallel channel to the existing IMAP/SMTP gateway — does not replace it. New `alpi/gateway/platforms/gmail.py` + OAuth callback server (ephemeral localhost port) for the install flow, refresh token stored in `~/.alpi/profiles/<name>/auth/gmail.json` with `fcntl` lock. First-run: `alpi setup → Gateways → Gmail` opens a browser for consent. Inbound polling via `users.messages.list` with `is:unread` filter. Outbound via `users.messages.send`.
-
-**Estimated LOC:** ~300. Dep: `google-api-python-client` + `google-auth-oauthlib` (~2 MB combined).
 
 ### U. Signal gateway (signal-cli)
 
@@ -236,3 +229,5 @@ First usable cut. Textual TUI, 3-file memory with two-tier dedup, skill system w
 | (next)  | Roadmap sweep: extended backlog with 9 new items (TTS/STT local, Gmail OAuth, Signal, Anthropic OAuth as ToS-gray, approval system, schedule threat-scan, tool budget, OSV malware, bola extra). Discarded WhatsApp/Discord/Slack with rationale (v0.2.19) |
 | (next)  | Security hardening pack — three items shipped together (Y + Z + X, ~200 LOC): (1) **Tool result budget** in `alpi/tools/_budget.py` — `tools.budget.per_result_chars: 100_000` default, per-tool override via `tools.<name>.max_result_chars` (e.g. `-1` for unlimited on `read_file`), replaces the three hardcoded `[:10_000]` sites across engine/research/delegate with a clean elided suffix; (2) **OSV malware check** in `alpi/tools/_osv.py` — `api.osv.dev` query on skill `scripts/*.py` imports and MCP `npx` args at save time, blocks on MAL-* findings, fails open on network errors; (3) **Schedule prompt threat-scan** — reuses `scan_skill_body` patterns at both save and fire time so prompt-injected cron jobs don't escape into unattended runs. 17 new tests, 402 green total (v0.2.20) |
 | (next)  | `read_image` auto-resize shipped (S closed). Pillow added as main dep (~3 MB). When `tools.read_image.auto_resize` (default `true`), any input image with a longer edge over `tools.read_image.max_edge` (default 1568 px — matches Anthropic's recommendation) is downscaled before base64-encoding. Aspect ratio preserved; PNGs with alpha stay PNG; everything else round-trips through JPEG q=85; SVG passthrough. Proactive (vs hermes' reactive "resize after API rejects too-large"). Typical saving: ~9× input-token cost on a 4K screenshot. 7 new tests, 409 green (v0.2.21) |
+| (next)  | T.1 — rename `email` → `mail/imap` in preparation for a second backend. Pure refactor, no behaviour change. Classes `EmailClient`/`EmailError` → `ImapClient`/`ImapError`; gateway platform class `Email` → `Imap`; config `gateway.email.*` → `gateway.imap.*`; env vars `EMAIL_*` → `IMAP_*`/`SMTP_*`. Setup menu: "Email" → "IMAP". Tool name `email` kept (user-facing concept, backend-agnostic) (v0.2.22) |
+| (next)  | T.2 — Gmail API (OAuth2) as a first-class parallel backend (T closed). `alpi/mail/gmail.py` implements the same 9 operations as `ImapClient` (list/search/read/send/reply/forward/move/delete/download_attachment) against `gmail.googleapis.com` with scopes `gmail.modify` + `gmail.send`. OAuth2 Authorization Code + PKCE with loopback callback server; refresh tokens stored per profile under `~/.alpi/<profile>/gmail_token.json` (0600, `fcntl`-locked). New `alpi/gateway/platforms/gmail.py` polls via `users.history.list` for delta-only fetches (no inbox rescans). Tool `email` gains an `account` param: auto-picks the only configured backend, demands explicit choice when both IMAP and Gmail are set. `send_message` platform enum grows `gmail`; delivery `_allowlist_env` maps gmail → `GMAIL_ALLOWED_SENDERS`. Setup wizard "Gateways → Gmail" walks through the GCP OAuth setup in 4 compact steps. Seed `.env.example` gains `GMAIL_CLIENT_ID` / `GMAIL_CLIENT_SECRET` / `GMAIL_ALLOWED_SENDERS`. Two post-landing correctness fixes: (a) `_list_history` no longer filters by `labelId: INBOX` — Gmail filter rules can route mail straight to custom labels (skipping INBOX), and those must still trigger alpi; SPAM/TRASH/DRAFT/CHAT/SENT excluded at processing time instead (matches IMAP's "only skip Junk" semantics); (b) `mark_as_read` moved from platform `listen()` to `run.py` post-allowlist via a new `IncomingMessage.ack` callback — previously automated/bulk and disallowed senders got `\Seen` / UNREAD removed without being processed, touching unrelated inbox traffic. 16 new tests (10 Gmail client + 6 dispatch). 425 green total (v0.2.23) |

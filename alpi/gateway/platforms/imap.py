@@ -59,8 +59,9 @@ class Imap(Platform):
     # Listen — async IMAP poll driven by the gateway event loop
 
     async def listen(self) -> AsyncIterator[IncomingMessage]:
-        if not os.environ.get("IMAP_ADDRESS"):
-            log.info("IMAP_ADDRESS not set — email listener idle.")
+        required = ("IMAP_ADDRESS", "IMAP_PASSWORD", "IMAP_HOST", "SMTP_HOST")
+        if not all(os.environ.get(v) for v in required):
+            log.info("IMAP env incomplete — listener idle.")
             while True:
                 await asyncio.sleep(3600)
                 if False:  # pragma: no cover
@@ -68,11 +69,16 @@ class Imap(Platform):
 
         log.info("IMAP listener starting (poll every %ss).", self._poll_interval)
 
-        # Baseline on first run so we don't backfill a whole inbox of
-        # old mail. Subsequent starts read the persisted UID.
         last_uid = self._load_last_uid()
         if last_uid is None:
-            last_uid = await asyncio.to_thread(self._discover_baseline_uid)
+            try:
+                last_uid = await asyncio.to_thread(self._discover_baseline_uid)
+            except ImapError as e:
+                log.warning("IMAP baseline failed: %s — listener idle.", e)
+                while True:
+                    await asyncio.sleep(3600)
+                    if False:  # pragma: no cover
+                        yield  # type: ignore[misc]
             self._save_last_uid(last_uid)
             log.info("IMAP baseline UID: %s (no backfill)", last_uid)
 
@@ -105,21 +111,24 @@ class Imap(Platform):
                     log.debug("email: dropping automated/bulk from %s", sender)
                     continue
 
-                if self._mark_as_read:
-                    try:
-                        await asyncio.to_thread(self._mark_seen, raw_uid)
-                    except ImapError as e:
-                        log.debug("email: failed to mark %s seen: %s", raw_uid, e)
-
                 prompt = (
                     f"[INBOUND EMAIL from {sender}]\n"
                     f"Subject: {subject}\n\n{body}"
                 )
+                ack = None
+                if self._mark_as_read:
+                    uid_copy = raw_uid
+                    async def ack() -> None:
+                        try:
+                            await asyncio.to_thread(self._mark_seen, uid_copy)
+                        except ImapError as e:
+                            log.debug("email: failed to mark %s seen: %s", uid_copy, e)
                 yield IncomingMessage(
                     platform="email",
                     external_user_id=sender,
                     external_chat_id=sender,
                     text=prompt,
+                    ack=ack,
                 )
 
             await asyncio.sleep(self._poll_interval)

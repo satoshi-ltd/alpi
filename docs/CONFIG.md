@@ -150,6 +150,19 @@ reasoning, so this flag has no effect there.
 | `gateway.imap.show_tool_trace` | `false` | Each trace would be its own email — spam if a turn touches many tools. Only the final reply goes out. |
 | `gateway.imap.typing_indicator` | `false` | No "typing…" concept over IMAP/SMTP. Kept explicit so the gateway loop doesn't spawn a no-op heartbeat. |
 
+### Gateway — Gmail
+
+Same knobs as IMAP, different backend. Polling uses Gmail's `users.history.list` with the last-seen `historyId` so we only fetch deltas (cheaper than rescanning INBOX). Credentials live in `~/.alpi/<profile>/gmail_token.json` after the one-off OAuth consent via `alpi setup → Gateways → Gmail`.
+
+| Key | Default | Why |
+|---|---|---|
+| `gateway.gmail.poll_interval` | `60` (seconds) | Same rationale as IMAP. |
+| `gateway.gmail.mark_as_read` | `true` | Removes the `UNREAD` label on processed messages. |
+| `gateway.gmail.show_tool_trace` | `false` | Same reason as IMAP. |
+| `gateway.gmail.typing_indicator` | `false` | Same reason as IMAP. |
+
+Configure both if you want: `imap` polls your primary mailbox via password, `gmail` polls another account via OAuth, each with its own allowlist (`IMAP_ALLOWED_SENDERS` vs `GMAIL_ALLOWED_SENDERS`).
+
 ### Ollama
 
 Ollama is a first-class provider. One entry per server — local, remote, different ports — each with its own user-chosen `name` that becomes the model prefix (`home/gemma4:e4b`, `gpu-box/qwen3:14b`). On every request against an Ollama server, `num_ctx` is auto-resolved from `/api/show` and injected so the model sees the full prompt instead of being truncated to Ollama's 2K default.

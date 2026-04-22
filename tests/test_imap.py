@@ -392,16 +392,23 @@ def test_delete_falls_through_trash_candidates(client, fake_imap) -> None:
 # --------------------------------------------------------------------
 
 
-def test_tool_surfaces_config_error_cleanly(monkeypatch) -> None:
+def _isolate_accounts(monkeypatch, tmp_path) -> None:
+    """Strip both IMAP env and Gmail token so the tool has no backend."""
     for var in ("IMAP_ADDRESS", "IMAP_PASSWORD", "IMAP_HOST", "SMTP_HOST"):
         monkeypatch.delenv(var, raising=False)
+    import alpi.home as home_mod
+    monkeypatch.setattr(home_mod, "_ROOT", tmp_path)
+
+
+def test_tool_surfaces_config_error_cleanly(monkeypatch, tmp_path) -> None:
+    _isolate_accounts(monkeypatch, tmp_path)
     result = Email().run(action="list")
     assert not result.ok
-    assert "email not configured" in result.error
-    assert "alpi setup" in result.error.lower()
+    assert "no email account" in result.error.lower()
 
 
-def test_tool_requires_uid_for_read(monkeypatch) -> None:
+def test_tool_requires_uid_for_read(monkeypatch, tmp_path) -> None:
+    _isolate_accounts(monkeypatch, tmp_path)
     monkeypatch.setenv("IMAP_ADDRESS", "me@x.com")
     monkeypatch.setenv("IMAP_PASSWORD", "p")
     monkeypatch.setenv("IMAP_HOST", "i")
@@ -411,7 +418,8 @@ def test_tool_requires_uid_for_read(monkeypatch) -> None:
     assert "uid" in result.error
 
 
-def test_tool_unknown_action(monkeypatch) -> None:
+def test_tool_unknown_action(monkeypatch, tmp_path) -> None:
+    _isolate_accounts(monkeypatch, tmp_path)
     monkeypatch.setenv("IMAP_ADDRESS", "me@x.com")
     monkeypatch.setenv("IMAP_PASSWORD", "p")
     monkeypatch.setenv("IMAP_HOST", "i")
