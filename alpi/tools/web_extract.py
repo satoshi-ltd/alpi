@@ -49,6 +49,10 @@ class WebExtract(Tool):
     }
 
     def run(self, url: str, question: str = "", max_bytes: int = 250_000) -> ToolResult:
+        from alpi.tools._sandbox import require_network
+        blocked = require_network("web_extract")
+        if blocked is not None:
+            return blocked
         from alpi.tools._state import emit_state
 
         # 1. Fetch the page as Markdown.

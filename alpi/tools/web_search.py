@@ -36,6 +36,10 @@ class WebSearch(Tool):
     }
 
     def run(self, query: str, max_results: int = 5) -> ToolResult:
+        from alpi.tools._sandbox import require_network
+        blocked = require_network("web_search")
+        if blocked is not None:
+            return blocked
         from alpi.tools._state import emit_state
 
         max_results = max(1, min(int(max_results or 5), 15))

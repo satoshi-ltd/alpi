@@ -238,13 +238,15 @@ class ToolCard(Widget):
 
 class AlpiTopBar(Static):
     def __init__(self, version: str, profile: str, path: str,
-                 workspace_set: bool, sandbox: bool = False) -> None:
+                 workspace_set: bool, sandbox: bool = False,
+                 network_locked: bool = False) -> None:
         super().__init__("")
         self._version = version
         self._profile = profile
         self._path = path
         self._workspace_set = workspace_set
         self._sandbox = sandbox
+        self._network_locked = network_locked
 
     def on_mount(self) -> None:
         self._refresh()
@@ -253,11 +255,12 @@ class AlpiTopBar(Static):
         self._refresh()
 
     def set_state(self, *, profile: str, path: str, workspace_set: bool,
-                  sandbox: bool = False) -> None:
+                  sandbox: bool = False, network_locked: bool = False) -> None:
         self._profile = profile
         self._path = path
         self._workspace_set = workspace_set
         self._sandbox = sandbox
+        self._network_locked = network_locked
         self._refresh()
 
     def _refresh(self) -> None:
@@ -288,7 +291,8 @@ class AlpiTopBar(Static):
             f"{profile_label}{profile_txt}"
         )
         if self._sandbox:
-            markup += f"{sep}[{success}]sandbox[/{success}]"
+            label = "offline" if self._network_locked else "sandbox"
+            markup += f"{sep}[{muted}]{label}[/{muted}]"
         markup += (
             f"{sep}"
             f"{workspace_label}{workspace_txt}"

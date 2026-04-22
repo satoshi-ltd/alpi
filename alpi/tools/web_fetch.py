@@ -44,6 +44,10 @@ class WebFetch(Tool):
         strip_links: bool = False,
         raw: bool = False,
     ) -> ToolResult:
+        from alpi.tools._sandbox import require_network
+        blocked = require_network("web_fetch")
+        if blocked is not None:
+            return blocked
         from alpi.tools._state import emit_state
         safe, reason = check_url(url)
         if not safe:

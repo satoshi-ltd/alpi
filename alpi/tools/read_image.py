@@ -163,6 +163,10 @@ class ReadImage(Tool):
 
     def run(self, path: str, question: str) -> ToolResult:
         if _is_url(path):
+            from alpi.tools._sandbox import require_network
+            blocked = require_network("read_image")
+            if blocked is not None:
+                return blocked
             try:
                 tool_state_mod.emit_state("downloading image…")
                 data = _download(path)

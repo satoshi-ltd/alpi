@@ -331,6 +331,10 @@ class Browser(Tool):
         key: str = "",
         question: str = "",
     ) -> ToolResult:
+        from alpi.tools._sandbox import require_network
+        blocked = require_network("browser")
+        if blocked is not None:
+            return blocked
         if action == "close":
             _on_browser_thread(_close_blocking)
             return ToolResult(ok=True, output="browser context closed")

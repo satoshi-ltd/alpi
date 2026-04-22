@@ -135,6 +135,10 @@ class Email(Tool):
     }
 
     def run(self, action: str, **kw: object) -> ToolResult:
+        from alpi.tools._sandbox import require_network
+        blocked = require_network("email")
+        if blocked is not None:
+            return blocked
         client, err = _resolve_client(str(kw.pop("account", "")))
         if err:
             return ToolResult(ok=False, output="", error=err)
