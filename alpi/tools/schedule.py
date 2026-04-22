@@ -109,6 +109,16 @@ class Schedule(Tool):
         if action == "add":
             if not prompt:
                 return ToolResult(ok=False, output="", error="'prompt' is required")
+            from alpi.tools.skill import scan_skill_body
+            flags = scan_skill_body(prompt)
+            if flags:
+                return ToolResult(
+                    ok=False, output="",
+                    error=(
+                        "threat scan blocked scheduled prompt "
+                        f"(runs unattended with full tool access): {', '.join(flags)}"
+                    ),
+                )
             from datetime import datetime, timezone
             now_iso = datetime.now(timezone.utc).isoformat()
             job: dict = {

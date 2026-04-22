@@ -600,6 +600,11 @@ def _add_file(
                 error=f"security scan blocked file: {', '.join(flags)}",
             )
 
+    if subdir == "scripts" and filename.endswith(".py"):
+        osv_err = _osv_scan_python(content)
+        if osv_err:
+            return ToolResult(ok=False, output="", error=osv_err)
+
     sub_path = skill_dir / subdir
     if subdir == "secrets":
         sub_path.mkdir(mode=0o700, exist_ok=True)
@@ -766,6 +771,23 @@ def _delete(
         return ToolResult(ok=False, output="", error=err)
     shutil.rmtree(skill_dir, ignore_errors=True)
     return ToolResult(ok=True, output=f"deleted {skill_dir}")
+
+
+def _osv_scan_python(source: str) -> str | None:
+    """Return an error string if the source imports a malicious PyPI pkg."""
+    import sys
+    from alpi.tools._osv import check, extract_pypi_imports
+    imports = extract_pypi_imports(source)
+    thirdparty = {
+        m for m in imports
+        if m not in sys.stdlib_module_names and m != "alpi"
+    }
+    if not thirdparty:
+        return None
+    advisories = [a for a in check("PyPI", thirdparty) if a.startswith("✗")]
+    if advisories:
+        return "OSV malware check blocked save:\n" + "\n".join(advisories)
+    return None
 
 
 def _validate(home: Path, name: str) -> ToolResult:

@@ -69,6 +69,19 @@ Two options:
 | `tools.research.quick_steps` | `8` | int | next turn |
 | `tools.research.normal_steps` | `15` | int | next turn |
 | `tools.research.deep_steps` | `30` | int | next turn |
+| `tools.budget.per_result_chars` | `100_000` | int (-1 = unlimited) | next turn |
+| `tools.<name>.max_result_chars` | `—` (unset) | int (-1 = unlimited) | next turn |
+
+`tools.budget.per_result_chars` caps the size of any tool output the LLM
+sees in-context, with a `… [N chars elided by tool budget]` suffix when
+hit. Prevents a single `read_file` on a 5 MB log from blowing up a turn.
+Per-tool overrides via `tools.<name>.max_result_chars` — set `-1` on
+`read_file` if you want the LLM to get the whole source deliberately,
+or lower a chatty tool's cap.
+
+Precedence: `tools.<name>.max_result_chars` (if set) → `tools.budget.per_result_chars` → hardcoded `100_000`.
+
+Not implemented (tracked, not planned): per-turn aggregate cap and inline preview. Hermes has both (200K aggregate with spill-to-disk, 1.5K preview in the tool card). Ship if and when a real turn actually burns through several large tool results.
 
 `tools.terminal.sandbox` enables OS-level isolation on shell commands
 (macOS `sandbox-exec`, Linux `bubblewrap`). Toggle via `alf setup →

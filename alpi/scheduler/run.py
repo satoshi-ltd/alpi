@@ -148,6 +148,11 @@ def run_job(job: dict, home: Path) -> tuple[bool, str]:
     if not prompt:
         return False, "empty prompt"
 
+    from alpi.tools.skill import scan_skill_body
+    flags = scan_skill_body(prompt)
+    if flags:
+        return False, f"threat scan blocked fire: {', '.join(flags)}"
+
     wrapped = (
         "[SCHEDULED: running from cron; user is not watching live. "
         "Answer concisely; the reply is auto-delivered to their chat. "

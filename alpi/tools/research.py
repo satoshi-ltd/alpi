@@ -9,6 +9,7 @@ from typing import Any
 from alpi import config as cfg_mod
 from alpi import llm
 from alpi.home import get_home
+from alpi.tools._budget import apply as _budget_apply
 from alpi.tools.base import Tool, ToolResult
 from alpi.tools import _state as tool_state_mod
 
@@ -260,7 +261,7 @@ class Research(Tool):
                             args = {}
                         result = execute(name, args)
                         payload = result.output if result.ok else f"ERROR: {result.error}"
-                        payload = payload[:10_000]
+                        payload = _budget_apply(name, payload)
                     messages.append({
                         "role": "tool", "tool_call_id": tc["id"],
                         "name": name, "content": payload,

@@ -33,9 +33,9 @@ Audience: Javi (product) + me (Claude across sessions).
 | U | Signal gateway (signal-cli) | 🔵 backlog — requires dedicated phone number |
 | V | Anthropic subscription OAuth | 🔵 backlog — ToS-gray, wait for official |
 | W | Approval system (dangerous cmd + session allowlist) | 🔵 backlog |
-| X | Schedule prompt threat-scan | 🔵 backlog |
-| Y | Tool result budget / truncation | 🔵 backlog |
-| Z | OSV malware check (skills + MCP installers) | 🔵 backlog |
+| X | Schedule prompt threat-scan | ✅ shipped (v0.2.20) |
+| Y | Tool result budget / truncation | ✅ shipped (v0.2.20) |
+| Z | OSV malware check (skills + MCP installers) | ✅ shipped (v0.2.20) |
 | Σ.1 | Mixture-of-agents tool (ensemble inference) | 🔵 bola extra — not planned, tracked for later |
 | Σ.2 | RL training / fine-tuning hooks | 🔵 bola extra — not planned, tracked for later |
 
@@ -47,7 +47,7 @@ release. The bar for "ship v0.2" is **clean docs + version bump +
 real-use validation across a few sessions** — not feature
 exhaustiveness.
 
-**Nothing open for v0.2.** Everything the original roadmap promised is shipped. Items still in the backlog — **C** (Codex OAuth), **H** (Home Assistant), **J** (camoufox), **M** (voice), **N** (image gen), **S** (read_image auto-resize), **T** (Gmail OAuth), **U** (Signal), **V** (Anthropic OAuth — ToS gray), **W** (approval system), **X** (schedule threat-scan), **Y** (tool budget), **Z** (OSV malware), **Σ.1/Σ.2** (bola extra) — roll forward to v0.3.
+**Nothing open for v0.2.** Everything the original roadmap promised is shipped. Items still in the backlog — **C** (Codex OAuth), **H** (Home Assistant), **J** (camoufox), **M** (voice), **N** (image gen), **S** (read_image auto-resize), **T** (Gmail OAuth), **U** (Signal), **V** (Anthropic OAuth — ToS gray), **W** (approval system), **Σ.1/Σ.2** (bola extra) — roll forward to v0.3.
 
 Once the v0.3 cycle picks up a few of those + a fresh CHANGELOG
 entry summarises v0.2, bump to `v0.3.0` and reopen the table.
@@ -169,38 +169,6 @@ Today the `terminal` tool has a static denylist (`_guards.py`) that blocks known
 
 **Estimated LOC:** ~150. Fits naturally alongside the existing sandbox (P — layer 2).
 
-### X. Schedule prompt threat-scan
-
-Cron jobs run unattended with full tool access. A prompt-injected email or a skill that silently mutates its trigger could insert exfiltration instructions that nobody sees until after the fact. Scan the scheduled prompt at save time AND at fire time for:
-
-- Known injection patterns (ignore previous / override system / disregard rules).
-- Exfil markers (URL with `?data=`, `$ENV_VAR` referencing secrets).
-- Invisible Unicode.
-
-Refuse to save if found; on fire-time hit, log + skip. ~50 LOC — reuses the existing `scan_skill_body` patterns.
-
-### Y. Tool result budget / truncation
-
-Today a `read_file` on a 5 MB log, or a `web_fetch` on a giant HTML page, dumps the raw payload into context and can single-handedly blow up a turn. Hermes has a 3-tier budget (per-result char cap, per-turn budget, inline preview of N chars) that prevents this.
-
-**Scope.**
-- `tools.budget.per_result_chars: 100_000` (default). If exceeded, truncate with `… [N chars elided]` suffix.
-- `tools.budget.per_turn_chars: 200_000` (default). Summed across all tool returns in one turn; if exceeded, subsequent calls get shorter truncation.
-- Per-tool override via `tools.<name>.max_result_chars`: e.g. set `read_file` to `∞` (no cap) so the LLM can pull the raw source when it explicitly wants to.
-- Inline preview in the TUI tool card (first 1.5K chars) — already mostly there, formalise it.
-
-~100 LOC in a new `alpi/tools/_budget.py`, wired into `execute()` in `tools/__init__.py`.
-
-### Z. OSV malware check (skills + MCP installers)
-
-When a skill's `scripts/*.py` imports a third-party package, or an MCP server spec runs `npx -y <pkg>` / `uvx <pkg>`, we're one typo away from installing a name-squatted malicious package. Google's OSV database has an up-to-date MAL-* feed (confirmed malicious packages, not just CVEs).
-
-**Scope.** At the moment a skill is `create`d or an MCP server is added, scan: extract package names from `scripts/*.py` imports, from MCP `args` (`-y @foo/bar`), and from `requirements.txt` if present. POST to `https://api.osv.dev/v1/query` for each with ecosystem=`PyPI|npm`. If any response contains `id` starting with `MAL-`, refuse to save (or refuse to install) and surface the advisory URL.
-
-Fail-open: if OSV is unreachable, proceed with a warning. Don't block on network issues — that's a worse UX than the risk the check covers.
-
-**Estimated LOC:** ~50. Dep: none (just httpx which is already present).
-
 ### Σ.1. Mixture-of-agents (bola extra)
 
 Spawn multiple LLMs on the same prompt, aggregate answers with a final synthesizer. Hermes has this as `mixture_of_agents_tool.py`. Use case: hard decisions where one model is weak and you want "wisdom of crowds" at 3× cost.
@@ -273,3 +241,5 @@ First usable cut. Textual TUI, 3-file memory with two-tier dedup, skill system w
 | (next)  | `browser` tool shipped (B closed). Playwright + Chromium, 9 actions: `navigate`, `snapshot`, `click`, `type`, `scroll`, `press`, `screenshot`, `close`, `logout`. Uses Playwright's native `aria_snapshot()` for LLM-friendly page representation; targets elements by `role` + accessible `name` (or by visible `text`) — robust across re-renders, no fragile CSS selectors. `playwright-stealth` patches applied by default (navigator.webdriver hidden, plugins populated, etc.) so Cloudflare-lite protection doesn't block us. `screenshot` saves a PNG and returns the path; when `tools.browser.vision=true` in the profile's config, passing a `question` auto-chains the screenshot to `read_image` — otherwise path-only with a hint. Per-profile storage at `~/.alpi/profiles/<name>/browser/state.json` so cookies stay isolated across profiles. Single dedicated worker thread (`ThreadPoolExecutor(1)`) funnels every call to Playwright's sync API — sidesteps the "Cannot switch to a different thread" greenlet restriction in the TUI where each turn runs in a fresh Textual worker. SSRF via existing `check_url()`. ~400 LOC vs hermes' 2984 — deliberately dropped multi-provider abstraction, daemon process, `@e1` refs, LLM summarization, JS/console eval, Browserbase/BrowserUse cloud, orphan reaper (v0.2.16) |
 | (next)  | `skill(action="validate")` shipped (Q closed). Four cheap correctness checks on a skill's `scripts/*.py`: `py_compile` for syntax, AST-walk + `find_spec` for missing third-party imports, OAuth race pattern (`webbrowser.open` before `serve_forever`/`handle_request`), and port coherence between `localhost:NNNN` mentioned in `SKILL.md` and `bind()` calls in code. Non-blocking — reports findings so the LLM decides what to do. ~150 LOC in `_skill_validate.py`. Did not port the 65-regex security scanner from hermes (we already had our own), nor the LLM-as-reviewer pattern (overlaps with asking alpi in chat "revisa esta skill") (v0.2.17) |
 | (next)  | Batch parallel sub-agents shipped (R.3 closed). `research` and `delegate` now accept `tasks: [...]` (up to 3) and run them concurrently via `ThreadPoolExecutor(max_workers=3)`. Results aggregate into one report with per-task sections; failures are captured inline instead of short-circuiting the batch. Prerequisite: `alpi/tools/_state.py` refactored from module-global `_emit`/`_interrupt_getter`/`_usage_sink` to `contextvars.ContextVar`, so two workers can have distinct emit callbacks without racing. Worker threads re-seed `interrupt_getter` + `usage_sink` from the parent context (Python's `ThreadPoolExecutor` does not auto-propagate ContextVars) and install a per-task prefixed `emit`. Existing callers unchanged — the public API is identical; only `research.py` and `delegate.py` added `get_emit()` instead of reading `_emit` directly (v0.2.18) |
+| (next)  | Roadmap sweep: extended backlog with 9 new items (TTS/STT local, Gmail OAuth, Signal, Anthropic OAuth as ToS-gray, approval system, schedule threat-scan, tool budget, OSV malware, bola extra). Discarded WhatsApp/Discord/Slack with rationale (v0.2.19) |
+| (next)  | Security hardening pack — three items shipped together (Y + Z + X, ~200 LOC): (1) **Tool result budget** in `alpi/tools/_budget.py` — `tools.budget.per_result_chars: 100_000` default, per-tool override via `tools.<name>.max_result_chars` (e.g. `-1` for unlimited on `read_file`), replaces the three hardcoded `[:10_000]` sites across engine/research/delegate with a clean elided suffix; (2) **OSV malware check** in `alpi/tools/_osv.py` — `api.osv.dev` query on skill `scripts/*.py` imports and MCP `npx` args at save time, blocks on MAL-* findings, fails open on network errors; (3) **Schedule prompt threat-scan** — reuses `scan_skill_body` patterns at both save and fire time so prompt-injected cron jobs don't escape into unattended runs. 17 new tests, 402 green total (v0.2.20) |
