@@ -17,7 +17,7 @@ def test_profile_list_shows_default_only(monkeypatch, tmp_path: Path) -> None:
     result = CliRunner().invoke(cli.main, ["profile", "list"])
     assert result.exit_code == 0
     assert "default" in result.output
-    assert "* default" in result.output  # active marker
+    assert "◆" in result.output  # active marker (accent-colored diamond)
 
 
 def test_profile_list_enumerates_existing(monkeypatch, tmp_path: Path) -> None:

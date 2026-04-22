@@ -876,7 +876,10 @@ def profile() -> None:
 @profile.command("list")
 @click.pass_context
 def profile_list(ctx: click.Context) -> None:
-    """List available profiles. Marks which one this invocation resolved to."""
+    """List available profiles with their model, size, and path."""
+    from rich.console import Console
+    from alpi import config as cfg_mod, home as home_mod
+
     active = ctx.obj.get("profile") or "default"
 
     named: list[str] = []
@@ -885,13 +888,36 @@ def profile_list(ctx: click.Context) -> None:
         named = sorted(p.name for p in root.iterdir() if p.is_dir())
 
     profiles = ["default", *named]
+    rows: list[tuple[str, str, str, str, str, bool]] = []
     for name in profiles:
-        marker = "* " if name == active else "  "
         home_path = (
             Path.home() / ".alpi" if name == "default"
             else Path.home() / ".alpi" / "profiles" / name
         )
-        click.echo(f"{marker}{name:<12}  {home_path}")
+        try:
+            cfg = cfg_mod.load(home_path)
+            accent = (cfg.tui or {}).get("accent") or "#ff8800"
+            model = cfg.model or "(no model)"
+        except Exception:  # noqa: BLE001
+            accent = "#ff8800"
+            model = "(unreadable)"
+        size = home_mod.profile_size_label(home_path)
+        short = home_mod.shorten_home(home_path)
+        rows.append((accent, name, model, size, short, name == active))
+
+    name_w = max(len(r[1]) for r in rows)
+    model_w = max(len(r[2]) for r in rows)
+    size_w = max(len(r[3]) for r in rows)
+    console = Console()
+    for accent, name, model, size, short, is_active in rows:
+        glyph = "◆" if is_active else "◇"
+        console.print(
+            f"[{accent}]{glyph}[/{accent}] "
+            f"{name:<{name_w}}  "
+            f"{model:<{model_w}}  "
+            f"{size:>{size_w}}  "
+            f"{short}"
+        )
 
     if not named:
         # Fresh install: nudge the user toward creating one if they want

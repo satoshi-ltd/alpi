@@ -43,47 +43,6 @@ class EngineEvent(Message):
         self.event = event
 
 
-_PROFILE_SIZE_CACHE: dict[Path, tuple[float, str]] = {}
-_PROFILE_SIZE_TTL = 30.0
-
-
-def _format_bytes(n: int) -> str:
-    if n < 1024:
-        return f"{n}B"
-    if n < 1024 ** 2:
-        return f"{n / 1024:.0f}KB"
-    if n < 1024 ** 3:
-        return f"{n / 1024 ** 2:.1f}MB"
-    return f"{n / 1024 ** 3:.2f}GB"
-
-
-def _profile_size_label(home_dir: Path) -> str:
-    import time
-    now = time.time()
-    cached = _PROFILE_SIZE_CACHE.get(home_dir)
-    if cached and (now - cached[0]) < _PROFILE_SIZE_TTL:
-        return cached[1]
-    # Default profile home is ~/.alpi/ which contains profiles/<name>/ as
-    # siblings — walking all would conflate the default profile's size
-    # with every other profile's.
-    excluded = home_dir / "profiles"
-    total = 0
-    try:
-        for p in home_dir.rglob("*"):
-            if excluded in p.parents or p == excluded:
-                continue
-            if p.is_file():
-                try:
-                    total += p.stat().st_size
-                except OSError:
-                    pass
-    except OSError:
-        return ""
-    label = _format_bytes(total)
-    _PROFILE_SIZE_CACHE[home_dir] = (now, label)
-    return label
-
-
 def _copy_to_os_clipboard(text: str) -> str:
     import shutil
     import subprocess
@@ -159,7 +118,7 @@ class AlpiApp(App):
                 self.cfg.tools.terminal.sandbox
                 and not self.cfg.tools.terminal.allow_network
             ),
-            profile_size=_profile_size_label(self.home),
+            profile_size=home.profile_size_label(self.home),
         )
         with VerticalScroll(id="chat"):
             pass
@@ -560,7 +519,7 @@ class AlpiApp(App):
                 self.cfg.tools.terminal.sandbox
                 and not self.cfg.tools.terminal.allow_network
             ),
-            profile_size=_profile_size_label(self.home),
+            profile_size=home.profile_size_label(self.home),
         )
 
     def _cmd_model(self) -> None:
