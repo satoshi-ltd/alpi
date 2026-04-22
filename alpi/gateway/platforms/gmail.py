@@ -65,6 +65,7 @@ class Gmail(Platform):
 
         client = GmailClient(self.home)
 
+        first_poll = True
         while True:
             try:
                 events = await asyncio.to_thread(self._list_history, last_history)
@@ -76,7 +77,11 @@ class Gmail(Platform):
                 events = {"messages": [], "newHistoryId": last_history}
 
             new_history = events.get("newHistoryId") or last_history
-            for msg_id in events.get("messages") or []:
+            pending = events.get("messages") or []
+            if first_poll and pending:
+                log.info("catching up on %d email(s) from backlog", len(pending))
+            first_poll = False
+            for msg_id in pending:
                 try:
                     full = await asyncio.to_thread(client.read, msg_id)
                 except GmailError as e:

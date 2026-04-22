@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 from pathlib import Path
@@ -19,12 +20,32 @@ API_BASE = "https://api.telegram.org/bot{token}"
 FILE_BASE = "https://api.telegram.org/file/bot{token}"
 
 
+def _state_path(home: Path) -> Path:
+    return home / "gateway" / "telegram-state.json"
+
+
 class Telegram(Platform):
     name = "telegram"
 
     def __init__(self, home) -> None:
         super().__init__(home)
-        self._offset = 0
+        self._offset = self._load_offset()
+
+    def _load_offset(self) -> int:
+        p = _state_path(self.home)
+        if not p.exists():
+            return 0
+        try:
+            return int((json.loads(p.read_text()) or {}).get("offset", 0))
+        except (json.JSONDecodeError, ValueError, TypeError):
+            return 0
+
+    def _save_offset(self) -> None:
+        p = _state_path(self.home)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        tmp = p.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps({"offset": self._offset}))
+        tmp.replace(p)
 
     async def listen(self) -> AsyncIterator[IncomingMessage]:
         token = os.environ.get("TELEGRAM_BOT_TOKEN")
@@ -36,8 +57,9 @@ class Telegram(Platform):
                     yield  # type: ignore[misc]
 
         url_base = API_BASE.format(token=token)
-        log.info("Telegram listener starting (long-poll).")
+        log.info("Telegram listener starting (long-poll, offset=%d).", self._offset)
 
+        first_poll = True
         async with httpx.AsyncClient(timeout=60) as client:
             while True:
                 try:
@@ -52,8 +74,14 @@ class Telegram(Platform):
                     await asyncio.sleep(5)
                     continue
 
-                for update in data.get("result", []):
+                results = data.get("result", [])
+                if first_poll and results:
+                    log.info("catching up on %d message(s) from backlog", len(results))
+                first_poll = False
+
+                for update in results:
                     self._offset = update["update_id"] + 1
+                    self._save_offset()
                     msg = update.get("message") or update.get("edited_message")
                     if not msg:
                         continue
