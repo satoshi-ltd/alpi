@@ -69,7 +69,7 @@ class GmailToken:
 
 
 def token_path(home: Path) -> Path:
-    return home / "gmail_token.json"
+    return home / "secrets" / "gmail_token.json"
 
 
 def _client_credentials() -> tuple[str, str]:
@@ -86,7 +86,7 @@ def _client_credentials() -> tuple[str, str]:
 @contextmanager
 def _lock(home: Path):
     import fcntl
-    lock_path = home / ".gmail_token.lock"
+    lock_path = home / "secrets" / ".gmail_token.lock"
     lock_path.parent.mkdir(parents=True, exist_ok=True)
     f = open(lock_path, "w")
     try:

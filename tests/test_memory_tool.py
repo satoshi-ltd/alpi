@@ -12,6 +12,7 @@ from alpi.tools.memory import Memory
 @pytest.fixture
 def isolated_home(tmp_home_no_env: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     monkeypatch.setenv("ALPI_HOME", str(tmp_home_no_env))
+    (tmp_home_no_env / "memories").mkdir(parents=True, exist_ok=True)
     return tmp_home_no_env
 
 
@@ -58,30 +59,30 @@ def test_read_reports_usage(isolated_home: Path) -> None:
 
 
 def test_personality_add(isolated_home: Path) -> None:
-    (isolated_home / "personality.md").write_text("# Identity\nYou are alpi.\n")
+    (isolated_home / "memories" / "PERSONALITY.md").write_text("# Identity\nYou are alpi.\n")
     r = Memory().run(
         action="add", target="personality.md",
         content="Usa bullets cortos, nunca párrafos.",
     )
     assert r.ok, r.error
-    assert "bullets" in (isolated_home / "personality.md").read_text()
+    assert "bullets" in (isolated_home / "memories" / "PERSONALITY.md").read_text()
 
 
 def test_personality_add_rejects_dup(isolated_home: Path) -> None:
-    (isolated_home / "personality.md").write_text("Base.\nUsa bullets.\n")
+    (isolated_home / "memories" / "PERSONALITY.md").write_text("Base.\nUsa bullets.\n")
     r = Memory().run(action="add", target="personality.md", content="Usa bullets.")
     assert not r.ok
     assert "already" in (r.error or "").lower()
 
 
 def test_personality_replace(isolated_home: Path) -> None:
-    (isolated_home / "personality.md").write_text("Frase antigua.\n")
+    (isolated_home / "memories" / "PERSONALITY.md").write_text("Frase antigua.\n")
     r = Memory().run(
         action="replace", target="personality.md",
         match="Frase antigua.", content="Frase nueva.",
     )
     assert r.ok, r.error
-    assert "Frase nueva" in (isolated_home / "personality.md").read_text()
+    assert "Frase nueva" in (isolated_home / "memories" / "PERSONALITY.md").read_text()
 
 
 def test_replace_entry_unique_match(isolated_home: Path) -> None:
@@ -130,7 +131,7 @@ def test_remove_matches_case_insensitive(isolated_home: Path) -> None:
 
 
 def test_personality_replace_accent_insensitive(isolated_home: Path) -> None:
-    (isolated_home / "personality.md").write_text(
+    (isolated_home / "memories" / "PERSONALITY.md").write_text(
         "Usa sinónimos en español cuándo puedas.\n"
     )
     r = Memory().run(
@@ -138,4 +139,4 @@ def test_personality_replace_accent_insensitive(isolated_home: Path) -> None:
         match="cuando puedas", content="siempre",
     )
     assert r.ok, r.error
-    assert "siempre" in (isolated_home / "personality.md").read_text()
+    assert "siempre" in (isolated_home / "memories" / "PERSONALITY.md").read_text()

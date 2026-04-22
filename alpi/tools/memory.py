@@ -143,6 +143,7 @@ def _personality_state(text: str) -> str:
 def _handle_personality(home, action: str, content: str, match: str) -> ToolResult:
     from alpi.home import personality_path
     path = personality_path(home)
+    path.parent.mkdir(parents=True, exist_ok=True)
     text = path.read_text() if path.exists() else ""
 
     if action == "read":

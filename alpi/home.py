@@ -24,6 +24,7 @@ def ensure_home(home: Path) -> None:
     """Bootstrap the home directory tree on first run."""
     for sub in (
         "memories",
+        "secrets",
         "sessions",
         "skills",
         "schedule/output",
@@ -34,6 +35,7 @@ def ensure_home(home: Path) -> None:
     if not gi.exists():
         gi.write_text(
             ".env\n"
+            "secrets/\n"
             "sessions/\n"
             "schedule/output/\n"
             "gateway/logs/\n"
@@ -44,7 +46,7 @@ def ensure_home(home: Path) -> None:
 
 def personality_path(home: Path) -> Path:
     """Return the canonical PERSONALITY.md path for this profile."""
-    return home / "PERSONALITY.md"
+    return home / "memories" / "PERSONALITY.md"
 
 
 def format_bytes(n: int) -> str:

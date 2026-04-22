@@ -18,7 +18,9 @@ def _isolate(monkeypatch, tmp_path: Path) -> None:
 
 def _seed_gmail_token(tmp_path: Path) -> None:
     import json
-    (tmp_path / "gmail_token.json").write_text(json.dumps({
+    secrets = tmp_path / "secrets"
+    secrets.mkdir(parents=True, exist_ok=True)
+    (secrets / "gmail_token.json").write_text(json.dumps({
         "email": "me@gmail.com",
         "access_token": "fake",
         "refresh_token": "fake-refresh",
