@@ -114,6 +114,10 @@ class AlpiApp(App):
             path=str(self._effective_workspace()),
             workspace_set=self.cfg.workspace_path is not None,
             sandbox=self.cfg.tools.terminal.sandbox,
+            network_locked=(
+                self.cfg.tools.terminal.sandbox
+                and not self.cfg.tools.terminal.allow_network
+            ),
         )
         with VerticalScroll(id="chat"):
             pass
@@ -510,6 +514,10 @@ class AlpiApp(App):
             path=str(self._effective_workspace()),
             workspace_set=self.cfg.workspace_path is not None,
             sandbox=self.cfg.tools.terminal.sandbox,
+            network_locked=(
+                self.cfg.tools.terminal.sandbox
+                and not self.cfg.tools.terminal.allow_network
+            ),
         )
 
     def _cmd_model(self) -> None:

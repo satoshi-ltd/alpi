@@ -13,6 +13,36 @@ class SandboxUnavailable(RuntimeError):
     pass
 
 
+def network_allowed() -> bool:
+    import yaml
+    from alpi.home import get_home
+    try:
+        cfg_path = get_home() / "config.yaml"
+        if not cfg_path.exists():
+            return True
+        data = yaml.safe_load(cfg_path.read_text()) or {}
+        term = ((data.get("tools") or {}).get("terminal") or {})
+    except Exception:  # noqa: BLE001
+        return True
+    if not term.get("sandbox"):
+        return True
+    return bool(term.get("allow_network"))
+
+
+def require_network(tool_name: str):
+    if network_allowed():
+        return None
+    from alpi.tools.base import ToolResult
+    return ToolResult(
+        ok=False, output="",
+        error=(
+            f"{tool_name} needs network but sandbox is locked "
+            f"(tools.terminal.allow_network=false). Unlock via "
+            f"`alpi setup → Sandbox` or disable sandbox."
+        ),
+    )
+
+
 _MACOS_PROFILE = """
 (version 1)
 (deny default)

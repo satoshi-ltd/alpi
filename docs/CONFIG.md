@@ -97,7 +97,22 @@ Sandbox`, or directly in YAML. The TUI top bar shows the current
 state (`sandbox on` / `off`). Most useful on profiles that run
 unattended (gateway, schedule, sub-agents) — see
 [SECURITY.md](SECURITY.md) for the recommended pattern + platform
-requirements. `allow_network` has no effect unless `sandbox` is on.
+requirements.
+
+`allow_network` has no effect unless `sandbox` is on. When sandbox is
+on and `allow_network=false`, the flag blocks ALL agent-initiated
+network:
+
+- The `terminal` subprocess is denied sockets (sandbox-exec / bwrap).
+- Python-native tools (`web_fetch`, `web_search`, `web_extract`,
+  `browser`, `tts`, `send_message`, `email`, `read_image` on URLs)
+  refuse with a clear error.
+- The LLM call itself (litellm) is exempt — it's the agent's brain,
+  not an exfiltration vector. The gateway inbound listener is also
+  exempt (receiving is not exfiltrating).
+
+The TUI top bar shows `offline` instead of `sandbox` when network is
+locked, so unattended profiles can be audited at a glance.
 
 `tools.browser.vision` lets the `browser(screenshot, question=…)` action auto-chain the screenshot into the vision model (`tools.read_image.model` or the active main model) and return the answer instead of the file path. When `false` (default), `screenshot` always returns the path and a hint pointing at `read_image` so the LLM can decide whether to pay for vision per call. Useful to turn on in an exploratory profile; keep off in watchdog/gateway profiles so the agent doesn't burn vision tokens silently.
 

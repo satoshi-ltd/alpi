@@ -146,6 +146,10 @@ class Tts(Tool):
     def run(self, text: str, voice: str = "") -> ToolResult:
         if not text or not text.strip():
             return ToolResult(ok=False, output="", error="text is empty")
+        from alpi.tools._sandbox import require_network
+        blocked = require_network("tts")
+        if blocked is not None:
+            return blocked
         if len(text) > MAX_CHARS:
             return ToolResult(
                 ok=False, output="",

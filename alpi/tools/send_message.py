@@ -75,6 +75,10 @@ class SendMessage(Tool):
     def run(self, text: str, platform: str = "telegram",
             chat_id: str | None = None,
             attachment: str | None = None) -> ToolResult:
+        from alpi.tools._sandbox import require_network
+        blocked = require_network("send_message")
+        if blocked is not None:
+            return blocked
         platform = (platform or "telegram").strip().lower()
         target = (chat_id or "").strip() or delivery.default_chat_id(platform)
         if not target:
