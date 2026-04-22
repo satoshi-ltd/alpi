@@ -572,6 +572,7 @@ def setup_cmd(ctx: click.Context) -> None:
             (ui.row("Gateways", _gateways_status(h)), "gateways"),
             (ui.row("MCPs", _mcp_status(h)), "mcps"),
             (ui.row("Sandbox", _sandbox_status(cfg)), "sandbox"),
+            (ui.row("Voice", _voice_status(cfg)), "voice"),
         ]
         # Every title starts with ``alf`` as a lightweight brand +
         # "you are here" marker. The active profile goes in the
@@ -596,6 +597,8 @@ def setup_cmd(ctx: click.Context) -> None:
             mcp_setup_run(h)
         elif choice == "sandbox":
             _sandbox_setup(h)
+        elif choice == "voice":
+            _voice_setup(h)
 
 
 def _setup_farewell(profile: str, h: Path) -> None:
@@ -759,6 +762,78 @@ def _sandbox_setup(h: Path) -> None:
         # User ESC'd — leave sandbox enabled with the previous network value.
         return
     cfg.tools.terminal.allow_network = (net == "allow")
+    config.save(cfg)
+
+
+_VOICE_SHORTLIST: list[tuple[str, str, str]] = [
+    ("en-US-AriaNeural",      "Aria",      "English (US) · female"),
+    ("en-US-GuyNeural",       "Guy",       "English (US) · male"),
+    ("en-GB-SoniaNeural",     "Sonia",     "English (UK) · female"),
+    ("es-ES-AlvaroNeural",    "Alvaro",    "Spanish (Spain) · male"),
+    ("es-ES-ElviraNeural",    "Elvira",    "Spanish (Spain) · female"),
+    ("es-MX-DaliaNeural",     "Dalia",     "Spanish (Mexico) · female"),
+    ("fr-FR-DeniseNeural",    "Denise",    "French (France) · female"),
+    ("de-DE-KatjaNeural",     "Katja",     "German · female"),
+    ("it-IT-ElsaNeural",      "Elsa",      "Italian · female"),
+    ("pt-BR-FranciscaNeural", "Francisca", "Portuguese (Brazil) · female"),
+]
+
+
+def _voice_display(voice_id: str) -> str:
+    for vid, name, _ in _VOICE_SHORTLIST:
+        if vid == voice_id:
+            locale = "-".join(voice_id.split("-", 2)[:2])
+            return f"{name} ({locale})"
+    return voice_id
+
+
+def _voice_status(cfg: config.Config) -> str:
+    ap = "autoplay on" if cfg.tools.tts.autoplay else "autoplay off"
+    return f"{_voice_display(cfg.tools.tts.voice)} · {ap}"
+
+
+def _voice_setup(h: Path) -> None:
+    """Pick the Edge TTS voice + autoplay toggle for the `tts` tool."""
+    from alpi import ui
+    cfg = config.load(h)
+
+    ui.banner(
+        ui.crumb("setup", "voice"),
+        subtitle=_voice_status(cfg),
+        home=h,
+    )
+    ui.dim(
+        "Default voice for audio output + autoplay toggle. Any pick is "
+        "permanent until you change it here."
+    )
+    ui._console.print("")
+
+    items: list[tuple[str, str]] = []
+    for vid, name, desc in _VOICE_SHORTLIST:
+        marker = " ✓" if vid == cfg.tools.tts.voice else ""
+        items.append((ui.row(name + marker, desc), vid))
+    items.append((
+        ui.row(
+            "Autoplay: " + ("on" if cfg.tools.tts.autoplay else "off"),
+            "toggle speaker playback",
+        ),
+        "__autoplay__",
+    ))
+
+    choice = ui.menu(
+        "",
+        items,
+        home=h, close="Back",
+    )
+    if choice is None:
+        return
+
+    if choice == "__autoplay__":
+        cfg.tools.tts.autoplay = not cfg.tools.tts.autoplay
+        config.save(cfg)
+        return
+
+    cfg.tools.tts.voice = choice
     config.save(cfg)
 
 

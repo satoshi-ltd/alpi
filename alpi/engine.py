@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import threading
 import time
 from dataclasses import dataclass, field
@@ -13,6 +14,16 @@ from alpi import config as cfg_mod
 from alpi import llm, memory, session, tools
 from alpi.tools._budget import apply as _budget_apply
 from alpi.session import ToolLog, truncate_result
+
+
+_CACHE_NOISE_RE = re.compile(
+    r"^.*\.alpi(?:/profiles/[^/]+)?/cache/(?:tts|stt)/.*$\n?",
+    re.MULTILINE,
+)
+
+
+def _strip_cache_noise(text: str) -> str:
+    return _CACHE_NOISE_RE.sub("", text).strip()
 
 
 def _maybe_load_mcps(cfg: cfg_mod.Config) -> list:
@@ -136,7 +147,7 @@ class Engine:
                     self._finalize_interrupt(emit)
                     return
 
-                content = "".join(accumulated_text)
+                content = _strip_cache_noise("".join(accumulated_text))
                 tool_calls = final.get("tool_calls", [])
 
                 # Bookkeeping

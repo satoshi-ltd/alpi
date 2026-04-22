@@ -268,7 +268,8 @@ class AlfApp(App):
         if ev.kind == "assistant_delta":
             self._on_assistant_delta(ev.text)
         elif ev.kind == "assistant_done":
-            pass
+            if self._current_assistant is not None and ev.text != self._current_assistant.text:
+                self._current_assistant.replace(ev.text)
         elif ev.kind == "tool_start":
             self._on_tool_start(ev)
         elif ev.kind == "tool_state":

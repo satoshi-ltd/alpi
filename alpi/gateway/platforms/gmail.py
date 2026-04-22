@@ -138,10 +138,6 @@ class Gmail(Platform):
         return str(r.json().get("historyId") or "0")
 
     def _list_history(self, start: str) -> dict:
-        # No labelId filter: Gmail filter rules can route mail straight to
-        # custom labels (skipping INBOX), and we still want those to trigger
-        # alpi. We exclude SPAM/TRASH/DRAFT/CHAT at processing time — same
-        # semantics as IMAP, which only skips Junk.
         token = get_access_token(self.home)
         params = {
             "startHistoryId": start,

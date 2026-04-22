@@ -17,8 +17,10 @@ from alpi.tools import (
     send_message,
     session_search,
     skill as skill_tool,
+    stt as stt_tool,
     terminal,
     todo,
+    tts as tts_tool,
     web_extract,
     web_fetch,
     web_search,
@@ -84,6 +86,8 @@ for _mod in (
     delegate,
     send_message,
     email_tool,
+    tts_tool,
+    stt_tool,
 ):
     _cls = getattr(_mod, "TOOL", None)
     if _cls is not None:

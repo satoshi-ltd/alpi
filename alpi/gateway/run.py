@@ -66,7 +66,7 @@ async def _process(platform: Platform, msg: IncomingMessage, home: Path) -> None
                 pass
 
     if not reply.strip():
-        reply = "(no response)"
+        return
     await platform.send(OutgoingMessage(
         external_chat_id=msg.external_chat_id,
         text=reply,
@@ -86,6 +86,7 @@ async def _run_agent(msg: IncomingMessage, platform: Platform, home: Path,
                      show_trace: bool) -> str:
     env = dict(os.environ)
     env["ALPI_HOME"] = str(home)
+    env["ALPI_GATEWAY"] = "1"
     proc = await asyncio.create_subprocess_exec(
         sys.executable, "-m", "alpi", "chat", "--once", msg.text, "--emit-events",
         env=env,
