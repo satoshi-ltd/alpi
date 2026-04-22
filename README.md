@@ -21,6 +21,18 @@ reflect, sub-agent mesh, SQLite state, 28 skill categories, hub/sync).
 landing. See [docs/ROADMAP.md](docs/ROADMAP.md) for what's shipped and
 what's planned.
 
+## Principles
+
+alpi respects the Terms of Service of every LLM vendor it integrates
+with. Users pay per-token API access through their own keys — that cost
+is honest and visible. **Subscription routing is not on the roadmap**:
+we do not reverse-engineer the private OAuth flows that ChatGPT Plus /
+Claude Pro / Claude Code use to talk to their official clients.
+Competitor agents ship these features; we consider that disrespectful
+to the vendor's product boundaries and unsafe for users (accounts get
+banned, reversed flows break). If a vendor publishes an official OAuth
+for third-party agents, we adopt it then.
+
 ## Install
 
 ```bash

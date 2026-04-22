@@ -14,7 +14,7 @@ Audience: Javi (product) + me (Claude across sessions).
 |---|---|---|
 | A | `send_message` outbound messaging | ✅ shipped (commit 6e31ace) |
 | B | Interactive browser (Playwright) | ✅ shipped (v0.2.16) |
-| C | OpenAI Codex provider (ChatGPT subscription auth) | 🔵 backlog — see below |
+| C | OpenAI Codex provider (ChatGPT subscription auth) | ❌ rejected — ToS violation, see "Principles" |
 | D | Vision (`read_image`) | ✅ shipped (v0.2.4) |
 | E | Multi-profile CLI | ✅ shipped (commit 630f97c) |
 | F | Gateway workspace validation | ✅ shipped (commit 04bdaba) |
@@ -32,7 +32,7 @@ Audience: Javi (product) + me (Claude across sessions).
 | S | `read_image` auto-resize (cost saver) | ✅ shipped (v0.2.21) |
 | T | Gmail API (OAuth2) gateway | ✅ shipped (v0.2.23, 2 commits: T.1 rename + T.2 full Gmail) |
 | U | Signal gateway (signal-cli) | 🔵 backlog — requires dedicated phone number |
-| V | Anthropic subscription OAuth | 🔵 backlog — ToS-gray, wait for official |
+| V | Anthropic subscription OAuth | ❌ rejected — ToS violation, see "Principles" |
 | W | Approval system (dangerous cmd + session allowlist) | 🔵 backlog |
 | X | Schedule prompt threat-scan | ✅ shipped (v0.2.20) |
 | Y | Tool result budget / truncation | ✅ shipped (v0.2.20) |
@@ -48,42 +48,26 @@ release. The bar for "ship v0.2" is **clean docs + version bump +
 real-use validation across a few sessions** — not feature
 exhaustiveness.
 
-**Nothing open for v0.2.** Everything the original roadmap promised is shipped. Items still in the backlog — **C** (Codex OAuth), **H** (Home Assistant), **J** (camoufox), **N** (image gen), **U** (Signal), **V** (Anthropic OAuth — ToS gray), **W** (approval system), **Σ.1/Σ.2** (bola extra) — roll forward to v0.3.
+**Nothing open for v0.2.** Everything the original roadmap promised is shipped. Items still in the backlog — **H** (Home Assistant), **J** (camoufox), **N** (image gen), **U** (Signal), **W** (approval system), **Σ.1/Σ.2** (bola extra) — roll forward to v0.3. **C** (OpenAI Codex OAuth) and **V** (Anthropic OAuth) were rejected on ToS grounds — see Principles section.
 
 Once the v0.3 cycle picks up a few of those + a fresh CHANGELOG
 entry summarises v0.2, bump to `v0.3.0` and reopen the table.
 
 ---
 
+## Principles
+
+alpi **respects the ToS of every provider it integrates with**. When an LLM vendor (OpenAI, Anthropic, …) offers a paid subscription for a first-party client (ChatGPT Plus/Pro, Claude Pro/Max, Claude Code), that subscription is for THAT client. Reverse-engineering the private OAuth flow of the official CLI to route a third-party agent against the same quota is:
+
+- A clear ToS violation.
+- Disrespectful to the vendor's product boundaries.
+- Unsafe for users (accounts can be banned; the reversed flow can break any time).
+
+The competitor landscape (hermes, similar third-party agents) routinely ships "Codex OAuth" / "Claude Code OAuth" features. **alpi does not, and will not.** If a vendor publishes an official OAuth-for-third-parties flow in the future (documented, stable, bindable), we adopt it then.
+
+**Practical consequence:** users pay per-token API access through their own keys. That cost is honest and visible. Subscription routing is not on the roadmap.
+
 ## Backlog — high value, on deck
-
-### C. OpenAI Codex provider (ChatGPT subscription auth)
-
-Today alpi goes through LiteLLM with API keys → OpenAI is metered per token. Hermes supports a second path: OAuth device-code against the user's ChatGPT Plus/Pro account, using the same endpoints the official Codex CLI uses. Already-paid quota instead of metered tokens.
-
-**Mechanics (reverse-engineered, not a public OpenAI API):**
-
-1. **Auth** — OAuth2 device code against `auth.openai.com` with the Codex CLI's public `client_id` (`app_EMoamEEZ73f0CkXaXp7hrann`). User opens URL + types code → poll → `access_token` + `refresh_token`. Reference: `~/git/hermes-agent/hermes_cli/auth.py:2999-3119` (`_codex_device_code_login`) and `:1615-1675` (`resolve_codex_runtime_credentials`).
-2. **Storage** — `~/.alpi/auth.json` with `fcntl` file lock (gateway + TUI + schedule daemon must not race on refresh). Refresh 120s before expiry; on 401 force-refresh + retry once.
-3. **Endpoint** — `https://chatgpt.com/backend-api/codex` (NOT `api.openai.com`).
-4. **Wire protocol** — Responses API with event streaming (`client.responses.stream(...)`), not chat/completions. **LiteLLM does not cover this cleanly** → bypass LiteLLM, use the OpenAI SDK directly. Reference: `~/git/hermes-agent/run_agent.py:4592` (`_run_codex_stream`).
-
-**Implementation shape:**
-
-- `alpi/auth/codex.py` — port from Hermes: `device_code_login()`, `resolve_runtime_credentials(force_refresh, refresh_skew)`, locked R/W of `auth.json`.
-- `alpi/providers/openai_codex.py` — new `Provider` subclass with `auth_type = "oauth_external"`, lists gpt-5 family.
-- `alpi/llm.py` — add a transport dispatch: when model id prefix is `openai-codex/`, resolve credentials and call `openai.OpenAI(...).responses.stream(...)` instead of `litellm.completion`. Normalise the event stream (`response.output_item.added` with `type=function_call`, etc.) into the same `{text_delta, tool_calls_delta, finish_reason}` shape `stream()` already yields.
-- CLI: `alpi auth openai-codex [login|logout|status]`.
-
-**Effort.** 1-2 days. Auth module is almost a literal port. The unknown is event-stream normalisation — Responses API emits a richer set of events than chat/completions.
-
-**Risks.**
-
-- **ToS grey area.** `chatgpt.com/backend-api/codex` is not a public, bindable-by-third-parties API. OpenAI can rotate the `client_id`, filter by User-Agent, or tighten the device flow at any moment. Acceptable for personal use; NOT acceptable for hosted/shared deployment.
-- **Two transports.** `engine.py` gets a second code path; contain it behind a `Transport` protocol so dispatch happens once in `llm.py`, not sprinkled.
-- **Token liveness across processes.** Gateway / TUI / schedule each open `auth.json` independently. The lock prevents torn writes but not stale reads — every transport call must re-resolve credentials.
-
-**Ship order.** Auth + CLI first (testable standalone). Then provider + transport dispatch. Then end-to-end smoke with real `gpt-5` through the agent loop.
 
 ### H. Home Assistant integration
 
@@ -112,16 +96,6 @@ Signal has the best security posture of any consumer messenger, but integration 
 **Estimated LOC:** ~200 (HTTP client + polling loop + send).
 
 **Blocker:** requires extra SIM / VoIP number. Real cost: ~$5/mo (Twilio / JustCall). Nicho unless you want E2EE + self-hosted.
-
-### V. Anthropic subscription OAuth (ToS-gray)
-
-Anthropic does not offer a public OAuth flow against Claude Pro/Max/Team quotas. Claude Code CLI uses a private OAuth against `claude.ai` but it's baked into the official client — not advertised as a bindable API. Reverse-engineering the flow is technically feasible (client_id discovery, device-code poll, session token) but:
-
-- **ToS grey**: Anthropic can (and will, if pattern detected) revoke the reverse-engineered client_id. Same category as hermes' Codex path.
-- **Value only if you already pay Pro/Max**: otherwise you still pay API tokens, just via a different endpoint.
-- **Breakage risk is permanent**: every Anthropic update can invalidate the flow.
-
-**Do not ship until Anthropic offers an official OAuth.** Documented here so nobody spends a sprint on it without reading this warning first. If it ever becomes officially supported, the implementation mirrors C (OpenAI Codex): `alpi/auth/anthropic.py` with device-code login, `alpi/providers/anthropic_oauth.py` as a second provider subclass, transport dispatch in `llm.py` when model prefix is `anthropic-oauth/…`.
 
 ### W. Approval system (dangerous cmd + session allowlist)
 
@@ -221,3 +195,5 @@ First usable cut. Textual TUI, 3-file memory with two-tier dedup, skill system w
 | (next)  | Brand cleanup across ~130 files. The Python package, binary, and home dir were already `alpi`, but the old nickname leaked everywhere — CLI help text, wizard banner titles, logger names, systemd/launchd service labels, User-Agent headers, tempfile prefixes, widget class names (`AlpiApp`, `AlpiHeader`, `AlpiTopBar`), function locals (`_locate_*`, `*_bin`, `*_home`), env vars (`ALPI_HOME`, `ALPI_PROFILE`, `ALPI_BIN`), shell aliases, docstrings, and docs. Rename staged in three regex passes: word-boundary, punctuated (`-`, `.`, `/`, `:`), and identifier-fragment (`_X_`, uppercase `X_`, capitalised `X`). Local git dir `~/git/alf/` kept intact (personal convention). 458 tests green (v0.2.27) |
 
 | (next)  | tts autoplay skipped on gateway. Before, autoplay fired on every call — fine in TUI where the speaker is right there, but in gateway context the agent usually replies to a user who is on their phone, not sitting next to the Mac. Audio played through the server speakers reaches nobody and can interrupt anyone else in earshot. Autoplay now runs only when `ALPI_GATEWAY` is unset. Voice-note delivery to Telegram via `send_message(attachment=…)` is the real channel; the user taps play on their device. Also simplified the synthesis flow: MP3 for TUI (afplay-native) or OGG via ffmpeg for gateway (Telegram `sendVoice` needs Opus). Dropped the previous "synthesise MP3 first so autoplay has something afplay can decode, then convert to OGG for delivery" gymnastics — no longer needed now that gateway never autoplays. 458 tests green (v0.2.28) |
+
+| (next)  | ToS stance codified. Removed **C** (OpenAI Codex OAuth against the private ChatGPT backend) and **V** (Anthropic Claude Pro/Code OAuth) from the backlog, marked both as rejected in the table. Added a "Principles" section to ROADMAP + README: alpi does not reverse-engineer the private OAuth flows that ChatGPT / Claude Code use for their official clients. Competitor agents (hermes, similar) ship these features; we do not. Users pay per-token API access through their own keys — honest + visible. If a vendor publishes an official OAuth-for-third-parties flow, we adopt it then. (v0.2.29) |
