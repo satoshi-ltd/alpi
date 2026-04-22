@@ -82,6 +82,7 @@ class Imap(Platform):
             self._save_last_uid(last_uid)
             log.info("IMAP baseline UID: %s (no backfill)", last_uid)
 
+        first_poll = True
         while True:
             try:
                 new_msgs = await asyncio.to_thread(
@@ -93,6 +94,10 @@ class Imap(Platform):
             except Exception as e:  # noqa: BLE001
                 log.exception("email poll crashed: %s", e)
                 new_msgs = []
+
+            if first_poll and new_msgs:
+                log.info("catching up on %d email(s) from backlog", len(new_msgs))
+            first_poll = False
 
             for raw_uid, msg_obj in new_msgs:
                 # Track max UID regardless of whether we surface it —
