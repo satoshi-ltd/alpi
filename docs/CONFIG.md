@@ -136,9 +136,9 @@ severities:
   Examples: `mkfs`, `dd of=/dev/…`, fork bomb, pipe-to-interpreter
   from an unknown URL (`curl … | bash`), recursive chmod / chown on
   `/`, reading SSH private keys, writes into `/etc` or `/var`. These
-  are **always blocked**. The only override is `ALPI_YOLO=1` in the
-  environment; there's no per-pattern allowlist for dangerous
-  severity on purpose.
+  are **always blocked**. No override — if you genuinely need to run
+  one of these, do it directly from your shell, not through the
+  agent.
 
 The allowlist is a list of **pattern descriptions** (the human label
 attached to each regex) rather than raw regex strings — so the config

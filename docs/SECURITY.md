@@ -25,8 +25,8 @@ doesn't reach:
   - **dangerous**: `mkfs`, `dd of=/dev/…`, fork bombs, pipe-to-
     interpreter (`curl | sh`), recursive `chmod`/`chown` on `/`,
     reads of SSH private keys, writes to `/etc /var /usr /boot /sys
-    /proc`. Always blocked. Override only via `ALPI_YOLO=1` in the
-    environment — no per-pattern allowlist on purpose.
+    /proc`. Always blocked. No override — run directly from your
+    shell if you genuinely need one of these.
 
   Replaces the previous hard denylist. See `docs/CONFIG.md` for the
   allowlist format and surface-specific behaviour.

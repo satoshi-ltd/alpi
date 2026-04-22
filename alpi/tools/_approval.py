@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import re
 import threading
 from dataclasses import dataclass
@@ -183,12 +182,6 @@ def check(cmd: str) -> Decision:
     severity, desc = classify(cmd)
     if severity == Severity.SAFE:
         return Decision(allowed=True, severity=severity)
-
-    if os.environ.get("ALPI_YOLO") == "1":
-        return Decision(
-            allowed=True, severity=severity, pattern=desc,
-            reason="YOLO override",
-        )
 
     if severity == Severity.DANGEROUS:
         return Decision(

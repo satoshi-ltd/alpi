@@ -291,39 +291,23 @@ def _read_frontmatter(path: Path) -> dict:
     return meta
 
 
+from rich.text import Text as _RichText
 from textual.widgets import OptionList
 from textual.widgets.option_list import Option
 
 
+_APPROVAL_CSS = """
+OptionList {
+    background: transparent !important;
+    margin: 0;
+    max-height: 18;
+}
+"""
+
+
 class ApprovalPanel(FloatingPanel):
     panel_title = "⚠ approval required"
-
-    DEFAULT_CSS = """
-    ApprovalPanel .approval-pattern {
-        color: $text-muted;
-        height: 1;
-        margin-bottom: 1;
-    }
-    ApprovalPanel .approval-command {
-        background: $surface-lighten-1;
-        color: $foreground;
-        padding: 0 1;
-        margin-bottom: 1;
-        height: auto;
-    }
-    ApprovalPanel OptionList {
-        background: transparent;
-        border: none;
-        padding: 0;
-        margin: 0;
-        height: auto;
-    }
-    ApprovalPanel OptionList > .option-list--option-highlighted {
-        background: $accent;
-        color: $foreground;
-        text-style: bold;
-    }
-    """
+    DEFAULT_CSS = _APPROVAL_CSS
 
     _OPTIONS: list[tuple[str, str, str]] = [
         ("once",    "Once",    "approve just this one call"),
@@ -339,17 +323,23 @@ class ApprovalPanel(FloatingPanel):
         self._pattern = pattern
         self._severity = severity
         self._on_choice = on_choice
-        self.panel_title = f"⚠ {severity.upper()} — approval required"
+        self.panel_title = f"⚠ {severity.upper()} · {pattern}"
 
     def compose_body(self) -> ComposeResult:
-        yield Static(f"matched: {self._pattern}", classes="approval-pattern")
-        yield Static(self._command, classes="approval-command")
-        yield OptionList(
-            *[Option(f"{lab:<8}  {hint}", id=key) for key, lab, hint in self._OPTIONS],
-            id="approval-options",
-        )
+        yield Static(self._command, classes="entry-desc")
+        options: list[Option] = []
+        for key, lab, hint in self._OPTIONS:
+            label = _RichText()
+            label.append(f"{lab:<10}", style="bold")
+            label.append("  ")
+            label.append(hint)
+            options.append(Option(label, id=key))
+        yield OptionList(*options, id="approval-options", compact=True)
 
     def on_mount(self) -> None:
+        self.call_after_refresh(self._focus_list)
+
+    def _focus_list(self) -> None:
         try:
             self.query_one(OptionList).focus()
         except Exception:  # noqa: BLE001
