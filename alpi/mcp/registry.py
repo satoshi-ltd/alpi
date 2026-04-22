@@ -64,10 +64,22 @@ def _register_tools(client: MCPClient) -> None:
         register(cls)
 
 
+_MCP_SEPARATOR = "__"
+
+
+def _sanitize_tool_name(raw: str) -> str:
+    import re
+    return re.sub(r"[^a-zA-Z0-9_-]", "_", raw)
+
+
 def _make_tool_class(client: MCPClient, spec) -> type[Tool]:
     # Spec's input_schema is a JSON Schema dict. alf's native tools
     # use the same shape directly, so we pass it through.
-    tool_name = f"{client.name}:{spec.name}"
+    tool_name = (
+        f"{_sanitize_tool_name(client.name)}"
+        f"{_MCP_SEPARATOR}"
+        f"{_sanitize_tool_name(spec.name)}"
+    )
     input_schema = spec.input_schema or {"type": "object", "properties": {}}
     tool_description = _wrap_description(spec.description)
 
@@ -119,5 +131,5 @@ def _render_content(content: list[dict]) -> str:
 
 
 def _stop_existing() -> None:
-    for tool_name in [n for n in _TOOLS if ":" in n]:
+    for tool_name in [n for n in _TOOLS if _MCP_SEPARATOR in n]:
         del _TOOLS[tool_name]
