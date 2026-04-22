@@ -18,7 +18,11 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "max_steps_per_turn": 40,
         "web_extract": {"model": ""},
         "read_image": {"model": "", "auto_resize": True, "max_edge": 1568},
-        "browser": {"vision": False},
+        "browser": {
+            "vision": False,
+            "human_typing": True,
+            "typing_delay_ms": [30, 80],
+        },
         "terminal": {
             "sandbox": False,
             "allow_network": False,
@@ -96,6 +100,8 @@ class TerminalToolConfig:
 @dataclass
 class BrowserToolConfig:
     vision: bool = False
+    human_typing: bool = True
+    typing_delay_ms: list[int] = field(default_factory=lambda: [30, 80])
 
 
 @dataclass
@@ -205,6 +211,8 @@ def load(home: Path) -> Config:
         ),
         browser=BrowserToolConfig(
             vision=bool(browser_raw.get("vision", False)),
+            human_typing=bool(browser_raw.get("human_typing", True)),
+            typing_delay_ms=list(browser_raw.get("typing_delay_ms", [30, 80])),
         ),
         tts=TtsToolConfig(
             voice=str(tts_raw.get("voice", "en-US-AriaNeural") or "en-US-AriaNeural"),
@@ -282,8 +290,15 @@ def _tools_delta(cfg: Config) -> dict:
         term_out["allow_network"] = cfg.tools.terminal.allow_network
     if term_out:
         out["terminal"] = term_out
+    browser_out: dict[str, Any] = {}
     if cfg.tools.browser.vision != d["browser"]["vision"]:
-        out["browser"] = {"vision": cfg.tools.browser.vision}
+        browser_out["vision"] = cfg.tools.browser.vision
+    if cfg.tools.browser.human_typing != d["browser"]["human_typing"]:
+        browser_out["human_typing"] = cfg.tools.browser.human_typing
+    if cfg.tools.browser.typing_delay_ms != d["browser"]["typing_delay_ms"]:
+        browser_out["typing_delay_ms"] = cfg.tools.browser.typing_delay_ms
+    if browser_out:
+        out["browser"] = browser_out
     tts_out: dict[str, Any] = {}
     if cfg.tools.tts.voice != d["tts"]["voice"]:
         tts_out["voice"] = cfg.tools.tts.voice

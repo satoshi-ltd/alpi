@@ -92,6 +92,27 @@ def test_type_fills_input(monkeypatch) -> None:
 
     r = Browser().run(action="type", role="textbox", name="Email", text="a@b.com")
     assert r.ok
+    target = page.get_by_role.return_value.first
+    target.clear.assert_called_once()
+    target.press_sequentially.assert_called_once()
+    args, kwargs = target.press_sequentially.call_args
+    assert args[0] == "a@b.com"
+    assert 30 <= kwargs["delay"] <= 80
+
+
+def test_type_uses_fill_when_human_typing_off(monkeypatch, tmp_path) -> None:
+    import alpi.home as home_mod
+    monkeypatch.setattr(home_mod, "_ROOT", tmp_path)
+    (tmp_path / "config.yaml").write_text(
+        "tools:\n  browser:\n    human_typing: false\n"
+    )
+    page = MagicMock()
+    page.locator.return_value.aria_snapshot.return_value = "- textbox"
+    page.url = "https://x.test/"
+    _install_fake_page(monkeypatch, page)
+
+    r = Browser().run(action="type", role="textbox", name="Email", text="a@b.com")
+    assert r.ok
     page.get_by_role.return_value.first.fill.assert_called_once_with("a@b.com")
 
 

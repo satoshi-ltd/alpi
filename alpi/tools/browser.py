@@ -205,8 +205,44 @@ def _do_type(role: str, name: str, text: str) -> ToolResult:
             ok=False, output="",
             error="type needs `role` (+ optional `name`)",
         )
-    loc.first.fill(text)
+    target = loc.first
+    human, delay_range = _browser_typing_cfg()
+    if human and delay_range not in ([0], [0, 0], []):
+        import random
+        lo, hi = _sanitize_delay_range(delay_range)
+        target.clear()
+        target.press_sequentially(text, delay=random.randint(lo, hi))
+    else:
+        target.fill(text)
     return ToolResult(ok=True, output=_snapshot(page))
+
+
+def _browser_typing_cfg() -> tuple[bool, list]:
+    import yaml
+    try:
+        cfg_path = get_home() / "config.yaml"
+        if not cfg_path.exists():
+            return True, [30, 80]
+        data = yaml.safe_load(cfg_path.read_text()) or {}
+        b = ((data.get("tools") or {}).get("browser") or {})
+    except Exception:  # noqa: BLE001
+        return True, [30, 80]
+    return bool(b.get("human_typing", True)), list(b.get("typing_delay_ms", [30, 80]))
+
+
+def _sanitize_delay_range(raw) -> tuple[int, int]:
+    try:
+        if isinstance(raw, (list, tuple)) and len(raw) >= 2:
+            lo, hi = int(raw[0]), int(raw[1])
+        elif isinstance(raw, (list, tuple)) and len(raw) == 1:
+            lo = hi = int(raw[0])
+        else:
+            lo, hi = int(raw), int(raw)
+    except (TypeError, ValueError):
+        lo, hi = 30, 80
+    if lo > hi:
+        lo, hi = hi, lo
+    return max(0, lo), max(0, hi)
 
 
 def _do_scroll(direction: str) -> ToolResult:
@@ -223,6 +259,10 @@ def _do_press(key: str) -> ToolResult:
     page, err = _ensure_page_blocking()
     if err is not None:
         return ToolResult(ok=False, output="", error=err)
+    human, _ = _browser_typing_cfg()
+    if human:
+        import random
+        page.wait_for_timeout(random.randint(150, 400))
     page.keyboard.press(key)
     page.wait_for_load_state("domcontentloaded")
     return ToolResult(ok=True, output=_snapshot(page))
