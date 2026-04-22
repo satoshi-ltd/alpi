@@ -573,6 +573,7 @@ def setup_cmd(ctx: click.Context) -> None:
             (ui.row("MCPs", _mcp_status(h)), "mcps"),
             (ui.row("Sandbox", _sandbox_status(cfg)), "sandbox"),
             (ui.row("Voice", _voice_status(cfg)), "voice"),
+            (ui.row("Cleanup", _cleanup_status(h)), "cleanup"),
         ]
         # Every title starts with ``alpi`` as a lightweight brand +
         # "you are here" marker. The active profile goes in the
@@ -599,6 +600,8 @@ def setup_cmd(ctx: click.Context) -> None:
             _sandbox_setup(h)
         elif choice == "voice":
             _voice_setup(h)
+        elif choice == "cleanup":
+            _cleanup_setup(h)
 
 
 def _setup_farewell(profile: str, h: Path) -> None:
@@ -835,6 +838,135 @@ def _voice_setup(h: Path) -> None:
 
     cfg.tools.tts.voice = choice
     config.save(cfg)
+
+
+_SESSION_STALE_DAYS = 30
+
+
+def _cleanup_categories(h: Path) -> list[dict]:
+    import time
+    now = time.time()
+    stale_cutoff = now - _SESSION_STALE_DAYS * 86400
+
+    def _dir(name: str) -> Path:
+        return h / name
+
+    def _sum(files: list[Path]) -> int:
+        total = 0
+        for p in files:
+            try:
+                total += p.stat().st_size
+            except OSError:
+                pass
+        return total
+
+    def _all(d: Path) -> list[Path]:
+        if not d.exists():
+            return []
+        return [p for p in d.iterdir() if p.is_file()]
+
+    def _older_than(d: Path, cutoff: float) -> list[Path]:
+        if not d.exists():
+            return []
+        out: list[Path] = []
+        for p in d.iterdir():
+            if not p.is_file():
+                continue
+            try:
+                if p.stat().st_mtime < cutoff:
+                    out.append(p)
+            except OSError:
+                continue
+        return out
+
+    tts_files = _all(_dir("cache/tts"))
+    inbound_files = _all(_dir("cache/inbound"))
+    session_files = _older_than(_dir("sessions"), stale_cutoff)
+    log_files = _all(_dir("gateway/logs"))
+    sched_files = _all(_dir("schedule/output"))
+
+    return [
+        {
+            "key": "audio",
+            "label": "Audio cache",
+            "desc": "TTS output + inbound Telegram voice notes",
+            "files": tts_files + inbound_files,
+            "size": _sum(tts_files + inbound_files),
+        },
+        {
+            "key": "sessions",
+            "label": f"Sessions (+{_SESSION_STALE_DAYS}days)",
+            "desc": "conversation transcripts kept in `sessions/`",
+            "files": session_files,
+            "size": _sum(session_files),
+        },
+        {
+            "key": "logs",
+            "label": "Gateway logs",
+            "desc": "`gateway/logs/*.log` — rotated by restart",
+            "files": log_files,
+            "size": _sum(log_files),
+        },
+        {
+            "key": "schedule",
+            "label": "Schedule output",
+            "desc": "stdout/stderr of past scheduled jobs",
+            "files": sched_files,
+            "size": _sum(sched_files),
+        },
+    ]
+
+
+def _cleanup_status(h: Path) -> str:
+    from alpi import home as home_mod
+    cats = _cleanup_categories(h)
+    total = sum(c["size"] for c in cats)
+    if total == 0:
+        return "nothing to clean"
+    return f"{home_mod.format_bytes(total)} reclaimable"
+
+
+def _cleanup_setup(h: Path) -> None:
+    from alpi import home as home_mod, ui
+    while True:
+        cats = _cleanup_categories(h)
+        items: list = []
+        for c in cats:
+            n = len(c["files"])
+            if n == 0:
+                status = "empty"
+            else:
+                status = f"{home_mod.format_bytes(c['size'])} · {n} file{'s' if n != 1 else ''}"
+            items.append((ui.row(c["label"], status), c["key"]))
+
+        choice = ui.menu(
+            ui.crumb("setup", "cleanup"),
+            items,
+            subtitle=f"profile: {home_mod.shorten_home(h)}",
+            home=h, close="Back",
+        )
+        if choice is None:
+            return
+        target = next((c for c in cats if c["key"] == choice), None)
+        if target is None or not target["files"]:
+            continue
+
+        n = len(target["files"])
+        size_label = home_mod.format_bytes(target["size"])
+        ui._console.print("")
+        if not ui.confirm(
+            f"  Delete {n} file(s) · {size_label} from {target['label']}?",
+            default=False,
+        ):
+            continue
+        deleted = 0
+        for p in target["files"]:
+            try:
+                p.unlink()
+                deleted += 1
+            except OSError as e:  # noqa: BLE001
+                ui.fail(f"could not delete {p.name}: {e}")
+        ui.ok(f"removed {deleted} file(s) from {target['label']}")
 
 
 def _email_status(h: Path) -> str:

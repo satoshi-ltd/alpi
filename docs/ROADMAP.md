@@ -26,7 +26,7 @@ Audience: Javi (product) + me (Claude across sessions).
 | L | Reasoning-as-state (TUI) | ✅ shipped (commits 62f7fa7 + fd1fec4) |
 | M | TTS / STT / voice-mode (local-first) | ✅ shipped (v0.2.25, 2 tools + Telegram voice inbound/outbound, no continuous voice mode) |
 | N | Image generation | 🔵 backlog — no concrete use case yet |
-| AA | Cleanup wizard (`alpi setup → Cleanup`) | 🔵 backlog — now that the top bar surfaces profile size |
+| AA | Cleanup wizard (`alpi setup → Cleanup`) | ✅ shipped (v0.2.39) |
 | AB | Gateway vs TUI profile split wizard | 🔵 backlog — make unattended gateway install one-click |
 | AC | Auto-generated CHANGELOG.md from commits | 🔵 backlog — release-cycle polish |
 | R.1 | Research step-counter in state label | ✅ shipped (v0.2.2) |
@@ -51,7 +51,7 @@ release. The bar for "ship v0.2" is **clean docs + version bump +
 real-use validation across a few sessions** — not feature
 exhaustiveness.
 
-**Nothing open for v0.2.** Everything the original roadmap promised is shipped. Items still in the backlog — **H** (Home Assistant), **N** (image gen), **U** (Signal), **AA** (Cleanup wizard), **AB** (Gateway profile split), **AC** (CHANGELOG auto-gen), **Σ.1/Σ.2** (bola extra) — roll forward to v0.3. **C** (OpenAI Codex OAuth), **V** (Anthropic OAuth), and **J** (camoufox) were rejected — C/V on ToS grounds (see Principles), J after humanised Playwright made it redundant.
+**Nothing open for v0.2.** Everything the original roadmap promised is shipped. Items still in the backlog — **H** (Home Assistant), **N** (image gen), **U** (Signal), **AB** (Gateway profile split), **AC** (CHANGELOG auto-gen), **Σ.1/Σ.2** (bola extra) — roll forward to v0.3. **C** (OpenAI Codex OAuth), **V** (Anthropic OAuth), and **J** (camoufox) were rejected — C/V on ToS grounds (see Principles), J after humanised Playwright made it redundant.
 
 Once the v0.3 cycle picks up a few of those + a fresh CHANGELOG
 entry summarises v0.2, bump to `v0.3.0` and reopen the table.
@@ -80,10 +80,6 @@ Only if Javi runs HA. Hermes has `homeassistant_tool` as reference. Requires `HA
 
 `generate_image(prompt, style)` using the active vision model or a dedicated endpoint (DALL-E, SD). Useful for "hazme un logo rápido". Low priority unless a concrete use case appears.
 
-### AA. Cleanup wizard
-
-`alpi setup → Cleanup` — an interactive pass over the active profile's heavy dirs (`cache/tts/`, `cache/`, old `sessions/*.json`, `schedule/output/`, `gateway/logs/`) with size + mtime per entry and a "[delete] [keep]" toggle. The top-bar profile size (v0.2.31) makes the ballooning visible; this wizard lets the user act on it without rm-ing by hand. Could reuse `home.profile_size_label` infrastructure. Estimated ~150 LOC.
-
 ### AB. Gateway vs TUI profile split wizard
 
 Today a user running alpi both interactively and as a gateway daemon runs both under the same profile (same model, same memory, same cache). The gateway often wants: leaner model, stricter sandbox, offline `allow_network=false`, different allowlist. Manual today. Proposal: `alpi setup → Gateway install` wizard that (a) creates a dedicated profile (e.g. `gateway`), (b) copies relevant `.env` subset, (c) registers a launchd/systemd unit pointing at `alpi -p gateway gateway start`, (d) suggests a conservative model + sandbox preset. Saves a lot of manual ops for hostile-environment setups. Estimated ~200 LOC.
@@ -105,20 +101,6 @@ Signal has the best security posture of any consumer messenger, but integration 
 **Estimated LOC:** ~200 (HTTP client + polling loop + send).
 
 **Blocker:** requires extra SIM / VoIP number. Real cost: ~$5/mo (Twilio / JustCall). Nicho unless you want E2EE + self-hosted.
-
-### W. Approval system (dangerous cmd + session allowlist)
-
-Today the `terminal` tool has a static denylist (`_guards.py`) that blocks known-destructive patterns. It's binary: allowed or blocked. Real-world agent runs hit a middle ground — commands that *look* dangerous but are legitimate (`rm -rf node_modules` inside the workspace, `sudo systemctl restart X` on a dev VM). Today those get blocked forever; users would want "yes, approve once for this session."
-
-**Scope.**
-- A pattern-based scanner classifies each terminal call as `safe` | `caution` | `dangerous` (reuse patterns from existing `_guards.py`, extend with the hermes list).
-- `caution` commands pause with a prompt: `[approve once] [approve for this session] [block]`. Session allowlist stored in-memory, discarded on restart.
-- `dangerous` blocked by default; bypassable only with an explicit `--yolo` flag or per-pattern config entry.
-- Works consistently in TUI (interactive) and gateway (auto-block if unattended, never auto-approve `dangerous`).
-
-**Estimated LOC:** ~150. Fits naturally alongside the existing sandbox (P — layer 2).
-
-**Design notes (post-hermes research, 2026-04-22).** Hermes' approval (`tools/approval.py`) is our reference: 39 hardcoded regex with human-readable descriptions, 3 scopes (`once`/`session`/`always`), permanent allowlist in config, per-surface defaults. Steal the pattern list + description strings + 3-scope model. Drop hermes' smart-mode LLM approver (unnecessary complexity), dual legacy/new pattern keys (back-compat we don't need — ship clean), triple scanner stack (regex + Tirith + skills-guard; one capa is enough), and activity-heartbeat during blocking (no inactivity watchdog to fight). Design split with sandbox (P): sandbox is automatic boundary (network/FS); approval is user-in-loop for destruction *inside* the allowed scope — complementary, not redundant. Surface defaults: TUI blocking modal with 60s timeout, schedule auto-deny (second layer over existing threat-scan), gateway auto-deny + notify-user-with-blocked-command (no interactive `/approve` flow over Telegram/email in v1 — reply correlation is not worth the LOC; revisit if users ask). YOLO escape: `--yolo` flag or `ALPI_YOLO=1`. Scope v1: only `terminal` tool (biggest blast radius); revisit `write_file` / other tools only if real incidents warrant. Module: single `alpi/tools/_approval.py`, patterns hardcoded, session state in a module-level dict keyed by session id, `always` persisted to `tools.terminal.approval.allowlist: []` in config.yaml.
 
 ### Σ.1. Mixture-of-agents (bola extra)
 
@@ -222,3 +204,5 @@ First usable cut. Textual TUI, 3-file memory with two-tier dedup, skill system w
 | (next)  | W shipped: command approval system on `terminal`. Replaces the static binary denylist (`_guards.check_command`) with a three-severity classifier (`safe`/`caution`/`dangerous`) in `alpi/tools/_approval.py`. 15 hardcoded patterns; safe runs through, caution prompts the user (TUI modal with four buttons: Once / Session / Always / Deny), dangerous always blocks unless `ALPI_YOLO=1` in env. Session approvals live in a module-level set (cleared on restart); Always persists the pattern description to `tools.terminal.approval.allowlist` in `config.yaml`. Non-TUI surfaces (gateway, schedule) auto-deny caution with an actionable error ("rerun from TUI or add to allowlist"). `ApprovalModal` (`alpi/tui/screens.py`) pushed via `call_from_thread` + `threading.Event` with 60 s timeout so the worker thread blocks cleanly on user input. Compared to hermes's `tools/approval.py` (~900 LOC): same 3-scope model, same surface-aware defaults, but dropped the smart-mode LLM auxiliary approver, the dual legacy/new pattern keys, the triple scanner stack (regex + Tirith + skills-guard), and the activity-heartbeat during blocking — ~200 LOC total. 13 new tests. 472 green. (v0.2.37) |
 
 | (next)  | Approval panel polish + YOLO removal. The `ApprovalPanel` now mirrors `/model`: minimal CSS (transparent OptionList, `compact=True` row height, `max-height: 18`), option labels built with `rich.Text` bold name + muted hint, panel title carries severity + matched pattern (`⚠ CAUTION · recursive rm`). Command shown as an `entry-desc` static above the list with margin-bottom 1. Focus timed via `call_after_refresh` so Enter works first-shot (was stolen by `_show_panel`'s `set_focus(None)` before). Removed the `ALPI_YOLO` escape hatch — dangerous severity is now always-always blocked; if the user genuinely needs `mkfs` they run it from their shell, not through the agent. Also compressed the `terminal` rule in `system_prompt.md` from 7 lines to 2: "Don't refuse destructive commands in chat. `terminal` has a built-in approval gate that pauses for user confirmation. Just call it." (v0.2.38) |
+
+| (next)  | AA shipped: Cleanup wizard (`alpi setup → Cleanup`). Scans the active profile's heavy directories — audio cache (tts output + inbound Telegram voice notes), sessions older than 30 days, gateway logs, schedule output — and shows each category with reclaimable size + file count in the setup menu. Picking a category opens a confirmation prompt ("Delete N file(s) · X from <label>?"); on yes, unlinks them and refreshes the list. Reuses `home.format_bytes` / `shorten_home`. Entry in the setup main menu shows the total reclaimable ("Cleanup · 1.8MB reclaimable" or "nothing to clean"). No automatic cleanup — only user-triggered; conservative by design. ~120 LOC. (v0.2.39) |

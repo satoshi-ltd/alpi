@@ -36,8 +36,12 @@ only when you want to override it.
 Two options:
 
 - **CLI wizards**: `alpi setup` covers model selection, gateway
-  credentials, MCP servers, and sandbox posture — the settings that
-  benefit from structured flows or secret handling.
+  credentials, MCP servers, sandbox posture, voice, and disk cleanup
+  — the settings that benefit from structured flows or secret
+  handling. `alpi setup → Cleanup` inspects the profile's heavy dirs
+  (audio cache, old sessions, gateway logs, schedule output), shows
+  reclaimable size per category, and deletes after one-shot
+  confirmation.
 - **Edit the YAML**: open `~/.alpi/config.yaml` (or
   `~/.alpi/profiles/<name>/config.yaml` for non-default profiles)
   and change values manually. Restart whatever surface was affected.
