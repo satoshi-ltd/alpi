@@ -9,7 +9,7 @@ Audience: any developer (or LLM) reading this codebase from cold.
 ## What alf is
 
 A slim personal AI agent. Two surfaces — a Textual TUI in the terminal
-and a Telegram/email gateway as a separate process. Inline-learning
+and a Telegram/IMAP gateway as a separate process. Inline-learning
 memory (no post-session reflect), live-by-default skills with a security
 scanner and a quota, multi-provider LLM via LiteLLM (plus a planned
 direct-Codex transport for the ChatGPT subscription path).
@@ -109,9 +109,9 @@ alf/
 │   └── … (read_file, write_file, edit_file, todo, web_*, schedule,
 │         memory, session_search, send_message, email, config)
 ├── tui/                    Textual app, widgets, screens, theme
-├── gateway/                separate process (Telegram / email)
+├── gateway/                separate process (Telegram / IMAP)
 ├── scheduler/              schedule daemon (cron + once jobs)
-├── email/                  IMAP+SMTP client (shared by tool + gateway)
+├── mail/                   mail backends (imap.py — IMAP+SMTP; gmail.py coming in T)
 ├── mcp/                    MCP client (stdio JSON-RPC) + registry
 └── skills/                 bundled skills (only `meta/consolidate-memory`)
 ```
@@ -250,7 +250,7 @@ Textual 8.2.x. Layout: `AlfTopBar` (identity) + chat scroll (`VerticalScroll.anc
 
 Separate process from the TUI. `alpi gateway start` runs an event loop that listens to platforms (Telegram long-poll, IMAP polling) and spawns `alf chat --once --emit-events` per incoming message. Tool traces stream as `◆ {tool} · {arg_hint}` messages; typing indicator stays on while the subprocess works.
 
-Allowlist: `TELEGRAM_ALLOWED_CHAT_IDS` and `EMAIL_ALLOWED_SENDERS` in `.env`, fail-closed if unset. Per-platform config under `gateway.{telegram,email}` in `config.yaml` (`show_tool_trace`, `typing_indicator`, etc.).
+Allowlist: `TELEGRAM_ALLOWED_CHAT_IDS` and `IMAP_ALLOWED_SENDERS` in `.env`, fail-closed if unset. Per-platform config under `gateway.{telegram,imap}` in `config.yaml` (`show_tool_trace`, `typing_indicator`, etc.).
 
 `alpi gateway install/uninstall` registers a launchd (macOS) or systemd-user (Linux) unit so the gateway survives reboot.
 

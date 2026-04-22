@@ -1,6 +1,6 @@
 """Tests for the email gateway platform (inbound listener + outbound).
 
-Covers the IMAP poll logic by mocking the EmailClient's IMAP helpers.
+Covers the IMAP poll logic by mocking the ImapClient's IMAP helpers.
 No real network. We focus on:
 - Baseline UID on first run (no backfill)
 - Subsequent polls surface only messages with UID > last_seen
@@ -23,7 +23,7 @@ import pytest
 
 from alpi.gateway import delivery
 from alpi.gateway.base import IncomingMessage, OutgoingMessage
-from alpi.gateway.platforms import email as email_platform
+from alpi.gateway.platforms import imap as email_platform
 
 
 # --------------------------------------------------------------------
@@ -90,17 +90,17 @@ def patch_imap(monkeypatch):
         holder["imap"] = _FakeIMAP()
         return holder["imap"]
 
-    import alpi.email.client as client_mod
+    import alpi.mail.imap as client_mod
     monkeypatch.setattr(client_mod.imaplib, "IMAP4_SSL", factory)
     return holder
 
 
 @pytest.fixture
 def env(monkeypatch):
-    monkeypatch.setenv("EMAIL_ADDRESS", "alf@example.com")
-    monkeypatch.setenv("EMAIL_PASSWORD", "pw")
-    monkeypatch.setenv("EMAIL_IMAP_HOST", "imap.example.com")
-    monkeypatch.setenv("EMAIL_SMTP_HOST", "smtp.example.com")
+    monkeypatch.setenv("IMAP_ADDRESS", "alf@example.com")
+    monkeypatch.setenv("IMAP_PASSWORD", "pw")
+    monkeypatch.setenv("IMAP_HOST", "imap.example.com")
+    monkeypatch.setenv("SMTP_HOST", "smtp.example.com")
 
 
 # --------------------------------------------------------------------
@@ -116,10 +116,10 @@ def test_discover_baseline_returns_latest_uid(env, patch_imap, tmp_path: Path) -
         imap.uids_in_box = {"7": b"", "8": b"", "9": b""}
         imap_holder["imap"] = imap
         return imap
-    import alpi.email.client as client_mod
+    import alpi.mail.imap as client_mod
     client_mod.imaplib.IMAP4_SSL = factory_with_state  # type: ignore[assignment]
 
-    platform = email_platform.Email(tmp_path)
+    platform = email_platform.Imap(tmp_path)
     assert platform._discover_baseline_uid() == 9
 
 
@@ -134,10 +134,10 @@ def test_poll_once_returns_only_messages_after_last_uid(env, tmp_path: Path, mon
         imap.search_responses[("UID", "6:*")] = ["6"]
         return imap
 
-    import alpi.email.client as client_mod
+    import alpi.mail.imap as client_mod
     monkeypatch.setattr(client_mod.imaplib, "IMAP4_SSL", factory)
 
-    platform = email_platform.Email(tmp_path)
+    platform = email_platform.Imap(tmp_path)
     results = platform._poll_once(since_uid=5)
     assert len(results) == 1
     uid, msg = results[0]
@@ -188,23 +188,23 @@ def test_auto_submitted_no_still_passes() -> None:
 
 
 def test_save_and_load_last_uid_roundtrip(env, tmp_path: Path) -> None:
-    p = email_platform.Email(tmp_path)
+    p = email_platform.Imap(tmp_path)
     assert p._load_last_uid() is None
     p._save_last_uid(42)
     # Re-instantiate to force re-read from disk.
-    p2 = email_platform.Email(tmp_path)
+    p2 = email_platform.Imap(tmp_path)
     assert p2._load_last_uid() == 42
 
 
 def test_state_is_per_email_address(env, tmp_path: Path, monkeypatch) -> None:
-    p1 = email_platform.Email(tmp_path)
+    p1 = email_platform.Imap(tmp_path)
     p1._save_last_uid(10)
-    monkeypatch.setenv("EMAIL_ADDRESS", "other@example.com")
-    p2 = email_platform.Email(tmp_path)
+    monkeypatch.setenv("IMAP_ADDRESS", "other@example.com")
+    p2 = email_platform.Imap(tmp_path)
     assert p2._load_last_uid() is None
     p2._save_last_uid(20)
-    monkeypatch.setenv("EMAIL_ADDRESS", "alf@example.com")
-    p3 = email_platform.Email(tmp_path)
+    monkeypatch.setenv("IMAP_ADDRESS", "alf@example.com")
+    p3 = email_platform.Imap(tmp_path)
     assert p3._load_last_uid() == 10
 
 
@@ -214,7 +214,7 @@ def test_state_is_per_email_address(env, tmp_path: Path, monkeypatch) -> None:
 
 
 def test_delivery_allowlist_uses_email_allowed_senders(monkeypatch) -> None:
-    monkeypatch.setenv("EMAIL_ALLOWED_SENDERS", "Pepe@X.COM, ana@y.com")
+    monkeypatch.setenv("IMAP_ALLOWED_SENDERS", "Pepe@X.COM, ana@y.com")
     # Case-insensitive match.
     assert delivery.is_allowed("email", "pepe@x.com") is True
     assert delivery.is_allowed("email", "PEPE@X.COM") is True
@@ -222,11 +222,11 @@ def test_delivery_allowlist_uses_email_allowed_senders(monkeypatch) -> None:
 
 
 def test_delivery_send_to_email_dispatches(monkeypatch, tmp_path: Path) -> None:
-    monkeypatch.setenv("EMAIL_ADDRESS", "me@x.com")
-    monkeypatch.setenv("EMAIL_PASSWORD", "pw")
-    monkeypatch.setenv("EMAIL_IMAP_HOST", "i.x.com")
-    monkeypatch.setenv("EMAIL_SMTP_HOST", "s.x.com")
-    monkeypatch.setenv("EMAIL_ALLOWED_SENDERS", "pepe@x.com")
+    monkeypatch.setenv("IMAP_ADDRESS", "me@x.com")
+    monkeypatch.setenv("IMAP_PASSWORD", "pw")
+    monkeypatch.setenv("IMAP_HOST", "i.x.com")
+    monkeypatch.setenv("SMTP_HOST", "s.x.com")
+    monkeypatch.setenv("IMAP_ALLOWED_SENDERS", "pepe@x.com")
 
     sends: list = []
 
@@ -239,14 +239,14 @@ def test_delivery_send_to_email_dispatches(monkeypatch, tmp_path: Path) -> None:
             sends.append({"to": to, "subject": subject, "body": body})
 
     # Patch the lazy import inside _send_email_sync.
-    import alpi.email.client as client_mod
-    monkeypatch.setattr(client_mod, "EmailClient", _FakeClient)
+    import alpi.mail.imap as client_mod
+    monkeypatch.setattr(client_mod, "ImapClient", _FakeClient)
 
     delivery.send_to("email", "pepe@x.com", "hello")
     assert sends == [{"to": ["pepe@x.com"], "subject": "[alf]", "body": "hello"}]
 
 
 def test_delivery_email_rejects_unallowlisted(monkeypatch) -> None:
-    monkeypatch.setenv("EMAIL_ALLOWED_SENDERS", "pepe@x.com")
-    with pytest.raises(delivery.DeliveryError, match="not in EMAIL_ALLOWED_SENDERS"):
+    monkeypatch.setenv("IMAP_ALLOWED_SENDERS", "pepe@x.com")
+    with pytest.raises(delivery.DeliveryError, match="not in IMAP_ALLOWED_SENDERS"):
         delivery.send_to("email", "eve@evil.com", "boom")

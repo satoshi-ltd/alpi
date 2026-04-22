@@ -1,4 +1,4 @@
-"""Email platform adapter — inbound IMAP poll + outbound SMTP reply."""
+"""IMAP platform adapter — inbound IMAP poll + outbound SMTP reply."""
 
 from __future__ import annotations
 
@@ -11,10 +11,10 @@ import re
 from pathlib import Path
 from typing import AsyncIterator
 
-from alpi.email.client import EmailClient, EmailError
+from alpi.mail.imap import ImapClient, ImapError
 from alpi.gateway.base import IncomingMessage, OutgoingMessage, Platform
 
-log = logging.getLogger("alf.gateway.email")
+log = logging.getLogger("alf.gateway.imap")
 
 DEFAULT_POLL_INTERVAL = 60
 # Folder alf listens on. We deliberately don't look in Spam/Junk — the
@@ -42,10 +42,10 @@ _AUTOMATED_HEADERS = {
 
 
 def _state_path(home: Path) -> Path:
-    return home / "gateway" / "email-state.json"
+    return home / "gateway" / "imap-state.json"
 
 
-class Email(Platform):
+class Imap(Platform):
     """Gateway inbound/outbound adapter for an IMAP+SMTP mailbox."""
 
     name = "email"
@@ -59,14 +59,14 @@ class Email(Platform):
     # Listen — async IMAP poll driven by the gateway event loop
 
     async def listen(self) -> AsyncIterator[IncomingMessage]:
-        if not os.environ.get("EMAIL_ADDRESS"):
-            log.info("EMAIL_ADDRESS not set — email listener idle.")
+        if not os.environ.get("IMAP_ADDRESS"):
+            log.info("IMAP_ADDRESS not set — email listener idle.")
             while True:
                 await asyncio.sleep(3600)
                 if False:  # pragma: no cover
                     yield  # type: ignore[misc]
 
-        log.info("Email listener starting (poll every %ss).", self._poll_interval)
+        log.info("IMAP listener starting (poll every %ss).", self._poll_interval)
 
         # Baseline on first run so we don't backfill a whole inbox of
         # old mail. Subsequent starts read the persisted UID.
@@ -74,14 +74,14 @@ class Email(Platform):
         if last_uid is None:
             last_uid = await asyncio.to_thread(self._discover_baseline_uid)
             self._save_last_uid(last_uid)
-            log.info("Email baseline UID: %s (no backfill)", last_uid)
+            log.info("IMAP baseline UID: %s (no backfill)", last_uid)
 
         while True:
             try:
                 new_msgs = await asyncio.to_thread(
                     self._poll_once, last_uid,
                 )
-            except EmailError as e:
+            except ImapError as e:
                 log.warning("email poll failed: %s", e)
                 new_msgs = []
             except Exception as e:  # noqa: BLE001
@@ -108,7 +108,7 @@ class Email(Platform):
                 if self._mark_as_read:
                     try:
                         await asyncio.to_thread(self._mark_seen, raw_uid)
-                    except EmailError as e:
+                    except ImapError as e:
                         log.debug("email: failed to mark %s seen: %s", raw_uid, e)
 
                 prompt = (
@@ -128,7 +128,7 @@ class Email(Platform):
 
     async def send(self, message: OutgoingMessage) -> None:
         def _do_send() -> None:
-            client = EmailClient.from_env()
+            client = ImapClient.from_env()
             client.send(
                 to=[message.external_chat_id],
                 subject="[alf] re:",
@@ -136,20 +136,20 @@ class Email(Platform):
             )
         try:
             await asyncio.to_thread(_do_send)
-        except EmailError as e:
+        except ImapError as e:
             log.warning("email send failed: %s", e)
 
     # Sync IMAP helpers (run under asyncio.to_thread to avoid blocking)
 
     def _discover_baseline_uid(self) -> int:
-        client = EmailClient.from_env()
+        client = ImapClient.from_env()
         with client._imap() as imap:
             client._select(imap, INBOX)
             uids = client._uid_search(imap, ["ALL"])
             return int(uids[-1]) if uids else 0
 
     def _poll_once(self, since_uid: int) -> list[tuple[str, object]]:
-        client = EmailClient.from_env()
+        client = ImapClient.from_env()
         results: list[tuple[str, object]] = []
         with client._imap() as imap:
             client._select(imap, INBOX)
@@ -172,12 +172,12 @@ class Email(Platform):
         return results
 
     def _mark_seen(self, uid: str) -> None:
-        client = EmailClient.from_env()
+        client = ImapClient.from_env()
         with client._imap() as imap:
             client._select(imap, INBOX)
             typ, _ = imap.uid("STORE", uid, "+FLAGS", r"(\Seen)")
             if typ != "OK":
-                raise EmailError(f"could not mark UID {uid} seen")
+                raise ImapError(f"could not mark UID {uid} seen")
 
     def _load_last_uid(self) -> int | None:
         p = _state_path(self.home)
@@ -187,7 +187,7 @@ class Email(Platform):
             data = json.loads(p.read_text() or "{}")
         except json.JSONDecodeError:
             return None
-        addr = os.environ.get("EMAIL_ADDRESS", "").lower()
+        addr = os.environ.get("IMAP_ADDRESS", "").lower()
         val = data.get(addr)
         try:
             return int(val) if val is not None else None
@@ -201,7 +201,7 @@ class Email(Platform):
             data = json.loads(p.read_text() or "{}") if p.exists() else {}
         except json.JSONDecodeError:
             data = {}
-        addr = os.environ.get("EMAIL_ADDRESS", "").lower()
+        addr = os.environ.get("IMAP_ADDRESS", "").lower()
         data[addr] = uid
         tmp = p.with_suffix(".json.tmp")
         tmp.write_text(json.dumps(data, indent=2))
@@ -211,7 +211,7 @@ class Email(Platform):
         try:
             from alpi import config as config_mod
             cfg = config_mod.load(self.home)
-            email_cfg = (cfg.gateway or {}).get("email", {})
+            email_cfg = (cfg.gateway or {}).get("imap", {})
             self._poll_interval = int(
                 email_cfg.get("poll_interval", DEFAULT_POLL_INTERVAL)
             )

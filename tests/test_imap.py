@@ -1,4 +1,4 @@
-"""Tests for the email subsystem — EmailClient + tool.
+"""Tests for the email subsystem — ImapClient + tool.
 
 IMAP/SMTP are mocked (fake classes injected via monkeypatch on
 ``imaplib.IMAP4_SSL`` / ``smtplib.SMTP``). No real network, no real
@@ -10,7 +10,7 @@ mailbox. We exercise:
 - send writes the right ``EmailMessage`` + recipients
 - reply / forward compose subject + threading headers correctly
 - move / delete fall through folder candidates
-- tool dispatcher surfaces EmailError as ToolResult.error
+- tool dispatcher surfaces ImapError as ToolResult.error
 """
 
 from __future__ import annotations
@@ -22,8 +22,8 @@ from typing import Any
 
 import pytest
 
-from alpi.email import client as email_client
-from alpi.email.client import EmailClient, EmailError
+from alpi.mail import imap as email_client
+from alpi.mail.imap import ImapClient, ImapError
 from alpi.tools.email import Email
 
 
@@ -130,8 +130,8 @@ def fake_smtp(monkeypatch):
 
 
 @pytest.fixture
-def client() -> EmailClient:
-    return EmailClient(
+def client() -> ImapClient:
+    return ImapClient(
         address="me@example.com", password="pw",
         imap_host="imap.example.com", smtp_host="smtp.example.com",
     )
@@ -143,20 +143,20 @@ def client() -> EmailClient:
 
 
 def test_from_env_requires_all_four(monkeypatch) -> None:
-    monkeypatch.delenv("EMAIL_ADDRESS", raising=False)
-    monkeypatch.delenv("EMAIL_PASSWORD", raising=False)
-    monkeypatch.delenv("EMAIL_IMAP_HOST", raising=False)
-    monkeypatch.delenv("EMAIL_SMTP_HOST", raising=False)
-    with pytest.raises(EmailError, match="missing"):
-        EmailClient.from_env()
+    monkeypatch.delenv("IMAP_ADDRESS", raising=False)
+    monkeypatch.delenv("IMAP_PASSWORD", raising=False)
+    monkeypatch.delenv("IMAP_HOST", raising=False)
+    monkeypatch.delenv("SMTP_HOST", raising=False)
+    with pytest.raises(ImapError, match="missing"):
+        ImapClient.from_env()
 
 
 def test_from_env_builds_from_env_vars(monkeypatch) -> None:
-    monkeypatch.setenv("EMAIL_ADDRESS", "me@example.com")
-    monkeypatch.setenv("EMAIL_PASSWORD", "pw")
-    monkeypatch.setenv("EMAIL_IMAP_HOST", "imap.example.com")
-    monkeypatch.setenv("EMAIL_SMTP_HOST", "smtp.example.com")
-    c = EmailClient.from_env()
+    monkeypatch.setenv("IMAP_ADDRESS", "me@example.com")
+    monkeypatch.setenv("IMAP_PASSWORD", "pw")
+    monkeypatch.setenv("IMAP_HOST", "imap.example.com")
+    monkeypatch.setenv("SMTP_HOST", "smtp.example.com")
+    c = ImapClient.from_env()
     assert c.address == "me@example.com"
     assert c.imap_port == 993
     assert c.smtp_port == 587
@@ -279,7 +279,7 @@ def test_smtp_port_465_uses_ssl_context(fake_smtp) -> None:
     """Regression: PrivateEmail and similar providers hang up on port
     465 if we speak plain SMTP + STARTTLS; the port demands implicit
     TLS via ``SMTP_SSL`` from the TCP handshake."""
-    c = EmailClient(
+    c = ImapClient(
         address="me@x.com", password="pw",
         imap_host="i.x.com", smtp_host="s.x.com", smtp_port=465,
     )
@@ -288,7 +288,7 @@ def test_smtp_port_465_uses_ssl_context(fake_smtp) -> None:
 
 
 def test_smtp_port_587_uses_starttls(fake_smtp) -> None:
-    c = EmailClient(
+    c = ImapClient(
         address="me@x.com", password="pw",
         imap_host="i.x.com", smtp_host="s.x.com", smtp_port=587,
     )
@@ -393,7 +393,7 @@ def test_delete_falls_through_trash_candidates(client, fake_imap) -> None:
 
 
 def test_tool_surfaces_config_error_cleanly(monkeypatch) -> None:
-    for var in ("EMAIL_ADDRESS", "EMAIL_PASSWORD", "EMAIL_IMAP_HOST", "EMAIL_SMTP_HOST"):
+    for var in ("IMAP_ADDRESS", "IMAP_PASSWORD", "IMAP_HOST", "SMTP_HOST"):
         monkeypatch.delenv(var, raising=False)
     result = Email().run(action="list")
     assert not result.ok
@@ -402,20 +402,20 @@ def test_tool_surfaces_config_error_cleanly(monkeypatch) -> None:
 
 
 def test_tool_requires_uid_for_read(monkeypatch) -> None:
-    monkeypatch.setenv("EMAIL_ADDRESS", "me@x.com")
-    monkeypatch.setenv("EMAIL_PASSWORD", "p")
-    monkeypatch.setenv("EMAIL_IMAP_HOST", "i")
-    monkeypatch.setenv("EMAIL_SMTP_HOST", "s")
+    monkeypatch.setenv("IMAP_ADDRESS", "me@x.com")
+    monkeypatch.setenv("IMAP_PASSWORD", "p")
+    monkeypatch.setenv("IMAP_HOST", "i")
+    monkeypatch.setenv("SMTP_HOST", "s")
     result = Email().run(action="read")  # missing uid
     assert not result.ok
     assert "uid" in result.error
 
 
 def test_tool_unknown_action(monkeypatch) -> None:
-    monkeypatch.setenv("EMAIL_ADDRESS", "me@x.com")
-    monkeypatch.setenv("EMAIL_PASSWORD", "p")
-    monkeypatch.setenv("EMAIL_IMAP_HOST", "i")
-    monkeypatch.setenv("EMAIL_SMTP_HOST", "s")
+    monkeypatch.setenv("IMAP_ADDRESS", "me@x.com")
+    monkeypatch.setenv("IMAP_PASSWORD", "p")
+    monkeypatch.setenv("IMAP_HOST", "i")
+    monkeypatch.setenv("SMTP_HOST", "s")
     result = Email().run(action="nuke_everything")
     assert not result.ok
     assert "unknown action" in result.error
@@ -428,19 +428,19 @@ def test_tool_unknown_action(monkeypatch) -> None:
 
 def test_decode_header_handles_utf8() -> None:
     encoded = "=?utf-8?b?SG9sYSDCoQ==?="
-    from alpi.email.client import _decode_header
+    from alpi.mail.imap import _decode_header
     assert _decode_header(encoded) == "Hola ¡"
 
 
 def test_clean_addr_extracts_email() -> None:
-    from alpi.email.client import _clean_addr
+    from alpi.mail.imap import _clean_addr
     assert _clean_addr('"Pepe" <Pepe@X.COM>') == "pepe@x.com"
     assert _clean_addr("pepe@x.com") == "pepe@x.com"
     assert _clean_addr("") == ""
 
 
 def test_imap_date_converts_iso_to_rfc() -> None:
-    from alpi.email.client import _imap_date
+    from alpi.mail.imap import _imap_date
     assert _imap_date("2026-04-20") == "20-Apr-2026"
     # Pass-through when already in IMAP format
     assert _imap_date("20-Apr-2026") == "20-Apr-2026"

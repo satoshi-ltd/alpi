@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from alpi.email.client import EmailClient, EmailError, EmailMessageFull
+from alpi.mail.imap import ImapClient, ImapError, EmailMessageFull
 from alpi.tools._paths import resolve_path
 from alpi.tools.base import Tool, ToolResult
 
@@ -86,19 +86,19 @@ class Email(Tool):
 
     def run(self, action: str, **kw: object) -> ToolResult:
         try:
-            client = EmailClient.from_env()
-        except EmailError as e:
+            client = ImapClient.from_env()
+        except ImapError as e:
             return ToolResult(ok=False, output="", error=str(e))
 
         try:
             return _dispatch(client, action, kw)
-        except EmailError as e:
+        except ImapError as e:
             return ToolResult(ok=False, output="", error=str(e))
         except ValueError as e:
             return ToolResult(ok=False, output="", error=str(e))
 
 
-def _dispatch(client: EmailClient, action: str, kw: dict) -> ToolResult:
+def _dispatch(client: ImapClient, action: str, kw: dict) -> ToolResult:
     folder = str(kw.get("folder") or "INBOX")
 
     if action == "list":
@@ -199,14 +199,14 @@ def _dispatch(client: EmailClient, action: str, kw: dict) -> ToolResult:
 def _require(kw: dict, key: str) -> str:
     val = kw.get(key)
     if not val or not isinstance(val, str):
-        raise EmailError(f"'{key}' is required for this action")
+        raise ImapError(f"'{key}' is required for this action")
     return val
 
 
 def _require_list(kw: dict, key: str) -> list[str]:
     val = kw.get(key)
     if not val or not isinstance(val, list):
-        raise EmailError(f"'{key}' is required for this action (list of strings)")
+        raise ImapError(f"'{key}' is required for this action (list of strings)")
     return [str(x) for x in val if x]
 
 
