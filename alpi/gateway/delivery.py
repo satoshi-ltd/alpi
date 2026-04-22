@@ -11,7 +11,7 @@ TELEGRAM_MAX_CHARS = 4096
 
 def _allowlist_env(platform: str) -> str:
     if platform == "email":
-        return "EMAIL_ALLOWED_SENDERS"
+        return "IMAP_ALLOWED_SENDERS"
     return f"{platform.upper()}_ALLOWED_CHAT_IDS"
 
 
@@ -96,14 +96,14 @@ def _send_telegram_sync(chat_id: str, text: str) -> None:
 
 
 def _send_email_sync(chat_id: str, text: str) -> None:
-    from alpi.email.client import EmailClient, EmailError
+    from alpi.mail.imap import ImapClient, ImapError
     try:
-        client = EmailClient.from_env()
-    except EmailError as e:
+        client = ImapClient.from_env()
+    except ImapError as e:
         raise DeliveryError(str(e))
     try:
         client.send(to=[chat_id], subject="[alf]", body=text)
-    except EmailError as e:
+    except ImapError as e:
         raise DeliveryError(str(e))
 
 

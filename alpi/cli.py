@@ -610,7 +610,7 @@ def _gateways_setup(h: Path) -> None:
     while True:
         items = [
             (ui.row("Telegram", _telegram_status(h)), "telegram"),
-            (ui.row("Email", _email_status(h)), "email"),
+            (ui.row("IMAP", _email_status(h)), "imap"),
         ]
         choice = ui.menu(
             ui.crumb("setup", "gateways"),
@@ -623,8 +623,8 @@ def _gateways_setup(h: Path) -> None:
         if choice == "telegram":
             from alpi.gateway.setup import run as telegram_setup
             telegram_setup(h)
-        elif choice == "email":
-            from alpi.email.setup import run as email_setup
+        elif choice == "imap":
+            from alpi.mail.setup import run as email_setup
             email_setup(h)
 
 
@@ -647,7 +647,7 @@ def _gateways_status(h: Path) -> str:
     names = []
     if env.get("TELEGRAM_BOT_TOKEN"):
         names.append("Telegram")
-    if env.get("EMAIL_ADDRESS"):
+    if env.get("IMAP_ADDRESS"):
         names.append("Email")
     return ", ".join(names) if names else "none"
 
@@ -757,10 +757,10 @@ def _sandbox_setup(h: Path) -> None:
 
 def _email_status(h: Path) -> str:
     env = _read_profile_env(h)
-    addr = env.get("EMAIL_ADDRESS", "")
+    addr = env.get("IMAP_ADDRESS", "")
     if not addr:
         return "not set up"
-    senders = env.get("EMAIL_ALLOWED_SENDERS", "")
+    senders = env.get("IMAP_ALLOWED_SENDERS", "")
     n = len([s for s in senders.split(",") if s.strip()])
     if n == 0:
         return f"ready · {addr} · outbound only"

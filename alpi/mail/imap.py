@@ -1,4 +1,4 @@
-"""EmailClient — IMAP + SMTP wrapper built on Python stdlib."""
+"""ImapClient — IMAP + SMTP wrapper built on Python stdlib."""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any, Iterator
 
 
-class EmailError(Exception):
+class ImapError(Exception):
     """Any failure the caller can report back — auth, network, protocol."""
 
 
@@ -64,7 +64,7 @@ class EmailMessageFull:
 
 
 
-class EmailClient:
+class ImapClient:
     """IMAP+SMTP operations against a single mailbox."""
 
     def __init__(
@@ -77,8 +77,8 @@ class EmailClient:
         smtp_port: int = DEFAULT_SMTP_PORT,
     ) -> None:
         if not (address and password and imap_host and smtp_host):
-            raise EmailError(
-                "EmailClient requires address, password, imap_host, smtp_host"
+            raise ImapError(
+                "ImapClient requires address, password, imap_host, smtp_host"
             )
         self.address = address
         self.password = password
@@ -90,20 +90,20 @@ class EmailClient:
     # Construction from environment
 
     @classmethod
-    def from_env(cls) -> "EmailClient":
-        """Build a client from ``EMAIL_*`` variables in the current env."""
-        addr = os.environ.get("EMAIL_ADDRESS", "").strip()
-        pwd = os.environ.get("EMAIL_PASSWORD", "")
-        imap = os.environ.get("EMAIL_IMAP_HOST", "").strip()
-        smtp = os.environ.get("EMAIL_SMTP_HOST", "").strip()
+    def from_env(cls) -> "ImapClient":
+        """Build a client from ``IMAP_*`` / ``SMTP_*`` variables in the env."""
+        addr = os.environ.get("IMAP_ADDRESS", "").strip()
+        pwd = os.environ.get("IMAP_PASSWORD", "")
+        imap = os.environ.get("IMAP_HOST", "").strip()
+        smtp = os.environ.get("SMTP_HOST", "").strip()
         missing = [
             name for name, val in (
-                ("EMAIL_ADDRESS", addr), ("EMAIL_PASSWORD", pwd),
-                ("EMAIL_IMAP_HOST", imap), ("EMAIL_SMTP_HOST", smtp),
+                ("IMAP_ADDRESS", addr), ("IMAP_PASSWORD", pwd),
+                ("IMAP_HOST", imap), ("SMTP_HOST", smtp),
             ) if not val
         ]
         if missing:
-            raise EmailError(
+            raise ImapError(
                 f"email not configured: missing {', '.join(missing)} in "
                 f"~/.alpi/.env. Run `alpi setup` and pick 'Email (IMAP/SMTP)'."
             )
@@ -112,28 +112,28 @@ class EmailClient:
             password=pwd,
             imap_host=imap,
             smtp_host=smtp,
-            imap_port=int(os.environ.get("EMAIL_IMAP_PORT") or DEFAULT_IMAP_PORT),
-            smtp_port=int(os.environ.get("EMAIL_SMTP_PORT") or DEFAULT_SMTP_PORT),
+            imap_port=int(os.environ.get("IMAP_PORT") or DEFAULT_IMAP_PORT),
+            smtp_port=int(os.environ.get("SMTP_PORT") or DEFAULT_SMTP_PORT),
         )
 
     # Connectivity test (used by the setup wizard)
 
     def test(self) -> None:
-        """Open + login on IMAP and SMTP. Raises ``EmailError`` on failure."""
+        """Open + login on IMAP and SMTP. Raises ``ImapError`` on failure."""
         try:
             with self._imap() as imap:
                 imap.select("INBOX", readonly=True)
         except imaplib.IMAP4.error as e:
-            raise EmailError(f"IMAP login failed: {e}")
+            raise ImapError(f"IMAP login failed: {e}")
         except (OSError, ssl.SSLError) as e:
-            raise EmailError(f"IMAP connect failed: {e}")
+            raise ImapError(f"IMAP connect failed: {e}")
         try:
             with self._smtp():
                 pass
         except smtplib.SMTPException as e:
-            raise EmailError(f"SMTP login failed: {e}")
+            raise ImapError(f"SMTP login failed: {e}")
         except (OSError, ssl.SSLError) as e:
-            raise EmailError(f"SMTP connect failed: {e}")
+            raise ImapError(f"SMTP connect failed: {e}")
 
     # Read-side: list + search + read + download_attachment
 
@@ -181,7 +181,7 @@ class EmailClient:
             self._select(imap, folder)
             msg = self._fetch_message(imap, uid)
             if msg is None:
-                raise EmailError(f"message {uid} not found in {folder}")
+                raise ImapError(f"message {uid} not found in {folder}")
             return _parse_full(msg, uid, folder)
 
     def download_attachment(
@@ -193,7 +193,7 @@ class EmailClient:
             self._select(imap, folder)
             msg = self._fetch_message(imap, uid)
             if msg is None:
-                raise EmailError(f"message {uid} not found in {folder}")
+                raise ImapError(f"message {uid} not found in {folder}")
             for part in msg.iter_attachments():
                 name = part.get_filename() or ""
                 name = _decode_header(name)
@@ -202,7 +202,7 @@ class EmailClient:
                     dest.parent.mkdir(parents=True, exist_ok=True)
                     dest.write_bytes(payload)
                     return dest
-            raise EmailError(
+            raise ImapError(
                 f"attachment {attachment_name!r} not found on message {uid}"
             )
 
@@ -281,7 +281,7 @@ class EmailClient:
                 # Some servers lack MOVE; fall back to COPY + flag + expunge.
                 typ, _ = imap.uid("COPY", uid, dest_folder)
                 if typ != "OK":
-                    raise EmailError(f"could not move uid {uid} to {dest_folder}")
+                    raise ImapError(f"could not move uid {uid} to {dest_folder}")
                 imap.uid("STORE", uid, "+FLAGS", r"(\Deleted)")
                 imap.expunge()
 
@@ -294,9 +294,9 @@ class EmailClient:
             try:
                 self.move(uid, candidate, folder=folder)
                 return
-            except EmailError:
+            except ImapError:
                 continue
-        raise EmailError(
+        raise ImapError(
             "could not find a Trash folder; use `move` with an explicit folder"
         )
 
@@ -313,12 +313,12 @@ class EmailClient:
     def _select(self, imap: imaplib.IMAP4, folder: str) -> None:
         typ, _ = imap.select(_imap_folder(folder))
         if typ != "OK":
-            raise EmailError(f"cannot select folder {folder!r}")
+            raise ImapError(f"cannot select folder {folder!r}")
 
     def _uid_search(self, imap: imaplib.IMAP4, criteria: list[Any]) -> list[str]:
         typ, data = imap.uid("SEARCH", None, *criteria)  # type: ignore[arg-type]
         if typ != "OK":
-            raise EmailError(f"IMAP search failed: {data!r}")
+            raise ImapError(f"IMAP search failed: {data!r}")
         raw = data[0].decode() if data and data[0] else ""
         return raw.split()
 
@@ -333,7 +333,7 @@ class EmailClient:
             "(UID FLAGS BODY.PEEK[HEADER.FIELDS (FROM TO SUBJECT DATE)] BODYSTRUCTURE)",
         )
         if typ != "OK":
-            raise EmailError("IMAP fetch failed")
+            raise ImapError("IMAP fetch failed")
         for item in data:
             if not isinstance(item, tuple) or len(item) < 2:
                 continue
@@ -369,7 +369,7 @@ class EmailClient:
 
 
 class _ImapCtx:
-    def __init__(self, client: EmailClient) -> None:
+    def __init__(self, client: ImapClient) -> None:
         self._client = client
         self._conn: imaplib.IMAP4 | None = None
 
@@ -380,9 +380,9 @@ class _ImapCtx:
             )
             self._conn.login(self._client.address, self._client.password)
         except imaplib.IMAP4.error as e:
-            raise EmailError(f"IMAP login failed: {e}")
+            raise ImapError(f"IMAP login failed: {e}")
         except (OSError, ssl.SSLError) as e:
-            raise EmailError(f"IMAP connect failed: {e}")
+            raise ImapError(f"IMAP connect failed: {e}")
         return self._conn
 
     def __exit__(self, *_: Any) -> None:
@@ -409,7 +409,7 @@ class _SmtpCtx:
     PrivateEmail before this fix.
     """
 
-    def __init__(self, client: EmailClient) -> None:
+    def __init__(self, client: ImapClient) -> None:
         self._client = client
         self._conn: smtplib.SMTP | None = None
 
@@ -432,9 +432,9 @@ class _SmtpCtx:
                 self._conn.ehlo()
             self._conn.login(self._client.address, self._client.password)
         except smtplib.SMTPException as e:
-            raise EmailError(f"SMTP login failed: {e}")
+            raise ImapError(f"SMTP login failed: {e}")
         except (OSError, ssl.SSLError) as e:
-            raise EmailError(f"SMTP connect failed: {e}")
+            raise ImapError(f"SMTP connect failed: {e}")
         return self._conn
 
     def __exit__(self, *_: Any) -> None:

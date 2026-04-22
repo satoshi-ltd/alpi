@@ -167,12 +167,12 @@ def test_gateway_config_defaults_nested(tmp_home_no_env: Path) -> None:
     cfg = config.load(tmp_home_no_env)
     assert cfg.gateway["telegram"]["show_tool_trace"] is True
     assert cfg.gateway["telegram"]["typing_indicator"] is True
-    assert cfg.gateway["email"]["poll_interval"] == 60
-    assert cfg.gateway["email"]["mark_as_read"] is True
+    assert cfg.gateway["imap"]["poll_interval"] == 60
+    assert cfg.gateway["imap"]["mark_as_read"] is True
     # Email-specific defaults — tool trace OFF (one trace = one email
     # = spam) and typing_indicator OFF (IMAP has no such concept).
-    assert cfg.gateway["email"]["show_tool_trace"] is False
-    assert cfg.gateway["email"]["typing_indicator"] is False
+    assert cfg.gateway["imap"]["show_tool_trace"] is False
+    assert cfg.gateway["imap"]["typing_indicator"] is False
 
 
 def test_gateway_config_deep_merge(tmp_home_no_env: Path) -> None:
@@ -182,14 +182,14 @@ def test_gateway_config_deep_merge(tmp_home_no_env: Path) -> None:
         "gateway:\n"
         "  telegram:\n"
         "    show_tool_trace: false\n"
-        "  email:\n"
+        "  imap:\n"
         "    poll_interval: 30\n"
     )
     cfg = config.load(tmp_home_no_env)
     assert cfg.gateway["telegram"]["show_tool_trace"] is False
     assert cfg.gateway["telegram"]["typing_indicator"] is True  # default kept
-    assert cfg.gateway["email"]["poll_interval"] == 30
-    assert cfg.gateway["email"]["mark_as_read"] is True          # default kept
+    assert cfg.gateway["imap"]["poll_interval"] == 30
+    assert cfg.gateway["imap"]["mark_as_read"] is True          # default kept
 
 
 def test_is_allowed_env_based(monkeypatch) -> None:

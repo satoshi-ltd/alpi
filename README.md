@@ -47,7 +47,7 @@ alpi profile remove <name>   # delete after safety checks + confirm
 
 alpi setup                   # interactive menu: model, gateways, MCPs
 
-alpi gateway start           # run the Telegram/email gateway process
+alpi gateway start           # run the Telegram/IMAP gateway process
 alpi schedule start          # run the schedule daemon
 alpi mcp list                # list configured MCP servers (read-only)
 
@@ -113,11 +113,11 @@ TELEGRAM_BOT_TOKEN=...
 TELEGRAM_ALLOWED_CHAT_IDS=12345,67890      # comma-separated, fail-closed
 
 # Email (optional) — generic IMAP/SMTP:
-EMAIL_ADDRESS=you@yourprovider.com
-EMAIL_PASSWORD=...
-EMAIL_IMAP_HOST=imap.yourprovider.com
-EMAIL_SMTP_HOST=smtp.yourprovider.com
-EMAIL_ALLOWED_SENDERS=pepe@x.com,ana@y.com  # gateway inbound (fail-closed)
+IMAP_ADDRESS=you@yourprovider.com
+IMAP_PASSWORD=...
+IMAP_HOST=imap.yourprovider.com
+SMTP_HOST=smtp.yourprovider.com
+IMAP_ALLOWED_SENDERS=pepe@x.com,ana@y.com  # gateway inbound (fail-closed)
 ```
 
 Switch model any time with `/model` inside the TUI. Tier guidance in
@@ -125,7 +125,7 @@ Switch model any time with `/model` inside the TUI. Tier guidance in
 
 ## Gateway
 
-Relays Telegram and email messages to alpi. Tool activity streams to the
+Relays Telegram and IMAP messages to alpi. Tool activity streams to the
 chat (`◆ memory · ...`) and a typing indicator stays on while alpi works.
 Both toggleable in `config.yaml` per platform:
 
@@ -134,7 +134,7 @@ gateway:
   telegram:
     show_tool_trace: true
     typing_indicator: true
-  email:
+  imap:
     poll_interval: 60
     mark_as_read: true
     show_tool_trace: false

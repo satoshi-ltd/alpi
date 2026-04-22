@@ -44,7 +44,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
             "show_tool_trace": True,
             "typing_indicator": True,
         },
-        "email": {
+        "imap": {
             "poll_interval": 60,
             "mark_as_read": True,
             "show_tool_trace": False,
@@ -281,10 +281,10 @@ def seed_defaults(home: Path) -> None:
             "# list means nothing inbound is processed on that platform.\n"
             "TELEGRAM_BOT_TOKEN=\n"
             "TELEGRAM_ALLOWED_CHAT_IDS=\n"
-            "EMAIL_ADDRESS=\n"
-            "EMAIL_PASSWORD=\n"
-            "EMAIL_IMAP_HOST=\n"
-            "EMAIL_SMTP_HOST=\n"
-            "EMAIL_ALLOWED_SENDERS=\n"
+            "IMAP_ADDRESS=\n"
+            "IMAP_PASSWORD=\n"
+            "IMAP_HOST=\n"
+            "SMTP_HOST=\n"
+            "IMAP_ALLOWED_SENDERS=\n"
             "WEBHOOK_ALLOWED_CHAT_IDS=\n"
         )

@@ -20,7 +20,7 @@ gateway:
   telegram:
     show_tool_trace: true
     typing_indicator: true
-  email:
+  imap:
     poll_interval: 60
     mark_as_read: true
     show_tool_trace: false
@@ -42,7 +42,7 @@ Two options:
   `~/.alpi/profiles/<name>/config.yaml` for non-default profiles)
   and change values manually. Restart whatever surface was affected.
   Cosmetic knobs (`tui.*`, `tools.max_steps_per_turn`,
-  `gateway.email.poll_interval`, `fallback_models`) live here.
+  `gateway.imap.poll_interval`, `fallback_models`) live here.
 
 ## Reference
 
@@ -141,14 +141,14 @@ reasoning, so this flag has no effect there.
 | `gateway.telegram.show_tool_trace` | `true` | Interactive chat; seeing tool calls in real time makes progress legible. |
 | `gateway.telegram.typing_indicator` | `true` | Shows "typing…" while alf is working; reassures the user something's happening. |
 
-### Gateway — Email
+### Gateway — IMAP
 
 | Key | Default | Why |
 |---|---|---|
-| `gateway.email.poll_interval` | `60` (seconds) | IMAP polling cadence. Hermes runs at 15s; 60s keeps CPU/network quiet for personal use. |
-| `gateway.email.mark_as_read` | `true` | Processed messages marked `\Seen` so your mail client treats them as read. |
-| `gateway.email.show_tool_trace` | `false` | Each trace would be its own email — spam if a turn touches many tools. Only the final reply goes out. |
-| `gateway.email.typing_indicator` | `false` | No "typing…" concept over IMAP/SMTP. Kept explicit so the gateway loop doesn't spawn a no-op heartbeat. |
+| `gateway.imap.poll_interval` | `60` (seconds) | IMAP polling cadence. Hermes runs at 15s; 60s keeps CPU/network quiet for personal use. |
+| `gateway.imap.mark_as_read` | `true` | Processed messages marked `\Seen` so your mail client treats them as read. |
+| `gateway.imap.show_tool_trace` | `false` | Each trace would be its own email — spam if a turn touches many tools. Only the final reply goes out. |
+| `gateway.imap.typing_indicator` | `false` | No "typing…" concept over IMAP/SMTP. Kept explicit so the gateway loop doesn't spawn a no-op heartbeat. |
 
 ### Ollama
 
