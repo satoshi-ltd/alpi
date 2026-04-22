@@ -26,13 +26,10 @@ def run(home: Path) -> None:
         # items above it.
         items: list = []
         for name in sorted(servers.keys()):
-            items.append((
-                ui.row(name, _summarize(servers[name])),
-                ("use", name),
-            ))
-        items.append(("+ Add a server", ("add", None)))
+            items.append((name, ("use", name), _summarize(servers[name])))
+        items.append(("+ Add server", ("add", None), ""))
         if servers:
-            items.append(("- Remove a server", ("remove", None)))
+            items.append(("- Remove server", ("remove", None), ""))
 
         result = ui.menu(
             ui.crumb("setup", "mcp"),
@@ -108,6 +105,7 @@ def _wizard(
     if command in ("npx", "npm") or any(a.endswith("npx") for a in [command]):
         advisories = [a for a in check("npm", extract_npm_args(args)) if a.startswith("✗")]
         if advisories:
+            ui._console.print("")
             ui.fail("OSV malware check blocked this server:")
             for a in advisories:
                 ui.fail("  " + a)
@@ -121,6 +119,7 @@ def _wizard(
         with ui.activity(f"Spawning and handshaking with {name}…"):
             client.start()
     except MCPError as e:
+        ui._console.print("")
         ui.fail(str(e))
         ui.warn("Not saving anything. Check the command/args or env vars in .env.")
         ui.press_enter()
@@ -129,8 +128,7 @@ def _wizard(
     client.stop()
 
     _persist(home, name, command, args, env_vars)
-    ui.ok(f"{name}: {len(tools)} tool{'s' if len(tools) != 1 else ''}")
-    ui.press_enter()
+    ui.ok_and_wait(f"{name}: {len(tools)} tool{'s' if len(tools) != 1 else ''}")
 
 
 
@@ -144,7 +142,7 @@ def _remove(home: Path, servers: dict) -> None:
     if not name:
         return
     _unpersist(home, name)
-    ui.ok(f"removed {name} from config.yaml")
+    ui.ok_and_wait(f"removed {name} from config.yaml")
 
 
 # Env var collection (walk existing, then add loop)

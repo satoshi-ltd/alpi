@@ -70,6 +70,7 @@ def run(home: Path) -> None:
         with ui.activity("Testing IMAP + SMTP connections…"):
             client.test()
     except ImapError as e:
+        ui._console.print("")
         ui.fail(str(e))
         ui.warn("Credentials look wrong or the server is unreachable. Not saving anything.")
         ui.press_enter()
@@ -91,5 +92,4 @@ def run(home: Path) -> None:
         _append_env(env, key, val)
         os.environ[key] = val
 
-    ui.saved(env)
-    ui.press_enter()
+    ui.saved_and_wait(env)

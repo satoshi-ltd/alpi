@@ -61,17 +61,16 @@ def run(home: Path) -> None:
         os.environ[key] = val
 
     if not ui.confirm("Authorize now via browser?", default=True):
-        ui.ok("credentials saved. Run this wizard again to authorize.")
-        ui.press_enter()
+        ui.ok_and_wait("credentials saved. Run this wizard again to authorize.")
         return
 
     try:
         token = gmail_auth.first_run(home)
     except gmail_auth.GmailAuthError as e:
-        ui.fail(str(e))
-        ui.press_enter()
+        ui.fail_and_wait(str(e))
         return
 
+    ui._console.print("")
     ui.ok(f"authorized as {token.email}")
     ui.saved(env)
     ui.press_enter()

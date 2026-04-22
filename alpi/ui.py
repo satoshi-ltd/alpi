@@ -83,20 +83,22 @@ def _accent_hex(home: Path | None) -> str:
 _TRAILING_PAREN = __import__("re").compile(r"\s*\([^)]*\)\s*$")
 
 
-def row(label: str, status: str = ""):
+def row(label: str, status: str = "", width: int | None = None):
     if not status:
         return label
-    left = f"{label:<{LABEL_WIDTH}}"
+    w = width if width is not None else LABEL_WIDTH
+    left = f"{label:<{w}}"
     return [
         ("", left),
         (_MUTED_STYLE, f" · {status}"),
     ]
 
 
-def row_accent(label: str, status: str, accent: str):
+def row_accent(label: str, status: str, accent: str, width: int | None = None):
     if not accent or not accent.strip():
-        return row(label, status)
-    left = f"{label:<{LABEL_WIDTH}}"
+        return row(label, status, width=width)
+    w = width if width is not None else LABEL_WIDTH
+    left = f"{label:<{w}}"
     parts = [(f"fg:{accent.strip()} bold", left)]
     if status:
         parts.append((_MUTED_STYLE, f" · {status}"))
@@ -132,6 +134,16 @@ def menu(
         _console.print(f"[dim]{NAV_HINT}[/dim]")
         _console.print("")
 
+    # First pass: find the widest plain-text label across 3-tuple items
+    # so the muted status column lines up per menu, independent of the
+    # module-level LABEL_WIDTH floor.
+    auto_width = LABEL_WIDTH
+    for item in items:
+        if isinstance(item, tuple) and len(item) == 3:
+            label, _value, status = item
+            if status:
+                auto_width = max(auto_width, len(str(label)))
+
     entries: list[tuple[Any, Any, bool]] = []  # (title_ft, value, selectable)
     for item in items:
         if item is None:
@@ -139,7 +151,10 @@ def menu(
         elif isinstance(item, tuple):
             if len(item) == 3:
                 label, value, status = item
-                entries.append((row(str(label), str(status or "")), value, True))
+                entries.append((
+                    row(str(label), str(status or ""), width=auto_width),
+                    value, True,
+                ))
             elif len(item) == 2:
                 label, value = item
                 entries.append((label, value, True))
@@ -369,11 +384,63 @@ def activity(message: str):
 
 
 def press_enter(message: str = "Press ENTER to continue") -> None:
-    _console.print(f"\n[dim]{message}[/dim]", end="")
+    _console.print(f"[dim]{message}[/dim]", end="")
     try:
         input()
     except (KeyboardInterrupt, EOFError):
         pass
+
+
+def ok_and_wait(message: str) -> None:
+    _console.print("")
+    ok(message)
+    press_enter()
+
+
+def fail_and_wait(message: str) -> None:
+    _console.print("")
+    fail(message)
+    press_enter()
+
+
+def saved_and_wait(path: Path) -> None:
+    _console.print("")
+    saved(path)
+    press_enter()
+
+
+_MARKUP_RE = __import__("re").compile(r"\[/?[^\]]*\]")
+
+
+def _visible_len(s: str) -> int:
+    return len(_MARKUP_RE.sub("", str(s)))
+
+
+def columns(rows: Sequence[Sequence[str]], gap: int = 2) -> None:
+    """Print rows with per-column widths computed from the widest cell.
+
+    Each row is a sequence of cell strings (Rich markup allowed — the
+    visible length is computed by stripping ``[tag]`` markers). The last
+    column is never padded so long right-hand values (paths, URLs) don't
+    force trailing whitespace.
+    """
+    if not rows:
+        return
+    ncols = max(len(r) for r in rows)
+    widths = [0] * ncols
+    for r in rows:
+        for i, cell in enumerate(r):
+            widths[i] = max(widths[i], _visible_len(cell))
+    sep = " " * max(1, gap)
+    for r in rows:
+        parts: list[str] = []
+        for i, cell in enumerate(r):
+            if i < ncols - 1:
+                pad = widths[i] - _visible_len(cell)
+                parts.append(f"{cell}{' ' * pad}")
+            else:
+                parts.append(str(cell))
+        _console.print(sep.join(parts))
 
 
 def accent_style(accent: str):

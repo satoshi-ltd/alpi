@@ -39,5 +39,4 @@ def run(home: Path) -> None:
     os.environ["TELEGRAM_BOT_TOKEN"] = token
     os.environ["TELEGRAM_ALLOWED_CHAT_IDS"] = ",".join(chat_ids)
 
-    ui.saved(env_path)
-    ui.press_enter()
+    ui.saved_and_wait(env_path)

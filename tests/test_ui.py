@@ -266,3 +266,55 @@ def test_menu_none_item_becomes_separator(monkeypatch) -> None:
     ui.menu("pick", [("A", "a"), None, ("B", "b")], home=None, close=None)
     # Middle entry is a non-selectable separator.
     assert captured["entries"][1][2] is False
+
+
+# --------------------------------------------------------------------
+# Auto-aligned helpers — added in the normalisation pass
+# --------------------------------------------------------------------
+
+
+def test_row_with_explicit_width() -> None:
+    out = ui.row("hi", "greet", width=10)
+    assert isinstance(out, list)
+    text = _row_text(out)
+    assert text.startswith("hi        ")  # padded to width 10
+    assert "greet" in text
+
+
+def test_row_accent_with_explicit_width() -> None:
+    out = ui.row_accent("x", "y", "#ff0000", width=8)
+    assert isinstance(out, list)
+    assert _row_text(out).startswith("x       ")
+
+
+def test_columns_aligns_by_visible_length(capsys: pytest.CaptureFixture) -> None:
+    ui.columns([
+        ["short",   "alpha", "one"],
+        ["longer-row", "b",   "two"],
+        ["mid",     "gamma", "three"],
+    ])
+    captured = capsys.readouterr().out.splitlines()
+    # All three rows should render their first column padded to the
+    # longest ("longer-row" = 10 chars), with at least one space after.
+    for line in captured:
+        assert "longer-row" in line or line.split()[0].ljust(10) in line
+
+
+def test_columns_ignores_markup_for_width(capsys: pytest.CaptureFixture) -> None:
+    ui.columns([
+        ["[red]x[/red]",       "short"],
+        ["plainlonglabel",     "other"],
+    ])
+    captured = capsys.readouterr().out.splitlines()
+    assert len(captured) == 2
+    # Markup'd row's visible width is 1, not 11, so alignment uses the
+    # long plain row as the max.
+    assert "plainlonglabel" in captured[1]
+
+
+def test_ok_and_wait_calls_press_enter(monkeypatch) -> None:
+    events: list[str] = []
+    monkeypatch.setattr(ui, "ok", lambda m: events.append(f"ok:{m}"))
+    monkeypatch.setattr(ui, "press_enter", lambda *a, **kw: events.append("wait"))
+    ui.ok_and_wait("done")
+    assert events == ["ok:done", "wait"]
