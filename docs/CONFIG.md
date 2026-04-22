@@ -140,6 +140,72 @@ The Telegram gateway auto-transcribes inbound voice notes and audio files throug
 
 ### TUI
 
+alpi's TUI is built on [Textual](https://textual.textualize.io/) — a
+full widget-based framework with streaming, focus management, scroll
+anchoring, and responsive layout. It's the **primary surface** (not a
+fallback); gateway and schedule processes inherit the same engine
+behind the scenes but render through their own channel (chat message,
+log file).
+
+Design choices worth knowing before tweaking config:
+
+- **Single cohesive UI.** No separate "legacy CLI" to maintain. Hermes
+  ships a `prompt_toolkit + rich` CLI plus a newer Ink.js/React TUI in
+  a second repo; alpi has one Textual app that covers every
+  interactive use case.
+- **Streaming is the default.** Assistant text streams into a Markdown
+  widget char-by-char. No full-message reload; the widget knows how to
+  append deltas. On `assistant_done` the final text replaces the
+  streamed buffer so any post-processing (e.g. `_strip_cache_noise`)
+  takes effect without a flash.
+- **Tool cards, not log lines.** Each tool call gets a compact card
+  with an args preview on the left, a live state in the middle
+  (`synthesizing…`, `playing…`, `transcribing…` — tools push these
+  via `tool_state_mod.emit_state`), a result hint on the right, and a
+  duration badge. Cards are scroll-anchored so the chat follows new
+  activity without stealing focus from what you're reading above.
+- **Reasoning is inline, not modal.** For reasoning models
+  (DeepSeek-R1, OpenAI o-series, Claude extended thinking) the tail
+  of `reasoning_content` scrolls live inside the `thinking…`
+  indicator. Full history is persisted to `sessions/*.json` even when
+  `tui.show_reasoning=false`, so you can re-enable later and replay
+  gets the reasoning back.
+- **Slash commands auto-suggest.** `/help`, `/memory`, `/tools`,
+  `/mcps`, `/cost`, `/clear`, `/new`, `/compact`, `/skills`, `/model`,
+  `/workspace`, `/exit`, `/quit`. Typing `/` opens a fuzzy prefix
+  suggester over that list.
+- **Responsive.** The top bar collapses labels when the terminal is
+  narrower than 60 columns; long paths are home-dir-abbreviated to
+  `~/…`. Nothing clips, nothing wraps weirdly.
+- **Theming.** Pick a `tui.accent` colour (CSS hex/name/rgb) and
+  `tui.theme: dark|light`. The accent recolours interactive
+  highlights and the profile name in the top bar.
+- **Scroll resilience under heavy streaming.** `VerticalScroll.anchor()`
+  is used during long tool outputs or streamed responses so the view
+  tracks the bottom without the user losing scroll position when they
+  were reading history.
+
+**What the top bar shows (left to right):**
+
+```
+alpi <version>  │  profile <name> <size>  │  [sandbox|offline]  │  workspace <path>
+```
+
+- `<size>` is the total disk footprint of the active profile home dir
+  (`~/.alpi/` for default, `~/.alpi/profiles/<name>/` otherwise).
+  Cached for 30 s; refreshed when you change profile, workspace, or
+  model. For the default profile the `profiles/` subtree is excluded
+  so it doesn't conflate with sibling profiles. Hidden in narrow mode
+  (< 60 columns).
+- The sandbox segment shows `sandbox` when
+  `tools.terminal.sandbox=true` and `tools.terminal.allow_network=true`;
+  it switches to `offline` when the network is locked (see sandbox
+  knobs above). Hidden when sandbox is off.
+- Workspace shows the resolved workspace path, or `not set` in error
+  colour when no workspace is configured and alpi falls back to cwd.
+
+**Config knobs (`tui.*`):**
+
 | Key | Default | Type | Takes effect |
 |---|---|---|---|
 | `tui.show_cost` | `true` | bool | next session |

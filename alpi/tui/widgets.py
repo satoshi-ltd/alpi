@@ -239,7 +239,7 @@ class ToolCard(Widget):
 class AlpiTopBar(Static):
     def __init__(self, version: str, profile: str, path: str,
                  workspace_set: bool, sandbox: bool = False,
-                 network_locked: bool = False) -> None:
+                 network_locked: bool = False, profile_size: str = "") -> None:
         super().__init__("")
         self._version = version
         self._profile = profile
@@ -247,6 +247,7 @@ class AlpiTopBar(Static):
         self._workspace_set = workspace_set
         self._sandbox = sandbox
         self._network_locked = network_locked
+        self._profile_size = profile_size
 
     def on_mount(self) -> None:
         self._refresh()
@@ -255,12 +256,14 @@ class AlpiTopBar(Static):
         self._refresh()
 
     def set_state(self, *, profile: str, path: str, workspace_set: bool,
-                  sandbox: bool = False, network_locked: bool = False) -> None:
+                  sandbox: bool = False, network_locked: bool = False,
+                  profile_size: str = "") -> None:
         self._profile = profile
         self._path = path
         self._workspace_set = workspace_set
         self._sandbox = sandbox
         self._network_locked = network_locked
+        self._profile_size = profile_size
         self._refresh()
 
     def _refresh(self) -> None:
@@ -269,7 +272,6 @@ class AlpiTopBar(Static):
         accent = tv.get("accent", "")
         muted = tv.get("text-muted", "")
         error = tv.get("error", "red")
-        success = tv.get("success", "green")
         width = self.size.width or 80
         narrow = width < 60
         if self._workspace_set:
@@ -282,6 +284,8 @@ class AlpiTopBar(Static):
             f"[b {accent}]{profile_esc}[/b {accent}]"
             if accent else f"[b]{profile_esc}[/b]"
         )
+        if self._profile_size and not narrow:
+            profile_txt += f" [{muted}]{escape(self._profile_size)}[/{muted}]"
         sep = f"  [{muted}]│[/{muted}]  "
         profile_label = "" if narrow else f"[{muted}]profile[/{muted}] "
         workspace_label = "" if narrow else f"[{muted}]workspace[/{muted}] "
