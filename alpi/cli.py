@@ -571,8 +571,10 @@ def setup_cmd(ctx: click.Context) -> None:
             (ui.row("Model / Provider", cfg.model or "(not set)"), "model"),
             (ui.row("Gateways", _gateways_status(h)), "gateways"),
             (ui.row("MCPs", _mcp_status(h)), "mcps"),
-            (ui.row("Sandbox", _sandbox_status(cfg)), "sandbox"),
             (ui.row("Voice", _voice_status(cfg)), "voice"),
+            None,
+            (ui.row("Sandbox", _sandbox_status(cfg)), "sandbox"),
+            (ui.row("Gateway service", _gateway_service_status(h)), "gateway-service"),
             (ui.row("Cleanup", _cleanup_status(h)), "cleanup"),
         ]
         # Every title starts with ``alpi`` as a lightweight brand +
@@ -602,6 +604,8 @@ def setup_cmd(ctx: click.Context) -> None:
             _voice_setup(h)
         elif choice == "cleanup":
             _cleanup_setup(h)
+        elif choice == "gateway-service":
+            _gateway_service_setup(h)
 
 
 def _setup_farewell(profile: str, h: Path) -> None:
@@ -636,6 +640,81 @@ def _gateways_setup(h: Path) -> None:
         elif choice == "gmail":
             from alpi.mail.gmail_setup import run as gmail_setup
             gmail_setup(h)
+
+
+def _gateway_service_status(h: Path) -> str:
+    from alpi import service
+    if not _any_gateway_ready(h):
+        return "no gateway configured"
+    backend = service.installed("gateway", _profile_from_home(h))
+    return f"running via {backend}" if backend else "not installed"
+
+
+def _gateway_service_setup(h: Path) -> None:
+    from alpi import service, ui
+    if not _any_gateway_ready(h):
+        ui.fail(
+            "no gateway configured yet — set up Telegram, IMAP, or Gmail first"
+        )
+        ui.press_enter()
+        return
+
+    profile_name = _profile_from_home(h)
+    backend = service.installed("gateway", profile_name)
+
+    ui.banner(
+        ui.crumb("setup", "gateway-service"),
+        subtitle=_gateway_service_status(h),
+        home=h,
+    )
+    ui.dim(
+        "Registers the gateway daemon (`alpi gateway start`) with your\n"
+        "OS so it runs on boot and restarts on crash. macOS: launchd\n"
+        "plist under ~/Library/LaunchAgents/. Linux: systemd --user unit\n"
+        "under ~/.config/systemd/user/. The current profile is the one\n"
+        "that gets wired up."
+    )
+    ui._console.print("")
+
+    if backend:
+        items = [("Uninstall", "remove-service")]
+    else:
+        items = [("Install", "add-service")]
+
+    choice = ui.menu("", items, home=h, close="Back")
+    if choice is None:
+        return
+    try:
+        if choice == "add-service":
+            kind = service.install("gateway", h, profile_name)
+            ui.ok(f"gateway service installed via {kind}")
+        elif choice == "remove-service":
+            kind = service.uninstall("gateway", h, profile_name)
+            ui.ok(f"gateway service uninstalled ({kind})")
+    except Exception as e:  # noqa: BLE001
+        ui.fail(str(e))
+    ui.press_enter()
+
+
+def _profile_from_home(h: Path) -> str:
+    from alpi.home import _ROOT
+    if h == _ROOT:
+        return "default"
+    try:
+        return h.relative_to(_ROOT / "profiles").parts[0]
+    except Exception:  # noqa: BLE001
+        return h.name
+
+
+def _any_gateway_ready(h: Path) -> bool:
+    env = _read_profile_env(h)
+    if env.get("TELEGRAM_BOT_TOKEN"):
+        return True
+    if env.get("IMAP_ADDRESS"):
+        return True
+    if (h / "secrets" / "gmail_token.json").exists():
+        return True
+    return False
 
 
 def _read_profile_env(h: Path) -> dict[str, str]:
