@@ -2,7 +2,7 @@
 
 Dropped commands should be gone; hidden options should not appear.
 This test locks the CLI surface so a future refactor doesn't
-accidentally re-expose ``alf model`` or ``--emit-events``.
+accidentally re-expose ``alpi model`` or ``--emit-events``.
 """
 
 from __future__ import annotations
@@ -41,7 +41,7 @@ def test_chat_help_does_not_expose_emit_events() -> None:
 
 def test_chat_emit_events_still_works_when_invoked_directly() -> None:
     # The option is hidden, not removed — the gateway still spawns
-    # ``alf chat --once "..." --emit-events``. Smoke-check parsing.
+    # ``alpi chat --once "..." --emit-events``. Smoke-check parsing.
     result = CliRunner().invoke(cli.main, ["chat", "--emit-events", "--help"])
     assert result.exit_code == 0
 
@@ -51,7 +51,7 @@ def test_gateway_subcommands_no_setup() -> None:
     assert result.exit_code == 0
     for sub in ("start", "stop", "status", "logs", "install", "uninstall"):
         assert sub in result.output
-    # 'setup' was removed — use `alf setup → Gateways → Telegram` instead.
+    # 'setup' was removed — use `alpi setup → Gateways → Telegram` instead.
     # A lingering 'setup' here would be a regression.
     assert "\n  setup " not in result.output
 
@@ -107,7 +107,7 @@ def test_gateway_start_rejects_nonexistent_workspace(tmp_path, monkeypatch) -> N
 def test_schedule_start_rejects_missing_workspace(tmp_path, monkeypatch) -> None:
     """Schedule daemon carries the same invariant as the gateway.
 
-    Scheduled jobs spawn ``alf chat --once`` subprocesses — each one
+    Scheduled jobs spawn ``alpi chat --once`` subprocesses — each one
     needs a workspace. A silent daemon that never runs a single job is
     a worse failure mode than refusing to start.
     """

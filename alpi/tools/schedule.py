@@ -33,7 +33,7 @@ class Schedule(Tool):
         "user says \"at 2pm\" write `0 14 * * *` for cron or "
         "`...T14:00:00` for once — do NOT convert to UTC.\n"
         "\n"
-        "`prompt` is what alf should do when the job fires. Its reply "
+        "`prompt` is what alpi should do when the job fires. Its reply "
         "is AUTO-DELIVERED to `platform` + `chat_id` (defaults: telegram "
         "+ first allowlisted chat). Do NOT include 'send to telegram' "
         "in the prompt — delivery is automatic; adding it sends twice."
@@ -62,7 +62,7 @@ class Schedule(Tool):
             },
             "prompt": {
                 "type": "string",
-                "description": "What to ask alf to do when the job fires.",
+                "description": "What to ask alpi to do when the job fires.",
             },
             "platform": {
                 "type": "string",
@@ -169,7 +169,7 @@ class Schedule(Tool):
             if running_pid(home):
                 hint = "daemon is running — job will fire on schedule"
             else:
-                hint = "run 'alf schedule start' (or install it) to fire jobs"
+                hint = "run 'alpi schedule start' (or install it) to fire jobs"
 
             return ToolResult(
                 ok=True,

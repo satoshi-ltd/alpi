@@ -50,7 +50,7 @@ _DANGER_PATTERNS: list[tuple[re.Pattern[str], str]] = [
                                                          "reads ~/.ssh"),
     (re.compile(r"(?:\$HOME|~)/\.aws/credentials"),     "reads ~/.aws/credentials"),
     (re.compile(r"(?:\$HOME|~)/\.gnupg"),               "reads ~/.gnupg"),
-    (re.compile(r"(?:\$HOME|~)/\.alf/\.env"),           "reads alf .env"),
+    (re.compile(r"(?:\$HOME|~)/\.alpi/\.env"),           "reads alpi .env"),
     (re.compile(r"(?:cat|head|tail|less|more|cp|mv)\s+[^\n]*(?:\.env\b|credentials\b|\.netrc\b|\.pgpass\b|\.npmrc\b|\.pypirc\b)"),
                                                          "reads known secrets file"),
     (re.compile(r"\bprintenv\b|\benv\s*\|"),            "dumps all env"),
@@ -278,7 +278,7 @@ class Skill(Tool):
         "    here = Path(__file__).parent.parent\n"
         "    here / 'secrets' / 'token'\n"
         "    here / 'state' / 'history.jsonl'\n"
-        "This way a skill invoked from any profile (alf -p work, -p home, "
+        "This way a skill invoked from any profile (alpi -p work, -p home, "
         "...) always finds its own data.\n"
         "\n"
         "**Prefer Python stdlib in scripts.** `urllib.request`, "

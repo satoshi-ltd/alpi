@@ -14,10 +14,10 @@ from typing import AsyncIterator
 from alpi.mail.imap import ImapClient, ImapError
 from alpi.gateway.base import IncomingMessage, OutgoingMessage, Platform
 
-log = logging.getLogger("alf.gateway.imap")
+log = logging.getLogger("alpi.gateway.imap")
 
 DEFAULT_POLL_INTERVAL = 60
-# Folder alf listens on. We deliberately don't look in Spam/Junk — the
+# Folder alpi listens on. We deliberately don't look in Spam/Junk — the
 # provider's DKIM/SPF checks already flagged those. Raising this to
 # "All Mail" or similar would open us up to spoofs the provider already
 # rejected.
@@ -140,7 +140,7 @@ class Imap(Platform):
             client = ImapClient.from_env()
             client.send(
                 to=[message.external_chat_id],
-                subject="[alf] re:",
+                subject="[alpi] re:",
                 body=message.text,
             )
         try:

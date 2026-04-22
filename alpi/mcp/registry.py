@@ -11,7 +11,7 @@ from alpi.mcp.client import MCPClient, MCPError
 from alpi.tools import _TOOLS, register
 from alpi.tools.base import Tool, ToolResult
 
-log = logging.getLogger("alf.mcp")
+log = logging.getLogger("alpi.mcp")
 
 
 def load_and_register(cfg: cfg_mod.Config) -> list[MCPClient]:
@@ -73,7 +73,7 @@ def _sanitize_tool_name(raw: str) -> str:
 
 
 def _make_tool_class(client: MCPClient, spec) -> type[Tool]:
-    # Spec's input_schema is a JSON Schema dict. alf's native tools
+    # Spec's input_schema is a JSON Schema dict. alpi's native tools
     # use the same shape directly, so we pass it through.
     tool_name = (
         f"{_sanitize_tool_name(client.name)}"

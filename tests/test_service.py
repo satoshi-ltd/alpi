@@ -1,4 +1,4 @@
-"""Tests for alf.service — install/uninstall for gateway + schedule.
+"""Tests for alpi.service — install/uninstall for gateway + schedule.
 
 Both backends (launchd/systemd) are exercised via ``platform.system``
 monkeypatching; ``subprocess.run`` is mocked so we never touch the
@@ -67,18 +67,18 @@ def test_unsupported_platform_raises(monkeypatch, fake_home) -> None:
 def test_launchd_install_writes_plist_and_bootstraps(
         monkeypatch, mock_run, fake_home, tmp_path) -> None:
     monkeypatch.setattr(service.platform, "system", lambda: "Darwin")
-    monkeypatch.setattr(service.shutil, "which", lambda n: "/usr/local/bin/alf")
+    monkeypatch.setattr(service.shutil, "which", lambda n: "/usr/local/bin/alpi")
     monkeypatch.setattr(service.os, "getuid", lambda: 501)
     monkeypatch.setattr(service.Path, "home", classmethod(lambda cls: tmp_path))
 
     backend = service.install("schedule", fake_home, "work")
 
     assert backend == "launchd"
-    plist = tmp_path / "Library/LaunchAgents/com.alf.schedule.work.plist"
+    plist = tmp_path / "Library/LaunchAgents/com.alpi.schedule.work.plist"
     assert plist.exists()
     content = plist.read_text()
-    assert "<string>com.alf.schedule.work</string>" in content
-    assert "<string>/usr/local/bin/alf</string>" in content
+    assert "<string>com.alpi.schedule.work</string>" in content
+    assert "<string>/usr/local/bin/alpi</string>" in content
     assert "<string>schedule</string>" in content
     assert "<string>start</string>" in content
     assert f"<string>{fake_home}</string>" in content
@@ -97,7 +97,7 @@ def test_launchd_uninstall_bootouts_and_removes_plist(
     monkeypatch.setattr(service.os, "getuid", lambda: 501)
     monkeypatch.setattr(service.Path, "home", classmethod(lambda cls: tmp_path))
 
-    plist = tmp_path / "Library/LaunchAgents/com.alf.gateway.default.plist"
+    plist = tmp_path / "Library/LaunchAgents/com.alpi.gateway.default.plist"
     plist.parent.mkdir(parents=True, exist_ok=True)
     plist.write_text("<plist/>")
 
@@ -121,7 +121,7 @@ def test_launchd_uninstall_errors_if_not_installed(
 def test_launchd_install_reports_bootstrap_failure(
         monkeypatch, fake_home, tmp_path) -> None:
     monkeypatch.setattr(service.platform, "system", lambda: "Darwin")
-    monkeypatch.setattr(service.shutil, "which", lambda n: "/usr/local/bin/alf")
+    monkeypatch.setattr(service.shutil, "which", lambda n: "/usr/local/bin/alpi")
     monkeypatch.setattr(service.os, "getuid", lambda: 501)
     monkeypatch.setattr(service.Path, "home", classmethod(lambda cls: tmp_path))
 
@@ -144,17 +144,17 @@ def test_launchd_install_reports_bootstrap_failure(
 def test_systemd_install_writes_unit_and_enables(
         monkeypatch, mock_run, fake_home, tmp_path) -> None:
     monkeypatch.setattr(service.platform, "system", lambda: "Linux")
-    monkeypatch.setattr(service.shutil, "which", lambda n: "/home/x/.local/bin/alf")
+    monkeypatch.setattr(service.shutil, "which", lambda n: "/home/x/.local/bin/alpi")
     monkeypatch.setattr(service.Path, "home", classmethod(lambda cls: tmp_path))
 
     backend = service.install("gateway", fake_home, "personal")
 
     assert backend == "systemd"
-    unit = tmp_path / ".config/systemd/user/alf-gateway-personal.service"
+    unit = tmp_path / ".config/systemd/user/alpi-gateway-personal.service"
     assert unit.exists()
     content = unit.read_text()
-    assert "alf gateway daemon (personal)" in content
-    assert f"ExecStart=/home/x/.local/bin/alf gateway start" in content
+    assert "alpi gateway daemon (personal)" in content
+    assert f"ExecStart=/home/x/.local/bin/alpi gateway start" in content
     assert f"Environment=ALPI_HOME={fake_home}" in content
     assert "Restart=on-failure" in content
     assert "WantedBy=default.target" in content
@@ -163,7 +163,7 @@ def test_systemd_install_writes_unit_and_enables(
     assert cmds[0] == ["systemctl", "--user", "daemon-reload"]
     assert cmds[1] == [
         "systemctl", "--user", "enable", "--now",
-        "alf-gateway-personal.service",
+        "alpi-gateway-personal.service",
     ]
 
 
@@ -172,7 +172,7 @@ def test_systemd_uninstall_disables_and_removes_unit(
     monkeypatch.setattr(service.platform, "system", lambda: "Linux")
     monkeypatch.setattr(service.Path, "home", classmethod(lambda cls: tmp_path))
 
-    unit = tmp_path / ".config/systemd/user/alf-schedule-default.service"
+    unit = tmp_path / ".config/systemd/user/alpi-schedule-default.service"
     unit.parent.mkdir(parents=True, exist_ok=True)
     unit.write_text("[Unit]\n")
 
@@ -181,13 +181,13 @@ def test_systemd_uninstall_disables_and_removes_unit(
     assert not unit.exists()
     cmds = [c["args"] for c in mock_run]
     assert ["systemctl", "--user", "disable", "--now",
-            "alf-schedule-default.service"] in cmds
+            "alpi-schedule-default.service"] in cmds
     assert ["systemctl", "--user", "daemon-reload"] in cmds
 
 
 def test_systemd_install_surfaces_bus_error(monkeypatch, fake_home, tmp_path) -> None:
     monkeypatch.setattr(service.platform, "system", lambda: "Linux")
-    monkeypatch.setattr(service.shutil, "which", lambda n: "/usr/bin/alf")
+    monkeypatch.setattr(service.shutil, "which", lambda n: "/usr/bin/alpi")
     monkeypatch.setattr(service.Path, "home", classmethod(lambda cls: tmp_path))
 
     def fake_run(args, check=True):
@@ -217,7 +217,7 @@ def test_installed_returns_none_when_no_file(monkeypatch, tmp_path) -> None:
 def test_installed_detects_existing_plist(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(service.platform, "system", lambda: "Darwin")
     monkeypatch.setattr(service.Path, "home", classmethod(lambda cls: tmp_path))
-    plist = tmp_path / "Library/LaunchAgents/com.alf.schedule.default.plist"
+    plist = tmp_path / "Library/LaunchAgents/com.alpi.schedule.default.plist"
     plist.parent.mkdir(parents=True, exist_ok=True)
     plist.write_text("x")
     assert service.installed("schedule", "default") == "launchd"
@@ -226,7 +226,7 @@ def test_installed_detects_existing_plist(monkeypatch, tmp_path) -> None:
 def test_installed_detects_existing_unit(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(service.platform, "system", lambda: "Linux")
     monkeypatch.setattr(service.Path, "home", classmethod(lambda cls: tmp_path))
-    unit = tmp_path / ".config/systemd/user/alf-gateway-work.service"
+    unit = tmp_path / ".config/systemd/user/alpi-gateway-work.service"
     unit.parent.mkdir(parents=True, exist_ok=True)
     unit.write_text("[Unit]\n")
     assert service.installed("gateway", "work") == "systemd"
@@ -239,13 +239,13 @@ def test_installed_detects_existing_unit(monkeypatch, tmp_path) -> None:
 
 def test_service_label_varies_by_platform(monkeypatch) -> None:
     monkeypatch.setattr(service.platform, "system", lambda: "Darwin")
-    assert service.service_label("schedule", "default") == "com.alf.schedule.default"
+    assert service.service_label("schedule", "default") == "com.alpi.schedule.default"
     monkeypatch.setattr(service.platform, "system", lambda: "Linux")
-    assert service.service_label("gateway", "work") == "alf-gateway-work"
+    assert service.service_label("gateway", "work") == "alpi-gateway-work"
 
 
-def test_locate_alf_falls_back_to_python_dash_m(monkeypatch) -> None:
+def test_locate_alpi_falls_back_to_python_dash_m(monkeypatch) -> None:
     monkeypatch.setattr(service.shutil, "which", lambda n: None)
-    path = service._locate_alf()
+    path = service._locate_alpi()
     assert "-m alpi" in path
     assert path.split()[0].endswith("python") or "python" in path.split()[0]

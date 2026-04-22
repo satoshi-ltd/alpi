@@ -74,7 +74,7 @@ def _jina_fetch(url: str, max_bytes: int) -> str | None:
     try:
         with httpx.Client(follow_redirects=True, timeout=30) as client:
             r = client.get(proxy_url, headers={
-                "User-Agent": "alf/0.0.1",
+                "User-Agent": "alpi/0.0.1",
                 "Accept": "text/plain",
             })
         if r.status_code != 200:
@@ -91,7 +91,7 @@ def _direct_fetch(url: str, max_bytes: int, raw: bool, strip_links: bool) -> Too
     import httpx
     try:
         with httpx.Client(follow_redirects=True, timeout=30) as client:
-            r = client.get(url, headers={"User-Agent": "alf/0.0.1"})
+            r = client.get(url, headers={"User-Agent": "alpi/0.0.1"})
         r.raise_for_status()
     except httpx.HTTPError as e:
         return ToolResult(ok=False, output="", error=str(e))

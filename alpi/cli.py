@@ -1,4 +1,4 @@
-"""alf — CLI entry point."""
+"""alpi — CLI entry point."""
 
 from __future__ import annotations
 
@@ -25,9 +25,9 @@ def _bootstrap(h: Path) -> None:
 
 def _run_chat(h: Path, continue_last: bool = False) -> None:
     _bootstrap(h)
-    from alpi.tui import AlfApp
+    from alpi.tui import AlpiApp
     try:
-        AlfApp(home_dir=h, continue_last=continue_last).run()
+        AlpiApp(home_dir=h, continue_last=continue_last).run()
     finally:
         _restore_terminal()
         # Force-exit: a worker thread may still be blocked on an LLM HTTP
@@ -178,7 +178,7 @@ def _run_once(h: Path, user_text: str, emit_events: bool = False) -> None:
 @click.version_option(__version__, prog_name="alpi")
 @click.pass_context
 def main(ctx: click.Context, profile: str | None, continue_last: bool) -> None:
-    """alf — a slim personal AI agent."""
+    """alpi — a slim personal AI agent."""
     ctx.ensure_object(dict)
     h = home.get_home(profile)
     ctx.obj["home"] = h
@@ -503,12 +503,12 @@ def _install_daemon(ctx: click.Context, name: str) -> None:
     if _running_pid_for(name, h):
         raise click.ClickException(
             f"{name} is running manually — stop it first with "
-            f"`alf {name} stop`, then re-run install."
+            f"`alpi {name} stop`, then re-run install."
         )
     if service.installed(name, profile):
         raise click.ClickException(
             f"{name} is already installed. "
-            f"Run `alf {name} uninstall` first if you want to reinstall."
+            f"Run `alpi {name} uninstall` first if you want to reinstall."
         )
     try:
         backend = service.install(name, h, profile)
@@ -574,7 +574,7 @@ def setup_cmd(ctx: click.Context) -> None:
             (ui.row("Sandbox", _sandbox_status(cfg)), "sandbox"),
             (ui.row("Voice", _voice_status(cfg)), "voice"),
         ]
-        # Every title starts with ``alf`` as a lightweight brand +
+        # Every title starts with ``alpi`` as a lightweight brand +
         # "you are here" marker. The active profile goes in the
         # subtitle so the user always knows which one they're
         # configuring without it bloating the title itself.
@@ -604,7 +604,7 @@ def setup_cmd(ctx: click.Context) -> None:
 def _setup_farewell(profile: str, h: Path) -> None:
     from alpi import ui as ui_mod
 
-    prefix = f"alpi -p {profile}" if profile != "default" else "alf"
+    prefix = f"alpi -p {profile}" if profile != "default" else "alpi"
     ui_mod._console.print(f"\n[dim]next:[/dim] {prefix}\n")
 
 
@@ -619,7 +619,7 @@ def _gateways_setup(h: Path) -> None:
         choice = ui.menu(
             ui.crumb("setup", "gateways"),
             items,
-            subtitle="inbound channels alf listens on",
+            subtitle="inbound channels alpi listens on",
             home=h, close="Back",
         )
         if choice is None:
@@ -902,12 +902,12 @@ def profile_list(ctx: click.Context) -> None:
         click.echo("for different contexts (work vs. personal, e.g.).")
         click.echo("")
         click.echo("Create one with:")
-        click.echo("  alf profile create work")
-        click.echo("  alf profile create personal")
+        click.echo("  alpi profile create work")
+        click.echo("  alpi profile create personal")
         click.echo("")
         click.echo("Then use it per-invocation:")
-        click.echo("  alf -p work                  # open TUI in the work profile")
-        click.echo("  alias alfw='alf -p work'     # shell alias if you live there")
+        click.echo("  alpi -p work                  # open TUI in the work profile")
+        click.echo("  alias alpiw='alpi -p work'     # shell alias if you live there")
 
 
 @profile.command("create")
@@ -925,10 +925,10 @@ def profile_create(name: str) -> None:
 
     _bootstrap(h)
     click.echo(f"created profile {name!r} at {h}")
-    click.echo(f"use it with: alf -p {name}")
+    click.echo(f"use it with: alpi -p {name}")
     click.echo("")
     click.echo("Configure it:")
-    click.echo(f"  alf -p {name} setup                          "
+    click.echo(f"  alpi -p {name} setup                          "
                f"# interactive (API keys + gateway)")
     default_env = Path.home() / ".alpi" / ".env"
     if default_env.exists():

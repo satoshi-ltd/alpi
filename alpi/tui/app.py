@@ -1,4 +1,4 @@
-"""Main Textual App for alf."""
+"""Main Textual App for alpi."""
 
 from __future__ import annotations
 
@@ -23,8 +23,8 @@ from alpi.tui.screens import (
     ToolsPanel,
 )
 from alpi.tui.widgets import (
-    AlfHeader,
-    AlfTopBar,
+    AlpiHeader,
+    AlpiTopBar,
     AssistantMessage,
     DimLine,
     ErrorLine,
@@ -72,7 +72,7 @@ def _copy_to_os_clipboard(text: str) -> str:
     return "osc52-only"
 
 
-class AlfApp(App):
+class AlpiApp(App):
     CSS_PATH = "theme.tcss"
     TITLE = "alpi"
     ENABLE_COMMAND_PALETTE = False  # hide the built-in Ctrl+P palette
@@ -90,7 +90,7 @@ class AlfApp(App):
         self.cfg = config.load(home_dir)
         super().__init__()
         # Child widgets read `self.app.theme_variables` in their own on_mount
-        # (fires before AlfApp.on_mount), so the theme must be installed here.
+        # (fires before AlpiApp.on_mount), so the theme must be installed here.
         self._install_theme()
         self.engine = Engine(home=home_dir, cfg=self.cfg)
 
@@ -102,14 +102,14 @@ class AlfApp(App):
 
     def compose(self) -> ComposeResult:
         from textual.suggester import SuggestFromList
-        from alpi import __version__ as alf_version
+        from alpi import __version__ as alpi_version
         slash_commands = [
             "/help", "/memory", "/tools", "/mcps", "/cost", "/clear", "/new",
             "/compact", "/skills", "/model", "/workspace",
             "/exit", "/quit",
         ]
-        yield AlfTopBar(
-            version=alf_version,
+        yield AlpiTopBar(
+            version=alpi_version,
             profile=self._profile_name(),
             path=str(self._effective_workspace()),
             workspace_set=self.cfg.workspace_path is not None,
@@ -117,7 +117,7 @@ class AlfApp(App):
         )
         with VerticalScroll(id="chat"):
             pass
-        yield AlfHeader()
+        yield AlpiHeader()
         yield Input(
             placeholder="Type a message or /help for commands…",
             id="chat-input",
@@ -135,7 +135,7 @@ class AlfApp(App):
         cwd = self._effective_workspace()
         short = str(cwd).replace(str(Path.home()), "~")
         self._mount_message(ErrorLine(
-            f"no workspace set — alf can touch everything under {short}. "
+            f"no workspace set — alpi can touch everything under {short}. "
             f"Run /workspace <path> to narrow the scope."
         ))
 
@@ -505,7 +505,7 @@ class AlfApp(App):
         self._refresh_top_bar()
 
     def _refresh_top_bar(self) -> None:
-        self.query_one(AlfTopBar).set_state(
+        self.query_one(AlpiTopBar).set_state(
             profile=self._profile_name(),
             path=str(self._effective_workspace()),
             workspace_set=self.cfg.workspace_path is not None,
@@ -518,7 +518,7 @@ class AlfApp(App):
         self._show_panel(ProviderPanel(self.cfg, self.home))
 
     def _update_header(self) -> None:
-        hdr = self.query_one(AlfHeader)
+        hdr = self.query_one(AlpiHeader)
         s = self.engine.session
         hdr.update_usage(
             model=s.model,

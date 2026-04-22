@@ -42,10 +42,10 @@ def test_add_rejects_trailing_punctuation_variant(store: memory.MemoryStore) -> 
 
 
 def test_add_strips_headers_and_template(store: memory.MemoryStore) -> None:
-    store.add("USER.md", "# header\n(alf will fill...)\nReal fact.")
+    store.add("USER.md", "# header\n(alpi will fill...)\nReal fact.")
     text = store.user_path.read_text()
     assert "# header" not in text
-    assert "alf will fill" not in text
+    assert "alpi will fill" not in text
     assert "Real fact" in text
 
 

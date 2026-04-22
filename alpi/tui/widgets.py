@@ -236,7 +236,7 @@ class ToolCard(Widget):
         return text
 
 
-class AlfTopBar(Static):
+class AlpiTopBar(Static):
     def __init__(self, version: str, profile: str, path: str,
                  workspace_set: bool, sandbox: bool = False) -> None:
         super().__init__("")
@@ -296,7 +296,7 @@ class AlfTopBar(Static):
         self.update(Text.from_markup(markup))
 
 
-class AlfHeader(Static):
+class AlpiHeader(Static):
     def __init__(self) -> None:
         super().__init__("")
         self._model: str = ""

@@ -42,14 +42,14 @@ def wrap_command(
     cmd: str,
     *,
     workspace: Path,
-    alf_home: Path,
+    alpi_home: Path,
     allow_network: bool,
 ) -> list[str]:
     platform = sys.platform
     if platform == "darwin":
-        return _wrap_macos(cmd, workspace, alf_home, allow_network)
+        return _wrap_macos(cmd, workspace, alpi_home, allow_network)
     if platform.startswith("linux"):
-        return _wrap_linux(cmd, workspace, alf_home, allow_network)
+        return _wrap_linux(cmd, workspace, alpi_home, allow_network)
     raise SandboxUnavailable(
         f"No sandbox implementation for platform {platform!r}. "
         "Set tools.terminal.sandbox=false to run without OS isolation."
@@ -59,7 +59,7 @@ def wrap_command(
 def _wrap_macos(
     cmd: str,
     workspace: Path,
-    alf_home: Path,
+    alpi_home: Path,
     allow_network: bool,
 ) -> list[str]:
     if shutil.which("sandbox-exec") is None:
@@ -75,7 +75,7 @@ def _wrap_macos(
     )
     params = [
         f"-D WORKSPACE={workspace}",
-        f"-D ALPI_HOME={alf_home}",
+        f"-D ALPI_HOME={alpi_home}",
         f"-D HOME_SSH={home}/.ssh",
         f"-D HOME_AWS={home}/.aws",
         f"-D HOME_GNUPG={home}/.gnupg",
@@ -92,7 +92,7 @@ def _wrap_macos(
 def _wrap_linux(
     cmd: str,
     workspace: Path,
-    alf_home: Path,
+    alpi_home: Path,
     allow_network: bool,
 ) -> list[str]:
     if shutil.which("bwrap") is None:
@@ -110,7 +110,7 @@ def _wrap_linux(
         "/etc/ssl", "/etc/ca-certificates", "/etc/resolv.conf",
     ])
     args += ["--bind", str(workspace), str(workspace)]
-    args += ["--bind", str(alf_home), str(alf_home)]
+    args += ["--bind", str(alpi_home), str(alpi_home)]
     args += ["--proc", "/proc", "--dev", "/dev", "--tmpfs", "/tmp"]
     args += ["--chdir", str(workspace)]
     args += ["--", "/bin/sh", "-c", cmd]

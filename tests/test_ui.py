@@ -1,4 +1,4 @@
-"""Unit tests for alf/ui.py — the shared UI primitives.
+"""Unit tests for alpi/ui.py — the shared UI primitives.
 
 UI is hard to test exhaustively without rendering a real terminal.
 We focus on the pure bits: row formatting, accent_style, and the

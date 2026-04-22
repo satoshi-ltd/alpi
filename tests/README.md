@@ -1,4 +1,4 @@
-# alf — tests
+# alpi — tests
 
 Pytest-based. One command to run everything.
 
@@ -25,8 +25,8 @@ Anything marked with `pytestmark = pytest.mark.llm` is skipped unless you opt in
 ## Running
 
 ```bash
-# From the repo root, using the installed alf's venv:
-PY=/Users/javi/.local/share/uv/tools/alf/bin/python
+# From the repo root, using the installed alpi's venv:
+PY=/Users/javi/.local/share/uv/tools/alpi/bin/python
 
 # Unit & fast tests only (no LLM, no cost)
 $PY -m pytest
@@ -46,7 +46,7 @@ $PY -m pytest tests/test_memory.py::test_add_rejects_exact_duplicate -v
 
 ## Fixtures
 
-- **`tmp_home_no_env`** — fresh temp alf home, no `.env` copied. Use for unit tests that must not talk to any LLM.
+- **`tmp_home_no_env`** — fresh temp alpi home, no `.env` copied. Use for unit tests that must not talk to any LLM.
 - **`tmp_home`** — same, but copies `~/.alpi/.env` in so LLM calls work. Use for `--llm` tests.
 - `_reset_session_search_state` runs automatically before each test to avoid state leaking.
 

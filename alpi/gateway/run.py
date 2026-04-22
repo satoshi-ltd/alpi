@@ -18,7 +18,7 @@ from alpi.gateway.platforms.imap import Imap
 from alpi.gateway.platforms.telegram import Telegram
 from alpi.gateway.platforms.webhook import Webhook
 
-log = logging.getLogger("alf.gateway")
+log = logging.getLogger("alpi.gateway")
 
 # Telegram's "typing…" indicator drops after ~5s, so we refresh slightly
 # sooner to keep it steady while a turn is in flight.

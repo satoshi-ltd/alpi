@@ -18,7 +18,7 @@ from croniter import croniter
 
 from alpi.gateway import delivery
 
-log = logging.getLogger("alf.schedule")
+log = logging.getLogger("alpi.schedule")
 
 # How often to wake up and check for due jobs. 30s is fine-grained enough
 # for "every minute" expressions while keeping CPU ~0.
@@ -143,7 +143,7 @@ def _last_user_activity(home: Path) -> datetime | None:
 
 
 def run_job(job: dict, home: Path) -> tuple[bool, str]:
-    """Invoke the prompt through ``alf chat --once`` and deliver the reply."""
+    """Invoke the prompt through ``alpi chat --once`` and deliver the reply."""
     prompt = job.get("prompt", "").strip()
     if not prompt:
         return False, "empty prompt"

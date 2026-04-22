@@ -8,7 +8,7 @@ from typing import AsyncIterator
 
 from alpi.gateway.base import IncomingMessage, OutgoingMessage, Platform
 
-log = logging.getLogger("alf.gateway.webhook")
+log = logging.getLogger("alpi.gateway.webhook")
 
 
 class Webhook(Platform):

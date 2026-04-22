@@ -1,6 +1,6 @@
 [project]
 name = "alpi"
-version = "0.2.26"
+version = "0.2.27"
 description = "A slim, self-improving AI agent"
 readme = "README.md"
 requires-python = ">=3.10"

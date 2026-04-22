@@ -14,14 +14,14 @@ import pytest
 
 pytestmark = pytest.mark.llm
 
-ALF_BIN = os.environ.get("ALPI_BIN", "alpi")
+ALPI_BIN = os.environ.get("ALPI_BIN", "alpi")
 
 
 def _run_once(home: Path, prompt: str, timeout: int = 90) -> tuple[int, str]:
     env = dict(os.environ)
     env["ALPI_HOME"] = str(home)
     r = subprocess.run(
-        [ALF_BIN, "chat", "--once", prompt],
+        [ALPI_BIN, "chat", "--once", prompt],
         capture_output=True, text=True, timeout=timeout, env=env,
     )
     return r.returncode, r.stdout.strip()

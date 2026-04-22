@@ -1,6 +1,6 @@
 # Security model
 
-alf runs LLM-decided tool calls on your machine. The security posture
+alpi runs LLM-decided tool calls on your machine. The security posture
 is layered — application-level guards that always run, plus an
 optional OS-level sandbox for shell commands.
 
@@ -64,9 +64,9 @@ veto. Layer 2 is the kernel-level veto you want there.
 
 ### Recommended pattern: one profile per posture
 
-alf's multi-profile CLI makes this ergonomic:
+alpi's multi-profile CLI makes this ergonomic:
 
-- `alf` — your main interactive dev profile. Sandbox off. Full access
+- `alpi` — your main interactive dev profile. Sandbox off. Full access
   to your usual tooling.
 - `alpi -p watchdog` — the profile your Telegram / schedule daemon
   runs under. Sandbox on. Denies `~/.ssh`, writes outside
@@ -109,7 +109,7 @@ Requires user namespaces enabled in the kernel (default on modern
 distros; some hardened configs disable them).
 
 **Windows** — no native sandbox path. Two options:
-1. **WSL2 (recommended)**: `wsl --install`, then run alf inside
+1. **WSL2 (recommended)**: `wsl --install`, then run alpi inside
    Ubuntu as if it were Linux native. bubblewrap works there.
 2. **Native Windows**: leave `tools.terminal.sandbox: false`. Layer 1
    stays active; you lose the kernel-level guarantee for shell
@@ -134,14 +134,14 @@ A minimal Docker image covers the Linux code path. See
 
 ## Threat model
 
-alf's realistic attacker:
+alpi's realistic attacker:
 
 - **Prompt injection** via email body, web page content, or tool
   output — tricking the LLM into running a destructive command or
   exfiltrating secrets. Layers 1 and 2 both defend here.
 - **Direct malicious input** from the user themselves — not a
   concern; you own the machine.
-- **Network adversaries** (APT, 0-day) — out of scope. alf is a
+- **Network adversaries** (APT, 0-day) — out of scope. alpi is a
   personal agent, not a hardened production system.
 
 Layer 1 covers the common-case attacks (known patterns, known

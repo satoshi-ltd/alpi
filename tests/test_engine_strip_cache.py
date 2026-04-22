@@ -19,7 +19,7 @@ def test_strips_tts_path_line() -> None:
 
 
 def test_strips_profiled_path() -> None:
-    text = "played at /Users/x/.alpi/profiles/alf/cache/tts/abc.mp3 now"
+    text = "played at /Users/x/.alpi/profiles/alpi/cache/tts/abc.mp3 now"
     assert _strip_cache_noise(text) == ""
 
 

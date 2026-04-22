@@ -21,7 +21,7 @@ def ws(tmp_path: Path) -> Path:
 
 @pytest.fixture
 def ah(tmp_path: Path) -> Path:
-    d = tmp_path / "alf_home"
+    d = tmp_path / "alpi_home"
     d.mkdir()
     return d
 
@@ -30,7 +30,7 @@ def test_unsupported_platform_raises(ws: Path, ah: Path) -> None:
     with patch.object(_sandbox, "sys") as sysmod:
         sysmod.platform = "win32"
         with pytest.raises(_sandbox.SandboxUnavailable) as ei:
-            _sandbox.wrap_command("ls", workspace=ws, alf_home=ah, allow_network=False)
+            _sandbox.wrap_command("ls", workspace=ws, alpi_home=ah, allow_network=False)
         assert "win32" in str(ei.value)
 
 
@@ -39,7 +39,7 @@ def test_macos_missing_binary_raises(ws: Path, ah: Path) -> None:
          patch.object(_sandbox.shutil, "which", return_value=None):
         sysmod.platform = "darwin"
         with pytest.raises(_sandbox.SandboxUnavailable) as ei:
-            _sandbox.wrap_command("ls", workspace=ws, alf_home=ah, allow_network=False)
+            _sandbox.wrap_command("ls", workspace=ws, alpi_home=ah, allow_network=False)
         assert "sandbox-exec" in str(ei.value)
 
 
@@ -48,14 +48,14 @@ def test_linux_missing_binary_raises(ws: Path, ah: Path) -> None:
          patch.object(_sandbox.shutil, "which", return_value=None):
         sysmod.platform = "linux"
         with pytest.raises(_sandbox.SandboxUnavailable) as ei:
-            _sandbox.wrap_command("ls", workspace=ws, alf_home=ah, allow_network=False)
+            _sandbox.wrap_command("ls", workspace=ws, alpi_home=ah, allow_network=False)
         assert "bwrap" in str(ei.value)
 
 
 @pytest.mark.skipif(sys.platform != "darwin" or shutil.which("sandbox-exec") is None,
                     reason="macOS-only, requires sandbox-exec")
 def test_macos_builds_sandbox_exec_command(ws: Path, ah: Path) -> None:
-    args = _sandbox.wrap_command("echo ok", workspace=ws, alf_home=ah, allow_network=False)
+    args = _sandbox.wrap_command("echo ok", workspace=ws, alpi_home=ah, allow_network=False)
     assert args[0] == "sandbox-exec"
     assert "-p" in args
     assert args[-3:] == ["/bin/sh", "-c", "echo ok"]
@@ -67,7 +67,7 @@ def test_macos_builds_sandbox_exec_command(ws: Path, ah: Path) -> None:
 @pytest.mark.skipif(sys.platform != "darwin" or shutil.which("sandbox-exec") is None,
                     reason="macOS-only, requires sandbox-exec")
 def test_macos_allow_network_flips_profile(ws: Path, ah: Path) -> None:
-    args = _sandbox.wrap_command("echo ok", workspace=ws, alf_home=ah, allow_network=True)
+    args = _sandbox.wrap_command("echo ok", workspace=ws, alpi_home=ah, allow_network=True)
     profile = args[args.index("-p") + 1]
     assert "(allow network*)" in profile
 
@@ -79,16 +79,16 @@ def test_macos_workspace_write_allowed_escape_blocked(ws: Path, ah: Path, tmp_pa
 
     args = _sandbox.wrap_command(
         f"echo inside > {ws}/ok.txt && cat {ws}/ok.txt",
-        workspace=ws, alf_home=ah, allow_network=False,
+        workspace=ws, alpi_home=ah, allow_network=False,
     )
     proc = subprocess.run(args, capture_output=True, text=True, timeout=10)
     assert proc.returncode == 0, proc.stderr
     assert "inside" in proc.stdout
 
-    escape = Path("/etc/alf_sandbox_escape_probe")
+    escape = Path("/etc/alpi_sandbox_escape_probe")
     args = _sandbox.wrap_command(
         f"echo pwn > {escape}",
-        workspace=ws, alf_home=ah, allow_network=False,
+        workspace=ws, alpi_home=ah, allow_network=False,
     )
     proc = subprocess.run(args, capture_output=True, text=True, timeout=10)
     assert proc.returncode != 0
@@ -106,7 +106,7 @@ def test_macos_ssh_read_blocked(ws: Path, ah: Path) -> None:
         pytest.skip("no ~/.ssh on this machine")
     args = _sandbox.wrap_command(
         f"ls {ssh}",
-        workspace=ws, alf_home=ah, allow_network=False,
+        workspace=ws, alpi_home=ah, allow_network=False,
     )
     proc = subprocess.run(args, capture_output=True, text=True, timeout=10)
     assert proc.returncode != 0
@@ -119,7 +119,7 @@ def test_macos_network_blocked_by_default(ws: Path, ah: Path) -> None:
 
     args = _sandbox.wrap_command(
         "curl --max-time 3 -s https://example.com",
-        workspace=ws, alf_home=ah, allow_network=False,
+        workspace=ws, alpi_home=ah, allow_network=False,
     )
     proc = subprocess.run(args, capture_output=True, text=True, timeout=10)
     assert proc.returncode != 0
@@ -128,7 +128,7 @@ def test_macos_network_blocked_by_default(ws: Path, ah: Path) -> None:
 @pytest.mark.skipif(not sys.platform.startswith("linux") or shutil.which("bwrap") is None,
                     reason="Linux-only, requires bwrap")
 def test_linux_builds_bwrap_command(ws: Path, ah: Path) -> None:
-    args = _sandbox.wrap_command("echo ok", workspace=ws, alf_home=ah, allow_network=False)
+    args = _sandbox.wrap_command("echo ok", workspace=ws, alpi_home=ah, allow_network=False)
     assert args[0] == "bwrap"
     assert "--unshare-net" in args
     assert str(ws) in args
@@ -138,7 +138,7 @@ def test_linux_builds_bwrap_command(ws: Path, ah: Path) -> None:
 @pytest.mark.skipif(not sys.platform.startswith("linux") or shutil.which("bwrap") is None,
                     reason="Linux-only, requires bwrap")
 def test_linux_allow_network_drops_unshare_net(ws: Path, ah: Path) -> None:
-    args = _sandbox.wrap_command("echo ok", workspace=ws, alf_home=ah, allow_network=True)
+    args = _sandbox.wrap_command("echo ok", workspace=ws, alpi_home=ah, allow_network=True)
     assert "--unshare-net" not in args
 
 
@@ -149,15 +149,15 @@ def test_linux_workspace_write_allowed_escape_blocked(ws: Path, ah: Path) -> Non
 
     args = _sandbox.wrap_command(
         f"echo inside > {ws}/ok.txt && cat {ws}/ok.txt",
-        workspace=ws, alf_home=ah, allow_network=False,
+        workspace=ws, alpi_home=ah, allow_network=False,
     )
     proc = subprocess.run(args, capture_output=True, text=True, timeout=10)
     assert proc.returncode == 0, proc.stderr
 
-    escape = Path("/etc/alf_sandbox_escape_probe")
+    escape = Path("/etc/alpi_sandbox_escape_probe")
     args = _sandbox.wrap_command(
         f"echo pwn > {escape}",
-        workspace=ws, alf_home=ah, allow_network=False,
+        workspace=ws, alpi_home=ah, allow_network=False,
     )
     proc = subprocess.run(args, capture_output=True, text=True, timeout=10)
     assert proc.returncode != 0

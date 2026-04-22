@@ -1,4 +1,4 @@
-"""session_search — let alf look up past conversations."""
+"""session_search — let alpi look up past conversations."""
 
 from __future__ import annotations
 
@@ -109,7 +109,7 @@ def _thread_tail(data: dict, cap: int) -> str:
         if tool_names:
             turns.append(f"tools: {', '.join(tool_names)}")
         if assistant:
-            turns.append(f"alf: {assistant}")
+            turns.append(f"alpi: {assistant}")
     joined = "\n\n".join(turns)
     if len(joined) <= cap:
         return joined

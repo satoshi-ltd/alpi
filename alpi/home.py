@@ -1,4 +1,4 @@
-"""HOME_DIR resolution for alf."""
+"""HOME_DIR resolution for alpi."""
 
 from __future__ import annotations
 

@@ -17,7 +17,7 @@ _ENTER_CUSTOM_MODEL = "__custom_model__"
 
 
 # Re-exported for back-compat with existing callers (wizards import
-# ``accent_style`` from here). New code should import from ``alf.ui``.
+# ``accent_style`` from here). New code should import from ``alpi.ui``.
 def accent_style(accent: str):
     return ui.accent_style(accent)
 

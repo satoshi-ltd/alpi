@@ -1,4 +1,4 @@
-"""Unit tests for ``alf.tools.web_search``.
+"""Unit tests for ``alpi.tools.web_search``.
 
 We mock the ``ddgs`` backend so the tests don't hit the network and
 don't depend on DDG's current behaviour. The goal is to exercise our

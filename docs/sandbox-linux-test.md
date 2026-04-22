@@ -1,6 +1,6 @@
 # Testing the Linux sandbox from macOS
 
-alf's Phase-2 sandbox uses `bubblewrap` on Linux. If you don't have a
+alpi's Phase-2 sandbox uses `bubblewrap` on Linux. If you don't have a
 Linux machine handy, a minimal Docker image lets you exercise the
 Linux code path from macOS.
 
@@ -17,17 +17,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 ENV PATH=/root/.local/bin:$PATH
 
-WORKDIR /alf
+WORKDIR /alpi
 ```
 
 ## Build + run
 
 ```bash
-docker build -t alf-linux-sandbox -f docs/sandbox-linux-test.Dockerfile .
+docker build -t alpi-linux-sandbox -f docs/sandbox-linux-test.Dockerfile .
 docker run --rm -it \
   --privileged \
-  -v "$PWD":/alf \
-  alf-linux-sandbox bash
+  -v "$PWD":/alpi \
+  alpi-linux-sandbox bash
 ```
 
 The `--privileged` flag lets bubblewrap create user namespaces inside
@@ -37,7 +37,7 @@ bubblewrap on their host, no Docker needed.
 ## Inside the container
 
 ```bash
-cd /alf
+cd /alpi
 uv run --with pytest pytest -q tests/test_sandbox.py
 uv run --with pytest pytest -q tests/test_guards.py
 ```
@@ -51,7 +51,7 @@ instead of being skipped.
 ```bash
 uv run python - <<'PY'
 from pathlib import Path
-from alf.tools._sandbox import wrap_command
+from alpi.tools._sandbox import wrap_command
 import subprocess
 
 ws = Path("/tmp/ws"); ws.mkdir(exist_ok=True)
@@ -59,18 +59,18 @@ ah = Path("/tmp/ah"); ah.mkdir(exist_ok=True)
 
 # allowed: write inside workspace
 args = wrap_command("echo hi > /tmp/ws/ok.txt && cat /tmp/ws/ok.txt",
-                    workspace=ws, alf_home=ah, allow_network=False)
+                    workspace=ws, alpi_home=ah, allow_network=False)
 print("allowed:", subprocess.run(args, capture_output=True, text=True).stdout)
 
 # blocked: write to /etc
 args = wrap_command("echo pwn > /etc/zzz",
-                    workspace=ws, alf_home=ah, allow_network=False)
+                    workspace=ws, alpi_home=ah, allow_network=False)
 r = subprocess.run(args, capture_output=True, text=True)
 print("blocked (/etc):", r.returncode, r.stderr[:80])
 
 # blocked: network with --unshare-net
 args = wrap_command("curl --max-time 3 https://example.com",
-                    workspace=ws, alf_home=ah, allow_network=False)
+                    workspace=ws, alpi_home=ah, allow_network=False)
 r = subprocess.run(args, capture_output=True, text=True)
 print("blocked (net):", r.returncode, r.stderr[:80])
 PY

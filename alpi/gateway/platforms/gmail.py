@@ -21,7 +21,7 @@ from alpi.gateway.platforms.imap import _is_automated
 from alpi.mail.gmail import GmailClient, GmailError
 from alpi.mail.gmail_auth import GmailAuthError, get_access_token, get_email, token_path
 
-log = logging.getLogger("alf.gateway.gmail")
+log = logging.getLogger("alpi.gateway.gmail")
 
 DEFAULT_POLL_INTERVAL = 60
 _HISTORY_URL = "https://gmail.googleapis.com/gmail/v1/users/me/history"
@@ -119,7 +119,7 @@ class Gmail(Platform):
         def _do_send() -> None:
             GmailClient(self.home).send(
                 to=[message.external_chat_id],
-                subject="[alf] re:",
+                subject="[alpi] re:",
                 body=message.text,
             )
         try:

@@ -1,4 +1,4 @@
-"""Tests for ``alf profile`` — list + create."""
+"""Tests for ``alpi profile`` — list + create."""
 
 from __future__ import annotations
 

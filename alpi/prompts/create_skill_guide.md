@@ -31,7 +31,7 @@ skill. Never create one proactively.
 
 ## Before creating
 
-- Search `~/.alpi/skills/` and the bundled `alf/skills/` for an existing
+- Search `~/.alpi/skills/` and the bundled `alpi/skills/` for an existing
   skill that already covers ≥80% of the need. If one exists, propose
   extending it instead of creating a duplicate.
 
@@ -53,10 +53,10 @@ does:
 
        ## Prerequisites
        - `github` MCP server configured in `config.yaml`
-         (see `alf setup → MCPs`). Needs `GITHUB_TOKEN` in `.env`.
+         (see `alpi setup → MCPs`). Needs `GITHUB_TOKEN` in `.env`.
 
 2. In the skill body, assume the MCP's tools are already registered
    (`github:create_issue`, etc.) and invoke them directly.
 
 Skills REFERENCE MCPs; they never install or configure them. The user
-adds MCPs once via `alf setup → MCPs`; skills use them afterwards.
+adds MCPs once via `alpi setup → MCPs`; skills use them afterwards.

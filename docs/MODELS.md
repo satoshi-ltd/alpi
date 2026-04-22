@@ -1,6 +1,6 @@
 # Model recommendations
 
-alf works with any model that speaks the OpenAI tool-calling protocol
+alpi works with any model that speaks the OpenAI tool-calling protocol
 via LiteLLM, but **not every model is a good agent**. Tool-calling
 fluency, system-prompt adherence, and memory-tool triggering vary
 wildly — and token cost and latency vary just as much. This page is
@@ -9,11 +9,11 @@ the distilled recommendation so you don't have to learn the hard way.
 ## How this list was built
 
 - **Usage signal**: OpenRouter's public rankings for [Hermes Agent][h]
-  (Nous Research's personal agent — comparable workload to alf:
+  (Nous Research's personal agent — comparable workload to alpi:
   tool-heavy CLI, 40+ tools, persistent memory, 3.41T tokens/month).
 - **Coding-agent signal**: same service, "Coding Agents" category —
   a proxy for disciplined tool-chain use.
-- **Empirical**: hands-on testing inside alf with the same set of
+- **Empirical**: hands-on testing inside alpi with the same set of
   smoke questions (identity adoption, proactive `memory` writes,
   session_search usage, tool-chain discipline).
 
@@ -46,7 +46,7 @@ credit.
 
 | Model | OpenRouter ID | Notes |
 |---|---|---|
-| **MiMo-V2-Flash** | `xiaomi/mimo-v2-flash` | **Validated locally in alf** — adopts persona fine, respects tool schema, very fast, very cheap. Our current default recommendation for personal daily use. |
+| **MiMo-V2-Flash** | `xiaomi/mimo-v2-flash` | **Validated locally in alpi** — adopts persona fine, respects tool schema, very fast, very cheap. Our current default recommendation for personal daily use. |
 | **Gemini 3 Flash Preview** | `google/gemini-3-flash-preview` | Fast, generous context, Google-cheap. Slightly laxer about proactive memory writes. |
 | **GLM 5.1** | `z-ai/glm-5.1` | #8 on Hermes. Competent, mid-cheap. Good fallback when Gemini rate-limits. |
 | **MiniMax M2.7** | `minimax/minimax-m2.7` | #3 on Hermes. Decent for conversation, slightly weaker on multi-step tool chains. |

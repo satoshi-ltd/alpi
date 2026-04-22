@@ -369,6 +369,6 @@ def test_ensure_running_spawns_detached_when_dead(
     # Child inherits ALPI_HOME so it writes to the right profile.
     env = captured["kwargs"].get("env") or {}
     assert env.get("ALPI_HOME") == str(tmp_home_no_env)
-    # Command invoked is `alf schedule start`.
+    # Command invoked is `alpi schedule start`.
     assert "schedule" in captured["args"]
     assert "start" in captured["args"]

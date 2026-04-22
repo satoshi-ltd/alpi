@@ -3,14 +3,14 @@ Screen {
     layers: base overlay;
 }
 
-AlfTopBar {
+AlpiTopBar {
     height: 2;
     background: $background;
     color: $text-muted;
     padding: 1 2 0 2;
 }
 
-AlfHeader {
+AlpiHeader {
     height: 1;
     background: $background;
     color: $text-muted;

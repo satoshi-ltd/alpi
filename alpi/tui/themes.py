@@ -1,4 +1,4 @@
-"""Alf theme factory — builds a Textual Theme from the user's accent."""
+"""Alpi theme factory — builds a Textual Theme from the user's accent."""
 
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ def build_theme(accent: str, dark: bool = True) -> Theme:
     fg = palette["foreground"]
 
     return Theme(
-        name=f"alf-{'dark' if dark else 'light'}",
+        name=f"alpi-{'dark' if dark else 'light'}",
         accent=accent,
         primary=accent,
         secondary=accent,

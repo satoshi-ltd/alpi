@@ -52,7 +52,7 @@ def run(home: Path) -> None:
     # Allowlist controls the INBOUND gateway only — outbound
     # (send_message, schedule delivery, email tool) works regardless.
     # Empty is a valid choice: "use email for outbound, never
-    # trigger alf from inbound".
+    # trigger alpi from inbound".
     senders_raw = ui.text(
         "Allowed senders (comma-separated, empty = no inbound):",
         default=current_senders,

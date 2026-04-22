@@ -100,7 +100,7 @@ def _clean_entry(content: str) -> str:
         # Skip pure markdown headers and seed template lines.
         if stripped.startswith("#"):
             continue
-        if stripped.startswith("(alf will"):
+        if stripped.startswith("(alpi will"):
             continue
         if stripped == "§":
             continue

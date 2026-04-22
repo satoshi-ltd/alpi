@@ -13,7 +13,7 @@ import httpx
 from alpi.gateway.base import IncomingMessage, OutgoingMessage, Platform
 from alpi.gateway.delivery import format_for_telegram
 
-log = logging.getLogger("alf.gateway.telegram")
+log = logging.getLogger("alpi.gateway.telegram")
 
 API_BASE = "https://api.telegram.org/bot{token}"
 FILE_BASE = "https://api.telegram.org/file/bot{token}"
