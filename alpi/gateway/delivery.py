@@ -149,7 +149,7 @@ def _send_email_sync(chat_id: str, text: str) -> None:
     except ImapError as e:
         raise DeliveryError(str(e))
     try:
-        client.send(to=[chat_id], subject="[alf]", body=text)
+        client.send(to=[chat_id], subject="[alpi]", body=text)
     except ImapError as e:
         raise DeliveryError(str(e))
 
@@ -158,7 +158,7 @@ def _send_gmail_sync(chat_id: str, text: str) -> None:
     from alpi.home import get_home
     from alpi.mail.gmail import GmailClient, GmailError
     try:
-        GmailClient(get_home()).send(to=[chat_id], subject="[alf]", body=text)
+        GmailClient(get_home()).send(to=[chat_id], subject="[alpi]", body=text)
     except GmailError as e:
         raise DeliveryError(str(e))
 

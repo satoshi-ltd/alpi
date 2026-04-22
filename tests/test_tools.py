@@ -31,9 +31,9 @@ def test_registry_has_all_expected_tools() -> None:
 
 def test_read_write_roundtrip(tmp_home_no_env: Path) -> None:
     target = tmp_home_no_env / "hello.txt"
-    assert WriteFile().run(path=str(target), content="hola alf").ok
+    assert WriteFile().run(path=str(target), content="hola alpi").ok
     r = ReadFile().run(path=str(target))
-    assert r.ok and "hola alf" in r.output
+    assert r.ok and "hola alpi" in r.output
 
 
 def test_edit_file_single_match(tmp_home_no_env: Path) -> None:

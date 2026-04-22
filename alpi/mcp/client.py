@@ -11,7 +11,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any
 
-log = logging.getLogger("alf.mcp")
+log = logging.getLogger("alpi.mcp")
 
 # Handshake. We speak the November 2024 spec; most servers still
 # accept older/newer versions and negotiate.

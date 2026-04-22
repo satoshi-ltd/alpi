@@ -63,7 +63,7 @@ def _resolve_popen_args(command: str) -> list[str] | str:
     return wrap_command(
         command,
         workspace=wp,
-        alf_home=get_home(),
+        alpi_home=get_home(),
         allow_network=allow_network,
     )
 
@@ -182,7 +182,7 @@ class Terminal(Tool):
             return ToolResult(ok=False, output="", error=str(e))
         use_shell = isinstance(popen_args, str)
         log = tempfile.NamedTemporaryFile(
-            prefix="alf-bg-", suffix=".log", dir=_bg_dir(), delete=False,
+            prefix="alpi-bg-", suffix=".log", dir=_bg_dir(), delete=False,
         )
         log.close()
         proc = subprocess.Popen(

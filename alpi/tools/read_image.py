@@ -105,7 +105,7 @@ def _download(url: str) -> bytes:
         r = client.get(
             url,
             headers={
-                "User-Agent": "alf/read_image",
+                "User-Agent": "alpi/read_image",
                 "Accept": "image/*,*/*;q=0.8",
             },
         )

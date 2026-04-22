@@ -25,9 +25,9 @@ what's planned.
 
 ```bash
 # One-time tool install from source
-uv tool install /path/to/alf
+uv tool install /path/to/alpi
 # After any code change
-uv tool install /path/to/alf --reinstall --no-cache
+uv tool install /path/to/alpi --reinstall --no-cache
 
 # One-time — Chromium for the `browser` tool (~200MB)
 playwright install chromium

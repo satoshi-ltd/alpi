@@ -1,7 +1,7 @@
-# Skills — how alf learns reusable recipes
+# Skills — how alpi learns reusable recipes
 
 A **skill** is a directory under `~/.alpi/skills/<category>/<name>/` that
-teaches alf how to do something. The agent creates skills via the
+teaches alpi how to do something. The agent creates skills via the
 `skill` tool; they go live under their declared category immediately.
 The user manages them (view / delete) with `/skills`. There is no
 approval gate — structure + security scanner + sandbox provide the
@@ -243,7 +243,7 @@ residue left behind.
 Hermes skills map cleanly for the simple case (just `SKILL.md`). For
 richer ones, reshape:
 
-| Hermes | alf |
+| Hermes | alpi |
 |---|---|
 | `skills/<cat>/<name>/SKILL.md` | `~/.alpi/skills/<cat>/<name>/SKILL.md` |
 | `skills/<cat>/<name>/scripts/*.py` | `scripts/*.py` (flat, no subdirs) |
@@ -253,4 +253,4 @@ richer ones, reshape:
 | `DESCRIPTION.md` at category level | Drop; redundant |
 
 The frontmatter also needs adapting: Hermes uses `metadata.hermes`,
-alf uses flat fields (`name`, `description`, `category`, etc.).
+alpi uses flat fields (`name`, `description`, `category`, etc.).

@@ -308,7 +308,7 @@ class ImapClient:
 
     def _msgid_domain(self) -> str:
         _, _, domain = self.address.partition("@")
-        return domain or "alf.local"
+        return domain or "alpi.local"
 
     def _select(self, imap: imaplib.IMAP4, folder: str) -> None:
         typ, _ = imap.select(_imap_folder(folder))

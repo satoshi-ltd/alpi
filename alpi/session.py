@@ -30,7 +30,7 @@ class Turn:
     at: float
     user: str
     tools: list[ToolLog]
-    assistant: str        # alf's final text reply (last no-tool-calls message)
+    assistant: str        # alpi's final text reply (last no-tool-calls message)
 
 
 @dataclass

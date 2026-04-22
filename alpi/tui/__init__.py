@@ -1,5 +1,5 @@
-"""Textual-based TUI for alf — mother.py-inspired minimal chat layout."""
+"""Textual-based TUI for alpi — mother.py-inspired minimal chat layout."""
 
-from alpi.tui.app import AlfApp
+from alpi.tui.app import AlpiApp
 
-__all__ = ["AlfApp"]
+__all__ = ["AlpiApp"]

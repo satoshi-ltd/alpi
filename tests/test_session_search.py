@@ -81,7 +81,7 @@ def test_ranking_higher_score_first(isolated_home: Path) -> None:
 
 def test_output_includes_tools_summary(isolated_home: Path) -> None:
     """Each turn's tool names appear in the thread tail — agent can tell
-    what alf did before without seeing raw outputs."""
+    what alpi did before without seeing raw outputs."""
     _write_session(isolated_home, "s1", 1_700_000_000, [
         _turn(
             user="busca restaurantes",

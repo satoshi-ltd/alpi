@@ -8,13 +8,13 @@ from pathlib import Path
 from alpi import home
 
 
-def test_default_is_home_alf(monkeypatch) -> None:
+def test_default_is_home_alpi(monkeypatch) -> None:
     monkeypatch.delenv("ALPI_HOME", raising=False)
     monkeypatch.delenv("ALPI_PROFILE", raising=False)
     assert home.get_home() == Path.home() / ".alpi"
 
 
-def test_alf_home_env_overrides(monkeypatch, tmp_path: Path) -> None:
+def test_alpi_home_env_overrides(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setenv("ALPI_HOME", str(tmp_path))
     assert home.get_home() == tmp_path
 
@@ -31,7 +31,7 @@ def test_ensure_home_creates_subtree(tmp_path: Path) -> None:
         assert (tmp_path / sub).is_dir()
 
 
-def test_alf_profile_env_resolves(monkeypatch) -> None:
+def test_alpi_profile_env_resolves(monkeypatch) -> None:
     monkeypatch.delenv("ALPI_HOME", raising=False)
     monkeypatch.setenv("ALPI_PROFILE", "work")
     assert home.get_home() == Path.home() / ".alpi" / "profiles" / "work"

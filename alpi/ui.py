@@ -46,7 +46,7 @@ NAV_HINT = "(↑↓ navigate  ENTER select  ESC cancel)"
 
 def crumb(*parts: str) -> str:
     from alpi import __version__
-    segments = [f"alf v{__version__}", *[p for p in parts if p]]
+    segments = [f"alpi v{__version__}", *[p for p in parts if p]]
     return " › ".join(segments)
 
 
@@ -64,8 +64,8 @@ def banner(title: str, subtitle: str = "", hint: str = "",
 
 def _render_title(title: str, *, home: Path | None) -> str:
     accent = _accent_hex(home)
-    if accent and title.startswith("alf "):
-        return f"[b {accent}]alf[/b {accent}][b] {title[4:]}[/b]"
+    if accent and title.startswith("alpi "):
+        return f"[b {accent}]alpi[/b {accent}][b] {title[4:]}[/b]"
     return f"[b]{title}[/b]"
 
 

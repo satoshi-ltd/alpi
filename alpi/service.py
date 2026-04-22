@@ -19,13 +19,13 @@ def install(name: str, home: Path, profile: str = "default") -> str:
     """Install and auto-start the named daemon. Returns the backend used."""
     _validate_name(name)
     backend = _detect_backend()
-    alf_bin = _locate_alf()
+    alpi_bin = _locate_alpi()
 
     if backend == "launchd":
-        _launchd_install(name, home, profile, alf_bin)
+        _launchd_install(name, home, profile, alpi_bin)
         return "launchd"
     if backend == "systemd":
-        _systemd_install(name, home, profile, alf_bin)
+        _systemd_install(name, home, profile, alpi_bin)
         return "systemd"
     raise ServiceError(f"unsupported platform: {platform.system()}")
 
@@ -71,11 +71,11 @@ def _validate_name(name: str) -> None:
         raise ServiceError(f"unknown daemon name: {name!r}")
 
 
-def _locate_alf() -> str:
+def _locate_alpi() -> str:
     path = shutil.which("alpi")
     if not path:
-        # Fallback to ``<python> -m alf`` — works from a venv/isolated
-        # install even if ``alf`` isn't on the global PATH.
+        # Fallback to ``<python> -m alpi`` — works from a venv/isolated
+        # install even if ``alpi`` isn't on the global PATH.
         return f"{sys.executable} -m alpi"
     return path
 
@@ -83,8 +83,8 @@ def _locate_alf() -> str:
 def service_label(name: str, profile: str) -> str:
     """Public label used for messages in the CLI and in status output."""
     if _detect_backend() == "launchd":
-        return f"com.alf.{name}.{profile}"
-    return f"alf-{name}-{profile}"
+        return f"com.alpi.{name}.{profile}"
+    return f"alpi-{name}-{profile}"
 
 
 # launchd (macOS)
@@ -123,19 +123,19 @@ _PLIST_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
 def _launchd_plist_path(name: str, profile: str) -> Path:
     return (
         Path.home() / "Library" / "LaunchAgents"
-        / f"com.alf.{name}.{profile}.plist"
+        / f"com.alpi.{name}.{profile}.plist"
     )
 
 
-def _launchd_install(name: str, home: Path, profile: str, alf_bin: str) -> None:
-    label = f"com.alf.{name}.{profile}"
+def _launchd_install(name: str, home: Path, profile: str, alpi_bin: str) -> None:
+    label = f"com.alpi.{name}.{profile}"
     plist = _launchd_plist_path(name, profile)
     plist.parent.mkdir(parents=True, exist_ok=True)
 
     log_path = _log_path(name, home)
     log_path.parent.mkdir(parents=True, exist_ok=True)
 
-    program_args = _program_args_xml(alf_bin, name)
+    program_args = _program_args_xml(alpi_bin, name)
     plist.write_text(_PLIST_TEMPLATE.format(
         label=label,
         program_args=program_args,
@@ -171,7 +171,7 @@ def _launchd_uninstall(name: str, profile: str) -> None:
 
 
 _UNIT_TEMPLATE = """[Unit]
-Description=alf {name} daemon ({profile})
+Description=alpi {name} daemon ({profile})
 After=network-online.target
 
 [Service]
@@ -191,11 +191,11 @@ WantedBy=default.target
 def _systemd_unit_path(name: str, profile: str) -> Path:
     return (
         Path.home() / ".config" / "systemd" / "user"
-        / f"alf-{name}-{profile}.service"
+        / f"alpi-{name}-{profile}.service"
     )
 
 
-def _systemd_install(name: str, home: Path, profile: str, alf_bin: str) -> None:
+def _systemd_install(name: str, home: Path, profile: str, alpi_bin: str) -> None:
     unit = _systemd_unit_path(name, profile)
     unit.parent.mkdir(parents=True, exist_ok=True)
     log_path = _log_path(name, home)
@@ -205,11 +205,11 @@ def _systemd_install(name: str, home: Path, profile: str, alf_bin: str) -> None:
         name=name,
         profile=profile,
         home=str(home),
-        exec_start=f"{alf_bin} {name} start",
+        exec_start=f"{alpi_bin} {name} start",
         log_path=str(log_path),
     ))
 
-    unit_id = f"alf-{name}-{profile}.service"
+    unit_id = f"alpi-{name}-{profile}.service"
     # Tell systemd to re-read units, then enable+start.
     res = _run(["systemctl", "--user", "daemon-reload"], check=False)
     if res.returncode != 0:
@@ -231,7 +231,7 @@ def _systemd_uninstall(name: str, profile: str) -> None:
     unit = _systemd_unit_path(name, profile)
     if not unit.exists():
         raise ServiceError(f"{name} is not installed (no unit at {unit})")
-    unit_id = f"alf-{name}-{profile}.service"
+    unit_id = f"alpi-{name}-{profile}.service"
     _run(["systemctl", "--user", "disable", "--now", unit_id], check=False)
     unit.unlink(missing_ok=True)
     _run(["systemctl", "--user", "daemon-reload"], check=False)
@@ -243,7 +243,7 @@ def _systemd_hint(result: subprocess.CompletedProcess) -> str:
         return (
             "\nNote: `systemd --user` must be available. On WSL without "
             "`systemd=true` in /etc/wsl.conf, or in minimal containers, "
-            "run `alf schedule start` in a tmux/screen session instead."
+            "run `alpi schedule start` in a tmux/screen session instead."
         )
     return ""
 
@@ -255,9 +255,9 @@ def _log_path(name: str, home: Path) -> Path:
     return home / "schedule" / "logs" / "scheduler.log"
 
 
-def _program_args_xml(alf_bin: str, name: str) -> str:
-    # alf_bin may be ``/path/to/alf`` or ``<python> -m alf`` — split it.
-    parts = alf_bin.split() + [name, "start"]
+def _program_args_xml(alpi_bin: str, name: str) -> str:
+    # alpi_bin may be ``/path/to/alpi`` or ``<python> -m alpi`` — split it.
+    parts = alpi_bin.split() + [name, "start"]
     return "\n".join(f"    <string>{p}</string>" for p in parts)
 
 

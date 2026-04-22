@@ -1,12 +1,12 @@
 # Architecture
 
-Living technical reference for alf at HEAD. Describes only what currently
+Living technical reference for alpi at HEAD. Describes only what currently
 ships — historical decisions live in commit messages, planned work lives
 in [ROADMAP.md](ROADMAP.md).
 
 Audience: any developer (or LLM) reading this codebase from cold.
 
-## What alf is
+## What alpi is
 
 A slim personal AI agent. Two surfaces — a Textual TUI in the terminal
 and a Telegram/IMAP gateway as a separate process. Inline-learning
@@ -16,16 +16,16 @@ direct-Codex transport for the ChatGPT subscription path).
 
 **Positioned as a lighter, improved version of
 [Hermes](https://github.com/NousResearch/hermes-agent).** The Hermes
-working tree is already on disk at **`~/git/hermes-agent/`** — alf's
+working tree is already on disk at **`~/git/hermes-agent/`** — alpi's
 canonical reference codebase, read directly with `Read`/`Grep`/`Glob`
 (no clone, no fetch). When designing a non-trivial feature, read
 Hermes first — they've usually solved the problem. Then evaluate critically (Hermes covers a broader
-audience than alf and many of its solutions are over-engineered for
+audience than alpi and many of its solutions are over-engineered for
 personal-use scope) and propose a leaner adaptation. The bar is "the
 smallest design that captures the value Hermes provides," not "port it
-verbatim." Things alf borrowed lean: skill scanner patterns
+verbatim." Things alpi borrowed lean: skill scanner patterns
 (skills_guard.py), auto-injected skills index in the system prompt
-(prompt_builder.py:589), depth-tiered research budget. Things alf
+(prompt_builder.py:589), depth-tiered research budget. Things alpi
 deliberately skipped: skill hub/sync, sub-agent mesh, SQLite state, 28
 skill categories, post-session reflect, broad cross-platform support.
 
@@ -39,9 +39,9 @@ skill categories, post-session reflect, broad cross-platform support.
 
 ## Code conventions
 
-**No human-facing comments in `alf/` source.** The reader is an LLM. Narrative prose, banner dividers, section labels, restatement docstrings — token tax. See `feedback_no_human_comments.md` in agent memory for the full rule. Tests, docs, and tool `description` strings are out of scope (those serve other audiences).
+**No human-facing comments in `alpi/` source.** The reader is an LLM. Narrative prose, banner dividers, section labels, restatement docstrings — token tax. See `feedback_no_human_comments.md` in agent memory for the full rule. Tests, docs, and tool `description` strings are out of scope (those serve other audiences).
 
-**English only.** All text inside `alf/` (code, docstrings, prompts, tool descriptions, error messages, seed comments) is English. The LLM reads these every turn; embedding Spanish nudges replies toward Spanish. User-facing runtime output follows the user's language.
+**English only.** All text inside `alpi/` (code, docstrings, prompts, tool descriptions, error messages, seed comments) is English. The LLM reads these every turn; embedding Spanish nudges replies toward Spanish. User-facing runtime output follows the user's language.
 
 **No comments without "why".** A comment survives only if removing it would mislead a future reader into a wrong edit or waste their time re-deriving an external fact. `or`-chains and try/except blocks are self-evidently intentional; documenting them is fluff.
 
@@ -50,35 +50,35 @@ skill categories, post-session reflect, broad cross-platform support.
 Stable verbs shared across groups so a user doesn't relearn per feature.
 
 ```
-alf                           launch the TUI
-alf -c / --continue           resume the last session in the TUI
-alf -p <name>                 profile flag, combinable with any command
+alpi                           launch the TUI
+alpi -c / --continue           resume the last session in the TUI
+alpi -p <name>                 profile flag, combinable with any command
 
-alf chat                      alias for `alf`
-alf chat --once "<text>"      one-shot turn to stdout (pipe-friendly)
-alf chat --once ... --emit-events     INTERNAL — gateway subprocess contract
+alpi chat                      alias for `alpi`
+alpi chat --once "<text>"      one-shot turn to stdout (pipe-friendly)
+alpi chat --once ... --emit-events     INTERNAL — gateway subprocess contract
 
-alf setup                     interactive menu: model / gateways / MCPs
+alpi setup                     interactive menu: model / gateways / MCPs
 
-alf profile list              list profiles, mark the active one
-alf profile create <name>     bootstrap a new profile tree
-alf profile remove <name>     delete after safety checks + confirm
+alpi profile list              list profiles, mark the active one
+alpi profile create <name>     bootstrap a new profile tree
+alpi profile remove <name>     delete after safety checks + confirm
 
-alf gateway   start|stop|status|logs|install|uninstall
-alf schedule  start|stop|status|logs|install|uninstall|run-once
-alf mcp       list|test|remove
+alpi gateway   start|stop|status|logs|install|uninstall
+alpi schedule  start|stop|status|logs|install|uninstall|run-once
+alpi mcp       list|test|remove
 ```
 
 **Shape rules:** containers (profile) get `list/create/remove`. Daemons (gateway, schedule) get `start/stop/status/logs/install/uninstall`. Schedule adds `run-once`. MCP has no daemon (servers spawn as Engine children) so no `start/stop`. Interactive wizards live exclusively under `alpi setup`; never add a per-feature wizard command.
 
-**`alf/ui.py`** is the shared interactive layer. Raw `questionary.*` is forbidden outside it. Helpers: `banner`, `menu`, `text`, `password`, `confirm`, `row`, `ok/fail/warn/dim/saved/cancelled`. The close item is added automatically with value `None` (callers treat `None` as "out").
+**`alpi/ui.py`** is the shared interactive layer. Raw `questionary.*` is forbidden outside it. Helpers: `banner`, `menu`, `text`, `password`, `confirm`, `row`, `ok/fail/warn/dim/saved/cancelled`. The close item is added automatically with value `None` (callers treat `None` as "out").
 
 **Menu close wording**: top-level (`alpi setup`) → `Exit`. Sub-menus (`Gateways:`, `MCP servers:`, `Manage saved keys`) → `← Back`. Wizard aborted mid-flow → `cancelled`. Mixing `Exit/Back/Cancel` in one context is a bug.
 
 ## File layout
 
 ```
-alf/
+alpi/
 ├── __init__.py             __version__
 ├── cli.py                  entry point, --continue, --profile resolution
 ├── engine.py               turn runner, interrupt flag, tool loop
@@ -135,23 +135,23 @@ alf/
 
 ## Core systems
 
-### Engine loop (`alf/engine.py`)
+### Engine loop (`alpi/engine.py`)
 
 Per turn: append user message → loop {LLM stream → emit deltas → exec tool calls → append tool results} until the LLM stops emitting tool calls OR `max_steps_per_turn` is hit. `interrupt_requested` is polled at three checkpoints (between iterations, mid-stream, between tool calls). A turn lock serializes concurrent runs so a delayed `research` tool from the previous turn can't bleed into the next.
 
 Events emitted to the UI sink: `user`, `reasoning_delta`, `assistant_delta`, `assistant_done`, `tool_start`, `tool_state`, `tool_end`, `usage`, `error`, `done`, `interrupted`. The TUI consumes them; the gateway subprocess consumes a subset via JSON-lines.
 
-The system prompt for each turn is built from: personality file → base prompt → environment block (workspace, profile home, path rule) → **skills index** (auto-injected by `alf.tools.skill.skills_index_block`) → USER.md → MEMORY.md.
+The system prompt for each turn is built from: personality file → base prompt → environment block (workspace, profile home, path rule) → **skills index** (auto-injected by `alpi.tools.skill.skills_index_block`) → USER.md → MEMORY.md.
 
-### LLM transport (`alf/llm.py`)
+### LLM transport (`alpi/llm.py`)
 
 Thin wrapper over `litellm.completion`. `stream()` is an async generator yielding `{text_delta, reasoning_delta, tool_calls_delta, finish_reason}` per chunk plus a final `{final, tool_calls, input_tokens, output_tokens, cost_usd}`. `complete()` is the non-streaming variant used by `research`. `_silence_litellm()` runs at import time to mute LiteLLM's startup banner via FD-level redirect (Textual is sensitive to stdout pollution).
 
-### Memory (`alf/memory.py`)
+### Memory (`alpi/memory.py`)
 
 Three files: `USER.md` (facts about the user), `MEMORY.md` (env quirks, commands, incidents), `PERSONALITY.md` (tone / language / behaviour). `§` entry delimiter, char limits (1375 / 2200), accent+case+punctuation-insensitive dedup, plus token-Jaccard dedup at 70% max-containment to catch paraphrases. `.bak` snapshot before every mutating write. Approach C: every mutating call returns the full current state of the target file so the agent sees its own write in the same turn.
 
-### Path resolution (`alf/tools/_paths.py`)
+### Path resolution (`alpi/tools/_paths.py`)
 
 Single entry point `resolve_path(path)`:
 
@@ -164,7 +164,7 @@ Denylist: `/etc/`, `/boot/`, `/sys/`, `/proc/`, `/usr/lib/systemd/`, `/System/`,
 
 `suggest_similar_paths(target)` lists the parent directory and fuzzy-matches siblings by basename substring/prefix. Used by `read_file`, `edit_file`, and `search` to turn dead-end errors into actionable suggestions.
 
-### Tool registry (`alf/tools/__init__.py`)
+### Tool registry (`alpi/tools/__init__.py`)
 
 `register(cls)` adds a `Tool` subclass to the dict, `schemas()` emits the OpenAI function-calling shape, `execute(name, args)` runs by name with full error capture. Currently 17 tools registered; `browser` exists as a stub but is not registered (Playwright work pending).
 
@@ -182,9 +182,9 @@ Frontmatter (auto-populated on `create`): `name`, `description`, `category`, `ve
 
 **Auto-injected into the system prompt** (`skills_index_block(home)`): every session start, all installed skills are listed by category as `name: description` entries, prefixed by a directive that says "check this list before reaching for general tools". Without this nudge, mimo-class models routinely went straight to `web_search`/`terminal` even when a perfect skill existed.
 
-**TUI integration**: when a `terminal` command's path matches `.alf/(profiles/<p>/)?skills/<cat>/<name>/...`, `arg_hint` rewrites the ToolCard label as `skill: <name>` (or `skill: <name> · <script>` when the script is the full path). Tool name stays `terminal`; the rewrite is display-only.
+**TUI integration**: when a `terminal` command's path matches `.alpi/(profiles/<p>/)?skills/<cat>/<name>/...`, `arg_hint` rewrites the ToolCard label as `skill: <name>` (or `skill: <name> · <script>` when the script is the full path). Tool name stays `terminal`; the rewrite is display-only.
 
-### Research (read-only sub-agent, `alf/tools/research.py`)
+### Research (read-only sub-agent, `alpi/tools/research.py`)
 
 Spawns a sub-agent with a read-only toolset (`web_search`, `web_fetch`, `web_extract`, `read_file`, `search`). Returns a single synthesised report; the main agent never sees the intermediate tool trace.
 
@@ -196,7 +196,7 @@ Spawns a sub-agent with a read-only toolset (`web_search`, `web_fetch`, `web_ext
 
 **Batch mode** (v0.2.18): `tasks: [{brief, depth}]` up to 3 runs concurrently — see the Delegate section below for the shared ThreadPoolExecutor design (same pattern applies here).
 
-### Vision (`alf/tools/read_image.py`)
+### Vision (`alpi/tools/read_image.py`)
 
 `read_image(path, question)` runs the current (or override) model in multimodal mode on an image and returns a text answer. `path` can be a local file OR an `http(s)` URL — URLs go through `check_url()` for SSRF (metadata hosts + private IPs blocked, redirects re-validated via httpx `event_hooks`).
 
@@ -208,7 +208,7 @@ No pre-flight vision-capability check — LiteLLM's `supports_vision()` is wrong
 
 Same usage / cost plumbing as research and delegate (`record_usage`). Auto-resize to cut tokens is tracked in [ROADMAP §S](ROADMAP.md) for v0.3.
 
-### Delegate (write-capable sub-agent, `alf/tools/delegate.py`)
+### Delegate (write-capable sub-agent, `alpi/tools/delegate.py`)
 
 Sibling to `research`, but can mutate: spawn a focused sub-agent with a chosen toolset, get back a summary. Used when a task would otherwise flood the parent context (multi-file refactors, fetch+parse+write pipelines, skills that generate several output files, iterative debug loops).
 
@@ -225,11 +225,11 @@ Sibling to `research`, but can mutate: spawn a focused sub-agent with a chosen t
 
 **Batch parallel mode** (v0.2.18). Both `research` and `delegate` accept `tasks: [...]` (up to 3) and run them concurrently via `ThreadPoolExecutor(max_workers=3)`. Isolation is provided by `_state.py`: `_emit`, `_interrupt_getter`, `_usage_sink` are `contextvars.ContextVar`, so each worker thread sees its own values without racing on module globals. Workers re-seed `interrupt_getter` + `usage_sink` from the parent context (Python's `ThreadPoolExecutor` doesn't propagate ContextVars automatically) and install a per-task prefixed `emit` so TUI progress lines read `[i/N] <tag> · <msg>`. Results aggregate into one markdown report with per-task sections; per-task failures are captured inline as `[failed: <error>]` instead of aborting the batch. Cap is hardcoded at 3 — bumping would need a config knob *and* would multiply LLM cost linearly; not a default worth moving.
 
-### TUI (`alf/tui/`)
+### TUI (`alpi/tui/`)
 
-Textual 8.2.x. Layout: `AlfTopBar` (identity) + chat scroll (`VerticalScroll.anchor()` auto-follows new content) + `AlfHeader` (status: model · ctx · cost) + `#chat-input` (flat slab, accent-tinted bg on focus).
+Textual 8.2.x. Layout: `AlpiTopBar` (identity) + chat scroll (`VerticalScroll.anchor()` auto-follows new content) + `AlpiHeader` (status: model · ctx · cost) + `#chat-input` (flat slab, accent-tinted bg on focus).
 
-**Theme** (`themes.py`): `build_theme(accent, dark)` factory returns a Textual `Theme` from a single accent hex + dark/light flag. Registered in `AlfApp.__init__` (not `on_mount` — child widgets read `theme_variables` during their own mount). Widgets read `self.app.theme_variables` at render time instead of taking colors as params, so `tui.accent` or `tui.theme` changes propagate without rewiring.
+**Theme** (`themes.py`): `build_theme(accent, dark)` factory returns a Textual `Theme` from a single accent hex + dark/light flag. Registered in `AlpiApp.__init__` (not `on_mount` — child widgets read `theme_variables` during their own mount). Widgets read `self.app.theme_variables` at render time instead of taking colors as params, so `tui.accent` or `tui.theme` changes propagate without rewiring.
 
 **Live tool cards** (`ToolCard` in `widgets.py`): single line, spinner + elapsed at 6 Hz, `tool_state` labels while running, switches to result line on completion. `◆` uses `$accent-darken-1` for non-error, `$error` for failures.
 
@@ -246,25 +246,25 @@ Textual 8.2.x. Layout: `AlfTopBar` (identity) + chat scroll (`VerticalScroll.anc
 
 **`Ctrl+Y`** copies last assistant reply (pbcopy/wl-copy/xclip/xsel/OSC-52 fallback chain). `Ctrl+L` clears.
 
-### Gateway (`alf/gateway/`)
+### Gateway (`alpi/gateway/`)
 
-Separate process from the TUI. `alpi gateway start` runs an event loop that listens to platforms (Telegram long-poll, IMAP polling) and spawns `alf chat --once --emit-events` per incoming message. Tool traces stream as `◆ {tool} · {arg_hint}` messages; typing indicator stays on while the subprocess works.
+Separate process from the TUI. `alpi gateway start` runs an event loop that listens to platforms (Telegram long-poll, IMAP polling) and spawns `alpi chat --once --emit-events` per incoming message. Tool traces stream as `◆ {tool} · {arg_hint}` messages; typing indicator stays on while the subprocess works.
 
 Allowlist: `TELEGRAM_ALLOWED_CHAT_IDS` and `IMAP_ALLOWED_SENDERS` in `.env`, fail-closed if unset. Per-platform config under `gateway.{telegram,imap}` in `config.yaml` (`show_tool_trace`, `typing_indicator`, etc.).
 
 `alpi gateway install/uninstall` registers a launchd (macOS) or systemd-user (Linux) unit so the gateway survives reboot.
 
-### Schedule (`alf/scheduler/`)
+### Schedule (`alpi/scheduler/`)
 
 Long-running daemon with a tick loop (default 30s). `add` schedules a job (`kind: cron|once`, expression or `after_hours`). `run-once` ticks manually for testing. UTC-stored, displayed in local TZ. LLM time grounding: when the agent calls `schedule(action='add', kind='once', after_hours=N)`, the engine resolves `now` from a single source so the agent doesn't drift.
 
-### MCP client (`alf/mcp/`)
+### MCP client (`alpi/mcp/`)
 
-Spawns user-configured MCP servers (stdio JSON-RPC, SSE planned). Their tools are wrapped and registered as alf tools. Servers configured in `config.yaml` under `mcp.servers.<name>` (command, args, env). `alf mcp list/test/remove` reads only; mutations live in `alf setup → MCPs`.
+Spawns user-configured MCP servers (stdio JSON-RPC, SSE planned). Their tools are wrapped and registered as alpi tools. Servers configured in `config.yaml` under `mcp.servers.<name>` (command, args, env). `alpi mcp list/test/remove` reads only; mutations live in `alpi setup → MCPs`.
 
-### Sessions (`alf/session.py`)
+### Sessions (`alpi/session.py`)
 
-Turn-based JSON: `turns: [{at, user, tools[], assistant}]` plus cumulative metrics. `ToolLog` carries `at, name, args, result (truncated hint), ok, duration_s, reasoning (non-empty only on first tool of a batch)`. Empty sessions (no user message) are NOT saved. `alf -c` / `--continue` resumes the most recent one and adopts its id.
+Turn-based JSON: `turns: [{at, user, tools[], assistant}]` plus cumulative metrics. `ToolLog` carries `at, name, args, result (truncated hint), ok, duration_s, reasoning (non-empty only on first tool of a batch)`. Empty sessions (no user message) are NOT saved. `alpi -c` / `--continue` resumes the most recent one and adopts its id.
 
 ### Security model
 
@@ -305,7 +305,7 @@ Key fixtures (`tests/conftest.py`):
 - Tool results are capped at 10,000 chars in `engine.py` before going into the LLM message thread.
 - `last_ctx_tokens` (current prompt size) ≠ cumulative `input_tokens`. Header shows the former.
 - `call_from_thread` + Python built-in methods (e.g. `dict.pop`) crashes Textual; always wrap in a regular function.
-- `cfg` must be loaded BEFORE `super().__init__()` on `AlfApp`. The theme is then registered immediately after, in `__init__` rather than `on_mount`, because child widgets read `self.app.theme_variables` during their own mount (which fires first). `self.get_css_variables()` is called explicitly to rebuild the var dict synchronously — setting `self.theme` alone schedules the refresh for the next event-loop tick.
+- `cfg` must be loaded BEFORE `super().__init__()` on `AlpiApp`. The theme is then registered immediately after, in `__init__` rather than `on_mount`, because child widgets read `self.app.theme_variables` during their own mount (which fires first). `self.get_css_variables()` is called explicitly to rebuild the var dict synchronously — setting `self.theme` alone schedules the refresh for the next event-loop tick.
 - `browser.py` exists but is intentionally NOT in the registry. Reactivate when Playwright lands (ROADMAP §B).
-- Gateway subprocess uses `alf chat --once --emit-events` — separate codepath from the TUI, simpler, non-streaming. Changes to TUI feel don't affect gateway.
+- Gateway subprocess uses `alpi chat --once --emit-events` — separate codepath from the TUI, simpler, non-streaming. Changes to TUI feel don't affect gateway.
 - `ALPI_HOME` env var routes daemons + tests to a specific profile root.

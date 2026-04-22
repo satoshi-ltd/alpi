@@ -57,7 +57,7 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
 
 @pytest.fixture
 def tmp_home_no_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """A clean alf home directory (no API keys). Safe for unit tests.
+    """A clean alpi home directory (no API keys). Safe for unit tests.
 
     Chdirs into the tmp dir AND points ALPI_HOME at it, so file-tool tests
     exercising paths under tmp_path pass the cwd sandbox and don't read
@@ -71,7 +71,7 @@ def tmp_home_no_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 @pytest.fixture
 def tmp_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """An alf home with the user's real .env copied (for LLM tests)."""
+    """An alpi home with the user's real .env copied (for LLM tests)."""
     src_env = Path.home() / ".alpi" / ".env"
     if src_env.exists():
         (tmp_path / ".env").write_text(src_env.read_text())

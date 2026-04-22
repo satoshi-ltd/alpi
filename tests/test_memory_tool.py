@@ -58,7 +58,7 @@ def test_read_reports_usage(isolated_home: Path) -> None:
 
 
 def test_personality_add(isolated_home: Path) -> None:
-    (isolated_home / "personality.md").write_text("# Identity\nYou are alf.\n")
+    (isolated_home / "personality.md").write_text("# Identity\nYou are alpi.\n")
     r = Memory().run(
         action="add", target="personality.md",
         content="Usa bullets cortos, nunca párrafos.",

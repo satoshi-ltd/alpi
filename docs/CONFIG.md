@@ -1,12 +1,12 @@
 # Configuration reference
 
-alf's settings live in `~/.alpi/config.yaml` (or
+alpi's settings live in `~/.alpi/config.yaml` (or
 `~/.alpi/profiles/<name>/config.yaml` for non-default profiles). This
 page lists every knob, its default, and what it controls.
 
 ## What ships in the YAML
 
-On first install alf only writes the sections you're likely to tweak
+On first install alpi only writes the sections you're likely to tweak
 — and where defaults are platform-dependent enough to deserve
 visibility:
 
@@ -92,7 +92,7 @@ Precedence: `tools.<name>.max_result_chars` (if set) → `tools.budget.per_resul
 Not implemented (tracked, not planned): per-turn aggregate cap and inline preview. Hermes has both (200K aggregate with spill-to-disk, 1.5K preview in the tool card). Ship if and when a real turn actually burns through several large tool results.
 
 `tools.terminal.sandbox` enables OS-level isolation on shell commands
-(macOS `sandbox-exec`, Linux `bubblewrap`). Toggle via `alf setup →
+(macOS `sandbox-exec`, Linux `bubblewrap`). Toggle via `alpi setup →
 Sandbox`, or directly in YAML. The TUI top bar shows the current
 state (`sandbox on` / `off`). Most useful on profiles that run
 unattended (gateway, schedule, sub-agents) — see
@@ -155,7 +155,7 @@ reasoning, so this flag has no effect there.
 | Key | Default | Why |
 |---|---|---|
 | `gateway.telegram.show_tool_trace` | `true` | Interactive chat; seeing tool calls in real time makes progress legible. |
-| `gateway.telegram.typing_indicator` | `true` | Shows "typing…" while alf is working; reassures the user something's happening. |
+| `gateway.telegram.typing_indicator` | `true` | Shows "typing…" while alpi is working; reassures the user something's happening. |
 
 ### Gateway — IMAP
 
@@ -203,6 +203,6 @@ Add via `alpi setup → Model → Add Ollama`. Remove via `alpi setup → Model 
 ## Takes-effect cheat sheet
 
 - **next turn** — change is live on the agent's next response.
-- **next session** — restart `alf` to pick it up.
-- **next gateway restart** — `alpi gateway stop && alf gateway start`
+- **next session** — restart `alpi` to pick it up.
+- **next gateway restart** — `alpi gateway stop && alpi gateway start`
   (or reload the service if installed as a daemon).

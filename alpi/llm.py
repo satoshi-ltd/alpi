@@ -197,9 +197,9 @@ def complete(
 
     if DEBUG:
         import sys
-        print(f"[alf.llm] finish_reason={response.choices[0].finish_reason!r}",
+        print(f"[alpi.llm] finish_reason={response.choices[0].finish_reason!r}",
               file=sys.stderr)
-        print(f"[alf.llm] raw choice={response.choices[0].message}", file=sys.stderr)
+        print(f"[alpi.llm] raw choice={response.choices[0].message}", file=sys.stderr)
     choice = response.choices[0].message
     usage = getattr(response, "usage", None)
 

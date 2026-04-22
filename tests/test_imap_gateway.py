@@ -35,7 +35,7 @@ def _build_msg(sender: str, subject: str, body: str,
                headers: dict[str, str] | None = None) -> bytes:
     m = EmailMessage()
     m["From"] = sender
-    m["To"] = "alf@example.com"
+    m["To"] = "alpi@example.com"
     m["Subject"] = subject
     for k, v in (headers or {}).items():
         m[k] = v
@@ -97,7 +97,7 @@ def patch_imap(monkeypatch):
 
 @pytest.fixture
 def env(monkeypatch):
-    monkeypatch.setenv("IMAP_ADDRESS", "alf@example.com")
+    monkeypatch.setenv("IMAP_ADDRESS", "alpi@example.com")
     monkeypatch.setenv("IMAP_PASSWORD", "pw")
     monkeypatch.setenv("IMAP_HOST", "imap.example.com")
     monkeypatch.setenv("SMTP_HOST", "smtp.example.com")
@@ -203,7 +203,7 @@ def test_state_is_per_email_address(env, tmp_path: Path, monkeypatch) -> None:
     p2 = email_platform.Imap(tmp_path)
     assert p2._load_last_uid() is None
     p2._save_last_uid(20)
-    monkeypatch.setenv("IMAP_ADDRESS", "alf@example.com")
+    monkeypatch.setenv("IMAP_ADDRESS", "alpi@example.com")
     p3 = email_platform.Imap(tmp_path)
     assert p3._load_last_uid() == 10
 
@@ -243,7 +243,7 @@ def test_delivery_send_to_email_dispatches(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setattr(client_mod, "ImapClient", _FakeClient)
 
     delivery.send_to("email", "pepe@x.com", "hello")
-    assert sends == [{"to": ["pepe@x.com"], "subject": "[alf]", "body": "hello"}]
+    assert sends == [{"to": ["pepe@x.com"], "subject": "[alpi]", "body": "hello"}]
 
 
 def test_delivery_email_rejects_unallowlisted(monkeypatch) -> None:
