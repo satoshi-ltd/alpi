@@ -63,6 +63,8 @@ Two options:
 | `tools.max_steps_per_turn` | `40` | int | next turn |
 | `tools.web_extract.model` | `""` (use main) | string | next turn |
 | `tools.read_image.model` | `""` (use main) | string | next turn |
+| `tools.read_image.auto_resize` | `true` | bool | next turn |
+| `tools.read_image.max_edge` | `1568` | int (pixels; `0` disables) | next turn |
 | `tools.terminal.sandbox` | `false` | bool | next turn |
 | `tools.terminal.allow_network` | `false` | bool | next turn |
 | `tools.browser.vision` | `false` | bool | next turn |
@@ -92,6 +94,8 @@ unattended (gateway, schedule, sub-agents) — see
 requirements. `allow_network` has no effect unless `sandbox` is on.
 
 `tools.browser.vision` lets the `browser(screenshot, question=…)` action auto-chain the screenshot into the vision model (`tools.read_image.model` or the active main model) and return the answer instead of the file path. When `false` (default), `screenshot` always returns the path and a hint pointing at `read_image` so the LLM can decide whether to pay for vision per call. Useful to turn on in an exploratory profile; keep off in watchdog/gateway profiles so the agent doesn't burn vision tokens silently.
+
+`tools.read_image.auto_resize` downscales any image whose longer edge exceeds `max_edge` (default 1568 px, matches Anthropic's recommendation) before base64-encoding to the model. Vision-model cost scales with resolution — a 4K screenshot costs ~9× more tokens than its 1568-px version for the same content. Aspect ratio is preserved, PNG-with-alpha stays PNG, everything else rounds-trips through JPEG q=85. SVG (vector) is skipped. Set `max_edge: 0` to disable entirely, or bump it if you work with detail-heavy images (charts, fine text) where the default is too aggressive.
 
 `tools.research.{quick,normal,deep}_steps` control the iteration
 budget of the `research` sub-agent. The agent picks the depth tier
