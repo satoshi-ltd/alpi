@@ -24,7 +24,7 @@ Audience: Javi (product) + me (Claude across sessions).
 | J | Anti-bot browsing (camoufox) | 🔵 backlog — depends on B |
 | K | Scroll resilience under heavy streaming | ✅ shipped (commit 9ed4139 — `VerticalScroll.anchor()`) |
 | L | Reasoning-as-state (TUI) | ✅ shipped (commits 62f7fa7 + fd1fec4) |
-| M | TTS / STT / voice-mode (local-first) | 🔵 backlog — opt-in, ⏸ pending user confirmation |
+| M | TTS / STT / voice-mode (local-first) | ✅ shipped (v0.2.25, 2 tools + Telegram voice inbound/outbound, no continuous voice mode) |
 | N | Image generation | 🔵 backlog — no concrete use case yet |
 | R.1 | Research step-counter in state label | ✅ shipped (v0.2.2) |
 | R.2 | `delegate` — write-capable sub-agent | ✅ shipped (v0.2.3, named `delegate` not `delegate_task`) |
@@ -48,7 +48,7 @@ release. The bar for "ship v0.2" is **clean docs + version bump +
 real-use validation across a few sessions** — not feature
 exhaustiveness.
 
-**Nothing open for v0.2.** Everything the original roadmap promised is shipped. Items still in the backlog — **C** (Codex OAuth), **H** (Home Assistant), **J** (camoufox), **M** (voice), **N** (image gen), **U** (Signal), **V** (Anthropic OAuth — ToS gray), **W** (approval system), **Σ.1/Σ.2** (bola extra) — roll forward to v0.3.
+**Nothing open for v0.2.** Everything the original roadmap promised is shipped. Items still in the backlog — **C** (Codex OAuth), **H** (Home Assistant), **J** (camoufox), **N** (image gen), **U** (Signal), **V** (Anthropic OAuth — ToS gray), **W** (approval system), **Σ.1/Σ.2** (bola extra) — roll forward to v0.3.
 
 Once the v0.3 cycle picks up a few of those + a fresh CHANGELOG
 entry summarises v0.2, bump to `v0.3.0` and reopen the table.
@@ -99,25 +99,6 @@ v0.2.16 shipped `playwright-stealth` on by default, which beats ~80% of basic de
 
 `generate_image(prompt, style)` using the active vision model or a dedicated endpoint (DALL-E, SD). Useful for "hazme un logo rápido". Low priority unless a concrete use case appears.
 
-### M. TTS / STT / voice-mode (local-first, opt-in)
-
-Hermes ships ~3000 LOC of voice (7 TTS providers, 3 STT tiers, full voice-mode). Too thick for alpi. Scope for us:
-
-- **TTS:** two providers only — Edge TTS (free online, zero setup) and NeuTTS (local, subprocess isolation so the 500MB model doesn't bloat alpi's RAM, supports voice cloning from a reference audio). Config knob `tools.voice.tts_provider: edge|neutts`.
-- **STT:** `faster-whisper` local, no cloud. Small model (base) by default, configurable. No Groq/OpenAI fallback — if local fails we fail explicitly.
-- **Voice mode:** push-to-talk only (no wake-word). Activated with `alpi --voice` or `/voice` slash in TUI. Mic → STT → LLM → TTS → speaker. Never always-listening.
-
-**Real-world applications** (why ship this at all):
-- Cooking, driving, DIY, walking — hands-busy scenarios where the TUI is unusable.
-- Dictating quick thoughts to memory while multitasking.
-- Sick-in-bed / accessibility.
-
-**Out of scope:** wake-word, continuous ambient listening, multi-voice synthesis, phone-mode (mic+speaker on separate hardware). Keep it simple.
-
-**Estimated LOC:** ~250 for the full pipeline (TTS dispatcher + STT wrapper + voice-mode loop + config).
-
----
-
 ## Next — v0.3 planned
 
 
@@ -153,6 +134,8 @@ Today the `terminal` tool has a static denylist (`_guards.py`) that blocks known
 - Works consistently in TUI (interactive) and gateway (auto-block if unattended, never auto-approve `dangerous`).
 
 **Estimated LOC:** ~150. Fits naturally alongside the existing sandbox (P — layer 2).
+
+**Design notes (post-hermes research, 2026-04-22).** Hermes' approval (`tools/approval.py`) is our reference: 39 hardcoded regex with human-readable descriptions, 3 scopes (`once`/`session`/`always`), permanent allowlist in config, per-surface defaults. Steal the pattern list + description strings + 3-scope model. Drop hermes' smart-mode LLM approver (unnecessary complexity), dual legacy/new pattern keys (back-compat we don't need — ship clean), triple scanner stack (regex + Tirith + skills-guard; one capa is enough), and activity-heartbeat during blocking (no inactivity watchdog to fight). Design split with sandbox (P): sandbox is automatic boundary (network/FS); approval is user-in-loop for destruction *inside* the allowed scope — complementary, not redundant. Surface defaults: TUI blocking modal with 60s timeout, schedule auto-deny (second layer over existing threat-scan), gateway auto-deny + notify-user-with-blocked-command (no interactive `/approve` flow over Telegram/email in v1 — reply correlation is not worth the LOC; revisit if users ask). YOLO escape: `--yolo` flag or `ALPI_YOLO=1`. Scope v1: only `terminal` tool (biggest blast radius); revisit `write_file` / other tools only if real incidents warrant. Module: single `alpi/tools/_approval.py`, patterns hardcoded, session state in a module-level dict keyed by session id, `always` persisted to `tools.terminal.approval.allowlist: []` in config.yaml.
 
 ### Σ.1. Mixture-of-agents (bola extra)
 
@@ -231,3 +214,4 @@ First usable cut. Textual TUI, 3-file memory with two-tier dedup, skill system w
 | (next)  | `read_image` auto-resize shipped (S closed). Pillow added as main dep (~3 MB). When `tools.read_image.auto_resize` (default `true`), any input image with a longer edge over `tools.read_image.max_edge` (default 1568 px — matches Anthropic's recommendation) is downscaled before base64-encoding. Aspect ratio preserved; PNGs with alpha stay PNG; everything else round-trips through JPEG q=85; SVG passthrough. Proactive (vs hermes' reactive "resize after API rejects too-large"). Typical saving: ~9× input-token cost on a 4K screenshot. 7 new tests, 409 green (v0.2.21) |
 | (next)  | T.1 — rename `email` → `mail/imap` in preparation for a second backend. Pure refactor, no behaviour change. Classes `EmailClient`/`EmailError` → `ImapClient`/`ImapError`; gateway platform class `Email` → `Imap`; config `gateway.email.*` → `gateway.imap.*`; env vars `EMAIL_*` → `IMAP_*`/`SMTP_*`. Setup menu: "Email" → "IMAP". Tool name `email` kept (user-facing concept, backend-agnostic) (v0.2.22) |
 | (next)  | T.2 — Gmail API (OAuth2) as a first-class parallel backend (T closed). `alpi/mail/gmail.py` implements the same 9 operations as `ImapClient` (list/search/read/send/reply/forward/move/delete/download_attachment) against `gmail.googleapis.com` with scopes `gmail.modify` + `gmail.send`. OAuth2 Authorization Code + PKCE with loopback callback server; refresh tokens stored per profile under `~/.alpi/<profile>/gmail_token.json` (0600, `fcntl`-locked). New `alpi/gateway/platforms/gmail.py` polls via `users.history.list` for delta-only fetches (no inbox rescans). Tool `email` gains an `account` param: auto-picks the only configured backend, demands explicit choice when both IMAP and Gmail are set. `send_message` platform enum grows `gmail`; delivery `_allowlist_env` maps gmail → `GMAIL_ALLOWED_SENDERS`. Setup wizard "Gateways → Gmail" walks through the GCP OAuth setup in 4 compact steps. Seed `.env.example` gains `GMAIL_CLIENT_ID` / `GMAIL_CLIENT_SECRET` / `GMAIL_ALLOWED_SENDERS`. Two post-landing correctness fixes: (a) `_list_history` no longer filters by `labelId: INBOX` — Gmail filter rules can route mail straight to custom labels (skipping INBOX), and those must still trigger alpi; SPAM/TRASH/DRAFT/CHAT/SENT excluded at processing time instead (matches IMAP's "only skip Junk" semantics); (b) `mark_as_read` moved from platform `listen()` to `run.py` post-allowlist via a new `IncomingMessage.ack` callback — previously automated/bulk and disallowed senders got `\Seen` / UNREAD removed without being processed, touching unrelated inbox traffic. 16 new tests (10 Gmail client + 6 dispatch). 425 green total (v0.2.23) |
+| (next)  | M — voice shipped as two tools + Telegram inbound/outbound, no continuous voice mode. **tts** (`alpi/tools/tts.py`) wraps Edge TTS (Microsoft Neural voices, free, no API key); autoplays locally when `tools.tts.autoplay` on (default). Format auto-picked: MP3 in TUI, OGG/Opus on gateway (`ALPI_GATEWAY=1` subprocess env) for Telegram voice-note compatibility — MP3 is synthesised first and autoplayed (afplay decodes Opus badly), then ffmpeg-converted to OGG. Tool params: `text`, `voice`; `rate`/`pitch` are config-only (`tools.tts.{rate,pitch}`) to keep the LLM from fiddling with prosody every turn. 1000-char hard cap. Cache keyed by hash-of(voice, rate, pitch, format, text) under `~/.alpi/cache/tts/`. **stt** (`alpi/tools/stt.py`) wraps faster-whisper on CPU; spawns a subprocess per call to avoid `bad value(s) in fds_to_keep` when ctranslate2 forks under the Textual TUI's fd-munged event loop. Model (`tiny`/`base`/`small`/`medium`/`large-v3`) downloaded on first call into `~/.cache/huggingface/`. **send_message** grew an `attachment` param; Telegram platform picks the right endpoint by extension (`sendVoice` for `.ogg`, `sendAudio` for `.mp3`, etc.). **Telegram inbound voice notes** auto-transcribe: gateway downloads via `getFile`, caches under `~/.alpi/cache/inbound/`, runs `stt`, feeds `[voice note] <transcript>` as a normal text turn. Surface tag `[INBOUND TELEGRAM from <id>]` prepended so the LLM knows to chain `send_message(attachment=…)` when asked to deliver audio back. Engine post-processor `_strip_cache_noise` in `alpi/engine.py` filters lines containing `.alpi/cache/(tts|stt)/` from the assistant's final text so weak models (mimo-v2-flash parrots + hallucinates paths) can't leak the cache path into replies; TUI re-renders the `AssistantMessage` markdown with the cleaned buffer on `assistant_done`. Deliberately dropped vs hermes's 3050 LOC voice stack: continuous voice mode, streaming TTS, silence/VAD state machine, whisper-hallucination regex filter, 6 extra TTS providers, auxiliary LLM smart approval. 31 new tests (tts, stt, send_message attachment, telegram voice inbound, engine strip-cache). 458 green total (v0.2.25) |

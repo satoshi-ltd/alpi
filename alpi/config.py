@@ -28,6 +28,13 @@ DEFAULT_CONFIG: dict[str, Any] = {
             "normal_steps": 15,
             "deep_steps": 30,
         },
+        "tts": {
+            "voice": "en-US-AriaNeural",
+            "autoplay": True,
+            "rate": "",
+            "pitch": "",
+        },
+        "stt": {"model": "base", "language": ""},
     },
     "tui": {
         "show_cost": True,
@@ -92,12 +99,28 @@ class BrowserToolConfig:
 
 
 @dataclass
+class TtsToolConfig:
+    voice: str = "en-US-AriaNeural"
+    autoplay: bool = True
+    rate: str = ""               # "+10%" / "-20%" / "" = neutral
+    pitch: str = ""              # "+5Hz" / "-10Hz" / "" = neutral
+
+
+@dataclass
+class SttToolConfig:
+    model: str = "base"         # tiny | base | small | medium | large-v3
+    language: str = ""          # "" → auto-detect
+
+
+@dataclass
 class ToolsConfig:
     max_steps_per_turn: int = 40   # ceiling on tool-calls per user turn
     web_extract: WebExtractToolConfig = field(default_factory=WebExtractToolConfig)
     read_image: ReadImageToolConfig = field(default_factory=ReadImageToolConfig)
     terminal: TerminalToolConfig = field(default_factory=TerminalToolConfig)
     browser: BrowserToolConfig = field(default_factory=BrowserToolConfig)
+    tts: TtsToolConfig = field(default_factory=TtsToolConfig)
+    stt: SttToolConfig = field(default_factory=SttToolConfig)
 
 
 @dataclass
@@ -162,6 +185,8 @@ def load(home: Path) -> Config:
     read_image_raw = tools_raw.get("read_image") or {}
     terminal_raw = tools_raw.get("terminal") or {}
     browser_raw = tools_raw.get("browser") or {}
+    tts_raw = tools_raw.get("tts") or {}
+    stt_raw = tools_raw.get("stt") or {}
     tools_cfg = ToolsConfig(
         max_steps_per_turn=int(tools_raw.get(
             "max_steps_per_turn", DEFAULT_CONFIG["tools"]["max_steps_per_turn"]
@@ -180,6 +205,16 @@ def load(home: Path) -> Config:
         ),
         browser=BrowserToolConfig(
             vision=bool(browser_raw.get("vision", False)),
+        ),
+        tts=TtsToolConfig(
+            voice=str(tts_raw.get("voice", "en-US-AriaNeural") or "en-US-AriaNeural"),
+            autoplay=bool(tts_raw.get("autoplay", True)),
+            rate=str(tts_raw.get("rate", "") or ""),
+            pitch=str(tts_raw.get("pitch", "") or ""),
+        ),
+        stt=SttToolConfig(
+            model=str(stt_raw.get("model", "base") or "base"),
+            language=str(stt_raw.get("language", "") or ""),
         ),
     )
 
@@ -249,6 +284,24 @@ def _tools_delta(cfg: Config) -> dict:
         out["terminal"] = term_out
     if cfg.tools.browser.vision != d["browser"]["vision"]:
         out["browser"] = {"vision": cfg.tools.browser.vision}
+    tts_out: dict[str, Any] = {}
+    if cfg.tools.tts.voice != d["tts"]["voice"]:
+        tts_out["voice"] = cfg.tools.tts.voice
+    if cfg.tools.tts.autoplay != d["tts"]["autoplay"]:
+        tts_out["autoplay"] = cfg.tools.tts.autoplay
+    if cfg.tools.tts.rate != d["tts"]["rate"]:
+        tts_out["rate"] = cfg.tools.tts.rate
+    if cfg.tools.tts.pitch != d["tts"]["pitch"]:
+        tts_out["pitch"] = cfg.tools.tts.pitch
+    if tts_out:
+        out["tts"] = tts_out
+    stt_out: dict[str, Any] = {}
+    if cfg.tools.stt.model != d["stt"]["model"]:
+        stt_out["model"] = cfg.tools.stt.model
+    if cfg.tools.stt.language != d["stt"]["language"]:
+        stt_out["language"] = cfg.tools.stt.language
+    if stt_out:
+        out["stt"] = stt_out
     return out
 
 

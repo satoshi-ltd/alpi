@@ -63,33 +63,76 @@ def format_for_telegram(text: str) -> list[str]:
 # Outbound send (sync)
 
 
-def send_to(platform: str, chat_id: str, text: str) -> None:
-    """Deliver ``text`` to ``(platform, chat_id)``. Raises ``DeliveryError``."""
+def send_to(
+    platform: str, chat_id: str, text: str,
+    attachment: str | None = None,
+) -> None:
+    """Deliver ``text`` (and optionally ``attachment``) to ``(platform, chat_id)``.
+
+    Raises ``DeliveryError`` on unknown platform, disallowed chat, or
+    an attachment on a platform that doesn't support it.
+    """
     if not is_allowed(platform, chat_id):
         raise DeliveryError(
             f"chat {chat_id!r} is not in {_allowlist_env(platform)}"
         )
-    if not text or not text.strip():
+    if not attachment and (not text or not text.strip()):
         raise DeliveryError("empty message")
 
     if platform == "telegram":
-        _send_telegram_sync(chat_id, text)
+        _send_telegram_sync(chat_id, text, attachment=attachment)
     elif platform == "email":
+        if attachment:
+            raise DeliveryError("attachment on email not supported via send_message; use the `email` tool")
         _send_email_sync(chat_id, text)
     elif platform == "gmail":
+        if attachment:
+            raise DeliveryError("attachment on gmail not supported via send_message; use the `email` tool")
         _send_gmail_sync(chat_id, text)
     elif platform == "webhook":
+        if attachment:
+            raise DeliveryError("attachment not supported on webhook")
         _send_webhook_sync(chat_id, text)
     else:
         raise DeliveryError(f"unknown platform: {platform}")
 
 
-def _send_telegram_sync(chat_id: str, text: str) -> None:
+def _send_telegram_sync(chat_id: str, text: str, attachment: str | None = None) -> None:
     token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
     if not token:
         raise DeliveryError("TELEGRAM_BOT_TOKEN not set")
-    url = f"https://api.telegram.org/bot{token}/sendMessage"
-    with httpx.Client(timeout=30) as client:
+    base = f"https://api.telegram.org/bot{token}"
+
+    with httpx.Client(timeout=60) as client:
+        if attachment:
+            from pathlib import Path as _Path
+            p = _Path(attachment).expanduser()
+            if not p.exists() or not p.is_file():
+                raise DeliveryError(f"attachment not found: {attachment}")
+            ext = p.suffix.lower()
+            if ext in (".ogg", ".oga", ".opus"):
+                endpoint, field = "/sendVoice", "voice"
+            elif ext in (".mp3", ".m4a", ".wav", ".flac", ".aac"):
+                endpoint, field = "/sendAudio", "audio"
+            elif ext in (".jpg", ".jpeg", ".png", ".gif", ".webp"):
+                endpoint, field = "/sendPhoto", "photo"
+            elif ext in (".mp4", ".mov", ".mkv"):
+                endpoint, field = "/sendVideo", "video"
+            else:
+                endpoint, field = "/sendDocument", "document"
+            data: dict[str, str] = {"chat_id": chat_id}
+            if text:
+                data["caption"] = text[:1024]
+            with p.open("rb") as fh:
+                files = {field: (p.name, fh)}
+                resp = client.post(base + endpoint, data=data, files=files)
+            if resp.status_code >= 400:
+                raise DeliveryError(
+                    f"telegram {endpoint} failed "
+                    f"(status={resp.status_code}): {resp.text[:200]}"
+                )
+            return
+        url = base + "/sendMessage"
         for chunk in format_for_telegram(text):
             resp = client.post(url, json={"chat_id": chat_id, "text": chunk})
             if resp.status_code >= 400:

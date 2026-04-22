@@ -122,7 +122,7 @@ class Imap(Platform):
                         try:
                             await asyncio.to_thread(self._mark_seen, uid_copy)
                         except ImapError as e:
-                            log.debug("email: failed to mark %s seen: %s", uid_copy, e)
+                            log.debug("email mark-seen failed for %s: %s", uid_copy, e)
                 yield IncomingMessage(
                     platform="email",
                     external_user_id=sender,

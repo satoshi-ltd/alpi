@@ -72,6 +72,12 @@ Two options:
 | `tools.research.normal_steps` | `15` | int | next turn |
 | `tools.research.deep_steps` | `30` | int | next turn |
 | `tools.budget.per_result_chars` | `100_000` | int (-1 = unlimited) | next turn |
+| `tools.tts.voice` | `"en-US-AriaNeural"` | Edge TTS voice id | next turn |
+| `tools.tts.autoplay` | `true` | bool (plays audio after synthesis) | next turn |
+| `tools.tts.rate` | `""` | string (`"+10%"`, `"-20%"`) — speed | next turn |
+| `tools.tts.pitch` | `""` | string (`"+5Hz"`, `"-10Hz"`) — pitch | next turn |
+| `tools.stt.model` | `"base"` | `tiny` \| `base` \| `small` \| `medium` \| `large-v3` | next turn |
+| `tools.stt.language` | `""` (auto) | ISO code (`en`, `es`, ...) | next turn |
 | `tools.<name>.max_result_chars` | `—` (unset) | int (-1 = unlimited) | next turn |
 
 `tools.budget.per_result_chars` caps the size of any tool output the LLM
@@ -106,6 +112,16 @@ you want even deeper investigations is fine; dropping `quick_steps`
 to 3 if you mainly use a tier-A model and want minimum latency on
 trivial questions is also fine. Default tiers are tuned for
 mimo-class models on read-only research.
+
+`tools.tts.voice` selects the Edge TTS voice used by the `tts` tool. Any Microsoft Neural voice id is valid (`es-ES-AlvaroNeural`, `en-US-AriaNeural`, `fr-FR-DeniseNeural`, ...). Output is an MP3 cached under `~/.alpi/cache/tts/<hash>.mp3` — same text + voice reuses the cached file. Edge TTS runs against a free Microsoft endpoint (no API key), so there's no per-call cost. To use a different voice per call the agent can pass `voice=...` directly without touching config. `alpi setup → Voice` gives you a curated shortlist (10 common-language voices) plus a "custom" entry to type any voice id, and toggles autoplay in one place.
+
+`tools.tts.autoplay` (default `true`) controls whether the generated MP3 plays through the system speakers immediately after synthesis. Uses `afplay` on macOS, `paplay`/`aplay`/`ffplay` on Linux (first one found), and PowerShell `Media.SoundPlayer` on Windows. Headless servers with no audio device: playback fails silently, the tool still returns the file path. Gateway processes: leave off or accept that the daemon machine plays sound — there's no per-surface override for now. The agent can also pass `play: false` per call when it just wants the file.
+
+`rate` and `pitch` are config-only (not per-call args) — persistent prosody defaults. Leave empty for neutral. Text is capped at 1000 chars (~1 minute); longer input is rejected. Output format is auto-picked: MP3 in TUI, OGG (Opus) on gateway surfaces for Telegram voice-note compatibility. OGG requires `ffmpeg`.
+
+`tools.stt.{model,language}` control the `stt` tool backed by faster-whisper running on CPU. First call downloads the model weights (~40 MB for `tiny`, ~150 MB for `base`, ~500 MB for `small`, ~1.5 GB for `medium`, ~3 GB for `large-v3`) into `~/.cache/huggingface/` and keeps them forever. Pick the smallest model that meets your accuracy bar — `base` is the sweet spot for spoken messages/voice notes; `small` or above for podcasts/meetings. `language` defaults to `""` (auto-detect); set to an ISO code (`en`, `es`, `fr`, ...) only when auto-detect fails on short clips.
+
+The Telegram gateway auto-transcribes inbound voice notes and audio files through the same `stt` pipeline: when a user sends a voice message, the gateway downloads it via `getFile`, caches under `~/.alpi/cache/inbound/`, runs `stt`, and feeds the transcript to the agent as text (`[voice note] <transcription>`). The agent sees a normal text turn — nothing surface-specific to handle.
 
 ### TUI
 

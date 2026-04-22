@@ -140,6 +140,25 @@ def arg_hint(tool_name: str, args: dict) -> str:
         return " · ".join(parts)
     if tool_name == "research":
         return truncate(str(args.get("brief", "")), 60)
+    if tool_name == "tts":
+        text = str(args.get("text", ""))
+        voice = str(args.get("voice", "")).strip()
+        if not voice:
+            try:
+                from alpi import config as _cfg
+                from alpi.home import get_home as _gh
+                voice = _cfg.load(_gh()).tools.tts.voice
+            except Exception:
+                voice = ""
+        short = voice or "?"
+        if "-" in voice:
+            for part in voice.split("-"):
+                if part.endswith("Neural"):
+                    short = part[:-6]
+                    break
+        return f"{short} · {len(text)} chars"
+    if tool_name == "stt":
+        return shorten_path(str(args.get("path", "")))
     if tool_name == "browser":
         action = str(args.get("action", ""))
         if action == "navigate":
@@ -217,6 +236,13 @@ def result_hint(tool_name: str, output: str, muted: str = "dim") -> str:
 
     if tool_name == "skill":
         return _escape_markup(truncate(text, 60))
+
+    if tool_name == "tts":
+        if "→" in text:
+            prefix, path = text.split("→", 1)
+            verb = prefix.strip().split(" ", 1)[0]
+            return _escape_markup(f"{verb} · {path.strip()}")
+        return _escape_markup(text)
 
     lines = text.splitlines()
     hint = _escape_markup(truncate(lines[0], 60))

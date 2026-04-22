@@ -25,6 +25,7 @@ class AssistantMessage(Widget):
         self._initial: str = initial
         self._buffer: str = initial
         self._stream = None
+        self._pending: str = ""
 
     def compose(self) -> ComposeResult:
         self._md = Markdown(self._initial)
@@ -33,6 +34,10 @@ class AssistantMessage(Widget):
     def on_mount(self) -> None:
         assert self._md is not None
         self._stream = Markdown.get_stream(self._md)
+        if self._pending:
+            pending, self._pending = self._pending, ""
+            self._buffer += pending
+            asyncio.create_task(self._stream.write(pending))
 
     async def on_unmount(self) -> None:
         if self._stream is not None:
@@ -40,10 +45,21 @@ class AssistantMessage(Widget):
             self._stream = None
 
     def append(self, delta: str) -> None:
-        if not delta or self._stream is None:
+        if not delta:
+            return
+        if self._stream is None:
+            self._pending += delta
             return
         self._buffer += delta
         asyncio.create_task(self._stream.write(delta))
+
+    def replace(self, text: str) -> None:
+        self._buffer = text
+        if self._md is not None:
+            if self._stream is not None:
+                asyncio.create_task(self._stream.stop())
+                self._stream = None
+            self._md.update(text)
 
     @property
     def text(self) -> str:
