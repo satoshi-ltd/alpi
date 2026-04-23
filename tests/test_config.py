@@ -6,7 +6,9 @@ from alpi import config
 def test_seed_writes_defaults(tmp_home_no_env: Path) -> None:
     config.seed_defaults(tmp_home_no_env)
     assert (tmp_home_no_env / "config.yaml").exists()
-    assert (tmp_home_no_env / ".env.example").exists()
+    # `.env.example` is no longer shipped — wizards are the onboarding path,
+    # and docs/CONFIG.md is the canonical key reference.
+    assert not (tmp_home_no_env / ".env.example").exists()
 
 
 def test_load_uses_defaults_when_fresh(tmp_home_no_env: Path) -> None:
