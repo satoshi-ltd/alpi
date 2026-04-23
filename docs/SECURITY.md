@@ -1,5 +1,19 @@
 # Security model
 
+alpi is published by [Satoshi Ltd.](https://www.satoshi-ltd.com/),
+whose three load-bearing principles for this document are:
+
+> **Security First** — threat-modeled from initial development; no
+> surveillance disguised as telemetry.
+> **Privacy by Design** — privacy is the foundation, not a feature.
+> **Zero Knowledge** — what we don't know can't be subpoenaed,
+> leaked, or sold.
+
+Those are the frame every decision below lives inside: the guard is
+mandatory and local, the sandbox is an opt-in *second* wall, the LLM
+is treated as an adversary with user credentials, and we keep as
+little state off your machine as we can.
+
 alpi runs LLM-decided tool calls on your machine. The security posture
 is layered — application-level guards that always run, plus an
 optional OS-level sandbox for shell commands.

@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.2.70 — 2026-04-23
+
+### license
+- repo re-licensed under **Business Source Licence 1.1** (`LICENSE`). Licensor: Satoshi Ltd. Change Date 2030-04-23 → Apache 2.0. Additional Use Grant lets individuals run alpi freely on machines they control for personal / research / non-commercial purposes; commercial production deployment by a legal entity requires a licence from `info@satoshi-ltd.com`. `pyproject.toml` license field updated to `BUSL-1.1`; README License section rewritten to explain the split.
+
+### docs
+- repo rooted in Satoshi Ltd.'s six operating principles (Privacy by Design, User Sovereignty, Security First, Open Source, Zero Knowledge, Digital Sovereignty) across `README.md`, `docs/ARCHITECTURE.md`, `docs/SECURITY.md`, `docs/ALP.md`. Each doc now explicitly maps its content to the principle it expresses.
+- new [`QUICKSTART.md`](QUICKSTART.md) at repo root — first-day walkthrough: install → model → workspace → first chat → resume → gateway → second profile → ALP → doctor.
+- new [`docs/PROFILES.md`](docs/PROFILES.md) — canonical reference for alpi's core isolation primitive (home resolution, what's isolated per profile, identity in ALP, creation patterns, cost).
+- new [`docs/DEPLOYMENTS.md`](docs/DEPLOYMENTS.md) — six topologies from laptop-only to enterprise "army of alpis", each with ASCII diagram, trade-offs, and BSL licence boundary.
+- new [`docs/OPERATIONS.md`](docs/OPERATIONS.md) — runbook: the five logs, service lifecycle, upgrades, backup + restore, ALP identity rotation, monitoring, disaster recovery, common failure modes.
+- `docs/ROADMAP.md` sanitised — 64 shipped-item rows + the "Done — v0.1 + shipped v0.2 items" commit table dropped (they duplicated CHANGELOG which already reconstructs them from `git log`). New top table lists only open items with target version + status.
+
 ## v0.2.69 — 2026-04-23
 
 ### models

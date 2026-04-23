@@ -31,11 +31,20 @@ skill categories, post-session reflect, broad cross-platform support.
 
 ## Principles
 
-- **Slim.** Every feature earns its keep. No over-engineering.
+alpi is published by [Satoshi Ltd.](https://www.satoshi-ltd.com/)
+and inherits the company's six operating principles (Privacy by
+Design, User Sovereignty, Security First, Open Source, Zero
+Knowledge, Digital Sovereignty). See the **Why alpi is built like
+this** section in `README.md` for the mapping between principle and
+code. The conventions below are the engineering expression of those
+principles — not separate from them.
+
+- **Slim.** Every feature earns its keep. No over-engineering. Maps to Satoshi's "constraint breeds coherence" heuristic.
 - **Solid base.** Core loop, memory, tools, paths, scanner before surface features.
-- **User in control.** No destructive action without explicit OK. No silent migrations.
+- **User in control.** No destructive action without explicit OK. No silent migrations. Expression of **User Sovereignty**.
 - **Python stack.** No Go rewrite (loses LiteLLM, tests, no upside).
 - **No legacy code.** When a schema or layout changes, it's a clean break — no compat shims, no auto-migration. Anything from yesterday's iteration is cleaned by hand, not by `ensure_home`.
+- **Closed protocol, own transport.** ALP is not A2A / MCP-over-network / gRPC. Every verb we don't ship is an attack surface we don't own. Expression of **Privacy by Design** + **Security First**.
 
 ## Code conventions
 
