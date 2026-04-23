@@ -95,10 +95,6 @@ class Gmail(Platform):
                     log.debug("Gmail: dropping automated/bulk from %s", sender)
                     continue
 
-                prompt = (
-                    f"[INBOUND EMAIL from {sender}]\n"
-                    f"Subject: {full.subject}\n\n{full.body}"
-                )
                 ack = None
                 if self._mark_as_read:
                     mid_copy = msg_id
@@ -111,7 +107,8 @@ class Gmail(Platform):
                     platform="gmail",
                     external_user_id=sender,
                     external_chat_id=sender,
-                    text=prompt,
+                    text=full.body,
+                    subject=full.subject,
                     ack=ack,
                 )
 

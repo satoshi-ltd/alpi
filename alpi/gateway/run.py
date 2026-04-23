@@ -43,11 +43,28 @@ async def _handle_platform(platform: Platform, home: Path) -> None:
 
 
 async def _process(platform: Platform, msg: IncomingMessage, home: Path) -> None:
-    # Per-platform UX config. Telegram has typing + tool traces;
-    # email (Commit 2 of this flow) has different concepts and reads
-    # its own sub-dict. We hydrate the platform's sub-dict once and
-    # default every flag from there — keeps this function platform-
-    # agnostic even though today only telegram uses the flags below.
+    # Intercept slash-command shortcuts before we spawn an agent turn.
+    # Every shortcut (`/help`, `/status`, `/new`, `/continue`, `/model`)
+    # resolves locally from session_map + config.yaml — no LLM round-trip.
+    from alpi.gateway import shortcuts as shortcuts_mod
+
+    cmd = shortcuts_mod.parse(msg.text)
+    if cmd is not None:
+        # /model on Telegram opens an interactive inline-keyboard picker —
+        # other platforms (IMAP, Gmail) fall through to the plain-text
+        # handler which just reports the currently configured model.
+        if cmd.name == "model" and hasattr(platform, "send_model_picker"):
+            await platform.send_model_picker(msg.external_chat_id)  # type: ignore[attr-defined]
+            return
+        reply = shortcuts_mod.handle(cmd, msg.external_chat_id, home)
+        if reply.strip():
+            await platform.send(OutgoingMessage(
+                external_chat_id=msg.external_chat_id, text=reply,
+            ))
+        return
+
+    # Per-platform UX config. Telegram has typing + tool traces; email has
+    # different concepts and reads its own sub-dict. Stays platform-agnostic.
     platform_cfg = _load_platform_cfg(home, platform.name)
     typing_task: asyncio.Task | None = None
     if platform_cfg.get("typing_indicator", True):
@@ -82,13 +99,35 @@ async def _typing_loop(platform: Platform, chat_id: str) -> None:
         await asyncio.sleep(_TYPING_REFRESH_SECONDS)
 
 
+def _llm_prompt(msg: IncomingMessage) -> str:
+    """Build the LLM-facing prompt from an inbound message.
+
+    Platforms yield the user's raw text; the agent-boundary prefix
+    (`[INBOUND TELEGRAM from …]`, email subject line) is constructed
+    here so ``IncomingMessage.text`` stays a clean single source of
+    truth for shortcut parsing, logging, and tests.
+    """
+    if msg.platform == "telegram":
+        return f"[INBOUND TELEGRAM from {msg.external_user_id}]\n{msg.text}"
+    if msg.platform in ("email", "gmail"):
+        subject = msg.subject or "(no subject)"
+        return (
+            f"[INBOUND EMAIL from {msg.external_user_id}]\n"
+            f"Subject: {subject}\n\n{msg.text}"
+        )
+    if msg.platform == "webhook":
+        return f"[INBOUND WEBHOOK from {msg.external_user_id}]\n{msg.text}"
+    return msg.text
+
+
 async def _run_agent(msg: IncomingMessage, platform: Platform, home: Path,
                      show_trace: bool) -> str:
     env = dict(os.environ)
     env["ALPI_HOME"] = str(home)
     env["ALPI_GATEWAY"] = "1"
+    prompt = _llm_prompt(msg)
     argv = [
-        sys.executable, "-m", "alpi", "chat", "--once", msg.text,
+        sys.executable, "-m", "alpi", "chat", "--once", prompt,
         "--emit-events",
     ]
     # Per-chat session threading: the CLI consults `sessions/_gateway_map.json`

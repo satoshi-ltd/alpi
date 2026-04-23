@@ -13,7 +13,8 @@ class IncomingMessage:
     platform: str
     external_user_id: str
     external_chat_id: str
-    text: str
+    text: str                        # user's raw message; the LLM prefix is built at the run boundary
+    subject: str = ""                # used by email platforms for the prompt prefix
     reply_to: str | None = None
     ack: Callable[[], Awaitable[Any]] | None = field(default=None, repr=False)
 
@@ -23,6 +24,7 @@ class OutgoingMessage:
     external_chat_id: str
     text: str
     attachment: str | None = None
+    reply_markup: dict[str, Any] | None = None  # platform-specific UI hint (Telegram inline_keyboard etc.); ignored by platforms that don't understand it
 
 
 class Platform(abc.ABC):
