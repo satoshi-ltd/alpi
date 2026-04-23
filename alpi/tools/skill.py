@@ -249,8 +249,13 @@ def _require_confirmation(
 class Skill(Tool):
     name = "skill"
     description = (
-        "Manage reusable skills under ~/.alpi/skills/<category>/<name>/. "
-        "A skill is a directory with a REQUIRED SKILL.md (prose "
+        "Save, load, or maintain a reusable recipe. Use when a "
+        "multi-step workflow would otherwise have to be re-explained "
+        "from scratch next time, or when you discover a non-trivial "
+        "approach worth preserving.\n"
+        "\n"
+        "Skills live under ~/.alpi/skills/<category>/<name>/. Each "
+        "skill is a directory with a REQUIRED SKILL.md (prose "
         "instructions the LLM loads into context) plus up to five "
         "OPTIONAL subdirectories:\n"
         "\n"

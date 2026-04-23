@@ -164,6 +164,7 @@ def run_job(job: dict, home: Path) -> tuple[bool, str]:
 
     env = dict(os.environ)
     env["ALPI_HOME"] = str(home)
+    env["ALPI_PLATFORM"] = "cron"
     try:
         proc = subprocess.run(
             [sys.executable, "-m", "alpi", "chat", "--once", wrapped, "--emit-events"],

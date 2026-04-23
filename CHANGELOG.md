@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.2.71 — 2026-04-24
+
+### engine / prompts (AT partial — 4 of 5 candidate edits applied)
+- new per-surface platform hint in the system prompt: `_platform_hint()` in `alpi/engine.py` reads `ALPI_PLATFORM` env and injects a matching block (`cron`, `telegram`, `email`, `gmail`). Gateway (`alpi/gateway/run.py`) sets it to `msg.platform` on every spawn; scheduler (`alpi/scheduler/run.py`) sets it to `cron`. TUI gets no hint (baseline). Concrete wins: cron jobs stop asking phantom users for clarification; Telegram replies arrive Markdown-aware; email replies arrive plain-text-only. 6 regression tests.
+- `memory` tool description now enforces declarative phrasing with ✓/✗ examples ("User prefers concise replies" ✓ — "Always reply concisely" ✗). Imperative memory entries were being re-read as directives across sessions.
+- `skill` tool description leads with "use when" purpose instead of directory layout.
+- `email` tool description leads with "Read, search, send, or move email. Use when…" instead of "Manage the mailbox".
+- `alpi/prompts/system_prompt.md` — dropped the "Past conversations" section; `session_search` tool description already carries the same rule. Net: ~10 fewer tokens injected on every turn.
+
+### roadmap
+- new **BD** item added for v0.3: model-aware tool-use-enforcement guidance (Claude/MiMo brevity, GPT/Codex/Gemini full block) — requires an A/B measurement on `agent.log` before applying.
+
+### docs
+- `docs/ARCHITECTURE.md` — system-prompt assembly section now documents the `ALPI_PLATFORM` contract between callers (gateway, scheduler) and the engine.
+
 ## v0.2.70 — 2026-04-23
 
 ### license

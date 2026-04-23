@@ -183,7 +183,9 @@ Per turn: append user message → loop {LLM stream → emit deltas → exec tool
 
 Events emitted to the UI sink: `user`, `reasoning_delta`, `assistant_delta`, `assistant_done`, `tool_start`, `tool_state`, `tool_end`, `usage`, `error`, `done`, `interrupted`. The TUI consumes them; the gateway subprocess consumes a subset via JSON-lines.
 
-The system prompt for each turn is built from: personality file → base prompt → environment block (workspace, profile home, path rule) → **skills index** (auto-injected by `alpi.tools.skill.skills_index_block`) → USER.md → MEMORY.md.
+The system prompt for each turn is built from: personality file → base prompt → environment block (workspace, profile home, path rule) → **platform hint** (`_platform_hint()` — injects per-surface guidance when `ALPI_PLATFORM` is set by the caller: `cron`, `telegram`, `email`, `gmail`; empty for TUI) → **skills index** (auto-injected by `alpi.tools.skill.skills_index_block`) → USER.md → MEMORY.md.
+
+The gateway (`alpi/gateway/run.py`) sets `ALPI_PLATFORM=<msg.platform>` on every spawned subprocess so Telegram replies arrive Markdown-aware and email replies arrive plain-text-only. The scheduler (`alpi/scheduler/run.py`) sets `ALPI_PLATFORM=cron` so scheduled jobs run knowing no user is present and they cannot ask for clarification.
 
 ### LLM transport (`alpi/llm.py`)
 

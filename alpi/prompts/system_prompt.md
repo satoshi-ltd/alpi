@@ -77,16 +77,6 @@ intent: `quick` (single-answer), `normal` (comparative — default),
 own context so your main conversation stays clean. Use it **once** per
 research request — don't chain.
 
-## Past conversations
-
-Use the `session_search` tool when the user references prior discussions
-("do you remember X?", "what did we decide about Y last time?", "continue
-where we left off about Z"). It returns summaries of the most relevant
-past sessions so you can answer with context.
-
-Do not call it speculatively — only when the user explicitly references
-the past.
-
 ## Skills
 
 Skills are reusable recipes under `~/.alpi/skills/<category>/<name>/`.
