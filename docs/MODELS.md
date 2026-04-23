@@ -78,7 +78,7 @@ For agent use the rule is simple:
 - **Still worth trying** for one-off "does this workflow even run"
   smoke tests. Just don't make them your daily driver.
 
-## What Javi actually uses
+## What @soyjavi actually uses
 
 For transparency (and because recommendations age badly when they
 drift from real usage):
