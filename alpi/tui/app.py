@@ -19,6 +19,7 @@ from alpi.tui.screens import (
     HelpPanel,
     McpPanel,
     MemoryPanel,
+    PeersPanel,
     SkillsPanel,
     ToolsPanel,
 )
@@ -42,6 +43,19 @@ class EngineEvent(Message):
     def __init__(self, event: AgentEvent) -> None:
         super().__init__()
         self.event = event
+
+
+class MentionDone(Message):
+    """ALP ``link.ask`` finished — posted from the worker to the UI."""
+
+    def __init__(
+        self, card: "ToolCard", ok: bool, output: str, reply: str,
+    ) -> None:
+        super().__init__()
+        self.card = card
+        self.ok = ok
+        self.output = output
+        self.reply = reply
 
 
 def _copy_to_os_clipboard(text: str) -> str:
@@ -106,9 +120,16 @@ class AlpiApp(App):
         from alpi import __version__ as alpi_version
         slash_commands = [
             "/help", "/memory", "/tools", "/mcps", "/status", "/clear", "/new",
-            "/compact", "/skills", "/model",
+            "/compact", "/skills", "/model", "/peers",
             "/exit", "/quit",
         ]
+        # Peer mentions share the same popup — typing ``@`` surfaces pinned
+        # peers so the user can route a one-shot ask without remembering ids.
+        try:
+            from alpi.alp import peers as _peers_mod
+            slash_commands.extend(f"@{p.id}" for p in _peers_mod.load(self.home))
+        except Exception:  # noqa: BLE001
+            pass
         yield AlpiTopBar(
             version=alpi_version,
             profile=self._profile_name(),
@@ -252,6 +273,9 @@ class AlpiApp(App):
         if text.startswith("/"):
             self._handle_slash(text)
             return
+        if text.startswith("@"):
+            self._handle_mention(text)
+            return
         # @work(exclusive=True) replaces the old worker; we still set the
         # engine interrupt flag so the in-flight LLM call unwinds promptly.
         if self._turn_in_progress():
@@ -360,6 +384,48 @@ class AlpiApp(App):
         if card is not None:
             card.finish(ev.output, ev.ok)
 
+    def _handle_mention(self, text: str) -> None:
+        """``@peer rest…`` — one-shot ALP ``link.ask`` to a pinned peer,
+        bypassing the local LLM. Renders exactly like a tool call so the
+        transcript reads the same whether the user or the agent invoked it."""
+        from alpi.alp import mention as alp_mention
+
+        parsed = alp_mention.parse(text)
+        if parsed is None:
+            self._mount_message(ErrorLine("usage: @<peer> <prompt>"))
+            return
+
+        self._scroll_end()
+        self._mount_message(UserMessage(text))
+        card = ToolCard(
+            tool_id=f"mention-{parsed.peer_id}-{id(parsed)}",
+            name="peer",
+            args={"peer_id": parsed.peer_id, "prompt": parsed.prompt},
+        )
+        self._mount_message(card)
+        self._run_mention(parsed.peer_id, parsed.prompt, card)
+
+    @work(thread=True, name="_run_mention")
+    def _run_mention(self, peer_id: str, prompt: str, card: ToolCard) -> None:
+        import asyncio
+        from alpi.alp import mention as alp_mention
+
+        result = asyncio.run(alp_mention.execute(self.home, peer_id, prompt))
+        if not result.ok:
+            self.post_message(MentionDone(card, ok=False, output=result.error, reply=""))
+            return
+
+        reply = result.reply
+        summary = (f"{reply[:60]}…" if len(reply) > 60 else reply) or "(empty reply)"
+        self.post_message(MentionDone(card, ok=True, output=summary, reply=reply))
+
+    def on_mention_done(self, message: MentionDone) -> None:
+        message.card.finish(message.output, ok=message.ok)
+        if message.ok and message.reply:
+            assistant = AssistantMessage()
+            self._mount_message(assistant)
+            assistant.append(message.reply)
+
     def _handle_slash(self, text: str) -> None:
         parts = text[1:].split(maxsplit=1)
         cmd = parts[0].lower() if parts else ""
@@ -375,6 +441,7 @@ class AlpiApp(App):
             "compact": lambda _a: self._cmd_compact(),
             "skills": lambda _a: self._cmd_skills(),
             "model": lambda _a: self._cmd_model(),
+            "peers": lambda _a: self._show_panel(PeersPanel(self.home)),
             "exit": lambda _a: self.action_quit(),
             "quit": lambda _a: self.action_quit(),
         }

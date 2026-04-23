@@ -59,8 +59,8 @@ alpi chat --once "<text>"      one-shot turn to stdout (pipe-friendly)
 alpi chat --once ... --emit-events     INTERNAL — gateway subprocess contract
 
 alpi setup                     interactive menu: model / gateways / voice / MCPs /
-                               sandbox / gateway service / schedule service /
-                               health check / cleanup
+                               peers / sandbox / gateway service / schedule service /
+                               alp service / health check / cleanup
 
 alpi doctor                    live health check (Telegram getMe, IMAP login,
                                Gmail token refresh, MCP handshake, service PIDs);
@@ -77,11 +77,18 @@ alpi profile remove <name>     delete after safety checks + confirm
 
 alpi gateway   start|stop|restart               manual control for debug; service runs via `alpi setup → Gateway service`
 alpi schedule  start|stop|restart|run-once      manual control; service auto-installs on first run
+alpi alp       start|stop|restart               ALP Unix-socket listener; service via `alpi setup → ALP service`
+
+alpi peers list                list pinned ALP peers for this profile
+alpi peers key                 print this profile's ALP public key
+alpi peers add <id> <pubkey>   pin a peer (prefer the wizard for capability selection)
+alpi peers remove <id>         unpin a peer
+alpi peers ping <id>           live probe via link.ping
 ```
 
-**Shape rules:** containers (profile) get `list/create/remove`. Daemons (gateway, schedule) get `start/stop` for manual/debug use — install/uninstall lives only in the wizard (`alpi setup → {Gateway,Schedule} service`), so users don't need to memorise two ways of doing the same thing. The scheduler auto-installs as a service on first run; a marker at `{home}/schedule/.bootstrapped` prevents re-installing after the user uninstalls from the wizard. Interactive wizards live exclusively under `alpi setup`; never add a per-feature wizard command.
+**Shape rules:** containers (profile, peers) get `list/create/remove` (or `add/remove`). Daemons (gateway, schedule, alp) get `start/stop/restart` for manual/debug use — install/uninstall lives only in the wizard (`alpi setup → {Gateway,Schedule,ALP} service`), so users don't need to memorise two ways of doing the same thing. The scheduler auto-installs as a service on first run; a marker at `{home}/schedule/.bootstrapped` prevents re-installing after the user uninstalls from the wizard. Interactive wizards live exclusively under `alpi setup`; never add a per-feature wizard command.
 
-**Command ordering** in `--help` is frequency-first, not alphabetical: `chat → setup → doctor → logs → profile → gateway → schedule`. See `_OrderedGroup` in `cli.py`.
+**Command ordering** in `--help` is frequency-first, not alphabetical: `chat → setup → doctor → logs → profile → peers → alp → gateway → schedule`. See `_OrderedGroup` in `cli.py`.
 
 **`alpi/ui.py`** is the shared interactive layer. Raw `questionary.*` is forbidden outside it. Helpers: `banner`, `menu`, `text`, `password`, `confirm`, `row`, `ok/fail/warn/dim/saved/cancelled`. The close item is added automatically with value `None` (callers treat `None` as "out").
 
@@ -125,6 +132,15 @@ alpi/
 ├── scheduler/              schedule daemon (cron + once jobs)
 ├── mail/                   mail backends (imap.py — IMAP+SMTP; gmail.py coming in T)
 ├── mcp/                    MCP client (stdio JSON-RPC) + registry
+├── alp/                    Alpi Link Protocol (spec: docs/ALP.md)
+│   ├── keys.py            Ed25519 identity at {home}/alp/secrets/alp_key.{pem,pub}
+│   ├── envelope.py        build/sign/verify JSON-RPC envelope + replay cache
+│   ├── peers.py           {home}/alp/peers.yaml load/save + capability check
+│   ├── server.py          Unix-socket listener, fail-closed dispatch
+│   ├── client.py          one-shot call with typed errors (TargetOffline, RemoteError)
+│   ├── handlers.py        link.ask / link.cancel — engine integration
+│   ├── mention.py         @peer parser + executor (shared by TUI + gateway)
+│   └── setup.py           `alpi setup → Peers` wizard
 └── skills/                 bundled skills (only `meta/consolidate-memory`)
 ```
 
@@ -140,7 +156,12 @@ alpi/
 │                                 .gitignore
 ├── sessions/<id>.json      turn-based session log
 ├── run/                    background process registry, gateway/schedule pids
-└── logs/                   gateway.log, schedule.log (rotated at 1MB)
+├── alp/                    ALP state — keypair, peer list, socket, pid
+│   ├── peers.yaml         pinned peers (pubkey + allow + optional address)
+│   ├── alp.sock           Unix-domain socket, 0600, only while listener runs
+│   ├── alp.pid            listener pid
+│   └── secrets/alp_key.{pem,pub}   Ed25519 identity (private 0600, public 0644)
+└── logs/                   gateway.log, schedule.log, alp.log (rotated at 1MB)
 
 ~/.alpi/profiles/<name>/     same layout, isolated per profile
 ```

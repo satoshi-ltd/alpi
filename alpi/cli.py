@@ -238,7 +238,7 @@ class _OrderedGroup(click.Group):
     a new user actually wants.
     """
 
-    _ORDER = ["chat", "setup", "doctor", "logs", "profile", "gateway", "schedule", "release"]
+    _ORDER = ["chat", "setup", "doctor", "logs", "profile", "peers", "alp", "gateway", "schedule", "release"]
 
     def list_commands(self, ctx: click.Context) -> list[str]:
         known = [c for c in self._ORDER if c in self.commands]
@@ -621,11 +621,13 @@ def setup_cmd(ctx: click.Context) -> None:
             ("Gateways", "gateways", _gateways_status(h)),
             ("Voice", "voice", _voice_status(cfg)),
             ("MCPs", "mcps", _mcp_status(h)),
+            ("Peers", "peers", _peers_status(h)),
             None,
             ("Workspace", "workspace", _workspace_status(cfg)),
             ("Sandbox", "sandbox", _sandbox_status(cfg)),
             ("Gateway service", "gateway-service", _gateway_service_status(h)),
             ("Schedule service", "schedule-service", _schedule_service_status(h)),
+            ("ALP service", "alp-service", _alp_service_status(h)),
             ("Health check", "doctor", _doctor_status(h, profile_name)),
             ("Cleanup", "cleanup", _cleanup_status(h)),
         ]
@@ -662,6 +664,11 @@ def setup_cmd(ctx: click.Context) -> None:
             _gateway_service_setup(h)
         elif choice == "schedule-service":
             _schedule_service_setup(h)
+        elif choice == "alp-service":
+            _alp_service_setup(h)
+        elif choice == "peers":
+            from alpi.alp.setup import run as alp_setup_run
+            alp_setup_run(h)
         elif choice == "doctor":
             _doctor_wizard(h, profile_name)
 
@@ -722,6 +729,12 @@ _DAEMON_WIZARD_COPY = {
         "uninstall it here if you prefer to run it manually with\n"
         "`alpi schedule start`, or reinstall after an uninstall."
     ),
+    "alp": (
+        "Registers the ALP listener (`alpi alp start`) so the Unix\n"
+        "socket stays up across reboots — peers can reach this profile\n"
+        "without you keeping a terminal open. Uninstall and run it\n"
+        "manually if you'd rather start/stop by hand."
+    ),
 }
 
 
@@ -770,26 +783,36 @@ def _schedule_service_setup(h: Path) -> None:
     _daemon_service_setup(h, "schedule")
 
 
+def _alp_service_setup(h: Path) -> None:
+    _daemon_service_setup(h, "alp")
+
+
 def _schedule_service_status(h: Path) -> str:
     from alpi import service
     backend = service.installed("schedule", _profile_from_home(h))
     return f"running via {backend}" if backend else "not installed"
 
 
+def _alp_service_status(h: Path) -> str:
+    from alpi import service
+    backend = service.installed("alp", _profile_from_home(h))
+    return f"running via {backend}" if backend else "not installed"
+
+
+def _peers_status(h: Path) -> str:
+    from alpi.alp import peers as peers_mod
+    count = len(peers_mod.load(h))
+    if count == 0:
+        return "none pinned"
+    return f"{count} pinned"
+
+
 def _doctor_status(h: Path, profile: str) -> str:
-    """Summary line for the `alpi setup` menu row."""
-    try:
-        from alpi import doctor
-        checks = doctor.run_all(h, profile)
-    except Exception:  # noqa: BLE001
-        return "ready"
-    fails = sum(1 for c in checks if c.status == "fail")
-    warns = sum(1 for c in checks if c.status == "warn")
-    if fails:
-        return f"{fails} failing, {warns} warning(s)"
-    if warns:
-        return f"{warns} warning(s)"
-    return "all green"
+    """Menu row hint. The real checks are live network probes (Telegram /
+    IMAP / Gmail / MCPs) that take 5–10s — running them on every menu
+    render made the wizard feel slow. Run on-demand when the user opens
+    the page instead; the health-check screen already has spinners."""
+    return "open to run checks"
 
 
 def _doctor_wizard(h: Path, profile: str) -> None:
@@ -1416,6 +1439,238 @@ def _profile_summary(home_dir: Path) -> list[str]:
     if not lines:
         lines.append("empty profile — nothing to lose.")
     return lines
+
+
+# ALP (Alpi Link Protocol) — peer management + dev listener
+#
+# ``alpi peers`` covers the day-to-day: generate / inspect this
+# profile's keypair, add or remove peers, send a ping. The eventual
+# UX home for add/remove is the ``alpi setup → Peers`` wizard;
+# these commands stay as the scriptable surface.
+#
+# ``alpi alp start`` runs the Unix-socket listener in the
+# foreground. It's hidden: in the final wiring it folds into the
+# gateway daemon (one always-on process per profile). Exposed for
+# now so a developer can stand up two profiles in two terminals
+# and watch them ping each other before the gateway integration
+# lands.
+
+
+@main.group()
+def peers() -> None:
+    """Manage ALP peer identities (spec: docs/ALP.md)."""
+
+
+@peers.command("key")
+@click.pass_context
+def peers_key(ctx: click.Context) -> None:
+    """Print this profile's ALP public key. Paste the line into the
+    other peer's ``peers add`` to pin it."""
+    from alpi.alp.keys import load_or_generate
+    h: Path = ctx.obj["home"]
+    kp = load_or_generate(h)
+    click.echo(kp.pubkey_b64())
+
+
+@peers.command("list")
+@click.pass_context
+def peers_list(ctx: click.Context) -> None:
+    """Show pinned peers for this profile."""
+    from alpi import ui
+    from alpi.alp import peers as peers_mod
+    h: Path = ctx.obj["home"]
+    entries = peers_mod.load(h)
+    if not entries:
+        click.echo("no peers pinned. `alpi peers add <id> <pubkey>` to add one.")
+        return
+    rows: list[list[str]] = []
+    for p in entries:
+        addr = p.address or "local"
+        allow = ", ".join(p.allow) or "—"
+        rows.append([p.id, p.pubkey[:12] + "…", addr, allow])
+    click.echo(f"{len(entries)} peer(s):")
+    ui.columns(rows)
+
+
+@peers.command("add")
+@click.argument("peer_id")
+@click.argument("pubkey_b64")
+@click.option("--allow", default="link.ping,link.ask",
+              help="Comma-separated method allowlist (default: link.ping,link.ask).")
+@click.option("--address", default=None,
+              help="host:port for inter-machine peers; omit for intra-machine.")
+@click.option("--alias", default="", help="Optional display label.")
+@click.pass_context
+def peers_add(
+    ctx: click.Context, peer_id: str, pubkey_b64: str,
+    allow: str, address: str | None, alias: str,
+) -> None:
+    """Pin a peer's pubkey + capabilities."""
+    from alpi.alp import peers as peers_mod
+    h: Path = ctx.obj["home"]
+    peer = peers_mod.Peer(
+        id=peer_id,
+        pubkey=pubkey_b64.strip(),
+        alias=alias,
+        address=address,
+        allow=[m.strip() for m in allow.split(",") if m.strip()],
+    )
+    try:
+        peers_mod.add(h, peer)
+    except ValueError as e:
+        raise click.ClickException(str(e))
+    click.echo(f"added peer {peer_id!r} ({len(peer.allow)} method(s) allowed)")
+
+
+@peers.command("remove")
+@click.argument("peer_id")
+@click.pass_context
+def peers_remove(ctx: click.Context, peer_id: str) -> None:
+    """Remove a peer. Does not touch the pinned pubkey file on the
+    other side — the remote profile still has you in its list until
+    they drop you too."""
+    from alpi.alp import peers as peers_mod
+    h: Path = ctx.obj["home"]
+    if peers_mod.remove(h, peer_id):
+        click.echo(f"removed peer {peer_id!r}")
+    else:
+        raise click.ClickException(f"no peer {peer_id!r}")
+
+
+@peers.command("ping")
+@click.argument("peer_id")
+@click.pass_context
+def peers_ping(ctx: click.Context, peer_id: str) -> None:
+    """Send a link.ping to a pinned peer and print the response."""
+    import asyncio
+    from alpi.alp import client as alp_client
+    from alpi.alp import peers as peers_mod
+    from alpi.alp.keys import load_or_generate
+
+    h: Path = ctx.obj["home"]
+    peer = peers_mod.get_by_id(h, peer_id)
+    if peer is None:
+        raise click.ClickException(f"no peer {peer_id!r} (see `alpi peers list`)")
+    if peer.address is not None:
+        raise click.ClickException(
+            "inter-machine ping not implemented yet (lands in ALP.2). "
+            "This peer has an address set; remove it to ping over the "
+            "local socket or wait for the TCP transport.",
+        )
+
+    # Resolve the target's socket path from its profile home. By
+    # convention, peers on the same machine live under
+    # ``~/.alpi/profiles/<id>/`` or ``~/.alpi/`` for the default.
+    # Accept either — try the profiles path first, fall back to the
+    # default home if the id is "default".
+    if peer_id == "default":
+        target_home = Path.home() / ".alpi"
+    else:
+        target_home = Path.home() / ".alpi" / "profiles" / peer_id
+    socket_path = target_home / "alp" / "alp.sock"
+    if not socket_path.exists():
+        raise click.ClickException(
+            f"target socket not found: {socket_path}\n"
+            f"Start the peer's listener first: "
+            f"`alpi -p {peer_id} alp start`",
+        )
+
+    sender = load_or_generate(h)
+    try:
+        result = asyncio.run(alp_client.call(
+            socket_path=socket_path,
+            sender=sender,
+            recipient_pubkey_b64=peer.pubkey,
+            method="link.ping",
+            params={"nonce": "cli"},
+        ))
+    except alp_client.TargetOffline as e:
+        raise click.ClickException(f"target-offline: {e}")
+    except alp_client.RemoteError as e:
+        raise click.ClickException(f"remote-error: {e}")
+    click.echo(
+        f"pong from {result.get('agent_name', '?')} "
+        f"· version={result.get('version', '?')} "
+        f"· nonce={result.get('nonce', '?')}"
+    )
+
+
+@main.group()
+def alp() -> None:
+    """ALP listener controls (install as a service via ``alpi setup``)."""
+
+
+def _alp_pid_path(home: Path) -> Path:
+    return home / "alp" / "alp.pid"
+
+
+@alp.command("start")
+@click.pass_context
+def alp_start(ctx: click.Context) -> None:
+    """Run the ALP Unix-socket listener for this profile (blocking)."""
+    import asyncio
+    import logging
+    from alpi.alp import handlers as alp_handlers
+    from alpi.alp.server import Server
+
+    h: Path = ctx.obj["home"]
+    profile: str = ctx.obj.get("profile") or "default"
+    _bootstrap(h)
+    _check_not_running(_alp_pid_path(h))
+
+    # Surface per-request activity — StreamHandler for foreground invokes,
+    # but when launchd captures stdout/stderr it still ends up in the log
+    # file configured on the plist.
+    handler = logging.StreamHandler()
+    handler.setFormatter(logging.Formatter("%(message)s"))
+    srv_log = logging.getLogger("alpi.alp.server")
+    srv_log.setLevel(logging.INFO)
+    srv_log.addHandler(handler)
+
+    server = Server(home=h, agent_name=profile)
+    alp_handlers.register_link_ask(server, h)
+
+    pid_file = _alp_pid_path(h)
+    pid_file.parent.mkdir(parents=True, exist_ok=True)
+    pid_file.write_text(str(os.getpid()))
+
+    async def _run() -> None:
+        await server.start()
+        click.echo(
+            f"alp: {profile} listening on {server.socket_path()}\n"
+            f"     pubkey: {server.pubkey_b64}\n"
+            f"     (Ctrl-C to stop)"
+        )
+        try:
+            await server.serve_forever()
+        finally:
+            await server.stop()
+
+    try:
+        asyncio.run(_run())
+    except KeyboardInterrupt:
+        click.echo("\nalp: stopped")
+    finally:
+        if pid_file.exists():
+            pid_file.unlink(missing_ok=True)
+
+
+@alp.command("stop")
+@click.pass_context
+def alp_stop(ctx: click.Context) -> None:
+    """Stop a running ALP listener (SIGTERM)."""
+    h: Path = ctx.obj["home"]
+    profile: str = ctx.obj.get("profile") or "default"
+    _stop_daemon("alp", h, profile, _alp_pid_path(h))
+
+
+@alp.command("restart")
+@click.pass_context
+def alp_restart(ctx: click.Context) -> None:
+    """Stop the listener and wait for the service to bring it back."""
+    h: Path = ctx.obj["home"]
+    profile: str = ctx.obj.get("profile") or "default"
+    _restart_daemon("alp", h, profile, _alp_pid_path(h))
 
 
 if __name__ == "__main__":

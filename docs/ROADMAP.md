@@ -58,9 +58,9 @@ Audience: the creator (@soyjavi) and any future contributor reading the repo col
 | AP | Profile scaffold: drop `.env.example` | ✅ shipped (v0.2.53) — `config.seed_defaults()` no longer writes `~/.alpi/.env.example`. The wizards (`alpi setup`) are the canonical onboarding path; CONFIG.md is the canonical key reference for non-interactive setups. Removes the double-authoring drift risk (example was already out of sync with the Ollama multi-endpoint reshape). |
 | AQ | Voice mode polish — STT + TTS quality + continuous mode | 🔵 backlog |
 | AR | v0.3 production release — website + content rewrite | 🔵 v0.3 gate — blocks the cut |
-| ALP.1 | Alpi Link Protocol — spec + intra-profile prototype (Unix socket, `link.ping` / `link.ask` / `link.cancel`) | 🔵 v0.3 |
-| ALP.2 | Alpi Link Protocol — inter-machine Noise-protocol transport | 🔵 v0.4 — depends on ALP.1 |
-| ALP.3 | Alpi Link Protocol — shared rooms (group chat, humans optional) | 🔵 v0.4 or v0.5 — depends on ALP.1 |
+| ALP.1 | Alpi Link Protocol — spec + intra-profile prototype (Unix socket, `link.ping` / `link.ask` / `link.cancel`) | ✅ shipped — `docs/ALP.md` spec (envelope, signing, verbs, errors, security model); `alpi/alp/` package (keys, envelope, peers, server, client, handlers, mention, setup); `peer` tool + TUI `@peer` gesture + `/peers` panel + Telegram `/peers` + gateway inbound interception; `alpi alp start/stop/restart` as a first-class service (launchd / systemd) with doctor row; `alpi setup → Peers` wizard with identity + probe (●/○/?). Budget + rate-limit fields parse but enforcement moves to ALP.2. |
+| ALP.2 | Alpi Link Protocol — inter-machine Noise-protocol transport + budget / rate-limit enforcement | 🔵 v0.4 — depends on ALP.1 |
+| ALP.3 | Alpi Link Protocol — shared rooms (group chat, humans optional) | 🔵 v0.4 — depends on ALP.1 |
 | AT | Audit system prompt + tool descriptions vs hermes | 🔵 backlog — research first |
 | AU | Gateway/Schedule service — ops UX polish | ✅ shipped (v0.2.58) — `gateway stop` / `schedule stop` now warn when the daemon is under launchd/systemd (KeepAlive will bounce it back); new `gateway restart` / `schedule restart` verbs stop + poll for the service-managed relaunch; `alpi doctor` compares the `alpi` binary mtime against the daemon's elapsed time and warns "run `alpi X restart`" when the process is running stale code after a reinstall. |
 | AV | Sandbox: whitelist `/dev/null` so `git` works under sandbox-exec / bwrap | ✅ shipped (v0.2.59) — macOS sandbox profile now grants `file-write*` on the standard character devices (`/dev/null`, `/dev/zero`, `/dev/random`, `/dev/urandom`, `/dev/tty`, `/dev/stdin`, `/dev/stdout`, `/dev/stderr`). Linux bwrap already exposes them via `--dev /dev`. Regression tests cover the reported `git log` failure end-to-end. |
@@ -77,7 +77,7 @@ release. The bar for "ship v0.2" is **clean docs + version bump +
 real-use validation across a few sessions** — not feature
 exhaustiveness.
 
-**Nothing open for v0.2.** Everything the original roadmap promised is shipped. Still open for v0.3: **AI, AJ, ALP.1, AO, AQ, AT** (see individual entries below). Cutting **v0.3.0** is gated by **AR** (production release — website + content rewrite). **ALP.2** (inter-machine Noise transport) and **ALP.3** (shared rooms) are scoped for v0.4 / v0.5. Long-term candidates: **H** (Home Assistant — blocked on confirmation), **N** (image gen), **U** (Signal), **Σ.1 / Σ.2** (stretch goals). Rejected: **C** (OpenAI Codex OAuth) and **V** (Anthropic OAuth) on ToS grounds (see Principles); **J** (camoufox) after humanised Playwright made it redundant.
+**Nothing open for v0.2.** Everything the original roadmap promised is shipped. Still open for v0.3: **AI, AJ, AO, AQ, AT** (see individual entries below). Cutting **v0.3.0** is gated by **AR** (production release — website + content rewrite). **ALP.2** (inter-machine Noise transport + budget/rate-limit enforcement) and **ALP.3** (shared rooms) are both scoped for v0.4. Long-term candidates: **H** (Home Assistant — blocked on confirmation), **N** (image gen), **U** (Signal), **Σ.1 / Σ.2** (stretch goals). Rejected: **C** (OpenAI Codex OAuth) and **V** (Anthropic OAuth) on ToS grounds (see Principles); **J** (camoufox) after humanised Playwright made it redundant.
 
 Once the v0.3 cycle picks up a few of those + a fresh CHANGELOG
 entry summarises v0.2, bump to `v0.3.0` and reopen the table.
@@ -256,13 +256,13 @@ Ships the foundation: `docs/ALP.md` with the wire format + security model locked
 
 **Capability model.** `~/.alpi/<profile>/peers.yaml` pins per-peer pubkey + `allow:` list. Missing method → `-32001 capability-denied`. Missing peer → envelope never parsed.
 
-**Client surface.** New tool `agent_ask(target, prompt)` in `alpi/tools/` — the agent calls it like any other tool; the other profile's tool loop + approval gate + cost accounting run as a normal turn.
+**Client surface.** New tool `peer(peer_id, prompt)` in `alpi/tools/` — the agent calls it like any other tool; the other profile's tool loop + approval gate + cost accounting run as a normal turn. TUI also exposes a first-class `@peer rest…` gesture (autocomplete + popup) that calls the same code path without routing through the local LLM.
 
 **Deliverables.**
 
 1. `docs/ALP.md` — the bundle spec (envelope, signing, verbs, error codes, security model).
 2. `alpi/alp/` package — envelope / keys / peers / server / client.
-3. `alpi/tools/agent_ask.py`.
+3. `alpi/tools/peer.py`.
 4. `alpi setup → Peers` wizard (add / remove / view pubkey + capabilities).
 5. `alpi doctor` row for ALP (key present, socket listening, peers reachable).
 6. Tests: envelope roundtrip, signature verification, capability enforcement, end-to-end ask between two profiles on one machine.
@@ -271,7 +271,7 @@ Ships the foundation: `docs/ALP.md` with the wire format + security model locked
 
 Depends on ALP.1. New gateway platform `alpi/gateway/platforms/alp.py` — TCP listener with Noise_XK handshake producing forward-secret session keys, per-peer AEAD encryption on top. Explicitly NOT HTTPS: we use Noise (same framework as WireGuard) so we don't drag TLS's 30-year legacy of downgrade attacks and cert-management headaches into a peer-to-peer tool. Peer entry gains `address: host:port`. Same verbs as ALP.1, different transport. Tailscale / WireGuard as a network-layer front-end is the blessed deployment; direct public-internet exposure is supported but discouraged.
 
-### ALP.3 — Shared rooms (v0.4 or v0.5)
+### ALP.3 — Shared rooms (v0.4)
 
 Depends on ALP.1. First-class group-chat workspaces — N alpis (different profiles, different machines) post into a shared transcript; a human can join via TUI `/room` or stay out entirely. Hub model (the room creator holds transcript + group key), not gossip. Per-room agent budget and kill switch as safety levers. New verbs (`room.create`, `room.join`, `room.post`, `room.pull`, `room.leave`, `room.pause`), rekey on member leave.
 

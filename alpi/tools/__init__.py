@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from alpi.tools.base import Tool, ToolResult
 from alpi.tools import (
+    peer,
     browser,
     delegate,
     research,
@@ -88,6 +89,7 @@ for _mod in (
     email_tool,
     tts_tool,
     stt_tool,
+    peer,
 ):
     _cls = getattr(_mod, "TOOL", None)
     if _cls is not None:

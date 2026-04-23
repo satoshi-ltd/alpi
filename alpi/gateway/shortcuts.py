@@ -26,6 +26,7 @@ _COMMANDS: tuple[tuple[str, str], ...] = (
     ("new",      "Start a fresh session for this chat"),
     ("continue", "Show which session is being resumed"),
     ("model",    "Show the currently configured model"),
+    ("peers",    "List ALP peers and their reachability"),
 )
 
 SHORTCUTS: tuple[str, ...] = tuple(name for name, _ in _COMMANDS)
@@ -69,6 +70,8 @@ def handle(shortcut: Shortcut, chat_id: str, home: Path) -> str:
         return _status(chat_id, home)
     if shortcut.name == "model":
         return _model(home)
+    if shortcut.name == "peers":
+        return _peers(home)
     return ""
 
 
@@ -125,6 +128,28 @@ def _status(chat_id: str, home: Path) -> str:
         f"**tokens** in={tok_in:,}  out={tok_out:,}  total={tok_in + tok_out:,}\n"
         f"**cost**   ${data.get('cost_usd', 0.0):.4f}"
     )
+
+
+def _peers(home: Path) -> str:
+    """Render pinned peers straight from ``peers.yaml``. Reachability is
+    implicit — if you actually ``@<peer>`` it and it's down, you'll
+    see ``listener not running`` in the reply."""
+    from alpi.alp import peers as peers_mod
+
+    entries = peers_mod.load(home)
+    if not entries:
+        return (
+            "no peers pinned yet.\n"
+            "Exchange pubkeys out-of-band and run `alpi setup → Peers → "
+            "+ Add peer` on the machine."
+        )
+    lines = ["**Peers**", ""]
+    for peer in entries:
+        allow = ", ".join(sorted(peer.allow)) or "no capabilities"
+        lines.append(f"@{peer.id}  —  {allow}")
+    lines.append("")
+    lines.append("Send `@<peer> <prompt>` to route a message directly.")
+    return "\n".join(lines)
 
 
 def _model(home: Path) -> str:

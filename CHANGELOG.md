@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.2.68 — 2026-04-23
+
+### alp (Alpi Link Protocol — ALP.1 closed)
+- new `alpi/alp/` package: Ed25519 identity, signed JSON-RPC envelope with replay cache, fail-closed peer list, Unix-socket server + client. `link.ping`, `link.ask` (reject-fast reentrancy), `link.cancel` (idempotent interrupt).
+- `peer` tool for LLM-driven cross-profile calls. TUI `@peer rest…` gesture with strict leading-`@` rule and `/peers` panel. Telegram / email / webhook gateway inbound interception hits the same code path without firing the local LLM.
+- `alpi alp start|stop|restart` + service install via `alpi setup → ALP service` (launchd / systemd). Doctor granular sub-checks: Identity (key loadable), Socket (listening), Peers (reachable).
+- `alpi setup → Peers` wizard: identity page with clipboard copy, probe-based ●/○/? status list, add/remove/inspect flows.
+- `alpi peers key|list|add|remove|ping` CLI group for scripting.
+- docs: `docs/ALP.md` spec v1 (envelope, verbs, errors, security), `docs/ROADMAP.md` ALP.1 shipped / ALP.2 + ALP.3 both v0.4, `docs/ARCHITECTURE.md` layout + commands.
+
+### setup
+- health-check row no longer blocks menu render on 5–10s of live network probes — status reads "open to run checks", actual checks run on-demand when the user opens the page.
+
 ## v0.2.54 — 2026-04-23
 
 ### gateway

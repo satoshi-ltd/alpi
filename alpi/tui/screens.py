@@ -132,6 +132,7 @@ class HelpPanel(FloatingPanel):
         ("mcps",      "list running MCP servers"),
         ("status",    "session snapshot — model, turns, tokens, cost"),
         ("skills",    "list installed skills"),
+        ("peers",     "list ALP peers; pick one to drop @id into the input"),
         ("clear",     "clear chat history (keeps session)"),
         ("new",       "start a fresh session (new id, history wiped)"),
         ("compact",   "summarize history to save tokens"),
@@ -316,6 +317,71 @@ class StatusPanel(FloatingPanel):
             yield Static(row)
 
 
+_LIST_PANEL_CSS = """
+OptionList {
+    background: transparent !important;
+    margin: 0;
+    max-height: 18;
+}
+"""
+
+
+class PeersPanel(FloatingPanel):
+    """List pinned ALP peers; selecting one drops ``@peer_id `` into the
+    input so the user can type the prompt right after."""
+
+    panel_title = "/peers"
+    DEFAULT_CSS = _LIST_PANEL_CSS
+
+    def __init__(self, home: Path) -> None:
+        super().__init__()
+        self.home = home
+
+    def compose_body(self) -> ComposeResult:
+        from alpi.alp import peers as peers_mod
+        from alpi.tui.list_row import build_options
+
+        entries = peers_mod.load(self.home)
+        if not entries:
+            yield Static(
+                "no peers pinned yet. See `alpi peers add` or `alpi setup → Peers`.",
+                classes="entry-desc",
+            )
+            return
+        items: list[tuple[str, str, str]] = []
+        for p in entries:
+            verbs = ", ".join(sorted(p.allow)) or "no capabilities"
+            address = f" · {p.address}" if p.address else ""
+            items.append((p.id, f"@{p.id}", f"{verbs}{address}"))
+        accent = self.app.theme_variables.get("accent")
+        yield OptionList(*build_options(items, accent=accent), id="peers-options", compact=True)
+
+    def on_mount(self) -> None:
+        self.call_after_refresh(self._focus_list)
+
+    def _focus_list(self) -> None:
+        try:
+            self.query_one(OptionList).focus()
+        except Exception:  # noqa: BLE001
+            pass
+
+    def on_option_list_option_selected(
+        self, event: OptionList.OptionSelected,
+    ) -> None:
+        peer_id = event.option.id or ""
+        self.remove()
+        if not peer_id:
+            return
+        try:
+            from textual.widgets import Input
+            inp = self.app.query_one(Input)
+            inp.value = f"@{peer_id} "
+            inp.cursor_position = len(inp.value)
+            inp.focus()
+        except Exception:  # noqa: BLE001
+            pass
+
+
 class SkillsPanel(FloatingPanel):
     panel_title = "/skills"
 
@@ -368,18 +434,9 @@ def _read_frontmatter(path: Path) -> dict:
     return meta
 
 
-_APPROVAL_CSS = """
-OptionList {
-    background: transparent !important;
-    margin: 0;
-    max-height: 18;
-}
-"""
-
-
 class ApprovalPanel(FloatingPanel):
     panel_title = "⚠ approval required"
-    DEFAULT_CSS = _APPROVAL_CSS
+    DEFAULT_CSS = _LIST_PANEL_CSS
 
     _OPTIONS: list[tuple[str, str, str]] = [
         ("once",    "Once",    "approve just this one call"),
