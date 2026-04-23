@@ -83,23 +83,35 @@ def _restore_terminal() -> None:
 
 
 def _continue_last_session(engine: Engine, h: Path, console=None) -> bool:
-    import json
-    from alpi.session import load_turns
-
     sessions_dir = h / "sessions"
     if not sessions_dir.exists():
         return False
     candidates = sorted(
-        sessions_dir.glob("*.json"),
+        (p for p in sessions_dir.glob("*.json") if not p.name.startswith("_")),
         key=lambda p: p.stat().st_mtime, reverse=True,
     )
     if not candidates:
         return False
+    return _hydrate_from_path(engine, candidates[0], console=console)
+
+
+def _continue_specific_session(engine: Engine, h: Path, session_id: str) -> bool:
+    """Resume a session by its exact id. Used by gateway per-chat threading."""
+    path = h / "sessions" / f"{session_id}.json"
+    if not path.exists():
+        return False
+    return _hydrate_from_path(engine, path)
+
+
+def _hydrate_from_path(engine: Engine, path: Path, console=None) -> bool:
+    import json
+    from alpi.session import load_turns
+
     try:
-        data = json.loads(candidates[0].read_text())
+        data = json.loads(path.read_text())
     except Exception as e:  # noqa: BLE001
         if console is not None:
-            console.print(f"could not load last session: {e}")
+            console.print(f"could not load session {path.name}: {e}")
         return False
 
     turns = load_turns(data)
@@ -139,12 +151,26 @@ def _continue_last_session(engine: Engine, h: Path, console=None) -> bool:
     return True
 
 
-def _run_once(h: Path, user_text: str, emit_events: bool = False) -> None:
+def _run_once(
+    h: Path,
+    user_text: str,
+    emit_events: bool = False,
+    resume_chat_id: str | None = None,
+) -> None:
     import json
+    from alpi import session_map
 
     _bootstrap(h)
     cfg = config.load(h)
     engine = Engine(home=h, cfg=cfg)
+
+    # Gateway per-chat threading: if the spawner passed a chat id, look up
+    # the pointer and resume that session. Missing pointer = fresh session,
+    # which we'll bind to the chat after the turn saves.
+    if resume_chat_id:
+        existing = session_map.get(h, resume_chat_id)
+        if existing:
+            _continue_specific_session(engine, h, existing)
 
     parts: list[str] = []
 
@@ -179,8 +205,16 @@ def _run_once(h: Path, user_text: str, emit_events: bool = False) -> None:
     engine.run_turn(user_text, emit=sink)
     try:
         engine.save_session()
-    except Exception:
+    except Exception:  # noqa: BLE001
         pass
+
+    # Bind (or refresh) the chat-id → session-id pointer after save, so a
+    # follow-up inbound from the same chat picks up the same session.
+    if resume_chat_id:
+        try:
+            session_map.set(h, resume_chat_id, engine.session.id)
+        except Exception:  # noqa: BLE001
+            pass
 
     final = "\n\n".join(parts).strip()
     if emit_events:
@@ -267,15 +301,18 @@ def main(ctx: click.Context, profile: str | None, continue_last: bool) -> None:
 # ``--once`` alone. The gateway sets this flag when spawning so it
 # can parse tool activity from the agent's stdout.
 @click.option("--emit-events", is_flag=True, default=False, hidden=True)
+@click.option("--resume-chat", "resume_chat", default=None, hidden=True,
+              help="Gateway-only: resume the per-chat session for this id.")
 @click.option("-c", "--continue", "continue_last", is_flag=True,
               help="Resume from the last session.")
 @click.pass_context
 def chat(ctx: click.Context, input_text: str | None, emit_events: bool,
-         continue_last: bool) -> None:
+         resume_chat: str | None, continue_last: bool) -> None:
     """Launch the TUI, or run one turn with ``--once "text"``."""
     h: Path = ctx.obj["home"]
     if input_text is not None:
-        _run_once(h, input_text, emit_events=emit_events)
+        _run_once(h, input_text, emit_events=emit_events,
+                  resume_chat_id=resume_chat)
     else:
         _run_chat(h, continue_last=continue_last)
 

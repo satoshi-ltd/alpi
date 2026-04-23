@@ -87,8 +87,17 @@ async def _run_agent(msg: IncomingMessage, platform: Platform, home: Path,
     env = dict(os.environ)
     env["ALPI_HOME"] = str(home)
     env["ALPI_GATEWAY"] = "1"
+    argv = [
+        sys.executable, "-m", "alpi", "chat", "--once", msg.text,
+        "--emit-events",
+    ]
+    # Per-chat session threading: the CLI consults `sessions/_gateway_map.json`
+    # and resumes whichever session was last bound to this chat id, or starts
+    # fresh and binds it after save.
+    if msg.external_chat_id:
+        argv += ["--resume-chat", msg.external_chat_id]
     proc = await asyncio.create_subprocess_exec(
-        sys.executable, "-m", "alpi", "chat", "--once", msg.text, "--emit-events",
+        *argv,
         env=env,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
