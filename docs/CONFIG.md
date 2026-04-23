@@ -33,7 +33,7 @@ only when you want to override it.
 
 ## How to change settings
 
-Two options:
+Three options:
 
 - **CLI wizards**: `alpi setup` covers model selection, gateway
   credentials, MCP servers, sandbox posture, voice, disk cleanup, and
@@ -50,6 +50,11 @@ Two options:
   and change values manually. Restart whatever surface was affected.
   Cosmetic knobs (`tui.*`, `tools.max_steps_per_turn`,
   `gateway.imap.poll_interval`, `fallback_models`) live here.
+- **Populate `.env` directly** (non-interactive, CI / devcontainers):
+  alpi does not ship a `.env.example` — the Reference tables below
+  (Core, Gateway — Telegram / IMAP / Gmail) list every key with its
+  default. Create `~/.alpi/.env` yourself with just the keys you use
+  and alpi picks them up on next launch.
 
 ## Reference
 

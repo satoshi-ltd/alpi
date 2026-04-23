@@ -340,30 +340,13 @@ def resolve_model(cfg: Config) -> dict[str, Any]:
 
 
 def seed_defaults(home: Path) -> None:
-    """Write starter config.yaml and .env.example on first run."""
+    """Write a starter config.yaml on first run.
+
+    ``.env`` is the wizard's output (``alpi setup``) — no starter
+    template is shipped. The canonical list of keys lives in
+    ``docs/CONFIG.md``; non-interactive deployments (CI, devcontainers)
+    can populate ``.env`` directly from there.
+    """
     cfg_path = home / "config.yaml"
     if not cfg_path.exists():
         cfg_path.write_text(yaml.safe_dump(SEED_CONFIG, sort_keys=False))
-
-    example_env = home / ".env.example"
-    if not example_env.exists():
-        example_env.write_text(
-            "# Copy to .env and fill in the keys you use.\n"
-            "ANTHROPIC_API_KEY=\n"
-            "OPENAI_API_KEY=\n"
-            "OPENROUTER_API_KEY=\n"
-            "OLLAMA_BASE_URL=http://localhost:11434\n"
-            "# Gateway (optional). Allowlists are fail-closed — an empty\n"
-            "# list means nothing inbound is processed on that platform.\n"
-            "TELEGRAM_BOT_TOKEN=\n"
-            "TELEGRAM_ALLOWED_CHAT_IDS=\n"
-            "IMAP_ADDRESS=\n"
-            "IMAP_PASSWORD=\n"
-            "IMAP_HOST=\n"
-            "SMTP_HOST=\n"
-            "IMAP_ALLOWED_SENDERS=\n"
-            "GMAIL_CLIENT_ID=\n"
-            "GMAIL_CLIENT_SECRET=\n"
-            "GMAIL_ALLOWED_SENDERS=\n"
-            "WEBHOOK_ALLOWED_CHAT_IDS=\n"
-        )
