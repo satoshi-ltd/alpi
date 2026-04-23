@@ -38,6 +38,24 @@ def test_tool_description_carries_core_rules() -> None:
     assert "verbatim" in desc.lower()
 
 
+def test_tool_description_instructs_neutral_user_voice() -> None:
+    """MEMORY.md entries must not nominalize the user by name — the
+    name lives in USER.md. Description spells this out explicitly so
+    small models don't default to 'Javi wants…' style writes."""
+    desc = Memory.description
+    assert "neutral" in desc.lower() or 'user"' in desc.lower()
+    assert "never" in desc.lower() and "name" in desc.lower()
+
+
+def test_content_param_description_reinforces_neutral_voice() -> None:
+    """Second reminder on the `content` parameter — the agent often
+    reads parameter hints even when the top-level description
+    description gets skimmed."""
+    hint = Memory.parameters["properties"]["content"]["description"]
+    assert '"user"' in hint.lower() or "\"user\"" in hint
+    assert "name" in hint.lower()
+
+
 def test_add_user_fact(isolated_home: Path) -> None:
     r = Memory().run(action="add", target="USER.md", content="Javi prefiere café negro.")
     assert r.ok, r.error
