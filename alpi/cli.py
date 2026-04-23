@@ -244,7 +244,19 @@ def main(ctx: click.Context, profile: str | None, continue_last: bool) -> None:
     if ctx.invoked_subcommand not in {"schedule", "gateway"}:
         _auto_install_scheduler(h, profile or "default")
     if ctx.invoked_subcommand is None:
-        _run_chat(h, continue_last=continue_last)
+        # Honour ``tui.auto_resume`` for bare ``alpi`` — if the user opted
+        # in via config, resume even without ``-c``. Explicit ``-c`` stays
+        # as a manual override. The chat subcommand does NOT auto-resume;
+        # it's used by the gateway and by anyone who wants explicit
+        # control, so the flag has to stay opt-in there.
+        resume = continue_last
+        if not resume:
+            try:
+                cfg = config.load(h)
+                resume = bool((cfg.tui or {}).get("auto_resume"))
+            except Exception:  # noqa: BLE001
+                pass
+        _run_chat(h, continue_last=resume)
 
 
 @main.command()

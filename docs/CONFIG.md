@@ -272,6 +272,13 @@ alpi <version>  │  profile <name> <size>  │  [sandbox|offline]  │  workspa
 | `tui.show_reasoning` | `true` | bool | next session |
 | `tui.accent` | `#ff8800` | CSS color (hex / named / rgb) | next session |
 | `tui.theme` | `dark` | `dark` \| `light` | next session |
+| `tui.auto_resume` | `false` | bool | next launch |
+
+`tui.auto_resume` makes bare `alpi` behave as if `-c` / `--continue` was
+passed — the last session is loaded automatically. Use `/new` inside the
+TUI to start a fresh thread without changing the config. The flag does
+not affect `alpi chat --once` (scripts and the gateway always start
+clean) or explicit `-c` usage (still an override).
 
 `tui.show_reasoning` controls two channels of model-thinking output:
 

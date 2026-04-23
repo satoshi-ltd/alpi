@@ -50,7 +50,7 @@ Audience: the creator (@soyjavi) and any future contributor reading the repo col
 | AI | Memory v2: better generation + TUI panel | 🔵 backlog — research first (see below) |
 | AJ | Browser realism: session persistence + login state + deeper antibot | 🔵 backlog |
 | AK | Telegram: richer reply formatting + command shortcuts | 🔵 backlog |
-| AL | `alpi` auto-resumes last session by config | 🔵 backlog |
+| AL | `alpi` auto-resumes last session by config | ✅ shipped (v0.2.50) — new `tui.auto_resume` flag (default `false`). When `true`, bare `alpi` behaves as if `-c` was passed; `/new` inside the TUI still starts a fresh thread. `alpi chat --once` (scripts + gateway) always starts clean. Explicit `-c` stays as a manual override. |
 | AM | Dependency audit (drop/upgrade, security-first) | 🔵 backlog |
 | AN | Gateway session model — per-chat persistence | 🔵 backlog — design decision |
 | AO | Default skills bundle (writer / coder / webmaster …) | 🔵 backlog — research first |
@@ -69,7 +69,7 @@ release. The bar for "ship v0.2" is **clean docs + version bump +
 real-use validation across a few sessions** — not feature
 exhaustiveness.
 
-**Nothing open for v0.2.** Everything the original roadmap promised is shipped. Items still in the backlog — **H** (Home Assistant), **N** (image gen), **U** (Signal), **Σ.1/Σ.2** (stretch goals), plus **AH–AQ** (TUI polish, Memory v2, browser realism, Telegram polish, auto-resume, dep audit, gateway sessions, default skills, scaffold review, voice mode polish), **AS.1** (ALPI protocol design + inter-profile prototype), and **AT** (system-prompt / tool-description audit) — roll forward to v0.3. Cutting **v0.3.0** is gated by **AR** (production release — website + content rewrite). **AS.2** (inter-machine `peer` gateway) is scoped for v0.4. **C** (OpenAI Codex OAuth), **V** (Anthropic OAuth), and **J** (camoufox) were rejected — C/V on ToS grounds (see Principles), J after humanised Playwright made it redundant.
+**Nothing open for v0.2.** Everything the original roadmap promised is shipped. Items still in the backlog — **H** (Home Assistant), **N** (image gen), **U** (Signal), **Σ.1/Σ.2** (stretch goals), plus **AH, AI, AJ, AK, AM–AQ** (TUI polish, Memory v2, browser realism, Telegram polish, dep audit, gateway sessions, default skills, scaffold review, voice mode polish), **AS.1** (ALPI protocol design + inter-profile prototype), and **AT** (system-prompt / tool-description audit) — roll forward to v0.3. Cutting **v0.3.0** is gated by **AR** (production release — website + content rewrite). **AS.2** (inter-machine `peer` gateway) is scoped for v0.4. **C** (OpenAI Codex OAuth), **V** (Anthropic OAuth), and **J** (camoufox) were rejected — C/V on ToS grounds (see Principles), J after humanised Playwright made it redundant.
 
 Once the v0.3 cycle picks up a few of those + a fresh CHANGELOG
 entry summarises v0.2, bump to `v0.3.0` and reopen the table.

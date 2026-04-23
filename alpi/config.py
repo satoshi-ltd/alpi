@@ -47,6 +47,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "show_reasoning": True,
         "accent": "#ff8800",
         "theme": "dark",
+        "auto_resume": False,
     },
     "mcp": {
         "servers": {},
