@@ -116,10 +116,6 @@ class Imap(Platform):
                     log.debug("email: dropping automated/bulk from %s", sender)
                     continue
 
-                prompt = (
-                    f"[INBOUND EMAIL from {sender}]\n"
-                    f"Subject: {subject}\n\n{body}"
-                )
                 ack = None
                 if self._mark_as_read:
                     uid_copy = raw_uid
@@ -132,7 +128,8 @@ class Imap(Platform):
                     platform="email",
                     external_user_id=sender,
                     external_chat_id=sender,
-                    text=prompt,
+                    text=body,
+                    subject=subject,
                     ack=ack,
                 )
 
