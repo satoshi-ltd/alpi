@@ -356,20 +356,25 @@ def gateway_start(ctx: click.Context) -> None:
 @click.pass_context
 def gateway_stop(ctx: click.Context) -> None:
     """Stop a running gateway (SIGTERM)."""
-    import signal
     from alpi.gateway.run import pid_path
     h: Path = ctx.obj["home"]
-    p = pid_path(h)
-    if not p.exists():
-        click.echo("gateway: not running")
-        return
-    try:
-        pid = int(p.read_text().strip())
-        os.kill(pid, signal.SIGTERM)
-        click.echo(f"gateway: sent SIGTERM to pid {pid}")
-    except (ValueError, ProcessLookupError) as e:
-        click.echo(f"gateway: {e}")
-        p.unlink(missing_ok=True)
+    profile: str = ctx.obj.get("profile") or "default"
+    _stop_daemon("gateway", h, profile, pid_path(h))
+
+
+@gateway.command("restart")
+@click.pass_context
+def gateway_restart(ctx: click.Context) -> None:
+    """Stop the gateway and wait for the service to bring it back up.
+
+    Typical use: after ``uv tool install --reinstall``, a restart makes
+    the process load the new binary. Only useful when the gateway runs
+    under launchd/systemd — if it doesn't, the daemon stays stopped.
+    """
+    from alpi.gateway.run import pid_path
+    h: Path = ctx.obj["home"]
+    profile: str = ctx.obj.get("profile") or "default"
+    _restart_daemon("gateway", h, profile, pid_path(h))
 
 
 # MCP servers
@@ -397,12 +402,20 @@ def schedule_start(ctx: click.Context) -> None:
 @click.pass_context
 def schedule_stop(ctx: click.Context) -> None:
     """Stop a running schedule daemon (SIGTERM)."""
-    from alpi.scheduler.run import stop as sch_stop
+    from alpi.scheduler.run import pid_path
     h: Path = ctx.obj["home"]
-    if sch_stop(h):
-        click.echo("schedule: SIGTERM sent")
-    else:
-        click.echo("schedule: not running")
+    profile: str = ctx.obj.get("profile") or "default"
+    _stop_daemon("schedule", h, profile, pid_path(h))
+
+
+@schedule.command("restart")
+@click.pass_context
+def schedule_restart(ctx: click.Context) -> None:
+    """Stop the schedule daemon and wait for the service to bring it back."""
+    from alpi.scheduler.run import pid_path
+    h: Path = ctx.obj["home"]
+    profile: str = ctx.obj.get("profile") or "default"
+    _restart_daemon("schedule", h, profile, pid_path(h))
 
 
 @schedule.command("run-once")
@@ -483,6 +496,85 @@ def logs_cmd(ctx: click.Context, source: str | None, tail_n: int, follow: bool) 
 
 
 # Shared install / uninstall / status helpers
+
+def _stop_daemon(name: str, home: Path, profile: str, pid_file: Path) -> None:
+    """SIGTERM the running ``name`` daemon. If a service is registered,
+    warn the user that launchd/systemd will restart the process within
+    a few seconds — it's useful for bouncing a stale binary, but the
+    wrong tool for actually stopping the daemon. Permanent stop lives
+    in ``alpi setup → {Gateway,Schedule} service → Uninstall``."""
+    import signal
+    from alpi import service
+
+    pid = _read_live_pid(pid_file)
+    if pid is None:
+        click.echo(f"{name}: not running")
+        return
+
+    backend = service.installed(name, profile)
+    if backend:
+        click.echo(
+            f"{name}: managed by {backend}; KeepAlive will restart the "
+            f"process in a few seconds. To stop it permanently, "
+            f"uninstall from `alpi setup → "
+            f"{name.capitalize()} service`."
+        )
+
+    try:
+        os.kill(pid, signal.SIGTERM)
+        click.echo(f"{name}: sent SIGTERM to pid {pid}")
+    except ProcessLookupError:
+        pid_file.unlink(missing_ok=True)
+        click.echo(f"{name}: process {pid} was already gone")
+
+
+def _restart_daemon(name: str, home: Path, profile: str, pid_file: Path) -> None:
+    """Stop + wait for launchd/systemd to bring the process back. When
+    no service is installed this degrades to a plain stop — there's
+    nothing to restart it and we say so instead of silently waiting
+    for a bounce that will never come."""
+    import signal
+    import time
+    from alpi import service
+
+    backend = service.installed(name, profile)
+    old_pid = _read_live_pid(pid_file)
+
+    if old_pid is not None:
+        try:
+            os.kill(old_pid, signal.SIGTERM)
+        except ProcessLookupError:
+            old_pid = None
+
+    if not backend:
+        msg = (
+            f"{name}: stopped. No service registered, so nothing will "
+            f"relaunch it — install via `alpi setup → {name.capitalize()} service`."
+        )
+        click.echo(msg)
+        return
+
+    # Poll for up to 15s waiting for the service to spawn a replacement.
+    deadline = time.time() + 15.0
+    new_pid: int | None = None
+    while time.time() < deadline:
+        candidate = _read_live_pid(pid_file)
+        if candidate and candidate != old_pid:
+            new_pid = candidate
+            break
+        time.sleep(0.5)
+
+    if new_pid is None:
+        click.echo(
+            f"{name}: sent SIGTERM to pid {old_pid}, but no replacement "
+            f"appeared within 15s. Check `alpi logs --source {name}`."
+        )
+        return
+    click.echo(
+        f"{name}: restarted via {backend} "
+        f"(pid {old_pid} → {new_pid})"
+    )
+
 
 def _read_live_pid(pid_file: Path) -> int | None:
     if not pid_file.exists():

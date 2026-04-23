@@ -374,12 +374,23 @@ def _check_services(home: Path, profile: str) -> list[Check]:
     from alpi import service
     out: list[Check] = []
 
+    bin_mtime = _alpi_binary_mtime()
     for name in ("gateway", "schedule"):
         backend = service.installed(name, profile)
         pid = _live_pid(home, name)
         if backend and pid:
-            out.append(Check("Services", name.capitalize(), "ok",
-                             f"running via {backend} (pid {pid})"))
+            stale = _is_binary_newer_than_process(bin_mtime, pid)
+            if stale:
+                out.append(Check(
+                    "Services", name.capitalize(), "warn",
+                    f"running via {backend} (pid {pid}) — binary is newer "
+                    f"than the process; run `alpi {name} restart` to load it",
+                ))
+            else:
+                out.append(Check(
+                    "Services", name.capitalize(), "ok",
+                    f"running via {backend} (pid {pid})",
+                ))
         elif backend:
             out.append(Check("Services", name.capitalize(), "warn",
                              f"installed via {backend} but no live pid"))
@@ -400,6 +411,74 @@ def _check_services(home: Path, profile: str) -> list[Check]:
             out.append(Check("Services", "Jobs", "info", f"{n} scheduled"))
 
     return out
+
+
+def _alpi_binary_mtime() -> float | None:
+    """Modification time of the ``alpi`` executable on PATH, or None."""
+    import os as _os
+    path = shutil.which("alpi")
+    if not path:
+        return None
+    try:
+        return _os.path.getmtime(path)
+    except OSError:
+        return None
+
+
+def _is_binary_newer_than_process(bin_mtime: float | None, pid: int) -> bool:
+    """True when the ``alpi`` binary on disk is newer than ``pid``'s start
+    time — i.e. the user reinstalled alpi but the daemon is still running
+    the old code and needs a restart."""
+    if bin_mtime is None:
+        return False
+    elapsed = _process_elapsed_seconds(pid)
+    if elapsed is None:
+        return False
+    import time
+    process_start = time.time() - elapsed
+    # 30s grace — freshly-restarted processes shouldn't flash warn because
+    # clocks and filesystem rounding drift.
+    return bin_mtime > process_start + 30
+
+
+def _process_elapsed_seconds(pid: int) -> int | None:
+    """Return how many seconds ``pid`` has been running. ``ps -o etime=``
+    format is portable across macOS + Linux (the ``etimes=`` variant is
+    Linux-only); we parse the ``[[days-]hh:]mm:ss`` shape ourselves."""
+    import subprocess
+    try:
+        r = subprocess.run(
+            ["ps", "-o", "etime=", "-p", str(pid)],
+            capture_output=True, text=True, timeout=2,
+        )
+    except Exception:  # noqa: BLE001
+        return None
+    if r.returncode != 0:
+        return None
+    return _parse_etime(r.stdout.strip())
+
+
+def _parse_etime(raw: str) -> int | None:
+    if not raw:
+        return None
+    days = 0
+    if "-" in raw:
+        day_part, _, raw = raw.partition("-")
+        try:
+            days = int(day_part)
+        except ValueError:
+            return None
+    try:
+        parts = [int(x) for x in raw.split(":")]
+    except ValueError:
+        return None
+    if len(parts) == 2:
+        h, m, s = 0, parts[0], parts[1]
+    elif len(parts) == 3:
+        h, m, s = parts[0], parts[1], parts[2]
+    else:
+        return None
+    return days * 86400 + h * 3600 + m * 60 + s
 
 
 def _probe_mcp(name: str, spec: dict) -> Check:
