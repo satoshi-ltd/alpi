@@ -28,7 +28,7 @@ Audience: Javi (product) + me (Claude across sessions).
 | N | Image generation | 🔵 backlog — no concrete use case yet |
 | AA | Cleanup wizard (`alpi setup → Cleanup`) | ✅ shipped (v0.2.39) |
 | AB | Gateway service install/uninstall wizard | ✅ shipped (v0.2.40, simpler scope than originally drafted — per-profile toggle, not a full split) |
-| AC | Auto-generated CHANGELOG.md from commits | 🔵 backlog — release-cycle polish |
+| AC | Auto-generated CHANGELOG.md from commits | ✅ shipped (v0.2.48) — `alpi release notes [--since REV] [-o FILE]` parses `git log`, treats `pyproject.toml` version-bump commits as release boundaries, groups commits by `type:` prefix within each version. Initial CHANGELOG.md reconstructs the full v0.1.0 → v0.2.48 history (44 releases). |
 | AD | CLI surface shrink + unified `alpi logs` + scheduler auto-install | ✅ shipped (v0.2.42) — dropped `gateway {stop,status,install,uninstall,logs}` / `schedule {stop,status,install,uninstall,logs}` / `mcp list`; daemon entrypoints hidden; one `alpi logs [--source]` replaces the per-subsystem tails; scheduler installs silently on first run |
 | AE | Centralised `~/.alpi/logs/` + `approval` / `agent` audit trails | ✅ shipped (v0.2.43) — all subsystem logs flattened into one dir; new `approval.log` (security audit of non-SAFE command decisions) and `agent.log` (one line per turn: cross-session grep index for "what has alpi been doing") |
 | AG | First-time help text in gateway/MCP wizards | ✅ shipped (v0.2.47) — Telegram (BotFather + @userinfobot), IMAP (hosts, ports, app password, fail-closed allowlist), MCP add (what MCPs are + GitHub example + registry link). Only shown when no value is configured yet, so editing flows stay terse. |

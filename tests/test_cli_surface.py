@@ -18,7 +18,7 @@ def test_top_level_help_shows_only_canonical_commands() -> None:
     assert result.exit_code == 0
     out = result.output
 
-    for name in ("chat", "setup", "doctor", "logs", "profile", "gateway", "schedule"):
+    for name in ("chat", "setup", "doctor", "logs", "profile", "gateway", "schedule", "release"):
         assert name in out, f"{name!r} missing from top-level --help"
 
     # mcp is fully absorbed by `alpi setup → MCPs`.
