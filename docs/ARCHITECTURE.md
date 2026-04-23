@@ -312,9 +312,15 @@ Progressive rendering: `run_and_render()` uses `rich.live.Live` — every row ap
 
 Exit codes: `1` if any check returns `fail`, `0` for warn/info/ok. Warnings don't break cron. The wizard entry ignores the exit code — it press-enter-waits so the user can read.
 
-### Sessions (`alpi/session.py`)
+### Sessions (`alpi/session.py`, `alpi/session_map.py`)
 
-Turn-based JSON: `turns: [{at, user, tools[], assistant}]` plus cumulative metrics. `ToolLog` carries `at, name, args, result (truncated hint), ok, duration_s, reasoning (non-empty only on first tool of a batch)`. Empty sessions (no user message) are NOT saved. `alpi -c` / `--continue` resumes the most recent one and adopts its id.
+Turn-based JSON: `turns: [{at, user, tools[], assistant}]` plus cumulative metrics. `ToolLog` carries `at, name, args, result (truncated hint), ok, duration_s, reasoning (non-empty only on first tool of a batch)`. Empty sessions (no user message) are NOT saved.
+
+**TUI resume.** Bare `alpi` resumes the most recent session when `tui.auto_resume: true`; `-c` / `--continue` is the manual override.
+
+**Gateway per-chat threading (v0.2.54).** Each inbound message carries `external_chat_id` (a Telegram chat id, or the sender email for IMAP/Gmail). `alpi/session_map.py` holds a pointer map at `~/.alpi/sessions/_gateway_map.json`: `{chat_id: session_id}`. When the gateway spawns `alpi chat --once --resume-chat <chat_id>`, the CLI consults the map — if there's a pointer, that session is loaded and continued; otherwise a fresh session starts and the pointer gets bound after save. Same mechanism across every platform; the natural semantics fall out of what each puts in `chat_id`: per-chat threading for Telegram, per-sender threading for IMAP / Gmail.
+
+`/new` (wired up in AK) calls `session_map.forget(chat_id)` — the pointer drops but the underlying session file stays on disk. Historical threads remain searchable via `session_search`.
 
 ### Security model
 
