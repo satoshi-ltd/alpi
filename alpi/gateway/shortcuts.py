@@ -113,13 +113,17 @@ def _status(chat_id: str, home: Path) -> str:
     except Exception:  # noqa: BLE001
         return f"session {sid}: (unreadable)"
     turns = len(data.get("turns") or [])
+    tok_in = data.get("input_tokens", 0)
+    tok_out = data.get("output_tokens", 0)
+    # Rendered with MarkdownV2 (see alpi/gateway/platforms/_md2.py):
+    # `**x**` becomes bold, specials in values are auto-escaped.
     return (
-        f"session {sid}\n"
-        f"  model     {data.get('model', '?')}\n"
-        f"  turns     {turns}\n"
-        f"  tokens    in={data.get('input_tokens', 0):,}"
-        f" out={data.get('output_tokens', 0):,}\n"
-        f"  cost      ${data.get('cost_usd', 0.0):.4f}"
+        f"**session {sid}**\n"
+        f"\n"
+        f"**model**  {data.get('model', '?')}\n"
+        f"**turns**  {turns}\n"
+        f"**tokens** in={tok_in:,}  out={tok_out:,}  total={tok_in + tok_out:,}\n"
+        f"**cost**   ${data.get('cost_usd', 0.0):.4f}"
     )
 
 

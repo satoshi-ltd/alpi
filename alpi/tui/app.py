@@ -14,7 +14,7 @@ from textual.widgets import Input
 from alpi import config, home, memory
 from alpi.engine import AgentEvent, Engine
 from alpi.tui.screens import (
-    CostPanel,
+    StatusPanel,
     FloatingPanel,
     HelpPanel,
     McpPanel,
@@ -104,7 +104,7 @@ class AlpiApp(App):
         from textual.suggester import SuggestFromList
         from alpi import __version__ as alpi_version
         slash_commands = [
-            "/help", "/memory", "/tools", "/mcps", "/cost", "/clear", "/new",
+            "/help", "/memory", "/tools", "/mcps", "/status", "/clear", "/new",
             "/compact", "/skills", "/model", "/workspace",
             "/exit", "/quit",
         ]
@@ -361,7 +361,7 @@ class AlpiApp(App):
             "memory": lambda _a: self._show_panel(MemoryPanel(self.home)),
             "tools": lambda _a: self._show_panel(ToolsPanel()),
             "mcps": lambda _a: self._show_panel(McpPanel(self.engine._mcp_clients)),
-            "cost": lambda _a: self._show_panel(CostPanel(self.engine.session)),
+            "status": lambda _a: self._show_panel(StatusPanel(self.engine.session)),
             "clear": lambda _a: self._cmd_clear(),
             "new": lambda _a: self._cmd_new(),
             "compact": lambda _a: self._cmd_compact(),

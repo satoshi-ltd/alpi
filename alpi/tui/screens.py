@@ -130,7 +130,7 @@ class HelpPanel(FloatingPanel):
         ("memory",    "show USER.md, MEMORY.md and personality.md"),
         ("tools",     "list available tools"),
         ("mcps",      "list running MCP servers"),
-        ("cost",      "session cost breakdown"),
+        ("status",    "session snapshot — model, turns, tokens, cost"),
         ("skills",    "list installed skills"),
         ("clear",     "clear chat history (keeps session)"),
         ("new",       "start a fresh session (new id, history wiped)"),
@@ -273,26 +273,48 @@ def _short(desc: str, max_chars: int = 130) -> str:
     return head
 
 
-class CostPanel(FloatingPanel):
-    panel_title = "/cost"
+def _status_rows(session) -> list[tuple[str, str]]:  # noqa: ANN001
+    """``/status`` rows in (label, value) form. Pure — tested directly
+    without Textual's widget tree."""
+    mins, secs = divmod(int(session.elapsed), 60)
+    turns = len(getattr(session, "turns", []) or [])
+    return [
+        ("model",   session.model),
+        ("turns",   str(turns)),
+        ("elapsed", f"{mins:02d}:{secs:02d}"),
+        ("tokens",  f"in={session.input_tokens:,}  out={session.output_tokens:,}"
+                    f"  total={session.input_tokens + session.output_tokens:,}"),
+        ("cost",    f"${session.cost_usd:.4f}"),
+    ]
+
+
+class StatusPanel(FloatingPanel):
+    """/status — session snapshot. Same shape as the Telegram ``/status``
+    shortcut so users see one consistent view across surfaces."""
+
+    panel_title = "/status"
 
     def __init__(self, session) -> None:  # noqa: ANN001
         super().__init__()
         self.sess = session
 
     def compose_body(self) -> ComposeResult:
-        mins, secs = divmod(int(self.sess.elapsed), 60)
-        body = (
-            f"- **session** `{self.sess.id}`\n"
-            f"- **model** `{self.sess.model}`\n"
-            f"- **elapsed** {mins:02d}:{secs:02d}\n\n"
-            f"**tokens**\n\n"
-            f"- input: {self.sess.input_tokens:,}\n"
-            f"- output: {self.sess.output_tokens:,}\n"
-            f"- total: {self.sess.input_tokens + self.sess.output_tokens:,}\n\n"
-            f"**cost** ${self.sess.cost_usd:.4f}\n"
-        )
-        yield VerticalScroll(Markdown(body))
+        from rich.text import Text
+
+        rows = _status_rows(self.sess)
+        width = max(len(label) for label, _ in rows)
+
+        title = Text()
+        title.append("session ", style="bold")
+        title.append(self.sess.id, style="bold")
+        yield Static(title)
+        yield Static("")
+        for label, value in rows:
+            row = Text()
+            row.append(label.ljust(width), style="bold")
+            row.append("  ")
+            row.append(value)
+            yield Static(row)
 
 
 class SkillsPanel(FloatingPanel):
