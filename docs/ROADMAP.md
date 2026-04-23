@@ -58,8 +58,9 @@ Audience: the creator (@soyjavi) and any future contributor reading the repo col
 | AP | Profile scaffold: drop `.env.example` | ✅ shipped (v0.2.53) — `config.seed_defaults()` no longer writes `~/.alpi/.env.example`. The wizards (`alpi setup`) are the canonical onboarding path; CONFIG.md is the canonical key reference for non-interactive setups. Removes the double-authoring drift risk (example was already out of sync with the Ollama multi-endpoint reshape). |
 | AQ | Voice mode polish — STT + TTS quality + continuous mode | 🔵 backlog |
 | AR | v0.3 production release — website + content rewrite | 🔵 v0.3 gate — blocks the cut |
-| AS.1 | ALPI-to-ALPI protocol — design doc + inter-profile prototype | 🔵 v0.3 — research-first |
-| AS.2 | ALPI-to-ALPI protocol — inter-machine `peer` gateway | 🔵 v0.4 — depends on AS.1 |
+| ALP.1 | Alpi Link Protocol — spec + intra-profile prototype (Unix socket, `link.ping` / `link.ask` / `link.cancel`) | 🔵 v0.3 |
+| ALP.2 | Alpi Link Protocol — inter-machine Noise-protocol transport | 🔵 v0.4 — depends on ALP.1 |
+| ALP.3 | Alpi Link Protocol — shared rooms (group chat, humans optional) | 🔵 v0.4 or v0.5 — depends on ALP.1 |
 | AT | Audit system prompt + tool descriptions vs hermes | 🔵 backlog — research first |
 | AU | Gateway/Schedule service — ops UX polish | ✅ shipped (v0.2.58) — `gateway stop` / `schedule stop` now warn when the daemon is under launchd/systemd (KeepAlive will bounce it back); new `gateway restart` / `schedule restart` verbs stop + poll for the service-managed relaunch; `alpi doctor` compares the `alpi` binary mtime against the daemon's elapsed time and warns "run `alpi X restart`" when the process is running stale code after a reinstall. |
 | AV | Sandbox: whitelist `/dev/null` so `git` works under sandbox-exec / bwrap | ✅ shipped (v0.2.59) — macOS sandbox profile now grants `file-write*` on the standard character devices (`/dev/null`, `/dev/zero`, `/dev/random`, `/dev/urandom`, `/dev/tty`, `/dev/stdin`, `/dev/stdout`, `/dev/stderr`). Linux bwrap already exposes them via `--dev /dev`. Regression tests cover the reported `git log` failure end-to-end. |
@@ -76,7 +77,7 @@ release. The bar for "ship v0.2" is **clean docs + version bump +
 real-use validation across a few sessions** — not feature
 exhaustiveness.
 
-**Nothing open for v0.2.** Everything the original roadmap promised is shipped. Still open for v0.3: **AI, AJ, AO, AQ, AS.1, AT** (see individual entries below). Cutting **v0.3.0** is gated by **AR** (production release — website + content rewrite). **AS.2** (inter-machine `peer` gateway) is scoped for v0.4. Long-term candidates: **H** (Home Assistant — blocked on confirmation), **N** (image gen), **U** (Signal), **Σ.1 / Σ.2** (stretch goals). Rejected: **C** (OpenAI Codex OAuth) and **V** (Anthropic OAuth) on ToS grounds (see Principles); **J** (camoufox) after humanised Playwright made it redundant.
+**Nothing open for v0.2.** Everything the original roadmap promised is shipped. Still open for v0.3: **AI, AJ, ALP.1, AO, AQ, AT** (see individual entries below). Cutting **v0.3.0** is gated by **AR** (production release — website + content rewrite). **ALP.2** (inter-machine Noise transport) and **ALP.3** (shared rooms) are scoped for v0.4 / v0.5. Long-term candidates: **H** (Home Assistant — blocked on confirmation), **N** (image gen), **U** (Signal), **Σ.1 / Σ.2** (stretch goals). Rejected: **C** (OpenAI Codex OAuth) and **V** (Anthropic OAuth) on ToS grounds (see Principles); **J** (camoufox) after humanised Playwright made it redundant.
 
 Once the v0.3 cycle picks up a few of those + a fresh CHANGELOG
 entry summarises v0.2, bump to `v0.3.0` and reopen the table.
@@ -237,38 +238,42 @@ v0.3 is the first release intended for public consumption. That implies a presen
 
 v0.3.0 doesn't ship until AR lands. The code is already v0.3-shaped (CLI shrunk, observability in, doctor live, centralised logs); what's missing is the narrative to back it.
 
-### AS.1. ALPI-to-ALPI protocol — design doc + inter-profile prototype (v0.3)
+### ALP — Alpi Link Protocol
 
-Lets two alpi instances talk to each other. AS.1 is the groundwork: a research doc that picks the wire shape, and a working inter-profile prototype on the same machine. Inter-machine (AS.2) builds on this once the protocol is validated.
+alpi agents couldn't talk to each other. ALP is alpi's own closed protocol for agent↔agent: intra-profile on the same machine, inter-machine over the public internet, shared rooms for N-agent workspaces. Security + privacy are hard requirements — every message is signed + encrypted, every peer is explicitly pinned (no discovery, no TOFU), every capability is fail-closed. Spec at `docs/ALP.md`. Three phases.
 
-**Use cases to validate first.** Before drawing protocol diagrams, lock the two concrete scenarios that justify the work. Candidates:
+### ALP.1 — Spec + intra-profile prototype (v0.3)
 
-- **Cross-profile handoff.** `alpi -p work` kicks a long job, `alpi -p personal` gets notified when it's done.
-- **Remote delegation.** TUI on a laptop with a small local model asks the home-server (bigger model) to do heavy research.
-- **Federated memory read.** "What did my work alpi note about the Acme project last week?" from inside the personal profile.
-- **Backup responder.** Inbound Telegram reaches any reachable alpi; whichever is online handles it.
+Ships the foundation: `docs/ALP.md` with the wire format + security model locked, plus a working intra-profile prototype on the same machine over a Unix-domain socket.
 
-Pick two and design against those. Over-generalising before the use cases are sharp is the main failure mode.
+**Verbs.**
 
-**Design axes to settle.**
+- `link.ping(nonce) → link.pong(nonce, version, agent_name)` — liveness / version handshake.
+- `link.ask(prompt, budget?) → link.reply(text, tokens, cost, session_id)` — one-shot ask another profile, reply comes back through the same session-threading machinery as a Telegram inbound.
+- `link.cancel(session_id)` — abort a running remote turn (Ctrl-C propagation).
 
-- **Topology.** Peer-to-peer with a per-profile peer list, central broker, or mesh discovery. For 2–5 nodes, explicit peer lists win — simpler, no SPOF.
-- **Transport.** HTTP/JSON-RPC, MCP-over-SSE, or WebSocket. MCP is tempting (we already speak it); weigh whether each alpi registers as an MCP server to its peers.
-- **Auth + integrity.** Long-lived bearer tokens in `.env` rotate poorly. Ed25519 keypairs per profile, messages signed + optionally encrypted, is only marginally harder and ages better.
-- **Capability model.** Every peer declares what tools / memory namespaces it accepts from others, fail-closed. A peer with `can_read_memory=true, can_call_terminal=false` is a read-only neighbour.
-- **Addressing.** `profile@host` where `host` is a user-picked hostname resolvable via the peer list. Stable across IP changes, no mDNS dependency.
+**Transport.** Unix-domain socket at `~/.alpi/<profile>/alp.sock`, served by the gateway daemon. Envelopes signed with the profile's long-term Ed25519 key (at `~/.alpi/<profile>/secrets/alp_key.{pem,pub}`, 0600). Unknown-peer / bad-sig → drop before routing.
+
+**Capability model.** `~/.alpi/<profile>/peers.yaml` pins per-peer pubkey + `allow:` list. Missing method → `-32001 capability-denied`. Missing peer → envelope never parsed.
+
+**Client surface.** New tool `agent_ask(target, prompt)` in `alpi/tools/` — the agent calls it like any other tool; the other profile's tool loop + approval gate + cost accounting run as a normal turn.
 
 **Deliverables.**
 
-1. `docs/PROTOCOL.md` — picked topology + transport + auth with the rationale.
-2. An inter-profile prototype on the same machine (local socket, no TLS, no firewall) exercising signing + capability enforcement on one of the two picked use cases.
-3. A clear cut line showing what slides to AS.2.
+1. `docs/ALP.md` — the bundle spec (envelope, signing, verbs, error codes, security model).
+2. `alpi/alp/` package — envelope / keys / peers / server / client.
+3. `alpi/tools/agent_ask.py`.
+4. `alpi setup → Peers` wizard (add / remove / view pubkey + capabilities).
+5. `alpi doctor` row for ALP (key present, socket listening, peers reachable).
+6. Tests: envelope roundtrip, signature verification, capability enforcement, end-to-end ask between two profiles on one machine.
 
-### AS.2. ALPI-to-ALPI protocol — inter-machine `peer` gateway (v0.4)
+### ALP.2 — Inter-machine Noise-protocol transport (v0.4)
 
-Depends on AS.1. A new gateway type in `alpi/gateway/platforms/peer.py`: an HTTPS listener that accepts signed messages from remote peers, runs them through the same allowlist + audit machinery as Telegram/IMAP, and replies. TLS, routing, discovery, and NAT traversal all land here.
+Depends on ALP.1. New gateway platform `alpi/gateway/platforms/alp.py` — TCP listener with Noise_XK handshake producing forward-secret session keys, per-peer AEAD encryption on top. Explicitly NOT HTTPS: we use Noise (same framework as WireGuard) so we don't drag TLS's 30-year legacy of downgrade attacks and cert-management headaches into a peer-to-peer tool. Peer entry gains `address: host:port`. Same verbs as ALP.1, different transport. Tailscale / WireGuard as a network-layer front-end is the blessed deployment; direct public-internet exposure is supported but discouraged.
 
-Scope intentionally deferred until AS.1 validates the protocol — dropping into TLS before the capability model is settled is the wrong order.
+### ALP.3 — Shared rooms (v0.4 or v0.5)
+
+Depends on ALP.1. First-class group-chat workspaces — N alpis (different profiles, different machines) post into a shared transcript; a human can join via TUI `/room` or stay out entirely. Hub model (the room creator holds transcript + group key), not gossip. Per-room agent budget and kill switch as safety levers. New verbs (`room.create`, `room.join`, `room.post`, `room.pull`, `room.leave`, `room.pause`), rekey on member leave.
 
 ### AT. Audit system prompt + tool descriptions vs hermes
 
