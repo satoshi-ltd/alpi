@@ -94,10 +94,15 @@ def test_status_reads_session_file(tmp_path: Path) -> None:
     }))
     session_map.set(tmp_path, "chat-1", "sess-abc")
     reply = shortcuts.handle(shortcuts.Shortcut("status", ""), "chat-1", tmp_path)
-    assert "sess-abc" in reply
-    assert "claude-sonnet-4-6" in reply
-    assert "1,234" in reply
-    assert "$0.0042" in reply
+    # Title and each field wrapped in **…** so MarkdownV2 renders them bold.
+    assert "**session sess-abc**" in reply
+    assert "**model**" in reply and "claude-sonnet-4-6" in reply
+    assert "**turns**" in reply
+    assert "**tokens**" in reply
+    assert "in=1,234" in reply and "out=567" in reply and "total=1,801" in reply
+    assert "**cost**" in reply and "$0.0042" in reply
+    # Blank line between title and the field rows.
+    assert "**session sess-abc**\n\n" in reply
 
 
 def test_status_without_session(tmp_path: Path) -> None:
