@@ -193,14 +193,13 @@ def _load_env(home: Path) -> None:
 
 def _configure_logging(home: Path) -> None:
     from logging.handlers import RotatingFileHandler
+    from alpi._log import FORMAT, MAX_BYTES, log_path
 
-    log_dir = home / "gateway" / "logs"
-    log_dir.mkdir(parents=True, exist_ok=True)
-    log_file = log_dir / "gateway.log"
-    # Single file, auto-truncated at 1 MB.
-    file_handler = RotatingFileHandler(log_file, maxBytes=1_000_000, backupCount=0)
+    path = log_path(home, "gateway")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    file_handler = RotatingFileHandler(path, maxBytes=MAX_BYTES, backupCount=0)
     logging.basicConfig(
         level=logging.INFO,
-        format="%(asctime)s %(levelname)s %(name)s %(message)s",
+        format=FORMAT,
         handlers=[file_handler, logging.StreamHandler()],
     )

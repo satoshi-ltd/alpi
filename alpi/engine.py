@@ -284,6 +284,35 @@ class Engine:
                 tools=turn_tools,
                 started_at=turn_started,
             )
+            self._log_agent_turn(
+                user_text, final_assistant, turn_tools,
+                elapsed=time.time() - turn_started,
+            )
+
+    def _log_agent_turn(
+        self, user_text: str, assistant: str,
+        turn_tools: list, elapsed: float,
+    ) -> None:
+        """Append a one-liner per turn to the cross-session agent log.
+
+        Complements ``session/*.json`` — those carry the full detail; this
+        is the grep-able index ("what did I ask yesterday across sessions").
+        """
+        try:
+            from alpi._log import get_subsystem_logger
+            logger = get_subsystem_logger(self.home, "agent")
+            user_preview = (user_text or "").replace("\n", " ")
+            if len(user_preview) > 120:
+                user_preview = user_preview[:117] + "..."
+            tool_names = ",".join(t.name for t in turn_tools) if turn_tools else "-"
+            logger.info(
+                "session=%s elapsed=%.2fs tools=%s reply_chars=%d cost=$%.4f user=%r",
+                self.session.id, elapsed, tool_names,
+                len(assistant or ""), float(self.session.cost_usd or 0.0),
+                user_preview,
+            )
+        except Exception:  # noqa: BLE001
+            pass
 
     def _finalize_interrupt(self, emit: EventSink) -> None:
         emit(AgentEvent(kind="interrupted",

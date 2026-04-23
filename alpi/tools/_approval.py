@@ -178,7 +178,32 @@ def classify(cmd: str) -> tuple[Severity, str]:
     return Severity.SAFE, ""
 
 
+def _log_decision(cmd: str, decision: Decision) -> None:
+    """Append one line per non-SAFE decision to the approval audit log."""
+    try:
+        from alpi._log import get_subsystem_logger
+        from alpi.home import get_home
+        logger = get_subsystem_logger(get_home(), "approval")
+        verdict = "ALLOW" if decision.allowed else "DENY"
+        # Truncate the command — audit, not forensics; full text lives in the session.
+        preview = cmd if len(cmd) <= 160 else cmd[:157] + "..."
+        logger.info(
+            "%s severity=%s pattern=%r reason=%r cmd=%r",
+            verdict, decision.severity.value, decision.pattern,
+            decision.reason, preview,
+        )
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def check(cmd: str) -> Decision:
+    decision = _check_inner(cmd)
+    if decision.severity != Severity.SAFE:
+        _log_decision(cmd, decision)
+    return decision
+
+
+def _check_inner(cmd: str) -> Decision:
     severity, desc = classify(cmd)
     if severity == Severity.SAFE:
         return Decision(allowed=True, severity=severity)
