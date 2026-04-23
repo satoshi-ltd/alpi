@@ -82,13 +82,13 @@ def test_persist_model_writes_config_yaml(tmp_path: Path) -> None:
     assert saved["model"] == "anthropic/claude-sonnet-4-6"
 
 
-def test_read_current_model_uses_config_default_when_empty(tmp_path: Path) -> None:
-    """Empty config.yaml → config.load() fills the seeded default. Picker
-    still parses a valid provider/model pair."""
+def test_read_current_model_is_empty_when_config_has_no_model(tmp_path: Path) -> None:
+    """Empty config.yaml → empty model. Fresh scaffolds no longer ship a
+    default; the user picks via `alpi setup → Model` (see docs/MODELS.md)."""
     (tmp_path / "config.yaml").write_text(yaml.safe_dump({}))
     provider, model = tg._read_current_model(tmp_path)
-    assert provider           # any non-empty slug is fine
-    assert "/" in model
+    assert provider == ""
+    assert model == ""
 
 
 def test_read_current_model_parses_slash(tmp_path: Path) -> None:

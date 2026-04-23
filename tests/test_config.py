@@ -12,10 +12,12 @@ def test_seed_writes_defaults(tmp_home_no_env: Path) -> None:
 
 
 def test_load_uses_defaults_when_fresh(tmp_home_no_env: Path) -> None:
+    """Fresh scaffold ships with an empty model — the setup wizard is the
+    canonical path to pick one. See docs/MODELS.md for recommendations."""
     config.seed_defaults(tmp_home_no_env)
     cfg = config.load(tmp_home_no_env)
     assert cfg.home == tmp_home_no_env
-    assert cfg.model.startswith("openrouter/")
+    assert cfg.model == ""
 
 
 def test_save_roundtrips(tmp_home_no_env: Path) -> None:
