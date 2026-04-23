@@ -490,6 +490,11 @@ class AlpiApp(App):
         if not panels:
             return
         w = event.widget
+        # If the clicked widget is already detached from the DOM (e.g. the
+        # click selected an OptionList row which swapped panels), leave the
+        # new panel alone — otherwise the post-swap bubble dismisses it.
+        if w is None or not getattr(w, "is_mounted", True):
+            return
         while w is not None:
             if isinstance(w, FloatingPanel):
                 return

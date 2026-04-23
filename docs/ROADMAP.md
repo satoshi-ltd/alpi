@@ -46,7 +46,7 @@ Audience: the creator (@soyjavi) and any future contributor reading the repo col
 | Z | OSV malware check (skills + MCP installers) | ✅ shipped (v0.2.20) |
 | Σ.1 | Mixture-of-agents tool (ensemble inference) | 🔵 stretch goal — not planned, tracked for later |
 | Σ.2 | RL training / fine-tuning hooks | 🔵 stretch goal — not planned, tracked for later |
-| AH | TUI polish (panels, lists, markdown, misc) | 🔵 backlog — needs scoping (see below) |
+| AH | TUI panel list rendering unified with CLI style | ✅ shipped (v0.2.51) — new `alpi/tui/list_row.py` helper with `row_text` + `build_options`. Selectable panels (`/model` providers, `/model` models, approval, `/help`) render entries as `glyph name · muted-description` with a leading `◆` in the profile accent marking the configured/active row. `/help` now runs the picked slash command on enter/click. Display-only panels (`/tools`, `/mcps`, `/skills`) keep their two-line `entry-name` / `entry-desc` stack — that reads better for content than for choices. |
 | AI | Memory v2: better generation + TUI panel | 🔵 backlog — research first (see below) |
 | AJ | Browser realism: session persistence + login state + deeper antibot | 🔵 backlog |
 | AK | Telegram: richer reply formatting + command shortcuts | 🔵 backlog |

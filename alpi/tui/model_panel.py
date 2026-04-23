@@ -57,17 +57,21 @@ class ProviderPanel(FloatingPanel):
         self.call_after_refresh(self._focus)
 
     def _focus(self) -> None:
+        if not self.is_mounted:
+            return
         try:
             olist = self.query_one(OptionList)
-        except Exception:
+        except Exception:  # noqa: BLE001
             return
         if self._active_idx is not None:
             olist.highlighted = self._active_idx
         olist.focus()
 
     def _build_options(self) -> list[Option]:
+        from alpi.tui.list_row import build_options
+
         active_head = self.cfg.model.split("/", 1)[0]
-        options: list[Option] = []
+        items: list[tuple[str, str, str]] = []
 
         or_models = (
             self.cfg.providers.get("openrouter", {}).get("models", []) or []
@@ -81,24 +85,18 @@ class ProviderPanel(FloatingPanel):
             if p.name == "openrouter" and not or_models:
                 continue
             self._providers[p.name] = p
-            label = Text()
-            label.append(f"{p.display:<14}", style="bold")
-            label.append("  ")
-            label.append(p.description)
-            if p.name == active_head:
-                self._active_idx = len(options)
-            options.append(Option(label, id=p.name))
+            items.append((p.name, p.display, p.description))
 
         for p in prov_mod.ollama(self.cfg.providers.get("ollama", [])):
             self._providers[p.name] = p
-            label = Text()
-            label.append(f"{p.name:<14}", style="bold")
-            label.append("  ")
-            label.append(p.url)
-            if p.name == active_head:
-                self._active_idx = len(options)
-            options.append(Option(label, id=p.name))
+            items.append((p.name, p.name, p.url))
 
+        accent = self.app.theme_variables.get("accent")
+        options = build_options(items, active_key=active_head, accent=accent)
+        for idx, item in enumerate(items):
+            if item[0] == active_head:
+                self._active_idx = idx
+                break
         return options
 
     def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
@@ -130,30 +128,49 @@ class ModelListPanel(FloatingPanel):
         self.call_after_refresh(self._load_models)
 
     def _load_models(self) -> None:
+        from alpi.tui.list_row import build_options
+
+        # call_after_refresh can fire after the panel was dismissed (e.g. the
+        # click that opened us also triggered an outside-click dismiss). Bail
+        # quietly — there's nothing to render into anymore.
+        if not self.is_mounted:
+            return
+
         error = self.app.theme_variables.get("error", "red")
         try:
             models = self.provider.list_models()
         except Exception as e:  # noqa: BLE001
-            status = self.query_one("#fetch-status", Static)
+            try:
+                status = self.query_one("#fetch-status", Static)
+            except Exception:  # noqa: BLE001
+                return
             err = Text()
             err.append("failed to load models: ", style=error)
             err.append(str(e), style=error)
             status.update(err)
             return
 
-        olist = self.query_one("#model-options", OptionList)
+        try:
+            olist = self.query_one("#model-options", OptionList)
+        except Exception:  # noqa: BLE001
+            return
         active = self.cfg.model
+        accent = self.app.theme_variables.get("accent")
+
+        items: list[tuple[str, str, str]] = []
         for i, m in enumerate(models):
             opt_id = f"m{i}"
             self._model_ids[opt_id] = m.id
-            label = Text()
-            label.append(m.display, style="bold")
-            if m.note:
-                label.append("  ")
-                label.append(m.note)
+            items.append((opt_id, m.display, m.note or ""))
             if m.id == active:
                 self._active_idx = i
-            olist.add_option(Option(label, id=opt_id))
+
+        active_opt_id = next(
+            (opt_id for opt_id, mid in self._model_ids.items() if mid == active),
+            None,
+        )
+        for opt in build_options(items, active_key=active_opt_id, accent=accent):
+            olist.add_option(opt)
 
         self.query_one("#fetch-status", Static).display = False
         if self._active_idx is not None:

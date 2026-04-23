@@ -107,7 +107,9 @@ ToolCard.-error {
 }
 
 OptionList > .option-list--option {
-    color: $text-muted;
+    color: $foreground;
+    padding: 0 0;
+    text-wrap: nowrap;
 }
 
 OptionList > .option-list--option-hover {

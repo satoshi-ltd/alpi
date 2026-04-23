@@ -6,7 +6,8 @@ from pathlib import Path
 
 from textual.app import ComposeResult
 from textual.containers import Container, Horizontal, VerticalScroll
-from textual.widgets import Markdown, Static
+from textual.widgets import Markdown, OptionList, Static
+from textual.widgets.option_list import Option
 
 
 class FloatingPanel(Container):
@@ -61,6 +62,10 @@ class FloatingPanel(Container):
         height: auto;
         max-height: 18;
         scrollbar-size: 0 0;
+        padding: 0 0;
+    }
+    FloatingPanel VerticalScroll {
+        padding: 0 0;
     }
     FloatingPanel .entry-name {
         color: $accent;
@@ -71,6 +76,17 @@ class FloatingPanel(Container):
         color: $text-muted;
         height: auto;
         margin-bottom: 1;
+    }
+    FloatingPanel .list-row {
+        height: 1;
+    }
+    FloatingPanel .help-section {
+        color: $text-muted;
+        margin-top: 1;
+        margin-bottom: 0;
+    }
+    FloatingPanel .help-section:first-of-type {
+        margin-top: 0;
     }
     FloatingPanel Markdown {
         background: transparent;
@@ -109,29 +125,69 @@ class FloatingPanel(Container):
 class HelpPanel(FloatingPanel):
     panel_title = "/help"
 
+    _COMMANDS: list[tuple[str, str]] = [
+        ("help",      "this panel"),
+        ("memory",    "show USER.md, MEMORY.md and personality.md"),
+        ("tools",     "list available tools"),
+        ("mcps",      "list running MCP servers"),
+        ("cost",      "session cost breakdown"),
+        ("skills",    "list installed skills"),
+        ("clear",     "clear chat history (keeps session)"),
+        ("new",       "start a fresh session (new id, history wiped)"),
+        ("compact",   "summarize history to save tokens"),
+        ("model",     "change model / provider"),
+        ("workspace", "show or set the sandbox root"),
+        ("exit",      "quit"),
+    ]
+
+    _KEYS: list[tuple[str, str]] = [
+        ("Enter",  "send message"),
+        ("Ctrl+C", "quit"),
+        ("Ctrl+L", "clear chat"),
+        ("Ctrl+Y", "copy last assistant reply"),
+        ("Esc",    "close panel"),
+    ]
+
     def compose_body(self) -> ComposeResult:
-        body = (
-            "**Slash commands**\n\n"
-            "- `/help` — this panel\n"
-            "- `/memory` — show USER.md, MEMORY.md and personality.md\n"
-            "- `/tools` — list available tools\n"
-            "- `/mcps` — list running MCP servers\n"
-            "- `/cost` — session cost breakdown\n"
-            "- `/skills` — list installed skills\n"
-            "- `/clear` — clear chat history (keeps session)\n"
-            "- `/new` — start a fresh session (new id, history wiped)\n"
-            "- `/compact` — summarize history to save tokens\n"
-            "- `/model` — change model / provider\n"
-            "- `/workspace` — show or set the sandbox root\n"
-            "- `/exit` — quit\n\n"
-            "**Keybindings**\n\n"
-            "- `Enter` — send message\n"
-            "- `Ctrl+C` — quit\n"
-            "- `Ctrl+L` — clear chat\n"
-            "- `Ctrl+Y` — copy last assistant reply\n"
-            "- `Esc` — close panel\n"
-        )
-        yield VerticalScroll(Markdown(body))
+        from alpi.tui.list_row import build_options, name_width, row_text
+
+        cmd_items = [(k, f"/{k}", desc) for k, desc in self._COMMANDS]
+        # No active key — /help is a palette, nothing is "currently selected".
+        # with_marker=False kills the 2-char prefix so rows align with the
+        # section header instead of sitting indented inside the highlight bar.
+        options = build_options(cmd_items, with_marker=False)
+        yield Static("slash commands — select to run", classes="help-section")
+        yield OptionList(*options, id="help-commands", compact=True)
+
+        key_width = name_width([k for k, _ in self._KEYS])
+        yield Static("keybindings", classes="help-section")
+        with VerticalScroll(id="help-keys"):
+            for key, desc in self._KEYS:
+                yield Static(
+                    row_text(key, desc, width=key_width, with_marker=False),
+                    classes="list-row",
+                )
+
+    def on_mount(self) -> None:
+        self.call_after_refresh(self._focus_list)
+
+    def _focus_list(self) -> None:
+        if not self.is_mounted:
+            return
+        try:
+            self.query_one("#help-commands", OptionList).focus()
+        except Exception:  # noqa: BLE001
+            pass
+
+    def on_option_list_option_selected(
+        self, event: OptionList.OptionSelected,
+    ) -> None:
+        cmd = event.option.id
+        if not cmd:
+            return
+        self.remove()
+        # Defer so the panel is fully gone before the next one (if any) mounts.
+        self.app.call_after_refresh(self.app._handle_slash, f"/{cmd}")
 
 
 class MemoryPanel(FloatingPanel):
@@ -291,11 +347,6 @@ def _read_frontmatter(path: Path) -> dict:
     return meta
 
 
-from rich.text import Text as _RichText
-from textual.widgets import OptionList
-from textual.widgets.option_list import Option
-
-
 _APPROVAL_CSS = """
 OptionList {
     background: transparent !important;
@@ -326,14 +377,10 @@ class ApprovalPanel(FloatingPanel):
         self.panel_title = f"⚠ {severity.upper()} · {pattern}"
 
     def compose_body(self) -> ComposeResult:
+        from alpi.tui.list_row import build_options
         yield Static(self._command, classes="entry-desc")
-        options: list[Option] = []
-        for key, lab, hint in self._OPTIONS:
-            label = _RichText()
-            label.append(f"{lab:<10}", style="bold")
-            label.append("  ")
-            label.append(hint)
-            options.append(Option(label, id=key))
+        accent = self.app.theme_variables.get("accent")
+        options = build_options(list(self._OPTIONS), accent=accent)
         yield OptionList(*options, id="approval-options", compact=True)
 
     def on_mount(self) -> None:
