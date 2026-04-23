@@ -78,6 +78,19 @@ def _wizard(
             subtitle="add an MCP server",
             home=home,
         )
+        ui.dim(
+            "MCPs let alpi load extra tools from external servers (GitHub,\n"
+            "Notion, …). You specify the command that spawns the server\n"
+            "and any env vars it needs.\n"
+            "\n"
+            "Example — GitHub MCP:\n"
+            "  Command:  npx\n"
+            "  Args:     -y @modelcontextprotocol/server-github\n"
+            "  Env:      GITHUB_TOKEN\n"
+            "\n"
+            "Full registry: github.com/modelcontextprotocol/servers\n"
+        )
+        ui._console.print("")
         name = ui.text("Short name (e.g. github, notion):")
         if not name:
             return ui.cancelled()
