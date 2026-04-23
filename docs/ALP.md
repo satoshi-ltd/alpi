@@ -64,7 +64,7 @@ with one of them is cut rather than the principle.
 - **Peer.** Another agent that the local profile has pinned, by
   pubkey, in its peer list. Peering is asymmetric by default —
   pinning B from A does not imply A is pinned from B.
-- **Peer list.** A YAML file (`~/.alpi/<profile>/peers.yaml`)
+- **Peer list.** A YAML file (`~/.alpi/<profile>/alp/peers.yaml`)
   that enumerates the agents this profile will accept traffic
   from and send traffic to, along with per-peer capabilities
   and budgets.
@@ -84,8 +84,8 @@ Each profile owns a long-term Ed25519 keypair, stored on the
 filesystem:
 
 ```
-~/.alpi/<profile>/secrets/alp_key.pem    # private, mode 0600
-~/.alpi/<profile>/secrets/alp_key.pub    # public,  mode 0644
+~/.alpi/<profile>/alp/secrets/alp_key.pem    # private, mode 0600
+~/.alpi/<profile>/alp/secrets/alp_key.pub    # public,  mode 0644
 ```
 
 The base64 encoding of the public key is the agent's
@@ -96,7 +96,7 @@ relationship that referenced the old key.
 For human readability, each peer entry also carries a short
 string `id` (e.g. `personal`, `home-server`). This `id` is used
 in logs, user interfaces, and calls such as
-`agent_ask("personal", …)`. It is **not** the cryptographic
+`peer(peer_id="personal", …)`. It is **not** the cryptographic
 identity: if an attacker registers the same `id` with a
 different pubkey, signature verification rejects the message
 before any `id`-based routing occurs.
@@ -140,14 +140,17 @@ before any `id`-based routing occurs.
 | `pubkey` | yes | Base64-encoded Ed25519 public key. |
 | `address` | for inter-machine | `host:port`. Omit for intra-profile peers. |
 | `allow` | yes | Fail-closed list of methods the peer may invoke. |
-| `budget.tokens_per_day` | no | Hard daily token cap. Exceeding returns `-32005`. |
-| `budget.usd_per_day` | no | Hard daily spend cap. Ollama and other free-inference setups omit this. |
-| `rate_limit.requests_per_minute` | no | Throttle. Default allows 10/min/peer. |
+| `budget.tokens_per_day` | no | Hard daily token cap. Exceeding returns `-32005`. Spec-only in ALP.1 — enforcement lands in ALP.2. |
+| `budget.usd_per_day` | no | Hard daily spend cap. Ollama and other free-inference setups omit this. Spec-only in ALP.1. |
+| `rate_limit.requests_per_minute` | no | Throttle. Default allows 10/min/peer. Spec-only in ALP.1. |
 
 Both budget fields are independent and optional. Budgets are
 **global per peer** — they cover every inbound method from that
 peer, including posts inside shared rooms. Budgets reset at UTC
-midnight; unused allowance does not carry over.
+midnight; unused allowance does not carry over. ALP.1 accepts
+these fields in `peers.yaml` and parses them without effect; the
+runtime enforcement (ledger, reset timer, `-32005` on breach)
+ships with ALP.2.
 
 The token budget has a secondary purpose beyond cost control: a
 tight cap forces the caller to be concise, which keeps inter-
@@ -159,8 +162,12 @@ peer traffic goal-directed instead of chatty.
 
 ### Intra-machine — Unix-domain socket
 
-Path: `~/.alpi/<profile>/alp.sock`, served by the profile's
-gateway daemon, mode `0600`. Filesystem permissions gate access
+Path: `~/.alpi/<profile>/alp/alp.sock`, served by the profile's
+ALP listener daemon (`alpi alp start`), mode `0600`. The listener
+runs as its own service (launchd / systemd); it is deliberately
+separate from the gateway daemon so `alpi` instances that never
+expose Telegram / email still participate in ALP. Filesystem
+permissions gate access
 to the socket file; every envelope on the socket is still signed
 as a second, orthogonal layer of defence.
 

@@ -375,7 +375,7 @@ def _check_services(home: Path, profile: str) -> list[Check]:
     out: list[Check] = []
 
     bin_mtime = _alpi_binary_mtime()
-    for name in ("gateway", "schedule"):
+    for name in ("gateway", "schedule", "alp"):
         backend = service.installed(name, profile)
         pid = _live_pid(home, name)
         if backend and pid:
@@ -383,8 +383,7 @@ def _check_services(home: Path, profile: str) -> list[Check]:
             if stale:
                 out.append(Check(
                     "Services", name.capitalize(), "warn",
-                    f"running via {backend} (pid {pid}) — binary is newer "
-                    f"than the process; run `alpi {name} restart` to load it",
+                    f"running — stale binary — `alpi {name} restart` to reload",
                 ))
             else:
                 out.append(Check(
@@ -395,10 +394,16 @@ def _check_services(home: Path, profile: str) -> list[Check]:
             out.append(Check("Services", name.capitalize(), "warn",
                              f"installed via {backend} but no live pid"))
         else:
-            status: Status = "info" if name == "gateway" else "warn"
-            detail = ("not installed — `alpi setup → Schedule service` to enable"
-                      if name == "schedule" else "not installed")
+            status: Status = "info" if name in ("gateway", "alp") else "warn"
+            if name == "schedule":
+                detail = "not installed — `alpi setup → Schedule service` to enable"
+            elif name == "alp":
+                detail = "not installed — `alpi setup → ALP service` to enable"
+            else:
+                detail = "not installed"
             out.append(Check("Services", name.capitalize(), status, detail))
+
+    out.extend(_check_alp(home))
 
     jobs_file = home / "schedule" / "jobs.json"
     if jobs_file.exists():
@@ -411,6 +416,99 @@ def _check_services(home: Path, profile: str) -> list[Check]:
             out.append(Check("Services", "Jobs", "info", f"{n} scheduled"))
 
     return out
+
+
+def _check_alp(home: Path) -> list[Check]:
+    """ALP-specific sub-checks beyond service liveness: identity key
+    present, socket listening, pinned peers reachable. Granular enough
+    that a failure tells the user exactly which piece to fix."""
+    import socket as _socket
+    out: list[Check] = []
+
+    # Identity key — loadable Ed25519 pair?
+    try:
+        from alpi.alp.keys import exists as key_exists, load as key_load
+        if key_exists(home):
+            try:
+                key_load(home)
+                out.append(Check("ALP", "Identity", "ok", "Ed25519 keypair present"))
+            except Exception as e:  # noqa: BLE001
+                out.append(Check("ALP", "Identity", "fail",
+                                 f"key files exist but failed to load: {e}"))
+        else:
+            out.append(Check("ALP", "Identity", "info",
+                             "no keypair yet — generated on first `alpi alp start`"))
+    except Exception as e:  # noqa: BLE001
+        out.append(Check("ALP", "Identity", "fail", f"keys module error: {e}"))
+
+    # Socket — listening?
+    sock_path = home / "alp" / "alp.sock"
+    if sock_path.exists():
+        s = _socket.socket(_socket.AF_UNIX, _socket.SOCK_STREAM)
+        s.settimeout(0.5)
+        try:
+            s.connect(str(sock_path))
+            out.append(Check("ALP", "Socket", "ok", f"listening on {sock_path}"))
+        except (ConnectionRefusedError, OSError) as e:
+            out.append(Check("ALP", "Socket", "warn",
+                             f"stale socket at {sock_path}: {e}"))
+        finally:
+            s.close()
+    else:
+        out.append(Check("ALP", "Socket", "info",
+                         "not listening — install the ALP service or run `alpi alp start`"))
+
+    # Peers — pinned and reachable?
+    try:
+        from alpi.alp import peers as peers_mod
+        pinned = peers_mod.load(home)
+    except Exception as e:  # noqa: BLE001
+        out.append(Check("ALP", "Peers", "fail", f"peers.yaml error: {e}"))
+        return out
+
+    if not pinned:
+        out.append(Check("ALP", "Peers", "info", "none pinned"))
+        return out
+
+    reachable = 0
+    remote = 0
+    unreachable: list[str] = []
+    for p in pinned:
+        if p.address is not None:
+            remote += 1
+            continue
+        peer_sock = _peer_socket_path(p.id)
+        if not peer_sock.exists():
+            unreachable.append(p.id)
+            continue
+        s = _socket.socket(_socket.AF_UNIX, _socket.SOCK_STREAM)
+        s.settimeout(0.5)
+        try:
+            s.connect(str(peer_sock))
+            reachable += 1
+        except (ConnectionRefusedError, OSError):
+            unreachable.append(p.id)
+        finally:
+            s.close()
+
+    total = len(pinned)
+    parts = [f"{reachable}/{total - remote} reachable"]
+    if remote:
+        parts.append(f"{remote} remote (ALP.2)")
+    if unreachable:
+        parts.append(f"offline: {', '.join(unreachable)}")
+    detail = " · ".join(parts)
+    status: Status = "ok" if not unreachable else "warn"
+    if total == remote:
+        status = "info"
+    out.append(Check("ALP", "Peers", status, detail))
+    return out
+
+
+def _peer_socket_path(peer_id: str) -> Path:
+    if peer_id == "default":
+        return Path.home() / ".alpi" / "alp" / "alp.sock"
+    return Path.home() / ".alpi" / "profiles" / peer_id / "alp" / "alp.sock"
 
 
 def _alpi_binary_mtime() -> float | None:
@@ -585,6 +683,8 @@ def _live_pid(home: Path, name: str) -> int | None:
     if name == "gateway":
         from alpi.gateway.run import pid_path
         p = pid_path(home)
+    elif name == "alp":
+        p = home / "alp" / "alp.pid"
     else:
         from alpi.scheduler.run import pid_path
         p = pid_path(home)

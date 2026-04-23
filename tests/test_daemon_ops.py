@@ -188,5 +188,5 @@ def test_doctor_flags_stale_binary(tmp_path: Path, monkeypatch) -> None:
     checks = doctor._check_services(tmp_path, "default")
     gateway_row = next(c for c in checks if c.name == "Gateway")
     assert gateway_row.status == "warn"
-    assert "binary is newer" in gateway_row.detail
+    assert "stale binary" in gateway_row.detail
     assert "alpi gateway restart" in gateway_row.detail

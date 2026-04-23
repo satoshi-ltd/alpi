@@ -48,6 +48,36 @@ async def _process(platform: Platform, msg: IncomingMessage, home: Path) -> None
     # resolves locally from session_map + config.yaml — no LLM round-trip.
     from alpi.gateway import shortcuts as shortcuts_mod
 
+    # ALP @peer mentions route directly through link.ask — no local
+    # LLM turn. Same parser + executor as the TUI so ``@mirai hi``
+    # from Telegram behaves exactly like it does in the TUI.
+    from alpi.alp import mention as alp_mention
+
+    parsed_mention = alp_mention.parse(msg.text)
+    if parsed_mention is not None:
+        # Mirror the tool-trace UX from the LLM path: if the platform has
+        # ``show_tool_trace`` on, emit a ``◆ peer · peer_id=…`` line first
+        # so the user sees the same "tool call happened" feedback whether
+        # the ``peer`` tool was invoked by the LLM or by an @-mention.
+        platform_cfg = _load_platform_cfg(home, platform.name)
+        if bool(platform_cfg.get("show_tool_trace", True)):
+            trace = _format_tool_trace({
+                "name": "peer",
+                "preview": f"peer_id={parsed_mention.peer_id}",
+            })
+            await platform.send(OutgoingMessage(
+                external_chat_id=msg.external_chat_id, text=trace,
+            ))
+        result = await alp_mention.execute(
+            home, parsed_mention.peer_id, parsed_mention.prompt,
+        )
+        reply_text = result.reply if result.ok else f"[{parsed_mention.peer_id}] {result.error}"
+        if reply_text.strip():
+            await platform.send(OutgoingMessage(
+                external_chat_id=msg.external_chat_id, text=reply_text,
+            ))
+        return
+
     cmd = shortcuts_mod.parse(msg.text)
     if cmd is not None:
         # /model on Telegram opens an interactive inline-keyboard picker —

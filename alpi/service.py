@@ -67,7 +67,7 @@ def _detect_backend() -> str | None:
 
 
 def _validate_name(name: str) -> None:
-    if name not in {"gateway", "schedule"}:
+    if name not in {"gateway", "schedule", "alp"}:
         raise ServiceError(f"unknown daemon name: {name!r}")
 
 
