@@ -236,7 +236,7 @@ Design choices worth knowing before tweaking config:
   gets the reasoning back.
 - **Slash commands auto-suggest.** `/help`, `/memory`, `/tools`,
   `/mcps`, `/cost`, `/clear`, `/new`, `/compact`, `/skills`, `/model`,
-  `/workspace`, `/exit`, `/quit`. Typing `/` opens a fuzzy prefix
+  `/exit`, `/quit`. Typing `/` opens a fuzzy prefix
   suggester over that list.
 - **Responsive.** The top bar collapses labels when the terminal is
   narrower than 60 columns; long paths are home-dir-abbreviated to

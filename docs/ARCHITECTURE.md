@@ -252,7 +252,7 @@ Textual 8.2.x. Layout: `AlpiTopBar` (identity) + chat scroll (`VerticalScroll.an
 - For models emitting `reasoning_content` separately (R1, o-series, Claude extended thinking), the tail (last 80 chars) replaces `thinking…` inside the live spinner. Dropped when the first content token or tool call arrives.
 - `tui.show_reasoning` (default `true`) hides both channels when `false`; data is still persisted, the engine still emits.
 
-**Slash commands**: `/help`, `/memory`, `/tools`, `/cost`, `/skills`, `/clear`, `/new`, `/compact`, `/model`, `/workspace`, `/exit`. All surface-panels are `FloatingPanel`s on the overlay layer docked above the input strip, dismissed by Esc or click-outside. Header (`$surface-lighten-1` tint) shows the command name; body scrolls with `max-height: 18`. The five info panels (`screens.py`) are read-only; `/model` (`model_panel.py`) is interactive — subclasses focus an `OptionList` / `Input` in `on_mount` via `call_after_refresh` so selection and navigation work while the panel floats.
+**Slash commands**: `/help`, `/memory`, `/tools`, `/mcps`, `/status`, `/skills`, `/clear`, `/new`, `/compact`, `/model`, `/exit`. All surface-panels are `FloatingPanel`s on the overlay layer docked above the input strip, dismissed by Esc or click-outside. Header (`$surface-lighten-1` tint) shows the command name; body scrolls with `max-height: 18`. The info panels (`screens.py`) are read-only; `/help` and `/model` (`model_panel.py`) are interactive — subclasses focus an `OptionList` / `Input` in `on_mount` via `call_after_refresh` so selection and navigation work while the panel floats. Configuration verbs (workspace, gateways, sandbox, …) live exclusively in `alpi setup` — the TUI is for chat and inspection, not for editing the profile.
 
 **Interrupt on new input**: typing while a turn runs cancels it. `engine.interrupt_requested` polled at 3 points; long-running tools (`research`) poll `tool_state.is_interrupted()`. Skipped tool calls get a `[skipped — user interrupted]` tool message to preserve OpenAI's pairing invariant.
 
@@ -339,7 +339,7 @@ Threat model: prompt injection via email/web content + direct user input (truste
 
 ### Workspace
 
-`cfg.workspace` (or `cwd` fallback if unset) is the **default root for relative paths** — not a wall. File tools and terminal can reach absolute paths anywhere except the sensitive denylist. Real workspace-only isolation is the opt-in OS sandbox (Layer 2). `/workspace` slash sets it interactively.
+`cfg.workspace` (or `cwd` fallback if unset) is the **default root for relative paths** — not a wall. File tools and terminal can reach absolute paths anywhere except the sensitive denylist. Real workspace-only isolation is the opt-in OS sandbox (Layer 2). Configure it via `alpi setup → Workspace`; the TUI top bar read-outs the resolved path but does not edit it.
 
 ### `_state.py` — global tool state callbacks
 

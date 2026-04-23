@@ -106,7 +106,7 @@ class AlpiApp(App):
         from alpi import __version__ as alpi_version
         slash_commands = [
             "/help", "/memory", "/tools", "/mcps", "/status", "/clear", "/new",
-            "/compact", "/skills", "/model", "/workspace",
+            "/compact", "/skills", "/model",
             "/exit", "/quit",
         ]
         yield AlpiTopBar(
@@ -142,7 +142,7 @@ class AlpiApp(App):
         short = str(cwd).replace(str(Path.home()), "~")
         self._mount_message(ErrorLine(
             f"no workspace set — alpi can touch everything under {short}. "
-            f"Run /workspace <path> to narrow the scope."
+            f"Pin one via `alpi setup → Workspace` to narrow the scope."
         ))
 
     def _maybe_warn_model(self) -> None:
@@ -375,7 +375,6 @@ class AlpiApp(App):
             "compact": lambda _a: self._cmd_compact(),
             "skills": lambda _a: self._cmd_skills(),
             "model": lambda _a: self._cmd_model(),
-            "workspace": lambda a: self._cmd_workspace(a),
             "exit": lambda _a: self.action_quit(),
             "quit": lambda _a: self.action_quit(),
         }
@@ -508,60 +507,6 @@ class AlpiApp(App):
                 return
             w = w.parent
         self._dismiss_panels()
-
-    def _cmd_workspace(self, arg: str) -> None:
-        if not arg:
-            suggested = self.cfg.workspace or str(self._effective_workspace())
-            inp = self.query_one(Input)
-            inp.value = f"/workspace {suggested}"
-            inp.action_end()
-            inp.focus()
-            return
-        if arg.lower() == "clear":
-            self._apply_workspace("")
-            return
-        self._apply_workspace(arg)
-
-    def _apply_workspace(self, raw: str) -> None:
-        raw = (raw or "").strip()
-        if not raw:
-            self._mount_message(DimLine("workspace unchanged"))
-            return
-        if raw.lower() == "clear":
-            self.cfg.workspace = ""
-            config.save(self.cfg)
-            self.cfg = config.load(self.home)
-            self._mount_message(DimLine("workspace cleared — using cwd"))
-            self._refresh_top_bar()
-            return
-        try:
-            p = Path(raw).expanduser().resolve()
-        except Exception as e:  # noqa: BLE001
-            self._mount_message(ErrorLine(f"bad path: {e}"))
-            return
-        if not p.is_dir():
-            self._mount_message(ErrorLine(
-                f"not a directory (or doesn't exist): {p}"
-            ))
-            return
-        self.cfg.workspace = str(p)
-        config.save(self.cfg)
-        self.cfg = config.load(self.home)
-        self._mount_message(DimLine(f"workspace set to {p}"))
-        self._refresh_top_bar()
-
-    def _refresh_top_bar(self) -> None:
-        self.query_one(AlpiTopBar).set_state(
-            profile=self._profile_name(),
-            path=str(self._effective_workspace()),
-            workspace_set=self.cfg.workspace_path is not None,
-            sandbox=self.cfg.tools.terminal.sandbox,
-            network_locked=(
-                self.cfg.tools.terminal.sandbox
-                and not self.cfg.tools.terminal.allow_network
-            ),
-            profile_size=home.profile_size_label(self.home),
-        )
 
     def _cmd_model(self) -> None:
         from alpi.tui.model_panel import ProviderPanel
