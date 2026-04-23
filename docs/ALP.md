@@ -21,6 +21,14 @@ interoperate with third-party agents. Its scope is limited to
 what alpi needs. That constraint keeps the attack surface narrow
 and the specification auditable end to end.
 
+> "Privacy isn't a feature. It's the foundation — everything else
+> is built on top."
+> — [Satoshi Ltd.](https://www.satoshi-ltd.com/), publisher of alpi.
+
+ALP is the wire-level expression of that principle. End-to-end
+encryption, pinned identity, fail-closed capabilities, and no
+discovery layer are consequences, not features.
+
 This document is the normative reference for all three modes.
 It defines the wire format, the transport bindings, the
 authentication and capability model, the message verbs, and the

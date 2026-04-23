@@ -1,371 +1,336 @@
 # Roadmap
 
-Status of in-progress work, plans for the next cycle, and a brief log of
-what's already shipped. For technical reference of what's currently in
-the codebase see [ARCHITECTURE.md](ARCHITECTURE.md).
+Open work for alpi. Shipped work lives in
+[CHANGELOG.md](../CHANGELOG.md) — this file never repeats it. For
+technical reference of what currently ships, see
+[ARCHITECTURE.md](ARCHITECTURE.md).
 
-Audience: the creator (@soyjavi) and any future contributor reading the repo cold.
+Audience: the creator ([@soyjavi](https://github.com/soyjavi)) and
+any future contributor reading the repo cold.
+
+Legend: 🔵 backlog · 🟡 next up · ⏸ blocked.
 
 ---
 
-## Now — v0.2 in progress
+## Open items
 
-| ID | Item | Status |
-|---|---|---|
-| A | `send_message` outbound messaging | ✅ shipped (commit 6e31ace) |
-| B | Interactive browser (Playwright) | ✅ shipped (v0.2.16) |
-| C | OpenAI Codex provider (ChatGPT subscription auth) | ❌ rejected — ToS violation, see "Principles" |
-| D | Vision (`read_image`) | ✅ shipped (v0.2.4) |
-| E | Multi-profile CLI | ✅ shipped (commit 630f97c) |
-| F | Gateway workspace validation | ✅ shipped (commit 04bdaba) |
-| G | Terminal + code execution OS sandbox | ✅ shipped opt-in/experimental (commit e78b428) |
-| H | Home Assistant integration | ⏸ blocked on user confirmation |
-| I | MCP client | ✅ shipped (commit 0d376ac) |
-| J | Anti-bot browsing (camoufox) | ❌ dismissed — humanised Playwright (v0.2.36) covers the real detection surface; camoufox adds +230 MB Firefox for marginal gain |
-| K | Scroll resilience under heavy streaming | ✅ shipped (commit 9ed4139 — `VerticalScroll.anchor()`) |
-| L | Reasoning-as-state (TUI) | ✅ shipped (commits 62f7fa7 + fd1fec4) |
-| M | TTS / STT / voice-mode (local-first) | ✅ shipped (v0.2.25, 2 tools + Telegram voice inbound/outbound, no continuous voice mode) |
-| N | Image generation | 🔵 backlog — no concrete use case yet |
-| AA | Cleanup wizard (`alpi setup → Cleanup`) | ✅ shipped (v0.2.39) |
-| AB | Gateway service install/uninstall wizard | ✅ shipped (v0.2.40, simpler scope than originally drafted — per-profile toggle, not a full split) |
-| AC | Auto-generated CHANGELOG.md from commits | ✅ shipped (v0.2.48) — `alpi release notes [--since REV] [-o FILE]` parses `git log`, treats `pyproject.toml` version-bump commits as release boundaries, groups commits by `type:` prefix within each version. Initial CHANGELOG.md reconstructs the full v0.1.0 → v0.2.48 history (44 releases). |
-| AD | CLI surface shrink + unified `alpi logs` + scheduler auto-install | ✅ shipped (v0.2.42) — dropped `gateway {stop,status,install,uninstall,logs}` / `schedule {stop,status,install,uninstall,logs}` / `mcp list`; daemon entrypoints hidden; one `alpi logs [--source]` replaces the per-subsystem tails; scheduler installs silently on first run |
-| AE | Centralised `~/.alpi/logs/` + `approval` / `agent` audit trails | ✅ shipped (v0.2.43) — all subsystem logs flattened into one dir; new `approval.log` (security audit of non-SAFE command decisions) and `agent.log` (one line per turn: cross-session grep index for "what has alpi been doing") |
-| AG | First-time help text in gateway/MCP wizards | ✅ shipped (v0.2.47) — Telegram (BotFather + @userinfobot), IMAP (hosts, ports, app password, fail-closed allowlist), MCP add (what MCPs are + GitHub example + registry link). Only shown when no value is configured yet, so editing flows stay terse. |
-| AF | `alpi doctor` health check | ✅ shipped (v0.2.45) — **live** audit: Telegram `getMe`, IMAP login, Gmail token refresh, MCP spawn+handshake, service PID liveness, workspace + API-key presence, sandbox backend. Parallel execution with per-check timeouts; total runtime ≈ slowest single check (~8s on a working profile, bounded to ~15s on a broken one). Reachable from CLI and `alpi setup → Health check`. Exit 1 on fail. |
-| R.1 | Research step-counter in state label | ✅ shipped (v0.2.2) |
-| R.2 | `delegate` — write-capable sub-agent | ✅ shipped (v0.2.3, named `delegate` not `delegate_task`) |
-| R.3 | Batch parallel sub-agents (`tasks[]`) | ✅ shipped (v0.2.18) |
-| S | `read_image` auto-resize (cost saver) | ✅ shipped (v0.2.21) |
-| T | Gmail API (OAuth2) gateway | ✅ shipped (v0.2.23, 2 commits: T.1 rename + T.2 full Gmail) |
-| U | Signal gateway (signal-cli) | 🔵 backlog — requires dedicated phone number |
-| V | Anthropic subscription OAuth | ❌ rejected — ToS violation, see "Principles" |
-| W | Approval system (dangerous cmd + session allowlist) | ✅ shipped (v0.2.37) |
-| X | Schedule prompt threat-scan | ✅ shipped (v0.2.20) |
-| Y | Tool result budget / truncation | ✅ shipped (v0.2.20) |
-| Z | OSV malware check (skills + MCP installers) | ✅ shipped (v0.2.20) |
-| Σ.1 | Mixture-of-agents tool (ensemble inference) | 🔵 stretch goal — not planned, tracked for later |
-| Σ.2 | RL training / fine-tuning hooks | 🔵 stretch goal — not planned, tracked for later |
-| AH | TUI panel list rendering unified with CLI style | ✅ shipped (v0.2.51) — new `alpi/tui/list_row.py` helper with `row_text` + `build_options`. Selectable panels (`/model` providers, `/model` models, approval, `/help`) render entries as `glyph name · muted-description` with a leading `◆` in the profile accent marking the configured/active row. `/help` now runs the picked slash command on enter/click. Display-only panels (`/tools`, `/mcps`, `/skills`) keep their two-line `entry-name` / `entry-desc` stack — that reads better for content than for choices. |
-| AI | Memory v2: better generation + TUI panel | 🔵 backlog — research first (see below) |
-| AJ | Browser realism: session persistence + login state + deeper antibot | 🔵 backlog |
-| AK.1 | Telegram: `/help /status /new /continue /model` shortcuts + native command menu (`setMyCommands`) + interactive `/model` picker (inline-keyboard drill-down) | ✅ shipped (v0.2.56) |
-| AK.2 | Telegram: MarkdownV2 reply rendering | ✅ shipped (v0.2.57) |
-| AL | `alpi` auto-resumes last session by config | ✅ shipped (v0.2.50) — new `tui.auto_resume` flag (default `false`). When `true`, bare `alpi` behaves as if `-c` was passed; `/new` inside the TUI still starts a fresh thread. `alpi chat --once` (scripts + gateway) always starts clean. Explicit `-c` stays as a manual override. |
-| AM | Dependency audit (drop/upgrade, security-first) | ✅ shipped — dropped the unused `gateway` extra (python-telegram-bot, fastapi, uvicorn — zero imports; gateways use raw httpx). Added `pip-audit` to the `dev` extra. Clean CVE report across the full lockfile. Also caught `litellm.telemetry = True` as a default and flipped it off in `llm.py::_silence_litellm()` (regression test in `tests/test_llm_privacy.py`). Docs: `ARCHITECTURE.md → Dependencies` (why each dep), `SECURITY.md → Third-party code` (per-dep risk profile + policy). |
-| AN | Gateway session model — per-chat persistence | ✅ shipped (v0.2.54) — new `alpi/session_map.py` holds a `{chat_id: session_id}` pointer map per profile; the gateway spawns `alpi chat --once --resume-chat <chat_id>` and the CLI consults the map to resume that chat's thread (or binds a fresh one). Same mechanism across Telegram / IMAP / Gmail — natural per-platform semantics fall out of the `external_chat_id` each platform uses. Session files are never deleted by the pointer logic; historical threads stay searchable. |
-| AO | Default skills bundle (writer / coder / webmaster …) | 🔵 backlog — research first |
-| AP | Profile scaffold: drop `.env.example` | ✅ shipped (v0.2.53) — `config.seed_defaults()` no longer writes `~/.alpi/.env.example`. The wizards (`alpi setup`) are the canonical onboarding path; CONFIG.md is the canonical key reference for non-interactive setups. Removes the double-authoring drift risk (example was already out of sync with the Ollama multi-endpoint reshape). |
-| AQ | Voice mode polish — STT + TTS quality + continuous mode | 🔵 backlog |
-| AR | v0.3 production release — website + content rewrite | 🔵 v0.3 gate — blocks the cut |
-| ALP.1 | Alpi Link Protocol — spec + intra-profile prototype (Unix socket, `link.ping` / `link.ask` / `link.cancel`) | ✅ shipped — `docs/ALP.md` spec (envelope, signing, verbs, errors, security model); `alpi/alp/` package (keys, envelope, peers, server, client, handlers, mention, setup); `peer` tool + TUI `@peer` gesture + `/peers` panel + Telegram `/peers` + gateway inbound interception; `alpi alp start/stop/restart` as a first-class service (launchd / systemd) with doctor row; `alpi setup → Peers` wizard with identity + probe (●/○/?). Budget + rate-limit fields parse but enforcement moves to ALP.2. |
-| ALP.2 | Alpi Link Protocol — inter-machine Noise-protocol transport + budget / rate-limit enforcement | 🔵 v0.4 — depends on ALP.1 |
-| ALP.3 | Alpi Link Protocol — shared rooms (group chat, humans optional) | 🔵 v0.4 — depends on ALP.1 |
-| AT | Audit system prompt + tool descriptions vs hermes | 🔵 backlog — research first |
-| AU | Gateway/Schedule service — ops UX polish | ✅ shipped (v0.2.58) — `gateway stop` / `schedule stop` now warn when the daemon is under launchd/systemd (KeepAlive will bounce it back); new `gateway restart` / `schedule restart` verbs stop + poll for the service-managed relaunch; `alpi doctor` compares the `alpi` binary mtime against the daemon's elapsed time and warns "run `alpi X restart`" when the process is running stale code after a reinstall. |
-| AV | Sandbox: whitelist `/dev/null` so `git` works under sandbox-exec / bwrap | ✅ shipped (v0.2.59) — macOS sandbox profile now grants `file-write*` on the standard character devices (`/dev/null`, `/dev/zero`, `/dev/random`, `/dev/urandom`, `/dev/tty`, `/dev/stdin`, `/dev/stdout`, `/dev/stderr`). Linux bwrap already exposes them via `--dev /dev`. Regression tests cover the reported `git log` failure end-to-end. |
-| AW | Memory: drop user-name nominalization ("Javi wants…" → "user wants…") — identity lives in USER.md | ✅ shipped (v0.2.60) — memory tool's description + `content` parameter now explicitly instruct neutral "user" voice in `MEMORY.md`; existing entries stay intact (no automated rewrite). |
-| AX | TUI: activity indicator while resuming a long session | ✅ shipped (v0.2.64) — new `ResumeActivity` widget (spinner + "resuming last session…" at 10 fps, accent-coloured) sits between the top bar and the chat scroll. Worker rehydrates the session + builds every replay widget in memory, then drops the activity bar and `chat.mount(*widgets)` mounts all of them in a single batch so Textual repaints once. No widget-by-widget streaming. |
-| AY | TUI: rename `/cost` → `/status`, align output shape with the Telegram shortcut | ✅ shipped (v0.2.61) |
-| AZ | Move workspace configuration from `/workspace` slash to `alpi setup` | ✅ shipped — Workspace lives as the first entry of the second group in `alpi setup`; `/workspace` slash and its handlers are out of the TUI. The "no workspace set" warning on launch stays and now points at `alpi setup → Workspace`. |
+| ID | Item | Target | Status |
+|---|---|---|---|
+| AR | v0.3 production release — website + content rewrite | v0.3 | 🟡 v0.3 gate — blocks the cut |
+| AT | Audit system prompt + tool descriptions vs hermes | v0.3 | 🔵 research first |
+| AI | Memory v2 — better generation + TUI panel | v0.3 | 🔵 research first |
+| AJ | Browser realism — session persistence + login state + deeper antibot | v0.3 | 🔵 |
+| AO | Default skills bundle (writer / coder / webmaster …) | v0.3 | 🔵 research first |
+| AQ | Voice mode polish — STT + TTS quality + continuous mode | v0.3 | 🔵 |
+| ALP.2 | Alpi Link Protocol — inter-machine Noise-protocol transport + budget / rate-limit enforcement | v0.4 | 🔵 — depends on ALP.1 (shipped) |
+| ALP.3 | Alpi Link Protocol — shared rooms (group chat, humans optional) | v0.4 | 🔵 — depends on ALP.1 (shipped) |
+| H | Home Assistant integration | long-term | ⏸ blocked on user confirmation |
+| N | Image generation | long-term | 🔵 no concrete use case yet |
+| U | Signal gateway (signal-cli) | long-term | 🔵 requires dedicated phone number |
+| Σ.1 | Mixture-of-agents tool (ensemble inference) | stretch | 🔵 not planned, tracked for later |
+| Σ.2 | RL training / fine-tuning hooks | stretch | 🔵 not planned, tracked for later |
 
-### What's left to call v0.2 done
-
-The minimum-viable shape of v0.2 is what's already shipped. Anything
-else listed under "🔵 backlog" can move to v0.3 without blocking
-release. The bar for "ship v0.2" is **clean docs + version bump +
-real-use validation across a few sessions** — not feature
-exhaustiveness.
-
-**Nothing open for v0.2.** Everything the original roadmap promised is shipped. Still open for v0.3: **AI, AJ, AO, AQ, AT** (see individual entries below). Cutting **v0.3.0** is gated by **AR** (production release — website + content rewrite). **ALP.2** (inter-machine Noise transport + budget/rate-limit enforcement) and **ALP.3** (shared rooms) are both scoped for v0.4. Long-term candidates: **H** (Home Assistant — blocked on confirmation), **N** (image gen), **U** (Signal), **Σ.1 / Σ.2** (stretch goals). Rejected: **C** (OpenAI Codex OAuth) and **V** (Anthropic OAuth) on ToS grounds (see Principles); **J** (camoufox) after humanised Playwright made it redundant.
-
-Once the v0.3 cycle picks up a few of those + a fresh CHANGELOG
-entry summarises v0.2, bump to `v0.3.0` and reopen the table.
+v0.3.0 ships when **AR** lands — every other v0.3 row is "nice to
+have before the cut, not required". **ALP.2** + **ALP.3** are firmly
+v0.4.
 
 ---
 
 ## Principles
 
-alpi **respects the ToS of every provider it integrates with**. When an LLM vendor (OpenAI, Anthropic, …) offers a paid subscription for a first-party client (ChatGPT Plus/Pro, Claude Pro/Max, Claude Code), that subscription is for THAT client. Reverse-engineering the private OAuth flow of the official CLI to route a third-party agent against the same quota is:
+alpi **respects the ToS of every provider it integrates with**. When
+an LLM vendor (OpenAI, Anthropic, …) offers a paid subscription for a
+first-party client (ChatGPT Plus/Pro, Claude Pro/Max, Claude Code),
+that subscription is for THAT client. Reverse-engineering the private
+OAuth flow of the official CLI to route a third-party agent against
+the same quota is:
 
 - A clear ToS violation.
 - Disrespectful to the vendor's product boundaries.
-- Unsafe for users (accounts can be banned; the reversed flow can break any time).
+- Unsafe for users (accounts can be banned; the reversed flow can
+  break any time).
 
-The competitor landscape (hermes, similar third-party agents) routinely ships "Codex OAuth" / "Claude Code OAuth" features. **alpi does not, and will not.** If a vendor publishes an official OAuth-for-third-parties flow in the future (documented, stable, bindable), we adopt it then.
+The competitor landscape (hermes, similar third-party agents)
+routinely ships "Codex OAuth" / "Claude Code OAuth" features.
+**alpi does not, and will not.** If a vendor publishes an official
+OAuth-for-third-parties flow in the future (documented, stable,
+bindable), we adopt it then.
 
-**Practical consequence:** users pay per-token API access through their own keys. That cost is honest and visible. Subscription routing is not on the roadmap.
+**Practical consequence:** users pay per-token API access through
+their own keys. That cost is honest and visible. Subscription
+routing is not on the roadmap.
 
-## Backlog — high value, on deck
+See the **Why alpi is built like this** section in
+[README.md](../README.md) for how the six Satoshi Ltd. principles
+(Privacy by Design, User Sovereignty, Security First, Open Source,
+Zero Knowledge, Digital Sovereignty) map to concrete choices in this
+repo.
 
-### H. Home Assistant integration
+---
 
-Only if @soyjavi runs Home Assistant. Hermes has `homeassistant_tool` as a reference. Requires `HA_URL` + a long-lived token in `.env`. Typical uses: read sensors, toggle lights/scenes, query occupancy. **Blocked on confirmation that HA is part of the setup.**
+## v0.3 cycle
 
-### N. Image generation
+### AR. v0.3 production release — website + content rewrite (v0.3 gate)
 
-`generate_image(prompt, style)` using the active vision model or a dedicated endpoint (DALL-E, SD). Useful for "hazme un logo rápido". Low priority unless a concrete use case appears.
+v0.3 is the first release intended for public consumption. That
+implies a presence (static site) and a content pass across
+`README.md`, `docs/*`, and the future landing page aligned with
+[satoshi-ltd.com](https://satoshi-ltd.com):
 
-### AH. Unify TUI list rendering with the CLI
+- **Positioning.** Privacy-first. No telemetry. Local-first,
+  cloud-last. Your keys, your machine, your data.
+- **Competitor framing.** Speak generically about the landscape
+  (hermes-style third-party agents, Claude-style official clients).
+  Avoid naming them gratuitously in marketing copy; when a
+  comparison is needed, state the difference in terms of *what
+  alpi does differently*, not what they do wrong.
+- **Differentiators to lead with.** UX discipline (one wizard, no
+  CLI sprawl), security posture (three-tier approval, OSV malware
+  check, opt-in OS sandbox, fail-closed allowlists), privacy (no
+  hidden network, no telemetry, no account), focused scope (only
+  the tools / skills that pay rent — no kitchen-sink registry).
 
-Every floating panel that shows a list (`/memory`, `/tools`, `/mcps`, `/model`, approval choices, provider picker) currently has its own glyphs, padding, and active-item marker. Align them on the pattern already used by the CLI `ui.menu` after the wizard normalisation: `<name>` left-padded to the max name width in the list, `·` separator, muted `<description>` on the right, active row rendered with the profile accent (matching `row_accent` in `alpi/ui.py`).
+**Deliverables before cutting v0.3.0:**
 
-**Scope.** Touch each panel that inherits from `FloatingPanel` and has a selectable list. Factor the shared renderer out so adding a new panel later doesn't drift the style back. Keep interaction behaviour untouched — this is purely visual alignment.
+1. Static site — single-page, minimal, matching satoshi-ltd.com
+   visual language. Lives in `site/` at the repo root; deploys
+   from there.
+2. README rewrite with the new positioning. Today's README is
+   install-first; the new one leads with why alpi, install is a
+   section.
+3. [`docs/ARCHITECTURE.md`](ARCHITECTURE.md) +
+   [`docs/SECURITY.md`](SECURITY.md) audited for old framing
+   ("experimental", "personal-use", "stretch goal") that no longer
+   fits a production release.
+4. A short launch post for the personal blog / X account —
+   optional, but the effort pays off once.
 
-**Done criterion.** Walking through `/memory`, `/tools`, `/mcps`, `/model`, approval, and provider panels produces rows that are column-aligned with the same glyph + accent treatment in every one.
+v0.3.0 doesn't ship until AR lands. The code is already
+v0.3-shaped (CLI shrunk, observability in, doctor live, centralised
+logs, ALP.1 shipped); what's missing is the narrative to back it.
+
+### AT. Audit system prompt + tool descriptions vs hermes
+
+Research-first. Today `alpi/prompts/system_prompt.md` + each tool's
+description field are our main levers for how the LLM uses alpi.
+They've been tweaked reactively (add a line when a model misbehaves,
+compress when the prompt bloats) but never audited as a whole.
+
+**What to compare.** Hermes is the closest reference codebase (see
+the memory entry for its path). For each alpi tool, read the hermes
+equivalent side by side and note:
+
+- Is our description shorter and still as clear? Longer without
+  paying for it?
+- Are the parameter hints as concrete? Hermes tends to include a
+  one-line "use this when…" at the top of every tool; do we?
+- Do we over-invest in negative instructions ("do NOT…") where a
+  positive example would land better with the LLM?
+- Are there tools where hermes' description consistently produces
+  better calls in our own traffic? The `agent.log` plus session
+  transcripts are the data set.
+
+**System prompt.** Same exercise for `system_prompt.md`: read our
+current version against hermes' system prompt, look for load-bearing
+guidance we're missing or redundant text we can drop. Bias toward
+shorter — every token in the system prompt is paid on every turn.
+
+**Done criterion.** A short report listing the 3–5 concrete edits
+worth making, each with before / after + a rationale tied to
+observed behaviour in `agent.log` or sessions. Apply the edits that
+clear the bar; leave the rest.
+
+**Why research-first.** "Rewrite all tool descriptions" is the easy
+way to waste a week. Measure first, edit surgically.
 
 ### AI. Memory v2 — generation + TUI panel
 
 Two sub-tasks, research-first:
 
-1. **Generation quality.** Revisit the `memory` tool description and body. Open questions: are we writing the right type per signal? Is the 70% Jaccard dedup too loose / too tight? Should the tool take a "confidence" field so low-conf writes auto-expire? Compare against Hermes + the latest public memory patterns (Mem0, Letta) and pick what fits our scope.
-2. **TUI panel.** `/memory` today shows the three files verbatim. Options: section-collapsible view, edit-in-place, "forget this" quick action, filter by type.
+1. **Generation quality.** Revisit the `memory` tool description
+   and body. Open questions: are we writing the right type per
+   signal? Is the 70% Jaccard dedup too loose / too tight? Should
+   the tool take a "confidence" field so low-conf writes
+   auto-expire? Compare against Hermes + the latest public memory
+   patterns (Mem0, Letta) and pick what fits our scope.
+2. **TUI panel.** `/memory` today shows the three files verbatim.
+   Options: section-collapsible view, edit-in-place, "forget this"
+   quick action, filter by type.
 
 Ship 1 first (server-side quality) then 2 (surface improvements).
 
 ### AJ. Browser realism — Cloudflare + captcha survival
 
-Research-first. What exists: Playwright with `playwright-stealth`, humanised typing (v0.2.36), per-profile `browser/state.json`. The open question is whether the current posture clears common anti-bot checkpoints — Cloudflare's "verify you are human" interstitial, Turnstile, hCaptcha challenges when they fire on the agent's traffic.
+Research-first. What exists: Playwright with `playwright-stealth`,
+humanised typing, per-profile `browser/state.json`. The open
+question is whether the current posture clears common anti-bot
+checkpoints — Cloudflare's "verify you are human" interstitial,
+Turnstile, hCaptcha challenges when they fire on the agent's
+traffic.
 
-**Step 1 — measurement.** Build a scorecard script that runs the browser tool against the standard detection sites (`bot.sannysoft.com`, `abrahamjuliot.github.io/creepjs`, the Cloudflare "Are you under attack" demo) and captures what each detector reports. That grounds the gap analysis.
+**Step 1 — measurement.** Build a scorecard script that runs the
+browser tool against the standard detection sites
+(`bot.sannysoft.com`, `abrahamjuliot.github.io/creepjs`, the
+Cloudflare "Are you under attack" demo) and captures what each
+detector reports. That grounds the gap analysis.
 
-**Step 2 — analysis.** With the scorecard in hand, identify the top 3 signals we fail (webdriver flag, audio context fingerprint, canvas, WebGL, timing patterns, …) and decide which are worth closing. Not everything is worth chasing: a perfect stealth score is a moving target and extreme measures (full fingerprint rotation, residential proxy) carry their own risk.
+**Step 2 — analysis.** With the scorecard in hand, identify the
+top 3 signals we fail (webdriver flag, audio context fingerprint,
+canvas, WebGL, timing patterns, …) and decide which are worth
+closing. Not everything is worth chasing: a perfect stealth score
+is a moving target and extreme measures (full fingerprint rotation,
+residential proxy) carry their own risk.
 
-**Step 3 — implementation.** Land the improvements behind the existing `browser` tool surface — no new config knobs unless strictly needed. Session persistence and login-state detection are adjacent concerns that naturally fall out of this work (a cookie-expired page looks different from a logged-in one); fold them in when the detection scaffold makes it cheap.
-
-### AK.1. Telegram shortcuts + interactive /model picker (shipped v0.2.56)
-
-Gateway shortcut parser lives at `alpi/gateway/shortcuts.py`; `_process` in `gateway/run.py` intercepts before spawning an agent turn. Five commands: `/help`, `/status`, `/new`, `/continue`, `/model`. `setMyCommands` runs at Telegram listener startup for both default (DMs) and `all_group_chats` scopes so typing `/` shows the native menu.
-
-`/model` on Telegram specifically opens an interactive inline-keyboard picker: provider grid → model grid, each callback edits the message in place; result persists to `config.yaml`. Callback data stays under Telegram's 64-byte cap (`mp:<slug>`, `mm:<slug>:<model_id>`, `mx` for cancel); model rows whose id would blow the budget are filtered out before send. Per-chat picker state lives on the `Telegram` platform instance — transient, cleared on pick/cancel.
-
-### AK.2. Telegram MarkdownV2 reply rendering (shipped v0.2.57)
-
-`alpi/gateway/platforms/_md2.py::to_markdown_v2(src)` rewrites the subset of Markdown the agent actually emits — `**bold**`, `*italic*`, `` `inline code` ``, fenced code blocks, `[text](url)` links, `#` headers — into Telegram's MarkdownV2 dialect. Strategy is placeholder-based: extract protected regions (code, links) first, rewrite remaining constructs, escape every special character that survived, then restore placeholders. Scope deliberately excludes Telegram-native features (tables, blockquotes, spoilers, strikethrough) that the agent doesn't emit — fold them in when they appear in real transcripts.
-
-Send path in `Telegram.send()` runs every outgoing chunk through the renderer and POSTs with `parse_mode: MarkdownV2`. On a 400 response whose description mentions a parse error, a one-shot fallback resends the chunk as plain text without `parse_mode`, so a renderer bug can't swallow a reply. Same render + fallback applies to attachment captions.
-
-### AL. `alpi` auto-resumes last session by default
-
-Today: `alpi` → fresh session; `alpi -c` → resume most recent. Change: `alpi` behaves like `alpi -c` always, no time limit. The last session is the thread you're in; opening the TUI should pick it up where you left off, the way a text editor reopens the last file. A user who explicitly wants a fresh start has `/new` inside the TUI — that's the only supported path.
-
-**Scope.** Flip the default in `cli.py::main` so `continue_last` is true when the bare subcommand fires; keep `alpi chat --once` starting clean (scripts want deterministic, empty context). No new config key needed — resume is the product behaviour, not a toggle.
-
-### AM. Dependency audit (shipped)
-
-Sweep of `pyproject.toml` with a security + value lens.
-
-Findings:
-
-- `pip-audit` ran clean across the 103-package lockfile. Zero CVEs.
-- The `gateway` optional extra (`python-telegram-bot`, `fastapi`, `uvicorn`) had **zero imports** in the codebase. Telegram uses raw httpx long-poll; IMAP/Gmail use `imaplib`/`httpx`; the webhook platform is a stub. Dropped the extra entirely.
-- Every remaining entry in `dependencies` is actually imported — confirmed by grepping top-level `import`/`from` statements across `alpi/`.
-- **`litellm.telemetry` defaults to `True`** — LiteLLM phones home on every completion unless disabled. Alpi's "no telemetry" principle made this a silent violation. Flipped off in `_silence_litellm()` with a regression test.
-
-Changes landed:
-
-- `pyproject.toml` — removed the `gateway` extra with a comment explaining why, added `pip-audit` to the `dev` extra so `uv run --with pip-audit pip-audit` is a one-liner for future audits.
-- `uv.lock` regenerated — starlette and uvicorn gone from the transitive set.
-- `alpi/llm.py::_silence_litellm()` — added `litellm.telemetry = False` at the import-time guard.
-- `tests/test_llm_privacy.py` — regression test that asserts the flag stays off after importing `alpi.llm`.
-- `docs/ARCHITECTURE.md` — new "Dependencies" section listing every runtime dep with a one-line justification.
-- `docs/SECURITY.md` — new "Third-party code" section with per-dep risk profile, CVE policy, and fallback-plan policy for reverse-engineered integrations (`edge-tts`, `playwright-stealth`, `ddgs`).
-
-Re-run `pip-audit` before each release. New runtime deps require a row in both the ARCHITECTURE table and the SECURITY risk table.
-
-### AN. Gateway session model — analyse and unify
-
-Research-first. Today every inbound message (Telegram / IMAP / Gmail) spawns `alpi chat --once` which implicitly resumes the last global session for the profile. That means a Telegram chat and an email thread collide: context written in one bleeds into the other, and the TUI session interleaves with whatever the gateway did while you were away.
-
-**Step 1 — write down how it actually works today.** Trace `gateway/run.py` + `_run_once` in `cli.py` + `session.py` load/save and document the current behaviour: where the session id is picked, when a new one starts, how `agent.log` associates turns with originator.
-
-**Step 2 — frame the options against real use.**
-
-- **Per-gateway**: one session per channel. Telegram conversation ≠ email thread ≠ TUI. Cleanest for the "these are different contexts" case.
-- **Per-chat / per-sender**: finer-grained (two Telegram groups = two sessions). More accurate to how humans think of messaging, but explodes session count.
-- **Shared / all together**: today's behaviour. Simple but leaky.
-
-**Step 3 — recommend based on how the agent is actually used.** If gateway traffic is low volume and coherent with the TUI thread, "shared" is fine. If it's high volume or topically separate, per-gateway wins. Only after the analysis lands should we pick + implement.
+**Step 3 — implementation.** Land the improvements behind the
+existing `browser` tool surface — no new config knobs unless
+strictly needed. Session persistence and login-state detection are
+adjacent concerns that naturally fall out of this work (a
+cookie-expired page looks different from a logged-in one); fold
+them in when the detection scaffold makes it cheap.
 
 ### AO. Default skills bundle
 
-Today the only bundled skill is `meta/consolidate-memory`. A starter pack would help new users see what skills are for:
+Today the only bundled skill is `meta/consolidate-memory`. A
+starter pack would help new users see what skills are for:
 
-- **writer** — drafting, editing, tone shifting; reusable across essays/emails.
-- **coder** — language-agnostic conventions for the code review + refactor patterns alpi does repeatedly.
-- **webmaster** — site audit, SEO, broken link check via the browser tool.
+- **writer** — drafting, editing, tone shifting; reusable across
+  essays/emails.
+- **coder** — language-agnostic conventions for the code review +
+  refactor patterns alpi does repeatedly.
+- **webmaster** — site audit, SEO, broken link check via the
+  browser tool.
 - Others TBD.
 
-**Research first:** read the hermes skills, scan popular agent-OS patterns (Claude Skills, Cursor Rules, Copilot Instructions), decide what's alpi-shaped vs what's bloat. Land one or two first, watch real usage, then expand.
-
-### AP. Profile scaffold review
-
-Today `home.ensure_home()` creates `memories/`, `secrets/`, `sessions/`, `skills/`, `schedule/output/`, `logs/` + a `.gitignore`. And `config.py::seed_defaults()` drops a `.env.example`. Question: is `.env.example` the right onboarding pattern vs. filling `.env` from the wizards directly?
-
-**Arguments for keeping `.env.example`:** self-documenting, copy-paste friendly, works for non-interactive setups (CI, devcontainers).
-
-**Arguments against:** every key that lives there is also prompted in `alpi setup`, so it's double authoring. New keys added to wizards easily forgotten in the example.
-
-Decide + align. Cheap to do.
+**Research first:** read the hermes skills, scan popular agent-OS
+patterns (Claude Skills, Cursor Rules, Copilot Instructions),
+decide what's alpi-shaped vs what's bloat. Land one or two first,
+watch real usage, then expand.
 
 ### AQ. Voice mode polish — STT + TTS + continuous mode
 
-M (v0.2.25) landed the primitives: a `tts` tool (edge-tts), a `stt` tool (faster-whisper local), Telegram voice inbound/outbound. What's missing is everything that makes voice feel like a first-class surface instead of a pair of utility tools.
+The voice primitives shipped (`tts`, `stt` tools, Telegram voice
+inbound/outbound) but the surface still feels like two utility
+tools, not a first-class mode.
 
 Open areas to evaluate before committing scope:
 
-- **STT quality vs. latency.** Are we on the right whisper model size by default? Do we need VAD (silence trimming) to cut latency? How bad is the current word-error rate on accented speech?
-- **TTS quality + personality.** Edge-tts voices are decent but robotic compared to OpenAI's `tts-1-hd` or ElevenLabs. Trade-off: local-first vs. quality. Maybe a per-profile toggle.
-- **Continuous voice mode.** M shipped without it explicitly — today voice is turn-based (record, transcribe, reply, speak). A push-to-talk or hotword-triggered loop in the TUI would turn voice into a usable mode, not a demo.
-- **Voice output in gateway context.** The autoplay-off-on-gateway fix (v0.2.28) works; still room to improve how voice notes are chunked for Telegram when replies are long.
+- **STT quality vs. latency.** Are we on the right whisper model
+  size by default? Do we need VAD (silence trimming) to cut
+  latency? How bad is the current word-error rate on accented
+  speech?
+- **TTS quality + personality.** Edge-tts voices are decent but
+  robotic compared to OpenAI's `tts-1-hd` or ElevenLabs.
+  Trade-off: local-first vs. quality. Maybe a per-profile toggle.
+- **Continuous voice mode.** Today voice is turn-based (record,
+  transcribe, reply, speak). A push-to-talk or hotword-triggered
+  loop in the TUI would turn voice into a usable mode, not a demo.
+- **Voice output in gateway context.** Autoplay-off-on-gateway
+  works; still room to improve how voice notes are chunked for
+  Telegram when replies are long.
 
-Start with a measurement pass (record a few real prompts, check STT accuracy + TTS latency end-to-end), then pick the two or three biggest wins.
+Start with a measurement pass (record a few real prompts, check STT
+accuracy + TTS latency end-to-end), then pick the two or three
+biggest wins.
 
-### AR. v0.3 production release — website + content rewrite (v0.3 gate)
+---
 
-v0.3 is the first release intended for public consumption. That implies a presence (static site) and a content pass across `README.md`, `docs/*`, and the future landing page aligned with the same voice as [satoshi-ltd.com](https://satoshi-ltd.com):
-
-- **Positioning.** Privacy-first. No telemetry. Local-first, cloud-last. Your keys, your machine, your data.
-- **Competitor framing.** Speak generically about the landscape (hermes-style third-party agents, Claude-style official clients). Avoid naming them gratuitously in marketing copy; when a comparison is needed, state the difference in terms of *what alpi does differently*, not what they do wrong.
-- **Differentiators to lead with.** UX discipline (one wizard, no CLI sprawl), security posture (three-tier approval, OSV malware check, opt-in OS sandbox, fail-closed allowlists), privacy (no hidden network, no telemetry, no account), focused scope (only the tools / skills that pay rent — no kitchen-sink registry).
-
-**Deliverables before cutting v0.3.0:**
-
-1. Static site — single-page, minimal, matching satoshi-ltd.com visual language. Hosted on GitHub Pages or equivalent.
-2. README rewrite with the new positioning. Today's README is install-first; the new one leads with why alpi, install is a section.
-3. `docs/ARCHITECTURE.md` + `docs/SECURITY.md` audited for old framing ("experimental", "personal-use", "stretch goal") that no longer fits a production release.
-4. A short launch post for the personal blog / X account — optional, but the effort pays off once.
-
-v0.3.0 doesn't ship until AR lands. The code is already v0.3-shaped (CLI shrunk, observability in, doctor live, centralised logs); what's missing is the narrative to back it.
+## v0.4 cycle
 
 ### ALP — Alpi Link Protocol
 
-alpi agents couldn't talk to each other. ALP is alpi's own closed protocol for agent↔agent: intra-profile on the same machine, inter-machine over the public internet, shared rooms for N-agent workspaces. Security + privacy are hard requirements — every message is signed + encrypted, every peer is explicitly pinned (no discovery, no TOFU), every capability is fail-closed. Spec at `docs/ALP.md`. Three phases.
-
-### ALP.1 — Spec + intra-profile prototype (v0.3)
-
-Ships the foundation: `docs/ALP.md` with the wire format + security model locked, plus a working intra-profile prototype on the same machine over a Unix-domain socket.
-
-**Verbs.**
-
-- `link.ping(nonce) → link.pong(nonce, version, agent_name)` — liveness / version handshake.
-- `link.ask(prompt, budget?) → link.reply(text, tokens, cost, session_id)` — one-shot ask another profile, reply comes back through the same session-threading machinery as a Telegram inbound.
-- `link.cancel(session_id)` — abort a running remote turn (Ctrl-C propagation).
-
-**Transport.** Unix-domain socket at `~/.alpi/<profile>/alp.sock`, served by the gateway daemon. Envelopes signed with the profile's long-term Ed25519 key (at `~/.alpi/<profile>/secrets/alp_key.{pem,pub}`, 0600). Unknown-peer / bad-sig → drop before routing.
-
-**Capability model.** `~/.alpi/<profile>/peers.yaml` pins per-peer pubkey + `allow:` list. Missing method → `-32001 capability-denied`. Missing peer → envelope never parsed.
-
-**Client surface.** New tool `peer(peer_id, prompt)` in `alpi/tools/` — the agent calls it like any other tool; the other profile's tool loop + approval gate + cost accounting run as a normal turn. TUI also exposes a first-class `@peer rest…` gesture (autocomplete + popup) that calls the same code path without routing through the local LLM.
-
-**Deliverables.**
-
-1. `docs/ALP.md` — the bundle spec (envelope, signing, verbs, error codes, security model).
-2. `alpi/alp/` package — envelope / keys / peers / server / client.
-3. `alpi/tools/peer.py`.
-4. `alpi setup → Peers` wizard (add / remove / view pubkey + capabilities).
-5. `alpi doctor` row for ALP (key present, socket listening, peers reachable).
-6. Tests: envelope roundtrip, signature verification, capability enforcement, end-to-end ask between two profiles on one machine.
+alpi agents couldn't talk to each other. ALP is alpi's own closed
+protocol for agent↔agent: intra-profile on the same machine,
+inter-machine over the public internet, shared rooms for N-agent
+workspaces. Security + privacy are hard requirements — every
+message is signed + encrypted, every peer is explicitly pinned (no
+discovery, no TOFU), every capability is fail-closed. Spec at
+[`docs/ALP.md`](ALP.md). Three phases; ALP.1 (intra-profile) shipped
+in v0.2.68.
 
 ### ALP.2 — Inter-machine Noise-protocol transport (v0.4)
 
-Depends on ALP.1. New gateway platform `alpi/gateway/platforms/alp.py` — TCP listener with Noise_XK handshake producing forward-secret session keys, per-peer AEAD encryption on top. Explicitly NOT HTTPS: we use Noise (same framework as WireGuard) so we don't drag TLS's 30-year legacy of downgrade attacks and cert-management headaches into a peer-to-peer tool. Peer entry gains `address: host:port`. Same verbs as ALP.1, different transport. Tailscale / WireGuard as a network-layer front-end is the blessed deployment; direct public-internet exposure is supported but discouraged.
+Depends on ALP.1. New transport `alpi/alp/noise.py` + gateway
+listener — TCP listener with Noise_XK handshake producing
+forward-secret session keys, per-peer AEAD encryption on top.
+Explicitly NOT HTTPS: we use Noise (same framework as WireGuard)
+so we don't drag TLS's 30-year legacy of downgrade attacks and
+cert-management headaches into a peer-to-peer tool. Peer entry
+gains `address: host:port`. Same verbs as ALP.1, different
+transport. Tailscale / WireGuard as a network-layer front-end is
+the blessed deployment; direct public-internet exposure is
+supported but discouraged.
+
+Also in ALP.2: **budget + rate-limit enforcement**. The
+`peers.yaml` `budget.tokens_per_day`, `budget.usd_per_day`, and
+`rate_limit.requests_per_minute` fields already parse in ALP.1 but
+don't enforce. ALP.2 ships the ledger + UTC-midnight reset + the
+`-32005 budget-exceeded` response path.
 
 ### ALP.3 — Shared rooms (v0.4)
 
-Depends on ALP.1. First-class group-chat workspaces — N alpis (different profiles, different machines) post into a shared transcript; a human can join via TUI `/room` or stay out entirely. Hub model (the room creator holds transcript + group key), not gossip. Per-room agent budget and kill switch as safety levers. New verbs (`room.create`, `room.join`, `room.post`, `room.pull`, `room.leave`, `room.pause`), rekey on member leave.
+Depends on ALP.1. First-class group-chat workspaces — N alpis
+(different profiles, different machines) post into a shared
+transcript; a human can join via TUI `/room` or stay out entirely.
+Hub model (the room creator holds transcript + group key), not
+gossip. Per-room agent budget and kill switch as safety levers.
+New verbs (`room.create`, `room.join`, `room.post`, `room.pull`,
+`room.leave`, `room.pause`), rekey on member leave.
 
-### AT. Audit system prompt + tool descriptions vs hermes
+---
 
-Research-first. Today `alpi/prompts/system_prompt.md` + each tool's description field are our main levers for how the LLM uses alpi. They've been tweaked reactively (add a line when a model misbehaves, compress when the prompt bloats) but never audited as a whole.
+## Long-term / stretch
 
-**What to compare.** Hermes is the closest reference codebase (see the memory entry for its path). For each alpi tool, read the hermes equivalent side by side and note:
+### H. Home Assistant integration
 
-- Is our description shorter and still as clear? Longer without paying for it?
-- Are the parameter hints as concrete? Hermes tends to include a one-line "use this when…" at the top of every tool; do we?
-- Do we over-invest in negative instructions ("do NOT…") where a positive example would land better with the LLM?
-- Are there tools where hermes' description consistently produces better calls in our own traffic? The `agent.log` (v0.2.43) plus session transcripts are the data set.
+Only if @soyjavi runs Home Assistant. Hermes has
+`homeassistant_tool` as a reference. Requires `HA_URL` + a
+long-lived token in `.env`. Typical uses: read sensors, toggle
+lights/scenes, query occupancy. **Blocked on confirmation that HA
+is part of the setup.**
 
-**System prompt.** Same exercise for `system_prompt.md`: read our current version against hermes' system prompt, look for load-bearing guidance we're missing or redundant text we can drop. Bias toward shorter — every token in the system prompt is paid on every turn.
+### N. Image generation
 
-**Done criterion.** A short report listing the 3–5 concrete edits worth making, each with before / after + a rationale tied to observed behaviour in `agent.log` or sessions. Apply the edits that clear the bar; leave the rest.
-
-**Why research-first.** "Rewrite all tool descriptions" is the easy way to waste a week. Measure first, edit surgically.
-
-### AV. Sandbox: whitelist `/dev/null` (shipped v0.2.59)
-
-Reported 2026-04-23: `git log` failed under the sandbox with `fatal: could not open '/dev/null' for reading and writing: Operation not permitted`. Root cause was the macOS `sandbox-exec` profile granting `file-write*` only under `WORKSPACE`, `ALPI_HOME`, `/tmp`, `/private/tmp`, `/private/var/folders` — which didn't cover `/dev/null`. Git writes progress to `/dev/null` when no tty is attached (as in the sandboxed subprocess), and the open failed.
-
-Profile now grants explicit `(literal ...)` writes on `/dev/null`, `/dev/zero`, `/dev/random`, `/dev/urandom`, `/dev/tty`, `/dev/stdin`, `/dev/stdout`, `/dev/stderr`. Strictly less dangerous than denying them — they're not persistent storage. Linux `bwrap` was already exposing them via `--dev /dev`; no change needed. Regression tests: one that writes + reads `/dev/null` directly, one that runs `git init && git commit && git log` under the sandbox end-to-end.
-
-### AW. Memory: drop user-name nominalization (shipped v0.2.60)
-
-Entries used to lean into first-person nominals ("Javi wants weekday standups…"). The name lives in `USER.md`; hardcoding it in `MEMORY.md` duplicated state and broke if the user renamed. Fix landed as two additions to `alpi/tools/memory.py`:
-
-1. Tool description grows a "Voice" paragraph: "use neutral third-person 'user' in MEMORY.md entries, never the user's name. The name lives in USER.md…" with a concrete before/after example.
-2. The `content` parameter description reinforces the same rule so models that skim the top-level hint still catch it.
-
-Existing `MEMORY.md` entries are left alone — explicit rewrites are safer than automated regex. The agent drifts toward the new voice on the next `add`.
-
-### AX. TUI: activity indicator while resuming (shipped v0.2.64)
-
-Sessions with many turns (40+ with tools) took long enough to rehydrate that the TUI felt frozen on launch.
-
-Fix: dedicated `ResumeActivity` widget (one line high, accent-coloured spinner animating at 10 fps, text "resuming last session…") mounted between `AlpiTopBar` and the `#chat` scroll. `AlpiApp.on_mount` mounts it before the first paint, then schedules the replay via `call_after_refresh → run_worker`.
-
-The worker rehydrates the session file (sync, blocks the worker only), then builds every replay widget in memory without touching the DOM. Once the list is ready it drops the activity bar and calls `await chat.mount(*widgets)` — one Mount event, one layout pass, one repaint. After the mount resolves, it finishes tool cards (so they land in their resolved state) and scrolls to the end. No widget-by-widget streaming, no frozen TUI.
-
-### AY. TUI: rename `/cost` → `/status` (shipped v0.2.61)
-
-The Telegram gateway exposes `/status` and the TUI exposed `/cost` for the same concept — session snapshot. Now both surfaces share the verb.
-
-- `CostPanel` → `StatusPanel`, `panel_title = "/status"`.
-- Slash dispatch in `app.py` moves from `"cost"` to `"status"`; auto-suggest list updated.
-- `/help` catalog entry follows.
-- Body rewritten to match the Telegram shortcut output: `session <id>` as a bold title, then aligned column rows (`model / turns / elapsed / tokens / cost`). No muted colours, bold only on the title, one-line-per-field layout. Token line carries `in / out / total` together so the eye doesn't have to add up.
-- Internal `_status_rows(session)` factored out as pure data for testability.
-
-### AZ. Move workspace config to `alpi setup` (shipped)
-
-Workspace lived as a `/workspace` slash inside the TUI; every other piece of profile state already had a wizard. Now the canonical entry is **`alpi setup → Workspace`** (first row of the second group, above Sandbox).
-
-Dropped from the TUI: the `/workspace` slash, its handlers (`_cmd_workspace`, `_apply_workspace`), the top-bar refresh helper they used, and the `/workspace` entry in the `/help` catalog + auto-suggest list.
-
-Kept: the launch-time `ErrorLine` when no workspace is set — it now reads "Pin one via `alpi setup → Workspace` to narrow the scope", and the top-bar read-out of the resolved workspace (it's a display concern, not an editor).
-
-Wizard contract: current value shown as the prompt default, empty input keeps it, the literal `clear` unsets it (falls back to cwd at launch), any other string is resolved with `expanduser` + `resolve`, validated as an existing directory, then persisted via `config.save`.
-
-### AU. Gateway/Schedule service — ops UX polish (shipped v0.2.58)
-
-Three fixes around daemon lifecycle. The CLI used to conflate "the process" (one `alpi gateway start` running) with "the service" (a launchd plist or systemd unit that keeps the process alive); `gateway stop` would SIGTERM and launchd would immediately relaunch because `KeepAlive=true`, silently.
-
-- `gateway stop` / `schedule stop` call `_stop_daemon(name, home, profile, pid_file)` which checks `service.installed()` first; if the daemon is managed, a warn says "managed by launchd; KeepAlive will restart the process — uninstall from `alpi setup → … service` to stop permanently." SIGTERM still fires so a bounce still happens (useful for post-reinstall).
-- `gateway restart` / `schedule restart` stop + poll the pid file for up to 15s; when the pid changes we print "restarted via launchd (pid X → Y)". Without a service registered it degrades to a plain stop with a note.
-- `alpi doctor` runs `_is_binary_newer_than_process(bin_mtime, pid)` against each daemon PID; `_process_elapsed_seconds` shells out to `ps -o etime=` (portable macOS+Linux, `etimes=` is Linux-only) and parses the `[[days-]hh:]mm:ss` format. A 30 s grace window absorbs clock/fs drift. When the binary is newer, the Services row warns with "run `alpi {gateway,schedule} restart`".
-
-## Next — v0.3 planned
-
-
+`generate_image(prompt, style)` using the active vision model or a
+dedicated endpoint (DALL-E, SD). Useful for "hazme un logo
+rápido". Low priority unless a concrete use case appears.
 
 ### U. Signal gateway (signal-cli)
 
-Signal has the best security posture of any consumer messenger, but integration requires a **dedicated phone number for the bot** (you can't bot your own number — Signal won't allow two sessions simultaneously in a useful way). signal-cli runs as a local daemon exposing an HTTP/JSON-RPC endpoint; we just POST/GET messages.
+Signal has the best security posture of any consumer messenger,
+but integration requires a **dedicated phone number for the bot**
+(you can't bot your own number — Signal won't allow two sessions
+simultaneously in a useful way). signal-cli runs as a local daemon
+exposing an HTTP/JSON-RPC endpoint; we just POST/GET messages.
 
-**Scope.** `alpi/gateway/platforms/signal.py` talking to a locally-running `signal-cli daemon --http 127.0.0.1:…`. First-run: user registers a bot number, follows signal-cli's captcha + SMS verify flow once (`signal-cli -u <num> register`), then `alpi setup → Gateways → Signal` stores the daemon URL + allowlist of sender numbers.
+**Scope.** `alpi/gateway/platforms/signal.py` talking to a
+locally-running `signal-cli daemon --http 127.0.0.1:…`. First-run:
+user registers a bot number, follows signal-cli's captcha + SMS
+verify flow once (`signal-cli -u <num> register`), then
+`alpi setup → Gateways → Signal` stores the daemon URL +
+allowlist of sender numbers.
 
 **Estimated LOC:** ~200 (HTTP client + polling loop + send).
 
-**Blocker:** requires extra SIM / VoIP number. Real cost: ~$5/mo (Twilio / JustCall). Nicho unless you want E2EE + self-hosted.
+**Blocker:** requires extra SIM / VoIP number. Real cost: ~$5/mo
+(Twilio / JustCall). Niche unless you want E2EE + self-hosted.
 
 ### Σ.1. Mixture-of-agents (stretch goal)
 
-Spawn multiple LLMs on the same prompt, aggregate answers with a final synthesizer. Hermes has this as `mixture_of_agents_tool.py`. Use case: hard decisions where one model is weak and you want "wisdom of crowds" at 3× cost.
+Spawn multiple LLMs on the same prompt, aggregate answers with a
+final synthesizer. Hermes has this as `mixture_of_agents_tool.py`.
+Use case: hard decisions where one model is weak and you want
+"wisdom of crowds" at 3× cost.
 
-Not planned — tracked here because it's a known technique and might become useful if we hit a ceiling on single-model research quality.
+Not planned — tracked here because it's a known technique and
+might become useful if we hit a ceiling on single-model research
+quality.
 
 ### Σ.2. RL training / fine-tuning hooks (stretch goal)
 
-Hermes has `rl_training_tool.py` for recording agent runs and building training datasets. If we ever want to fine-tune a smaller local model on your actual conversation patterns, the dataset-collection scaffold would live here.
+Hermes has `rl_training_tool.py` for recording agent runs and
+building training datasets. If we ever want to fine-tune a smaller
+local model on your actual conversation patterns, the
+dataset-collection scaffold would live here.
 
 Not planned. Research-grade, irrelevant for everyday personal use.
 
@@ -373,93 +338,65 @@ Not planned. Research-grade, irrelevant for everyday personal use.
 
 ## Decisions discarded — don't relitigate
 
+**Rejected integrations / providers:**
+
+- **C. OpenAI Codex OAuth** (ChatGPT subscription auth). ToS
+  violation, see "Principles".
+- **V. Anthropic subscription OAuth** (Claude Pro/Code auth). ToS
+  violation, see "Principles".
+- **J. camoufox** (+230 MB Firefox) for anti-bot. Humanised
+  Playwright covers the real detection surface without the weight.
+- **WhatsApp gateway.** Meta Business API requires company
+  verification + is expensive; `whatsapp-web.js` / Baileys are
+  reverse-engineered with frequent bans, and the attack surface
+  is catastrophic (a compromised bot leaks every chat). Not worth
+  shipping for a personal agent.
+- **Discord gateway.** Bot tokens grant full server access — same
+  blast-radius profile as Telegram with no added value, since
+  Telegram covers the "messaging gateway" role already.
+- **Slack gateway.** Enterprise-focused, per-workspace tokens with
+  broad scopes, operationally heavy. No real personal-agent use
+  case.
+
+**Rejected architecture attempts:**
+
 - **Go + Bubbletea rewrite.** Rejected.
-- **rich.Live + prompt_toolkit inline UI.** Worked but had ceiling (no modals, suspend races). Replaced by Textual.
-- **Full Textual app with sidebar + modals + fullscreen chrome** (first attempt). Rolled back as too heavy. Current is mother.py-style minimal.
-- **Pending-approval gate for skills.** Tried in v0.1, removed in v0.2 commit 2e67830 ("live-by-default"). Friction outweighed benefit; security scanner is the gate.
-- **Workspace wall on file tools.** Removed in v0.2 commit 3e2dc29. Without Layer 2 OS sandbox active, the wall was friction without isolation (terminal escaped it in one tool call). Now file tools follow terminal's posture: shared sensitive-path denylist, no workspace restriction.
-- **Pending-approval files** (`pending_skills.md`, `pending_personality.md`). Replaced inline.
-- **SQLite state.db.** Plain JSON files scan fast for <1000 sessions.
+- **rich.Live + prompt_toolkit inline UI.** Worked but had ceiling
+  (no modals, suspend races). Replaced by Textual.
+- **Full Textual app with sidebar + modals + fullscreen chrome**
+  (first attempt). Rolled back as too heavy. Current is
+  mother.py-style minimal.
+- **SQLite state.db.** Plain JSON files scan fast for <1000
+  sessions.
+- **Pending-approval gate for skills.** Tried in v0.1, removed in
+  v0.2. Friction outweighed benefit; security scanner is the gate.
+- **Workspace wall on file tools.** Removed in v0.2. Without OS
+  sandbox active, the wall was friction without isolation
+  (terminal escaped it in one tool call). File tools now follow
+  terminal's posture: shared sensitive-path denylist, no workspace
+  restriction.
+- **Pending-approval files** (`pending_skills.md`,
+  `pending_personality.md`). Replaced inline.
+- **Regex-gating shell commands** to enforce sandbox. Too many
+  false positives (legitimate `..`, env-var expansion, command
+  substitution). Real enforcement needs OS-level sandbox.
+- **`.bak` sibling on every `write_file`.** Tried it, rejected —
+  clutters every directory alpi writes in. Kept only on memory
+  files where it pays off.
+- **`alpi setup → Identity` wizard for editing PERSONALITY.md.**
+  Rejected after consideration. The `memory` tool already mutates
+  `PERSONALITY.md` from inside chat, and the LLM captures nuance
+  ("less formal but not jokey; respect my code-switching") that a
+  form can't.
+
+**Rejected behaviours:**
+
 - **Auto-reflect on Ctrl+C.** Dangerous.
+- **Post-session `/reflect` loop.** Tried it — removed because
+  Hermes doesn't do post-session reflection either, and the TUI
+  implementation was broken. Replaced by hardened system prompt +
+  tool-description rules for inline `memory(add)` + `skill(create)`.
+
+**Rejected dependencies:**
+
 - **duckduckgo-search.** Deprecated → migrated to `ddgs`.
-- **Post-session `/reflect` loop.** Tried it — `/reflect` slash + auto-trigger + `alpi/reflect.py` + 2 tests. Removed because Hermes doesn't do post-session reflection either, and the TUI implementation was broken (silenced Console output + `Prompt.ask` blocking the worker). Replaced by hardened system prompt + tool-description rules for inline `memory(add)` + `skill(create)`.
-- **Regex-gating shell commands** to enforce sandbox. Too many false positives (legitimate `..`, env-var expansion, command substitution). Real enforcement needs OS-level sandbox (G).
-- **`.bak` sibling on every `write_file`.** Tried it, rejected — clutters every directory alpi writes in. Kept only on memory files where it pays off.
-- **`alpi setup → Identity` wizard for editing PERSONALITY.md.** Rejected after consideration. The `memory` tool already mutates `PERSONALITY.md` from inside chat, and the LLM captures nuance ("less formal but not jokey; respect my code-switching") that a form can't.
-- **WhatsApp gateway.** Meta Business API requires company verification + is expensive; `whatsapp-web.js` / Baileys are reverse-engineered with frequent bans, and the attack surface is catastrophic (a compromised bot leaks every chat). Not worth shipping for a personal agent.
-- **Discord gateway.** Bot tokens grant full server access — same blast-radius profile as Telegram with no added value, since Telegram covers the "messaging gateway" role already.
-- **Slack gateway.** Enterprise-focused, per-workspace tokens with broad scopes, operationally heavy. No real personal-agent use case.
-
----
-
-## Done — v0.1 + shipped v0.2 items
-
-### v0.1 (released)
-
-First usable cut. Textual TUI, 3-file memory with two-tier dedup, skill system with pending gate (later removed), workspace sandbox (later removed), `delegate` sub-agent (renamed `research` in v0.2), turn-based session format, interrupt-on-new-input, gateway (Telegram), schedule daemon (cron + once jobs), email tool + gateway channel, MCP client, multi-profile CLI, send_message tool, OS sandbox phase 1 + 2 (terminal denylist + opt-in OS sandbox), config tool + `/new` session.
-
-### v0.2 (in progress — shipped so far)
-
-| Commit | What landed |
-|---|---|
-| 2e67830 | Skills: unified `skill` tool, subdir contract, live-by-default, path guards |
-| 2b73091 | Merge `glob` + `grep` into `search`; fix relative-path resolution |
-| 62f7fa7 | TUI: surface inter-tool prose + reasoning tokens in live indicator |
-| 3e2dc29 | File tools: drop workspace wall, match terminal's denylist posture |
-| 211c022 | Skill tool: `patch`/`view` actions, `state/` subdir, scanner beef-up (~50 patterns) |
-| fd1fec4 | TUI: reasoning persists across sessions, `show_reasoning` toggle, tighter layout |
-| d2ceb74 | Tools: rename `delegate` → `research`, depth tiers driven by config |
-| 4035327 | Skills: auto-inject index into system prompt + render skill name in tool cards |
-| 9ed4139 | TUI: theme system + floating panels + anchored scroll + MarkdownStream (v0.2.1) |
-| (next)  | Research: prefix inner `emit_state` with `step N/M · …` during tool loop (v0.2.2, R.1) |
-| (next)  | `delegate` tool: write-capable sub-agent with file/terminal/web toolsets (v0.2.3, R.2) |
-| (next)  | `read_image` tool: vision-capable image analysis, local path + http(s) URL with SSRF guard, SVG, model override (v0.2.4, D) |
-| (next)  | `/model` as FloatingPanel (was ModalScreen); startup warn when no usable model; session-only model switch with reload on `/new`; OpenRouter user-driven model history (no catalog fetch); Anthropic/OpenAI fetch live with hardcoded fallback; setup flow polish — custom providers above "add new", active entry in accent, provider order, 3s fetch timeout (v0.2.5) |
-| (next)  | `/mcps` panel listing running MCP servers with status and exposed tools (v0.2.6) |
-| (next)  | Panel header elevation flips direction in light mode — `$surface-lighten-1` in dark, `$surface-darken-1` in light, so the header always contrasts with the body (v0.2.7) |
-| (next)  | `AlpiHeader` responsive — 3 width tiers: wide (≥100) shows full `provider/model` path, medium keeps the short name, narrow (<60) drops the `ctx` label and halves the bar to 5 cells; `│` separators preserved across all tiers (v0.2.8) |
-| (next)  | `AlpiTopBar` responsive — narrow (<60) drops `profile` / `workspace` labels, keeps values + `│` separators; matches `AlpiHeader` policy (v0.2.9) |
-| (next)  | Drop `questionary`; `menu()` reimplemented directly on `prompt_toolkit` (O). Removes 5 workarounds in `ui.py` (empty qmark, FormattedText close hack, ANSI wipe, close sentinel, style overrides). Dependency gone from `pyproject.toml` (v0.2.10) |
-| (next)  | Sandbox polish (P closed): `alpi setup → Sandbox` to toggle per profile, TUI top bar shows `sandbox on/off` next to workspace, `TerminalToolConfig` dataclass for clean `save()` delta, SECURITY.md + CONFIG.md drop "experimental" wording and reposition as "recommended for unattended profiles" (v0.2.11). Default stays `false` — dev workflows vary too much to pick a universal profile; the kill scenario is unattended runs, not interactive chat. |
-| (next)  | Rename `alpi` → `alpi` across the codebase: package dir, CLI entrypoint, `~/.alpi` home, `ALPI_*` env vars, TUI brand, prompts, docs, tests. 357 tests green (v0.2.12) |
-| (next)  | Remove the `config` tool (199 LOC + 112 LOC of tests). Config surface is now two-channel: `alpi setup` for structured settings (model, gateways, MCP, sandbox) + direct YAML edits for cosmetic knobs (`tui.*`, `max_steps_per_turn`, `poll_interval`, `fallback_models`). The conversational "change the accent to Facebook blue" case wasn't worth the tool-attention budget (v0.2.13) |
-| (next)  | `/tools` panel filters out MCP-registered tools (`<server>:<tool>` shape) — they live in `/mcps`. Keeps `/tools` focused on alpi's own surface (v0.2.14) |
-| (next)  | `todo` tool: `done: bool` → `status: pending\|in_progress\|completed` with a new `start` action. The description already promised "only ONE in_progress at a time" but the tool had no way to mark it — now the invariant is tool-enforced. Deliberately did not port hermes' IDs, merge mode, dedup, or /compact re-injection (v0.2.15) |
-| (next)  | Ollama as a first-class provider (replaces the generic "Custom OpenAI-compatible endpoint" slot). Multiple named servers per profile (`home`, `gpu-box`, remote…), each with its own URL; model id becomes `<server-name>/<model>`. Live listing via `/api/tags` at setup time. Auto-resolves `num_ctx` from `/api/show` on every request so the model sees the full prompt instead of Ollama's 2K default — was the root cause of "never replies" with large system prompts. TUI header reads the resolved ctx as `ctx_window`; cost line hidden when `<= 0` for local models. `providers.custom` deleted entirely — no backwards-compat, no migration. ⚠ known limitation: small Ollama models (<7B) still hallucinate tool names regardless of transport (v0.2.15) |
-| (next)  | `browser` tool shipped (B closed). Playwright + Chromium, 9 actions: `navigate`, `snapshot`, `click`, `type`, `scroll`, `press`, `screenshot`, `close`, `logout`. Uses Playwright's native `aria_snapshot()` for LLM-friendly page representation; targets elements by `role` + accessible `name` (or by visible `text`) — robust across re-renders, no fragile CSS selectors. `playwright-stealth` patches applied by default (navigator.webdriver hidden, plugins populated, etc.) so Cloudflare-lite protection doesn't block us. `screenshot` saves a PNG and returns the path; when `tools.browser.vision=true` in the profile's config, passing a `question` auto-chains the screenshot to `read_image` — otherwise path-only with a hint. Per-profile storage at `~/.alpi/profiles/<name>/browser/state.json` so cookies stay isolated across profiles. Single dedicated worker thread (`ThreadPoolExecutor(1)`) funnels every call to Playwright's sync API — sidesteps the "Cannot switch to a different thread" greenlet restriction in the TUI where each turn runs in a fresh Textual worker. SSRF via existing `check_url()`. ~400 LOC vs hermes' 2984 — deliberately dropped multi-provider abstraction, daemon process, `@e1` refs, LLM summarization, JS/console eval, Browserbase/BrowserUse cloud, orphan reaper (v0.2.16) |
-| (next)  | `skill(action="validate")` shipped (Q closed). Four cheap correctness checks on a skill's `scripts/*.py`: `py_compile` for syntax, AST-walk + `find_spec` for missing third-party imports, OAuth race pattern (`webbrowser.open` before `serve_forever`/`handle_request`), and port coherence between `localhost:NNNN` mentioned in `SKILL.md` and `bind()` calls in code. Non-blocking — reports findings so the LLM decides what to do. ~150 LOC in `_skill_validate.py`. Did not port the 65-regex security scanner from hermes (we already had our own), nor the LLM-as-reviewer pattern (overlaps with asking alpi in chat "revisa esta skill") (v0.2.17) |
-| (next)  | Batch parallel sub-agents shipped (R.3 closed). `research` and `delegate` now accept `tasks: [...]` (up to 3) and run them concurrently via `ThreadPoolExecutor(max_workers=3)`. Results aggregate into one report with per-task sections; failures are captured inline instead of short-circuiting the batch. Prerequisite: `alpi/tools/_state.py` refactored from module-global `_emit`/`_interrupt_getter`/`_usage_sink` to `contextvars.ContextVar`, so two workers can have distinct emit callbacks without racing. Worker threads re-seed `interrupt_getter` + `usage_sink` from the parent context (Python's `ThreadPoolExecutor` does not auto-propagate ContextVars) and install a per-task prefixed `emit`. Existing callers unchanged — the public API is identical; only `research.py` and `delegate.py` added `get_emit()` instead of reading `_emit` directly (v0.2.18) |
-| (next)  | Roadmap sweep: extended backlog with 9 new items (TTS/STT local, Gmail OAuth, Signal, Anthropic OAuth as ToS-gray, approval system, schedule threat-scan, tool budget, OSV malware, stretch goals). Discarded WhatsApp/Discord/Slack with rationale (v0.2.19) |
-| (next)  | Security hardening pack — three items shipped together (Y + Z + X, ~200 LOC): (1) **Tool result budget** in `alpi/tools/_budget.py` — `tools.budget.per_result_chars: 100_000` default, per-tool override via `tools.<name>.max_result_chars` (e.g. `-1` for unlimited on `read_file`), replaces the three hardcoded `[:10_000]` sites across engine/research/delegate with a clean elided suffix; (2) **OSV malware check** in `alpi/tools/_osv.py` — `api.osv.dev` query on skill `scripts/*.py` imports and MCP `npx` args at save time, blocks on MAL-* findings, fails open on network errors; (3) **Schedule prompt threat-scan** — reuses `scan_skill_body` patterns at both save and fire time so prompt-injected cron jobs don't escape into unattended runs. 17 new tests, 402 green total (v0.2.20) |
-| (next)  | `read_image` auto-resize shipped (S closed). Pillow added as main dep (~3 MB). When `tools.read_image.auto_resize` (default `true`), any input image with a longer edge over `tools.read_image.max_edge` (default 1568 px — matches Anthropic's recommendation) is downscaled before base64-encoding. Aspect ratio preserved; PNGs with alpha stay PNG; everything else round-trips through JPEG q=85; SVG passthrough. Proactive (vs hermes' reactive "resize after API rejects too-large"). Typical saving: ~9× input-token cost on a 4K screenshot. 7 new tests, 409 green (v0.2.21) |
-| (next)  | T.1 — rename `email` → `mail/imap` in preparation for a second backend. Pure refactor, no behaviour change. Classes `EmailClient`/`EmailError` → `ImapClient`/`ImapError`; gateway platform class `Email` → `Imap`; config `gateway.email.*` → `gateway.imap.*`; env vars `EMAIL_*` → `IMAP_*`/`SMTP_*`. Setup menu: "Email" → "IMAP". Tool name `email` kept (user-facing concept, backend-agnostic) (v0.2.22) |
-| (next)  | T.2 — Gmail API (OAuth2) as a first-class parallel backend (T closed). `alpi/mail/gmail.py` implements the same 9 operations as `ImapClient` (list/search/read/send/reply/forward/move/delete/download_attachment) against `gmail.googleapis.com` with scopes `gmail.modify` + `gmail.send`. OAuth2 Authorization Code + PKCE with loopback callback server; refresh tokens stored per profile under `~/.alpi/<profile>/gmail_token.json` (0600, `fcntl`-locked). New `alpi/gateway/platforms/gmail.py` polls via `users.history.list` for delta-only fetches (no inbox rescans). Tool `email` gains an `account` param: auto-picks the only configured backend, demands explicit choice when both IMAP and Gmail are set. `send_message` platform enum grows `gmail`; delivery `_allowlist_env` maps gmail → `GMAIL_ALLOWED_SENDERS`. Setup wizard "Gateways → Gmail" walks through the GCP OAuth setup in 4 compact steps. Seed `.env.example` gains `GMAIL_CLIENT_ID` / `GMAIL_CLIENT_SECRET` / `GMAIL_ALLOWED_SENDERS`. Two post-landing correctness fixes: (a) `_list_history` no longer filters by `labelId: INBOX` — Gmail filter rules can route mail straight to custom labels (skipping INBOX), and those must still trigger alpi; SPAM/TRASH/DRAFT/CHAT/SENT excluded at processing time instead (matches IMAP's "only skip Junk" semantics); (b) `mark_as_read` moved from platform `listen()` to `run.py` post-allowlist via a new `IncomingMessage.ack` callback — previously automated/bulk and disallowed senders got `\Seen` / UNREAD removed without being processed, touching unrelated inbox traffic. 16 new tests (10 Gmail client + 6 dispatch). 425 green total (v0.2.23) |
-| (next)  | M — voice shipped as two tools + Telegram inbound/outbound, no continuous voice mode. **tts** (`alpi/tools/tts.py`) wraps Edge TTS (Microsoft Neural voices, free, no API key); autoplays locally when `tools.tts.autoplay` on (default). Format auto-picked: MP3 in TUI, OGG/Opus on gateway (`ALPI_GATEWAY=1` subprocess env) for Telegram voice-note compatibility — MP3 is synthesised first and autoplayed (afplay decodes Opus badly), then ffmpeg-converted to OGG. Tool params: `text`, `voice`; `rate`/`pitch` are config-only (`tools.tts.{rate,pitch}`) to keep the LLM from fiddling with prosody every turn. 1000-char hard cap. Cache keyed by hash-of(voice, rate, pitch, format, text) under `~/.alpi/cache/tts/`. **stt** (`alpi/tools/stt.py`) wraps faster-whisper on CPU; spawns a subprocess per call to avoid `bad value(s) in fds_to_keep` when ctranslate2 forks under the Textual TUI's fd-munged event loop. Model (`tiny`/`base`/`small`/`medium`/`large-v3`) downloaded on first call into `~/.cache/huggingface/`. **send_message** grew an `attachment` param; Telegram platform picks the right endpoint by extension (`sendVoice` for `.ogg`, `sendAudio` for `.mp3`, etc.). **Telegram inbound voice notes** auto-transcribe: gateway downloads via `getFile`, caches under `~/.alpi/cache/inbound/`, runs `stt`, feeds `[voice note] <transcript>` as a normal text turn. Surface tag `[INBOUND TELEGRAM from <id>]` prepended so the LLM knows to chain `send_message(attachment=…)` when asked to deliver audio back. Engine post-processor `_strip_cache_noise` in `alpi/engine.py` filters lines containing `.alpi/cache/(tts|stt)/` from the assistant's final text so weak models (mimo-v2-flash parrots + hallucinates paths) can't leak the cache path into replies; TUI re-renders the `AssistantMessage` markdown with the cleaned buffer on `assistant_done`. Deliberately dropped vs hermes's 3050 LOC voice stack: continuous voice mode, streaming TTS, silence/VAD state machine, whisper-hallucination regex filter, 6 extra TTS providers, auxiliary LLM smart approval. 31 new tests (tts, stt, send_message attachment, telegram voice inbound, engine strip-cache). 458 green total (v0.2.25) |
-
-| (next)  | Three tidy-ups bundled. (1) MCP tool-name OpenAI compatibility: MCP-exposed tools were named `<server>:<tool>` (e.g. `github:create_issue`), but OpenAI rejects any function name outside `^[a-zA-Z0-9_-]+$` — every OpenAI turn with MCP servers loaded crashed with `Invalid tools[N].function.name`. Anthropic/OpenRouter silently accepted the colon so the bug hid until an OpenAI model was picked. Switched separator to `__` (`github__create_issue`), sanitise server + tool names to collapse any other illegal char to `_`. (2) OpenAI + Anthropic provider lists curated manually instead of live-fetched from `/models` — raw catalogs include dozens of embeddings, TTS, moderation, and legacy variants that were never going to work as an agent brain, and the wizard scrolled forever. Dropped `_fetch()` + `_EXCLUDE_PREFIXES` in favour of a 5-model OpenAI list (`gpt-5.4` flagship, `gpt-5.4-mini` balanced, `gpt-5.4-nano` cheap, `gpt-5.3-codex` coding, `o3` heavy reasoning) and 4-model Anthropic list (`claude-opus-4-7` flagship, `claude-opus-4-6` 1M ctx, `claude-sonnet-4-6` balanced, `claude-haiku-4-5` fast). Each entry carries a short role tag rendered in the two-column setup wizard. Custom model id is still one click away for previews or anything not in the shortlist. Groq + Google were already curated. (3) Context window resolution: the TUI's header used to hardcode 200k for any non-Ollama model, which both under-reports (`gpt-5.4` is 1.05M, Claude 4.7 is 1M) and over-reports (`gpt-4o` is 128k). `_resolve_ctx_window` now probes `litellm.model_cost` after the Ollama branch — litellm ships an up-to-date cost/context DB for every mainstream provider, so we get accurate bars without maintaining a map in-repo. Ollama stays on its own `/api/show` path (local-only). Tests updated (v0.2.26) |
-
-| (next)  | Brand cleanup across ~130 files. The Python package, binary, and home dir were already `alpi`, but the old nickname leaked everywhere — CLI help text, wizard banner titles, logger names, systemd/launchd service labels, User-Agent headers, tempfile prefixes, widget class names (`AlpiApp`, `AlpiHeader`, `AlpiTopBar`), function locals (`_locate_*`, `*_bin`, `*_home`), env vars (`ALPI_HOME`, `ALPI_PROFILE`, `ALPI_BIN`), shell aliases, docstrings, and docs. Rename staged in three regex passes: word-boundary, punctuated (`-`, `.`, `/`, `:`), and identifier-fragment (`_X_`, uppercase `X_`, capitalised `X`). Local git dir `~/git/alf/` kept intact (personal convention). 458 tests green (v0.2.27) |
-
-| (next)  | tts autoplay skipped on gateway. Before, autoplay fired on every call — fine in TUI where the speaker is right there, but in gateway context the agent usually replies to a user who is on their phone, not sitting next to the Mac. Audio played through the server speakers reaches nobody and can interrupt anyone else in earshot. Autoplay now runs only when `ALPI_GATEWAY` is unset. Voice-note delivery to Telegram via `send_message(attachment=…)` is the real channel; the user taps play on their device. Also simplified the synthesis flow: MP3 for TUI (afplay-native) or OGG via ffmpeg for gateway (Telegram `sendVoice` needs Opus). Dropped the previous "synthesise MP3 first so autoplay has something afplay can decode, then convert to OGG for delivery" gymnastics — no longer needed now that gateway never autoplays. 458 tests green (v0.2.28) |
-
-| (next)  | ToS stance codified. Removed **C** (OpenAI Codex OAuth against the private ChatGPT backend) and **V** (Anthropic Claude Pro/Code OAuth) from the backlog, marked both as rejected in the table. Added a "Principles" section to ROADMAP + README: alpi does not reverse-engineer the private OAuth flows that ChatGPT / Claude Code use for their official clients. Competitor agents (hermes, similar) ship these features; we do not. Users pay per-token API access through their own keys — honest + visible. If a vendor publishes an official OAuth-for-third-parties flow, we adopt it then. (v0.2.29) |
-
-| (next)  | `allow_network=false` now blocks Python-native network tools too, not just the terminal subprocess. Before, toggling off `allow_network` only denied sockets to the shell sandbox (sandbox-exec / bwrap); `web_fetch`, `web_search`, `web_extract`, `browser`, `tts`, `send_message`, `email`, and URL-mode `read_image` all still reached out freely. That was semantically confusing — "network off" is meant to mean off, not "off for shell, on for everything else". Added `require_network(tool_name)` helper in `alpi/tools/_sandbox.py` that reads `tools.terminal.{sandbox,allow_network}` directly from `config.yaml` (no `load_dotenv` side effects that poisoned test env). Each network-using tool checks at entry and refuses with a clear error citing the config key. LLM transport (litellm) and gateway inbound listeners stay exempt — the LLM is the agent's brain and inbound is not exfiltration. TUI top bar now renders `offline` instead of `sandbox` when network is locked (muted style, no icons) so unattended profiles are auditable at a glance. 458 tests green (v0.2.30) |
-
-| (next)  | TopBar shows the active profile's disk footprint next to its name (e.g. `profile default 2.8MB`). `~/.alpi/` for the default profile (with the `profiles/` subtree excluded so it doesn't double-count sibling profiles); `~/.alpi/profiles/<name>/` otherwise. `rglob`-based walk with 30 s cache; recomputed on profile / workspace / model changes. Hidden in narrow mode (< 60 columns). Useful hook for the planned cleanup wizard (reveal which profile has ballooned). Also documented alpi TUI's features/design choices in CONFIG.md — Textual vs hermes's prompt_toolkit CLI + separate Ink.js TUI, streaming markdown, tool cards with live state, inline reasoning tail, auto-suggest slash commands, responsive collapse, scroll anchoring. 458 tests green (v0.2.31) |
-
-| (next)  | `alpi setup → Model` wizard reorders providers to put Ollama (local, offline-first) before cloud vendors. Existing Ollama servers + `Add Ollama` appear on top, then a blank separator, then OpenAI / Anthropic / OpenRouter / Google / Groq. The `Add Ollama` row carries the tag "local or remote — private, offline-first". Nudges new users toward the private path before they start pasting API keys. (v0.2.32) |
-
-| (next)  | `alpi profile list` redesigned. Replaces old `* name /full/path` with: `◆` (solid) or `◇` (hollow) glyph in the profile's `tui.accent` colour, name, active model, disk size, and home-abbreviated path (`/Users/javi` → `~`, portable). Diamond shape carries the active/inactive distinction even in non-colour terminals. Rest of the row is plain — no dim, no bold, no per-column colours. Extracted `format_bytes`, `profile_size_label` (30 s cache, excludes sibling profiles when counting default), `shorten_home` from `alpi/tui/app.py` into `alpi/home.py` so CLI + TUI share one source. (v0.2.33) |
-
-| (next)  | Telegram gateway offset now persists across restarts. Before, `self._offset = 0` on every `__init__` meant every restart replayed the last 24 h of unacked updates from Telegram — the bot answered the same inbound twice, the user saw ghost "hi" / "Hello" echoes. Saved to `~/.alpi/gateway/telegram-state.json` (matches the IMAP / Gmail pattern which already persisted UID / historyId). Offset written after each update is consumed so a mid-loop crash doesn't lose progress. Also added a one-shot "catching up on N message(s) from backlog" log on the first non-empty poll after startup, on all three platforms (telegram, imap, gmail) — makes it obvious when the agent is answering accumulated offline traffic vs real-time arrivals. Startup log now also includes the restored offset value for telegram so operators can spot a misconfigured state file. 458 tests green (v0.2.34) |
-
-| (next)  | Humanised Playwright typing. `browser(type=...)` used `loc.fill(text)` which pastes the whole string instantly — a loud bot signature that anti-bot vendors (Cloudflare Turnstile, DataDome, PerimeterX) gate on. Replaced with `loc.clear()` + `loc.press_sequentially(text, delay=random.randint(lo, hi))` — letter by letter with a per-call random delay in ms. Config knobs: `tools.browser.human_typing` (default `true`) and `tools.browser.typing_delay_ms: [30, 80]` (jitter range). A small random 150-400 ms pause is also inserted before `press(Enter)` to avoid instant-submit after typing. Camoufox (J) dismissed from the backlog as a result — humanised playwright + stealth cover the real detection surface without the +230 MB Firefox binary. Three new backlog items (AA Cleanup wizard, AB Gateway profile split wizard, AC CHANGELOG auto-gen) added, all low-priority polish. Config loader reads YAML directly instead of going through `config.load()` to avoid `load_dotenv` polluting the process env (same trick as `require_network`). 459 tests green (v0.2.36) |
-
-| (next)  | W shipped: command approval system on `terminal`. Replaces the static binary denylist (`_guards.check_command`) with a three-severity classifier (`safe`/`caution`/`dangerous`) in `alpi/tools/_approval.py`. 15 hardcoded patterns; safe runs through, caution prompts the user (TUI modal with four buttons: Once / Session / Always / Deny), dangerous always blocks unless `ALPI_YOLO=1` in env. Session approvals live in a module-level set (cleared on restart); Always persists the pattern description to `tools.terminal.approval.allowlist` in `config.yaml`. Non-TUI surfaces (gateway, schedule) auto-deny caution with an actionable error ("rerun from TUI or add to allowlist"). `ApprovalModal` (`alpi/tui/screens.py`) pushed via `call_from_thread` + `threading.Event` with 60 s timeout so the worker thread blocks cleanly on user input. Compared to hermes's `tools/approval.py` (~900 LOC): same 3-scope model, same surface-aware defaults, but dropped the smart-mode LLM auxiliary approver, the dual legacy/new pattern keys, the triple scanner stack (regex + Tirith + skills-guard), and the activity-heartbeat during blocking — ~200 LOC total. 13 new tests. 472 green. (v0.2.37) |
-
-| (next)  | Approval panel polish + YOLO removal. The `ApprovalPanel` now mirrors `/model`: minimal CSS (transparent OptionList, `compact=True` row height, `max-height: 18`), option labels built with `rich.Text` bold name + muted hint, panel title carries severity + matched pattern (`⚠ CAUTION · recursive rm`). Command shown as an `entry-desc` static above the list with margin-bottom 1. Focus timed via `call_after_refresh` so Enter works first-shot (was stolen by `_show_panel`'s `set_focus(None)` before). Removed the `ALPI_YOLO` escape hatch — dangerous severity is now always-always blocked; if the user genuinely needs `mkfs` they run it from their shell, not through the agent. Also compressed the `terminal` rule in `system_prompt.md` from 7 lines to 2: "Don't refuse destructive commands in chat. `terminal` has a built-in approval gate that pauses for user confirmation. Just call it." (v0.2.38) |
-
-| (next)  | AA shipped: Cleanup wizard (`alpi setup → Cleanup`). Scans the active profile's heavy directories — audio cache (tts output + inbound Telegram voice notes), sessions older than 30 days, gateway logs, schedule output — and shows each category with reclaimable size + file count in the setup menu. Picking a category opens a confirmation prompt ("Delete N file(s) · X from <label>?"); on yes, unlinks them and refreshes the list. Reuses `home.format_bytes` / `shorten_home`. Entry in the setup main menu shows the total reclaimable ("Cleanup · 1.8MB reclaimable" or "nothing to clean"). No automatic cleanup — only user-triggered; conservative by design. ~120 LOC. (v0.2.39) |
-
-| (next)  | AB shipped: `alpi setup → Gateway service`. Simpler scope than the original "gateway vs TUI profile split" plan in the roadmap — we realised forcing a different model for the gateway breaks profile identity (a user talking to their `work` profile over Telegram should get the same model and memory as when they talk to it from the TUI). What users actually need is just the service registration automated. One toggle in the setup main menu: **Install** writes the launchd plist (macOS) or systemd `--user` unit (Linux) pointing at `alpi -p <profile> gateway start`; **Uninstall** removes it. Status line shows `running via launchd` / `not installed` / `no gateway configured` so the user sees state at a glance. Gated on at least one gateway channel (Telegram / IMAP / Gmail) having credentials; picking it before that shows an error and nudges them to configure first. Setup main menu reorganised into two groups separated by a blank line: config on top (Model, Gateways, MCPs, Voice), operational below (Sandbox, Gateway service, Cleanup). ~80 LOC. (v0.2.40) |
