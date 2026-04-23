@@ -63,7 +63,7 @@ Audience: the creator (@soyjavi) and any future contributor reading the repo col
 | AT | Audit system prompt + tool descriptions vs hermes | 🔵 backlog — research first |
 | AU | Gateway/Schedule service — ops UX polish | ✅ shipped (v0.2.58) — `gateway stop` / `schedule stop` now warn when the daemon is under launchd/systemd (KeepAlive will bounce it back); new `gateway restart` / `schedule restart` verbs stop + poll for the service-managed relaunch; `alpi doctor` compares the `alpi` binary mtime against the daemon's elapsed time and warns "run `alpi X restart`" when the process is running stale code after a reinstall. |
 | AV | Sandbox: whitelist `/dev/null` so `git` works under sandbox-exec / bwrap | ✅ shipped (v0.2.59) — macOS sandbox profile now grants `file-write*` on the standard character devices (`/dev/null`, `/dev/zero`, `/dev/random`, `/dev/urandom`, `/dev/tty`, `/dev/stdin`, `/dev/stdout`, `/dev/stderr`). Linux bwrap already exposes them via `--dev /dev`. Regression tests cover the reported `git log` failure end-to-end. |
-| AW | Memory: drop user-name nominalization ("Javi wants…" → "user wants…") — identity lives in USER.md | ship, S |
+| AW | Memory: drop user-name nominalization ("Javi wants…" → "user wants…") — identity lives in USER.md | ✅ shipped (v0.2.60) — memory tool's description + `content` parameter now explicitly instruct neutral "user" voice in `MEMORY.md`; existing entries stay intact (no automated rewrite). |
 | AX | TUI: loading indicator while resuming a long session | ship, S |
 | AY | TUI: polish text inside `/cost` panel | ship, S |
 | AZ | Move workspace configuration from `/workspace` slash to `alpi setup` | 🔵 backlog |
@@ -76,7 +76,7 @@ release. The bar for "ship v0.2" is **clean docs + version bump +
 real-use validation across a few sessions** — not feature
 exhaustiveness.
 
-**Nothing open for v0.2.** Everything the original roadmap promised is shipped. Still open for v0.3: **AI, AJ, AM, AO, AQ, AS.1, AT, AW, AX, AY, AZ** (see individual entries below). Cutting **v0.3.0** is gated by **AR** (production release — website + content rewrite). **AS.2** (inter-machine `peer` gateway) is scoped for v0.4. Long-term candidates: **H** (Home Assistant — blocked on confirmation), **N** (image gen), **U** (Signal), **Σ.1 / Σ.2** (stretch goals). Rejected: **C** (OpenAI Codex OAuth) and **V** (Anthropic OAuth) on ToS grounds (see Principles); **J** (camoufox) after humanised Playwright made it redundant.
+**Nothing open for v0.2.** Everything the original roadmap promised is shipped. Still open for v0.3: **AI, AJ, AM, AO, AQ, AS.1, AT, AX, AY, AZ** (see individual entries below). Cutting **v0.3.0** is gated by **AR** (production release — website + content rewrite). **AS.2** (inter-machine `peer` gateway) is scoped for v0.4. Long-term candidates: **H** (Home Assistant — blocked on confirmation), **N** (image gen), **U** (Signal), **Σ.1 / Σ.2** (stretch goals). Rejected: **C** (OpenAI Codex OAuth) and **V** (Anthropic OAuth) on ToS grounds (see Principles); **J** (camoufox) after humanised Playwright made it redundant.
 
 Once the v0.3 cycle picks up a few of those + a fresh CHANGELOG
 entry summarises v0.2, bump to `v0.3.0` and reopen the table.
@@ -282,11 +282,14 @@ Reported 2026-04-23: `git log` failed under the sandbox with `fatal: could not o
 
 Profile now grants explicit `(literal ...)` writes on `/dev/null`, `/dev/zero`, `/dev/random`, `/dev/urandom`, `/dev/tty`, `/dev/stdin`, `/dev/stdout`, `/dev/stderr`. Strictly less dangerous than denying them — they're not persistent storage. Linux `bwrap` was already exposing them via `--dev /dev`; no change needed. Regression tests: one that writes + reads `/dev/null` directly, one that runs `git init && git commit && git log` under the sandbox end-to-end.
 
-### AW. Memory: drop user-name nominalization
+### AW. Memory: drop user-name nominalization (shipped v0.2.60)
 
-Today memory entries lean into first-person nominal phrases ("Javi wants weekday standups…"). The user's handle/name lives in `USER.md` — memory files shouldn't hardcode it. Fix: tweak the `memory` tool's description + personality to prefer neutral "user" references in `MEMORY.md` (and similar) so the memory survives a name change cleanly.
+Entries used to lean into first-person nominals ("Javi wants weekday standups…"). The name lives in `USER.md`; hardcoding it in `MEMORY.md` duplicated state and broke if the user renamed. Fix landed as two additions to `alpi/tools/memory.py`:
 
-Open question: back-fill existing `MEMORY.md` automatically, or let it drift? I'd vote "leave existing entries, lint on write" — explicit rewrites are safer than automated regex.
+1. Tool description grows a "Voice" paragraph: "use neutral third-person 'user' in MEMORY.md entries, never the user's name. The name lives in USER.md…" with a concrete before/after example.
+2. The `content` parameter description reinforces the same rule so models that skim the top-level hint still catch it.
+
+Existing `MEMORY.md` entries are left alone — explicit rewrites are safer than automated regex. The agent drifts toward the new voice on the next `add`.
 
 ### AX. TUI: loading indicator while resuming a long session
 

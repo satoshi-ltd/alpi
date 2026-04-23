@@ -24,6 +24,12 @@ class Memory(Tool):
         "  PERSONALITY.md  — how YOU behave (tone, style, length, language, "
         "identity).\n"
         "\n"
+        "Voice: use neutral third-person \"user\" in MEMORY.md entries, "
+        "never the user's name. The name lives in USER.md; hardcoding it "
+        "in MEMORY.md duplicates state and breaks if the user changes "
+        "names. Write \"user runs standups at 12:10\", not "
+        "\"Javi runs standups at 12:10\".\n"
+        "\n"
         "Actions: read | add | replace | remove.\n"
         "\n"
         "Skip: session progress, restatements of the current turn, facts "
@@ -48,7 +54,9 @@ class Memory(Tool):
                 "type": "string",
                 "description": (
                     "Entry content (for add/replace). One fact per call, "
-                    "declarative, short. No paragraphs. No headers."
+                    "declarative, short. No paragraphs. No headers. For "
+                    "MEMORY.md refer to the user as \"user\", never by "
+                    "name (the name lives in USER.md)."
                 ),
             },
             "match": {
