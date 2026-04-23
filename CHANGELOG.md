@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.2.69 — 2026-04-23
+
+### models
+- `docs/MODELS.md` rebuilt around a neutral 3-tier recommendation sourced from a standalone deep-research pass (Tier 1 quality, Tier 2 cost/service, Tier 3 Ollama) with production-setup suggestions. Personal-usage section and deliberately-left-out list dropped to keep the doc unbiased.
+- fresh profile scaffold (`config.seed_defaults`) no longer pins a default model — `config.yaml` ships with `model: ""` so the setup wizard is the canonical picker.
+- `docs/CONFIG.md` updated to reflect the empty default.
+
 ## v0.2.68 — 2026-04-23
 
 ### alp (Alpi Link Protocol — ALP.1 closed)

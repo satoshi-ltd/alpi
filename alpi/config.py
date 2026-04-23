@@ -10,7 +10,7 @@ import yaml
 from dotenv import load_dotenv
 
 DEFAULT_CONFIG: dict[str, Any] = {
-    "model": "openrouter/xiaomi/mimo-v2-flash",
+    "model": "",
     "fallback_models": [],
     "workspace": "",
     "providers": {"ollama": []},

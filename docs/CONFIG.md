@@ -11,7 +11,7 @@ On first install alpi only writes the sections you're likely to tweak
 visibility:
 
 ```yaml
-model: openrouter/xiaomi/mimo-v2-flash
+model: ""                          # empty on a fresh scaffold; pick via `alpi setup → Model` (see docs/MODELS.md)
 providers:
   ollama: []
 mcp:
@@ -62,7 +62,7 @@ Three options:
 
 | Key | Default | Type | Takes effect |
 |---|---|---|---|
-| `model` | `openrouter/xiaomi/mimo-v2-flash` | string | next session |
+| `model` | `""` (empty; pick via `alpi setup → Model` — see `docs/MODELS.md`) | string | next session |
 | `workspace` | `""` (cwd at launch) | string | next session |
 | `fallback_models` | `[]` | list of strings | next turn |
 | `providers.ollama` | `[]` | list of `{name, url}` — one per Ollama server | next session |
@@ -190,7 +190,7 @@ the integer per tier is your knob. Bumping `deep_steps` to 60 if
 you want even deeper investigations is fine; dropping `quick_steps`
 to 3 if you mainly use a tier-A model and want minimum latency on
 trivial questions is also fine. Default tiers are tuned for
-mimo-class models on read-only research.
+Tier 2 (cost / service) models on read-only research.
 
 `tools.tts.voice` selects the Edge TTS voice used by the `tts` tool. Any Microsoft Neural voice id is valid (`es-ES-AlvaroNeural`, `en-US-AriaNeural`, `fr-FR-DeniseNeural`, ...). Output is an MP3 cached under `~/.alpi/cache/tts/<hash>.mp3` — same text + voice reuses the cached file. Edge TTS runs against a free Microsoft endpoint (no API key), so there's no per-call cost. To use a different voice per call the agent can pass `voice=...` directly without touching config. `alpi setup → Voice` gives you a curated shortlist (10 common-language voices) plus a "custom" entry to type any voice id, and toggles autoplay in one place.
 
