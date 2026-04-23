@@ -61,7 +61,7 @@ Audience: the creator (@soyjavi) and any future contributor reading the repo col
 | AS.1 | ALPI-to-ALPI protocol — design doc + inter-profile prototype | 🔵 v0.3 — research-first |
 | AS.2 | ALPI-to-ALPI protocol — inter-machine `peer` gateway | 🔵 v0.4 — depends on AS.1 |
 | AT | Audit system prompt + tool descriptions vs hermes | 🔵 backlog — research first |
-| AU | Gateway/Schedule service — ops UX polish | 🔵 backlog |
+| AU | Gateway/Schedule service — ops UX polish | ✅ shipped (v0.2.58) — `gateway stop` / `schedule stop` now warn when the daemon is under launchd/systemd (KeepAlive will bounce it back); new `gateway restart` / `schedule restart` verbs stop + poll for the service-managed relaunch; `alpi doctor` compares the `alpi` binary mtime against the daemon's elapsed time and warns "run `alpi X restart`" when the process is running stale code after a reinstall. |
 
 ### What's left to call v0.2 done
 
@@ -71,7 +71,7 @@ release. The bar for "ship v0.2" is **clean docs + version bump +
 real-use validation across a few sessions** — not feature
 exhaustiveness.
 
-**Nothing open for v0.2.** Everything the original roadmap promised is shipped. Still open for v0.3: **AI, AJ, AM, AO, AQ, AS.1, AT, AU** (see individual entries below). Cutting **v0.3.0** is gated by **AR** (production release — website + content rewrite). **AS.2** (inter-machine `peer` gateway) is scoped for v0.4. Long-term candidates: **H** (Home Assistant — blocked on confirmation), **N** (image gen), **U** (Signal), **Σ.1 / Σ.2** (stretch goals). Rejected: **C** (OpenAI Codex OAuth) and **V** (Anthropic OAuth) on ToS grounds (see Principles); **J** (camoufox) after humanised Playwright made it redundant.
+**Nothing open for v0.2.** Everything the original roadmap promised is shipped. Still open for v0.3: **AI, AJ, AM, AO, AQ, AS.1, AT** (see individual entries below). Cutting **v0.3.0** is gated by **AR** (production release — website + content rewrite). **AS.2** (inter-machine `peer` gateway) is scoped for v0.4. Long-term candidates: **H** (Home Assistant — blocked on confirmation), **N** (image gen), **U** (Signal), **Σ.1 / Σ.2** (stretch goals). Rejected: **C** (OpenAI Codex OAuth) and **V** (Anthropic OAuth) on ToS grounds (see Principles); **J** (camoufox) after humanised Playwright made it redundant.
 
 Once the v0.3 cycle picks up a few of those + a fresh CHANGELOG
 entry summarises v0.2, bump to `v0.3.0` and reopen the table.
@@ -271,21 +271,13 @@ Research-first. Today `alpi/prompts/system_prompt.md` + each tool's description 
 
 **Why research-first.** "Rewrite all tool descriptions" is the easy way to waste a week. Measure first, edit surgically.
 
-### AU. Gateway/Schedule service — ops UX polish
+### AU. Gateway/Schedule service — ops UX polish (shipped v0.2.58)
 
-Three small but high-signal fixes around daemon lifecycle. Today the CLI conflates "the process" (one `alpi gateway start` running) with "the service" (a launchd plist or systemd unit that keeps the process alive). When the service is installed, `gateway stop` sends SIGTERM and launchd immediately restarts the process because `KeepAlive=true` — the user thinks they stopped it, the process is back in seconds. No warning.
+Three fixes around daemon lifecycle. The CLI used to conflate "the process" (one `alpi gateway start` running) with "the service" (a launchd plist or systemd unit that keeps the process alive); `gateway stop` would SIGTERM and launchd would immediately relaunch because `KeepAlive=true`, silently.
 
-Same story on code upgrades: `uv tool install --reinstall` drops a new binary at the same path, but the running process keeps executing the image that launchd loaded last time. The service stays on old code until somebody bounces the process manually — and no surface tells you that.
-
-**Scope:**
-
-1. **Smart `gateway stop` / `schedule stop`.** When the command runs, first check `service.installed(name, profile)`. If yes, print a warn: "managed by launchd; KeepAlive will restart the process in a few seconds. To stop permanently, uninstall from `alpi setup → {Gateway,Schedule} service`." Still send SIGTERM so it bounces — useful for picking up a fresh binary.
-2. **`gateway restart` / `schedule restart`.** One command: SIGTERM + wait for launchd/systemd to bring it back. Primary use case is post-reinstall: `uv tool install … --reinstall && alpi gateway restart`.
-3. **`alpi doctor` detects outdated binaries.** Compare `mtime` of the `alpi` binary against the start time of the gateway/schedule process (read from `/proc` on Linux or `lsof` / `ps -o lstart` on macOS). If the binary is newer, flag as warn with "run `alpi gateway restart`".
-
-**Scope guard.** All three should land as one commit — they share the same mental model and the same code path through `service.installed()`. Don't expand into a full "service management" subcommand; the wizard stays the canonical install/uninstall surface.
-
-Every patch bump commits with a descriptive subject already. A script (`alpi release notes` or a git hook) that collects commits between two tags and renders a `CHANGELOG.md` stanza would let us stop writing release prose twice (once in the commit, once in ROADMAP). Group by type (feat / fix / tidy) via a lightweight prefix heuristic on commit subjects. Estimated ~80 LOC.
+- `gateway stop` / `schedule stop` call `_stop_daemon(name, home, profile, pid_file)` which checks `service.installed()` first; if the daemon is managed, a warn says "managed by launchd; KeepAlive will restart the process — uninstall from `alpi setup → … service` to stop permanently." SIGTERM still fires so a bounce still happens (useful for post-reinstall).
+- `gateway restart` / `schedule restart` stop + poll the pid file for up to 15s; when the pid changes we print "restarted via launchd (pid X → Y)". Without a service registered it degrades to a plain stop with a note.
+- `alpi doctor` runs `_is_binary_newer_than_process(bin_mtime, pid)` against each daemon PID; `_process_elapsed_seconds` shells out to `ps -o etime=` (portable macOS+Linux, `etimes=` is Linux-only) and parses the `[[days-]hh:]mm:ss` format. A 30 s grace window absorbs clock/fs drift. When the binary is newer, the Services row warns with "run `alpi {gateway,schedule} restart`".
 
 ## Next — v0.3 planned
 

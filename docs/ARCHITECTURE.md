@@ -75,8 +75,8 @@ alpi profile list              list profiles, mark the active one
 alpi profile create <name>     bootstrap a new profile tree
 alpi profile remove <name>     delete after safety checks + confirm
 
-alpi gateway   start|stop               manual control for debug; service runs via `alpi setup → Gateway service`
-alpi schedule  start|stop|run-once      manual control; service auto-installs on first run
+alpi gateway   start|stop|restart               manual control for debug; service runs via `alpi setup → Gateway service`
+alpi schedule  start|stop|restart|run-once      manual control; service auto-installs on first run
 ```
 
 **Shape rules:** containers (profile) get `list/create/remove`. Daemons (gateway, schedule) get `start/stop` for manual/debug use — install/uninstall lives only in the wizard (`alpi setup → {Gateway,Schedule} service`), so users don't need to memorise two ways of doing the same thing. The scheduler auto-installs as a service on first run; a marker at `{home}/schedule/.bootstrapped` prevents re-installing after the user uninstalls from the wizard. Interactive wizards live exclusively under `alpi setup`; never add a per-feature wizard command.
