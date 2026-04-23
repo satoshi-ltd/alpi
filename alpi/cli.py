@@ -204,7 +204,7 @@ class _OrderedGroup(click.Group):
     a new user actually wants.
     """
 
-    _ORDER = ["chat", "setup", "doctor", "logs", "profile", "gateway", "schedule"]
+    _ORDER = ["chat", "setup", "doctor", "logs", "profile", "gateway", "schedule", "release"]
 
     def list_commands(self, ctx: click.Context) -> list[str]:
         known = [c for c in self._ORDER if c in self.commands]
@@ -369,6 +369,32 @@ def schedule_run_once(ctx: click.Context) -> None:
         return
     for jid, ok, msg in results:
         click.echo(f"  {jid}  {'OK' if ok else 'FAIL'}  {msg}")
+
+
+# Release — auto-generate CHANGELOG sections from git history
+
+@main.group()
+def release() -> None:
+    """Release-cycle helpers (changelog, tagging)."""
+
+
+@release.command("notes")
+@click.option("--since", default=None,
+              help="Git rev to start from (default: entire history).")
+@click.option("-o", "--output", "output",
+              type=click.Path(dir_okay=False, writable=True),
+              default=None,
+              help="Write to this file instead of stdout (overwrites).")
+def release_notes(since: str | None, output: str | None) -> None:
+    """Render a Markdown changelog from commits, grouped by version bump."""
+    from alpi import changelog
+    releases = changelog.collect(since=since)
+    rendered = changelog.render_markdown(releases)
+    if output:
+        Path(output).write_text(rendered)
+        click.echo(f"wrote {output} ({len(releases)} release{'s' if len(releases) != 1 else ''})")
+    else:
+        click.echo(rendered, nl=False)
 
 
 # Doctor — health check across model, workspace, gateways, services, MCPs, security
