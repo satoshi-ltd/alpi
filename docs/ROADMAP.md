@@ -50,7 +50,7 @@ Audience: the creator (@soyjavi) and any future contributor reading the repo col
 | AI | Memory v2: better generation + TUI panel | 🔵 backlog — research first (see below) |
 | AJ | Browser realism: session persistence + login state + deeper antibot | 🔵 backlog |
 | AK.1 | Telegram: `/help /status /new /continue /model` shortcuts + native command menu (`setMyCommands`) + interactive `/model` picker (inline-keyboard drill-down) | ✅ shipped (v0.2.56) |
-| AK.2 | Telegram: MarkdownV2 reply rendering | 🔵 backlog |
+| AK.2 | Telegram: MarkdownV2 reply rendering | ✅ shipped (v0.2.57) |
 | AL | `alpi` auto-resumes last session by config | ✅ shipped (v0.2.50) — new `tui.auto_resume` flag (default `false`). When `true`, bare `alpi` behaves as if `-c` was passed; `/new` inside the TUI still starts a fresh thread. `alpi chat --once` (scripts + gateway) always starts clean. Explicit `-c` stays as a manual override. |
 | AM | Dependency audit (drop/upgrade, security-first) | 🔵 backlog |
 | AN | Gateway session model — per-chat persistence | ✅ shipped (v0.2.54) — new `alpi/session_map.py` holds a `{chat_id: session_id}` pointer map per profile; the gateway spawns `alpi chat --once --resume-chat <chat_id>` and the CLI consults the map to resume that chat's thread (or binds a fresh one). Same mechanism across Telegram / IMAP / Gmail — natural per-platform semantics fall out of the `external_chat_id` each platform uses. Session files are never deleted by the pointer logic; historical threads stay searchable. |
@@ -71,7 +71,7 @@ release. The bar for "ship v0.2" is **clean docs + version bump +
 real-use validation across a few sessions** — not feature
 exhaustiveness.
 
-**Nothing open for v0.2.** Everything the original roadmap promised is shipped. Still open for v0.3: **AI, AJ, AK.2, AM, AO, AQ, AS.1, AT, AU** (see individual entries below). Cutting **v0.3.0** is gated by **AR** (production release — website + content rewrite). **AS.2** (inter-machine `peer` gateway) is scoped for v0.4. Long-term candidates: **H** (Home Assistant — blocked on confirmation), **N** (image gen), **U** (Signal), **Σ.1 / Σ.2** (stretch goals). Rejected: **C** (OpenAI Codex OAuth) and **V** (Anthropic OAuth) on ToS grounds (see Principles); **J** (camoufox) after humanised Playwright made it redundant.
+**Nothing open for v0.2.** Everything the original roadmap promised is shipped. Still open for v0.3: **AI, AJ, AM, AO, AQ, AS.1, AT, AU** (see individual entries below). Cutting **v0.3.0** is gated by **AR** (production release — website + content rewrite). **AS.2** (inter-machine `peer` gateway) is scoped for v0.4. Long-term candidates: **H** (Home Assistant — blocked on confirmation), **N** (image gen), **U** (Signal), **Σ.1 / Σ.2** (stretch goals). Rejected: **C** (OpenAI Codex OAuth) and **V** (Anthropic OAuth) on ToS grounds (see Principles); **J** (camoufox) after humanised Playwright made it redundant.
 
 Once the v0.3 cycle picks up a few of those + a fresh CHANGELOG
 entry summarises v0.2, bump to `v0.3.0` and reopen the table.
@@ -133,9 +133,11 @@ Gateway shortcut parser lives at `alpi/gateway/shortcuts.py`; `_process` in `gat
 
 `/model` on Telegram specifically opens an interactive inline-keyboard picker: provider grid → model grid, each callback edits the message in place; result persists to `config.yaml`. Callback data stays under Telegram's 64-byte cap (`mp:<slug>`, `mm:<slug>:<model_id>`, `mx` for cancel); model rows whose id would blow the budget are filtered out before send. Per-chat picker state lives on the `Telegram` platform instance — transient, cleared on pick/cancel.
 
-### AK.2. Telegram MarkdownV2 reply rendering
+### AK.2. Telegram MarkdownV2 reply rendering (shipped v0.2.57)
 
-Telegram has its own MarkdownV2 format with escape rules for `_`, `*`, `[`, `]`, `(`, `)`, `~`, `` ` ``, `>`, `#`, `+`, `-`, `=`, `|`, `{`, `}`, `.`, `!`. Agent replies today go through as plain text; a render pass that converts the Markdown the agent emits (bold / italic / code / links) to MarkdownV2 would make replies readable without breaking on the special chars. Still open.
+`alpi/gateway/platforms/_md2.py::to_markdown_v2(src)` rewrites the subset of Markdown the agent actually emits — `**bold**`, `*italic*`, `` `inline code` ``, fenced code blocks, `[text](url)` links, `#` headers — into Telegram's MarkdownV2 dialect. Strategy is placeholder-based: extract protected regions (code, links) first, rewrite remaining constructs, escape every special character that survived, then restore placeholders. Scope deliberately excludes Telegram-native features (tables, blockquotes, spoilers, strikethrough) that the agent doesn't emit — fold them in when they appear in real transcripts.
+
+Send path in `Telegram.send()` runs every outgoing chunk through the renderer and POSTs with `parse_mode: MarkdownV2`. On a 400 response whose description mentions a parse error, a one-shot fallback resends the chunk as plain text without `parse_mode`, so a renderer bug can't swallow a reply. Same render + fallback applies to attachment captions.
 
 ### AL. `alpi` auto-resumes last session by default
 

@@ -152,18 +152,11 @@ class Telegram(Platform):
             url = base + "/sendMessage"
             chunks = format_for_telegram(message.text)
             for i, chunk in enumerate(chunks):
-                payload: dict[str, Any] = {
-                    "chat_id": message.external_chat_id,
-                    "text": chunk,
-                }
-                # Only attach reply_markup to the LAST chunk — attaching to
-                # the first would put the keyboard above the message tail.
-                if message.reply_markup and i == len(chunks) - 1:
-                    payload["reply_markup"] = message.reply_markup
-                try:
-                    await client.post(url, json=payload)
-                except Exception as e:  # noqa: BLE001
-                    log.warning("sendMessage failed: %s", e)
+                is_last = i == len(chunks) - 1
+                markup = message.reply_markup if is_last else None
+                await _send_text_chunk(
+                    client, url, message.external_chat_id, chunk, markup,
+                )
 
     # Interactive /model picker — two-step drill-down via inline keyboards.
     #
@@ -291,6 +284,63 @@ class Telegram(Platform):
             self._model_picker.pop(chat_id, None)
             await _ack("saved")
             return
+
+
+async def _send_text_chunk(
+    client: httpx.AsyncClient, url: str, chat_id: str,
+    text: str, reply_markup: dict | None,
+) -> None:
+    """Send one text chunk as MarkdownV2 with a plain-text fallback.
+
+    The agent emits standard Markdown; we render it to Telegram's
+    MarkdownV2 dialect so users see proper formatting. If Telegram
+    rejects the body (status 400 with ``parse error`` — usually a
+    rogue character the renderer missed), retry once as plain text
+    WITHOUT ``parse_mode`` so at least the content gets through.
+    """
+    from alpi.gateway.platforms._md2 import to_markdown_v2
+
+    rendered = to_markdown_v2(text)
+    payload: dict[str, Any] = {
+        "chat_id": chat_id,
+        "text": rendered,
+        "parse_mode": "MarkdownV2",
+    }
+    if reply_markup is not None:
+        payload["reply_markup"] = reply_markup
+
+    try:
+        resp = await client.post(url, json=payload)
+    except Exception as e:  # noqa: BLE001
+        log.warning("sendMessage failed: %s", e)
+        return
+    if resp.status_code == 200:
+        return
+
+    # MarkdownV2 parse errors return 400 with ``description`` starting
+    # with "Bad Request: can't parse entities". Any other status is
+    # likely a transport/chat-id problem and retrying without markup
+    # won't help — log and move on.
+    body = {}
+    try:
+        body = resp.json()
+    except Exception:  # noqa: BLE001
+        pass
+    desc = (body.get("description") or "")
+    if resp.status_code == 400 and "parse" in desc.lower():
+        log.info("sendMessage: markdown parse failed (%s), retrying as plain", desc)
+        fallback: dict[str, Any] = {"chat_id": chat_id, "text": text}
+        if reply_markup is not None:
+            fallback["reply_markup"] = reply_markup
+        try:
+            await client.post(url, json=fallback)
+        except Exception as e:  # noqa: BLE001
+            log.warning("sendMessage fallback failed: %s", e)
+        return
+
+    log.warning(
+        "sendMessage: status=%d body=%s", resp.status_code, desc or body,
+    )
 
 
 async def _register_bot_commands(url_base: str) -> None:
@@ -462,14 +512,33 @@ async def _send_attachment(
     else:
         endpoint, field = "/sendDocument", "document"
 
+    from alpi.gateway.platforms._md2 import to_markdown_v2
+
     data: dict[str, str] = {"chat_id": chat_id}
     if caption:
-        data["caption"] = caption[:1024]
+        # Same MarkdownV2 rendering + fallback as text messages.
+        data["caption"] = to_markdown_v2(caption[:1024])
+        data["parse_mode"] = "MarkdownV2"
 
     try:
         with p.open("rb") as fh:
             files = {field: (p.name, fh)}
             resp = await client.post(base + endpoint, data=data, files=files)
+        if resp.status_code == 400 and caption:
+            try:
+                desc = resp.json().get("description", "")
+            except Exception:  # noqa: BLE001
+                desc = ""
+            if "parse" in desc.lower():
+                log.info(
+                    "telegram %s: markdown parse failed, retrying as plain",
+                    endpoint,
+                )
+                data.pop("parse_mode", None)
+                data["caption"] = caption[:1024]
+                with p.open("rb") as fh:
+                    files = {field: (p.name, fh)}
+                    resp = await client.post(base + endpoint, data=data, files=files)
         if resp.status_code >= 400:
             log.warning(
                 "telegram %s failed (%s): %s",
