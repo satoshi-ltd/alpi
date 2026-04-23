@@ -26,6 +26,50 @@ def _strip_cache_noise(text: str) -> str:
     return _CACHE_NOISE_RE.sub("", text).strip()
 
 
+_PLATFORM_HINTS: dict[str, str] = {
+    "cron": (
+        "# SURFACE: scheduled job\n"
+        "You are running as a scheduled job. No user is present — you "
+        "cannot ask questions, request clarification, or wait for "
+        "follow-up. Execute the task fully and autonomously, making "
+        "reasonable decisions where needed. Your reply is "
+        "auto-delivered to the job's configured destination; put the "
+        "primary content directly in your response."
+    ),
+    "telegram": (
+        "# SURFACE: Telegram\n"
+        "You are replying on Telegram. Plain Markdown is auto-converted "
+        "to Telegram's MarkdownV2 (bold, italic, inline code, code "
+        "blocks, links, headers). Tables, blockquotes, and deeply "
+        "nested lists do NOT render — prefer flat text. Keep replies "
+        "chat-friendly: short paragraphs, no sign-offs. Attach files "
+        "via `send_message(attachment=…)`, not by inlining paths."
+    ),
+    "email": (
+        "# SURFACE: email\n"
+        "You are replying by email. Plain text only — no Markdown, it "
+        "shows as literal asterisks and backticks. Keep replies "
+        "concise. The subject line is preserved for threading. Skip "
+        "greetings and sign-offs unless the user's message warranted "
+        "them (business tone vs casual)."
+    ),
+    "gmail": (
+        "# SURFACE: email\n"
+        "You are replying by email. Plain text only — no Markdown, it "
+        "shows as literal asterisks and backticks. Keep replies "
+        "concise. The subject line is preserved for threading. Skip "
+        "greetings and sign-offs unless the user's message warranted "
+        "them (business tone vs casual)."
+    ),
+}
+
+
+def _platform_hint() -> str:
+    import os
+    platform = (os.environ.get("ALPI_PLATFORM") or "").strip().lower()
+    return _PLATFORM_HINTS.get(platform, "")
+
+
 def _maybe_load_mcps(cfg: cfg_mod.Config) -> list:
     servers = (cfg.raw.get("mcp") or {}).get("servers") or {}
     if not servers:
@@ -365,6 +409,9 @@ class Engine:
         env = "\n".join(env_parts)
 
         parts = [personality.strip(), base.strip(), env]
+        hint = _platform_hint()
+        if hint:
+            parts.append(hint)
         from alpi.tools.skill import skills_index_block
         skills_block = skills_index_block(self.home)
         if skills_block:

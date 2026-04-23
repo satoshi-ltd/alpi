@@ -52,8 +52,11 @@ def _resolve_client(account: str = ""):
 class Email(Tool):
     name = "email"
     description = (
-        "Manage the mailbox. Works against IMAP or Gmail API; pick which "
-        "with `account` when both are configured.\n"
+        "Read, search, send, or move email. Use when the user asks to "
+        "check their inbox, send a message by mail, or act on a specific "
+        "message (reply, forward, archive, delete). Works against IMAP "
+        "or Gmail API; pick which with `account` when both are "
+        "configured.\n"
         "\n"
         "Actions: list, search, read, send, reply, forward, move, delete, "
         "download_attachment.\n"

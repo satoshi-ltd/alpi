@@ -22,6 +22,10 @@ Legend: 🔵 backlog · 🟡 next up · ⏸ blocked.
 | AJ | Browser realism — session persistence + login state + deeper antibot | v0.3 | 🔵 |
 | AO | Default skills bundle (writer / coder / webmaster …) | v0.3 | 🔵 research first |
 | AQ | Voice mode polish — STT + TTS quality + continuous mode | v0.3 | 🔵 |
+| BA | Schedule: ad-hoc job fire (`tick` / force-run) for circuit testing | v0.3 | 🔵 |
+| BB | TUI: shared link renderer (bold + underline; hover = accent bg + black) | v0.3 | 🔵 |
+| BC | External security audit before v0.3 public release | v0.3 | 🔴 gate on AR |
+| BD | Model-aware tool-use-enforcement guidance (Claude/MiMo brevity, GPT/Codex/Gemini full block) | v0.3 | 🔵 needs A/B on agent.log first |
 | ALP.2 | Alpi Link Protocol — inter-machine Noise-protocol transport + budget / rate-limit enforcement | v0.4 | 🔵 — depends on ALP.1 (shipped) |
 | ALP.3 | Alpi Link Protocol — shared rooms (group chat, humans optional) | v0.4 | 🔵 — depends on ALP.1 (shipped) |
 | H | Home Assistant integration | long-term | ⏸ blocked on user confirmation |
@@ -231,6 +235,95 @@ Open areas to evaluate before committing scope:
 Start with a measurement pass (record a few real prompts, check STT
 accuracy + TTS latency end-to-end), then pick the two or three
 biggest wins.
+
+### BA. Schedule: ad-hoc job fire
+
+Today a cron job added via the `schedule` tool only fires when its
+time comes. That makes end-to-end testing painful — add a job, wait
+for the next window, hope it works. What's missing is a way to say
+"run this job *now*, exactly as the scheduler would have".
+
+**Scope.**
+
+- **CLI**: `alpi schedule fire <job_id>` — looks up the job in
+  `jobs.json`, executes it through the same path the scheduler
+  daemon uses (`_run_once` + the same envelope), writes to
+  `schedule/output/` and `schedule.log` as normal.
+- **Tool**: `schedule(action="fire", id=...)` so the agent can
+  self-test a job it just created.
+- **Safety**: same threat-scan (X) runs on fire as on cron tick.
+  No bypass of approval gate.
+
+**Why it matters.** Closes the only feedback loop where the user
+has to wait N minutes to learn their job is broken. Also useful
+for operations — when debugging a cron that's not firing on the
+expected interval, force one run and tail the logs.
+
+### BB. TUI: shared link renderer
+
+Markdown links (`[text](url)`) today render as Rich's default —
+underlined text in the base foreground colour. Works, but blends
+with body text when the terminal's theme is low-contrast.
+
+**Proposed look.**
+
+- **Default state**: bold + underline, base foreground colour.
+  Mimics the classic HTML anchor convention. Reads as a link at a
+  glance without burning accent colour on every link.
+- **Hover / selected state**: accent background, black foreground.
+  High contrast, unambiguous affordance. Matches the selection
+  visual already used by `OptionList` rows.
+
+**Scope.**
+
+- New helper in `alpi/tui/links.py` (or inline in
+  `alpi/tui/formatting.py`) that walks a Rich `Text` / markdown
+  tree and rewrites link nodes to the two-state style.
+- Apply transversally: `AssistantMessage` render path, every
+  `FloatingPanel` subclass that can contain links (`/memory`
+  `/help`, future `/peers` detail). One call site per widget is
+  fine as long as they all share the helper.
+- Keep the URL copyable — don't swap link text for the URL;
+  Textual's built-in link handling stays.
+
+**Done criterion.** Walking through `/memory`, `/help`, a chat
+reply containing links, and an error message with a link renders
+them all with the same two-state visual. No widget has its own
+link style.
+
+### BC. External security audit before v0.3 public release
+
+**Gate on AR.** v0.3 is the first release intended for public
+consumption (`docs/ROADMAP.md → AR`). Before we cut it, contract
+an external firm for a formal audit.
+
+**Scope of the engagement.**
+
+- Threat model: who is the attacker, what's protected, what's
+  non-goal. Draft lives in `docs/SECURITY.md` today; the auditor
+  formalises and challenges it.
+- ALP cryptography review: envelope signing (Ed25519 PKCS8),
+  replay cache, Noise_XK wrapper when ALP.2 lands, peer-pinning
+  workflow.
+- Tool surface review: approval system, sandbox posture (macOS
+  sandbox-exec profile + Linux bwrap), shell denylist, skill
+  scanner, OSV check, SSRF guards in `browser` / `web_*` tools.
+- Dependency posture: `pip-audit` output, third-party-code risks
+  documented in `docs/SECURITY.md → Third-party code`.
+- Privacy review: confirm **Zero Knowledge** + **Privacy by
+  Design** claims match the code — no hidden telemetry paths, no
+  analytics beacons, no cloud coupling that's not user-chosen.
+
+**Output.** A public report lives at `docs/audits/v0.3-<vendor>.md`
+(or linked from there). Issues found are either fixed before the
+release or documented in the report with a timeline. The report
+being published is part of the trust story — sitting on findings
+isn't.
+
+**Why external, not internal.** Satoshi Ltd. builds the tool; an
+independent security firm reads it. The Satoshi principle "Open
+Source — Auditable code. Reproducible builds. Trust, but verify"
+applies to the organisation too.
 
 ---
 

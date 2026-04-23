@@ -155,6 +155,7 @@ async def _run_agent(msg: IncomingMessage, platform: Platform, home: Path,
     env = dict(os.environ)
     env["ALPI_HOME"] = str(home)
     env["ALPI_GATEWAY"] = "1"
+    env["ALPI_PLATFORM"] = msg.platform
     prompt = _llm_prompt(msg)
     argv = [
         sys.executable, "-m", "alpi", "chat", "--once", prompt,
