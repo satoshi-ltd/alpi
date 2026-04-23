@@ -114,6 +114,47 @@ def test_macos_ssh_read_blocked(ws: Path, ah: Path) -> None:
 
 @pytest.mark.skipif(sys.platform != "darwin" or shutil.which("sandbox-exec") is None,
                     reason="macOS-only, requires sandbox-exec")
+def test_macos_dev_null_writable(ws: Path, ah: Path) -> None:
+    """Regression: git and other tools reopen /dev/null for r+w; the
+    sandbox must not block that. Prior profile only granted file-write*
+    in workspace/home/tmp and the sandboxed open(2) failed with
+    ``Operation not permitted``."""
+    import subprocess
+
+    args = _sandbox.wrap_command(
+        "echo hi > /dev/null && cat /dev/null && printf 'ok'",
+        workspace=ws, alpi_home=ah, allow_network=False,
+    )
+    proc = subprocess.run(args, capture_output=True, text=True, timeout=10)
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout == "ok"
+
+
+@pytest.mark.skipif(sys.platform != "darwin" or shutil.which("sandbox-exec") is None,
+                    reason="macOS-only, requires sandbox-exec")
+def test_macos_git_log_works(ws: Path, ah: Path) -> None:
+    """End-to-end for the reported bug: ``git log`` failed under the
+    sandbox because git opens /dev/null for r+w on some plumbing
+    paths. Initialise a throwaway repo inside the workspace and assert
+    ``git log`` completes cleanly."""
+    import subprocess
+
+    init = subprocess.run(
+        _sandbox.wrap_command(
+            f"cd {ws} && git init -q && "
+            "git -c user.email=a@b -c user.name=a commit "
+            "--allow-empty -m init -q && "
+            "git log --oneline",
+            workspace=ws, alpi_home=ah, allow_network=False,
+        ),
+        capture_output=True, text=True, timeout=15,
+    )
+    assert init.returncode == 0, init.stderr
+    assert "init" in init.stdout
+
+
+@pytest.mark.skipif(sys.platform != "darwin" or shutil.which("sandbox-exec") is None,
+                    reason="macOS-only, requires sandbox-exec")
 def test_macos_network_blocked_by_default(ws: Path, ah: Path) -> None:
     import subprocess
 
