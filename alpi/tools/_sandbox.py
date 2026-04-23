@@ -63,7 +63,20 @@ _MACOS_PROFILE = """
     (subpath (param "ALPI_HOME"))
     (subpath "/tmp")
     (subpath "/private/tmp")
-    (subpath "/private/var/folders"))
+    (subpath "/private/var/folders")
+    ; Character devices that well-behaved CLI tools reopen for r+w
+    ; (git writes progress lines to /dev/null when no tty is attached,
+    ; node/python seed from /dev/urandom, anything interactive probes
+    ; /dev/tty). Exposing these is strictly less dangerous than
+    ; denying them — they're not persistent storage.
+    (literal "/dev/null")
+    (literal "/dev/zero")
+    (literal "/dev/random")
+    (literal "/dev/urandom")
+    (literal "/dev/tty")
+    (literal "/dev/stdin")
+    (literal "/dev/stdout")
+    (literal "/dev/stderr"))
 %NETWORK%
 """.strip()
 
