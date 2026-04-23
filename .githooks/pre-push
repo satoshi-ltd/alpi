@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+#
+# Regenerate CHANGELOG.md before pushing; block the push if it's stale.
+#
+# Opt-in (per clone):
+#   git config core.hooksPath .githooks
+#
+# The hook is deliberately non-destructive: it regenerates CHANGELOG.md
+# into the working tree and, if the content drifted from what's committed,
+# aborts with a message so the user commits the refresh explicitly. It
+# never amends, stages, or re-commits on your behalf.
+
+set -e
+
+# Skip if uv isn't available — don't block pushes on a dev-env hiccup.
+if ! command -v uv >/dev/null 2>&1; then
+    echo "pre-push: uv not found, skipping CHANGELOG check" >&2
+    exit 0
+fi
+
+tmp="$(mktemp -t alpi-changelog.XXXXXX)"
+trap 'rm -f "$tmp"' EXIT
+
+if ! uv run --quiet alpi release notes > "$tmp" 2>/dev/null; then
+    echo "pre-push: \`alpi release notes\` failed, skipping CHANGELOG check" >&2
+    exit 0
+fi
+
+if [ ! -f CHANGELOG.md ] || ! diff -q CHANGELOG.md "$tmp" >/dev/null 2>&1; then
+    mv "$tmp" CHANGELOG.md
+    trap - EXIT
+    echo "" >&2
+    echo "pre-push: CHANGELOG.md was stale — regenerated." >&2
+    echo "pre-push: commit the refresh, then re-run your push:" >&2
+    echo "" >&2
+    echo "    git add CHANGELOG.md" >&2
+    echo "    git commit -m 'release: refresh CHANGELOG'" >&2
+    echo "" >&2
+    exit 1
+fi
