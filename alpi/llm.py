@@ -33,6 +33,11 @@ def _silence_litellm() -> None:
         import litellm
         litellm.suppress_debug_info = True
         litellm.set_verbose = False
+        # LiteLLM ships with ``telemetry = True`` by default, which phones
+        # home to their backend. alpi's principle is no telemetry — flip
+        # it off at import time so no request to our own providers ever
+        # carries a side-effect call.
+        litellm.telemetry = False
         # Warm the provider cache once so future calls don't emit banners.
         try:
             litellm.get_llm_provider("openrouter/dummy")

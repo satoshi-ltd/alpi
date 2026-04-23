@@ -163,6 +163,38 @@ sensitive paths, known SSRF targets). Layer 2 adds defense-in-depth
 so a creative prompt that bypasses the regex still can't touch the
 FS or the network.
 
+## Third-party code
+
+Every runtime dependency is an attack surface. We keep the list
+tight (see [ARCHITECTURE.md → Dependencies](ARCHITECTURE.md#dependencies)
+for why each one earns its place) and audit it before each
+release. The CVE pass is a single command:
+
+```bash
+uv run --with pip-audit pip-audit
+```
+
+Risk profile of the runtime set:
+
+| Dep | Risk | Notes |
+|---|---|---|
+| `litellm` | **Medium** | Large surface (100+ providers). Ships with `telemetry=True` by default — alpi flips it off in `llm.py::_silence_litellm()` so no request phones home. Regression test: `tests/test_llm_privacy.py`. |
+| `playwright` | Medium-high | Runs a full Chromium (~230 MB) that loads arbitrary web content. Chromium's own sandbox is the line of defence at that layer; alpi adds nothing on top. Used only by the `browser` tool. |
+| `playwright-stealth` | Low | Small patch set on `navigator.webdriver` and friends. Reverse-engineered detection bypass; breaks occasionally when detection vendors tighten. |
+| `pillow` | Medium | Image parsers have a long history of CVEs. Keep on the latest minor; `pip-audit` catches known issues. |
+| `faster-whisper` | Low | Bundles CTranslate2 native code. Models are downloaded from HuggingFace on first use — inspect the model hash if paranoia calls for it. |
+| `edge-tts` | Low | Reverse-engineered unofficial Microsoft Edge TTS endpoint. Small code, but the endpoint can change; have a plan B (`say` on macOS, `espeak` on Linux) ready. |
+| `textual` | Low | Pure Python, active, stable API surface we pin to. |
+| `litellm`'s transitive tree (openai SDK, anthropic SDK, etc.) | Low-medium | Flows through. `pip-audit` covers. |
+| `httpx`, `rich`, `click`, `pyyaml`, `python-dotenv`, `prompt_toolkit`, `croniter`, `html2text`, `ddgs` | Low | Small or stable or both. Rarely updated, rarely break. |
+
+### Policy
+
+- **`pip-audit` before every release.** Zero tolerance for known CVEs on the lockfile.
+- **Image / parser deps on the latest minor.** Pillow especially — image parser CVEs land multiple times per year.
+- **New runtime deps require justification.** A line in `ARCHITECTURE.md → Dependencies` and a row in the table above. No drift.
+- **Reverse-engineered integrations carry a fallback plan.** `edge-tts` (Microsoft), `playwright-stealth` (detection vendors), `ddgs` (DuckDuckGo HTML) are all at the mercy of third parties. When they break we swap, we don't patch around them forever.
+
 ## Known gaps
 
 - Writes to `/tmp` are allowed by both layers. A process could drop

@@ -347,6 +347,32 @@ Three module-level globals: `_emit`, `_interrupt_getter`, `_usage_sink`. The eng
 
 These are GLOBALS — concurrent tool calls would race. The current design is single-threaded; batch parallel research (ROADMAP §R.3) requires moving to `contextvars` or thread-locals.
 
+## Dependencies
+
+Hard runtime deps are kept tight — every line in `pyproject.toml`'s `dependencies` is actually imported by `alpi/`. The audited set, with one-liner for why each earns its place:
+
+- `litellm` — multi-provider LLM client; the one primitive the agent is built around.
+- `rich` — Text formatting primitives used across the CLI wizards, TUI rendering pipeline, and tool output.
+- `textual` — TUI framework.
+- `prompt_toolkit` — CLI wizard input (menus, text, password). Replaced `questionary` in v0.2.10.
+- `httpx` — async HTTP; Telegram long-poll, Gmail API, web_fetch, setMyCommands, OAuth dance.
+- `click` — CLI command dispatch.
+- `pyyaml` — config.yaml + skill frontmatter.
+- `python-dotenv` — `.env` loader.
+- `croniter` — cron expression parsing for the schedule daemon.
+- `playwright` + `playwright-stealth` — interactive browser tool.
+- `pillow` — image pre-processing for `read_image` (auto-resize).
+- `html2text` — strip HTML to markdown in `web_fetch` / `web_extract`.
+- `ddgs` — DuckDuckGo search backend (replaced `duckduckgo-search` when that package was deprecated).
+- `edge-tts` — TTS tool (local-first, no API key).
+- `faster-whisper` — STT tool (local-first, no API key).
+
+Optional `dev` extra: `pytest` + `pytest-asyncio` for the test suite, `ruff` for lint, `pip-audit` for CVE scans.
+
+**No `gateway` extra.** Prior to v0.2.66 there was one bundling `python-telegram-bot`, `fastapi`, `uvicorn` for an HTTP webhook server that never materialised. A dependency audit confirmed zero imports from the codebase; dropped. If a FastAPI webhook ever lands, the extra comes back.
+
+Security posture: `uv run --with pip-audit pip-audit` ran clean against the full lockfile at the time of the v0.2.66 audit. Re-run before each release. Known-CVE deps are not allowed to accumulate — drop or upgrade.
+
 ## Testing
 
 `tests/` runs via `pytest`. ~340 tests, ~2s. `--llm` flag enables real-LLM integration tests (a few cents on free models).

@@ -1,6 +1,6 @@
 [project]
 name = "alpi"
-version = "0.2.65"
+version = "0.2.66"
 description = "A slim, self-improving AI agent"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -26,8 +26,12 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-gateway = ["python-telegram-bot>=21.0", "fastapi>=0.110.0", "uvicorn>=0.27.0"]
-dev = ["pytest>=8.0", "pytest-asyncio>=0.23", "ruff>=0.3.0"]
+# No `gateway` extra — the Telegram / IMAP / Gmail gateways live in core
+# and use raw httpx long-poll / smtplib. python-telegram-bot, fastapi,
+# and uvicorn used to be listed here for a webhook server that never
+# shipped; dropped in v0.2.66 after a dependency audit confirmed zero
+# imports. If a FastAPI webhook ever lands, add the extra back then.
+dev = ["pytest>=8.0", "pytest-asyncio>=0.23", "ruff>=0.3.0", "pip-audit>=2.7"]
 
 [project.scripts]
 alpi = "alpi.__main__:main"
