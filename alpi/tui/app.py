@@ -29,6 +29,7 @@ from alpi.tui.widgets import (
     DimLine,
     ErrorLine,
     ReasoningLine,
+    ResumeActivity,
     ThinkingIndicator,
     ToolCard,
     UserMessage,
@@ -203,7 +204,14 @@ class AlpiApp(App):
         self.query_one("#chat", VerticalScroll).anchor()
 
         if self.continue_last:
-            self._resume_last_session()
+            # Full TUI renders immediately; rehydration runs as a worker.
+            # A thin ResumeActivity bar sits between the top bar and the
+            # chat scroll with a spinner + "resuming…" text. Messages
+            # stream into the chat below as they mount; when the worker
+            # finishes it removes the activity bar.
+            activity = ResumeActivity()
+            self.mount(activity, before=self.query_one("#chat"))
+            self.call_after_refresh(self._kick_resume, activity)
 
         from alpi.tools import session_search
         session_search.set_current_session_id(self.engine.session.id)
@@ -629,30 +637,69 @@ class AlpiApp(App):
             pass
         self.exit()
 
-    def _resume_last_session(self) -> None:
+    def _kick_resume(self, activity: "ResumeActivity | None" = None) -> None:
+        """Launch the async resume worker after the activity bar paints."""
+        self.run_worker(
+            self._resume_last_session(activity), exclusive=True,
+        )
+
+    async def _resume_last_session(
+        self, activity: "ResumeActivity | None" = None,
+    ) -> None:
+        """Rehydrate the last session and reveal its replay atomically.
+
+        Three phases:
+          1. Activity bar visible. Read the session JSON, build every
+             replay widget IN MEMORY (no mounting yet).
+          2. Drop the activity bar. Single ``chat.mount(*widgets)``
+             call so Textual processes all of them in one Mount
+             event → one layout pass → one repaint. No widget-by-
+             widget streaming.
+          3. Resolve tool cards (``finish``), scroll to end, refresh
+             the header.
+        """
         from alpi.cli import _continue_last_session
+
+        def _drop_activity() -> None:
+            if activity is not None:
+                try:
+                    activity.remove()
+                except Exception:  # noqa: BLE001
+                    pass
+
         resumed = _continue_last_session(self.engine, self.home)
         if not resumed:
+            _drop_activity()
             return
 
         turns = self.engine.session.turns
-        self._mount_message(DimLine(
+        widgets: list = []
+        cards_to_finish: list[tuple[ToolCard, object]] = []
+        for t in turns:
+            if t.user:
+                widgets.append(UserMessage(t.user))
+            for tl in t.tools:
+                if tl.reasoning and self._show_reasoning():
+                    widgets.append(ReasoningLine(tl.reasoning))
+                card = ToolCard(
+                    tool_id=f"replay-{id(tl)}", name=tl.name, args=tl.args,
+                )
+                widgets.append(card)
+                cards_to_finish.append((card, tl))
+            if t.assistant:
+                widgets.append(AssistantMessage(initial=t.assistant))
+
+        widgets.append(DimLine(
             f"✦ continuing session {self.engine.session.id} — "
             f"{len(turns)} turns loaded"
         ))
 
-        for t in turns:
-            if t.user:
-                self._mount_message(UserMessage(t.user))
-            for tl in t.tools:
-                if tl.reasoning and self._show_reasoning():
-                    self._mount_message(ReasoningLine(tl.reasoning))
-                card = ToolCard(
-                    tool_id=f"replay-{id(tl)}", name=tl.name, args=tl.args,
-                )
-                self._mount_message(card)
-                card.finish(tl.result, ok=tl.ok, skip_duration=True)
-            if t.assistant:
-                self._mount_message(AssistantMessage(initial=t.assistant))
+        chat = self.query_one("#chat", VerticalScroll)
+        _drop_activity()
+        await chat.mount(*widgets)
 
+        for card, tl in cards_to_finish:
+            card.finish(tl.result, ok=tl.ok, skip_duration=True)
+
+        chat.scroll_end(animate=False)
         self._update_header()

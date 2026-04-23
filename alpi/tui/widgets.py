@@ -86,6 +86,51 @@ class ReasoningLine(Static):
         super().__init__(Text(f"» {compact}"))
 
 
+class ResumeActivity(Static):
+    """One-line activity indicator shown between the top bar and the
+    chat scroll while a long session rehydrates. Spinner + message,
+    auto-animating at 10 fps via a Textual timer. Removed when the
+    resume worker finishes.
+    """
+
+    DEFAULT_CSS = """
+    ResumeActivity {
+        height: 1;
+        padding: 0 2;
+        color: $text-muted;
+    }
+    """
+
+    _FRAMES = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+
+    def __init__(self, message: str = "resuming last session…") -> None:
+        super().__init__("")
+        self._message = message
+        self._idx = 0
+        self._timer = None
+
+    def on_mount(self) -> None:
+        self._timer = self.set_interval(1 / 10, self._tick)
+        self._refresh_label()
+
+    def _tick(self) -> None:
+        self._idx = (self._idx + 1) % len(self._FRAMES)
+        self._refresh_label()
+
+    def _refresh_label(self) -> None:
+        tv = self.app.theme_variables
+        accent = tv.get("accent", "cyan")
+        t = Text()
+        t.append(self._FRAMES[self._idx], style=accent)
+        t.append(f"  {self._message}")
+        self.update(t)
+
+    def on_unmount(self) -> None:
+        if self._timer is not None:
+            self._timer.stop()
+            self._timer = None
+
+
 _SPINNER_FRAMES = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
 
 

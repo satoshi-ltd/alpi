@@ -64,7 +64,7 @@ Audience: the creator (@soyjavi) and any future contributor reading the repo col
 | AU | Gateway/Schedule service — ops UX polish | ✅ shipped (v0.2.58) — `gateway stop` / `schedule stop` now warn when the daemon is under launchd/systemd (KeepAlive will bounce it back); new `gateway restart` / `schedule restart` verbs stop + poll for the service-managed relaunch; `alpi doctor` compares the `alpi` binary mtime against the daemon's elapsed time and warns "run `alpi X restart`" when the process is running stale code after a reinstall. |
 | AV | Sandbox: whitelist `/dev/null` so `git` works under sandbox-exec / bwrap | ✅ shipped (v0.2.59) — macOS sandbox profile now grants `file-write*` on the standard character devices (`/dev/null`, `/dev/zero`, `/dev/random`, `/dev/urandom`, `/dev/tty`, `/dev/stdin`, `/dev/stdout`, `/dev/stderr`). Linux bwrap already exposes them via `--dev /dev`. Regression tests cover the reported `git log` failure end-to-end. |
 | AW | Memory: drop user-name nominalization ("Javi wants…" → "user wants…") — identity lives in USER.md | ✅ shipped (v0.2.60) — memory tool's description + `content` parameter now explicitly instruct neutral "user" voice in `MEMORY.md`; existing entries stay intact (no automated rewrite). |
-| AX | TUI: loading indicator while resuming a long session | ship, S |
+| AX | TUI: activity indicator while resuming a long session | ✅ shipped (v0.2.64) — new `ResumeActivity` widget (spinner + "resuming last session…" at 10 fps, accent-coloured) sits between the top bar and the chat scroll. Worker rehydrates the session + builds every replay widget in memory, then drops the activity bar and `chat.mount(*widgets)` mounts all of them in a single batch so Textual repaints once. No widget-by-widget streaming. |
 | AY | TUI: rename `/cost` → `/status`, align output shape with the Telegram shortcut | ✅ shipped (v0.2.61) |
 | AZ | Move workspace configuration from `/workspace` slash to `alpi setup` | 🔵 backlog |
 
@@ -76,7 +76,7 @@ release. The bar for "ship v0.2" is **clean docs + version bump +
 real-use validation across a few sessions** — not feature
 exhaustiveness.
 
-**Nothing open for v0.2.** Everything the original roadmap promised is shipped. Still open for v0.3: **AI, AJ, AM, AO, AQ, AS.1, AT, AX, AZ** (see individual entries below). Cutting **v0.3.0** is gated by **AR** (production release — website + content rewrite). **AS.2** (inter-machine `peer` gateway) is scoped for v0.4. Long-term candidates: **H** (Home Assistant — blocked on confirmation), **N** (image gen), **U** (Signal), **Σ.1 / Σ.2** (stretch goals). Rejected: **C** (OpenAI Codex OAuth) and **V** (Anthropic OAuth) on ToS grounds (see Principles); **J** (camoufox) after humanised Playwright made it redundant.
+**Nothing open for v0.2.** Everything the original roadmap promised is shipped. Still open for v0.3: **AI, AJ, AM, AO, AQ, AS.1, AT, AZ** (see individual entries below). Cutting **v0.3.0** is gated by **AR** (production release — website + content rewrite). **AS.2** (inter-machine `peer` gateway) is scoped for v0.4. Long-term candidates: **H** (Home Assistant — blocked on confirmation), **N** (image gen), **U** (Signal), **Σ.1 / Σ.2** (stretch goals). Rejected: **C** (OpenAI Codex OAuth) and **V** (Anthropic OAuth) on ToS grounds (see Principles); **J** (camoufox) after humanised Playwright made it redundant.
 
 Once the v0.3 cycle picks up a few of those + a fresh CHANGELOG
 entry summarises v0.2, bump to `v0.3.0` and reopen the table.
@@ -291,9 +291,13 @@ Entries used to lean into first-person nominals ("Javi wants weekday standups…
 
 Existing `MEMORY.md` entries are left alone — explicit rewrites are safer than automated regex. The agent drifts toward the new voice on the next `add`.
 
-### AX. TUI: loading indicator while resuming a long session
+### AX. TUI: activity indicator while resuming (shipped v0.2.64)
 
-When `alpi` resumes a large session the TUI mounts silently, then spends a second or two rendering the replay. Feels frozen. Fix: show an `activity("resuming conversation…")` spinner until the first message from the replay is mounted, then hand off to the normal layout.
+Sessions with many turns (40+ with tools) took long enough to rehydrate that the TUI felt frozen on launch.
+
+Fix: dedicated `ResumeActivity` widget (one line high, accent-coloured spinner animating at 10 fps, text "resuming last session…") mounted between `AlpiTopBar` and the `#chat` scroll. `AlpiApp.on_mount` mounts it before the first paint, then schedules the replay via `call_after_refresh → run_worker`.
+
+The worker rehydrates the session file (sync, blocks the worker only), then builds every replay widget in memory without touching the DOM. Once the list is ready it drops the activity bar and calls `await chat.mount(*widgets)` — one Mount event, one layout pass, one repaint. After the mount resolves, it finishes tool cards (so they land in their resolved state) and scrolls to the end. No widget-by-widget streaming, no frozen TUI.
 
 ### AY. TUI: rename `/cost` → `/status` (shipped v0.2.61)
 
