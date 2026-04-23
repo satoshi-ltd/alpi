@@ -1,5 +1,35 @@
 # Changelog
 
+## v0.2.54 — 2026-04-23
+
+### gateway
+- per-chat session threading (AN closed) + AU backlog entry (`e0f093d`)
+
+## v0.2.53 — 2026-04-23
+
+### config
+- drop .env.example scaffold (AP closed) (`e707983`)
+
+## v0.2.52 — 2026-04-23
+
+### skill
+- tighten `tools:` field description + document scheduler TZ (`27765b0`)
+
+## v0.2.51 — 2026-04-23
+
+### tui
+- unified list row shape for selectable panels + /help palette (AH closed) (`f0f9052`)
+
+## v0.2.50 — 2026-04-23
+
+### config
+- tui.auto_resume flag for bare alpi (AL closed) (`8404526`)
+
+## v0.2.49 — 2026-04-23
+
+### roadmap
+- expand v0.3 backlog (AH–AT) + pre-push CHANGELOG hook (`543834d`)
+
 ## v0.2.47 — 2026-04-23
 
 ### setup

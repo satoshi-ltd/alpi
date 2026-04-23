@@ -70,7 +70,7 @@ release. The bar for "ship v0.2" is **clean docs + version bump +
 real-use validation across a few sessions** — not feature
 exhaustiveness.
 
-**Nothing open for v0.2.** Everything the original roadmap promised is shipped. Items still in the backlog — **H** (Home Assistant), **N** (image gen), **U** (Signal), **Σ.1/Σ.2** (stretch goals), plus **AI, AJ, AK, AM, AO, AQ, AU** (TUI polish, Memory v2, browser realism, Telegram polish, dep audit, gateway sessions, default skills, scaffold review, voice mode polish), **AS.1** (ALPI protocol design + inter-profile prototype), and **AT** (system-prompt / tool-description audit) — roll forward to v0.3. Cutting **v0.3.0** is gated by **AR** (production release — website + content rewrite). **AS.2** (inter-machine `peer` gateway) is scoped for v0.4. **C** (OpenAI Codex OAuth), **V** (Anthropic OAuth), and **J** (camoufox) were rejected — C/V on ToS grounds (see Principles), J after humanised Playwright made it redundant.
+**Nothing open for v0.2.** Everything the original roadmap promised is shipped. Still open for v0.3: **AI, AJ, AK, AM, AO, AQ, AS.1, AT, AU** (see individual entries below). Cutting **v0.3.0** is gated by **AR** (production release — website + content rewrite). **AS.2** (inter-machine `peer` gateway) is scoped for v0.4. Long-term candidates: **H** (Home Assistant — blocked on confirmation), **N** (image gen), **U** (Signal), **Σ.1 / Σ.2** (stretch goals). Rejected: **C** (OpenAI Codex OAuth) and **V** (Anthropic OAuth) on ToS grounds (see Principles); **J** (camoufox) after humanised Playwright made it redundant.
 
 Once the v0.3 cycle picks up a few of those + a fresh CHANGELOG
 entry summarises v0.2, bump to `v0.3.0` and reopen the table.
