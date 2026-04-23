@@ -52,7 +52,7 @@ Audience: the creator (@soyjavi) and any future contributor reading the repo col
 | AK.1 | Telegram: `/help /status /new /continue /model` shortcuts + native command menu (`setMyCommands`) + interactive `/model` picker (inline-keyboard drill-down) | ✅ shipped (v0.2.56) |
 | AK.2 | Telegram: MarkdownV2 reply rendering | ✅ shipped (v0.2.57) |
 | AL | `alpi` auto-resumes last session by config | ✅ shipped (v0.2.50) — new `tui.auto_resume` flag (default `false`). When `true`, bare `alpi` behaves as if `-c` was passed; `/new` inside the TUI still starts a fresh thread. `alpi chat --once` (scripts + gateway) always starts clean. Explicit `-c` stays as a manual override. |
-| AM | Dependency audit (drop/upgrade, security-first) | 🔵 backlog |
+| AM | Dependency audit (drop/upgrade, security-first) | ✅ shipped — dropped the unused `gateway` extra (python-telegram-bot, fastapi, uvicorn — zero imports; gateways use raw httpx). Added `pip-audit` to the `dev` extra. Clean CVE report across the full lockfile. Also caught `litellm.telemetry = True` as a default and flipped it off in `llm.py::_silence_litellm()` (regression test in `tests/test_llm_privacy.py`). Docs: `ARCHITECTURE.md → Dependencies` (why each dep), `SECURITY.md → Third-party code` (per-dep risk profile + policy). |
 | AN | Gateway session model — per-chat persistence | ✅ shipped (v0.2.54) — new `alpi/session_map.py` holds a `{chat_id: session_id}` pointer map per profile; the gateway spawns `alpi chat --once --resume-chat <chat_id>` and the CLI consults the map to resume that chat's thread (or binds a fresh one). Same mechanism across Telegram / IMAP / Gmail — natural per-platform semantics fall out of the `external_chat_id` each platform uses. Session files are never deleted by the pointer logic; historical threads stay searchable. |
 | AO | Default skills bundle (writer / coder / webmaster …) | 🔵 backlog — research first |
 | AP | Profile scaffold: drop `.env.example` | ✅ shipped (v0.2.53) — `config.seed_defaults()` no longer writes `~/.alpi/.env.example`. The wizards (`alpi setup`) are the canonical onboarding path; CONFIG.md is the canonical key reference for non-interactive setups. Removes the double-authoring drift risk (example was already out of sync with the Ollama multi-endpoint reshape). |
@@ -76,7 +76,7 @@ release. The bar for "ship v0.2" is **clean docs + version bump +
 real-use validation across a few sessions** — not feature
 exhaustiveness.
 
-**Nothing open for v0.2.** Everything the original roadmap promised is shipped. Still open for v0.3: **AI, AJ, AM, AO, AQ, AS.1, AT** (see individual entries below). Cutting **v0.3.0** is gated by **AR** (production release — website + content rewrite). **AS.2** (inter-machine `peer` gateway) is scoped for v0.4. Long-term candidates: **H** (Home Assistant — blocked on confirmation), **N** (image gen), **U** (Signal), **Σ.1 / Σ.2** (stretch goals). Rejected: **C** (OpenAI Codex OAuth) and **V** (Anthropic OAuth) on ToS grounds (see Principles); **J** (camoufox) after humanised Playwright made it redundant.
+**Nothing open for v0.2.** Everything the original roadmap promised is shipped. Still open for v0.3: **AI, AJ, AO, AQ, AS.1, AT** (see individual entries below). Cutting **v0.3.0** is gated by **AR** (production release — website + content rewrite). **AS.2** (inter-machine `peer` gateway) is scoped for v0.4. Long-term candidates: **H** (Home Assistant — blocked on confirmation), **N** (image gen), **U** (Signal), **Σ.1 / Σ.2** (stretch goals). Rejected: **C** (OpenAI Codex OAuth) and **V** (Anthropic OAuth) on ToS grounds (see Principles); **J** (camoufox) after humanised Playwright made it redundant.
 
 Once the v0.3 cycle picks up a few of those + a fresh CHANGELOG
 entry summarises v0.2, bump to `v0.3.0` and reopen the table.
@@ -150,16 +150,27 @@ Today: `alpi` → fresh session; `alpi -c` → resume most recent. Change: `alpi
 
 **Scope.** Flip the default in `cli.py::main` so `continue_last` is true when the bare subcommand fires; keep `alpi chat --once` starting clean (scripts want deterministic, empty context). No new config key needed — resume is the product behaviour, not a toggle.
 
-### AM. Dependency audit
+### AM. Dependency audit (shipped)
 
-Sweep of `pyproject.toml` dependencies with security + value lens:
+Sweep of `pyproject.toml` with a security + value lens.
 
-- Run `pip-audit` / `uv tree` against current `uv.lock`, note any known CVE.
-- Drop unused transitives, pin majors where a breaking upgrade would land.
-- Evaluate whether big-footprint deps (litellm, playwright, textual, questionary-equivalents already removed) still earn their weight.
-- Document the kept set in ARCHITECTURE with a one-liner per dep.
+Findings:
 
-Low-risk, high-signal. Do after the TUI and browser work so the audit reflects final usage.
+- `pip-audit` ran clean across the 103-package lockfile. Zero CVEs.
+- The `gateway` optional extra (`python-telegram-bot`, `fastapi`, `uvicorn`) had **zero imports** in the codebase. Telegram uses raw httpx long-poll; IMAP/Gmail use `imaplib`/`httpx`; the webhook platform is a stub. Dropped the extra entirely.
+- Every remaining entry in `dependencies` is actually imported — confirmed by grepping top-level `import`/`from` statements across `alpi/`.
+- **`litellm.telemetry` defaults to `True`** — LiteLLM phones home on every completion unless disabled. Alpi's "no telemetry" principle made this a silent violation. Flipped off in `_silence_litellm()` with a regression test.
+
+Changes landed:
+
+- `pyproject.toml` — removed the `gateway` extra with a comment explaining why, added `pip-audit` to the `dev` extra so `uv run --with pip-audit pip-audit` is a one-liner for future audits.
+- `uv.lock` regenerated — starlette and uvicorn gone from the transitive set.
+- `alpi/llm.py::_silence_litellm()` — added `litellm.telemetry = False` at the import-time guard.
+- `tests/test_llm_privacy.py` — regression test that asserts the flag stays off after importing `alpi.llm`.
+- `docs/ARCHITECTURE.md` — new "Dependencies" section listing every runtime dep with a one-line justification.
+- `docs/SECURITY.md` — new "Third-party code" section with per-dep risk profile, CVE policy, and fallback-plan policy for reverse-engineered integrations (`edge-tts`, `playwright-stealth`, `ddgs`).
+
+Re-run `pip-audit` before each release. New runtime deps require a row in both the ARCHITECTURE table and the SECURITY risk table.
 
 ### AN. Gateway session model — analyse and unify
 
