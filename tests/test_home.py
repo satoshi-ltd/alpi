@@ -27,7 +27,7 @@ def test_named_profile_goes_to_subdir(monkeypatch) -> None:
 
 def test_ensure_home_creates_subtree(tmp_path: Path) -> None:
     home.ensure_home(tmp_path)
-    for sub in ("memories", "sessions", "skills", "schedule/output", "gateway/logs"):
+    for sub in ("memories", "sessions", "skills", "schedule/output", "logs"):
         assert (tmp_path / sub).is_dir()
 
 

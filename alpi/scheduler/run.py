@@ -300,13 +300,14 @@ def _load_env(home: Path) -> None:
 
 
 def _configure_logging(home: Path) -> None:
-    log_dir = home / "schedule" / "logs"
-    log_dir.mkdir(parents=True, exist_ok=True)
-    log_file = log_dir / "scheduler.log"
-    file_handler = RotatingFileHandler(log_file, maxBytes=1_000_000, backupCount=0)
+    from alpi._log import FORMAT, MAX_BYTES, log_path
+
+    path = log_path(home, "schedule")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    file_handler = RotatingFileHandler(path, maxBytes=MAX_BYTES, backupCount=0)
     logging.basicConfig(
         level=logging.INFO,
-        format="%(asctime)s %(levelname)s %(name)s %(message)s",
+        format=FORMAT,
         handlers=[file_handler, logging.StreamHandler()],
     )
 
@@ -350,9 +351,9 @@ def ensure_running(home: Path) -> int | None:
     if pid:
         return pid
 
-    log_dir = home / "schedule" / "logs"
-    log_dir.mkdir(parents=True, exist_ok=True)
-    log_file_path = log_dir / "scheduler.log"
+    from alpi._log import log_path
+    log_file_path = log_path(home, "schedule")
+    log_file_path.parent.mkdir(parents=True, exist_ok=True)
     # Open in append mode and hand the fd to the child. The parent
     # closes its handle immediately after spawn so we don't hold extra
     # fds open in the TUI.

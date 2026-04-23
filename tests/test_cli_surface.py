@@ -1,8 +1,9 @@
 """Guardrails on what ``alpi --help`` shows the user.
 
-Dropped commands should be gone; hidden options should not appear.
-This test locks the CLI surface so a future refactor doesn't
-accidentally re-expose ``alpi model`` or ``--emit-events``.
+The CLI is deliberately thin: everything configurable lives in
+``alpi setup``, logs are unified under ``alpi logs``, and
+service-invoked daemon commands (``gateway start`` / ``schedule
+start``) are hidden from help. This test locks that surface.
 """
 
 from __future__ import annotations
@@ -17,43 +18,58 @@ def test_top_level_help_shows_only_canonical_commands() -> None:
     assert result.exit_code == 0
     out = result.output
 
-    # Canonical commands — present.
-    for name in ("chat", "setup", "profile", "gateway", "schedule", "mcp"):
+    for name in ("chat", "setup", "doctor", "logs", "profile", "gateway", "schedule"):
         assert name in out, f"{name!r} missing from top-level --help"
 
-    # Dropped — must not appear.
-    for gone in ("model",):
-        # Check that "model" isn't listed as a top-level command. It
-        # may still appear in prose ("model, gateways, MCPs") so we
-        # look for the "  model  " listing pattern.
-        assert "\n  model " not in out and "\n  model\n" not in out, (
-            f"{gone!r} should be removed from top-level --help"
-        )
+    # mcp is fully absorbed by `alpi setup → MCPs`.
+    assert "\n  mcp " not in out and "\n  mcp\n" not in out
 
 
 def test_chat_help_does_not_expose_emit_events() -> None:
     result = CliRunner().invoke(cli.main, ["chat", "--help"])
     assert result.exit_code == 0
     assert "--once" in result.output
-    # Internal gateway contract — hidden, must not show in --help.
     assert "--emit-events" not in result.output
 
 
 def test_chat_emit_events_still_works_when_invoked_directly() -> None:
-    # The option is hidden, not removed — the gateway still spawns
-    # ``alpi chat --once "..." --emit-events``. Smoke-check parsing.
     result = CliRunner().invoke(cli.main, ["chat", "--emit-events", "--help"])
     assert result.exit_code == 0
 
 
-def test_gateway_subcommands_no_setup() -> None:
+def test_gateway_help_lists_start_and_stop() -> None:
     result = CliRunner().invoke(cli.main, ["gateway", "--help"])
     assert result.exit_code == 0
-    for sub in ("start", "stop", "status", "logs", "install", "uninstall"):
+    assert "start" in result.output
+    assert "stop" in result.output
+    # Dropped: status/install/uninstall/logs live in `alpi setup` / `alpi logs`.
+    for gone in ("status", "install", "uninstall", "logs"):
+        assert f"\n  {gone}" not in result.output, f"gateway {gone} should be gone"
+
+
+def test_schedule_help_lists_manual_controls() -> None:
+    result = CliRunner().invoke(cli.main, ["schedule", "--help"])
+    assert result.exit_code == 0
+    for sub in ("start", "stop", "run-once"):
         assert sub in result.output
-    # 'setup' was removed — use `alpi setup → Gateways → Telegram` instead.
-    # A lingering 'setup' here would be a regression.
-    assert "\n  setup " not in result.output
+    for gone in ("status", "install", "uninstall", "logs"):
+        assert f"\n  {gone}" not in result.output, f"schedule {gone} should be gone"
+
+
+def test_dropped_commands_are_gone() -> None:
+    for argv in (
+        ["gateway", "status"],
+        ["gateway", "install"],
+        ["gateway", "uninstall"],
+        ["gateway", "logs"],
+        ["schedule", "status"],
+        ["schedule", "install"],
+        ["schedule", "uninstall"],
+        ["schedule", "logs"],
+        ["mcp"],
+    ):
+        result = CliRunner().invoke(cli.main, argv)
+        assert result.exit_code != 0, f"{argv} should not exist"
 
 
 def test_profile_subcommands_include_remove() -> None:
@@ -63,6 +79,13 @@ def test_profile_subcommands_include_remove() -> None:
         assert sub in result.output
 
 
+def test_logs_help_lists_source_filter() -> None:
+    result = CliRunner().invoke(cli.main, ["logs", "--help"])
+    assert result.exit_code == 0
+    assert "--source" in result.output
+    assert "--follow" in result.output or "-f" in result.output
+
+
 # ----------------------------------------------------------------------
 # Daemon workspace validation — fail fast before the daemon loops
 # ----------------------------------------------------------------------
@@ -70,29 +93,17 @@ def test_profile_subcommands_include_remove() -> None:
 
 def test_gateway_start_rejects_missing_workspace(tmp_path, monkeypatch) -> None:
     """Unset ``workspace`` must stop ``alpi gateway start`` before it
-    writes a PID file or touches the network.
-
-    Rationale: a gateway with no workspace is a daemon that rejects
-    every tool call silently. Discovering that via ``tail -f`` an hour
-    later is strictly worse than a UsageError at the command boundary.
-    """
+    writes a PID file or touches the network."""
     monkeypatch.setenv("ALPI_HOME", str(tmp_path))
-    # Bare-minimum config: no workspace key at all.
     (tmp_path / "config.yaml").write_text("model: openrouter/foo/bar\n")
 
     result = CliRunner().invoke(cli.main, ["gateway", "start"])
     assert result.exit_code != 0
     assert "No workspace configured" in result.output
-    # Critical: PID file must NOT exist — the daemon aborted before
-    # ``_write_pid`` could fire.
     assert not (tmp_path / "gateway" / "gateway.pid").exists()
 
 
 def test_gateway_start_rejects_nonexistent_workspace(tmp_path, monkeypatch) -> None:
-    """``workspace`` set but the directory is gone (typo, moved mount).
-
-    Same rationale as above — fail loudly, not silently.
-    """
     monkeypatch.setenv("ALPI_HOME", str(tmp_path))
     (tmp_path / "config.yaml").write_text(
         "model: openrouter/foo/bar\nworkspace: /no/such/dir\n"
@@ -105,12 +116,6 @@ def test_gateway_start_rejects_nonexistent_workspace(tmp_path, monkeypatch) -> N
 
 
 def test_schedule_start_rejects_missing_workspace(tmp_path, monkeypatch) -> None:
-    """Schedule daemon carries the same invariant as the gateway.
-
-    Scheduled jobs spawn ``alpi chat --once`` subprocesses — each one
-    needs a workspace. A silent daemon that never runs a single job is
-    a worse failure mode than refusing to start.
-    """
     monkeypatch.setenv("ALPI_HOME", str(tmp_path))
     (tmp_path / "config.yaml").write_text("model: openrouter/foo/bar\n")
 

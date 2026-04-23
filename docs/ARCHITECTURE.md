@@ -58,18 +58,30 @@ alpi chat                      alias for `alpi`
 alpi chat --once "<text>"      one-shot turn to stdout (pipe-friendly)
 alpi chat --once ... --emit-events     INTERNAL — gateway subprocess contract
 
-alpi setup                     interactive menu: model / gateways / MCPs
+alpi setup                     interactive menu: model / gateways / voice / MCPs /
+                               sandbox / gateway service / schedule service /
+                               health check / cleanup
+
+alpi doctor                    live health check (Telegram getMe, IMAP login,
+                               Gmail token refresh, MCP handshake, service PIDs);
+                               exits 1 on any failure, 0 otherwise
+
+alpi logs                      tail every subsystem log merged by timestamp
+  --source {gateway|schedule|agent|approval}   restrict to one subsystem
+  -n N                                         last N lines (default 100)
+  -f                                           follow mode (poll every 1s)
 
 alpi profile list              list profiles, mark the active one
 alpi profile create <name>     bootstrap a new profile tree
 alpi profile remove <name>     delete after safety checks + confirm
 
-alpi gateway   start|stop|status|logs|install|uninstall
-alpi schedule  start|stop|status|logs|install|uninstall|run-once
-alpi mcp       list|test|remove
+alpi gateway   start|stop               manual control for debug; service runs via `alpi setup → Gateway service`
+alpi schedule  start|stop|run-once      manual control; service auto-installs on first run
 ```
 
-**Shape rules:** containers (profile) get `list/create/remove`. Daemons (gateway, schedule) get `start/stop/status/logs/install/uninstall`. Schedule adds `run-once`. MCP has no daemon (servers spawn as Engine children) so no `start/stop`. Interactive wizards live exclusively under `alpi setup`; never add a per-feature wizard command.
+**Shape rules:** containers (profile) get `list/create/remove`. Daemons (gateway, schedule) get `start/stop` for manual/debug use — install/uninstall lives only in the wizard (`alpi setup → {Gateway,Schedule} service`), so users don't need to memorise two ways of doing the same thing. The scheduler auto-installs as a service on first run; a marker at `{home}/schedule/.bootstrapped` prevents re-installing after the user uninstalls from the wizard. Interactive wizards live exclusively under `alpi setup`; never add a per-feature wizard command.
+
+**Command ordering** in `--help` is frequency-first, not alphabetical: `chat → setup → doctor → logs → profile → gateway → schedule`. See `_OrderedGroup` in `cli.py`.
 
 **`alpi/ui.py`** is the shared interactive layer. Raw `questionary.*` is forbidden outside it. Helpers: `banner`, `menu`, `text`, `password`, `confirm`, `row`, `ok/fail/warn/dim/saved/cancelled`. The close item is added automatically with value `None` (callers treat `None` as "out").
 
@@ -252,7 +264,7 @@ Separate process from the TUI. `alpi gateway start` runs an event loop that list
 
 Allowlist: `TELEGRAM_ALLOWED_CHAT_IDS` and `IMAP_ALLOWED_SENDERS` in `.env`, fail-closed if unset. Per-platform config under `gateway.{telegram,imap}` in `config.yaml` (`show_tool_trace`, `typing_indicator`, etc.).
 
-`alpi gateway install/uninstall` registers a launchd (macOS) or systemd-user (Linux) unit so the gateway survives reboot.
+The gateway is registered as a launchd (macOS) or systemd-user (Linux) unit via `alpi setup → Gateway service` so it survives reboot.
 
 ### Schedule (`alpi/scheduler/`)
 
@@ -260,7 +272,43 @@ Long-running daemon with a tick loop (default 30s). `add` schedules a job (`kind
 
 ### MCP client (`alpi/mcp/`)
 
-Spawns user-configured MCP servers (stdio JSON-RPC, SSE planned). Their tools are wrapped and registered as alpi tools. Servers configured in `config.yaml` under `mcp.servers.<name>` (command, args, env). `alpi mcp list/test/remove` reads only; mutations live in `alpi setup → MCPs`.
+Spawns user-configured MCP servers (stdio JSON-RPC, SSE planned). Their tools are wrapped and registered as alpi tools. Servers configured in `config.yaml` under `mcp.servers.<name>` (command, args, env). Management lives in `alpi setup → MCPs`; `alpi mcp` itself is not exposed on the CLI surface.
+
+### Logging (`alpi/_log.py`, `alpi/logs.py`)
+
+Every subsystem writes to a single flat folder: `~/.alpi/logs/<subsystem>.log`, rotated at 1 MB with no backups. Same format everywhere (`%(asctime)s %(levelname)s %(name)s %(message)s`) so `alpi logs` can merge them by timestamp prefix. The source tag on display comes from the filename.
+
+Four sources today:
+
+- **`gateway`** — inbound platform traffic (Telegram/IMAP/Gmail), agent spawns triggered by incoming messages, delivery errors. Written by the gateway daemon.
+- **`schedule`** — cron tick loop, job fires, job create/delete. Written by the schedule daemon.
+- **`agent`** — one line per TUI/gateway/schedule-triggered turn: session id, elapsed, tool names, reply size, cumulative cost, truncated user prompt. This is the **cross-session grep index** — `sessions/<id>.json` carry the full detail; `agent.log` lets you answer "what has alpi been doing this week?" without iterating JSONs.
+- **`approval`** — one line per non-SAFE terminal command classification (ALLOW / DENY with severity, pattern, reason). **Security audit trail**; complements the per-turn detail in `sessions/`.
+
+Why logs are NOT inside `sessions/`: `sessions/` is a structured store (one JSON per conversation, indexed by id, consumed by `session_search` and the resume flow). Mixing freeform logs would break the glob pattern and the cleanup semantics. Logs are the **index and audit trail**; sessions are the **content**. Peers, not nested.
+
+Why one flat folder (`logs/`) instead of per-subsystem dirs: four tiny `<subsystem>/logs/` folders with a single file each is pure noise. Daemons still keep their own dirs for non-log state (`gateway/gateway.pid`, `schedule/jobs.json`) — only the `.log` files consolidate.
+
+Adding a new source is two lines: `from alpi._log import get_subsystem_logger; logger = get_subsystem_logger(home, "my-sub")`. `alpi logs` picks it up without changes; add the tag to the `--source` choice list in `cli.py::logs_cmd` if you want it filterable.
+
+### Doctor (`alpi/doctor.py`)
+
+`alpi doctor` — live health check. Verifies each subsystem actually **responds**, not just that it's configured. Same entry point from the CLI and from `alpi setup → Health check`; the status in the setup menu row (`all green` / `N warning(s)` / `N failing`) runs the full check too.
+
+Checks:
+
+- **Model** — `cfg.model` set + provider's API key present in `.env` or env.
+- **Workspace** — configured + exists + writable.
+- **Gateways** (live) — Telegram `getMe` over HTTPS, IMAP login+SMTP handshake, Gmail OAuth token refresh.
+- **Services** — `service.installed()` + `kill -0 <pid>` to distinguish "installed but dead" from "installed and running".
+- **MCPs** (live) — spawn each configured server, `list_tools`, stop. Parallelised; per-server timeout 8 s.
+- **Security** — sandbox backend binary on PATH (if `tools.terminal.sandbox: true`), approval allowlist count.
+
+Parallelism: the four network-bound tasks (Telegram/IMAP/Gmail/MCPs) submit to a `ThreadPoolExecutor(max_workers=8)`. Sync checks (model, workspace, services, security) run on the main thread while the pool works. Total wall time ≈ slowest single task, not sum — ~5-10 s on a healthy profile.
+
+Progressive rendering: `run_and_render()` uses `rich.live.Live` — every row appears immediately with a cyan spinner, each resolves to `✓`/`✗`/`!` as its future completes. Animation at 10 fps via a manual frame cycler (rich's `Spinner` objects can't be appended to `Text`). Layout is stable (same rows, same column widths) so the eye doesn't jump.
+
+Exit codes: `1` if any check returns `fail`, `0` for warn/info/ok. Warnings don't break cron. The wizard entry ignores the exit code — it press-enter-waits so the user can read.
 
 ### Sessions (`alpi/session.py`)
 

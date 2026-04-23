@@ -28,7 +28,7 @@ def ensure_home(home: Path) -> None:
         "sessions",
         "skills",
         "schedule/output",
-        "gateway/logs",
+        "logs",
     ):
         (home / sub).mkdir(parents=True, exist_ok=True)
     gi = home / ".gitignore"
@@ -38,7 +38,7 @@ def ensure_home(home: Path) -> None:
             "secrets/\n"
             "sessions/\n"
             "schedule/output/\n"
-            "gateway/logs/\n"
+            "logs/\n"
             "cache/\n"
             "skills/**/secrets/\n"
         )

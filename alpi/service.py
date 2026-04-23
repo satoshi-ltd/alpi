@@ -250,9 +250,9 @@ def _systemd_hint(result: subprocess.CompletedProcess) -> str:
 
 
 def _log_path(name: str, home: Path) -> Path:
-    if name == "gateway":
-        return home / "gateway" / "logs" / "gateway.log"
-    return home / "schedule" / "logs" / "scheduler.log"
+    from alpi._log import log_path
+    # ``schedule`` is the daemon name; logs use the same tag.
+    return log_path(home, name)
 
 
 def _program_args_xml(alpi_bin: str, name: str) -> str:

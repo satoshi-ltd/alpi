@@ -81,6 +81,12 @@ def tmp_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 
 @pytest.fixture(autouse=True)
+def _disable_scheduler_autoinstall(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Prevent tests from writing launchd plists / systemd units on the dev box."""
+    monkeypatch.setenv("ALPI_SKIP_AUTO_INSTALL", "1")
+
+
+@pytest.fixture(autouse=True)
 def _reset_session_search_state() -> None:
     """Avoid state leaking between tests that use session_search."""
     try:

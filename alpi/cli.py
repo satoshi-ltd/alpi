@@ -23,6 +23,33 @@ def _bootstrap(h: Path) -> None:
         personality.write_text(default)
 
 
+def _auto_install_scheduler(h: Path, profile: str) -> None:
+    """Register the schedule daemon on first run of this profile, silently.
+
+    Once we've attempted it (successfully or not), drop a marker so
+    later invocations don't re-install after the user explicitly
+    uninstalled it from ``alpi setup → Schedule service``. The marker
+    is per-profile so each profile gets one first-run attempt.
+    """
+    if os.environ.get("ALPI_SKIP_AUTO_INSTALL"):
+        return
+    marker = h / "schedule" / ".bootstrapped"
+    if marker.exists():
+        return
+    try:
+        from alpi import service
+        if not service.installed("schedule", profile):
+            service.install("schedule", h, profile)
+    except Exception:  # noqa: BLE001
+        pass
+    finally:
+        try:
+            marker.parent.mkdir(parents=True, exist_ok=True)
+            marker.touch()
+        except OSError:
+            pass
+
+
 def _run_chat(h: Path, continue_last: bool = False) -> None:
     _bootstrap(h)
     from alpi.tui import AlpiApp
@@ -168,7 +195,25 @@ def _run_once(h: Path, user_text: str, emit_events: bool = False) -> None:
 
 # Click subcommands
 
+class _OrderedGroup(click.Group):
+    """Display subcommands by user-frequency, not alphabetically.
+
+    Click's default listing is alphabetical, which buries `setup` under
+    `gateway` / `schedule` even though the daemon groups are for rare
+    manual control. This keeps the first line of ``alpi --help`` the one
+    a new user actually wants.
+    """
+
+    _ORDER = ["chat", "setup", "doctor", "logs", "profile", "gateway", "schedule"]
+
+    def list_commands(self, ctx: click.Context) -> list[str]:
+        known = [c for c in self._ORDER if c in self.commands]
+        extra = sorted(c for c in self.commands if c not in self._ORDER)
+        return known + extra
+
+
 @click.group(
+    cls=_OrderedGroup,
     invoke_without_command=True,
     context_settings={"max_content_width": 100, "help_option_names": ["-h", "--help"]},
 )
@@ -193,6 +238,11 @@ def main(ctx: click.Context, profile: str | None, continue_last: bool) -> None:
     if profile:
         os.environ["ALPI_PROFILE"] = profile
     _bootstrap(h)
+    # Skip auto-install when the invocation is itself the daemon (launchd
+    # spawns ``alpi schedule start``) to avoid touching launchctl from
+    # inside a service-spawned process.
+    if ctx.invoked_subcommand not in {"schedule", "gateway"}:
+        _auto_install_scheduler(h, profile or "default")
     if ctx.invoked_subcommand is None:
         _run_chat(h, continue_last=continue_last)
 
@@ -238,13 +288,13 @@ def _require_workspace(h: Path) -> None:
 
 @main.group()
 def gateway() -> None:
-    """Gateway daemon (inbound channels: Telegram, Email, …)."""
+    """Gateway daemon controls (configure channels via ``alpi setup``)."""
 
 
 @gateway.command("start")
 @click.pass_context
 def gateway_start(ctx: click.Context) -> None:
-    """Start the gateway process (blocking)."""
+    """Start the gateway process in the foreground (blocking)."""
     from alpi.gateway.run import run as gw_run, pid_path
     h: Path = ctx.obj["home"]
     _bootstrap(h)
@@ -256,7 +306,7 @@ def gateway_start(ctx: click.Context) -> None:
 @gateway.command("stop")
 @click.pass_context
 def gateway_stop(ctx: click.Context) -> None:
-    """Stop a running gateway process."""
+    """Stop a running gateway (SIGTERM)."""
     import signal
     from alpi.gateway.run import pid_path
     h: Path = ctx.obj["home"]
@@ -273,115 +323,19 @@ def gateway_stop(ctx: click.Context) -> None:
         p.unlink(missing_ok=True)
 
 
-@gateway.command("status")
-@click.pass_context
-def gateway_status(ctx: click.Context) -> None:
-    """Show whether the gateway is running (and whether it's installed)."""
-    from alpi.gateway.run import pid_path
-    h: Path = ctx.obj["home"]
-    p = pid_path(h)
-    _print_daemon_status("gateway", p, h, ctx.obj.get("profile") or "default")
-
-
-@gateway.command("install")
-@click.pass_context
-def gateway_install(ctx: click.Context) -> None:
-    """Install the gateway as a system service (launchd/systemd)."""
-    h: Path = ctx.obj["home"]
-    _bootstrap(h)
-    _require_workspace(h)
-    _install_daemon(ctx, "gateway")
-
-
-@gateway.command("uninstall")
-@click.pass_context
-def gateway_uninstall(ctx: click.Context) -> None:
-    """Stop + unregister the gateway system service."""
-    _uninstall_daemon(ctx, "gateway")
-
-
-@gateway.command("logs")
-@click.option("-n", "--tail", default=50, help="Number of lines to show.")
-@click.pass_context
-def gateway_logs(ctx: click.Context, tail: int) -> None:
-    """Show the tail of the gateway log."""
-    h: Path = ctx.obj["home"]
-    log_file = h / "gateway" / "logs" / "gateway.log"
-    if not log_file.exists():
-        click.echo("gateway: no log yet")
-        return
-    lines = log_file.read_text().splitlines()[-tail:]
-    click.echo("\n".join(lines))
-
-
 # MCP servers
 
-@main.group()
-def mcp() -> None:
-    """Inspect configured MCP servers."""
-
-
-@mcp.command("list")
-@click.pass_context
-def mcp_list(ctx: click.Context) -> None:
-    """List configured MCP servers (from config.yaml)."""
-    from alpi import ui
-    h: Path = ctx.obj["home"]
-    cfg = config.load(h)
-    servers = (cfg.raw.get("mcp") or {}).get("servers") or {}
-    if not servers:
-        click.echo("mcp: no servers configured. Run `alpi setup` → MCPs.")
-        return
-    click.echo(f"mcp: {len(servers)} server(s)")
-    rows: list[list[str]] = []
-    for name, spec in sorted(servers.items()):
-        cmd = spec.get("command", "?")
-        args = " ".join(spec.get("args") or [])
-        rows.append([name, cmd, args])
-    ui.columns(rows)
-
-
-@mcp.command("test")
-@click.argument("name")
-@click.pass_context
-def mcp_test(ctx: click.Context, name: str) -> None:
-    """Spawn one MCP server, list its tools, then stop it."""
-    from alpi.mcp.client import MCPClient, MCPError
-    h: Path = ctx.obj["home"]
-    cfg = config.load(h)
-    spec = ((cfg.raw.get("mcp") or {}).get("servers") or {}).get(name)
-    if not spec:
-        raise click.ClickException(f"no server {name!r} in config.yaml")
-    client = MCPClient(
-        name=name,
-        command=spec.get("command", ""),
-        args=list(spec.get("args") or []),
-        env=dict(spec.get("env") or {}),
-    )
-    try:
-        client.start()
-    except MCPError as e:
-        raise click.ClickException(str(e))
-    try:
-        tools_ = client.list_tools()
-        click.echo(f"{name}: ok ({len(tools_)} tool{'s' if len(tools_) != 1 else ''})")
-        for t in tools_:
-            click.echo(f"  {name}:{t.name}")
-    finally:
-        client.stop()
-
-
-# Schedule daemon
+# Schedule daemon — auto-installs on first `alpi` run; these are for manual/debug use
 
 @main.group()
 def schedule() -> None:
-    """Schedule daemon (runs cron + inactivity jobs)."""
+    """Schedule daemon controls (auto-installs as a service on first run)."""
 
 
 @schedule.command("start")
 @click.pass_context
 def schedule_start(ctx: click.Context) -> None:
-    """Start the schedule daemon (blocking)."""
+    """Start the schedule daemon in the foreground (blocking)."""
     from alpi.scheduler.run import run as sch_run, pid_path
     h: Path = ctx.obj["home"]
     _bootstrap(h)
@@ -393,56 +347,13 @@ def schedule_start(ctx: click.Context) -> None:
 @schedule.command("stop")
 @click.pass_context
 def schedule_stop(ctx: click.Context) -> None:
-    """Stop a running schedule daemon."""
+    """Stop a running schedule daemon (SIGTERM)."""
     from alpi.scheduler.run import stop as sch_stop
     h: Path = ctx.obj["home"]
     if sch_stop(h):
         click.echo("schedule: SIGTERM sent")
     else:
         click.echo("schedule: not running")
-
-
-@schedule.command("status")
-@click.pass_context
-def schedule_status(ctx: click.Context) -> None:
-    """Show whether the daemon is running + list jobs."""
-    import json
-    from alpi.scheduler.run import pid_path, jobs_path
-    h: Path = ctx.obj["home"]
-    _print_daemon_status("schedule", pid_path(h), h, ctx.obj.get("profile") or "default")
-    jp = jobs_path(h)
-    if jp.exists():
-        jobs = json.loads(jp.read_text() or "[]")
-        if jobs:
-            click.echo(f"jobs ({len(jobs)}):")
-            for j in jobs:
-                descr = j.get("expression") or f"after {j.get('after_hours')}h"
-                last = j.get("last_run_at") or "never"
-                click.echo(
-                    f"  {j.get('id', '?')}  [{j.get('kind', 'cron')}]  "
-                    f"{descr}  last={last}"
-                )
-        else:
-            click.echo("jobs: (none)")
-    else:
-        click.echo("jobs: (none)")
-
-
-@schedule.command("install")
-@click.pass_context
-def schedule_install(ctx: click.Context) -> None:
-    """Install the schedule daemon as a system service (launchd/systemd)."""
-    h: Path = ctx.obj["home"]
-    _bootstrap(h)
-    _require_workspace(h)
-    _install_daemon(ctx, "schedule")
-
-
-@schedule.command("uninstall")
-@click.pass_context
-def schedule_uninstall(ctx: click.Context) -> None:
-    """Stop + unregister the schedule system service."""
-    _uninstall_daemon(ctx, "schedule")
 
 
 @schedule.command("run-once")
@@ -460,29 +371,43 @@ def schedule_run_once(ctx: click.Context) -> None:
         click.echo(f"  {jid}  {'OK' if ok else 'FAIL'}  {msg}")
 
 
-@schedule.command("logs")
-@click.option("-n", "--tail", default=50, help="Number of lines to show.")
+# Doctor — health check across model, workspace, gateways, services, MCPs, security
+
+@main.command("doctor")
 @click.pass_context
-def schedule_logs(ctx: click.Context, tail: int) -> None:
-    """Show the tail of the schedule daemon log."""
+def doctor_cmd(ctx: click.Context) -> None:
+    """Read-only health check of the current profile."""
+    from alpi import doctor, ui
     h: Path = ctx.obj["home"]
-    log_file = h / "schedule" / "logs" / "scheduler.log"
-    if not log_file.exists():
-        click.echo("schedule: no log yet")
+    profile: str = ctx.obj.get("profile") or "default"
+    checks = doctor.run_and_render(ui._console, h, profile, __version__)
+    ctx.exit(doctor.exit_code(checks))
+
+
+# Logs — unified tail across every subsystem under ``{home}/*/logs/``
+
+@main.command("logs")
+@click.option("--source", type=click.Choice(["gateway", "schedule", "agent", "approval"]),
+              default=None, help="Restrict to one subsystem.")
+@click.option("-n", "--tail", "tail_n", default=100,
+              help="Number of most recent lines to show (default: 100).")
+@click.option("-f", "--follow", is_flag=True, default=False,
+              help="Follow the logs as new lines arrive.")
+@click.pass_context
+def logs_cmd(ctx: click.Context, source: str | None, tail_n: int, follow: bool) -> None:
+    """Show the tail of every log this profile writes, merged by timestamp."""
+    from alpi import logs as logs_mod, ui
+    h: Path = ctx.obj["home"]
+    lines = logs_mod.tail(h, source, tail_n)
+    if not lines and not follow:
+        ui._console.print("[dim]no logs yet — run `alpi setup` to get started.[/dim]")
         return
-    lines = log_file.read_text().splitlines()[-tail:]
-    click.echo("\n".join(lines))
+    logs_mod.print_tail(ui._console, lines)
+    if follow:
+        logs_mod.follow(h, source, ui._console)
 
 
 # Shared install / uninstall / status helpers
-
-def _running_pid_for(name: str, home: Path) -> int | None:
-    if name == "gateway":
-        from alpi.gateway.run import pid_path
-        return _read_live_pid(pid_path(home))
-    from alpi.scheduler.run import running_pid
-    return running_pid(home)
-
 
 def _read_live_pid(pid_file: Path) -> int | None:
     if not pid_file.exists():
@@ -496,52 +421,6 @@ def _read_live_pid(pid_file: Path) -> int | None:
         return None
     except PermissionError:
         return pid
-
-
-def _install_daemon(ctx: click.Context, name: str) -> None:
-    from alpi import service
-    h: Path = ctx.obj["home"]
-    profile: str = ctx.obj.get("profile") or "default"
-
-    if _running_pid_for(name, h):
-        raise click.ClickException(
-            f"{name} is running manually — stop it first with "
-            f"`alpi {name} stop`, then re-run install."
-        )
-    if service.installed(name, profile):
-        raise click.ClickException(
-            f"{name} is already installed. "
-            f"Run `alpi {name} uninstall` first if you want to reinstall."
-        )
-    try:
-        backend = service.install(name, h, profile)
-    except service.ServiceError as e:
-        raise click.ClickException(str(e))
-    label = service.service_label(name, profile)
-    click.echo(f"{name}: installed via {backend} ({label}) — auto-started")
-
-
-def _uninstall_daemon(ctx: click.Context, name: str) -> None:
-    from alpi import service
-    h: Path = ctx.obj["home"]
-    profile: str = ctx.obj.get("profile") or "default"
-    try:
-        backend = service.uninstall(name, h, profile)
-    except service.ServiceError as e:
-        raise click.ClickException(str(e))
-    click.echo(f"{name}: uninstalled ({backend})")
-
-
-def _print_daemon_status(name: str, pid_file: Path, home: Path, profile: str) -> None:
-    from alpi import service
-    pid = _read_live_pid(pid_file)
-    state = f"running (pid {pid})" if pid else "stopped"
-    backend = service.installed(name, profile)
-    installed_line = (
-        f"installed via {backend} ({service.service_label(name, profile)})"
-        if backend else "not installed"
-    )
-    click.echo(f"{name}: {state} — {installed_line}")
 
 
 def _check_not_running(pid_file: Path) -> None:
@@ -578,6 +457,8 @@ def setup_cmd(ctx: click.Context) -> None:
             None,
             ("Sandbox", "sandbox", _sandbox_status(cfg)),
             ("Gateway service", "gateway-service", _gateway_service_status(h)),
+            ("Schedule service", "schedule-service", _schedule_service_status(h)),
+            ("Health check", "doctor", _doctor_status(h, profile_name)),
             ("Cleanup", "cleanup", _cleanup_status(h)),
         ]
         # Every title starts with ``alpi`` as a lightweight brand +
@@ -609,6 +490,10 @@ def setup_cmd(ctx: click.Context) -> None:
             _cleanup_setup(h)
         elif choice == "gateway-service":
             _gateway_service_setup(h)
+        elif choice == "schedule-service":
+            _schedule_service_setup(h)
+        elif choice == "doctor":
+            _doctor_wizard(h, profile_name)
 
 
 def _setup_farewell(profile: str, h: Path) -> None:
@@ -653,50 +538,97 @@ def _gateway_service_status(h: Path) -> str:
     return f"running via {backend}" if backend else "not installed"
 
 
-def _gateway_service_setup(h: Path) -> None:
+_DAEMON_WIZARD_COPY = {
+    "gateway": (
+        "Registers the gateway daemon (`alpi gateway start`) with your\n"
+        "OS so it runs on boot and restarts on crash. macOS: launchd\n"
+        "plist under ~/Library/LaunchAgents/. Linux: systemd --user unit\n"
+        "under ~/.config/systemd/user/. The current profile is the one\n"
+        "that gets wired up."
+    ),
+    "schedule": (
+        "The scheduler auto-installs on first run so cron jobs and\n"
+        "reminders fire even when you're not in the TUI. You can still\n"
+        "uninstall it here if you prefer to run it manually with\n"
+        "`alpi schedule start`, or reinstall after an uninstall."
+    ),
+}
+
+
+def _daemon_service_setup(h: Path, name: str) -> None:
+    """Install / uninstall the service for one daemon (`gateway` or `schedule`)."""
     from alpi import service, ui
-    if not _any_gateway_ready(h):
+
+    if name == "gateway" and not _any_gateway_ready(h):
         ui.fail_and_wait(
             "no gateway configured yet — set up Telegram, IMAP, or Gmail first"
         )
         return
 
     profile_name = _profile_from_home(h)
-    while True:
-        backend = service.installed("gateway", profile_name)
+    backend = service.installed(name, profile_name)
+    subtitle = f"running via {backend}" if backend else "not installed"
 
-        ui.banner(
-            ui.crumb("setup", "gateway-service"),
-            subtitle=_gateway_service_status(h),
-            home=h,
-        )
-        ui.dim(
-            "Registers the gateway daemon (`alpi gateway start`) with your\n"
-            "OS so it runs on boot and restarts on crash. macOS: launchd\n"
-            "plist under ~/Library/LaunchAgents/. Linux: systemd --user unit\n"
-            "under ~/.config/systemd/user/. The current profile is the one\n"
-            "that gets wired up."
-        )
-        ui._console.print("")
+    ui.banner(ui.crumb("setup", f"{name}-service"), subtitle=subtitle, home=h)
+    ui.dim(_DAEMON_WIZARD_COPY[name])
+    ui._console.print("")
 
-        if backend:
-            items = [("Uninstall", "remove-service", f"running via {backend}")]
-        else:
-            items = [("Install", "add-service", "register + start now")]
+    if backend:
+        items = [("Uninstall", "remove-service", f"running via {backend}")]
+    else:
+        items = [("Install", "add-service", "register + start now")]
 
-        choice = ui.menu("", items, home=h, close="Back")
-        if choice is None:
-            return
-        try:
-            if choice == "add-service":
-                kind = service.install("gateway", h, profile_name)
-                ui.ok_and_wait(f"gateway service installed via {kind}")
-            elif choice == "remove-service":
-                kind = service.uninstall("gateway", h, profile_name)
-                ui.ok_and_wait(f"gateway service uninstalled ({kind})")
-        except Exception as e:  # noqa: BLE001
-            ui.fail_and_wait(str(e))
+    choice = ui.menu("", items, home=h, close="Back")
+    if choice is None:
         return
+    try:
+        if choice == "add-service":
+            kind = service.install(name, h, profile_name)
+            ui.ok_and_wait(f"{name} service installed via {kind}")
+        elif choice == "remove-service":
+            kind = service.uninstall(name, h, profile_name)
+            ui.ok_and_wait(f"{name} service uninstalled ({kind})")
+    except Exception as e:  # noqa: BLE001
+        ui.fail_and_wait(str(e))
+
+
+def _gateway_service_setup(h: Path) -> None:
+    _daemon_service_setup(h, "gateway")
+
+
+def _schedule_service_setup(h: Path) -> None:
+    _daemon_service_setup(h, "schedule")
+
+
+def _schedule_service_status(h: Path) -> str:
+    from alpi import service
+    backend = service.installed("schedule", _profile_from_home(h))
+    return f"running via {backend}" if backend else "not installed"
+
+
+def _doctor_status(h: Path, profile: str) -> str:
+    """Summary line for the `alpi setup` menu row."""
+    try:
+        from alpi import doctor
+        checks = doctor.run_all(h, profile)
+    except Exception:  # noqa: BLE001
+        return "ready"
+    fails = sum(1 for c in checks if c.status == "fail")
+    warns = sum(1 for c in checks if c.status == "warn")
+    if fails:
+        return f"{fails} failing, {warns} warning(s)"
+    if warns:
+        return f"{warns} warning(s)"
+    return "all green"
+
+
+def _doctor_wizard(h: Path, profile: str) -> None:
+    from alpi import doctor, ui
+    ui.banner(ui.crumb("setup", "doctor"), subtitle="health check", home=h)
+    ui._console.print("")
+    doctor.run_and_render(ui._console, h, profile, __version__)
+    ui._console.print("")
+    ui.press_enter()
 
 
 def _profile_from_home(h: Path) -> str:
@@ -981,7 +913,7 @@ def _cleanup_categories(h: Path) -> list[dict]:
     tts_files = _all(_dir("cache/tts"))
     inbound_files = _all(_dir("cache/inbound"))
     session_files = _older_than(_dir("sessions"), stale_cutoff)
-    log_files = _all(_dir("gateway/logs"))
+    log_files = _all(_dir("logs"))
     sched_files = _all(_dir("schedule/output"))
 
     return [
@@ -1001,8 +933,8 @@ def _cleanup_categories(h: Path) -> list[dict]:
         },
         {
             "key": "logs",
-            "label": "Gateway logs",
-            "desc": "`gateway/logs/*.log` — rotated by restart",
+            "label": "Subsystem logs",
+            "desc": "`logs/*.log` — gateway, schedule, agent, approval",
             "files": log_files,
             "size": _sum(log_files),
         },
@@ -1213,7 +1145,7 @@ def profile_remove(name: str) -> None:
         svc_list = ", ".join(installed)
         raise click.ClickException(
             f"profile {name!r} has installed service(s): {svc_list}.\n"
-            f"Run `alpi -p {name} {installed[0]} uninstall` first."
+            f"Open `alpi -p {name} setup → Gateway service` and uninstall first."
         )
 
     # Summary — user wants to see what they're losing before saying yes.
