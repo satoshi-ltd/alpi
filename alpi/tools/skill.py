@@ -347,7 +347,15 @@ class Skill(Tool):
             "tools": {
                 "type": "array",
                 "items": {"type": "string"},
-                "description": "Tools the skill is allowed to call (create only).",
+                "description": (
+                    "Minimal list of tools this skill actually calls "
+                    "(create only). Metadata only — it's NOT enforced at "
+                    "runtime. Include ONLY the tools the body strictly "
+                    "needs; do not pad with tools that MIGHT be useful. "
+                    "Example: a notify skill that runs a shell command "
+                    "and sends one Telegram message is `['terminal', "
+                    "'send_message']`, nothing more."
+                ),
                 "default": [],
             },
             "stores_secrets": {

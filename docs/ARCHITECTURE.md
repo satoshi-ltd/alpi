@@ -268,7 +268,9 @@ The gateway is registered as a launchd (macOS) or systemd-user (Linux) unit via 
 
 ### Schedule (`alpi/scheduler/`)
 
-Long-running daemon with a tick loop (default 30s). `add` schedules a job (`kind: cron|once`, expression or `after_hours`). `run-once` ticks manually for testing. UTC-stored, displayed in local TZ. LLM time grounding: when the agent calls `schedule(action='add', kind='once', after_hours=N)`, the engine resolves `now` from a single source so the agent doesn't drift.
+Long-running daemon with a tick loop (default 30s). `add` schedules a job (`kind: cron|once`, expression or `after_hours`). `run-once` ticks manually for testing. LLM time grounding: when the agent calls `schedule(action='add', kind='once', after_hours=N)`, the engine resolves `now` from a single source so the agent doesn't drift.
+
+**Timezone.** Cron expressions evaluate against the **machine's system timezone** (`datetime.now().astimezone()` in `scheduler/run.py`). Jobs are stored with UTC `last_run_at` but fire according to local wall-clock time. Practical consequence: if you specify `10 12 * * *` because you want a 12:10 reminder in Bangkok, the Mac must be set to `Asia/Bangkok`. Move the machine to a different timezone and the cron fires at 12:10 there, not in Bangkok. No in-job timezone override today — add it via `TZ=…` in the launchd plist / systemd unit if cross-timezone stability is required.
 
 ### MCP client (`alpi/mcp/`)
 
