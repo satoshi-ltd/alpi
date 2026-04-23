@@ -27,6 +27,16 @@ def run(home: Path) -> None:
     current_smtp_port = os.environ.get("SMTP_PORT") or str(DEFAULT_SMTP_PORT)
     current_senders = os.environ.get("IMAP_ALLOWED_SENDERS", "")
 
+    if not current_addr:
+        ui.dim(
+            "You need your IMAP + SMTP hostnames and an app password (NOT\n"
+            "your login — 2FA providers require a generated one). Defaults\n"
+            "are 993 (IMAP SSL) + 587 (SMTP STARTTLS).\n"
+            "\n"
+            "The allowlist is fail-closed: unlisted senders are ignored.\n"
+        )
+        ui._console.print("")
+
     address = ui.text("Email address:", default=current_addr)
     if not address:
         return ui.cancelled()
