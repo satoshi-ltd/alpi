@@ -622,6 +622,7 @@ def setup_cmd(ctx: click.Context) -> None:
             ("Voice", "voice", _voice_status(cfg)),
             ("MCPs", "mcps", _mcp_status(h)),
             None,
+            ("Workspace", "workspace", _workspace_status(cfg)),
             ("Sandbox", "sandbox", _sandbox_status(cfg)),
             ("Gateway service", "gateway-service", _gateway_service_status(h)),
             ("Schedule service", "schedule-service", _schedule_service_status(h)),
@@ -644,6 +645,8 @@ def setup_cmd(ctx: click.Context) -> None:
         if choice == "model":
             from alpi import model_selector
             model_selector.run(config.load(h))
+        elif choice == "workspace":
+            _workspace_setup(h)
         elif choice == "gateways":
             _gateways_setup(h)
         elif choice == "mcps":
@@ -874,6 +877,67 @@ def _sandbox_status(cfg: config.Config) -> str:
         return "off"
     net = "network on" if term.allow_network else "network off"
     return f"on · {net}"
+
+
+def _workspace_status(cfg: config.Config) -> str:
+    if cfg.workspace_path is not None:
+        return str(cfg.workspace_path)
+    return "not set · falls back to cwd"
+
+
+def _workspace_setup(h: Path) -> None:
+    """Pick the workspace directory for the current profile.
+
+    The workspace is the default root for relative paths in file tools
+    and the shell sandbox. Not a wall — absolute paths still reach
+    outside, with the sensitive-path denylist as the only hard stop.
+    Stored as ``workspace:`` in the profile's ``config.yaml``.
+    """
+    from alpi import ui
+    cfg = config.load(h)
+
+    ui.banner(
+        ui.crumb("setup", "workspace"),
+        subtitle=_workspace_status(cfg),
+        home=h,
+    )
+    ui.dim(
+        "The workspace is the default root alpi assumes for relative\n"
+        "paths in the file tools and the terminal. When unset, alpi\n"
+        "falls back to the directory you ran it from.\n\n"
+        "It is NOT a wall — absolute paths still reach anywhere except\n"
+        "the sensitive-path denylist (~/.ssh, ~/.aws, /etc, cloud\n"
+        "metadata, …). Real isolation lives in the opt-in OS sandbox\n"
+        "(`alpi setup → Sandbox`).\n\n"
+        "Leave the prompt empty to keep the current value; type "
+        "`clear` to unset."
+    )
+    ui._console.print("")
+
+    current = cfg.workspace or ""
+    raw = ui.text("Workspace directory", default=current)
+    if raw is None:
+        return ui.cancelled()
+    raw = raw.strip()
+    if not raw:
+        ui.ok_and_wait("workspace unchanged")
+        return
+    if raw.lower() == "clear":
+        cfg.workspace = ""
+        config.save(cfg)
+        ui.ok_and_wait("workspace cleared — will use cwd at launch")
+        return
+    try:
+        p = Path(raw).expanduser().resolve()
+    except Exception as e:  # noqa: BLE001
+        ui.fail_and_wait(f"bad path: {e}")
+        return
+    if not p.is_dir():
+        ui.fail_and_wait(f"not a directory (or doesn't exist): {p}")
+        return
+    cfg.workspace = str(p)
+    config.save(cfg)
+    ui.ok_and_wait(f"workspace set to {p}")
 
 
 def _sandbox_setup(h: Path) -> None:

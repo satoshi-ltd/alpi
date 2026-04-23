@@ -136,7 +136,6 @@ class HelpPanel(FloatingPanel):
         ("new",       "start a fresh session (new id, history wiped)"),
         ("compact",   "summarize history to save tokens"),
         ("model",     "change model / provider"),
-        ("workspace", "show or set the sandbox root"),
         ("exit",      "quit"),
     ]
 

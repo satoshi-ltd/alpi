@@ -66,7 +66,7 @@ Audience: the creator (@soyjavi) and any future contributor reading the repo col
 | AW | Memory: drop user-name nominalization ("Javi wants…" → "user wants…") — identity lives in USER.md | ✅ shipped (v0.2.60) — memory tool's description + `content` parameter now explicitly instruct neutral "user" voice in `MEMORY.md`; existing entries stay intact (no automated rewrite). |
 | AX | TUI: activity indicator while resuming a long session | ✅ shipped (v0.2.64) — new `ResumeActivity` widget (spinner + "resuming last session…" at 10 fps, accent-coloured) sits between the top bar and the chat scroll. Worker rehydrates the session + builds every replay widget in memory, then drops the activity bar and `chat.mount(*widgets)` mounts all of them in a single batch so Textual repaints once. No widget-by-widget streaming. |
 | AY | TUI: rename `/cost` → `/status`, align output shape with the Telegram shortcut | ✅ shipped (v0.2.61) |
-| AZ | Move workspace configuration from `/workspace` slash to `alpi setup` | 🔵 backlog |
+| AZ | Move workspace configuration from `/workspace` slash to `alpi setup` | ✅ shipped — Workspace lives as the first entry of the second group in `alpi setup`; `/workspace` slash and its handlers are out of the TUI. The "no workspace set" warning on launch stays and now points at `alpi setup → Workspace`. |
 
 ### What's left to call v0.2 done
 
@@ -76,7 +76,7 @@ release. The bar for "ship v0.2" is **clean docs + version bump +
 real-use validation across a few sessions** — not feature
 exhaustiveness.
 
-**Nothing open for v0.2.** Everything the original roadmap promised is shipped. Still open for v0.3: **AI, AJ, AM, AO, AQ, AS.1, AT, AZ** (see individual entries below). Cutting **v0.3.0** is gated by **AR** (production release — website + content rewrite). **AS.2** (inter-machine `peer` gateway) is scoped for v0.4. Long-term candidates: **H** (Home Assistant — blocked on confirmation), **N** (image gen), **U** (Signal), **Σ.1 / Σ.2** (stretch goals). Rejected: **C** (OpenAI Codex OAuth) and **V** (Anthropic OAuth) on ToS grounds (see Principles); **J** (camoufox) after humanised Playwright made it redundant.
+**Nothing open for v0.2.** Everything the original roadmap promised is shipped. Still open for v0.3: **AI, AJ, AM, AO, AQ, AS.1, AT** (see individual entries below). Cutting **v0.3.0** is gated by **AR** (production release — website + content rewrite). **AS.2** (inter-machine `peer` gateway) is scoped for v0.4. Long-term candidates: **H** (Home Assistant — blocked on confirmation), **N** (image gen), **U** (Signal), **Σ.1 / Σ.2** (stretch goals). Rejected: **C** (OpenAI Codex OAuth) and **V** (Anthropic OAuth) on ToS grounds (see Principles); **J** (camoufox) after humanised Playwright made it redundant.
 
 Once the v0.3 cycle picks up a few of those + a fresh CHANGELOG
 entry summarises v0.2, bump to `v0.3.0` and reopen the table.
@@ -309,9 +309,15 @@ The Telegram gateway exposes `/status` and the TUI exposed `/cost` for the same 
 - Body rewritten to match the Telegram shortcut output: `session <id>` as a bold title, then aligned column rows (`model / turns / elapsed / tokens / cost`). No muted colours, bold only on the title, one-line-per-field layout. Token line carries `in / out / total` together so the eye doesn't have to add up.
 - Internal `_status_rows(session)` factored out as pure data for testability.
 
-### AZ. Move workspace config to `alpi setup`
+### AZ. Move workspace config to `alpi setup` (shipped)
 
-Today workspace lives as a `/workspace` slash inside the TUI. Setup wizards own every other piece of profile state (model, gateways, voice, MCPs, sandbox, services, cleanup) — workspace should be there too so there's one canonical place to configure a profile. Keep the `/workspace` slash as a quick-peek / one-shot override if useful, but the wizard is the primary entry.
+Workspace lived as a `/workspace` slash inside the TUI; every other piece of profile state already had a wizard. Now the canonical entry is **`alpi setup → Workspace`** (first row of the second group, above Sandbox).
+
+Dropped from the TUI: the `/workspace` slash, its handlers (`_cmd_workspace`, `_apply_workspace`), the top-bar refresh helper they used, and the `/workspace` entry in the `/help` catalog + auto-suggest list.
+
+Kept: the launch-time `ErrorLine` when no workspace is set — it now reads "Pin one via `alpi setup → Workspace` to narrow the scope", and the top-bar read-out of the resolved workspace (it's a display concern, not an editor).
+
+Wizard contract: current value shown as the prompt default, empty input keeps it, the literal `clear` unsets it (falls back to cwd at launch), any other string is resolved with `expanduser` + `resolve`, validated as an existing directory, then persisted via `config.save`.
 
 ### AU. Gateway/Schedule service — ops UX polish (shipped v0.2.58)
 
