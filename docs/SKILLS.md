@@ -56,7 +56,7 @@ These are the skills the user (or the agent on the user's behalf)
 writes.
 
 **Bundled skills** ship with the alpi package and are addressed
-with the prefix `@alpi/<name>` — e.g. `@alpi/consolidate-memory`.
+with the prefix `@alpi/<name>`. Shipped set is currently empty.
 They live inside `alpi.skills` as package resources; they never
 materialise on disk at `{home}/skills/`. Bundled skills are
 **read-only**:
@@ -90,6 +90,14 @@ picks by description fit.
 index, bundled after with the `[bundled]` marker. That primacy
 nudges the LLM toward user-tailored content when a semantic match
 exists.
+
+### Currently bundled
+
+None. The `@alpi/*` namespace is reserved and the loader is live,
+but no bundled skill ships by default. See
+`docs/ROADMAP.md → AO` for the curation policy — bundled skills
+ship when concrete recurring patterns justify them, not from a
+catalog.
 
 ## Frontmatter
 
