@@ -16,8 +16,8 @@ const TPL  = join(SITE, 'templates');
 // ── deploy metadata (override with env vars on CI if needed) ────────────────
 const SITE_URL    = (process.env.SITE_URL    || 'https://alpi.satoshi-ltd.com').replace(/\/+$/, '');
 const SITE_NAME   = process.env.SITE_NAME   || 'alpi';
-const SITE_TAGLINE = 'a slim personal AI agent';
-const SITE_DESCRIPTION = "alpi is a slim personal AI agent for the terminal, Telegram, and email. Inline-learning memory, live skills with a security scanner, and ALP — a closed agent-to-agent protocol that links your agents across machines without a hub. No telemetry, no account, no mandatory cloud.";
+const SITE_TAGLINE = 'your private agent network';
+const SITE_DESCRIPTION = "alpi starts as the agent in your terminal, then grows with you: profiles for work, cron, home servers, research, and rooms with other alpis. Each profile owns its memory, keys, model, skills, gateways, approvals, and trust boundary. ALP links them across machines without a registry, hub, account, or mandatory cloud.";
 const OG_IMAGE = `${SITE_URL}/assets/alpi-brand.png`;
 const OG_IMAGE_W = 1200;
 const OG_IMAGE_H = 800;
@@ -30,19 +30,19 @@ const VERSION = (pyproject.match(/^version\s*=\s*"([^"]+)"/m) || [null, '0.0.0']
 // ── doc metadata ─────────────────────────────────────────────────────────────
 // Order drives prev/next pager and the docs index.
 const DOCS = [
-  { slug: 'README',       src: 'README.md',             ix: '01', category: 'intro',     sub: "Start here. What alpi is, who it's for, how it differs." },
-  { slug: 'QUICKSTART',   src: 'QUICKSTART.md',         ix: '02', category: 'guide',     sub: 'Install, set a key, first chat, first skill. 5 minutes from zero to a working agent.' },
-  { slug: 'PROFILES',     src: 'docs/PROFILES.md',      ix: '03', category: 'guide',     sub: 'Switchable agent personalities: personal / coder / ops / research. How to define your own.' },
-  { slug: 'SKILLS',       src: 'docs/SKILLS.md',        ix: '04', category: 'guide',     sub: 'Directory contract. 13 closed categories. Frontmatter. Where secrets live.' },
-  { slug: 'MODELS',       src: 'docs/MODELS.md',        ix: '05', category: 'guide',     sub: 'Tiers A/B/C. Usage signals + hands-on testing. What @soyjavi uses day to day.' },
-  { slug: 'ALP',          src: 'docs/ALP.md',           ix: '06', category: 'reference', sub: 'Alpi Link Protocol. Noise-encrypted inter-machine transport. Rooms, rate limits, budgets.' },
+  { slug: 'README',       src: 'README.md',             ix: '01', category: 'intro',     sub: "Start here. The public thesis: local-first, user-owned agent infrastructure." },
+  { slug: 'QUICKSTART',   src: 'QUICKSTART.md',         ix: '02', category: 'guide',     sub: 'Install, pick a model, pin a workspace, send a first message, and check health.' },
+  { slug: 'PROFILES',     src: 'docs/PROFILES.md',      ix: '03', category: 'guide',     sub: 'The isolation primitive: identity, keys, memory, skills, peers, gateways, and cost.' },
+  { slug: 'SKILLS',       src: 'docs/SKILLS.md',        ix: '04', category: 'guide',     sub: 'Directory contract, frontmatter, scanner, validation, secrets, and bundled namespace.' },
+  { slug: 'MODELS',       src: 'docs/MODELS.md',        ix: '05', category: 'guide',     sub: 'Model tiers for tool-heavy agent use: quality, cost/service, and local Ollama.' },
+  { slug: 'ALP',          src: 'docs/ALP.md',           ix: '06', category: 'reference', sub: 'Alpi Link Protocol: pinned identity, signed envelopes, peer capabilities, rooms.' },
   { slug: 'ARCHITECTURE', src: 'docs/ARCHITECTURE.md',  ix: '07', category: 'reference', sub: 'Code structure, turn loop, memory, sessions, gateway, scheduler, MCP, logging.' },
   { slug: 'CONFIG',       src: 'docs/CONFIG.md',        ix: '08', category: 'reference', sub: 'Every YAML knob, its default, what it controls.' },
   { slug: 'SECURITY',     src: 'docs/SECURITY.md',      ix: '09', category: 'reference', sub: 'Two-layer security model. Approval system, SSRF, prompt-injection, sensitive paths. Sandbox.' },
   { slug: 'DEPLOYMENTS',  src: 'docs/DEPLOYMENTS.md',   ix: '10', category: 'ops',       sub: 'launchd on macOS, systemd on Linux. Gateway daemon, schedule daemon, keep-alive, logs.' },
   { slug: 'OPERATIONS',   src: 'docs/OPERATIONS.md',    ix: '11', category: 'ops',       sub: 'Day-2 runbook. Doctor, diagnostics, log rotation, backup, recovery, upgrade.' },
-  { slug: 'LICENSE',      src: 'LICENSE',               ix: '12', category: 'legal',     sub: 'BSL 1.1 for the agent core; Apache-2.0 for the Alpi Link Protocol.', raw: true },
-  { slug: 'ROADMAP',      src: 'docs/ROADMAP.md',       ix: '13', category: 'planning',  sub: "What's in progress, what's coming in v0.3, decisions discarded with rationale." },
+  { slug: 'LICENSE',      src: 'LICENSE',               ix: '12', category: 'legal',     sub: 'Legal terms for the source-available agent core and Apache-2.0 Alpi Link Protocol.', raw: true },
+  { slug: 'ROADMAP',      src: 'docs/ROADMAP.md',       ix: '13', category: 'planning',  sub: 'Open release gates, ALP launch work, long-term bets, and discarded decisions.' },
   { slug: 'CHANGELOG',    src: 'CHANGELOG.md',          ix: '14', category: 'log',       sub: 'Version-by-version log of user-visible changes since v0.1.' },
 ];
 const TOTAL = DOCS.length;
@@ -76,14 +76,14 @@ function renderHead({ kind, title, description, path, iconPath }) {
 <meta property="og:image:type" content="image/png" />
 <meta property="og:image:width" content="${OG_IMAGE_W}" />
 <meta property="og:image:height" content="${OG_IMAGE_H}" />
-<meta property="og:image:alt" content="alpi — a slim personal AI agent" />
+<meta property="og:image:alt" content="alpi — your private agent network" />
 
 <!-- Twitter -->
 <meta name="twitter:card" content="summary_large_image" />
 <meta name="twitter:title" content="${escapeAttr(title)}" />
 <meta name="twitter:description" content="${escapeAttr(description)}" />
 <meta name="twitter:image" content="${OG_IMAGE}" />
-<meta name="twitter:image:alt" content="alpi — a slim personal AI agent" />
+<meta name="twitter:image:alt" content="alpi — your private agent network" />
 <meta name="twitter:creator" content="${TWITTER}" />
 <meta name="twitter:site" content="${TWITTER}" />
 
@@ -442,8 +442,10 @@ const landing = readFileSync(join(TPL, 'landing.html'), 'utf8')
   .replace('<meta charset="utf-8" />\n<!-- SEO_HEAD (injected by build.mjs) -->', landingHead)
   .replace('<!-- NAV (injected by build.mjs) -->', renderNav('landing'))
   .replace('<!-- DOCS_GRID_PLACEHOLDER -->', renderDocsGrid({ hrefPrefix: 'docs/' }))
-  .replace(/v0\.2\.70/g, `v${VERSION}`)
-  .replace(/alpi v0\.2\.70/g, `alpi v${VERSION}`);
+  // Match any v<semver> in the landing template so the hero, terminal
+  // chrome, and footer all track pyproject.toml regardless of which
+  // version the template was last saved with.
+  .replace(/\bv\d+\.\d+\.\d+\b/g, `v${VERSION}`);
 write(join(DIST, 'index.html'), landing);
 
 // Docs index

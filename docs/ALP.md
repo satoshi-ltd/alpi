@@ -2,7 +2,9 @@
 
 **Version:** 1
 **Editor:** [@soyjavi](https://github.com/soyjavi)
-**Status:** Living specification. Normative for alpi ≥ 0.3.
+**Status:** Living specification for the current ALP surface. ALP.1
+handles same-machine profiles, ALP.2 handles inter-machine links over
+Noise_XK TCP, and ALP.3 adds hub-anchored rooms.
 
 ---
 
@@ -33,6 +35,14 @@ This document is the normative reference for all three modes.
 It defines the wire format, the transport bindings, the
 authentication and capability model, the message verbs, and the
 error codes.
+
+Implementation status matters when reading the rest of the document:
+ALP.1 implements profile-to-profile links on the same machine over a
+Unix-domain socket. ALP.2 implements inter-machine Noise_XK over TCP
+plus budget/rate-limit enforcement. ALP.3 implements shared rooms.
+The three modes share identity, envelope, capability, budget, and
+error semantics so the protocol stays one coherent design instead of
+three incompatible feature drops.
 
 ---
 
@@ -148,17 +158,15 @@ before any `id`-based routing occurs.
 | `pubkey` | yes | Base64-encoded Ed25519 public key. |
 | `address` | for inter-machine | `host:port`. Omit for intra-profile peers. |
 | `allow` | yes | Fail-closed list of methods the peer may invoke. |
-| `budget.tokens_per_day` | no | Hard daily token cap. Exceeding returns `-32005`. Spec-only in ALP.1 — enforcement lands in ALP.2. |
-| `budget.usd_per_day` | no | Hard daily spend cap. Ollama and other free-inference setups omit this. Spec-only in ALP.1. |
-| `rate_limit.requests_per_minute` | no | Throttle. Default allows 10/min/peer. Spec-only in ALP.1. |
+| `budget.tokens_per_day` | no | Hard daily token cap. Exceeding returns `-32005`. Enforced on ALP.2 inter-machine traffic and shared room posts. |
+| `budget.usd_per_day` | no | Hard daily spend cap. Ollama and other free-inference setups omit this. Enforced when token/cost accounting is available. |
+| `rate_limit.requests_per_minute` | no | Throttle. Default allows 10/min/peer. Enforced before handler dispatch. |
 
 Both budget fields are independent and optional. Budgets are
 **global per peer** — they cover every inbound method from that
 peer, including posts inside shared rooms. Budgets reset at UTC
-midnight; unused allowance does not carry over. ALP.1 accepts
-these fields in `peers.yaml` and parses them without effect; the
-runtime enforcement (ledger, reset timer, `-32005` on breach)
-ships with ALP.2.
+midnight; unused allowance does not carry over. The ALP.2 runtime
+enforces the ledger, reset timer, and `-32005` response path.
 
 The token budget has a secondary purpose beyond cost control: a
 tight cap forces the caller to be concise, which keeps inter-
@@ -520,11 +528,10 @@ OpenSSL for primitive speed. The library choice is an
 implementation detail; any library offering equivalent primitives
 produces an ALP-compliant implementation.
 
-Noise_XK handshakes (used for inter-machine transport, v0.4) are
-implemented on top of the same primitives without adding a
-separate Noise dependency, keeping the crypto surface single-
-source. The handshake pattern is stable and short enough to
-carry in-tree without a framework.
+Noise_XK handshakes for inter-machine transport are implemented on
+top of the same primitives without adding a separate Noise dependency,
+keeping the crypto surface single-source. The handshake pattern is
+stable and short enough to carry in-tree without a framework.
 
 ---
 
@@ -547,12 +554,8 @@ carry in-tree without a framework.
 
 ## Changelog
 
-- **v1 (2026-04-23)** — Initial specification. Intra-machine
-  transport over Unix-domain socket, core `link.*` methods,
-  envelope format, peer identity via Ed25519, capability model,
-  reject-fast reentrancy, budget enforcement, error codes. Rooms
-  extension specified structurally with a hub-anchored
-  availability model and a global per-peer budget applied to
-  room posts. Inter-machine transport (Noise_XK over TCP)
-  specified at the normative level; reference implementation
-  follows in v0.4.
+- **v1 (2026-04-24)** — current ALP surface: intra-machine transport over
+  Unix-domain socket, inter-machine transport over Noise_XK TCP, core
+  `link.*` methods, room extension, envelope format, peer identity via
+  Ed25519, capability model, reject-fast reentrancy, budget/rate-limit
+  enforcement, and error codes.

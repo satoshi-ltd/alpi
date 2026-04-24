@@ -1,6 +1,24 @@
 # Changelog
 
-## v0.2.81 — 2026-04-24
+## v0.2.82 — 2026-04-24
+
+### site/docs — private agent network narrative
+
+The public narrative now matches the product shape: alpi is a
+profile-based personal AI agent that can grow from one terminal into a
+private network across machines.
+
+- `README.md` now leads with profiles, model/key ownership,
+  multi-machine coordination, and the current ALP surface.
+- Landing copy moved from a privacy-only slogan to
+  `your private / agent network`, with ALP.1 local links, ALP.2
+  machine links, and ALP.3 rooms stated directly.
+- ALP docs now treat ALP.1/ALP.2/ALP.3 as the current launch surface:
+  Unix sockets, Noise_XK TCP, budgets/rate limits, and hub-anchored
+  rooms.
+- Deployment, security, operations, profiles, config, and roadmap
+  docs were aligned so the site no longer presents ALP.2/ALP.3 as
+  distant work.
 
 ### tools — failure-mode + when-to-use hints on three tool descriptions
 
@@ -365,7 +383,7 @@ skill on demand.
 - repo rooted in Satoshi Ltd.'s six operating principles (Privacy by Design, User Sovereignty, Security First, Open Source, Zero Knowledge, Digital Sovereignty) across `README.md`, `docs/ARCHITECTURE.md`, `docs/SECURITY.md`, `docs/ALP.md`. Each doc now explicitly maps its content to the principle it expresses.
 - new [`QUICKSTART.md`](QUICKSTART.md) at repo root — first-day walkthrough: install → model → workspace → first chat → resume → gateway → second profile → ALP → doctor.
 - new [`docs/PROFILES.md`](docs/PROFILES.md) — canonical reference for alpi's core isolation primitive (home resolution, what's isolated per profile, identity in ALP, creation patterns, cost).
-- new [`docs/DEPLOYMENTS.md`](docs/DEPLOYMENTS.md) — six topologies from laptop-only to enterprise "army of alpis", each with ASCII diagram, trade-offs, and BSL licence boundary.
+- new [`docs/DEPLOYMENTS.md`](docs/DEPLOYMENTS.md) — six topologies from laptop-only to enterprise private agent networks, each with ASCII diagram, trade-offs, and BSL licence boundary.
 - new [`docs/OPERATIONS.md`](docs/OPERATIONS.md) — runbook: the five logs, service lifecycle, upgrades, backup + restore, ALP identity rotation, monitoring, disaster recovery, common failure modes.
 - `docs/ROADMAP.md` sanitised — 64 shipped-item rows + the "Done — v0.1 + shipped v0.2 items" commit table dropped (they duplicated CHANGELOG which already reconstructs them from `git log`). New top table lists only open items with target version + status.
 
@@ -384,7 +402,7 @@ skill on demand.
 - `alpi alp start|stop|restart` + service install via `alpi setup → ALP service` (launchd / systemd). Doctor granular sub-checks: Identity (key loadable), Socket (listening), Peers (reachable).
 - `alpi setup → Peers` wizard: identity page with clipboard copy, probe-based ●/○/? status list, add/remove/inspect flows.
 - `alpi peers key|list|add|remove|ping` CLI group for scripting.
-- docs: `docs/ALP.md` spec v1 (envelope, verbs, errors, security), `docs/ROADMAP.md` ALP.1 shipped / ALP.2 + ALP.3 both v0.4, `docs/ARCHITECTURE.md` layout + commands.
+- docs: `docs/ALP.md` spec v1 (envelope, verbs, errors, security), `docs/ROADMAP.md` with ALP.1 shipped and ALP.2 / ALP.3 initially tracked for later, `docs/ARCHITECTURE.md` layout + commands.
 
 ### setup
 - health-check row no longer blocks menu render on 5–10s of live network probes — status reads "open to run checks", actual checks run on-demand when the user opens the page.

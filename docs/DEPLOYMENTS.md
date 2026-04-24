@@ -6,13 +6,11 @@ adapt. For the primitives each shape leans on see
 [PROFILES.md](PROFILES.md) (identity + isolation) and
 [ALP.md](ALP.md) (the wire protocol).
 
-Licence reminder up front: **personal / non-production use by
-individuals is always free under BSL 1.1.** Production deployment
-inside a legal entity (company, team, org) requires a commercial
-licence from Satoshi Ltd. — see the [LICENSE](../LICENSE) file and
-contact `info@satoshi-ltd.com` for arrangements. The shapes below
-are *what's technically possible*; which of them you can deploy
-commercially without a licence is covered in the licence itself.
+The shapes below are technical deployment patterns, not pricing tiers.
+Personal use, evaluation, and non-production deployments are free.
+Commercial production deployments are covered by the terms in
+[LICENSE](../LICENSE); contact `info@satoshi-ltd.com` when you are
+planning that rollout.
 
 ## 1. Laptop only
 
@@ -60,7 +58,7 @@ but that'd just be two profiles — see topology 3).
 
 - **Profiles:** 1 on each machine (both `default` is fine — the
   cryptographic identity is the Ed25519 pubkey, not the name).
-- **ALP:** ALP.2 (v0.4) with Noise_XK over TCP, fronted by
+- **ALP:** ALP.2 with Noise_XK over TCP, fronted by
   Tailscale / WireGuard.
 - **Peers:** cross-pinned. Capabilities narrow — laptop grants
   `home-server` only `link.ping` + `link.ask`; home-server grants
@@ -75,8 +73,8 @@ but that'd just be two profiles — see topology 3).
 ## 3. One machine, many profiles
 
 Same machine, multiple profiles with different roles, linked
-intra-profile via ALP.1 (Unix sockets). This is the "army of
-alpis" starter kit on a single host.
+intra-profile via ALP.1 (Unix sockets). This is the private-network
+starter kit on a single host.
 
 ```
 ┌────────────────────────────────────────────────────┐
@@ -163,7 +161,7 @@ room. Hub-anchored.
 
 - **Profiles:** 1 per human, 1 on the home server acting as room
   hub.
-- **ALP:** ALP.3 (v0.4) rooms. The home server creates the room,
+- **ALP:** ALP.3 rooms. The home server creates the room,
   holds the group key + transcript; members post via
   `room.post(room_id, text)`.
 - **Human interaction:** Jane can subscribe to the room via her
@@ -177,7 +175,7 @@ room. Hub-anchored.
   week?"), small team stand-ups, a book club with bots helping
   the humans.
 
-## 6. Enterprise — "an army of alpis"
+## 6. Enterprise — private agent network
 
 Per-employee profiles, mesh linked via ALP.2 over Tailscale or a
 VPN. Shared services (research-bot, tools-bot) as pinned peers
@@ -223,8 +221,8 @@ with narrow capabilities. Audit trail centralised.
   ships them to the log hub in a format your SIEM consumes. See
   [OPERATIONS.md](OPERATIONS.md) for the log schema.
 - **Cost management.** Per-profile `.env` + model selection means
-  finance can ring-fence spend per team. Budget enforcement on
-  ALP peer traffic (daily token cap) lands in ALP.2.
+  finance can ring-fence spend per team. ALP.2 enforces budgets on
+  peer traffic with daily token / USD caps and per-minute limits.
 - **Sandbox + approval.** The company policy pushes
   `tools.terminal.sandbox: true` into every profile's
   `config.yaml` at onboarding. Dangerous commands always deny
@@ -233,11 +231,10 @@ with narrow capabilities. Audit trail centralised.
   Tailscale / WireGuard. No HTTPS, no cert management, no public
   endpoint. If Tailscale goes, alpis can't reach each other —
   that's the point. Local TUIs keep working.
-- **Licence.** This topology is **production deployment by a
-  legal entity** and requires a commercial licence from
-  Satoshi Ltd. (`info@satoshi-ltd.com`). Evaluation / internal
-  development for a limited period is covered by the BSL's
-  Additional Use Grant.
+- **Commercial path.** This topology is production deployment by a
+  legal entity. Evaluation and internal development are covered by
+  the Additional Use Grant; production rollout goes through
+  Satoshi Ltd. (`info@satoshi-ltd.com`).
 
 ### What alpi does not try to solve at enterprise scale
 
@@ -265,4 +262,4 @@ aren't coming:
 | A user with a NAS / home server | **(2) Laptop + home server** | → (3) add specialised roles on the home server. |
 | A user wanting role-based alpis | **(3) One machine, many profiles** | → (5) if the household wants in. |
 | A family / small team | **(5) Family / small team** | → (6) when it stops being a household. |
-| A company | **(6) Enterprise** (requires commercial licence) | — |
+| A company | **(6) Enterprise** (commercial path) | — |
