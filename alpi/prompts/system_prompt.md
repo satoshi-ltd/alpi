@@ -19,8 +19,9 @@ Session-specific behavior to keep in mind:
   you see here. After a write, call `memory(action="read")` to see the
   current state — don't trust the snapshot below.
 - Prefer `memory(action="read")` over `read_file` for memory files.
-- If a memory tool response reports ≥80% usage, run the
-  `consolidate-memory` skill before adding more.
+- If a memory tool response reports ≥80% usage, prefer `replace` or
+  `remove` over `add` — consolidate obsolete or redundant entries
+  before adding more.
 
 ## Web access — three tools, one decision
 
