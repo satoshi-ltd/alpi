@@ -5,9 +5,11 @@ disk, one identity, one set of credentials, one memory, one set of
 skills, one peer list, one model choice. Everything else — the TUI,
 the gateway, ALP, the scheduler — operates *inside* a profile.
 
-If you only ever use alpi for yourself on one machine, you can
-ignore this doc: you have a profile (it's called `default`) and
-things just work. This doc is for everyone else.
+If you only ever use alpi for yourself on one machine, the default
+profile is enough. Profiles become important as soon as identity,
+cost, memory, trust, or unattended execution need a boundary: personal
+vs work, laptop vs home server, daily driver vs cron, or one shared
+service per team.
 
 ## Where a profile lives
 
@@ -172,5 +174,5 @@ full.
 
 Each profile can have a completely different model, a different
 sandbox posture, a different memory, and expose a different
-capability surface in ALP. This is how "an army of alpis" gets
+capability surface in ALP. This is how a private network of alpis gets
 built: granular identity per role, ALP as the coordination layer.

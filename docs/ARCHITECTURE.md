@@ -8,26 +8,16 @@ Audience: any developer (or LLM) reading this codebase from cold.
 
 ## What alpi is
 
-A slim personal AI agent. Two surfaces — a Textual TUI in the terminal
-and a Telegram/IMAP gateway as a separate process. Inline-learning
-memory (no post-session reflect), live-by-default skills with a security
-scanner and a quota, multi-provider LLM via LiteLLM (plus a planned
-direct-Codex transport for the ChatGPT subscription path).
+alpi is a local-first personal AI agent. It has a Textual TUI in the
+terminal, Telegram/IMAP/Gmail gateways as separate processes,
+inline-learning memory, scanner-gated live skills, multi-provider LLM
+support via LiteLLM, read-only research, write-capable delegation,
+scheduling, MCP integration, and ALP for private agent-to-agent links.
 
-**Positioned as a lighter, improved version of
-[Hermes](https://github.com/NousResearch/hermes-agent).** The Hermes
-working tree is already on disk at **`~/git/hermes-agent/`** — alpi's
-canonical reference codebase, read directly with `Read`/`Grep`/`Glob`
-(no clone, no fetch). When designing a non-trivial feature, read
-Hermes first — they've usually solved the problem. Then evaluate critically (Hermes covers a broader
-audience than alpi and many of its solutions are over-engineered for
-personal-use scope) and propose a leaner adaptation. The bar is "the
-smallest design that captures the value Hermes provides," not "port it
-verbatim." Things alpi borrowed lean: skill scanner patterns
-(skills_guard.py), auto-injected skills index in the system prompt
-(prompt_builder.py:589), depth-tiered research budget. Things alpi
-deliberately skipped: skill hub/sync, sub-agent mesh, SQLite state, 28
-skill categories, post-session reflect, broad cross-platform support.
+The architectural constraint is sovereignty: state is local, identities
+are per-profile, network trust is explicit, and operational surfaces
+stay small enough to audit. The product is intentionally not a generic
+agent suite, marketplace, or hosted router.
 
 ## Principles
 
@@ -39,7 +29,7 @@ this** section in `README.md` for the mapping between principle and
 code. The conventions below are the engineering expression of those
 principles — not separate from them.
 
-- **Slim.** Every feature earns its keep. No over-engineering. Maps to Satoshi's "constraint breeds coherence" heuristic.
+- **Focused.** Every feature earns its keep. No over-engineering. Maps to Satoshi's "constraint breeds coherence" heuristic.
 - **Solid base.** Core loop, memory, tools, paths, scanner before surface features.
 - **User in control.** No destructive action without explicit OK. No silent migrations. Expression of **User Sovereignty**.
 - **Python stack.** No Go rewrite (loses LiteLLM, tests, no upside).
@@ -369,9 +359,9 @@ Turn-based JSON: `turns: [{at, user, tools[], assistant}]` plus cumulative metri
 Two layers:
 
 - **Layer 1 — application guards (always on).** `_guards._DANGEROUS` denylist on terminal (rm -rf, pipe-to-interpreter, fork bomb, ...). SSRF block on web_fetch/web_extract (RFC 1918, link-local, cloud metadata). Prompt-injection scan on email + web content. Sensitive-path denylist on file tools (`_paths.py`).
-- **Layer 2 — OS sandbox (opt-in, experimental).** `tools.terminal.sandbox: true` wraps shell commands in `sandbox-exec` (macOS) or `bubblewrap` (Linux). Read/write limited to workspace + `~/.alpi/` + `/tmp`; network denied by default. Off by default until validated against the long tail of common commands.
+- **Layer 2 — OS sandbox (opt-in, per profile).** `tools.terminal.sandbox: true` wraps shell commands in `sandbox-exec` (macOS) or `bubblewrap` (Linux). Read/write limited to workspace + `~/.alpi/` + `/tmp`; network denied by default. Off by default because interactive development workflows vary; recommended for unattended profiles.
 
-Threat model: prompt injection via email/web content + direct user input (trusted) + network adversaries (out of scope, personal-use posture). Full discussion in [SECURITY.md](SECURITY.md).
+Threat model: prompt injection via email/web content, LLM-issued tool calls on the user's machine, direct user input (trusted), and network adversaries for ALP links. Full discussion in [SECURITY.md](SECURITY.md).
 
 ## Cross-cutting concerns
 

@@ -167,8 +167,8 @@ observability, the signals to watch:
   outage.
 - **Cost ceiling.** `jq '.cost_usd' ~/.alpi/sessions/*.json` sums
   the spend per profile. Bound this in a cron job and alert if a
-  threshold is crossed. Budget enforcement *inside* alpi for ALP
-  peer traffic lands in ALP.2.
+  threshold is crossed. ALP.2 enforces peer-traffic budgets inside
+  alpi; external alerting still catches provider-side drift.
 - **`approval.log` triggers.** Any line with a
   `caution always-approved` entry means the allowlist grew — a
   new command pattern is now auto-permitted for this profile. Put

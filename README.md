@@ -1,256 +1,207 @@
 # alpi
 
-A slim personal AI agent. Terminal + Telegram + email. Inline-learning
-memory, live skills with a security scanner and a quota, and a read-only
-research sub-agent.
+**Your private agent network.**
 
-**Positioned as a lighter, improved version of Nous Research's
-[Hermes](https://github.com/NousResearch/hermes-agent).** Hermes is
-the canonical reference codebase — kept locally at
-**`~/git/hermes-agent/`** so alpi development can read it directly when
-designing a feature. Workflow: read Hermes, evaluate critically, port
-a leaner version. Kept: the ideas that earn their keep (tool-calling
-loop, curated memory, separate gateway process, multi-provider LLM via
-litellm, read-only research sub-agent, security scanner on skills).
-Dropped: the complexity that doesn't (30+ tools → ~17, post-session
-reflect, sub-agent mesh, SQLite state, 28 skill categories, hub/sync).
+alpi starts as the agent in your terminal, then grows with you:
+profiles for work, cron, home servers, research, and rooms with other
+alpis. Each profile owns its memory, keys, model, skills, gateways,
+approvals, and trust boundary. ALP links them across machines without
+a registry, hub, account, or mandatory cloud.
 
-## Status
+Bring any model. Keep every key. Run one alpi, or a network that stays
+yours.
 
-**v0.2** — in active development. Core systems stable; surface features
-landing. See [docs/ROADMAP.md](docs/ROADMAP.md) for what's shipped and
-what's planned.
+## Why alpi exists
 
-## Principles
+Most useful agents eventually become infrastructure: they hold memory,
+touch files, run commands, answer from a phone, wake up on schedules,
+and coordinate work across machines. alpi treats the **profile** as
+the unit of that infrastructure, not the chat.
 
-alpi respects the Terms of Service of every LLM vendor it integrates
-with. Users pay per-token API access through their own keys — that cost
-is honest and visible. **Subscription routing is not on the roadmap**:
-we do not reverse-engineer the private OAuth flows that ChatGPT Plus /
-Claude Pro / Claude Code use to talk to their official clients.
-Competitor agents ship these features; we consider that disrespectful
-to the vendor's product boundaries and unsafe for users (accounts get
-banned, reversed flows break). If a vendor publishes an official OAuth
-for third-party agents, we adopt it then.
+The design goal is sovereignty:
 
-## Why alpi is built like this
+- **Local-first by default.** State lives under `~/.alpi/` or a named
+  profile. Memory, sessions, skills, keys, logs, and peer lists are
+  files on your machine.
+- **User-owned models.** Fresh profiles ship with no default model.
+  You pick the provider, model, API key, or Ollama server per profile.
+- **Security as product shape.** Shell commands pass a three-tier
+  approval system. Dangerous commands are blocked with no override.
+  Web and email content is treated as hostile data. Skills and MCPs
+  are scanned before install.
+- **Operational UX.** One setup wizard, a live `doctor`, per-profile
+  services, merged logs, gateway daemons, scheduling, and cleanup.
+- **Private coordination.** ALP.1 links local profiles, ALP.2 links
+  machines over Noise_XK, and ALP.3 adds shared rooms. Peers are
+  pinned by Ed25519 identity and governed by fail-closed capabilities.
+  No discovery service, no shared account, no central broker.
+- **Honest provider boundaries.** alpi does not reverse-engineer
+  ChatGPT Plus, Claude Pro, Claude Code, or other first-party
+  subscription clients. If a vendor publishes an official third-party
+  OAuth flow, alpi can adopt it. Until then, users pay per-token API
+  access through their own keys.
 
-alpi is published by **[Satoshi Ltd.](https://www.satoshi-ltd.com/)**
-and inherits its six operating principles. They are not aspirational
-copy — every non-obvious design choice in this repo traces back to one:
+## What ships today
 
-- **Privacy by Design.** ALP is a closed, purpose-built protocol, not
-  an adoption of A2A or similar open standards — every exposed knob
-  is a potential attack vector. No discovery, no registry, no
-  telemetry. LiteLLM's default telemetry is audited off at release
-  (`alpi/llm.py::_silence_litellm`, regression-tested).
-- **User Sovereignty.** Per-profile isolation under
-  `~/.alpi/profiles/<name>/`. Fresh profiles ship with no default
-  model — you pick your provider, your model, your memory. Skills
-  and memory live on your disk, not ours.
-- **Security First.** Threat-modeled from the spec (see
-  [docs/ALP.md](docs/ALP.md)): Ed25519 signing on every ALP
-  envelope, fail-closed capability model, reject-fast reentrancy,
-  approval gate on shell, OSV check before installing skills or
-  MCPs, `pip-audit` in the release checklist.
-- **Open Source.** Source-available under BSL 1.1; reproducible via `uv.lock`; no hidden binaries. See [License](#license) for the split between personal / non-production use (free) and commercial production deployment (separate licence from Satoshi). Converts to Apache 2.0 on the Change Date.
-- **Zero Knowledge.** No trust-on-first-use. Peers exchange pubkeys
-  out-of-band and pin them. ALP.2's Noise_XK handshake produces
-  forward-secret session keys — losing a long-term key doesn't unlock
-  past traffic.
-- **Digital Sovereignty.** Ollama is a first-class provider. Skills
-  and sub-agents run locally. You can wire alpi up on a laptop, a
-  home server, and a remote box, link them via ALP, and never depend
-  on a centralised service.
+The current release ships the full local-to-network shape:
 
-The design heuristic that pulls these together — borrowed from
-Satoshi's Clonara — is **"constraint breeds coherence"**. Closed
-scope, small verb set, one transport per environment, no generic
-framework.
+- Textual TUI with streaming replies, slash commands, live tool cards,
+  interrupt, session resume, model switching, and cost/token display.
+- Telegram, IMAP, and Gmail gateways as separate per-profile daemons.
+- Inline-learning memory: `USER.md`, `MEMORY.md`, and `AGENT.md`.
+- Live skills under `~/.alpi/skills/<category>/<name>/`, scanner-gated
+  and auto-injected into the system prompt.
+- Multi-provider LLM support through LiteLLM, plus first-class Ollama.
+- Read-only `research(brief, depth)` sub-agent with `quick`, `normal`,
+  and `deep` tiers.
+- Write-capable `delegate` sub-agent for focused file/web/terminal
+  tasks.
+- Schedule daemon for cron and one-shot jobs.
+- MCP client for user-configured local MCP servers.
+- ALP.1: intra-machine agent-to-agent links over Unix sockets.
+- ALP.2: inter-machine links over Noise_XK TCP, with per-peer budget
+  and rate-limit enforcement.
+- ALP.3: hub-anchored shared rooms for multiple alpis and optional
+  human participants.
+- `alpi doctor`, `alpi logs`, per-profile launchd/systemd services,
+  backup-friendly file layout, and security audit logs.
 
-## Install
+## Quickstart
 
 ```bash
-# One-time tool install from source
-uv tool install /path/to/alpi
-# After any code change
-uv tool install /path/to/alpi --reinstall --no-cache
+uv tool install alpi
+alpi setup
+alpi
+alpi doctor
+```
 
-# One-time — Chromium for the `browser` tool (~200MB)
+Optional browser support:
+
+```bash
 playwright install chromium
 ```
 
-## Run
+During setup, pick a model, paste the relevant key, and pin a
+workspace. For local-only inference, install Ollama first and add it in
+`alpi setup -> Model`.
+
+Common commands:
 
 ```bash
-alpi                         # interactive TUI in the current directory
-alpi --continue              # resume the last session
-alpi -p <name>               # use a named profile (multi-profile)
-alpi chat --once "text"      # one-shot turn to stdout (pipe-friendly)
+alpi                         # interactive TUI
+alpi -c                      # resume last session
+alpi -p work                 # use named profile
+alpi chat --once "status?"   # one-shot stdout turn
 
-alpi profile list            # show profiles, mark the active one
-alpi profile create <name>   # bootstrap a new profile tree
-alpi profile remove <name>   # delete after safety checks + confirm
+alpi setup                   # model, gateways, MCPs, sandbox, services
+alpi doctor                  # live health checks
+alpi logs                    # merged profile logs
 
-alpi setup                   # interactive menu: model, gateways, MCPs
+alpi profile list
+alpi profile create work
+alpi profile remove work
 
-alpi gateway start           # run the Telegram/IMAP gateway process
-alpi schedule start          # run the schedule daemon
-alpi mcp list                # list configured MCP servers (read-only)
+alpi gateway start|stop|restart
+alpi schedule start|stop|restart|run-once
+alpi alp start|stop|restart
 
-# Persist across reboots (launchd on macOS, systemd --user on Linux):
-alpi gateway install         # one-time, auto-starts at login
-alpi schedule install
-alpi gateway uninstall
-alpi schedule uninstall
+alpi peers key
+alpi peers list
+alpi peers add <id> <pubkey>
+alpi peers ping <id>
 ```
 
-`gateway` and `schedule` are independent processes with the same
-lifecycle. Install only what you want surviving a reboot — otherwise
-`start`/`stop` covers day-to-day.
+For the first-day walkthrough, see [QUICKSTART.md](QUICKSTART.md).
 
-## Key concepts
+## Core concepts
 
-**Workspace** — the default root for relative paths in tools. Pinned in
-the profile's `config.yaml`, or `cwd` at launch as fallback. **Not a
-wall**: absolute paths reach anywhere except a sensitive-path denylist
-(`/etc`, SSH keys, AWS creds, docker sockets, …). Real workspace-only
-isolation is the opt-in OS sandbox (`tools.terminal.sandbox: true`).
-Full security model in [docs/SECURITY.md](docs/SECURITY.md).
+**Profiles** are the isolation primitive. A profile is one directory,
+one identity, one model choice, one memory, one skill set, one gateway
+configuration, one schedule surface, and one ALP peer list. The
+default profile lives at `~/.alpi/`; named profiles live under
+`~/.alpi/profiles/<name>/`.
 
-**Memory** — three files under `~/.alpi/memory/`:
+**Memory** is plain Markdown. `USER.md` captures facts about the user,
+`MEMORY.md` captures environment quirks and durable operational facts,
+and `AGENT.md` shapes how alpi should respond. Memory is updated inline
+during conversations; there is no post-session reflection loop.
 
-- `USER.md` — who the user is.
-- `MEMORY.md` — alpi's own notes (env quirks, commands, incidents).
-- `AGENT.md` — how alpi should respond.
+**Skills** are reusable recipes with a strict directory contract. They
+can include instructions, scripts, references, assets, secrets, and
+state. Mutations go through validation and a security scanner; secrets
+live in either `.env` or a per-skill `secrets/` directory.
 
-Updated inline during conversations via the `memory` tool. No
-post-session reflect. Snapshot frozen per session for prefix cache.
+**Workspace** is the default root for relative paths, not a fake
+security wall. File tools and terminal can use absolute paths except
+for a sensitive-path denylist. Real workspace-only isolation is the
+opt-in OS sandbox.
 
-**Skills** — reusable recipes under `~/.alpi/skills/<category>/<name>/`.
-Each skill is a directory with `SKILL.md` plus optional `scripts/`,
-`references/`, `assets/`, `secrets/` (mode 0700, gitignored), `state/`
-(gitignored runtime persistence). Live by default — no approval gate;
-the security scanner is the gate. Auto-injected into the system prompt
-so the agent sees its toolbox without having to discover it. Full
-contract in [docs/SKILLS.md](docs/SKILLS.md).
+**ALP** is the Alpi Link Protocol. Each profile owns an Ed25519 keypair.
+Peers pin pubkeys out of band and grant explicit capabilities such as
+`link.ping`, `link.ask`, and `room.post`. ALP.1 handles same-machine
+profiles over Unix sockets. ALP.2 handles inter-machine links with
+Noise_XK over TCP plus budgets and rate limits. ALP.3 adds
+hub-anchored rooms.
 
-**Sessions** — JSON under `~/.alpi/sessions/<id>.json` as a list of
-turns. `--continue` resumes the most recent.
+## Security posture
 
-**Research** — `research(brief, depth)` spawns a read-only sub-agent
-with its own context. `depth` is `quick` / `normal` / `deep`; the
-integer per tier is a knob in `config.yaml`. Returns a synthesised
-report; the main agent never sees the intermediate trace.
+alpi assumes the LLM is powerful, fallible, and sitting next to user
+credentials. The guardrails are local and layered:
 
-## Providers
+- safe / caution / dangerous command classification;
+- dangerous commands blocked with no config escape hatch;
+- caution commands require interactive approval or configured allowlist;
+- sensitive-path denylist shared across file and terminal posture;
+- SSRF protection on web tools;
+- prompt-injection warnings on fetched web/email content;
+- OSV malware checks before skill or MCP install;
+- optional macOS/Linux OS sandbox per profile;
+- `approval.log` and `agent.log` for audit.
 
-Any LiteLLM-supported provider — set the relevant key in `~/.alpi/.env`:
-
-```bash
-ANTHROPIC_API_KEY=...
-OPENAI_API_KEY=...
-OPENROUTER_API_KEY=...
-GOOGLE_API_KEY=...
-GROQ_API_KEY=...
-OLLAMA_BASE_URL=http://localhost:11434     # local
-
-# Gateway (optional) — single source of truth for bot + allowlist:
-TELEGRAM_BOT_TOKEN=...
-TELEGRAM_ALLOWED_CHAT_IDS=12345,67890      # comma-separated, fail-closed
-
-# Email (optional, pick ONE or BOTH).
-# IMAP/SMTP — generic provider (password or app-password):
-IMAP_ADDRESS=you@yourprovider.com
-IMAP_PASSWORD=...
-IMAP_HOST=imap.yourprovider.com
-SMTP_HOST=smtp.yourprovider.com
-IMAP_ALLOWED_SENDERS=pepe@x.com,ana@y.com    # fail-closed inbound allowlist
-
-# Gmail API (OAuth2) — scoped, no password stored:
-GMAIL_CLIENT_ID=...apps.googleusercontent.com
-GMAIL_CLIENT_SECRET=GOCSPX-...
-GMAIL_ALLOWED_SENDERS=pepe@x.com,ana@y.com   # fail-closed inbound allowlist
-# The refresh token is stored per profile under ~/.alpi/.../gmail_token.json
-# after a one-off browser consent via `alpi setup → Gateways → Gmail`.
-```
-
-Switch model any time with `/model` inside the TUI. Tier guidance in
-[docs/MODELS.md](docs/MODELS.md).
-
-## Gateway
-
-Relays Telegram and IMAP messages to alpi. Tool activity streams to the
-chat (`◆ memory · ...`) and a typing indicator stays on while alpi works.
-Both toggleable in `config.yaml` per platform:
-
-```yaml
-gateway:
-  telegram:
-    show_tool_trace: true
-    typing_indicator: true
-  imap:
-    poll_interval: 60
-    mark_as_read: true
-    show_tool_trace: false
-```
-
-Allowlists live in `~/.alpi/.env` (fail-closed if unset). Run
-`alpi setup` for interactive configuration.
+See [docs/SECURITY.md](docs/SECURITY.md) for the full model.
 
 ## Documentation
 
-Each doc has a focused job:
-
-- [QUICKSTART.md](QUICKSTART.md) — first-day walkthrough. Pick a model, pin a workspace, send your first message, connect a gateway, install services.
-- [ALP.md](docs/ALP.md) — Alpi Link Protocol spec — paper-style normative reference for agent↔agent communication.
-- [PROFILES.md](docs/PROFILES.md) — the core isolation primitive. Per-profile identity, state, memory, skills, peers.
-- [DEPLOYMENTS.md](docs/DEPLOYMENTS.md) — six topologies from laptop-only to enterprise "army of alpis", with the licence boundary for each.
-- [OPERATIONS.md](docs/OPERATIONS.md) — runbook: logs, services, upgrades, backup + restore, identity rotation, monitoring, disaster recovery.
-- [ARCHITECTURE.md](docs/ARCHITECTURE.md) — technical reference of what's currently in the codebase. File layout, core systems, invariants.
-- [CONFIG.md](docs/CONFIG.md) — every config key with default + when it takes effect.
-- [SECURITY.md](docs/SECURITY.md) — threat model + Layer 1 (always-on guards) + Layer 2 (opt-in OS sandbox).
-- [SKILLS.md](docs/SKILLS.md) — skill authoring guide: structure, conventions, secrets/state, scanner.
-- [MODELS.md](docs/MODELS.md) — tiered model recommendations.
-- [ROADMAP.md](docs/ROADMAP.md) — open work; shipped work lives in the CHANGELOG.
+- [QUICKSTART.md](QUICKSTART.md) — install, model, workspace, first chat,
+  gateways, profiles, ALP, doctor.
+- [docs/PROFILES.md](docs/PROFILES.md) — per-profile identity,
+  isolation, state, memory, skills, peers, services.
+- [docs/ALP.md](docs/ALP.md) — wire protocol, identity, signatures,
+  transports, methods, errors, rooms.
+- [docs/SECURITY.md](docs/SECURITY.md) — threat model, approval gate,
+  sandbox, injection/SSRF/path guards, dependency posture.
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — implementation
+  reference for contributors and agents reading the codebase.
+- [docs/CONFIG.md](docs/CONFIG.md) — every YAML key and when it takes
+  effect.
+- [docs/SKILLS.md](docs/SKILLS.md) — skill directory contract,
+  frontmatter, secrets, scanner, validation.
+- [docs/MODELS.md](docs/MODELS.md) — model recommendations for
+  tool-heavy agent use.
+- [docs/DEPLOYMENTS.md](docs/DEPLOYMENTS.md) — laptop, home server,
+  multi-profile, multi-device, family/team, enterprise shapes.
+- [docs/OPERATIONS.md](docs/OPERATIONS.md) — services, logs, upgrades,
+  backup/restore, monitoring, disaster recovery.
+- [docs/ROADMAP.md](docs/ROADMAP.md) — open work and rejected ideas.
 
 ## Tests
 
 ```bash
 uv run --with pytest pytest -q
-uv run --with pytest pytest --llm    # also real-LLM integration tests
+uv run --with pytest pytest --llm
 ```
 
 ## License
 
-alpi is published under the **[Business Source Licence 1.1](LICENSE)**
-by [Satoshi Ltd.](https://www.satoshi-ltd.com/) — source-available,
-not OSI "open source" *today*, but it converts to **Apache 2.0 on the
-Change Date** (2030-04-23, or four years after each version's first
-public release, whichever comes first).
+alpi is source-available from day one. The agent core is published by
+[Satoshi Ltd.](https://www.satoshi-ltd.com/) under the
+[Business Source Licence 1.1](LICENSE), with a scheduled conversion to
+Apache 2.0 on 2030-04-23, or four years after each version's first
+public release, whichever comes first.
 
-### What you can do without a commercial licence
-
-- **Anyone** can read, copy, modify, redistribute, and make
-  non-production use of alpi — no paperwork, no contact needed.
-- **Individuals** can run alpi in production on machines they
-  personally control, for personal, research, and non-commercial
-  purposes.
-- **Companies and other legal entities** can run alpi internally
-  for **evaluation, development, and experimentation**.
-
-### What requires a commercial licence
-
-- Production deployment by a company or other legal entity
-  (e.g. rolling alpi out to staff, automating internal workflows
-  with it, running it against a production dataset).
-- Offering alpi — or a derivative — to third parties as a hosted,
-  embedded, or managed service.
+Personal use, research, evaluation, and non-production deployments are
+free. Commercial production deployments, or offering alpi as a hosted,
+embedded, or managed service, are covered by a Satoshi Ltd. commercial
+licence.
 
 Commercial enquiries: **info@satoshi-ltd.com**.
-
-This model — free for individuals and non-production use, paid for
-commercial production — reflects Satoshi's consulting-first business
-model and keeps alpi honest about its funding. See
-[docs/ROADMAP.md](docs/ROADMAP.md) under "Principles" for why
-subscription-routing and OAuth-reversal are also off the table.

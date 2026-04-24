@@ -17,7 +17,7 @@ Legend: 🔵 backlog · 🟡 next up · ⏸ blocked.
 | ID | Item | Target | Status |
 |---|---|---|---|
 | AR | v0.3 production release — website + content rewrite | v0.3 | 🟡 v0.3 gate — blocks the cut |
-| AT | Audit system prompt + tool descriptions vs hermes | v0.3 | ✅ closed — BD spins out for the one item that needs measurement |
+| AT | Audit system prompt + tool descriptions against comparable agents | v0.3 | ✅ closed — BD spins out for the one item that needs measurement |
 | AI | Memory v2 — better generation + TUI panel | v0.3 | 🔵 research first |
 | AJ | Browser realism — session persistence + login state + deeper antibot | v0.3 | 🔵 |
 | AO | Default skills bundle | v0.3 | 🔵 intentionally empty — bundled skills emerge from concrete recurring patterns, not catalog imitation |
@@ -25,17 +25,16 @@ Legend: 🔵 backlog · 🟡 next up · ⏸ blocked.
 | BB | TUI: shared link renderer (bold + underline; hover = accent bg + black) | v0.3 | 🔵 |
 | BC | External security audit before v0.3 public release | v0.3 | 🔴 gate on AR |
 | BD | Model-aware tool-use-enforcement guidance (Claude/MiMo brevity, GPT/Codex/Gemini full block) | v0.3 | 🔵 needs A/B on agent.log first |
-| ALP.2 | Alpi Link Protocol — inter-machine Noise-protocol transport + budget / rate-limit enforcement | v0.4 | 🔵 — depends on ALP.1 (shipped) |
-| ALP.3 | Alpi Link Protocol — shared rooms (group chat, humans optional) | v0.4 | 🔵 — depends on ALP.1 (shipped) |
+| ALP.2 | Alpi Link Protocol — inter-machine Noise-protocol transport + budget / rate-limit enforcement | v0.3 | 🟡 v0.3 launch surface |
+| ALP.3 | Alpi Link Protocol — shared rooms (group chat, humans optional) | v0.3 | 🟡 v0.3 launch surface |
 | H | Home Assistant integration | long-term | ⏸ blocked on user confirmation |
 | N | Image generation | long-term | 🔵 no concrete use case yet |
 | U | Signal gateway (signal-cli) | long-term | 🔵 requires dedicated phone number |
 | Σ.1 | Mixture-of-agents tool (ensemble inference) | stretch | 🔵 not planned, tracked for later |
 | Σ.2 | RL training / fine-tuning hooks | stretch | 🔵 not planned, tracked for later |
 
-v0.3.0 ships when **AR** lands — every other v0.3 row is "nice to
-have before the cut, not required". **ALP.2** + **ALP.3** are firmly
-v0.4.
+v0.3.0 ships when **AR**, **ALP.2**, and **ALP.3** land. The rest of
+the v0.3 rows are "nice to have before the cut, not required".
 
 ---
 
@@ -53,8 +52,8 @@ the same quota is:
 - Unsafe for users (accounts can be banned; the reversed flow can
   break any time).
 
-The competitor landscape (hermes, similar third-party agents)
-routinely ships "Codex OAuth" / "Claude Code OAuth" features.
+The competitor landscape routinely ships "Codex OAuth" / "Claude Code
+OAuth" features.
 **alpi does not, and will not.** If a vendor publishes an official
 OAuth-for-third-parties flow in the future (documented, stable,
 bindable), we adopt it then.
@@ -77,14 +76,14 @@ repo.
 
 v0.3 is the first release intended for public consumption. That
 implies a presence (static site) and a content pass across
-`README.md`, `docs/*`, and the future landing page aligned with
+`README.md`, `docs/*`, and the landing page aligned with
 [satoshi-ltd.com](https://satoshi-ltd.com):
 
 - **Positioning.** Privacy-first. No telemetry. Local-first,
   cloud-last. Your keys, your machine, your data.
 - **Competitor framing.** Speak generically about the landscape
-  (hermes-style third-party agents, Claude-style official clients).
-  Avoid naming them gratuitously in marketing copy; when a
+  (third-party agents, official vendor clients, hosted routers).
+  Avoid naming products gratuitously in marketing copy; when a
   comparison is needed, state the difference in terms of *what
   alpi does differently*, not what they do wrong.
 - **Differentiators to lead with.** UX discipline (one wizard, no
@@ -102,17 +101,16 @@ implies a presence (static site) and a content pass across
    install-first; the new one leads with why alpi, install is a
    section.
 3. [`docs/ARCHITECTURE.md`](ARCHITECTURE.md) +
-   [`docs/SECURITY.md`](SECURITY.md) audited for old framing
-   ("experimental", "personal-use", "stretch goal") that no longer
-   fits a production release.
+   [`docs/SECURITY.md`](SECURITY.md) audited for old framing that no
+   longer fits a production release.
 4. A short launch post for the personal blog / X account —
    optional, but the effort pays off once.
 
-v0.3.0 doesn't ship until AR lands. The code is already
-v0.3-shaped (CLI shrunk, observability in, doctor live, centralised
-logs, ALP.1 shipped); what's missing is the narrative to back it.
+v0.3.0 doesn't ship until AR, ALP.2, and ALP.3 land. The public shape
+is profiles + private ALP networks, not a terminal-only assistant with
+future networking bolted on later.
 
-### AT. Audit system prompt + tool descriptions vs hermes — ✅ closed
+### AT. Audit system prompt + tool descriptions against comparable agents — ✅ closed
 
 Done across three passes:
 
@@ -124,7 +122,7 @@ Done across three passes:
    where the failure mode was non-obvious: `browser` (retry with the
    real role+name from the latest snapshot), `search` (regex
    metachars must be escaped), `stt` ("Use when the user shares a
-   voice note"). The rest of the Hermes-vs-alpi audit's "worst
+   voice note"). The rest of the comparable-agent audit's "worst
    offenders" turned out to already carry explicit *Use when / Not
    for / failure mode* sections and needed no change.
 3. **Context-file injection scanner** — investigated and closed
@@ -150,7 +148,7 @@ Two sub-tasks, research-first:
    and body. Open questions: are we writing the right type per
    signal? Is the 70% Jaccard dedup too loose / too tight? Should
    the tool take a "confidence" field so low-conf writes
-   auto-expire? Compare against Hermes + the latest public memory
+   auto-expire? Compare against comparable agents + the latest public memory
    patterns (Mem0, Letta) and pick what fits our scope.
 2. **TUI panel.** `/memory` today shows the three files verbatim.
    Options: section-collapsible view, edit-in-place, "forget this"
@@ -193,9 +191,9 @@ BE ships the infrastructure to bundle skills under `@alpi/*`. This
 item is the curation side — what, if anything, to include.
 
 **Current position: no bundled skills.** We deliberately resisted
-shipping a catalog of methodology skills imported from other
-agents (hermes has 59; most are off-scope for alpi). The ethos is
-"ship what you use" — bundle only skills that encode recurring
+shipping a catalog of generic methodology skills imported from other
+agents; most are off-scope for alpi. The ethos is "ship what you use"
+— bundle only skills that encode recurring
 patterns we actually observe in real usage, not generic
 write/code/web guides.
 
@@ -203,7 +201,7 @@ write/code/web guides.
 
 - `writer`, `coder`, `webmaster` (original draft) — too broad;
   would each become 3-5 sub-workflows.
-- `@alpi/systematic-debugging` (from hermes) — methodology for
+- `@alpi/systematic-debugging` — methodology for
   root-cause investigation. Marginal capability add; modern LLMs
   do most of this when asked. Reconsider if real debug sessions
   show the LLM taking shortcuts.
@@ -286,8 +284,8 @@ an external firm for a formal audit.
   non-goal. Draft lives in `docs/SECURITY.md` today; the auditor
   formalises and challenges it.
 - ALP cryptography review: envelope signing (Ed25519 PKCS8),
-  replay cache, Noise_XK wrapper when ALP.2 lands, peer-pinning
-  workflow.
+  replay cache, Noise_XK wrapper, peer-pinning workflow, room
+  key handling.
 - Tool surface review: approval system, sandbox posture (macOS
   sandbox-exec profile + Linux bwrap), shell denylist, skill
   scanner, OSV check, SSRF guards in `browser` / `web_*` tools.
@@ -314,8 +312,7 @@ Gate the "Actually CALL the tool…" paragraph in
 `alpi/prompts/system_prompt.md` on model family. Claude / MiMo /
 Qwen / Sonnet / Opus follow tool instructions well without the
 long enforcement block; GPT / Codex / Gemini / Gemma / Grok
-need it. Hermes gates this via a model-substring list; measure
-on `agent.log` before committing.
+need it. Measure on `agent.log` before committing.
 
 Output: short report showing tool-call rate on a Claude session
 with vs without the block (same prompts). Apply the split only if
@@ -323,7 +320,7 @@ no regression on the shorter variant.
 
 ---
 
-## v0.4 cycle
+## ALP launch work
 
 ### ALP — Alpi Link Protocol
 
@@ -333,10 +330,10 @@ inter-machine over the public internet, shared rooms for N-agent
 workspaces. Security + privacy are hard requirements — every
 message is signed + encrypted, every peer is explicitly pinned (no
 discovery, no TOFU), every capability is fail-closed. Spec at
-[`docs/ALP.md`](ALP.md). Three phases; ALP.1 (intra-profile) shipped
-in v0.2.68.
+[`docs/ALP.md`](ALP.md). Three phases form the v0.3 public surface:
+ALP.1 local links, ALP.2 machine links, ALP.3 rooms.
 
-### ALP.2 — Inter-machine Noise-protocol transport (v0.4)
+### ALP.2 — Inter-machine Noise-protocol transport (v0.3)
 
 Depends on ALP.1. New transport `alpi/alp/noise.py` + gateway
 listener — TCP listener with Noise_XK handshake producing
@@ -351,11 +348,10 @@ supported but discouraged.
 
 Also in ALP.2: **budget + rate-limit enforcement**. The
 `peers.yaml` `budget.tokens_per_day`, `budget.usd_per_day`, and
-`rate_limit.requests_per_minute` fields already parse in ALP.1 but
-don't enforce. ALP.2 ships the ledger + UTC-midnight reset + the
-`-32005 budget-exceeded` response path.
+`rate_limit.requests_per_minute` fields drive the ledger,
+UTC-midnight reset, and the `-32005 budget-exceeded` response path.
 
-### ALP.3 — Shared rooms (v0.4)
+### ALP.3 — Shared rooms (v0.3)
 
 Depends on ALP.1. First-class group-chat workspaces — N alpis
 (different profiles, different machines) post into a shared
@@ -371,11 +367,10 @@ New verbs (`room.create`, `room.join`, `room.post`, `room.pull`,
 
 ### H. Home Assistant integration
 
-Only if @soyjavi runs Home Assistant. Hermes has
-`homeassistant_tool` as a reference. Requires `HA_URL` + a
-long-lived token in `.env`. Typical uses: read sensors, toggle
-lights/scenes, query occupancy. **Blocked on confirmation that HA
-is part of the setup.**
+Only if @soyjavi runs Home Assistant. Requires `HA_URL` + a long-lived
+token in `.env`. Typical uses: read sensors, toggle lights/scenes,
+query occupancy. **Blocked on confirmation that HA is part of the
+setup.**
 
 ### N. Image generation
 
@@ -406,9 +401,8 @@ allowlist of sender numbers.
 ### Σ.1. Mixture-of-agents (stretch goal)
 
 Spawn multiple LLMs on the same prompt, aggregate answers with a
-final synthesizer. Hermes has this as `mixture_of_agents_tool.py`.
-Use case: hard decisions where one model is weak and you want
-"wisdom of crowds" at 3× cost.
+final synthesizer. Use case: hard decisions where one model is weak
+and you want "wisdom of crowds" at 3× cost.
 
 Not planned — tracked here because it's a known technique and
 might become useful if we hit a ceiling on single-model research
@@ -416,10 +410,8 @@ quality.
 
 ### Σ.2. RL training / fine-tuning hooks (stretch goal)
 
-Hermes has `rl_training_tool.py` for recording agent runs and
-building training datasets. If we ever want to fine-tune a smaller
-local model on your actual conversation patterns, the
-dataset-collection scaffold would live here.
+If we ever want to fine-tune a smaller local model on real conversation
+patterns, the dataset-collection scaffold would live here.
 
 Not planned. Research-grade, irrelevant for everyday personal use.
 
@@ -481,10 +473,10 @@ Not planned. Research-grade, irrelevant for everyday personal use.
 **Rejected behaviours:**
 
 - **Auto-reflect on Ctrl+C.** Dangerous.
-- **Post-session `/reflect` loop.** Tried it — removed because
-  Hermes doesn't do post-session reflection either, and the TUI
-  implementation was broken. Replaced by hardened system prompt +
-  tool-description rules for inline `memory(add)` + `skill(create)`.
+- **Post-session `/reflect` loop.** Tried it — removed because the TUI
+  implementation was broken and inline memory writes are cleaner.
+  Replaced by hardened system prompt + tool-description rules for
+  inline `memory(add)` + `skill(create)`.
 
 **Rejected dependencies:**
 

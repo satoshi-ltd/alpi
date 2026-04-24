@@ -169,8 +169,10 @@ alpi's realistic attacker:
   exfiltrating secrets. Layers 1 and 2 both defend here.
 - **Direct malicious input** from the user themselves — not a
   concern; you own the machine.
-- **Network adversaries** (APT, 0-day) — out of scope. alpi is a
-  personal agent, not a hardened production system.
+- **Network adversaries** on ALP links — handled by signed envelopes,
+  replay checks, pinned peer identity, and the ALP.2 Noise transport
+  for inter-machine links. Endpoint compromise and APT-grade host
+  compromise remain outside alpi's boundary.
 
 Layer 1 covers the common-case attacks (known patterns, known
 sensitive paths, known SSRF targets). Layer 2 adds defense-in-depth

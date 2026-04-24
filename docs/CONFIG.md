@@ -102,7 +102,7 @@ or lower a chatty tool's cap.
 
 Precedence: `tools.<name>.max_result_chars` (if set) → `tools.budget.per_result_chars` → hardcoded `100_000`.
 
-Not implemented (tracked, not planned): per-turn aggregate cap and inline preview. Hermes has both (200K aggregate with spill-to-disk, 1.5K preview in the tool card). Ship if and when a real turn actually burns through several large tool results.
+Not implemented (tracked, not planned): per-turn aggregate cap and inline preview. Comparable agents carry both, but alpi only ships them if real turns start burning through several large tool results.
 
 `tools.terminal.sandbox` enables OS-level isolation on shell commands
 (macOS `sandbox-exec`, Linux `bubblewrap`). Toggle via `alpi setup →
@@ -213,10 +213,8 @@ log file).
 
 Design choices worth knowing before tweaking config:
 
-- **Single cohesive UI.** No separate "legacy CLI" to maintain. Hermes
-  ships a `prompt_toolkit + rich` CLI plus a newer Ink.js/React TUI in
-  a second repo; alpi has one Textual app that covers every
-  interactive use case.
+- **Single cohesive UI.** No separate "legacy CLI" to maintain. alpi has
+  one Textual app that covers every interactive use case.
 - **Streaming is the default.** Assistant text streams into a Markdown
   widget char-by-char. No full-message reload; the widget knows how to
   append deltas. On `assistant_done` the final text replaces the
@@ -313,7 +311,7 @@ reasoning, so this flag has no effect there.
 
 | Key | Default | Why |
 |---|---|---|
-| `gateway.imap.poll_interval` | `60` (seconds) | IMAP polling cadence. Hermes runs at 15s; 60s keeps CPU/network quiet for personal use. |
+| `gateway.imap.poll_interval` | `60` (seconds) | IMAP polling cadence. Keeps CPU/network quiet for personal use. |
 | `gateway.imap.mark_as_read` | `true` | Processed messages marked `\Seen` so your mail client treats them as read. |
 | `gateway.imap.show_tool_trace` | `false` | Each trace would be its own email — spam if a turn touches many tools. Only the final reply goes out. |
 | `gateway.imap.typing_indicator` | `false` | No "typing…" concept over IMAP/SMTP. Kept explicit so the gateway loop doesn't spawn a no-op heartbeat. |
@@ -330,6 +328,27 @@ Same knobs as IMAP, different backend. Polling uses Gmail's `users.history.list`
 | `gateway.gmail.typing_indicator` | `false` | Same reason as IMAP. |
 
 Configure both if you want: `imap` polls your primary mailbox via password, `gmail` polls another account via OAuth, each with its own allowlist (`IMAP_ALLOWED_SENDERS` vs `GMAIL_ALLOWED_SENDERS`).
+
+### ALP
+
+ALP always serves the per-profile Unix socket for same-machine peers.
+Inter-machine ALP.2 is opt-in per profile: set a TCP port in YAML or
+pass `--port` when starting the listener. Bind the port to a Tailscale
+/ WireGuard address where possible; `0.0.0.0` is supported, but public
+internet exposure is not the recommended shape.
+
+| Key | Default | Notes |
+|---|---|---|
+| `alp.tcp_port` | unset | Enables ALP.2 Noise_XK-over-TCP for this profile. Equivalent to `alpi alp start --port <n>`. |
+| `alp.tcp_host` | `127.0.0.1` when `tcp_port` is set | TCP bind host. Use a VPN IP or `0.0.0.0` when remote peers need to dial in. |
+
+Example:
+
+```yaml
+alp:
+  tcp_host: 100.64.12.34
+  tcp_port: 7423
+```
 
 ### Ollama
 
