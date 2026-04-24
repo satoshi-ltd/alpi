@@ -26,6 +26,7 @@ Legend: 🔵 backlog · 🟡 next up · ⏸ blocked.
 | BB | TUI: shared link renderer (bold + underline; hover = accent bg + black) | v0.3 | 🔵 |
 | BC | External security audit before v0.3 public release | v0.3 | 🔴 gate on AR |
 | BD | Model-aware tool-use-enforcement guidance (Claude/MiMo brevity, GPT/Codex/Gemini full block) | v0.3 | 🔵 needs A/B on agent.log first |
+| BE | Bundled skills infrastructure (loader; no content yet) | v0.3 | 🔵 dual-source lookup or seed-on-create — land alongside first real bundled skill |
 | ALP.2 | Alpi Link Protocol — inter-machine Noise-protocol transport + budget / rate-limit enforcement | v0.4 | 🔵 — depends on ALP.1 (shipped) |
 | ALP.3 | Alpi Link Protocol — shared rooms (group chat, humans optional) | v0.4 | 🔵 — depends on ALP.1 (shipped) |
 | H | Home Assistant integration | long-term | ⏸ blocked on user confirmation |
@@ -194,8 +195,11 @@ them in when the detection scaffold makes it cheap.
 
 ### AO. Default skills bundle
 
-Today the only bundled skill is `meta/consolidate-memory`. A
-starter pack would help new users see what skills are for:
+Today there are no bundled skills. Fresh profiles start with an
+empty `{home}/skills/` dir; the `skill` tool only looks under
+`{home}`, so nothing ships by default. Making bundles reachable
+is the prerequisite (see **BE**). A starter pack on top of a
+working loader would help new users see what skills are for:
 
 - **writer** — drafting, editing, tone shifting; reusable across
   essays/emails.
@@ -324,6 +328,45 @@ isn't.
 independent security firm reads it. The Satoshi principle "Open
 Source — Auditable code. Reproducible builds. Trust, but verify"
 applies to the organisation too.
+
+### BE. Bundled skills infrastructure
+
+The `skill` tool only searches `{home}/skills/` today. There is no
+way to ship skills with the package — fresh profiles start empty,
+and any SKILL.md authored in the repo is invisible to the agent.
+
+Infrastructure first, content second. When a concrete bundled
+skill has a clear use case (the first plausible one is a memory
+consolidator, but `memory(replace|remove)` already covers it
+ad-hoc), land the loader at the same time.
+
+**Two implementation options.**
+
+- **Seed-on-create:** on `ensure_home`, copy bundled package
+  resources into `{home}/skills/`. Simple; each profile pins the
+  skill version it was created with. User edits override.
+- **Dual-source lookup:** `skill(action="run"|"view")` searches
+  `{home}/skills/` first, falls back to package resources.
+  Bundled skills always latest; user edits land in the profile
+  and shadow the bundle (copy-on-write).
+
+Dual-source is the cleaner model (matches Python package
+resolution) but the seed path is what users intuitively expect.
+Pick at implementation time, alongside the first real skill that
+justifies the work.
+
+### BD. Model-aware tool-use-enforcement guidance
+
+Gate the "Actually CALL the tool…" paragraph in
+`alpi/prompts/system_prompt.md` on model family. Claude / MiMo /
+Qwen / Sonnet / Opus follow tool instructions well without the
+long enforcement block; GPT / Codex / Gemini / Gemma / Grok
+need it. Hermes gates this via a model-substring list; measure
+on `agent.log` before committing.
+
+Output: short report showing tool-call rate on a Claude session
+with vs without the block (same prompts). Apply the split only if
+no regression on the shorter variant.
 
 ---
 

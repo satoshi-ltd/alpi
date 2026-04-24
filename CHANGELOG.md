@@ -1,5 +1,36 @@
 # Changelog
 
+## v0.2.73 — 2026-04-24
+
+### skills / memory / docs — stop shipping what we don't use
+
+- Deleted the `alpi/skills/` package directory. The only blueprint
+  there (`meta/consolidate-memory/SKILL.md`) never reached profiles
+  — the `skill` tool only searches `{home}/skills/` and nothing
+  seeds the bundle. Keeping dead literature shipped with the binary
+  violated the "ship what you use" posture. Runtime skills system
+  is untouched — `~/.alpi/skills/<category>/<name>/` still works,
+  the `skill` tool still creates / edits / runs user skills, and
+  the `/skills` TUI panel still lists them.
+- `pyproject.toml` package-data no longer includes `skills/**/*.md`.
+- `alpi/tools/memory.py` — the ≥80% hint now says *"consider
+  consolidating old entries before adding more"* (generic,
+  actionable) instead of pointing at a skill that doesn't exist.
+- `alpi/prompts/system_prompt.md` — same substitution: at ≥80%,
+  prefer `replace` / `remove` over `add`.
+- `alpi/prompts/create_skill_guide.md` — drops the "search the
+  bundled `alpi/skills/`" step, since there's nothing to search.
+- `docs/ARCHITECTURE.md` — package tree no longer lists `skills/`
+  under `alpi/`. Added a bridge paragraph pointing at the Profile
+  home layout where runtime skills / sessions / memories / logs /
+  ALP state actually live. Skills core-systems section unchanged.
+- `docs/ROADMAP.md` — **BE** reframed as "bundled skills
+  infrastructure (loader; no content yet)" rather than a loader
+  pinned to a specific blueprint. **AO** no longer claims
+  consolidate-memory is bundled.
+- Two regression tests in `tests/test_memory_tool_v2.py` now
+  assert the new generic "consolidating" wording.
+
 ## v0.2.72 — 2026-04-24
 
 ### memory — v2 rules (AI partial)

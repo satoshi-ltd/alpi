@@ -131,13 +131,13 @@ def test_over_80_percent_adds_consolidation_hint(isolated_home: Path) -> None:
     # Now add a small legitimate entry; the response must flag the state.
     r = Memory().run(action="add", target="MEMORY.md", content="Ollama en localhost:11434.")
     assert r.ok, r.error
-    assert "consolidate-memory" in r.output
+    assert "consolidating" in r.output.lower()
 
 
 def test_well_below_limit_has_no_hint(isolated_home: Path) -> None:
     r = Memory().run(action="add", target="USER.md", content="Nombre: Javi.")
     assert r.ok, r.error
-    assert "consolidate-memory" not in r.output
+    assert "consolidating" not in r.output.lower()
 
 
 # F — the limits themselves got bumped (regression, locks in the new values)

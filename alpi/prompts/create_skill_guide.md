@@ -31,9 +31,9 @@ skill. Never create one proactively.
 
 ## Before creating
 
-- Search `~/.alpi/skills/` and the bundled `alpi/skills/` for an existing
-  skill that already covers ≥80% of the need. If one exists, propose
-  extending it instead of creating a duplicate.
+- Search `~/.alpi/skills/` for an existing skill that already covers
+  ≥80% of the need. If one exists, propose extending it instead of
+  creating a duplicate.
 
 ## After creating
 

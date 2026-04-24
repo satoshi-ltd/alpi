@@ -204,7 +204,7 @@ class Memory(Tool):
     def _state_snapshot(self, store: MemoryStore, target: str) -> str:
         used, limit = store.usage()[target]
         pct = int(used / limit * 100) if limit else 0
-        hint = " — run the consolidate-memory skill" if pct >= 80 else ""
+        hint = " — consider consolidating old entries before adding more" if pct >= 80 else ""
         current = store.snapshot()[target].strip() or "(empty)"
         return (
             f"{target}: {pct}% ({used:,}/{limit:,} chars){hint}\n\n"

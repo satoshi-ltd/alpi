@@ -1,6 +1,6 @@
 [project]
 name = "alpi"
-version = "0.2.72"
+version = "0.2.73"
 description = "A slim, self-improving AI agent"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -45,7 +45,7 @@ build-backend = "setuptools.build_meta"
 include = ["alpi*"]
 
 [tool.setuptools.package-data]
-alpi = ["prompts/*.md", "skills/**/*.md", "tui/*.tcss"]
+alpi = ["prompts/*.md", "tui/*.tcss"]
 
 [tool.ruff]
 line-length = 100
