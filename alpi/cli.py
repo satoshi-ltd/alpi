@@ -15,6 +15,7 @@ from alpi.engine import AgentEvent, Engine
 
 def _suggest(name: str, candidates: list[str]) -> str:
     import difflib
+
     hit = difflib.get_close_matches(name, candidates, n=1, cutoff=0.6)
     return f". Did you mean {hit[0]!r}?" if hit else ""
 
@@ -44,6 +45,7 @@ def _auto_install_scheduler(h: Path, profile: str) -> None:
         return
     try:
         from alpi import service
+
         if not service.installed("schedule", profile):
             service.install("schedule", h, profile)
     except Exception:  # noqa: BLE001
@@ -59,6 +61,7 @@ def _auto_install_scheduler(h: Path, profile: str) -> None:
 def _run_chat(h: Path, continue_last: bool = False) -> None:
     _bootstrap(h)
     from alpi.tui import AlpiApp
+
     try:
         AlpiApp(home_dir=h, continue_last=continue_last).run()
     finally:
@@ -68,19 +71,20 @@ def _run_chat(h: Path, continue_last: bool = False) -> None:
         # the user to Ctrl+C a second time. Session save already happened
         # inside action_quit (and after every turn), so nothing is lost.
         import os
+
         os._exit(0)
 
 
 def _restore_terminal() -> None:
     try:
         seqs = (
-            "\033[?1000l"   # disable X10 mouse reporting
-            "\033[?1002l"   # disable button-event mouse tracking
-            "\033[?1003l"   # disable any-event mouse tracking
-            "\033[?1006l"   # disable SGR mouse extension
-            "\033[?2004l"   # disable bracketed paste
-            "\033[?25h"     # show cursor
-            "\033[?1049l"   # leave alternate screen
+            "\033[?1000l"  # disable X10 mouse reporting
+            "\033[?1002l"  # disable button-event mouse tracking
+            "\033[?1003l"  # disable any-event mouse tracking
+            "\033[?1006l"  # disable SGR mouse extension
+            "\033[?2004l"  # disable bracketed paste
+            "\033[?25h"  # show cursor
+            "\033[?1049l"  # leave alternate screen
         )
         sys.stdout.write(seqs)
         sys.stdout.flush()
@@ -94,7 +98,8 @@ def _continue_last_session(engine: Engine, h: Path, console=None) -> bool:
         return False
     candidates = sorted(
         (p for p in sessions_dir.glob("*.json") if not p.name.startswith("_")),
-        key=lambda p: p.stat().st_mtime, reverse=True,
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
     )
     if not candidates:
         return False
@@ -124,21 +129,21 @@ def _hydrate_from_path(engine: Engine, path: Path, console=None) -> bool:
     if not turns:
         return False
 
-    engine.session.messages.append({
-        "role": "system",
-        "content": (
-            "NOTE: the conversation below is a previous session that was "
-            "resumed. You already have this context — do not call "
-            "`session_search` to recover it. Refer to the messages directly."
-        ),
-    })
+    engine.session.messages.append(
+        {
+            "role": "system",
+            "content": (
+                "NOTE: the conversation below is a previous session that was "
+                "resumed. You already have this context — do not call "
+                "`session_search` to recover it. Refer to the messages directly."
+            ),
+        }
+    )
     for t in turns:
         if t.user:
             engine.session.messages.append({"role": "user", "content": t.user})
         if t.assistant:
-            engine.session.messages.append(
-                {"role": "assistant", "content": t.assistant}
-            )
+            engine.session.messages.append({"role": "assistant", "content": t.assistant})
     engine.session.turns = list(turns)
 
     if data.get("id"):
@@ -150,9 +155,7 @@ def _hydrate_from_path(engine: Engine, path: Path, console=None) -> bool:
     if saved_ctx:
         engine.session.last_ctx_tokens = saved_ctx
     else:
-        total_chars = sum(
-            len(m.get("content", "") or "") for m in engine.session.messages
-        )
+        total_chars = sum(len(m.get("content", "") or "") for m in engine.session.messages)
         engine.session.last_ctx_tokens = max(1, total_chars // 4)
     return True
 
@@ -225,15 +228,15 @@ def _run_once(
     final = "\n\n".join(parts).strip()
     if emit_events:
         import json as _json
+
         sys.stdout.write(_json.dumps({"kind": "reply", "text": final}) + "\n")
     else:
         sys.stdout.write(final + "\n")
     sys.stdout.flush()
 
 
-
-
 # Click subcommands
+
 
 class _OrderedGroup(click.Group):
     """Display subcommands by user-frequency, not alphabetically.
@@ -244,7 +247,18 @@ class _OrderedGroup(click.Group):
     a new user actually wants.
     """
 
-    _ORDER = ["chat", "setup", "doctor", "logs", "profile", "peers", "alp", "gateway", "schedule", "release"]
+    _ORDER = [
+        "chat",
+        "setup",
+        "doctor",
+        "logs",
+        "profile",
+        "peers",
+        "alp",
+        "gateway",
+        "schedule",
+        "release",
+    ]
 
     def list_commands(self, ctx: click.Context) -> list[str]:
         known = [c for c in self._ORDER if c in self.commands]
@@ -258,8 +272,9 @@ class _OrderedGroup(click.Group):
     context_settings={"max_content_width": 100, "help_option_names": ["-h", "--help"]},
 )
 @click.option("-p", "--profile", default=None, help="Profile to use (default: default).")
-@click.option("-c", "--continue", "continue_last", is_flag=True,
-              help="Resume from the last session.")
+@click.option(
+    "-c", "--continue", "continue_last", is_flag=True, help="Resume from the last session."
+)
 @click.version_option(__version__, prog_name="alpi")
 @click.pass_context
 def main(ctx: click.Context, profile: str | None, continue_last: bool) -> None:
@@ -300,28 +315,38 @@ def main(ctx: click.Context, profile: str | None, continue_last: bool) -> None:
 
 
 @main.command()
-@click.option("--once", "input_text", default=None,
-              help="Run one turn and print the reply to stdout.")
+@click.option(
+    "--once", "input_text", default=None, help="Run one turn and print the reply to stdout."
+)
 # Internal gateway-subprocess contract. Hidden from ``--help`` so the
 # public surface stays minimal; users who need one-shot mode use
 # ``--once`` alone. The gateway sets this flag when spawning so it
 # can parse tool activity from the agent's stdout.
 @click.option("--emit-events", is_flag=True, default=False, hidden=True)
-@click.option("--resume-chat", "resume_chat", default=None, hidden=True,
-              help="Gateway-only: resume the per-chat session for this id.")
-@click.option("-c", "--continue", "continue_last", is_flag=True,
-              help="Resume from the last session.")
+@click.option(
+    "--resume-chat",
+    "resume_chat",
+    default=None,
+    hidden=True,
+    help="Gateway-only: resume the per-chat session for this id.",
+)
+@click.option(
+    "-c", "--continue", "continue_last", is_flag=True, help="Resume from the last session."
+)
 @click.pass_context
-def chat(ctx: click.Context, input_text: str | None, emit_events: bool,
-         resume_chat: str | None, continue_last: bool) -> None:
+def chat(
+    ctx: click.Context,
+    input_text: str | None,
+    emit_events: bool,
+    resume_chat: str | None,
+    continue_last: bool,
+) -> None:
     """Launch the TUI, or run one turn with ``--once "text"``."""
     h: Path = ctx.obj["home"]
     if input_text is not None:
-        _run_once(h, input_text, emit_events=emit_events,
-                  resume_chat_id=resume_chat)
+        _run_once(h, input_text, emit_events=emit_events, resume_chat_id=resume_chat)
     else:
         _run_chat(h, continue_last=continue_last)
-
 
 
 def _require_workspace(h: Path) -> None:
@@ -351,6 +376,7 @@ def gateway() -> None:
 def gateway_start(ctx: click.Context) -> None:
     """Start the gateway process in the foreground (blocking)."""
     from alpi.gateway.run import run as gw_run, pid_path
+
     h: Path = ctx.obj["home"]
     _bootstrap(h)
     _require_workspace(h)
@@ -363,6 +389,7 @@ def gateway_start(ctx: click.Context) -> None:
 def gateway_stop(ctx: click.Context) -> None:
     """Stop a running gateway (SIGTERM)."""
     from alpi.gateway.run import pid_path
+
     h: Path = ctx.obj["home"]
     profile: str = ctx.obj.get("profile") or "default"
     _stop_daemon("gateway", h, profile, pid_path(h))
@@ -378,6 +405,7 @@ def gateway_restart(ctx: click.Context) -> None:
     under launchd/systemd — if it doesn't, the daemon stays stopped.
     """
     from alpi.gateway.run import pid_path
+
     h: Path = ctx.obj["home"]
     profile: str = ctx.obj.get("profile") or "default"
     _restart_daemon("gateway", h, profile, pid_path(h))
@@ -386,6 +414,7 @@ def gateway_restart(ctx: click.Context) -> None:
 # MCP servers
 
 # Schedule daemon — auto-installs on first `alpi` run; these are for manual/debug use
+
 
 @main.group()
 def schedule() -> None:
@@ -397,6 +426,7 @@ def schedule() -> None:
 def schedule_start(ctx: click.Context) -> None:
     """Start the schedule daemon in the foreground (blocking)."""
     from alpi.scheduler.run import run as sch_run, pid_path
+
     h: Path = ctx.obj["home"]
     _bootstrap(h)
     _require_workspace(h)
@@ -409,6 +439,7 @@ def schedule_start(ctx: click.Context) -> None:
 def schedule_stop(ctx: click.Context) -> None:
     """Stop a running schedule daemon (SIGTERM)."""
     from alpi.scheduler.run import pid_path
+
     h: Path = ctx.obj["home"]
     profile: str = ctx.obj.get("profile") or "default"
     _stop_daemon("schedule", h, profile, pid_path(h))
@@ -419,6 +450,7 @@ def schedule_stop(ctx: click.Context) -> None:
 def schedule_restart(ctx: click.Context) -> None:
     """Stop the schedule daemon and wait for the service to bring it back."""
     from alpi.scheduler.run import pid_path
+
     h: Path = ctx.obj["home"]
     profile: str = ctx.obj.get("profile") or "default"
     _restart_daemon("schedule", h, profile, pid_path(h))
@@ -429,6 +461,7 @@ def schedule_restart(ctx: click.Context) -> None:
 def schedule_run_once(ctx: click.Context) -> None:
     """Run one tick in-process (manual fire, no daemon needed)."""
     from alpi.scheduler.run import tick
+
     h: Path = ctx.obj["home"]
     _bootstrap(h)
     results = tick(h)
@@ -450,6 +483,7 @@ def schedule_fire(ctx: click.Context, job_id: str) -> None:
     Does not delete ``once`` jobs — testing doesn't consume them.
     """
     from alpi.scheduler.run import fire_by_id
+
     h: Path = ctx.obj["home"]
     _bootstrap(h)
     ok, msg = fire_by_id(h, job_id)
@@ -460,21 +494,26 @@ def schedule_fire(ctx: click.Context, job_id: str) -> None:
 
 # Release — auto-generate CHANGELOG sections from git history
 
+
 @main.group()
 def release() -> None:
     """Release-cycle helpers (changelog, tagging)."""
 
 
 @release.command("notes")
-@click.option("--since", default=None,
-              help="Git rev to start from (default: entire history).")
-@click.option("-o", "--output", "output",
-              type=click.Path(dir_okay=False, writable=True),
-              default=None,
-              help="Write to this file instead of stdout (overwrites).")
+@click.option("--since", default=None, help="Git rev to start from (default: entire history).")
+@click.option(
+    "-o",
+    "--output",
+    "output",
+    type=click.Path(dir_okay=False, writable=True),
+    default=None,
+    help="Write to this file instead of stdout (overwrites).",
+)
 def release_notes(since: str | None, output: str | None) -> None:
     """Render a Markdown changelog from commits, grouped by version bump."""
     from alpi import changelog
+
     releases = changelog.collect(since=since)
     rendered = changelog.render_markdown(releases)
     if output:
@@ -486,11 +525,13 @@ def release_notes(since: str | None, output: str | None) -> None:
 
 # Doctor — health check across model, workspace, gateways, services, MCPs, security
 
+
 @main.command("doctor")
 @click.pass_context
 def doctor_cmd(ctx: click.Context) -> None:
     """Read-only health check of the current profile."""
     from alpi import doctor, ui
+
     h: Path = ctx.obj["home"]
     profile: str = ctx.obj.get("profile") or "default"
     checks = doctor.run_and_render(ui._console, h, profile, __version__)
@@ -499,17 +540,29 @@ def doctor_cmd(ctx: click.Context) -> None:
 
 # Logs — unified tail across every subsystem under ``{home}/*/logs/``
 
+
 @main.command("logs")
-@click.option("--source", type=click.Choice(["gateway", "schedule", "agent", "approval"]),
-              default=None, help="Restrict to one subsystem.")
-@click.option("-n", "--tail", "tail_n", default=100,
-              help="Number of most recent lines to show (default: 100).")
-@click.option("-f", "--follow", is_flag=True, default=False,
-              help="Follow the logs as new lines arrive.")
+@click.option(
+    "--source",
+    type=click.Choice(["gateway", "schedule", "agent", "approval"]),
+    default=None,
+    help="Restrict to one subsystem.",
+)
+@click.option(
+    "-n",
+    "--tail",
+    "tail_n",
+    default=100,
+    help="Number of most recent lines to show (default: 100).",
+)
+@click.option(
+    "-f", "--follow", is_flag=True, default=False, help="Follow the logs as new lines arrive."
+)
 @click.pass_context
 def logs_cmd(ctx: click.Context, source: str | None, tail_n: int, follow: bool) -> None:
     """Show the tail of every log this profile writes, merged by timestamp."""
     from alpi import logs as logs_mod, ui
+
     h: Path = ctx.obj["home"]
     lines = logs_mod.tail(h, source, tail_n)
     if not lines and not follow:
@@ -521,6 +574,7 @@ def logs_cmd(ctx: click.Context, source: str | None, tail_n: int, follow: bool) 
 
 
 # Shared install / uninstall / status helpers
+
 
 def _stop_daemon(name: str, home: Path, profile: str, pid_file: Path) -> None:
     """SIGTERM the running ``name`` daemon. If a service is registered,
@@ -595,10 +649,7 @@ def _restart_daemon(name: str, home: Path, profile: str, pid_file: Path) -> None
             f"appeared within 15s. Check `alpi logs --source {name}`."
         )
         return
-    click.echo(
-        f"{name}: restarted via {backend} "
-        f"(pid {old_pid} → {new_pid})"
-    )
+    click.echo(f"{name}: restarted via {backend} (pid {old_pid} → {new_pid})")
 
 
 def _read_live_pid(pid_file: Path) -> int | None:
@@ -630,11 +681,13 @@ def _check_not_running(pid_file: Path) -> None:
 
 # setup / profile
 
+
 @main.command("setup")
 @click.pass_context
 def setup_cmd(ctx: click.Context) -> None:
     """Interactive setup — model, gateways, MCPs."""
     from alpi import ui
+
     h: Path = ctx.obj["home"]
     _bootstrap(h)
 
@@ -658,8 +711,9 @@ def setup_cmd(ctx: click.Context) -> None:
         ]
         if profile_name != "default":
             items.append(None)
-            items.append(("Delete profile", "delete-profile",
-                          _delete_profile_status(h, profile_name)))
+            items.append(
+                ("Delete profile", "delete-profile", _delete_profile_status(h, profile_name))
+            )
         # Every title starts with ``alpi`` as a lightweight brand +
         # "you are here" marker. The active profile goes in the
         # subtitle so the user always knows which one they're
@@ -668,13 +722,15 @@ def setup_cmd(ctx: click.Context) -> None:
             ui.crumb("setup"),
             items,
             subtitle=f"profile: {profile_name}",
-            home=h, close="Exit",
+            home=h,
+            close="Exit",
         )
         if choice is None:
             _setup_farewell(profile_name, h)
             return
         if choice == "model":
             from alpi import model_selector
+
             model_selector.run(config.load(h))
         elif choice == "workspace":
             _workspace_setup(h)
@@ -682,6 +738,7 @@ def setup_cmd(ctx: click.Context) -> None:
             _gateways_setup(h)
         elif choice == "mcps":
             from alpi.mcp.setup import run as mcp_setup_run
+
             mcp_setup_run(h)
         elif choice == "sandbox":
             _sandbox_setup(h)
@@ -697,6 +754,7 @@ def setup_cmd(ctx: click.Context) -> None:
             _alp_service_setup(h)
         elif choice == "peers":
             from alpi.alp.setup import run as alp_setup_run
+
             alp_setup_run(h)
         elif choice == "doctor":
             _doctor_wizard(h, profile_name)
@@ -714,6 +772,7 @@ def _setup_farewell(profile: str, h: Path) -> None:
 
 def _gateways_setup(h: Path) -> None:
     from alpi import ui
+
     while True:
         items = [
             ("Telegram", "telegram", _telegram_status(h)),
@@ -724,23 +783,28 @@ def _gateways_setup(h: Path) -> None:
             ui.crumb("setup", "gateways"),
             items,
             subtitle="inbound channels alpi listens on",
-            home=h, close="Back",
+            home=h,
+            close="Back",
         )
         if choice is None:
             return
         if choice == "telegram":
             from alpi.gateway.setup import run as telegram_setup
+
             telegram_setup(h)
         elif choice == "imap":
             from alpi.mail.setup import run as email_setup
+
             email_setup(h)
         elif choice == "gmail":
             from alpi.mail.gmail_setup import run as gmail_setup
+
             gmail_setup(h)
 
 
 def _gateway_service_status(h: Path) -> str:
     from alpi import service
+
     if not _any_gateway_ready(h):
         return "no gateway configured"
     backend = service.installed("gateway", _profile_from_home(h))
@@ -775,9 +839,7 @@ def _daemon_service_setup(h: Path, name: str) -> None:
     from alpi import service, ui
 
     if name == "gateway" and not _any_gateway_ready(h):
-        ui.fail_and_wait(
-            "no gateway configured yet — set up Telegram, IMAP, or Gmail first"
-        )
+        ui.fail_and_wait("no gateway configured yet — set up Telegram, IMAP, or Gmail first")
         return
 
     profile_name = _profile_from_home(h)
@@ -816,23 +878,156 @@ def _schedule_service_setup(h: Path) -> None:
 
 
 def _alp_service_setup(h: Path) -> None:
-    _daemon_service_setup(h, "alp")
+    """ALP service — install/uninstall the launchd/systemd unit, plus
+    inter-machine TCP port configuration."""
+    from alpi import config as cfg_mod
+    from alpi import service, ui
+
+    while True:
+        profile_name = _profile_from_home(h)
+        backend = service.installed("alp", profile_name)
+        svc_label = f"running via {backend}" if backend else "not installed"
+
+        cfg = cfg_mod.load(h)
+        tcp_port = (cfg.alp or {}).get("tcp_port")
+        tcp_host = (cfg.alp or {}).get("tcp_host") or "127.0.0.1"
+        if tcp_port:
+            tcp_label = f"{tcp_host}:{tcp_port} (Noise_XK)"
+        else:
+            tcp_label = "not bound (Unix only)"
+
+        ui.banner(
+            ui.crumb("setup", "alp-service"),
+            subtitle=svc_label,
+            home=h,
+        )
+        ui.dim(_DAEMON_WIZARD_COPY["alp"])
+        ui._console.print("")
+
+        items: list = []
+        if backend:
+            items.append(("Uninstall service", "remove-service", svc_label))
+        else:
+            items.append(("Install service", "add-service", "register + start now"))
+        items.append(None)
+        items.append(("TCP port (inter-machine)", "tcp", tcp_label))
+
+        choice = ui.menu("", items, home=h, close="Back")
+        if choice is None:
+            return
+        try:
+            if choice == "add-service":
+                kind = service.install("alp", h, profile_name)
+                ui.ok_and_wait(f"alp service installed via {kind}")
+            elif choice == "remove-service":
+                kind = service.uninstall("alp", h, profile_name)
+                ui.ok_and_wait(f"alp service uninstalled ({kind})")
+            elif choice == "tcp":
+                _alp_tcp_port_setup(h)
+        except Exception as e:  # noqa: BLE001
+            ui.fail_and_wait(str(e))
+
+
+def _alp_tcp_port_setup(h: Path) -> None:
+    """Configure the optional TCP listener for inter-machine ALP links."""
+    from alpi import config as cfg_mod
+    from alpi import ui
+
+    cfg = cfg_mod.load(h)
+    current_port = (cfg.alp or {}).get("tcp_port")
+    current_host = (cfg.alp or {}).get("tcp_host") or "127.0.0.1"
+
+    ui.banner(
+        ui.crumb("setup", "alp-service", "tcp"),
+        subtitle="Noise_XK over TCP — inter-machine peers",
+        home=h,
+    )
+    ui.dim(
+        "When a TCP port is set, other alpis can dial this profile from\n"
+        "another machine. Traffic is Noise_XK encrypted and only peers\n"
+        "pinned in peers.yaml are admitted.\n\n"
+        "Default host is 127.0.0.1 (loopback only). Set a VPN address\n"
+        "(e.g. your Tailscale 100.x.x.x) to accept remote peers. Avoid\n"
+        "binding 0.0.0.0 without a VPN in front.\n\n"
+        "Leave the port empty to disable TCP and keep the Unix socket\n"
+        "as the only transport."
+    )
+    ui._console.print("")
+
+    host = ui.text(
+        f"Bind host — e.g. 127.0.0.1, a Tailscale IP, or 0.0.0.0 [{current_host}]:",
+        default=current_host,
+    )
+    if host is None:
+        return ui.cancelled()
+    host = (host or current_host).strip() or "127.0.0.1"
+
+    if host == "0.0.0.0":
+        if not ui.confirm(
+            "0.0.0.0 exposes the port to every interface. Continue?",
+            default=False,
+        ):
+            return ui.cancelled()
+
+    port_default = str(current_port) if current_port else ""
+    port_hint = f"[{port_default}]" if port_default else "[empty = disable TCP]"
+    port_s = ui.text(
+        f"Port number (1-65535) {port_hint}:",
+        default=port_default,
+    )
+    if port_s is None:
+        return ui.cancelled()
+    port_s = (port_s or "").strip()
+
+    alp_cfg = dict(cfg.alp or {})
+
+    if not port_s:
+        alp_cfg.pop("tcp_port", None)
+        alp_cfg.pop("tcp_host", None)
+        cfg.alp = alp_cfg
+        cfg_mod.save(cfg)
+        ui.ok_and_wait("TCP disabled — Unix socket only")
+        return
+
+    try:
+        port = int(port_s)
+    except ValueError:
+        ui.fail_and_wait(f"not a valid port: {port_s!r} (did you mean to set it as host?)")
+        return
+    if not (1 <= port <= 65535):
+        ui.fail_and_wait(f"port out of range: {port} (expected 1-65535)")
+        return
+
+    alp_cfg["tcp_port"] = port
+    alp_cfg["tcp_host"] = host
+    cfg.alp = alp_cfg
+    cfg_mod.save(cfg)
+    ui.ok_and_wait(f"TCP bound to {host}:{port} — restart the alp service to pick it up")
 
 
 def _schedule_service_status(h: Path) -> str:
     from alpi import service
+
     backend = service.installed("schedule", _profile_from_home(h))
     return f"running via {backend}" if backend else "not installed"
 
 
 def _alp_service_status(h: Path) -> str:
     from alpi import service
+    from alpi import config as cfg_mod
+
     backend = service.installed("alp", _profile_from_home(h))
-    return f"running via {backend}" if backend else "not installed"
+    cfg = cfg_mod.load(h)
+    port = (cfg.alp or {}).get("tcp_port")
+    base = f"running via {backend}" if backend else "not installed"
+    if port:
+        return f"{base} · tcp :{port}"
+    return base
 
 
 def _peers_status(h: Path) -> str:
     from alpi.alp import peers as peers_mod
+
     count = len(peers_mod.load(h))
     if count == 0:
         return "none pinned"
@@ -849,6 +1044,7 @@ def _doctor_status(h: Path, profile: str) -> str:
 
 def _doctor_wizard(h: Path, profile: str) -> None:
     from alpi import doctor, ui
+
     ui.banner(ui.crumb("setup", "doctor"), subtitle="health check", home=h)
     ui._console.print("")
     doctor.run_and_render(ui._console, h, profile, __version__)
@@ -858,6 +1054,7 @@ def _doctor_wizard(h: Path, profile: str) -> None:
 
 def _profile_from_home(h: Path) -> str:
     from alpi.home import _ROOT
+
     if h == _ROOT:
         return "default"
     try:
@@ -893,6 +1090,7 @@ def _read_profile_env(h: Path) -> dict[str, str]:
 
 def _gateways_status(h: Path) -> str:
     from alpi.mail.gmail_auth import token_path
+
     env = _read_profile_env(h)
     names = []
     if env.get("TELEGRAM_BOT_TOKEN"):
@@ -949,6 +1147,7 @@ def _workspace_setup(h: Path) -> None:
     Stored as ``workspace:`` in the profile's ``config.yaml``.
     """
     from alpi import ui
+
     cfg = config.load(h)
 
     ui.banner(
@@ -998,6 +1197,7 @@ def _workspace_setup(h: Path) -> None:
 def _sandbox_setup(h: Path) -> None:
     """Pick the desired sandbox posture for the current profile."""
     from alpi import ui
+
     while True:
         cfg = config.load(h)
 
@@ -1026,7 +1226,8 @@ def _sandbox_setup(h: Path) -> None:
                 ("Enable sandbox", "enable"),
                 ("Disable sandbox", "disable"),
             ],
-            home=h, close="Back",
+            home=h,
+            close="Back",
         )
         if choice is None:
             return
@@ -1060,29 +1261,29 @@ def _sandbox_setup(h: Path) -> None:
                 ("Deny network (isolated)", "deny"),
                 ("Allow network (git push, npm, curl…)", "allow"),
             ],
-            home=h, close="Back",
+            home=h,
+            close="Back",
         )
         if net is None:
             return
-        cfg.tools.terminal.allow_network = (net == "allow")
+        cfg.tools.terminal.allow_network = net == "allow"
         config.save(cfg)
         ui.ok_and_wait(
-            f"sandbox enabled · network "
-            f"{'on' if cfg.tools.terminal.allow_network else 'off'}"
+            f"sandbox enabled · network {'on' if cfg.tools.terminal.allow_network else 'off'}"
         )
         return
 
 
 _VOICE_SHORTLIST: list[tuple[str, str, str]] = [
-    ("en-US-AriaNeural",      "Aria",      "English (US) · female"),
-    ("en-US-GuyNeural",       "Guy",       "English (US) · male"),
-    ("en-GB-SoniaNeural",     "Sonia",     "English (UK) · female"),
-    ("es-ES-AlvaroNeural",    "Alvaro",    "Spanish (Spain) · male"),
-    ("es-ES-ElviraNeural",    "Elvira",    "Spanish (Spain) · female"),
-    ("es-MX-DaliaNeural",     "Dalia",     "Spanish (Mexico) · female"),
-    ("fr-FR-DeniseNeural",    "Denise",    "French (France) · female"),
-    ("de-DE-KatjaNeural",     "Katja",     "German · female"),
-    ("it-IT-ElsaNeural",      "Elsa",      "Italian · female"),
+    ("en-US-AriaNeural", "Aria", "English (US) · female"),
+    ("en-US-GuyNeural", "Guy", "English (US) · male"),
+    ("en-GB-SoniaNeural", "Sonia", "English (UK) · female"),
+    ("es-ES-AlvaroNeural", "Alvaro", "Spanish (Spain) · male"),
+    ("es-ES-ElviraNeural", "Elvira", "Spanish (Spain) · female"),
+    ("es-MX-DaliaNeural", "Dalia", "Spanish (Mexico) · female"),
+    ("fr-FR-DeniseNeural", "Denise", "French (France) · female"),
+    ("de-DE-KatjaNeural", "Katja", "German · female"),
+    ("it-IT-ElsaNeural", "Elsa", "Italian · female"),
     ("pt-BR-FranciscaNeural", "Francisca", "Portuguese (Brazil) · female"),
 ]
 
@@ -1103,6 +1304,7 @@ def _voice_status(cfg: config.Config) -> str:
 def _voice_setup(h: Path) -> None:
     """Pick the Edge TTS voice + autoplay toggle for the `tts` tool."""
     from alpi import ui
+
     while True:
         cfg = config.load(h)
 
@@ -1121,23 +1323,32 @@ def _voice_setup(h: Path) -> None:
         collected: list[tuple[str, str, str, bool]] = []
         for vid, name, desc in _VOICE_SHORTLIST:
             collected.append((name, desc, vid, vid == cfg.tools.tts.voice))
-        collected.append((
-            "Autoplay: " + ("on" if cfg.tools.tts.autoplay else "off"),
-            "toggle speaker playback",
-            "__autoplay__", False,
-        ))
+        collected.append(
+            (
+                "Autoplay: " + ("on" if cfg.tools.tts.autoplay else "off"),
+                "toggle speaker playback",
+                "__autoplay__",
+                False,
+            )
+        )
         width = max(len(lab) for lab, _s, _v, _a in collected)
 
         items: list = []
         for label, status, value, active in collected:
             if active:
-                items.append((
-                    ui.row_accent(label, status, accent, width=width), value,
-                ))
+                items.append(
+                    (
+                        ui.row_accent(label, status, accent, width=width),
+                        value,
+                    )
+                )
             else:
-                items.append((
-                    ui.row(label, status, width=width), value,
-                ))
+                items.append(
+                    (
+                        ui.row(label, status, width=width),
+                        value,
+                    )
+                )
 
         choice = ui.menu("", items, home=h, close="Back")
         if choice is None:
@@ -1146,9 +1357,7 @@ def _voice_setup(h: Path) -> None:
         if choice == "__autoplay__":
             cfg.tools.tts.autoplay = not cfg.tools.tts.autoplay
             config.save(cfg)
-            ui.ok_and_wait(
-                f"autoplay {'on' if cfg.tools.tts.autoplay else 'off'}"
-            )
+            ui.ok_and_wait(f"autoplay {'on' if cfg.tools.tts.autoplay else 'off'}")
             return
 
         cfg.tools.tts.voice = choice
@@ -1162,6 +1371,7 @@ _SESSION_STALE_DAYS = 30
 
 def _cleanup_categories(h: Path) -> list[dict]:
     import time
+
     now = time.time()
     stale_cutoff = now - _SESSION_STALE_DAYS * 86400
 
@@ -1236,6 +1446,7 @@ def _cleanup_categories(h: Path) -> list[dict]:
 
 def _cleanup_status(h: Path) -> str:
     from alpi import home as home_mod
+
     cats = _cleanup_categories(h)
     total = sum(c["size"] for c in cats)
     if total == 0:
@@ -1245,6 +1456,7 @@ def _cleanup_status(h: Path) -> str:
 
 def _cleanup_setup(h: Path) -> None:
     from alpi import home as home_mod, ui
+
     while True:
         cats = _cleanup_categories(h)
         items: list = []
@@ -1260,7 +1472,8 @@ def _cleanup_setup(h: Path) -> None:
             ui.crumb("setup", "cleanup"),
             items,
             subtitle=f"profile: {home_mod.shorten_home(h)}",
-            home=h, close="Back",
+            home=h,
+            close="Back",
         )
         if choice is None:
             return
@@ -1300,6 +1513,7 @@ def _email_status(h: Path) -> str:
 
 def _gmail_status(h: Path) -> str:
     from alpi.mail.gmail_auth import token_path
+
     env = _read_profile_env(h)
     if not env.get("GMAIL_CLIENT_ID") or not env.get("GMAIL_CLIENT_SECRET"):
         return "not set up"
@@ -1307,6 +1521,7 @@ def _gmail_status(h: Path) -> str:
         return "credentials present · not authorized"
     try:
         from alpi.mail.gmail_auth import get_email
+
         addr = get_email(h) or "?"
     except Exception:  # noqa: BLE001
         addr = "?"
@@ -1338,7 +1553,8 @@ def profile_list(ctx: click.Context) -> None:
     rows: list[list[str]] = []
     for name in ["default", *named]:
         home_path = (
-            Path.home() / ".alpi" if name == "default"
+            Path.home() / ".alpi"
+            if name == "default"
             else Path.home() / ".alpi" / "profiles" / name
         )
         try:
@@ -1350,13 +1566,15 @@ def profile_list(ctx: click.Context) -> None:
             model = "(unreadable)"
         glyph = "◆" if name == active else "◇"
         name_cell = f"[b]{name}[/b]" if name == active else name
-        rows.append([
-            f"[{accent}]{glyph}[/{accent}]",
-            name_cell,
-            model,
-            home_mod.profile_size_label(home_path),
-            home_mod.shorten_home(home_path),
-        ])
+        rows.append(
+            [
+                f"[{accent}]{glyph}[/{accent}]",
+                name_cell,
+                model,
+                home_mod.profile_size_label(home_path),
+                home_mod.shorten_home(home_path),
+            ]
+        )
 
     ui.columns(rows)
 
@@ -1395,8 +1613,9 @@ def profile_create(name: str) -> None:
     click.echo(f"use it with: alpi -p {name}")
     click.echo("")
     click.echo("Configure it:")
-    click.echo(f"  alpi -p {name} setup                          "
-               f"# interactive (API keys + gateway)")
+    click.echo(
+        f"  alpi -p {name} setup                          # interactive (API keys + gateway)"
+    )
     default_env = Path.home() / ".alpi" / ".env"
     if default_env.exists():
         click.echo(f"  # — or, to reuse the default profile's setup:")
@@ -1419,10 +1638,12 @@ def profile_remove(name: str) -> None:
     h = home.get_home(name)
     if not h.exists():
         from alpi.home import _ROOT
+
         profiles_root = _ROOT / "profiles"
         available = (
             [p.name for p in profiles_root.iterdir() if p.is_dir()]
-            if profiles_root.exists() else []
+            if profiles_root.exists()
+            else []
         )
         raise click.ClickException(
             f"profile {name!r} does not exist{_suggest(name, available)}",
@@ -1450,8 +1671,7 @@ def profile_remove(name: str) -> None:
     for line in summary:
         click.echo(f"  {line}")
     click.echo("")
-    if not ui.confirm(f"Remove profile {name!r}? This cannot be undone.",
-                      default=False):
+    if not ui.confirm(f"Remove profile {name!r}? This cannot be undone.", default=False):
         ui.cancelled()
         return
 
@@ -1485,9 +1705,9 @@ def _profile_summary(home_dir: Path) -> list[str]:
 
 def _delete_profile_status(h: Path, profile_name: str) -> str:
     from alpi import service
+
     installed = [
-        d for d in ("gateway", "schedule", "alp")
-        if service.installed(d, profile=profile_name)
+        d for d in ("gateway", "schedule", "alp") if service.installed(d, profile=profile_name)
     ]
     if installed:
         return f"{len(installed)} service(s) installed · one-shot teardown"
@@ -1500,8 +1720,7 @@ def _delete_profile_wizard(h: Path, profile_name: str) -> bool:
     import shutil
     from alpi import service, ui
 
-    ui.banner(ui.crumb("setup", "danger", f"delete {profile_name}"),
-              subtitle=str(h), home=h)
+    ui.banner(ui.crumb("setup", "danger", f"delete {profile_name}"), subtitle=str(h), home=h)
     ui._console.print("")
 
     summary = _profile_summary(h)
@@ -1509,8 +1728,7 @@ def _delete_profile_wizard(h: Path, profile_name: str) -> bool:
         ui._console.print(f"  {line}")
 
     installed = [
-        d for d in ("gateway", "schedule", "alp")
-        if service.installed(d, profile=profile_name)
+        d for d in ("gateway", "schedule", "alp") if service.installed(d, profile=profile_name)
     ]
     if installed:
         ui._console.print("")
@@ -1575,6 +1793,7 @@ def peers_key(ctx: click.Context) -> None:
     """Print this profile's ALP public key. Paste the line into the
     other peer's ``peers add`` to pin it."""
     from alpi.alp.keys import load_or_generate
+
     h: Path = ctx.obj["home"]
     kp = load_or_generate(h)
     click.echo(kp.pubkey_b64())
@@ -1586,6 +1805,7 @@ def peers_list(ctx: click.Context) -> None:
     """Show pinned peers for this profile."""
     from alpi import ui
     from alpi.alp import peers as peers_mod
+
     h: Path = ctx.obj["home"]
     entries = peers_mod.load(h)
     if not entries:
@@ -1603,18 +1823,27 @@ def peers_list(ctx: click.Context) -> None:
 @peers.command("add")
 @click.argument("peer_id")
 @click.argument("pubkey_b64")
-@click.option("--allow", default="link.ping,link.ask",
-              help="Comma-separated method allowlist (default: link.ping,link.ask).")
-@click.option("--address", default=None,
-              help="host:port for inter-machine peers; omit for intra-machine.")
+@click.option(
+    "--allow",
+    default="link.ping,link.ask",
+    help="Comma-separated method allowlist (default: link.ping,link.ask).",
+)
+@click.option(
+    "--address", default=None, help="host:port for inter-machine peers; omit for intra-machine."
+)
 @click.option("--alias", default="", help="Optional display label.")
 @click.pass_context
 def peers_add(
-    ctx: click.Context, peer_id: str, pubkey_b64: str,
-    allow: str, address: str | None, alias: str,
+    ctx: click.Context,
+    peer_id: str,
+    pubkey_b64: str,
+    allow: str,
+    address: str | None,
+    alias: str,
 ) -> None:
     """Pin a peer's pubkey + capabilities."""
     from alpi.alp import peers as peers_mod
+
     h: Path = ctx.obj["home"]
     peer = peers_mod.Peer(
         id=peer_id,
@@ -1638,6 +1867,7 @@ def peers_remove(ctx: click.Context, peer_id: str) -> None:
     other side — the remote profile still has you in its list until
     they drop you too."""
     from alpi.alp import peers as peers_mod
+
     h: Path = ctx.obj["home"]
     if peers_mod.remove(h, peer_id):
         click.echo(f"removed peer {peer_id!r}")
@@ -1661,50 +1891,61 @@ def peers_ping(ctx: click.Context, peer_id: str) -> None:
     if peer is None:
         available = [p.id for p in peers_mod.load(h)]
         raise click.ClickException(
-            f"no peer {peer_id!r}{_suggest(peer_id, available)} "
-            f"(see `alpi peers list`)",
-        )
-    if peer.address is not None:
-        raise click.ClickException(
-            "inter-machine ping not implemented yet (lands in ALP.2). "
-            "This peer has an address set; remove it to ping over the "
-            "local socket or wait for the TCP transport.",
-        )
-
-    # Resolve the target's socket path from its profile home. By
-    # convention, peers on the same machine live under
-    # ``~/.alpi/profiles/<id>/`` or ``~/.alpi/`` for the default.
-    # Accept either — try the profiles path first, fall back to the
-    # default home if the id is "default".
-    if peer_id == "default":
-        target_home = Path.home() / ".alpi"
-    else:
-        target_home = Path.home() / ".alpi" / "profiles" / peer_id
-    socket_path = target_home / "alp" / "alp.sock"
-    if not socket_path.exists():
-        raise click.ClickException(
-            f"target socket not found: {socket_path}\n"
-            f"Start the peer's listener first: "
-            f"`alpi -p {peer_id} alp start`",
+            f"no peer {peer_id!r}{_suggest(peer_id, available)} (see `alpi peers list`)",
         )
 
     sender = load_or_generate(h)
     try:
-        result = asyncio.run(alp_client.call(
-            socket_path=socket_path,
-            sender=sender,
-            recipient_pubkey_b64=peer.pubkey,
-            method="link.ping",
-            params={"nonce": "cli"},
-        ))
+        if peer.address:
+            host, _, port_s = peer.address.rpartition(":")
+            if not host or not port_s.isdigit():
+                raise click.ClickException(
+                    f"peer {peer_id!r} has an invalid address {peer.address!r}; expected host:port",
+                )
+            transport = f"tcp://{host}:{port_s}"
+            result = asyncio.run(
+                alp_client.call_tcp(
+                    host=host,
+                    port=int(port_s),
+                    sender=sender,
+                    recipient_pubkey_b64=peer.pubkey,
+                    method="link.ping",
+                    params={"nonce": "cli"},
+                )
+            )
+        else:
+            if peer_id == "default":
+                target_home = Path.home() / ".alpi"
+            else:
+                target_home = Path.home() / ".alpi" / "profiles" / peer_id
+            socket_path = target_home / "alp" / "alp.sock"
+            if not socket_path.exists():
+                raise click.ClickException(
+                    f"target socket not found: {socket_path}\n"
+                    f"Start the peer's listener first: "
+                    f"`alpi -p {peer_id} alp start`",
+                )
+            transport = str(socket_path)
+            result = asyncio.run(
+                alp_client.call(
+                    socket_path=socket_path,
+                    sender=sender,
+                    recipient_pubkey_b64=peer.pubkey,
+                    method="link.ping",
+                    params={"nonce": "cli"},
+                )
+            )
     except alp_client.TargetOffline as e:
         raise click.ClickException(f"target-offline: {e}")
+    except alp_client.ClientError as e:
+        raise click.ClickException(f"transport-error: {e}")
     except alp_client.RemoteError as e:
         raise click.ClickException(f"remote-error: {e}")
     click.echo(
         f"pong from {result.get('agent_name', '?')} "
         f"· version={result.get('version', '?')} "
-        f"· nonce={result.get('nonce', '?')}"
+        f"· nonce={result.get('nonce', '?')} "
+        f"· via {transport}"
     )
 
 
@@ -1718,29 +1959,53 @@ def _alp_pid_path(home: Path) -> Path:
 
 
 @alp.command("start")
+@click.option(
+    "--port",
+    type=int,
+    default=None,
+    help="TCP port for inter-machine peers (Noise_XK). Overrides config.alp.tcp_port.",
+)
+@click.option(
+    "--host",
+    type=str,
+    default=None,
+    help="TCP bind host (default 127.0.0.1; set 0.0.0.0 or a VPN IP to accept remote peers).",
+)
 @click.pass_context
-def alp_start(ctx: click.Context) -> None:
-    """Run the ALP Unix-socket listener for this profile (blocking)."""
+def alp_start(ctx: click.Context, port: int | None, host: str | None) -> None:
+    """Run the ALP listener (Unix socket + optional TCP) for this profile."""
     import asyncio
     import logging
     from alpi.alp import handlers as alp_handlers
     from alpi.alp.server import Server
+    from alpi import config as cfg_mod
 
     h: Path = ctx.obj["home"]
     profile: str = ctx.obj.get("profile") or "default"
     _bootstrap(h)
     _check_not_running(_alp_pid_path(h))
 
-    # Surface per-request activity — StreamHandler for foreground invokes,
-    # but when launchd captures stdout/stderr it still ends up in the log
-    # file configured on the plist.
+    cfg = cfg_mod.load(h)
+    cfg_alp = cfg.alp or {}
+    tcp_port = port if port is not None else cfg_alp.get("tcp_port")
+    tcp_host = host if host is not None else cfg_alp.get("tcp_host")
+    if tcp_port is not None and not isinstance(tcp_port, int):
+        raise click.ClickException(
+            f"alp.tcp_port in config.yaml must be an int, got {type(tcp_port).__name__}"
+        )
+
     handler = logging.StreamHandler()
     handler.setFormatter(logging.Formatter("%(message)s"))
     srv_log = logging.getLogger("alpi.alp.server")
     srv_log.setLevel(logging.INFO)
     srv_log.addHandler(handler)
 
-    server = Server(home=h, agent_name=profile)
+    server = Server(
+        home=h,
+        agent_name=profile,
+        tcp_host=tcp_host,
+        tcp_port=tcp_port,
+    )
     alp_handlers.register_link_ask(server, h)
 
     pid_file = _alp_pid_path(h)
@@ -1749,11 +2014,13 @@ def alp_start(ctx: click.Context) -> None:
 
     async def _run() -> None:
         await server.start()
-        click.echo(
-            f"alp: {profile} listening on {server.socket_path()}\n"
-            f"     pubkey: {server.pubkey_b64}\n"
-            f"     (Ctrl-C to stop)"
-        )
+        lines = [f"alp: {profile} listening on {server.socket_path()}"]
+        if tcp_port is not None:
+            bind = tcp_host or "127.0.0.1"
+            lines.append(f"     tcp:    Noise_XK on {bind}:{tcp_port}")
+        lines.append(f"     pubkey: {server.pubkey_b64}")
+        lines.append("     (Ctrl-C to stop)")
+        click.echo("\n".join(lines))
         try:
             await server.serve_forever()
         finally:
