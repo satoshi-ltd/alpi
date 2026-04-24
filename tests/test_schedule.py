@@ -372,3 +372,96 @@ def test_ensure_running_spawns_detached_when_dead(
     # Command invoked is `alpi schedule start`.
     assert "schedule" in captured["args"]
     assert "start" in captured["args"]
+
+
+# --------------------------------------------------------------------
+# fire_by_id — ad-hoc job fire (BA)
+# --------------------------------------------------------------------
+
+
+def test_fire_by_id_runs_matching_job(monkeypatch, tmp_home_no_env: Path) -> None:
+    jobs_path = scheduler.jobs_path(tmp_home_no_env)
+    jobs_path.parent.mkdir(parents=True, exist_ok=True)
+    jobs_path.write_text(json.dumps([
+        {"id": "alpha", "kind": "cron", "prompt": "hola",
+         "platform": "telegram", "chat_id": "1",
+         "expression": "0 9 * * *"},
+        {"id": "beta", "kind": "once", "prompt": "otro",
+         "platform": "telegram", "chat_id": "1",
+         "run_at": "2099-01-01T00:00:00"},
+    ], indent=2))
+
+    called_with = {}
+
+    def fake_run_job(job, home):
+        called_with["id"] = job["id"]
+        called_with["prompt"] = job["prompt"]
+        return True, "delivered to telegram:1"
+
+    monkeypatch.setattr(scheduler, "run_job", fake_run_job)
+
+    ok, msg = scheduler.fire_by_id(tmp_home_no_env, "alpha")
+    assert ok, msg
+    assert called_with == {"id": "alpha", "prompt": "hola"}
+    assert "telegram:1" in msg
+
+
+def test_fire_by_id_unknown_returns_error(tmp_home_no_env: Path) -> None:
+    scheduler.jobs_path(tmp_home_no_env).parent.mkdir(parents=True, exist_ok=True)
+    scheduler.jobs_path(tmp_home_no_env).write_text(json.dumps([]))
+    ok, msg = scheduler.fire_by_id(tmp_home_no_env, "nope")
+    assert not ok
+    assert "nope" in msg
+
+
+def test_fire_by_id_does_not_consume_once_job(
+        monkeypatch, tmp_home_no_env: Path) -> None:
+    """Ad-hoc fire is deliberate testing, not the natural trigger. A
+    successful fire on a kind=once job must NOT delete it from jobs.json
+    — the user still wants that job on the books for its real time."""
+    jobs_path = scheduler.jobs_path(tmp_home_no_env)
+    jobs_path.parent.mkdir(parents=True, exist_ok=True)
+    jobs_path.write_text(json.dumps([
+        {"id": "tomorrow", "kind": "once", "prompt": "remind me",
+         "platform": "telegram", "chat_id": "1",
+         "run_at": "2099-01-01T09:00:00"},
+    ], indent=2))
+
+    monkeypatch.setattr(scheduler, "run_job", lambda job, home: (True, "ok"))
+    ok, _ = scheduler.fire_by_id(tmp_home_no_env, "tomorrow")
+    assert ok
+
+    jobs_after = json.loads(jobs_path.read_text())
+    assert len(jobs_after) == 1
+    assert jobs_after[0]["id"] == "tomorrow"
+    # last_run_at must land so the operator sees it was tested.
+    assert "last_run_at" in jobs_after[0]
+
+
+def test_schedule_tool_fire_action(monkeypatch, tmp_home_no_env: Path) -> None:
+    monkeypatch.setenv("ALPI_HOME", str(tmp_home_no_env))
+    (tmp_home_no_env / "schedule").mkdir(parents=True, exist_ok=True)
+
+    # Seed one job.
+    Schedule().run(action="add", kind="cron", expression="0 9 * * *",
+                   prompt="ping", chat_id="1")
+
+    # Look up its id from jobs.json.
+    jobs = json.loads((tmp_home_no_env / "schedule" / "jobs.json").read_text())
+    jid = jobs[0]["id"]
+
+    # Stub the actual subprocess-spawning turn.
+    monkeypatch.setattr(scheduler, "run_job",
+                        lambda job, home: (True, "delivered to telegram:1"))
+
+    r = Schedule().run(action="fire", id=jid)
+    assert r.ok, r.error
+    assert "telegram:1" in r.output
+
+
+def test_schedule_tool_fire_requires_id(tmp_home_no_env: Path,
+                                         monkeypatch) -> None:
+    monkeypatch.setenv("ALPI_HOME", str(tmp_home_no_env))
+    r = Schedule().run(action="fire")
+    assert not r.ok
+    assert "id" in (r.error or "").lower()

@@ -17,7 +17,12 @@ class Schedule(Tool):
         "\"done, you'll get X at Y\" in the reply; nothing is "
         "scheduled unless this tool is invoked.\n"
         "\n"
-        "Actions: list, add, remove.\n"
+        "Actions: list, add, remove, fire.\n"
+        "\n"
+        "`fire` runs a specific job ad-hoc — same threat-scan + "
+        "dispatch path as the scheduler daemon. Useful right after "
+        "`add` to verify the prompt works end-to-end without waiting "
+        "for the cron window. Once-jobs are NOT consumed by fire.\n"
         "\n"
         "Pick `kind`:\n"
         "  once       — fires on a single date/time, then deletes itself "
@@ -41,7 +46,7 @@ class Schedule(Tool):
     parameters = {
         "type": "object",
         "properties": {
-            "action": {"type": "string", "enum": ["list", "add", "remove"]},
+            "action": {"type": "string", "enum": ["list", "add", "remove", "fire"]},
             "kind": {
                 "type": "string",
                 "enum": ["once", "cron", "inactivity"],
@@ -73,7 +78,7 @@ class Schedule(Tool):
                 "type": "string",
                 "description": "Target chat id. Default: first allowlisted chat.",
             },
-            "id": {"type": "string", "description": "Job id (for remove)."},
+            "id": {"type": "string", "description": "Job id (for remove / fire)."},
         },
         "required": ["action"],
     }
@@ -184,6 +189,13 @@ class Schedule(Tool):
                 return ToolResult(ok=False, output="", error=f"job {id} not found")
             jobs_path.write_text(json.dumps(new_jobs, indent=2))
             return ToolResult(ok=True, output=f"Removed job {id}")
+
+        if action == "fire":
+            if not id:
+                return ToolResult(ok=False, output="", error="'id' required")
+            from alpi.scheduler.run import fire_by_id
+            ok, msg = fire_by_id(home, id)
+            return ToolResult(ok=ok, output=msg, error=None if ok else msg)
 
         return ToolResult(ok=False, output="", error=f"unknown action: {action}")
 

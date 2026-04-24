@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.2.74 — 2026-04-24
+
+### schedule — ad-hoc job fire (BA closed)
+
+Closes the tightest feedback loop in the schedule lifecycle: add a
+cron, verify it works, without waiting for the cron window.
+
+- `alpi/scheduler/run.py::fire_by_id(home, job_id)` — loads
+  `jobs.json`, looks up the id, runs the job through the same path
+  the daemon tick uses (`run_job` — threat scan + `alpi chat --once`
+  subprocess + delivery). Updates `last_run_at`; does **not**
+  consume `once` jobs (ad-hoc fire is deliberate testing, not the
+  natural trigger).
+- CLI: `alpi schedule fire <job_id>`. Exit code 1 on failure.
+- Tool: `schedule(action="fire", id=...)` so the LLM can self-test
+  a job right after adding it.
+- Description updated to list the new action + caveat about
+  once-jobs not being consumed.
+
+5 new regression tests in `tests/test_schedule.py`; 675 green.
+
 ## v0.2.73 — 2026-04-24
 
 ### skills / memory / docs — stop shipping what we don't use
