@@ -22,7 +22,6 @@ Legend: 🔵 backlog · 🟡 next up · ⏸ blocked.
 | AJ | Browser realism — session persistence + login state + deeper antibot | v0.3 | 🔵 |
 | AO | Default skills bundle (writer / coder / webmaster …) | v0.3 | 🔵 research first |
 | AQ | Voice mode polish — STT + TTS quality + continuous mode | v0.3 | 🔵 |
-| BA | Schedule: ad-hoc job fire (`tick` / force-run) for circuit testing | v0.3 | 🔵 |
 | BB | TUI: shared link renderer (bold + underline; hover = accent bg + black) | v0.3 | 🔵 |
 | BC | External security audit before v0.3 public release | v0.3 | 🔴 gate on AR |
 | BD | Model-aware tool-use-enforcement guidance (Claude/MiMo brevity, GPT/Codex/Gemini full block) | v0.3 | 🔵 needs A/B on agent.log first |
@@ -239,29 +238,6 @@ Open areas to evaluate before committing scope:
 Start with a measurement pass (record a few real prompts, check STT
 accuracy + TTS latency end-to-end), then pick the two or three
 biggest wins.
-
-### BA. Schedule: ad-hoc job fire
-
-Today a cron job added via the `schedule` tool only fires when its
-time comes. That makes end-to-end testing painful — add a job, wait
-for the next window, hope it works. What's missing is a way to say
-"run this job *now*, exactly as the scheduler would have".
-
-**Scope.**
-
-- **CLI**: `alpi schedule fire <job_id>` — looks up the job in
-  `jobs.json`, executes it through the same path the scheduler
-  daemon uses (`_run_once` + the same envelope), writes to
-  `schedule/output/` and `schedule.log` as normal.
-- **Tool**: `schedule(action="fire", id=...)` so the agent can
-  self-test a job it just created.
-- **Safety**: same threat-scan (X) runs on fire as on cron tick.
-  No bypass of approval gate.
-
-**Why it matters.** Closes the only feedback loop where the user
-has to wait N minutes to learn their job is broken. Also useful
-for operations — when debugging a cron that's not firing on the
-expected interval, force one run and tail the logs.
 
 ### BB. TUI: shared link renderer
 

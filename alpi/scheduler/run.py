@@ -218,6 +218,24 @@ def _parse_events(stdout: str) -> tuple[bool, str]:
 # Tick + main loop
 
 
+def fire_by_id(home: Path, job_id: str) -> tuple[bool, str]:
+    """Run one specific job ad-hoc, bypassing the schedule check. Same
+    threat-scan + dispatch path as the daemon tick, so what you test is
+    exactly what the daemon would fire. Does NOT delete ``once`` jobs —
+    ad-hoc fire is deliberate testing, not the natural trigger.
+    """
+    jobs = _load_jobs(home)
+    for job in jobs:
+        if job.get("id") == job_id:
+            log.info("firing job %s ad-hoc (%s)", job_id, job.get("kind", "?"))
+            ok, msg = run_job(job, home)
+            log.info("job %s ad-hoc %s — %s", job_id, "OK" if ok else "FAIL", msg)
+            job["last_run_at"] = _now().isoformat()
+            _save_jobs(home, jobs)
+            return ok, msg
+    return False, f"no job with id {job_id!r}"
+
+
 def tick(home: Path, now: datetime | None = None) -> list[tuple[str, bool, str]]:
     """Run one pass: fire every due job, persist ``last_run_at`` on success."""
     now = now or _now()

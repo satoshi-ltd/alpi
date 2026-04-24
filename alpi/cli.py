@@ -433,6 +433,25 @@ def schedule_run_once(ctx: click.Context) -> None:
         click.echo(f"  {jid}  {'OK' if ok else 'FAIL'}  {msg}")
 
 
+@schedule.command("fire")
+@click.argument("job_id")
+@click.pass_context
+def schedule_fire(ctx: click.Context, job_id: str) -> None:
+    """Fire one specific job ad-hoc — same path as the daemon tick.
+
+    Bypasses the schedule check (time / inactivity / once). Useful to
+    test a newly-added cron without waiting for its window to hit.
+    Does not delete ``once`` jobs — testing doesn't consume them.
+    """
+    from alpi.scheduler.run import fire_by_id
+    h: Path = ctx.obj["home"]
+    _bootstrap(h)
+    ok, msg = fire_by_id(h, job_id)
+    click.echo(f"{'OK' if ok else 'FAIL'}  {msg}")
+    if not ok:
+        ctx.exit(1)
+
+
 # Release — auto-generate CHANGELOG sections from git history
 
 @main.group()
