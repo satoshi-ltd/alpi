@@ -177,6 +177,39 @@ sensitive paths, known SSRF targets). Layer 2 adds defense-in-depth
 so a creative prompt that bypasses the regex still can't touch the
 FS or the network.
 
+## Closed system prompt (by construction)
+
+alpi's system prompt is assembled from three narrow, controlled
+sources — nothing else. There is **no auto-load of workspace files**
+like `AGENTS.md`, `.alpi.md`, `CLAUDE.md`, or similar "bring your
+own context" conventions. The build in `engine.py::_build_system_prompt`
+concatenates, in order:
+
+1. `alpi/prompts/system_prompt.md` — shipped in the package; authored
+   by us, updated with each release.
+2. Memory (`USER.md`, `MEMORY.md`, `AGENT.md`) from
+   `~/.alpi/profiles/<name>/memories/` — written by the LLM itself
+   through the `memory` tool, with dedup + char limits + cross-file
+   duplicate detection.
+3. The skills index from `~/.alpi/skills/**/SKILL.md` — every
+   mutation passes through `skills_guard.py`, which scans for
+   dangerous patterns (rm -rf, curl|sh, eval(), hardcoded keys).
+
+Workspace files — anything the user has on disk — are **data**, not
+context. The LLM reads them through the `read_file` tool, which
+labels the result as a tool response (the model is trained to treat
+tool output as untrusted). The usual prompt-injection warnings in
+`system_prompt.md` cover this path.
+
+This is a deliberate departure from agents that honour
+convention-over-configuration context files. Those files are raw
+Markdown loaded before the turn starts — a documented attack vector
+(an attacker who can write a `.agent.md` to a repo you clone can
+steer your next turn). alpi trades the ergonomic convention for a
+smaller trusted-input surface. If a project needs its conventions
+taught to the agent, put them in a skill or in `USER.md`; both paths
+pass through explicit user approval.
+
 ## Third-party code
 
 Every runtime dependency is an attack surface. We keep the list

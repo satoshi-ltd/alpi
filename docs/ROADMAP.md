@@ -17,7 +17,7 @@ Legend: 🔵 backlog · 🟡 next up · ⏸ blocked.
 | ID | Item | Target | Status |
 |---|---|---|---|
 | AR | v0.3 production release — website + content rewrite | v0.3 | 🟡 v0.3 gate — blocks the cut |
-| AT | Audit system prompt + tool descriptions vs hermes | v0.3 | 🔵 research first |
+| AT | Audit system prompt + tool descriptions vs hermes | v0.3 | ✅ closed — BD spins out for the one item that needs measurement |
 | AI | Memory v2 — better generation + TUI panel | v0.3 | 🔵 research first |
 | AJ | Browser realism — session persistence + login state + deeper antibot | v0.3 | 🔵 |
 | AO | Default skills bundle | v0.3 | 🔵 intentionally empty — bundled skills emerge from concrete recurring patterns, not catalog imitation |
@@ -112,39 +112,35 @@ v0.3.0 doesn't ship until AR lands. The code is already
 v0.3-shaped (CLI shrunk, observability in, doctor live, centralised
 logs, ALP.1 shipped); what's missing is the narrative to back it.
 
-### AT. Audit system prompt + tool descriptions vs hermes
+### AT. Audit system prompt + tool descriptions vs hermes — ✅ closed
 
-Research-first. Today `alpi/prompts/system_prompt.md` + each tool's
-description field are our main levers for how the LLM uses alpi.
-They've been tweaked reactively (add a line when a model misbehaves,
-compress when the prompt bloats) but never audited as a whole.
+Done across three passes:
 
-**What to compare.** Hermes is the closest reference codebase (see
-the memory entry for its path). For each alpi tool, read the hermes
-equivalent side by side and note:
+1. **`ff6bb21`** — per-surface platform hint (cron / telegram / email /
+   gmail) injected from `engine._platform_hint()`; memory tool
+   description gained the declarative-phrasing rule ("write facts, not
+   instructions"); tool-desc leads tightened on a handful of tools.
+2. **`f170e72`** — three targeted additions to tool descriptions
+   where the failure mode was non-obvious: `browser` (retry with the
+   real role+name from the latest snapshot), `search` (regex
+   metachars must be escaped), `stt` ("Use when the user shares a
+   voice note"). The rest of the Hermes-vs-alpi audit's "worst
+   offenders" turned out to already carry explicit *Use when / Not
+   for / failure mode* sections and needed no change.
+3. **Context-file injection scanner** — investigated and closed
+   without code. alpi does **not** auto-load workspace context
+   files (no `AGENTS.md` / `.alpi.md` / `CLAUDE.md` convention).
+   The system prompt is built from three controlled sources only:
+   the package-shipped `system_prompt.md`, memory files written by
+   the LLM itself through the `memory` tool (dedup-checked), and
+   the skills index (scanned by `skills_guard.py`). Workspace
+   content enters as tool results, not system prompt. Documented
+   in `SECURITY.md → Closed system prompt (by construction)`.
 
-- Is our description shorter and still as clear? Longer without
-  paying for it?
-- Are the parameter hints as concrete? Hermes tends to include a
-  one-line "use this when…" at the top of every tool; do we?
-- Do we over-invest in negative instructions ("do NOT…") where a
-  positive example would land better with the LLM?
-- Are there tools where hermes' description consistently produces
-  better calls in our own traffic? The `agent.log` plus session
-  transcripts are the data set.
-
-**System prompt.** Same exercise for `system_prompt.md`: read our
-current version against hermes' system prompt, look for load-bearing
-guidance we're missing or redundant text we can drop. Bias toward
-shorter — every token in the system prompt is paid on every turn.
-
-**Done criterion.** A short report listing the 3–5 concrete edits
-worth making, each with before / after + a rationale tied to
-observed behaviour in `agent.log` or sessions. Apply the edits that
-clear the bar; leave the rest.
-
-**Why research-first.** "Rewrite all tool descriptions" is the easy
-way to waste a week. Measure first, edit surgically.
+**What's still open, spun out separately.** Model-specific execution
+guidance (Claude brevity vs GPT verification vs Gemini absolute
+paths) doesn't land until we have an A/B measurement on
+`agent.log`. That lives under **BD** now.
 
 ### AI. Memory v2 — generation + TUI panel
 
