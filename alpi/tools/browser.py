@@ -317,7 +317,12 @@ class Browser(Tool):
         "After every action a fresh snapshot is returned so you see the new "
         "page state. Identify elements by role + accessible name whenever "
         "possible — it's more robust than free text. Use `web_fetch` for "
-        "read-only static pages; this tool is for interactive flows."
+        "read-only static pages; this tool is for interactive flows.\n"
+        "\n"
+        "If a click/type fails because no element matches, the accessibility "
+        "tree probably labels the element differently than the visible text "
+        "— re-check the latest snapshot for the real role + name and retry. "
+        "Don't guess selectors blindly."
     )
     parameters = {
         "type": "object",
