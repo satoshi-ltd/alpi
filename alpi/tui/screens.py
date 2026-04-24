@@ -85,6 +85,22 @@ class FloatingPanel(Container):
         margin-top: 1;
         margin-bottom: 0;
     }
+    FloatingPanel .memory-section {
+        color: $accent;
+        text-style: bold;
+        margin-top: 1;
+        margin-bottom: 0;
+        height: auto;
+    }
+    FloatingPanel .memory-section:first-of-type {
+        margin-top: 0;
+    }
+    FloatingPanel Markdown {
+        background: transparent;
+        padding: 0;
+        margin: 0 0 1 0;
+        height: auto;
+    }
     FloatingPanel .help-section:first-of-type {
         margin-top: 0;
     }
@@ -199,6 +215,8 @@ class MemoryPanel(FloatingPanel):
 
     def compose_body(self) -> ComposeResult:
         from alpi import memory
+        from alpi.home import agent_path as _agent_path
+
         store = memory.MemoryStore(home=self.home)
         store.seed_defaults()
         snap = store.snapshot()
@@ -209,19 +227,34 @@ class MemoryPanel(FloatingPanel):
         user_pct = int(user_used / user_limit * 100) if user_limit else 0
         mem_pct = int(mem_used / mem_limit * 100) if mem_limit else 0
 
-        from alpi.home import agent_path as _agent_path
         ap = _agent_path(self.home)
         agent_profile = ap.read_text() if ap.exists() else ""
 
-        body = (
-            f"**USER.md** — {user_pct}% ({user_used:,}/{user_limit:,} chars)\n\n"
-            f"```\n{snap['USER.md'] or '(empty)'}\n```\n\n"
-            f"**MEMORY.md** — {mem_pct}% ({mem_used:,}/{mem_limit:,} chars)\n\n"
-            f"```\n{snap['MEMORY.md'] or '(empty)'}\n```\n\n"
-            f"**AGENT.md**\n\n"
-            f"```\n{agent_profile or '(empty)'}\n```\n"
-        )
-        yield VerticalScroll(Markdown(body))
+        with VerticalScroll():
+            yield Static(
+                f"USER.md · {user_pct}% ({user_used:,}/{user_limit:,} chars)",
+                classes="memory-section",
+            )
+            yield from _render_delimited(snap["USER.md"])
+            yield Static(
+                f"MEMORY.md · {mem_pct}% ({mem_used:,}/{mem_limit:,} chars)",
+                classes="memory-section",
+            )
+            yield from _render_delimited(snap["MEMORY.md"])
+            yield Static("AGENT.md", classes="memory-section")
+            yield Markdown(agent_profile.strip() or "_(empty)_")
+
+
+def _render_delimited(text: str):
+    from alpi.memory import ENTRY_DELIMITER
+    body = text.strip()
+    if not body:
+        yield Markdown("_(empty)_")
+        return
+    for entry in body.split(ENTRY_DELIMITER):
+        entry = entry.strip()
+        if entry:
+            yield Markdown(entry)
 
 
 class ToolsPanel(FloatingPanel):

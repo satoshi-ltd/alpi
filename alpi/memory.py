@@ -179,7 +179,13 @@ def fuzzy_find_unique_entry(entries: list[str], match: str) -> int:
     """Return the single index in `entries` that contains `match` (fuzzy), or raise."""
     hits = [i for i, e in enumerate(entries) if fuzzy_contains(e, match)]
     if not hits:
-        raise ValueError(f"no entry matches {match!r}")
+        hint = ""
+        if "§" in match:
+            hint = (
+                " — note: `§` is the entry delimiter, not content. "
+                "Strip it from your match string."
+            )
+        raise ValueError(f"no entry matches {match!r}{hint}")
     if len(hits) > 1:
         raise ValueError(f"{len(hits)} entries match {match!r}; use a more unique substring")
     return hits[0]

@@ -19,6 +19,8 @@ class UserMessage(Static):
 
 
 class AssistantMessage(Widget):
+    _FLUSH_INTERVAL = 0.08
+
     def __init__(self, initial: str = "") -> None:
         super().__init__()
         self._md: Markdown | None = None
@@ -26,6 +28,8 @@ class AssistantMessage(Widget):
         self._buffer: str = initial
         self._stream = None
         self._pending: str = ""
+        self._flush_buffer: str = ""
+        self._flush_timer = None
 
     def compose(self) -> ComposeResult:
         self._md = Markdown(self._initial)
@@ -38,8 +42,15 @@ class AssistantMessage(Widget):
             pending, self._pending = self._pending, ""
             self._buffer += pending
             asyncio.create_task(self._stream.write(pending))
+        self._flush_timer = self.set_interval(
+            self._FLUSH_INTERVAL, self._flush_deltas,
+        )
 
     async def on_unmount(self) -> None:
+        if self._flush_timer is not None:
+            self._flush_timer.stop()
+            self._flush_timer = None
+        await self._flush_deltas()
         if self._stream is not None:
             await self._stream.stop()
             self._stream = None
@@ -47,14 +58,21 @@ class AssistantMessage(Widget):
     def append(self, delta: str) -> None:
         if not delta:
             return
+        self._buffer += delta
         if self._stream is None:
             self._pending += delta
             return
-        self._buffer += delta
-        asyncio.create_task(self._stream.write(delta))
+        self._flush_buffer += delta
+
+    async def _flush_deltas(self) -> None:
+        if not self._flush_buffer or self._stream is None:
+            return
+        pending, self._flush_buffer = self._flush_buffer, ""
+        await self._stream.write(pending)
 
     def replace(self, text: str) -> None:
         self._buffer = text
+        self._flush_buffer = ""
         if self._md is not None:
             if self._stream is not None:
                 asyncio.create_task(self._stream.stop())
