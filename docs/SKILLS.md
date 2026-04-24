@@ -40,10 +40,56 @@ Closed enum, enforced at creation:
 ```
 software  data       research   productivity  communication  media
 system    finance    personal   creative      security       meta
+miscellaneous
 ```
 
 If a skill doesn't fit, pick the closest match and put the actual
 domain in the description. Never invent a new category.
+
+## Bundled vs user skills
+
+There are two namespaces, kept strictly apart by construction.
+
+**User skills** live under `{home}/skills/<category>/<name>/` and
+are the only ones the `skill` tool can create, edit, or delete.
+These are the skills the user (or the agent on the user's behalf)
+writes.
+
+**Bundled skills** ship with the alpi package and are addressed
+with the prefix `@alpi/<name>` — e.g. `@alpi/consolidate-memory`.
+They live inside `alpi.skills` as package resources; they never
+materialise on disk at `{home}/skills/`. Bundled skills are
+**read-only**:
+
+- `skill(action="create"|"edit"|"patch"|"add_file"|"remove_file"|"delete")`
+  on a `@alpi/*` name is rejected with a message pointing at the
+  variant pattern (below).
+- `skill(action="view")` and `skill(action="list")` transparently
+  resolve bundled names; `skills_index_block` injected into the
+  system prompt marks them `[bundled]`.
+- Upgrades land on every `uv tool install --reinstall` — bundled
+  skills are always the latest shipped version; no merge, no
+  migration, no drift.
+
+**Collision is impossible by construction.** The `@` sigil is not
+a legal category name (the category validator rejects any
+`category.startswith("@")`). A user cannot create
+`@alpi/foo`; if a rogue write lands at
+`{home}/skills/@alpi/foo/SKILL.md` directly via shell, the listing
+skips any category whose name starts with `@` as a defence in
+depth.
+
+**Variant pattern.** If a user wants their own take on a bundled
+skill (e.g. "`@alpi/obsidian-writer` but tuned for my vault"), they
+create a new user skill with a different name in any non-`@`
+category — for example `personal/obsidian-writer`. Both coexist
+and both appear in the `skill list` + system-prompt index; the LLM
+picks by description fit.
+
+**Discovery.** User skills render first in the system-prompt
+index, bundled after with the `[bundled]` marker. That primacy
+nudges the LLM toward user-tailored content when a semantic match
+exists.
 
 ## Frontmatter
 

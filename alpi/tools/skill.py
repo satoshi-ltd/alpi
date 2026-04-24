@@ -124,13 +124,55 @@ def scan_skill_body(body: str) -> list[str]:
     return [label for pat, label in _DANGER_PATTERNS if pat.search(body)]
 
 
+BUNDLED_PREFIX = "@alpi/"
+
+
+def _bundled_root():
+    try:
+        from importlib.resources import files
+        return files("alpi.skills")
+    except (ModuleNotFoundError, FileNotFoundError):
+        return None
+
+
+def _bundled_skill(name: str):
+    if not name.startswith(BUNDLED_PREFIX):
+        return None
+    base = _bundled_root()
+    if base is None:
+        return None
+    target = base / name[len(BUNDLED_PREFIX):]
+    return target if target.is_dir() else None
+
+
+def bundled_skills() -> list[dict]:
+    base = _bundled_root()
+    if base is None:
+        return []
+    out: list[dict] = []
+    for entry in sorted(base.iterdir(), key=lambda p: p.name):
+        if entry.name.startswith("_") or not entry.is_dir():
+            continue
+        skill_md = entry / "SKILL.md"
+        if not skill_md.is_file():
+            continue
+        meta = _frontmatter_from_text(skill_md.read_text())
+        out.append({
+            "name": f"{BUNDLED_PREFIX}{entry.name}",
+            "category": meta.get("category") or "miscellaneous",
+            "description": meta.get("description") or "",
+            "path": entry,
+        })
+    return out
+
+
 def all_skills(home: Path) -> list[Path]:
     root = home / "skills"
     if not root.exists():
         return []
     out: list[Path] = []
     for cat in sorted(root.iterdir()):
-        if not cat.is_dir() or cat.name.startswith("_"):
+        if not cat.is_dir() or cat.name.startswith("_") or cat.name.startswith("@"):
             continue
         for skill in sorted(cat.iterdir()):
             if skill.is_dir():
@@ -152,43 +194,57 @@ def agent_skill_count(home: Path) -> int:
 
 
 def skills_index_block(home: Path) -> str:
-    """Compact skills index suitable for injection into the system prompt.
+    """Compact skills index for system-prompt injection.
 
-    Empty string when the user has no skills yet. Otherwise a markdown
-    block grouping skills by category, listing `name: description`
-    entries the agent should consider before reaching for general tools.
+    User skills first, bundled (`@alpi/*`) after with a `[bundled]`
+    marker. Empty string when neither is present.
     """
-    skills = all_skills(home)
-    if not skills:
+    user_skills = all_skills(home)
+    bundled = bundled_skills()
+    if not user_skills and not bundled:
         return ""
-    by_cat: dict[str, list[tuple[str, str]]] = {}
-    for p in skills:
-        meta = _frontmatter(p / "SKILL.md")
-        name = meta.get("name") or p.name
-        desc = meta.get("description") or ""
-        cat = meta.get("category") or "miscellaneous"
-        by_cat.setdefault(cat, []).append((name, desc))
+
     lines = [
         "# AVAILABLE SKILLS",
         "Before reaching for general tools (web_search, terminal, "
         "research) check this list. When a skill matches the user's "
         "request, prefer it: load the SKILL.md with "
         "`skill(action='view', name=...)` and follow its instructions. "
-        "Skills carry the user's preferred approach for recurring tasks "
-        "and often hold cached state from previous runs.",
+        "User skills (listed first) carry the user's preferred approach "
+        "and often hold cached state from previous runs; bundled skills "
+        "(marked `[bundled]`, prefix `@alpi/`) ship with alpi and are "
+        "read-only.",
         "",
     ]
+
+    by_cat: dict[str, list[tuple[str, str]]] = {}
+    for p in user_skills:
+        meta = _frontmatter(p / "SKILL.md")
+        name = meta.get("name") or p.name
+        desc = meta.get("description") or ""
+        cat = meta.get("category") or "miscellaneous"
+        by_cat.setdefault(cat, []).append((name, desc))
     for cat in sorted(by_cat):
         lines.append(f"  {cat}:")
         for name, desc in sorted(by_cat[cat]):
-            if desc:
-                lines.append(f"    - {name}: {desc}")
-            else:
-                lines.append(f"    - {name}")
+            lines.append(f"    - {name}: {desc}" if desc else f"    - {name}")
+
+    if bundled:
+        if user_skills:
+            lines.append("")
+        lines.append("  @alpi/ [bundled]:")
+        for b in bundled:
+            desc = b["description"]
+            lines.append(
+                f"    - {b['name']}: {desc}" if desc else f"    - {b['name']}"
+            )
     return "\n".join(lines)
 
 
-def _find_skill(home: Path, name: str) -> Path | None:
+def _find_skill(home: Path, name: str):
+    bundled = _bundled_skill(name)
+    if bundled is not None:
+        return bundled
     for p in all_skills(home):
         if p.name == name:
             return p
@@ -198,7 +254,10 @@ def _find_skill(home: Path, name: str) -> Path | None:
 def _frontmatter(md_path: Path) -> dict[str, str]:
     if not md_path.exists():
         return {}
-    text = md_path.read_text()
+    return _frontmatter_from_text(md_path.read_text())
+
+
+def _frontmatter_from_text(text: str) -> dict[str, str]:
     if not text.startswith("---"):
         return {}
     try:
@@ -427,6 +486,17 @@ class Skill(Tool):
             return _list(home)
         if action == "view":
             return _view(home, name, file)
+        mutating = {"create", "edit", "patch", "add_file",
+                    "remove_file", "delete"}
+        if action in mutating and name.startswith(BUNDLED_PREFIX):
+            return ToolResult(
+                ok=False, output="",
+                error=(
+                    f"{name!r} is a bundled skill — read-only. Create "
+                    f"your own variant with a different name in another "
+                    f"category (e.g. category='personal')."
+                ),
+            )
         if action == "create":
             return _create(home, name, category, description, body,
                            requires_env or [], tools or [], stores_secrets)
@@ -449,18 +519,25 @@ class Skill(Tool):
 
 
 def _list(home: Path) -> ToolResult:
-    root = home / "skills"
-    if not root.exists():
-        return ToolResult(ok=True, output="(no skills)")
     lines: list[str] = []
-    for cat in sorted(root.iterdir()):
-        if not cat.is_dir() or cat.name.startswith("_"):
-            continue
-        skills = sorted(s.name for s in cat.iterdir() if s.is_dir())
-        if not skills:
-            continue
-        lines.append(f"{cat.name}:")
-        lines.extend(f"  - {n}" for n in skills)
+    root = home / "skills"
+    if root.exists():
+        for cat in sorted(root.iterdir()):
+            if (not cat.is_dir()
+                    or cat.name.startswith("_")
+                    or cat.name.startswith("@")):
+                continue
+            skills = sorted(s.name for s in cat.iterdir() if s.is_dir())
+            if not skills:
+                continue
+            lines.append(f"{cat.name}:")
+            lines.extend(f"  - {n}" for n in skills)
+    bundled = bundled_skills()
+    if bundled:
+        if lines:
+            lines.append("")
+        lines.append("@alpi/ [bundled]:")
+        lines.extend(f"  - {b['name']}" for b in bundled)
     if not lines:
         lines.append("(no skills)")
     return ToolResult(ok=True, output="\n".join(lines))
@@ -484,8 +561,8 @@ def _view(home: Path, name: str, file: str) -> ToolResult:
         if sub not in ALLOWED_SUBDIRS or not _FILENAME_RE.match(fn):
             return ToolResult(ok=False, output="", error=f"invalid file: {file}")
         target = skill_dir / sub / fn
-    if not target.exists():
-        return ToolResult(ok=False, output="", error=f"not found: {target}")
+    if not target.is_file():
+        return ToolResult(ok=False, output="", error=f"not found: {file or 'SKILL.md'}")
     try:
         return ToolResult(ok=True, output=target.read_text())
     except (OSError, UnicodeDecodeError) as e:

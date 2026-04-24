@@ -25,7 +25,6 @@ Legend: 🔵 backlog · 🟡 next up · ⏸ blocked.
 | BB | TUI: shared link renderer (bold + underline; hover = accent bg + black) | v0.3 | 🔵 |
 | BC | External security audit before v0.3 public release | v0.3 | 🔴 gate on AR |
 | BD | Model-aware tool-use-enforcement guidance (Claude/MiMo brevity, GPT/Codex/Gemini full block) | v0.3 | 🔵 needs A/B on agent.log first |
-| BE | Bundled skills infrastructure (loader; no content yet) | v0.3 | 🔵 dual-source lookup or seed-on-create — land alongside first real bundled skill |
 | ALP.2 | Alpi Link Protocol — inter-machine Noise-protocol transport + budget / rate-limit enforcement | v0.4 | 🔵 — depends on ALP.1 (shipped) |
 | ALP.3 | Alpi Link Protocol — shared rooms (group chat, humans optional) | v0.4 | 🔵 — depends on ALP.1 (shipped) |
 | H | Home Assistant integration | long-term | ⏸ blocked on user confirmation |
@@ -304,32 +303,6 @@ isn't.
 independent security firm reads it. The Satoshi principle "Open
 Source — Auditable code. Reproducible builds. Trust, but verify"
 applies to the organisation too.
-
-### BE. Bundled skills infrastructure
-
-The `skill` tool only searches `{home}/skills/` today. There is no
-way to ship skills with the package — fresh profiles start empty,
-and any SKILL.md authored in the repo is invisible to the agent.
-
-Infrastructure first, content second. When a concrete bundled
-skill has a clear use case (the first plausible one is a memory
-consolidator, but `memory(replace|remove)` already covers it
-ad-hoc), land the loader at the same time.
-
-**Two implementation options.**
-
-- **Seed-on-create:** on `ensure_home`, copy bundled package
-  resources into `{home}/skills/`. Simple; each profile pins the
-  skill version it was created with. User edits override.
-- **Dual-source lookup:** `skill(action="run"|"view")` searches
-  `{home}/skills/` first, falls back to package resources.
-  Bundled skills always latest; user edits land in the profile
-  and shadow the bundle (copy-on-write).
-
-Dual-source is the cleaner model (matches Python package
-resolution) but the seed path is what users intuitively expect.
-Pick at implementation time, alongside the first real skill that
-justifies the work.
 
 ### BD. Model-aware tool-use-enforcement guidance
 
