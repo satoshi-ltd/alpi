@@ -56,11 +56,13 @@ def _transcribe(audio_path: Path, model_name: str, language: str) -> tuple[dict 
 class Stt(Tool):
     name = "stt"
     description = (
-        "Transcribe audio to text using faster-whisper locally. No API key, "
-        "no cloud calls — runs on CPU. First call downloads the model weights "
-        "(~150 MB for `base`) into `~/.cache/huggingface/`; subsequent calls "
-        "are fast. Supported: WAV, MP3, M4A, OGG, Opus, FLAC, WebM, AAC. "
-        "Language auto-detected; pass `language` (ISO code) only to override."
+        "Transcribe audio to text using faster-whisper locally. Use when "
+        "the user shares a voice note or audio file and you need the "
+        "transcript before replying. No API key, no cloud calls — runs on "
+        "CPU. First call downloads the model weights (~150 MB for `base`) "
+        "into `~/.cache/huggingface/`; subsequent calls are fast. "
+        "Supported: WAV, MP3, M4A, OGG, Opus, FLAC, WebM, AAC. Language "
+        "auto-detected; pass `language` (ISO code) only to override."
     )
     parameters = {
         "type": "object",

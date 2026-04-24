@@ -55,7 +55,12 @@ class Search(Tool):
         "'src/**/*.ts').\n"
         "\n"
         "Case: smart by default — lowercase pattern is case-insensitive, "
-        "mixed-case is sensitive. Override with case_sensitive."
+        "mixed-case is sensitive. Override with case_sensitive.\n"
+        "\n"
+        "Regex: the pattern is a regex in content mode. To match a literal "
+        "`{` `}` `(` `)` `|` `.` `*` `+`, escape it with `\\`. If content "
+        "search returns nothing and you expected hits, double-check the "
+        "pattern isn't being interpreted as regex metacharacters."
     )
     parameters = {
         "type": "object",

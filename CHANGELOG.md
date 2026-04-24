@@ -1,5 +1,33 @@
 # Changelog
 
+## v0.2.81 — 2026-04-24
+
+### tools — failure-mode + when-to-use hints on three tool descriptions
+
+Third pass on AT (prompt + tool descriptions audit vs Hermes).
+Three targeted additions; most other tools already had "Use when /
+Not for / failure modes" from the earlier `ff6bb21` pass and need
+no change.
+
+- `browser.py` — added a line on what to do when `click` / `type`
+  can't find an element: re-check the latest snapshot for the real
+  role + accessible name, don't guess selectors blindly. Stops the
+  common loop where the model keeps retrying the same wrong label.
+- `search.py` — added a regex gotcha note. The pattern is a regex
+  in content mode; literal `{ } ( ) | . * +` must be escaped. If a
+  content search returns nothing when hits are expected, metachars
+  are usually the cause.
+- `stt.py` — added a "Use when" preamble so gateway voice-note
+  messages reliably trigger transcription before the reply.
+
+Skipped the Hermes audit's recommendations that didn't match reality
+post-`ff6bb21`: `delegate`, `send_message`, and `research` already
+carry explicit "Use when" + "Not for" sections, and the memory
+"facts vs directives" rule lives in the memory tool description
+with an explicit pointer from `system_prompt.md`. Duplicating would
+be token tax without signal. Model-specific execution guidance (BD)
+stays parked until there's an A/B measurement on `agent.log`.
+
 ## v0.2.80 — 2026-04-24
 
 ### site — header/nav unified, docs index redesigned, SEO at 100%
