@@ -57,6 +57,14 @@ alpi profile list              # shows all profiles, active one flagged
 alpi profile remove work       # deletes after safety checks + confirm
 ```
 
+`profile remove` is the happy-path CLI — works when the profile has
+no system services installed. When it does, it redirects to
+**`alpi -p <name> setup → Delete profile`**, which is the canonical
+one-shot flow: uninstalls every registered service (gateway /
+schedule / alp), rmtree's the profile home, and exits. CLI is kept
+for scripting and empty-profile cleanup; the wizard is the path most
+users want.
+
 Every command in alpi's CLI accepts `-p <name>` to scope to a
 profile:
 
