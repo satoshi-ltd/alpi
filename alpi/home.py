@@ -44,9 +44,8 @@ def ensure_home(home: Path) -> None:
         )
 
 
-def personality_path(home: Path) -> Path:
-    """Return the canonical PERSONALITY.md path for this profile."""
-    return home / "memories" / "PERSONALITY.md"
+def agent_path(home: Path) -> Path:
+    return home / "memories" / "AGENT.md"
 
 
 def format_bytes(n: int) -> str:

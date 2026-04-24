@@ -1,5 +1,51 @@
 # Changelog
 
+## v0.2.72 — 2026-04-24
+
+### memory — v2 rules (AI partial)
+
+Renames PERSONALITY.md → **AGENT.md** across the codebase, prompts,
+tests, and docs. The user/agent pair (`USER.md` vs `AGENT.md`) is now
+symmetric and readable. The `memory` tool enum, template file
+(`alpi/prompts/default_agent.md`), home helper, and tool descriptions
+that list memory files are all updated. File migration on existing
+profiles is manual — no auto-migration per project policy.
+
+- **A** — AGENT.md now uses paragraph-level fold + Jaccard dedup
+  (`is_duplicate_stanza` in `alpi/memory.py`) instead of raw substring
+  match. Paraphrased voice blocks no longer accumulate. Error text
+  nudges toward `replace` when the user is refining an existing rule.
+- **B** — `alpi/prompts/default_agent.md` "Edit me" footer rewritten
+  to teach the correct `replace` vs `add` pattern (append new
+  sections; replace existing lines; never replace unrelated rules
+  to "make room").
+- **C** — cross-file duplicate check: `add` to USER.md (or MEMORY.md)
+  rejects when the content is already in the other file, pointing
+  the caller at the correct target. Prevents the common failure
+  where a fact (e.g. vehicle list) lands in both files.
+- **E** — operational-state warning: `add` returns a ⚠ line in the
+  tool output when the entry matches a session/chat/interaction log
+  pattern (`chat_id`, `session_id`, `first interaction`, 5+-digit id
+  combined with a date). Non-blocking — the LLM sees the hint; it
+  decides whether to honour the user's explicit target.
+- **F** — memory char limits bumped: `USER.md` 1375 → **3000**,
+  `MEMORY.md` 2200 → **5000**. When either target reaches ≥ 80%
+  usage, the tool response carries a `— run the consolidate-memory
+  skill` hint so the model can escalate to consolidation before
+  adding more.
+
+**D deferred** — the "≤1-token entry dedup" idea (lower Jaccard
+guard from 2 → 1) produced false positives on entries that shared
+one generic content token (`Dato A` vs `Dato B` both reduced to
+`{dato}`). Kept the guard at 2.
+
+**G deferred** — periodic self-consolidation trigger stays out:
+explicit over-engineering per the "no fails, no over-engineering"
+directive. The user or the model can run the `consolidate-memory`
+skill on demand.
+
+11 new regression tests in `tests/test_memory_tool_v2.py`.
+
 ## v0.2.71 — 2026-04-24
 
 ### engine / prompts (AT partial — 4 of 5 candidate edits applied)

@@ -369,9 +369,9 @@ class Engine:
     def _build_system_prompt(self) -> str:
         from importlib import resources
 
-        personality = (
-            self.cfg.personality_path.read_text()
-            if self.cfg.personality_path.exists() else ""
+        agent_profile = (
+            self.cfg.agent_path.read_text()
+            if self.cfg.agent_path.exists() else ""
         )
         base = resources.files("alpi.prompts").joinpath("system_prompt.md").read_text()
         mem = memory.MemoryStore(home=self.home)
@@ -408,7 +408,7 @@ class Engine:
             env_parts.append(f"- **profile home** (memory/skills/config): `{self.home}`")
         env = "\n".join(env_parts)
 
-        parts = [personality.strip(), base.strip(), env]
+        parts = [agent_profile.strip(), base.strip(), env]
         hint = _platform_hint()
         if hint:
             parts.append(hint)

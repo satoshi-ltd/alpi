@@ -14,8 +14,8 @@ except ImportError:
 
 ENTRY_DELIMITER = "\n§\n"
 
-USER_CHAR_LIMIT = 1375
-MEMORY_CHAR_LIMIT = 2200
+USER_CHAR_LIMIT = 3000
+MEMORY_CHAR_LIMIT = 5000
 
 SEED_USER = ""
 SEED_MEMORY = ""
@@ -106,6 +106,16 @@ def _clean_entry(content: str) -> str:
             continue
         lines.append(stripped)
     return "\n".join(lines).strip()
+
+
+def is_duplicate_stanza(existing_text: str, new_stanza: str) -> bool:
+    """Same fold + Jaccard dedup as ``_is_duplicate`` but splitting the
+    existing text on blank lines instead of the ``§`` delimiter. Used for
+    AGENT.md, which is free-form markdown (paragraphs / sections) rather
+    than a delimited entry list."""
+    stanzas = [s for s in existing_text.split("\n\n") if s.strip()]
+    joined = ENTRY_DELIMITER.join(stanzas)
+    return _is_duplicate(joined, new_stanza)
 
 
 def _is_duplicate(existing: str, new_entry: str) -> bool:

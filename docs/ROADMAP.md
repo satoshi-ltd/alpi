@@ -476,9 +476,9 @@ Not planned. Research-grade, irrelevant for everyday personal use.
 - **`.bak` sibling on every `write_file`.** Tried it, rejected —
   clutters every directory alpi writes in. Kept only on memory
   files where it pays off.
-- **`alpi setup → Identity` wizard for editing PERSONALITY.md.**
+- **`alpi setup → Identity` wizard for editing AGENT.md.**
   Rejected after consideration. The `memory` tool already mutates
-  `PERSONALITY.md` from inside chat, and the LLM captures nuance
+  `AGENT.md` from inside chat, and the LLM captures nuance
   ("less formal but not jokey; respect my code-switching") that a
   form can't.
 

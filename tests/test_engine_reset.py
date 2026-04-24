@@ -15,7 +15,7 @@ def bootstrapped_home(tmp_home_no_env: Path) -> Path:
     home.ensure_home(tmp_home_no_env)
     config.seed_defaults(tmp_home_no_env)
     memory.MemoryStore(tmp_home_no_env).seed_defaults()
-    (tmp_home_no_env / "PERSONALITY.md").write_text("# Identity\nYou are alpi.\n")
+    (tmp_home_no_env / "memories" / "AGENT.md").write_text("# Identity\nYou are alpi.\n")
     return tmp_home_no_env
 
 

@@ -96,7 +96,7 @@ class Terminal(Tool):
         "(target='files') with pattern='*'.\n"
         "Do NOT use `curl/wget` for HTTP — use `web_fetch`/`web_search`/"
         "`web_extract`.\n"
-        "Do NOT touch memory files (USER.md/MEMORY.md/PERSONALITY.md) — "
+        "Do NOT touch memory files (USER.md/MEMORY.md/AGENT.md) — "
         "use `memory`.\n"
         "\n"
         "Stay inside the workspace. If the user wants something outside, "

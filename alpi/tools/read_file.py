@@ -18,7 +18,7 @@ class ReadFile(Tool):
         "`offset` + `limit` to read a slice.\n"
         "\n"
         "DO NOT use read_file for:\n"
-        "  • USER.md / MEMORY.md / PERSONALITY.md → use `memory(action='read')`\n"
+        "  • USER.md / MEMORY.md / AGENT.md → use `memory(action='read')`\n"
         "  • SKILL.md of a skill you want to inspect → read via /skills"
     )
     parameters = {

@@ -122,7 +122,7 @@ Full security model in [docs/SECURITY.md](docs/SECURITY.md).
 
 - `USER.md` — who the user is.
 - `MEMORY.md` — alpi's own notes (env quirks, commands, incidents).
-- `PERSONALITY.md` — how alpi should respond.
+- `AGENT.md` — how alpi should respond.
 
 Updated inline during conversations via the `memory` tool. No
 post-session reflect. Snapshot frozen per session for prefix cache.

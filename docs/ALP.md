@@ -306,7 +306,7 @@ intentionally does not define verbs to read peer memory or
 search peer session history directly. If a caller wants
 information another peer knows, it asks, and the target agent
 decides what to share in its reply. This keeps sensitive files
-(USER.md, PERSONALITY.md, raw session transcripts) behind the
+(USER.md, AGENT.md, raw session transcripts) behind the
 agent's own judgement instead of exposing them over the wire.
 
 `session_id` is the session identifier the target used for this

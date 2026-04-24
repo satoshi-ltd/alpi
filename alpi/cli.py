@@ -17,10 +17,10 @@ def _bootstrap(h: Path) -> None:
     home.ensure_home(h)
     config.seed_defaults(h)
     memory.MemoryStore(h).seed_defaults()
-    personality = home.personality_path(h)
-    if not personality.exists():
-        default = resources.files("alpi.prompts").joinpath("default_personality.md").read_text()
-        personality.write_text(default)
+    agent = home.agent_path(h)
+    if not agent.exists():
+        default = resources.files("alpi.prompts").joinpath("default_agent.md").read_text()
+        agent.write_text(default)
 
 
 def _auto_install_scheduler(h: Path, profile: str) -> None:
@@ -267,7 +267,7 @@ def main(ctx: click.Context, profile: str | None, continue_last: bool) -> None:
     # ``get_home()`` call (tools, providers, UI helpers) resolves to the
     # SAME home as this CLI invocation. Without this, the tools bypass
     # ``-p`` entirely and silently write to the default profile — e.g.
-    # the ``memory`` tool was editing ``~/.alpi/PERSONALITY.md`` when the
+    # the ``memory`` tool was editing ``~/.alpi/AGENT.md`` when the
     # user had launched ``alpi -p personal``.
     if profile:
         os.environ["ALPI_PROFILE"] = profile
