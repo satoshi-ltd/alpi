@@ -233,7 +233,11 @@ def fire_by_id(home: Path, job_id: str) -> tuple[bool, str]:
             job["last_run_at"] = _now().isoformat()
             _save_jobs(home, jobs)
             return ok, msg
-    return False, f"no job with id {job_id!r}"
+    import difflib
+    available = [str(j.get("id", "")) for j in jobs if j.get("id")]
+    hit = difflib.get_close_matches(job_id, available, n=1, cutoff=0.6)
+    hint = f". Did you mean {hit[0]!r}?" if hit else ""
+    return False, f"no job with id {job_id!r}{hint}"
 
 
 def tick(home: Path, now: datetime | None = None) -> list[tuple[str, bool, str]]:

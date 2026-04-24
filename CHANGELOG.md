@@ -1,5 +1,33 @@
 # Changelog
 
+## v0.2.75 — 2026-04-24
+
+### wizard / cli — profile lifecycle + polish
+
+- New setup entry `alpi -p <name> setup → Delete profile` (non-default
+  profiles only). One-shot teardown: summary → warn about installed
+  services → typed-name confirmation → uninstall gateway / schedule /
+  alp services → `rmtree` the profile home → exit. Collapses what
+  used to be "uninstall each service manually, then run `alpi profile
+  remove X`" into a single guided action.
+- `alpi profile remove <name>` CLI now redirects to the wizard when
+  services are installed, instead of listing per-service uninstall
+  hints. CLI remains for the happy path (empty profiles, scripting).
+- "Did you mean…?" suggestions in CLI when the target id doesn't
+  exist: `alpi profile remove` (closest profile name), `alpi peers
+  remove` / `alpi peers ping` (closest peer id), `alpi schedule fire`
+  (closest job id). Shared `_suggest()` helper using `difflib`.
+- Fixed the misleading "→ Gateway service" hint in `profile remove`
+  error — it now names the actually-installed service(s) and points
+  at the wizard.
+- Dropped `.githooks/` (pre-push CHANGELOG regen). We've been
+  running `alpi release notes` manually at release time; the hook
+  was opt-in and unused.
+
+### docs
+- `docs/PROFILES.md` — documents the wizard-redirect flow.
+- `docs/ARCHITECTURE.md` — setup menu outline lists "delete profile".
+
 ## v0.2.74 — 2026-04-24
 
 ### schedule — ad-hoc job fire (BA closed)

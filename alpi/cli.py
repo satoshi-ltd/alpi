@@ -13,6 +13,12 @@ from alpi import __version__, config, home, memory
 from alpi.engine import AgentEvent, Engine
 
 
+def _suggest(name: str, candidates: list[str]) -> str:
+    import difflib
+    hit = difflib.get_close_matches(name, candidates, n=1, cutoff=0.6)
+    return f". Did you mean {hit[0]!r}?" if hit else ""
+
+
 def _bootstrap(h: Path) -> None:
     home.ensure_home(h)
     config.seed_defaults(h)
@@ -650,6 +656,10 @@ def setup_cmd(ctx: click.Context) -> None:
             ("Health check", "doctor", _doctor_status(h, profile_name)),
             ("Cleanup", "cleanup", _cleanup_status(h)),
         ]
+        if profile_name != "default":
+            items.append(None)
+            items.append(("Delete profile", "delete-profile",
+                          _delete_profile_status(h, profile_name)))
         # Every title starts with ``alpi`` as a lightweight brand +
         # "you are here" marker. The active profile goes in the
         # subtitle so the user always knows which one they're
@@ -690,6 +700,9 @@ def setup_cmd(ctx: click.Context) -> None:
             alp_setup_run(h)
         elif choice == "doctor":
             _doctor_wizard(h, profile_name)
+        elif choice == "delete-profile":
+            if _delete_profile_wizard(h, profile_name):
+                return  # profile gone — nothing left to edit
 
 
 def _setup_farewell(profile: str, h: Path) -> None:
@@ -1405,20 +1418,30 @@ def profile_remove(name: str) -> None:
 
     h = home.get_home(name)
     if not h.exists():
-        raise click.ClickException(f"profile {name!r} does not exist")
+        from alpi.home import _ROOT
+        profiles_root = _ROOT / "profiles"
+        available = (
+            [p.name for p in profiles_root.iterdir() if p.is_dir()]
+            if profiles_root.exists() else []
+        )
+        raise click.ClickException(
+            f"profile {name!r} does not exist{_suggest(name, available)}",
+        )
 
     # Safety: refuse if the profile has a registered system service.
     # Uninstalling them is an explicit step the user has to take so
     # they understand what's being torn down.
-    installed = []
-    for daemon in ("gateway", "schedule"):
-        if service.installed(daemon, profile=name):
-            installed.append(daemon)
+    installed = [
+        daemon
+        for daemon in ("gateway", "schedule", "alp")
+        if service.installed(daemon, profile=name)
+    ]
     if installed:
         svc_list = ", ".join(installed)
         raise click.ClickException(
             f"profile {name!r} has installed service(s): {svc_list}.\n"
-            f"Open `alpi -p {name} setup → Gateway service` and uninstall first."
+            f"Run `alpi -p {name} setup → Delete profile` to uninstall "
+            f"services and delete in one step."
         )
 
     # Summary — user wants to see what they're losing before saying yes.
@@ -1458,6 +1481,72 @@ def _profile_summary(home_dir: Path) -> list[str]:
     if not lines:
         lines.append("empty profile — nothing to lose.")
     return lines
+
+
+def _delete_profile_status(h: Path, profile_name: str) -> str:
+    from alpi import service
+    installed = [
+        d for d in ("gateway", "schedule", "alp")
+        if service.installed(d, profile=profile_name)
+    ]
+    if installed:
+        return f"{len(installed)} service(s) installed · one-shot teardown"
+    return "one-shot teardown"
+
+
+def _delete_profile_wizard(h: Path, profile_name: str) -> bool:
+    """Return True if the profile was deleted — the caller must exit the
+    setup loop because there is nothing left to edit."""
+    import shutil
+    from alpi import service, ui
+
+    ui.banner(ui.crumb("setup", "danger", f"delete {profile_name}"),
+              subtitle=str(h), home=h)
+    ui._console.print("")
+
+    summary = _profile_summary(h)
+    for line in summary:
+        ui._console.print(f"  {line}")
+
+    installed = [
+        d for d in ("gateway", "schedule", "alp")
+        if service.installed(d, profile=profile_name)
+    ]
+    if installed:
+        ui._console.print("")
+        ui.warn(f"installed services: {', '.join(installed)} — will be uninstalled")
+    ui._console.print("")
+
+    if not ui.confirm(
+        f"Delete profile '{profile_name}' — this cannot be undone. Continue?",
+        default=False,
+    ):
+        ui.cancelled()
+        return False
+
+    typed = ui.text(f"Type '{profile_name}' to confirm")
+    if (typed or "").strip() != profile_name:
+        ui.cancelled()
+        return False
+
+    for daemon in installed:
+        try:
+            kind = service.uninstall(daemon, h, profile_name)
+            ui.ok(f"uninstalled {daemon} service ({kind})")
+        except Exception as e:  # noqa: BLE001
+            ui.fail(f"failed to uninstall {daemon}: {e}")
+            ui.warn("aborting delete — address the service issue and retry.")
+            ui.press_enter()
+            return False
+
+    try:
+        shutil.rmtree(h)
+    except Exception as e:  # noqa: BLE001
+        ui.fail_and_wait(f"rmtree failed: {e}")
+        return False
+
+    ui.ok_and_wait(f"profile '{profile_name}' deleted.")
+    return True
 
 
 # ALP (Alpi Link Protocol) — peer management + dev listener
@@ -1553,7 +1642,8 @@ def peers_remove(ctx: click.Context, peer_id: str) -> None:
     if peers_mod.remove(h, peer_id):
         click.echo(f"removed peer {peer_id!r}")
     else:
-        raise click.ClickException(f"no peer {peer_id!r}")
+        available = [p.id for p in peers_mod.load(h)]
+        raise click.ClickException(f"no peer {peer_id!r}{_suggest(peer_id, available)}")
 
 
 @peers.command("ping")
@@ -1569,7 +1659,11 @@ def peers_ping(ctx: click.Context, peer_id: str) -> None:
     h: Path = ctx.obj["home"]
     peer = peers_mod.get_by_id(h, peer_id)
     if peer is None:
-        raise click.ClickException(f"no peer {peer_id!r} (see `alpi peers list`)")
+        available = [p.id for p in peers_mod.load(h)]
+        raise click.ClickException(
+            f"no peer {peer_id!r}{_suggest(peer_id, available)} "
+            f"(see `alpi peers list`)",
+        )
     if peer.address is not None:
         raise click.ClickException(
             "inter-machine ping not implemented yet (lands in ALP.2). "

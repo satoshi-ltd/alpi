@@ -69,7 +69,8 @@ alpi chat --once ... --emit-events     INTERNAL — gateway subprocess contract
 
 alpi setup                     interactive menu: model / gateways / voice / MCPs /
                                peers / sandbox / gateway service / schedule service /
-                               alp service / health check / cleanup
+                               alp service / health check / cleanup /
+                               delete profile (non-default only)
 
 alpi doctor                    live health check (Telegram getMe, IMAP login,
                                Gmail token refresh, MCP handshake, service PIDs);

@@ -130,7 +130,7 @@ def test_profile_remove_refuses_if_service_installed(monkeypatch, tmp_path: Path
     result = CliRunner().invoke(cli.main, ["profile", "remove", "guarded"])
     assert result.exit_code != 0
     assert "installed service" in result.output
-    assert "Gateway service" in result.output
+    assert "Delete profile" in result.output
 
 
 def test_profile_remove_cancelled_leaves_directory(
