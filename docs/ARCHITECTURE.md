@@ -118,7 +118,7 @@ alpi/
 ├── ui.py                   shared wizard/menu primitives
 ├── service.py              install/uninstall launchd/systemd units
 ├── prompts/
-│   ├── default_personality.md
+│   ├── default_agent.md
 │   └── system_prompt.md
 ├── providers/              metadata for the model picker
 │   └── {anthropic,openai,google,groq,openrouter,custom}.py
@@ -159,7 +159,7 @@ alpi/
 ~/.alpi/                     default profile root
 ├── .env                    API keys, gateway tokens, allowlists
 ├── config.yaml             model + tools + tui + mcp + gateway
-├── memory/                 USER.md, MEMORY.md, PERSONALITY.md (+ .bak)
+├── memories/               USER.md, MEMORY.md, AGENT.md (+ .bak)
 ├── skills/<category>/<name>/    SKILL.md + scripts/ + references/ +
 │                                 assets/ + secrets/ (0700) + state/ +
 │                                 .gitignore
@@ -183,7 +183,7 @@ Per turn: append user message → loop {LLM stream → emit deltas → exec tool
 
 Events emitted to the UI sink: `user`, `reasoning_delta`, `assistant_delta`, `assistant_done`, `tool_start`, `tool_state`, `tool_end`, `usage`, `error`, `done`, `interrupted`. The TUI consumes them; the gateway subprocess consumes a subset via JSON-lines.
 
-The system prompt for each turn is built from: personality file → base prompt → environment block (workspace, profile home, path rule) → **platform hint** (`_platform_hint()` — injects per-surface guidance when `ALPI_PLATFORM` is set by the caller: `cron`, `telegram`, `email`, `gmail`; empty for TUI) → **skills index** (auto-injected by `alpi.tools.skill.skills_index_block`) → USER.md → MEMORY.md.
+The system prompt for each turn is built from: `AGENT.md` (agent profile — voice, style, identity) → base prompt → environment block (workspace, profile home, path rule) → **platform hint** (`_platform_hint()` — injects per-surface guidance when `ALPI_PLATFORM` is set by the caller: `cron`, `telegram`, `email`, `gmail`; empty for TUI) → **skills index** (auto-injected by `alpi.tools.skill.skills_index_block`) → `USER.md` → `MEMORY.md`.
 
 The gateway (`alpi/gateway/run.py`) sets `ALPI_PLATFORM=<msg.platform>` on every spawned subprocess so Telegram replies arrive Markdown-aware and email replies arrive plain-text-only. The scheduler (`alpi/scheduler/run.py`) sets `ALPI_PLATFORM=cron` so scheduled jobs run knowing no user is present and they cannot ask for clarification.
 
@@ -193,7 +193,7 @@ Thin wrapper over `litellm.completion`. `stream()` is an async generator yieldin
 
 ### Memory (`alpi/memory.py`)
 
-Three files: `USER.md` (facts about the user), `MEMORY.md` (env quirks, commands, incidents), `PERSONALITY.md` (tone / language / behaviour). `§` entry delimiter, char limits (1375 / 2200), accent+case+punctuation-insensitive dedup, plus token-Jaccard dedup at 70% max-containment to catch paraphrases. `.bak` snapshot before every mutating write. Approach C: every mutating call returns the full current state of the target file so the agent sees its own write in the same turn.
+Three files: `USER.md` (facts about the user), `MEMORY.md` (env quirks, commands, incidents), `AGENT.md` (the agent's own profile — tone, style, identity, language). `§` entry delimiter, char limits (1375 / 2200), accent+case+punctuation-insensitive dedup, plus token-Jaccard dedup at 70% max-containment to catch paraphrases. `.bak` snapshot before every mutating write. Approach C: every mutating call returns the full current state of the target file so the agent sees its own write in the same turn.
 
 ### Path resolution (`alpi/tools/_paths.py`)
 

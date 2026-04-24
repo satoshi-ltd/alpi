@@ -64,10 +64,10 @@ def test_session_search_finds_past_topic(tmp_home: Path) -> None:
     assert "tailscale" in out.lower()
 
 
-def test_style_rule_lands_in_personality(tmp_home: Path) -> None:
+def test_style_rule_lands_in_agent(tmp_home: Path) -> None:
     _run_once(
         tmp_home,
         "A partir de ahora responde siempre en un solo bullet. Guárdalo como instrucción de estilo.",
     )
-    personality = (tmp_home / "personality.md").read_text().lower()
-    assert "bullet" in personality or "bulleted" in personality
+    agent_profile = (tmp_home / "memories" / "AGENT.md").read_text().lower()
+    assert "bullet" in agent_profile or "bulleted" in agent_profile

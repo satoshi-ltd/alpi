@@ -127,7 +127,7 @@ class HelpPanel(FloatingPanel):
 
     _COMMANDS: list[tuple[str, str]] = [
         ("help",      "this panel"),
-        ("memory",    "show USER.md, MEMORY.md and personality.md"),
+        ("memory",    "show USER.md, MEMORY.md and AGENT.md"),
         ("tools",     "list available tools"),
         ("mcps",      "list running MCP servers"),
         ("status",    "session snapshot — model, turns, tokens, cost"),
@@ -209,17 +209,17 @@ class MemoryPanel(FloatingPanel):
         user_pct = int(user_used / user_limit * 100) if user_limit else 0
         mem_pct = int(mem_used / mem_limit * 100) if mem_limit else 0
 
-        from alpi.home import personality_path as _personality_path
-        pp = _personality_path(self.home)
-        personality = pp.read_text() if pp.exists() else ""
+        from alpi.home import agent_path as _agent_path
+        ap = _agent_path(self.home)
+        agent_profile = ap.read_text() if ap.exists() else ""
 
         body = (
             f"**USER.md** — {user_pct}% ({user_used:,}/{user_limit:,} chars)\n\n"
             f"```\n{snap['USER.md'] or '(empty)'}\n```\n\n"
             f"**MEMORY.md** — {mem_pct}% ({mem_used:,}/{mem_limit:,} chars)\n\n"
             f"```\n{snap['MEMORY.md'] or '(empty)'}\n```\n\n"
-            f"**personality.md**\n\n"
-            f"```\n{personality or '(empty)'}\n```\n"
+            f"**AGENT.md**\n\n"
+            f"```\n{agent_profile or '(empty)'}\n```\n"
         )
         yield VerticalScroll(Markdown(body))
 

@@ -7,7 +7,7 @@ pretend to have done something you haven't actually executed.
 ## Memory — learn in the moment
 
 You have persistent memory across sessions (`USER.md`, `MEMORY.md`,
-`PERSONALITY.md`). Use it proactively — there is no post-session
+`AGENT.md`). Use it proactively — there is no post-session
 reflection. The `memory` tool's own description carries the full rules
 (when to save, when NOT to save, how to pick a target, how `replace`
 works). **Follow that description exactly.**

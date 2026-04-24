@@ -33,7 +33,7 @@ Everything that represents state, identity, or cost:
 |---|---|---|
 | `config.yaml` | ✓ | Model, fallbacks, tool limits, gateway config, MCP servers. |
 | `.env` | ✓ | API keys. A leak in one profile doesn't touch the other. |
-| `memories/` (USER.md, MEMORY.md, PERSONALITY.md) | ✓ | Your identity and what alpi remembers. |
+| `memories/` (USER.md, MEMORY.md, AGENT.md) | ✓ | Your identity and what alpi remembers. |
 | `sessions/<id>.json` | ✓ | Turn-by-turn chat log. |
 | `sessions/_gateway_map.json` | ✓ | Per-chat session threading. |
 | `skills/` | ✓ | Installed skills (live under this profile's allowlist). |

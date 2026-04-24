@@ -17,7 +17,7 @@ class WriteFile(Tool):
         "`edit_file` for targeted changes — don't read + rewrite.\n"
         "\n"
         "DO NOT use write_file for:\n"
-        "  • USER.md / MEMORY.md / PERSONALITY.md → use `memory(add/replace)`\n"
+        "  • USER.md / MEMORY.md / AGENT.md → use `memory(add/replace)`\n"
         "  • skill files (SKILL.md or anything in scripts/references/"
         "assets/secrets/) → use `skill(action='create'|'edit'|'add_file')`. "
         "Direct writes skip the security scanner."

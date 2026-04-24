@@ -61,7 +61,7 @@ Useful first commands to try inside the TUI:
 
 - `/help` — list every slash command.
 - `/memory` — show what alpi remembers about you (`USER.md`,
-  `MEMORY.md`, `PERSONALITY.md`).
+  `MEMORY.md`, `AGENT.md`).
 - `/skills` — list installed skills.
 - `/status` — session snapshot (turns, tokens, cost).
 - `/new` — start a fresh session.

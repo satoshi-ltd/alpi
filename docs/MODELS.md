@@ -40,7 +40,7 @@ agent loops can push real spend well above list.
 
 Pick when the cost of a wrong tool call or a missed refactor beats
 the cost of API tokens. These adopt the persona from
-`PERSONALITY.md` on turn 1, call `memory` proactively, respect the
+`AGENT.md` on turn 1, call `memory` proactively, respect the
 tool schema, and hold coherence across long sessions.
 
 | Model | OpenRouter ID | Input | Output | Notes |

@@ -30,7 +30,7 @@ def test_tool_description_carries_core_rules() -> None:
       match strings and corrupt the file).
     """
     desc = Memory.description
-    assert "USER.md" in desc and "MEMORY.md" in desc and "PERSONALITY.md" in desc
+    assert "USER.md" in desc and "MEMORY.md" in desc and "AGENT.md" in desc
     assert "never duplicate" in desc.lower()
     assert "skip:" in desc.lower() or "skip " in desc.lower()
     assert "session progress" in desc.lower()
@@ -76,31 +76,31 @@ def test_read_reports_usage(isolated_home: Path) -> None:
     assert "%" in r.output
 
 
-def test_personality_add(isolated_home: Path) -> None:
-    (isolated_home / "memories" / "PERSONALITY.md").write_text("# Identity\nYou are alpi.\n")
+def test_agent_add(isolated_home: Path) -> None:
+    (isolated_home / "memories" / "AGENT.md").write_text("# Identity\nYou are alpi.\n")
     r = Memory().run(
-        action="add", target="personality.md",
+        action="add", target="AGENT.md",
         content="Usa bullets cortos, nunca párrafos.",
     )
     assert r.ok, r.error
-    assert "bullets" in (isolated_home / "memories" / "PERSONALITY.md").read_text()
+    assert "bullets" in (isolated_home / "memories" / "AGENT.md").read_text()
 
 
-def test_personality_add_rejects_dup(isolated_home: Path) -> None:
-    (isolated_home / "memories" / "PERSONALITY.md").write_text("Base.\nUsa bullets.\n")
-    r = Memory().run(action="add", target="personality.md", content="Usa bullets.")
+def test_agent_add_rejects_dup(isolated_home: Path) -> None:
+    (isolated_home / "memories" / "AGENT.md").write_text("Base.\nUsa bullets.\n")
+    r = Memory().run(action="add", target="AGENT.md", content="Usa bullets.")
     assert not r.ok
-    assert "already" in (r.error or "").lower()
+    assert "duplicate" in (r.error or "").lower()
 
 
-def test_personality_replace(isolated_home: Path) -> None:
-    (isolated_home / "memories" / "PERSONALITY.md").write_text("Frase antigua.\n")
+def test_agent_replace(isolated_home: Path) -> None:
+    (isolated_home / "memories" / "AGENT.md").write_text("Frase antigua.\n")
     r = Memory().run(
-        action="replace", target="personality.md",
+        action="replace", target="AGENT.md",
         match="Frase antigua.", content="Frase nueva.",
     )
     assert r.ok, r.error
-    assert "Frase nueva" in (isolated_home / "memories" / "PERSONALITY.md").read_text()
+    assert "Frase nueva" in (isolated_home / "memories" / "AGENT.md").read_text()
 
 
 def test_replace_entry_unique_match(isolated_home: Path) -> None:
@@ -148,13 +148,13 @@ def test_remove_matches_case_insensitive(isolated_home: Path) -> None:
     assert "Madrid" not in (isolated_home / "memories" / "USER.md").read_text()
 
 
-def test_personality_replace_accent_insensitive(isolated_home: Path) -> None:
-    (isolated_home / "memories" / "PERSONALITY.md").write_text(
+def test_agent_replace_accent_insensitive(isolated_home: Path) -> None:
+    (isolated_home / "memories" / "AGENT.md").write_text(
         "Usa sinónimos en español cuándo puedas.\n"
     )
     r = Memory().run(
-        action="replace", target="personality.md",
+        action="replace", target="AGENT.md",
         match="cuando puedas", content="siempre",
     )
     assert r.ok, r.error
-    assert "siempre" in (isolated_home / "memories" / "PERSONALITY.md").read_text()
+    assert "siempre" in (isolated_home / "memories" / "AGENT.md").read_text()

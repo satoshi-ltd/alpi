@@ -108,7 +108,7 @@ The pieces worth knowing:
 - `config.yaml` + `.env` — reproducible config. Keep `.env` in a
   password manager, not in plain-text backup storage, if you
   treat API keys as secret.
-- `memories/` — your USER.md + MEMORY.md + PERSONALITY.md. The
+- `memories/` — your USER.md + MEMORY.md + AGENT.md. The
   `.bak` siblings hold the previous generation.
 - `sessions/` — every chat history. Growing monotonically unless
   you run `alpi setup → Cleanup`.

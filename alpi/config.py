@@ -152,9 +152,9 @@ class Config:
         return Path(w).expanduser().resolve()
 
     @property
-    def personality_path(self) -> Path:
-        from alpi.home import personality_path as _pp
-        return _pp(self.home)
+    def agent_path(self) -> Path:
+        from alpi.home import agent_path as _ap
+        return _ap(self.home)
 
     @property
     def env_path(self) -> Path:
