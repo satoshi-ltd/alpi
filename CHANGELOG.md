@@ -1,5 +1,74 @@
 # Changelog
 
+## v0.2.83 — 2026-04-24
+
+### alp — inter-machine Noise_XK transport, rate limits, wizard wiring
+
+Ships the inter-machine half of the ALP spec. Peers with an `address`
+field in `peers.yaml` now route over a TCP+Noise_XK channel; the
+intra-profile Unix socket path from ALP.1 is untouched.
+
+- `alpi/alp/noise.py` — own `Noise_XK_25519_ChaChaPoly_SHA256`
+  implementation on `cryptography` primitives (symmetric state, cipher
+  state, Ed25519→X25519 birational derivation so peers keep one
+  pinned identity).
+- `alpi/alp/transport_tcp.py` — TCP framing (u16 handshake, u32 bulk
+  capped at 1 MiB), handshake orchestration with timeouts, pinned-key
+  cross-check between the Noise-authenticated static and
+  `peers.yaml`.
+- `alpi/alp/rate_limit.py` — sliding-window counter per peer, default
+  60/min overridable via `peers.yaml` `rate_limit.per_minute`. Over-cap
+  requests return JSON-RPC `-32005`.
+- `alpi/alp/server.py` — binds the TCP listener alongside the Unix
+  socket when `alp.tcp_port` is set. Shared dispatch; the TCP path
+  additionally cross-checks that the envelope's claimed sender
+  matches the Noise-authenticated identity before invoking the
+  handler.
+- `alpi/alp/client.py` — new `call_tcp()` + `call_peer()` routing by
+  peer address. Existing `call()` Unix-socket signature preserved for
+  intra-profile callers.
+- `alpi/config.py` — new `alp` section (`tcp_host`, `tcp_port`).
+  Absent → Unix-only listener.
+- `alpi/cli.py` — `alpi alp start --port N --host H` flags with
+  config fallback; `alpi peers ping` routes over TCP when the peer
+  carries an address and prints the resolved transport in the
+  response.
+
+Wizard updates so ALP.2 is configurable end-to-end without editing
+YAML by hand:
+
+- `alpi setup → ALP service → TCP port` — sets `alp.tcp_host` and
+  `alp.tcp_port`. Prompts host first (changes more often once a port
+  is set), with `0.0.0.0` behind a confirm.
+- `alpi setup → Peers → Add peer` — new "Remote address" prompt
+  accepting `host:port`; a valid address routes that peer over TCP.
+- Peer probe in the peer list now uses a real Noise_XK ping for
+  peers with an address — the `?` placeholder is gone; remote peers
+  surface green/grey like local ones.
+
+17 new tests in `tests/test_alp_noise.py` (derivation, XK handshake
+happy path, tampering, bad `rs`, bulk traffic, cipher state) and
+`tests/test_alp_tcp.py` (ping roundtrip, silent drop on unpinned
+peer, capability denial, `-32005` rate-limit trip, `call_peer`
+dispatch + validation). Full suite: 715 passed, 8 skipped.
+
+Verified live between two profiles on the same host and also over
+Tailscale (listener bound to a 100.x.x.x address, dialled from
+another profile via MagicDNS `<machine>.tail*.ts.net` — same code
+path as real remote peers).
+
+### spec — budget roadmap (BG)
+
+`docs/ALP.md` still talks about per-peer `budget.tokens_per_day` /
+`usd_per_day`. The enforcement path hadn't been written and the
+shape was incomplete: there was no profile-level ceiling, just
+per-peer numbers that add up silently as peers grow. `docs/ROADMAP.md`
+now carries a dedicated **BG** item — one unified ledger that covers
+interactive turns *and* ALP inbound, with the profile cap as the
+pool and per-peer caps as optional sub-budgets. BG is explicitly
+v0.3 and blocks ALP.3 rooms (rooms need a working peer budget so a
+noisy room can't silently drain an agent).
+
 ## v0.2.82 — 2026-04-24
 
 ### site/docs — private agent network narrative

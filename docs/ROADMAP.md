@@ -25,8 +25,9 @@ Legend: 🔵 backlog · 🟡 next up · ⏸ blocked.
 | BB | TUI: shared link renderer (bold + underline; hover = accent bg + black) | v0.3 | 🔵 |
 | BC | External security audit before v0.3 public release | v0.3 | 🔴 gate on AR |
 | BD | Model-aware tool-use-enforcement guidance (Claude/MiMo brevity, GPT/Codex/Gemini full block) | v0.3 | 🔵 needs A/B on agent.log first |
-| ALP.2 | Alpi Link Protocol — inter-machine Noise-protocol transport + budget / rate-limit enforcement | v0.3 | 🟡 v0.3 launch surface |
-| ALP.3 | Alpi Link Protocol — shared rooms (group chat, humans optional) | v0.3 | 🟡 v0.3 launch surface |
+| ALP.2 | Alpi Link Protocol — inter-machine Noise-protocol transport + rate-limit enforcement | v0.3 | 🟡 transport shipped; budgets pending (BG) |
+| BG | Spending budgets — daily token/USD caps at profile + optional per-peer override | v0.3 | 🟡 next up · unblocks ALP.3 room budgeting |
+| ALP.3 | Alpi Link Protocol — shared rooms (group chat, humans optional) | v0.3 | 🔵 depends on BG |
 | H | Home Assistant integration | long-term | ⏸ blocked on user confirmation |
 | N | Image generation | long-term | 🔵 no concrete use case yet |
 | U | Signal gateway (signal-cli) | long-term | 🔵 requires dedicated phone number |
@@ -335,21 +336,84 @@ ALP.1 local links, ALP.2 machine links, ALP.3 rooms.
 
 ### ALP.2 — Inter-machine Noise-protocol transport (v0.3)
 
-Depends on ALP.1. New transport `alpi/alp/noise.py` + gateway
-listener — TCP listener with Noise_XK handshake producing
-forward-secret session keys, per-peer AEAD encryption on top.
-Explicitly NOT HTTPS: we use Noise (same framework as WireGuard)
-so we don't drag TLS's 30-year legacy of downgrade attacks and
-cert-management headaches into a peer-to-peer tool. Peer entry
-gains `address: host:port`. Same verbs as ALP.1, different
-transport. Tailscale / WireGuard as a network-layer front-end is
-the blessed deployment; direct public-internet exposure is
-supported but discouraged.
+Depends on ALP.1. Transport in `alpi/alp/noise.py` +
+`alpi/alp/transport_tcp.py` — TCP listener with Noise_XK handshake
+producing forward-secret session keys and ChaCha20-Poly1305 AEAD on
+top. Explicitly NOT HTTPS: we use Noise (same framework as
+WireGuard) so we don't drag TLS's 30-year legacy of downgrade
+attacks and cert-management headaches into a peer-to-peer tool. Peer
+entries grow an `address: host:port`; same verbs as ALP.1, different
+wire. Tailscale / WireGuard as a network-layer front-end is the
+blessed deployment; direct public-internet exposure is supported but
+discouraged.
 
-Also in ALP.2: **budget + rate-limit enforcement**. The
-`peers.yaml` `budget.tokens_per_day`, `budget.usd_per_day`, and
-`rate_limit.requests_per_minute` fields drive the ledger,
-UTC-midnight reset, and the `-32005 budget-exceeded` response path.
+**Shipped**: transport, per-peer rate-limit enforcement, wizard
+integration (ALP service TCP port + peers address + remote probe).
+**Pending**: spending budgets (covered by **BG** below — spun out so
+the ledger serves both interactive + ALP traffic).
+
+### BG — Spending budgets (v0.3)
+
+Today `session.cost_usd` tracks cumulative token/USD spend but
+nothing enforces a cap. ALP.2 also assumes `peer.budget.tokens_per_day`
+/ `usd_per_day` exist but doesn't check them yet. BG ships both as
+one unified ledger so we don't maintain two parallel spending stories.
+
+**Model.** Profile is the ceiling, peer is an optional sub-cap.
+
+```yaml
+# config.yaml — profile-level ceiling
+alp:
+  budget:
+    daily_usd: 5.00
+    daily_tokens: 500000   # optional, either knob or both
+
+# peers.yaml — optional per-peer tightening
+- id: alice
+  budget:
+    daily_usd: 1.00        # alice caps at $1 of the $5 profile pool
+```
+
+Semantics:
+
+- Profile cap covers **every** turn: interactive TUI, gateway, schedule
+  daemon, and ALP inbound. One pool, one ledger.
+- Peer cap (optional) is a sub-budget — alice can't exceed her own cap
+  even if the profile pool has room.
+- Absent peer cap → peer shares the profile pool directly.
+- Midnight UTC reset; no carry-over.
+- Over-cap responses: `-32005 budget-exceeded` on the ALP wire; a
+  surface-specific "out of budget" message on interactive paths.
+
+**Ledger.** `~/.alpi/<profile>/alp/ledger.json`:
+
+```json
+{
+  "day": "2026-04-24",
+  "total": { "usd": 2.34, "tokens": 187200 },
+  "by_peer": {
+    "alice": { "usd": 0.47, "tokens": 42100 },
+    "__interactive__": { "usd": 0.75, "tokens": 55700 }
+  }
+}
+```
+
+**Enforcement points.**
+1. `engine.run_turn` pre-check (covers interactive + sub-agents).
+2. `alp.server._dispatch` pre-check for inbound ALP (peer vs
+   profile cap, whichever is tighter).
+3. Post-turn hook on `session.record()` increments the ledger under
+   the right bucket.
+
+**Spec update.** `docs/ALP.md` currently defines budget as per-peer
+only. The spec needs to move the budget to "profile cap + optional
+peer sub-cap" shape. Stamp on the §Peer list table and §Security
+considerations.
+
+**ALP.3 unblocks** once BG lands: room posts can count against the
+poster's peer budget inside the poster's own profile ledger, closing
+the "a noisy room drains every agent silently" gap that rooms would
+otherwise carry.
 
 ### ALP.3 — Shared rooms (v0.3)
 

@@ -46,7 +46,8 @@ def run(home: Path) -> None:
             ui.crumb("setup", "peers"),
             items,
             subtitle="ALP — cross-profile & inter-machine agent links",
-            home=home, close="Back",
+            home=home,
+            close="Back",
         )
         if result is None:
             return
@@ -65,7 +66,9 @@ def run(home: Path) -> None:
 
 
 async def _probe_all(
-    home: Path, entries: list[Peer], self_pubkey: str,
+    home: Path,
+    entries: list[Peer],
+    self_pubkey: str,
 ) -> dict[str, str]:
     """Fire a concurrent ``link.ping`` at every peer. 500ms timeout,
     returns a dict ``{peer_id: "on"|"off"|"?"}``."""
@@ -77,14 +80,25 @@ async def _probe_all(
 
 
 async def _probe_one(home: Path, peer: Peer, _self: str) -> str:
-    if peer.address is not None:
-        return "?"  # ALP.2 — skip until TCP transport lands.
-    target_home = _target_home(peer.id)
-    socket_path = target_home / "alp" / "alp.sock"
-    if not socket_path.exists():
-        return "off"
+    kp = load_or_generate(home)
     try:
-        kp = load_or_generate(home)
+        if peer.address:
+            host, _, port_s = peer.address.rpartition(":")
+            if not host or not port_s.isdigit():
+                return "off"
+            await alp_client.call_tcp(
+                host=host,
+                port=int(port_s),
+                sender=kp,
+                recipient_pubkey_b64=peer.pubkey,
+                method="link.ping",
+                params={"nonce": "setup"},
+                timeout=_PING_TIMEOUT,
+            )
+            return "on"
+        socket_path = _target_home(peer.id) / "alp" / "alp.sock"
+        if not socket_path.exists():
+            return "off"
         await alp_client.call(
             socket_path=socket_path,
             sender=kp,
@@ -130,8 +144,7 @@ def _short_pubkey(pubkey_b64: str) -> str:
 
 
 def _show_identity(home: Path, pubkey_b64: str) -> None:
-    ui.banner(ui.crumb("setup", "peers", "identity"),
-              subtitle="your ALP public key", home=home)
+    ui.banner(ui.crumb("setup", "peers", "identity"), subtitle="your ALP public key", home=home)
     ui._console.print("")
     ui.dim(
         "Share this pubkey with peers who need to pin you. They paste\n"
@@ -152,6 +165,7 @@ def _copy_to_clipboard(text: str) -> None:
     import shutil
     import subprocess
     import sys
+
     cmds: list[list[str]] = []
     if sys.platform == "darwin":
         cmds.append(["pbcopy"])
@@ -197,9 +211,11 @@ def _inspect(home: Path, peer_id: str, status: str) -> None:
 def _remove(home: Path, entries: list[Peer]) -> None:
     items = [(f"@{p.id}", p.id, _peer_detail(p)) for p in entries]
     peer_id = ui.menu(
-        ui.crumb("setup", "peers", "remove"), items,
+        ui.crumb("setup", "peers", "remove"),
+        items,
         subtitle="drop a pinned peer",
-        home=home, close="Back",
+        home=home,
+        close="Back",
     )
     if not peer_id:
         return
@@ -243,16 +259,29 @@ def _add(home: Path) -> None:
         ui.fail_and_wait("that pubkey is already pinned under a different id")
         return
 
+    address = ui.text("Remote address (host:port for inter-machine; ENTER to skip):") or ""
+    address = address.strip() or None
+    if address is not None and not _valid_address(address):
+        ui.fail_and_wait(f"invalid address: {address!r} — expected host:port with port 1-65535")
+        return
+
     allow = _pick_capabilities()
     alias = ui.text("Alias (optional display label, ENTER to skip):") or ""
 
-    peer = Peer(id=peer_id, pubkey=pubkey, alias=alias.strip(), allow=allow)
+    peer = Peer(
+        id=peer_id,
+        pubkey=pubkey,
+        alias=alias.strip(),
+        address=address,
+        allow=allow,
+    )
     try:
         peers_mod.add(home, peer)
     except ValueError as e:
         ui.fail_and_wait(str(e))
         return
-    ui.ok_and_wait(f"pinned @{peer_id}")
+    transport = f"tcp {address}" if address else "unix socket (same machine)"
+    ui.ok_and_wait(f"pinned @{peer_id} via {transport}")
 
 
 def _pick_capabilities() -> list[str]:
@@ -276,3 +305,14 @@ def _valid_pubkey(pubkey_b64: str) -> bool:
     except Exception:  # noqa: BLE001
         return False
     return len(raw) == 32
+
+
+def _valid_address(address: str) -> bool:
+    """Accept ``host:port`` where host is non-empty and port is 1-65535.
+    Host can be an IPv4, a hostname, or a Tailscale-style name; we don't
+    resolve it here — a bad host just fails at dial time."""
+    host, sep, port = address.rpartition(":")
+    if not sep or not host or not port.isdigit():
+        return False
+    p = int(port)
+    return 1 <= p <= 65535

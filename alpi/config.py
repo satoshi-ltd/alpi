@@ -110,19 +110,19 @@ class BrowserToolConfig:
 class TtsToolConfig:
     voice: str = "en-US-AriaNeural"
     autoplay: bool = True
-    rate: str = ""               # "+10%" / "-20%" / "" = neutral
-    pitch: str = ""              # "+5Hz" / "-10Hz" / "" = neutral
+    rate: str = ""  # "+10%" / "-20%" / "" = neutral
+    pitch: str = ""  # "+5Hz" / "-10Hz" / "" = neutral
 
 
 @dataclass
 class SttToolConfig:
-    model: str = "base"         # tiny | base | small | medium | large-v3
-    language: str = ""          # "" → auto-detect
+    model: str = "base"  # tiny | base | small | medium | large-v3
+    language: str = ""  # "" → auto-detect
 
 
 @dataclass
 class ToolsConfig:
-    max_steps_per_turn: int = 40   # ceiling on tool-calls per user turn
+    max_steps_per_turn: int = 40  # ceiling on tool-calls per user turn
     web_extract: WebExtractToolConfig = field(default_factory=WebExtractToolConfig)
     read_image: ReadImageToolConfig = field(default_factory=ReadImageToolConfig)
     terminal: TerminalToolConfig = field(default_factory=TerminalToolConfig)
@@ -140,7 +140,8 @@ class Config:
     tools: ToolsConfig = field(default_factory=ToolsConfig)
     tui: dict[str, Any] = field(default_factory=dict)
     gateway: dict[str, Any] = field(default_factory=dict)
-    workspace: str = ""      # "" → fall back to cwd
+    alp: dict[str, Any] = field(default_factory=dict)
+    workspace: str = ""  # "" → fall back to cwd
     raw: dict[str, Any] = field(default_factory=dict)
 
     @property
@@ -154,6 +155,7 @@ class Config:
     @property
     def agent_path(self) -> Path:
         from alpi.home import agent_path as _ap
+
         return _ap(self.home)
 
     @property
@@ -196,9 +198,9 @@ def load(home: Path) -> Config:
     tts_raw = tools_raw.get("tts") or {}
     stt_raw = tools_raw.get("stt") or {}
     tools_cfg = ToolsConfig(
-        max_steps_per_turn=int(tools_raw.get(
-            "max_steps_per_turn", DEFAULT_CONFIG["tools"]["max_steps_per_turn"]
-        )),
+        max_steps_per_turn=int(
+            tools_raw.get("max_steps_per_turn", DEFAULT_CONFIG["tools"]["max_steps_per_turn"])
+        ),
         web_extract=WebExtractToolConfig(
             model=str(web_extract_raw.get("model", "") or ""),
         ),
@@ -236,6 +238,7 @@ def load(home: Path) -> Config:
         tools=tools_cfg,
         tui=data.get("tui", DEFAULT_CONFIG["tui"]),
         gateway=data.get("gateway", DEFAULT_CONFIG["gateway"]),
+        alp=dict(data.get("alp") or {}),
         workspace=str(data.get("workspace", "") or ""),
         raw=user_data,
     )
@@ -258,12 +261,12 @@ def save(cfg: Config) -> None:
     if tools_delta:
         data["tools"] = tools_delta
 
-    tui_delta = {
-        k: v for k, v in (cfg.tui or {}).items()
-        if v != DEFAULT_CONFIG["tui"].get(k)
-    }
+    tui_delta = {k: v for k, v in (cfg.tui or {}).items() if v != DEFAULT_CONFIG["tui"].get(k)}
     if tui_delta:
         data["tui"] = tui_delta
+
+    if cfg.alp:
+        data["alp"] = cfg.alp
 
     cfg.config_path.write_text(yaml.safe_dump(data, sort_keys=False))
 

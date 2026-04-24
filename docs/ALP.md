@@ -158,15 +158,19 @@ before any `id`-based routing occurs.
 | `pubkey` | yes | Base64-encoded Ed25519 public key. |
 | `address` | for inter-machine | `host:port`. Omit for intra-profile peers. |
 | `allow` | yes | Fail-closed list of methods the peer may invoke. |
-| `budget.tokens_per_day` | no | Hard daily token cap. Exceeding returns `-32005`. Enforced on ALP.2 inter-machine traffic and shared room posts. |
-| `budget.usd_per_day` | no | Hard daily spend cap. Ollama and other free-inference setups omit this. Enforced when token/cost accounting is available. |
+| `budget.tokens_per_day` | no | Hard daily token cap for this peer. Exceeding returns `-32005`. Accepted today; enforcement lands with the spending-ledger work in the BG roadmap item. |
+| `budget.usd_per_day` | no | Hard daily spend cap for this peer. Ollama and other free-inference setups omit this. Same enforcement timing as the token cap. |
 | `rate_limit.requests_per_minute` | no | Throttle. Default allows 10/min/peer. Enforced before handler dispatch. |
 
-Both budget fields are independent and optional. Budgets are
-**global per peer** — they cover every inbound method from that
-peer, including posts inside shared rooms. Budgets reset at UTC
-midnight; unused allowance does not carry over. The ALP.2 runtime
-enforces the ledger, reset timer, and `-32005` response path.
+Budget fields are independent and optional, and they act as an
+**optional sub-cap under a profile-level ceiling** — the profile's
+own `alp.budget.{daily_usd, daily_tokens}` is the pool from which
+every inbound method from every peer (and every interactive turn, and
+every sub-agent spawn) draws. An absent peer cap means the peer
+shares the pool directly; a peer cap tightens below the profile
+ceiling. Budgets reset at UTC midnight; unused allowance does not
+carry over. One unified ledger drives both the profile ceiling and
+the per-peer sub-caps, reset timer, and the `-32005` response path.
 
 The token budget has a secondary purpose beyond cost control: a
 tight cap forces the caller to be concise, which keeps inter-
