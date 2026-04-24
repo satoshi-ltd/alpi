@@ -1,0 +1,1102 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<!-- SEO_HEAD (injected by build.mjs) -->
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0a0a0a;
+    --fg:#f2f2f0;
+    --muted:#6a6a66;
+    --dim:#3a3a38;
+    --line:#1c1c1a;
+    --accent:#f2f2f0;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{background:var(--bg);color:var(--fg);font-family:"Space Grotesk",sans-serif;-webkit-font-smoothing:antialiased}
+  body{overflow-x:hidden}
+  .mono{font-family:"JetBrains Mono",ui-monospace,monospace}
+
+  /* ASCII canvas layer — fixed, behind everything */
+  #ascii-bg{
+    position:fixed;inset:0;width:100vw;height:100vh;
+    z-index:0;pointer-events:none;
+    font-family:"JetBrains Mono",ui-monospace,monospace;
+    font-size:12px;line-height:12px;letter-spacing:0;
+    color:var(--dim);
+    white-space:pre;
+    overflow:hidden;
+    user-select:none;
+  }
+  #ascii-bg pre{margin:0;padding:0;color:inherit;font:inherit;white-space:pre}
+
+  /* Soft vignette over ascii to keep legibility */
+  .veil{
+    position:fixed;inset:0;z-index:1;pointer-events:none;
+    background:
+      radial-gradient(ellipse at 50% 30%, transparent 0%, rgba(10,10,10,.55) 55%, rgba(10,10,10,.85) 100%);
+  }
+
+  /* Shell */
+  .shell{position:relative;z-index:2;max-width:1240px;margin:0 auto;padding:0 clamp(24px, 5vw, 64px)}
+
+  /* Nav — shared with docs (see site/templates/doc.css) */
+  nav.top{
+    position:sticky;top:0;z-index:10;
+    backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+    background:rgba(10,10,10,.55);
+    border-bottom:1px solid var(--line);
+  }
+  nav.top .row{
+    display:flex;align-items:center;justify-content:space-between;
+    padding-top:18px;padding-bottom:18px;gap:24px;
+  }
+  .brand-lockup{display:flex;align-items:center;gap:18px;min-width:0}
+  .brand{display:inline-flex;align-items:center;color:var(--fg);text-decoration:none;line-height:1}
+  .brand .logo{width:94px;height:42px;color:var(--fg);flex-shrink:0;display:block}
+  .bp-tail{display:inline-flex;align-items:center;gap:14px;line-height:1;margin-top:4px}
+  .bp-sep,
+  .bp-seg{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:12px;letter-spacing:.04em;text-transform:uppercase;font-weight:400}
+  .bp-sep{color:var(--dim)}
+  .bp-seg{color:var(--muted);padding:4px 0;border-bottom:1px solid transparent;transition:.15s;text-decoration:none}
+  a.bp-seg:hover{color:var(--fg);border-bottom-color:var(--fg)}
+  .bp-current{color:var(--fg)}
+  .bp-docs{color:var(--fg);font-weight:700}
+  nav ul{list-style:none;display:flex;gap:22px;font-size:12px;color:var(--muted);font-family:"JetBrains Mono",ui-monospace,monospace;letter-spacing:.04em;text-transform:uppercase}
+  nav ul a{color:inherit;text-decoration:none;padding:6px 0;border-bottom:1px solid transparent;transition:.15s}
+  nav ul a:hover{color:var(--fg);border-bottom-color:var(--fg)}
+  .nav-cta{
+    display:inline-flex;align-items:center;gap:8px;
+    font-family:"JetBrains Mono",monospace;font-size:12px;
+    border:1px solid var(--line);padding:8px 12px;border-radius:2px;
+    color:var(--fg);text-decoration:none;white-space:nowrap;
+    transition:border-color .2s,background .2s;
+  }
+  .nav-cta:hover{border-color:var(--fg);background:rgba(255,255,255,.03)}
+  /* Burger + mobile drawer — only visible below 760px */
+  .burger{
+    display:none;background:transparent;border:1px solid var(--line);
+    width:40px;height:40px;padding:0;border-radius:2px;cursor:pointer;
+    flex-direction:column;align-items:center;justify-content:center;gap:5px;
+    transition:border-color .2s;
+  }
+  .burger:hover{border-color:var(--fg)}
+  .burger span{display:block;width:18px;height:1.5px;background:var(--fg);transition:transform .2s, opacity .2s}
+  .burger[aria-expanded="true"] span:nth-child(1){transform:translateY(6.5px) rotate(45deg)}
+  .burger[aria-expanded="true"] span:nth-child(2){opacity:0}
+  .burger[aria-expanded="true"] span:nth-child(3){transform:translateY(-6.5px) rotate(-45deg)}
+  .nav-drawer{
+    display:none;border-top:1px solid var(--line);
+    padding:16px clamp(24px, 5vw, 64px) 24px;
+    background:rgba(10,10,10,.92);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+  }
+  .nav-drawer ul{list-style:none;display:flex;flex-direction:column;gap:4px;margin-bottom:16px}
+  .nav-drawer ul a{
+    display:block;padding:12px 0;color:var(--muted);font-family:"JetBrains Mono",ui-monospace,monospace;
+    font-size:13px;letter-spacing:.04em;text-transform:uppercase;text-decoration:none;
+    border-bottom:1px solid var(--line);transition:color .15s;
+  }
+  .nav-drawer ul a:hover{color:var(--fg)}
+  .nav-drawer .nav-cta{width:100%;justify-content:center;padding:14px}
+  @media (max-width:760px){
+    .nav-menu{display:none}
+    nav.top > .row > .nav-cta{display:none}
+    .burger{display:inline-flex}
+    .nav-drawer[data-open="true"]{display:block}
+    .bp-seg:not(.bp-current){display:none}
+    .bp-sep{display:none}
+    .bp-current{display:inline}
+  }
+
+  /* Hero */
+  .hero{padding:120px 0 96px;position:relative}
+  .hero .kicker{
+    font-family:"JetBrains Mono",monospace;font-size:12px;color:var(--muted);
+    display:flex;align-items:center;gap:10px;margin-bottom:28px;
+  }
+  .hero .kicker .dot{width:6px;height:6px;background:#7fb069;border-radius:50%}
+  .hero h1{
+    font-weight:700;font-size:clamp(56px,9vw,128px);line-height:.95;
+    letter-spacing:-0.04em;margin-bottom:28px;
+  }
+  .hero h1 .slash{color:var(--muted);font-weight:500}
+  .hero p.lead{
+    font-size:clamp(18px,2vw,22px);max-width:680px;
+    color:var(--fg);line-height:1.45;margin-bottom:40px;text-wrap:pretty;
+  }
+  .hero p.lead em{color:var(--muted);font-style:normal}
+  .cta-row{display:flex;gap:12px;flex-wrap:wrap}
+  .btn{
+    display:inline-flex;align-items:center;gap:10px;
+    font-family:"JetBrains Mono",monospace;font-size:13px;
+    padding:14px 22px;border-radius:2px;text-decoration:none;
+    transition:all .2s;
+  }
+  .btn-primary{background:var(--fg);color:var(--bg);border:1px solid var(--fg)}
+  .btn-primary:hover{background:transparent;color:var(--fg)}
+  .btn-ghost{background:transparent;color:var(--fg);border:1px solid var(--line)}
+  .btn-ghost:hover{border-color:var(--fg)}
+  .btn .arr{transition:transform .2s}
+  .btn:hover .arr{transform:translateX(4px)}
+
+  /* Terminal preview card */
+  .term{
+    margin-top:80px;
+    border:1px solid var(--line);
+    background:rgba(12,12,12,.85);
+    backdrop-filter:blur(4px);
+    border-radius:4px;
+    overflow:hidden;
+    box-shadow:0 30px 80px -20px rgba(0,0,0,.8);
+  }
+  .term-head{
+    display:flex;align-items:center;gap:12px;padding:12px 16px;
+    border-bottom:1px solid var(--line);
+    font-family:"JetBrains Mono",monospace;font-size:11px;color:var(--muted);
+  }
+  .term-head .dots{display:flex;gap:6px}
+  .term-head .dots span{width:10px;height:10px;border-radius:50%;background:var(--dim)}
+  .term-body{
+    padding:24px 28px;font-family:"JetBrains Mono",monospace;font-size:13px;line-height:1.65;
+    min-height:340px;
+  }
+  .term-body .prompt{color:#7fb069}
+  .term-body .muted{color:var(--muted)}
+  .term-body .user{color:var(--fg)}
+  .term-body .bot{color:#d8d8d4}
+  .term-body .tool{color:#a89b76}
+  .term-body .diamond{color:#a89b76;display:inline-block;width:14px}
+  .term-body .cursor{display:inline-block;width:9px;height:16px;background:var(--fg);vertical-align:-2px;animation:blink 1.1s steps(2) infinite}
+  @keyframes blink{50%{opacity:0}}
+
+  /* Section scaffolding */
+  section{padding:120px 0;position:relative}
+  .eyebrow{
+    font-family:"JetBrains Mono",monospace;font-size:11px;color:var(--muted);
+    letter-spacing:.14em;text-transform:uppercase;margin-bottom:24px;
+    display:flex;align-items:center;gap:12px;
+  }
+  .eyebrow:before{content:"";width:24px;height:1px;background:var(--muted)}
+  h2{font-weight:700;font-size:clamp(36px,5vw,64px);line-height:1.02;letter-spacing:-0.03em;margin-bottom:24px;max-width:900px;text-wrap:balance}
+  h3{font-weight:600;font-size:22px;letter-spacing:-0.01em;margin-bottom:10px}
+  p.sub{font-size:18px;color:var(--muted);max-width:680px;line-height:1.55;text-wrap:pretty}
+
+  /* grid */
+  .grid{display:grid;gap:1px;background:var(--line);border:1px solid var(--line);margin-top:64px}
+  .grid.c2{grid-template-columns:repeat(2,1fr)}
+  .grid.c3{grid-template-columns:repeat(3,1fr)}
+  .grid.c4{grid-template-columns:repeat(4,1fr)}
+  @media(max-width:860px){.grid.c3,.grid.c4{grid-template-columns:repeat(2,1fr)}}
+  @media(max-width:560px){.grid.c2,.grid.c3,.grid.c4{grid-template-columns:1fr}}
+  .cell{background:var(--bg);padding:32px;min-height:180px;display:flex;flex-direction:column;gap:12px}
+  .cell .n{font-family:"JetBrains Mono",monospace;font-size:11px;color:var(--muted)}
+  .cell p{color:var(--muted);font-size:14.5px;line-height:1.55}
+  .cell .tag{
+    font-family:"JetBrains Mono",monospace;font-size:10.5px;color:var(--muted);
+    border:1px solid var(--line);padding:2px 8px;border-radius:999px;align-self:flex-start;margin-top:auto
+  }
+
+  /* Two-column layout for "architecture" */
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:80px;align-items:start}
+  @media(max-width:900px){.cols{grid-template-columns:1fr;gap:48px}}
+  .cols pre.ascii-diagram{
+    font-family:"JetBrains Mono",monospace;font-size:12px;line-height:1.5;color:var(--fg);
+    white-space:pre;overflow-x:auto;
+    background:rgba(255,255,255,.02);
+    border:1px solid var(--line);padding:28px;border-radius:4px;
+  }
+  .cols pre.ascii-diagram .muted{color:var(--muted)}
+  .cols pre.ascii-diagram .accent{color:#d8d8d4}
+
+  /* Models table */
+  table.models{
+    width:100%;border-collapse:collapse;margin-top:48px;
+    font-family:"JetBrains Mono",monospace;font-size:13px;
+  }
+  table.models th,table.models td{
+    text-align:left;padding:16px 12px;border-bottom:1px solid var(--line);vertical-align:top;
+  }
+  table.models th{color:var(--muted);font-weight:400;font-size:11px;text-transform:uppercase;letter-spacing:.1em}
+  table.models .tier{font-family:"Space Grotesk",sans-serif;font-weight:600;font-size:15px}
+  table.models td.notes{color:var(--muted);font-family:"Space Grotesk",sans-serif;font-size:14px;font-weight:400}
+  .pill{
+    display:inline-block;padding:2px 8px;border-radius:2px;font-size:10.5px;
+    border:1px solid var(--line);color:var(--fg);
+  }
+  .pill.a{border-color:#d8d8d4;color:#f2f2f0}
+  .pill.b{border-color:#6a6a66;color:#d8d8d4}
+  .pill.c{border-color:#3a3a38;color:#6a6a66}
+
+  /* CLI / commands block */
+  .cli{
+    margin-top:56px;border:1px solid var(--line);border-radius:4px;overflow:hidden;
+    background:rgba(12,12,12,.7);
+  }
+  .cli .row{
+    display:grid;grid-template-columns:260px 1fr;gap:24px;padding:18px 24px;
+    border-bottom:1px solid var(--line);font-family:"JetBrains Mono",monospace;font-size:13px;
+  }
+  .cli .row:last-child{border-bottom:0}
+  .cli .row .cmd{color:var(--fg)}
+  .cli .row .desc{color:var(--muted);font-family:"Space Grotesk",sans-serif;font-size:14px}
+  @media(max-width:640px){.cli .row{grid-template-columns:1fr;gap:4px}}
+
+  /* Docs */
+  .docs{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line);margin-top:48px;border:1px solid var(--line)}
+  @media(max-width:1080px){.docs[style*="repeat(4,1fr)"]{grid-template-columns:repeat(3,1fr) !important}}
+  @media(max-width:860px){.docs, .docs[style*="repeat(4,1fr)"]{grid-template-columns:repeat(2,1fr) !important}}
+  @media(max-width:560px){.docs, .docs[style*="repeat(4,1fr)"]{grid-template-columns:1fr !important}}
+  .doc{background:var(--bg);padding:36px;text-decoration:none;color:var(--fg);display:flex;flex-direction:column;gap:14px;min-height:240px;transition:background .2s}
+  .doc:hover{background:rgba(255,255,255,.02)}
+  .doc .ix{font-family:"JetBrains Mono",monospace;font-size:11px;color:var(--muted)}
+  .doc h4{font-weight:600;font-size:22px;letter-spacing:-0.01em}
+  .doc p{color:var(--muted);font-size:14px;line-height:1.5}
+  .doc .go{font-family:"JetBrains Mono",monospace;font-size:12px;color:var(--muted);margin-top:auto;display:flex;gap:8px;align-items:center}
+  .doc:hover .go{color:var(--fg)}
+
+  /* Compare */
+  .compare{margin-top:56px;border:1px solid var(--line);border-radius:4px;overflow:hidden}
+  .compare .crow{display:grid;grid-template-columns:1.2fr 1fr 1fr 1fr;border-bottom:1px solid var(--line)}
+  .compare .crow:last-child{border-bottom:0}
+  .compare .ccell{padding:18px 22px;border-right:1px solid var(--line);font-size:14px;color:var(--muted)}
+  .compare .ccell:last-child{border-right:0}
+  .compare .crow.head .ccell{color:var(--fg);font-weight:600;font-family:"Space Grotesk",sans-serif}
+  .compare .crow.head .ccell.alpi{background:rgba(255,255,255,.04)}
+  .compare .ccell.alpi{background:rgba(255,255,255,.015);color:var(--fg)}
+  .compare .ok{color:#7fb069}
+  .compare .no{color:#6a6a66}
+  @media(max-width:760px){.compare .crow{grid-template-columns:1fr 1fr}.compare .crow .ccell:first-child{grid-column:1/-1;background:rgba(255,255,255,.02);font-weight:600;color:var(--fg)}}
+
+  /* Footer */
+  footer{border-top:1px solid var(--line);padding:64px 0 48px;margin-top:80px;position:relative;z-index:2}
+  footer .row{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:40px}
+  @media(max-width:760px){footer .row{grid-template-columns:1fr 1fr}}
+  footer h5{font-family:"JetBrains Mono",monospace;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.12em;margin-bottom:16px}
+  footer ul{list-style:none}
+  footer li{margin-bottom:10px}
+  footer a{color:var(--fg);text-decoration:none;font-size:14px}
+  footer a:hover{color:var(--muted)}
+  footer .sig{margin-top:48px;padding-top:32px;border-top:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;font-family:"JetBrains Mono",monospace;font-size:11px;color:var(--muted)}
+  footer .sig .big{font-family:"Space Grotesk",sans-serif;font-size:clamp(80px,18vw,260px);font-weight:700;letter-spacing:-0.04em;line-height:.85;color:var(--fg);margin-top:32px;display:block}
+
+  /* Animations init */
+  .reveal{opacity:0;transform:translateY(12px);transition:opacity .7s ease, transform .7s ease}
+  .reveal.visible{opacity:1;transform:none}
+
+  /* Controls */
+  .bg-ctrl{
+    position:fixed;bottom:20px;right:20px;z-index:5;
+    display:flex;gap:6px;
+    font-family:"JetBrains Mono",monospace;font-size:10px;color:var(--muted);
+    background:rgba(10,10,10,.7);border:1px solid var(--line);padding:6px 8px;border-radius:2px;
+    backdrop-filter:blur(4px);
+  }
+  .bg-ctrl button{
+    background:transparent;border:1px solid transparent;color:inherit;
+    font:inherit;cursor:pointer;padding:2px 6px;border-radius:2px;
+  }
+  .bg-ctrl button.on{border-color:var(--fg);color:var(--fg)}
+  .bg-ctrl button:hover{color:var(--fg)}
+</style>
+</head>
+<body>
+
+<!-- Bundler splash thumbnail -->
+<template id="__bundler_thumbnail" data-bg-color="#0a0a0a">
+  <svg viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg">
+    <rect width="400" height="400" fill="#0a0a0a"/>
+    <g fill="none" stroke="#3a3a38" stroke-width="1" font-family="monospace" font-size="14">
+      <text x="40" y="80" fill="#3a3a38">/////</text>
+      <text x="40" y="110" fill="#3a3a38">/// //</text>
+      <text x="40" y="140" fill="#3a3a38">// ///</text>
+    </g>
+    <text x="200" y="210" text-anchor="middle" fill="#f2f2f0" font-family="sans-serif" font-size="64" font-weight="700" letter-spacing="-2">alpi</text>
+    <text x="200" y="250" text-anchor="middle" fill="#6a6a66" font-family="monospace" font-size="12" letter-spacing="2">A SLIM PERSONAL AGENT</text>
+    <circle cx="200" cy="290" r="3" fill="#7fb069"/>
+  </svg>
+</template>
+
+<!-- ASCII background canvas -->
+<div id="ascii-bg" aria-hidden="true"><pre id="ascii-pre"></pre></div>
+<div class="veil" aria-hidden="true"></div>
+
+
+<!-- NAV (injected by build.mjs) -->
+
+<!-- HERO -->
+<section class="hero">
+  <div class="shell">
+    <div class="kicker"><span class="dot"></span>v0.2.70 · BSL 1.1 → Apache 2.0 (2030) · published by <a href="https://www.satoshi-ltd.com/" style="color:inherit;border-bottom:1px solid var(--dim)">Satoshi Ltd.</a></div>
+    <h1>
+      a slim <span class="slash">/</span><br/>personal agent.
+    </h1>
+    <p class="lead">
+      alpi lives in your terminal. Inline-learning memory, live skills, your choice of model, reachable from the messengers you already use — and <strong style="color:var(--fg);font-weight:500">ALP</strong>, a closed agent-to-agent protocol that links your agents across profiles and machines without a hub. <em>No telemetry. No account. No mandatory cloud.</em>
+    </p>
+    <div class="cta-row">
+      <a class="btn btn-primary" href="#install">$ uv tool install alpi <span class="arr">→</span></a>
+      <a class="btn btn-ghost" href="#principles">read the principles</a>
+    </div>
+
+    <!-- Terminal mock -->
+    <div class="term" aria-hidden="true">
+      <div class="term-head">
+        <div class="dots"><span></span><span></span><span></span></div>
+        <span>alpi v0.2.70 · profile: personal · claude-sonnet-4.6 · ctx 24k · $0.01 · sandbox off · workspace ~/git/alpi</span>
+      </div>
+      <div class="term-body" id="termBody">
+        <!-- filled by JS -->
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- WHAT -->
+<section id="what">
+  <div class="shell">
+    <div class="eyebrow">01 / what alpi is</div>
+    <h2>An agent that fits in a repo, not in a suite.</h2>
+    <p class="sub">
+      Third-party agents typically aim at a broad audience: 28 skill categories, sync hub, sub-agent mesh, SQLite state. alpi drops all of that. 17 tools, 3 memory files, 1 research sub-agent. Every feature earns its keep or doesn't ship.
+    </p>
+
+    <div class="grid c3">
+      <div class="cell">
+        <span class="n">// slim</span>
+        <h3>Core loop first.</h3>
+        <p>Turn, memory, tools, paths, scanner. The surface comes after. 30+ tools → ~17. No legacy code, no silent migrations.</p>
+        <span class="tag">constraint breeds coherence</span>
+      </div>
+      <div class="cell">
+        <span class="n">// user in control</span>
+        <h3>No destructive action without explicit OK.</h3>
+        <p>Three-tier approval system: safe / caution / dangerous. The dangerous ones never get an override — no flag, no config knob.</p>
+        <span class="tag">approval gate</span>
+      </div>
+      <div class="cell">
+        <span class="n">// inline memory</span>
+        <h3>No post-session reflect.</h3>
+        <p>Three markdown files — USER.md, MEMORY.md, PERSONALITY.md. Updated inline during conversations via the <span class="mono" style="color:var(--fg)">memory</span> tool.</p>
+        <span class="tag">3 files</span>
+      </div>
+      <div class="cell">
+        <span class="n">// live-by-default</span>
+        <h3>Skills without an approval gate.</h3>
+        <p>Tried in v0.1, removed in v0.2. The security scanner plus OSV check on install are the real gate. Auto-injected into the system prompt.</p>
+        <span class="tag">skills</span>
+      </div>
+      <div class="cell">
+        <span class="n">// read-only research</span>
+        <h3>One sub-agent role, not a mesh.</h3>
+        <p><span class="mono" style="color:var(--fg)">research(brief, depth)</span> spawns a read-only worker with its own context. Returns a synthesised report — main agent never sees the trace.</p>
+        <span class="tag">quick · normal · deep</span>
+      </div>
+      <div class="cell">
+        <span class="n">// honesty</span>
+        <h3>We respect every provider's ToS.</h3>
+        <p>Zero reversed OAuth against any vendor's first-party subscription client. You use your own API keys — the cost is honest, per-token, and visible.</p>
+        <span class="tag">no subscription routing</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- QUICKSTART -->
+<section id="quickstart">
+  <div class="shell">
+    <div class="eyebrow">02 / quickstart</div>
+    <h2>Ten minutes, end to end.</h2>
+    <p class="sub">
+      Install. Pick a model. Pin a workspace. Send a message. Connect a gateway if you want 24/7 messaging. Add a profile if you want isolation. Link machines over ALP if you want a mesh. All of it lives behind <span class="mono" style="color:var(--fg)">alpi setup</span>.
+    </p>
+
+    <div class="grid c3" style="margin-top:64px">
+      <div class="cell">
+        <span class="n">step · 01</span>
+        <h3>Install.</h3>
+        <p><span class="mono" style="color:var(--fg)">uv tool install alpi</span>. Python ≥ 3.10. Optional: <span class="mono" style="color:var(--fg)">playwright install chromium</span> (~200 MB) for the <span class="mono" style="color:var(--fg)">browser</span> tool.</p>
+      </div>
+      <div class="cell">
+        <span class="n">step · 02</span>
+        <h3>Pick a model.</h3>
+        <p><span class="mono" style="color:var(--fg)">alpi setup → Model / Provider</span>. Fresh profiles ship with no default — you choose the provider, paste the key, pick the model. See <a href="docs/MODELS.html" style="color:var(--fg)">MODELS.md</a> for tiered guidance.</p>
+      </div>
+      <div class="cell">
+        <span class="n">step · 03</span>
+        <h3>Pin a workspace.</h3>
+        <p>Same wizard, <span class="mono" style="color:var(--fg)">Workspace</span>. Point it at the dir alpi may read/write. Fallback is <span class="mono" style="color:var(--fg)">cwd</span> at launch, with a warning — fine for trying, not for real use.</p>
+      </div>
+      <div class="cell">
+        <span class="n">step · 04</span>
+        <h3>Send a message.</h3>
+        <p>Run <span class="mono" style="color:var(--fg)">alpi</span>. Type <span class="mono" style="color:var(--fg)">hola</span>. Useful first slash commands: <span class="mono" style="color:var(--fg)">/help · /memory · /skills · /status · /new · /model</span>.</p>
+      </div>
+      <div class="cell">
+        <span class="n">step · 05</span>
+        <h3>Resume where you left off.</h3>
+        <p><span class="mono" style="color:var(--fg)">alpi -c</span> rehydrates the last session. To make it implicit, flip <span class="mono" style="color:var(--fg)">tui.auto_resume</span> in <span class="mono" style="color:var(--fg)">config.yaml</span>.</p>
+      </div>
+      <div class="cell">
+        <span class="n">step · 06</span>
+        <h3>Connect a gateway.</h3>
+        <p><span class="mono" style="color:var(--fg)">alpi setup → Gateways</span> then <span class="mono" style="color:var(--fg)">Gateway service → Install</span>. alpi now answers Telegram / IMAP / Gmail 24/7, with per-chat session threading.</p>
+      </div>
+      <div class="cell">
+        <span class="n">step · 07</span>
+        <h3>Add a second profile.</h3>
+        <p><span class="mono" style="color:var(--fg)">alpi profile create work</span> · <span class="mono" style="color:var(--fg)">alpi -p work setup</span>. Different API key, different memory, different bot, different identity. Fully isolated under <span class="mono" style="color:var(--fg)">~/.alpi/profiles/work/</span>.</p>
+      </div>
+      <div class="cell">
+        <span class="n">step · 08</span>
+        <h3>Link another alpi.</h3>
+        <p><span class="mono" style="color:var(--fg)">alpi setup → ALP service → Install</span> then <span class="mono" style="color:var(--fg)">→ Peers</span> to exchange pubkeys. See <a href="#deployments" style="color:var(--fg)">deployments</a> for the six topologies.</p>
+      </div>
+      <div class="cell">
+        <span class="n">step · 09</span>
+        <h3>Check health.</h3>
+        <p><span class="mono" style="color:var(--fg)">alpi doctor</span>. Live checks: model reachable, gateways logged in, MCP handshaking, services alive, ALP socket listening, peers reachable. Exits 1 on any failure — cron-friendly.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- IN ACTION -->
+<section id="in-action">
+  <div class="shell">
+    <div class="eyebrow">03 / in action</div>
+    <h2>What it looks like, day to day.</h2>
+    <p class="sub">
+      Not a framework. Not a harness. A terminal companion that remembers you, executes, and — with ALP — talks to your other machines without a hub in the middle.
+    </p>
+
+    <div class="grid c2" style="margin-top:64px">
+      <div class="cell">
+        <span class="n">// memory across sessions</span>
+        <h3>It remembers what matters.</h3>
+        <pre class="mini-term" style="margin-top:14px;background:#0f0f0e;border:1px solid var(--line);border-radius:4px;padding:14px 16px;font-size:12.5px;line-height:1.55;color:var(--muted);overflow:auto"><span style="color:#d8d8d4">you</span> › my partner's birthday is march 14th
+<span style="color:#b8b8b4">alpi</span> › noted. added to MEMORY.md.
+…
+<span style="color:#7a7a76"># three weeks later, fresh session</span>
+<span style="color:#d8d8d4">you</span> › anything coming up this month worth planning?
+<span style="color:#b8b8b4">alpi</span> › yes — her birthday on the 14th. want me to draft a plan?</pre>
+      </div>
+
+      <div class="cell">
+        <span class="n">// live skills</span>
+        <h3>Drop a folder. It's a new capability.</h3>
+        <pre class="mini-term" style="margin-top:14px;background:#0f0f0e;border:1px solid var(--line);border-radius:4px;padding:14px 16px;font-size:12.5px;line-height:1.55;color:var(--muted);overflow:auto"><span style="color:#7a7a76">~/.alpi/skills/</span>
+  finance/
+    SKILL.md          <span style="color:#7a7a76"># when to invoke</span>
+    scripts/fetch.py
+    references/ledger.md
+
+<span style="color:#d8d8d4">you</span> › how much did i spend on groceries last month?
+<span style="color:#b8b8b4">alpi</span> › → skill(finance) → fetch.py → €412.80 across 23 tx</pre>
+      </div>
+
+      <div class="cell">
+        <span class="n">// alp · peer-to-peer</span>
+        <h3>Ask your other machine to do it.</h3>
+        <pre class="mini-term" style="margin-top:14px;background:#0f0f0e;border:1px solid var(--line);border-radius:4px;padding:14px 16px;font-size:12.5px;line-height:1.55;color:var(--muted);overflow:auto"><span style="color:#7a7a76"># on the laptop</span>
+<span style="color:#d8d8d4">you</span> › ask nas to pull the latest logs and tell me what's odd
+<span style="color:#b8b8b4">alpi</span> › → link.ask(peer=nas, brief=…)
+         ← 3 auth failures from 185.220.x at 03:14 UTC.
+         consistent with a credential-stuffing probe.</pre>
+      </div>
+
+      <div class="cell">
+        <span class="n">// reachable anywhere</span>
+        <h3>Reach it from the messenger you already open.</h3>
+        <pre class="mini-term" style="margin-top:14px;background:#0f0f0e;border:1px solid var(--line);border-radius:4px;padding:14px 16px;font-size:12.5px;line-height:1.55;color:var(--muted);overflow:auto"><span style="color:#7a7a76"># from your phone, 400km away</span>
+<span style="color:#d8d8d4">you</span> › did the backup run tonight?
+<span style="color:#b8b8b4">alpi</span> › ✓ 02:11 UTC, 184GB, ok.
+         previous 7 days also clean.
+
+<span style="color:#7a7a76"># fail-closed allowlist; unknown senders drop silently</span></pre>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- DEPLOYMENTS -->
+<section id="deployments">
+  <div class="shell">
+    <div class="eyebrow">04 / deployments</div>
+    <h2>Six topologies. Pick the closest.</h2>
+    <p class="sub">
+      alpi is designed to scale from one laptop to an enterprise "army of alpis", without ever needing a central server. Each shape is a reference you can adapt — profiles provide identity, ALP provides the wire.
+    </p>
+
+    <div class="grid c2" style="margin-top:64px">
+      <div class="cell" style="padding:36px">
+        <span class="n">topology · 01</span>
+        <h3>Laptop only.</h3>
+        <p>One profile, one machine, TUI for chat. Optional gateway daemon for 24/7 Telegram / IMAP / Gmail. Zero ALP. The baseline — 90% of individual users stop here.</p>
+        <p style="margin-top:12px"><span class="mono" style="color:#7fb069">free · BSL personal use</span></p>
+      </div>
+      <div class="cell" style="padding:36px">
+        <span class="n">topology · 02</span>
+        <h3>Laptop + home server.</h3>
+        <p>Heavy work (schedules, long research, cron) on the home server; interactive chat on the laptop. Linked via ALP.2 over Tailscale. Each pins the other's pubkey; capabilities narrow per peer.</p>
+        <p style="margin-top:12px"><span class="mono" style="color:#7fb069">free · BSL personal use</span></p>
+      </div>
+      <div class="cell" style="padding:36px">
+        <span class="n">topology · 03</span>
+        <h3>One machine, many profiles.</h3>
+        <p>The "army of alpis" starter kit on a single host. <span class="mono" style="color:var(--fg)">assistant</span> (daily driver) + <span class="mono" style="color:var(--fg)">researcher</span> (deep-research role) + <span class="mono" style="color:var(--fg)">cron</span> (scheduled jobs). Intra-machine ALP = Unix-domain sockets, mode 0600.</p>
+        <p style="margin-top:12px"><span class="mono" style="color:#7fb069">free · BSL personal use</span></p>
+      </div>
+      <div class="cell" style="padding:36px">
+        <span class="n">topology · 04</span>
+        <h3>Multi-device personal.</h3>
+        <p>Your alpis follow you across devices — laptop, desktop, phone (Termux / iSH) — over a Tailscale mesh. Every device pins every other. Losing a device means dropping its pubkey from every <span class="mono" style="color:var(--fg)">peers.yaml</span>.</p>
+        <p style="margin-top:12px"><span class="mono" style="color:#7fb069">free · BSL personal use</span></p>
+      </div>
+      <div class="cell" style="padding:36px">
+        <span class="n">topology · 05</span>
+        <h3>Family / small team.</h3>
+        <p>One profile per human, plus a home-server hub. ALP.3 rooms: the hub holds the group key + transcript, members post via <span class="mono" style="color:var(--fg)">room.post</span>. Agents inside the room act within their per-member budget. Ships in ALP.3 (v0.4).</p>
+        <p style="margin-top:12px"><span class="mono" style="color:#7fb069">free · BSL personal use</span></p>
+      </div>
+      <div class="cell" style="padding:36px">
+        <span class="n">topology · 06</span>
+        <h3>Enterprise — army of alpis.</h3>
+        <p>Per-employee profiles, mesh linked over corporate Tailscale. Shared services (<span class="mono" style="color:var(--fg)">research-bot</span>, <span class="mono" style="color:var(--fg)">tools-bot</span>) as pinned peers with narrow capabilities. Central log + approval audit hub. Company policy pushes sandbox on.</p>
+        <p style="margin-top:12px"><span class="mono" style="color:#a89b76">commercial licence from Satoshi Ltd.</span></p>
+      </div>
+    </div>
+
+    <pre class="ascii-diagram" style="margin-top:64px;font-size:12.5px;line-height:1.55;max-width:920px">
+<span class="muted">topology · 06 · enterprise mesh</span>
+
+<span class="muted">┌──────────────────────────────────────────────────────────────┐</span>
+<span class="muted">│ corporate Tailscale network                                  │</span>
+<span class="muted">│                                                              │</span>
+<span class="muted">│  ┌──────┐  ┌──────┐  ┌──────┐  ┌──────┐  ┌──────┐            │</span>
+<span class="muted">│  │</span>Jane  <span class="muted">│  │</span>Raj   <span class="muted">│  │</span>Mia   <span class="muted">│  │</span>Léa   <span class="muted">│  │</span>… N  <span class="muted">│            │</span>
+<span class="muted">│  │</span>alpi  <span class="muted">│  │</span>alpi  <span class="muted">│  │</span>alpi  <span class="muted">│  │</span>alpi  <span class="muted">│  │</span>      <span class="muted">│            │</span>
+<span class="muted">│  └──┬───┘  └──┬───┘  └──┬───┘  └──┬───┘  └──┬───┘            │</span>
+<span class="muted">│     └─────────┴─────────┴─────────┴─────────┘                │</span>
+<span class="muted">│                       │                                      │</span>
+<span class="muted">│              ┌────────┴─────────┐                            │</span>
+<span class="muted">│    ┌─────────▼──────┐    ┌──────▼─────────┐                  │</span>
+<span class="muted">│    │</span> <span class="accent">research-bot</span>   <span class="muted">│    │</span> <span class="accent">tools-bot</span>      <span class="muted">│                  │</span>
+<span class="muted">│    │</span> (shared, RO)   <span class="muted">│    │</span> (HR, calendar, <span class="muted">│                  │</span>
+<span class="muted">│    │</span>                <span class="muted">│    │</span>  narrow budget)<span class="muted">│                  │</span>
+<span class="muted">│    └────────────────┘    └────────────────┘                  │</span>
+<span class="muted">│                                                              │</span>
+<span class="muted">│              ┌───────────────────┐                           │</span>
+<span class="muted">│              │</span> <span class="accent">audit + log hub</span>   <span class="muted">│</span>  agent.log + approval.log
+<span class="muted">│              │</span> (SIEM forwarder) <span class="muted">│</span>  shipped to your SIEM
+<span class="muted">│              └───────────────────┘                           │</span>
+<span class="muted">└──────────────────────────────────────────────────────────────┘</span>
+
+<span class="muted">out of scope, deliberately —</span>
+  · SSO / SAML / OIDC for human access         <span class="muted">(belongs at Tailscale / OS)</span>
+  · centralised secret management               <span class="muted">(wire Vault via MCP)</span>
+  · federation with non-alpi agents             <span class="muted">(ALP is closed — use MCP)</span>
+</pre>
+
+    <p class="sub" style="margin-top:40px;max-width:720px">
+      <strong style="color:var(--fg);font-weight:500">Licence boundary.</strong> Topologies 1–5 are <em style="color:var(--fg);font-style:normal;font-weight:500">personal / non-production use by individuals</em> and are free under BSL 1.1. Topology 6 — production deployment inside a legal entity — requires a commercial licence from Satoshi Ltd. (<a href="mailto:info@satoshi-ltd.com" style="color:var(--fg);border-bottom:1px solid var(--dim)">info@satoshi-ltd.com</a>). Full text in <a href="#license" style="color:var(--fg);border-bottom:1px solid var(--dim)">§license</a>.
+    </p>
+  </div>
+</section>
+
+<!-- ALP PROTOCOL -->
+<section id="alp">
+  <div class="shell">
+    <div class="eyebrow">05 / alp · new in v0.3</div>
+    <h2>A closed protocol for agent-to-agent links.</h2>
+    <p class="sub">
+      ALP (Alpi Link Protocol) connects alpi instances — same machine, different machines, or a shared room — without a hub, a registry, or a discovery service. End-to-end encrypted, pinned pubkeys, fail-closed capabilities. Purpose-built, not open-federation.
+    </p>
+
+    <div class="grid c3" style="margin-top:64px">
+      <div class="cell">
+        <span class="n">identity</span>
+        <h3>One Ed25519 key per profile.</h3>
+        <p>Every envelope is signed. Peer lists pin a pubkey — not a hostname, not a trust-on-first-use cert. Unknown peer, dropped at the transport layer before the payload is parsed.</p>
+      </div>
+      <div class="cell">
+        <span class="n">transport</span>
+        <h3>Unix socket, or Noise_XK over TCP.</h3>
+        <p>Intra-machine: <span class="mono" style="color:var(--fg)">alp.sock</span> mode 0600. Inter-machine: Noise_XK handshake + ChaCha20-Poly1305. Forward-secret session keys. No TLS, no PKI, no CA to trust.</p>
+      </div>
+      <div class="cell">
+        <span class="n">verbs</span>
+        <h3>Three core methods.</h3>
+        <p><span class="mono" style="color:var(--fg)">link.ping</span> — liveness. <span class="mono" style="color:var(--fg)">link.ask</span> — runs a full agent turn on the target peer, using <em>its</em> memory, skills, and tools. <span class="mono" style="color:var(--fg)">link.cancel</span> — interrupt. No introspection. No federation.</p>
+      </div>
+      <div class="cell">
+        <span class="n">capabilities</span>
+        <h3>Fail-closed per peer.</h3>
+        <p>Every peer lists an <span class="mono" style="color:var(--fg)">allow:</span> array of methods it may invoke. Not listed, not allowed. Daily budgets in tokens or USD. Rate limits per minute.</p>
+      </div>
+      <div class="cell">
+        <span class="n">rooms</span>
+        <h3>Multi-party, hub-anchored.</h3>
+        <p>N agents share a workspace with a stable group key. One hub holds the transcript. No replication, no consensus re-election — host the hub on an always-on machine.</p>
+      </div>
+      <div class="cell">
+        <span class="n">reentrancy</span>
+        <h3>Reject fast, never queue.</h3>
+        <p>A second <span class="mono" style="color:var(--fg)">link.ask</span> on an already-running session returns <span class="mono" style="color:var(--fg)">-32007 target-busy</span>. The caller retries with jittered backoff. No deadlock class.</p>
+      </div>
+    </div>
+
+    <pre class="ascii-diagram" style="margin-top:64px;font-size:12.5px;line-height:1.55;max-width:860px">
+<span class="muted">peer A (laptop)                                   peer B (home-server)</span>
+<span class="muted">┌──────────────────────────────────┐                 ┌─────────────────────────────────┐</span>
+<span class="muted">│</span> alpi profile=personal          <span class="muted">│</span>                 <span class="muted">│</span> alpi profile=nas              <span class="muted">│</span>
+<span class="muted">│</span>   key: ed25519 <span class="accent">(pinned → B)</span>   <span class="muted">│</span>                 <span class="muted">│</span>   key: ed25519 <span class="accent">(pinned → A)</span>   <span class="muted">│</span>
+<span class="muted">└─────────────┬─────────────────┘                 └─────────────┬─────────────────┘</span>
+              <span class="muted">│</span>                                     <span class="muted">│</span>
+              <span class="muted">└─── Noise_XK ─── ChaCha20-Poly1305 ───┘</span>
+                           <span class="accent">TCP :7423</span>
+
+<span class="muted">envelope</span>  { jsonrpc, id, method, params,
+            alp: { v, from, to, ts, nonce, <span class="accent">sig</span> } }
+
+<span class="muted">verbs</span>     link.ping   · liveness + version
+          link.ask    · run full agent turn on peer
+          link.cancel · interrupt session
+</pre>
+
+    <p class="sub" style="margin-top:40px;max-width:680px">
+      <strong style="color:var(--fg);font-weight:500">What ALP is not.</strong> It's not an open federation protocol. It does not aim to interoperate with third-party agents. It does not anonymise traffic. It does not defend against a compromised endpoint. Scope is deliberately narrow — that's what keeps the attack surface narrow and the spec auditable end to end.
+    </p>
+  </div>
+</section>
+
+<!-- PRINCIPLES (Satoshi Ltd.) -->
+<section id="principles">
+  <div class="shell">
+    <div class="eyebrow">06 / principles</div>
+    <h2>Inherited from Satoshi Ltd.</h2>
+    <p class="sub">
+      alpi is published by <a href="https://www.satoshi-ltd.com/" style="color:var(--fg);border-bottom:1px solid var(--dim)">Satoshi Ltd.</a> and inherits its six operating principles. They aren't aspirational copy — every non-obvious design choice in the repo traces back to one of these.
+    </p>
+
+    <div class="grid c3" style="margin-top:64px">
+      <div class="cell">
+        <span class="n">principle · 01</span>
+        <h3>Privacy by Design.</h3>
+        <p>No discovery. No registry. No telemetry. LiteLLM's default telemetry is audited off at release — regression-tested. ALP is a closed protocol by construction: every exposed knob is a potential attack vector.</p>
+      </div>
+      <div class="cell">
+        <span class="n">principle · 02</span>
+        <h3>User Sovereignty.</h3>
+        <p>Per-profile isolation under <span class="mono" style="color:var(--fg)">~/.alpi/profiles/&lt;name&gt;/</span>. Fresh profiles ship with no default model — you pick your provider, your model, your memory. Skills and memory live on your disk, not ours.</p>
+      </div>
+      <div class="cell">
+        <span class="n">principle · 03</span>
+        <h3>Security First.</h3>
+        <p>Threat-modeled from the spec. Ed25519 signing on every ALP envelope, fail-closed capability model, reject-fast reentrancy, approval gate on shell, OSV check before installing skills or MCPs, <span class="mono" style="color:var(--fg)">pip-audit</span> in the release checklist.</p>
+      </div>
+      <div class="cell">
+        <span class="n">principle · 04</span>
+        <h3>Open Source.</h3>
+        <p>Source-available under <span class="mono" style="color:var(--fg)">BSL 1.1</span>. Reproducible via <span class="mono" style="color:var(--fg)">uv.lock</span>. No hidden binaries. Converts to Apache 2.0 on the Change Date (2030-04-23). Free for individuals and non-production use.</p>
+      </div>
+      <div class="cell">
+        <span class="n">principle · 05</span>
+        <h3>Zero Knowledge.</h3>
+        <p>No trust-on-first-use. Peers exchange pubkeys out of band and pin them. ALP.2's Noise_XK handshake produces forward-secret session keys — losing a long-term key doesn't unlock past traffic.</p>
+      </div>
+      <div class="cell">
+        <span class="n">principle · 06</span>
+        <h3>Digital Sovereignty.</h3>
+        <p>Ollama is a first-class provider. Skills and sub-agents run locally. Wire alpi up on a laptop, a home server, and a remote box, link them via ALP, and never depend on a centralised service.</p>
+      </div>
+    </div>
+
+    <p class="sub" style="margin-top:56px;max-width:680px">
+      The design heuristic that pulls these together — borrowed from Satoshi's Clonara — is <em style="color:var(--fg);font-style:normal;font-weight:500">“constraint breeds coherence”</em>. Closed scope, small verb set, one transport per environment, no generic framework.
+    </p>
+  </div>
+</section>
+
+<!-- LICENSE (summary → docs) -->
+<section id="license">
+  <div class="shell">
+    <div class="eyebrow">07 / license</div>
+    <h2>Free for individuals. Paid for commercial production.</h2>
+    <p class="sub">
+      Source-available under <strong style="color:var(--fg);font-weight:500">BSL 1.1</strong> by Satoshi Ltd., converting to <strong style="color:var(--fg);font-weight:500">Apache 2.0 on 2030-04-23</strong>. Individuals, research, and non-production use are free. Companies deploying to production need a commercial licence. The Alpi Link Protocol itself ships under Apache-2.0 so third parties can implement interoperable nodes.
+    </p>
+
+    <div class="grid c2" style="margin-top:48px">
+      <a class="cell" href="docs/LICENSE.html" style="padding:32px;display:block;transition:.2s;color:var(--fg);text-decoration:none">
+        <span class="n">full terms</span>
+        <h3 style="color:var(--fg)">LICENSE →</h3>
+        <p style="color:var(--muted)">BSL 1.1 split, Change Date, individuals vs companies, the Alpi Link Protocol exception.</p>
+      </a>
+      <div class="cell" style="padding:32px">
+        <span class="n">commercial licence</span>
+        <h3>Talk to Satoshi Ltd.</h3>
+        <p>Production deployment by a company, or offering alpi as a hosted / embedded service — <a href="mailto:info@satoshi-ltd.com" style="color:var(--fg);border-bottom:1px solid var(--dim);font-family:'JetBrains Mono',monospace;font-size:13px">info@satoshi-ltd.com</a></p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- INSTALL -->
+<section id="install">
+  <div class="shell">
+    <div class="eyebrow">08 / install</div>
+    <h2>Four commands. No account.</h2>
+
+    <pre class="ascii-diagram" style="margin-top:56px;font-size:14px;line-height:1.8;max-width:780px">
+<span class="muted"># 1. install from PyPI (uv recommended, pip also works)</span>
+$ uv tool install alpi
+
+<span class="muted"># 2. configure the default profile (model + .env + workspace)</span>
+$ alpi setup
+
+<span class="muted"># 3. chat</span>
+$ alpi
+
+<span class="muted"># 4. check health</span>
+$ alpi doctor
+
+<span class="muted"># later — add a second profile, fully isolated</span>
+$ alpi profile create work
+$ alpi -p work setup
+</pre>
+
+    <p class="sub" style="margin-top:48px">
+      alpi needs Python ≥ 3.10. The default profile lives in <span class="mono" style="color:var(--fg)">~/.alpi/</span>. Additional profiles in <span class="mono" style="color:var(--fg)">~/.alpi/profiles/&lt;name&gt;/</span>. No account, no central server, no telemetry — your <span class="mono" style="color:var(--fg)">.env</span> is the single source of truth for secrets. Source-available under <span class="mono" style="color:var(--fg)">BSL 1.1</span>; converts to Apache 2.0 on 2030-04-23. Commercial production deployment → <a href="#license" style="color:var(--fg)">§license</a>.
+    </p>
+  </div>
+</section>
+
+<!-- DOCS -->
+<section id="docs">
+  <div class="shell">
+    <div class="eyebrow">09 / documentation</div>
+    <h2>Live. In the repo. Auditable.</h2>
+    <p class="sub">Each doc is a reference of something that already ships — historical decisions live in commits, planned work in the ROADMAP.</p>
+
+    <!-- DOCS_GRID_PLACEHOLDER -->
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="shell">
+    <div class="row">
+      <div>
+        <h5>Product</h5>
+        <ul>
+          <li><a href="#what">What alpi is</a></li>
+          <li><a href="#quickstart">Quickstart</a></li>
+          <li><a href="#deployments">Deployments</a></li>
+          <li><a href="#alp">ALP protocol</a></li>
+          <li><a href="#install">Install</a></li>
+        </ul>
+      </div>
+      <div>
+        <h5>Engineering</h5>
+        <ul>
+          <li><a href="security.html">Security</a></li>
+          <li><a href="docs/ARCHITECTURE.html">Architecture</a></li>
+          <li><a href="docs/index.html?file=docs/OPERATIONS.md">Operations</a></li>
+          <li><a href="docs/MODELS.html">Models</a></li>
+          <li><a href="docs/index.html?file=docs/PROFILES.md">Profiles</a></li>
+        </ul>
+      </div>
+      <div>
+        <h5>Docs</h5>
+        <ul>
+          <li><a href="docs/index.html?file=QUICKSTART.md">QUICKSTART</a></li>
+          <li><a href="docs/index.html?file=docs/PROFILES.md">PROFILES</a></li>
+          <li><a href="docs/index.html?file=docs/DEPLOYMENTS.md">DEPLOYMENTS</a></li>
+          <li><a href="docs/index.html?file=docs/OPERATIONS.md">OPERATIONS</a></li>
+          <li><a href="docs/index.html?file=docs/ALP.md">ALP spec</a></li>
+          <li><a href="docs/ARCHITECTURE.html">ARCHITECTURE</a></li>
+          <li><a href="docs/SECURITY.html">SECURITY</a></li>
+        </ul>
+      </div>
+      <div>
+        <h5>Meta</h5>
+        <ul>
+          <li><a href="#license">Licence · BSL 1.1</a></li>
+          <li><a href="mailto:info@satoshi-ltd.com">Commercial licence</a></li>
+          <li><a href="https://www.satoshi-ltd.com/">Satoshi Ltd.</a></li>
+          <li><a href="docs/index.html?file=docs/CHANGELOG.md">CHANGELOG</a></li>
+          <li><a href="docs/index.html?file=docs/ROADMAP.md">ROADMAP</a></li>
+          <li><a href="https://github.com/soyjavi">@soyjavi</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="sig">
+      <div>v0.2.70 · BSL 1.1 → Apache 2.0 (2030-04-23) · no telemetry</div>
+      <div>constraint breeds coherence</div>
+    </div>
+    <span class="big">alpi</span>
+  </div>
+</footer>
+
+<!-- BG controls -->
+<div class="bg-ctrl" role="group" aria-label="ascii background">
+  <span style="padding:2px 6px">ascii bg</span>
+  <button data-mode="flow" class="on">flow</button>
+  <button data-mode="rain">rain</button>
+  <button data-mode="wave">wave</button>
+  <button data-mode="off">off</button>
+</div>
+
+<script>
+  /* Burger toggle (mobile only — hidden above 760px) */
+  (function(){
+    const burger = document.querySelector('.burger');
+    const drawer = document.getElementById('nav-drawer');
+    if (!burger || !drawer) return;
+    function setOpen(open){
+      burger.setAttribute('aria-expanded', String(open));
+      if (open) { drawer.hidden = false; drawer.dataset.open = 'true'; }
+      else      { drawer.hidden = true;  delete drawer.dataset.open; }
+    }
+    burger.addEventListener('click', () => {
+      setOpen(burger.getAttribute('aria-expanded') !== 'true');
+    });
+    drawer.addEventListener('click', (e) => {
+      if (e.target.tagName === 'A') setOpen(false);
+    });
+  })();
+
+  /* ============================================================
+     ASCII BACKGROUND ENGINE
+     ============================================================ */
+  (function(){
+    const pre = document.getElementById('ascii-pre');
+    const host = document.getElementById('ascii-bg');
+    let cols = 0, rows = 0, charW = 7.2, charH = 12;
+    let mode = 'flow';
+    let t = 0;
+    let running = true;
+    const chars = " ·⋅∙•◦◌◍⚬○◎◉+*-~=/\\|".split('');
+    const rainChars = "abcdefghijklmnopqrstuvwxyz0123456789$#@%&*+=-/\\|αβγδεζηθικλμνξπρστυφχψωALPI".split('');
+
+    function measure(){
+      // measure a canary
+      const canary = document.createElement('span');
+      canary.style.cssText = 'visibility:hidden;position:absolute;font-family:"JetBrains Mono",monospace;font-size:12px;line-height:12px;white-space:pre;';
+      canary.textContent = 'M'.repeat(100);
+      document.body.appendChild(canary);
+      charW = canary.getBoundingClientRect().width / 100;
+      charH = 12;
+      canary.remove();
+      cols = Math.ceil(window.innerWidth / charW) + 2;
+      rows = Math.ceil(window.innerHeight / charH) + 2;
+    }
+
+    // rain state
+    let drops = [];
+    function initRain(){
+      drops = new Array(cols).fill(0).map(()=>({
+        y: Math.random()*rows,
+        speed: 0.2 + Math.random()*0.6,
+        len: 6 + Math.floor(Math.random()*18),
+        c: rainChars[Math.floor(Math.random()*rainChars.length)],
+      }));
+    }
+
+    function renderFlow(){
+      // curl-noise-ish field: pseudo-noise using sin/cos combos
+      const buf = new Array(rows);
+      for (let y=0; y<rows; y++){
+        let line = '';
+        for (let x=0; x<cols; x++){
+          const nx = x*0.06;
+          const ny = y*0.11;
+          const v =
+              Math.sin(nx + t*0.008) +
+              Math.cos(ny*1.3 - t*0.005) +
+              Math.sin((nx+ny)*0.7 + t*0.012) +
+              Math.cos(Math.sqrt(nx*nx+ny*ny)*0.9 - t*0.01);
+          const norm = (v + 4) / 8; // 0..1
+          const idx = Math.max(0, Math.min(chars.length-1, Math.floor(norm * chars.length)));
+          line += chars[idx];
+        }
+        buf[y] = line;
+      }
+      return buf.join('\n');
+    }
+
+    function renderWave(){
+      const buf = [];
+      for (let y=0; y<rows; y++){
+        let line = '';
+        for (let x=0; x<cols; x++){
+          const d = Math.sin((x*0.12) + (y*0.05) + t*0.02) * 2
+                  + Math.sin((x*0.03) - (y*0.09) - t*0.015) * 2;
+          const norm = (d + 4) / 8;
+          const pick = chars[Math.max(0, Math.min(chars.length-1, Math.floor(norm * chars.length)))];
+          line += pick;
+        }
+        buf.push(line);
+      }
+      return buf.join('\n');
+    }
+
+    function renderRain(){
+      // build matrix
+      const grid = [];
+      for (let y=0; y<rows; y++) grid.push(new Array(cols).fill(' '));
+      for (let x=0; x<cols; x++){
+        const d = drops[x];
+        d.y += d.speed;
+        if (d.y - d.len > rows){
+          d.y = -Math.random()*10;
+          d.speed = 0.15 + Math.random()*0.55;
+          d.len = 4 + Math.floor(Math.random()*20);
+          d.c = rainChars[Math.floor(Math.random()*rainChars.length)];
+        }
+        for (let k=0; k<d.len; k++){
+          const yy = Math.floor(d.y - k);
+          if (yy>=0 && yy<rows){
+            const ch = (Math.random() < 0.08)
+              ? rainChars[Math.floor(Math.random()*rainChars.length)]
+              : d.c;
+            grid[yy][x] = ch;
+          }
+        }
+      }
+      return grid.map(r=>r.join('')).join('\n');
+    }
+
+    let raf;
+    function loop(){
+      if (!running) return;
+      t += 1;
+      let out;
+      if (mode === 'flow') out = renderFlow();
+      else if (mode === 'wave') out = renderWave();
+      else if (mode === 'rain') out = renderRain();
+      pre.textContent = out || '';
+      raf = requestAnimationFrame(loop);
+    }
+
+    function start(){
+      cancelAnimationFrame(raf);
+      running = true;
+      measure();
+      if (mode === 'rain') initRain();
+      loop();
+    }
+    function stop(){
+      running = false;
+      cancelAnimationFrame(raf);
+      pre.textContent = '';
+    }
+
+    // resize
+    let resizeT;
+    window.addEventListener('resize', ()=>{
+      clearTimeout(resizeT);
+      resizeT = setTimeout(()=>{
+        measure();
+        if (mode === 'rain') initRain();
+      }, 150);
+    });
+
+    // controls
+    document.querySelectorAll('.bg-ctrl button').forEach(b=>{
+      b.addEventListener('click', ()=>{
+        const next = b.dataset.mode;
+        document.querySelectorAll('.bg-ctrl button').forEach(x=>x.classList.toggle('on', x===b));
+        if (next === 'off'){
+          mode = 'off'; stop();
+        } else {
+          mode = next;
+          if (!running) start(); else if (mode==='rain') initRain();
+        }
+      });
+    });
+
+    // lower opacity when scrolling fast? just ensure perf — throttle animation when tab hidden
+    document.addEventListener('visibilitychange', ()=>{
+      if (document.hidden){ stop(); }
+      else if (mode !== 'off'){ start(); }
+    });
+
+    start();
+  })();
+
+  /* ============================================================
+     TERMINAL TYPE-OUT
+     ============================================================ */
+  (function(){
+    const el = document.getElementById('termBody');
+    const lines = [
+      {t:'<span class="muted">alpi v0.2.70  ·  profile personal  ·  sandbox off  ·  ~/git/alpi</span>'},
+      {t:''},
+      {t:'<span class="prompt">▷</span> <span class="user">what did i ship in alpi this week?</span>'},
+      {t:'<span class="muted">» searching sessions + CHANGELOG for recent work…</span>'},
+      {t:'<span class="diamond">◆</span> <span class="tool">session_search · query "alpi"</span>   <span class="muted">14 matches · 0.4s</span>'},
+      {t:'<span class="diamond">◆</span> <span class="tool">read_file · ~/git/alpi/docs/CHANGELOG.md</span>   <span class="muted">18.2k · 0.1s</span>'},
+      {t:'<span class="diamond">◆</span> <span class="tool">terminal · git log --since="7 days ago" --oneline</span>   <span class="muted">23 commits · 0.3s</span>'},
+      {t:''},
+      {t:'<span class="bot">This week:</span>'},
+      {t:'<span class="bot">  · v0.2.68 — ALP.1 (Unix socket) shipped. <span class="mono">peer</span> tool live;</span>'},
+      {t:'<span class="bot">    <span class="mono">@peer …</span> TUI gesture and <span class="mono">alpi setup → Peers</span> wizard.</span>'},
+      {t:'<span class="bot">  · v0.2.69 — MODELS.md rebuilt neutral 3-tier; fresh profiles</span>'},
+      {t:'<span class="bot">    no longer pin a default model (setup wizard is canonical).</span>'},
+      {t:'<span class="bot">  · v0.2.70 — re-licensed under <span class="mono">BSL 1.1</span>; new QUICKSTART,</span>'},
+      {t:'<span class="bot">    PROFILES, DEPLOYMENTS, OPERATIONS docs.</span>'},
+      {t:''},
+      {t:'<span class="muted">» saving to MEMORY.md that today is 2026-04-23…</span>'},
+      {t:'<span class="diamond">◆</span> <span class="tool">memory · action add</span>   <span class="muted">MEMORY.md +1 entry</span>'},
+      {t:''},
+      {t:'<span class="prompt">▷</span> <span class="user">@nas ping — is the backup daemon healthy?</span>'},
+      {t:'<span class="diamond">◆</span> <span class="tool">peer · peer_id nas · link.ping</span>   <span class="muted">up · 0.08s</span>'},
+      {t:'<span class="diamond">◆</span> <span class="tool">peer · peer_id nas · link.ask</span>   <span class="muted">reply · 1.1s</span>'},
+      {t:'<span class="bot">nas is up. schedule + gateway daemons both healthy; last</span>'},
+      {t:'<span class="bot">backup ran 02:11 UTC, 184 GB, ok. previous 7 days also clean.</span>'},
+      {t:''},
+      {t:'<span class="prompt">▷</span> <span class="user"><span class="cursor"></span></span>'},
+    ];
+    // render instantly (server-like), line by line with tiny stagger for feel
+    el.innerHTML = '';
+    let i = 0;
+    function next(){
+      if (i >= lines.length) return;
+      const div = document.createElement('div');
+      div.innerHTML = lines[i].t || '&nbsp;';
+      el.appendChild(div);
+      i++;
+      const delay = lines[i-1].t.includes('cursor') ? 0
+                  : lines[i-1].t.includes('diamond') ? 120
+                  : lines[i-1].t.includes('user">') ? 260
+                  : 50;
+      setTimeout(next, delay);
+    }
+    // start after small delay so first paint is the layout
+    setTimeout(next, 400);
+  })();
+
+  /* ============================================================
+     REVEAL ON SCROLL
+     ============================================================ */
+  (function(){
+    const els = document.querySelectorAll('section, .cell, .doc, .term, tr, .crow');
+    els.forEach(e=>e.classList.add('reveal'));
+    const io = new IntersectionObserver((entries)=>{
+      entries.forEach(en=>{
+        if (en.isIntersecting){
+          en.target.classList.add('visible');
+          io.unobserve(en.target);
+        }
+      });
+    },{threshold:0.08});
+    els.forEach(e=>io.observe(e));
+  })();
+</script>
+</body>
+</html>

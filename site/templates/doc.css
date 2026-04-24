@@ -1,0 +1,173 @@
+@import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600&display=swap");
+
+:root{
+  --bg:#0a0a0a;
+  --fg:#f2f2f0;
+  --muted:#6a6a66;
+  --dim:#3a3a38;
+  --line:#1c1c1a;
+  --soft:#121210;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:var(--bg);color:var(--fg);font-family:"Space Grotesk",sans-serif;-webkit-font-smoothing:antialiased;min-height:100vh}
+body{overflow-x:hidden}
+.mono{font-family:"JetBrains Mono",ui-monospace,monospace}
+.muted{color:var(--muted)}
+a{color:inherit;text-decoration:none}
+
+#ascii-bg{position:fixed;inset:0;width:100vw;height:100vh;z-index:0;pointer-events:none;display:block}
+.veil{position:fixed;inset:0;z-index:1;pointer-events:none;
+  background:radial-gradient(ellipse at 50% 20%, transparent 0%, rgba(10,10,10,.6) 55%, rgba(10,10,10,.92) 100%);}
+
+/* One wrapper width for nav + /docs + /docs/* so the logo, DOCS title,
+   doc H1s, and card grid all share the same left edge. Prose legibility
+   is protected below by capping .md, .dochead .sub, and .dochead h1. */
+.shell{position:relative;z-index:2;max-width:1240px;margin:0 auto;padding:0 clamp(24px, 5vw, 64px)}
+
+/* Nav — shared across landing + docs. The wrapper gives horizontal
+   breathing room at every viewport; .shell-nav widens the cap so
+   brand + crumbs + CTA never feel centred in a 980px column. */
+nav.top{
+  position:sticky;top:0;z-index:10;
+  backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+  background:rgba(10,10,10,.55);
+  border-bottom:1px solid var(--line);
+}
+nav.top .shell{max-width:1240px}
+nav.top .row{
+  display:flex;align-items:center;justify-content:space-between;
+  padding-top:18px;padding-bottom:18px;gap:24px;
+}
+/* The nav left side is a lockup: brand link + crumb tail as siblings.
+   Nested <a> would be invalid, so the crumbs live outside .brand. */
+.brand-lockup{display:flex;align-items:center;gap:18px;min-width:0}
+.brand{display:inline-flex;align-items:center;color:var(--fg);text-decoration:none;line-height:1}
+.brand .logo{width:94px;height:42px;color:var(--fg);flex-shrink:0;display:block}
+/* Breadcrumb tail — matches the landing nav menu typography
+   (JetBrains Mono, 12px, uppercase) so the header reads as one system. */
+/* Nudged down ~4px so the crumbs sit on the baseline of the "alpi"
+   wordmark inside the logo (the llama sits above it, so the logo's
+   geometric centre is higher than the wordmark centre). */
+.bp-tail{display:inline-flex;align-items:center;gap:14px;line-height:1;margin-top:4px}
+.bp-sep,
+.bp-seg{
+  font-family:"JetBrains Mono",ui-monospace,monospace;
+  font-size:12px;letter-spacing:.04em;text-transform:uppercase;font-weight:400;
+}
+.bp-sep{color:var(--dim)}
+.bp-seg{
+  color:var(--muted);
+  padding:4px 0;border-bottom:1px solid transparent;transition:.15s;
+  text-decoration:none;
+}
+a.bp-seg:hover{color:var(--fg);border-bottom-color:var(--fg)}
+.bp-current{color:var(--fg)}
+/* DOCS crumb — always bold + highlighted (the section label), whether
+   current (on /docs/) or a link back to it (on /docs/*). */
+.bp-docs{color:var(--fg);font-weight:700}
+nav ul{list-style:none;display:flex;gap:22px;font-size:12px;color:var(--muted);font-family:"JetBrains Mono",ui-monospace,monospace;letter-spacing:.04em;text-transform:uppercase}
+nav ul a{color:inherit;text-decoration:none;padding:6px 0;border-bottom:1px solid transparent;transition:.15s}
+nav ul a:hover{color:var(--fg);border-bottom-color:var(--fg)}
+.nav-cta{
+  display:inline-flex;align-items:center;gap:8px;
+  font-family:"JetBrains Mono",monospace;font-size:12px;
+  color:var(--fg);padding:8px 14px;border:1px solid var(--line);border-radius:3px;
+  transition:border-color .2s,background .2s;
+}
+.nav-cta:hover{border-color:var(--fg);background:rgba(255,255,255,.03)}
+@media (max-width:760px){
+  nav ul{display:none}
+  .bp-seg:not(.bp-current){display:none}
+  .bp-sep{display:none}
+  .bp-current{display:inline}
+}
+
+/* Docs-index (wide shell for the landing-style card grid) */
+.shell.shell-wide, main.docs-index{max-width:1240px;padding-top:56px;padding-bottom:140px}
+main.docs-index #docs{padding:0}
+main.docs-index .shell{padding:0;max-width:none}
+.eyebrow{
+  font-family:"JetBrains Mono",ui-monospace,monospace;font-size:11px;color:var(--muted);
+  letter-spacing:.14em;text-transform:uppercase;margin-bottom:24px;
+  display:flex;align-items:center;gap:12px;
+}
+.eyebrow:before{content:"";width:24px;height:1px;background:var(--muted)}
+/* DOCS index title — matches the H1 scale of a single doc page so the
+   landing/doc hierarchy stays consistent (72px, 600 weight, -.035em). */
+main.docs-index h2{font-weight:600;font-size:72px;line-height:.95;letter-spacing:-.035em;margin-bottom:24px;max-width:900px;text-wrap:balance}
+@media (max-width:760px){main.docs-index h2{font-size:clamp(44px, 10vw, 56px)}}
+main.docs-index p.sub{font-size:18px;color:var(--muted);max-width:680px;line-height:1.55;text-wrap:pretty}
+.docs{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line);margin-top:48px;border:1px solid var(--line)}
+@media(max-width:1080px){.docs[style*="repeat(4,1fr)"]{grid-template-columns:repeat(3,1fr) !important}}
+@media(max-width:860px){.docs, .docs[style*="repeat(4,1fr)"]{grid-template-columns:repeat(2,1fr) !important}}
+@media(max-width:560px){.docs, .docs[style*="repeat(4,1fr)"]{grid-template-columns:1fr !important}}
+.docs .doc{background:var(--bg);padding:36px;text-decoration:none;color:var(--fg);display:flex;flex-direction:column;gap:14px;min-height:240px;transition:background .2s}
+.docs .doc:hover{background:rgba(255,255,255,.02)}
+.docs .doc .ix{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:11px;color:var(--muted)}
+.docs .doc h4{font-weight:600;font-size:22px;letter-spacing:-0.01em;color:var(--fg)}
+.docs .doc p{color:var(--muted);font-size:14px;line-height:1.5}
+.docs .doc .go{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:12px;color:var(--muted);margin-top:auto;display:flex;gap:8px;align-items:center}
+.docs .doc:hover .go{color:var(--fg)}
+
+/* Doc head — only touch vertical padding; horizontal is owned by .shell. */
+.doc{padding-top:80px;padding-bottom:140px}
+.dochead{margin-bottom:72px;padding-bottom:48px;border-bottom:1px solid var(--line)}
+.crumbs{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:36px}
+.crumbs a:hover{color:var(--fg)}
+.crumbs .sep{margin:0 8px;color:var(--dim)}
+.crumbs span:last-child{color:var(--fg)}
+.dochead h1{font-size:72px;font-weight:600;letter-spacing:-.035em;line-height:.95;margin-bottom:24px;max-width:900px;text-wrap:balance}
+.dochead .sub{font-size:19px;color:var(--muted);max-width:640px;line-height:1.55}
+.dochead .meta{margin-top:32px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);display:flex;gap:14px;align-items:center}
+.dochead .meta .d{color:var(--dim)}
+
+/* Markdown */
+.md{font-size:16px;line-height:1.75;color:#d8d8d4;max-width:720px}
+.md h1,.md h2,.md h3,.md h4{color:var(--fg);font-weight:600;letter-spacing:-.02em;margin-top:56px;margin-bottom:20px;line-height:1.2}
+.md > h1:first-child,.md > h2:first-child,.md > h3:first-child{margin-top:0}
+.md h1{font-size:40px;padding-bottom:18px;border-bottom:1px solid var(--line);margin-top:72px}
+.md h2{font-size:30px;margin-top:72px}
+.md h3{font-size:22px;margin-top:48px}
+.md h4{font-size:17px;margin-top:36px;color:var(--fg)}
+.md p{margin-bottom:20px}
+.md ul,.md ol{margin-bottom:20px;padding-left:22px}
+.md li{margin-bottom:8px}
+.md li::marker{color:var(--muted)}
+.md strong{color:var(--fg);font-weight:600}
+.md em{font-style:italic;color:#e6e6e2}
+.md a{color:var(--fg);border-bottom:1px solid var(--dim);transition:.15s}
+.md a:hover{border-bottom-color:var(--fg)}
+.md code{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:.86em;background:var(--soft);border:1px solid var(--line);padding:1px 6px;border-radius:3px;color:#e6e6e2}
+.md pre{background:var(--soft);border:1px solid var(--line);border-radius:6px;padding:20px 22px;overflow-x:auto;margin:24px 0;font-size:13px;line-height:1.6}
+.md pre code{background:transparent;border:0;padding:0;font-size:inherit;color:#d8d8d4}
+.md blockquote{border-left:2px solid var(--fg);padding:6px 0 6px 22px;margin:24px 0;color:var(--muted);font-style:italic}
+.md hr{border:0;border-top:1px solid var(--line);margin:48px 0}
+.md table{width:100%;border-collapse:collapse;margin:24px 0;font-size:14px}
+.md table th,.md table td{text-align:left;padding:10px 14px;border-bottom:1px solid var(--line);vertical-align:top}
+.md table th{color:var(--muted);font-weight:500;font-size:11px;letter-spacing:.08em;text-transform:uppercase;border-bottom-color:var(--dim)}
+.md table code{font-size:.82em}
+
+/* Pager */
+.pager{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:96px;padding-top:32px;border-top:1px solid var(--line)}
+.pg{border:1px solid var(--line);padding:22px 24px;display:flex;flex-direction:column;gap:6px;transition:.2s;min-height:88px;justify-content:center}
+.pg:hover{border-color:var(--fg);background:rgba(255,255,255,.02)}
+.pg .lbl{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.pg:hover .lbl{color:var(--fg)}
+.pg .tt{font-size:17px;font-weight:500}
+.pg.next{text-align:right;align-items:flex-end}
+
+/* Index grid */
+.idx{display:grid;grid-template-columns:repeat(2,1fr);gap:1px;background:var(--line);margin-top:40px}
+.idx .card{background:var(--bg);padding:36px 34px;display:flex;flex-direction:column;gap:12px;transition:.2s;min-height:200px}
+.idx .card:hover{background:var(--soft)}
+.idx .ix{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.idx .card h3{font-size:26px;font-weight:600;letter-spacing:-.02em}
+.idx .card p{color:var(--muted);font-size:14px;line-height:1.55;flex:1}
+.idx .go{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:12px;letter-spacing:.04em;color:var(--muted);margin-top:8px}
+.idx .card:hover .go{color:var(--fg)}
+
+@media (max-width:720px){
+  .dochead h1{font-size:44px}
+  .idx{grid-template-columns:1fr}
+  .pager{grid-template-columns:1fr}
+}
