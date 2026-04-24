@@ -1,5 +1,34 @@
 # Changelog
 
+## v0.2.78 — 2026-04-24
+
+### skills — auto-validate on every mutation
+
+Every mutating action on a user skill (`create`, `edit`, `patch`,
+`add_file`, `remove_file`) now runs the script validator
+(`_skill_validate.validate_skill` — py_compile, missing imports,
+OAuth race pattern, port coherence) and surfaces findings in the
+tool output. The LLM sees issues immediately and can iterate in
+the same turn without having to call `skill(action="validate")`
+separately. 6 new regression tests in
+`tests/test_skill_auto_validate.py`.
+
+`alpi/prompts/create_skill_guide.md` extended with a Scripts
+section (prefer stdlib, include a dry-run / smoke-test path,
+explicit exit codes) and a note about the automatic validation —
+so the LLM authors scripts knowing it will get feedback.
+
+### skills — AO position clarified, no bundled skill shipped yet
+
+Reverted the `@alpi/plan` experiment. It restyled output without
+adding real capability and imposed a path convention users may not
+want. The honest conclusion: don't ship bundled skills from a
+hermes-style catalog just because BE's infrastructure is ready.
+`docs/ROADMAP.md → AO` and `docs/SKILLS.md` updated to reflect the
+new position: the `@alpi/*` namespace is reserved and live, but
+nothing ships by default. Bundled skills land when concrete
+recurring patterns justify one — not from a catalog import.
+
 ## v0.2.77 — 2026-04-24
 
 ### skills — bundled infrastructure (BE closed)

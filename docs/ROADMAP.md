@@ -20,7 +20,7 @@ Legend: 🔵 backlog · 🟡 next up · ⏸ blocked.
 | AT | Audit system prompt + tool descriptions vs hermes | v0.3 | 🔵 research first |
 | AI | Memory v2 — better generation + TUI panel | v0.3 | 🔵 research first |
 | AJ | Browser realism — session persistence + login state + deeper antibot | v0.3 | 🔵 |
-| AO | Default skills bundle (writer / coder / webmaster …) | v0.3 | 🔵 research first |
+| AO | Default skills bundle | v0.3 | 🔵 intentionally empty — bundled skills emerge from concrete recurring patterns, not catalog imitation |
 | AQ | Voice mode polish — STT + TTS quality + continuous mode | v0.3 | 🔵 |
 | BB | TUI: shared link renderer (bold + underline; hover = accent bg + black) | v0.3 | 🔵 |
 | BC | External security audit before v0.3 public release | v0.3 | 🔴 gate on AR |
@@ -193,24 +193,32 @@ them in when the detection scaffold makes it cheap.
 
 ### AO. Default skills bundle
 
-Today there are no bundled skills. Fresh profiles start with an
-empty `{home}/skills/` dir; the `skill` tool only looks under
-`{home}`, so nothing ships by default. Making bundles reachable
-is the prerequisite (see **BE**). A starter pack on top of a
-working loader would help new users see what skills are for:
+BE ships the infrastructure to bundle skills under `@alpi/*`. This
+item is the curation side — what, if anything, to include.
 
-- **writer** — drafting, editing, tone shifting; reusable across
-  essays/emails.
-- **coder** — language-agnostic conventions for the code review +
-  refactor patterns alpi does repeatedly.
-- **webmaster** — site audit, SEO, broken link check via the
-  browser tool.
-- Others TBD.
+**Current position: no bundled skills.** We deliberately resisted
+shipping a catalog of methodology skills imported from other
+agents (hermes has 59; most are off-scope for alpi). The ethos is
+"ship what you use" — bundle only skills that encode recurring
+patterns we actually observe in real usage, not generic
+write/code/web guides.
 
-**Research first:** read the hermes skills, scan popular agent-OS
-patterns (Claude Skills, Cursor Rules, Copilot Instructions),
-decide what's alpi-shaped vs what's bloat. Land one or two first,
-watch real usage, then expand.
+**Candidates evaluated, deferred:**
+
+- `writer`, `coder`, `webmaster` (original draft) — too broad;
+  would each become 3-5 sub-workflows.
+- `@alpi/systematic-debugging` (from hermes) — methodology for
+  root-cause investigation. Marginal capability add; modern LLMs
+  do most of this when asked. Reconsider if real debug sessions
+  show the LLM taking shortcuts.
+- `@alpi/test-driven-development` — opinionated; do not impose.
+- `@alpi/plan` (thin plan-mode) — rejected: restyles output
+  rather than adding capability.
+
+**Trigger for shipping a bundled skill:** noticing the same
+workflow scaffolding being re-asked 3+ times in real sessions
+across profiles. When that happens, one targeted SKILL.md plus
+an e2e test lands on its own, not as part of a bundle.
 
 ### AQ. Voice mode polish — STT + TTS + continuous mode
 

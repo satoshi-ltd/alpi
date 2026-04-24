@@ -638,13 +638,14 @@ def _create(
         secrets = skill_dir / "secrets"
         secrets.mkdir(mode=0o700, exist_ok=True)
 
+    base_msg = (
+        f"Created skill '{name}' (category: {category}) at {skill_dir}. "
+        f"It is live immediately. Use `skill(action='add_file', ...)` "
+        f"to flesh out scripts/references/assets."
+    )
     return ToolResult(
         ok=True,
-        output=(
-            f"Created skill '{name}' (category: {category}) at {skill_dir}. "
-            f"It is live immediately. Use `skill(action='add_file', ...)` "
-            f"to flesh out scripts/references/assets."
-        ),
+        output=_annotate_with_validation(base_msg, skill_dir),
     )
 
 
@@ -704,7 +705,10 @@ def _add_file(
     file_path = sub_path / filename
     mode = 0o600 if subdir == "secrets" else 0o644
     _atomic_write(file_path, content, mode=mode)
-    return ToolResult(ok=True, output=f"wrote {file_path}")
+    return ToolResult(
+        ok=True,
+        output=_annotate_with_validation(f"wrote {file_path}", skill_dir),
+    )
 
 
 def _remove_file(
@@ -734,7 +738,10 @@ def _remove_file(
     if not file_path.exists():
         return ToolResult(ok=False, output="", error=f"not found: {file_path}")
     file_path.unlink()
-    return ToolResult(ok=True, output=f"removed {file_path}")
+    return ToolResult(
+        ok=True,
+        output=_annotate_with_validation(f"removed {file_path}", skill_dir),
+    )
 
 
 def _edit(
@@ -777,7 +784,12 @@ def _edit(
     if md.exists():
         shutil.copy2(md, md.with_suffix(".md.bak"))
     _atomic_write(md, header + body.strip() + "\n")
-    return ToolResult(ok=True, output=f"edited {md} (backup: {md}.bak)")
+    return ToolResult(
+        ok=True,
+        output=_annotate_with_validation(
+            f"edited {md} (backup: {md}.bak)", skill_dir,
+        ),
+    )
 
 
 def _patch(
@@ -843,7 +855,12 @@ def _patch(
     shutil.copy2(target, target.with_suffix(target.suffix + ".bak"))
     mode = 0o600 if effective_subdir == "secrets" else 0o644
     _atomic_write(target, patched, mode=mode)
-    return ToolResult(ok=True, output=f"patched {target} (backup: {target}.bak)")
+    return ToolResult(
+        ok=True,
+        output=_annotate_with_validation(
+            f"patched {target} (backup: {target}.bak)", skill_dir,
+        ),
+    )
 
 
 def _delete(
@@ -886,11 +903,22 @@ def _validate(home: Path, name: str) -> ToolResult:
     skill_dir = _find_skill(home, name)
     if skill_dir is None:
         return ToolResult(ok=False, output="", error=f"skill not found: {name}")
-    from alpi.tools._skill_validate import validate_skill
-    findings = validate_skill(skill_dir)
+    findings = _run_validate(skill_dir)
     if not findings:
         return ToolResult(ok=True, output="(no issues)")
     return ToolResult(ok=True, output="\n".join(findings))
+
+
+def _run_validate(skill_dir: Path) -> list[str]:
+    from alpi.tools._skill_validate import validate_skill
+    return validate_skill(skill_dir)
+
+
+def _annotate_with_validation(message: str, skill_dir: Path) -> str:
+    findings = _run_validate(skill_dir)
+    if not findings:
+        return message
+    return f"{message}\n\nvalidation:\n  " + "\n  ".join(findings)
 
 
 TOOL = Skill

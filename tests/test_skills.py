@@ -411,9 +411,13 @@ def test_scanner_detects_github_pat(isolated_home: Path) -> None:
     assert "github pat" in (r.error or "")
 
 
-def test_skills_index_block_empty(tmp_path) -> None:
-    from alpi.tools.skill import skills_index_block
-    assert skills_index_block(tmp_path) == ""
+def test_skills_index_block_empty(tmp_path, monkeypatch) -> None:
+    """With no user skills and no bundled skills, the block is empty.
+    Bundled skills are mocked off here — the real suite always has at
+    least the shipped `@alpi/*` set, tested separately."""
+    from alpi.tools import skill as skill_mod
+    monkeypatch.setattr(skill_mod, "_bundled_root", lambda: None)
+    assert skill_mod.skills_index_block(tmp_path) == ""
 
 
 def test_skills_index_block_lists_existing(isolated_home: Path) -> None:

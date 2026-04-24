@@ -35,7 +35,26 @@ skill. Never create one proactively.
   ≥80% of the need. If one exists, propose extending it instead of
   creating a duplicate.
 
-## After creating
+## Scripts
+
+When a skill includes scripts under `scripts/`:
+
+- Prefer stdlib. Every non-stdlib import is a deployment dependency the
+  user will have to install — justify each one.
+- Include a dry-run / smoke-test path (e.g. `--dry-run` flag, or a
+  `--help` branch that works without side effects). Mention the exact
+  command in SKILL.md so the user (or a future agent) can verify the
+  script runs at all.
+- Use explicit exit codes: `0` on success, non-zero on failure. Clear
+  error messages to stderr.
+
+## After creating / editing
+
+Every `create`, `edit`, `patch`, `add_file`, and `remove_file` call
+auto-validates the skill's Python scripts (syntax, imports, OAuth race,
+port coherence) and returns any findings in the tool output. If the
+output contains `validation:` lines, fix them in the same turn with
+another `patch` / `add_file` before telling the user you are done.
 
 - Report the final path and the frontmatter. Tell the user which env vars
   they need to add to `~/.alpi/.env` before the skill can run.
