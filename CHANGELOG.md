@@ -1,5 +1,42 @@
 # Changelog
 
+## v0.2.77 — 2026-04-24
+
+### skills — bundled infrastructure (BE closed)
+
+Adds a read-only namespace for skills that ship with the alpi
+package. No content bundled yet — this is infrastructure only.
+
+- **`@alpi/` namespace.** Bundled skills are addressed as
+  `@alpi/<name>`. The `@` sigil is not a legal category name on
+  disk, so bundled and user skills cannot collide by construction.
+- **Loader.** `_bundled_root()` resolves against
+  `importlib.resources.files("alpi.skills")`; `_bundled_skill(name)`
+  returns the package resource for a `@alpi/*` name, or `None`.
+  `_find_skill` tries bundled first, then falls through to
+  `{home}/skills/`.
+- **Discovery.** `skills_index_block()` (injected into the system
+  prompt every turn) now lists user skills first, then a separate
+  `@alpi/ [bundled]:` block with the marker visible. `skill list`
+  mirrors the same ordering.
+- **Write guards.** `create`/`edit`/`patch`/`add_file`/`remove_file`/
+  `delete` on a `@alpi/*` name is rejected with a message pointing
+  at the variant pattern (create your own under a non-`@` category).
+- **Defense in depth.** `all_skills` skips any category under
+  `{home}/skills/` whose name starts with `@`, so a rogue direct
+  write cannot shadow a bundled skill.
+
+`pyproject.toml` package-data extended to ship `skills/**/*`; the
+`alpi/skills/` package directory is empty except for `__init__.py`.
+When we land the first real bundled skill, no loader changes are
+needed — drop the SKILL.md in place and it shows up.
+
+14 new regression tests in `tests/test_bundled_skills.py`; 692 green.
+
+Docs: `docs/SKILLS.md` gains a "Bundled vs user skills" section with
+the namespace, variant pattern, and discovery ordering.
+`docs/ARCHITECTURE.md` package tree + runtime note updated.
+
 ## v0.2.76 — 2026-04-24
 
 ### tui — markdown link styling + memory panel rewrite (BB closed)

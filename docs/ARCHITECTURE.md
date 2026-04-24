@@ -142,7 +142,7 @@ alpi/
 ├── scheduler/              schedule daemon (cron + once jobs)
 ├── mail/                   mail backends (imap.py — IMAP+SMTP; gmail.py coming in T)
 ├── mcp/                    MCP client (stdio JSON-RPC) + registry
-└── alp/                    Alpi Link Protocol (spec: docs/ALP.md)
+├── alp/                    Alpi Link Protocol (spec: docs/ALP.md)
 │   ├── keys.py            Ed25519 identity at {home}/alp/secrets/alp_key.{pem,pub}
 │   ├── envelope.py        build/sign/verify JSON-RPC envelope + replay cache
 │   ├── peers.py           {home}/alp/peers.yaml load/save + capability check
@@ -151,12 +151,16 @@ alpi/
 │   ├── handlers.py        link.ask / link.cancel — engine integration
 │   ├── mention.py         @peer parser + executor (shared by TUI + gateway)
 │   └── setup.py           `alpi setup → Peers` wizard
+└── skills/                 bundled skill blueprints; read-only, resolved via `@alpi/<name>` (see docs/SKILLS.md)
 ```
 
-Runtime state (skills, sessions, memories, logs, ALP peers, keys)
-does not ship with the package — it's generated per profile under
-`~/.alpi/`. See Profile home layout immediately below. The
-`skill` tool (`alpi/tools/skill.py`) manages user-created skills
+Runtime state (user skills, sessions, memories, logs, ALP peers,
+keys) does not ship with the package — it's generated per profile
+under `~/.alpi/`. The `alpi/skills/` package directory holds only
+bundled skill blueprints addressed as `@alpi/<name>`; bundled and
+user skills coexist in the listing, kept apart by namespace.
+See Profile home layout immediately below. The `skill` tool
+(`alpi/tools/skill.py`) manages user-created skills
 that live at `{home}/skills/<category>/<name>/`.
 
 ## Profile home layout (`~/.alpi/` or `~/.alpi/profiles/<name>/`)
