@@ -1,5 +1,69 @@
 # Changelog
 
+## v0.2.76 — 2026-04-24
+
+### tui — markdown link styling + memory panel rewrite (BB closed)
+
+**BB — shared link renderer.** Textual 8.2.3 exposes only `@click`
+meta on markdown link spans, no visual style — so links rendered as
+plain prose in the chat. New `alpi/tui/_links.py` monkey-patches
+`MarkdownBlock._token_to_content` at import time: every span carrying
+`@click` meta gets **bold + underline** appended. Idempotent install,
+applied globally — works across `AssistantMessage` streaming output
+AND every floating panel that uses `Markdown` (same patch, one pipeline).
+
+Per-link hover styling is **not** addressed — Textual renders link
+spans as Rich Text inside a single widget, not as per-link widgets.
+A hover state would require widget-per-link rewriting of the Markdown
+internals, out of scope. Deferred.
+
+### tui — `/memory` panel rewrite
+
+Old `/memory` wrapped each file's content in a ```markdown code block```
+so everything rendered with the `.code_inline` accent color. Inconsistent
+and the code-block hid real markdown structure.
+
+New layout: three stacked sections, each with a `Static` accent-colored
+header + `Markdown` widgets for the content. `USER.md` and `MEMORY.md`
+are split on `§` and rendered as N separate `Markdown` widgets so entries
+appear visually separated (the `§` character no longer leaks into the
+render). `AGENT.md` renders as one unit since it's already markdown.
+
+New `.memory-section` CSS class; all `FloatingPanel Markdown` widgets
+share transparent background + tight margins so panels stay compact.
+
+### prompts / template
+
+`alpi/prompts/default_agent.md` — `# Identity` / `# Voice` / `# Defaults`
+headers downgraded to `##`. Textual renders `h1` centered (it reads as
+"document title" styling); `h2` is left-aligned which is the right look
+for in-document sections. Applied to the template that seeds fresh
+profiles.
+
+### memory tool / description
+
+`§` entry delimiter guidance tightened (English only, terse). New
+`fuzzy_find_unique_entry` error now appends a "note: `§` is the entry
+delimiter, not content — strip it from your match string" hint when the
+match string contains `§`. Catches the common LLM mis-construction
+observed on long-running profiles with many entries.
+
+### tui — streaming input lag
+
+Fixed: typing in the TUI lagged while the assistant streamed output.
+Cause: `AssistantMessage.append(delta)` spawned one `asyncio.create_task`
+per delta (~60/s from the LLM), each re-parsing markdown — saturating the
+event loop so key events queued behind paint work. Fix: deltas now
+accumulate in a buffer and a single timer flushes them at 12.5 Hz
+(`_FLUSH_INTERVAL = 0.08`). One coalesced write per tick instead of
+dozens. Input stays responsive mid-stream.
+
+### docs
+
+`docs/ROADMAP.md` — BF (drop `§` delimiter) removed. Pre-existing
+profiles handle it fine with the new description guidance; refactoring
+the on-disk format isn't worth the migration surface right now.
+
 ## v0.2.75 — 2026-04-24
 
 ### wizard / cli — profile lifecycle + polish

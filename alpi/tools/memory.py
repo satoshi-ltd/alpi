@@ -108,8 +108,10 @@ class Memory(Tool):
         "the current turn, facts stale within a week, duplicates "
         "(`read` first if unsure).\n"
         "\n"
-        "`replace` match must be verbatim from a prior `read` or the "
-        "frozen snapshot — never invent one. If unsure, use `add`."
+        "`replace` / `remove` match must be verbatim from a prior `read` "
+        "or the frozen snapshot — never invent one. Do not include the "
+        "`§` entry delimiter in the match; match only content inside an "
+        "entry. If unsure, use `add`."
     )
     parameters = {
         "type": "object",
