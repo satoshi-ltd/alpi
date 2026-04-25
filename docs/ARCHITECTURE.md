@@ -58,16 +58,16 @@ alpi chat --once "<text>"      one-shot turn to stdout (pipe-friendly)
 alpi chat --once ... --emit-events     INTERNAL — gateway subprocess contract
 
 alpi setup                     interactive menu: model / gateways / voice / MCPs /
-                               peers / sandbox / gateway service / schedule service /
-                               alp service / health check / cleanup /
+                               peers / workgroups / sandbox / service /
+                               health check / cleanup /
                                delete profile (non-default only)
 
 alpi doctor                    live health check (Telegram getMe, IMAP login,
-                               Gmail token refresh, MCP handshake, service PIDs);
+                               Gmail token refresh, MCP handshake, service PID);
                                exits 1 on any failure, 0 otherwise
 
 alpi logs                      tail every subsystem log merged by timestamp
-  --source {gateway|schedule|agent|approval}   restrict to one subsystem
+  --source {service|agent|approval}            restrict to one subsystem
   -n N                                         last N lines (default 100)
   -f                                           follow mode (poll every 1s)
 
@@ -75,20 +75,28 @@ alpi profile list              list profiles, mark the active one
 alpi profile create <name>     bootstrap a new profile tree
 alpi profile remove <name>     delete after safety checks + confirm
 
-alpi gateway   start|stop|restart               manual control for debug; service runs via `alpi setup → Gateway service`
-alpi schedule  start|stop|restart|run-once      manual control; service auto-installs on first run
-alpi alp       start|stop|restart               ALP Unix-socket listener; service via `alpi setup → ALP service`
+alpi service start|stop|restart|status         lifecycle of the unified per-profile orchestrator
+alpi schedule run-once|fire <id>                manual cron tick / ad-hoc job fire (operational, not lifecycle)
 
 alpi peers list                list pinned ALP peers for this profile
 alpi peers key                 print this profile's ALP public key
 alpi peers add <id> <pubkey>   pin a peer (prefer the wizard for capability selection)
 alpi peers remove <id>         unpin a peer
 alpi peers ping <id>           live probe via link.ping
+
+alpi workgroup list                                list workgroups (hub-of + member-of)
+alpi workgroup show <wg_id>                        detail + decrypted transcript
+alpi workgroup create <name> --member <id|pubkey>  hub-side create (auto-grants verbs to invited peers)
+alpi workgroup join <hub_peer_id> <wg_id>          subscribe to a peer-hosted workgroup
+alpi workgroup post <wg_id> <text>                 encrypt + post; cost is auto-declared in PR 5
+alpi workgroup pull <wg_id>                        fetch new posts and decrypt; cursor advances
+alpi workgroup pause|resume|leave <wg_id>          membership ops
+alpi workgroup kick <wg_id> <member-id|pubkey>     hub-only; rotates the group key
 ```
 
-**Shape rules:** containers (profile, peers) get `list/create/remove` (or `add/remove`). Daemons (gateway, schedule, alp) get `start/stop/restart` for manual/debug use — install/uninstall lives only in the wizard (`alpi setup → {Gateway,Schedule,ALP} service`), so users don't need to memorise two ways of doing the same thing. The scheduler auto-installs as a service on first run; a marker at `{home}/schedule/.bootstrapped` prevents re-installing after the user uninstalls from the wizard. Interactive wizards live exclusively under `alpi setup`; never add a per-feature wizard command.
+**Shape rules:** containers (profile, peers, workgroups) get `list/create/remove` (or `add/remove`). The unified service gets `start/stop/restart/status` under `alpi service`; install/uninstall lives only in the wizard (`alpi setup → Service`), so users don't memorise two ways of doing the same thing. New profiles default to **opt-in** — nothing runs as a background service until the user installs it. Interactive wizards live exclusively under `alpi setup`; never add a per-feature wizard command.
 
-**Command ordering** in `--help` is frequency-first, not alphabetical: `chat → setup → doctor → logs → profile → peers → alp → gateway → schedule`. See `_OrderedGroup` in `cli.py`.
+**Command ordering** in `--help` is frequency-first, not alphabetical: `chat → setup → doctor → logs → profile → peers → workgroup → schedule → service`. See `_OrderedGroup` in `cli.py`.
 
 **`alpi/ui.py`** is the shared interactive layer. Raw `questionary.*` is forbidden outside it. Helpers: `banner`, `menu`, `text`, `password`, `confirm`, `row`, `ok/fail/warn/dim/saved/cancelled`. The close item is added automatically with value `None` (callers treat `None` as "out").
 
@@ -107,7 +115,7 @@ alpi/
 ├── home.py                 profile path resolution
 ├── config.py               YAML load/save, defaults, deep merge
 ├── ui.py                   shared wizard/menu primitives
-├── service.py              install/uninstall launchd/systemd units
+├── service.py              unified orchestrator — runs every enabled subsystem on one asyncio loop; install/uninstall launchd / systemd unit per profile
 ├── ledger.py               daily spend ledger (logs/ledger.json) + profile cap gate
 ├── status.py               canonical /status rows (TUI + Telegram share this)
 ├── prompts/
@@ -130,8 +138,8 @@ alpi/
 │   └── … (read_file, write_file, edit_file, todo, web_*, schedule,
 │         memory, session_search, send_message, email, config)
 ├── tui/                    Textual app, widgets, screens, theme
-├── gateway/                separate process (Telegram / IMAP)
-├── scheduler/              schedule daemon (cron + once jobs)
+├── gateway/                inbound platforms (Telegram / IMAP / Gmail), hosted by the unified service
+├── scheduler/              cron + once jobs, hosted by the unified service
 ├── mail/                   mail backends (imap.py — IMAP+SMTP; gmail.py coming in T)
 ├── mcp/                    MCP client (stdio JSON-RPC) + registry
 ├── alp/                    Alpi Link Protocol (spec: docs/ALP.md)
@@ -292,17 +300,68 @@ Textual 8.2.x. Layout: `AlpiTopBar` (identity) + chat scroll (`VerticalScroll.an
 
 **`Ctrl+Y`** copies last assistant reply (pbcopy/wl-copy/xclip/xsel/OSC-52 fallback chain). `Ctrl+L` clears.
 
+### Service (`alpi/service.py`)
+
+Single per-profile orchestrator. One Python process runs every
+enabled subsystem (gateway, scheduler, ALP listener) on the same
+asyncio event loop, supervised by one launchd plist
+(`com.alpi.service.<profile>`) on macOS or one systemd-user unit
+(`alpi-service-<profile>.service`) on Linux. The legacy
+"three-services-per-profile" model is gone.
+
+`alpi.service.serve(home, profile)` is the foreground entry point
+called from `alpi service start` and from the supervising plist /
+unit's ExecStart. It:
+
+1. Reads `service.{gateway,schedule,alp}` from `config.yaml`;
+   defaults to all-on when the section is missing.
+2. Configures the root logger to write to
+   `~/.alpi/<profile>/logs/service.log` (and to stderr only when
+   stderr is a TTY — avoids double-writes when launchd already
+   redirects stderr to the same file).
+3. Sets the process title to `alpi (<profile>)` via `setproctitle`,
+   so `ps aux` shows distinct entries for distinct profiles
+   instead of three look-alike `alpi` lines.
+4. Writes `service.pid`.
+5. Spawns one asyncio task per enabled subsystem and waits.
+   `gateway/run.serve(home)` runs the platform listeners,
+   `scheduler/run.serve(home)` is the tick loop converted to
+   `asyncio.sleep`, and an inline `_run_alp` boots the
+   `alp.server.Server` with `link.ask` + workgroup handlers
+   registered.
+6. SIGTERM / SIGINT cancels every task cooperatively, the PID
+   file is cleaned up on the way out.
+
+`status(home, profile)` is the snapshot used by `alpi service
+status` and by `alpi setup → Maintenance → Service`: PID, uptime
+(via `ps -o etime`), installed backend (launchd / systemd / none),
+and the enabled subsystems map.
+
 ### Gateway (`alpi/gateway/`)
 
-Separate process from the TUI. `alpi gateway start` runs an event loop that listens to platforms (Telegram long-poll, IMAP polling) and spawns `alpi chat --once --emit-events` per incoming message. Tool traces stream as `◆ {tool} · {arg_hint}` messages; typing indicator stays on while the subprocess works.
+Inbound platform listeners (Telegram long-poll, IMAP polling,
+Gmail OAuth, webhook stub) hosted by the unified service. Each
+platform iterates `async for msg in platform.listen()`; per
+incoming message the gateway spawns `alpi chat --once --emit-events`,
+streaming tool traces as `◆ {tool} · {arg_hint}` with the typing
+indicator on while the subprocess works.
 
-Allowlist: `TELEGRAM_ALLOWED_CHAT_IDS` and `IMAP_ALLOWED_SENDERS` in `.env`, fail-closed if unset. Per-platform config under `gateway.{telegram,imap}` in `config.yaml` (`show_tool_trace`, `typing_indicator`, etc.).
+Allowlist: `TELEGRAM_ALLOWED_CHAT_IDS` and `IMAP_ALLOWED_SENDERS`
+in `.env`, fail-closed if unset. Per-platform config under
+`gateway.{telegram,imap,gmail}` in `config.yaml` (`show_tool_trace`,
+`typing_indicator`, `poll_interval`, etc.).
 
-The gateway is registered as a launchd (macOS) or systemd-user (Linux) unit via `alpi setup → Gateway service` so it survives reboot.
+Disable for a profile via `alpi setup → Maintenance → Service →
+Gateway · off` (writes `service.gateway: false`).
 
 ### Schedule (`alpi/scheduler/`)
 
-Long-running daemon with a tick loop (default 30s). `add` schedules a job (`kind: cron|once`, expression or `after_hours`). `run-once` ticks manually for testing. LLM time grounding: when the agent calls `schedule(action='add', kind='once', after_hours=N)`, the engine resolves `now` from a single source so the agent doesn't drift.
+Tick loop (default 30s) hosted inside the unified service. `add`
+schedules a job (`kind: cron|once`, expression or `after_hours`).
+`run-once` ticks manually for testing. LLM time grounding: when
+the agent calls `schedule(action='add', kind='once',
+after_hours=N)`, the engine resolves `now` from a single source so
+the agent doesn't drift.
 
 **Timezone.** Cron expressions evaluate against the **machine's system timezone** (`datetime.now().astimezone()` in `scheduler/run.py`). Jobs are stored with UTC `last_run_at` but fire according to local wall-clock time. Practical consequence: if you specify `10 12 * * *` because you want a 12:10 reminder in Bangkok, the Mac must be set to `Asia/Bangkok`. Move the machine to a different timezone and the cron fires at 12:10 there, not in Bangkok. No in-job timezone override today — add it via `TZ=…` in the launchd plist / systemd unit if cross-timezone stability is required.
 
@@ -316,14 +375,17 @@ Every subsystem writes to a single flat folder: `~/.alpi/logs/<subsystem>.log`, 
 
 Four sources today:
 
-- **`gateway`** — inbound platform traffic (Telegram/IMAP/Gmail), agent spawns triggered by incoming messages, delivery errors. Written by the gateway daemon.
-- **`schedule`** — cron tick loop, job fires, job create/delete. Written by the schedule daemon.
+- **`service`** — the unified orchestrator's root log: subsystem
+  start/stop, gateway listener events (Telegram / IMAP / Gmail),
+  scheduler ticks, ALP listener traffic, delivery errors. Written
+  by `alpi.service` and every subsystem that logs through the
+  root logger.
 - **`agent`** — one line per TUI/gateway/schedule-triggered turn: session id, elapsed, tool names, reply size, cumulative cost, truncated user prompt. This is the **cross-session grep index** — `sessions/<id>.json` carry the full detail; `agent.log` lets you answer "what has alpi been doing this week?" without iterating JSONs.
 - **`approval`** — one line per non-SAFE terminal command classification (ALLOW / DENY with severity, pattern, reason). **Security audit trail**; complements the per-turn detail in `sessions/`.
 
 Why logs are NOT inside `sessions/`: `sessions/` is a structured store (one JSON per conversation, indexed by id, consumed by `session_search` and the resume flow). Mixing freeform logs would break the glob pattern and the cleanup semantics. Logs are the **index and audit trail**; sessions are the **content**. Peers, not nested.
 
-Why one flat folder (`logs/`) instead of per-subsystem dirs: four tiny `<subsystem>/logs/` folders with a single file each is pure noise. Daemons still keep their own dirs for non-log state (`gateway/gateway.pid`, `schedule/jobs.json`) — only the `.log` files consolidate.
+Why one flat folder (`logs/`) instead of per-subsystem dirs: tiny `<subsystem>/logs/` folders with a single file each is pure noise. The service keeps non-log state in its own places (`schedule/jobs.json`, `alp/alp.sock`, `service.pid` at the profile root) — only the `.log` files consolidate.
 
 Adding a new source is two lines: `from alpi._log import get_subsystem_logger; logger = get_subsystem_logger(home, "my-sub")`. `alpi logs` picks it up without changes; add the tag to the `--source` choice list in `cli.py::logs_cmd` if you want it filterable.
 
@@ -336,7 +398,7 @@ Checks:
 - **Model** — `cfg.model` set + provider's API key present in `.env` or env.
 - **Workspace** — configured + exists + writable.
 - **Gateways** (live) — Telegram `getMe` over HTTPS, IMAP login+SMTP handshake, Gmail OAuth token refresh.
-- **Services** — `service.installed()` + `kill -0 <pid>` to distinguish "installed but dead" from "installed and running".
+- **Service** — `service.installed(profile)` + `service.running_pid(home)` to distinguish "installed but dead" from "running" from "not installed". A second info row lists which subsystems the config has enabled.
 - **MCPs** (live) — spawn each configured server, `list_tools`, stop. Parallelised; per-server timeout 8 s.
 - **Security** — sandbox backend binary on PATH (if `tools.terminal.sandbox: true`), approval allowlist count.
 
@@ -369,7 +431,7 @@ Threat model: prompt injection via email/web content, LLM-issued tool calls on t
 
 ### Profiles
 
-`alpi -p <name>` resolves home to `~/.alpi/profiles/<name>/`. `ALPI_PROFILE` env var is the same. No sticky "current profile" file — resolution is fully explicit. Daemons (gateway, schedule) carry the profile name in their launchd/systemd label so multiple profiles coexist without colliding.
+`alpi -p <name>` resolves home to `~/.alpi/profiles/<name>/`. `ALPI_PROFILE` env var is the same. No sticky "current profile" file — resolution is fully explicit. The unified service plist / unit carries the profile name in its label (`com.alpi.service.<profile>` / `alpi-service-<profile>.service`) so multiple profiles coexist without colliding, and `setproctitle` makes them distinguishable in `ps`.
 
 ### Workspace
 
@@ -393,7 +455,8 @@ Hard runtime deps are kept tight — every line in `pyproject.toml`'s `dependenc
 - `click` — CLI command dispatch.
 - `pyyaml` — config.yaml + skill frontmatter.
 - `python-dotenv` — `.env` loader.
-- `croniter` — cron expression parsing for the schedule daemon.
+- `croniter` — cron expression parsing for the scheduler subsystem.
+- `setproctitle` — makes `ps aux` show ``alpi (<profile>)`` instead of identical ``alpi`` lines for every profile's service.
 - `playwright` + `playwright-stealth` — interactive browser tool.
 - `pillow` — image pre-processing for `read_image` (auto-resize).
 - `html2text` — strip HTML to markdown in `web_fetch` / `web_extract`.

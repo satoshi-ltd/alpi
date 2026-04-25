@@ -1,5 +1,127 @@
 # Changelog
 
+## v0.2.90 — 2026-04-25
+
+### service unification — one process per profile
+
+The three legacy daemons (gateway, scheduler, ALP listener) collapse
+into a single ``alpi service`` process per profile. One asyncio
+event loop hosts every enabled subsystem, one PID, one log file,
+one launchd plist / systemd-user unit. Memory footprint per profile
+drops by ~2/3 and the OS service inventory becomes legible
+(``com.alpi.service.<profile>`` instead of three look-alike entries
+per profile).
+
+#### Why now
+
+Originally tracked as v0.4 architecture cleanup. Brought into v0.3
+because the workgroup auto-pull work in PR 5 needs a clean home for
+its background loop, and three services × N profiles was already
+the worst UX paper-cut on the public release surface.
+
+#### CLI
+
+- New: ``alpi service {start,stop,restart,status}``. Lifecycle for
+  the unified process. ``status`` prints PID, uptime, installed
+  backend (launchd / systemd / none), and the enabled subsystems.
+- Removed: ``alpi gateway`` and ``alpi alp`` groups entirely
+  (they only had start/stop/restart). ``alpi schedule`` survives
+  but slimmer — ``run-once`` and ``fire`` are kept (operational,
+  not lifecycle); ``start`` / ``stop`` / ``restart`` /
+  ``install`` / ``uninstall`` are gone.
+- Removed: the auto-install of the scheduler on first ``alpi`` run
+  (the legacy ``schedule/.bootstrapped`` marker). Every profile
+  now starts in the **opt-in** state — nothing runs in background
+  until you choose to install. Aligns with the rest of alpi's
+  user-sovereignty model (peers, sandbox, budgets are all opt-in).
+
+#### Wizard
+
+- ``alpi setup → Maintenance → Service`` replaces three legacy
+  entries (``Gateway service``, ``Schedule service``, ``ALP
+  service``). Inside: per-subsystem on/off toggles (writing
+  ``service.{gateway,schedule,alp}: bool`` to ``config.yaml``),
+  Install / Uninstall / Restart / Stop, and the ALP TCP-port
+  config that previously lived under ``ALP service``.
+
+#### Process / OS surface
+
+- One PID file: ``~/.alpi/<profile>/service.pid``.
+- One log: ``~/.alpi/<profile>/logs/service.log`` (the legacy
+  ``gateway.log`` / ``schedule.log`` / ``alp.log`` files are not
+  written by the orchestrator any more — subsystems log via the
+  shared root handler).
+- launchd label: ``com.alpi.service.<profile>``.
+- systemd unit: ``alpi-service-<profile>.service``.
+- ``setproctitle`` makes ``ps aux`` show ``alpi (<profile>)``
+  instead of three identical ``alpi`` lines per profile (added
+  to ``dependencies``).
+- StreamHandler is only attached when stderr is a TTY. Under
+  launchd / systemd the plist already redirects stderr into the
+  log file, so a separate stream handler would write every line
+  twice — fixed.
+
+#### Code shape
+
+- ``alpi/service.py`` — new orchestrator. ``serve(home, profile)``
+  blocks the foreground; ``_main()`` builds an asyncio task per
+  enabled subsystem and waits on them + a SIGTERM/SIGINT signal
+  handler. On stop, all tasks cancel cooperatively and PID/log
+  state is cleaned up. Same module owns the install / uninstall
+  helpers (single plist / unit, no per-name fan-out).
+- ``alpi/gateway/run.py`` and ``alpi/scheduler/run.py`` — expose
+  ``async def serve(home)`` for the orchestrator. Logging + env
+  loading + PID writing is owned by the orchestrator now.
+- ``alpi/cli.py`` — drops the three legacy groups, the
+  ``_stop_daemon`` / ``_restart_daemon`` / ``_read_live_pid`` /
+  ``_check_not_running`` helpers (no more multi-PID fan-out), and
+  the ``_auto_install_scheduler`` helper. Adds the ``service``
+  group, the unified ``_service_wizard`` flow, and the ``Remove
+  gateway`` step inside ``setup → Gateways`` (drops env vars +
+  Gmail token file for one configured gateway).
+- ``alpi/config.py`` — new ``service: dict[str, Any]`` field on
+  ``Config``; persisted in ``config.yaml`` only when non-empty.
+- ``alpi/doctor.py`` — ``_check_services`` collapses three rows
+  into one (``Service``) plus an ``info`` row listing enabled
+  subsystems.
+- ``alpi/tools/schedule.py`` — the "is the daemon running?" hint
+  now asks ``alpi.service.is_running(home)`` and the schedule
+  subsystem flag, instead of the legacy scheduler-only PID.
+
+#### Config
+
+- New optional section in ``config.yaml``::
+
+      service:
+        gateway: true
+        schedule: true
+        alp: true
+
+  Default if the section is missing: all three on, matching the
+  pre-refactor behaviour. Toggle individually to keep the service
+  small (e.g. an ALP-only relay machine sets ``gateway: false`` +
+  ``schedule: false``). A toggle takes effect at the next
+  ``service restart``.
+
+#### Tests
+
+- Removed: ``tests/test_daemon_ops.py``, ``tests/test_bootstrap_autoinstall.py``,
+  legacy ``tests/test_service.py`` (~30 cases for the per-daemon
+  install model and the helpers that no longer exist).
+- New: ``tests/test_service.py`` with 20 cases for the unified
+  surface — backend selection, launchd + systemd install /
+  uninstall round-trips, error surfacing, label per platform,
+  subsystem toggle defaults, PID stale-cleanup, status snapshot,
+  ``etime`` parser.
+- Updated: ``tests/test_cli_surface.py`` to lock the new help
+  surface (gateway / alp groups gone, service group present,
+  schedule keeps run-once / fire only). ``tests/test_profile_cli.py``
+  and ``tests/test_schedule.py`` minor patches for the new
+  ``service.installed(profile)`` signature.
+
+Suite: 804 passed, 8 skipped (was 817 — net change after dropping
+30 obsolete + adding 20 new + a couple of patches).
+
 ## v0.2.89 — 2026-04-25
 
 ### alp.3 — workgroups: pause/resume + member-side state + management UX
@@ -114,15 +236,6 @@ awareness, briefing, milestone, and budget-aware behaviour are
   cursor advance, post-rotation pull picks up new sealed key,
   leave drops subscription, post without subscription raises,
   hub resolution rejects unpinned peer.
-- ``scripts/demo_workgroups.py`` (new) — runnable end-to-end
-  demo. Spins up five in-process profiles (alice / bob / bling
-  / mirai / default) under ``/tmp/alpi-demo-*``, mounts two
-  overlapping workgroups (``design`` 2-member alice+bob,
-  ``research`` 4-member mirai+bling+default+alice with a
-  $1.00 lifetime cap), runs the canonical join → post → pull →
-  decrypt cycle in both, prints a narrated trace, tears down.
-  Doesn't touch the user's real ``~/.alpi/``.
-
 Suite: 817 passed, 8 skipped (was 800).
 
 **Pending for ALP.3 to close (PR 5):** briefing field, milestone

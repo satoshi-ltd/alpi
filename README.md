@@ -29,8 +29,9 @@ The design goal is sovereignty:
   approval system. Dangerous commands are blocked with no override.
   Web and email content is treated as hostile data. Skills and MCPs
   are scanned before install.
-- **Operational UX.** One setup wizard, a live `doctor`, per-profile
-  services, merged logs, gateway daemons, scheduling, and cleanup.
+- **Operational UX.** One setup wizard, a live `doctor`, a single
+  per-profile `alpi service` orchestrator (gateway + scheduler + ALP
+  listener on one asyncio loop), merged logs, and cleanup.
 - **Private coordination.** ALP.1 links local profiles, ALP.2 links
   machines over Noise_XK, and ALP.3 adds shared workgroups. Peers are
   pinned by Ed25519 identity and governed by fail-closed capabilities.
@@ -47,7 +48,8 @@ The current release ships the full local-to-network shape:
 
 - Textual TUI with streaming replies, slash commands, live tool cards,
   interrupt, session resume, model switching, and cost/token display.
-- Telegram, IMAP, and Gmail gateways as separate per-profile daemons.
+- Telegram, IMAP, and Gmail gateways hosted by the unified per-profile
+  service.
 - Inline-learning memory: `USER.md`, `MEMORY.md`, and `AGENT.md`.
 - Live skills under `~/.alpi/skills/<category>/<name>/`, scanner-gated
   and auto-injected into the system prompt.
@@ -56,14 +58,14 @@ The current release ships the full local-to-network shape:
   and `deep` tiers.
 - Write-capable `delegate` sub-agent for focused file/web/terminal
   tasks.
-- Schedule daemon for cron and one-shot jobs.
+- Cron + one-shot scheduler hosted by the unified service.
 - MCP client for user-configured local MCP servers.
 - ALP.1: intra-machine agent-to-agent links over Unix sockets.
 - ALP.2: inter-machine links over Noise_XK TCP, with per-peer budget
   and rate-limit enforcement.
 - ALP.3: hub-anchored shared workgroups for multiple alpis and optional
   human participants.
-- `alpi doctor`, `alpi logs`, per-profile launchd/systemd services,
+- `alpi doctor`, `alpi logs`, one launchd / systemd unit per profile,
   backup-friendly file layout, and security audit logs.
 
 ## Quickstart
@@ -93,7 +95,7 @@ alpi -c                      # resume last session
 alpi -p work                 # use named profile
 alpi chat --once "status?"   # one-shot stdout turn
 
-alpi setup                   # model, gateways, MCPs, sandbox, services
+alpi setup                   # model, gateways, MCPs, sandbox, service
 alpi doctor                  # live health checks
 alpi logs                    # merged profile logs
 
@@ -101,14 +103,17 @@ alpi profile list
 alpi profile create work
 alpi profile remove work
 
-alpi gateway start|stop|restart
-alpi schedule start|stop|restart|run-once
-alpi alp start|stop|restart
+alpi service start|stop|restart|status   # unified per-profile orchestrator
+alpi schedule run-once|fire <job-id>     # operational scheduler verbs
 
 alpi peers key
 alpi peers list
 alpi peers add <id> <pubkey>
 alpi peers ping <id>
+
+alpi workgroup list
+alpi workgroup create <name> --member <peer-id>
+alpi workgroup join <hub-id> <wg_id>
 ```
 
 For the first-day walkthrough, see [QUICKSTART.md](QUICKSTART.md).

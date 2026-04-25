@@ -182,13 +182,15 @@ top of this daily profile cap. See *Workgroups → Budget*.
 ### Intra-machine — Unix-domain socket
 
 Path: `~/.alpi/<profile>/alp/alp.sock`, served by the profile's
-ALP listener daemon (`alpi alp start`), mode `0600`. The listener
-runs as its own service (launchd / systemd); it is deliberately
-separate from the gateway daemon so `alpi` instances that never
-expose Telegram / email still participate in ALP. Filesystem
-permissions gate access
-to the socket file; every envelope on the socket is still signed
-as a second, orthogonal layer of defence.
+unified service (`alpi service start`) when the ALP subsystem is
+enabled (`service.alp: true` — default), mode `0600`. The
+listener shares the per-profile asyncio loop with gateway and
+scheduler; toggle `service.alp: false` for profiles that need
+gateway / scheduler but no ALP, or `service.gateway: false` +
+`service.schedule: false` for an ALP-only relay machine.
+Filesystem permissions gate access to the socket file; every
+envelope on the socket is still signed as a second, orthogonal
+layer of defence.
 
 ### Inter-machine — Noise_XK over TCP
 

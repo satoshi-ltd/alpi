@@ -271,68 +271,17 @@ def tick(home: Path, now: datetime | None = None) -> list[tuple[str, bool, str]]
     return results
 
 
-def run(home: Path) -> None:
-    _configure_logging(home)
-    _load_env(home)
-    _write_pid(home)
+async def serve(home: Path) -> None:
+    """Async entry point for the orchestrator. Sleeps between ticks
+    using ``asyncio.sleep`` so other subsystems share the same loop."""
+    import asyncio
     log.info("Scheduler started (tick=%ss).", TICK_SECONDS)
-
-    def _term(signum: int, _frame: Any) -> None:
-        log.info("Scheduler stopping (signal %s).", signum)
-        _clear_pid(home)
-        sys.exit(0)
-
-    signal.signal(signal.SIGTERM, _term)
-    signal.signal(signal.SIGINT, _term)
-
-    try:
-        while True:
-            try:
-                tick(home)
-            except Exception as e:  # noqa: BLE001
-                log.exception("tick crashed: %s", e)
-            time.sleep(TICK_SECONDS)
-    finally:
-        _clear_pid(home)
-
-
-# PID + logging + env helpers (same shape as gateway)
-
-
-def _write_pid(home: Path) -> None:
-    p = pid_path(home)
-    p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(str(os.getpid()))
-
-
-def _clear_pid(home: Path) -> None:
-    p = pid_path(home)
-    if p.exists():
+    while True:
         try:
-            p.unlink()
-        except OSError:
-            pass
-
-
-def _load_env(home: Path) -> None:
-    env_path = home / ".env"
-    if env_path.exists():
-        from dotenv import load_dotenv
-        load_dotenv(env_path, override=False)
-        log.info("Loaded env from %s", env_path)
-
-
-def _configure_logging(home: Path) -> None:
-    from alpi._log import FORMAT, MAX_BYTES, log_path
-
-    path = log_path(home, "schedule")
-    path.parent.mkdir(parents=True, exist_ok=True)
-    file_handler = RotatingFileHandler(path, maxBytes=MAX_BYTES, backupCount=0)
-    logging.basicConfig(
-        level=logging.INFO,
-        format=FORMAT,
-        handlers=[file_handler, logging.StreamHandler()],
-    )
+            tick(home)
+        except Exception as e:  # noqa: BLE001
+            log.exception("tick crashed: %s", e)
+        await asyncio.sleep(TICK_SECONDS)
 
 
 # Process control (used by CLI start/stop/status)

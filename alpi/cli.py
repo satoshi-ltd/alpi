@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 import sys
 from importlib import resources
@@ -11,6 +12,7 @@ from typing import Any
 import click
 
 from alpi import __version__, config, home, memory
+from alpi.alp import client as alp_client
 from alpi.engine import AgentEvent, Engine
 
 
@@ -29,34 +31,6 @@ def _bootstrap(h: Path) -> None:
     if not agent.exists():
         default = resources.files("alpi.prompts").joinpath("default_agent.md").read_text()
         agent.write_text(default)
-
-
-def _auto_install_scheduler(h: Path, profile: str) -> None:
-    """Register the schedule daemon on first run of this profile, silently.
-
-    Once we've attempted it (successfully or not), drop a marker so
-    later invocations don't re-install after the user explicitly
-    uninstalled it from ``alpi setup → Schedule service``. The marker
-    is per-profile so each profile gets one first-run attempt.
-    """
-    if os.environ.get("ALPI_SKIP_AUTO_INSTALL"):
-        return
-    marker = h / "schedule" / ".bootstrapped"
-    if marker.exists():
-        return
-    try:
-        from alpi import service
-
-        if not service.installed("schedule", profile):
-            service.install("schedule", h, profile)
-    except Exception:  # noqa: BLE001
-        pass
-    finally:
-        try:
-            marker.parent.mkdir(parents=True, exist_ok=True)
-            marker.touch()
-        except OSError:
-            pass
 
 
 def _run_chat(h: Path, continue_last: bool = False) -> None:
@@ -297,11 +271,6 @@ def main(ctx: click.Context, profile: str | None, continue_last: bool) -> None:
     if profile:
         os.environ["ALPI_PROFILE"] = profile
     _bootstrap(h)
-    # Skip auto-install when the invocation is itself the daemon (launchd
-    # spawns ``alpi schedule start``) to avoid touching launchctl from
-    # inside a service-spawned process.
-    if ctx.invoked_subcommand not in {"schedule", "gateway"}:
-        _auto_install_scheduler(h, profile or "default")
     if ctx.invoked_subcommand is None:
         # Honour ``tui.auto_resume`` for bare ``alpi`` — if the user opted
         # in via config, resume even without ``-c``. Explicit ``-c`` stays
@@ -370,94 +339,98 @@ def _require_workspace(h: Path) -> None:
         )
 
 
+# Service — single per-profile orchestrator. Runs gateway / schedule /
+# alp listener (whichever the config enables) on one asyncio loop in
+# one process. Replaces the legacy `gateway`, `schedule {start,stop,
+# restart}`, and `alp` lifecycle groups.
+
+
 @main.group()
-def gateway() -> None:
-    """Gateway daemon controls (configure channels via ``alpi setup``)."""
+def service() -> None:
+    """Per-profile service: gateway + scheduler + ALP listener in one process."""
 
 
-@gateway.command("start")
+@service.command("start")
 @click.pass_context
-def gateway_start(ctx: click.Context) -> None:
-    """Start the gateway process in the foreground (blocking)."""
-    from alpi.gateway.run import run as gw_run, pid_path
+def service_start(ctx: click.Context) -> None:
+    """Run the service in the foreground (blocking).
+
+    Reads ``service.{gateway,schedule,alp}`` from this profile's
+    ``config.yaml`` to decide which subsystems to spin up. Default if
+    the section is missing: all three on. Used by both the install
+    path (launchd/systemd ExecStart) and one-shot dev runs.
+    """
+    from alpi import service as svc
 
     h: Path = ctx.obj["home"]
+    profile: str = ctx.obj.get("profile") or "default"
     _bootstrap(h)
     _require_workspace(h)
-    _check_not_running(pid_path(h))
-    gw_run(h)
+    if svc.is_running(h):
+        raise click.ClickException(
+            f"service already running (pid {svc.running_pid(h)}). "
+            "Use `alpi service stop` first.",
+        )
+    svc.serve(h, profile)
 
 
-@gateway.command("stop")
+@service.command("stop")
 @click.pass_context
-def gateway_stop(ctx: click.Context) -> None:
-    """Stop a running gateway (SIGTERM)."""
-    from alpi.gateway.run import pid_path
+def service_stop(ctx: click.Context) -> None:
+    """Send SIGTERM to a running service."""
+    from alpi import service as svc
+
+    h: Path = ctx.obj["home"]
+    if not svc.stop(h, ctx.obj.get("profile") or "default"):
+        click.echo("service is not running")
+        return
+    click.echo("service stopped")
+
+
+@service.command("restart")
+@click.pass_context
+def service_restart(ctx: click.Context) -> None:
+    """Stop the service so the supervising launchd / systemd brings it
+    back. Without an installed service, the process stays stopped."""
+    from alpi import service as svc
 
     h: Path = ctx.obj["home"]
     profile: str = ctx.obj.get("profile") or "default"
-    _stop_daemon("gateway", h, profile, pid_path(h))
+    if not svc.is_running(h):
+        click.echo("service is not running")
+        return
+    svc.stop(h, profile)
+    click.echo("service stopped — supervisor will respawn it shortly")
 
 
-@gateway.command("restart")
+@service.command("status")
 @click.pass_context
-def gateway_restart(ctx: click.Context) -> None:
-    """Stop the gateway and wait for the service to bring it back up.
-
-    Typical use: after ``uv tool install --reinstall``, a restart makes
-    the process load the new binary. Only useful when the gateway runs
-    under launchd/systemd — if it doesn't, the daemon stays stopped.
-    """
-    from alpi.gateway.run import pid_path
+def service_status(ctx: click.Context) -> None:
+    """Print PID, uptime, and which subsystems are active."""
+    from alpi import service as svc
 
     h: Path = ctx.obj["home"]
     profile: str = ctx.obj.get("profile") or "default"
-    _restart_daemon("gateway", h, profile, pid_path(h))
+    info = svc.status(h, profile)
+    if info["running"]:
+        up = info.get("uptime_seconds")
+        up_s = f"  · uptime {up}s" if up is not None else ""
+        click.echo(f"running  · pid {info['pid']}{up_s}")
+    else:
+        click.echo("not running")
+    backend = info["installed_via"]
+    click.echo(f"installed via {backend}" if backend else "not installed")
+    on = [k for k, v in info["subsystems"].items() if v]
+    click.echo(f"subsystems: {', '.join(on) if on else '(none enabled)'}")
 
 
-# MCP servers
-
-# Schedule daemon — auto-installs on first `alpi` run; these are for manual/debug use
+# Schedule — only operational verbs survive (run-once, fire). Lifecycle
+# moved to `alpi service`. The `schedule` group lives on as a namespace.
 
 
 @main.group()
 def schedule() -> None:
-    """Schedule daemon controls (auto-installs as a service on first run)."""
-
-
-@schedule.command("start")
-@click.pass_context
-def schedule_start(ctx: click.Context) -> None:
-    """Start the schedule daemon in the foreground (blocking)."""
-    from alpi.scheduler.run import run as sch_run, pid_path
-
-    h: Path = ctx.obj["home"]
-    _bootstrap(h)
-    _require_workspace(h)
-    _check_not_running(pid_path(h))
-    sch_run(h)
-
-
-@schedule.command("stop")
-@click.pass_context
-def schedule_stop(ctx: click.Context) -> None:
-    """Stop a running schedule daemon (SIGTERM)."""
-    from alpi.scheduler.run import pid_path
-
-    h: Path = ctx.obj["home"]
-    profile: str = ctx.obj.get("profile") or "default"
-    _stop_daemon("schedule", h, profile, pid_path(h))
-
-
-@schedule.command("restart")
-@click.pass_context
-def schedule_restart(ctx: click.Context) -> None:
-    """Stop the schedule daemon and wait for the service to bring it back."""
-    from alpi.scheduler.run import pid_path
-
-    h: Path = ctx.obj["home"]
-    profile: str = ctx.obj.get("profile") or "default"
-    _restart_daemon("schedule", h, profile, pid_path(h))
+    """Schedule operations (lifecycle is `alpi service`)."""
 
 
 @schedule.command("run-once")
@@ -577,112 +550,6 @@ def logs_cmd(ctx: click.Context, source: str | None, tail_n: int, follow: bool) 
         logs_mod.follow(h, source, ui._console)
 
 
-# Shared install / uninstall / status helpers
-
-
-def _stop_daemon(name: str, home: Path, profile: str, pid_file: Path) -> None:
-    """SIGTERM the running ``name`` daemon. If a service is registered,
-    warn the user that launchd/systemd will restart the process within
-    a few seconds — it's useful for bouncing a stale binary, but the
-    wrong tool for actually stopping the daemon. Permanent stop lives
-    in ``alpi setup → {Gateway,Schedule} service → Uninstall``."""
-    import signal
-    from alpi import service
-
-    pid = _read_live_pid(pid_file)
-    if pid is None:
-        click.echo(f"{name}: not running")
-        return
-
-    backend = service.installed(name, profile)
-    if backend:
-        click.echo(
-            f"{name}: managed by {backend}; KeepAlive will restart the "
-            f"process in a few seconds. To stop it permanently, "
-            f"uninstall from `alpi setup → "
-            f"{name.capitalize()} service`."
-        )
-
-    try:
-        os.kill(pid, signal.SIGTERM)
-        click.echo(f"{name}: sent SIGTERM to pid {pid}")
-    except ProcessLookupError:
-        pid_file.unlink(missing_ok=True)
-        click.echo(f"{name}: process {pid} was already gone")
-
-
-def _restart_daemon(name: str, home: Path, profile: str, pid_file: Path) -> None:
-    """Stop + wait for launchd/systemd to bring the process back. When
-    no service is installed this degrades to a plain stop — there's
-    nothing to restart it and we say so instead of silently waiting
-    for a bounce that will never come."""
-    import signal
-    import time
-    from alpi import service
-
-    backend = service.installed(name, profile)
-    old_pid = _read_live_pid(pid_file)
-
-    if old_pid is not None:
-        try:
-            os.kill(old_pid, signal.SIGTERM)
-        except ProcessLookupError:
-            old_pid = None
-
-    if not backend:
-        msg = (
-            f"{name}: stopped. No service registered, so nothing will "
-            f"relaunch it — install via `alpi setup → {name.capitalize()} service`."
-        )
-        click.echo(msg)
-        return
-
-    # Poll for up to 15s waiting for the service to spawn a replacement.
-    deadline = time.time() + 15.0
-    new_pid: int | None = None
-    while time.time() < deadline:
-        candidate = _read_live_pid(pid_file)
-        if candidate and candidate != old_pid:
-            new_pid = candidate
-            break
-        time.sleep(0.5)
-
-    if new_pid is None:
-        click.echo(
-            f"{name}: sent SIGTERM to pid {old_pid}, but no replacement "
-            f"appeared within 15s. Check `alpi logs --source {name}`."
-        )
-        return
-    click.echo(f"{name}: restarted via {backend} (pid {old_pid} → {new_pid})")
-
-
-def _read_live_pid(pid_file: Path) -> int | None:
-    if not pid_file.exists():
-        return None
-    try:
-        pid = int(pid_file.read_text().strip())
-        os.kill(pid, 0)
-        return pid
-    except (ValueError, ProcessLookupError):
-        pid_file.unlink(missing_ok=True)
-        return None
-    except PermissionError:
-        return pid
-
-
-def _check_not_running(pid_file: Path) -> None:
-    if not pid_file.exists():
-        return
-    try:
-        pid = int(pid_file.read_text().strip())
-        os.kill(pid, 0)
-    except (ValueError, ProcessLookupError):
-        pid_file.unlink(missing_ok=True)
-        return
-    # Generic message — this helper is shared by gateway and schedule.
-    raise click.ClickException(f"process already running (pid {pid}).")
-
-
 # setup / profile
 
 
@@ -711,15 +578,13 @@ def setup_cmd(ctx: click.Context) -> None:
 
             ui.Heading("Messaging"),
             ("Gateways", "gateways", _gateways_status(h)),
-            ("Gateway service", "gateway-service", _gateway_service_status(h)),
 
             ui.Heading("ALP (Alpi Link Protocol)"),
             ("Peers", "peers", _peers_status(h)),
             ("Workgroups", "workgroups", _workgroups_status(h)),
-            ("ALP service", "alp-service", _alp_service_status(h)),
 
             ui.Heading("Maintenance"),
-            ("Schedule service", "schedule-service", _schedule_service_status(h)),
+            ("Service", "service", _service_status(h, profile_name)),
             ("Health check", "doctor", _doctor_status(h, profile_name)),
             ("Cleanup", "cleanup", _cleanup_status(h)),
         ]
@@ -761,12 +626,8 @@ def setup_cmd(ctx: click.Context) -> None:
             _voice_setup(h)
         elif choice == "cleanup":
             _cleanup_setup(h)
-        elif choice == "gateway-service":
-            _gateway_service_setup(h)
-        elif choice == "schedule-service":
-            _schedule_service_setup(h)
-        elif choice == "alp-service":
-            _alp_service_setup(h)
+        elif choice == "service":
+            _service_wizard(h, profile_name)
         elif choice == "peers":
             from alpi.alp.setup import run as alp_setup_run
 
@@ -789,15 +650,32 @@ def _setup_farewell(profile: str, h: Path) -> None:
     ui_mod._console.print(f"\n[dim]next:[/dim] {prefix}\n")
 
 
+_GATEWAY_ENV_KEYS = {
+    "telegram": ("TELEGRAM_BOT_TOKEN", "TELEGRAM_ALLOWED_CHAT_IDS"),
+    "imap": (
+        "IMAP_ADDRESS", "IMAP_PASSWORD", "IMAP_HOST", "IMAP_PORT",
+        "IMAP_ALLOWED_SENDERS",
+    ),
+    "gmail": (
+        "GMAIL_CLIENT_ID", "GMAIL_CLIENT_SECRET", "GMAIL_ALLOWED_SENDERS",
+    ),
+}
+
+
 def _gateways_setup(h: Path) -> None:
     from alpi import ui
 
     while True:
+        configured = _configured_gateways(h)
         items = [
             ("Telegram", "telegram", _telegram_status(h)),
             ("IMAP", "imap", _email_status(h)),
             ("Gmail", "gmail", _gmail_status(h)),
         ]
+        if configured:
+            items.append(None)
+            items.append(("Remove gateway", "remove",
+                          f"drop one of: {', '.join(configured)}"))
         choice = ui.menu(
             ui.crumb("setup", "gateways"),
             items,
@@ -819,125 +697,190 @@ def _gateways_setup(h: Path) -> None:
             from alpi.mail.gmail_setup import run as gmail_setup
 
             gmail_setup(h)
+        elif choice == "remove":
+            _remove_gateway_flow(h, configured)
 
 
-def _gateway_service_status(h: Path) -> str:
-    from alpi import service
-
-    if not _any_gateway_ready(h):
-        return "no gateway configured"
-    backend = service.installed("gateway", _profile_from_home(h))
-    return f"running via {backend}" if backend else "not installed"
-
-
-_DAEMON_WIZARD_COPY = {
-    "gateway": (
-        "Keeps the gateway running on boot so Telegram / IMAP / Gmail "
-        "stay reachable. Uninstall to run `alpi gateway start` manually."
-    ),
-    "schedule": (
-        "Keeps cron jobs and reminders firing when the TUI is closed. "
-        "Uninstall to run `alpi schedule start` manually."
-    ),
-    "alp": (
-        "Keeps the ALP listener up across reboots so peers can reach "
-        "this profile. Uninstall to run `alpi alp start` manually."
-    ),
-}
+def _configured_gateways(h: Path) -> list[str]:
+    """Subset of {telegram, imap, gmail} that has any state worth wiping."""
+    env = _read_profile_env(h)
+    out: list[str] = []
+    if env.get("TELEGRAM_BOT_TOKEN"):
+        out.append("telegram")
+    if env.get("IMAP_ADDRESS"):
+        out.append("imap")
+    if env.get("GMAIL_CLIENT_ID") or (h / "secrets" / "gmail_token.json").exists():
+        out.append("gmail")
+    return out
 
 
-def _daemon_service_setup(h: Path, name: str) -> None:
-    """Install / uninstall the service for one daemon (`gateway` or `schedule`)."""
-    from alpi import service, ui
+def _remove_gateway_flow(h: Path, configured: list[str]) -> None:
+    """Drop env vars (and the Gmail token file) for one configured
+    gateway. Confirmation gated; restart of the service is up to the
+    user since polling loops only stop reading on next start."""
+    from alpi import ui
+    from alpi.model_selector import _remove_env_key
 
-    if name == "gateway" and not _any_gateway_ready(h):
-        ui.fail_and_wait("no gateway configured yet — set up Telegram, IMAP, or Gmail first")
+    items = [(name, name, _gateway_summary(h, name)) for name in configured]
+    target = ui.menu(
+        ui.crumb("setup", "gateways", "remove"),
+        items,
+        subtitle="pick the gateway to disconnect",
+        home=h,
+        close="Back",
+    )
+    if target is None:
         return
+    if not ui.confirm(
+        f"Remove {target} gateway? Drops env vars; you can re-add later.",
+        default=False,
+    ):
+        return ui.cancelled()
 
-    profile_name = _profile_from_home(h)
-    backend = service.installed(name, profile_name)
-    subtitle = f"running via {backend}" if backend else "not installed"
+    for key in _GATEWAY_ENV_KEYS.get(target, ()):
+        _remove_env_key(h / ".env", key)
+        os.environ.pop(key, None)
+    if target == "gmail":
+        token_file = h / "secrets" / "gmail_token.json"
+        if token_file.exists():
+            try:
+                token_file.unlink()
+            except OSError:
+                pass
+    ui.ok_and_wait(
+        f"removed {target} — restart the service for the change to take effect",
+    )
 
-    ui.banner(ui.crumb("setup", f"{name}-service"), subtitle=subtitle, home=h)
-    ui.dim(_DAEMON_WIZARD_COPY[name])
-    ui._console.print("")
 
-    if backend:
-        items = [("Uninstall", "remove-service", f"running via {backend}")]
+def _gateway_summary(h: Path, name: str) -> str:
+    if name == "telegram":
+        return _telegram_status(h)
+    if name == "imap":
+        return _email_status(h)
+    if name == "gmail":
+        return _gmail_status(h)
+    return ""
+
+
+def _service_status(h: Path, profile: str) -> str:
+    """Status line for the unified service entry in the setup menu."""
+    from alpi import service as svc
+
+    backend = svc.installed(profile)
+    if svc.is_running(h):
+        running = f"running (pid {svc.running_pid(h)})"
     else:
-        items = [("Install", "add-service", "register + start now")]
-
-    choice = ui.menu("", items, home=h, close="Back")
-    if choice is None:
-        return
-    try:
-        if choice == "add-service":
-            kind = service.install(name, h, profile_name)
-            ui.ok_and_wait(f"{name} service installed via {kind}")
-        elif choice == "remove-service":
-            kind = service.uninstall(name, h, profile_name)
-            ui.ok_and_wait(f"{name} service uninstalled ({kind})")
-    except Exception as e:  # noqa: BLE001
-        ui.fail_and_wait(str(e))
+        running = "stopped"
+    if backend:
+        return f"{running} · installed via {backend}"
+    return f"{running} · not installed"
 
 
-def _gateway_service_setup(h: Path) -> None:
-    _daemon_service_setup(h, "gateway")
+_SERVICE_WIZARD_COPY = (
+    "One process per profile runs every enabled subsystem (gateway,\n"
+    "scheduler, ALP listener) on a single asyncio loop. Install registers\n"
+    "the launchd / systemd unit so it autostarts on boot; toggle which\n"
+    "subsystems run from this same screen."
+)
 
 
-def _schedule_service_setup(h: Path) -> None:
-    _daemon_service_setup(h, "schedule")
-
-
-def _alp_service_setup(h: Path) -> None:
-    """ALP service — install/uninstall the launchd/systemd unit, plus
-    inter-machine TCP port configuration."""
+def _service_wizard(h: Path, profile: str) -> None:
+    """Unified setup for `alpi service`. Replaces the legacy
+    Gateway / Schedule / ALP service wizards."""
     from alpi import config as cfg_mod
-    from alpi import service, ui
+    from alpi import service as svc
+    from alpi import ui
 
     while True:
-        profile_name = _profile_from_home(h)
-        backend = service.installed("alp", profile_name)
-        svc_label = f"running via {backend}" if backend else "not installed"
+        backend = svc.installed(profile)
+        running_pid = svc.running_pid(h)
+        on_subsystems = svc.enabled_subsystems(h)
 
-        cfg = cfg_mod.load(h)
-        tcp_port = (cfg.alp or {}).get("tcp_port")
-        tcp_host = (cfg.alp or {}).get("tcp_host") or "127.0.0.1"
-        if tcp_port:
-            tcp_label = f"{tcp_host}:{tcp_port} (Noise_XK)"
+        if running_pid is not None:
+            head = f"running · pid {running_pid}"
+        elif backend:
+            head = f"installed via {backend} · stopped"
         else:
-            tcp_label = "not bound (Unix only)"
+            head = "not installed"
 
-        ui.banner(
-            ui.crumb("setup", "alp-service"),
-            subtitle=svc_label,
-            home=h,
-        )
-        ui.dim(_DAEMON_WIZARD_COPY["alp"])
+        ui.banner(ui.crumb("setup", "service"), subtitle=head, home=h)
+        ui.dim(_SERVICE_WIZARD_COPY)
         ui._console.print("")
 
-        items: list = []
+        items: list = [
+            ui.Heading("Subsystems"),
+            (("Gateway · " + _on_off(on_subsystems["gateway"])),
+             "toggle-gateway", _gateways_status(h)),
+            (("Scheduler · " + _on_off(on_subsystems["schedule"])),
+             "toggle-schedule", "cron jobs"),
+            (("ALP listener · " + _on_off(on_subsystems["alp"])),
+             "toggle-alp", _alp_subsystem_status(h)),
+            ui.Heading("Lifecycle"),
+        ]
         if backend:
-            items.append(("Uninstall service", "remove-service", svc_label))
+            items.append(("Uninstall", "uninstall",
+                          f"unregister from {backend}"))
+            items.append(("Restart", "restart", "stop + supervisor respawns"))
         else:
-            items.append(("Install service", "add-service", "register + start now"))
-        items.append(None)
-        items.append(("TCP port (inter-machine)", "tcp", tcp_label))
+            items.append(("Install", "install",
+                          "register + start now"))
+        if running_pid is not None:
+            items.append(("Stop", "stop", "send SIGTERM to the process"))
+        items.append(ui.Heading("ALP"))
+        items.append(("TCP port (inter-machine)", "tcp",
+                      _alp_tcp_label(h)))
 
         choice = ui.menu("", items, home=h, close="Back")
         if choice is None:
             return
         try:
-            if choice == "add-service":
-                kind = service.install("alp", h, profile_name)
-                ui.ok_and_wait(f"alp service installed via {kind}")
-            elif choice == "remove-service":
-                kind = service.uninstall("alp", h, profile_name)
-                ui.ok_and_wait(f"alp service uninstalled ({kind})")
+            if choice in ("toggle-gateway", "toggle-schedule", "toggle-alp"):
+                key = choice.split("-", 1)[1]
+                cfg = cfg_mod.load(h)
+                svc_cfg = dict(cfg.service or {})
+                svc_cfg[key] = not on_subsystems[key]
+                cfg.service = svc_cfg
+                cfg_mod.save(cfg)
+                ui.ok_and_wait(f"{key}: {_on_off(svc_cfg[key])} (restart to apply)")
+            elif choice == "install":
+                kind = svc.install(h, profile)
+                ui.ok_and_wait(f"service installed via {kind}")
+            elif choice == "uninstall":
+                kind = svc.uninstall(h, profile)
+                ui.ok_and_wait(f"service uninstalled ({kind})")
+            elif choice == "restart":
+                if not running_pid:
+                    ui.fail_and_wait("not running")
+                else:
+                    svc.stop(h, profile)
+                    ui.ok_and_wait("stopped — supervisor will respawn")
+            elif choice == "stop":
+                svc.stop(h, profile)
+                ui.ok_and_wait("stopped")
             elif choice == "tcp":
                 _alp_tcp_port_setup(h)
         except Exception as e:  # noqa: BLE001
             ui.fail_and_wait(str(e))
+
+
+def _on_off(b: bool) -> str:
+    return "on" if b else "off"
+
+
+def _alp_subsystem_status(h: Path) -> str:
+    from alpi import config as cfg_mod
+    cfg = cfg_mod.load(h)
+    port = (cfg.alp or {}).get("tcp_port")
+    return f"unix + tcp :{port}" if port else "unix socket only"
+
+
+def _alp_tcp_label(h: Path) -> str:
+    from alpi import config as cfg_mod
+    cfg = cfg_mod.load(h)
+    cfg_alp = cfg.alp or {}
+    port = cfg_alp.get("tcp_port")
+    host = cfg_alp.get("tcp_host") or "127.0.0.1"
+    return f"{host}:{port} (Noise_XK)" if port else "not bound (Unix only)"
 
 
 def _alp_tcp_port_setup(h: Path) -> None:
@@ -1011,26 +954,6 @@ def _alp_tcp_port_setup(h: Path) -> None:
     cfg.alp = alp_cfg
     cfg_mod.save(cfg)
     ui.ok_and_wait(f"TCP bound to {host}:{port} — restart the alp service to pick it up")
-
-
-def _schedule_service_status(h: Path) -> str:
-    from alpi import service
-
-    backend = service.installed("schedule", _profile_from_home(h))
-    return f"running via {backend}" if backend else "not installed"
-
-
-def _alp_service_status(h: Path) -> str:
-    from alpi import service
-    from alpi import config as cfg_mod
-
-    backend = service.installed("alp", _profile_from_home(h))
-    cfg = cfg_mod.load(h)
-    port = (cfg.alp or {}).get("tcp_port")
-    base = f"running via {backend}" if backend else "not installed"
-    if port:
-        return f"{base} · tcp :{port}"
-    return base
 
 
 def _workgroups_status(h: Path) -> str:
@@ -1750,19 +1673,13 @@ def profile_remove(name: str) -> None:
         )
 
     # Safety: refuse if the profile has a registered system service.
-    # Uninstalling them is an explicit step the user has to take so
-    # they understand what's being torn down.
-    installed = [
-        daemon
-        for daemon in ("gateway", "schedule", "alp")
-        if service.installed(daemon, profile=name)
-    ]
-    if installed:
-        svc_list = ", ".join(installed)
+    # Uninstalling it is an explicit step the user has to take so they
+    # understand what's being torn down.
+    if service.installed(name):
         raise click.ClickException(
-            f"profile {name!r} has installed service(s): {svc_list}.\n"
+            f"profile {name!r} has an installed service.\n"
             f"Run `alpi -p {name} setup → Delete profile` to uninstall "
-            f"services and delete in one step."
+            f"the service and delete in one step."
         )
 
     # Summary — user wants to see what they're losing before saying yes.
@@ -1806,11 +1723,8 @@ def _profile_summary(home_dir: Path) -> list[str]:
 def _delete_profile_status(h: Path, profile_name: str) -> str:
     from alpi import service
 
-    installed = [
-        d for d in ("gateway", "schedule", "alp") if service.installed(d, profile=profile_name)
-    ]
-    if installed:
-        return f"Remove all data & {len(installed)} service(s)"
+    if service.installed(profile_name):
+        return "Remove all data & uninstall service"
     return "Remove all data"
 
 
@@ -1827,12 +1741,10 @@ def _delete_profile_wizard(h: Path, profile_name: str) -> bool:
     for line in summary:
         ui._console.print(f"  {line}")
 
-    installed = [
-        d for d in ("gateway", "schedule", "alp") if service.installed(d, profile=profile_name)
-    ]
-    if installed:
+    has_service = service.installed(profile_name) is not None
+    if has_service:
         ui._console.print("")
-        ui.warn(f"installed services: {', '.join(installed)} — will be uninstalled")
+        ui.warn("service is installed — it will be uninstalled before deletion")
     ui._console.print("")
 
     if not ui.confirm(
@@ -1847,12 +1759,12 @@ def _delete_profile_wizard(h: Path, profile_name: str) -> bool:
         ui.cancelled()
         return False
 
-    for daemon in installed:
+    if has_service:
         try:
-            kind = service.uninstall(daemon, h, profile_name)
-            ui.ok(f"uninstalled {daemon} service ({kind})")
+            kind = service.uninstall(h, profile_name)
+            ui.ok(f"uninstalled service ({kind})")
         except Exception as e:  # noqa: BLE001
-            ui.fail(f"failed to uninstall {daemon}: {e}")
+            ui.fail(f"failed to uninstall service: {e}")
             ui.warn("aborting delete — address the service issue and retry.")
             ui.press_enter()
             return False
@@ -2049,110 +1961,9 @@ def peers_ping(ctx: click.Context, peer_id: str) -> None:
     )
 
 
-@main.group()
-def alp() -> None:
-    """ALP listener controls (install as a service via ``alpi setup``)."""
-
-
-def _alp_pid_path(home: Path) -> Path:
-    return home / "alp" / "alp.pid"
-
-
-@alp.command("start")
-@click.option(
-    "--port",
-    type=int,
-    default=None,
-    help="TCP port for inter-machine peers (Noise_XK). Overrides config.alp.tcp_port.",
-)
-@click.option(
-    "--host",
-    type=str,
-    default=None,
-    help="TCP bind host (default 127.0.0.1; set 0.0.0.0 or a VPN IP to accept remote peers).",
-)
-@click.pass_context
-def alp_start(ctx: click.Context, port: int | None, host: str | None) -> None:
-    """Run the ALP listener (Unix socket + optional TCP) for this profile."""
-    import asyncio
-    import logging
-    from alpi.alp import handlers as alp_handlers
-    from alpi.alp.server import Server
-    from alpi import config as cfg_mod
-
-    h: Path = ctx.obj["home"]
-    profile: str = ctx.obj.get("profile") or "default"
-    _bootstrap(h)
-    _check_not_running(_alp_pid_path(h))
-
-    cfg = cfg_mod.load(h)
-    cfg_alp = cfg.alp or {}
-    tcp_port = port if port is not None else cfg_alp.get("tcp_port")
-    tcp_host = host if host is not None else cfg_alp.get("tcp_host")
-    if tcp_port is not None and not isinstance(tcp_port, int):
-        raise click.ClickException(
-            f"alp.tcp_port in config.yaml must be an int, got {type(tcp_port).__name__}"
-        )
-
-    handler = logging.StreamHandler()
-    handler.setFormatter(logging.Formatter("%(message)s"))
-    srv_log = logging.getLogger("alpi.alp.server")
-    srv_log.setLevel(logging.INFO)
-    srv_log.addHandler(handler)
-
-    server = Server(
-        home=h,
-        agent_name=profile,
-        tcp_host=tcp_host,
-        tcp_port=tcp_port,
-    )
-    alp_handlers.register_link_ask(server, h)
-    from alpi.alp import workgroup as alp_workgroup
-    alp_workgroup.register(server, h)
-
-    pid_file = _alp_pid_path(h)
-    pid_file.parent.mkdir(parents=True, exist_ok=True)
-    pid_file.write_text(str(os.getpid()))
-
-    async def _run() -> None:
-        await server.start()
-        lines = [f"alp: {profile} listening on {server.socket_path()}"]
-        if tcp_port is not None:
-            bind = tcp_host or "127.0.0.1"
-            lines.append(f"     tcp:    Noise_XK on {bind}:{tcp_port}")
-        lines.append(f"     pubkey: {server.pubkey_b64}")
-        lines.append("     (Ctrl-C to stop)")
-        click.echo("\n".join(lines))
-        try:
-            await server.serve_forever()
-        finally:
-            await server.stop()
-
-    try:
-        asyncio.run(_run())
-    except KeyboardInterrupt:
-        click.echo("\nalp: stopped")
-    finally:
-        if pid_file.exists():
-            pid_file.unlink(missing_ok=True)
-
-
-@alp.command("stop")
-@click.pass_context
-def alp_stop(ctx: click.Context) -> None:
-    """Stop a running ALP listener (SIGTERM)."""
-    h: Path = ctx.obj["home"]
-    profile: str = ctx.obj.get("profile") or "default"
-    _stop_daemon("alp", h, profile, _alp_pid_path(h))
-
-
-@alp.command("restart")
-@click.pass_context
-def alp_restart(ctx: click.Context) -> None:
-    """Stop the listener and wait for the service to bring it back."""
-    h: Path = ctx.obj["home"]
-    profile: str = ctx.obj.get("profile") or "default"
-    _restart_daemon("alp", h, profile, _alp_pid_path(h))
+# `alpi alp` group has been removed — lifecycle moved to `alpi service`.
+# All ALP listener bootstrap (Unix socket + optional TCP, link.* + workgroup
+# handler registration) lives in ``alpi.service._run_alp``.
 
 
 # Workgroups (ALP.3)

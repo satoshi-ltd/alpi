@@ -36,15 +36,17 @@ only when you want to override it.
 Three options:
 
 - **CLI wizards**: `alpi setup` covers model selection, gateway
-  credentials, MCP servers, sandbox posture, voice, disk cleanup, and
-  installing the gateway daemon as an OS-level service. `alpi setup →
-  Cleanup` inspects the profile's heavy dirs (audio cache, old
-  sessions, gateway logs, schedule output) and deletes after one-shot
-  confirmation. `alpi setup → Gateway service` registers the gateway
-  daemon under launchd (macOS) or systemd --user (Linux) for the
-  active profile, so it starts on boot and restarts on crash — only
-  after at least one gateway channel (Telegram / IMAP / Gmail) has
-  credentials set. Uninstall from the same menu.
+  credentials, MCP servers, sandbox posture, voice, peers,
+  workgroups, disk cleanup, and installing the unified service as
+  an OS-level autorun. `alpi setup → Cleanup` inspects the
+  profile's heavy dirs (audio cache, old sessions, schedule output)
+  and deletes after one-shot confirmation. `alpi setup →
+  Maintenance → Service` registers the per-profile orchestrator
+  under launchd (macOS) or systemd --user (Linux) so it starts on
+  boot and restarts on crash; the same screen toggles which
+  subsystems (gateway / scheduler / ALP) the orchestrator activates
+  and configures the inter-machine TCP port for ALP. Uninstall from
+  the same menu.
 - **Edit the YAML**: open `~/.alpi/config.yaml` (or
   `~/.alpi/profiles/<name>/config.yaml` for non-default profiles)
   and change values manually. Restart whatever surface was affected.
@@ -374,7 +376,7 @@ internet exposure is not the recommended shape.
 
 | Key | Default | Notes |
 |---|---|---|
-| `alp.tcp_port` | unset | Enables ALP.2 Noise_XK-over-TCP for this profile. Equivalent to `alpi alp start --port <n>`. |
+| `alp.tcp_port` | unset | Enables ALP.2 Noise_XK-over-TCP for this profile. The ALP listener subsystem of `alpi service` picks it up at start. |
 | `alp.tcp_host` | `127.0.0.1` when `tcp_port` is set | TCP bind host. Use a VPN IP or `0.0.0.0` when remote peers need to dial in. |
 
 Example:
@@ -406,9 +408,26 @@ Add via `alpi setup → Model → Add Ollama`. Remove via `alpi setup → Model 
 |---|---|---|
 | `mcp.servers` | `{}` | Map of `<name> → {command, args, env}`. Secrets in `env` use the `env:VAR_NAME` reference. Add via `alpi setup → MCPs` — hand-editing is supported but the wizard is easier. |
 
+### Service
+
+The unified per-profile orchestrator (gateway + scheduler + ALP
+listener in one process). Every subsystem is on by default; toggle
+individually if you want a slim profile (e.g. an ALP-only relay
+machine sets gateway and scheduler to false).
+
+```yaml
+service:
+  gateway: true
+  schedule: true
+  alp: true
+```
+
+Missing section = all three on, matching the pre-refactor
+default. A toggle takes effect at the next `alpi service restart`.
+
 ## Takes-effect cheat sheet
 
 - **next turn** — change is live on the agent's next response.
 - **next session** — restart `alpi` to pick it up.
-- **next gateway restart** — `alpi gateway stop && alpi gateway start`
-  (or reload the service if installed as a daemon).
+- **next service restart** — `alpi service restart` (or reload
+  through launchd / systemd if installed as an autorun).

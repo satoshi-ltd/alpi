@@ -121,11 +121,11 @@ def test_profile_remove_refuses_if_service_installed(monkeypatch, tmp_path: Path
 
     CliRunner().invoke(cli.main, ["profile", "create", "guarded"])
 
-    # Simulate: gateway service is installed for this profile.
+    # Simulate: a service is installed for this profile.
     from alpi import service
     monkeypatch.setattr(
         service, "installed",
-        lambda name, profile="default": "launchd" if name == "gateway" else None,
+        lambda profile="default": "launchd" if profile == "guarded" else None,
     )
     result = CliRunner().invoke(cli.main, ["profile", "remove", "guarded"])
     assert result.exit_code != 0
