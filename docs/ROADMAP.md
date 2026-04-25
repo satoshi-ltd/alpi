@@ -20,7 +20,7 @@ remaining window.
 
 | ID | Item | Status |
 |---|---|---|
-| ALP.3 | Alpi Link Protocol — shared workgroups (collaborative spaces, humans optional) | 🔴 gate — landing today |
+| ALP.3 | Alpi Link Protocol — shared workgroups (collaborative spaces, humans optional) | ✅ shipped (PR 5 closes functional autonomy) |
 | AU | Distribution — `uv tool install alpi`, `alpi update`, end-user install without source | 🔴 gate |
 | SU | Service unification — single ``alpi service`` orchestrator per profile (replaces gateway/schedule/alp daemons) | ✅ shipped (was tracked for v0.4 architecture cleanup, brought forward) |
 
@@ -36,6 +36,43 @@ are double-gated against both profile and workgroup budgets. Verbs:
 `workgroup.create`, `workgroup.join`, `workgroup.post`,
 `workgroup.pull`, `workgroup.leave`, `workgroup.pause`; rekey on
 member leave.
+
+**PR 5 (functional closure)** lands the engine integration: each
+member's service runs a workgroup poller that wakes the agent on
+new posts; every interactive / gateway / scheduled turn auto-pulls
+subscribed workgroups before running and injects the briefing +
+recent transcript + active task as system prompt context. Two
+in-chat markers, parsed client-side on the decrypted transcript:
+`#task <text>` opens the active task (preempts the previous one
+with synthetic result `"preempted by …"`), `#done <text>` closes
+it. The hub stays zero-knowledge — task state is computed locally
+from the post stream. Single-task model only; multi-task is
+tracked separately for v0.4.
+
+**v0.3 backlog (ALP.3 follow-ups, queued after PR 5):**
+
+- **Workgroup roles** — optional ``roles: dict[peer_id, str]`` in
+  ``meta.yaml`` so the workgroup creator publishes a one-line role
+  hint per invited member (``alice: "product engineer — velocity"``
+  / ``bob: "systems engineer — durability"``). The hub returns it
+  on ``workgroup.join``, members cache it in their subscription,
+  and the engine pre-turn hook surfaces it alongside the briefing.
+  Lets every agent see the roster of who-does-what so misdirected
+  tasks ("@bob frontend please") can be redirected with confidence
+  instead of accepted blindly. AGENT.md stays private; ``roles`` is
+  just the public-facing tag-line. No protocol change beyond a
+  metadata field. Estimated ~50 LoC + tests.
+
+- **Active liveness probes** (optional follow-up to passive
+  liveness shipped in PR 5) — passive ``last_seen_at`` is in
+  place: the hub stamps it on every ``workgroup.pull`` /
+  ``workgroup.post`` and returns the roster on ``join`` /
+  ``pull``; the engine pre-turn hook tags peers as ``online`` /
+  ``last seen N min ago`` / ``offline (>30 min)``. If passive
+  proves unreliable in the wild, layer an active probe via
+  ``link.ping`` with a 500 ms timeout, but only on the wizard's
+  "show members" view — never on every engine turn (would blow
+  turn latency).
 
 ### AU — Distribution + update path
 
@@ -95,6 +132,7 @@ measurement before scope locks).
 |---|---|---|
 | ALP.4 | Streaming `link.ask` — SSE-style chunked replies between peers | 🔵 |
 | ALP.5 | Blob transfer — `link.put_blob` / `link.get_blob`, content-addressed, chunked AEAD | 🔵 |
+| ALP.3+ | Multi-task workgroups — `multitask: true` in meta, letter-prefixed task IDs (`#task A …`, `#done A: …`) so several streams can run in the same workgroup | 🔵 deferred from v0.3 — emerges only when single-task in real use shows it's not enough |
 | AX | Mobile / desktop companion — minimal client speaking ALP to the user's profile | 🔵 |
 | AY | Skills marketplace — federated, signed, never centralised | 🔵 |
 | AZ | Workgroup viewer — folds into AX (companion app surfaces the transcript read-only or read/write) | 🔵 |

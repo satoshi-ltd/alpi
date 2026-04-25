@@ -560,7 +560,7 @@ ECIES over X25519 + HKDF-SHA256 + ChaCha20-Poly1305:
 
 The 32-byte group key plus a 16-byte AEAD tag yields a 92-byte
 sealed blob, base64-encoded in `members.yaml`. Forward secrecy on
-key rotation (ALP.3 PR 2 `leave` flow) drops out naturally — the
+key rotation on `leave` drops out naturally — the
 hub generates a fresh group key and re-runs the seal once per
 remaining member; ex-members' Ed25519 keys cannot derive the new
 shared secret.
@@ -602,6 +602,79 @@ workgroups host the hub on an always-on machine (a home server, a
 small VPS, a Raspberry Pi), which is the deployment the protocol
 optimises for.
 
+### Briefing + auto-kickoff
+
+A workgroup carries a short **briefing** — a one-paragraph
+description of its purpose, members, and expected deliverable —
+set at create time and editable from the wizard. The briefing is
+plaintext on the hub (alongside the name, hub_pubkey, and budget),
+since it's metadata about *why this workgroup exists*, not the
+content of conversations inside it.
+
+```yaml
+# meta.yaml extension
+briefing: >
+  research peptide candidates for therapeutic protein X.
+  deliver a shortlist of 5 with Tanimoto > 0.7 by friday.
+auto_kickoff: true   # default; agents wake on create instead of waiting for first mention
+```
+
+`auto_kickoff: true` (default) means every member's local engine
+starts engaging with the briefing as soon as their next turn fires
+— no waiting for a first human prompt. Set `false` for
+exploratory workgroups where you want the chat dormant until you
+explicitly speak.
+
+### In-chat protocol
+
+The wire-level transport doesn't change. **All semantics below
+are parsed client-side on the decrypted transcript** — the hub
+remains zero-knowledge about plaintext. Each member's engine
+re-derives the workgroup's task state on every `pull` by scanning
+the post stream in order.
+
+Two markers on top of the existing ALP `@<peer-id>` mention
+syntax:
+
+| Marker | Meaning | Posted by |
+|---|---|---|
+| `@<peer-id>` | Direct mention. Pinged member's engine treats this as an explicit handoff signal. | any member |
+| `#task <text>` | Open the active task with `<text>` as its description. Preempts whatever was active before. | any member |
+| `#done <text>` | Close the active task. `<text>` is the result string persisted with the task record. | any member |
+
+**Recognition rule.** Markers count only when they appear at the
+**start of a line** in the decrypted post body. So a sentence like
+`"I'll create a #task tomorrow"` does NOT open one; only a line
+beginning with `#task ` does. Same for `#done` and for `@`. This
+prevents accidental triggers when agents talk *about* tasks.
+
+**Single-task model (v0.3).** Exactly one task active per
+workgroup at a time. Posting a new `#task` while one is open
+auto-closes the previous one with the synthetic result
+``"preempted by <new task description>"`` and starts the new one.
+Members see the switch in their next turn's context as
+"previous task X closed (preempted). Active task: Y." — work
+already done stays in the transcript, available if the new task
+needs it. Multi-task workgroups (`multitask: true` in `meta.yaml`,
+with letter-prefixed task IDs) are tracked for v0.4.
+
+**Edge cases:**
+
+- A post containing both `#task ...` and `#done ...` at line
+  starts is **ambiguous** and ignored — the engine logs a warning
+  and treats the post as plain prose.
+- `#task` with no description is a silent no-op.
+- `#done` with no active task is a silent no-op.
+- A post can mention multiple peers (`#task @alice review papers,
+  @bob run pipeline`) — every mentioned peer's engine reads the
+  active task plus the implicit "I'm being handed this slice".
+
+**Closure notification.** When `#done` lands, the engine
+on each member's machine emits a one-line summary into
+`agent.log` and (optionally per workgroup) pushes a Telegram DM
+to the user — `notify_on_close: telegram | none` in `meta.yaml`,
+defaulting to none.
+
 ### Budget inside workgroups
 
 A workgroup may carry its own optional **lifetime** budget — a
@@ -632,8 +705,7 @@ budget. Whichever is tighter wins:
   workgroup even while the workgroup pool has room; its model
   simply can't run to produce the next post.
 - An exhausted workgroup freezes posts from every member until
-  the cap is bumped (manual edit of `meta.yaml`; a TUI surface is
-  tracked under ALP.3 PR 4).
+  the cap is bumped (manual edit of `meta.yaml`).
 
 The hub gates against **author-declared** spend: the
 `cost: {usd, tokens}` field on each `workgroup.post` is taken at
@@ -645,6 +717,66 @@ the LLM spend that produced the message; the hub records it in
 the workgroup `ledger.json` and checks cumulative `used + declared
 > cap` before admitting the post (`-32005 budget-exceeded` with
 `data.cap_kind = "workgroup_usd"` or `"workgroup_tokens"`).
+
+### Autonomous engagement
+
+Workgroups are useful only if the agents inside them act without a
+human in the loop. Each member runs a poller that wakes its agent
+on relevant new traffic, plus a pre-turn context hook that injects
+workgroup state into every engine turn.
+
+**Poller.** Each member ticks the workgroups it participates in on
+a fixed interval (the reference implementation uses 30 s). Per
+workgroup it compares the cached transcript against a
+``last_responded_seq`` cursor and dispatches an engine turn when
+any of three triggers fires:
+
+1. The newest unresponded post `@`-mentions this member.
+2. The newest unresponded post opens a collective `#task` with no
+   `@`-targets.
+3. The active `#task` names this member and there is a newer post
+   than our last response.
+
+A per-workgroup cooldown rate-limits dispatches so two peers don't
+ping-pong. When a trigger fires, the poller invokes one engine turn
+against the workgroup and exits. The synthetic prompt explicitly
+states the agent is running alone with no human in the loop, so it
+posts via `workgroup.post` or stays silent rather than asking a
+non-existent human for permission.
+
+**Pre-turn context hook.** Before every engine turn (interactive,
+gateway, scheduled, or workgroup-spawned), the hook reads the
+on-disk subscription cache and emits a system-prompt block per
+workgroup the profile participates in. The block carries the
+briefing, the active task, the last few decrypted posts, the
+roster with liveness stamps, and a fixed engagement-rules section
+that biases the agent toward observer behaviour: silence by
+default, post only when the message adds genuinely new content,
+react to a peer's concrete proposal with accept / counter /
+block (never with more research), and close with `#done` when the
+discussion converges.
+
+**Cost auto-declaration.** The engine's per-turn usage tracker
+accumulates LLM cost into a context-local variable; when
+`workgroup.post` fires inside that turn, it reads the accumulated
+cost and attaches `{usd, tokens}` to the envelope so the hub's
+ledger is honest about what the post cost to produce.
+
+### Member liveness
+
+The hub stamps a `last_seen_at` ISO timestamp on each member every
+time that member calls `workgroup.pull` or `workgroup.post`, and
+returns the full roster (`[{pubkey, last_seen_at}]`) on `join` and
+on every `pull`. Each member caches the roster locally and the
+pre-turn hook renders it into the system prompt as e.g.
+`@alice (online) · @bob (last seen 12m ago) · @carla (offline
+>30m)`. "Online" means seen within the last few poll ticks.
+
+This is a passive signal — no extra ping traffic. It lets agents
+tell the difference between a peer who hasn't replied yet and a
+peer who isn't watching the workgroup, so they don't waste tokens
+mentioning absent members or wait indefinitely on a quorum that
+isn't going to materialise.
 
 ### Human participation
 

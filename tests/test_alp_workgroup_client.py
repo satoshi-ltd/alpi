@@ -79,6 +79,53 @@ def test_upsert_replaces_existing_subscription(short_tmp: Path) -> None:
     assert loaded[0].name == "b"
 
 
+def test_recent_posts_cache_dedupes_and_trims(short_tmp: Path) -> None:
+    sub = sub_mod.Subscription(wg_id="wg_x", name="x", hub_id="h", hub_pubkey="k")
+    posts = [{"seq": i, "text": f"msg {i}", "from": "x"} for i in range(1, 26)]
+    sub.append_recent(posts)
+    assert len(sub.recent_posts) == sub_mod.RECENT_POSTS_CACHE
+    seqs = [int(p["seq"]) for p in sub.recent_posts]
+    assert seqs[-1] == 25
+    assert seqs[0] == 25 - sub_mod.RECENT_POSTS_CACHE + 1
+
+
+def test_recent_posts_cache_replaces_on_same_seq() -> None:
+    sub = sub_mod.Subscription(wg_id="wg_x", name="x", hub_id="h", hub_pubkey="k")
+    sub.append_recent([{"seq": 1, "text": "first", "from": "a"}])
+    sub.append_recent([{"seq": 1, "text": "first (updated)", "from": "a"}])
+    assert len(sub.recent_posts) == 1
+    assert sub.recent_posts[0]["text"] == "first (updated)"
+
+
+def test_recent_posts_persist_through_load_save(short_tmp: Path) -> None:
+    home = short_tmp / "alice"; home.mkdir()
+    sub = sub_mod.Subscription(wg_id="wg_x", name="x", hub_id="h", hub_pubkey="k")
+    sub.append_recent([
+        {"seq": 1, "text": "alpha", "from": "a"},
+        {"seq": 2, "text": "beta",  "from": "b"},
+    ])
+    sub_mod.upsert(home, sub)
+    reloaded = sub_mod.get(home, "wg_x")
+    assert reloaded is not None
+    assert len(reloaded.recent_posts) == 2
+    assert reloaded.recent_posts[1]["text"] == "beta"
+
+
+def test_briefing_persists_through_load_save(short_tmp: Path) -> None:
+    """Member-side briefing is fetched on join and cached in
+    subscriptions.yaml so the engine pre-turn hook surfaces it on
+    every turn without an extra network call."""
+    home = short_tmp / "alice"; home.mkdir()
+    sub = sub_mod.Subscription(
+        wg_id="wg_x", name="x", hub_id="h", hub_pubkey="k",
+        briefing="research peptides for protein X",
+    )
+    sub_mod.upsert(home, sub)
+    reloaded = sub_mod.get(home, "wg_x")
+    assert reloaded is not None
+    assert reloaded.briefing == "research peptides for protein X"
+
+
 def test_remove_returns_false_for_unknown(short_tmp: Path) -> None:
     home = short_tmp / "x"; home.mkdir()
     assert sub_mod.remove(home, "wg_nope") is False

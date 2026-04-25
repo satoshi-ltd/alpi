@@ -110,6 +110,8 @@ def _hub_detail_view(home: Path, wg_id: str) -> None:
              f"{post_count} message{'s' if post_count != 1 else ''}"),
             ("Members",         "members",
              f"{len(wg.members)} pinned"),
+            ("Briefing",        "briefing",
+             _preview(wg.meta.briefing) if wg.meta.briefing else "(empty)"),
             ("Budget",          "budget", _budget_summary(home, wg)),
             ui.Heading("Maintenance"),
             ("Pause" if not wg.meta.paused else "Resume",
@@ -127,6 +129,8 @@ def _hub_detail_view(home: Path, wg_id: str) -> None:
             _show_members(home, wg)
         elif choice == "budget":
             _edit_budget(home, wg)
+        elif choice == "briefing":
+            _edit_briefing(home, wg)
         elif choice == "pause":
             wg.meta.paused = True
             from alpi.alp.workgroup import _utcnow, _save_meta, _wg_dir
@@ -159,6 +163,7 @@ def _show_members(home: Path, wg) -> None:
     aliases = _alias_map(home)
     kp = load_or_generate(home)
     accent = ui._accent_hex(home) or ""
+    spend = _spend_per_member(home, wg)
     ui.banner(
         ui.crumb("setup", "workgroups", wg.meta.name, "members"),
         subtitle=f"{len(wg.members)} pinned · hub-anchored roster",
@@ -169,12 +174,37 @@ def _show_members(home: Path, wg) -> None:
         flag = "joined" if m.joined else "invited"
         if m.pubkey == wg.meta.hub_pubkey:
             flag = "hub"
+        spent = spend.get(m.pubkey, {"usd": 0.0, "tokens": 0, "posts": 0})
+        suffix = (
+            f"  [dim]· ${spent['usd']:.2f} · {spent['tokens']:,} tok"
+            f" · {spent['posts']} posts[/dim]"
+        )
         if m.pubkey == kp.pubkey_b64() and accent:
-            ui._console.print(f"  [b {accent}]{who}[/b {accent}]  [dim]{flag}[/dim]")
+            ui._console.print(
+                f"  [b {accent}]{who}[/b {accent}]  [dim]{flag}[/dim]{suffix}",
+            )
         else:
-            ui._console.print(f"  [b]{who}[/b]  [dim]{flag}[/dim]")
+            ui._console.print(f"  [b]{who}[/b]  [dim]{flag}[/dim]{suffix}")
     ui._console.print("")
     ui.press_enter()
+
+
+def _spend_per_member(home: Path, wg) -> dict[str, dict[str, Any]]:
+    """Aggregate workgroup transcript by author. Each post may carry
+    an optional ``cost: {usd, tokens}`` declaration; we sum them per
+    pubkey to give the wizard a quick "who's burning what" view."""
+    kp = load_or_generate(home)
+    member = wg.member(kp.pubkey_b64())
+    out: dict[str, dict[str, Any]] = {}
+    for entry in _read_transcript(home, wg.meta.id):
+        author = str(entry.get("from") or "")
+        bucket = out.setdefault(author, {"usd": 0.0, "tokens": 0, "posts": 0})
+        bucket["posts"] += 1
+        cost = entry.get("cost") or {}
+        if isinstance(cost, dict):
+            bucket["usd"] += float(cost.get("usd", 0.0) or 0.0)
+            bucket["tokens"] += int(cost.get("tokens", 0) or 0)
+    return out
 
 
 def _show_transcript_hub(home: Path, wg) -> None:
@@ -382,6 +412,14 @@ def _create_flow(home: Path) -> None:
         return ui.cancelled()
     name = name.strip()
 
+    briefing = ui.text(
+        "Briefing — what is this workgroup for? "
+        "(one paragraph, ENTER to skip):",
+    )
+    if briefing is None:
+        return ui.cancelled()
+    briefing = (briefing or "").strip()
+
     # Pick members from peers.yaml
     pinned = peers_mod.load(home)
     if not pinned:
@@ -396,11 +434,18 @@ def _create_flow(home: Path) -> None:
     if budget is False:
         return ui.cancelled()
 
+    auto_kickoff = ui.confirm(
+        "Auto-kickoff? (members start engaging as soon as their "
+        "service polls — set off for exploratory workgroups)",
+        default=True,
+    )
+
     kp = load_or_generate(home)
     try:
         wg = wg_mod.create(
             home, name=name, hub_kp=kp,
             member_pubkeys=member_pks, budget=budget or {},
+            briefing=briefing, auto_kickoff=bool(auto_kickoff),
         )
     except ValueError as e:
         ui.fail_and_wait(str(e))
@@ -480,6 +525,42 @@ def _budget_summary(home: Path, wg) -> str:
             f"{led.get('tokens', 0):,} / {wg.meta.budget['max_tokens']:,} tok",
         )
     return " · ".join(parts)
+
+
+def _edit_briefing(home: Path, wg) -> None:
+    """Edit the workgroup's plaintext briefing on the hub. Set what
+    this workgroup is for; a clear briefing is the anchor every member
+    agent reads on every turn."""
+    from alpi.alp.workgroup import _save_meta, _wg_dir
+
+    ui.banner(
+        ui.crumb("setup", "workgroups", wg.meta.name, "briefing"),
+        subtitle="what is this workgroup for?",
+        home=home,
+    )
+    ui.dim(
+        "The briefing is plaintext on the hub — visible to anyone with\n"
+        "filesystem access, not part of the encrypted transcript. It\n"
+        "anchors what the workgroup exists for; member agents read it\n"
+        "on every turn to stay aligned."
+    )
+    ui._console.print("")
+    raw = ui.text(
+        f"Briefing (current: {_preview(wg.meta.briefing) or '(empty)'}):",
+        default=wg.meta.briefing,
+    )
+    if raw is None:
+        return ui.cancelled()
+    wg.meta.briefing = (raw or "").strip()
+    _save_meta(_wg_dir(home, wg.meta.id), wg.meta)
+    ui.ok_and_wait("briefing updated")
+
+
+def _preview(text: str, limit: int = 60) -> str:
+    text = (text or "").strip()
+    if len(text) <= limit:
+        return text
+    return text[: limit - 1] + "…"
 
 
 def _edit_budget(home: Path, wg) -> None:
