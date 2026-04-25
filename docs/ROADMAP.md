@@ -92,6 +92,8 @@ measurement before scope locks).
 
 | ID | Item | Status |
 |---|---|---|
+| ALP.4 | Streaming `link.ask` — SSE-style chunked replies between peers | 🔵 |
+| ALP.5 | Blob transfer — `link.put_blob` / `link.get_blob`, content-addressed, chunked AEAD | 🔵 |
 | AX | Mobile / desktop companion — minimal client speaking ALP to the user's profile | 🔵 |
 | AY | Skills marketplace — federated, signed, never centralised | 🔵 |
 | AZ | Workgroup viewer — folds into AX (companion app surfaces the transcript read-only or read/write) | 🔵 |
@@ -188,6 +190,52 @@ party who can decrypt; we never see the plaintext.
 machines" + "no vendor lock-in" + "if your laptop dies, you have
 your agent back" — every commercial AI tool today loses your
 context when you re-install. We don't.
+
+### ALP.4. Streaming `link.ask`
+
+Today `link.ask` is request/response: a peer asks "research X" and
+waits until the full answer lands. Streaming chunks turns that into
+*watching the other agent think* — reasoning tokens, tool traces,
+partial answers all flow as they happen.
+
+**Wire shape.** Same envelope as today; the response carries a
+`stream: true` flag and the body becomes a sequence of
+`{kind: "chunk"|"final"|"error", payload: …}` frames. Over Unix
+socket: line-delimited JSON. Over TCP/Noise: each frame is its own
+encrypted record. No new crypto, no new auth — the existing
+envelope signature covers the stream as a whole (signed at the
+final frame); intermediate chunks are AEAD-protected by the Noise
+session for inter-machine, by the Unix-socket trust boundary
+intra-machine.
+
+**Why it matters.** Two payoffs. (1) Demos: "two alpis
+collaborating" looks like one watching the other type, which is the
+single most legible visualisation of agent-to-agent work we can
+ship. (2) Inside workgroups (ALP.3), a long `workgroup.post`
+appears live for every member — the workgroup transcript becomes a
+real-time surface, not a polling one. The same primitive lets the
+companion app (AX) stream a remote profile's reply incrementally
+instead of waiting for the full turn.
+
+### ALP.5. Blob transfer
+
+Two new verbs — `link.put_blob(bytes, hash)` and
+`link.get_blob(hash)` — for sharing artefacts that have no business
+inline in a JSON envelope: a PDF, a dataset, the output of a skill,
+a screenshot.
+
+**Wire shape.** Content-addressed by SHA-256; the recipient stores
+under `~/.alpi/<profile>/alp/blobs/<hash>` and dedups across calls.
+Chunked transfer (default 64 KiB) with per-chunk AEAD; the final
+frame carries the full-blob signature so the receiver can verify
+the artefact end-to-end. Caps: per-call max blob size (config
+knob, 100 MiB default), per-day inbound budget per peer (separate
+from the spending ledger — this gates *bytes*, not LLM cost).
+
+**Pairs naturally with workgroups.** A workgroup post can reference
+a blob (`{text: "see attached", blob: "<hash>"}`); the hub fans out
+the post and members `link.get_blob` from the hub on demand. No
+need to upload to the cloud, no third-party intermediary.
 
 ### AX. Mobile / desktop companion
 
@@ -393,6 +441,55 @@ need it. Measure on `agent.log` before committing.
 Output: short report showing tool-call rate on a Claude session
 with vs without the block (same prompts). Apply the split only if
 no regression on the shorter variant.
+
+---
+
+## v0.5 cycle
+
+The v0.5 surface deepens what v0.4 plants. ALP gets two more
+extensions that turn workgroups from "shared chat" into "shared
+workspace"; the rest emerges from how v0.4 lands in real use.
+
+| ID | Item | Status |
+|---|---|---|
+| ALP.6 | Workgroup search — semantic search over a workgroup transcript via local RAG (depends on **BA**) | 🔵 |
+| ALP.7 | Pinned shared memory per workgroup — hub-anchored `wiki.md`, role-based write | 🔵 |
+
+### ALP.6. Workgroup search
+
+Once a workgroup runs for weeks, scrolling becomes useless.
+`workgroup.search(workgroup_id, query)` returns the top-K posts
+matching a query, ranked by semantic similarity using the local RAG
+index (**BA**). The hub indexes its own transcript on disk; members
+search remotely via the existing ALP transport.
+
+**Why it pairs with BA.** Reuses the same embedding model and
+vector store; no separate ML surface to maintain. The hub embeds
+each post when it lands and answers `workgroup.search` from the
+local index — no roundtrip to a third party, no plaintext leaks
+beyond the workgroup membership.
+
+### ALP.7. Pinned shared memory per workgroup
+
+Workgroups today are append-only chat. **ALP.7** adds a single
+mutable surface per workgroup — a `wiki.md` held by the hub, read
+by every member, writable by members the hub flagged with the
+`writer` role at create or via `workgroup.grant`. The wiki captures
+state that does not belong in the rolling transcript: design
+decisions, shared conventions, links, the workgroup's "about"
+page.
+
+**Verbs.** `workgroup.wiki.read(workgroup_id) → text`,
+`workgroup.wiki.write(workgroup_id, text, parent_hash) → new_hash`,
+`workgroup.wiki.history(workgroup_id, limit)`. Optimistic
+concurrency via the `parent_hash` — two writers racing get a clean
+conflict response, not a clobber.
+
+**Why "pinned memory" not "files"**. ALP.5 already covers blobs.
+The wiki is deliberately a single text doc per workgroup —
+opinionated, easy to render in the TUI and the companion (AX), and
+sized for an agent to read in full as part of joining the
+workgroup. Anything bigger goes through ALP.5.
 
 ---
 

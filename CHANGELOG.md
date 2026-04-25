@@ -1,5 +1,70 @@
 # Changelog
 
+## v0.2.87 — 2026-04-25
+
+### alp.3 — workgroups (PR 1: hub state + 4 core verbs)
+
+First slice of ALP.3. The hub side of shared workgroups: a profile
+can `create` a workgroup with a chosen roster, and pinned remote
+peers can `join`, `post`, and `pull` over the existing ALP transport
+(Unix socket or Noise_XK/TCP — the dispatch is transport-agnostic).
+End-to-end encrypted: the hub stores ciphertext only, group keys
+are sealed per-member.
+
+- `alpi/alp/workgroup.py` (new, ~430 lines) — three layers in one
+  module:
+  - **Crypto.** ECIES seal of the group key for each member:
+    X25519 (derived from the member's Ed25519 pubkey via the same
+    birational map Noise uses) + HKDF-SHA256 + ChaCha20-Poly1305
+    with AAD-tagged contexts (`b"seal"`, `b"post"`).
+    `seal_group_key` / `open_sealed_group_key` for keys,
+    `encrypt_post` / `decrypt_post` for transcript entries.
+  - **Storage.** Per-workgroup directory under
+    `~/.alpi/<profile>/alp/workgroups/<wg_id>/` with `meta.yaml`,
+    `members.yaml`, and append-only `transcript.jsonl`. IDs
+    follow `wg_<base32(16 random bytes)>` — name-independent so
+    renames don't break references.
+  - **Local + over-the-wire verbs.** `create()` is a local
+    primitive (the hub creates a workgroup on its own profile;
+    you don't ask another alpi to host one). `register()` wires
+    `workgroup.join`, `workgroup.post`, `workgroup.pull` against
+    an `alp.server.Server`. Capability is enforced at the
+    transport layer; membership is enforced at the handler with
+    the new `-32008 workgroup-not-member` and `-32009
+    workgroup-not-found` error codes.
+- `alpi/cli.py` — `alpi alp start` registers the workgroup
+  handlers alongside the existing `link.ask` handlers.
+- `docs/ALP.md` — workgroup methods rewritten with concrete
+  signatures (`workgroup.post(workgroup_id, nonce, ciphertext)`,
+  not `(workgroup_id, text)` — encryption is client-side, the hub
+  never sees plaintext). New sections document the sealing scheme
+  step-by-step and the hub's on-disk state. Error codes table
+  gains `-32008` and `-32009`. `leave` and `pause`/`resume` flagged
+  as PR 2 / PR 3.
+
+20 new tests in `tests/test_alp_workgroup.py`:
+- crypto round-trip + isolation (sealing only opens with the
+  right Ed25519 key; wrong group key fails post AEAD)
+- local `create` (persistence, dedup, validation, hub auto-join)
+- end-to-end over Unix socket — `join` → encrypt-and-post → `pull`
+  → decrypt
+- multi-member (3 alpis posting, every member decrypts the full
+  transcript)
+- concurrent posts via `asyncio.gather` produce distinct
+  monotonic `seq` values
+- workgroup state survives a server stop+restart (proves
+  on-disk authoritative state)
+- same flow over Noise_XK / TCP via `call_tcp`
+- error paths: `-32008` not-member across all 3 verbs,
+  `-32009` not-found, `-32001` capability-denied.
+
+Suite: 789 passed, 8 skipped (was 769).
+
+**Pending for ALP.3 to close:** `leave` + group-key rotation +
+budget double-gate (PR 2), `pause` / `resume` + `-32010
+workgroup-paused` (PR 3), TUI + CLI surface + engine context
+(PR 4).
+
 ## v0.2.86 — 2026-04-25
 
 ### setup wizard — section headings + copy pass

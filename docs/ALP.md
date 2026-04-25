@@ -382,6 +382,8 @@ reserved space:
 | `-32005` | `budget-exceeded` | Request would breach daily cap. |
 | `-32006` | `version-mismatch` | Incompatible `alp.v`. |
 | `-32007` | `target-busy` | Session already running a turn. |
+| `-32008` | `workgroup-not-member` | Caller is not a pinned member of the workgroup. |
+| `-32009` | `workgroup-not-found` | No workgroup with the requested id at the hub. |
 
 The standard JSON-RPC codes (`-32600` through `-32603`) retain
 their standard meaning and apply to malformed requests, unknown
@@ -456,20 +458,86 @@ chat.
 
 ### Methods
 
-- `workgroup.create(name, members[]) → workgroup_id`
-- `workgroup.join(workgroup_id)` — the hub responds with the
-  current group key, encrypted to the joining member's pubkey.
-- `workgroup.post(workgroup_id, text)` — the author encrypts
-  under the current group key and sends to the hub, which fans
-  out.
-- `workgroup.pull(workgroup_id, since)` — poll for new messages
-  since a cursor; may be served as SSE on inter-machine links.
+`create` is a **local primitive** invoked on the hub itself (TUI
+or CLI), not over the wire — there is no "ask another alpi to
+host a workgroup for me". The remaining verbs are over-the-wire
+methods callable by pinned peers in the workgroup roster.
+
+- `workgroup.create(name, member_pubkeys[]) → workgroup_id`
+  Local primitive on the hub. `member_pubkeys` are base64
+  Ed25519 identities (same shape as `peers.yaml`); the hub's own
+  pubkey is added implicitly. Generates a fresh 32-byte group
+  key, seals it once per member, and writes the workgroup state
+  to disk. Returns a `wg_<base32(16 random bytes)>` identifier
+  — name-independent, rename-safe.
+
+- `workgroup.join(workgroup_id) → {workgroup_id, name, sealed_key, members[]}`
+  Caller MUST already be in the workgroup's member roster (added
+  at create time); otherwise `-32008`. The hub returns the
+  member's pre-sealed group key plus the current member-pubkey
+  list. Idempotent — a second `join` returns the same sealed key.
+
+- `workgroup.post(workgroup_id, nonce, ciphertext) → {seq, ts}`
+  The author encrypts the message client-side under the current
+  group key (ChaCha20-Poly1305, AAD = `b"post"`); the hub never
+  sees plaintext. The hub appends the ciphertext to the
+  transcript and assigns the next monotonic `seq` (1-based).
+
+- `workgroup.pull(workgroup_id, since) → {posts[], head}`
+  Returns every post with `seq > since`, in order, plus the
+  current `head` cursor. `since=0` returns the full transcript.
+  Pull is the canonical fan-out for ALP.3 — each member observes
+  new traffic by polling. SSE-style streaming pull is tracked
+  separately as **ALP.4**.
+
 - `workgroup.leave(workgroup_id)` — the hub generates a new group
   key and distributes it to remaining members so past keys can no
-  longer decrypt new traffic.
+  longer decrypt new traffic. *(Not yet shipped — PR 2.)*
+
 - `workgroup.pause(workgroup_id)` / `workgroup.resume(workgroup_id)`
   — any member may pause a workgroup, suspending all posts until
-  a resume.
+  a resume. *(Not yet shipped — PR 3.)*
+
+### Group-key sealing
+
+The hub seals the group key separately for every member using
+ECIES over X25519 + HKDF-SHA256 + ChaCha20-Poly1305:
+
+1. Convert the member's Ed25519 pubkey to X25519 with the standard
+   birational map (same conversion the Noise_XK transport uses).
+2. Generate an ephemeral X25519 keypair.
+3. `shared = X25519(ephemeral_priv, member_x_pub)`.
+4. `key = HKDF-SHA256(shared, salt = ephemeral_pub || member_x_pub,
+   info = b"alp.workgroup.seal.v1", L=32)`.
+5. `sealed = ephemeral_pub(32) || nonce(12) || ChaCha20-Poly1305(
+   key, nonce, group_key, AAD = b"seal")`.
+
+The 32-byte group key plus a 16-byte AEAD tag yields a 92-byte
+sealed blob, base64-encoded in `members.yaml`. Forward secrecy on
+key rotation (ALP.3 PR 2 `leave` flow) drops out naturally — the
+hub generates a fresh group key and re-runs the seal once per
+remaining member; ex-members' Ed25519 keys cannot derive the new
+shared secret.
+
+### Hub state
+
+The hub persists each workgroup under
+`~/.alpi/<profile>/alp/workgroups/<wg_id>/`:
+
+- `meta.yaml` — `id`, `name`, `hub_pubkey`, `created_at`.
+- `members.yaml` — list of `{pubkey, sealed_key, joined,
+  joined_at}`. The `joined` flag flips on first successful
+  `workgroup.join`; pre-join state lets the hub distinguish
+  invited-but-not-yet-acknowledged from active members.
+- `transcript.jsonl` — append-only ciphertext log; one
+  `{seq, ts, from, nonce, ciphertext}` per line.
+
+The hub stores **ciphertext only**. A workgroup operator who
+inspects the transcript file on disk sees nothing without a
+member's private key. This is what makes the `leave` rekey
+meaningful: re-sealing the new group key cuts off ex-members
+from new traffic without having to also re-encrypt past
+posts.
 
 ### Hub availability
 
