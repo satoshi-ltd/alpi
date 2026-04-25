@@ -142,6 +142,7 @@ class Config:
     gateway: dict[str, Any] = field(default_factory=dict)
     alp: dict[str, Any] = field(default_factory=dict)
     budget: dict[str, Any] = field(default_factory=dict)
+    service: dict[str, Any] = field(default_factory=dict)
     workspace: str = ""  # "" → fall back to cwd
     raw: dict[str, Any] = field(default_factory=dict)
 
@@ -241,6 +242,7 @@ def load(home: Path) -> Config:
         gateway=data.get("gateway", DEFAULT_CONFIG["gateway"]),
         alp=dict(data.get("alp") or {}),
         budget=dict(data.get("budget") or {}),
+        service=dict(data.get("service") or {}),
         workspace=str(data.get("workspace", "") or ""),
         raw=user_data,
     )
@@ -272,6 +274,9 @@ def save(cfg: Config) -> None:
 
     if cfg.budget:
         data["budget"] = cfg.budget
+
+    if cfg.service:
+        data["service"] = cfg.service
 
     cfg.config_path.write_text(yaml.safe_dump(data, sort_keys=False))
 

@@ -168,13 +168,14 @@ class Schedule(Tool):
             jobs.append(job)
             jobs_path.write_text(json.dumps(jobs, indent=2))
 
-            # Tell the user how to activate delivery. Same pattern as
-            # the gateway: nothing starts until the user asks for it.
-            from alpi.scheduler.run import running_pid
-            if running_pid(home):
-                hint = "daemon is running — job will fire on schedule"
+            # Tell the user how to activate delivery. Nothing fires
+            # without the unified service running with the scheduler
+            # subsystem enabled.
+            from alpi import service as svc
+            if svc.is_running(home) and svc.enabled_subsystems(home).get("schedule"):
+                hint = "service is running — job will fire on schedule"
             else:
-                hint = "run 'alpi schedule start' (or install it) to fire jobs"
+                hint = "start the service ('alpi service start' or install it) to fire jobs"
 
             return ToolResult(
                 ok=True,

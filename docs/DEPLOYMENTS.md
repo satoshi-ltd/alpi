@@ -24,16 +24,20 @@ gateway for messaging.
 │   alpi (TUI)                        │
 │     │                               │
 │     ├─ ~/.alpi/  (default profile)  │
-│     ├─ gateway daemon (optional)    │
-│     │    └─ Telegram / IMAP / Gmail │
-│     └─ schedule daemon              │
+│     └─ alpi service (optional)      │
+│          ├─ gateway: Telegram /     │
+│          │           IMAP / Gmail   │
+│          ├─ scheduler (cron)        │
+│          └─ ALP listener            │
 └─────────────────────────────────────┘
 ```
 
 - **Profiles:** 1 (`default`).
-- **ALP:** not needed — nothing else to talk to.
-- **Ops:** `alpi setup → Gateway service → Install` if you want
-  24/7 messaging.
+- **ALP:** the listener is part of the unified service — leave it
+  on (default) even when nothing else dials in; it's idle and
+  costs nothing.
+- **Ops:** `alpi setup → Maintenance → Service → Install` if you
+  want 24/7 messaging + cron.
 - **Best for:** individual, personal use. Zero-config after the
   quickstart.
 

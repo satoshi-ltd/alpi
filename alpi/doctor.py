@@ -371,37 +371,39 @@ def _check_gmail_live(home: Path, env: dict[str, str]) -> list[Check]:
 
 
 def _check_services(home: Path, profile: str) -> list[Check]:
-    from alpi import service
+    from alpi import service as svc
     out: list[Check] = []
 
+    backend = svc.installed(profile)
+    pid = svc.running_pid(home)
     bin_mtime = _alpi_binary_mtime()
-    for name in ("gateway", "schedule", "alp"):
-        backend = service.installed(name, profile)
-        pid = _live_pid(home, name)
-        if backend and pid:
-            stale = _is_binary_newer_than_process(bin_mtime, pid)
-            if stale:
-                out.append(Check(
-                    "Services", name.capitalize(), "warn",
-                    f"running — stale binary — `alpi {name} restart` to reload",
-                ))
-            else:
-                out.append(Check(
-                    "Services", name.capitalize(), "ok",
-                    f"running via {backend} (pid {pid})",
-                ))
-        elif backend:
-            out.append(Check("Services", name.capitalize(), "warn",
-                             f"installed via {backend} but no live pid"))
+
+    if backend and pid:
+        if _is_binary_newer_than_process(bin_mtime, pid):
+            out.append(Check(
+                "Services", "Service", "warn",
+                "running — stale binary — `alpi service restart` to reload",
+            ))
         else:
-            status: Status = "info" if name in ("gateway", "alp") else "warn"
-            if name == "schedule":
-                detail = "not installed — `alpi setup → Schedule service` to enable"
-            elif name == "alp":
-                detail = "not installed — `alpi setup → ALP service` to enable"
-            else:
-                detail = "not installed"
-            out.append(Check("Services", name.capitalize(), status, detail))
+            out.append(Check(
+                "Services", "Service", "ok",
+                f"running via {backend} (pid {pid})",
+            ))
+    elif backend:
+        out.append(Check("Services", "Service", "warn",
+                         f"installed via {backend} but no live pid"))
+    elif pid:
+        out.append(Check("Services", "Service", "info",
+                         f"running foreground (pid {pid}) — not installed"))
+    else:
+        out.append(Check("Services", "Service", "info",
+                         "not installed — `alpi setup → Service` to enable"))
+
+    on = [k for k, v in svc.enabled_subsystems(home).items() if v]
+    out.append(Check(
+        "Services", "Subsystems", "info",
+        f"enabled: {', '.join(on) if on else '(none)'}",
+    ))
 
     out.extend(_check_alp(home))
 
@@ -679,25 +681,11 @@ def _provider_api_key_var(cfg: cfg_mod.Config) -> str | None:
     return "OPENROUTER_API_KEY"  # safe default — most models go through openrouter
 
 
-def _live_pid(home: Path, name: str) -> int | None:
-    if name == "gateway":
-        from alpi.gateway.run import pid_path
-        p = pid_path(home)
-    elif name == "alp":
-        p = home / "alp" / "alp.pid"
-    else:
-        from alpi.scheduler.run import pid_path
-        p = pid_path(home)
-    if not p.exists():
-        return None
-    try:
-        pid = int(p.read_text().strip())
-        os.kill(pid, 0)
-        return pid
-    except (ValueError, ProcessLookupError):
-        return None
-    except PermissionError:
-        return pid  # exists but owned by another user
+def _live_pid(home: Path, name: str = "service") -> int | None:
+    """Live PID for the unified service. ``name`` parameter kept for
+    legacy callers but ignored — there's only one process per profile."""
+    from alpi import service as svc
+    return svc.running_pid(home)
 
 
 def _sandbox_backend() -> str | None:

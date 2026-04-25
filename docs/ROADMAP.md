@@ -14,7 +14,7 @@ Legend: 🔵 backlog · 🟡 next up · ⏸ blocked · 🔴 gate.
 
 ## v0.3 — public release
 
-Two items left before the cut. Everything else previously parked
+Three items left before the cut. Everything else previously parked
 under v0.3 moved to v0.4 — none of it can land honestly in the
 remaining window.
 
@@ -22,6 +22,7 @@ remaining window.
 |---|---|---|
 | ALP.3 | Alpi Link Protocol — shared workgroups (collaborative spaces, humans optional) | 🔴 gate — landing today |
 | AU | Distribution — `uv tool install alpi`, `alpi update`, end-user install without source | 🔴 gate |
+| SU | Service unification — single ``alpi service`` orchestrator per profile (replaces gateway/schedule/alp daemons) | ✅ shipped (was tracked for v0.4 architecture cleanup, brought forward) |
 
 ### ALP.3 — Shared workgroups
 

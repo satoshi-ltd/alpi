@@ -98,8 +98,9 @@ push` over SSH relies on `~/.ssh`, Apple Silicon Homebrew lives in
 `~/.npm`. For interactive chat where you approve every command, the
 Layer 1 denylist is already sufficient.
 
-**Where it really earns its keep: unattended profiles.** Telegram
-gateway, schedule daemon, `research` / `delegate` sub-agents — these
+**Where it really earns its keep: unattended profiles.** The
+unified service (Telegram gateway + scheduler subsystems),
+`research` / `delegate` sub-agents — these
 run without a human approving each command. A prompt-injected email
 or a hallucinating sub-agent can issue `rm -rf ~/anything` with no
 veto. Layer 2 is the kernel-level veto you want there.
@@ -110,8 +111,8 @@ alpi's multi-profile CLI makes this ergonomic:
 
 - `alpi` — your main interactive dev profile. Sandbox off. Full access
   to your usual tooling.
-- `alpi -p watchdog` — the profile your Telegram / schedule daemon
-  runs under. Sandbox on. Denies `~/.ssh`, writes outside
+- `alpi -p watchdog` — the profile whose service runs your Telegram /
+  scheduler. Sandbox on. Denies `~/.ssh`, writes outside
   `workspace`, network (unless you opt in).
 
 Each profile has its own `~/.alpi/profiles/<name>/config.yaml`, so

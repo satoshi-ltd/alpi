@@ -73,7 +73,7 @@ Reality check on pricing: at list prices, **Step 3.5 Flash** runs
 **~30× cheaper on input and ~50× cheaper on output** than
 **Sonnet 4.6**. **MiMo-V2-Flash** lands ~33× / ~52× cheaper.
 **DeepSeek V3.2** is ~12× / ~40× cheaper. For a profile that runs a
-gateway daemon hitting Telegram inbound all day, those multipliers
+unified service hitting Telegram inbound all day, those multipliers
 compound into real savings — many of those turns don't need
 Tier 1 reasoning.
 
@@ -103,7 +103,7 @@ tiers by role is cheap to wire up:
 
 - **Single-model, every profile**: **MiMo-V2-Pro**. Best adoption
   across tool-heavy agents, good context, sensible price.
-- **Router-style (high-volume profiles with gateway daemons)**:
+- **Router-style (high-volume profiles whose service hosts gateway listeners)**:
   **Step 3.5 Flash** as base + **MiMo-V2-Pro** or
   **Sonnet 4.6** as fallback for hard turns. Matches how long-running
   agents are deployed elsewhere — heartbeats and simple shell calls

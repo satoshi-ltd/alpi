@@ -93,10 +93,11 @@ exactly like they'd talk to a profile on a different machine over
 ALP.2.
 
 Rotation is deliberate: delete `alp/secrets/` and the next
-`alpi alp start` generates a fresh pair. Every peer who pinned the
-old pubkey must update their entry — rotation is an *outage* for
-the peer mesh, not a silent operation. Treat it the way you'd
-treat rotating an SSH key.
+`alpi service start` generates a fresh pair when the ALP
+subsystem boots. Every peer who pinned the old pubkey must update
+their entry — rotation is an *outage* for the peer mesh, not a
+silent operation. Treat it the way you'd treat rotating an SSH
+key.
 
 ## When to create a new profile
 
@@ -135,9 +136,11 @@ cleanup wizard (`alpi setup → Cleanup`) reclaims audio cache, old
 sessions, rotated logs, and schedule output on demand.
 
 On CPU / memory: a profile not in active use costs *nothing*.
-Each running surface — TUI instance, gateway daemon, schedule
-daemon, ALP listener — is its own process, and each of those can
-be stopped, installed as a service, or run ad-hoc.
+Active surfaces collapse into two processes: the TUI instance
+(when you launch it) and the unified service (one process per
+profile, hosting gateway + scheduler + ALP listener on a single
+asyncio loop). The service can be started ad-hoc, installed as a
+launchd / systemd autorun, or left off entirely.
 
 ## Common patterns
 

@@ -226,59 +226,11 @@ def _is_allowed(msg: IncomingMessage) -> bool:
     return delivery.is_allowed(msg.platform, msg.external_chat_id)
 
 
-def run(home: Path) -> None:
-    _configure_logging(home)
-    _load_env(home)
-    _write_pid(home)
-    try:
-        platforms: list[Platform] = [Telegram(home), Imap(home), Gmail(home), Webhook(home)]
-
-        async def _main() -> None:
-            await asyncio.gather(*(_handle_platform(p, home) for p in platforms))
-
-        try:
-            asyncio.run(_main())
-        except KeyboardInterrupt:
-            log.info("Gateway stopped.")
-    finally:
-        _clear_pid(home)
-
-
-# PID file helpers (used by start/stop/status commands)
-
-def pid_path(home: Path) -> Path:
-    return home / "gateway" / "gateway.pid"
-
-
-def _write_pid(home: Path) -> None:
-    p = pid_path(home)
-    p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(str(os.getpid()))
-
-
-def _clear_pid(home: Path) -> None:
-    p = pid_path(home)
-    if p.exists():
-        p.unlink()
-
-
-def _load_env(home: Path) -> None:
-    env_path = home / ".env"
-    if env_path.exists():
-        from dotenv import load_dotenv
-        load_dotenv(env_path, override=False)
-        log.info("Loaded env from %s", env_path)
-
-
-def _configure_logging(home: Path) -> None:
-    from logging.handlers import RotatingFileHandler
-    from alpi._log import FORMAT, MAX_BYTES, log_path
-
-    path = log_path(home, "gateway")
-    path.parent.mkdir(parents=True, exist_ok=True)
-    file_handler = RotatingFileHandler(path, maxBytes=MAX_BYTES, backupCount=0)
-    logging.basicConfig(
-        level=logging.INFO,
-        format=FORMAT,
-        handlers=[file_handler, logging.StreamHandler()],
-    )
+async def serve(home: Path) -> None:
+    """Async entry point for the orchestrator. Returns when cancelled.
+    Logging + env are owned by the orchestrator now (one shared
+    config), so this only spins up the platform listeners."""
+    platforms: list[Platform] = [
+        Telegram(home), Imap(home), Gmail(home), Webhook(home),
+    ]
+    await asyncio.gather(*(_handle_platform(p, home) for p in platforms))
