@@ -1,5 +1,44 @@
 # Changelog
 
+## v0.2.85 — 2026-04-25
+
+### security — profile `.env` and `config.yaml` are off-limits to tools
+
+Both file tools and the `terminal` shell now refuse to read or write
+the active profile's `.env` and `config.yaml`. These files hold
+provider API keys, gateway tokens, and security knobs (sandbox flag,
+allowlist, model choice); a prompt-injected mailbox or web page must
+not be able to coax the agent into leaking or rewriting them. They
+remain editable by hand or through `alpi setup`.
+
+- `alpi/tools/_paths.py` — denylist regex now matches
+  `~/.alpi/.env`, `~/.alpi/config.yaml`, and the same pair under
+  any `~/.alpi/profiles/<name>/`. The error message dropped the old
+  "use the terminal tool with sudo" hint, which never applied to
+  user-home paths anyway.
+- `alpi/tools/_guards.py` — three new dangerous-command patterns:
+  `read profile secret` (`cat`/`head`/`tail`/`less`/`more`/`cp`/`mv`/
+  `scp`/`rsync`/`grep`/`awk`/`sed`/`xxd`/`hexdump`/`strings`/`od`
+  against profile `.env` / `config.yaml`), `write profile config`
+  (`>`, `>>`, `tee` into them), and `dump environment` (bare `env`
+  / `printenv`, including in pipes). `env VAR=x cmd` and
+  `printenv HOME` stay allowed.
+
+A workspace `.env` (a project's own dotenv outside `~/.alpi/`) is
+deliberately untouched — the denylist scopes by path, not by basename.
+
+23 new test cases in `tests/test_guards.py` (12 reject, 6 allow) and
+`tests/test_paths_denylist.py` (12 — alpi-profile paths refused,
+workspace paths with the same basename pass).
+
+`docs/SECURITY.md` § Layer 1 lists the new path patterns and the
+terminal-side counterparts; reiterates that skill scripts run inside
+the parent's `os.environ` and can still enumerate secrets through
+Python — closing that vector requires per-skill env scoping (own
+roadmap item).
+
+Suite: 765 passed, 8 skipped (was 734).
+
 ## v0.2.84 — 2026-04-25
 
 ### budget — daily spending ledger, profile-level cap

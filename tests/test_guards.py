@@ -31,6 +31,19 @@ from alpi.tools._guards import check_command, check_url, scan_injection
     "cp secret.pem /tmp/",
     "DROP TABLE users",
     "psql -c 'TRUNCATE TABLE customers'",
+    "cat ~/.alpi/.env",
+    "cat ~/.alpi/profiles/mirai/.env",
+    "head -n 5 /Users/javi/.alpi/profiles/work/.env",
+    "grep KEY ~/.alpi/profiles/mirai/.env",
+    "less ~/.alpi/config.yaml",
+    "cp ~/.alpi/profiles/mirai/.env /tmp/leak",
+    "echo BAD=1 >> ~/.alpi/.env",
+    "tee ~/.alpi/profiles/mirai/config.yaml",
+    "env",
+    "env | grep KEY",
+    "printenv",
+    "printenv > /tmp/dump",
+    "ls; env",
 ])
 def test_check_command_rejects_dangerous(cmd: str) -> None:
     safe, reason = check_command(cmd)
@@ -52,6 +65,12 @@ def test_check_command_rejects_dangerous(cmd: str) -> None:
     "echo hello",
     "grep foo src/",
     "find . -name '*.py'",
+    "env VAR=value some-cmd",
+    "env -i bash",
+    "printenv HOME",
+    "cat .env",
+    "cat ./node_modules/.env",
+    "echo X >> /tmp/.env",
 ])
 def test_check_command_allows_safe(cmd: str) -> None:
     safe, reason = check_command(cmd)

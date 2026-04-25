@@ -27,6 +27,12 @@ _DANGEROUS: list[tuple[str, re.Pattern]] = [
      re.compile(r"(?:>+|tee)\s+/(?:etc|var|usr|boot|sys|proc)/", re.IGNORECASE)),
     ("read ssh private key",
      re.compile(r"(?:cat|head|tail|less|more|cp|mv|scp|rsync)\s+[^ ]*(?:\.ssh/id_|\.pem\b|id_rsa\b|id_ed25519\b)", re.IGNORECASE)),
+    ("read profile secret",
+     re.compile(r"(?:cat|head|tail|less|more|cp|mv|scp|rsync|grep|awk|sed|xxd|hexdump|strings|od)\b[^|;&]*?\.alpi(?:/profiles/[^/ ]+)?/(?:\.env|config\.yaml)\b", re.IGNORECASE)),
+    ("write profile config",
+     re.compile(r"(?:>+|tee\b)[^|;&]*?\.alpi(?:/profiles/[^/ ]+)?/(?:\.env|config\.yaml)\b", re.IGNORECASE)),
+    ("dump environment",
+     re.compile(r"(?:^|[|;&]\s*)\s*(?:env|printenv)\s*(?:\||;|&|>|$)", re.IGNORECASE)),
     ("sql destructive",
      re.compile(r"\b(?:DROP|TRUNCATE)\s+(?:TABLE|DATABASE|SCHEMA)\b", re.IGNORECASE)),
 ]

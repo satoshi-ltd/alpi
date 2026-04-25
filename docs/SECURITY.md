@@ -65,10 +65,24 @@ doesn't reach:
   posture: paths under `/etc`, `/boot`, `/sys`, `/proc`,
   `/usr/lib/systemd`, `/System`, `/private/etc`, the docker sockets,
   SSH private keys (`~/.ssh/id_*`, `*_key`, `*_ed25519`), `*.pem /
-  *.p12 / *.pfx`, `~/.aws/credentials`, `~/.gnupg/` are refused
-  everywhere. Anything else — including arbitrary `$HOME` paths, `/tmp`,
-  and outside-workspace project dirs — is allowed, same as terminal.
-  Workspace-only isolation lives in Layer 2 (OS sandbox).
+  *.p12 / *.pfx`, `~/.aws/credentials`, `~/.gnupg/`, and the active
+  profile's own `~/.alpi/<profile>/.env` and `config.yaml` are refused
+  everywhere. The `.env` and `config.yaml` denials cover both reads
+  and writes — secrets stay out of model context, and an injected
+  prompt cannot rewrite the profile's sandbox flag or model choice.
+  Edits to those two files are intentionally manual (or via
+  `alpi setup`). Anything else — including arbitrary `$HOME` paths,
+  `/tmp`, project `.env` files in the workspace, and outside-workspace
+  project dirs — is allowed, same as terminal. Workspace-only isolation
+  lives in Layer 2 (OS sandbox).
+
+- **Profile-secret patterns on `terminal`** complement the path denylist
+  by catching shell-side bypasses: `cat`/`head`/`grep`/etc. against
+  `~/.alpi/.../.env` or `config.yaml`, redirections (`>`, `tee`) into
+  those paths, and bare `env` / `printenv` (the easy enumeration of
+  every loaded secret) all hit the dangerous classifier and are
+  blocked outright. `env VAR=x cmd` is still permitted because it sets
+  one variable for one child rather than dumping the whole environment.
 
 ## Layer 2 — OS sandbox (opt-in, per profile)
 
