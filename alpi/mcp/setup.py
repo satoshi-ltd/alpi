@@ -134,7 +134,7 @@ def _wizard(
     except MCPError as e:
         ui._console.print("")
         ui.fail(str(e))
-        ui.warn("Not saving anything. Check the command/args or env vars in .env.")
+        ui.warn("Not saving anything. Check the command/args or required env vars (set them in your profile's .env).")
         ui.press_enter()
         return
     tools = client.list_tools()

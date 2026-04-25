@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any, NamedTuple, Sequence
 
 from rich.console import Console
 from rich.prompt import Confirm, Prompt
@@ -109,6 +109,11 @@ def row_accent(label: str, status: str, accent: str, width: int | None = None):
 _SEPARATOR = object()
 
 
+class Heading(NamedTuple):
+    """Non-selectable section label inside a ``menu()`` items list."""
+    text: str
+
+
 def menu(
     title: str,
     items: Sequence[Any],
@@ -123,6 +128,7 @@ def menu(
         - ``(label, value)``
         - ``(label, value, status)`` → rendered via ``row(label, status)``
         - ``None`` → blank separator row
+        - ``Heading("Section")`` → muted-bold uppercase divider, non-selectable
         - bare string → used as both label and value
     """
     if title:
@@ -148,6 +154,15 @@ def menu(
     for item in items:
         if item is None:
             entries.append((" ", _SEPARATOR, False))
+        elif isinstance(item, Heading):
+            # Visually breathe between sections — every heading after the
+            # first one gets an automatic blank row above it.
+            if entries:
+                entries.append((" ", _SEPARATOR, False))
+            entries.append((
+                [(f"{_MUTED_STYLE} bold", item.text)],
+                _SEPARATOR, False,
+            ))
         elif isinstance(item, tuple):
             if len(item) == 3:
                 label, value, status = item
@@ -163,6 +178,8 @@ def menu(
 
     close_sentinel: Any = object()
     if close:
+        if entries:
+            entries.append((" ", _SEPARATOR, False))
         entries.append((
             [(_MUTED_STYLE, close)],
             close_sentinel,

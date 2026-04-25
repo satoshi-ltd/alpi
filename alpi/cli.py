@@ -698,24 +698,31 @@ def setup_cmd(ctx: click.Context) -> None:
     profile_name = ctx.obj.get("profile") or "default"
     while True:
         cfg = config.load(h)
-        items = [
+        items: list = [
+            ui.Heading("Agent"),
             ("Model / Provider", "model", cfg.model or "(not set)"),
-            ("Gateways", "gateways", _gateways_status(h)),
             ("Voice", "voice", _voice_status(cfg)),
             ("MCPs", "mcps", _mcp_status(h)),
-            ("Peers", "peers", _peers_status(h)),
-            None,
+
+            ui.Heading("Boundaries"),
             ("Workspace", "workspace", _workspace_status(cfg)),
-            ("Budget", "budget", _budget_status(cfg)),
             ("Sandbox", "sandbox", _sandbox_status(cfg)),
+            ("Budget", "budget", _budget_status(cfg)),
+
+            ui.Heading("Messaging"),
+            ("Gateways", "gateways", _gateways_status(h)),
             ("Gateway service", "gateway-service", _gateway_service_status(h)),
-            ("Schedule service", "schedule-service", _schedule_service_status(h)),
+
+            ui.Heading("ALP (Alpi Link Protocol)"),
+            ("Peers", "peers", _peers_status(h)),
             ("ALP service", "alp-service", _alp_service_status(h)),
+
+            ui.Heading("Maintenance"),
+            ("Schedule service", "schedule-service", _schedule_service_status(h)),
             ("Health check", "doctor", _doctor_status(h, profile_name)),
             ("Cleanup", "cleanup", _cleanup_status(h)),
         ]
         if profile_name != "default":
-            items.append(None)
             items.append(
                 ("Delete profile", "delete-profile", _delete_profile_status(h, profile_name))
             )
@@ -820,23 +827,16 @@ def _gateway_service_status(h: Path) -> str:
 
 _DAEMON_WIZARD_COPY = {
     "gateway": (
-        "Registers the gateway daemon (`alpi gateway start`) with your\n"
-        "OS so it runs on boot and restarts on crash. macOS: launchd\n"
-        "plist under ~/Library/LaunchAgents/. Linux: systemd --user unit\n"
-        "under ~/.config/systemd/user/. The current profile is the one\n"
-        "that gets wired up."
+        "Keeps the gateway running on boot so Telegram / IMAP / Gmail "
+        "stay reachable. Uninstall to run `alpi gateway start` manually."
     ),
     "schedule": (
-        "The scheduler auto-installs on first run so cron jobs and\n"
-        "reminders fire even when you're not in the TUI. You can still\n"
-        "uninstall it here if you prefer to run it manually with\n"
-        "`alpi schedule start`, or reinstall after an uninstall."
+        "Keeps cron jobs and reminders firing when the TUI is closed. "
+        "Uninstall to run `alpi schedule start` manually."
     ),
     "alp": (
-        "Registers the ALP listener (`alpi alp start`) so the Unix\n"
-        "socket stays up across reboots — peers can reach this profile\n"
-        "without you keeping a terminal open. Uninstall and run it\n"
-        "manually if you'd rather start/stop by hand."
+        "Keeps the ALP listener up across reboots so peers can reach "
+        "this profile. Uninstall to run `alpi alp start` manually."
     ),
 }
 
@@ -950,14 +950,10 @@ def _alp_tcp_port_setup(h: Path) -> None:
         home=h,
     )
     ui.dim(
-        "When a TCP port is set, other alpis can dial this profile from\n"
-        "another machine. Traffic is Noise_XK encrypted and only peers\n"
-        "pinned in peers.yaml are admitted.\n\n"
-        "Default host is 127.0.0.1 (loopback only). Set a VPN address\n"
-        "(e.g. your Tailscale 100.x.x.x) to accept remote peers. Avoid\n"
-        "binding 0.0.0.0 without a VPN in front.\n\n"
-        "Leave the port empty to disable TCP and keep the Unix socket\n"
-        "as the only transport."
+        "Sets a TCP port so other machines can dial this profile (Noise_XK,\n"
+        "peers.yaml-pinned only). Host 127.0.0.1 = loopback; set a Tailscale\n"
+        "/ VPN IP for remote peers. Avoid 0.0.0.0 without a VPN in front.\n"
+        "Empty port = disable TCP, keep the Unix socket only."
     )
     ui._console.print("")
 
@@ -1164,11 +1160,9 @@ def _budget_setup(h: Path) -> None:
         home=h,
     )
     ui.dim(
-        "Paid models → set a USD cap. Local / free models → set a token\n"
-        "cap. Leave both empty for no ceiling. The cap covers everything\n"
-        "this profile spends: interactive turns, gateway replies,\n"
-        "scheduled jobs, sub-agents, and inbound ALP calls from peers.\n"
-        "Counters reset at UTC midnight."
+        "Paid models → USD cap. Local / free models → token cap. Empty = no\n"
+        "ceiling. Cap covers every turn this profile runs (interactive,\n"
+        "gateway, scheduled, sub-agents, ALP). Resets at UTC midnight."
     )
     ui._console.print("")
 
@@ -1250,15 +1244,10 @@ def _workspace_setup(h: Path) -> None:
         home=h,
     )
     ui.dim(
-        "The workspace is the default root alpi assumes for relative\n"
-        "paths in the file tools and the terminal. When unset, alpi\n"
-        "falls back to the directory you ran it from.\n\n"
-        "It is NOT a wall — absolute paths still reach anywhere except\n"
-        "the sensitive-path denylist (~/.ssh, ~/.aws, /etc, cloud\n"
-        "metadata, …). Real isolation lives in the opt-in OS sandbox\n"
-        "(`alpi setup → Sandbox`).\n\n"
-        "Leave the prompt empty to keep the current value; type "
-        "`clear` to unset."
+        "Default root for relative paths in file tools and terminal.\n"
+        "Unset → falls back to the cwd at launch. Not a wall: real\n"
+        "isolation is the opt-in Sandbox.\n\n"
+        "Empty = keep current; type `clear` to unset."
     )
     ui._console.print("")
 
@@ -1301,16 +1290,12 @@ def _sandbox_setup(h: Path) -> None:
             home=h,
         )
         ui.dim(
-            "Wraps shell commands in sandbox-exec (macOS) or bubblewrap (Linux) so\n"
-            "the kernel blocks writes outside your workspace + ~/.alpi, and denies\n"
-            "network unless you opt in.\n\n"
-            "Recommended for profiles that run unattended — Telegram gateway,\n"
-            "schedule daemon, research / delegate sub-agents. For interactive chat\n"
-            "where you approve every command, the denylist (Layer 1) is already\n"
-            "sufficient.\n\n"
-            "Trade-offs when enabled: git push over SSH (~/.ssh denied), Homebrew\n"
-            "on Apple Silicon, and docker commands may break. Keep it off in your\n"
-            "main dev profile."
+            "Wraps shell commands in sandbox-exec (macOS) or bubblewrap (Linux):\n"
+            "kernel blocks writes outside workspace + ~/.alpi, network denied\n"
+            "unless opted in.\n\n"
+            "Recommended for unattended profiles (gateway, scheduler, sub-agents).\n"
+            "Trade-offs: SSH push, Homebrew on Apple Silicon, and docker may break\n"
+            "— keep off in your main dev profile."
         )
         ui._console.print("")
 
@@ -1516,7 +1501,7 @@ def _cleanup_categories(h: Path) -> list[dict]:
         },
         {
             "key": "sessions",
-            "label": f"Sessions (+{_SESSION_STALE_DAYS}days)",
+            "label": f"Stale sessions (>{_SESSION_STALE_DAYS} days old)",
             "desc": "conversation transcripts kept in `sessions/`",
             "files": session_files,
             "size": _sum(session_files),
@@ -1804,8 +1789,8 @@ def _delete_profile_status(h: Path, profile_name: str) -> str:
         d for d in ("gateway", "schedule", "alp") if service.installed(d, profile=profile_name)
     ]
     if installed:
-        return f"{len(installed)} service(s) installed · one-shot teardown"
-    return "one-shot teardown"
+        return f"Remove all data & {len(installed)} service(s)"
+    return "Remove all data"
 
 
 def _delete_profile_wizard(h: Path, profile_name: str) -> bool:

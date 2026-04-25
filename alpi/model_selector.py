@@ -68,11 +68,13 @@ def _pick_provider(cfg: cfg_mod.Config) -> Provider | None:
     active_head = cfg.model.split("/", 1)[0]
     accent = (cfg.tui or {}).get("accent", "") or ""
 
-    collected: list[tuple[str, str, Any, bool]] = []  # (label, status, value, active)
+    local: list[tuple[str, str, Any, bool]] = []
     for p in ollamas:
-        collected.append((p.name, f"ollama · {p.url}", p, p.name == active_head))
-    collected.append(("Add Ollama", "local or remote — private, offline-first",
-                      _ADD_OLLAMA, False))
+        local.append((p.name, f"ollama · {p.url}", p, p.name == active_head))
+    local.append(("Add Ollama", "local or remote — private, offline-first",
+                  _ADD_OLLAMA, False))
+
+    cloud: list[tuple[str, str, Any, bool]] = []
     for p in builtin:
         parts = []
         if p.api_key_env and p.has_key():
@@ -80,27 +82,31 @@ def _pick_provider(cfg: cfg_mod.Config) -> Provider | None:
         parts.append(p.description)
         if p.api_key_env and not p.has_key():
             parts.append("[key needed]")
-        collected.append((p.display, " · ".join(parts), p, p.name == active_head))
+        cloud.append((p.display, " · ".join(parts), p, p.name == active_head))
+
+    manage: list[tuple[str, str, Any, bool]] = []
     if ollamas or _any_saved_keys(builtin):
-        collected.append(("Remove keys", "delete API keys or Ollama servers",
-                          _MANAGE_SAVED, False))
+        manage.append(("Remove keys", "delete API keys or Ollama servers",
+                       _MANAGE_SAVED, False))
 
-    width = max((len(lab) for lab, status, _v, _a in collected if status), default=0)
+    all_rows = local + cloud + manage
+    width = max((len(lab) for lab, status, _v, _a in all_rows if status), default=0)
 
-    items: list = []
-    for i, (label, status, value, active) in enumerate(collected):
-        # Keep the visual separator between the last Ollama entry
-        # ("Add Ollama") and the first cloud provider.
-        if i > 0 and value is not _ADD_OLLAMA and collected[i - 1][2] is _ADD_OLLAMA:
-            items.append(None)
+    def _render_row(label: str, status: str, value: Any, active: bool):
         if active:
-            items.append((
-                ui.row_accent(label, status, accent, width=width), value,
-            ))
-        else:
-            items.append((
-                ui.row(label, status, width=width), value,
-            ))
+            return (ui.row_accent(label, status, accent, width=width), value)
+        return (ui.row(label, status, width=width), value)
+
+    items: list = [ui.Heading("Local")]
+    for label, status, value, active in local:
+        items.append(_render_row(label, status, value, active))
+    items.append(ui.Heading("Cloud"))
+    for label, status, value, active in cloud:
+        items.append(_render_row(label, status, value, active))
+    if manage:
+        items.append(ui.Heading("Manage"))
+        for label, status, value, active in manage:
+            items.append(_render_row(label, status, value, active))
 
     result = ui.menu(
         ui.crumb("setup", "model"),
