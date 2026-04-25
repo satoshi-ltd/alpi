@@ -1,5 +1,31 @@
 // Shared ASCII bg + markdown renderer for alpi doc subpages
 (function(){
+  const root = document.documentElement;
+  const buttons = document.querySelectorAll('.bg-ctrl button[data-theme]');
+  const metaTheme = document.querySelector('meta[name="theme-color"]');
+
+  function readTheme(){
+    try { return sessionStorage.getItem('alpi-theme'); }
+    catch { return null; }
+  }
+  function writeTheme(theme){
+    try { sessionStorage.setItem('alpi-theme', theme); }
+    catch {}
+  }
+  function setTheme(theme){
+    root.dataset.theme = theme;
+    writeTheme(theme);
+    buttons.forEach(button => button.classList.toggle('on', button.dataset.theme === theme));
+    if (metaTheme) metaTheme.setAttribute('content', theme === 'light' ? '#f5f4ef' : '#0a0a0a');
+  }
+
+  buttons.forEach(button => {
+    button.addEventListener('click', () => setTheme(button.dataset.theme));
+  });
+  setTheme(readTheme() === 'light' ? 'light' : 'dark');
+})();
+
+(function(){
   const canvas = document.getElementById('ascii-bg');
   if (!canvas) return;
   const ctx = canvas.getContext('2d');
@@ -22,9 +48,16 @@
   resize();
   addEventListener('resize', resize);
 
+  function cssVar(name, fallback){
+    const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    return value || fallback;
+  }
+
   function frame(ts){
     const t = (ts - t0) / 1000;
-    ctx.fillStyle = '#0a0a0a';
+    const light = document.documentElement.dataset.theme === 'light';
+    const glyph = light ? '70,70,64' : '140,140,134';
+    ctx.fillStyle = cssVar('--bg', '#0a0a0a');
     ctx.fillRect(0,0,innerWidth,innerHeight);
     ctx.font = FONT + 'px "JetBrains Mono", monospace';
     ctx.textBaseline = 'top';
@@ -40,7 +73,7 @@
         const ch = CHARS[idx];
         if (ch === ' ') continue;
         const a = (v*0.5 + 0.5);
-        ctx.fillStyle = `rgba(140,140,134,${0.08 + a*0.18})`;
+        ctx.fillStyle = `rgba(${glyph},${0.08 + a*0.18})`;
         ctx.fillText(ch, x*CELL_W, y*CELL_H);
       }
     }
