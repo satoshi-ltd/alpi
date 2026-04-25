@@ -171,6 +171,10 @@ the trust lever. Budget pressure at the profile level has a useful
 secondary effect: a tight cap forces callers to be concise, which
 keeps inter-peer traffic goal-directed instead of chatty.
 
+Workgroups (the multi-party extension below) carry a separate,
+optional **lifetime** budget that double-gates `workgroup.post` on
+top of this daily profile cap. See *Workgroups → Budget*.
+
 ---
 
 ## Transport
@@ -379,7 +383,7 @@ reserved space:
 | `-32002` | `replay` | `(from, nonce)` seen within the window. |
 | `-32003` | `bad-signature` | Envelope signature verification failed. |
 | `-32004` | `target-offline` | Peer resolvable but connection refused. |
-| `-32005` | `budget-exceeded` | Request would breach daily cap. |
+| `-32005` | `budget-exceeded` | Request would breach a profile (daily) or workgroup (lifetime) cap. `data.cap_kind` distinguishes: `usd` / `tokens` for profile, `workgroup_usd` / `workgroup_tokens` for the workgroup pool. |
 | `-32006` | `version-mismatch` | Incompatible `alp.v`. |
 | `-32007` | `target-busy` | Session already running a turn. |
 | `-32008` | `workgroup-not-member` | Caller is not a pinned member of the workgroup. |
@@ -471,32 +475,61 @@ methods callable by pinned peers in the workgroup roster.
   to disk. Returns a `wg_<base32(16 random bytes)>` identifier
   — name-independent, rename-safe.
 
-- `workgroup.join(workgroup_id) → {workgroup_id, name, sealed_key, members[]}`
+- `workgroup.join(workgroup_id) → {workgroup_id, name, sealed_key, key_version, current_key_version, members[]}`
   Caller MUST already be in the workgroup's member roster (added
   at create time); otherwise `-32008`. The hub returns the
-  member's pre-sealed group key plus the current member-pubkey
-  list. Idempotent — a second `join` returns the same sealed key.
+  member's currently-sealed group key, its `key_version`, the
+  workgroup's `current_key_version`, and the member-pubkey list.
+  Idempotent — a second `join` returns the same sealed key.
 
-- `workgroup.post(workgroup_id, nonce, ciphertext) → {seq, ts}`
-  The author encrypts the message client-side under the current
-  group key (ChaCha20-Poly1305, AAD = `b"post"`); the hub never
-  sees plaintext. The hub appends the ciphertext to the
-  transcript and assigns the next monotonic `seq` (1-based).
+- `workgroup.post(workgroup_id, key_version, nonce, ciphertext, cost?) → {seq, ts}`
+  The author encrypts the message client-side under the
+  group key for `key_version` (ChaCha20-Poly1305, AAD =
+  `b"post"`); the hub never sees plaintext. `cost` is an optional
+  `{usd, tokens}` declaration the author makes about the LLM
+  spend that produced the post — the hub uses it to gate against
+  the workgroup-level lifetime budget (see *Budget* below) and
+  records it in the workgroup ledger. The hub appends the entry
+  to the transcript and assigns the next monotonic `seq`
+  (1-based).
 
-- `workgroup.pull(workgroup_id, since) → {posts[], head}`
+- `workgroup.pull(workgroup_id, since) → {posts[], head, current_key_version, sealed_key}`
   Returns every post with `seq > since`, in order, plus the
   current `head` cursor. `since=0` returns the full transcript.
-  Pull is the canonical fan-out for ALP.3 — each member observes
-  new traffic by polling. SSE-style streaming pull is tracked
-  separately as **ALP.4**.
+  The response also echoes the caller's currently-sealed group
+  key and the workgroup's `current_key_version` so members detect
+  rekeys (e.g., after another member's `leave`) on their next
+  pull and update their local key map. Pull is the canonical
+  fan-out for ALP.3 — each member observes new traffic by
+  polling. SSE-style streaming pull is tracked separately as
+  **ALP.4**.
 
-- `workgroup.leave(workgroup_id)` — the hub generates a new group
-  key and distributes it to remaining members so past keys can no
-  longer decrypt new traffic. *(Not yet shipped — PR 2.)*
+- `workgroup.leave(workgroup_id) → {workgroup_id, current_key_version, remaining_members[]}`
+  The leaving member is dropped from the roster; the hub mints a
+  fresh 32-byte group key, seals it for every remaining member,
+  and bumps `current_key_version` by 1. Past transcript stays
+  decryptable with old keys (members keep their local copy);
+  forward secrecy applies to **new** traffic only. The hub itself
+  cannot leave its own workgroup (`-32602`); use a hub-side
+  primitive instead.
 
 - `workgroup.pause(workgroup_id)` / `workgroup.resume(workgroup_id)`
   — any member may pause a workgroup, suspending all posts until
   a resume. *(Not yet shipped — PR 3.)*
+
+### Group-key versioning
+
+Every workgroup maintains a monotonically-increasing
+`current_key_version`, starting at 1 on `create`. Each member
+record carries the version of the group key currently sealed for
+them, and each transcript entry records the `key_version` it was
+encrypted under. After a `leave` (or hub-side `kick`), the hub
+rotates the key for every remaining member and bumps the version;
+members detect the change on their next `pull`, decrypt the new
+sealed blob, and store the new group key in their local map keyed
+by version. Decryption of an old post selects the matching version
+from that map, so past traffic stays readable while new traffic is
+locked away from ex-members.
 
 ### Group-key sealing
 
@@ -524,13 +557,18 @@ shared secret.
 The hub persists each workgroup under
 `~/.alpi/<profile>/alp/workgroups/<wg_id>/`:
 
-- `meta.yaml` — `id`, `name`, `hub_pubkey`, `created_at`.
-- `members.yaml` — list of `{pubkey, sealed_key, joined,
-  joined_at}`. The `joined` flag flips on first successful
+- `meta.yaml` — `id`, `name`, `hub_pubkey`, `created_at`,
+  `current_key_version`, optional `budget`.
+- `members.yaml` — list of `{pubkey, sealed_key, key_version,
+  joined, joined_at}`. The `joined` flag flips on first successful
   `workgroup.join`; pre-join state lets the hub distinguish
   invited-but-not-yet-acknowledged from active members.
 - `transcript.jsonl` — append-only ciphertext log; one
-  `{seq, ts, from, nonce, ciphertext}` per line.
+  `{seq, ts, from, key_version, nonce, ciphertext, cost?}` per
+  line.
+- `ledger.json` — cumulative `{usd, tokens, posts}` across the
+  workgroup's lifetime; the gate for the `max_usd` /
+  `max_tokens` budget below.
 
 The hub stores **ciphertext only**. A workgroup operator who
 inspects the transcript file on disk sees nothing without a
@@ -552,23 +590,46 @@ optimises for.
 
 ### Budget inside workgroups
 
-A workgroup may carry its own optional daily budget — a shared
-pool for the collaborative work happening inside it. When set,
-**every post is double-gated**: it admits only if the poster's
-profile still has budget *and* the workgroup still has budget.
-Whichever is tighter wins.
+A workgroup may carry its own optional **lifetime** budget — a
+project-scoped ceiling that, unlike the profile budget, does not
+reset. The profile budget answers *"how much can my agent spend
+today?"*; the workgroup budget answers *"how big can this
+collaboration grow before someone reviews it?"*. Two axes, two
+caps.
 
-An agent whose profile cap is exhausted goes silent in the
-workgroup even while the workgroup's own pool has room; its
-model simply can't run to produce the next post. Conversely, an
-exhausted workgroup freezes every member's posts until UTC
-midnight regardless of what their individual profiles have left.
-Silent capping keeps the transcript free of "out of budget"
-noise and lets budgets throttle autonomous agents without human
-intervention. All counters reset at UTC midnight.
+```yaml
+# meta.yaml inside ~/.alpi/<profile>/alp/workgroups/<wg_id>/
+budget:
+  max_usd: 5.00         # paid models; or
+  max_tokens: 500000    # local / free models
+```
 
-Workgroups without a configured budget inherit no ceiling of
-their own; the profile caps are still the only stop.
+`max_usd` and `max_tokens` are mutually exclusive — pick one,
+mirroring the profile-budget shape. Workgroups without a
+configured budget inherit no ceiling of their own; the profile
+caps are the only stop.
+
+When set, **every post is double-gated** — admits only if the
+poster's profile still has budget *and* the workgroup still has
+budget. Whichever is tighter wins:
+
+- An agent whose profile cap is exhausted goes silent in the
+  workgroup even while the workgroup pool has room; its model
+  simply can't run to produce the next post.
+- An exhausted workgroup freezes posts from every member until
+  the cap is bumped (manual edit of `meta.yaml`; a TUI surface is
+  tracked under ALP.3 PR 4).
+
+The hub gates against **author-declared** spend: the
+`cost: {usd, tokens}` field on each `workgroup.post` is taken at
+face value (the envelope is signed, so we know who claimed it).
+This is the same trust model the profile-level ledger applies to
+LiteLLM's reported cost — declarations come from a known
+identity, not from a verified receipt. The author SHOULD report
+the LLM spend that produced the message; the hub records it in
+the workgroup `ledger.json` and checks cumulative `used + declared
+> cap` before admitting the post (`-32005 budget-exceeded` with
+`data.cap_kind = "workgroup_usd"` or `"workgroup_tokens"`).
 
 ### Human participation
 

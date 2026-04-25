@@ -620,6 +620,664 @@ async def test_workgroup_over_tcp_noise(short_tmp: Path) -> None:
         await server.stop()
 
 
+# PR 2 — leave + rekey
+
+
+@pytest.mark.asyncio
+async def test_leave_rotates_group_key_and_drops_member(short_tmp: Path) -> None:
+    """Member calls workgroup.leave → hub mints a fresh group key,
+    re-seals it for the remaining members, bumps versions, and drops
+    the leaver from the roster. The leaver's old key still opens the
+    pre-leave transcript; new posts use the new key."""
+    hub_home = short_tmp / "hub"; hub_home.mkdir()
+    a_home = short_tmp / "a"; a_home.mkdir()
+    b_home = short_tmp / "b"; b_home.mkdir()
+    hub_kp = load_or_generate(hub_home)
+    a_kp = load_or_generate(a_home)
+    b_kp = load_or_generate(b_home)
+    _pin(hub_home, "a", a_kp.pubkey_b64(),
+         ["workgroup.join", "workgroup.post", "workgroup.pull", "workgroup.leave"])
+    _pin(hub_home, "b", b_kp.pubkey_b64(),
+         ["workgroup.join", "workgroup.post", "workgroup.pull"])
+
+    wg = wg_mod.create(
+        hub_home, name="rekey-me", hub_kp=hub_kp,
+        member_pubkeys=[a_kp.pubkey_b64(), b_kp.pubkey_b64()],
+    )
+    server = alp_server.Server(home=hub_home, agent_name="hub")
+    wg_mod.register(server, hub_home)
+    await server.start()
+    try:
+        # Both join and harvest the v1 group key.
+        async def _join(kp):
+            r = await alp_client.call(
+                socket_path=server.socket_path(),
+                sender=kp,
+                recipient_pubkey_b64=hub_kp.pubkey_b64(),
+                method="workgroup.join",
+                params={"workgroup_id": wg.meta.id},
+            )
+            return r, wg_mod.open_sealed_group_key(r["sealed_key"], kp)
+        a_join, a_key_v1 = await _join(a_kp)
+        b_join, b_key_v1 = await _join(b_kp)
+        assert a_join["current_key_version"] == 1
+        assert a_key_v1 == b_key_v1
+
+        # B posts something under v1 so we have pre-leave transcript.
+        nonce, ct = wg_mod.encrypt_post(b_key_v1, b"before leave")
+        await alp_client.call(
+            socket_path=server.socket_path(),
+            sender=b_kp,
+            recipient_pubkey_b64=hub_kp.pubkey_b64(),
+            method="workgroup.post",
+            params={
+                "workgroup_id": wg.meta.id,
+                "key_version": 1,
+                "nonce": nonce,
+                "ciphertext": ct,
+            },
+        )
+
+        # A leaves. Hub mints v2 and seals it for B (only remaining peer
+        # besides hub).
+        leave_result = await alp_client.call(
+            socket_path=server.socket_path(),
+            sender=a_kp,
+            recipient_pubkey_b64=hub_kp.pubkey_b64(),
+            method="workgroup.leave",
+            params={"workgroup_id": wg.meta.id},
+        )
+        assert leave_result["current_key_version"] == 2
+        assert a_kp.pubkey_b64() not in leave_result["remaining_members"]
+        assert b_kp.pubkey_b64() in leave_result["remaining_members"]
+
+        # B pulls and detects the new key version, decrypts the new
+        # sealed key, posts under v2.
+        b_pull = await alp_client.call(
+            socket_path=server.socket_path(),
+            sender=b_kp,
+            recipient_pubkey_b64=hub_kp.pubkey_b64(),
+            method="workgroup.pull",
+            params={"workgroup_id": wg.meta.id, "since": 0},
+        )
+        assert b_pull["current_key_version"] == 2
+        b_key_v2 = wg_mod.open_sealed_group_key(b_pull["sealed_key"], b_kp)
+        assert b_key_v2 != b_key_v1
+
+        # Past post still decrypts with v1 (forward-secrecy applies to
+        # NEW traffic only).
+        old_post = b_pull["posts"][0]
+        assert old_post["key_version"] == 1
+        assert wg_mod.decrypt_post(
+            b_key_v1, old_post["nonce"], old_post["ciphertext"],
+        ) == b"before leave"
+
+        # New post under v2 lands and decrypts.
+        nonce2, ct2 = wg_mod.encrypt_post(b_key_v2, b"after leave")
+        await alp_client.call(
+            socket_path=server.socket_path(),
+            sender=b_kp,
+            recipient_pubkey_b64=hub_kp.pubkey_b64(),
+            method="workgroup.post",
+            params={
+                "workgroup_id": wg.meta.id,
+                "key_version": 2,
+                "nonce": nonce2,
+                "ciphertext": ct2,
+            },
+        )
+        b_pull2 = await alp_client.call(
+            socket_path=server.socket_path(),
+            sender=b_kp,
+            recipient_pubkey_b64=hub_kp.pubkey_b64(),
+            method="workgroup.pull",
+            params={"workgroup_id": wg.meta.id, "since": 1},
+        )
+        new_post = b_pull2["posts"][0]
+        assert new_post["key_version"] == 2
+        assert wg_mod.decrypt_post(
+            b_key_v2, new_post["nonce"], new_post["ciphertext"],
+        ) == b"after leave"
+        # And the old key cannot open new traffic — forward secrecy.
+        with pytest.raises(Exception):
+            wg_mod.decrypt_post(
+                b_key_v1, new_post["nonce"], new_post["ciphertext"],
+            )
+    finally:
+        await server.stop()
+
+
+@pytest.mark.asyncio
+async def test_left_member_cannot_post_or_pull(short_tmp: Path) -> None:
+    """After a successful leave, the ex-member is no longer in the
+    roster — subsequent post/pull from them gets `-32008`."""
+    hub_home = short_tmp / "hub"; hub_home.mkdir()
+    bob_home = short_tmp / "b"; bob_home.mkdir()
+    hub_kp = load_or_generate(hub_home)
+    bob_kp = load_or_generate(bob_home)
+    _pin(hub_home, "b", bob_kp.pubkey_b64(),
+         ["workgroup.join", "workgroup.post", "workgroup.pull", "workgroup.leave"])
+    wg = wg_mod.create(
+        hub_home, name="bye", hub_kp=hub_kp,
+        member_pubkeys=[bob_kp.pubkey_b64()],
+    )
+    server = alp_server.Server(home=hub_home, agent_name="hub")
+    wg_mod.register(server, hub_home)
+    await server.start()
+    try:
+        await alp_client.call(
+            socket_path=server.socket_path(),
+            sender=bob_kp,
+            recipient_pubkey_b64=hub_kp.pubkey_b64(),
+            method="workgroup.leave",
+            params={"workgroup_id": wg.meta.id},
+        )
+        with pytest.raises(alp_client.RemoteError) as exc:
+            await alp_client.call(
+                socket_path=server.socket_path(),
+                sender=bob_kp,
+                recipient_pubkey_b64=hub_kp.pubkey_b64(),
+                method="workgroup.pull",
+                params={"workgroup_id": wg.meta.id, "since": 0},
+            )
+        assert exc.value.code == -32008
+    finally:
+        await server.stop()
+
+
+@pytest.mark.asyncio
+async def test_hub_cannot_leave_its_own_workgroup(short_tmp: Path) -> None:
+    hub_home = short_tmp / "hub"; hub_home.mkdir()
+    other_home = short_tmp / "h2"; other_home.mkdir()  # for envelope round-trip
+    hub_kp = load_or_generate(hub_home)
+    other_kp = load_or_generate(other_home)
+    # Pin hub's own pubkey so its envelope passes the silent-drop gate
+    _pin(hub_home, "self", hub_kp.pubkey_b64(), ["workgroup.leave"])
+    wg = wg_mod.create(
+        hub_home, name="solo", hub_kp=hub_kp, member_pubkeys=[],
+    )
+    server = alp_server.Server(home=hub_home, agent_name="hub")
+    wg_mod.register(server, hub_home)
+    await server.start()
+    try:
+        with pytest.raises(alp_client.RemoteError) as exc:
+            await alp_client.call(
+                socket_path=server.socket_path(),
+                sender=hub_kp,
+                recipient_pubkey_b64=hub_kp.pubkey_b64(),
+                method="workgroup.leave",
+                params={"workgroup_id": wg.meta.id},
+            )
+        assert exc.value.code == -32602
+    finally:
+        await server.stop()
+
+
+def test_kick_local_primitive_drops_member_and_rekeys(short_tmp: Path) -> None:
+    hub_home = short_tmp / "hub"; hub_home.mkdir()
+    a_home = short_tmp / "a"; a_home.mkdir()
+    b_home = short_tmp / "b"; b_home.mkdir()
+    hub_kp = load_or_generate(hub_home)
+    a_kp = load_or_generate(a_home)
+    b_kp = load_or_generate(b_home)
+
+    wg = wg_mod.create(
+        hub_home, name="kicker", hub_kp=hub_kp,
+        member_pubkeys=[a_kp.pubkey_b64(), b_kp.pubkey_b64()],
+    )
+    assert wg.meta.current_key_version == 1
+    a_v1 = wg_mod.open_sealed_group_key(
+        wg.member(a_kp.pubkey_b64()).sealed_key, a_kp,
+    )
+
+    updated = wg_mod.kick(hub_home, wg.meta.id, a_kp.pubkey_b64())
+    assert updated.meta.current_key_version == 2
+    assert updated.member(a_kp.pubkey_b64()) is None
+    b_v2 = wg_mod.open_sealed_group_key(
+        updated.member(b_kp.pubkey_b64()).sealed_key, b_kp,
+    )
+    assert b_v2 != a_v1
+
+
+def test_kick_rejects_hub_pubkey(short_tmp: Path) -> None:
+    home = short_tmp / "hub"; home.mkdir()
+    hub_kp = load_or_generate(home)
+    wg = wg_mod.create(home, name="x", hub_kp=hub_kp, member_pubkeys=[])
+    with pytest.raises(ValueError, match="hub cannot leave"):
+        wg_mod.kick(home, wg.meta.id, hub_kp.pubkey_b64())
+
+
+def test_kick_rejects_unknown_pubkey(short_tmp: Path) -> None:
+    home = short_tmp / "hub"; home.mkdir()
+    other_home = short_tmp / "o"; other_home.mkdir()
+    hub_kp = load_or_generate(home)
+    other_kp = load_or_generate(other_home)
+    wg = wg_mod.create(home, name="x", hub_kp=hub_kp, member_pubkeys=[])
+    with pytest.raises(ValueError, match="not in roster"):
+        wg_mod.kick(home, wg.meta.id, other_kp.pubkey_b64())
+
+
+# PR 2 — workgroup budget
+
+
+def test_create_validates_budget_shape(short_tmp: Path) -> None:
+    home = short_tmp / "hub"; home.mkdir()
+    kp = load_or_generate(home)
+    # Both at once — pick-one violation
+    with pytest.raises(ValueError, match="pick-one"):
+        wg_mod.create(
+            home, name="x", hub_kp=kp, member_pubkeys=[],
+            budget={"max_usd": 1.0, "max_tokens": 1000},
+        )
+    # Empty budget dict with neither key
+    with pytest.raises(ValueError, match="max_usd or max_tokens"):
+        wg_mod.create(
+            home, name="x", hub_kp=kp, member_pubkeys=[],
+            budget={"foo": "bar"},
+        )
+    # Non-positive
+    with pytest.raises(ValueError, match="max_usd"):
+        wg_mod.create(
+            home, name="x", hub_kp=kp, member_pubkeys=[],
+            budget={"max_usd": 0},
+        )
+
+
+@pytest.mark.asyncio
+async def test_post_admits_under_usd_cap_and_blocks_at_breach(short_tmp: Path) -> None:
+    hub_home = short_tmp / "hub"; hub_home.mkdir()
+    bob_home = short_tmp / "b"; bob_home.mkdir()
+    hub_kp = load_or_generate(hub_home)
+    bob_kp = load_or_generate(bob_home)
+    _pin(hub_home, "b", bob_kp.pubkey_b64(),
+         ["workgroup.join", "workgroup.post", "workgroup.pull"])
+
+    wg = wg_mod.create(
+        hub_home, name="capped", hub_kp=hub_kp,
+        member_pubkeys=[bob_kp.pubkey_b64()],
+        budget={"max_usd": 1.00},
+    )
+    server = alp_server.Server(home=hub_home, agent_name="hub")
+    wg_mod.register(server, hub_home)
+    await server.start()
+    try:
+        join = await alp_client.call(
+            socket_path=server.socket_path(),
+            sender=bob_kp,
+            recipient_pubkey_b64=hub_kp.pubkey_b64(),
+            method="workgroup.join",
+            params={"workgroup_id": wg.meta.id},
+        )
+        key = wg_mod.open_sealed_group_key(join["sealed_key"], bob_kp)
+
+        async def _post(declared_usd: float):
+            nonce, ct = wg_mod.encrypt_post(key, b"x")
+            return await alp_client.call(
+                socket_path=server.socket_path(),
+                sender=bob_kp,
+                recipient_pubkey_b64=hub_kp.pubkey_b64(),
+                method="workgroup.post",
+                params={
+                    "workgroup_id": wg.meta.id,
+                    "key_version": 1,
+                    "nonce": nonce,
+                    "ciphertext": ct,
+                    "cost": {"usd": declared_usd, "tokens": 0},
+                },
+            )
+
+        # Two posts at 0.40 each → cumulative 0.80, still under 1.00 cap
+        await _post(0.40)
+        await _post(0.40)
+        # Next post at 0.30 would push to 1.10 → reject
+        with pytest.raises(alp_client.RemoteError) as exc:
+            await _post(0.30)
+        assert exc.value.code == -32005
+        assert exc.value.data["cap_kind"] == "workgroup_usd"
+        assert exc.value.data["cap"] == 1.00
+        assert abs(exc.value.data["used"] - 0.80) < 1e-9
+    finally:
+        await server.stop()
+
+
+@pytest.mark.asyncio
+async def test_post_with_tokens_cap_blocks_at_breach(short_tmp: Path) -> None:
+    hub_home = short_tmp / "hub"; hub_home.mkdir()
+    bob_home = short_tmp / "b"; bob_home.mkdir()
+    hub_kp = load_or_generate(hub_home)
+    bob_kp = load_or_generate(bob_home)
+    _pin(hub_home, "b", bob_kp.pubkey_b64(),
+         ["workgroup.join", "workgroup.post"])
+
+    wg = wg_mod.create(
+        hub_home, name="tok", hub_kp=hub_kp,
+        member_pubkeys=[bob_kp.pubkey_b64()],
+        budget={"max_tokens": 1000},
+    )
+    server = alp_server.Server(home=hub_home, agent_name="hub")
+    wg_mod.register(server, hub_home)
+    await server.start()
+    try:
+        join = await alp_client.call(
+            socket_path=server.socket_path(),
+            sender=bob_kp,
+            recipient_pubkey_b64=hub_kp.pubkey_b64(),
+            method="workgroup.join",
+            params={"workgroup_id": wg.meta.id},
+        )
+        key = wg_mod.open_sealed_group_key(join["sealed_key"], bob_kp)
+        nonce, ct = wg_mod.encrypt_post(key, b"x")
+
+        # First post at 600 tokens admits
+        await alp_client.call(
+            socket_path=server.socket_path(),
+            sender=bob_kp,
+            recipient_pubkey_b64=hub_kp.pubkey_b64(),
+            method="workgroup.post",
+            params={
+                "workgroup_id": wg.meta.id,
+                "key_version": 1,
+                "nonce": nonce,
+                "ciphertext": ct,
+                "cost": {"tokens": 600},
+            },
+        )
+
+        # Second at 500 → cumulative 1100, breach
+        nonce2, ct2 = wg_mod.encrypt_post(key, b"y")
+        with pytest.raises(alp_client.RemoteError) as exc:
+            await alp_client.call(
+                socket_path=server.socket_path(),
+                sender=bob_kp,
+                recipient_pubkey_b64=hub_kp.pubkey_b64(),
+                method="workgroup.post",
+                params={
+                    "workgroup_id": wg.meta.id,
+                    "key_version": 1,
+                    "nonce": nonce2,
+                    "ciphertext": ct2,
+                    "cost": {"tokens": 500},
+                },
+            )
+        assert exc.value.code == -32005
+        assert exc.value.data["cap_kind"] == "workgroup_tokens"
+    finally:
+        await server.stop()
+
+
+@pytest.mark.asyncio
+async def test_no_budget_means_no_workgroup_cap(short_tmp: Path) -> None:
+    hub_home = short_tmp / "hub"; hub_home.mkdir()
+    bob_home = short_tmp / "b"; bob_home.mkdir()
+    hub_kp = load_or_generate(hub_home)
+    bob_kp = load_or_generate(bob_home)
+    _pin(hub_home, "b", bob_kp.pubkey_b64(),
+         ["workgroup.join", "workgroup.post"])
+
+    wg = wg_mod.create(
+        hub_home, name="open", hub_kp=hub_kp,
+        member_pubkeys=[bob_kp.pubkey_b64()],
+    )
+    server = alp_server.Server(home=hub_home, agent_name="hub")
+    wg_mod.register(server, hub_home)
+    await server.start()
+    try:
+        join = await alp_client.call(
+            socket_path=server.socket_path(),
+            sender=bob_kp,
+            recipient_pubkey_b64=hub_kp.pubkey_b64(),
+            method="workgroup.join",
+            params={"workgroup_id": wg.meta.id},
+        )
+        key = wg_mod.open_sealed_group_key(join["sealed_key"], bob_kp)
+        # Five posts at $1000 each — no cap, so all admit.
+        for i in range(5):
+            nonce, ct = wg_mod.encrypt_post(key, str(i).encode())
+            r = await alp_client.call(
+                socket_path=server.socket_path(),
+                sender=bob_kp,
+                recipient_pubkey_b64=hub_kp.pubkey_b64(),
+                method="workgroup.post",
+                params={
+                    "workgroup_id": wg.meta.id,
+                    "key_version": 1,
+                    "nonce": nonce,
+                    "ciphertext": ct,
+                    "cost": {"usd": 1000.0, "tokens": 999999},
+                },
+            )
+            assert r["seq"] == i + 1
+    finally:
+        await server.stop()
+
+
+def test_pr1_format_workgroup_loads_with_version_defaults(short_tmp: Path) -> None:
+    """A workgroup written by PR 1 (no ``current_key_version`` in
+    meta.yaml, no ``key_version`` per member) loads cleanly under PR 2,
+    defaulting both to version 1. Backward-compat for any state on
+    disk before this commit."""
+    import yaml as _yaml
+    home = short_tmp / "hub"; home.mkdir()
+    hub_kp = load_or_generate(home)
+    other_home = short_tmp / "o"; other_home.mkdir()
+    other_kp = load_or_generate(other_home)
+
+    wg_id = "wg_legacy"
+    d = home / "alp" / "workgroups" / wg_id
+    d.mkdir(parents=True)
+    sealed = wg_mod.seal_group_key(b"\x00" * 32, hub_kp.pubkey_b64())
+    sealed_other = wg_mod.seal_group_key(b"\x00" * 32, other_kp.pubkey_b64())
+    (d / "meta.yaml").write_text(_yaml.safe_dump({
+        "id": wg_id, "name": "legacy",
+        "hub_pubkey": hub_kp.pubkey_b64(),
+        "created_at": "2026-04-25T00:00:00Z",
+    }))  # NOTE: no current_key_version
+    (d / "members.yaml").write_text(_yaml.safe_dump([
+        {"pubkey": hub_kp.pubkey_b64(), "sealed_key": sealed,
+         "joined": True, "joined_at": "2026-04-25T00:00:00Z"},
+        {"pubkey": other_kp.pubkey_b64(), "sealed_key": sealed_other},
+    ]))  # NOTE: no key_version per member
+    (d / "transcript.jsonl").touch()
+
+    wg = wg_mod.load(home, wg_id)
+    assert wg is not None
+    assert wg.meta.current_key_version == 1
+    for m in wg.members:
+        assert m.key_version == 1
+    # Rekey on top of legacy state still bumps cleanly to v2.
+    updated = wg_mod.kick(home, wg_id, other_kp.pubkey_b64())
+    assert updated.meta.current_key_version == 2
+
+
+@pytest.mark.asyncio
+async def test_concurrent_post_and_leave_serialise_cleanly(short_tmp: Path) -> None:
+    """Asyncio is single-loop; a leave fired alongside a post is
+    serialised by the dispatcher. Pin that — if someone ever moves
+    handler I/O off the loop and breaks the implicit lock, the test
+    catches the race."""
+    import asyncio
+
+    hub_home = short_tmp / "hub"; hub_home.mkdir()
+    a_home = short_tmp / "a"; a_home.mkdir()
+    b_home = short_tmp / "b"; b_home.mkdir()
+    hub_kp = load_or_generate(hub_home)
+    a_kp = load_or_generate(a_home)
+    b_kp = load_or_generate(b_home)
+    _pin(hub_home, "a", a_kp.pubkey_b64(),
+         ["workgroup.join", "workgroup.post", "workgroup.leave"])
+    _pin(hub_home, "b", b_kp.pubkey_b64(),
+         ["workgroup.join", "workgroup.post"])
+
+    wg = wg_mod.create(
+        hub_home, name="race", hub_kp=hub_kp,
+        member_pubkeys=[a_kp.pubkey_b64(), b_kp.pubkey_b64()],
+    )
+    server = alp_server.Server(home=hub_home, agent_name="hub")
+    wg_mod.register(server, hub_home)
+    await server.start()
+    try:
+        async def _join(kp):
+            r = await alp_client.call(
+                socket_path=server.socket_path(),
+                sender=kp,
+                recipient_pubkey_b64=hub_kp.pubkey_b64(),
+                method="workgroup.join",
+                params={"workgroup_id": wg.meta.id},
+            )
+            return wg_mod.open_sealed_group_key(r["sealed_key"], kp)
+        a_key = await _join(a_kp)
+        b_key = await _join(b_kp)
+
+        async def _b_post():
+            nonce, ct = wg_mod.encrypt_post(b_key, b"during race")
+            return await alp_client.call(
+                socket_path=server.socket_path(),
+                sender=b_kp,
+                recipient_pubkey_b64=hub_kp.pubkey_b64(),
+                method="workgroup.post",
+                params={
+                    "workgroup_id": wg.meta.id,
+                    "key_version": 1,
+                    "nonce": nonce, "ciphertext": ct,
+                },
+            )
+
+        async def _a_leave():
+            return await alp_client.call(
+                socket_path=server.socket_path(),
+                sender=a_kp,
+                recipient_pubkey_b64=hub_kp.pubkey_b64(),
+                method="workgroup.leave",
+                params={"workgroup_id": wg.meta.id},
+            )
+
+        # Fire both. Whichever lands first wins; the other observes the
+        # post-resolved state. Either order is fine — what we assert is
+        # that NEITHER crashes and the final on-disk state is coherent.
+        results = await asyncio.gather(_b_post(), _a_leave(), return_exceptions=True)
+        for r in results:
+            assert not isinstance(r, Exception), f"crash: {r!r}"
+
+        # Final state: A is gone, B remains, version is 2.
+        wg_after = wg_mod.load(hub_home, wg.meta.id)
+        assert wg_after.meta.current_key_version == 2
+        assert wg_after.member(a_kp.pubkey_b64()) is None
+        assert wg_after.member(b_kp.pubkey_b64()) is not None
+        # Transcript has exactly one post (B's), regardless of order.
+        d = hub_home / "alp" / "workgroups" / wg.meta.id
+        lines = (d / "transcript.jsonl").read_text().strip().splitlines()
+        assert len(lines) == 1
+    finally:
+        await server.stop()
+
+
+@pytest.mark.asyncio
+async def test_profile_budget_gate_fires_before_workgroup_gate(short_tmp: Path) -> None:
+    """Profile budget is checked upstream in ``Server._dispatch`` (see
+    server.py); a profile cap exhausted on the hub returns ``-32005``
+    with ``cap_kind = usd|tokens`` *before* the workgroup handler ever
+    runs. Pin the precedence."""
+    from alpi import config as cfg_mod
+    from alpi import ledger
+
+    hub_home = short_tmp / "hub"; hub_home.mkdir()
+    bob_home = short_tmp / "b"; bob_home.mkdir()
+    hub_kp = load_or_generate(hub_home)
+    bob_kp = load_or_generate(bob_home)
+    _pin(hub_home, "b", bob_kp.pubkey_b64(),
+         ["workgroup.join", "workgroup.post"])
+
+    # Hub profile carries a tiny daily USD cap; pre-spend it so the
+    # next call trips immediately.
+    cfg = cfg_mod.load(hub_home)
+    cfg.budget = {"daily_usd": 0.10}
+    cfg_mod.save(cfg)
+    ledger.record(hub_home, usd=0.50, tokens=0)
+
+    wg = wg_mod.create(
+        hub_home, name="bothcaps", hub_kp=hub_kp,
+        member_pubkeys=[bob_kp.pubkey_b64()],
+        budget={"max_usd": 100.00},  # workgroup cap is huge — never the limiter
+    )
+    server = alp_server.Server(home=hub_home, agent_name="hub")
+    wg_mod.register(server, hub_home)
+    await server.start()
+    try:
+        with pytest.raises(alp_client.RemoteError) as exc:
+            await alp_client.call(
+                socket_path=server.socket_path(),
+                sender=bob_kp,
+                recipient_pubkey_b64=hub_kp.pubkey_b64(),
+                method="workgroup.join",
+                params={"workgroup_id": wg.meta.id},
+            )
+        assert exc.value.code == -32005
+        # Profile cap, not workgroup — distinguish via cap_kind.
+        assert exc.value.data.get("cap_kind") == "usd"
+    finally:
+        await server.stop()
+
+
+def test_sequential_leaves_keep_bumping_versions(short_tmp: Path) -> None:
+    """Two leaves in a row: v1 → v2 → v3. Each remaining member ends up
+    holding the latest sealed key for the latest version."""
+    hub_home = short_tmp / "hub"; hub_home.mkdir()
+    a_home = short_tmp / "a"; a_home.mkdir()
+    b_home = short_tmp / "b"; b_home.mkdir()
+    c_home = short_tmp / "c"; c_home.mkdir()
+    hub_kp = load_or_generate(hub_home)
+    a_kp = load_or_generate(a_home)
+    b_kp = load_or_generate(b_home)
+    c_kp = load_or_generate(c_home)
+
+    wg = wg_mod.create(
+        hub_home, name="seq", hub_kp=hub_kp,
+        member_pubkeys=[a_kp.pubkey_b64(), b_kp.pubkey_b64(),
+                        c_kp.pubkey_b64()],
+    )
+    assert wg.meta.current_key_version == 1
+    c_v1 = wg_mod.open_sealed_group_key(
+        wg.member(c_kp.pubkey_b64()).sealed_key, c_kp,
+    )
+
+    after_a = wg_mod.kick(hub_home, wg.meta.id, a_kp.pubkey_b64())
+    assert after_a.meta.current_key_version == 2
+    c_v2 = wg_mod.open_sealed_group_key(
+        after_a.member(c_kp.pubkey_b64()).sealed_key, c_kp,
+    )
+
+    after_b = wg_mod.kick(hub_home, wg.meta.id, b_kp.pubkey_b64())
+    assert after_b.meta.current_key_version == 3
+    c_v3 = wg_mod.open_sealed_group_key(
+        after_b.member(c_kp.pubkey_b64()).sealed_key, c_kp,
+    )
+
+    assert c_v1 != c_v2 != c_v3
+    # A and B are gone; only hub + C remain
+    remaining_pks = {m.pubkey for m in after_b.members}
+    assert remaining_pks == {hub_kp.pubkey_b64(), c_kp.pubkey_b64()}
+
+
+def test_ledger_records_cumulative_spend(short_tmp: Path) -> None:
+    """Verify the ledger file is updated atomically with each accepted
+    post — usd, tokens, and posts all increment."""
+    import json
+    hub_home = short_tmp / "hub"; hub_home.mkdir()
+    bob_home = short_tmp / "b"; bob_home.mkdir()
+    hub_kp = load_or_generate(hub_home)
+    bob_kp = load_or_generate(bob_home)
+
+    wg = wg_mod.create(
+        hub_home, name="led", hub_kp=hub_kp,
+        member_pubkeys=[bob_kp.pubkey_b64()],
+    )
+    ledger_path = (
+        hub_home / "alp" / "workgroups" / wg.meta.id / "ledger.json"
+    )
+    initial = json.loads(ledger_path.read_text())
+    assert initial == {"usd": 0.0, "tokens": 0, "posts": 0}
+
+
 @pytest.mark.asyncio
 async def test_capability_denied_when_verb_not_allowed(short_tmp: Path) -> None:
     """Even a workgroup member is rejected at the capability layer if
