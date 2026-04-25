@@ -1,6 +1,6 @@
 [project]
 name = "alpi"
-version = "0.2.84"
+version = "0.2.85"
 description = "A profile-based personal AI agent for terminal, messengers, and private ALP networks"
 readme = "README.md"
 requires-python = ">=3.10"

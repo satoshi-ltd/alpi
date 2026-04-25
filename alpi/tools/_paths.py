@@ -22,6 +22,9 @@ _SENSITIVE_PATH_REGEX: tuple[re.Pattern[str], ...] = (
     re.compile(r"\.(?:pem|p12|pfx)$", re.I),
     re.compile(r"(?:^|/)\.aws/credentials$", re.I),
     re.compile(r"(?:^|/)\.gnupg/", re.I),
+    # Profile secrets and config — must only be edited by hand or via
+    # `alpi setup`, never through file tools or terminal redirection.
+    re.compile(r"(?:^|/)\.alpi(?:/profiles/[^/]+)?/(?:\.env|config\.yaml)$"),
 )
 
 
@@ -67,10 +70,7 @@ def resolve_path(path: str) -> Path:
     resolved = p.resolve()
     hit = _is_sensitive(p, resolved)
     if hit is not None:
-        raise ValueError(
-            f"refusing to touch sensitive system path: {path}. "
-            "Use the terminal tool with sudo if you really need it."
-        )
+        raise ValueError(f"refusing to touch sensitive path: {path}")
     return resolved
 
 
