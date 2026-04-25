@@ -166,14 +166,21 @@ function renderJsonLd({ kind, title, description, canonical }) {
   return `<script type="application/ld+json">${JSON.stringify(data)}</script>`;
 }
 
-// ── alpi logo (alpaca + wordmark, inlined into the nav) ───────────────────
-const logoSvg = (() => {
-  const src = readFileSync(join(SITE, 'assets', 'alpi-logo.svg'), 'utf8');
+// ── alpi logo (llama + wordmark, inlined into the nav) ─────────────────────
+function inlineLogoPart(fileName, className) {
+  const src = readFileSync(join(SITE, 'assets', fileName), 'utf8');
   return src
     .replace(/<\?xml[^?]*\?>\s*/i, '')
-    .replace(/<svg\b[^>]*>/i, '<svg class="logo" role="img" aria-label="alpi" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1319 587" fill="currentColor">')
+    .replace(/<svg\b/i, `<svg class="${className}" aria-hidden="true" focusable="false"`)
     .trim();
-})();
+}
+
+const logoSvg = `<span class="logo" aria-hidden="true">${inlineLogoPart('alpi-white.svg', 'logo-mark')}${inlineLogoPart('alpi-text-white.svg', 'logo-word')}</span>`;
+const themeControlHtml = `<div class="bg-ctrl" role="group" aria-label="theme">
+  <span>theme</span>
+  <button data-theme="dark" class="on">dark</button>
+  <button data-theme="light">light</button>
+</div>`;
 
 // ── shared nav component — identical markup on landing + docs + doc pages ──
 // kind: 'landing' | 'docs-index' | 'doc'
@@ -325,7 +332,7 @@ ${renderHead({
   title: `${doc.slug} — alpi docs`,
   description: `${doc.sub} Part of the alpi documentation (${doc.ix}/${String(TOTAL).padStart(2,'0')}, ${doc.category}). v${VERSION}.`,
   path: `/docs/${doc.slug}.html`,
-  iconPath: '../assets/alpi-alpaca.svg',
+  iconPath: '../assets/alpi-favicon.svg',
 })}
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -362,6 +369,7 @@ ${bodyHtml}
   </nav>
 </main>
 
+${themeControlHtml}
 <script src="../doc.js"></script>
 </body>
 </html>
@@ -378,7 +386,7 @@ ${renderHead({
   title: 'alpi docs — documentation index',
   description: `Complete documentation for alpi v${VERSION}: ${TOTAL} references covering quickstart, skills, profiles, models, architecture, security, deployments, the Alpi Link Protocol, and more.`,
   path: '/docs/',
-  iconPath: '../assets/alpi-alpaca.svg',
+  iconPath: '../assets/alpi-favicon.svg',
 })}
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -402,6 +410,7 @@ ${renderDocsGrid({
 })}
 </main>
 
+${themeControlHtml}
 <script src="../doc.js"></script>
 </body>
 </html>
@@ -436,7 +445,7 @@ const landingHead = renderHead({
   title: `alpi — ${SITE_TAGLINE}`,
   description: SITE_DESCRIPTION,
   path: '/',
-  iconPath: 'assets/alpi-alpaca.svg',
+  iconPath: 'assets/alpi-favicon.svg',
 });
 const landing = readFileSync(join(TPL, 'landing.html'), 'utf8')
   .replace('<meta charset="utf-8" />\n<!-- SEO_HEAD (injected by build.mjs) -->', landingHead)
