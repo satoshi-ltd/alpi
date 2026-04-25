@@ -8,138 +8,307 @@ technical reference of what currently ships, see
 Audience: the creator ([@soyjavi](https://github.com/soyjavi)) and
 any future contributor reading the repo cold.
 
-Legend: 🔵 backlog · 🟡 next up · ⏸ blocked.
+Legend: 🔵 backlog · 🟡 next up · ⏸ blocked · 🔴 gate.
 
 ---
 
-## Open items
+## v0.3 — public release
 
-| ID | Item | Target | Status |
-|---|---|---|---|
-| AR | v0.3 production release — website + content rewrite | v0.3 | 🟡 v0.3 gate — blocks the cut |
-| AT | Audit system prompt + tool descriptions against comparable agents | v0.3 | ✅ closed — BD spins out for the one item that needs measurement |
-| AI | Memory v2 — better generation + TUI panel | v0.3 | 🔵 research first |
-| AJ | Browser realism — session persistence + login state + deeper antibot | v0.3 | 🔵 |
-| AO | Default skills bundle | v0.3 | 🔵 intentionally empty — bundled skills emerge from concrete recurring patterns, not catalog imitation |
-| AQ | Voice mode polish — STT + TTS quality + continuous mode | v0.3 | 🔵 |
-| BB | TUI: shared link renderer (bold + underline; hover = accent bg + black) | v0.3 | 🔵 |
-| BC | External security audit before v0.3 public release | v0.3 | 🔴 gate on AR |
-| BD | Model-aware tool-use-enforcement guidance (Claude/MiMo brevity, GPT/Codex/Gemini full block) | v0.3 | 🔵 needs A/B on agent.log first |
-| ALP.2 | Alpi Link Protocol — inter-machine Noise-protocol transport + rate-limit enforcement | v0.3 | ✅ shipped |
-| BG | Spending budgets — daily USD or token cap at the profile | v0.3 | ✅ shipped — ledger enforces across interactive, gateway, schedule, sub-agents, and ALP inbound |
-| ALP.3 | Alpi Link Protocol — shared workgroups (collaborative spaces, humans optional) | v0.3 | 🔵 next up — workgroup budget double-gates on top of each member's profile budget |
-| H | Home Assistant integration | long-term | ⏸ blocked on user confirmation |
-| N | Image generation | long-term | 🔵 no concrete use case yet |
-| U | Signal gateway (signal-cli) | long-term | 🔵 requires dedicated phone number |
-| Σ.1 | Mixture-of-agents tool (ensemble inference) | stretch | 🔵 not planned, tracked for later |
-| Σ.2 | RL training / fine-tuning hooks | stretch | 🔵 not planned, tracked for later |
+Two items left before the cut. Everything else previously parked
+under v0.3 moved to v0.4 — none of it can land honestly in the
+remaining window.
 
-v0.3.0 ships when **AR**, **ALP.2**, and **ALP.3** land. The rest of
-the v0.3 rows are "nice to have before the cut, not required".
+| ID | Item | Status |
+|---|---|---|
+| ALP.3 | Alpi Link Protocol — shared workgroups (collaborative spaces, humans optional) | 🔴 gate — landing today |
+| AU | Distribution — `uv tool install alpi`, `alpi update`, end-user install without source | 🔴 gate |
+
+### ALP.3 — Shared workgroups
+
+Depends on ALP.1 + ALP.2 (shipped) and the profile-level budget
+ledger (shipped). First-class collaborative workspaces — N alpis
+(different profiles, different machines) post into a shared
+transcript; a human can join via the TUI or stay out entirely. Hub
+model (the workgroup creator holds transcript + group key), not
+gossip. Per-workgroup budget and pause switch as safety levers; posts
+are double-gated against both profile and workgroup budgets. Verbs:
+`workgroup.create`, `workgroup.join`, `workgroup.post`,
+`workgroup.pull`, `workgroup.leave`, `workgroup.pause`; rekey on
+member leave.
+
+### AU — Distribution + update path
+
+Today alpi is installed by cloning the repo and running `uv sync`. A
+public release needs an end-user path that does not require git or
+the source tree. Three deliverables:
+
+1. **`uv tool install alpi`** — publish the package on PyPI so a
+   plain `uv tool install alpi` (or `pipx install alpi`) lands a
+   working `alpi` binary in the user's PATH. The package is already
+   PyPI-shaped (`pyproject.toml` has `[project.scripts] alpi = …`);
+   the missing pieces are the publish workflow, the trusted-publisher
+   config on PyPI, and a smoke-test that asserts a fresh-machine
+   install actually launches.
+
+2. **`alpi update`** — a single command that bumps the user's
+   installation to the latest release. Implementation is a thin
+   wrapper around `uv tool upgrade alpi` (or `pipx upgrade`) with a
+   pre-flight check against PyPI's JSON API (`/pypi/alpi/json`) to
+   announce the version delta and the changelog link before pulling.
+   Falls back gracefully on networks without PyPI access.
+
+3. **Versioning + release process.** Document the cut: tag
+   `v0.3.0`, build, publish, GitHub release with the CHANGELOG
+   excerpt as body. Once the workflow is green, every patch bump
+   (`v0.2.86 → v0.2.87 → …`) flows through the same pipeline so
+   `alpi update` is meaningful and not a one-off.
+
+**What's intentionally not in scope:** auto-update on launch (would
+contradict the "no hidden network" principle), Homebrew formula
+(double the maintenance for a uv-first tool), platform-specific
+installers (macOS .pkg, Windows MSI). Users on those platforms get
+alpi via `uv` like everyone else.
 
 ---
 
-## Principles
+## v0.4 cycle
 
-alpi **respects the ToS of every provider it integrates with**. When
-an LLM vendor (OpenAI, Anthropic, …) offers a paid subscription for a
-first-party client (ChatGPT Plus/Pro, Claude Pro/Max, Claude Code),
-that subscription is for THAT client. Reverse-engineering the private
-OAuth flow of the official CLI to route a third-party agent against
-the same quota is:
+The v0.4 surface is wider on purpose: alpi v0.3 is a credible
+private-agent tool; v0.4 is where the Satoshi positioning earns
+recurring use. Items split into three groups — **hardening** (close
+the loops we know are open), **commercial recorrido** (visible
+roadmap for early users), and **deferred research** (work that needs
+measurement before scope locks).
 
-- A clear ToS violation.
-- Disrespectful to the vendor's product boundaries.
-- Unsafe for users (accounts can be banned; the reversed flow can
-  break any time).
+### Hardening
 
-The competitor landscape routinely ships "Codex OAuth" / "Claude Code
-OAuth" features.
-**alpi does not, and will not.** If a vendor publishes an official
-OAuth-for-third-parties flow in the future (documented, stable,
-bindable), we adopt it then.
+| ID | Item | Status |
+|---|---|---|
+| BC | External security audit before public release | 🔴 ships before v0.4 cut |
+| AV | Per-skill env scoping — close the residual `os.environ` enumeration vector | 🔵 |
+| AW | Encrypted profile backup/restore — zero-knowledge passphrase-encrypted archive of `~/.alpi/<profile>/` | 🔵 |
 
-**Practical consequence:** users pay per-token API access through
-their own keys. That cost is honest and visible. Subscription
-routing is not on the roadmap.
+### Commercial recorrido
 
-See the **Why alpi is built like this** section in
-[README.md](../README.md) for how the six Satoshi Ltd. principles
-(Privacy by Design, User Sovereignty, Security First, Open Source,
-Zero Knowledge, Digital Sovereignty) map to concrete choices in this
-repo.
+| ID | Item | Status |
+|---|---|---|
+| AX | Mobile / desktop companion — minimal client speaking ALP to the user's profile | 🔵 |
+| AY | Skills marketplace — federated, signed, never centralised | 🔵 |
+| AZ | Workgroup viewer — folds into AX (companion app surfaces the transcript read-only or read/write) | 🔵 |
+| BA | Local RAG over `workspace/` — local-only embeddings (sentence-transformers), semantic search tools | 🔵 |
+| BB | Enhanced rich text in UI — refine the link renderer baseline, extend to lists, code blocks, tables | 🔵 |
+| H  | Home Assistant integration | ⏸ blocked on user confirmation |
+| U  | Signal gateway (signal-cli) | 🔵 — requires dedicated phone number |
+
+### Deferred research
+
+| ID | Item | Status |
+|---|---|---|
+| AI | Memory v2 — better generation + TUI panel | 🔵 research first |
+| AJ | Browser realism — session persistence + login state + deeper antibot | 🔵 |
+| AQ | Voice mode polish — STT + TTS quality + continuous mode | 🔵 |
+| BD | Model-aware tool-use-enforcement guidance (Claude/MiMo brevity, GPT/Codex/Gemini full block) | 🔵 needs A/B on `agent.log` first |
 
 ---
 
-## v0.3 cycle
+## v0.4 — detailed scope
 
-### AR. v0.3 production release — website + content rewrite (v0.3 gate)
+### BC. External security audit before public release
 
-v0.3 is the first release intended for public consumption. That
-implies a presence (static site) and a content pass across
-`README.md`, `docs/*`, and the landing page aligned with
-[satoshi-ltd.com](https://satoshi-ltd.com):
+**Why before v0.4, not v0.3.** A real audit is 4-8 weeks of vendor
+engagement plus remediation. Forcing it into the v0.3 window would
+be theatre. v0.3 ships with a public commitment: the contract
+becomes part of the launch story, the report lands at
+`docs/audits/v0.4-<vendor>.md` before the v0.4 cut.
 
-- **Positioning.** Privacy-first. No telemetry. Local-first,
-  cloud-last. Your keys, your machine, your data.
-- **Competitor framing.** Speak generically about the landscape
-  (third-party agents, official vendor clients, hosted routers).
-  Avoid naming products gratuitously in marketing copy; when a
-  comparison is needed, state the difference in terms of *what
-  alpi does differently*, not what they do wrong.
-- **Differentiators to lead with.** UX discipline (one wizard, no
-  CLI sprawl), security posture (three-tier approval, OSV malware
-  check, opt-in OS sandbox, fail-closed allowlists), privacy (no
-  hidden network, no telemetry, no account), focused scope (only
-  the tools / skills that pay rent — no kitchen-sink registry).
+**Scope of the engagement.**
 
-**Deliverables before cutting v0.3.0:**
+- Threat model: who is the attacker, what's protected, what's
+  non-goal. Draft lives in `docs/SECURITY.md` today; the auditor
+  formalises and challenges it.
+- ALP cryptography review: envelope signing (Ed25519 PKCS8),
+  replay cache, Noise_XK wrapper, peer-pinning workflow, workgroup
+  key handling.
+- Tool surface review: approval system, sandbox posture (macOS
+  sandbox-exec profile + Linux bwrap), shell denylist, skill
+  scanner, OSV check, SSRF guards in `browser` / `web_*` tools.
+- Dependency posture: `pip-audit` output, third-party-code risks
+  documented in `docs/SECURITY.md → Third-party code`.
+- Privacy review: confirm **Zero Knowledge** + **Privacy by
+  Design** claims match the code — no hidden telemetry paths, no
+  analytics beacons, no cloud coupling that's not user-chosen.
 
-1. Static site — single-page, minimal, matching satoshi-ltd.com
-   visual language. Lives in `site/` at the repo root; deploys
-   from there.
-2. README rewrite with the new positioning. Today's README is
-   install-first; the new one leads with why alpi, install is a
-   section.
-3. [`docs/ARCHITECTURE.md`](ARCHITECTURE.md) +
-   [`docs/SECURITY.md`](SECURITY.md) audited for old framing that no
-   longer fits a production release.
-4. A short launch post for the personal blog / X account —
-   optional, but the effort pays off once.
+**Output.** A public report. Issues found are either fixed before
+v0.4 or documented in the report with a timeline. The report being
+published is part of the trust story — sitting on findings isn't.
 
-v0.3.0 doesn't ship until AR, ALP.2, and ALP.3 land. The public shape
-is profiles + private ALP networks, not a terminal-only assistant with
-future networking bolted on later.
+### AV. Per-skill env scoping
 
-### AT. Audit system prompt + tool descriptions against comparable agents — ✅ closed
+`~/.alpi/.env` and `~/.alpi/<profile>/config.yaml` are denied at the
+file-tool layer (v0.2.85). Skill scripts still inherit the parent
+process's `os.environ` and can enumerate every variable in Python
+with no file access at all — a prompt-injected skill can therefore
+exfiltrate `OPENAI_API_KEY` or `TELEGRAM_BOT_TOKEN` without ever
+opening a file.
 
-Done across three passes:
+**Scope.** When a skill runs, scrub `os.environ` down to a
+declarative allowlist read from the skill's frontmatter:
 
-1. **`ff6bb21`** — per-surface platform hint (cron / telegram / email /
-   gmail) injected from `engine._platform_hint()`; memory tool
-   description gained the declarative-phrasing rule ("write facts, not
-   instructions"); tool-desc leads tightened on a handful of tools.
-2. **`f170e72`** — three targeted additions to tool descriptions
-   where the failure mode was non-obvious: `browser` (retry with the
-   real role+name from the latest snapshot), `search` (regex
-   metachars must be escaped), `stt` ("Use when the user shares a
-   voice note"). The rest of the comparable-agent audit's "worst
-   offenders" turned out to already carry explicit *Use when / Not
-   for / failure mode* sections and needed no change.
-3. **Context-file injection scanner** — investigated and closed
-   without code. alpi does **not** auto-load workspace context
-   files (no `AGENTS.md` / `.alpi.md` / `CLAUDE.md` convention).
-   The system prompt is built from three controlled sources only:
-   the package-shipped `system_prompt.md`, memory files written by
-   the LLM itself through the `memory` tool (dedup-checked), and
-   the skills index (scanned by `skills_guard.py`). Workspace
-   content enters as tool results, not system prompt. Documented
-   in `SECURITY.md → Closed system prompt (by construction)`.
+```yaml
+# skills/<name>/SKILL.md frontmatter
+env:
+  - HTTP_PROXY  # if the skill genuinely needs it
+```
 
-**What's still open, spun out separately.** Model-specific execution
-guidance (Claude brevity vs GPT verification vs Gemini absolute
-paths) doesn't land until we have an A/B measurement on
-`agent.log`. That lives under **BD** now.
+The default is the empty allowlist. The skill executor builds a
+restricted env dict, spawns the subprocess (or sets up the
+restricted scope for in-process skills) without inheriting anything
+beyond the allowlist plus the irreducible PATH / HOME / LANG set
+needed for any process to run.
+
+**Closes** the residual vector named in v0.2.85's CHANGELOG +
+`docs/SECURITY.md → Layer 1`.
+
+### AW. Encrypted profile backup/restore
+
+Zero-knowledge archive of `~/.alpi/<profile>/`: memories, peers,
+skills, sessions, the `.env`, the `config.yaml`. Two verbs:
+
+- `alpi backup [--out PATH]` — passphrase-prompt; emits a single
+  age-encrypted file (`profile-name.YYYY-MM-DD.alpi-backup`).
+- `alpi restore PATH` — passphrase-prompt; reverses the above into
+  `~/.alpi/<profile>/`, refusing to overwrite a non-empty profile
+  unless `--force`.
+
+Crypto: **age** with passphrase recipient (no asymmetric keys for
+the user to manage). Argon2id KDF. The profile owner is the only
+party who can decrypt; we never see the plaintext.
+
+**Why it matters commercially.** "Carry your agent between
+machines" + "no vendor lock-in" + "if your laptop dies, you have
+your agent back" — every commercial AI tool today loses your
+context when you re-install. We don't.
+
+### AX. Mobile / desktop companion
+
+A minimal client (likely Tauri or a thin native wrapper) that
+speaks ALP to the user's main profile rather than running a full
+agent locally. The phone / desktop app is a remote control + lens
+on the agent that lives on the user's main machine.
+
+**Why a companion, not a full port.** A mobile alpi running its own
+LLM + tools doubles the security surface and the maintenance cost
+without adding capability. ALP is already the protocol for
+"another machine talks to my profile" — the companion is just
+another peer.
+
+**Surfaces this could replace or extend:**
+
+- Telegram gateway (today's mobile story) — keep working but
+  optional once the companion is real.
+- `/peers`, `/budget`, `/memory` panels exposed read-only on the
+  go.
+- Workgroup viewer (**AZ**) folds in here — the same companion
+  that mirrors a 1:1 chat shows the workgroup transcript.
+
+**Open questions before scope locks:**
+
+- Tauri vs. native (SwiftUI / Kotlin) — Tauri is one codebase, but
+  ALP requires a Noise_XK implementation in the host language; we
+  already have it in Python. A Rust crate (`snow`) covers Tauri
+  cleanly.
+- iOS background restrictions — running an ALP TCP listener on
+  iOS is non-trivial; the companion likely *initiates* connections
+  to the user's profile rather than accepting them.
+- Distribution — TestFlight + Play Store internal track at first.
+
+### AY. Skills marketplace
+
+A curated, signed, *federated* registry. Not a centralised store.
+
+**Shape.** A skill is published by writing its manifest + body to a
+git repo (any forge — GitHub, sourcehut, self-hosted Gitea); the
+manifest carries a public key and the body is signed. `alpi skill
+install <url>` clones the repo, verifies the signature, runs the
+existing security scanner, and lands the skill under
+`skills/<name>/`. There is no central index; users discover skills
+the same way they discover npm packages (links, blog posts,
+word-of-mouth) and the trust anchor is the publisher's pubkey.
+
+**Why federated, not centralised.** A central marketplace becomes a
+chokepoint (review queue, takedowns, account bans, eventual
+acquisition). Federation matches the Satoshi principles —
+**Open Source**, **User Sovereignty** — and reuses the same
+trust pattern as ALP peers (pubkey-pinned, no discovery service).
+
+**Curation.** Satoshi Ltd. publishes a `@satoshi-ltd/skills` repo
+with our blessed bundles (the v0.3 **AO** decision was "no default
+bundle"; that holds — this is opt-in). Other publishers are equally
+first-class.
+
+### BA. Local RAG over `workspace/`
+
+Semantic search over the user's project files without sending a
+byte to a third party. Two new tools:
+
+- `index_workspace(path?)` — embeds the workspace into a local
+  vector store (`~/.alpi/<profile>/index/`). Default model is a
+  small sentence-transformer (`all-MiniLM-L6-v2` or similar);
+  optionally swappable.
+- `search_workspace(query, k=5)` — returns top-K snippets with
+  filepath + line range. The agent then reads the matching ranges
+  with the existing `read_file` tool.
+
+**Why not piggy-back on a cloud RAG.** The whole point is that the
+workspace contents never leave the machine. Embedding model + index
+both live locally; no API roundtrips during search.
+
+**Trade-offs to settle.** Sentence-transformers ships ~80 MB of
+PyTorch weights — significant install weight. A pure-CPU
+alternative (e.g., GGUF + llama.cpp) keeps the install lighter at
+the cost of slower indexing. Decide during scope.
+
+### BB. Enhanced rich text in UI
+
+The link renderer (the original v0.3 BB) shipped a baseline. v0.4
+extends it across the rest of the rich-text surface:
+
+- Lists (ordered + unordered) — consistent indent, marker style.
+- Inline code + fenced blocks — monospace font, accent-aware
+  background, per-language syntax highlight where it pays off.
+- Tables — column alignment, header style, fits to terminal width.
+- Headings inside chat replies — sized hierarchy, not just bold.
+
+Goal: when an LLM emits structured Markdown in its reply, the TUI
+renders it cleanly enough that users stop falling back to copying
+the raw text into another tool.
+
+### H. Home Assistant integration
+
+Only if @soyjavi runs Home Assistant. Requires `HA_URL` + a
+long-lived token in `.env`. Typical uses: read sensors, toggle
+lights/scenes, query occupancy. **Blocked on confirmation that HA
+is part of the setup.**
+
+### U. Signal gateway (signal-cli)
+
+Signal has the best security posture of any consumer messenger,
+but integration requires a **dedicated phone number for the bot**
+(you can't bot your own number — Signal won't allow two sessions
+simultaneously in a useful way). signal-cli runs as a local daemon
+exposing an HTTP/JSON-RPC endpoint; we just POST/GET messages.
+
+**Scope.** `alpi/gateway/platforms/signal.py` talking to a
+locally-running `signal-cli daemon --http 127.0.0.1:…`. First-run:
+user registers a bot number, follows signal-cli's captcha + SMS
+verify flow once (`signal-cli -u <num> register`), then
+`alpi setup → Gateways → Signal` stores the daemon URL +
+allowlist of sender numbers.
+
+**Estimated LOC:** ~200 (HTTP client + polling loop + send).
+
+**Blocker:** requires extra SIM / VoIP number. Real cost: ~$5/mo
+(Twilio / JustCall). Niche unless you want E2EE + self-hosted.
 
 ### AI. Memory v2 — generation + TUI panel
 
@@ -149,8 +318,9 @@ Two sub-tasks, research-first:
    and body. Open questions: are we writing the right type per
    signal? Is the 70% Jaccard dedup too loose / too tight? Should
    the tool take a "confidence" field so low-conf writes
-   auto-expire? Compare against comparable agents + the latest public memory
-   patterns (Mem0, Letta) and pick what fits our scope.
+   auto-expire? Compare against comparable agents + the latest
+   public memory patterns (Mem0, Letta) and pick what fits our
+   scope.
 2. **TUI panel.** `/memory` today shows the three files verbatim.
    Options: section-collapsible view, edit-in-place, "forget this"
    quick action, filter by type.
@@ -186,35 +356,6 @@ adjacent concerns that naturally fall out of this work (a
 cookie-expired page looks different from a logged-in one); fold
 them in when the detection scaffold makes it cheap.
 
-### AO. Default skills bundle
-
-BE ships the infrastructure to bundle skills under `@alpi/*`. This
-item is the curation side — what, if anything, to include.
-
-**Current position: no bundled skills.** We deliberately resisted
-shipping a catalog of generic methodology skills imported from other
-agents; most are off-scope for alpi. The ethos is "ship what you use"
-— bundle only skills that encode recurring
-patterns we actually observe in real usage, not generic
-write/code/web guides.
-
-**Candidates evaluated, deferred:**
-
-- `writer`, `coder`, `webmaster` (original draft) — too broad;
-  would each become 3-5 sub-workflows.
-- `@alpi/systematic-debugging` — methodology for
-  root-cause investigation. Marginal capability add; modern LLMs
-  do most of this when asked. Reconsider if real debug sessions
-  show the LLM taking shortcuts.
-- `@alpi/test-driven-development` — opinionated; do not impose.
-- `@alpi/plan` (thin plan-mode) — rejected: restyles output
-  rather than adding capability.
-
-**Trigger for shipping a bundled skill:** noticing the same
-workflow scaffolding being re-asked 3+ times in real sessions
-across profiles. When that happens, one targeted SKILL.md plus
-an e2e test lands on its own, not as part of a bundle.
-
 ### AQ. Voice mode polish — STT + TTS + continuous mode
 
 The voice primitives shipped (`tts`, `stt` tools, Telegram voice
@@ -241,72 +382,6 @@ Start with a measurement pass (record a few real prompts, check STT
 accuracy + TTS latency end-to-end), then pick the two or three
 biggest wins.
 
-### BB. TUI: shared link renderer
-
-Markdown links (`[text](url)`) today render as Rich's default —
-underlined text in the base foreground colour. Works, but blends
-with body text when the terminal's theme is low-contrast.
-
-**Proposed look.**
-
-- **Default state**: bold + underline, base foreground colour.
-  Mimics the classic HTML anchor convention. Reads as a link at a
-  glance without burning accent colour on every link.
-- **Hover / selected state**: accent background, black foreground.
-  High contrast, unambiguous affordance. Matches the selection
-  visual already used by `OptionList` rows.
-
-**Scope.**
-
-- New helper in `alpi/tui/links.py` (or inline in
-  `alpi/tui/formatting.py`) that walks a Rich `Text` / markdown
-  tree and rewrites link nodes to the two-state style.
-- Apply transversally: `AssistantMessage` render path, every
-  `FloatingPanel` subclass that can contain links (`/memory`
-  `/help`, future `/peers` detail). One call site per widget is
-  fine as long as they all share the helper.
-- Keep the URL copyable — don't swap link text for the URL;
-  Textual's built-in link handling stays.
-
-**Done criterion.** Walking through `/memory`, `/help`, a chat
-reply containing links, and an error message with a link renders
-them all with the same two-state visual. No widget has its own
-link style.
-
-### BC. External security audit before v0.3 public release
-
-**Gate on AR.** v0.3 is the first release intended for public
-consumption (`docs/ROADMAP.md → AR`). Before we cut it, contract
-an external firm for a formal audit.
-
-**Scope of the engagement.**
-
-- Threat model: who is the attacker, what's protected, what's
-  non-goal. Draft lives in `docs/SECURITY.md` today; the auditor
-  formalises and challenges it.
-- ALP cryptography review: envelope signing (Ed25519 PKCS8),
-  replay cache, Noise_XK wrapper, peer-pinning workflow, workgroup
-  key handling.
-- Tool surface review: approval system, sandbox posture (macOS
-  sandbox-exec profile + Linux bwrap), shell denylist, skill
-  scanner, OSV check, SSRF guards in `browser` / `web_*` tools.
-- Dependency posture: `pip-audit` output, third-party-code risks
-  documented in `docs/SECURITY.md → Third-party code`.
-- Privacy review: confirm **Zero Knowledge** + **Privacy by
-  Design** claims match the code — no hidden telemetry paths, no
-  analytics beacons, no cloud coupling that's not user-chosen.
-
-**Output.** A public report lives at `docs/audits/v0.3-<vendor>.md`
-(or linked from there). Issues found are either fixed before the
-release or documented in the report with a timeline. The report
-being published is part of the trust story — sitting on findings
-isn't.
-
-**Why external, not internal.** Satoshi Ltd. builds the tool; an
-independent security firm reads it. The Satoshi principle "Open
-Source — Auditable code. Reproducible builds. Trust, but verify"
-applies to the organisation too.
-
 ### BD. Model-aware tool-use-enforcement guidance
 
 Gate the "Actually CALL the tool…" paragraph in
@@ -321,156 +396,45 @@ no regression on the shorter variant.
 
 ---
 
-## ALP launch work
+## Principles
 
-### ALP — Alpi Link Protocol
+alpi **respects the ToS of every provider it integrates with**. When
+an LLM vendor (OpenAI, Anthropic, …) offers a paid subscription for a
+first-party client (ChatGPT Plus/Pro, Claude Pro/Max, Claude Code),
+that subscription is for THAT client. Reverse-engineering the private
+OAuth flow of the official CLI to route a third-party agent against
+the same quota is:
 
-alpi agents couldn't talk to each other. ALP is alpi's own closed
-protocol for agent↔agent: intra-profile on the same machine,
-inter-machine over the public internet, shared workgroups for N-agent
-workspaces. Security + privacy are hard requirements — every
-message is signed + encrypted, every peer is explicitly pinned (no
-discovery, no TOFU), every capability is fail-closed. Spec at
-[`docs/ALP.md`](ALP.md). Three phases form the v0.3 public surface:
-ALP.1 local links, ALP.2 machine links, ALP.3 workgroups.
+- A clear ToS violation.
+- Disrespectful to the vendor's product boundaries.
+- Unsafe for users (accounts can be banned; the reversed flow can
+  break any time).
 
-### ALP.2 — Inter-machine Noise-protocol transport (v0.3)
+The competitor landscape routinely ships "Codex OAuth" / "Claude Code
+OAuth" features.
+**alpi does not, and will not.** If a vendor publishes an official
+OAuth-for-third-parties flow in the future (documented, stable,
+bindable), we adopt it then.
 
-Depends on ALP.1. Transport in `alpi/alp/noise.py` +
-`alpi/alp/transport_tcp.py` — TCP listener with Noise_XK handshake
-producing forward-secret session keys and ChaCha20-Poly1305 AEAD on
-top. Explicitly NOT HTTPS: we use Noise (same framework as
-WireGuard) so we don't drag TLS's 30-year legacy of downgrade
-attacks and cert-management headaches into a peer-to-peer tool. Peer
-entries grow an `address: host:port`; same verbs as ALP.1, different
-wire. Tailscale / WireGuard as a network-layer front-end is the
-blessed deployment; direct public-internet exposure is supported but
-discouraged.
+**Practical consequence:** users pay per-token API access through
+their own keys. That cost is honest and visible. Subscription
+routing is not on the roadmap.
 
-Transport, per-peer rate-limit enforcement, and wizard integration
-(ALP service TCP port + peer address + remote probe) are shipped.
-Spending is governed by the profile-level budget ledger — see **BG**.
-
-### BG — Spending budgets
-
-One daily ledger per profile, single source of truth for every path
-that spends. Interactive turns, gateway replies, scheduled jobs,
-sub-agent spawns (`research`, `delegate`, `read_image`), and inbound
-ALP calls from pinned peers all draw from the same pool and all trip
-the same cap when it runs out.
-
-**Config shape.** One knob per profile — either USD or tokens,
-picked by the provider's pricing model.
-
-```yaml
-# ~/.alpi/profiles/<name>/config.yaml
-
-# Paid API profile (Claude, OpenAI, Gemini, OpenRouter, …)
-budget:
-  daily_usd: 5.00
-
-# Local Ollama or free inference — cost is always $0, token counter
-# is the useful knob
-budget:
-  daily_tokens: 500000
-```
-
-Leave both unset for no ceiling.
-
-**Semantics.**
-
-- The profile cap covers every spending path. There is no per-peer
-  sub-cap; peer-specific trust lives in `peers.yaml` capabilities
-  and rate limits, not in a second ledger.
-- Midnight UTC reset; no carry-over.
-- When the cap trips: `-32005 budget-exceeded` to ALP callers, a
-  surface-specific "budget exhausted" message on interactive paths.
-- If both `daily_usd` and `daily_tokens` are set, USD wins (paid is
-  the common case for a cap-enforced profile).
-
-**Ledger.** `~/.alpi/<profile>/logs/ledger.json`:
-
-```json
-{
-  "day": "2026-04-24",
-  "profile": { "usd": 2.34, "tokens": 187200 },
-  "by_peer": {
-    "__interactive__": { "usd": 1.12, "tokens": 89400 },
-    "alice":           { "usd": 0.47, "tokens": 42100 },
-    "nas":             { "usd": 0.75, "tokens": 55700 }
-  }
-}
-```
-
-`profile` is the gate. `by_peer` is observability for the `/cost`
-panel — it breaks spend down by who asked for it, but never blocks
-a request on its own.
-
-**Enforcement points.**
-
-1. `engine.run_turn` pre-check at the start of every turn.
-2. `alp.server._dispatch` pre-check before invoking a peer's
-   handler.
-3. Post-turn: `ledger.record()` increments the profile total and the
-   current bucket (peer id when the turn runs via ALP,
-   `__interactive__` otherwise).
-
-ALP.3 **workgroups** build on this: a workgroup can declare its own
-daily budget as a shared pool. Posting into a workgroup double-gates
-— both the poster's profile and the workgroup must have budget for
-the post to admit. When the poster's profile cap is exhausted it
-goes silent in the workgroup even if the workgroup still has room;
-when the workgroup's own pool is exhausted the whole workgroup
-freezes regardless of individual members' profiles.
-
-### ALP.3 — Shared workgroups (v0.3)
-
-Depends on ALP.1 and BG. First-class collaborative workspaces — N
-alpis (different profiles, different machines) post into a shared
-transcript; a human can join via the TUI or stay out entirely. Hub
-model (the workgroup creator holds transcript + group key), not
-gossip. Per-workgroup budget and pause switch as safety levers; posts
-are double-gated against both profile and workgroup budgets. Verbs:
-`workgroup.create`, `workgroup.join`, `workgroup.post`,
-`workgroup.pull`, `workgroup.leave`, `workgroup.pause`; rekey on
-member leave.
+See the **Why alpi is built like this** section in
+[README.md](../README.md) for how the six Satoshi Ltd. principles
+(Privacy by Design, User Sovereignty, Security First, Open Source,
+Zero Knowledge, Digital Sovereignty) map to concrete choices in this
+repo.
 
 ---
 
 ## Long-term / stretch
-
-### H. Home Assistant integration
-
-Only if @soyjavi runs Home Assistant. Requires `HA_URL` + a long-lived
-token in `.env`. Typical uses: read sensors, toggle lights/scenes,
-query occupancy. **Blocked on confirmation that HA is part of the
-setup.**
 
 ### N. Image generation
 
 `generate_image(prompt, style)` using the active vision model or a
 dedicated endpoint (DALL-E, SD). Useful for "hazme un logo
 rápido". Low priority unless a concrete use case appears.
-
-### U. Signal gateway (signal-cli)
-
-Signal has the best security posture of any consumer messenger,
-but integration requires a **dedicated phone number for the bot**
-(you can't bot your own number — Signal won't allow two sessions
-simultaneously in a useful way). signal-cli runs as a local daemon
-exposing an HTTP/JSON-RPC endpoint; we just POST/GET messages.
-
-**Scope.** `alpi/gateway/platforms/signal.py` talking to a
-locally-running `signal-cli daemon --http 127.0.0.1:…`. First-run:
-user registers a bot number, follows signal-cli's captcha + SMS
-verify flow once (`signal-cli -u <num> register`), then
-`alpi setup → Gateways → Signal` stores the daemon URL +
-allowlist of sender numbers.
-
-**Estimated LOC:** ~200 (HTTP client + polling loop + send).
-
-**Blocker:** requires extra SIM / VoIP number. Real cost: ~$5/mo
-(Twilio / JustCall). Niche unless you want E2EE + self-hosted.
 
 ### Σ.1. Mixture-of-agents (stretch goal)
 
@@ -543,6 +507,9 @@ Not planned. Research-grade, irrelevant for everyday personal use.
   `AGENT.md` from inside chat, and the LLM captures nuance
   ("less formal but not jokey; respect my code-switching") that a
   form can't.
+- **Default skills bundle (AO, v0.3).** Resolved as "ship nothing
+  by default". The marketplace (**AY**) is the path: bundles ship
+  out of `@satoshi-ltd/skills`, opt-in, never imposed.
 
 **Rejected behaviours:**
 

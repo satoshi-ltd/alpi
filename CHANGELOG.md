@@ -606,243 +606,77 @@ skill on demand.
 ### gateway
 - per-chat session threading (AN closed) + AU backlog entry (`e0f093d`)
 
-## v0.2.53 — 2026-04-23
+## v0.2.1 – v0.2.53 — 2026-04-21 → 2026-04-23
 
-### config
-- drop .env.example scaffold (AP closed) (`e707983`)
-
-## v0.2.52 — 2026-04-23
-
-### skill
-- tighten `tools:` field description + document scheduler TZ (`27765b0`)
-
-## v0.2.51 — 2026-04-23
-
-### tui
-- unified list row shape for selectable panels + /help palette (AH closed) (`f0f9052`)
-
-## v0.2.50 — 2026-04-23
-
-### config
-- tui.auto_resume flag for bare alpi (AL closed) (`8404526`)
-
-## v0.2.49 — 2026-04-23
-
-### roadmap
-- expand v0.3 backlog (AH–AT) + pre-push CHANGELOG hook (`543834d`)
-
-## v0.2.47 — 2026-04-23
-
-### setup
-- first-time help text in gateway/MCP wizards (AG closed) (`88e4086`)
-
-## v0.2.46 — 2026-04-23
-
-### cli
-- shrink surface, unify logs, add live doctor (AD/AE/AF) (`b110569`)
-
-## v0.2.41 — 2026-04-23
-
-### setup
-- normalise wizard UX across the board (`b46929f`)
-
-## v0.2.40 — 2026-04-23
-
-### gateway
-- service install/uninstall wizard (AB closed) (`f372ec0`)
-
-## v0.2.39 — 2026-04-22
-
-### cleanup
-- `alpi setup → Cleanup` wizard (AA closed) (`5825e87`)
-
-## v0.2.38 — 2026-04-22
-
-### approval
-- panel styled like /model, YOLO removed (`6be95ca`)
-
-## v0.2.37 — 2026-04-22
-
-### approval
-- three-severity command gate for terminal (W closed) (`2064d10`)
-
-## v0.2.36 — 2026-04-22
-
-### browser
-- humanised typing, dismiss camoufox (`a54425f`)
-
-## v0.2.35 — 2026-04-22
-
-### tidy
-- move PERSONALITY.md under memories/, gmail_token under secrets/ (`2914fe0`)
-
-## v0.2.34 — 2026-04-22
-
-### gateway
-- persist telegram offset, log backlog catch-up (`418d2fb`)
-
-## v0.2.33 — 2026-04-22
-
-### misc
-- profile list: accent diamond + model + size + abbreviated path (`4a832b6`)
-
-## v0.2.32 — 2026-04-22
-
-### setup
-- reorder Model wizard — Ollama first, cloud second (`1e4b119`)
-
-## v0.2.31 — 2026-04-22
-
-### tui
-- profile disk size in top bar + document TUI features (`416f203`)
-
-## v0.2.30 — 2026-04-22
-
-### sandbox
-- allow_network=off now blocks Python-native network tools (`83f9d00`)
-
-## v0.2.29 — 2026-04-22
-
-### tos
-- remove C (Codex OAuth) and V (Anthropic OAuth) from backlog (`5e77f17`)
-
-## v0.2.28 — 2026-04-22
-
-### misc
-- tts + send_message: autoplay off on gateway, terse outputs (`5e80755`)
-
-## v0.2.27 — 2026-04-22
+Two days of rapid iteration after the v0.2.0 split. Patch bumps
+collapsed into thematic groups; full per-commit detail in `git log`.
 
 ### brand
-- nickname → alpi across ~130 files (`00722a9`)
+- Project renamed `alf` → `alpi` across the codebase, docs, and
+  config paths (~130 files touched).
 
-## v0.2.26 — 2026-04-22
+### TUI
+- Theme system + floating panels + scaffold polish (foundation for
+  every later panel).
+- New panels: `/model`, `/mcps`, `/tools`, `/help` palette; unified
+  list-row shape across selectable panels (AH closed).
+- Profile disk size + accent diamond + abbreviated path in the
+  profile-list top bar; adapts to narrow widths.
+- `tui.auto_resume` flag so bare `alpi` continues the last session
+  (AL closed).
+- Drop questionary; menus + text inputs rebuilt directly on
+  `prompt_toolkit`.
 
-### misc
-- mcp + providers: OpenAI-compat tool names, curated lists, ctx window (`6ddf316`)
+### setup wizards
+- Normalised UX across every wizard.
+- New wizards: Cleanup (AA), Gateway service install/uninstall
+  (AB), live Doctor (AD/AE/AF), first-time help text in
+  Gateway/MCP wizards (AG), Model wizard reordered (Ollama first).
+- `.env.example` scaffold dropped; profile owns its own `.env` (AP).
 
-## v0.2.25 — 2026-04-22
+### voice + gateways
+- Voice pack: `tts` + `stt` tools + Telegram voice inbound/outbound
+  (M closed).
+- TTS autoplay off on gateway surfaces; terse outputs by default.
+- Gmail OAuth2 gateway + mail tool dispatch (T closed); internal
+  rename `email/` → `mail/imap/`.
+- Telegram offset persistence + backlog catch-up logging.
 
-### voice
-- tts + stt + telegram voice inbound/outbound (M closed) (`1af86d6`)
+### tools
+- `browser`: Playwright with stealth-by-default, humanised typing,
+  optional vision; camoufox dismissed.
+- `read_image`: vision tool with URL/SVG/model-override (D);
+  auto-resize oversized images before vision (S closed).
+- `research` + `delegate`: batch parallel tasks (R.3); `delegate`
+  becomes write-capable with file/terminal/web toolsets (R.2);
+  `research` prefixes inner emit with step counter (R.1).
+- `skill`: new `validate` action for correctness checks (Q
+  closed); `tools:` field description tightened.
+- Removed: `config` tool (config is user-owned).
 
-## v0.2.23 — 2026-04-22
+### security
+- Three-severity command gate for terminal (W closed); approval
+  panel restyled; YOLO removed.
+- Tool budget + OSV malware check + schedule threat-scan (security
+  pack).
+- Sandbox promoted from "experimental" to per-profile opt-in;
+  `allow_network=off` now blocks Python-native network tools too.
+- `tos`: removed C (Codex OAuth) and V (Anthropic OAuth) from
+  backlog — ToS-violation principle locked in.
 
-### gmail
-- OAuth2 gateway + mail tool dispatch (T closed) (`d8b644e`)
+### release pipeline
+- Auto-generated CHANGELOG from git history (AC closed) +
+  pre-push CHANGELOG hook.
+- `cli`: surface shrunk, logs unified.
+- Filesystem tidied: `PERSONALITY.md` → `memories/`, `gmail_token`
+  → `secrets/`.
 
-## v0.2.22 — 2026-04-22
-
-### refactor
-- email → mail/imap rename for upcoming Gmail backend (T commit 1/3) (`d9cd7de`)
-
-## v0.2.21 — 2026-04-22
-
-### read_image
-- auto-resize oversized images before vision (S closed) (`2823b4b`)
-
-## v0.2.20 — 2026-04-22
-
-### misc
-- security pack: tool budget + OSV malware + schedule threat-scan (`8d79faf`)
-
-## v0.2.19 — 2026-04-22
-
-### roadmap
-- extend backlog with TTS/STT, Gmail/Signal, approval, OSV (`2e504f3`)
-
-## v0.2.18 — 2026-04-22
-
-### research/delegate
-- batch parallel tasks (R.3 closed) (`5eec824`)
-
-## v0.2.17 — 2026-04-22
-
-### skill
-- add validate action for correctness checks (Q closed) (`88e2721`)
-
-## v0.2.16 — 2026-04-22
-
-### browser
-- Playwright tool with stealth-by-default and optional vision (`9710574`)
-
-## v0.2.15 — 2026-04-21
-
-### ollama
-- first-class provider + kill the generic custom slot (`9a3b4e1`)
-
-### todo
-- add in_progress status to match the prompt promise (`664e184`)
-
-## v0.2.14 — 2026-04-21
-
-### tui
-- /tools skips MCP-registered tools (`836f28a`)
-
-## v0.2.13 — 2026-04-21
-
-### misc
-- remove the config tool — config is user-owned (`ba7ce49`)
-
-## v0.2.12 — 2026-04-21
-
-### rename
-- alf → alpi across the entire codebase (`85384c3`)
-
-## v0.2.11 — 2026-04-21
-
-### misc
-- sandbox polish: promote from "experimental" to per-profile opt-in (`679fca8`)
-
-## v0.2.10 — 2026-04-21
-
-### ui
-- drop questionary, build menu()+text() directly on prompt_toolkit (`1063bf2`)
-
-## v0.2.9 — 2026-04-21
-
-### tui
-- AlfTopBar drops labels in narrow mode (`a5fd740`)
-
-## v0.2.8 — 2026-04-21
-
-### tui
-- AlfHeader adapts to available width (`c065e14`)
-
-## v0.2.7 — 2026-04-21
-
-### tui
-- panel header elevation flips in light mode (`6c02eeb`)
-
-## v0.2.6 — 2026-04-21
-
-### tui
-- /mcps panel listing running MCP servers (`b13ed62`)
-
-## v0.2.5 — 2026-04-21
-
-### tui+setup
-- /model as panel, user-driven openrouter, live anthropic/openai fetch (`f64bebf`)
-
-## v0.2.4 — 2026-04-21
-
-### read_image
-- vision tool with URL, SVG, and model-override (D) (`b71ce2f`)
-
-## v0.2.3 — 2026-04-21
-
-### delegate
-- write-capable sub-agent with file/terminal/web toolsets (R.2) (`fdf999a`)
-
-## v0.2.2 — 2026-04-21
-
-### research
-- prefix inner emit_state with step counter (R.1) (`1722fab`)
-
-## v0.2.1 — 2026-04-21
-
-### tui
-- theme system + floating panels + scaffold polish (`9ed4139`)
+### MCP + providers
+- OpenAI-compat tool names, curated provider lists, context-window
+  awareness.
+- `/tools` skips MCP-registered tools (rendered in `/mcps` instead).
+- Ollama promoted to first-class provider; generic custom slot
+  removed.
 
 ## v0.2.0 — 2026-04-21
 
