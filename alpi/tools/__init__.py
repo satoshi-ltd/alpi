@@ -25,6 +25,7 @@ from alpi.tools import (
     web_extract,
     web_fetch,
     web_search,
+    workgroup as workgroup_tool,
     write_file,
 )
 
@@ -90,6 +91,7 @@ for _mod in (
     tts_tool,
     stt_tool,
     peer,
+    workgroup_tool,
 ):
     _cls = getattr(_mod, "TOOL", None)
     if _cls is not None:

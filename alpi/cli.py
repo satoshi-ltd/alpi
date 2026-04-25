@@ -715,6 +715,7 @@ def setup_cmd(ctx: click.Context) -> None:
 
             ui.Heading("ALP (Alpi Link Protocol)"),
             ("Peers", "peers", _peers_status(h)),
+            ("Workgroups", "workgroups", _workgroups_status(h)),
             ("ALP service", "alp-service", _alp_service_status(h)),
 
             ui.Heading("Maintenance"),
@@ -770,6 +771,10 @@ def setup_cmd(ctx: click.Context) -> None:
             from alpi.alp.setup import run as alp_setup_run
 
             alp_setup_run(h)
+        elif choice == "workgroups":
+            from alpi.alp.workgroup_setup import run as wg_setup_run
+
+            wg_setup_run(h)
         elif choice == "doctor":
             _doctor_wizard(h, profile_name)
         elif choice == "delete-profile":
@@ -1026,6 +1031,22 @@ def _alp_service_status(h: Path) -> str:
     if port:
         return f"{base} · tcp :{port}"
     return base
+
+
+def _workgroups_status(h: Path) -> str:
+    from alpi.alp import subscription as sub_mod
+    from alpi.alp import workgroup as wg_mod
+
+    hub_n = len(wg_mod.list_workgroups(h))
+    sub_n = len(sub_mod.load(h))
+    if hub_n == 0 and sub_n == 0:
+        return "none"
+    parts = []
+    if hub_n:
+        parts.append(f"{hub_n} hosting")
+    if sub_n:
+        parts.append(f"{sub_n} joined")
+    return " · ".join(parts)
 
 
 def _peers_status(h: Path) -> str:
@@ -2132,6 +2153,279 @@ def alp_restart(ctx: click.Context) -> None:
     h: Path = ctx.obj["home"]
     profile: str = ctx.obj.get("profile") or "default"
     _restart_daemon("alp", h, profile, _alp_pid_path(h))
+
+
+# Workgroups (ALP.3)
+
+
+@main.group()
+def workgroup() -> None:
+    """Manage ALP workgroups (multi-party shared transcripts).
+
+    Verbs split by role: as a hub you `create` / `kick` / inspect
+    locally-hosted workgroups; as a member you `join` / `post` /
+    `pull` / `pause` / `resume` / `leave` ones a peer is hosting.
+    Both flows share `list` and `show`.
+    """
+
+
+@workgroup.command("list")
+@click.pass_context
+def workgroup_list(ctx: click.Context) -> None:
+    """Show workgroups this profile is hub of and member of."""
+    from alpi import ui as ui_mod
+    from alpi.alp import subscription as sub_mod
+    from alpi.alp import workgroup as wg_mod
+
+    h: Path = ctx.obj["home"]
+    hub = wg_mod.list_workgroups(h)
+    sub = sub_mod.load(h)
+    if not hub and not sub:
+        click.echo("no workgroups. `alpi workgroup create` or `alpi workgroup join`.")
+        return
+    if hub:
+        click.echo("hub of:")
+        for w in hub:
+            paused = " [paused]" if w.meta.paused else ""
+            click.echo(f"  {w.meta.id}  {w.meta.name}  ({len(w.members)} members){paused}")
+    if sub:
+        click.echo("member of:")
+        for s in sub:
+            click.echo(f"  {s.wg_id}  {s.name}  via @{s.hub_id}  (seq {s.last_seq})")
+
+
+@workgroup.command("show")
+@click.argument("wg_id")
+@click.pass_context
+def workgroup_show(ctx: click.Context, wg_id: str) -> None:
+    """Print workgroup detail + decrypted transcript."""
+    from alpi.alp import subscription as sub_mod
+    from alpi.alp import workgroup as wg_mod
+    from alpi.alp.keys import load_or_generate
+
+    h: Path = ctx.obj["home"]
+    wg = wg_mod.load(h, wg_id)
+    if wg is not None:
+        kp = load_or_generate(h)
+        click.echo(f"{wg.meta.name}  ({wg.meta.id})")
+        click.echo(f"  role     hub")
+        click.echo(f"  members  {len(wg.members)}")
+        click.echo(f"  paused   {wg.meta.paused}")
+        click.echo(f"  key v    {wg.meta.current_key_version}")
+        if wg.meta.budget:
+            click.echo(f"  budget   {wg.meta.budget}")
+        # Decrypt with hub's own key
+        member = wg.member(kp.pubkey_b64())
+        if member is None:
+            return
+        try:
+            from alpi.alp.workgroup import open_sealed_group_key, decrypt_post
+            gk = open_sealed_group_key(member.sealed_key, kp)
+        except Exception:  # noqa: BLE001
+            gk = None
+        click.echo("transcript:")
+        for p in _read_local_transcript(h, wg_id):
+            text = "[v" + str(p.get("key_version", 1)) + " key gone]"
+            if gk is not None and int(p.get("key_version", 1)) == member.key_version:
+                try:
+                    text = decrypt_post(gk, p["nonce"], p["ciphertext"]).decode()
+                except Exception as e:  # noqa: BLE001
+                    text = f"[decrypt failed: {e}]"
+            click.echo(f"  #{p['seq']}  {p['from'][:12]}…  {text}")
+        return
+
+    s = sub_mod.get(h, wg_id)
+    if s is None:
+        raise click.ClickException(f"workgroup {wg_id!r} not found")
+    click.echo(f"{s.name}  ({s.wg_id})")
+    click.echo(f"  role     member")
+    click.echo(f"  hub      @{s.hub_id}")
+    click.echo(f"  cursor   seq {s.last_seq}")
+    click.echo(f"  keys     v{s.latest_version()} cached")
+    click.echo("(use `alpi workgroup pull` to fetch + decrypt the transcript)")
+
+
+def _read_local_transcript(h: Path, wg_id: str) -> list[dict]:
+    p = h / "alp" / "workgroups" / wg_id / "transcript.jsonl"
+    if not p.exists():
+        return []
+    out = []
+    import json as _json
+    for line in p.read_text().splitlines():
+        line = line.strip()
+        if line:
+            try:
+                out.append(_json.loads(line))
+            except _json.JSONDecodeError:
+                continue
+    return out
+
+
+@workgroup.command("create")
+@click.argument("name")
+@click.option("--member", "members", multiple=True,
+              help="Member pubkey or pinned peer id. Repeat for multiple.")
+@click.option("--budget-usd", type=float, default=None,
+              help="Lifetime USD cap (paid models).")
+@click.option("--budget-tokens", type=int, default=None,
+              help="Lifetime token cap (local / free models).")
+@click.pass_context
+def workgroup_create(
+    ctx: click.Context, name: str,
+    members: tuple[str, ...], budget_usd: float | None, budget_tokens: int | None,
+) -> None:
+    """Create a workgroup; you become the hub. Members are pubkeys or
+    pinned peer ids (the latter resolve via this profile's peers.yaml)."""
+    from alpi.alp import peers as peers_mod
+    from alpi.alp import workgroup as wg_mod
+    from alpi.alp.keys import load_or_generate
+
+    h: Path = ctx.obj["home"]
+    pubkeys: list[str] = []
+    for m in members:
+        m = m.strip()
+        if not m:
+            continue
+        peer = peers_mod.get_by_id(h, m)
+        pubkeys.append(peer.pubkey if peer else m)
+
+    budget: dict = {}
+    if budget_usd is not None and budget_tokens is not None:
+        raise click.ClickException("--budget-usd and --budget-tokens are mutually exclusive")
+    if budget_usd is not None:
+        budget["max_usd"] = budget_usd
+    if budget_tokens is not None:
+        budget["max_tokens"] = budget_tokens
+
+    try:
+        wg = wg_mod.create(
+            h, name=name, hub_kp=load_or_generate(h),
+            member_pubkeys=pubkeys, budget=budget,
+        )
+    except ValueError as e:
+        raise click.ClickException(str(e))
+    click.echo(f"created {wg.meta.id} · {len(wg.members)} members")
+
+
+@workgroup.command("join")
+@click.argument("hub_peer_id")
+@click.argument("wg_id")
+@click.pass_context
+def workgroup_join(ctx: click.Context, hub_peer_id: str, wg_id: str) -> None:
+    """Subscribe to a remote workgroup. ``hub_peer_id`` must be a
+    pinned peer in this profile's peers.yaml."""
+    from alpi.alp import workgroup_client as wc
+
+    h: Path = ctx.obj["home"]
+    try:
+        sub = asyncio.run(wc.join(h, hub_peer_id, wg_id))
+    except alp_client.RemoteError as e:
+        raise click.ClickException(f"hub rejected: {e.code} {e.message}")
+    except (ValueError, alp_client.ClientError) as e:
+        raise click.ClickException(str(e))
+    click.echo(f"joined {sub.name or sub.wg_id} via @{sub.hub_id}")
+
+
+@workgroup.command("post")
+@click.argument("wg_id")
+@click.argument("text")
+@click.pass_context
+def workgroup_post_cmd(ctx: click.Context, wg_id: str, text: str) -> None:
+    """Encrypt and post a message to a workgroup we are subscribed to."""
+    from alpi.alp import workgroup_client as wc
+
+    h: Path = ctx.obj["home"]
+    try:
+        result = asyncio.run(wc.post(h, wg_id, text.encode("utf-8")))
+    except alp_client.RemoteError as e:
+        raise click.ClickException(f"hub rejected: {e.code} {e.message}")
+    except (ValueError, alp_client.ClientError) as e:
+        raise click.ClickException(str(e))
+    click.echo(f"posted seq {result.get('seq')}")
+
+
+@workgroup.command("pull")
+@click.argument("wg_id")
+@click.option("--since", type=int, default=None,
+              help="Override the local cursor (default: pick up where we left off).")
+@click.pass_context
+def workgroup_pull(ctx: click.Context, wg_id: str, since: int | None) -> None:
+    """Fetch new posts and decrypt them. Advances the cursor."""
+    from alpi.alp import workgroup_client as wc
+
+    h: Path = ctx.obj["home"]
+    try:
+        posts, head = asyncio.run(wc.pull(h, wg_id, since=since))
+    except alp_client.RemoteError as e:
+        raise click.ClickException(f"hub rejected: {e.code} {e.message}")
+    except (ValueError, alp_client.ClientError) as e:
+        raise click.ClickException(str(e))
+    if not posts:
+        click.echo(f"(no new posts; head={head})")
+        return
+    for p in posts:
+        click.echo(f"  #{p['seq']}  {p['from'][:12]}…  {p['text']}")
+    click.echo(f"head={head}")
+
+
+@workgroup.command("pause")
+@click.argument("wg_id")
+@click.pass_context
+def workgroup_pause(ctx: click.Context, wg_id: str) -> None:
+    """Pause a workgroup (any member can; idempotent)."""
+    _wg_simple(ctx, wg_id, "pause", "paused")
+
+
+@workgroup.command("resume")
+@click.argument("wg_id")
+@click.pass_context
+def workgroup_resume(ctx: click.Context, wg_id: str) -> None:
+    """Resume a paused workgroup."""
+    _wg_simple(ctx, wg_id, "resume", "resumed")
+
+
+@workgroup.command("leave")
+@click.argument("wg_id")
+@click.pass_context
+def workgroup_leave(ctx: click.Context, wg_id: str) -> None:
+    """Leave a workgroup. The hub rotates the group key on remaining
+    members; we drop our subscription locally."""
+    _wg_simple(ctx, wg_id, "leave", "left")
+
+
+def _wg_simple(ctx, wg_id: str, verb: str, ok_msg: str) -> None:
+    from alpi.alp import workgroup_client as wc
+
+    h: Path = ctx.obj["home"]
+    fn = getattr(wc, verb)
+    try:
+        asyncio.run(fn(h, wg_id))
+    except alp_client.RemoteError as e:
+        raise click.ClickException(f"hub rejected: {e.code} {e.message}")
+    except (ValueError, alp_client.ClientError) as e:
+        raise click.ClickException(str(e))
+    click.echo(f"{ok_msg} {wg_id}")
+
+
+@workgroup.command("kick")
+@click.argument("wg_id")
+@click.argument("member_pubkey")
+@click.pass_context
+def workgroup_kick(ctx: click.Context, wg_id: str, member_pubkey: str) -> None:
+    """Hub-side: drop a member and rotate the group key."""
+    from alpi.alp import peers as peers_mod
+    from alpi.alp import workgroup as wg_mod
+
+    h: Path = ctx.obj["home"]
+    # Allow kicking by peer id too
+    peer = peers_mod.get_by_id(h, member_pubkey)
+    target = peer.pubkey if peer else member_pubkey
+    try:
+        updated = wg_mod.kick(h, wg_id, target)
+    except ValueError as e:
+        raise click.ClickException(str(e))
+    click.echo(f"kicked + rekeyed · v{updated.meta.current_key_version} "
+               f"({len(updated.members)} members remaining)")
 
 
 if __name__ == "__main__":

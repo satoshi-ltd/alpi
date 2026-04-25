@@ -863,12 +863,12 @@ def test_kick_rejects_unknown_pubkey(short_tmp: Path) -> None:
 def test_create_validates_budget_shape(short_tmp: Path) -> None:
     home = short_tmp / "hub"; home.mkdir()
     kp = load_or_generate(home)
-    # Both at once — pick-one violation
-    with pytest.raises(ValueError, match="pick-one"):
-        wg_mod.create(
-            home, name="x", hub_kp=kp, member_pubkeys=[],
-            budget={"max_usd": 1.0, "max_tokens": 1000},
-        )
+    # Both set — accepted, both gate independently (mirrors profile UX).
+    wg = wg_mod.create(
+        home, name="both", hub_kp=kp, member_pubkeys=[],
+        budget={"max_usd": 1.0, "max_tokens": 1000},
+    )
+    assert wg.meta.budget == {"max_usd": 1.0, "max_tokens": 1000}
     # Empty budget dict with neither key
     with pytest.raises(ValueError, match="max_usd or max_tokens"):
         wg_mod.create(
@@ -1276,6 +1276,344 @@ def test_ledger_records_cumulative_spend(short_tmp: Path) -> None:
     )
     initial = json.loads(ledger_path.read_text())
     assert initial == {"usd": 0.0, "tokens": 0, "posts": 0}
+
+
+# PR 3 — pause + resume
+
+
+@pytest.mark.asyncio
+async def test_pause_blocks_post_with_workgroup_paused_error(short_tmp: Path) -> None:
+    """Member pauses the workgroup → subsequent posts (from anyone,
+    including the pauser) are rejected with `-32010 workgroup-paused`.
+    `pull` / `join` / `leave` keep working."""
+    hub_home = short_tmp / "hub"; hub_home.mkdir()
+    a_home = short_tmp / "a"; a_home.mkdir()
+    b_home = short_tmp / "b"; b_home.mkdir()
+    hub_kp = load_or_generate(hub_home)
+    a_kp = load_or_generate(a_home)
+    b_kp = load_or_generate(b_home)
+    _pin(hub_home, "a", a_kp.pubkey_b64(),
+         ["workgroup.join", "workgroup.post", "workgroup.pause",
+          "workgroup.resume", "workgroup.pull", "workgroup.leave"])
+    _pin(hub_home, "b", b_kp.pubkey_b64(),
+         ["workgroup.join", "workgroup.post", "workgroup.pull",
+          "workgroup.leave"])
+
+    wg = wg_mod.create(
+        hub_home, name="paused", hub_kp=hub_kp,
+        member_pubkeys=[a_kp.pubkey_b64(), b_kp.pubkey_b64()],
+    )
+    server = alp_server.Server(home=hub_home, agent_name="hub")
+    wg_mod.register(server, hub_home)
+    await server.start()
+    try:
+        async def _join(kp):
+            r = await alp_client.call(
+                socket_path=server.socket_path(),
+                sender=kp,
+                recipient_pubkey_b64=hub_kp.pubkey_b64(),
+                method="workgroup.join",
+                params={"workgroup_id": wg.meta.id},
+            )
+            return wg_mod.open_sealed_group_key(r["sealed_key"], kp)
+        a_key = await _join(a_kp)
+        b_key = await _join(b_kp)
+
+        # First post (before pause) lands.
+        nonce, ct = wg_mod.encrypt_post(b_key, b"before pause")
+        await alp_client.call(
+            socket_path=server.socket_path(),
+            sender=b_kp,
+            recipient_pubkey_b64=hub_kp.pubkey_b64(),
+            method="workgroup.post",
+            params={
+                "workgroup_id": wg.meta.id, "key_version": 1,
+                "nonce": nonce, "ciphertext": ct,
+            },
+        )
+
+        # A pauses
+        pause_result = await alp_client.call(
+            socket_path=server.socket_path(),
+            sender=a_kp,
+            recipient_pubkey_b64=hub_kp.pubkey_b64(),
+            method="workgroup.pause",
+            params={"workgroup_id": wg.meta.id},
+        )
+        assert pause_result["paused"] is True
+        assert pause_result["paused_by"] == a_kp.pubkey_b64()
+        assert pause_result["paused_at"]  # non-empty ISO timestamp
+
+        # B can still pull (read works during pause)
+        b_pull = await alp_client.call(
+            socket_path=server.socket_path(),
+            sender=b_kp,
+            recipient_pubkey_b64=hub_kp.pubkey_b64(),
+            method="workgroup.pull",
+            params={"workgroup_id": wg.meta.id, "since": 0},
+        )
+        assert b_pull["head"] == 1
+
+        # B's post is now rejected
+        nonce2, ct2 = wg_mod.encrypt_post(b_key, b"during pause")
+        with pytest.raises(alp_client.RemoteError) as exc:
+            await alp_client.call(
+                socket_path=server.socket_path(),
+                sender=b_kp,
+                recipient_pubkey_b64=hub_kp.pubkey_b64(),
+                method="workgroup.post",
+                params={
+                    "workgroup_id": wg.meta.id, "key_version": 1,
+                    "nonce": nonce2, "ciphertext": ct2,
+                },
+            )
+        assert exc.value.code == -32010
+        assert exc.value.data["paused_by"] == a_kp.pubkey_b64()
+
+        # Even the pauser themselves can't post while paused
+        nonce3, ct3 = wg_mod.encrypt_post(a_key, b"pauser tries")
+        with pytest.raises(alp_client.RemoteError) as exc2:
+            await alp_client.call(
+                socket_path=server.socket_path(),
+                sender=a_kp,
+                recipient_pubkey_b64=hub_kp.pubkey_b64(),
+                method="workgroup.post",
+                params={
+                    "workgroup_id": wg.meta.id, "key_version": 1,
+                    "nonce": nonce3, "ciphertext": ct3,
+                },
+            )
+        assert exc2.value.code == -32010
+    finally:
+        await server.stop()
+
+
+@pytest.mark.asyncio
+async def test_resume_re_admits_posts(short_tmp: Path) -> None:
+    hub_home = short_tmp / "hub"; hub_home.mkdir()
+    bob_home = short_tmp / "b"; bob_home.mkdir()
+    hub_kp = load_or_generate(hub_home)
+    bob_kp = load_or_generate(bob_home)
+    _pin(hub_home, "b", bob_kp.pubkey_b64(),
+         ["workgroup.join", "workgroup.post", "workgroup.pause",
+          "workgroup.resume"])
+
+    wg = wg_mod.create(
+        hub_home, name="cycle", hub_kp=hub_kp,
+        member_pubkeys=[bob_kp.pubkey_b64()],
+    )
+    server = alp_server.Server(home=hub_home, agent_name="hub")
+    wg_mod.register(server, hub_home)
+    await server.start()
+    try:
+        join = await alp_client.call(
+            socket_path=server.socket_path(),
+            sender=bob_kp,
+            recipient_pubkey_b64=hub_kp.pubkey_b64(),
+            method="workgroup.join",
+            params={"workgroup_id": wg.meta.id},
+        )
+        key = wg_mod.open_sealed_group_key(join["sealed_key"], bob_kp)
+
+        await alp_client.call(
+            socket_path=server.socket_path(),
+            sender=bob_kp,
+            recipient_pubkey_b64=hub_kp.pubkey_b64(),
+            method="workgroup.pause",
+            params={"workgroup_id": wg.meta.id},
+        )
+        # Resume
+        resume = await alp_client.call(
+            socket_path=server.socket_path(),
+            sender=bob_kp,
+            recipient_pubkey_b64=hub_kp.pubkey_b64(),
+            method="workgroup.resume",
+            params={"workgroup_id": wg.meta.id},
+        )
+        assert resume["paused"] is False
+
+        # Post admits again
+        nonce, ct = wg_mod.encrypt_post(key, b"after resume")
+        r = await alp_client.call(
+            socket_path=server.socket_path(),
+            sender=bob_kp,
+            recipient_pubkey_b64=hub_kp.pubkey_b64(),
+            method="workgroup.post",
+            params={
+                "workgroup_id": wg.meta.id, "key_version": 1,
+                "nonce": nonce, "ciphertext": ct,
+            },
+        )
+        assert r["seq"] == 1
+
+        # On-disk meta no longer carries paused fields
+        wg_after = wg_mod.load(hub_home, wg.meta.id)
+        assert wg_after.meta.paused is False
+        assert wg_after.meta.paused_at == ""
+        assert wg_after.meta.paused_by == ""
+    finally:
+        await server.stop()
+
+
+@pytest.mark.asyncio
+async def test_pause_and_resume_are_idempotent(short_tmp: Path) -> None:
+    """Double-pause keeps the original timestamp/pauser; double-resume
+    is a no-op."""
+    hub_home = short_tmp / "hub"; hub_home.mkdir()
+    bob_home = short_tmp / "b"; bob_home.mkdir()
+    hub_kp = load_or_generate(hub_home)
+    bob_kp = load_or_generate(bob_home)
+    _pin(hub_home, "b", bob_kp.pubkey_b64(),
+         ["workgroup.join", "workgroup.pause", "workgroup.resume"])
+
+    wg = wg_mod.create(
+        hub_home, name="idem", hub_kp=hub_kp,
+        member_pubkeys=[bob_kp.pubkey_b64()],
+    )
+    server = alp_server.Server(home=hub_home, agent_name="hub")
+    wg_mod.register(server, hub_home)
+    await server.start()
+    try:
+        first = await alp_client.call(
+            socket_path=server.socket_path(),
+            sender=bob_kp,
+            recipient_pubkey_b64=hub_kp.pubkey_b64(),
+            method="workgroup.pause",
+            params={"workgroup_id": wg.meta.id},
+        )
+        # Sleep would be flaky; just call again immediately
+        second = await alp_client.call(
+            socket_path=server.socket_path(),
+            sender=bob_kp,
+            recipient_pubkey_b64=hub_kp.pubkey_b64(),
+            method="workgroup.pause",
+            params={"workgroup_id": wg.meta.id},
+        )
+        assert first["paused_at"] == second["paused_at"]
+        assert first["paused_by"] == second["paused_by"]
+
+        # Double-resume on a paused → first clears, second is no-op
+        await alp_client.call(
+            socket_path=server.socket_path(),
+            sender=bob_kp,
+            recipient_pubkey_b64=hub_kp.pubkey_b64(),
+            method="workgroup.resume",
+            params={"workgroup_id": wg.meta.id},
+        )
+        again = await alp_client.call(
+            socket_path=server.socket_path(),
+            sender=bob_kp,
+            recipient_pubkey_b64=hub_kp.pubkey_b64(),
+            method="workgroup.resume",
+            params={"workgroup_id": wg.meta.id},
+        )
+        assert again["paused"] is False
+    finally:
+        await server.stop()
+
+
+@pytest.mark.asyncio
+async def test_pause_does_not_block_leave(short_tmp: Path) -> None:
+    """A paused workgroup must NOT trap members. ``leave`` must still
+    work so anyone can exit cleanly even when posts are frozen."""
+    hub_home = short_tmp / "hub"; hub_home.mkdir()
+    bob_home = short_tmp / "b"; bob_home.mkdir()
+    hub_kp = load_or_generate(hub_home)
+    bob_kp = load_or_generate(bob_home)
+    _pin(hub_home, "b", bob_kp.pubkey_b64(),
+         ["workgroup.join", "workgroup.pause", "workgroup.leave"])
+
+    wg = wg_mod.create(
+        hub_home, name="paused-exit", hub_kp=hub_kp,
+        member_pubkeys=[bob_kp.pubkey_b64()],
+    )
+    server = alp_server.Server(home=hub_home, agent_name="hub")
+    wg_mod.register(server, hub_home)
+    await server.start()
+    try:
+        # Bob joins, pauses, then leaves — no crash.
+        await alp_client.call(
+            socket_path=server.socket_path(),
+            sender=bob_kp,
+            recipient_pubkey_b64=hub_kp.pubkey_b64(),
+            method="workgroup.join",
+            params={"workgroup_id": wg.meta.id},
+        )
+        await alp_client.call(
+            socket_path=server.socket_path(),
+            sender=bob_kp,
+            recipient_pubkey_b64=hub_kp.pubkey_b64(),
+            method="workgroup.pause",
+            params={"workgroup_id": wg.meta.id},
+        )
+        leave_result = await alp_client.call(
+            socket_path=server.socket_path(),
+            sender=bob_kp,
+            recipient_pubkey_b64=hub_kp.pubkey_b64(),
+            method="workgroup.leave",
+            params={"workgroup_id": wg.meta.id},
+        )
+        # Bob is gone; hub remains.
+        assert bob_kp.pubkey_b64() not in leave_result["remaining_members"]
+        assert leave_result["current_key_version"] == 2
+    finally:
+        await server.stop()
+
+
+@pytest.mark.asyncio
+async def test_pause_persists_across_server_restart(short_tmp: Path) -> None:
+    hub_home = short_tmp / "hub"; hub_home.mkdir()
+    bob_home = short_tmp / "b"; bob_home.mkdir()
+    hub_kp = load_or_generate(hub_home)
+    bob_kp = load_or_generate(bob_home)
+    _pin(hub_home, "b", bob_kp.pubkey_b64(),
+         ["workgroup.join", "workgroup.post", "workgroup.pause"])
+
+    wg = wg_mod.create(
+        hub_home, name="restart-paused", hub_kp=hub_kp,
+        member_pubkeys=[bob_kp.pubkey_b64()],
+    )
+    server = alp_server.Server(home=hub_home, agent_name="hub")
+    wg_mod.register(server, hub_home)
+    await server.start()
+    try:
+        join = await alp_client.call(
+            socket_path=server.socket_path(),
+            sender=bob_kp,
+            recipient_pubkey_b64=hub_kp.pubkey_b64(),
+            method="workgroup.join",
+            params={"workgroup_id": wg.meta.id},
+        )
+        key = wg_mod.open_sealed_group_key(join["sealed_key"], bob_kp)
+        await alp_client.call(
+            socket_path=server.socket_path(),
+            sender=bob_kp,
+            recipient_pubkey_b64=hub_kp.pubkey_b64(),
+            method="workgroup.pause",
+            params={"workgroup_id": wg.meta.id},
+        )
+    finally:
+        await server.stop()
+
+    server2 = alp_server.Server(home=hub_home, agent_name="hub")
+    wg_mod.register(server2, hub_home)
+    await server2.start()
+    try:
+        nonce, ct = wg_mod.encrypt_post(key, b"x")
+        with pytest.raises(alp_client.RemoteError) as exc:
+            await alp_client.call(
+                socket_path=server2.socket_path(),
+                sender=bob_kp,
+                recipient_pubkey_b64=hub_kp.pubkey_b64(),
+                method="workgroup.post",
+                params={
+                    "workgroup_id": wg.meta.id, "key_version": 1,
+                    "nonce": nonce, "ciphertext": ct,
+                },
+            )
+        assert exc.value.code == -32010
+    finally:
+        await server2.stop()
 
 
 @pytest.mark.asyncio
