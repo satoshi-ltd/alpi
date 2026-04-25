@@ -167,20 +167,22 @@ function renderJsonLd({ kind, title, description, canonical }) {
 }
 
 // ── alpi logo (llama + wordmark, inlined into the nav) ─────────────────────
-function inlineLogoPart(fileName, className) {
+function inlineLogoPart(fileName, className, attrs = '') {
   const src = readFileSync(join(SITE, 'assets', fileName), 'utf8');
   return src
     .replace(/<\?xml[^?]*\?>\s*/i, '')
-    .replace(/<svg\b/i, `<svg class="${className}" aria-hidden="true" focusable="false"`)
+    .replace(/<svg\b/i, `<svg class="${className}" ${attrs} aria-hidden="true" focusable="false"`)
     .trim();
 }
 
-const logoSvg = `<span class="logo" aria-hidden="true">${inlineLogoPart('alpi-white.svg', 'logo-mark')}${inlineLogoPart('alpi-text-white.svg', 'logo-word')}</span>`;
+const logoSvg = `<span class="logo" aria-hidden="true">${inlineLogoPart('alpi-white.svg', 'logo-mark', 'width="35" height="40"')}${inlineLogoPart('alpi-text-white.svg', 'logo-word', 'width="64" height="32"')}</span>`;
 const themeControlHtml = `<div class="bg-ctrl" role="group" aria-label="theme">
   <span>theme</span>
   <button data-theme="dark" class="on">dark</button>
   <button data-theme="light">light</button>
 </div>`;
+const GITHUB_URL = 'https://github.com/satoshi-ltd/alpi';
+const githubIcon = `<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path fill="currentColor" d="M8 0C3.58 0 0 3.67 0 8.2c0 3.62 2.29 6.69 5.47 7.78.4.08.55-.18.55-.4l-.01-1.52c-2.23.5-2.7-1.1-2.7-1.1-.36-.95-.89-1.2-.89-1.2-.73-.51.06-.5.06-.5.8.06 1.23.85 1.23.85.72 1.26 1.88.9 2.34.68.07-.53.28-.9.51-1.1-1.78-.21-3.64-.91-3.64-4.04 0-.9.31-1.62.82-2.2-.08-.21-.36-1.04.08-2.17 0 0 .68-.22 2.2.84A7.42 7.42 0 0 1 8 3.84c.68 0 1.36.09 1.99.28 1.52-1.06 2.2-.84 2.2-.84.44 1.13.16 1.96.08 2.17.51.58.82 1.31.82 2.2 0 3.14-1.87 3.83-3.65 4.03.29.26.54.76.54 1.53l-.01 2.37c0 .22.14.48.55.4A8.12 8.12 0 0 0 16 8.2C16 3.67 12.42 0 8 0Z"/></svg>`;
 
 // ── shared nav component — identical markup on landing + docs + doc pages ──
 // kind: 'landing' | 'docs-index' | 'doc'
@@ -246,7 +248,10 @@ function renderNav(kind, opts = {}) {
       </a>${crumbsHtml}
     </div>
     ${menuHtml}
-    <a href="${ctaHref}" class="nav-cta">$ uv tool install alpi →</a>
+    <div class="nav-actions">
+      <a href="${GITHUB_URL}" class="nav-github" aria-label="alpi on GitHub">${githubIcon}</a>
+      <a href="${ctaHref}" class="nav-cta">$ uv tool install alpi →</a>
+    </div>
     ${burgerHtml}
   </div>
   ${drawerHtml}
