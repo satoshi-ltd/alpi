@@ -1,25 +1,36 @@
-"""ALP.3 — workgroups (PR 1: hub state + 4 core verbs).
+"""ALP.3 — workgroups (PR 1 + PR 2: hub state, 4 core verbs, leave +
+rekey, lifetime budget).
 
 A workgroup is a multi-party shared transcript anchored at a single
 hub (the creator). Members post ciphertext under a shared group key;
 the hub fans out the same ciphertext on `pull`. The hub holds sealed
 copies of the group key — one per member, sealed under the member's
 X25519 pubkey (derived from their Ed25519 ALP identity) — and never
-sees post plaintext on disk. Layout::
+sees post plaintext on disk.
 
-    ~/.alpi/<profile>/alp/workgroups/<wg_id>/
-        meta.yaml         # name, hub_pubkey, created_at
-        members.yaml      # [{pubkey, sealed_key, joined, joined_at}]
-        transcript.jsonl  # one ciphertext post per line
+Group keys are versioned: every successful `leave` (or hub-side
+``kick``) generates a fresh key, re-sealed for each remaining member.
+Members detect the new version on their next `pull` (the response
+carries `current_key_version` and the member's current sealed key)
+and update their local key map. Old keys stay valid for past
+ciphertext — forward secrecy applies to **new** traffic only, by
+design.
 
-This module exposes both the local primitive (``create``, used by
-the future TUI/CLI to start a workgroup on this profile) and the
-over-the-wire handlers (``workgroup.join``, ``workgroup.post``,
-``workgroup.pull``) registered against the ALP server.
+Budget is **lifetime, not daily** — the workgroup is project-scoped.
+Either USD or tokens (pick one, mirroring the profile budget shape);
+authors declare the cost of producing each post and the hub gates
+cumulative spend against the cap. Hitting the cap freezes the
+workgroup; bumping it requires editing ``meta.yaml`` (TUI in PR 4).
 
-Out of scope for PR 1: ``leave`` + group-key rotation, ``pause`` /
-``resume``, budget double-gate, TUI surface. Tracked in ROADMAP §
-ALP.3.
+On-disk layout under ``~/.alpi/<profile>/alp/workgroups/<wg_id>/``:
+
+    meta.yaml         # name, hub_pubkey, created_at, current_key_version, budget?
+    members.yaml      # [{pubkey, sealed_key, key_version, joined, joined_at}]
+    transcript.jsonl  # one ciphertext post per line, tagged with key_version + cost
+    ledger.json       # {usd, tokens, posts} cumulative across the workgroup's life
+
+Out of scope here: ``pause`` / ``resume`` (PR 3), TUI / CLI surface,
+engine context integration (PR 4).
 """
 
 from __future__ import annotations
@@ -55,6 +66,7 @@ _WG_DIR = "alp/workgroups"
 _META = "meta.yaml"
 _MEMBERS = "members.yaml"
 _TRANSCRIPT = "transcript.jsonl"
+_LEDGER = "ledger.json"
 
 GROUP_KEY_BYTES = 32  # ChaCha20-Poly1305 key size
 _HKDF_INFO = b"alp.workgroup.seal.v1"
@@ -148,6 +160,7 @@ def decrypt_post(group_key: bytes, nonce_b64: str, ciphertext_b64: str) -> bytes
 class Member:
     pubkey: str            # base64 Ed25519 — stable identity
     sealed_key: str        # base64 of seal_group_key output for this pubkey
+    key_version: int = 1   # bumps every rekey; matches Meta.current_key_version
     joined: bool = False   # flips True on first successful workgroup.join
     joined_at: str = ""    # ISO-8601, set when ``joined`` flips
 
@@ -158,6 +171,11 @@ class Meta:
     name: str
     hub_pubkey: str
     created_at: str
+    current_key_version: int = 1
+    # Optional lifetime budget. ``max_usd`` xor ``max_tokens`` (pick
+    # one). Empty / missing = no workgroup-level cap (profile cap still
+    # applies upstream).
+    budget: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -201,6 +219,8 @@ def _load_meta(d: Path) -> Meta | None:
             name=str(raw["name"]),
             hub_pubkey=str(raw["hub_pubkey"]),
             created_at=str(raw["created_at"]),
+            current_key_version=int(raw.get("current_key_version", 1)),
+            budget=dict(raw.get("budget") or {}),
         )
     except KeyError:
         return None
@@ -208,15 +228,16 @@ def _load_meta(d: Path) -> Meta | None:
 
 def _save_meta(d: Path, meta: Meta) -> None:
     d.mkdir(parents=True, exist_ok=True)
-    (d / _META).write_text(yaml.safe_dump(
-        {
-            "id": meta.id,
-            "name": meta.name,
-            "hub_pubkey": meta.hub_pubkey,
-            "created_at": meta.created_at,
-        },
-        sort_keys=False,
-    ))
+    payload: dict[str, Any] = {
+        "id": meta.id,
+        "name": meta.name,
+        "hub_pubkey": meta.hub_pubkey,
+        "created_at": meta.created_at,
+        "current_key_version": meta.current_key_version,
+    }
+    if meta.budget:
+        payload["budget"] = meta.budget
+    (d / _META).write_text(yaml.safe_dump(payload, sort_keys=False))
 
 
 def _load_members(d: Path) -> list[Member]:
@@ -235,6 +256,7 @@ def _load_members(d: Path) -> list[Member]:
         out.append(Member(
             pubkey=str(entry["pubkey"]),
             sealed_key=str(entry["sealed_key"]),
+            key_version=int(entry.get("key_version", 1)),
             joined=bool(entry.get("joined", False)),
             joined_at=str(entry.get("joined_at") or ""),
         ))
@@ -245,7 +267,11 @@ def _save_members(d: Path, members: list[Member]) -> None:
     d.mkdir(parents=True, exist_ok=True)
     data = []
     for m in members:
-        entry: dict[str, Any] = {"pubkey": m.pubkey, "sealed_key": m.sealed_key}
+        entry: dict[str, Any] = {
+            "pubkey": m.pubkey,
+            "sealed_key": m.sealed_key,
+            "key_version": m.key_version,
+        }
         if m.joined:
             entry["joined"] = True
             if m.joined_at:
@@ -285,6 +311,7 @@ def create(
     name: str,
     hub_kp: Keypair,
     member_pubkeys: list[str],
+    budget: dict[str, Any] | None = None,
 ) -> Workgroup:
     """Create a workgroup on this profile (we are the hub).
 
@@ -294,12 +321,16 @@ def create(
     generated fresh, sealed once per member, and persisted alongside
     the empty transcript.
 
+    ``budget`` is an optional ``{"max_usd": float}`` xor
+    ``{"max_tokens": int}``. Leave unset for no workgroup-level cap.
+
     Returns the created ``Workgroup``. Raises ``ValueError`` on bad
-    inputs (empty name, duplicate or malformed pubkey).
+    inputs (empty name, malformed pubkey, ill-formed budget).
     """
     name = (name or "").strip()
     if not name:
         raise ValueError("workgroup name required")
+    budget = _validate_budget(budget or {})
 
     hub_pk = hub_kp.pubkey_b64()
     roster = [hub_pk]
@@ -326,6 +357,8 @@ def create(
         name=name,
         hub_pubkey=hub_pk,
         created_at=_utcnow(),
+        current_key_version=1,
+        budget=budget,
     )
     _save_meta(d, meta)
 
@@ -333,18 +366,62 @@ def create(
     members: list[Member] = []
     for pk in roster:
         sealed = seal_group_key(group_key, pk)
-        m = Member(pubkey=pk, sealed_key=sealed)
+        m = Member(pubkey=pk, sealed_key=sealed, key_version=1)
         if pk == hub_pk:
             m.joined = True
             m.joined_at = now
         members.append(m)
     _save_members(d, members)
 
-    # Empty transcript file so ``pull`` works on a brand-new workgroup
+    # Empty transcript so ``pull`` works on a brand-new workgroup
     # without an existence check.
     (d / _TRANSCRIPT).touch()
+    (d / _LEDGER).write_text(json.dumps(
+        {"usd": 0.0, "tokens": 0, "posts": 0}, separators=(",", ":"),
+    ))
 
     return Workgroup(meta=meta, members=members)
+
+
+# Rekey + remove (used by leave + kick)
+
+
+def _rekey(home: Path, wg_id: str, dropped_pubkey: str) -> Workgroup:
+    """Drop ``dropped_pubkey`` from the roster, mint a fresh group key,
+    seal it for every remaining member, bump versions and persist.
+    Returns the updated Workgroup. Raises ``ValueError`` if the dropped
+    pubkey is the hub's (the hub cannot leave its own workgroup; spec
+    is hub-anchored, no failover) or if the workgroup is unknown."""
+    wg = load(home, wg_id)
+    if wg is None:
+        raise ValueError(f"workgroup {wg_id!r} not found")
+    if dropped_pubkey == wg.meta.hub_pubkey:
+        raise ValueError("hub cannot leave its own workgroup")
+    if wg.member(dropped_pubkey) is None:
+        raise ValueError(f"pubkey {dropped_pubkey!r} not in roster")
+
+    remaining = [m for m in wg.members if m.pubkey != dropped_pubkey]
+    new_key = secrets.token_bytes(GROUP_KEY_BYTES)
+    new_version = wg.meta.current_key_version + 1
+    for m in remaining:
+        m.sealed_key = seal_group_key(new_key, m.pubkey)
+        m.key_version = new_version
+
+    wg.members = remaining
+    wg.meta.current_key_version = new_version
+
+    d = _wg_dir(home, wg_id)
+    _save_meta(d, wg.meta)
+    _save_members(d, wg.members)
+    return wg
+
+
+def kick(home: Path, wg_id: str, target_pubkey: str) -> Workgroup:
+    """Hub-side primitive — remove ``target_pubkey`` from the workgroup
+    and rotate the group key. Equivalent to the target calling
+    ``workgroup.leave`` themselves, but initiated locally. Raises
+    ``ValueError`` if the target is the hub or not in the roster."""
+    return _rekey(home, wg_id, target_pubkey)
 
 
 # Transcript
@@ -376,11 +453,105 @@ def _append_transcript(d: Path, entry: dict[str, Any]) -> None:
         f.write(line + "\n")
 
 
+# Ledger — workgroup lifetime spend
+
+
+def _load_ledger(d: Path) -> dict[str, Any]:
+    p = d / _LEDGER
+    if not p.exists():
+        return {"usd": 0.0, "tokens": 0, "posts": 0}
+    try:
+        raw = json.loads(p.read_text())
+    except json.JSONDecodeError:
+        return {"usd": 0.0, "tokens": 0, "posts": 0}
+    return {
+        "usd": float(raw.get("usd", 0.0)),
+        "tokens": int(raw.get("tokens", 0)),
+        "posts": int(raw.get("posts", 0)),
+    }
+
+
+def _save_ledger(d: Path, ledger: dict[str, Any]) -> None:
+    d.mkdir(parents=True, exist_ok=True)
+    (d / _LEDGER).write_text(json.dumps(
+        {
+            "usd": float(ledger.get("usd", 0.0)),
+            "tokens": int(ledger.get("tokens", 0)),
+            "posts": int(ledger.get("posts", 0)),
+        },
+        separators=(",", ":"),
+    ))
+
+
+def _validate_budget(budget: dict[str, Any]) -> dict[str, Any]:
+    """Enforce the ``max_usd`` xor ``max_tokens`` shape. Empty dict =
+    no cap. Mixed or non-positive values raise ``ValueError`` so a
+    typo at create time fails fast instead of silently doing nothing."""
+    if not budget:
+        return {}
+    usd = budget.get("max_usd")
+    tokens = budget.get("max_tokens")
+    if usd is None and tokens is None:
+        raise ValueError("budget must set max_usd or max_tokens")
+    if usd is not None and tokens is not None:
+        raise ValueError("budget is pick-one: max_usd xor max_tokens")
+    out: dict[str, Any] = {}
+    if usd is not None:
+        usd_f = float(usd)
+        if usd_f <= 0:
+            raise ValueError("max_usd must be > 0")
+        out["max_usd"] = usd_f
+    if tokens is not None:
+        tokens_i = int(tokens)
+        if tokens_i <= 0:
+            raise ValueError("max_tokens must be > 0")
+        out["max_tokens"] = tokens_i
+    return out
+
+
+def _gate_post(meta: Meta, ledger: dict[str, Any], cost: dict[str, Any]) -> None:
+    """Workgroup budget check: would admitting this post breach the
+    lifetime cap? Reuses error code ``-32005 budget-exceeded`` with
+    ``data.cap_kind`` set to ``workgroup_usd`` / ``workgroup_tokens`` so
+    callers can tell it apart from the profile-level cap."""
+    if not meta.budget:
+        return
+    usd_cap = meta.budget.get("max_usd")
+    tokens_cap = meta.budget.get("max_tokens")
+    declared_usd = float(cost.get("usd", 0.0)) if cost else 0.0
+    declared_tokens = int(cost.get("tokens", 0)) if cost else 0
+    if usd_cap is not None:
+        used = float(ledger.get("usd", 0.0))
+        if used >= usd_cap or used + declared_usd > usd_cap:
+            raise alp_server.HandlerError(
+                -32005, "budget-exceeded",
+                data={
+                    "cap_kind": "workgroup_usd",
+                    "cap": usd_cap,
+                    "used": used,
+                    "declared": declared_usd,
+                },
+            )
+    if tokens_cap is not None:
+        used_t = int(ledger.get("tokens", 0))
+        if used_t >= tokens_cap or used_t + declared_tokens > tokens_cap:
+            raise alp_server.HandlerError(
+                -32005, "budget-exceeded",
+                data={
+                    "cap_kind": "workgroup_tokens",
+                    "cap": tokens_cap,
+                    "used": used_t,
+                    "declared": declared_tokens,
+                },
+            )
+
+
 # Server-side handlers — registered against ``alpi.alp.server.Server``
 
 
 def register(server: alp_server.Server, home: Path) -> None:
-    """Register ``workgroup.join``, ``workgroup.post``, ``workgroup.pull``.
+    """Register ``workgroup.join``, ``workgroup.post``, ``workgroup.pull``,
+    ``workgroup.leave``.
 
     Capability is enforced upstream by ``peer.may_call``; the handlers
     additionally check workgroup membership so a peer with the verb
@@ -413,6 +584,8 @@ def register(server: alp_server.Server, home: Path) -> None:
             "workgroup_id": wg.meta.id,
             "name": wg.meta.name,
             "sealed_key": member.sealed_key,
+            "key_version": member.key_version,
+            "current_key_version": wg.meta.current_key_version,
             "members": [m.pubkey for m in wg.members],
         }
 
@@ -429,22 +602,45 @@ def register(server: alp_server.Server, home: Path) -> None:
                 -32602, "invalid-params",
                 data={"detail": "workgroup_id, nonce, ciphertext required"},
             )
+        try:
+            key_version = int((params or {}).get("key_version", 1))
+        except (TypeError, ValueError):
+            key_version = 1
+        cost = (params or {}).get("cost") or {}
+        if not isinstance(cost, dict):
+            cost = {}
+
         wg = load(home, wg_id)
         if wg is None:
             raise alp_server.HandlerError(-32009, "workgroup-not-found")
         if wg.member(peer.pubkey) is None:
             raise alp_server.HandlerError(-32008, "workgroup-not-member")
+
         d = _wg_dir(home, wg_id)
+        ledger = _load_ledger(d)
+        _gate_post(wg.meta, ledger, cost)  # raises -32005 on breach
+
         existing = _read_transcript(d)
         seq = (existing[-1]["seq"] + 1) if existing else 1
-        entry = {
+        entry: dict[str, Any] = {
             "seq": seq,
             "ts": _utcnow(),
             "from": peer.pubkey,
+            "key_version": key_version,
             "nonce": nonce,
             "ciphertext": ciphertext,
         }
+        declared_usd = float(cost.get("usd", 0.0)) if cost else 0.0
+        declared_tokens = int(cost.get("tokens", 0)) if cost else 0
+        if declared_usd or declared_tokens:
+            entry["cost"] = {"usd": declared_usd, "tokens": declared_tokens}
         _append_transcript(d, entry)
+
+        ledger["usd"] = float(ledger.get("usd", 0.0)) + declared_usd
+        ledger["tokens"] = int(ledger.get("tokens", 0)) + declared_tokens
+        ledger["posts"] = int(ledger.get("posts", 0)) + 1
+        _save_ledger(d, ledger)
+
         return {"seq": seq, "ts": entry["ts"]}
 
     async def workgroup_pull(
@@ -466,12 +662,53 @@ def register(server: alp_server.Server, home: Path) -> None:
         wg = load(home, wg_id)
         if wg is None:
             raise alp_server.HandlerError(-32009, "workgroup-not-found")
-        if wg.member(peer.pubkey) is None:
+        member = wg.member(peer.pubkey)
+        if member is None:
             raise alp_server.HandlerError(-32008, "workgroup-not-member")
         all_posts = _read_transcript(_wg_dir(home, wg_id))
         fresh = [p for p in all_posts if int(p.get("seq", 0)) > since]
-        return {"posts": fresh, "head": all_posts[-1]["seq"] if all_posts else 0}
+        return {
+            "posts": fresh,
+            "head": all_posts[-1]["seq"] if all_posts else 0,
+            # Always echo the caller's current sealed key + version so
+            # rekey detection is implicit in pull. Members compare
+            # ``current_key_version`` against the highest version they
+            # already hold; if behind, they ``open_sealed_group_key``
+            # the returned blob and store the new group_key under that
+            # version in their local map.
+            "current_key_version": wg.meta.current_key_version,
+            "sealed_key": member.sealed_key,
+        }
+
+    async def workgroup_leave(
+        params: dict[str, Any],
+        peer: peers_mod.Peer,
+        srv: alp_server.Server,
+    ) -> dict[str, Any]:
+        wg_id = str((params or {}).get("workgroup_id") or "").strip()
+        if not wg_id:
+            raise alp_server.HandlerError(
+                -32602, "invalid-params",
+                data={"detail": "workgroup_id required"},
+            )
+        wg = load(home, wg_id)
+        if wg is None:
+            raise alp_server.HandlerError(-32009, "workgroup-not-found")
+        if wg.member(peer.pubkey) is None:
+            raise alp_server.HandlerError(-32008, "workgroup-not-member")
+        if peer.pubkey == wg.meta.hub_pubkey:
+            raise alp_server.HandlerError(
+                -32602, "invalid-params",
+                data={"detail": "hub cannot leave its own workgroup"},
+            )
+        updated = _rekey(home, wg_id, peer.pubkey)
+        return {
+            "workgroup_id": updated.meta.id,
+            "current_key_version": updated.meta.current_key_version,
+            "remaining_members": [m.pubkey for m in updated.members],
+        }
 
     server.register("workgroup.join", workgroup_join)
     server.register("workgroup.post", workgroup_post)
     server.register("workgroup.pull", workgroup_pull)
+    server.register("workgroup.leave", workgroup_leave)

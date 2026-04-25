@@ -1,5 +1,69 @@
 # Changelog
 
+## v0.2.88 — 2026-04-25
+
+### alp.3 — workgroups (PR 2: leave + rekey + lifetime budget)
+
+Second slice of ALP.3. Members can now leave a workgroup and the
+hub rotates the group key for everyone left behind; workgroups can
+carry an optional **lifetime** budget (USD or tokens, project-
+scoped, no daily reset) and posts double-gate against it on top of
+the existing profile-level cap.
+
+- `alpi/alp/workgroup.py` — extended:
+  - `Member.key_version` + `Meta.current_key_version` track the
+    monotonic group-key generation. Bumps on every rekey.
+  - `_rekey()` helper: drops a target pubkey, mints a fresh
+    32-byte group key, re-seals it for every remaining member,
+    persists. Used by both the over-the-wire `workgroup.leave`
+    and the local `kick()` primitive.
+  - `workgroup.leave` handler — the leaving member is dropped;
+    the hub itself can't leave its own workgroup (`-32602`).
+  - `workgroup.pull` response now includes `current_key_version`
+    + the caller's currently-sealed key, so members detect rekey
+    on their next pull and update their local key map without an
+    extra verb.
+  - `workgroup.post` accepts `key_version` (which key the
+    ciphertext was encrypted under, recorded in the transcript)
+    and an optional `cost: {usd, tokens}` declaration that the
+    hub gates against the workgroup's lifetime budget.
+  - `_validate_budget()` enforces `max_usd` xor `max_tokens` with
+    positive values; the workgroup `ledger.json` accumulates
+    `{usd, tokens, posts}` over the workgroup's life. Hitting
+    either cap returns `-32005 budget-exceeded` with
+    `data.cap_kind = "workgroup_usd"` or `"workgroup_tokens"`.
+  - `kick(home, wg_id, target_pubkey)` — hub-side primitive
+    equivalent to a remote `leave` (TUI surface lands in PR 4).
+- `docs/ALP.md` — methods table now documents `leave`, the
+  `key_version` / `cost` fields on `post`, and the rekey-via-pull
+  flow. New "Group-key versioning" subsection. Budget section
+  rewritten as project-lifetime cap (`max_usd` / `max_tokens`
+  pick-one) with the author-declared cost trust model spelled
+  out. Hub-state listing extended with `ledger.json` and the
+  per-member `key_version` field.
+
+15 new tests in `tests/test_alp_workgroup.py` (PR 1's 20 still
+green — backward-compat preserved): leave end-to-end with
+forward-secrecy assertion (old key opens past posts, fails on new
+ones), left member loses access (`-32008`), hub can't leave its
+own workgroup, local `kick` rotates and rejects hub / unknown
+targets, budget shape validation, USD-cap admit-then-block,
+tokens-cap admit-then-block, no-budget unbounded posting, ledger
+file initialised on `create`, PR 1 on-disk format loads cleanly
+with `key_version=1` defaults (no migration needed for any
+workgroup already on disk), sequential leaves bump versions
+monotonically (v1→v2→v3 with three drops), race between
+concurrent post + leave serialises cleanly via asyncio's
+single-loop dispatch, profile budget gate fires upstream of the
+workgroup gate (`-32005 cap_kind=usd` before the workgroup
+handler ever runs).
+
+Suite: 804 passed, 8 skipped (was 789).
+
+**Pending for ALP.3 to close:** `pause` / `resume` + `-32010
+workgroup-paused` (PR 3), TUI / CLI surface + engine context
+integration (PR 4), workgroup budget bump UI (folded into PR 4).
+
 ## v0.2.87 — 2026-04-25
 
 ### alp.3 — workgroups (PR 1: hub state + 4 core verbs)
