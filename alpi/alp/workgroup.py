@@ -176,6 +176,12 @@ class Meta:
     # one). Empty / missing = no workgroup-level cap (profile cap still
     # applies upstream).
     budget: dict[str, Any] = field(default_factory=dict)
+    # Pause is a soft circuit-breaker on ``workgroup.post`` only —
+    # ``pull`` / ``join`` / ``leave`` keep working so members can
+    # catch up on past traffic and exit cleanly. Idempotent verbs.
+    paused: bool = False
+    paused_at: str = ""        # ISO-8601, set when paused flips True
+    paused_by: str = ""        # Ed25519 pubkey of the member who paused
 
 
 @dataclass
@@ -221,6 +227,9 @@ def _load_meta(d: Path) -> Meta | None:
             created_at=str(raw["created_at"]),
             current_key_version=int(raw.get("current_key_version", 1)),
             budget=dict(raw.get("budget") or {}),
+            paused=bool(raw.get("paused", False)),
+            paused_at=str(raw.get("paused_at") or ""),
+            paused_by=str(raw.get("paused_by") or ""),
         )
     except KeyError:
         return None
@@ -237,6 +246,12 @@ def _save_meta(d: Path, meta: Meta) -> None:
     }
     if meta.budget:
         payload["budget"] = meta.budget
+    if meta.paused:
+        payload["paused"] = True
+        if meta.paused_at:
+            payload["paused_at"] = meta.paused_at
+        if meta.paused_by:
+            payload["paused_by"] = meta.paused_by
     (d / _META).write_text(yaml.safe_dump(payload, sort_keys=False))
 
 
@@ -484,17 +499,18 @@ def _save_ledger(d: Path, ledger: dict[str, Any]) -> None:
 
 
 def _validate_budget(budget: dict[str, Any]) -> dict[str, Any]:
-    """Enforce the ``max_usd`` xor ``max_tokens`` shape. Empty dict =
-    no cap. Mixed or non-positive values raise ``ValueError`` so a
-    typo at create time fails fast instead of silently doing nothing."""
+    """Normalise + sanity-check the workgroup budget shape, mirroring
+    the profile-budget UX (``daily_usd`` / ``daily_tokens`` — both
+    optional, set what you care about). Empty dict = no cap.
+    Non-positive values raise ``ValueError`` so a typo fails fast.
+    When both are set, both gate independently — whichever trips
+    first wins."""
     if not budget:
         return {}
     usd = budget.get("max_usd")
     tokens = budget.get("max_tokens")
     if usd is None and tokens is None:
         raise ValueError("budget must set max_usd or max_tokens")
-    if usd is not None and tokens is not None:
-        raise ValueError("budget is pick-one: max_usd xor max_tokens")
     out: dict[str, Any] = {}
     if usd is not None:
         usd_f = float(usd)
@@ -615,6 +631,14 @@ def register(server: alp_server.Server, home: Path) -> None:
             raise alp_server.HandlerError(-32009, "workgroup-not-found")
         if wg.member(peer.pubkey) is None:
             raise alp_server.HandlerError(-32008, "workgroup-not-member")
+        if wg.meta.paused:
+            raise alp_server.HandlerError(
+                -32010, "workgroup-paused",
+                data={
+                    "paused_at": wg.meta.paused_at,
+                    "paused_by": wg.meta.paused_by,
+                },
+            )
 
         d = _wg_dir(home, wg_id)
         ledger = _load_ledger(d)
@@ -708,7 +732,62 @@ def register(server: alp_server.Server, home: Path) -> None:
             "remaining_members": [m.pubkey for m in updated.members],
         }
 
+    async def workgroup_pause(
+        params: dict[str, Any],
+        peer: peers_mod.Peer,
+        srv: alp_server.Server,
+    ) -> dict[str, Any]:
+        wg_id = str((params or {}).get("workgroup_id") or "").strip()
+        if not wg_id:
+            raise alp_server.HandlerError(
+                -32602, "invalid-params",
+                data={"detail": "workgroup_id required"},
+            )
+        wg = load(home, wg_id)
+        if wg is None:
+            raise alp_server.HandlerError(-32009, "workgroup-not-found")
+        if wg.member(peer.pubkey) is None:
+            raise alp_server.HandlerError(-32008, "workgroup-not-member")
+        # Idempotent — already paused returns the existing state.
+        if not wg.meta.paused:
+            wg.meta.paused = True
+            wg.meta.paused_at = _utcnow()
+            wg.meta.paused_by = peer.pubkey
+            _save_meta(_wg_dir(home, wg_id), wg.meta)
+        return {
+            "workgroup_id": wg.meta.id,
+            "paused": True,
+            "paused_at": wg.meta.paused_at,
+            "paused_by": wg.meta.paused_by,
+        }
+
+    async def workgroup_resume(
+        params: dict[str, Any],
+        peer: peers_mod.Peer,
+        srv: alp_server.Server,
+    ) -> dict[str, Any]:
+        wg_id = str((params or {}).get("workgroup_id") or "").strip()
+        if not wg_id:
+            raise alp_server.HandlerError(
+                -32602, "invalid-params",
+                data={"detail": "workgroup_id required"},
+            )
+        wg = load(home, wg_id)
+        if wg is None:
+            raise alp_server.HandlerError(-32009, "workgroup-not-found")
+        if wg.member(peer.pubkey) is None:
+            raise alp_server.HandlerError(-32008, "workgroup-not-member")
+        # Idempotent — already running returns the cleared state.
+        if wg.meta.paused:
+            wg.meta.paused = False
+            wg.meta.paused_at = ""
+            wg.meta.paused_by = ""
+            _save_meta(_wg_dir(home, wg_id), wg.meta)
+        return {"workgroup_id": wg.meta.id, "paused": False}
+
     server.register("workgroup.join", workgroup_join)
     server.register("workgroup.post", workgroup_post)
     server.register("workgroup.pull", workgroup_pull)
     server.register("workgroup.leave", workgroup_leave)
+    server.register("workgroup.pause", workgroup_pause)
+    server.register("workgroup.resume", workgroup_resume)

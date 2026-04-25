@@ -388,6 +388,7 @@ reserved space:
 | `-32007` | `target-busy` | Session already running a turn. |
 | `-32008` | `workgroup-not-member` | Caller is not a pinned member of the workgroup. |
 | `-32009` | `workgroup-not-found` | No workgroup with the requested id at the hub. |
+| `-32010` | `workgroup-paused` | Workgroup is paused; `post` rejected. `pull` / `join` / `leave` still work. |
 
 The standard JSON-RPC codes (`-32600` through `-32603`) retain
 their standard meaning and apply to malformed requests, unknown
@@ -513,9 +514,19 @@ methods callable by pinned peers in the workgroup roster.
   cannot leave its own workgroup (`-32602`); use a hub-side
   primitive instead.
 
-- `workgroup.pause(workgroup_id)` / `workgroup.resume(workgroup_id)`
-  — any member may pause a workgroup, suspending all posts until
-  a resume. *(Not yet shipped — PR 3.)*
+- `workgroup.pause(workgroup_id) → {workgroup_id, paused, paused_at, paused_by}`
+  Any member may pause the workgroup. While paused, `workgroup.post`
+  is rejected with `-32010 workgroup-paused`; `pull`, `join`, and
+  `leave` keep working so members can catch up on existing traffic
+  and exit cleanly without being trapped. Idempotent — calling
+  pause on an already-paused workgroup returns the existing state
+  without bumping the `paused_at` timestamp or rewriting
+  `paused_by`. The hub records who triggered the pause for audit.
+
+- `workgroup.resume(workgroup_id) → {workgroup_id, paused}`
+  Inverse of `pause`. Any member may resume; idempotent on an
+  already-running workgroup. Posts admit again starting on the
+  next call.
 
 ### Group-key versioning
 
@@ -558,7 +569,8 @@ The hub persists each workgroup under
 `~/.alpi/<profile>/alp/workgroups/<wg_id>/`:
 
 - `meta.yaml` — `id`, `name`, `hub_pubkey`, `created_at`,
-  `current_key_version`, optional `budget`.
+  `current_key_version`, optional `budget`, optional `paused`
+  flag (with `paused_at` / `paused_by` audit fields when set).
 - `members.yaml` — list of `{pubkey, sealed_key, key_version,
   joined, joined_at}`. The `joined` flag flips on first successful
   `workgroup.join`; pre-join state lets the hub distinguish
@@ -604,8 +616,9 @@ budget:
   max_tokens: 500000    # local / free models
 ```
 
-`max_usd` and `max_tokens` are mutually exclusive — pick one,
-mirroring the profile-budget shape. Workgroups without a
+Both knobs are optional and mirror the profile-budget shape — set
+what you care about. When both are set each gates independently;
+whichever cap trips first freezes posts. Workgroups without a
 configured budget inherit no ceiling of their own; the profile
 caps are the only stop.
 

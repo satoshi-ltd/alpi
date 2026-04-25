@@ -1,5 +1,139 @@
 # Changelog
 
+## v0.2.89 — 2026-04-25
+
+### alp.3 — workgroups: pause/resume + member-side state + management UX
+
+Two layers landed together. The protocol now carries
+``workgroup.pause`` / ``workgroup.resume``, and members get
+their own subscription state plus a full management surface (CLI
+verbs, ``alpi setup → ALP → Workgroups`` wizard, agent tool).
+
+#### Pause / resume
+
+- ``alpi/alp/workgroup.py`` — ``Meta.paused`` / ``paused_at`` /
+  ``paused_by`` (only persisted while paused). Two new handlers
+  ``workgroup.pause`` and ``workgroup.resume``, both idempotent.
+  ``workgroup.post`` now rejects with ``-32010 workgroup-paused``
+  + ``data: {paused_at, paused_by}`` when the flag is set.
+  ``pull`` / ``join`` / ``leave`` keep working — pause must not
+  trap members.
+- ``docs/ALP.md`` — verbs documented; error code ``-32010`` added
+  to the table; hub-state listing notes the optional fields.
+
+#### Member-side state — ``Subscription``
+
+A profile that joined a workgroup hosted by a peer needs local
+state to send ``post`` / ``pull`` / ``leave`` without re-joining
+on every restart, and to decrypt past traffic across rekeys.
+
+- ``alpi/alp/subscription.py`` (new) —
+  ``~/.alpi/<profile>/alp/secrets/subscriptions.yaml`` (mode 0600).
+  Per-workgroup record: ``wg_id``, ``name``, ``hub_id``,
+  ``hub_pubkey``, list of ``SealedKey(version, sealed)`` (hub
+  rotations land here on the next ``pull``), ``last_seq`` cursor,
+  ``joined_at``. Sealed keys stay sealed on disk — they only open
+  with this profile's Ed25519 private key, so file exposure alone
+  reveals nothing without the keypair.
+- ``alpi/alp/workgroup_client.py`` (new) — member-side helpers
+  ``join`` / ``post`` / ``pull`` / ``leave`` / ``pause`` /
+  ``resume`` that resolve the hub via this profile's
+  ``peers.yaml`` (Unix socket intra-machine, Noise_XK over TCP
+  inter-machine), maintain the subscription cache, and refresh
+  the sealed key when the hub signals a new
+  ``current_key_version`` on a pull. Hub identity is **explicit**
+  — we don't probe pinned peers for which one hosts a wg_id
+  (that would leak the id to every pinned peer and let a
+  malicious peer impersonate the real hub by pre-creating a
+  same-id workgroup).
+
+#### CLI surface — ``alpi workgroup``
+
+Nine verbs split by role.
+
+- Both: ``list``, ``show``.
+- Hub: ``create``, ``kick``.
+- Member: ``join``, ``post``, ``pull``, ``pause``, ``resume``,
+  ``leave``.
+
+``create`` accepts ``--member <pubkey | peer-id>`` (repeated) and
+``--budget-usd`` / ``--budget-tokens``. ``kick`` accepts the
+target as either a pubkey or a pinned peer id.
+
+#### Wizard — ``alpi setup → ALP → Workgroups``
+
+- List view: workgroups grouped under ``Hub of`` and ``Member of``
+  headings (no group shown when empty). Status counter on the
+  setup main menu reads ``N hosting · M joined`` instead of the
+  earlier jargon ``N hub-of / M member-of``.
+- Hub detail: split into ``Workgroup`` (Read messages, Members,
+  Budget) and ``Maintenance`` (Pause / Resume, Kick member,
+  Delete workgroup) headings.
+- Read messages: hub-side audit view that decrypts the transcript
+  with the hub's own sealed key.
+- Members: shows each pinned member with role flag (``hub`` /
+  ``joined`` / ``invited``); the current profile's row renders
+  in the configured accent colour.
+- Budget: edit-in-place at any time; clears when both prompts
+  are blanked.
+- Member detail: Read new messages (pull + decrypt), Send a
+  message, Pause / Resume, Leave.
+- Create flow: pick name → toggle members from ``peers.yaml`` →
+  optional budget. **Auto-grants** the six workgroup verbs
+  (``join``, ``post``, ``pull``, ``leave``, ``pause``,
+  ``resume``) to every invited peer's ``allow`` list — without
+  this, the hub's capability gate would reject every join.
+- Join flow: pick the hub from pinned peers → paste the
+  ``wg_id`` shared out-of-band.
+- Kick flow: alias-aware (shows ``@bob`` instead of pubkey
+  fragment).
+- Budget flow mirrors the profile-budget UX exactly: ask for
+  USD and tokens prompts; both are optional; both gate
+  independently when set (whichever trips first freezes posts).
+
+Workgroup budget validation relaxed accordingly — both
+``max_usd`` and ``max_tokens`` may be set; only "neither + non-
+empty dict" or "non-positive value" still raise.
+
+#### Agent tool — ``workgroup_post``
+
+Minimal hook: the agent can drop an encrypted message into a
+workgroup it's already subscribed to. Auto-pull, mention
+awareness, briefing, milestone, and budget-aware behaviour are
+**deferred to PR 5** (closes ALP.3 functional).
+
+#### Tests + demo
+
+- ``tests/test_alp_workgroup.py`` — 9 new tests for pause /
+  resume (gate, idempotence, persists across restart, doesn't
+  block leave, and inverse-action persistence). Suite of
+  workgroup tests now 40 cases.
+- ``tests/test_alp_workgroup_client.py`` (new) — 8 tests:
+  subscription roundtrip with 0600 mode, idempotent upsert,
+  remove, end-to-end member join → post → pull → decrypt with
+  cursor advance, post-rotation pull picks up new sealed key,
+  leave drops subscription, post without subscription raises,
+  hub resolution rejects unpinned peer.
+- ``scripts/demo_workgroups.py`` (new) — runnable end-to-end
+  demo. Spins up five in-process profiles (alice / bob / bling
+  / mirai / default) under ``/tmp/alpi-demo-*``, mounts two
+  overlapping workgroups (``design`` 2-member alice+bob,
+  ``research`` 4-member mirai+bling+default+alice with a
+  $1.00 lifetime cap), runs the canonical join → post → pull →
+  decrypt cycle in both, prints a narrated trace, tears down.
+  Doesn't touch the user's real ``~/.alpi/``.
+
+Suite: 817 passed, 8 skipped (was 800).
+
+**Pending for ALP.3 to close (PR 5):** briefing field, milestone
+abstraction (alive / closed / failed + goal + result), engine
+auto-pull on every turn (interactive / gateway / scheduler) so
+agents see workgroup activity as part of their context, mention
+awareness, ``workgroup_post`` declares cost from the current
+turn's ledger, budget-conscious system prompt guidance (delegate
+to better-funded peers, prefer concise replies near the cap),
+per-member spend breakdown in the wizard.
+
 ## v0.2.88 — 2026-04-25
 
 ### alp.3 — workgroups (PR 2: leave + rekey + lifetime budget)
