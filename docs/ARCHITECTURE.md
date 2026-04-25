@@ -108,6 +108,8 @@ alpi/
 ├── config.py               YAML load/save, defaults, deep merge
 ├── ui.py                   shared wizard/menu primitives
 ├── service.py              install/uninstall launchd/systemd units
+├── ledger.py               daily spend ledger (logs/ledger.json) + profile cap gate
+├── status.py               canonical /status rows (TUI + Telegram share this)
 ├── prompts/
 │   ├── default_agent.md
 │   └── system_prompt.md

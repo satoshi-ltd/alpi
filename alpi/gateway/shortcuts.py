@@ -115,19 +115,29 @@ def _status(chat_id: str, home: Path) -> str:
         data = json.loads(session_file.read_text())
     except Exception:  # noqa: BLE001
         return f"session {sid}: (unreadable)"
-    turns = len(data.get("turns") or [])
-    tok_in = data.get("input_tokens", 0)
-    tok_out = data.get("output_tokens", 0)
-    # Rendered with MarkdownV2 (see alpi/gateway/platforms/_md2.py):
-    # `**x**` becomes bold, specials in values are auto-escaped.
-    return (
-        f"**session {sid}**\n"
-        f"\n"
-        f"**model**  {data.get('model', '?')}\n"
-        f"**turns**  {turns}\n"
-        f"**tokens** in={tok_in:,}  out={tok_out:,}  total={tok_in + tok_out:,}\n"
-        f"**cost**   ${data.get('cost_usd', 0.0):.4f}"
+
+    from alpi import config as cfg_mod
+    from alpi.status import status_rows, status_title
+
+    cfg = cfg_mod.load(home)
+    rows = status_rows(
+        session_id=sid,
+        model=data.get("model", "?"),
+        turns=len(data.get("turns") or []),
+        elapsed_seconds=None,  # session file does not persist clock-time
+        input_tokens=data.get("input_tokens", 0),
+        output_tokens=data.get("output_tokens", 0),
+        cost_usd=data.get("cost_usd", 0.0),
+        home=home,
+        cfg_budget=cfg.budget,
     )
+
+    # Fenced block keeps column alignment and skips MarkdownV2 escaping.
+    label_w = max(len(label) for label, _ in rows)
+    body = "\n".join(
+        f"{label.ljust(label_w)}  {value}" for label, value in rows
+    )
+    return f"**{status_title(sid)}**\n\n```\n{body}\n```"
 
 
 def _peers(home: Path) -> str:

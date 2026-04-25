@@ -1,5 +1,57 @@
 # Changelog
 
+## v0.2.84 — 2026-04-25
+
+### budget — daily spending ledger, profile-level cap
+
+Every spend path through alpi now goes through one ledger and one cap.
+The cap lives at the profile level (`budget.daily_usd` or
+`daily_tokens` in `config.yaml`); per-peer spending sub-caps were
+considered and dropped — peer trust lives in capabilities and rate
+limits, not in a second ledger.
+
+- `alpi/ledger.py` (new) — JSON ledger at
+  `~/.alpi/<profile>/logs/ledger.json` with profile total + per-peer
+  observability buckets, atomic writes, midnight UTC reset, and a
+  context-var that lets the ALP server attribute a turn's spend to
+  the remote peer that asked for it.
+- `alpi/engine.py` — admit-check before every turn, record after
+  each turn body and after each sub-agent (`research`, `delegate`,
+  `read_image`) so the cap covers the whole tree.
+- `alpi/alp/server.py` + `handlers.py` — inbound `link.ask` admits
+  the same way; over-cap responds with JSON-RPC `-32005
+  budget-exceeded` (`cap_kind`/`cap`/`used` in `data`). Engine
+  errors now flow into the reply text instead of as a separate
+  trace event so gateways with `show_tool_trace: true` don't show
+  the message twice.
+- `alpi/cli.py` — `alpi setup → Budget` prompts daily USD or daily
+  tokens (pick-one; empty leaves the profile uncapped).
+- `alpi/status.py` (new) — canonical `(label, value)` rows shared
+  by the TUI `/status` panel and the Telegram `/status` shortcut so
+  the two surfaces no longer drift. Telegram renders the body as a
+  fenced code block to keep column alignment under MarkdownV2.
+
+`alpi/alp/__init__.py`, `docs/CONFIG.md`, `docs/ALP.md`,
+`docs/PROFILES.md`, `docs/OPERATIONS.md`, `docs/ARCHITECTURE.md`, and
+`docs/ROADMAP.md` updated to describe the budget shape and to use
+"workgroup" for the multi-party ALP extension everywhere
+(`alpi-rooms` was the old name; the new term reflects that the
+primary inhabitant is an autonomous agent, not a chat user).
+
+The landing page picks up the budget mention as a one-line addition
+to the operations card — visible without crowding the headline.
+
+19 new tests across `tests/test_ledger.py` (15 — load/save, peer
+context, clamping, stale-day reset, corrupt-file resilience,
+concurrent writers, `pick-one` precedence) and `tests/test_alp_budget.py`
+(3 — over-cap returns `-32005`, under-cap admits, no cap is a
+no-op). Plus 1 status-panel adapter test. Suite: 734 passed, 8
+skipped.
+
+Verified live in TUI and Telegram with bob @ `daily_usd: $0.05`:
+budget reached message renders cleanly in both surfaces, the
+`/status` row shows `daily budget $0.0554 / $0.05 · capped`.
+
 ## v0.2.83 — 2026-04-24
 
 ### alp — inter-machine Noise_XK transport, rate limits, wizard wiring
@@ -59,15 +111,17 @@ path as real remote peers).
 
 ### spec — budget roadmap (BG)
 
-`docs/ALP.md` still talks about per-peer `budget.tokens_per_day` /
-`usd_per_day`. The enforcement path hadn't been written and the
-shape was incomplete: there was no profile-level ceiling, just
-per-peer numbers that add up silently as peers grow. `docs/ROADMAP.md`
-now carries a dedicated **BG** item — one unified ledger that covers
-interactive turns *and* ALP inbound, with the profile cap as the
-pool and per-peer caps as optional sub-budgets. BG is explicitly
-v0.3 and blocks ALP.3 rooms (rooms need a working peer budget so a
-noisy room can't silently drain an agent).
+`docs/ROADMAP.md` carries a new **BG** item that defines the spending
+budget shape the agent will adopt. One ceiling per profile, expressed
+as either `daily_usd` or `daily_tokens` — paid models pick the dollar
+unit, local Ollama profiles pick tokens, and absent values mean no
+ceiling. The same ledger covers every spending path through alpi
+(interactive turns, gateways, scheduled jobs, sub-agent spawns, and
+inbound ALP from peers). Per-peer spending sub-caps are intentionally
+absent: peer trust lives in capabilities and rate limits, not in a
+secondary spending ledger. BG is v0.3 and unblocks ALP.3 workgroups,
+which double-gate posts against both each member's profile budget
+and an optional per-workgroup pool.
 
 ## v0.2.82 — 2026-04-24
 
@@ -81,10 +135,10 @@ private network across machines.
   multi-machine coordination, and the current ALP surface.
 - Landing copy moved from a privacy-only slogan to
   `your private / agent network`, with ALP.1 local links, ALP.2
-  machine links, and ALP.3 rooms stated directly.
+  machine links, and ALP.3 workgroups stated directly.
 - ALP docs now treat ALP.1/ALP.2/ALP.3 as the current launch surface:
   Unix sockets, Noise_XK TCP, budgets/rate limits, and hub-anchored
-  rooms.
+  workgroups.
 - Deployment, security, operations, profiles, config, and roadmap
   docs were aligned so the site no longer presents ALP.2/ALP.3 as
   distant work.

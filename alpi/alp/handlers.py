@@ -109,7 +109,10 @@ def _run_turn(
             interrupted = True
 
     try:
-        engine.run_turn(prompt, emit=sink)
+        from alpi import ledger
+
+        with ledger.peer_context(peer_id):
+            engine.run_turn(prompt, emit=sink)
         try:
             engine.save_session()
         except Exception:  # noqa: BLE001

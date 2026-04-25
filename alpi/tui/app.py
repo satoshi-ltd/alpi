@@ -435,7 +435,11 @@ class AlpiApp(App):
             "memory": lambda _a: self._show_panel(MemoryPanel(self.home)),
             "tools": lambda _a: self._show_panel(ToolsPanel()),
             "mcps": lambda _a: self._show_panel(McpPanel(self.engine._mcp_clients)),
-            "status": lambda _a: self._show_panel(StatusPanel(self.engine.session)),
+            "status": lambda _a: self._show_panel(StatusPanel(
+                self.engine.session,
+                home=self.engine.home,
+                cfg_budget=self.engine.cfg.budget,
+            )),
             "clear": lambda _a: self._cmd_clear(),
             "new": lambda _a: self._cmd_new(),
             "compact": lambda _a: self._cmd_compact(),

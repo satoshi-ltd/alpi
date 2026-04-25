@@ -17,7 +17,7 @@ const TPL  = join(SITE, 'templates');
 const SITE_URL    = (process.env.SITE_URL    || 'https://alpi.satoshi-ltd.com').replace(/\/+$/, '');
 const SITE_NAME   = process.env.SITE_NAME   || 'alpi';
 const SITE_TAGLINE = 'your private agent network';
-const SITE_DESCRIPTION = "alpi starts as the agent in your terminal, then grows with you: profiles for work, cron, home servers, research, and rooms with other alpis. Each profile owns its memory, keys, model, skills, gateways, approvals, and trust boundary. ALP links them across machines without a registry, hub, account, or mandatory cloud.";
+const SITE_DESCRIPTION = "alpi starts as the agent in your terminal, then grows with you: profiles for work, cron, home servers, research, and workgroups with other alpis. Each profile owns its memory, keys, model, skills, gateways, approvals, and trust boundary. ALP links them across machines without a registry, central account, or mandatory cloud.";
 const OG_IMAGE = `${SITE_URL}/assets/alpi-brand.png`;
 const OG_IMAGE_W = 1200;
 const OG_IMAGE_H = 800;
@@ -35,7 +35,7 @@ const DOCS = [
   { slug: 'PROFILES',     src: 'docs/PROFILES.md',      ix: '03', category: 'guide',     sub: 'The isolation primitive: identity, keys, memory, skills, peers, gateways, and cost.' },
   { slug: 'SKILLS',       src: 'docs/SKILLS.md',        ix: '04', category: 'guide',     sub: 'Directory contract, frontmatter, scanner, validation, secrets, and bundled namespace.' },
   { slug: 'MODELS',       src: 'docs/MODELS.md',        ix: '05', category: 'guide',     sub: 'Model tiers for tool-heavy agent use: quality, cost/service, and local Ollama.' },
-  { slug: 'ALP',          src: 'docs/ALP.md',           ix: '06', category: 'reference', sub: 'Alpi Link Protocol: pinned identity, signed envelopes, peer capabilities, rooms.' },
+  { slug: 'ALP',          src: 'docs/ALP.md',           ix: '06', category: 'reference', sub: 'Alpi Link Protocol: pinned identity, signed envelopes, peer capabilities, workgroups.' },
   { slug: 'ARCHITECTURE', src: 'docs/ARCHITECTURE.md',  ix: '07', category: 'reference', sub: 'Code structure, turn loop, memory, sessions, gateway, scheduler, MCP, logging.' },
   { slug: 'CONFIG',       src: 'docs/CONFIG.md',        ix: '08', category: 'reference', sub: 'Every YAML knob, its default, what it controls.' },
   { slug: 'SECURITY',     src: 'docs/SECURITY.md',      ix: '09', category: 'reference', sub: 'Two-layer security model. Approval system, SSRF, prompt-injection, sensitive paths. Sandbox.' },

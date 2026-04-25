@@ -4,7 +4,7 @@
 **Editor:** [@soyjavi](https://github.com/soyjavi)
 **Status:** Living specification for the current ALP surface. ALP.1
 handles same-machine profiles, ALP.2 handles inter-machine links over
-Noise_XK TCP, and ALP.3 adds hub-anchored rooms.
+Noise_XK TCP, and ALP.3 adds hub-anchored workgroups.
 
 ---
 
@@ -16,7 +16,7 @@ three deployment modes:
 
 - two agents running as separate profiles on the same machine,
 - two agents running on different machines across a network, and
-- N agents sharing a workspace ("room").
+- N agents sharing a workspace (a **workgroup**).
 
 ALP is not an open federation protocol and does not aim to
 interoperate with third-party agents. Its scope is limited to
@@ -39,10 +39,11 @@ error codes.
 Implementation status matters when reading the rest of the document:
 ALP.1 implements profile-to-profile links on the same machine over a
 Unix-domain socket. ALP.2 implements inter-machine Noise_XK over TCP
-plus budget/rate-limit enforcement. ALP.3 implements shared rooms.
-The three modes share identity, envelope, capability, budget, and
-error semantics so the protocol stays one coherent design instead of
-three incompatible feature drops.
+plus rate-limit enforcement. ALP.3 implements shared workgroups. All
+three share identity, envelope, capability, and error semantics so
+the protocol stays one coherent design instead of three incompatible
+feature drops. Spending is governed by a single profile-level ledger
+(see `CONFIG.md → Budget`) that every path through alpi draws from.
 
 ---
 
@@ -61,7 +62,7 @@ with one of them is cut rather than the principle.
    service, no registry, no heartbeat ping. The only metadata
    exposed on the wire is what routing strictly requires.
 3. **Minimalism.** ALP defines three request methods in its
-   core and six more in the optional rooms extension. There is
+   core and six more in the optional workgroups extension. There is
    no capability negotiation, no introspection, no federation.
    Every exposed knob is a new attack surface; none are added
    speculatively.
@@ -85,14 +86,14 @@ with one of them is cut rather than the principle.
 - **Peer list.** A YAML file (`~/.alpi/<profile>/alp/peers.yaml`)
   that enumerates the agents this profile will accept traffic
   from and send traffic to, along with per-peer capabilities
-  and budgets.
+  and rate limits.
 - **Link.** A one-on-one communication channel between two
   peers. Core ALP methods operate on a link.
-- **Room.** A multi-party workspace hosted by one peer (the
-  **hub**) with one or more member peers. Rooms are defined in
-  the optional rooms extension.
+- **Workgroup.** A multi-party workspace hosted by one peer (the
+  **hub**) with one or more member peers. Defined in the optional
+  workgroups extension.
 - **Hub.** The peer that holds the authoritative transcript and
-  current group key for a room.
+  current group key for a workgroup.
 
 ---
 
@@ -131,9 +132,6 @@ before any `id`-based routing occurs.
   allow:
     - link.ping
     - link.ask
-  budget:
-    tokens_per_day: 200000
-    usd_per_day: 0.50
   rate_limit:
     requests_per_minute: 10
 
@@ -145,8 +143,6 @@ before any `id`-based routing occurs.
     - link.ping
     - link.ask
     - link.cancel
-  budget:
-    tokens_per_day: 1000000
   rate_limit:
     requests_per_minute: 30
 ```
@@ -158,23 +154,22 @@ before any `id`-based routing occurs.
 | `pubkey` | yes | Base64-encoded Ed25519 public key. |
 | `address` | for inter-machine | `host:port`. Omit for intra-profile peers. |
 | `allow` | yes | Fail-closed list of methods the peer may invoke. |
-| `budget.tokens_per_day` | no | Hard daily token cap for this peer. Exceeding returns `-32005`. Accepted today; enforcement lands with the spending-ledger work in the BG roadmap item. |
-| `budget.usd_per_day` | no | Hard daily spend cap for this peer. Ollama and other free-inference setups omit this. Same enforcement timing as the token cap. |
 | `rate_limit.requests_per_minute` | no | Throttle. Default allows 10/min/peer. Enforced before handler dispatch. |
 
-Budget fields are independent and optional, and they act as an
-**optional sub-cap under a profile-level ceiling** — the profile's
-own `alp.budget.{daily_usd, daily_tokens}` is the pool from which
-every inbound method from every peer (and every interactive turn, and
-every sub-agent spawn) draws. An absent peer cap means the peer
-shares the pool directly; a peer cap tightens below the profile
-ceiling. Budgets reset at UTC midnight; unused allowance does not
-carry over. One unified ledger drives both the profile ceiling and
-the per-peer sub-caps, reset timer, and the `-32005` response path.
+Spending is not configured here. Every inbound call from every peer
+draws from the same daily ledger that interactive turns, gateway
+replies, and sub-agents spend from; the cap lives at the profile level
+(`budget.daily_usd` / `budget.daily_tokens` in `config.yaml`, see
+[CONFIG.md → Budget](CONFIG.md#budget)). When the profile cap trips,
+ALP inbound answers with JSON-RPC `-32005 budget-exceeded` and falls
+silent on interactive paths until UTC midnight.
 
-The token budget has a secondary purpose beyond cost control: a
-tight cap forces the caller to be concise, which keeps inter-
-peer traffic goal-directed instead of chatty.
+If a specific peer needs a tighter leash than the profile cap allows,
+narrow its `allow` list or drop the request rate. Per-peer spending
+sub-caps are deliberately absent — capabilities and rate limits are
+the trust lever. Budget pressure at the profile level has a useful
+secondary effect: a tight cap forces callers to be concise, which
+keeps inter-peer traffic goal-directed instead of chatty.
 
 ---
 
@@ -331,7 +326,7 @@ The call is rejected under any of:
 
 - The `link.ask` method is not in the peer's `allow` list
   (`-32001 capability-denied`).
-- The target would breach its daily budget cap on this peer
+- The target has already spent its daily profile budget
   (`-32005 budget-exceeded`).
 - The target is already running a turn in the same session
   (`-32007 target-busy`; see **Reentrancy** below).
@@ -448,63 +443,72 @@ The goal of ALP's security design is to ensure that:
 
 ---
 
-## Rooms (extension)
+## Workgroups (extension)
 
-Rooms are a multi-party extension to ALP, layered on top of the
-core link methods. A room is a shared transcript with a stable
-group key; every member can post, every member can read. The
-member that creates the room is the **hub** and holds the
-authoritative transcript and key state.
+A **workgroup** is a multi-party extension to ALP, layered on top
+of the core link methods. It is a shared transcript with a stable
+group key for a set of alpis collaborating on something — every
+member can post, every member can read. The member that creates
+the workgroup is the **hub** and holds the authoritative
+transcript and key state. "Workgroup" over "room" is deliberate:
+the primary inhabitant is an autonomous agent, not a human in a
+chat.
 
 ### Methods
 
-- `room.create(name, members[]) → room_id`
-- `room.join(room_id)` — the hub responds with the current group
-  key, encrypted to the joining member's pubkey.
-- `room.post(room_id, text)` — the author encrypts under the
-  current group key and sends to the hub, which fans out.
-- `room.pull(room_id, since)` — poll for new messages since a
-  cursor; may be served as SSE on inter-machine links.
-- `room.leave(room_id)` — the hub generates a new group key and
-  distributes it to remaining members so past keys can no
+- `workgroup.create(name, members[]) → workgroup_id`
+- `workgroup.join(workgroup_id)` — the hub responds with the
+  current group key, encrypted to the joining member's pubkey.
+- `workgroup.post(workgroup_id, text)` — the author encrypts
+  under the current group key and sends to the hub, which fans
+  out.
+- `workgroup.pull(workgroup_id, since)` — poll for new messages
+  since a cursor; may be served as SSE on inter-machine links.
+- `workgroup.leave(workgroup_id)` — the hub generates a new group
+  key and distributes it to remaining members so past keys can no
   longer decrypt new traffic.
-- `room.pause(room_id)` / `room.resume(room_id)` — any member
-  may pause a room, suspending all posts until a resume.
+- `workgroup.pause(workgroup_id)` / `workgroup.resume(workgroup_id)`
+  — any member may pause a workgroup, suspending all posts until
+  a resume.
 
 ### Hub availability
 
-Rooms are **hub-anchored**: when the hub's machine is offline,
-the room is cold. Members cannot post, cannot pull new messages,
-and cannot join until the hub returns. The protocol intentionally
-does not provide a failover path, replication, or consensus-
-driven re-election. Operators who want always-on rooms host the
-hub on an always-on machine (a home server, a small VPS, a
-Raspberry Pi), which is the deployment the protocol optimises
-for.
+Workgroups are **hub-anchored**: when the hub's machine is
+offline, the workgroup is cold. Members cannot post, cannot pull
+new messages, and cannot join until the hub returns. The protocol
+intentionally does not provide a failover path, replication, or
+consensus-driven re-election. Operators who want always-on
+workgroups host the hub on an always-on machine (a home server, a
+small VPS, a Raspberry Pi), which is the deployment the protocol
+optimises for.
 
-### Budget inside rooms
+### Budget inside workgroups
 
-Room posts count against the peer's global daily budget defined
-in the peer list. An agent that reaches its cap during a room
-conversation goes silent: it does not post a "I'm out of budget"
-message and it does not leave the room. Silent capping keeps the
-transcript clean of infrastructure noise and lets the budget
-self-rate-limit autonomous agents without human intervention.
-Budgets reset at UTC midnight.
+A workgroup may carry its own optional daily budget — a shared
+pool for the collaborative work happening inside it. When set,
+**every post is double-gated**: it admits only if the poster's
+profile still has budget *and* the workgroup still has budget.
+Whichever is tighter wins.
 
-There is no separate per-room budget in ALP v1. A single
-per-peer cap covers every inbound path from that peer: core
-link calls and room posts alike. Per-room caps can be added in a
-future version if real usage reveals a room that monopolises an
-agent's budget.
+An agent whose profile cap is exhausted goes silent in the
+workgroup even while the workgroup's own pool has room; its
+model simply can't run to produce the next post. Conversely, an
+exhausted workgroup freezes every member's posts until UTC
+midnight regardless of what their individual profiles have left.
+Silent capping keeps the transcript free of "out of budget"
+noise and lets budgets throttle autonomous agents without human
+intervention. All counters reset at UTC midnight.
+
+Workgroups without a configured budget inherit no ceiling of
+their own; the profile caps are still the only stop.
 
 ### Human participation
 
-Humans are supported transparently: a human connects to a room
-through the alpi TUI and appears as another member. Autonomous
-agents do not wait for the human to post; the per-peer budget in
-the peer list bounds how much any agent spends inside a given
-room.
+Humans are supported transparently: a human connects to a
+workgroup through the alpi TUI and appears as another member.
+Autonomous agents do not wait for the human to post; each
+agent's profile cap bounds how much they can spend inside the
+workgroup.
 
 ---
 
@@ -560,6 +564,6 @@ stable and short enough to carry in-tree without a framework.
 
 - **v1 (2026-04-24)** — current ALP surface: intra-machine transport over
   Unix-domain socket, inter-machine transport over Noise_XK TCP, core
-  `link.*` methods, room extension, envelope format, peer identity via
+  `link.*` methods, workgroup extension, envelope format, peer identity via
   Ed25519, capability model, reject-fast reentrancy, budget/rate-limit
   enforcement, and error codes.

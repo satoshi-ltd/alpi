@@ -33,8 +33,7 @@ def test_status_rows_cover_every_field() -> None:
     assert rows["turns"] == "3"
     assert "in=1,234" in rows["tokens"]
     assert "out=567" in rows["tokens"]
-    assert "total=1,801" in rows["tokens"]
-    assert rows["cost"] == "$0.0042"
+    assert rows["session cost"] == "$0.0042"
 
 
 def test_status_rows_order_matches_telegram_shortcut() -> None:
@@ -42,7 +41,15 @@ def test_status_rows_order_matches_telegram_shortcut() -> None:
     so both surfaces look identical at a glance."""
     s = _fake_session()
     labels = [label for label, _ in _status_rows(s)]
-    assert labels == ["model", "turns", "elapsed", "tokens", "cost"]
+    assert labels == ["model", "turns", "elapsed", "tokens", "session cost"]
+
+
+def test_status_rows_appends_budget_when_home_provided(tmp_path) -> None:
+    """Passing ``home`` adds a ``daily budget`` row sourced from the ledger."""
+    s = _fake_session()
+    rows = dict(_status_rows(s, home=tmp_path, cfg_budget={"daily_usd": 5.0}))
+    assert "daily budget" in rows
+    assert rows["daily budget"] == "$0.0000 / $5.00"
 
 
 def test_status_rows_handle_session_without_turns_attr() -> None:
