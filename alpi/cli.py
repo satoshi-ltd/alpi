@@ -2086,6 +2086,8 @@ def alp_start(ctx: click.Context, port: int | None, host: str | None) -> None:
         tcp_port=tcp_port,
     )
     alp_handlers.register_link_ask(server, h)
+    from alpi.alp import workgroup as alp_workgroup
+    alp_workgroup.register(server, h)
 
     pid_file = _alp_pid_path(h)
     pid_file.parent.mkdir(parents=True, exist_ok=True)
