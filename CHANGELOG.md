@@ -1,5 +1,37 @@
 # Changelog
 
+## v0.2.86 — 2026-04-25
+
+### setup wizard — section headings + copy pass
+
+The `alpi setup` main menu split into 5 visual sections (Agent,
+Boundaries, Messaging, ALP, Maintenance), and the model picker into
+Local / Cloud / Manage. Headings are non-selectable, render as-passed
+(no auto case transform), and `ui.menu()` auto-spaces between sections
+and before the close sentinel.
+
+- `alpi/ui.py` — new `Heading(NamedTuple)` shape; `menu()` recognises it,
+  adds blank rows between sections and above `Back`/`Exit`, and keeps
+  the cursor from landing on either.
+- `alpi/cli.py::setup_cmd` — flat 13/14-item list rewritten as five
+  sections. Dispatch unchanged. `_delete_profile_status` copy trimmed
+  (`Remove all data & N service(s)`).
+- `alpi/model_selector.py` — provider picker grouped Local / Cloud /
+  Manage. Cloud always visible; Manage only when there is something
+  saved to remove.
+- Copy pass across the wizard — Sandbox / Workspace / Budget / TCP-port
+  dim blocks trimmed to 3–6 lines; daemon-service wizards reduced to a
+  single line each (no launchd/systemd plumbing); MCP add-error
+  references the profile's `.env`; Cleanup row relabelled
+  `Stale sessions (>30 days old)`; Peers subtitle replaced with
+  `pubkey + capabilities + reachability per peer`.
+
+`tests/test_ui_menu.py` — 4 cases pinning the heading shape, the
+non-selectable mask with auto-blank, verbatim text rendering, and the
+no-leading-blank-before-first-heading rule.
+
+Suite: 769 passed, 8 skipped.
+
 ## v0.2.85 — 2026-04-25
 
 ### security — profile `.env` and `config.yaml` are off-limits to tools

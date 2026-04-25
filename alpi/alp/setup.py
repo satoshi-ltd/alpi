@@ -45,7 +45,7 @@ def run(home: Path) -> None:
         result = ui.menu(
             ui.crumb("setup", "peers"),
             items,
-            subtitle="ALP — cross-profile & inter-machine agent links",
+            subtitle="pubkey + capabilities + reachability per peer",
             home=home,
             close="Back",
         )
