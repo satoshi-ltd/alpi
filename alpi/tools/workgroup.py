@@ -26,14 +26,16 @@ from alpi.tools.base import Tool, ToolResult
 class WorkgroupPostTool(Tool):
     name = "workgroup_post"
     description = (
-        "Post a message into a shared ALP workgroup transcript. The "
-        "workgroup id is the `wg_*` string the user shared with you "
-        "(or the value of `wg_id` in `alpi workgroup list`). The "
-        "profile must already be subscribed — joins happen via "
-        "`alpi workgroup join` or the setup wizard, not via this tool. "
-        "Use when the user explicitly asks you to broadcast something "
-        "to a workgroup; do NOT post unprompted. Other members read "
-        "the post when they pull. Returns the assigned sequence number."
+        "Post a message into a shared ALP workgroup transcript. Use this "
+        "when (a) the user asks you to broadcast something to a workgroup, "
+        "or (b) the workgroup-poller woke this turn because you were "
+        "@-mentioned or a collective `#task` opened — see the "
+        "`Workgroup engagement rules` block in your system prompt for the "
+        "full posture. Default posture is OBSERVER; only post when you "
+        "have substantive content. The `wg_id` is the `wg_*` string in "
+        "your workgroup context block. Cost is auto-declared from this "
+        "turn's accumulated USD/tokens; the hub gates against the "
+        "workgroup's lifetime budget. Returns the assigned sequence number."
     )
     parameters = {
         "type": "object",
@@ -55,9 +57,22 @@ class WorkgroupPostTool(Tool):
         text = kwargs.get("text")
         if not wg_id or not text:
             return ToolResult(ok=False, output="", error="wg_id and text required")
+
+        # Auto-declare cost from the current turn's accumulated spend.
+        # Workgroup hubs gate against this declaration; reporting truthfully
+        # keeps the workgroup ledger meaningful and the lifetime cap real.
+        from alpi.tools import _state as _wg_state
+        tally = _wg_state.get_turn_usage()
+        cost = None
+        if tally:
+            cost = {
+                "usd": float(tally.get("usd", 0.0)),
+                "tokens": int(tally.get("tokens_in", 0)) + int(tally.get("tokens_out", 0)),
+            }
+
         try:
             result = asyncio.run(
-                wc.post(get_home(), wg_id, text.encode("utf-8")),
+                wc.post(get_home(), wg_id, text.encode("utf-8"), cost=cost),
             )
         except alp_client.RemoteError as e:
             return ToolResult(
@@ -66,9 +81,14 @@ class WorkgroupPostTool(Tool):
             )
         except (ValueError, alp_client.ClientError) as e:
             return ToolResult(ok=False, output="", error=str(e))
+        cost_hint = ""
+        if cost:
+            cost_hint = (
+                f" · declared ${cost['usd']:.4f} / {cost['tokens']} tokens"
+            )
         return ToolResult(
             ok=True,
-            output=f"posted seq {result.get('seq')} at {result.get('ts')}",
+            output=f"posted seq {result.get('seq')} at {result.get('ts')}{cost_hint}",
         )
 
 

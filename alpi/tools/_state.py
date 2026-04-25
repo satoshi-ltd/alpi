@@ -14,6 +14,10 @@ _interrupt_getter: ContextVar[Optional[InterruptFn]] = ContextVar(
     "alpi_interrupt", default=None,
 )
 _usage_sink: ContextVar[Optional[UsageFn]] = ContextVar("alpi_usage", default=None)
+# Per-turn running tally — set by the engine at turn start, incremented
+# by ``record_usage``, read by tools that need to know "what has this
+# turn cost so far?" (e.g. ``workgroup_post`` auto-declaring cost).
+_turn_usage: ContextVar[Optional[dict]] = ContextVar("alpi_turn_usage", default=None)
 
 
 def get_emit() -> Optional[EmitFn]:
@@ -57,6 +61,40 @@ def record_usage(input_tokens: int, output_tokens: int, cost_usd: float) -> None
             sink(int(input_tokens), int(output_tokens), float(cost_usd))
         except Exception:
             pass
+    tally = _turn_usage.get()
+    if tally is not None:
+        try:
+            tally["tokens_in"] = int(tally.get("tokens_in", 0)) + int(input_tokens)
+            tally["tokens_out"] = int(tally.get("tokens_out", 0)) + int(output_tokens)
+            tally["usd"] = float(tally.get("usd", 0.0)) + float(cost_usd)
+        except Exception:  # noqa: BLE001
+            pass
+
+
+def reset_turn_usage() -> None:
+    """Engine calls this at the start of each turn so tools can read
+    only this turn's accumulated cost (not the whole session)."""
+    _turn_usage.set({"tokens_in": 0, "tokens_out": 0, "usd": 0.0})
+
+
+def get_turn_usage() -> Optional[dict]:
+    """Snapshot of the current turn's accumulated tokens + usd cost.
+    None when no turn is in progress (or the engine forgot to seed)."""
+    tally = _turn_usage.get()
+    return dict(tally) if tally is not None else None
+
+
+def bump_turn_usage(input_tokens: int, output_tokens: int, cost_usd: float) -> None:
+    """Update only the per-turn tally — does NOT call the sink.
+    Engine uses this for the main LLM stream's usage, where the sink
+    isn't the right path (the engine writes to session + ledger
+    directly there)."""
+    tally = _turn_usage.get()
+    if tally is None:
+        return
+    tally["tokens_in"] = int(tally.get("tokens_in", 0)) + int(input_tokens)
+    tally["tokens_out"] = int(tally.get("tokens_out", 0)) + int(output_tokens)
+    tally["usd"] = float(tally.get("usd", 0.0)) + float(cost_usd)
 
 
 def emit_state(label: str, *, error: bool = False) -> None:

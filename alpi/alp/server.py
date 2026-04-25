@@ -111,16 +111,29 @@ class Server:
         sock.chmod(0o600)
         log.info("alp server listening on %s", sock)
         if self._tcp_port is not None:
-            self._tcp_server = await asyncio.start_server(
-                self._handle_tcp_connection,
-                host=self._tcp_host,
-                port=self._tcp_port,
-            )
-            log.info(
-                "alp tcp listening on %s:%d (Noise_XK)",
-                self._tcp_host,
-                self._tcp_port,
-            )
+            try:
+                self._tcp_server = await asyncio.start_server(
+                    self._handle_tcp_connection,
+                    host=self._tcp_host,
+                    port=self._tcp_port,
+                )
+                log.info(
+                    "alp tcp listening on %s:%d (Noise_XK)",
+                    self._tcp_host,
+                    self._tcp_port,
+                )
+            except OSError as e:
+                # TCP bind failed (Tailscale/VPN down, port in use, IP not
+                # local). The Unix socket still works for intra-machine
+                # peers, so we degrade gracefully instead of taking the
+                # whole listener down. Inter-machine peers won't reach us
+                # until the operator fixes the network.
+                log.warning(
+                    "alp tcp bind failed on %s:%d (%s) — "
+                    "running unix-socket-only",
+                    self._tcp_host, self._tcp_port, e,
+                )
+                self._tcp_server = None
 
     async def stop(self) -> None:
         for s in (self._server, self._tcp_server):

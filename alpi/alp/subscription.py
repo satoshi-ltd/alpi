@@ -41,6 +41,10 @@ class SealedKey:
     sealed: str            # base64 ECIES blob (open with our Ed25519 priv)
 
 
+RECENT_POSTS_CACHE = 20  # last N posts cached locally for engine context
+DISPATCH_COOLDOWN_SECONDS = 60  # min gap between auto-dispatches per workgroup
+
+
 @dataclass
 class Subscription:
     """One workgroup we are a remote member of (we are NOT the hub)."""
@@ -51,6 +55,31 @@ class Subscription:
     sealed_keys: list[SealedKey] = field(default_factory=list)
     last_seq: int = 0      # cursor for pull(since=…)
     joined_at: str = ""
+    # Hub-side metadata cached locally so the engine pre-turn hook
+    # gives the member's agent the same anchor (briefing) the hub's
+    # own agent sees. Refreshed on every successful ``workgroup.join``.
+    briefing: str = ""
+    # Highest post seq we've already responded to. Bumped after each
+    # successful turn dispatch. Decouples "did I respond yet?" from
+    # the pull cursor — so a tick that pulls a new post but skips on
+    # cooldown doesn't lose the trigger; the next tick re-evaluates
+    # against the cache and dispatches when the cooldown expires.
+    last_responded_seq: int = 0
+    # Roster snapshot from the hub — pubkey → last_seen_at iso. The
+    # hub stamps a fresh ``last_seen_at`` on every member's pull or
+    # post and returns the whole list on join + pull, so we always
+    # have a recent passive liveness signal without extra probing.
+    roster: dict[str, str] = field(default_factory=dict)
+    # Cooldown — populated by the workgroup poller after dispatching
+    # an autonomous turn. Stops the same workgroup triggering another
+    # spawn within ``DISPATCH_COOLDOWN_SECONDS`` and helps catch
+    # feedback loops between two alpis ping-ponging.
+    last_dispatch_at: str = ""
+    # Last RECENT_POSTS_CACHE decrypted posts, kept here so the engine
+    # pre-turn hook reads context cheaply (no extra network call) and
+    # the workgroup poller can compare to detect new content. Each
+    # entry is ``{seq, ts, from, text, key_version}``.
+    recent_posts: list[dict] = field(default_factory=list)
 
     def latest_version(self) -> int:
         if not self.sealed_keys:
@@ -71,6 +100,18 @@ class Subscription:
                 self.sealed_keys[i] = SealedKey(version=version, sealed=sealed)
                 return
         self.sealed_keys.append(SealedKey(version=version, sealed=sealed))
+
+    def append_recent(self, posts: list[dict]) -> None:
+        """Add freshly-decrypted posts to the cache, dedupe by seq, trim
+        to the most recent ``RECENT_POSTS_CACHE`` entries. Posts must
+        carry at least ``seq`` and ``text``."""
+        if not posts:
+            return
+        merged: dict[int, dict] = {int(p["seq"]): p for p in self.recent_posts}
+        for p in posts:
+            merged[int(p["seq"])] = p
+        ordered = sorted(merged.values(), key=lambda x: int(x["seq"]))
+        self.recent_posts = ordered[-RECENT_POSTS_CACHE:]
 
 
 def path(home: Path) -> Path:
@@ -99,6 +140,10 @@ def load(home: Path) -> list[Subscription]:
                 hub_pubkey=str(entry["hub_pubkey"]),
                 last_seq=int(entry.get("last_seq", 0)),
                 joined_at=str(entry.get("joined_at") or ""),
+                last_dispatch_at=str(entry.get("last_dispatch_at") or ""),
+                briefing=str(entry.get("briefing") or ""),
+                last_responded_seq=int(entry.get("last_responded_seq", 0)),
+                roster=dict(entry.get("roster") or {}),
             )
         except KeyError:
             continue
@@ -112,6 +157,12 @@ def load(home: Path) -> list[Subscription]:
                 ))
             except (KeyError, TypeError, ValueError):
                 continue
+        for p in entry.get("recent_posts") or []:
+            if not isinstance(p, dict):
+                continue
+            if "seq" not in p or "text" not in p:
+                continue
+            sub.recent_posts.append(dict(p))
         out.append(sub)
     return out
 
@@ -131,6 +182,16 @@ def save(home: Path, subs: list[Subscription]) -> None:
         }
         if s.joined_at:
             entry["joined_at"] = s.joined_at
+        if s.last_dispatch_at:
+            entry["last_dispatch_at"] = s.last_dispatch_at
+        if s.briefing:
+            entry["briefing"] = s.briefing
+        if s.last_responded_seq:
+            entry["last_responded_seq"] = s.last_responded_seq
+        if s.roster:
+            entry["roster"] = s.roster
+        if s.recent_posts:
+            entry["recent_posts"] = s.recent_posts
         data.append(entry)
     p.write_text(yaml.safe_dump(data, sort_keys=False))
     try:

@@ -220,15 +220,20 @@ def test_enabled_subsystems_defaults_all_on_when_section_missing(
 ) -> None:
     (tmp_home / "config.yaml").write_text("model: x\n")
     on = service.enabled_subsystems(tmp_home)
-    assert on == {"gateway": True, "schedule": True, "alp": True}
+    assert on == {
+        "gateway": True, "schedule": True, "alp": True, "workgroups": True,
+    }
 
 
 def test_enabled_subsystems_honours_explicit_toggles(tmp_home: Path) -> None:
     (tmp_home / "config.yaml").write_text(
-        "model: x\nservice:\n  gateway: false\n  schedule: true\n  alp: false\n",
+        "model: x\nservice:\n  gateway: false\n  schedule: true\n"
+        "  alp: false\n  workgroups: false\n",
     )
     on = service.enabled_subsystems(tmp_home)
-    assert on == {"gateway": False, "schedule": True, "alp": False}
+    assert on == {
+        "gateway": False, "schedule": True, "alp": False, "workgroups": False,
+    }
 
 
 def test_running_pid_clears_stale_pid_file(tmp_home: Path) -> None:
@@ -254,7 +259,7 @@ def test_status_reports_subsystems_and_running_state(tmp_home: Path) -> None:
     assert info["profile"] == "alice"
     assert info["running"] is False
     assert info["subsystems"] == {
-        "gateway": True, "schedule": True, "alp": True,
+        "gateway": True, "schedule": True, "alp": True, "workgroups": True,
     }
 
 

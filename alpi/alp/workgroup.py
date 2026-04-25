@@ -163,6 +163,12 @@ class Member:
     key_version: int = 1   # bumps every rekey; matches Meta.current_key_version
     joined: bool = False   # flips True on first successful workgroup.join
     joined_at: str = ""    # ISO-8601, set when ``joined`` flips
+    # PR 5: passive liveness signal. Hub stamps this on every
+    # ``workgroup.pull`` / ``workgroup.post`` from this member, so the
+    # roster carries an implicit "online" indicator without any extra
+    # probe traffic. Members get the snapshot on ``join`` / ``pull``
+    # and surface it in the engine context block.
+    last_seen_at: str = ""
 
 
 @dataclass
@@ -182,6 +188,19 @@ class Meta:
     paused: bool = False
     paused_at: str = ""        # ISO-8601, set when paused flips True
     paused_by: str = ""        # Ed25519 pubkey of the member who paused
+    # PR 5: human-readable description of the workgroup's purpose,
+    # injected into every member agent's system prompt as the
+    # workgroup's stable anchor. Plaintext on the hub — it's metadata
+    # about *why this workgroup exists*, not the conversation content.
+    briefing: str = ""
+    # PR 5: when True, member engines start engaging with the
+    # briefing as soon as their next turn fires after create — no
+    # waiting for a first human prompt.
+    auto_kickoff: bool = True
+    # PR 5: where to push a notification when ``#done`` lands in the
+    # transcript. ``"none"`` (default) silences the push; ``"telegram"``
+    # uses the user's configured Telegram gateway DM.
+    notify_on_close: str = "none"
 
 
 @dataclass
@@ -230,6 +249,9 @@ def _load_meta(d: Path) -> Meta | None:
             paused=bool(raw.get("paused", False)),
             paused_at=str(raw.get("paused_at") or ""),
             paused_by=str(raw.get("paused_by") or ""),
+            briefing=str(raw.get("briefing") or ""),
+            auto_kickoff=bool(raw.get("auto_kickoff", True)),
+            notify_on_close=str(raw.get("notify_on_close") or "none"),
         )
     except KeyError:
         return None
@@ -252,6 +274,13 @@ def _save_meta(d: Path, meta: Meta) -> None:
             payload["paused_at"] = meta.paused_at
         if meta.paused_by:
             payload["paused_by"] = meta.paused_by
+    # PR 5 metadata — only persisted when non-default.
+    if meta.briefing:
+        payload["briefing"] = meta.briefing
+    if not meta.auto_kickoff:  # default True; persist only the override
+        payload["auto_kickoff"] = False
+    if meta.notify_on_close and meta.notify_on_close != "none":
+        payload["notify_on_close"] = meta.notify_on_close
     (d / _META).write_text(yaml.safe_dump(payload, sort_keys=False))
 
 
@@ -274,6 +303,7 @@ def _load_members(d: Path) -> list[Member]:
             key_version=int(entry.get("key_version", 1)),
             joined=bool(entry.get("joined", False)),
             joined_at=str(entry.get("joined_at") or ""),
+            last_seen_at=str(entry.get("last_seen_at") or ""),
         ))
     return out
 
@@ -291,6 +321,8 @@ def _save_members(d: Path, members: list[Member]) -> None:
             entry["joined"] = True
             if m.joined_at:
                 entry["joined_at"] = m.joined_at
+        if m.last_seen_at:
+            entry["last_seen_at"] = m.last_seen_at
         data.append(entry)
     (d / _MEMBERS).write_text(yaml.safe_dump(data, sort_keys=False))
 
@@ -327,6 +359,9 @@ def create(
     hub_kp: Keypair,
     member_pubkeys: list[str],
     budget: dict[str, Any] | None = None,
+    briefing: str = "",
+    auto_kickoff: bool = True,
+    notify_on_close: str = "none",
 ) -> Workgroup:
     """Create a workgroup on this profile (we are the hub).
 
@@ -374,6 +409,9 @@ def create(
         created_at=_utcnow(),
         current_key_version=1,
         budget=budget,
+        briefing=(briefing or "").strip(),
+        auto_kickoff=bool(auto_kickoff),
+        notify_on_close=str(notify_on_close or "none"),
     )
     _save_meta(d, meta)
 
@@ -592,17 +630,23 @@ def register(server: alp_server.Server, home: Path) -> None:
         member = wg.member(peer.pubkey)
         if member is None:
             raise alp_server.HandlerError(-32008, "workgroup-not-member")
+        now = _utcnow()
+        member.last_seen_at = now
         if not member.joined:
             member.joined = True
-            member.joined_at = _utcnow()
-            _save_members(_wg_dir(home, wg_id), wg.members)
+            member.joined_at = now
+        _save_members(_wg_dir(home, wg_id), wg.members)
         return {
             "workgroup_id": wg.meta.id,
             "name": wg.meta.name,
+            "briefing": wg.meta.briefing,
             "sealed_key": member.sealed_key,
             "key_version": member.key_version,
             "current_key_version": wg.meta.current_key_version,
-            "members": [m.pubkey for m in wg.members],
+            "members": [
+                {"pubkey": m.pubkey, "last_seen_at": m.last_seen_at}
+                for m in wg.members
+            ],
         }
 
     async def workgroup_post(
@@ -665,6 +709,12 @@ def register(server: alp_server.Server, home: Path) -> None:
         ledger["posts"] = int(ledger.get("posts", 0)) + 1
         _save_ledger(d, ledger)
 
+        # Liveness — posting is activity, stamp it.
+        member = wg.member(peer.pubkey)
+        if member is not None:
+            member.last_seen_at = entry["ts"]
+            _save_members(d, wg.members)
+
         return {"seq": seq, "ts": entry["ts"]}
 
     async def workgroup_pull(
@@ -689,6 +739,11 @@ def register(server: alp_server.Server, home: Path) -> None:
         member = wg.member(peer.pubkey)
         if member is None:
             raise alp_server.HandlerError(-32008, "workgroup-not-member")
+        # Liveness signal — every pull stamps the caller as "just seen"
+        # so the hub maintains an implicit online roster without any
+        # extra probe traffic.
+        member.last_seen_at = _utcnow()
+        _save_members(_wg_dir(home, wg_id), wg.members)
         all_posts = _read_transcript(_wg_dir(home, wg_id))
         fresh = [p for p in all_posts if int(p.get("seq", 0)) > since]
         return {
@@ -702,6 +757,12 @@ def register(server: alp_server.Server, home: Path) -> None:
             # version in their local map.
             "current_key_version": wg.meta.current_key_version,
             "sealed_key": member.sealed_key,
+            # Refreshed roster snapshot — members pick this up to
+            # display "@bob (last seen 8m ago)" in the engine context.
+            "members": [
+                {"pubkey": m.pubkey, "last_seen_at": m.last_seen_at}
+                for m in wg.members
+            ],
         }
 
     async def workgroup_leave(

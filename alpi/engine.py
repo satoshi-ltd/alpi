@@ -154,6 +154,26 @@ class Engine:
         turn_tools: list[ToolLog] = []
         final_assistant = ""
 
+        # ALP.3 PR 5 — workgroup context (briefing, active task, recent
+        # posts, mentions of self) injected as a transient system
+        # message just before the user input. Read from on-disk caches
+        # populated by the workgroup poller — no network in the hot
+        # path. Silent no-op when the profile has no workgroups.
+        try:
+            from alpi.alp import agent_context as _wg_ctx
+            wg_block = _wg_ctx.build(self.home)
+        except Exception:  # noqa: BLE001
+            wg_block = None
+        if wg_block:
+            self.session.messages.append({"role": "system", "content": wg_block})
+
+        # ALP.3 PR 5 — workgroup_post and friends read this turn's
+        # accumulated cost via ``_state.get_turn_usage`` to declare
+        # spend honestly when posting to a workgroup. Reset every turn
+        # so tools see only THIS turn's spend, not the session total.
+        from alpi.tools import _state as _wg_state
+        _wg_state.reset_turn_usage()
+
         self.session.messages.append({"role": "user", "content": user_text})
         emit(AgentEvent(kind="user", text=user_text))
 
@@ -207,6 +227,12 @@ class Engine:
                     input_tokens=final.get("input_tokens", 0),
                     output_tokens=final.get("output_tokens", 0),
                     cost=final.get("cost_usd", 0.0),
+                )
+                from alpi.tools import _state as _wg_state
+                _wg_state.bump_turn_usage(
+                    int(final.get("input_tokens", 0)),
+                    int(final.get("output_tokens", 0)),
+                    float(final.get("cost_usd", 0.0)),
                 )
                 from alpi import ledger as _ledger
                 _ledger.record(

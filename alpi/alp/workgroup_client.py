@@ -104,9 +104,31 @@ async def join(home: Path, peer_id: str, wg_id: str) -> sub_mod.Subscription:
         )
     if not sub.name:
         sub.name = str(result.get("name") or "")
+    # Briefing is plaintext metadata on the hub — refresh on every
+    # successful join so the member's agent sees the same anchor the
+    # hub publishes.
+    sub.briefing = str(result.get("briefing") or "")
     sub.upsert_key(int(result.get("key_version", 1)), str(result["sealed_key"]))
+    _absorb_roster(sub, result.get("members"))
     sub_mod.upsert(home, sub)
     return sub
+
+
+def _absorb_roster(sub: sub_mod.Subscription, raw) -> None:
+    """Hub returns ``members`` as a list of either bare pubkey strings
+    (legacy shape from PR 1-4) or ``{pubkey, last_seen_at}`` dicts
+    (PR 5+). Normalise both into ``sub.roster: {pubkey: last_seen_at}``
+    so the engine context block always has a stable map."""
+    if not raw:
+        return
+    out: dict[str, str] = {}
+    for entry in raw:
+        if isinstance(entry, dict) and "pubkey" in entry:
+            out[str(entry["pubkey"])] = str(entry.get("last_seen_at") or "")
+        elif isinstance(entry, str):
+            out[entry] = ""
+    if out:
+        sub.roster = out
 
 
 async def post(
@@ -115,8 +137,21 @@ async def post(
 ) -> dict[str, Any]:
     """Encrypt ``text`` under the latest known group key and send to
     the hub. ``cost`` is the optional ``{usd, tokens}`` declaration
-    used for the workgroup's lifetime budget gate."""
+    used for the workgroup's lifetime budget gate.
+
+    Works for both roles: if this profile is a remote member it
+    encrypts and dials the hub via ALP; if this profile is the hub
+    of the workgroup, it writes directly to its own transcript +
+    ledger (no network roundtrip)."""
     kp = load_or_generate(home)
+
+    # Hub path — short-circuits the network. Hub holds the canonical
+    # transcript, so posting locally is correct and avoids the loopback
+    # over our own ALP socket.
+    wg = wg_mod.load(home, wg_id)
+    if wg is not None and wg.meta.hub_pubkey == kp.pubkey_b64():
+        return _post_as_hub(home, wg, kp, text, cost)
+
     sub = sub_mod.get(home, wg_id)
     if sub is None:
         raise ValueError(
@@ -137,6 +172,63 @@ async def post(
     if cost:
         params["cost"] = cost
     return await _call(home, kp, sub.hub_id, "workgroup.post", params)
+
+
+def _post_as_hub(
+    home: Path, wg, kp: Keypair, text: bytes,
+    cost: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Write a post directly into the local transcript when this
+    profile is the hub. Mirrors what the ``workgroup.post`` server
+    handler would do over the wire — same budget gate, same ledger
+    update, same paused / membership checks. Returns the same shape
+    (``{seq, ts}``) the wire path produces."""
+    import datetime as _dt
+    import json
+    from alpi.alp.workgroup import (
+        _append_transcript, _gate_post, _load_ledger, _save_ledger,
+        _read_transcript, _wg_dir,
+    )
+
+    own = wg.member(kp.pubkey_b64())
+    if own is None:
+        raise ValueError("hub is not a member of its own workgroup")
+    if wg.meta.paused:
+        raise ValueError("workgroup is paused")
+
+    cost_dict = dict(cost) if cost else {}
+    d = _wg_dir(home, wg.meta.id)
+    ledger = _load_ledger(d)
+
+    # _gate_post raises HandlerError on breach, which carries an
+    # alpi.alp.server.RemoteError-shaped code. Translate to ValueError
+    # here so the calling tool surfaces a clean error string.
+    try:
+        _gate_post(wg.meta, ledger, cost_dict)
+    except Exception as e:  # noqa: BLE001
+        raise ValueError(str(e)) from e
+
+    group_key = wg_mod.open_sealed_group_key(own.sealed_key, kp)
+    nonce, ct = wg_mod.encrypt_post(group_key, text)
+
+    existing = _read_transcript(d)
+    seq = (existing[-1]["seq"] + 1) if existing else 1
+    ts = _dt.datetime.now(tz=_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    entry: dict[str, Any] = {
+        "seq": seq, "ts": ts, "from": kp.pubkey_b64(),
+        "key_version": own.key_version, "nonce": nonce, "ciphertext": ct,
+    }
+    declared_usd = float(cost_dict.get("usd", 0.0)) if cost_dict else 0.0
+    declared_tokens = int(cost_dict.get("tokens", 0)) if cost_dict else 0
+    if declared_usd or declared_tokens:
+        entry["cost"] = {"usd": declared_usd, "tokens": declared_tokens}
+    _append_transcript(d, entry)
+
+    ledger["usd"] = float(ledger.get("usd", 0.0)) + declared_usd
+    ledger["tokens"] = int(ledger.get("tokens", 0)) + declared_tokens
+    ledger["posts"] = int(ledger.get("posts", 0)) + 1
+    _save_ledger(d, ledger)
+    return {"seq": seq, "ts": ts}
 
 
 async def pull(
@@ -173,6 +265,12 @@ async def pull(
     head = int(raw.get("head", cursor))
     if head > sub.last_seq:
         sub.last_seq = head
+    # Cache the freshly-decrypted posts so the engine pre-turn hook can
+    # build the system-prompt block without an extra network roundtrip.
+    sub.append_recent(decrypted)
+    # Refresh the liveness roster from the hub's response (hub stamps
+    # last_seen_at on every member's pull / post).
+    _absorb_roster(sub, raw.get("members"))
     sub_mod.upsert(home, sub)
     return decrypted, head
 
