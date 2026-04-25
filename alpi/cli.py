@@ -6,6 +6,7 @@ import os
 import sys
 from importlib import resources
 from pathlib import Path
+from typing import Any
 
 import click
 
@@ -204,12 +205,15 @@ def _run_once(
         sys.stdout.flush()
 
     def sink(ev: AgentEvent) -> None:
-        if emit_events:
+        # Errors go to the reply (so gateway users see them) instead of
+        # the event stream — emitting both duplicates the message when
+        # the gateway runs with show_tool_trace.
+        if emit_events and ev.kind != "error":
             _emit_event_line(ev)
         if ev.kind == "assistant_done" and ev.text.strip():
             parts.append(ev.text)
-        elif ev.kind == "error" and not emit_events:
-            parts.append(f"[error] {ev.text}")
+        elif ev.kind == "error":
+            parts.append(ev.text if emit_events else f"[error] {ev.text}")
 
     engine.run_turn(user_text, emit=sink)
     try:
@@ -702,6 +706,7 @@ def setup_cmd(ctx: click.Context) -> None:
             ("Peers", "peers", _peers_status(h)),
             None,
             ("Workspace", "workspace", _workspace_status(cfg)),
+            ("Budget", "budget", _budget_status(cfg)),
             ("Sandbox", "sandbox", _sandbox_status(cfg)),
             ("Gateway service", "gateway-service", _gateway_service_status(h)),
             ("Schedule service", "schedule-service", _schedule_service_status(h)),
@@ -740,6 +745,8 @@ def setup_cmd(ctx: click.Context) -> None:
             from alpi.mcp.setup import run as mcp_setup_run
 
             mcp_setup_run(h)
+        elif choice == "budget":
+            _budget_setup(h)
         elif choice == "sandbox":
             _sandbox_setup(h)
         elif choice == "voice":
@@ -1130,6 +1137,93 @@ def _sandbox_status(cfg: config.Config) -> str:
         return "off"
     net = "network on" if term.allow_network else "network off"
     return f"on · {net}"
+
+
+def _budget_status(cfg: config.Config) -> str:
+    b = cfg.budget or {}
+    usd = b.get("daily_usd")
+    tokens = b.get("daily_tokens")
+    if isinstance(usd, (int, float)) and usd > 0:
+        return f"${float(usd):.2f}/day"
+    if isinstance(tokens, int) and tokens > 0:
+        return f"{tokens:,} tokens/day"
+    return "unlimited"
+
+
+def _budget_setup(h: Path) -> None:
+    from alpi import ui
+
+    cfg = config.load(h)
+    b = dict(cfg.budget or {})
+    current_usd = b.get("daily_usd") or ""
+    current_tokens = b.get("daily_tokens") or ""
+
+    ui.banner(
+        ui.crumb("setup", "budget"),
+        subtitle="daily spend cap for this profile",
+        home=h,
+    )
+    ui.dim(
+        "Paid models → set a USD cap. Local / free models → set a token\n"
+        "cap. Leave both empty for no ceiling. The cap covers everything\n"
+        "this profile spends: interactive turns, gateway replies,\n"
+        "scheduled jobs, sub-agents, and inbound ALP calls from peers.\n"
+        "Counters reset at UTC midnight."
+    )
+    ui._console.print("")
+
+    usd_s = ui.text(
+        f"Daily USD cap (empty to skip) [{current_usd}]:",
+        default=str(current_usd),
+    )
+    if usd_s is None:
+        return ui.cancelled()
+    usd_s = (usd_s or "").strip()
+
+    tokens_s = ui.text(
+        f"Daily token cap (empty to skip) [{current_tokens}]:",
+        default=str(current_tokens),
+    )
+    if tokens_s is None:
+        return ui.cancelled()
+    tokens_s = (tokens_s or "").strip()
+
+    new_budget: dict[str, Any] = {}
+    if usd_s:
+        try:
+            v = float(usd_s)
+        except ValueError:
+            ui.fail_and_wait(f"not a number: {usd_s!r}")
+            return
+        if v <= 0:
+            ui.fail_and_wait("USD cap must be > 0")
+            return
+        new_budget["daily_usd"] = v
+
+    if tokens_s:
+        try:
+            v_int = int(tokens_s)
+        except ValueError:
+            ui.fail_and_wait(f"not an integer: {tokens_s!r}")
+            return
+        if v_int <= 0:
+            ui.fail_and_wait("token cap must be > 0")
+            return
+        new_budget["daily_tokens"] = v_int
+
+    cfg.budget = new_budget
+    config.save(cfg)
+    if not new_budget:
+        ui.ok_and_wait("budget cleared — unlimited")
+    elif "daily_usd" in new_budget and "daily_tokens" in new_budget:
+        ui.ok_and_wait(
+            f"cap: ${new_budget['daily_usd']:.2f}/day · "
+            f"{new_budget['daily_tokens']:,} tokens/day"
+        )
+    elif "daily_usd" in new_budget:
+        ui.ok_and_wait(f"cap: ${new_budget['daily_usd']:.2f}/day")
+    else:
+        ui.ok_and_wait(f"cap: {new_budget['daily_tokens']:,} tokens/day")
 
 
 def _workspace_status(cfg: config.Config) -> str:

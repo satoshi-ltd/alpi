@@ -165,10 +165,15 @@ observability, the signals to watch:
 - **Log tail error rate.** `grep ERROR ~/.alpi/logs/*.log | wc -l`
   over a window — spike = misconfig, broken credentials, LLM API
   outage.
-- **Cost ceiling.** `jq '.cost_usd' ~/.alpi/sessions/*.json` sums
-  the spend per profile. Bound this in a cron job and alert if a
-  threshold is crossed. ALP.2 enforces peer-traffic budgets inside
-  alpi; external alerting still catches provider-side drift.
+- **Cost ceiling.** Set `budget.daily_usd` (paid models) or
+  `budget.daily_tokens` (local) in the profile's `config.yaml` —
+  see [CONFIG.md → Budget](CONFIG.md#budget). The ledger at
+  `~/.alpi/<profile>/logs/ledger.json` is the in-process gate;
+  every interactive turn, gateway reply, scheduled job, sub-agent
+  spawn, and inbound ALP call admits against it before running and
+  records its actual spend after. For external alerting that
+  catches provider-side drift, `jq '.cost_usd' ~/.alpi/sessions/*.json`
+  still sums historical session spend.
 - **`approval.log` triggers.** Any line with a
   `caution always-approved` entry means the allowlist grew — a
   new command pattern is now auto-permitted for this profile. Put

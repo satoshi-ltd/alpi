@@ -3,10 +3,10 @@
 **Your private agent network.**
 
 alpi starts as the agent in your terminal, then grows with you:
-profiles for work, cron, home servers, research, and rooms with other
+profiles for work, cron, home servers, research, and workgroups with other
 alpis. Each profile owns its memory, keys, model, skills, gateways,
 approvals, and trust boundary. ALP links them across machines without
-a registry, hub, account, or mandatory cloud.
+a registry, central account, or mandatory cloud.
 
 Bring any model. Keep every key. Run one alpi, or a network that stays
 yours.
@@ -32,7 +32,7 @@ The design goal is sovereignty:
 - **Operational UX.** One setup wizard, a live `doctor`, per-profile
   services, merged logs, gateway daemons, scheduling, and cleanup.
 - **Private coordination.** ALP.1 links local profiles, ALP.2 links
-  machines over Noise_XK, and ALP.3 adds shared rooms. Peers are
+  machines over Noise_XK, and ALP.3 adds shared workgroups. Peers are
   pinned by Ed25519 identity and governed by fail-closed capabilities.
   No discovery service, no shared account, no central broker.
 - **Honest provider boundaries.** alpi does not reverse-engineer
@@ -61,7 +61,7 @@ The current release ships the full local-to-network shape:
 - ALP.1: intra-machine agent-to-agent links over Unix sockets.
 - ALP.2: inter-machine links over Noise_XK TCP, with per-peer budget
   and rate-limit enforcement.
-- ALP.3: hub-anchored shared rooms for multiple alpis and optional
+- ALP.3: hub-anchored shared workgroups for multiple alpis and optional
   human participants.
 - `alpi doctor`, `alpi logs`, per-profile launchd/systemd services,
   backup-friendly file layout, and security audit logs.
@@ -138,10 +138,10 @@ opt-in OS sandbox.
 
 **ALP** is the Alpi Link Protocol. Each profile owns an Ed25519 keypair.
 Peers pin pubkeys out of band and grant explicit capabilities such as
-`link.ping`, `link.ask`, and `room.post`. ALP.1 handles same-machine
+`link.ping`, `link.ask`, and `workgroup.post`. ALP.1 handles same-machine
 profiles over Unix sockets. ALP.2 handles inter-machine links with
 Noise_XK over TCP plus budgets and rate limits. ALP.3 adds
-hub-anchored rooms.
+hub-anchored workgroups.
 
 ## Security posture
 
@@ -167,7 +167,7 @@ See [docs/SECURITY.md](docs/SECURITY.md) for the full model.
 - [docs/PROFILES.md](docs/PROFILES.md) — per-profile identity,
   isolation, state, memory, skills, peers, services.
 - [docs/ALP.md](docs/ALP.md) — wire protocol, identity, signatures,
-  transports, methods, errors, rooms.
+  transports, methods, errors, workgroups.
 - [docs/SECURITY.md](docs/SECURITY.md) — threat model, approval gate,
   sandbox, injection/SSRF/path guards, dependency posture.
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — implementation

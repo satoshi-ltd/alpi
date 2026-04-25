@@ -135,6 +135,14 @@ class Engine:
             self._run_turn_locked(user_text, emit)
 
     def _run_turn_locked(self, user_text: str, emit: EventSink) -> None:
+        from alpi import ledger
+
+        try:
+            ledger.check(self.home, self.cfg.budget)
+        except ledger.BudgetExceeded as e:
+            emit(AgentEvent(kind="error", text=str(e)))
+            return
+
         # Fresh run: clear any lingering interrupt request from the previous
         # turn before we start consuming input.
         self.interrupt_requested = False
@@ -200,6 +208,13 @@ class Engine:
                     output_tokens=final.get("output_tokens", 0),
                     cost=final.get("cost_usd", 0.0),
                 )
+                from alpi import ledger as _ledger
+                _ledger.record(
+                    self.home,
+                    usd=float(final.get("cost_usd", 0.0)),
+                    tokens=int(final.get("input_tokens", 0))
+                          + int(final.get("output_tokens", 0)),
+                )
                 self.session.last_ctx_tokens = int(final.get("input_tokens", 0))
                 emit(AgentEvent(
                     kind="usage",
@@ -235,6 +250,11 @@ class Engine:
                 def _absorb_usage(in_tok: int, out_tok: int, cost: float) -> None:
                     self.session.record(
                         input_tokens=in_tok, output_tokens=out_tok, cost=cost,
+                    )
+                    from alpi import ledger as _ledger
+                    _ledger.record(
+                        self.home, usd=float(cost),
+                        tokens=int(in_tok) + int(out_tok),
                     )
                     emit(AgentEvent(
                         kind="usage", tokens_in=in_tok, tokens_out=out_tok,

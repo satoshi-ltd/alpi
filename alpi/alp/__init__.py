@@ -3,8 +3,7 @@
 Reference implementation of the ALP specification (see
 ``docs/ALP.md``). Covers agent-to-agent communication between alpi
 instances: intra-profile on the same machine over a Unix-domain
-socket (this package, v0.3), inter-machine over Noise_XK-on-TCP
-(v0.4), and shared rooms (v0.4+).
+socket, inter-machine over Noise_XK-on-TCP, and shared workgroups.
 """
 
 from __future__ import annotations

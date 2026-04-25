@@ -42,6 +42,7 @@ Everything that represents state, identity, or cost:
 | `alp/` (peers.yaml, socket, keypair) | ✓ | ALP identity + pinned peers. Two profiles on the same machine are two distinct peers. |
 | `schedule/jobs.json` | ✓ | Cron + one-shot jobs. |
 | `logs/` | ✓ | `gateway.log`, `schedule.log`, `alp.log`, `agent.log`, `approval.log`. |
+| `logs/ledger.json` | ✓ | Daily spending ledger — the profile's USD / token cap is enforced from here across every turn (interactive, gateway, scheduled, sub-agent, inbound ALP). Resets at UTC midnight. |
 | `cache/` (tts, stt, inbound voice) | ✓ | Audio cache. |
 
 Not isolated (shared globally by design):
@@ -104,7 +105,10 @@ Create a new profile when:
 
 - **Different cost / compliance boundary.** Work charges tokens to
   the company API key; personal pays out of pocket. Per-profile
-  `.env` + `config.yaml` prevents mixing.
+  `.env` + `config.yaml` prevents mixing, and a per-profile
+  `budget.daily_usd` (or `daily_tokens` for local models) caps the
+  spend independently — the work profile can be aggressive while
+  the personal one runs on a $1/day leash.
 - **Different memory.** You don't want work context (calendar,
   colleagues, ongoing projects) bleeding into a personal chat
   about weekend plans. MEMORY.md is profile-scoped.

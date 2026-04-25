@@ -341,7 +341,7 @@
       your private <span class="slash">/</span><br/>agent network.
     </h1>
     <p class="lead">
-      alpi starts as the agent in your terminal. Then it grows with you: one profile for work, one for cron, one on your home server, one for research, one in a room with other alpis. Each profile has its own memory, keys, model, skills, gateways, approvals, and trust boundary. ALP links them across machines without a registry, hub, account, or mandatory cloud. <em>Bring any model. Keep every key. Run one alpi, or a network that stays yours.</em>
+      alpi starts as the agent in your terminal. Then it grows with you: one profile for work, one for cron, one on your home server, one for research, one in a workgroup with other alpis. Each profile has its own memory, keys, model, skills, gateways, approvals, and trust boundary. ALP links them across machines without a registry, central account, or mandatory cloud. <em>Bring any model. Keep every key. Run one alpi, or a network that stays yours.</em>
     </p>
     <div class="cta-row">
       <a class="btn btn-primary" href="#install">$ uv tool install alpi <span class="arr">→</span></a>
@@ -367,7 +367,7 @@
     <div class="eyebrow">01 / what alpi is</div>
     <h2>The unit is not a chat. It is a profile.</h2>
     <p class="sub">
-      A profile can be personal, work, cron, research, or a home-server peer. It owns identity, memory, model, tools, gateways, schedules, logs, approvals, and ALP capabilities. That is how alpi does daily-agent work without losing the shape needed for private multi-machine and shared-room setups.
+      A profile can be personal, work, cron, research, or a home-server peer. It owns identity, memory, model, tools, gateways, schedules, logs, approvals, and ALP capabilities. That is how alpi does daily-agent work without losing the shape needed for private multi-machine and shared-workgroup setups.
     </p>
 
     <div class="grid c3">
@@ -398,13 +398,13 @@
       <div class="cell">
         <span class="n">// alp</span>
         <h3>Peers, not a platform.</h3>
-        <p>ALP.1 links local profiles, ALP.2 links machines over Noise_XK, and ALP.3 adds hub-anchored rooms. No registry, no discovery layer, no central service deciding who your agents trust.</p>
+        <p>ALP.1 links local profiles, ALP.2 links machines over Noise_XK, and ALP.3 adds hub-anchored workgroups. No registry, no discovery layer, no central service deciding who your agents trust.</p>
         <span class="tag">peer-to-peer</span>
       </div>
       <div class="cell">
         <span class="n">// operations</span>
         <h3>Small surface. Real upkeep.</h3>
-        <p>One setup wizard, live doctor checks, launchd/systemd services, merged logs, approval audit, schedule daemon, and gateway daemon.</p>
+        <p>One setup wizard, live doctor checks, launchd/systemd services, merged logs, approval audit, schedule daemon, and gateway daemon. Per-profile daily spend cap (USD or tokens) keeps a runaway agent from quietly burning your API budget.</p>
         <span class="tag">day-2 ready</span>
       </div>
     </div>
@@ -417,7 +417,7 @@
     <div class="eyebrow">02 / quickstart</div>
     <h2>Ten minutes, end to end.</h2>
     <p class="sub">
-      Install. Pick a model. Pin a workspace. Send a message. Connect a gateway if you want 24/7 messaging. Add a profile if you want isolation. Link machines or rooms over ALP when you want a private network. All of it lives behind <span class="mono" style="color:var(--fg)">alpi setup</span>.
+      Install. Pick a model. Pin a workspace. Send a message. Connect a gateway if you want 24/7 messaging. Add a profile if you want isolation. Link machines or workgroups over ALP when you want a private network. All of it lives behind <span class="mono" style="color:var(--fg)">alpi setup</span>.
     </p>
 
     <div class="grid c3" style="margin-top:64px">
@@ -459,7 +459,7 @@
       <div class="cell">
         <span class="n">step · 08</span>
         <h3>Link another alpi.</h3>
-        <p><span class="mono" style="color:var(--fg)">alpi setup → ALP service → Install</span> then <span class="mono" style="color:var(--fg)">→ Peers</span> to exchange pubkeys. Use ALP.2 for machine links and ALP.3 rooms when several alpis need a shared workspace.</p>
+        <p><span class="mono" style="color:var(--fg)">alpi setup → ALP service → Install</span> then <span class="mono" style="color:var(--fg)">→ Peers</span> to exchange pubkeys. Use ALP.2 for machine links and ALP.3 workgroups when several alpis need a shared workspace.</p>
       </div>
       <div class="cell">
         <span class="n">step · 09</span>
@@ -561,7 +561,7 @@
       <div class="cell" style="padding:36px">
         <span class="n">topology · 05</span>
         <h3>Family / small team.</h3>
-        <p>One profile per human, plus a home-server hub. ALP.3 rooms: the hub holds the group key + transcript, members post via <span class="mono" style="color:var(--fg)">room.post</span>. Agents inside the room act within their per-member budget.</p>
+        <p>One profile per human, plus a home-server hub. ALP.3 workgroups: the hub holds the group key + transcript, members post via <span class="mono" style="color:var(--fg)">workgroup.post</span>. Agents inside the workgroup act within their per-member budget.</p>
       </div>
       <div class="cell" style="padding:36px">
         <span class="n">topology · 06</span>
@@ -583,7 +583,7 @@
     <div class="eyebrow">05 / alp</div>
     <h2>A closed protocol for private agent networks.</h2>
     <p class="sub">
-      ALP (Alpi Link Protocol) connects alpi instances on the same machine, across different machines, and inside shared rooms. ALP.1 uses Unix sockets, ALP.2 uses Noise_XK over TCP, and ALP.3 adds room verbs. Pinned pubkeys, fail-closed capabilities, no registry, no discovery service, no generic federation layer.
+      ALP (Alpi Link Protocol) connects alpi instances on the same machine, across different machines, and inside shared workgroups. ALP.1 uses Unix sockets, ALP.2 uses Noise_XK over TCP, and ALP.3 adds workgroup verbs. Pinned pubkeys, fail-closed capabilities, no registry, no discovery service, no generic federation layer.
     </p>
 
     <div class="grid c3" style="margin-top:64px">
@@ -608,7 +608,7 @@
         <p>Every peer lists an <span class="mono" style="color:var(--fg)">allow:</span> array of methods it may invoke. Not listed, not allowed. Daily budgets in tokens or USD. Rate limits per minute.</p>
       </div>
       <div class="cell">
-        <span class="n">rooms</span>
+        <span class="n">workgroups</span>
         <h3>Multi-party, hub-anchored.</h3>
         <p>N agents share a workspace with a stable group key. One hub holds the transcript. No replication, no consensus re-election — host the hub on an always-on machine.</p>
       </div>
@@ -1006,22 +1006,22 @@ $ alpi -p work setup
       '<span class="prompt">›</span> <span class="user">' + text + '</span>';
 
     const lines = [
-      {d:   0, t:'<span class="muted">alpi v0.2.82  ·  profile personal  ·  sandbox off  ·  ~/git/alpi</span>'},
+      {d:   0, t:'<span class="muted">alpi v0.2.81  ·  profile personal  ·  sandbox off  ·  ~/git/alpi</span>'},
       {d:  80, t:''},
       {d: 350, t: U('ask my other alpis what needs attention before monday')},
       {d: 650, t:'<span class="muted">» routing over ALP: @nas (home-server · ALP.2) · @work (local · ALP.1) · @cron (local · ALP.1)</span>'},
       {d: 550, t: T('peer',  '@nas  · link.ask',       'backup + services', '1.3s')},
-      {d: 900, t: T('peer',  '@work · link.ask',       'inbox + calendar',  '0.6s')},
+      {d: 900, t: T('peer',  '@work · link.ask',       'peer handoffs + calendar',  '0.6s')},
       {d: 450, t: T('peer',  '@cron · link.ask',       'scheduled jobs',    '0.4s')},
       {d: 250, t:''},
-      {d: 550, t:'<span class="bot">Monday brief:</span>'},
+      {d: 550, t:'<span class="bot">Peer brief:</span>'},
       {d: 220, t:'<span class="bot">  · nas: backup ok, 184 GB; disk at 82%; no auth spikes.</span>'},
-      {d: 220, t:'<span class="bot">  · work: 2 client replies due; invoice #1042 still unpaid.</span>'},
+      {d: 220, t:'<span class="bot">  · work: 2 peer handoffs waiting; release note needs review.</span>'},
       {d: 220, t:'<span class="bot">  · cron: renewal check runs tonight; no failed jobs.</span>'},
       {d: 250, t:''},
-      {d: 700, t: U('post the summary to room:home')},
-      {d: 600, t: T('peer',  'room:home · room.post',  '3 members',         '0.2s')},
-      {d: 450, t:'<span class="bot">posted. @maria and @pi will see it the next time they open the room.</span>'},
+      {d: 700, t: U('post the ops note to workgroup:home')},
+      {d: 600, t: T('peer',  'workgroup.post · home',  '3 members',         '0.2s')},
+      {d: 450, t:'<span class="bot">posted. @maria and @pi will pull it from the workgroup when they come online.</span>'},
       {d: 250, t:''},
       {d: 500, t:'<span class="prompt">›</span> <span class="user"><span class="cursor"></span></span>'},
     ];

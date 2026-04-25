@@ -317,6 +317,24 @@ class Server:
                 error={"code": -32601, "message": "method-not-found"},
             )
 
+        from alpi import config as _cfg_mod
+        from alpi import ledger as _ledger
+
+        try:
+            _ledger.check(self.home, _cfg_mod.load(self.home).budget)
+        except _ledger.BudgetExceeded as e:
+            log.info("alp: budget-exceeded %s (%s)", peer.id, e)
+            return env.build_response(
+                sender=self.kp,
+                recipient_pubkey_b64=sender_pk,
+                request_id=request_id,
+                error={
+                    "code": -32005,
+                    "message": "budget-exceeded",
+                    "data": {"cap_kind": e.cap_kind, "cap": e.cap, "used": e.used},
+                },
+            )
+
         import time as _time
 
         t0 = _time.monotonic()

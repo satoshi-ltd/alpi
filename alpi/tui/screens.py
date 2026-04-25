@@ -306,19 +306,25 @@ def _short(desc: str, max_chars: int = 130) -> str:
     return head
 
 
-def _status_rows(session) -> list[tuple[str, str]]:  # noqa: ANN001
-    """``/status`` rows in (label, value) form. Pure — tested directly
-    without Textual's widget tree."""
-    mins, secs = divmod(int(session.elapsed), 60)
-    turns = len(getattr(session, "turns", []) or [])
-    return [
-        ("model",   session.model),
-        ("turns",   str(turns)),
-        ("elapsed", f"{mins:02d}:{secs:02d}"),
-        ("tokens",  f"in={session.input_tokens:,}  out={session.output_tokens:,}"
-                    f"  total={session.input_tokens + session.output_tokens:,}"),
-        ("cost",    f"${session.cost_usd:.4f}"),
-    ]
+def _status_rows(
+    session,  # noqa: ANN001
+    *,
+    home: Path | None = None,
+    cfg_budget: dict | None = None,
+) -> list[tuple[str, str]]:
+    from alpi.status import status_rows
+
+    return status_rows(
+        session_id=session.id,
+        model=session.model,
+        turns=len(getattr(session, "turns", []) or []),
+        elapsed_seconds=int(getattr(session, "elapsed", 0) or 0),
+        input_tokens=session.input_tokens,
+        output_tokens=session.output_tokens,
+        cost_usd=session.cost_usd,
+        home=home,
+        cfg_budget=cfg_budget,
+    )
 
 
 class StatusPanel(FloatingPanel):
@@ -327,14 +333,24 @@ class StatusPanel(FloatingPanel):
 
     panel_title = "/status"
 
-    def __init__(self, session) -> None:  # noqa: ANN001
+    def __init__(
+        self,
+        session,  # noqa: ANN001
+        *,
+        home: Path | None = None,
+        cfg_budget: dict | None = None,
+    ) -> None:
         super().__init__()
         self.sess = session
+        self.home = home
+        self.cfg_budget = cfg_budget
 
     def compose_body(self) -> ComposeResult:
         from rich.text import Text
 
-        rows = _status_rows(self.sess)
+        rows = _status_rows(
+            self.sess, home=self.home, cfg_budget=self.cfg_budget,
+        )
         width = max(len(label) for label, _ in rows)
 
         title = Text()

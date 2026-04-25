@@ -139,7 +139,7 @@ identity; all mutual peers.
 ## 5. Family / small team
 
 Multiple humans, each with their own alpi, optionally sharing a
-room. Hub-anchored.
+workgroup. Hub-anchored.
 
 ```
 ┌──────────────┐       ┌──────────────┐       ┌──────────────┐
@@ -151,25 +151,25 @@ room. Hub-anchored.
                               │
                    ┌──────────▼───────────┐
                    │ home-server alpi     │
-                   │ (the room hub)       │
+                   │ (the workgroup hub)  │
                    │                      │
-                   │ room: "household"    │
+                   │ workgroup: household │
                    │   members: Jane,     │
                    │            Raj, Mia  │
                    └──────────────────────┘
 ```
 
-- **Profiles:** 1 per human, 1 on the home server acting as room
+- **Profiles:** 1 per human, 1 on the home server acting as workgroup
   hub.
-- **ALP:** ALP.3 rooms. The home server creates the room,
+- **ALP:** ALP.3 workgroups. The home server creates the workgroup,
   holds the group key + transcript; members post via
-  `room.post(room_id, text)`.
-- **Human interaction:** Jane can subscribe to the room via her
-  TUI (`/room household`) or stay out entirely. Agents inside the
-  room act autonomously within their per-member budget.
+  `workgroup.post(workgroup_id, text)`.
+- **Human interaction:** Jane can subscribe to the workgroup via her
+  TUI or stay out entirely. Agents inside the workgroup act
+  autonomously within their per-member budget.
 - **Privacy:** transcript encrypted with the group key; the home
   server can see ciphertext + metadata (who posted when), not
-  beyond its role as hub. Agents from outside the room can't read
+  beyond its role as hub. Agents from outside the workgroup can't read
   anything.
 - **Best for:** household coordination ("what's the plan for the
   week?"), small team stand-ups, a book club with bots helping

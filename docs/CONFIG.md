@@ -329,6 +329,41 @@ Same knobs as IMAP, different backend. Polling uses Gmail's `users.history.list`
 
 Configure both if you want: `imap` polls your primary mailbox via password, `gmail` polls another account via OAuth, each with its own allowlist (`IMAP_ALLOWED_SENDERS` vs `GMAIL_ALLOWED_SENDERS`).
 
+### Budget
+
+One daily spending ceiling per profile. Pick whichever unit matches
+the profile's provider: `daily_usd` for paid APIs (Claude, OpenAI,
+Gemini, OpenRouter) where LiteLLM reports a real cost per turn;
+`daily_tokens` for local Ollama and other free inference paths where
+cost is always zero. Leave both unset for no ceiling.
+
+The cap covers **every** turn this profile runs: interactive TUI
+replies, gateway responses (Telegram / IMAP / Gmail), scheduled jobs,
+sub-agent spawns (`research`, `delegate`, `read_image`), and inbound
+ALP calls from pinned peers. Counters reset at UTC midnight; no
+carry-over. The ledger lives at `~/.alpi/<profile>/logs/ledger.json` and
+also records a per-peer breakdown for the `/cost` panel, though only
+the profile total gates new turns.
+
+| Key | Default | Notes |
+|---|---|---|
+| `budget.daily_usd` | unset | Hard daily USD cap. Exceeding it surfaces `budget-exceeded` (interactive) or JSON-RPC `-32005 budget-exceeded` (ALP). |
+| `budget.daily_tokens` | unset | Hard daily token cap. Same behaviour; use instead of `daily_usd` for local / free providers. |
+
+If both are set (uncommon), `daily_usd` takes precedence.
+
+```yaml
+# Paid-API profile
+budget:
+  daily_usd: 5.00
+
+# Local Ollama profile
+budget:
+  daily_tokens: 500000
+```
+
+Edit interactively via `alpi setup → Budget`.
+
 ### ALP
 
 ALP always serves the per-profile Unix socket for same-machine peers.

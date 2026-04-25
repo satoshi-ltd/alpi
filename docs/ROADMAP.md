@@ -25,9 +25,9 @@ Legend: 🔵 backlog · 🟡 next up · ⏸ blocked.
 | BB | TUI: shared link renderer (bold + underline; hover = accent bg + black) | v0.3 | 🔵 |
 | BC | External security audit before v0.3 public release | v0.3 | 🔴 gate on AR |
 | BD | Model-aware tool-use-enforcement guidance (Claude/MiMo brevity, GPT/Codex/Gemini full block) | v0.3 | 🔵 needs A/B on agent.log first |
-| ALP.2 | Alpi Link Protocol — inter-machine Noise-protocol transport + rate-limit enforcement | v0.3 | 🟡 transport shipped; budgets pending (BG) |
-| BG | Spending budgets — daily token/USD caps at profile + optional per-peer override | v0.3 | 🟡 next up · unblocks ALP.3 room budgeting |
-| ALP.3 | Alpi Link Protocol — shared rooms (group chat, humans optional) | v0.3 | 🔵 depends on BG |
+| ALP.2 | Alpi Link Protocol — inter-machine Noise-protocol transport + rate-limit enforcement | v0.3 | ✅ shipped |
+| BG | Spending budgets — daily USD or token cap at the profile | v0.3 | ✅ shipped — ledger enforces across interactive, gateway, schedule, sub-agents, and ALP inbound |
+| ALP.3 | Alpi Link Protocol — shared workgroups (collaborative spaces, humans optional) | v0.3 | 🔵 next up — workgroup budget double-gates on top of each member's profile budget |
 | H | Home Assistant integration | long-term | ⏸ blocked on user confirmation |
 | N | Image generation | long-term | 🔵 no concrete use case yet |
 | U | Signal gateway (signal-cli) | long-term | 🔵 requires dedicated phone number |
@@ -285,7 +285,7 @@ an external firm for a formal audit.
   non-goal. Draft lives in `docs/SECURITY.md` today; the auditor
   formalises and challenges it.
 - ALP cryptography review: envelope signing (Ed25519 PKCS8),
-  replay cache, Noise_XK wrapper, peer-pinning workflow, room
+  replay cache, Noise_XK wrapper, peer-pinning workflow, workgroup
   key handling.
 - Tool surface review: approval system, sandbox posture (macOS
   sandbox-exec profile + Linux bwrap), shell denylist, skill
@@ -327,12 +327,12 @@ no regression on the shorter variant.
 
 alpi agents couldn't talk to each other. ALP is alpi's own closed
 protocol for agent↔agent: intra-profile on the same machine,
-inter-machine over the public internet, shared rooms for N-agent
+inter-machine over the public internet, shared workgroups for N-agent
 workspaces. Security + privacy are hard requirements — every
 message is signed + encrypted, every peer is explicitly pinned (no
 discovery, no TOFU), every capability is fail-closed. Spec at
 [`docs/ALP.md`](ALP.md). Three phases form the v0.3 public surface:
-ALP.1 local links, ALP.2 machine links, ALP.3 rooms.
+ALP.1 local links, ALP.2 machine links, ALP.3 workgroups.
 
 ### ALP.2 — Inter-machine Noise-protocol transport (v0.3)
 
@@ -347,83 +347,93 @@ wire. Tailscale / WireGuard as a network-layer front-end is the
 blessed deployment; direct public-internet exposure is supported but
 discouraged.
 
-**Shipped**: transport, per-peer rate-limit enforcement, wizard
-integration (ALP service TCP port + peers address + remote probe).
-**Pending**: spending budgets (covered by **BG** below — spun out so
-the ledger serves both interactive + ALP traffic).
+Transport, per-peer rate-limit enforcement, and wizard integration
+(ALP service TCP port + peer address + remote probe) are shipped.
+Spending is governed by the profile-level budget ledger — see **BG**.
 
-### BG — Spending budgets (v0.3)
+### BG — Spending budgets
 
-Today `session.cost_usd` tracks cumulative token/USD spend but
-nothing enforces a cap. ALP.2 also assumes `peer.budget.tokens_per_day`
-/ `usd_per_day` exist but doesn't check them yet. BG ships both as
-one unified ledger so we don't maintain two parallel spending stories.
+One daily ledger per profile, single source of truth for every path
+that spends. Interactive turns, gateway replies, scheduled jobs,
+sub-agent spawns (`research`, `delegate`, `read_image`), and inbound
+ALP calls from pinned peers all draw from the same pool and all trip
+the same cap when it runs out.
 
-**Model.** Profile is the ceiling, peer is an optional sub-cap.
+**Config shape.** One knob per profile — either USD or tokens,
+picked by the provider's pricing model.
 
 ```yaml
-# config.yaml — profile-level ceiling
-alp:
-  budget:
-    daily_usd: 5.00
-    daily_tokens: 500000   # optional, either knob or both
+# ~/.alpi/profiles/<name>/config.yaml
 
-# peers.yaml — optional per-peer tightening
-- id: alice
-  budget:
-    daily_usd: 1.00        # alice caps at $1 of the $5 profile pool
+# Paid API profile (Claude, OpenAI, Gemini, OpenRouter, …)
+budget:
+  daily_usd: 5.00
+
+# Local Ollama or free inference — cost is always $0, token counter
+# is the useful knob
+budget:
+  daily_tokens: 500000
 ```
 
-Semantics:
+Leave both unset for no ceiling.
 
-- Profile cap covers **every** turn: interactive TUI, gateway, schedule
-  daemon, and ALP inbound. One pool, one ledger.
-- Peer cap (optional) is a sub-budget — alice can't exceed her own cap
-  even if the profile pool has room.
-- Absent peer cap → peer shares the profile pool directly.
+**Semantics.**
+
+- The profile cap covers every spending path. There is no per-peer
+  sub-cap; peer-specific trust lives in `peers.yaml` capabilities
+  and rate limits, not in a second ledger.
 - Midnight UTC reset; no carry-over.
-- Over-cap responses: `-32005 budget-exceeded` on the ALP wire; a
-  surface-specific "out of budget" message on interactive paths.
+- When the cap trips: `-32005 budget-exceeded` to ALP callers, a
+  surface-specific "budget exhausted" message on interactive paths.
+- If both `daily_usd` and `daily_tokens` are set, USD wins (paid is
+  the common case for a cap-enforced profile).
 
-**Ledger.** `~/.alpi/<profile>/alp/ledger.json`:
+**Ledger.** `~/.alpi/<profile>/logs/ledger.json`:
 
 ```json
 {
   "day": "2026-04-24",
-  "total": { "usd": 2.34, "tokens": 187200 },
+  "profile": { "usd": 2.34, "tokens": 187200 },
   "by_peer": {
-    "alice": { "usd": 0.47, "tokens": 42100 },
-    "__interactive__": { "usd": 0.75, "tokens": 55700 }
+    "__interactive__": { "usd": 1.12, "tokens": 89400 },
+    "alice":           { "usd": 0.47, "tokens": 42100 },
+    "nas":             { "usd": 0.75, "tokens": 55700 }
   }
 }
 ```
 
+`profile` is the gate. `by_peer` is observability for the `/cost`
+panel — it breaks spend down by who asked for it, but never blocks
+a request on its own.
+
 **Enforcement points.**
-1. `engine.run_turn` pre-check (covers interactive + sub-agents).
-2. `alp.server._dispatch` pre-check for inbound ALP (peer vs
-   profile cap, whichever is tighter).
-3. Post-turn hook on `session.record()` increments the ledger under
-   the right bucket.
 
-**Spec update.** `docs/ALP.md` currently defines budget as per-peer
-only. The spec needs to move the budget to "profile cap + optional
-peer sub-cap" shape. Stamp on the §Peer list table and §Security
-considerations.
+1. `engine.run_turn` pre-check at the start of every turn.
+2. `alp.server._dispatch` pre-check before invoking a peer's
+   handler.
+3. Post-turn: `ledger.record()` increments the profile total and the
+   current bucket (peer id when the turn runs via ALP,
+   `__interactive__` otherwise).
 
-**ALP.3 unblocks** once BG lands: room posts can count against the
-poster's peer budget inside the poster's own profile ledger, closing
-the "a noisy room drains every agent silently" gap that rooms would
-otherwise carry.
+ALP.3 **workgroups** build on this: a workgroup can declare its own
+daily budget as a shared pool. Posting into a workgroup double-gates
+— both the poster's profile and the workgroup must have budget for
+the post to admit. When the poster's profile cap is exhausted it
+goes silent in the workgroup even if the workgroup still has room;
+when the workgroup's own pool is exhausted the whole workgroup
+freezes regardless of individual members' profiles.
 
-### ALP.3 — Shared rooms (v0.3)
+### ALP.3 — Shared workgroups (v0.3)
 
-Depends on ALP.1. First-class group-chat workspaces — N alpis
-(different profiles, different machines) post into a shared
-transcript; a human can join via TUI `/room` or stay out entirely.
-Hub model (the room creator holds transcript + group key), not
-gossip. Per-room agent budget and kill switch as safety levers.
-New verbs (`room.create`, `room.join`, `room.post`, `room.pull`,
-`room.leave`, `room.pause`), rekey on member leave.
+Depends on ALP.1 and BG. First-class collaborative workspaces — N
+alpis (different profiles, different machines) post into a shared
+transcript; a human can join via the TUI or stay out entirely. Hub
+model (the workgroup creator holds transcript + group key), not
+gossip. Per-workgroup budget and pause switch as safety levers; posts
+are double-gated against both profile and workgroup budgets. Verbs:
+`workgroup.create`, `workgroup.join`, `workgroup.post`,
+`workgroup.pull`, `workgroup.leave`, `workgroup.pause`; rekey on
+member leave.
 
 ---
 
