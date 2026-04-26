@@ -53,7 +53,7 @@ async def _process(platform: Platform, msg: IncomingMessage, home: Path) -> None
     # from Telegram behaves exactly like it does in the TUI.
     from alpi.alp import mention as alp_mention
 
-    parsed_mention = alp_mention.parse(msg.text)
+    parsed_mention = alp_mention.parse(msg.text, home=home)
     if parsed_mention is not None:
         # Mirror the tool-trace UX from the LLM path: if the platform has
         # ``show_tool_trace`` on, emit a ``◆ peer · peer_id=…`` line first

@@ -275,8 +275,10 @@ class AlpiApp(App):
         if text.startswith("/"):
             self._handle_slash(text)
             return
-        if text.startswith("@"):
-            self._handle_mention(text)
+        from alpi.alp import mention as alp_mention
+        parsed = alp_mention.parse(text, home=self.home)
+        if parsed is not None:
+            self._handle_mention(text, parsed=parsed)
             return
         # @work(exclusive=True) replaces the old worker; we still set the
         # engine interrupt flag so the in-flight LLM call unwinds promptly.
@@ -386,13 +388,16 @@ class AlpiApp(App):
         if card is not None:
             card.finish(ev.output, ev.ok)
 
-    def _handle_mention(self, text: str) -> None:
-        """``@peer rest…`` — one-shot ALP ``link.ask`` to a pinned peer,
-        bypassing the local LLM. Renders exactly like a tool call so the
-        transcript reads the same whether the user or the agent invoked it."""
-        from alpi.alp import mention as alp_mention
-
-        parsed = alp_mention.parse(text)
+    def _handle_mention(self, text: str, parsed=None) -> None:
+        """``@peer ...`` anywhere in the input — one-shot ALP
+        ``link.ask`` to a pinned peer, bypassing the local LLM.
+        Renders exactly like a tool call so the transcript reads the
+        same whether the user or the agent invoked it. Caller passes
+        ``parsed`` (already validated against the roster) so we don't
+        re-parse here."""
+        if parsed is None:
+            from alpi.alp import mention as alp_mention
+            parsed = alp_mention.parse(text, home=self.home)
         if parsed is None:
             self._mount_message(ErrorLine("usage: @<peer> <prompt>"))
             return
