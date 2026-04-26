@@ -34,12 +34,10 @@ alpi
 
 Pin a specific version with `uv tool install alpi-agent==0.3.0`.
 
-Optional: install Chromium for the browser tool. alpi does not
-install it automatically because most users don't need it.
-
-```bash
-playwright install chromium
-```
+The first time the agent runs the `browser` tool, alpi downloads
+Chromium (~200 MB, one-time, cached at `~/.cache/ms-playwright/`).
+No separate install command. If you never use the browser tool,
+nothing is downloaded.
 
 ## Alternative — `pipx install`
 
@@ -116,9 +114,10 @@ uv run alpi
   directory isn't on your `PATH`. uv suggests the right line during
   install; re-run the suggested `eval "$(uv tool ...)"` command, or
   add `~/.local/bin` to your shell's `PATH`.
-- `playwright install chromium` fails on Linux — install the
-  system libraries Playwright needs first
-  (`uv run playwright install-deps chromium`).
+- The browser tool's first run fails on Linux with a missing
+  shared library (`libgbm`, `libnss3`, etc.) — install the
+  system libraries Playwright needs:
+  `uvx --from playwright playwright install-deps chromium`.
 - `alpi doctor` red lights — run it; the output names the missing
   piece (model, workspace, gateway env, etc.) and tells you which
   wizard step fixes it.
