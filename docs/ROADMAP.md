@@ -14,105 +14,108 @@ Legend: 🔵 backlog · 🟡 next up · ⏸ blocked · 🔴 gate.
 
 ## v0.3 — public release
 
-Three items left before the cut. Everything else previously parked
-under v0.3 moved to v0.4 — none of it can land honestly in the
-remaining window.
+The release is feature-complete; the items below are optional
+polish queued before the v0.3.0 cut. See `CHANGELOG.md` for what
+already landed in this cycle (ALP.3 workgroups, service
+unification, distribution + `alpi update`).
 
 | ID | Item | Status |
 |---|---|---|
-| ALP.3 | Alpi Link Protocol — shared workgroups (collaborative spaces, humans optional) | ✅ shipped (PR 5 closes functional autonomy) |
-| AU | Distribution — `uv tool install alpi-agent`, `alpi update`, end-user install without source | 🔴 gate |
-| SU | Service unification — single ``alpi service`` orchestrator per profile (replaces gateway/schedule/alp daemons) | ✅ shipped (was tracked for v0.4 architecture cleanup, brought forward) |
+| AL      | `@alpi/knowledge` — first bundled skill (self-help)         | 🟡 next |
+| ALP.3.1 | Mention parsing relaxed (anywhere in text, not line-start)  | 🟡 next |
+| —       | Active liveness probes (follow-up to shipped passive liveness) | 🔵 |
+| —       | Per-workgroup role override (extension of `public_bio`)     | 🔵 |
 
-### ALP.3 — Shared workgroups
+### AL — `@alpi/knowledge` bundled skill
 
-Depends on ALP.1 + ALP.2 (shipped) and the profile-level budget
-ledger (shipped). First-class collaborative workspaces — N alpis
-(different profiles, different machines) post into a shared
-transcript; a human can join via the TUI or stay out entirely. Hub
-model (the workgroup creator holds transcript + group key), not
-gossip. Per-workgroup budget and pause switch as safety levers; posts
-are double-gated against both profile and workgroup budgets. Verbs:
-`workgroup.create`, `workgroup.join`, `workgroup.post`,
-`workgroup.pull`, `workgroup.leave`, `workgroup.pause`; rekey on
-member leave.
+The first skill the project ships under the reserved `@alpi/*`
+namespace (currently empty — see `docs/SKILLS.md`). Bundles alpi's
+own documentation as a queryable resource so the agent can answer
+"how do I change the TUI color?" or "how does ALP work?" without a
+`web_search` round-trip and without relying on the LLM's stale
+training data.
 
-**PR 5 (functional closure)** lands the engine integration: each
-member's service runs a workgroup poller that wakes the agent on
-new posts; every interactive / gateway / scheduled turn auto-pulls
-subscribed workgroups before running and injects the briefing +
-recent transcript + active task as system prompt context. Two
-in-chat markers, parsed client-side on the decrypted transcript:
-`#task <text>` opens the active task (preempts the previous one
-with synthetic result `"preempted by …"`), `#done <text>` closes
-it. The hub stays zero-knowledge — task state is computed locally
-from the post stream. Single-task model only; multi-task is
-tracked separately for v0.4.
+**v1 (this cycle).** Keyword-grep tier. The skill bundles
+`docs/*.md` + `README.md` + `CHANGELOG.md` as package resources;
+the `@alpi/knowledge` tool takes a topic string, fuzzy-matches
+against headings, and returns the relevant section(s). The base
+system prompt nudges the LLM to prefer it over `web_search` for
+alpi-internal questions. Estimated ~150 LoC + tests + a
+`pyproject.toml::package-data` entry that copies the docs into the
+wheel at build time.
 
-**v0.3 backlog (ALP.3 follow-ups):**
+**v2 (v0.4, depends on BA).** Swap the keyword backend for local
+RAG once `BA` (Local RAG over `workspace/`) ships its embedding
+infrastructure. Same tool surface, smarter retrieval.
 
-- **Active liveness probes** (optional follow-up to the shipped
-  passive liveness) — passive ``last_seen_at`` is in place: the
-  hub stamps it on every ``workgroup.pull`` / ``workgroup.post``
-  and returns the roster on ``join`` / ``pull``; the engine
-  pre-turn hook tags peers as ``online`` / ``last seen N min
-  ago`` / ``offline (>30 min)``. If passive proves unreliable in
-  the wild, layer an active probe via ``link.ping`` with a 500 ms
-  timeout, but only on the wizard's "show members" view — never
-  on every engine turn (would blow turn latency).
+**Why now.** Validates the whole `@alpi/*` namespace machinery
+(loader, read-only enforcement, system-prompt index) under real
+use, lowers the support cost of the public release ("the agent
+knows itself"), and gives v0.3 a concrete narrative beat: alpi
+ships its first bundled skill, and it's the one that teaches you
+how to use alpi.
 
-- **Per-workgroup role override** — extend the shipped self-published
-  ``public_bio`` (each profile broadcasts its own tag-line on
-  ``workgroup.join``, source of truth lives with the joiner, no
-  duplication per workgroup) with an optional override on
-  ``meta.yaml`` for the rare case the creator wants to pin a
-  workgroup-specific role on a member ("in this workgroup, alice is
-  the timekeeper"). Don't add until a real case appears — the bio
-  covers the vast majority. Estimated ~30 LoC + tests if and when.
+### ALP.3.1 — Mention parsing relaxed
 
-### AU — Distribution + update path
+Today `@<peer-id>` only counts as a mention when it appears at the
+start of a line — same rule as `#task` and `#done`. The line-start
+rule was designed for state-change markers (a typo'd `#task`
+mid-sentence shouldn't open a real task); it was extended to
+mentions out of consistency, not necessity. The cost is real
+friction: humans write "Hey @alice, can you check this?" naturally
+and expect alice to be pinged.
 
-Today alpi is installed by cloning the repo and running `uv sync`. A
-public release needs an end-user path that does not require git or
-the source tree. Three deliverables:
+Split the rule:
 
-1. ✅ **`uv tool install alpi-agent`** — package shipped on PyPI
-   under `alpi-agent` (the binary stays `alpi`). The Trusted
-   Publisher (OIDC) is configured; the publish workflow at
-   `.github/workflows/publish.yml` smoke-installs the wheel in
-   five clean container images before going live.
+- `#task` / `#done` stay strict line-start (load-bearing protocol;
+  accidental open/close is bad).
+- `@<peer-id>` matches anywhere in the text, with two boundary
+  rules to avoid false positives:
+  1. The `@` must be preceded by whitespace or start-of-string —
+     excludes `email@gmail.com`.
+  2. The matched id must be in the workgroup's roster — `@property`
+     and `@deprecated` in code snippets get silently ignored
+     because they're not pinned peers.
 
-2. ✅ **`alpi update`** — landed as a CLI command plus a passive
-   background check. The check runs once every eight hours in a
-   daemon thread, caches the result under `~/.alpi/cache/
-   update_check.json`, and surfaces it in `alpi doctor` and the
-   TUI top bar. The command itself fetches PyPI on demand,
-   compares versions, detects the installer (`uv` / `pipx` /
-   dev), and runs the matching upgrade subprocess.
+One regex change in `alpi/alp/tasks.py::mentions_in`; callers opt
+into roster filtering by passing `valid_peers`. ALP.md gets a
+small clarification note in the "Recognition rule" section.
+Estimated ~30 LoC + tests.
 
-3. **Versioning + release process** — pending the actual v0.3.0
-   cut. The mechanics work (every commit on `main` that changes
-   the version triggers a publish, tags the commit, and publishes
-   a GitHub release with the CHANGELOG excerpt). The remaining
-   work is the cut itself: bump to `v0.3.0`, write the cycle's
-   summary entry in CHANGELOG, watch the workflow ship it.
+### Active liveness probes (optional follow-up)
 
-**What's intentionally not in scope:** auto-update on launch (would
-contradict the "no hidden network" principle), Homebrew formula
-(double the maintenance for a uv-first tool), platform-specific
-installers (macOS .pkg, Windows MSI). Users on those platforms get
-alpi via `uv` like everyone else.
+Passive `last_seen_at` is in place: the hub stamps it on every
+`workgroup.pull` / `workgroup.post` and returns the roster on
+`join` / `pull`; the engine pre-turn hook tags peers as
+`online` / `last seen N min ago` / `offline (>30 min)`. If passive
+proves unreliable in the wild, layer an active probe via
+`link.ping` with a 500 ms timeout, but only on the wizard's "show
+members" view — never on every engine turn (would blow turn
+latency).
+
+### Per-workgroup role override (optional)
+
+Extend the shipped self-published `public_bio` (each profile
+broadcasts its own tag-line on `workgroup.join`, source of truth
+lives with the joiner, no duplication per workgroup) with an
+optional override on `meta.yaml` for the rare case the creator
+wants to pin a workgroup-specific role on a member ("in this
+workgroup, alice is the timekeeper"). Don't add until a real case
+appears — the bio covers the vast majority. Estimated ~30 LoC +
+tests if and when.
 
 ---
 
 ## v0.4 cycle
 
-The v0.4 surface is wider on purpose: alpi v0.3 is a credible
-private-agent tool; v0.4 is where the Satoshi positioning earns
-recurring use. Items split into three groups — **hardening** (close
-the loops we know are open), **commercial recorrido** (visible
-roadmap for early users), and **deferred research** (work that needs
-measurement before scope locks).
+**Theme: agent productivity + adoption.** v0.3 made alpi a
+credible private-agent tool; v0.4 is where the individual agent
+becomes substantively more useful (streaming, blobs, RAG, voice
+polish, browser realism) and the surfaces that draw in users land
+(companion app, gateways). Items split into three groups —
+**hardening** (close the loops we know are open), **commercial
+recorrido** (visible roadmap for early users), and **deferred
+research** (work that needs measurement before scope locks).
 
 ### Hardening
 
@@ -128,9 +131,7 @@ measurement before scope locks).
 |---|---|---|
 | ALP.4 | Streaming `link.ask` — SSE-style chunked replies between peers | 🔵 |
 | ALP.5 | Blob transfer — `link.put_blob` / `link.get_blob`, content-addressed, chunked AEAD | 🔵 |
-| ALP.3+ | Multi-task workgroups — `multitask: true` in meta, letter-prefixed task IDs (`#task A …`, `#done A: …`) so several streams can run in the same workgroup | 🔵 deferred from v0.3 — emerges only when single-task in real use shows it's not enough |
 | AX | Mobile / desktop companion — minimal client speaking ALP to the user's profile | 🔵 |
-| AY | Skills marketplace — federated, signed, never centralised | 🔵 |
 | AZ | Workgroup viewer — folds into AX (companion app surfaces the transcript read-only or read/write) | 🔵 |
 | BA | Local RAG over `workspace/` — local-only embeddings (sentence-transformers), semantic search tools | 🔵 |
 | BB | Enhanced rich text in UI — refine the link renderer baseline, extend to lists, code blocks, tables | 🔵 |
@@ -305,30 +306,6 @@ another peer.
   to the user's profile rather than accepting them.
 - Distribution — TestFlight + Play Store internal track at first.
 
-### AY. Skills marketplace
-
-A curated, signed, *federated* registry. Not a centralised store.
-
-**Shape.** A skill is published by writing its manifest + body to a
-git repo (any forge — GitHub, sourcehut, self-hosted Gitea); the
-manifest carries a public key and the body is signed. `alpi skill
-install <url>` clones the repo, verifies the signature, runs the
-existing security scanner, and lands the skill under
-`skills/<name>/`. There is no central index; users discover skills
-the same way they discover npm packages (links, blog posts,
-word-of-mouth) and the trust anchor is the publisher's pubkey.
-
-**Why federated, not centralised.** A central marketplace becomes a
-chokepoint (review queue, takedowns, account bans, eventual
-acquisition). Federation matches the Satoshi principles —
-**Open Source**, **User Sovereignty** — and reuses the same
-trust pattern as ALP peers (pubkey-pinned, no discovery service).
-
-**Curation.** Satoshi Ltd. publishes a `@satoshi-ltd/skills` repo
-with our blessed bundles (the v0.3 **AO** decision was "no default
-bundle"; that holds — this is opt-in). Other publishers are equally
-first-class.
-
 ### BA. Local RAG over `workspace/`
 
 Semantic search over the user's project files without sending a
@@ -481,28 +458,64 @@ no regression on the shorter variant.
 
 ## v0.5 cycle
 
-The v0.5 surface deepens what v0.4 plants. ALP gets two more
-extensions that turn workgroups from "shared chat" into "shared
-workspace"; the rest emerges from how v0.4 lands in real use.
+**Theme: collaboration depth + community.** v0.4 made the
+individual agent productive; v0.5 deepens what happens when many
+agents collaborate, and lets the community publish skills around
+the project. Workgroups graduate from "shared chat" into "shared
+workspace" (multi-task + search + pinned memory), and the
+federated marketplace turns the `@alpi/*` namespace experiment of
+v0.3 into a community pattern.
 
 | ID | Item | Status |
 |---|---|---|
+| ALP.3+ | Multi-task workgroups — `multitask: true` in meta, letter-prefixed task IDs (`#task A …`, `#done A: …`) | 🔵 deferred from v0.3 — emerges only when single-task in real use shows it's not enough |
 | ALP.6 | Workgroup search — semantic search over a workgroup transcript via local RAG (depends on **BA**) | 🔵 |
 | ALP.7 | Pinned shared memory per workgroup — hub-anchored `wiki.md`, role-based write | 🔵 |
+| AY    | Skills marketplace — federated, signed, never centralised | 🔵 |
+
+### ALP.3+. Multi-task workgroups
+
+v0.3 ships a strict single-task model: posting a new `#task` while
+one is open auto-closes the previous with `"preempted by …"`. The
+constraint is a feature — it forces convergence and keeps the
+agent context narrow. v0.5 lifts it for workgroups that **need**
+parallel streams.
+
+Workgroups opt in with `multitask: true` in `meta.yaml`.
+Markers extend with letter-prefixed IDs: `#task A research the
+peptide`, `#task B audit the contract`, closures match prefix
+(`#done A: shortlist of 5`). Each task carries its own active
+state, its own `last_responded_seq` per member, its own dispatch
+gating. The pre-turn hook surfaces every active task in the
+context block; the agent picks which to engage based on
+`@`-mentions and explicit prefix references.
+
+**Why deferred from v0.3.** The single-task model has not yet
+proven insufficient. Multi-task adds real complexity (per-task
+roster filters, per-task budget headroom, UI for showing N
+concurrent threads). Ship single-task first; revisit when real
+workgroups outgrow it.
 
 ### ALP.6. Workgroup search
 
 Once a workgroup runs for weeks, scrolling becomes useless.
 `workgroup.search(workgroup_id, query)` returns the top-K posts
 matching a query, ranked by semantic similarity using the local RAG
-index (**BA**). The hub indexes its own transcript on disk; members
-search remotely via the existing ALP transport.
+index (**BA**, shipped in v0.4). The hub indexes its own
+transcript on disk; members search remotely via the existing ALP
+transport.
 
 **Why it pairs with BA.** Reuses the same embedding model and
 vector store; no separate ML surface to maintain. The hub embeds
 each post when it lands and answers `workgroup.search` from the
 local index — no roundtrip to a third party, no plaintext leaks
 beyond the workgroup membership.
+
+**Pairing with `@alpi/knowledge`.** v0.3 ships `@alpi/knowledge`
+v1 (keyword grep) as the first bundled skill. Once BA lands in
+v0.4, `@alpi/knowledge` v2 swaps to the same RAG backend that
+ALP.6 uses — one embedding stack, two surfaces (knowledge over
+docs, search over transcripts). The work falls out for free.
 
 ### ALP.7. Pinned shared memory per workgroup
 
@@ -525,6 +538,35 @@ The wiki is deliberately a single text doc per workgroup —
 opinionated, easy to render in the TUI and the companion (AX), and
 sized for an agent to read in full as part of joining the
 workgroup. Anything bigger goes through ALP.5.
+
+### AY. Skills marketplace
+
+A curated, signed, *federated* registry. Not a centralised store.
+
+**Shape.** A skill is published by writing its manifest + body to a
+git repo (any forge — GitHub, sourcehut, self-hosted Gitea); the
+manifest carries a public key and the body is signed. `alpi skill
+install <url>` clones the repo, verifies the signature, runs the
+existing security scanner, and lands the skill under
+`skills/<name>/`. There is no central index; users discover skills
+the same way they discover npm packages (links, blog posts,
+word-of-mouth) and the trust anchor is the publisher's pubkey.
+
+**Why federated, not centralised.** A central marketplace becomes a
+chokepoint (review queue, takedowns, account bans, eventual
+acquisition). Federation matches the Satoshi principles —
+**Open Source**, **User Sovereignty** — and reuses the same
+trust pattern as ALP peers (pubkey-pinned, no discovery service).
+
+**Curation.** Satoshi Ltd. publishes a `@satoshi-ltd/skills` repo
+with our blessed bundles. Other publishers are equally first-class.
+
+**Why v0.5, not v0.4.** A marketplace presupposes an active author
+community and enough adoption for discovery to matter. v0.3 ships
+the first bundled skill (`@alpi/knowledge`); v0.4 grows the bundled
+catalog and watches users start authoring their own; v0.5 is when
+we know what shape the federation needs and can ship it from
+evidence rather than guess.
 
 ---
 
