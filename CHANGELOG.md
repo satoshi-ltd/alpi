@@ -1,5 +1,44 @@
 # Changelog
 
+## v0.3.0 — 2026-04-26 — public release
+
+First public release of alpi. Marks the line where the project
+becomes installable from PyPI (`uv tool install alpi-agent`) and
+the documentation, site, and onboarding are stable enough for
+external users.
+
+The v0.3 cycle stacked the work that makes alpi usable beyond a
+single hacker on a laptop:
+
+- **ALP** — the Alpi Link Protocol shipped end-to-end. ALP.1
+  (Unix sockets, intra-machine), ALP.2 (Noise_XK over TCP, with
+  rate limits + budgets), and ALP.3 (workgroups: hub state,
+  pause/resume, leave + rekey, member bios, `@<peer>` mentions
+  anywhere in the text).
+- **Service unification** — one process per profile hosts the
+  gateway, scheduler, and ALP listener. `alpi service` replaces
+  the legacy `gateway` / `schedule` / `alp` daemons.
+- **Distribution** — packaged as `alpi-agent` on PyPI with a
+  publish workflow. `alpi update` + a version badge in `doctor`
+  and the TUI top bar.
+- **Bundled skills** — first `@alpi/knowledge` skill ships
+  alpi's own user-facing docs as package resources, so the
+  agent answers questions about itself without `web_search`.
+- **Browser tool** — Chromium downloads itself on first use; no
+  separate install step.
+- **Security & budget** — profile `.env` / `config.yaml`
+  off-limits to file tools and terminal; daily spending ledger
+  with profile-level cap.
+- **UX** — wizard section headings + copy pass, TUI markdown
+  link style, `/memory` panel rewrite, streaming lag fix,
+  setup → Delete profile, CLI "did you mean" polish.
+- **Site** — landing + 15 docs pages, Open Graph + JSON-LD,
+  hero/quickstart console demo widget, social banner.
+
+Per-patch detail for the cycle is preserved in the v0.2.x
+entries below; this entry is the umbrella the public release
+ships under.
+
 ## v0.2.97 — 2026-04-26
 
 ### `@alpi/knowledge` — first bundled skill
