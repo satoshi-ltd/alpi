@@ -1,5 +1,68 @@
 # Changelog
 
+## v0.2.96 — 2026-04-26
+
+### `@<peer>` mentions match anywhere in the text — ALP.3.1
+
+The `@<peer>` shortcut used in the TUI input and on incoming
+gateway messages now fires **anywhere** in the text, not just at
+position 0. Humans write naturally — `"hey @mirai can you check
+this?"` pings mirai without forcing the user to put `@mirai` at
+the start of the line.
+
+Two boundary rules keep false positives out:
+
+1. The `@` must be preceded by whitespace or be the very first
+   character. `email@gmail.com` therefore never matches.
+2. The matched id must resolve to a pinned peer in this profile's
+   `peers.yaml`. Strings like `@property` or `@deprecated` in code
+   snippets fall through silently — `parse()` returns `None` and
+   the caller hands the text to the LLM as plain prose.
+
+The prompt sent to the peer is the original text with the
+`@<peer>` token (and its boundary whitespace) removed. Internal
+whitespace inside the surviving prose is preserved, since the
+prompt may be quoted code or deliberately formatted.
+
+#### Scope of the change
+
+- `alpi/alp/mention.py::parse` — relaxed regex with the two
+  boundary rules and an optional `home: Path` parameter that
+  enables the roster check. The signature stays backward-
+  compatible: callers that don't pass `home` get raw structural
+  detection without pinning validation.
+- `alpi/tui/app.py` — input dispatch no longer gates on
+  `text.startswith("@")`. Every non-slash input runs through
+  `mention.parse(text, home=...)`; if a pinned peer matches, the
+  input routes via the @-shortcut, otherwise it goes to the LLM.
+- `alpi/gateway/run.py` — same change for inbound platform
+  messages. `parse(msg.text, home=home)` validates against the
+  pinned roster; non-mention text still flows to the LLM.
+
+#### What stays strict
+
+`#task` and `#done` markers are unchanged — they remain strict
+line-start so a typo'd marker in mid-sentence cannot accidentally
+open or close a workgroup task. The asymmetry is deliberate:
+state-change markers must not trigger by accident, attention
+markers (`@`) are safe to relax.
+
+#### Tests
+
+`tests/test_alp_mention.py` is rewritten — 14 cases covering
+mid-text mentions, end-of-text mentions, email-shape immunity,
+internal-whitespace preservation, multi-mention (first wins),
+punctuation that shouldn't eat into the id, optional roster
+validation against pinned peers. Suite at 901 (was 894).
+
+#### Docs
+
+`docs/ALP.md` updates the "Recognition rule" section to
+distinguish state-change markers (still line-start) from
+attention markers (`@` anywhere with whitespace boundary).
+
+---
+
 ## v0.2.95 — 2026-04-26
 
 ### `alpi update` — version check and self-upgrade

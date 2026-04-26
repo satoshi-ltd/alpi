@@ -1,25 +1,49 @@
 """``@peer rest…`` shortcut parsing + execution.
 
 The ``@peer`` gesture is used from two places:
-- TUI input (``alpi/tui/app.py``): typed with a leading ``@``.
-- Gateway inbound text (``alpi/gateway/run.py``): a user DM-ing ``@peer hi``
-  from Telegram / email / webhook should route to the peer without
-  firing the local LLM.
+- TUI input (``alpi/tui/app.py``): typed anywhere in the message.
+- Gateway inbound text (``alpi/gateway/run.py``): a user DM-ing
+  ``hey @peer can you…`` from Telegram / email / webhook routes to
+  the peer without firing the local LLM.
 
 Both call through this module so the semantics match: same parsing
 rules, same resolution rules, same error shapes. The ``peer`` tool
-(``alpi/tools/peer.py``) uses the same executor so LLM-invoked calls
-and direct ``@``-mentions hit the same code path.
+(``alpi/tools/peer.py``) uses the same executor so LLM-invoked
+calls and direct ``@``-mentions hit the same code path.
+
+Detection rules (relaxed in v0.2.96 as ALP.3.1):
+
+- The ``@`` may appear anywhere in the text, but it must be
+  preceded by whitespace or be at the very start. That single
+  boundary keeps email addresses (``hello@soyjavi.com``) from
+  ever matching.
+- The peer-id token after ``@`` is ``[A-Za-z0-9_-]+``.
+- A ``home`` Path may be passed; when given, the parser also
+  requires the matched id to resolve to a pinned peer. That filters
+  false positives like ``@property`` or ``@deprecated`` in code
+  snippets — they look syntactically right but aren't peers, so the
+  caller falls through to the LLM instead of trying to route an
+  ``@property`` mention.
+- The "prompt" is the original text with the ``@<peer>`` token (and
+  its boundary whitespace) removed. ``"hey @alice can you check?"``
+  yields ``prompt="hey can you check?"``. A bare mention with no
+  surrounding text yields ``None``.
 """
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
 from alpi.alp import client as alp_client
 from alpi.alp import peers as peers_mod
 from alpi.alp.keys import load_or_generate
+
+
+# Boundary ``(?:^|\s)`` excludes ``email@example.com``; trailing
+# ``\b`` keeps ``@alice,`` from greedily eating the comma into the id.
+_MENTION_RE = re.compile(r"(?:^|\s)@([A-Za-z0-9_-]+)\b")
 
 
 @dataclass
@@ -38,27 +62,33 @@ class Result:
     cost: float = 0.0
 
 
-def parse(text: str) -> Mention | None:
-    """Return a ``Mention`` if ``text`` starts with a valid ``@handle prompt``
-    gesture, otherwise ``None``.
+def parse(text: str, home: Path | None = None) -> Mention | None:
+    """Return a ``Mention`` if ``text`` contains a valid ``@<peer>``
+    token (anywhere, with whitespace boundary), otherwise ``None``.
 
-    Rules:
-    - Must start with ``@`` at position 0 — no leading whitespace.
-    - ``@handle`` must be followed by whitespace + non-empty prompt.
-    - Empty prompt or missing handle → ``None``.
-
-    The strict leading-``@`` rule is what keeps ``oye manda un email a
-    hello@soyjavi.com`` from triggering anything.
+    When ``home`` is given, the matched id must also resolve to a
+    pinned peer in that profile's ``peers.yaml`` — used by the TUI
+    and the gateway so an ``@property`` in a code snippet falls
+    through to the LLM instead of erroring on a missing peer.
     """
-    if not text.startswith("@") or len(text) < 2:
+    if not text:
         return None
-    body = text[1:]
-    parts = body.split(maxsplit=1)
-    if len(parts) != 2:
+    m = _MENTION_RE.search(text)
+    if m is None:
         return None
-    peer_id = parts[0].strip()
-    prompt = parts[1].strip()
-    if not peer_id or not prompt:
+    peer_id = m.group(1)
+    if home is not None and peers_mod.get_by_id(home, peer_id) is None:
+        return None
+    # Strip only the boundary whitespace around the ``@<peer>`` token,
+    # never internal runs — the prompt may be quoted code or
+    # deliberately formatted text.
+    before = text[: m.start()].rstrip()
+    after = text[m.end():].lstrip()
+    if before and after:
+        prompt = before + " " + after
+    else:
+        prompt = before + after
+    if not prompt:
         return None
     return Mention(peer_id=peer_id, prompt=prompt)
 
