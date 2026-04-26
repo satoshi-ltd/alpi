@@ -70,6 +70,12 @@ class Subscription:
     # post and returns the whole list on join + pull, so we always
     # have a recent passive liveness signal without extra probing.
     roster: dict[str, str] = field(default_factory=dict)
+    # Parallel map pubkey → public bio string. Each peer self-publishes
+    # its tag-line as a ``workgroup.join`` parameter; the hub stores
+    # it and returns it in roster responses. Lets the engine pre-turn
+    # hook render "@alice (online, 'product engineer — velocity')"
+    # without the workgroup creator having to type a role per member.
+    roster_bios: dict[str, str] = field(default_factory=dict)
     # Cooldown — populated by the workgroup poller after dispatching
     # an autonomous turn. Stops the same workgroup triggering another
     # spawn within ``DISPATCH_COOLDOWN_SECONDS`` and helps catch
@@ -144,6 +150,7 @@ def load(home: Path) -> list[Subscription]:
                 briefing=str(entry.get("briefing") or ""),
                 last_responded_seq=int(entry.get("last_responded_seq", 0)),
                 roster=dict(entry.get("roster") or {}),
+                roster_bios=dict(entry.get("roster_bios") or {}),
             )
         except KeyError:
             continue
@@ -190,6 +197,8 @@ def save(home: Path, subs: list[Subscription]) -> None:
             entry["last_responded_seq"] = s.last_responded_seq
         if s.roster:
             entry["roster"] = s.roster
+        if s.roster_bios:
+            entry["roster_bios"] = s.roster_bios
         if s.recent_posts:
             entry["recent_posts"] = s.recent_posts
         data.append(entry)

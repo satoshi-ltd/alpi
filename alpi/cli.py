@@ -580,6 +580,7 @@ def setup_cmd(ctx: click.Context) -> None:
             ("Gateways", "gateways", _gateways_status(h)),
 
             ui.Heading("ALP (Alpi Link Protocol)"),
+            ("Identity", "identity", _identity_status(cfg)),
             ("Peers", "peers", _peers_status(h)),
             ("Workgroups", "workgroups", _workgroups_status(h)),
 
@@ -628,6 +629,8 @@ def setup_cmd(ctx: click.Context) -> None:
             _cleanup_setup(h)
         elif choice == "service":
             _service_wizard(h, profile_name)
+        elif choice == "identity":
+            _identity_setup(h)
         elif choice == "peers":
             from alpi.alp.setup import run as alp_setup_run
 
@@ -1162,6 +1165,122 @@ def _budget_setup(h: Path) -> None:
         ui.ok_and_wait(f"cap: ${new_budget['daily_usd']:.2f}/day")
     else:
         ui.ok_and_wait(f"cap: {new_budget['daily_tokens']:,} tokens/day")
+
+
+def _identity_status(cfg: config.Config) -> str:
+    """Status string for the public-bio menu entry. Truncated preview
+    of the bio, or a hint when unset."""
+    bio = (cfg.public_bio or "").strip()
+    if not bio:
+        return "not set · peers see handle only"
+    if len(bio) <= 60:
+        return bio
+    return bio[:59] + "…"
+
+
+def _identity_setup(h: Path) -> None:
+    """Edit the profile's public bio — the one-line tag-line propagated
+    to every workgroup this profile joins. Source of truth for the
+    ``Member.bio`` shown in other peers' system-prompt rosters.
+
+    Sends nothing automatically; the next ``workgroup.join`` carries
+    the value (re-joining a workgroup refreshes the bio there too).
+    """
+    from alpi import ui
+
+    cfg = config.load(h)
+
+    ui.banner(
+        ui.crumb("setup", "identity"),
+        subtitle=_identity_status(cfg),
+        home=h,
+    )
+    ui.dim(
+        "Public bio is your one-line tag-line ('product engineer —\n"
+        "velocity, ships fast'). It is sent on every workgroup.join\n"
+        "and rendered in other members' agent prompts so they know\n"
+        "what you do without having to ask.\n\n"
+        "AGENT.md stays private — this is the deliberate cross-agent\n"
+        "introduction. Visible to anyone who joins a workgroup with\n"
+        "you (so think 'business card', not personal notes).\n\n"
+        "Empty = keep current · `clear` = unset · `draft` = synthesize\n"
+        "a draft from your AGENT.md (one LLM call, you can edit it)."
+    )
+    ui._console.print("")
+
+    current = cfg.public_bio or ""
+    raw = ui.text("Public bio", default=current)
+    if raw is None:
+        return ui.cancelled()
+    raw = raw.strip()
+    if not raw:
+        ui.ok_and_wait("bio unchanged")
+        return
+    if raw.lower() == "clear":
+        cfg.public_bio = ""
+        config.save(cfg)
+        ui.ok_and_wait("bio cleared — peers will see handle only")
+        return
+    if raw.lower() == "draft":
+        drafted = _draft_bio_from_agent(h, cfg)
+        if drafted is None:
+            return  # ui already showed the failure / cancel
+        # Round-trip the draft so the user can edit before saving.
+        edited = ui.text("Edit the draft (Enter to accept):", default=drafted)
+        if edited is None:
+            return ui.cancelled()
+        raw = (edited or "").strip()
+        if not raw:
+            ui.ok_and_wait("bio unchanged")
+            return
+    if len(raw) > 200:
+        raw = raw[:200]
+        ui.dim("(truncated to 200 chars)")
+    cfg.public_bio = raw
+    config.save(cfg)
+    ui.ok_and_wait(f"bio set: {raw}")
+
+
+def _draft_bio_from_agent(h: Path, cfg: config.Config) -> str | None:
+    """Ask the configured LLM to synthesize a one-line public bio
+    from the profile's AGENT.md. One-shot call, no streaming, no
+    tools. Returns the drafted string or None on failure / cancel."""
+    from alpi import home as _home, llm as _llm, ui
+
+    agent_md = _home.agent_path(h)
+    text = agent_md.read_text() if agent_md.exists() else ""
+    if not text.strip():
+        ui.fail_and_wait("AGENT.md is empty — nothing to summarise")
+        return None
+    if not cfg.model:
+        ui.fail_and_wait("no model configured — set one in setup → Model")
+        return None
+
+    ui.dim("synthesizing one-line bio from AGENT.md…")
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "You write one-line public bios for AI agents. "
+                "Read the agent's private AGENT.md and produce a single "
+                "tag-line under 100 chars (no quotes, no period at end) "
+                "that another agent could read in a workgroup roster to "
+                "understand this agent's role and bias. Output only the "
+                "tag-line, nothing else."
+            ),
+        },
+        {"role": "user", "content": text[:8000]},
+    ]
+    try:
+        result = _llm.complete(model=cfg.model, messages=messages)
+    except Exception as e:  # noqa: BLE001
+        ui.fail_and_wait(f"draft failed: {e}")
+        return None
+    out = (result.content or "").strip().strip('"').strip("'").splitlines()
+    if not out:
+        ui.fail_and_wait("LLM returned an empty draft")
+        return None
+    return out[0].strip()[:200]
 
 
 def _workspace_status(cfg: config.Config) -> str:
@@ -2108,10 +2227,14 @@ def workgroup_create(
     if budget_tokens is not None:
         budget["max_tokens"] = budget_tokens
 
+    # Carry the profile's ``public_bio`` onto the hub's own member
+    # record. Members joining later send their own via ``workgroup.join``;
+    # the hub never calls join on itself, so the CLI plumbs it here.
+    hub_bio = (config.load(h).public_bio or "").strip()
     try:
         wg = wg_mod.create(
             h, name=name, hub_kp=load_or_generate(h),
-            member_pubkeys=pubkeys, budget=budget,
+            member_pubkeys=pubkeys, budget=budget, hub_bio=hub_bio,
         )
     except ValueError as e:
         raise click.ClickException(str(e))

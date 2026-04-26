@@ -441,11 +441,18 @@ def _create_flow(home: Path) -> None:
     )
 
     kp = load_or_generate(home)
+    # Carry the hub's profile-level public_bio onto its own member
+    # record at create time. Members joining later send their bios via
+    # ``workgroup.join``; the hub never calls join on itself, so we
+    # have to plumb it explicitly here.
+    from alpi import config as _cfg
+    hub_bio = (_cfg.load(home).public_bio or "").strip()
     try:
         wg = wg_mod.create(
             home, name=name, hub_kp=kp,
             member_pubkeys=member_pks, budget=budget or {},
             briefing=briefing, auto_kickoff=bool(auto_kickoff),
+            hub_bio=hub_bio,
         )
     except ValueError as e:
         ui.fail_and_wait(str(e))

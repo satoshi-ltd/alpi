@@ -88,8 +88,15 @@ async def join(home: Path, peer_id: str, wg_id: str) -> sub_mod.Subscription:
     impersonate the real hub. Trust must be declared, not inferred.
     """
     kp = load_or_generate(home)
-    result = await _call(home, kp, peer_id, "workgroup.join",
-                         {"workgroup_id": wg_id})
+    # Self-publish our profile's public bio as part of the join. The
+    # hub stamps it on our member record so every other member's
+    # roster sees the tag-line. Empty bio = nothing published.
+    from alpi import config as _cfg
+    bio = (_cfg.load(home).public_bio or "").strip()
+    params: dict[str, Any] = {"workgroup_id": wg_id}
+    if bio:
+        params["bio"] = bio
+    result = await _call(home, kp, peer_id, "workgroup.join", params)
     res = _resolve_hub(home, peer_id)
     sub = sub_mod.get(home, wg_id) or sub_mod.Subscription(
         wg_id=wg_id,
@@ -116,19 +123,30 @@ async def join(home: Path, peer_id: str, wg_id: str) -> sub_mod.Subscription:
 
 def _absorb_roster(sub: sub_mod.Subscription, raw) -> None:
     """Hub returns ``members`` as a list of either bare pubkey strings
-    (legacy shape from PR 1-4) or ``{pubkey, last_seen_at}`` dicts
-    (PR 5+). Normalise both into ``sub.roster: {pubkey: last_seen_at}``
-    so the engine context block always has a stable map."""
+    (legacy shape) or ``{pubkey, last_seen_at, bio?}`` dicts. Normalise
+    into ``sub.roster: {pubkey: last_seen_at}`` plus ``sub.roster_bios:
+    {pubkey: bio}`` so the engine context block always has a stable
+    map. Empty bios drop out of the bio map (renders as just the
+    handle, no tag-line)."""
     if not raw:
         return
-    out: dict[str, str] = {}
+    seen: dict[str, str] = {}
+    bios: dict[str, str] = {}
     for entry in raw:
         if isinstance(entry, dict) and "pubkey" in entry:
-            out[str(entry["pubkey"])] = str(entry.get("last_seen_at") or "")
+            pk = str(entry["pubkey"])
+            seen[pk] = str(entry.get("last_seen_at") or "")
+            bio = str(entry.get("bio") or "").strip()
+            if bio:
+                bios[pk] = bio
         elif isinstance(entry, str):
-            out[entry] = ""
-    if out:
-        sub.roster = out
+            seen[entry] = ""
+    if seen:
+        sub.roster = seen
+    # Always replace the bios snapshot — a peer that cleared its
+    # public_bio should disappear from the rendered tag-lines on the
+    # next join/pull.
+    sub.roster_bios = bios
 
 
 async def post(

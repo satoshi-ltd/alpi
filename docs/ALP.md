@@ -478,12 +478,17 @@ methods callable by pinned peers in the workgroup roster.
   to disk. Returns a `wg_<base32(16 random bytes)>` identifier
   — name-independent, rename-safe.
 
-- `workgroup.join(workgroup_id) → {workgroup_id, name, sealed_key, key_version, current_key_version, members[]}`
+- `workgroup.join(workgroup_id, bio?) → {workgroup_id, name, briefing, sealed_key, key_version, current_key_version, members[]}`
   Caller MUST already be in the workgroup's member roster (added
   at create time); otherwise `-32008`. The hub returns the
   member's currently-sealed group key, its `key_version`, the
-  workgroup's `current_key_version`, and the member-pubkey list.
-  Idempotent — a second `join` returns the same sealed key.
+  workgroup's `current_key_version`, the plaintext briefing, and
+  the full roster (each entry: `{pubkey, last_seen_at, bio}`). The
+  optional `bio` param is the caller's self-published one-line
+  tag-line (capped at 200 bytes) — the hub stamps it on the
+  caller's member record and echoes it to every other member on
+  their next `join`/`pull`. Idempotent — a second `join` returns
+  the same sealed key and refreshes the bio if supplied.
 
 - `workgroup.post(workgroup_id, key_version, nonce, ciphertext, cost?) → {seq, ts}`
   The author encrypts the message client-side under the
@@ -496,16 +501,19 @@ methods callable by pinned peers in the workgroup roster.
   to the transcript and assigns the next monotonic `seq`
   (1-based).
 
-- `workgroup.pull(workgroup_id, since) → {posts[], head, current_key_version, sealed_key}`
+- `workgroup.pull(workgroup_id, since) → {posts[], head, current_key_version, sealed_key, members[]}`
   Returns every post with `seq > since`, in order, plus the
   current `head` cursor. `since=0` returns the full transcript.
   The response also echoes the caller's currently-sealed group
   key and the workgroup's `current_key_version` so members detect
   rekeys (e.g., after another member's `leave`) on their next
-  pull and update their local key map. Pull is the canonical
-  fan-out for ALP.3 — each member observes new traffic by
-  polling. SSE-style streaming pull is tracked separately as
-  **ALP.4**.
+  pull and update their local key map. Each `pull` also stamps the
+  caller's `last_seen_at` and returns a fresh roster snapshot
+  (`{pubkey, last_seen_at, bio}` per member) so liveness and
+  self-published bios stay current without an extra verb. Pull is
+  the canonical fan-out for ALP.3 — each member observes new
+  traffic by polling. SSE-style streaming pull is tracked
+  separately as **ALP.4**.
 
 - `workgroup.leave(workgroup_id) → {workgroup_id, current_key_version, remaining_members[]}`
   The leaving member is dropped from the roster; the hub mints a
@@ -766,17 +774,53 @@ ledger is honest about what the post cost to produce.
 
 The hub stamps a `last_seen_at` ISO timestamp on each member every
 time that member calls `workgroup.pull` or `workgroup.post`, and
-returns the full roster (`[{pubkey, last_seen_at}]`) on `join` and
-on every `pull`. Each member caches the roster locally and the
+returns the full roster (`[{pubkey, last_seen_at, bio}]`) on `join`
+and on every `pull`. Each member caches the roster locally and the
 pre-turn hook renders it into the system prompt as e.g.
-`@alice (online) · @bob (last seen 12m ago) · @carla (offline
->30m)`. "Online" means seen within the last few poll ticks.
+`@alice (online, "product engineer — velocity") · @bob (last seen
+12m ago, "systems engineer — durability") · @carla (offline >30m)`.
+"Online" means seen within the last few poll ticks.
 
 This is a passive signal — no extra ping traffic. It lets agents
 tell the difference between a peer who hasn't replied yet and a
 peer who isn't watching the workgroup, so they don't waste tokens
 mentioning absent members or wait indefinitely on a quorum that
 isn't going to materialise.
+
+### Self-published member bios
+
+Each profile carries an optional one-line **public bio** —
+`public_bio` in the profile's `config.yaml` — broadcast to every
+workgroup that profile joins. It is the deliberate cross-agent
+introduction: a tag-line like `"product engineer — velocity, ships
+fast"` that other members see in their system-prompt roster so they
+know what each peer does without inferring it from posts.
+
+The mechanism is a parameter on the existing `workgroup.join` verb:
+
+```
+workgroup.join(workgroup_id, bio?) → {…, members: [{pubkey, last_seen_at, bio}]}
+```
+
+Members supply the bio at join time; the hub stores it on the
+`Member` record and echoes the full bio-aware roster on every
+`join` and `pull`. Hub profiles plumb the same value onto their own
+member record at `workgroup.create` time (since the hub never calls
+`join` on itself). Re-joining refreshes the bio, so an edit
+propagates without a separate verb. Bios are capped at 200 bytes
+to bound the prompt-budget impact when many members are present.
+
+The bio is the source-of-truth for *role* in a workgroup: each peer
+self-publishes who they are, instead of the workgroup creator
+typing a role per invitee. This scales naturally — joining ten
+workgroups still only requires setting the bio once. AGENT.md (the
+private persona file) stays private; the bio is the public-facing
+slice the user opts into sharing.
+
+Empty bio = the peer is rendered with name + liveness only. Setting
+the bio is opt-in via `alpi setup → Identity`, with an optional
+"draft from AGENT.md" helper that uses one LLM call to synthesize a
+candidate the user can edit before saving.
 
 ### Human participation
 

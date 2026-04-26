@@ -49,30 +49,26 @@ it. The hub stays zero-knowledge — task state is computed locally
 from the post stream. Single-task model only; multi-task is
 tracked separately for v0.4.
 
-**v0.3 backlog (ALP.3 follow-ups, queued after PR 5):**
+**v0.3 backlog (ALP.3 follow-ups):**
 
-- **Workgroup roles** — optional ``roles: dict[peer_id, str]`` in
-  ``meta.yaml`` so the workgroup creator publishes a one-line role
-  hint per invited member (``alice: "product engineer — velocity"``
-  / ``bob: "systems engineer — durability"``). The hub returns it
-  on ``workgroup.join``, members cache it in their subscription,
-  and the engine pre-turn hook surfaces it alongside the briefing.
-  Lets every agent see the roster of who-does-what so misdirected
-  tasks ("@bob frontend please") can be redirected with confidence
-  instead of accepted blindly. AGENT.md stays private; ``roles`` is
-  just the public-facing tag-line. No protocol change beyond a
-  metadata field. Estimated ~50 LoC + tests.
+- **Active liveness probes** (optional follow-up to the shipped
+  passive liveness) — passive ``last_seen_at`` is in place: the
+  hub stamps it on every ``workgroup.pull`` / ``workgroup.post``
+  and returns the roster on ``join`` / ``pull``; the engine
+  pre-turn hook tags peers as ``online`` / ``last seen N min
+  ago`` / ``offline (>30 min)``. If passive proves unreliable in
+  the wild, layer an active probe via ``link.ping`` with a 500 ms
+  timeout, but only on the wizard's "show members" view — never
+  on every engine turn (would blow turn latency).
 
-- **Active liveness probes** (optional follow-up to passive
-  liveness shipped in PR 5) — passive ``last_seen_at`` is in
-  place: the hub stamps it on every ``workgroup.pull`` /
-  ``workgroup.post`` and returns the roster on ``join`` /
-  ``pull``; the engine pre-turn hook tags peers as ``online`` /
-  ``last seen N min ago`` / ``offline (>30 min)``. If passive
-  proves unreliable in the wild, layer an active probe via
-  ``link.ping`` with a 500 ms timeout, but only on the wizard's
-  "show members" view — never on every engine turn (would blow
-  turn latency).
+- **Per-workgroup role override** — extend the shipped self-published
+  ``public_bio`` (each profile broadcasts its own tag-line on
+  ``workgroup.join``, source of truth lives with the joiner, no
+  duplication per workgroup) with an optional override on
+  ``meta.yaml`` for the rare case the creator wants to pin a
+  workgroup-specific role on a member ("in this workgroup, alice is
+  the timekeeper"). Don't add until a real case appears — the bio
+  covers the vast majority. Estimated ~30 LoC + tests if and when.
 
 ### AU — Distribution + update path
 

@@ -143,3 +143,44 @@ def test_block_contains_engagement_guardrails(short_tmp: Path) -> None:
     assert "DO NOT POST" in block
     assert "Don't open new" in block or "do not author" in block.lower()
     assert "auto-declares" in block.lower()
+
+
+def test_roster_renders_bios_when_present(short_tmp: Path) -> None:
+    """Members in the roster with a self-published bio render as
+    ``@alice (online, "product engineer — velocity")``; members
+    without a bio render with just the status."""
+    home = short_tmp / "alice"; home.mkdir()
+    kp = load_or_generate(home)
+    # Pin two peers so they alias to readable handles in the block.
+    peers_mod.add(home, Peer(
+        id="bob", pubkey="BOB_PK", allow=["link.ping"], address=None,
+    ))
+    peers_mod.add(home, Peer(
+        id="carla", pubkey="CARLA_PK", allow=["link.ping"], address=None,
+    ))
+    sub = sub_mod.Subscription(
+        wg_id="wg1", name="design", hub_id="bob", hub_pubkey="BOB_PK",
+        roster={"BOB_PK": "", "CARLA_PK": ""},
+        roster_bios={"BOB_PK": "systems engineer — durability"},
+    )
+    sub_mod.upsert(home, sub)
+    block = agent_context.build(home)
+    assert block is not None
+    assert '@bob (unknown, "systems engineer — durability")' in block
+    # Carla has no bio → renders without the quoted suffix.
+    assert "@carla (unknown)" in block
+    assert '@carla (unknown, ' not in block
+
+
+def test_hub_workgroup_renders_own_bio(short_tmp: Path) -> None:
+    """When the profile is the hub of a workgroup, its own ``Member.bio``
+    (set via ``hub_bio=`` on ``create``) shows up in the rendered roster."""
+    home = short_tmp / "alice"; home.mkdir()
+    kp = load_or_generate(home)
+    wg_mod.create(
+        home, name="hosted", hub_kp=kp, member_pubkeys=[],
+        hub_bio="product engineer — velocity",
+    )
+    block = agent_context.build(home)
+    assert block is not None
+    assert "product engineer — velocity" in block
