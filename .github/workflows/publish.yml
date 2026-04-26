@@ -1,0 +1,247 @@
+name: publish
+
+# Auto-publish to PyPI on every merge to main where the
+# pyproject.toml version differs from the version currently on PyPI
+# — Cloudflare-style "merge → deploy", adapted to the immutability
+# of PyPI by gating on the version delta.
+#
+# Why this design:
+#   - alpi already bumps patch in every commit (memory rule), so a
+#     PR that lands on main is, by convention, a release.
+#   - PyPI versions are immutable; we never reuse a number. Skipping
+#     no-op publishes (version unchanged) prevents accidents.
+#   - Smoke-install runs *before* publish, so a wheel that builds
+#     locally but fails on a clean container can't reach users.
+#
+# Manual ``workflow_dispatch`` is preserved for two reasons: (1)
+# rehearse a release on TestPyPI, (2) re-publish a tag if the
+# original auto-publish was interrupted (e.g. CI outage).
+#
+# Trusted Publisher (OIDC) is configured on PyPI; no API tokens
+# live in this repo.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "publish target"
+        required: true
+        default: "testpypi"
+        type: choice
+        options:
+          - testpypi
+          - pypi
+
+permissions: {}
+
+jobs:
+  # 1. Cheap probe: is the version different from what's on PyPI?
+  #    If not, exit early — no build, no smoke, no publish, no spam.
+  check-version:
+    name: should we publish?
+    runs-on: ubuntu-latest
+    outputs:
+      should_publish: ${{ steps.gate.outputs.should_publish }}
+      version: ${{ steps.gate.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: gate
+        run: |
+          version=$(python3 -c "import tomllib, pathlib; print(tomllib.loads(pathlib.Path('pyproject.toml').read_text())['project']['version'])")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+          # Manual dispatch: always proceed (the operator decided).
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "should_publish=true" >> "$GITHUB_OUTPUT"
+            echo "manual dispatch — proceeding with version $version"
+            exit 0
+          fi
+
+          # Auto on push: compare against PyPI's latest.
+          live=$(curl -fsS "https://pypi.org/pypi/alpi-agent/json" | python3 -c "import json, sys; print(json.load(sys.stdin)['info']['version'])" 2>/dev/null || echo "none")
+          echo "pyproject=$version  pypi=$live"
+          if [ "$version" = "$live" ]; then
+            echo "should_publish=false" >> "$GITHUB_OUTPUT"
+            echo "version unchanged ($version already on PyPI) — skipping"
+          else
+            echo "should_publish=true" >> "$GITHUB_OUTPUT"
+            echo "version changed ($live → $version) — will publish"
+          fi
+
+  # 2. Build sdist + wheel and validate twine-readability.
+  build:
+    name: build
+    needs: check-version
+    if: needs.check-version.outputs.should_publish == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: latest
+      - run: |
+          rm -rf dist/
+          uv build
+      - run: uvx twine check dist/*
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+          retention-days: 7
+
+  # 3. Smoke-install in clean containers BEFORE publishing. If a
+  #    runtime dep is missing or the entry point breaks, we want to
+  #    fail here, not on a user's machine after the wheel is live.
+  smoke:
+    name: smoke (${{ matrix.image }})
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+      matrix:
+        image:
+          - "python:3.10-slim"
+          - "python:3.11-slim"
+          - "python:3.12-slim"
+          - "ubuntu:22.04"
+          - "debian:12"
+    container:
+      image: ${{ matrix.image }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: bootstrap curl for the uv installer
+        # All matrix images are Debian-based (python:*-slim, ubuntu,
+        # debian) so apt-get is always available. python:*-slim ships
+        # without curl/ca-certificates; we install only what the next
+        # step needs. uv brings its own Python toolchain so we don't
+        # need to pre-install python3 here.
+        run: |
+          apt-get update -qq
+          apt-get install -y -qq --no-install-recommends curl ca-certificates
+
+      - name: install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: install alpi from local wheel
+        # Glob is permissive — the wheel filename uses PEP 503's
+        # normalized form (``alpi_agent-…`` with underscore), not the
+        # distribution name from pyproject (``alpi-agent``).
+        run: |
+          export PATH="$HOME/.local/bin:$PATH"
+          uv tool install ./dist/*.whl
+
+      - name: alpi --version returns the right number
+        run: |
+          export PATH="$HOME/.local/bin:$PATH"
+          out=$(alpi --version)
+          echo "$out"
+          echo "$out" | grep -q "${{ needs.check-version.outputs.version }}" || {
+            echo "version mismatch: expected ${{ needs.check-version.outputs.version }}"
+            exit 1
+          }
+
+      - name: alpi --help opens
+        run: |
+          export PATH="$HOME/.local/bin:$PATH"
+          alpi --help > /dev/null
+
+  # 4a. TestPyPI dry-run path. Triggered only by manual dispatch
+  #     with target=testpypi. Useful before a real release to catch
+  #     classifier / metadata issues without burning a real version.
+  publish-testpypi:
+    name: publish to TestPyPI
+    needs: [check-version, smoke]
+    if: github.event_name == 'workflow_dispatch' && inputs.target == 'testpypi'
+    runs-on: ubuntu-latest
+    environment:
+      name: testpypi
+      url: https://test.pypi.org/project/alpi-agent/
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+
+  # 4b. Real publish — auto on push to main when version changed,
+  #     or manual dispatch with target=pypi. No environment gate
+  #     (Cloudflare-style: merge = deploy). Tag + GitHub release
+  #     are created post-publish from the same commit.
+  publish-pypi:
+    name: publish to PyPI
+    needs: [check-version, smoke]
+    if: |
+      (github.event_name == 'push' && needs.check-version.outputs.should_publish == 'true')
+      || (github.event_name == 'workflow_dispatch' && inputs.target == 'pypi')
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write   # OIDC for trusted publishing
+      contents: write   # to create the tag + GitHub release
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+
+      # Tag the commit we just published so users can map a PyPI
+      # version back to a git revision. Skip if the tag already
+      # exists (manual re-runs after a partial failure).
+      - name: tag commit
+        env:
+          VERSION: ${{ needs.check-version.outputs.version }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git rev-parse "v$VERSION" >/dev/null 2>&1; then
+            echo "tag v$VERSION already exists — skipping"
+          else
+            git tag -a "v$VERSION" -m "v$VERSION"
+            git push origin "v$VERSION"
+          fi
+
+      - name: extract changelog excerpt
+        id: changelog
+        env:
+          VERSION: ${{ needs.check-version.outputs.version }}
+        run: |
+          {
+            echo "body<<__EOF__"
+            awk -v v="$VERSION" '
+              $0 ~ "^## v"v" " {flag=1; next}
+              flag && /^## v[0-9]/ {flag=0}
+              flag {print}
+            ' CHANGELOG.md
+            echo "__EOF__"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ needs.check-version.outputs.version }}
+          name: v${{ needs.check-version.outputs.version }}
+          body: ${{ steps.changelog.outputs.body }}
+          files: dist/*
+          fail_on_unmatched_files: true
+          prerelease: false

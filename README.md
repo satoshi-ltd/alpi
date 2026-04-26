@@ -71,7 +71,7 @@ The current release ships the full local-to-network shape:
 ## Quickstart
 
 ```bash
-uv tool install alpi
+uv tool install alpi-agent
 alpi setup
 alpi
 alpi doctor

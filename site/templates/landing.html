@@ -378,7 +378,7 @@
       alpi starts as the agent in your terminal. Then it grows with you: one profile for work, one for cron, one on your home server, one for research, one in a workgroup with other alpis. Each profile has its own memory, keys, model, skills, gateways, approvals, and trust boundary. ALP links them across machines without a registry, central account, or mandatory cloud. <em>Bring any model. Keep every key. Run one alpi, or a network that stays yours.</em>
     </p>
     <div class="cta-row">
-      <a class="btn btn-primary" href="#install">$ uv tool install alpi <span class="arr">→</span></a>
+      <a class="btn btn-primary" href="#install">$ uv tool install alpi-agent <span class="arr">→</span></a>
       <a class="btn btn-ghost" href="#principles">read the principles</a>
     </div>
 
@@ -458,7 +458,7 @@
       <div class="cell">
         <span class="n">step · 01</span>
         <h3>Install.</h3>
-        <p><span class="mono" style="color:var(--fg)">uv tool install alpi</span>. Python ≥ 3.10. Optional: <span class="mono" style="color:var(--fg)">playwright install chromium</span> (~200 MB) for the <span class="mono" style="color:var(--fg)">browser</span> tool.</p>
+        <p><span class="mono" style="color:var(--fg)">uv tool install alpi-agent</span>. Python ≥ 3.10. Optional: <span class="mono" style="color:var(--fg)">playwright install chromium</span> (~200 MB) for the <span class="mono" style="color:var(--fg)">browser</span> tool.</p>
       </div>
       <div class="cell">
         <span class="n">step · 02</span>
@@ -738,8 +738,8 @@
     <h2>Four commands. No account.</h2>
 
     <pre class="ascii-diagram" style="margin-top:56px;font-size:14px;line-height:1.8;max-width:780px">
-<span class="muted"># 1. install from PyPI (uv recommended, pip also works)</span>
-$ uv tool install alpi
+<span class="muted"># 1. install from PyPI (uv recommended; pipx works too)</span>
+$ uv tool install alpi-agent   <span class="muted"># package name; binary stays "alpi"</span>
 
 <span class="muted"># 2. configure the default profile (model + .env + workspace)</span>
 $ alpi setup
@@ -749,11 +749,11 @@ $ alpi
 
 <span class="muted"># 4. check health</span>
 $ alpi doctor
-
-<span class="muted"># later — add a second profile, fully isolated</span>
-$ alpi profile create work
-$ alpi -p work setup
 </pre>
+
+    <p class="sub" style="margin-top:32px">
+      Full guide → <a href="docs/INSTALL.html" style="color:var(--fg)">INSTALL.md</a> · alternatives, update path, uninstall, troubleshooting.
+    </p>
 
     <p class="sub" style="margin-top:48px">
       alpi needs Python ≥ 3.10. The default profile lives in <span class="mono" style="color:var(--fg)">~/.alpi/</span>. Additional profiles in <span class="mono" style="color:var(--fg)">~/.alpi/profiles/&lt;name&gt;/</span>. No account, no central server, no telemetry — your <span class="mono" style="color:var(--fg)">.env</span> is the single source of truth for secrets.
