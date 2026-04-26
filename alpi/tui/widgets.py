@@ -360,9 +360,6 @@ class AlpiTopBar(Static):
         workspace_label = "" if narrow else f"[{muted}]workspace[/{muted}] "
         version_block = f"[b]alpi[/b] [{muted}]{escape(self._version)}[/{muted}]"
         if self._update_available:
-            # Small accent badge next to the version. Drawn in narrow
-            # mode too — it's a single token, deserves the screen
-            # real estate over labels.
             badge_color = accent or "yellow"
             version_block += (
                 f" [{badge_color}]↑ v{escape(self._update_available)}[/{badge_color}]"

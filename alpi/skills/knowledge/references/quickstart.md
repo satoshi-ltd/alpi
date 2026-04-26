@@ -10,6 +10,8 @@ For the security posture, see [SECURITY.md](docs/SECURITY.md).
 Why alpi is built the way it is: see the
 [Why section](README.md#why-alpi-is-built-like-this) in the README.
 
+<!-- alpi-demo -->
+
 ## 1. Install
 
 ```bash
@@ -98,17 +100,20 @@ alpi setup → Gateways
 ```
 
 Pick the channel, follow the prompts (the wizard knows where to
-point you for tokens and credentials), then install the gateway
-as a background service:
+point you for tokens and credentials), then install the unified
+background service so alpi answers 24/7:
 
 ```bash
-alpi setup → Gateway service → Install
+alpi setup → Service → Install
 ```
 
-From now on alpi answers you over the channel 24/7 — on boot, on
-crash-restart, on every inbound. Messages from the gateway share
-per-chat session threads with your TUI, so a conversation started
-on Telegram can continue in the terminal.
+The single `alpi service` orchestrator hosts the gateway, the
+scheduler, and the ALP listener on one event loop — one PID, one
+log file, one launchd / systemd unit per profile. From now on
+alpi answers you over the channel 24/7 — on boot, on crash-
+restart, on every inbound. Messages from the gateway share per-
+chat session threads with your TUI, so a conversation started on
+Telegram can continue in the terminal.
 
 ## 7. Add a second profile (optional)
 
@@ -125,15 +130,16 @@ Everything is per-profile: home directory, sessions, memory,
 skills, keys, peers. See [docs/PROFILES.md](docs/PROFILES.md) for
 the full model.
 
-## 8. Install ALP service (optional)
+## 8. Link to other alpis (optional)
 
-If you plan to link profiles or machines with other alpis, install
-the [Alpi Link Protocol](docs/ALP.md) listener as a service and
-exchange pubkeys:
+If you plan to link profiles or machines with other alpis, the
+unified service already exposes the [Alpi Link Protocol](docs/ALP.md)
+listener — no separate install. Run the service if you haven't
+already, then exchange pubkeys with peers:
 
 ```bash
-alpi setup → ALP service → Install
-alpi setup → Peers
+alpi setup → Service → Install      # if not already running
+alpi setup → ALP → Peers
 ```
 
 See [docs/DEPLOYMENTS.md](docs/DEPLOYMENTS.md) for topologies

@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="demo.css" />
 <style>
   :root{
     --bg:#0a0a0a;
@@ -175,40 +176,10 @@
   .btn .arr{transition:transform .2s}
   .btn:hover .arr{transform:translateX(4px)}
 
-  /* Terminal preview card */
-  .term{
-    margin-top:80px;
-    border:1px solid var(--line);
-    background:var(--panel-bg);
-    backdrop-filter:blur(4px);
-    border-radius:4px;
-    overflow:hidden;
-    box-shadow:0 30px 80px -20px rgba(0,0,0,.32);
-  }
-  .term-head{
-    display:flex;align-items:center;gap:12px;padding:12px 16px;
-    border-bottom:1px solid var(--line);
-    font-family:"JetBrains Mono",monospace;font-size:11px;color:var(--muted);
-  }
-  .term-head .dots{display:flex;gap:6px}
-  .term-head .dots span{width:10px;height:10px;border-radius:50%;background:var(--dim)}
-  .term-body{
-    padding:24px 28px;font-family:"JetBrains Mono",monospace;font-size:13px;line-height:1.65;
-    min-height:340px;
-  }
-  /* Chat glyphs follow the real Textual TUI:
-       › <text>                        = user prompt (bold, accent)
-       ◆ <name>  <arg>  →  <result>    = tool call   (diamond + name bold)
-     Plain lines (alpi responses) pick up var(--fg) from .term-body. */
-  .term-body .prompt{color:#a89b76;font-weight:700}
-  .term-body .muted{color:var(--muted)}
-  .term-body .user{color:#a89b76;font-weight:700}
-  .term-body .bot{color:#d8d8d4}
-  :root[data-theme="light"] .term-body .bot{color:var(--fg)}
-  .term-body .diamond{color:#a89b76;display:inline-block;width:14px}
-  .term-body .tool{color:var(--fg);font-weight:700}
-  .term-body .cursor{display:inline-block;width:9px;height:16px;background:var(--fg);vertical-align:-2px;animation:blink 1.1s steps(2) infinite}
-  @keyframes blink{50%{opacity:0}}
+  /* Hero terminal lives in the shared alpi-demo widget — see demo.css.
+     Margin lifts it from the lead paragraph the same distance the old
+     ``.term`` block did. */
+  .hero [data-alpi-demo]{margin-top:80px;display:block}
 
   /* Section scaffolding */
   section{padding:120px 0;position:relative}
@@ -382,16 +353,7 @@
       <a class="btn btn-ghost" href="#principles">read the principles</a>
     </div>
 
-    <!-- Terminal mock -->
-    <div class="term" aria-hidden="true">
-      <div class="term-head">
-        <div class="dots"><span></span><span></span><span></span></div>
-        <span>alpi v0.2.81 · profile: personal · claude-sonnet-4.6 · ctx 24k · $0.01 · sandbox off · workspace ~/git/alpi</span>
-      </div>
-      <div class="term-body" id="termBody">
-        <!-- filled by JS -->
-      </div>
-    </div>
+    <div data-alpi-demo data-scene-set="hero" aria-hidden="true"></div>
   </div>
 </section>
 
@@ -483,7 +445,7 @@
       <div class="cell">
         <span class="n">step · 06</span>
         <h3>Connect a gateway.</h3>
-        <p><span class="mono" style="color:var(--fg)">alpi setup → Gateways</span> then <span class="mono" style="color:var(--fg)">Gateway service → Install</span>. alpi now answers Telegram / IMAP / Gmail 24/7, with per-chat session threading.</p>
+        <p><span class="mono" style="color:var(--fg)">alpi setup → Gateways</span> then <span class="mono" style="color:var(--fg)">Service → Install</span>. The unified service hosts gateway, scheduler, and ALP listener on one PID — answers Telegram / IMAP / Gmail 24/7 with per-chat session threading.</p>
       </div>
       <div class="cell">
         <span class="n">step · 07</span>
@@ -493,7 +455,7 @@
       <div class="cell">
         <span class="n">step · 08</span>
         <h3>Link another alpi.</h3>
-        <p><span class="mono" style="color:var(--fg)">alpi setup → ALP service → Install</span> then <span class="mono" style="color:var(--fg)">→ Peers</span> to exchange pubkeys. Use ALP.2 for machine links and ALP.3 workgroups when several alpis need a shared workspace.</p>
+        <p>The same <span class="mono" style="color:var(--fg)">Service</span> install above also exposes the ALP listener. Pin pubkeys with <span class="mono" style="color:var(--fg)">alpi setup → ALP → Peers</span>. Use ALP.2 for machine links and ALP.3 workgroups when several alpis need a shared workspace.</p>
       </div>
       <div class="cell">
         <span class="n">step · 09</span>
@@ -967,68 +929,10 @@ $ alpi doctor
   })();
 
   /* ============================================================
-     TERMINAL TYPE-OUT
-     ============================================================ */
-  (function(){
-    const el = document.getElementById('termBody');
-    // Each line: d = ms to wait BEFORE printing this line. Tuned so the
-    // animation reads like a real turn: prompt → think → tool latency →
-    // synthesis → next prompt, with tool latencies loosely matching the
-    // `·  1.3s` hints in the muted column.
-    // TUI layout helper: name left-padded to TOOL_COL_WIDTH (14 chars,
-    // same as alpi/tui/widgets.py). Non-breaking spaces so whitespace
-    // survives the HTML flow.
-    const pad = (s, n) => s + '\u00A0'.repeat(Math.max(0, n - s.length));
-    const TOOL_COL = 14;
-    const T = (name, arg, result, dur) =>
-      '<span class="diamond">◆</span> '
-      + '<span class="tool">' + pad(name, TOOL_COL) + '</span>'
-      + ' <span class="muted">' + arg + '</span>'
-      + '  <span class="muted">→</span>  '
-      + result
-      + (dur ? '   <span class="muted">' + dur + '</span>' : '');
-    const U = (text) =>
-      '<span class="prompt">›</span> <span class="user">' + text + '</span>';
-
-    const lines = [
-      {d:   0, t:'<span class="muted">alpi v0.2.81  ·  profile personal  ·  sandbox off  ·  ~/git/alpi</span>'},
-      {d:  80, t:''},
-      {d: 350, t: U('ask my other alpis what needs attention before monday')},
-      {d: 650, t:'<span class="muted">» routing over ALP: @nas (home-server · ALP.2) · @work (local · ALP.1) · @cron (local · ALP.1)</span>'},
-      {d: 550, t: T('peer',  '@nas  · link.ask',       'backup + services', '1.3s')},
-      {d: 900, t: T('peer',  '@work · link.ask',       'peer handoffs + calendar',  '0.6s')},
-      {d: 450, t: T('peer',  '@cron · link.ask',       'scheduled jobs',    '0.4s')},
-      {d: 250, t:''},
-      {d: 550, t:'<span class="bot">Peer brief:</span>'},
-      {d: 220, t:'<span class="bot">  · nas: backup ok, 184 GB; disk at 82%; no auth spikes.</span>'},
-      {d: 220, t:'<span class="bot">  · work: 2 peer handoffs waiting; release note needs review.</span>'},
-      {d: 220, t:'<span class="bot">  · cron: renewal check runs tonight; no failed jobs.</span>'},
-      {d: 250, t:''},
-      {d: 700, t: U('post the ops note to workgroup:home')},
-      {d: 600, t: T('peer',  'workgroup.post · home',  '3 members',         '0.2s')},
-      {d: 450, t:'<span class="bot">posted. @maria and @pi will pull it from the workgroup when they come online.</span>'},
-      {d: 250, t:''},
-      {d: 500, t:'<span class="prompt">›</span> <span class="user"><span class="cursor"></span></span>'},
-    ];
-    el.innerHTML = '';
-    let i = 0;
-    function next(){
-      if (i >= lines.length) return;
-      const div = document.createElement('div');
-      div.innerHTML = lines[i].t || '&nbsp;';
-      el.appendChild(div);
-      i++;
-      setTimeout(next, i < lines.length ? lines[i].d : 0);
-    }
-    // initial wait so the first paint is the empty terminal chrome
-    setTimeout(next, 500);
-  })();
-
-  /* ============================================================
      REVEAL ON SCROLL
      ============================================================ */
   (function(){
-    const els = document.querySelectorAll('section, .cell, .doc, .term, tr, .crow');
+    const els = document.querySelectorAll('section, .cell, .doc, [data-alpi-demo], tr, .crow');
     els.forEach(e=>e.classList.add('reveal'));
     const io = new IntersectionObserver((entries)=>{
       entries.forEach(en=>{
@@ -1041,5 +945,6 @@ $ alpi doctor
     els.forEach(e=>io.observe(e));
   })();
 </script>
+<script src="demo.js" defer></script>
 </body>
 </html>

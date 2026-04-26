@@ -1,27 +1,9 @@
-"""Version-check + upgrade flow for alpi.
+"""Version-check + upgrade flow for ``alpi``.
 
-Two surfaces care about "is there a newer version on PyPI?":
-
-- ``alpi setup`` shows a banner heading when an update exists.
-- The TUI top bar shows a small badge.
-
-Both read from a shared cache at ``~/.alpi/state/update_check.json``
-that a fire-and-forget daemon thread refreshes once every TTL. The
-cache is global (not per-profile) — there's one binary on disk
-regardless of which profile invokes it.
-
-Design choices the rest of the project leans on:
-
-- **No blocking on launch.** The check runs in a daemon thread off
-  the critical path; if PyPI is offline or slow, the user never
-  feels it.
-- **No automatic upgrade.** alpi never reaches PyPI without the
-  user asking. The badge is informational; ``alpi update`` does
-  the actual work.
-- **Skippable in tests.** ``ALPI_SKIP_UPDATE_CHECK=1`` short-
-  circuits the daemon — the autouse fixture in ``conftest.py``
-  sets it so unit tests never reach the network.
-"""
+Cache at ``~/.alpi/cache/update_check.json`` (global, not per-profile)
+is refreshed by a daemon thread; ``alpi doctor`` and the TUI top bar
+read it. ``ALPI_SKIP_UPDATE_CHECK=1`` disables the daemon (set by
+the test autouse fixture)."""
 
 from __future__ import annotations
 
@@ -30,7 +12,6 @@ import json
 import os
 import shutil
 import subprocess
-import sys
 import threading
 from pathlib import Path
 
@@ -40,27 +21,18 @@ from alpi import __version__
 
 _PYPI_URL_DEFAULT = "https://pypi.org/pypi/alpi-agent/json"
 _CHANGELOG_URL = "https://github.com/satoshi-ltd/alpi/blob/main/CHANGELOG.md"
-# 8 hours: three checks complete a full day (00/08/16 wall-clock
-# slots if the user opens alpi at consistent hours). Long enough to
-# stay quiet under shell-script automation; short enough that a
-# release lands in the user's badge by the next morning.
+# 8 h: a release lands in the badge by next morning under typical use.
 _CACHE_TTL_SECONDS = 8 * 3600
 _PYPI_TIMEOUT_SECONDS = 3.0
 _PACKAGE_NAME = "alpi-agent"
 
 
 def _cache_path() -> Path:
-    """Where the JSON cache lives. Global to all profiles — the
-    binary version is one and the same regardless of which profile
-    invokes alpi. Lives under ``cache/`` (the conventional location
-    for derived/refreshable data; ``tts`` and the telegram inbound
-    queue use the same root)."""
     return Path.home() / ".alpi" / "cache" / "update_check.json"
 
 
 def _pypi_url() -> str:
-    """Endpoint used to read the latest version. ``ALPI_UPDATE_INDEX``
-    overrides for TestPyPI rehearsals (see docs/RELEASE.md)."""
+    # ``ALPI_UPDATE_INDEX`` overrides for TestPyPI rehearsals.
     return os.environ.get("ALPI_UPDATE_INDEX") or _PYPI_URL_DEFAULT
 
 
@@ -77,8 +49,7 @@ def _parse_iso(stamp: str) -> _dt.datetime | None:
 
 
 def _load_cache() -> dict | None:
-    """Read the cache. Defensive — corrupt JSON or missing fields
-    return ``None`` so the caller treats it as stale and refetches."""
+    # Defensive — corrupt JSON or missing fields → ``None`` (refetch).
     p = _cache_path()
     if not p.exists():
         return None
@@ -113,15 +84,13 @@ def _is_cache_fresh(cache: dict) -> bool:
 
 
 def _fetch_pypi_version() -> str | None:
-    """Hit PyPI's JSON API. ~100–500 ms; 3 s hard timeout. Returns
-    ``None`` on any failure (offline, 5xx, malformed payload, etc.)
-    so the daemon path stays silent."""
+    # Returns ``None`` on any failure — the daemon path stays silent.
     try:
         with httpx.Client(timeout=_PYPI_TIMEOUT_SECONDS) as client:
             r = client.get(_pypi_url())
             r.raise_for_status()
             data = r.json() or {}
-    except Exception:  # noqa: BLE001 — silence any network/parse error
+    except Exception:  # noqa: BLE001
         return None
     info = data.get("info") or {}
     version = info.get("version")
@@ -131,9 +100,8 @@ def _fetch_pypi_version() -> str | None:
 
 
 def _is_newer(latest: str, current: str) -> bool:
-    """Robust version comparison. Falls back to string equality if
-    parsing fails (then ``False`` — better to under-report updates
-    than to badge spuriously)."""
+    # Falls back to ``False`` on parse error — under-report rather than
+    # badge spuriously.
     try:
         from packaging.version import Version
         return Version(latest) > Version(current)
@@ -142,9 +110,6 @@ def _is_newer(latest: str, current: str) -> bool:
 
 
 def refresh_cache_if_stale() -> None:
-    """Daemon entry point. Reads the cache, returns immediately if
-    fresh, otherwise fetches PyPI and rewrites the cache. Silent on
-    every kind of failure — this runs off the critical path."""
     cache = _load_cache()
     if cache is not None and _is_cache_fresh(cache):
         return
@@ -155,9 +120,6 @@ def refresh_cache_if_stale() -> None:
 
 
 def trigger_background_check_if_enabled() -> None:
-    """Hook called from ``alpi/cli.py::main`` on every invocation.
-    Spawns a daemon thread that updates the cache if stale; returns
-    in <10 ms regardless of network state."""
     if os.environ.get("ALPI_SKIP_UPDATE_CHECK"):
         return
     try:
@@ -166,16 +128,13 @@ def trigger_background_check_if_enabled() -> None:
             name="alpi-update-check",
         ).start()
     except RuntimeError:
-        # Some embedded environments (e.g. frozen interpreters) reject
-        # thread creation — silently skip; not worth crashing for.
+        # Frozen interpreters reject thread creation — silently skip.
         pass
 
 
 def available_update() -> str | None:
-    """Return the latest PyPI version when it is newer than the
-    currently-running ``__version__``, else ``None``. Reads the cache
-    only — never touches the network. Safe to call in hot paths
-    (every menu render, every TUI mount)."""
+    """Latest PyPI version when newer than ``__version__``, else
+    ``None``. Reads cache only — safe in hot paths."""
     cache = _load_cache()
     if cache is None:
         return None
@@ -191,12 +150,7 @@ def available_update() -> str | None:
 
 
 def _detect_installer() -> str:
-    """Identify how alpi was installed. Returns:
-
-    - ``"uv"``    — via ``uv tool install alpi-agent``
-    - ``"pipx"``  — via ``pipx install alpi-agent``
-    - ``"dev"``   — neither; user is on an editable / source install
-    """
+    """``"uv"`` | ``"pipx"`` | ``"dev"`` (editable / source install)."""
     uv = shutil.which("uv")
     if uv:
         try:
@@ -231,8 +185,6 @@ def _upgrade_command(installer: str) -> list[str] | None:
 
 
 def do_update(*, check_only: bool, yes: bool) -> int:
-    """Drive the ``alpi update`` command. Returns a process exit
-    code (0 success, non-zero on failure)."""
     from alpi import ui
 
     ui._console.print(f"[dim]checking PyPI for {_PACKAGE_NAME}…[/dim]")
@@ -244,8 +196,7 @@ def do_update(*, check_only: bool, yes: bool) -> int:
         )
         return 1
 
-    # Refresh the cache while we're online — clears any stale badge
-    # from earlier runs even if the version turns out unchanged.
+    # Refresh cache while online — clears any stale badge.
     _save_cache(latest, __version__)
 
     if not _is_newer(latest, __version__):
@@ -298,8 +249,7 @@ def do_update(*, check_only: bool, yes: bool) -> int:
         ui.fail(f"`{' '.join(cmd)}` exited with status {rc}")
         return rc
 
-    # Sanity-check that the new binary is wired up. Spawn a fresh
-    # subprocess (the current process still imports the old code).
+    # Spawn fresh subprocess — current process still imports old code.
     alpi_bin = shutil.which("alpi")
     if alpi_bin is None:
         ui._console.print(
@@ -324,9 +274,7 @@ def do_update(*, check_only: bool, yes: bool) -> int:
             f"{reported!r} (expected v{latest}). You may need to "
             f"restart your shell.[/yellow]"
         )
-    # Refresh the cache one more time — the new binary's __version__
-    # matches PyPI now, so available_update() will return None and
-    # the badge clears immediately.
+    # Cache the upgraded version so the badge clears immediately.
     try:
         _save_cache(latest, latest)
     except OSError:

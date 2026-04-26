@@ -271,10 +271,7 @@ def main(ctx: click.Context, profile: str | None, continue_last: bool) -> None:
     # user had launched ``alpi -p personal``.
     if profile:
         os.environ["ALPI_PROFILE"] = profile
-    # Background update check — daemon thread, fire-and-forget. Skips
-    # itself when the cache is fresh, when the user passed --version
-    # or --help (click handles those before this function runs), and
-    # when running ``alpi update`` (which does its own fresh fetch).
+    # ``alpi update`` does its own fresh fetch — skip the daemon there.
     if ctx.invoked_subcommand != "update":
         from alpi import updater
         updater.trigger_background_check_if_enabled()
@@ -984,7 +981,7 @@ def _alp_tcp_port_setup(h: Path) -> None:
     alp_cfg["tcp_host"] = host
     cfg.alp = alp_cfg
     cfg_mod.save(cfg)
-    ui.ok_and_wait(f"TCP bound to {host}:{port} — restart the alp service to pick it up")
+    ui.ok_and_wait(f"TCP bound to {host}:{port} — restart the service (`alpi service restart`) to pick it up")
 
 
 def _workgroups_status(h: Path) -> str:
@@ -1924,21 +1921,6 @@ def _delete_profile_wizard(h: Path, profile_name: str) -> bool:
 
     ui.ok_and_wait(f"profile '{profile_name}' deleted.")
     return True
-
-
-# ALP (Alpi Link Protocol) — peer management + dev listener
-#
-# ``alpi peers`` covers the day-to-day: generate / inspect this
-# profile's keypair, add or remove peers, send a ping. The eventual
-# UX home for add/remove is the ``alpi setup → Peers`` wizard;
-# these commands stay as the scriptable surface.
-#
-# ``alpi alp start`` runs the Unix-socket listener in the
-# foreground. It's hidden: in the final wiring it folds into the
-# gateway daemon (one always-on process per profile). Exposed for
-# now so a developer can stand up two profiles in two terminals
-# and watch them ping each other before the gateway integration
-# lands.
 
 
 @main.group()
