@@ -50,7 +50,14 @@ def _ensure_page_blocking():
     try:
         from playwright.sync_api import sync_playwright
     except ImportError:
-        return None, "playwright is not installed. Run: pip install playwright"
+        # playwright is a hard dependency declared in ``pyproject.toml``,
+        # so reaching this branch means the alpi install itself is broken
+        # (partial wheel, manual edit of site-packages, etc.). The fix is
+        # to reinstall through the same tool the user installed with.
+        return None, (
+            "playwright import failed — your alpi install is incomplete. "
+            "Try: uv tool install alpi-agent --reinstall"
+        )
     pw = sync_playwright().start()
     try:
         browser = _launch_chromium(pw)
@@ -88,7 +95,13 @@ def _launch_chromium(pw):
             raise
     import subprocess
     import sys
-    print("downloading Chromium for the browser tool (one-time, ~200MB)…", flush=True)
+    # stderr, not stdout — the agent's response goes to stdout in
+    # ``chat --once`` and via the engine elsewhere; we don't want a
+    # one-line install banner to be parsed as model output.
+    print(
+        "downloading Chromium for the browser tool (one-time, ~200MB)…",
+        file=sys.stderr, flush=True,
+    )
     subprocess.run(
         [sys.executable, "-m", "playwright", "install", "chromium"],
         check=True,

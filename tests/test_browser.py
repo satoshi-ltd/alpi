@@ -228,3 +228,60 @@ def test_playwright_missing_yields_install_hint(monkeypatch) -> None:
     r = Browser().run(action="navigate", url="https://example.com")
     assert not r.ok
     assert "playwright" in r.error.lower()
+
+
+def test_launch_chromium_installs_on_first_run(monkeypatch) -> None:
+    """First launch raises ``Executable doesn't exist`` → tool calls
+    ``python -m playwright install chromium`` and retries. The user
+    never has to run that command manually; alpi handles it the first
+    time the agent reaches for the browser."""
+    calls = {"launch": 0, "subprocess": 0}
+
+    class _FakeBrowser:
+        pass
+
+    fake_browser = _FakeBrowser()
+
+    def fake_launch(*, headless):  # noqa: ARG001 — mirrors playwright signature
+        calls["launch"] += 1
+        if calls["launch"] == 1:
+            raise RuntimeError(
+                "Executable doesn't exist at /tmp/missing/chromium"
+            )
+        return fake_browser
+
+    fake_pw = MagicMock()
+    fake_pw.chromium.launch = fake_launch
+
+    fake_run = MagicMock()
+
+    def _fake_run(args, **_kw):
+        calls["subprocess"] += 1
+        # Sanity-check the command shape so a refactor that drops the
+        # ``-m playwright install chromium`` invocation breaks loudly.
+        assert "playwright" in args
+        assert "install" in args
+        assert "chromium" in args
+        return fake_run
+
+    # ``subprocess`` is imported lazily inside ``_launch_chromium``;
+    # patching it on the canonical module is enough.
+    import subprocess as _sub
+    monkeypatch.setattr(_sub, "run", _fake_run)
+
+    out = browser_mod._launch_chromium(fake_pw)
+    assert out is fake_browser
+    assert calls["launch"] == 2  # first raised, second succeeded
+    assert calls["subprocess"] == 1
+
+
+def test_launch_chromium_propagates_unrelated_errors(monkeypatch) -> None:
+    """Errors that aren't about the missing executable should bubble
+    up unchanged — JIT install is for "binary not present", not for
+    swallowing every chromium failure."""
+    fake_pw = MagicMock()
+    fake_pw.chromium.launch.side_effect = RuntimeError("some other crash")
+
+    import pytest
+    with pytest.raises(RuntimeError, match="some other crash"):
+        browser_mod._launch_chromium(fake_pw)

@@ -77,15 +77,12 @@ alpi
 alpi doctor
 ```
 
-Optional browser support:
-
-```bash
-playwright install chromium
-```
-
 During setup, pick a model, paste the relevant key, and pin a
 workspace. For local-only inference, install Ollama first and add it in
 `alpi setup -> Model`.
+
+The browser tool downloads Chromium (~200 MB) on first use,
+cached at `~/.cache/ms-playwright/`. No manual step.
 
 Common commands:
 

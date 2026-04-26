@@ -1,5 +1,45 @@
 # Changelog
 
+## v0.2.94 — 2026-04-26
+
+### browser tool — Chromium downloads itself on first use
+
+The browser tool already knew how to install Chromium on its first
+run (it catches `Executable doesn't exist` from
+`playwright.chromium.launch`, downloads via
+`python -m playwright install chromium`, and retries). The
+documentation hadn't caught up: README, QUICKSTART, INSTALL, and
+the landing page still told the user to run `playwright install
+chromium` themselves.
+
+This release aligns the docs with the code. There is no separate
+install step. The first time the agent reaches for the browser
+tool, alpi prints a one-line notice on stderr and downloads
+Chromium (~200 MB, cached at `~/.cache/ms-playwright/`). Users
+who never use the browser pay nothing.
+
+#### Other small fixes
+
+- The install-banner now writes to stderr instead of stdout so it
+  can't be mistaken for model output when alpi runs under
+  `chat --once` or via a gateway.
+- The `playwright import failed` error message no longer suggests
+  `pip install playwright` (which would pollute the system Python
+  on a `uv tool` install). It now points at
+  `uv tool install alpi-agent --reinstall`, which is the correct
+  fix when the wheel is incomplete.
+
+#### Tests
+
+- New: `tests/test_browser.py::test_launch_chromium_installs_on_first_run`
+  — first launch raises, install runs, retry succeeds.
+- New: `tests/test_browser.py::test_launch_chromium_propagates_unrelated_errors`
+  — the JIT install path is for "binary missing", not a swallow-
+  everything wrapper.
+- Suite: 868 passing.
+
+---
+
 ## v0.2.93 — 2026-04-26
 
 ### distribution — first PyPI publish path
