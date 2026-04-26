@@ -238,6 +238,20 @@ def skills_index_block(home: Path) -> str:
             lines.append(
                 f"    - {b['name']}: {desc}" if desc else f"    - {b['name']}"
             )
+
+        if any(b["name"] == "@alpi/knowledge" for b in bundled):
+            lines.append("")
+            lines.append(
+                "RULE — alpi self-knowledge: if the user's question "
+                "mentions ``alpi`` (the project — config, commands, "
+                "protocol, skills, deployment, install), CALL "
+                "``skill(action='view', name='@alpi/knowledge')`` "
+                "FIRST and read the routing table inside. Then read "
+                "the relevant ``references/<topic>.md``. The bundled "
+                "docs are authoritative; your training is not — alpi "
+                "shipped after your cutoff. Do NOT answer alpi "
+                "questions from general knowledge."
+            )
     return "\n".join(lines)
 
 

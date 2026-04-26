@@ -133,6 +133,7 @@ research** (work that needs measurement before scope locks).
 | ALP.5 | Blob transfer — `link.put_blob` / `link.get_blob`, content-addressed, chunked AEAD | 🔵 |
 | AX | Mobile / desktop companion — minimal client speaking ALP to the user's profile | 🔵 |
 | AZ | Workgroup viewer — folds into AX (companion app surfaces the transcript read-only or read/write) | 🔵 |
+| BE | Revisit `@alpi/knowledge` — better follow-rate on small models, optionally fetch docs from GitHub instead of bundling | 🔵 |
 | BA | Local RAG over `workspace/` — local-only embeddings (sentence-transformers), semantic search tools | 🔵 |
 | BB | Enhanced rich text in UI — refine the link renderer baseline, extend to lists, code blocks, tables | 🔵 |
 | H  | Home Assistant integration | ⏸ blocked on user confirmation |
@@ -342,6 +343,49 @@ extends it across the rest of the rich-text surface:
 Goal: when an LLM emits structured Markdown in its reply, the TUI
 renders it cleanly enough that users stop falling back to copying
 the raw text into another tool.
+
+### BE. Revisit `@alpi/knowledge`
+
+v0.3 ships `@alpi/knowledge` v1: bundled docs + keyword routing
+table in `SKILL.md`. Real-world use exposed two limits worth
+addressing in v0.4:
+
+**1. Stale bundle.** Docs ship inside the wheel and only refresh
+on a new release. Users who pin to an older version get older
+docs. The `scripts/sync_knowledge.py` script keeps the in-tree
+mirror current, but the published wheel is fixed at build time.
+
+**2. Inconsistent follow-rate on small models.** With
+`gpt-5.4-nano` the LLM honours the system-prompt rule
+("call `@alpi/knowledge` first for any alpi question") roughly
+60-70% of the time; the rest it answers from training (often
+incorrectly, since alpi shipped after the cutoff) or jumps
+straight to `web_search`. Larger models (mini, sonnet) follow
+the rule reliably.
+
+**Two design directions to weigh in v0.4:**
+
+- **GitHub-fetched docs.** Replace the bundled `references/`
+  with on-demand fetches from
+  `https://raw.githubusercontent.com/satoshi-ltd/alpi/main/docs/`.
+  Pros: always current, smaller wheel, no sync script.
+  Cons: violates the "works offline" property the v0.3 design
+  was built around (users on planes, in CI, behind strict
+  egress firewalls). A hybrid that prefers GitHub when online
+  and falls back to bundle when offline could keep both, at
+  the cost of two code paths.
+- **Stronger nudge for small models.** Move the imperative rule
+  from `skills_index_block` to the base system prompt
+  (higher-priority position), or add a guard that intercepts
+  questions matching `alpi[^a-z]` patterns and force-loads the
+  skill before the LLM dispatches. Both reduce flexibility and
+  add complexity; worth a measured A/B against the simple
+  upgrade-the-default-model path.
+
+**What we'd measure first.** Real `agent.log` from v0.3 users:
+how often does the LLM call `@alpi/knowledge` when the user's
+question mentions alpi? What models are users on? That data
+turns this from a guess into a calibrated decision.
 
 ### H. Home Assistant integration
 

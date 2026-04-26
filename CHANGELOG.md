@@ -1,5 +1,85 @@
 # Changelog
 
+## v0.2.97 — 2026-04-26
+
+### `@alpi/knowledge` — first bundled skill
+
+alpi now ships its first bundled skill under the reserved
+`@alpi/*` namespace: `@alpi/knowledge`. The skill bundles alpi's
+own user-facing documentation (12 `.md` files: README,
+QUICKSTART, INSTALL, PROFILES, SKILLS, MODELS, ALP, ARCHITECTURE,
+CONFIG, SECURITY, DEPLOYMENTS, OPERATIONS) as package resources
+so the agent can answer questions about alpi itself —
+configuration, commands, the ALP protocol, security model,
+deployment — without a `web_search` round-trip and without
+guessing from training data (which predates alpi).
+
+#### How it works
+
+The skill ships as part of the wheel under
+`alpi/skills/knowledge/`. Its `SKILL.md` carries a routing table
+(topic → reference file); the agent loads the body, picks the
+matching reference, reads it, and synthesizes the answer.
+Discovery rides on the existing `skills_index_block` injected
+into every system prompt — bundled skills already render under
+the `@alpi/` heading with the `[bundled]` marker.
+
+The skills index now also carries an explicit imperative rule
+when `@alpi/knowledge` is present: "if the user's question
+mentions alpi, CALL `skill(action='view', name='@alpi/knowledge')`
+FIRST". This biases small models (which otherwise default to
+training data or `web_search`) toward the bundled docs. Real-
+world follow-rate is ~70% on `gpt-5.4-nano` and effectively 100%
+on `gpt-5.4-mini` and above; v0.4 tracks a polish item (`BE`)
+to revisit once we have agent.log evidence from real users.
+
+#### What's NOT bundled (and why)
+
+- `CHANGELOG.md` — stales every release, can't track which
+  version a user has installed. The skill points users at
+  `alpi update --check` and the GitHub releases page instead.
+- `ROADMAP.md` — internal planning, not user knowledge.
+- `RELEASE.md` — maintainer-only.
+- `LICENSE` — legal, not knowledge.
+
+#### Maintenance
+
+`scripts/sync_knowledge.py` keeps the bundled `references/`
+mirror in lockstep with `docs/` and the top-level `README.md` /
+`QUICKSTART.md`. Run it before commit when any user-facing doc
+changes; the test
+`test_skill_md_routing_table_only_lists_existing_files` catches
+drift between the routing table and the references on every
+test run.
+
+#### Documentation
+
+`docs/SKILLS.md` gains a new "Why ship skills with the binary"
+section listing the five properties that fall out of the design
+(no second install step, works offline, version-pinned to the
+binary, auditable, curated). The "Currently bundled" table
+lists `@alpi/knowledge` as the inaugural entry, plus a curation
+policy (when something becomes bundled, what doesn't qualify).
+`QUICKSTART.md` adds a one-line discoverability nudge for new
+users to try asking alpi about itself.
+
+#### Roadmap
+
+`docs/ROADMAP.md` adds **BE** to v0.4 commercial: "revisit
+`@alpi/knowledge` — better follow-rate on small models,
+optionally fetch docs from GitHub instead of bundling".
+
+#### Tests
+
+`tests/test_alpi_knowledge.py` (new) — 10 cases covering: skill
+discovery via `bundled_skills()`, frontmatter shape, view of
+SKILL.md and references, every reference declared in the routing
+table actually exists, mutating actions on a bundled name are
+rejected, the imperative RULE is present in the skills index
+block. Suite at 911 (was 901).
+
+---
+
 ## v0.2.96 — 2026-04-26
 
 ### `@<peer>` mentions match anywhere in the text — ALP.3.1
