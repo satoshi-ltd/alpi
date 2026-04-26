@@ -292,3 +292,108 @@ def test_resolve_hub_rejects_unpinned_peer(short_tmp: Path) -> None:
     load_or_generate(home)
     with pytest.raises(ValueError, match="not pinned"):
         wc._resolve_hub(home, "ghost")
+
+
+# Public bio (self-published tag-line)
+
+
+def test_absorb_roster_captures_bios(short_tmp: Path) -> None:
+    """Hub returns ``members: [{pubkey, last_seen_at, bio}]``;
+    ``_absorb_roster`` should populate both the liveness map and the
+    parallel bios map, dropping empty bios."""
+    sub = sub_mod.Subscription(
+        wg_id="wg_x", name="x", hub_id="h", hub_pubkey="hk",
+    )
+    raw = [
+        {"pubkey": "PK_A", "last_seen_at": "2026-04-26T10:00:00Z",
+         "bio": "product engineer — velocity"},
+        {"pubkey": "PK_B", "last_seen_at": "2026-04-26T10:00:00Z",
+         "bio": ""},  # empty bio drops out of bios map
+        {"pubkey": "PK_C", "last_seen_at": ""},  # legacy / no bio
+    ]
+    wc._absorb_roster(sub, raw)
+    assert sub.roster == {
+        "PK_A": "2026-04-26T10:00:00Z",
+        "PK_B": "2026-04-26T10:00:00Z",
+        "PK_C": "",
+    }
+    assert sub.roster_bios == {"PK_A": "product engineer — velocity"}
+
+
+def test_subscription_persists_roster_bios(short_tmp: Path) -> None:
+    home = short_tmp / "alice"; home.mkdir()
+    sub = sub_mod.Subscription(
+        wg_id="wg1", name="x", hub_id="h", hub_pubkey="hk",
+        roster={"PK_A": "stamp"},
+        roster_bios={"PK_A": "product engineer — velocity"},
+    )
+    sub_mod.upsert(home, sub)
+    reloaded = sub_mod.get(home, "wg1")
+    assert reloaded is not None
+    assert reloaded.roster_bios == {"PK_A": "product engineer — velocity"}
+
+
+@pytest.mark.asyncio
+async def test_join_propagates_public_bio_to_hub(short_tmp: Path) -> None:
+    """Bob's profile sets ``public_bio``; on ``wc.join`` the value
+    lands on his ``Member.bio`` at the hub and shows up in the roster
+    response (so alice's pre-turn hook can render it)."""
+    from alpi import config as cfg_mod
+
+    hub_home = short_tmp / "alice"; hub_home.mkdir()
+    bob_home = short_tmp / "bob"; bob_home.mkdir()
+    alice_kp = load_or_generate(hub_home)
+    bob_kp = load_or_generate(bob_home)
+    _pin(hub_home, "bob", bob_kp.pubkey_b64(),
+         ["workgroup.join", "workgroup.post", "workgroup.pull"])
+    _pin(bob_home, "alice", alice_kp.pubkey_b64(), ["link.ping"])
+
+    # Bob declares a public bio in his config
+    bob_cfg = cfg_mod.load(bob_home)
+    bob_cfg.public_bio = "systems engineer — durability bias"
+    cfg_mod.save(bob_cfg)
+
+    wg = wg_mod.create(
+        hub_home, name="design", hub_kp=alice_kp,
+        member_pubkeys=[bob_kp.pubkey_b64()],
+        hub_bio="product engineer — velocity",
+    )
+
+    server = alp_server.Server(home=hub_home, agent_name="alice")
+    wg_mod.register(server, hub_home)
+    await server.start()
+    import alpi.alp.workgroup_client as wc_mod
+    original = wc_mod._intra_socket_path
+    wc_mod._intra_socket_path = lambda peer_id: server.socket_path()
+    try:
+        sub = await wc.join(bob_home, "alice", wg.meta.id)
+    finally:
+        wc_mod._intra_socket_path = original
+        await server.stop()
+
+    # Bob's subscription remembers both bios from the join response
+    assert sub.roster_bios.get(bob_kp.pubkey_b64()) == \
+        "systems engineer — durability bias"
+    assert sub.roster_bios.get(alice_kp.pubkey_b64()) == \
+        "product engineer — velocity"
+
+    # Hub-side member record was stamped with bob's bio
+    wg_after = wg_mod.load(hub_home, wg.meta.id)
+    bob_member = wg_after.member(bob_kp.pubkey_b64())
+    assert bob_member is not None
+    assert bob_member.bio == "systems engineer — durability bias"
+
+
+def test_member_bio_persists_on_disk(short_tmp: Path) -> None:
+    """``_save_members`` / ``_load_members`` round-trip the bio field
+    so a hub restart doesn't drop self-published tag-lines."""
+    home = short_tmp / "alice"; home.mkdir()
+    alice_kp = load_or_generate(home)
+    wg = wg_mod.create(
+        home, name="design", hub_kp=alice_kp, member_pubkeys=[],
+        hub_bio="product engineer — velocity",
+    )
+    reloaded = wg_mod.load(home, wg.meta.id)
+    hub = reloaded.member(alice_kp.pubkey_b64())
+    assert hub is not None
+    assert hub.bio == "product engineer — velocity"

@@ -144,6 +144,12 @@ class Config:
     budget: dict[str, Any] = field(default_factory=dict)
     service: dict[str, Any] = field(default_factory=dict)
     workspace: str = ""  # "" → fall back to cwd
+    # One-line public tag-line broadcast to every workgroup this
+    # profile joins. Source of truth for ``Member.bio`` on the hub.
+    # Empty string = don't publish anything (peers see name only).
+    # AGENT.md stays private; this is the deliberate cross-agent
+    # introduction the user opts into.
+    public_bio: str = ""
     raw: dict[str, Any] = field(default_factory=dict)
 
     @property
@@ -244,6 +250,7 @@ def load(home: Path) -> Config:
         budget=dict(data.get("budget") or {}),
         service=dict(data.get("service") or {}),
         workspace=str(data.get("workspace", "") or ""),
+        public_bio=str(data.get("public_bio", "") or ""),
         raw=user_data,
     )
 
@@ -258,6 +265,8 @@ def save(cfg: Config) -> None:
     }
     if cfg.workspace:
         data["workspace"] = cfg.workspace
+    if cfg.public_bio:
+        data["public_bio"] = cfg.public_bio
     if cfg.fallback_models:
         data["fallback_models"] = cfg.fallback_models
 

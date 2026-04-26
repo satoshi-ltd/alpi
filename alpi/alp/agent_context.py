@@ -196,7 +196,7 @@ def _format_subscription_block(
     if sub.briefing:
         lines.append(f"  briefing: {_preview(sub.briefing)}")
     if sub.roster:
-        roster_line = _format_roster(sub.roster, aliases)
+        roster_line = _format_roster(sub.roster, aliases, sub.roster_bios)
         if roster_line:
             lines.append(f"  members: {roster_line}")
     if active is not None:
@@ -221,31 +221,44 @@ def _format_subscription_block(
     return "\n".join(lines)
 
 
-def _format_roster(roster: dict[str, str], aliases: dict[str, str]) -> str:
-    """Render the roster as ``@alice (online) · @bob (last seen 12m ago)``.
-    "Online" = stamp within last 90s (≈3 poll ticks); otherwise we
-    show how long ago. Empty stamp = "unknown" (likely never pulled)."""
+def _format_roster(
+    roster: dict[str, str], aliases: dict[str, str],
+    bios: dict[str, str] | None = None,
+) -> str:
+    """Render the roster as ``@alice (online, "product engineer") ·
+    @bob (last seen 12m ago, "systems engineer")``. "Online" = stamp
+    within last 90s (≈3 poll ticks); otherwise show how long ago.
+    Empty stamp = "unknown" (likely never pulled). The bio tag-line is
+    self-published by each peer via ``public_bio`` and propagated to
+    the hub on ``workgroup.join``; empty bio renders without the
+    quoted suffix."""
     import datetime as _dt
     now = _dt.datetime.now(tz=_dt.timezone.utc)
+    bios = bios or {}
     parts: list[str] = []
     for pubkey, stamp in roster.items():
         who = aliases.get(pubkey, _short_author(pubkey))
+        bio = (bios.get(pubkey) or "").strip()
         if not stamp:
-            parts.append(f"{who} (unknown)")
-            continue
-        try:
-            seen = _dt.datetime.strptime(stamp, "%Y-%m-%dT%H:%M:%SZ")
-            seen = seen.replace(tzinfo=_dt.timezone.utc)
-        except ValueError:
-            parts.append(f"{who} (unknown)")
-            continue
-        elapsed = (now - seen).total_seconds()
-        if elapsed < 90:
-            parts.append(f"{who} (online)")
-        elif elapsed < 1800:
-            parts.append(f"{who} (last seen {int(elapsed/60)}m ago)")
+            status = "unknown"
         else:
-            parts.append(f"{who} (offline >30m)")
+            try:
+                seen = _dt.datetime.strptime(stamp, "%Y-%m-%dT%H:%M:%SZ")
+                seen = seen.replace(tzinfo=_dt.timezone.utc)
+            except ValueError:
+                status = "unknown"
+            else:
+                elapsed = (now - seen).total_seconds()
+                if elapsed < 90:
+                    status = "online"
+                elif elapsed < 1800:
+                    status = f"last seen {int(elapsed/60)}m ago"
+                else:
+                    status = "offline >30m"
+        if bio:
+            parts.append(f"{who} ({status}, \"{bio}\")")
+        else:
+            parts.append(f"{who} ({status})")
     return " · ".join(parts)
 
 
@@ -281,7 +294,8 @@ def _format_hub_block(
         lines.append(f"  briefing: {_preview(wg.meta.briefing)}")
     if wg.members:
         roster = {m.pubkey: m.last_seen_at for m in wg.members}
-        roster_line = _format_roster(roster, aliases)
+        bios = {m.pubkey: m.bio for m in wg.members if m.bio}
+        roster_line = _format_roster(roster, aliases, bios)
         if roster_line:
             lines.append(f"  members: {roster_line}")
     if wg.meta.paused:

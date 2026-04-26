@@ -1,6 +1,6 @@
 [project]
 name = "alpi"
-version = "0.2.91"
+version = "0.2.92"
 description = "A profile-based personal AI agent for terminal, messengers, and private ALP networks"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -54,6 +54,11 @@ target-version = "py310"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Manual integration scripts under ``tests/manual/`` are runnable
+# Python files but NOT collected by pytest — they need live profiles,
+# real LLM calls, and explicit setup. Documented in
+# ``tests/manual/README.md``.
+norecursedirs = ["manual"]
 addopts = "-ra --strict-markers"
 asyncio_mode = "strict"
 markers = [

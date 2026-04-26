@@ -68,6 +68,12 @@ _MEMBERS = "members.yaml"
 _TRANSCRIPT = "transcript.jsonl"
 _LEDGER = "ledger.json"
 
+# Hard ceiling on the per-member ``bio`` tag-line. Keeps the
+# system-prompt block readable when many members are present and
+# prevents a malicious peer from blasting a multi-kilobyte string
+# into every other member's prompt budget.
+_BIO_MAX = 200
+
 GROUP_KEY_BYTES = 32  # ChaCha20-Poly1305 key size
 _HKDF_INFO = b"alp.workgroup.seal.v1"
 _PROTOCOL_KIND_SEAL = b"seal"
@@ -163,12 +169,19 @@ class Member:
     key_version: int = 1   # bumps every rekey; matches Meta.current_key_version
     joined: bool = False   # flips True on first successful workgroup.join
     joined_at: str = ""    # ISO-8601, set when ``joined`` flips
-    # PR 5: passive liveness signal. Hub stamps this on every
+    # Passive liveness signal. Hub stamps this on every
     # ``workgroup.pull`` / ``workgroup.post`` from this member, so the
     # roster carries an implicit "online" indicator without any extra
     # probe traffic. Members get the snapshot on ``join`` / ``pull``
     # and surface it in the engine context block.
     last_seen_at: str = ""
+    # Self-published one-line tag-line ("product engineer — velocity").
+    # Members supply it as a parameter on ``workgroup.join`` and the
+    # hub stores it here so every member's pre-turn hook sees who's
+    # who without the workgroup creator having to type a role per
+    # invitee. Source of truth lives in the joiner's profile config
+    # (``public_bio``); AGENT.md stays private.
+    bio: str = ""
 
 
 @dataclass
@@ -304,6 +317,7 @@ def _load_members(d: Path) -> list[Member]:
             joined=bool(entry.get("joined", False)),
             joined_at=str(entry.get("joined_at") or ""),
             last_seen_at=str(entry.get("last_seen_at") or ""),
+            bio=str(entry.get("bio") or ""),
         ))
     return out
 
@@ -323,6 +337,8 @@ def _save_members(d: Path, members: list[Member]) -> None:
                 entry["joined_at"] = m.joined_at
         if m.last_seen_at:
             entry["last_seen_at"] = m.last_seen_at
+        if m.bio:
+            entry["bio"] = m.bio
         data.append(entry)
     (d / _MEMBERS).write_text(yaml.safe_dump(data, sort_keys=False))
 
@@ -362,6 +378,7 @@ def create(
     briefing: str = "",
     auto_kickoff: bool = True,
     notify_on_close: str = "none",
+    hub_bio: str = "",
 ) -> Workgroup:
     """Create a workgroup on this profile (we are the hub).
 
@@ -423,6 +440,9 @@ def create(
         if pk == hub_pk:
             m.joined = True
             m.joined_at = now
+            m.last_seen_at = now
+            if hub_bio:
+                m.bio = hub_bio[:_BIO_MAX]
         members.append(m)
     _save_members(d, members)
 
@@ -632,6 +652,12 @@ def register(server: alp_server.Server, home: Path) -> None:
             raise alp_server.HandlerError(-32008, "workgroup-not-member")
         now = _utcnow()
         member.last_seen_at = now
+        # Refresh the member's bio on every join — the joiner's
+        # profile owns the source of truth, so re-joining lets a
+        # bio edit propagate without a separate verb.
+        bio = str((params or {}).get("bio") or "").strip()
+        if bio:
+            member.bio = bio[:_BIO_MAX]
         if not member.joined:
             member.joined = True
             member.joined_at = now
@@ -644,7 +670,7 @@ def register(server: alp_server.Server, home: Path) -> None:
             "key_version": member.key_version,
             "current_key_version": wg.meta.current_key_version,
             "members": [
-                {"pubkey": m.pubkey, "last_seen_at": m.last_seen_at}
+                {"pubkey": m.pubkey, "last_seen_at": m.last_seen_at, "bio": m.bio}
                 for m in wg.members
             ],
         }
@@ -758,9 +784,10 @@ def register(server: alp_server.Server, home: Path) -> None:
             "current_key_version": wg.meta.current_key_version,
             "sealed_key": member.sealed_key,
             # Refreshed roster snapshot — members pick this up to
-            # display "@bob (last seen 8m ago)" in the engine context.
+            # display "@bob (last seen 8m ago, "<bio>")" in the engine
+            # context.
             "members": [
-                {"pubkey": m.pubkey, "last_seen_at": m.last_seen_at}
+                {"pubkey": m.pubkey, "last_seen_at": m.last_seen_at, "bio": m.bio}
                 for m in wg.members
             ],
         }

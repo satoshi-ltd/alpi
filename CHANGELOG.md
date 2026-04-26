@@ -1,5 +1,135 @@
 # Changelog
 
+## v0.2.92 — 2026-04-26
+
+### self-published member bios in workgroups
+
+Each profile now carries an optional one-line ``public_bio`` that
+propagates to every workgroup it joins. The bio surfaces in other
+members' system-prompt rosters as e.g. ``@alice (online, "product
+engineer — velocity") · @bob (online, "systems engineer —
+durability")``, so each agent sees who-does-what from the first
+turn instead of inferring it from posts. AGENT.md stays private —
+the bio is the deliberate cross-agent introduction the user opts
+into sharing.
+
+#### Why this shape
+
+The earlier roadmap proposed creator-assigned ``roles`` in
+``meta.yaml`` (the workgroup creator types a role per invitee). It
+didn't scale: invite alice to five workgroups and you type her role
+five times. The self-published bio inverts the direction — alice
+authors her own tag-line once at the profile level, every workgroup
+join carries it, source of truth never duplicates.
+
+#### Mechanism
+
+- New field ``public_bio: str`` in ``config.yaml``. Empty = nothing
+  published; peers see name + liveness only.
+- ``workgroup.join`` accepts an optional ``bio`` parameter (capped
+  at 200 bytes); the hub stamps it on the caller's ``Member`` record.
+- ``workgroup.join`` and ``workgroup.pull`` responses include
+  ``bio`` in each ``members[]`` entry alongside ``last_seen_at``.
+- ``workgroup.create`` accepts ``hub_bio=`` so the hub's own member
+  record carries the same value (the hub never calls ``join`` on
+  itself). The CLI and wizard plumb ``config.public_bio`` through.
+- Re-joining refreshes the bio on the hub, so an edit propagates
+  without a separate verb.
+
+#### Wizard
+
+- New: ``alpi setup → ALP (Alpi Link Protocol) → Identity``. Edit
+  the public bio inline. Three special inputs:
+  - empty → keep current
+  - ``clear`` → unset (peers see handle only)
+  - ``draft`` → one-shot LLM call synthesizes a candidate from
+    your private AGENT.md; you review and edit before saving.
+
+#### Tests
+
+- New: ``tests/test_alp_workgroup_client.py::test_absorb_roster_captures_bios``,
+  ``::test_subscription_persists_roster_bios``,
+  ``::test_join_propagates_public_bio_to_hub``,
+  ``::test_member_bio_persists_on_disk`` — 4 cases covering wire
+  shape, persistence, and end-to-end flow.
+- New: ``tests/test_alp_agent_context.py::test_roster_renders_bios_when_present``,
+  ``::test_hub_workgroup_renders_own_bio`` — 2 cases for the
+  pre-turn hook render.
+- Suite: 866 passing (was 860).
+
+#### Manual integration tests moved to ``tests/manual/``
+
+The autonomous workgroup convergence script (``alice + bob
+collaborate on a stack-decision and close with #done`` — proves the
+PR 5 loop end-to-end) graduates from ``scripts/`` to
+``tests/manual/test_alice_bob_workgroup.py``. Excluded from
+``pytest`` collection via ``norecursedirs`` in ``pyproject.toml``;
+documented in ``tests/manual/README.md`` with the contract every
+manual test in the folder must follow (self-check preconditions,
+wipe state, document cost, assert outcome not text).
+
+---
+
+## v0.2.91 — 2026-04-26
+
+### alp.3 — workgroups (PR 5): functional autonomy
+
+Closes ALP.3. Workgroups are now self-driving: each member's service
+polls the hub on a fixed tick (30 s) and dispatches one engine turn
+when a new post mentions them, opens a collective ``#task``, or
+names them in the active task. A per-workgroup cooldown (60 s) rate-
+limits ping-pong between peers.
+
+#### Engine integration
+
+- New: pre-turn context hook (``alpi.alp.agent_context.build``)
+  injects briefing + active task + last 5 decrypted posts +
+  passive-liveness roster + ``WORKGROUP_GUARDRAILS`` into every
+  engine turn (interactive, gateway, scheduled, or workgroup-
+  spawned). Read-only against on-disk caches; no network IO.
+- Engagement guardrails bias the agent toward observer posture:
+  silence by default, react to a peer's concrete proposal with
+  accept / counter / block (never with more research), close with
+  ``#done`` when the discussion converges. Tuned across real
+  alice+bob runs to avoid both paraphrase loops and premature
+  closure.
+- ``workgroup_post`` auto-declares the producing turn's USD/tokens
+  via a ``ContextVar`` usage tracker so the hub's ledger is honest
+  about what each post cost to produce.
+- Hub-of-itself short-circuit: when the local profile is the hub of
+  the target workgroup, ``workgroup_client.post`` writes directly
+  to the local transcript (same gate, same ledger, same checks)
+  without an ALP loopback.
+
+#### Hub additions
+
+- ``Meta.briefing`` (plaintext one-paragraph anchor),
+  ``Meta.auto_kickoff`` (default True), ``Meta.notify_on_close``
+  (default ``"none"``).
+- ``Member.last_seen_at`` stamped on every ``workgroup.pull`` /
+  ``workgroup.post``; returned in the roster on ``join`` and on
+  every ``pull``. Passive liveness signal — no extra probe traffic.
+- In-chat protocol: ``#task <text>`` opens the active task
+  (preempts the previous one), ``#done <text>`` closes it. Markers
+  count only at the start of a line; both parsed client-side on the
+  decrypted transcript so the hub stays zero-knowledge. Single-task
+  model in v0.3; multi-task tracked for v0.4.
+
+#### Service hardening
+
+- ALP TCP bind failure (e.g. Tailscale down) now falls back to
+  unix-socket-only with a warning instead of killing the daemon.
+- Each subsystem (alp, gateways, scheduler, workgroups) runs under
+  ``_supervise`` so one crash doesn't take the others down.
+
+#### Tests
+
+- New: ``tests/test_alp_agent_context.py``, ``tests/test_alp_tasks.py``,
+  ``tests/test_alp_workgroup_poller.py``, ``tests/test_state_turn_usage.py``.
+- Suite at PR 5 close: 860 passing.
+
+---
+
 ## v0.2.90 — 2026-04-25
 
 ### service unification — one process per profile
