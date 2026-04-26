@@ -1,5 +1,82 @@
 # Changelog
 
+## v0.2.93 — 2026-04-26
+
+### distribution — first PyPI publish path
+
+alpi is now installable from PyPI as ``alpi-agent``. Closes the **AU**
+(distribution) gate on the v0.3 roadmap. The CLI binary, the Python
+import, and ``~/.alpi/`` remain ``alpi`` — only the PyPI distribution
+name changes.
+
+```bash
+uv tool install alpi-agent     # install
+alpi setup                     # use
+```
+
+#### Auto-publish workflow (model: merge → release)
+
+``.github/workflows/publish.yml`` runs on every push to ``main`` and
+publishes to PyPI when ``pyproject.toml``'s version differs from the
+one currently on PyPI. Cloudflare-style merge-to-deploy, adapted to
+PyPI's immutability via the version-delta gate.
+
+Steps in order:
+
+1. ``check-version`` — read ``pyproject.toml``, hit
+   ``pypi.org/pypi/alpi-agent/json``, set ``should_publish=true`` if
+   the numbers differ. Skips silently otherwise.
+2. ``build`` — ``uv build`` + ``twine check`` produce wheel + sdist.
+3. ``smoke`` — install the freshly-built wheel inside five clean
+   container images (Python 3.10/3.11/3.12-slim, Ubuntu 22.04,
+   Debian 12) and assert ``alpi --version`` returns the bumped
+   number and ``alpi --help`` opens. Fail-fast: any image failing
+   aborts the publish.
+4. ``publish-pypi`` — publish to PyPI via OIDC (Trusted Publisher;
+   no API tokens stored in repo), tag the commit ``v<version>``,
+   create a GitHub release with the relevant CHANGELOG excerpt as
+   the body.
+
+No environment gate, no required reviewers, no manual click. Smoke
+across five containers is the safety net; the version-bump is the
+release decision.
+
+``workflow_dispatch`` is preserved for two cases: rehearsing on
+TestPyPI before a delicate cut, or re-publishing a tag if the
+auto-run was interrupted (idempotent — version-gate short-circuits
+if PyPI already has the version).
+
+#### Packaging metadata
+
+- ``pyproject.toml`` adopts PEP 639 SPDX license expression
+  (``license = "BUSL-1.1"`` + ``license-files = ["LICENSE"]``).
+- Adds ``[project.urls]`` (Homepage, Repository, Issues, Changelog).
+- Adds ``classifiers`` and ``keywords`` so PyPI search and the
+  project page render properly.
+
+#### Documentation
+
+- ``docs/INSTALL.md`` (new) — user-facing install reference: uv,
+  pipx, dev, update, uninstall, troubleshooting, supported
+  platforms, and the explicit "no curl | bash" stance with the
+  reasoning.
+- ``docs/RELEASE.md`` (new) — maintainer's cut checklist and
+  troubleshooting for the publish workflow.
+- ``QUICKSTART.md`` install step now points at PyPI instead of a
+  local path.
+- ``README.md`` quickstart updated.
+- ``docs/ROADMAP.md`` AU references the published name.
+
+#### Site
+
+- Landing #install simplified: four commands, link to
+  ``INSTALL.md`` for alternatives, update path, and uninstall.
+- ``INSTALL`` added to the docs grid (slug ``02``); subsequent docs
+  renumbered ``03..15``.
+- All install-CTAs across the site point at ``alpi-agent``.
+
+---
+
 ## v0.2.92 — 2026-04-26
 
 ### self-published member bios in workgroups

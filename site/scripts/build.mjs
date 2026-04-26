@@ -31,19 +31,20 @@ const VERSION = (pyproject.match(/^version\s*=\s*"([^"]+)"/m) || [null, '0.0.0']
 // Order drives prev/next pager and the docs index.
 const DOCS = [
   { slug: 'README',       src: 'README.md',             ix: '01', category: 'intro',     sub: "Start here. The public thesis: local-first, user-owned agent infrastructure." },
-  { slug: 'QUICKSTART',   src: 'QUICKSTART.md',         ix: '02', category: 'guide',     sub: 'Install, pick a model, pin a workspace, send a first message, and check health.' },
-  { slug: 'PROFILES',     src: 'docs/PROFILES.md',      ix: '03', category: 'guide',     sub: 'The isolation primitive: identity, keys, memory, skills, peers, gateways, and cost.' },
-  { slug: 'SKILLS',       src: 'docs/SKILLS.md',        ix: '04', category: 'guide',     sub: 'Directory contract, frontmatter, scanner, validation, secrets, and bundled namespace.' },
-  { slug: 'MODELS',       src: 'docs/MODELS.md',        ix: '05', category: 'guide',     sub: 'Model tiers for tool-heavy agent use: quality, cost/service, and local Ollama.' },
-  { slug: 'ALP',          src: 'docs/ALP.md',           ix: '06', category: 'reference', sub: 'Alpi Link Protocol: pinned identity, signed envelopes, peer capabilities, workgroups.' },
-  { slug: 'ARCHITECTURE', src: 'docs/ARCHITECTURE.md',  ix: '07', category: 'reference', sub: 'Code structure, turn loop, memory, sessions, gateway, scheduler, MCP, logging.' },
-  { slug: 'CONFIG',       src: 'docs/CONFIG.md',        ix: '08', category: 'reference', sub: 'Every YAML knob, its default, what it controls.' },
-  { slug: 'SECURITY',     src: 'docs/SECURITY.md',      ix: '09', category: 'reference', sub: 'Two-layer security model. Approval system, SSRF, prompt-injection, sensitive paths. Sandbox.' },
-  { slug: 'DEPLOYMENTS',  src: 'docs/DEPLOYMENTS.md',   ix: '10', category: 'ops',       sub: 'launchd on macOS, systemd on Linux. Gateway daemon, schedule daemon, keep-alive, logs.' },
-  { slug: 'OPERATIONS',   src: 'docs/OPERATIONS.md',    ix: '11', category: 'ops',       sub: 'Day-2 runbook. Doctor, diagnostics, log rotation, backup, recovery, upgrade.' },
-  { slug: 'LICENSE',      src: 'LICENSE',               ix: '12', category: 'legal',     sub: 'Legal terms for the source-available agent core and Apache-2.0 Alpi Link Protocol.', raw: true },
-  { slug: 'ROADMAP',      src: 'docs/ROADMAP.md',       ix: '13', category: 'planning',  sub: 'Open release gates, ALP launch work, long-term bets, and discarded decisions.' },
-  { slug: 'CHANGELOG',    src: 'CHANGELOG.md',          ix: '14', category: 'log',       sub: 'Version-by-version log of user-visible changes since v0.1.' },
+  { slug: 'INSTALL',      src: 'docs/INSTALL.md',       ix: '02', category: 'guide',     sub: 'Install methods (uv, pipx, dev), update path, uninstall, troubleshooting, supported platforms.' },
+  { slug: 'QUICKSTART',   src: 'QUICKSTART.md',         ix: '03', category: 'guide',     sub: 'Install, pick a model, pin a workspace, send a first message, and check health.' },
+  { slug: 'PROFILES',     src: 'docs/PROFILES.md',      ix: '04', category: 'guide',     sub: 'The isolation primitive: identity, keys, memory, skills, peers, gateways, and cost.' },
+  { slug: 'SKILLS',       src: 'docs/SKILLS.md',        ix: '05', category: 'guide',     sub: 'Directory contract, frontmatter, scanner, validation, secrets, and bundled namespace.' },
+  { slug: 'MODELS',       src: 'docs/MODELS.md',        ix: '06', category: 'guide',     sub: 'Model tiers for tool-heavy agent use: quality, cost/service, and local Ollama.' },
+  { slug: 'ALP',          src: 'docs/ALP.md',           ix: '07', category: 'reference', sub: 'Alpi Link Protocol: pinned identity, signed envelopes, peer capabilities, workgroups.' },
+  { slug: 'ARCHITECTURE', src: 'docs/ARCHITECTURE.md',  ix: '08', category: 'reference', sub: 'Code structure, turn loop, memory, sessions, gateway, scheduler, MCP, logging.' },
+  { slug: 'CONFIG',       src: 'docs/CONFIG.md',        ix: '09', category: 'reference', sub: 'Every YAML knob, its default, what it controls.' },
+  { slug: 'SECURITY',     src: 'docs/SECURITY.md',      ix: '10', category: 'reference', sub: 'Two-layer security model. Approval system, SSRF, prompt-injection, sensitive paths. Sandbox.' },
+  { slug: 'DEPLOYMENTS',  src: 'docs/DEPLOYMENTS.md',   ix: '11', category: 'ops',       sub: 'launchd on macOS, systemd on Linux. Gateway daemon, schedule daemon, keep-alive, logs.' },
+  { slug: 'OPERATIONS',   src: 'docs/OPERATIONS.md',    ix: '12', category: 'ops',       sub: 'Day-2 runbook. Doctor, diagnostics, log rotation, backup, recovery, upgrade.' },
+  { slug: 'LICENSE',      src: 'LICENSE',               ix: '13', category: 'legal',     sub: 'Legal terms for the source-available agent core and Apache-2.0 Alpi Link Protocol.', raw: true },
+  { slug: 'ROADMAP',      src: 'docs/ROADMAP.md',       ix: '14', category: 'planning',  sub: 'Open release gates, ALP launch work, long-term bets, and discarded decisions.' },
+  { slug: 'CHANGELOG',    src: 'CHANGELOG.md',          ix: '15', category: 'log',       sub: 'Version-by-version log of user-visible changes since v0.1.' },
 ];
 const TOTAL = DOCS.length;
 
@@ -234,7 +235,7 @@ function renderNav(kind, opts = {}) {
   const drawerHtml = showMenu
     ? `<div class="nav-drawer" id="nav-drawer" hidden>
     <ul>${menuLinks.map(([h, l]) => `<li><a href="${h}">${l}</a></li>`).join('')}</ul>
-    <a href="#install" class="nav-cta">$ uv tool install alpi →</a>
+    <a href="#install" class="nav-cta">$ uv tool install alpi-agent →</a>
   </div>`
     : '';
 
@@ -250,7 +251,7 @@ function renderNav(kind, opts = {}) {
     ${menuHtml}
     <div class="nav-actions">
       <a href="${GITHUB_URL}" class="nav-github" aria-label="alpi on GitHub">${githubIcon}</a>
-      <a href="${ctaHref}" class="nav-cta">$ uv tool install alpi →</a>
+      <a href="${ctaHref}" class="nav-cta">$ uv tool install alpi-agent →</a>
     </div>
     ${burgerHtml}
   </div>

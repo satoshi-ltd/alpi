@@ -21,7 +21,7 @@ remaining window.
 | ID | Item | Status |
 |---|---|---|
 | ALP.3 | Alpi Link Protocol — shared workgroups (collaborative spaces, humans optional) | ✅ shipped (PR 5 closes functional autonomy) |
-| AU | Distribution — `uv tool install alpi`, `alpi update`, end-user install without source | 🔴 gate |
+| AU | Distribution — `uv tool install alpi-agent`, `alpi update`, end-user install without source | 🔴 gate |
 | SU | Service unification — single ``alpi service`` orchestrator per profile (replaces gateway/schedule/alp daemons) | ✅ shipped (was tracked for v0.4 architecture cleanup, brought forward) |
 
 ### ALP.3 — Shared workgroups
@@ -76,8 +76,8 @@ Today alpi is installed by cloning the repo and running `uv sync`. A
 public release needs an end-user path that does not require git or
 the source tree. Three deliverables:
 
-1. **`uv tool install alpi`** — publish the package on PyPI so a
-   plain `uv tool install alpi` (or `pipx install alpi`) lands a
+1. **`uv tool install alpi-agent`** — publish the package on PyPI so a
+   plain `uv tool install alpi-agent` (or `pipx install alpi-agent`) lands a
    working `alpi` binary in the user's PATH. The package is already
    PyPI-shaped (`pyproject.toml` has `[project.scripts] alpi = …`);
    the missing pieces are the publish workflow, the trusted-publisher

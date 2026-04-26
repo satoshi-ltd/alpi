@@ -13,8 +13,12 @@ Why alpi is built the way it is: see the
 ## 1. Install
 
 ```bash
-uv tool install /path/to/alpi
+uv tool install alpi-agent     # install
+alpi setup                     # use
 ```
+
+PyPI package is `alpi-agent`; the binary is `alpi`. Alternatives
+and update path → [INSTALL.md](docs/INSTALL.md).
 
 Needs Python ≥ 3.10. Optional: `playwright install chromium` if
 you want the `browser` tool (~200 MB download).
