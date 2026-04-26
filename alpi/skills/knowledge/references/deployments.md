@@ -52,7 +52,7 @@ but that'd just be two profiles — see topology 3).
 ┌──────────────────┐                ┌──────────────────────┐
 │ laptop           │                │ home server          │
 │                  │   ALP.2 over   │                      │
-│  alpi (TUI)      │───Tailscale───▶│  alpi gateway + alp  │
+│  alpi (TUI)      │───Tailscale───▶│  alpi service        │
 │  ~/.alpi/        │                │  ~/.alpi/            │
 │  peers: home     │                │  peers: laptop       │
 │                  │◀───────────────│  (reaches back only  │
@@ -67,9 +67,9 @@ but that'd just be two profiles — see topology 3).
 - **Peers:** cross-pinned. Capabilities narrow — laptop grants
   `home-server` only `link.ping` + `link.ask`; home-server grants
   laptop only `link.ask`. See [ALP.md §Capability model](ALP.md).
-- **Ops:** home server installs `alpi` + `alp` + `gateway` +
-  `schedule` as services. Laptop just runs `alpi` when the user
-  sits down.
+- **Ops:** home server installs the unified `alpi service` (one
+  PID per profile hosts gateway + scheduler + ALP listener).
+  Laptop just runs `alpi` when the user sits down.
 - **Best for:** power-user individual with a house NAS /
   mini-server. Also: "I want scheduled jobs to run even when my
   laptop is closed."

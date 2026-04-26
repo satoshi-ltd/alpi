@@ -345,6 +345,7 @@ ${renderHead({
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="../doc.css" />
+<link rel="stylesheet" href="../demo.css" />
 </head>
 <body>
 <canvas id="ascii-bg" aria-hidden="true"></canvas>
@@ -377,6 +378,7 @@ ${bodyHtml}
 
 ${themeControlHtml}
 <script src="../doc.js"></script>
+<script src="../demo.js" defer></script>
 </body>
 </html>
 `;
@@ -445,6 +447,21 @@ copyTree(join(SITE, 'assets'), join(DIST, 'assets'));
 copyFileSync(join(TPL, 'doc.css'), join(DIST, 'doc.css'));
 writeFileSync(join(DIST, 'doc.js'), runtimeJs);
 
+// Quickstart demo widget (mounts in landing hero and on QUICKSTART doc).
+// CSS travels as-is; demo.js gets the same version sweep landing.html
+// gets so the simulated terminal advertises the version this build
+// is shipping (header `alpi v…`, install line, doctor row, etc.).
+copyFileSync(join(TPL, 'demo.css'), join(DIST, 'demo.css'));
+{
+  const src = readFileSync(join(TPL, 'demo.js'), 'utf8');
+  // ``\bv?\d+\.\d+\.\d+\b`` catches both ``v0.3.0`` and bare ``0.3.0``
+  // (the doctor row prints the bare form). Preserve the ``v`` prefix
+  // when the literal had one so we don't drop it on the way out.
+  const out = src.replace(/\bv?\d+\.\d+\.\d+\b/g,
+    m => (m.startsWith('v') ? 'v' : '') + VERSION);
+  writeFileSync(join(DIST, 'demo.js'), out);
+}
+
 // Landing — inject head, shared nav + docs grid, rewrite version refs
 const landingHead = renderHead({
   kind: 'landing',
@@ -480,6 +497,13 @@ for (let k = 0; k < DOCS.length; k++) {
     body = `<pre><code>${raw.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</code></pre>`;
   } else {
     body = renderMarkdown(stripFirstH1(stripFrontmatter(raw)), { linkRewrite });
+    // The ``<!-- alpi-demo -->`` marker survives Markdown rendering as
+    // an escaped paragraph; swap it for the mount node the demo widget
+    // hydrates on load.
+    body = body.replace(
+      /<p>(?:&lt;|<)!--\s*alpi-demo\s*--(?:&gt;|>)<\/p>/g,
+      '<div data-alpi-demo class="demo-console"></div>',
+    );
   }
   const prev = DOCS[k - 1] || null;
   const next = DOCS[k + 1] || null;

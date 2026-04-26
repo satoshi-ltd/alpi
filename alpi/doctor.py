@@ -285,10 +285,6 @@ def run_and_render(console, home: Path, profile: str, version: str) -> list[Chec
 # Individual checks
 
 def _check_version() -> list[Check]:
-    """Surface the cached PyPI version comparison. Doctor is the
-    natural place for "is there an update?" — the wizard stays
-    focused on configuration, the user reaches doctor when they
-    want to know what to fix or refresh."""
     from alpi import __version__, updater
     newer = updater.available_update()
     if newer:
@@ -298,9 +294,8 @@ def _check_version() -> list[Check]:
         )]
     cache = updater._load_cache()
     if cache is None:
-        # No cache yet — the background daemon will populate it on
-        # this run; until then, just show the current version with no
-        # claim about whether it's up to date.
+        # No cache yet — daemon populates it asynchronously; show the
+        # version without claiming it's up to date.
         return [Check("Version", "alpi-agent", "info", f"v{__version__}")]
     return [Check(
         "Version", "alpi-agent", "ok",
@@ -466,7 +461,7 @@ def _check_alp(home: Path) -> list[Check]:
                                  f"key files exist but failed to load: {e}"))
         else:
             out.append(Check("ALP", "Identity", "info",
-                             "no keypair yet — generated on first `alpi alp start`"))
+                             "no keypair yet — generated on first `alpi service start`"))
     except Exception as e:  # noqa: BLE001
         out.append(Check("ALP", "Identity", "fail", f"keys module error: {e}"))
 
@@ -485,7 +480,7 @@ def _check_alp(home: Path) -> list[Check]:
             s.close()
     else:
         out.append(Check("ALP", "Socket", "info",
-                         "not listening — install the ALP service or run `alpi alp start`"))
+                         "not listening — `alpi setup → Service → Install` or `alpi service start`"))
 
     # Peers — pinned and reachable?
     try:

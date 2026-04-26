@@ -1,0 +1,149 @@
+.alpi-demo{
+  --t-bg:#0e0e0e;
+  --t-fg:#e8e8e6;
+  --t-muted:#7a7a76;
+  --t-dim:#3a3a37;
+  --t-acc:#a89b76;
+  --t-bot:#d8d8d4;
+  --t-border:#1c1c1a;
+  --t-ok:#7fb069;
+  font-family:"JetBrains Mono",ui-monospace,monospace;
+  color:var(--t-fg);
+  color-scheme:dark;
+}
+.alpi-demo[hidden]{display:none !important}
+
+.demo-toggle{
+  display:inline-flex;gap:0;padding:3px;
+  background:#1a1a18;
+  border:1px solid #2c2c2a;border-radius:4px;
+  font-family:"JetBrains Mono",ui-monospace,monospace;
+  font-size:12px;letter-spacing:.04em;
+  margin-top:32px;
+}
+.demo-toggle button{
+  appearance:none;background:transparent;color:#7a7a76;
+  border:0;padding:7px 16px;cursor:pointer;border-radius:3px;
+  font:inherit;letter-spacing:inherit;text-transform:lowercase;
+  transition:background .15s,color .15s;
+}
+.demo-toggle button[aria-pressed="true"]{background:#2c2c2a;color:#e8e8e6}
+.demo-toggle button:hover:not([aria-pressed="true"]){color:#e8e8e6}
+
+.demo-grid-wrap{margin-top:48px}
+.demo-console{margin-top:48px}
+
+.alpi-term{
+  background:var(--t-bg);
+  border:1px solid var(--t-border);border-radius:8px;
+  overflow:hidden;display:flex;flex-direction:column;
+  box-shadow:0 30px 80px -20px rgba(0,0,0,.32);
+}
+
+.alpi-term-top{
+  display:flex;align-items:center;justify-content:space-between;
+  gap:12px;padding:12px 18px;border-bottom:1px solid var(--t-border);
+  font-size:14px;color:var(--t-muted);
+  flex-wrap:wrap;
+}
+.alpi-term-top .left{display:flex;gap:14px;align-items:center;flex-wrap:wrap;min-width:0}
+.alpi-term-top .step{
+  font-size:13px;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--t-acc);
+}
+.alpi-term-top .of{color:var(--t-muted)}
+.alpi-term-top .topinfo{color:var(--t-muted)}
+.alpi-term-top .topinfo .acc{color:var(--t-acc);font-weight:600}
+.alpi-term-top .topinfo .sep{color:var(--t-dim)}
+
+.alpi-term-body{
+  padding:20px 24px;font-size:14px;line-height:1.65;
+  color:var(--t-fg);
+  /* ``pre-wrap`` preserves leading whitespace + newlines for the
+     wizard/doctor layouts, but wraps long bot responses at word
+     boundaries instead of overflowing horizontally. */
+  white-space:pre-wrap;word-break:break-word;overflow-wrap:anywhere;
+  flex:1;min-height:340px;
+}
+
+.alpi-term-body .acc{color:var(--t-acc);font-weight:600}
+.alpi-term-body .muted{color:var(--t-muted)}
+.alpi-term-body .dim{color:var(--t-dim)}
+.alpi-term-body .bot{color:var(--t-bot)}
+.alpi-term-body .ok{color:var(--t-ok);font-weight:600}
+.alpi-term-body .diamond{color:var(--t-acc);font-weight:600;display:inline-block;width:14px}
+.alpi-term-body .prompt{color:var(--t-acc);font-weight:600}
+.alpi-term-body .user{color:var(--t-acc);font-weight:600}
+.alpi-term-body .check{color:var(--t-ok)}
+.alpi-term-body .sep{color:var(--t-dim)}
+.alpi-term-body .tool{color:var(--t-fg);font-weight:600}
+
+.alpi-cmd::before{content:"$ ";color:var(--t-muted)}
+.alpi-cursor{
+  display:inline-block;width:.55em;height:1em;
+  background:var(--t-fg);vertical-align:text-bottom;
+  margin-left:1px;animation:alpi-blink 1s steps(1) infinite;
+}
+.alpi-cursor.idle{animation:none;opacity:.5}
+@keyframes alpi-blink{50%{opacity:0}}
+
+.alpi-term-status{
+  padding:11px 18px;border-top:1px solid var(--t-border);
+  font-size:14px;color:var(--t-muted);
+  display:flex;gap:14px;align-items:center;
+  flex-wrap:wrap;
+  background:rgba(255,255,255,.015);
+}
+.alpi-term-status[hidden]{display:none !important}
+.alpi-term-status .diamond{color:var(--t-acc);font-weight:600}
+.alpi-term-status .acc{color:var(--t-acc)}
+.alpi-term-status .sep{color:var(--t-dim)}
+
+.alpi-term-input{
+  padding:11px 18px;border-top:1px solid var(--t-border);
+  font-size:14px;color:var(--t-fg);
+  display:flex;align-items:center;gap:8px;
+  font-family:"JetBrains Mono",ui-monospace,monospace;
+}
+.alpi-term-input[hidden]{display:none !important}
+.alpi-term-input .prompt{color:var(--t-acc);font-weight:600}
+.alpi-term-input .placeholder{color:var(--t-dim);font-style:italic}
+.alpi-term-input .typed{color:var(--t-fg)}
+
+.alpi-term-foot{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:11px 16px;border-top:1px solid var(--t-border);
+  font-size:14px;letter-spacing:.03em;
+  background:rgba(0,0,0,.18);
+}
+.alpi-term-foot[hidden]{display:none}
+.alpi-term-foot .nav{display:flex;gap:8px}
+.alpi-term-foot button{
+  appearance:none;background:transparent;
+  border:1px solid var(--t-border);border-radius:3px;
+  color:var(--t-muted);font:inherit;font-family:"JetBrains Mono",monospace;
+  font-size:14px;padding:6px 14px;cursor:pointer;text-transform:lowercase;
+  transition:border-color .15s,color .15s;
+}
+.alpi-term-foot button:hover:not(:disabled){color:var(--t-fg);border-color:var(--t-fg)}
+.alpi-term-foot button:disabled{opacity:.3;cursor:not-allowed}
+
+.alpi-term-caption{
+  color:var(--muted);
+  font-family:"Space Grotesk",sans-serif;
+  font-size:14px;line-height:1.6;
+  max-width:760px;margin:18px 4px 0;
+}
+
+@media (max-width:760px){
+  .alpi-term-body{font-size:11px;padding:14px 14px 18px;min-height:260px;line-height:1.6}
+  .alpi-term-top,.alpi-term-foot,.alpi-term-input,.alpi-term-status{padding:9px 12px;font-size:11px;gap:8px}
+  .alpi-term-top .step{font-size:10px;letter-spacing:.05em}
+  .alpi-term-foot button{font-size:11px;padding:5px 10px}
+  .demo-toggle{font-size:11px}
+  .demo-toggle button{padding:6px 12px}
+  /* Mirror the real TUI's narrow-mode behaviour: drop the label
+     and keep the value (`profile alice` becomes `alice`). */
+  .alpi-term-top .lbl,
+  .alpi-term-status .lbl{display:none}
+}

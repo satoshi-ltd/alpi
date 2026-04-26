@@ -105,6 +105,10 @@ nav ul a:hover{color:var(--fg);border-bottom-color:var(--fg)}
   .bp-seg:not(.bp-current){display:none}
   .bp-sep{display:none}
   .bp-current{display:inline}
+  /* GitHub icon adds clutter on a narrow nav (logo + breadcrumb +
+     install pill already eat the row). The pill stays; users can
+     reach the repo from the footer. */
+  .nav-github{display:none}
 }
 
 /* Docs-index (wide shell for the landing-style card grid) */
