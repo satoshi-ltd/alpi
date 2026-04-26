@@ -61,6 +61,7 @@ def run_all(home: Path, profile: str) -> list[Check]:
 
         # Sync checks run on the main thread while live ones execute.
         sync_checks: dict[str, list[Check]] = {
+            "version": _check_version(),
             "model": _check_model(cfg, env),
             "workspace": _check_workspace(cfg),
             "services": _check_services(home, profile),
@@ -74,8 +75,9 @@ def run_all(home: Path, profile: str) -> list[Check]:
             except Exception as e:  # noqa: BLE001
                 live[key] = [Check("Live", key, "fail", str(e))]
 
-    # Final render order: model → workspace → gateways → services → mcps → security.
+    # Final render order: version → model → workspace → gateways → services → mcps → security.
     out: list[Check] = []
+    out.extend(sync_checks["version"])
     out.extend(sync_checks["model"])
     out.extend(sync_checks["workspace"])
     out.extend(live.get("gateways", []))
@@ -158,6 +160,7 @@ def run_and_render(console, home: Path, profile: str, version: str) -> list[Chec
     def _add_pending(key: str, group: str, name: str) -> None:
         plan.append((key, group, name))
 
+    _add_sync(_check_version())
     _add_sync(_check_model(cfg, env))
     _add_sync(_check_workspace(cfg))
 
@@ -280,6 +283,30 @@ def run_and_render(console, home: Path, profile: str, version: str) -> list[Chec
 
 
 # Individual checks
+
+def _check_version() -> list[Check]:
+    """Surface the cached PyPI version comparison. Doctor is the
+    natural place for "is there an update?" — the wizard stays
+    focused on configuration, the user reaches doctor when they
+    want to know what to fix or refresh."""
+    from alpi import __version__, updater
+    newer = updater.available_update()
+    if newer:
+        return [Check(
+            "Version", "alpi-agent", "warn",
+            f"v{__version__} → v{newer} available — run `alpi update`",
+        )]
+    cache = updater._load_cache()
+    if cache is None:
+        # No cache yet — the background daemon will populate it on
+        # this run; until then, just show the current version with no
+        # claim about whether it's up to date.
+        return [Check("Version", "alpi-agent", "info", f"v{__version__}")]
+    return [Check(
+        "Version", "alpi-agent", "ok",
+        f"v{__version__} (latest)",
+    )]
+
 
 def _check_model(cfg: cfg_mod.Config, env: dict[str, str]) -> list[Check]:
     out: list[Check] = []

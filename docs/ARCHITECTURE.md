@@ -488,3 +488,4 @@ Key fixtures (`tests/conftest.py`):
 - `browser.py` exists but is intentionally NOT in the registry. Reactivate when Playwright lands (ROADMAP §B).
 - Gateway subprocess uses `alpi chat --once --emit-events` — separate codepath from the TUI, simpler, non-streaming. Changes to TUI feel don't affect gateway.
 - `ALPI_HOME` env var routes daemons + tests to a specific profile root.
+- `ALPI_SKIP_UPDATE_CHECK=1` short-circuits the background PyPI version check (`alpi/updater.py`); the autouse fixture in `tests/conftest.py` sets it so the unit suite never reaches PyPI. `ALPI_UPDATE_INDEX` overrides the JSON URL the updater hits — used to point at TestPyPI for release rehearsals.

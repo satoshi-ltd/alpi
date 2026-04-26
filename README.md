@@ -94,6 +94,7 @@ alpi chat --once "status?"   # one-shot stdout turn
 
 alpi setup                   # model, gateways, MCPs, sandbox, service
 alpi doctor                  # live health checks
+alpi update                  # check PyPI and upgrade alpi-agent
 alpi logs                    # merged profile logs
 
 alpi profile list

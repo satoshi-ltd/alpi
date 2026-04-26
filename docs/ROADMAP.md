@@ -76,26 +76,26 @@ Today alpi is installed by cloning the repo and running `uv sync`. A
 public release needs an end-user path that does not require git or
 the source tree. Three deliverables:
 
-1. **`uv tool install alpi-agent`** — publish the package on PyPI so a
-   plain `uv tool install alpi-agent` (or `pipx install alpi-agent`) lands a
-   working `alpi` binary in the user's PATH. The package is already
-   PyPI-shaped (`pyproject.toml` has `[project.scripts] alpi = …`);
-   the missing pieces are the publish workflow, the trusted-publisher
-   config on PyPI, and a smoke-test that asserts a fresh-machine
-   install actually launches.
+1. ✅ **`uv tool install alpi-agent`** — package shipped on PyPI
+   under `alpi-agent` (the binary stays `alpi`). The Trusted
+   Publisher (OIDC) is configured; the publish workflow at
+   `.github/workflows/publish.yml` smoke-installs the wheel in
+   five clean container images before going live.
 
-2. **`alpi update`** — a single command that bumps the user's
-   installation to the latest release. Implementation is a thin
-   wrapper around `uv tool upgrade alpi` (or `pipx upgrade`) with a
-   pre-flight check against PyPI's JSON API (`/pypi/alpi/json`) to
-   announce the version delta and the changelog link before pulling.
-   Falls back gracefully on networks without PyPI access.
+2. ✅ **`alpi update`** — landed as a CLI command plus a passive
+   background check. The check runs once every eight hours in a
+   daemon thread, caches the result under `~/.alpi/cache/
+   update_check.json`, and surfaces it in `alpi doctor` and the
+   TUI top bar. The command itself fetches PyPI on demand,
+   compares versions, detects the installer (`uv` / `pipx` /
+   dev), and runs the matching upgrade subprocess.
 
-3. **Versioning + release process.** Document the cut: tag
-   `v0.3.0`, build, publish, GitHub release with the CHANGELOG
-   excerpt as body. Once the workflow is green, every patch bump
-   (`v0.2.86 → v0.2.87 → …`) flows through the same pipeline so
-   `alpi update` is meaningful and not a one-off.
+3. **Versioning + release process** — pending the actual v0.3.0
+   cut. The mechanics work (every commit on `main` that changes
+   the version triggers a publish, tags the commit, and publishes
+   a GitHub release with the CHANGELOG excerpt). The remaining
+   work is the cut itself: bump to `v0.3.0`, write the cycle's
+   summary entry in CHANGELOG, watch the workflow ship it.
 
 **What's intentionally not in scope:** auto-update on launch (would
 contradict the "no hidden network" principle), Homebrew formula
