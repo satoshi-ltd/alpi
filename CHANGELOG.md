@@ -1,5 +1,89 @@
 # Changelog
 
+## v0.2.95 — 2026-04-26
+
+### `alpi update` — version check and self-upgrade
+
+alpi now tells you when there's a new release on PyPI and gives you
+one command to install it. Two surfaces, one cache, one binary
+upgrade path. Nothing changes in the no-network case — the check is
+fire-and-forget on a daemon thread and never blocks startup.
+
+#### How users notice an update
+
+A daemon thread that fires on every `alpi` invocation hits PyPI's
+JSON API once every eight hours and writes the result to
+`~/.alpi/cache/update_check.json`. Two surfaces read the cache
+when they render:
+
+- `alpi doctor` adds a `Version` row at the top. Up-to-date prints
+  a quiet `✓ alpi-agent  v0.2.95 (latest)`; behind prints a
+  warning `! alpi-agent  v0.2.94 → v0.2.95 available — run
+  `alpi update``.
+- The TUI's top bar adds a small `↑ v0.2.95` badge in the accent
+  colour next to the current version.
+
+If you never use the browser tool, you never download Chromium —
+same shape here. If alpi never reaches PyPI (offline, slow
+network), the daemon dies silently inside its 3-second timeout
+and nothing surfaces.
+
+#### `alpi update`
+
+The new command:
+
+```
+alpi update            # check, then prompt before upgrading
+alpi update --check    # check only, no install
+alpi update -y         # check, upgrade without prompting
+```
+
+It bypasses the cache for a forced fresh fetch, refreshes the
+cache so a stale badge clears immediately, then detects how alpi
+was installed:
+
+- `uv tool list` shows `alpi-agent` → runs `uv tool upgrade
+  alpi-agent`.
+- `pipx list --short` shows it → runs `pipx upgrade alpi-agent`.
+- Neither → prints "you appear to be on a dev install — `git pull`
+  in your alpi checkout" and exits cleanly. Saves a foot-shoot
+  for contributors running from a clone.
+
+After the upgrade, alpi spawns a fresh `alpi --version` and
+verifies the reported version matches what PyPI advertised, so a
+broken upgrade fails loudly instead of silently leaving you on
+the old binary.
+
+#### Configuration knobs
+
+- `ALPI_SKIP_UPDATE_CHECK=1` short-circuits the daemon thread
+  entirely. The autouse fixture in `tests/conftest.py` sets it so
+  the unit suite never reaches PyPI.
+- `ALPI_UPDATE_INDEX` overrides the JSON endpoint. Used to point
+  the updater at TestPyPI during release rehearsals.
+
+#### Tests
+
+- New: `tests/test_updater.py` — 26 cases covering version
+  comparison (including the `0.2.10 > 0.2.9` lexical-sort trap),
+  cache I/O (missing / corrupt / round-trip), TTL window,
+  daemon-thread skip-when-disabled, the dev-install detection
+  branch, and the network failure path. PyPI is mocked at the
+  `httpx.Client` level so the suite stays offline.
+- Suite: 894 passing (was 868).
+
+#### Documentation
+
+- `docs/INSTALL.md` updates the Updating section to describe how
+  the badge surfaces and what `--check` does.
+- `docs/ROADMAP.md` ticks items 1 and 2 of AU as shipped; item 3
+  (the v0.3.0 cut itself) remains open.
+- `docs/ARCHITECTURE.md` adds the two new env vars to the env-var
+  reference.
+- `README.md` lists `alpi update` in the common-commands block.
+
+---
+
 ## v0.2.94 — 2026-04-26
 
 ### browser tool — Chromium downloads itself on first use

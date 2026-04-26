@@ -302,7 +302,8 @@ class ToolCard(Widget):
 class AlpiTopBar(Static):
     def __init__(self, version: str, profile: str, path: str,
                  workspace_set: bool, sandbox: bool = False,
-                 network_locked: bool = False, profile_size: str = "") -> None:
+                 network_locked: bool = False, profile_size: str = "",
+                 update_available: str = "") -> None:
         super().__init__("")
         self._version = version
         self._profile = profile
@@ -311,6 +312,10 @@ class AlpiTopBar(Static):
         self._sandbox = sandbox
         self._network_locked = network_locked
         self._profile_size = profile_size
+        # Empty when up-to-date or the cache hasn't been written yet.
+        # When set (e.g. ``"0.2.95"``), the top bar shows a small
+        # ``↑ v0.2.95`` badge; the user runs ``alpi update`` to act.
+        self._update_available = update_available
 
     def on_mount(self) -> None:
         self._refresh()
@@ -320,13 +325,14 @@ class AlpiTopBar(Static):
 
     def set_state(self, *, profile: str, path: str, workspace_set: bool,
                   sandbox: bool = False, network_locked: bool = False,
-                  profile_size: str = "") -> None:
+                  profile_size: str = "", update_available: str = "") -> None:
         self._profile = profile
         self._path = path
         self._workspace_set = workspace_set
         self._sandbox = sandbox
         self._network_locked = network_locked
         self._profile_size = profile_size
+        self._update_available = update_available
         self._refresh()
 
     def _refresh(self) -> None:
@@ -352,8 +358,17 @@ class AlpiTopBar(Static):
         sep = f"  [{muted}]│[/{muted}]  "
         profile_label = "" if narrow else f"[{muted}]profile[/{muted}] "
         workspace_label = "" if narrow else f"[{muted}]workspace[/{muted}] "
+        version_block = f"[b]alpi[/b] [{muted}]{escape(self._version)}[/{muted}]"
+        if self._update_available:
+            # Small accent badge next to the version. Drawn in narrow
+            # mode too — it's a single token, deserves the screen
+            # real estate over labels.
+            badge_color = accent or "yellow"
+            version_block += (
+                f" [{badge_color}]↑ v{escape(self._update_available)}[/{badge_color}]"
+            )
         markup = (
-            f"[b]alpi[/b] [{muted}]{escape(self._version)}[/{muted}]"
+            f"{version_block}"
             f"{sep}"
             f"{profile_label}{profile_txt}"
         )

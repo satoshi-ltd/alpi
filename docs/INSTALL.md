@@ -56,9 +56,21 @@ alpi update
 ```
 
 `alpi update` checks PyPI for a newer version, shows what changed,
-and runs `uv tool upgrade alpi` (or `pipx upgrade alpi`) on
-confirmation. There is no auto-update at launch — alpi never reaches
-the network unless you ask it to.
+and runs `uv tool upgrade alpi-agent` (or `pipx upgrade
+alpi-agent`) on confirmation. There is no auto-update at launch —
+alpi never reaches the network unless you ask it to.
+
+You don't have to remember to run it: alpi already checks PyPI in
+the background once every eight hours and surfaces the result in
+two places —
+
+- `alpi doctor` prints a `Version` row at the top with the new
+  number when one is available.
+- The TUI's top bar adds a small `↑ vX.Y.Z` badge next to the
+  current version.
+
+`alpi update --check` does just the check and tells you whether
+an upgrade exists, without installing anything.
 
 To pin an older version intentionally:
 

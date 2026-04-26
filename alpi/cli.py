@@ -229,6 +229,7 @@ class _OrderedGroup(click.Group):
         "chat",
         "setup",
         "doctor",
+        "update",
         "logs",
         "profile",
         "peers",
@@ -270,6 +271,13 @@ def main(ctx: click.Context, profile: str | None, continue_last: bool) -> None:
     # user had launched ``alpi -p personal``.
     if profile:
         os.environ["ALPI_PROFILE"] = profile
+    # Background update check — daemon thread, fire-and-forget. Skips
+    # itself when the cache is fresh, when the user passed --version
+    # or --help (click handles those before this function runs), and
+    # when running ``alpi update`` (which does its own fresh fetch).
+    if ctx.invoked_subcommand != "update":
+        from alpi import updater
+        updater.trigger_background_check_if_enabled()
     _bootstrap(h)
     if ctx.invoked_subcommand is None:
         # Honour ``tui.auto_resume`` for bare ``alpi`` — if the user opted
@@ -548,6 +556,26 @@ def logs_cmd(ctx: click.Context, source: str | None, tail_n: int, follow: bool) 
     logs_mod.print_tail(ui._console, lines)
     if follow:
         logs_mod.follow(h, source, ui._console)
+
+
+# update
+
+
+@main.command("update")
+@click.option(
+    "--check", "check_only", is_flag=True,
+    help="Check for a new version; don't install.",
+)
+@click.option(
+    "--yes", "-y", "assume_yes", is_flag=True,
+    help="Skip the confirmation prompt before installing.",
+)
+@click.pass_context
+def update_cmd(ctx: click.Context, check_only: bool, assume_yes: bool) -> None:
+    """Check PyPI for a newer alpi-agent and install it."""
+    from alpi import updater
+    rc = updater.do_update(check_only=check_only, yes=assume_yes)
+    ctx.exit(rc)
 
 
 # setup / profile

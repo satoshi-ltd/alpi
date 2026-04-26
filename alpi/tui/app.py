@@ -130,6 +130,7 @@ class AlpiApp(App):
             slash_commands.extend(f"@{p.id}" for p in _peers_mod.load(self.home))
         except Exception:  # noqa: BLE001
             pass
+        from alpi import updater as _updater
         yield AlpiTopBar(
             version=alpi_version,
             profile=self._profile_name(),
@@ -141,6 +142,7 @@ class AlpiApp(App):
                 and not self.cfg.tools.terminal.allow_network
             ),
             profile_size=home.profile_size_label(self.home),
+            update_available=_updater.available_update() or "",
         )
         with VerticalScroll(id="chat"):
             pass
