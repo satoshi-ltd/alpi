@@ -197,7 +197,7 @@ class AlpiApp(App):
     def _install_theme(self) -> None:
         from alpi.tui.themes import build_theme
         tui = self.cfg.tui or {}
-        accent = tui.get("accent") or "#ff8800"
+        accent = tui.get("accent") or "#c8a24e"
         dark = str(tui.get("theme") or "dark").lower() != "light"
         theme = build_theme(accent=accent, dark=dark)
         self.register_theme(theme)

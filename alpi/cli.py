@@ -1726,10 +1726,10 @@ def profile_list(ctx: click.Context) -> None:
         )
         try:
             cfg = cfg_mod.load(home_path)
-            accent = (cfg.tui or {}).get("accent") or "#ff8800"
+            accent = (cfg.tui or {}).get("accent") or "#c8a24e"
             model = cfg.model or "(no model)"
         except Exception:  # noqa: BLE001
-            accent = "#ff8800"
+            accent = "#c8a24e"
             model = "(unreadable)"
         glyph = "◆" if name == active else "◇"
         name_cell = f"[b]{name}[/b]" if name == active else name
