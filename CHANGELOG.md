@@ -1,5 +1,41 @@
 # Changelog
 
+## v0.3.2 — 2026-04-27 — `@peer` and doctor reach remote peers
+
+Two bugs were keeping ALP.2 (TCP/Noise) traffic from working in
+practice even though the transport itself had been ready since
+v0.3.0. A peer pinned with an `address:` field — the canonical
+signal for "this peer lives on another machine, reach it over
+the network" — was being rejected by the two highest-traffic code
+paths and misreported by the health check, so a Tailscale-exposed
+peer looked unreachable from the outside even when its TCP listener
+was happily accepting Noise handshakes.
+
+- `alpi/alp/mention.py` — `execute()` now routes through
+  `alp_client.call_peer()` when the pinned peer has `address:`
+  set, falling back to the local Unix socket only for
+  intra-machine peers. Removes the explicit
+  `"@<id> is remote — ALP.2 pending"` rejection that blocked
+  every TUI mention, gateway DM and `peer` tool call against a
+  remote alpi.
+- `alpi/tools/peer.py` — module docstring and the tool
+  `description` shown to the LLM no longer claim
+  "intra-machine only"; the tool now advertises that pinned
+  peers with an `address:` are routed over TCP/Noise
+  automatically, so the model picks it for cross-machine
+  handoffs.
+- `alpi/doctor.py` — `_check_alp` reuses
+  `alpi.alp.setup._probe_all` to actually fire a `link.ping`
+  against every pinned peer (TCP for remote, Unix socket for
+  local) instead of skipping `address`-bearing peers and
+  reporting the misleading `0/0 reachable · 1 remote (ALP.2)`.
+  A reachable Tailscale peer now shows as `1/1 reachable`; an
+  offline one as `0/1 reachable · offline: <id>`.
+- `tests/test_alp_mention.py` — new
+  `test_execute_routes_remote_peer_over_tcp` pins a peer with
+  `address:`, monkey-patches `call_peer`, and asserts the TCP
+  path is taken with the right `peer_id` / `method` / `params`.
+
 ## v0.3.1 — 2026-04-27 — brand accent unified
 
 Single brand accent across every alpi surface. TUI dropped its
