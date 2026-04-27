@@ -275,7 +275,7 @@ alpi <version>  │  profile <name> <size>  │  [sandbox|offline]  │  workspa
 | `tui.show_cost` | `true` | bool | next session |
 | `tui.show_tokens` | `true` | bool | next session |
 | `tui.show_reasoning` | `true` | bool | next session |
-| `tui.accent` | `#ff8800` | CSS color (hex / named / rgb) | next session |
+| `tui.accent` | `#c8a24e` | CSS color (hex / named / rgb) | next session |
 | `tui.theme` | `dark` | `dark` \| `light` | next session |
 | `tui.auto_resume` | `false` | bool | next launch |
 

@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.3.1 — 2026-04-27 — brand accent unified
+
+Single brand accent across every alpi surface. TUI dropped its
+orange `#ff8800`, the marketing site dropped its desaturated
+`#a89b76`, and both adopted the warmer gold `#c8a24e` that the
+in-progress desktop app also uses. Everything that ships an
+"alpi" pixel now shares the same hue. Behaviour unchanged —
+existing profiles with a custom `tui.accent` keep their override.
+
+- `alpi/config.py`, `alpi/cli.py`, `alpi/tui/app.py` —
+  default `tui.accent` literal updated to `#c8a24e`.
+- `alpi/skills/knowledge/references/config.md` +
+  `docs/CONFIG.md` — config reference table reflects the new
+  default.
+- `site/templates/demo.css` + `site/templates/landing.html` —
+  hero/playwright console accent and "commercial path
+  available" mono note recoloured.
+
 ## v0.3.0 — 2026-04-26 — public release
 
 First public release of alpi. Marks the line where the project
