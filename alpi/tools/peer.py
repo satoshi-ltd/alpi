@@ -6,8 +6,8 @@ through ``alpi.alp.mention.execute`` so this tool, the TUI's
 ``@peer`` gesture, and the gateway mention interception all share
 one implementation.
 
-Inter-machine (TCP/Noise) lands in ALP.2 — for now, intra-machine
-Unix sockets only. Peers with ``address:`` set are rejected.
+Routing is automatic: peers with an ``address:`` go over TCP/Noise
+(ALP.2), the rest hit the local Unix socket (ALP.1).
 """
 
 from __future__ import annotations
@@ -23,9 +23,11 @@ from alpi.tools.base import Tool, ToolResult
 class PeerTool(Tool):
     name = "peer"
     description = (
-        "Ask another alpi profile on this machine a question and return "
-        "its reply. Use for cross-profile handoffs (e.g. work profile "
-        "asking personal profile for its timezone). The peer must be "
+        "Ask another alpi peer a question and return its reply. Works "
+        "for both local profiles on this machine and remote peers "
+        "reachable over the network (peers with an address set in "
+        "peers.yaml are routed over TCP/Noise automatically). Use for "
+        "cross-profile or cross-machine handoffs. The peer must be "
         "pinned in peers.yaml and have link.ask in its allow list. "
         "Returns the remote reply text plus token/cost usage."
     )

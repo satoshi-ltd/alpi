@@ -100,7 +100,10 @@ def _target_home(peer_id: str) -> Path:
 
 
 async def execute(home: Path, peer_id: str, prompt: str, *, timeout: float = 300.0) -> Result:
-    """Run a single ``link.ask`` against a pinned peer over ALP.1 (Unix socket).
+    """Run a single ``link.ask`` against a pinned peer.
+
+    Routes to TCP/Noise (ALP.2) when the peer has ``address`` set,
+    otherwise falls back to the intra-machine Unix socket (ALP.1).
 
     Returns a ``Result`` with ``ok=True`` + reply on success, or
     ``ok=False`` + human-readable error text otherwise. Never raises —
@@ -109,26 +112,33 @@ async def execute(home: Path, peer_id: str, prompt: str, *, timeout: float = 300
     peer = peers_mod.get_by_id(home, peer_id)
     if peer is None:
         return Result(ok=False, error=f"no peer @{peer_id} pinned")
-    if peer.address is not None:
-        return Result(ok=False, error=f"@{peer_id} is remote — ALP.2 pending")
 
-    socket_path = _target_home(peer_id) / "alp" / "alp.sock"
-    if not socket_path.exists():
-        return Result(
-            ok=False,
-            error=f"listener not running (`alpi -p {peer_id} alp start`)",
-        )
-
+    sender = load_or_generate(home)
     try:
-        sender = load_or_generate(home)
-        reply = await alp_client.call(
-            socket_path=socket_path,
-            sender=sender,
-            recipient_pubkey_b64=peer.pubkey,
-            method="link.ask",
-            params={"prompt": prompt},
-            timeout=timeout,
-        )
+        if peer.address is not None:
+            reply = await alp_client.call_peer(
+                home=home,
+                peer_id=peer_id,
+                sender=sender,
+                method="link.ask",
+                params={"prompt": prompt},
+                timeout=timeout,
+            )
+        else:
+            socket_path = _target_home(peer_id) / "alp" / "alp.sock"
+            if not socket_path.exists():
+                return Result(
+                    ok=False,
+                    error=f"listener not running (`alpi -p {peer_id} alp start`)",
+                )
+            reply = await alp_client.call(
+                socket_path=socket_path,
+                sender=sender,
+                recipient_pubkey_b64=peer.pubkey,
+                method="link.ask",
+                params={"prompt": prompt},
+                timeout=timeout,
+            )
     except alp_client.TargetOffline as e:
         return Result(ok=False, error=f"target-offline: {e}")
     except alp_client.RemoteError as e:

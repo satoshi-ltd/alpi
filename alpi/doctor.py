@@ -494,45 +494,24 @@ def _check_alp(home: Path) -> list[Check]:
         out.append(Check("ALP", "Peers", "info", "none pinned"))
         return out
 
-    reachable = 0
-    remote = 0
-    unreachable: list[str] = []
-    for p in pinned:
-        if p.address is not None:
-            remote += 1
-            continue
-        peer_sock = _peer_socket_path(p.id)
-        if not peer_sock.exists():
-            unreachable.append(p.id)
-            continue
-        s = _socket.socket(_socket.AF_UNIX, _socket.SOCK_STREAM)
-        s.settimeout(0.5)
-        try:
-            s.connect(str(peer_sock))
-            reachable += 1
-        except (ConnectionRefusedError, OSError):
-            unreachable.append(p.id)
-        finally:
-            s.close()
+    import asyncio
+    from alpi.alp.setup import _probe_all
+
+    try:
+        results = asyncio.run(_probe_all(home, pinned, ""))
+    except Exception as e:  # noqa: BLE001
+        out.append(Check("ALP", "Peers", "fail", f"probe error: {e}"))
+        return out
 
     total = len(pinned)
-    parts = [f"{reachable}/{total - remote} reachable"]
-    if remote:
-        parts.append(f"{remote} remote (ALP.2)")
+    reachable = sum(1 for v in results.values() if v == "on")
+    unreachable = [pid for pid, v in results.items() if v != "on"]
+    detail = f"{reachable}/{total} reachable"
     if unreachable:
-        parts.append(f"offline: {', '.join(unreachable)}")
-    detail = " · ".join(parts)
+        detail += f" · offline: {', '.join(unreachable)}"
     status: Status = "ok" if not unreachable else "warn"
-    if total == remote:
-        status = "info"
     out.append(Check("ALP", "Peers", status, detail))
     return out
-
-
-def _peer_socket_path(peer_id: str) -> Path:
-    if peer_id == "default":
-        return Path.home() / ".alpi" / "alp" / "alp.sock"
-    return Path.home() / ".alpi" / "profiles" / peer_id / "alp" / "alp.sock"
 
 
 def _alpi_binary_mtime() -> float | None:

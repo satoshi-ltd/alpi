@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 from alpi.alp import peers as peers_mod
-from alpi.alp.mention import parse
+from alpi.alp.mention import execute, parse
 from alpi.alp.peers import Peer
 
 
@@ -126,3 +126,36 @@ def test_no_home_skips_roster_validation() -> None:
     m = parse("use @property here")
     assert m is not None
     assert m.peer_id == "property"
+
+
+# execute() routing
+
+
+def test_execute_routes_remote_peer_over_tcp(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A pinned peer with ``address`` must go through ``call_peer``
+    (TCP/Noise), not be rejected as ALP.2 pending."""
+    home = tmp_path / "me"
+    home.mkdir()
+    peers_mod.add(
+        home,
+        Peer(id="bob", pubkey="BOB_PK", address="100.1.2.3:7425", allow=["link.ask"]),
+    )
+
+    captured: dict = {}
+
+    async def fake_call_peer(**kwargs):
+        captured.update(kwargs)
+        return {"text": "pong from tcp", "tokens_in": 1, "tokens_out": 2, "cost": 0.0}
+
+    monkeypatch.setattr("alpi.alp.mention.alp_client.call_peer", fake_call_peer)
+
+    import asyncio
+    result = asyncio.run(execute(home, "bob", "ping"))
+
+    assert result.ok is True
+    assert result.reply == "pong from tcp"
+    assert captured["peer_id"] == "bob"
+    assert captured["method"] == "link.ask"
+    assert captured["params"] == {"prompt": "ping"}
