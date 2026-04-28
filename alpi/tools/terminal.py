@@ -20,6 +20,28 @@ from alpi.tools._approval import Severity, check as approval_check
 from alpi.tools._sandbox import SandboxUnavailable, wrap_command
 from alpi.tools.base import Tool, ToolResult
 
+_SAFE_ENV_KEYS = (
+    "PATH", "HOME", "USER", "LOGNAME", "SHELL",
+    "LANG", "LC_ALL", "LC_CTYPE", "TERM", "TZ",
+    "PWD", "TMPDIR",
+)
+
+
+def _build_subprocess_env() -> dict[str, str]:
+    from alpi.tools import _state
+    parent = os.environ
+    out: dict[str, str] = {}
+    for key in _SAFE_ENV_KEYS:
+        if key in parent:
+            out[key] = parent[key]
+    for key in parent:
+        if key.startswith("LC_") and key not in out:
+            out[key] = parent[key]
+    for key in _state.get_active_skills_env():
+        if key in parent and key not in out:
+            out[key] = parent[key]
+    return out
+
 
 def _bg_dir() -> Path:
     root = get_home() / "run" / "bg"
@@ -154,6 +176,7 @@ class Terminal(Tool):
             proc = subprocess.run(
                 popen_args, shell=use_shell, capture_output=True, text=True,
                 timeout=timeout, cwd=cwd or _default_cwd(),
+                env=_build_subprocess_env(),
             )
         except subprocess.TimeoutExpired:
             return ToolResult(ok=False, output="", error=f"Timed out after {timeout}s")
@@ -188,7 +211,7 @@ class Terminal(Tool):
         proc = subprocess.Popen(
             popen_args, shell=use_shell, cwd=cwd or _default_cwd(),
             stdout=open(log.name, "ab"), stderr=subprocess.STDOUT,
-            start_new_session=True,
+            start_new_session=True, env=_build_subprocess_env(),
         )
         registry = _bg_dir() / f"{proc.pid}.meta"
         registry.write_text(
