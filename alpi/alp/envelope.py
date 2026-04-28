@@ -51,6 +51,18 @@ class ReplayDetected(EnvelopeError):
     """A ``(from, nonce)`` pair was seen within ``REPLAY_WINDOW``."""
 
 
+class WrongRecipient(EnvelopeError):
+    """``alp.to`` does not match the local node's identity."""
+
+
+class WrongSender(EnvelopeError):
+    """``alp.from`` does not match the expected peer for this exchange."""
+
+
+class IdMismatch(EnvelopeError):
+    """JSON-RPC ``id`` of the response does not match the request."""
+
+
 @dataclass
 class Envelope:
     """Parsed representation of an ALP message — helpful for tests
@@ -164,6 +176,9 @@ def verify(
     *,
     now: datetime | None = None,
     replay_cache: "ReplayCache | None" = None,
+    expected_to: str | None = None,
+    expected_from: str | None = None,
+    expected_id: str | None = None,
 ) -> Envelope:
     """Validate the envelope end to end.
 
@@ -173,6 +188,9 @@ def verify(
       3. Timestamp within ``TS_SKEW_MAX`` of ``now``.
       4. Signature verifies against the ``from`` pubkey.
       5. ``(from, nonce)`` not in the replay cache.
+      6. ``alp.to == expected_to`` when set (cross-target replay guard).
+      7. ``alp.from == expected_from`` when set (response sender pin).
+      8. ``body.id == expected_id`` when set (request/response binding).
 
     Raises the subclass of ``EnvelopeError`` matching the first
     failing check. Returns a parsed ``Envelope`` on success.
@@ -205,6 +223,22 @@ def verify(
 
     if replay_cache is not None:
         replay_cache.check_and_record(alp["from"], alp["nonce"])
+
+    if expected_to is not None and alp["to"] != expected_to:
+        raise WrongRecipient(
+            f"alp.to={alp['to'][:12]}… does not match local id "
+            f"{expected_to[:12]}…",
+        )
+    if expected_from is not None and alp["from"] != expected_from:
+        raise WrongSender(
+            f"alp.from={alp['from'][:12]}… does not match expected peer "
+            f"{expected_from[:12]}…",
+        )
+    if expected_id is not None and body.get("id") != expected_id:
+        raise IdMismatch(
+            f"response id={body.get('id')!r} does not match request "
+            f"id={expected_id!r}",
+        )
 
     return Envelope(
         jsonrpc=body.get("jsonrpc", ""),

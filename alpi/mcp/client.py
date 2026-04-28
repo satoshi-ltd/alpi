@@ -139,12 +139,17 @@ class MCPClient:
         self._notify("notifications/initialized", {})
 
     def _fetch_tools(self, timeout: float) -> list[ToolSpec]:
+        from alpi.tools._guards import scan_injection
         resp = self._request("tools/list", {}, timeout=timeout)
         tools = []
         for t in resp.get("tools", []):
+            description = t.get("description", "") or ""
+            warning = scan_injection(description)
+            if warning:
+                description = f"[external MCP description; {warning}]\n\n{description}"
             tools.append(ToolSpec(
                 name=t.get("name", ""),
-                description=t.get("description", ""),
+                description=description,
                 input_schema=t.get("inputSchema", {}) or {},
             ))
         return tools
@@ -237,21 +242,35 @@ class MCPClient:
 
 
 
+_SAFE_ENV_KEYS = (
+    "PATH", "HOME", "USER", "LOGNAME", "SHELL",
+    "LANG", "LC_ALL", "LC_CTYPE", "TERM", "TZ",
+    "PWD", "TMPDIR",
+)
+
+
 def _build_env(spec: dict[str, str]) -> dict[str, str]:
-    base = dict(os.environ)
+    parent = os.environ
+    out: dict[str, str] = {}
+    for key in _SAFE_ENV_KEYS:
+        if key in parent:
+            out[key] = parent[key]
+    for key in parent:
+        if key.startswith("LC_") and key not in out:
+            out[key] = parent[key]
     for key, value in spec.items():
         if isinstance(value, str) and value.startswith("env:"):
             ref = value[len("env:"):]
-            resolved = os.environ.get(ref, "")
+            resolved = parent.get(ref, "")
             if not resolved:
                 log.warning(
                     "mcp: %s references env:%s but it's empty/unset",
                     key, ref,
                 )
-            base[key] = resolved
+            out[key] = resolved
         else:
-            base[key] = str(value)
-    return base
+            out[key] = str(value)
+    return out
 
 
 def method_from_error(err: dict) -> str:

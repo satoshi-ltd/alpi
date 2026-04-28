@@ -19,14 +19,13 @@ private-agent tool on the terminal. v0.4 is the cycle where the
 project earns wider adoption: a desktop app (Ollama-style
 distribution), skills mature into mini-apps, a federated gateway
 ships, and the security story closes with a third-party audit.
-Tightly scoped — 3 items — to ship in 3-4 months without
+Tightly scoped — 2 items — to ship in 3-4 months without
 becoming a broken release.
 
 ### Hardening
 
 | ID | Item | Status |
 |---|---|---|
-| BC | External security audit before public release | 🔴 |
 | AW | Encrypted profile backup/restore — zero-knowledge passphrase-encrypted archive of `~/.alpi/<profile>/` | 🔵 |
 
 ### Commercial track

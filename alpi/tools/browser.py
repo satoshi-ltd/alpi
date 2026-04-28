@@ -70,6 +70,24 @@ def _ensure_page_blocking():
         context_args["storage_state"] = str(storage_file)
     context = browser.new_context(**context_args)
     _apply_stealth(context)
+
+    def _route_guard(route, request):  # noqa: ANN001
+        ok, reason = check_url(request.url)
+        if not ok:
+            try:
+                route.abort("addressunreachable")
+            except Exception:  # noqa: BLE001
+                pass
+            return
+        try:
+            route.continue_()
+        except Exception:  # noqa: BLE001
+            pass
+
+    try:
+        context.route("**/*", _route_guard)
+    except Exception:  # noqa: BLE001
+        pass
     page = context.new_page()
     page.set_default_timeout(_DEFAULT_TIMEOUT_MS)
     _state.update(playwright=pw, browser=browser, context=context, page=page)

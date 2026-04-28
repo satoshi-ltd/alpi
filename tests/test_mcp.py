@@ -259,6 +259,24 @@ def test_literal_env_value_passes_through() -> None:
     assert env["FOO"] == "literal"
 
 
+def test_undeclared_secrets_do_not_leak(monkeypatch) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-secret")
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "1234:abc")
+    monkeypatch.setenv("PATH", "/usr/bin:/bin")
+    env = mcp_client._build_env({"FOO": "literal"})
+    assert "OPENAI_API_KEY" not in env
+    assert "TELEGRAM_BOT_TOKEN" not in env
+    assert env.get("PATH") == "/usr/bin:/bin"
+
+
+def test_safelist_keys_pass_through(monkeypatch) -> None:
+    monkeypatch.setenv("HOME", "/tmp/h")
+    monkeypatch.setenv("LANG", "en_US.UTF-8")
+    env = mcp_client._build_env({})
+    assert env.get("HOME") == "/tmp/h"
+    assert env.get("LANG") == "en_US.UTF-8"
+
+
 # --------------------------------------------------------------------
 # Registry: config → tools registered with <server>:<tool> names
 # --------------------------------------------------------------------

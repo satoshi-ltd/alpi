@@ -79,6 +79,10 @@ def test_check_command_allows_safe(cmd: str) -> None:
 
 
 
+def _addrinfo(*addrs: str) -> list:
+    return [(2, 1, 6, "", (a, 0)) for a in addrs]
+
+
 @pytest.mark.parametrize("url", [
     "http://169.254.169.254/latest/meta-data/",
     "http://metadata.google.internal/",
@@ -89,30 +93,46 @@ def test_check_command_allows_safe(cmd: str) -> None:
     "http://localhost/secrets",
 ])
 def test_check_url_blocks_private_and_metadata(url: str) -> None:
-    with patch("alpi.tools._guards.socket.gethostbyname") as gethost:
-        gethost.side_effect = lambda h: {
+    with patch("alpi.tools._guards.socket.getaddrinfo") as getai:
+        getai.side_effect = lambda h, *_a, **_k: _addrinfo({
             "localhost": "127.0.0.1",
             "metadata.google.internal": "169.254.169.254",
-        }.get(h, h)
+        }.get(h, h))
         safe, reason = check_url(url)
     assert not safe, f"expected BLOCK for {url}, got allowed"
     assert reason
 
 
 def test_check_url_allows_public_domain() -> None:
-    with patch("alpi.tools._guards.socket.gethostbyname",
-               return_value="93.184.216.34"):
+    with patch("alpi.tools._guards.socket.getaddrinfo",
+               return_value=_addrinfo("93.184.216.34")):
         safe, reason = check_url("https://example.com/path")
     assert safe
     assert reason == ""
 
 
 def test_check_url_resolves_hostname_to_private_ip_and_blocks() -> None:
-    with patch("alpi.tools._guards.socket.gethostbyname",
-               return_value="10.0.0.42"):
+    with patch("alpi.tools._guards.socket.getaddrinfo",
+               return_value=_addrinfo("10.0.0.42")):
         safe, reason = check_url("https://sneaky.attacker.com/")
     assert not safe
     assert "10.0.0.42" in reason
+
+
+def test_check_url_blocks_when_any_record_is_private() -> None:
+    with patch("alpi.tools._guards.socket.getaddrinfo",
+               return_value=_addrinfo("93.184.216.34", "10.0.0.7")):
+        safe, reason = check_url("https://multi.example.com/")
+    assert not safe
+    assert "10.0.0.7" in reason
+
+
+def test_check_url_rejects_non_http_scheme() -> None:
+    safe, reason = check_url("file:///etc/passwd")
+    assert not safe
+    assert "scheme" in reason
+    safe, reason = check_url("gopher://example.com/")
+    assert not safe
 
 
 def test_scan_injection_flags_override_directive() -> None:

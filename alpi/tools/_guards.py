@@ -73,6 +73,8 @@ def check_url(url: str) -> Tuple[bool, str]:
         parsed = urlparse(url)
     except Exception:
         return False, "unparseable url"
+    if parsed.scheme not in ("http", "https"):
+        return False, f"unsupported scheme {parsed.scheme!r}"
     host = (parsed.hostname or "").lower()
     if not host:
         return False, "missing host"
@@ -86,15 +88,21 @@ def check_url(url: str) -> Tuple[bool, str]:
     except ValueError:
         pass
     try:
-        resolved = socket.gethostbyname(host)
+        infos = socket.getaddrinfo(host, None)
     except OSError:
         return True, ""
-    try:
-        ip = ipaddress.ip_address(resolved)
-    except ValueError:
-        return True, ""
-    if any(ip in net for net in _BLOCKED_NETWORKS):
-        return False, f"{host!r} resolves to private ip {ip}"
+    seen: set[str] = set()
+    for info in infos:
+        addr = info[4][0]
+        if addr in seen:
+            continue
+        seen.add(addr)
+        try:
+            ip = ipaddress.ip_address(addr)
+        except ValueError:
+            continue
+        if any(ip in net for net in _BLOCKED_NETWORKS):
+            return False, f"{host!r} resolves to private ip {ip}"
     return True, ""
 
 

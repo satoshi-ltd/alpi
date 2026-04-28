@@ -199,3 +199,84 @@ def test_verify_returns_envelope_dataclass(alice_bob) -> None:
     assert parsed.method == "link.ask"
     assert parsed.result is None
     assert parsed.error is None
+
+
+# Binding checks (cross-target replay / sender pin / id binding)
+
+
+def test_wrong_recipient_rejected(alice_bob) -> None:
+    alice, bob = alice_bob
+    charlie = generate(Path("/tmp") / "charlie-alp-test")
+    body = env.build_request(
+        sender=alice,
+        recipient_pubkey_b64=bob.pubkey_b64(),
+        method="link.ping",
+        params={},
+    )
+    # Charlie tries to accept a message addressed to Bob.
+    with pytest.raises(env.WrongRecipient):
+        env.verify(body, expected_to=charlie.pubkey_b64())
+
+
+def test_correct_recipient_passes(alice_bob) -> None:
+    alice, bob = alice_bob
+    body = env.build_request(
+        sender=alice,
+        recipient_pubkey_b64=bob.pubkey_b64(),
+        method="link.ping",
+        params={},
+    )
+    parsed = env.verify(body, expected_to=bob.pubkey_b64())
+    assert parsed.alp["to"] == bob.pubkey_b64()
+
+
+def test_wrong_sender_rejected(alice_bob, tmp_path: Path) -> None:
+    alice, bob = alice_bob
+    charlie = generate(tmp_path / "charlie")
+    body = env.build_response(
+        sender=charlie,
+        recipient_pubkey_b64=alice.pubkey_b64(),
+        request_id="req-1",
+        result={},
+    )
+    # Alice expected the response to come from Bob, not Charlie.
+    with pytest.raises(env.WrongSender):
+        env.verify(
+            body,
+            expected_to=alice.pubkey_b64(),
+            expected_from=bob.pubkey_b64(),
+        )
+
+
+def test_id_mismatch_rejected(alice_bob) -> None:
+    alice, bob = alice_bob
+    body = env.build_response(
+        sender=bob,
+        recipient_pubkey_b64=alice.pubkey_b64(),
+        request_id="req-XYZ",
+        result={},
+    )
+    with pytest.raises(env.IdMismatch):
+        env.verify(
+            body,
+            expected_to=alice.pubkey_b64(),
+            expected_from=bob.pubkey_b64(),
+            expected_id="req-DIFFERENT",
+        )
+
+
+def test_id_match_passes(alice_bob) -> None:
+    alice, bob = alice_bob
+    body = env.build_response(
+        sender=bob,
+        recipient_pubkey_b64=alice.pubkey_b64(),
+        request_id="req-XYZ",
+        result={},
+    )
+    parsed = env.verify(
+        body,
+        expected_to=alice.pubkey_b64(),
+        expected_from=bob.pubkey_b64(),
+        expected_id="req-XYZ",
+    )
+    assert parsed.id == "req-XYZ"

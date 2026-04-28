@@ -89,6 +89,12 @@ class SendMessage(Tool):
                     f"(set {platform.upper()}_ALLOWED_CHAT_IDS in ~/.alpi/.env)"
                 ),
             )
+        if attachment:
+            from alpi.tools._paths import resolve_path
+            try:
+                resolve_path(attachment)
+            except ValueError as e:
+                return ToolResult(ok=False, output="", error=str(e))
         try:
             delivery.send_to(platform, target, text, attachment=attachment)
         except delivery.DeliveryError as e:

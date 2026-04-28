@@ -93,7 +93,13 @@ async def call(
         response = json.loads(response_line)
     except json.JSONDecodeError as e:
         raise ClientError(f"malformed response: {e}") from e
-    parsed = env.verify(response, replay_cache=replay_cache)
+    parsed = env.verify(
+        response,
+        replay_cache=replay_cache,
+        expected_to=sender.pubkey_b64(),
+        expected_from=recipient_pubkey_b64,
+        expected_id=body.get("id"),
+    )
     if parsed.error is not None:
         err = parsed.error
         raise RemoteError(
@@ -169,7 +175,13 @@ async def call_tcp(
         response = json.loads(response_bytes)
     except json.JSONDecodeError as e:
         raise ClientError(f"malformed response: {e}") from e
-    parsed = env.verify(response, replay_cache=replay_cache)
+    parsed = env.verify(
+        response,
+        replay_cache=replay_cache,
+        expected_to=sender.pubkey_b64(),
+        expected_from=recipient_pubkey_b64,
+        expected_id=body.get("id"),
+    )
     if parsed.error is not None:
         err = parsed.error
         raise RemoteError(
