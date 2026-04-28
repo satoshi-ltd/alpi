@@ -18,6 +18,9 @@ _usage_sink: ContextVar[Optional[UsageFn]] = ContextVar("alpi_usage", default=No
 # by ``record_usage``, read by tools that need to know "what has this
 # turn cost so far?" (e.g. ``workgroup_post`` auto-declaring cost).
 _turn_usage: ContextVar[Optional[dict]] = ContextVar("alpi_turn_usage", default=None)
+_active_skills_env: ContextVar[Optional[set]] = ContextVar(
+    "alpi_active_skills_env", default=None,
+)
 
 
 def get_emit() -> Optional[EmitFn]:
@@ -95,6 +98,27 @@ def bump_turn_usage(input_tokens: int, output_tokens: int, cost_usd: float) -> N
     tally["tokens_in"] = int(tally.get("tokens_in", 0)) + int(input_tokens)
     tally["tokens_out"] = int(tally.get("tokens_out", 0)) + int(output_tokens)
     tally["usd"] = float(tally.get("usd", 0.0)) + float(cost_usd)
+
+
+def reset_skill_env() -> None:
+    _active_skills_env.set(set())
+
+
+def add_skill_env(names: list[str]) -> None:
+    if not names:
+        return
+    current = _active_skills_env.get()
+    if current is None:
+        current = set()
+        _active_skills_env.set(current)
+    for n in names:
+        if isinstance(n, str) and n.strip():
+            current.add(n.strip())
+
+
+def get_active_skills_env() -> set[str]:
+    current = _active_skills_env.get()
+    return set(current) if current else set()
 
 
 def emit_state(label: str, *, error: bool = False) -> None:

@@ -19,7 +19,7 @@ private-agent tool on the terminal. v0.4 is the cycle where the
 project earns wider adoption: a desktop app (Ollama-style
 distribution), skills mature into mini-apps, a federated gateway
 ships, and the security story closes with a third-party audit.
-Tightly scoped — 5 items — to ship in 3-4 months without
+Tightly scoped — 4 items — to ship in 3-4 months without
 becoming a broken release.
 
 ### Hardening
@@ -27,7 +27,6 @@ becoming a broken release.
 | ID | Item | Status |
 |---|---|---|
 | BC | External security audit before public release | 🔴 |
-| AV | Per-skill env scoping — restrict each skill's view of `os.environ` to a declared allowlist; today a prompt-injected skill can enumerate every API key / token in the parent process without touching a file | 🔵 |
 | AW | Encrypted profile backup/restore — zero-knowledge passphrase-encrypted archive of `~/.alpi/<profile>/` | 🔵 |
 
 ### Commercial track
@@ -77,33 +76,6 @@ becomes part of the launch story, the report lands at
 **Output.** A public report. Issues found are either fixed before
 v0.4 or documented in the report with a timeline. The report being
 published is part of the trust story — sitting on findings isn't.
-
-### AV. Per-skill env scoping
-
-`~/.alpi/.env` and `~/.alpi/<profile>/config.yaml` are denied at the
-file-tool layer (v0.2.85). Skill scripts still inherit the parent
-process's `os.environ` and can enumerate every variable in Python
-with no file access at all — a prompt-injected skill can therefore
-exfiltrate `OPENAI_API_KEY` or `TELEGRAM_BOT_TOKEN` without ever
-opening a file.
-
-**Scope.** When a skill runs, scrub `os.environ` down to a
-declarative allowlist read from the skill's frontmatter:
-
-```yaml
-# skills/<name>/SKILL.md frontmatter
-env:
-  - HTTP_PROXY  # if the skill genuinely needs it
-```
-
-The default is the empty allowlist. The skill executor builds a
-restricted env dict, spawns the subprocess (or sets up the
-restricted scope for in-process skills) without inheriting anything
-beyond the allowlist plus the irreducible PATH / HOME / LANG set
-needed for any process to run.
-
-**Closes** the residual vector named in v0.2.85's CHANGELOG +
-`docs/SECURITY.md → Layer 1`.
 
 ### AW. Encrypted profile backup/restore
 

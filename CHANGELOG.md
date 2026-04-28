@@ -1,1925 +1,596 @@
 # Changelog
 
+## v0.3.6 — 2026-04-28 — terminal subprocess env scoping (AV)
+
+Closes roadmap AV. The `terminal()` tool now starts every
+subprocess with an explicit `env=` dict instead of inheriting
+the parent's `os.environ` — a prompt-injected skill running
+`terminal('env')` no longer sees `OPENAI_API_KEY` or any other
+secret. Skills opt back into specific vars via `SKILL.md`
+frontmatter `env: [FOO]`, scoped per-turn.
+
+- `alpi/tools/terminal.py` — `_SAFE_ENV_KEYS` safelist + `_build_subprocess_env()`; both fg + bg subprocess sites pass `env=`.
+- `alpi/tools/_state.py`, `alpi/engine.py` — per-turn allowlist ContextVar, reset at turn start.
+- `alpi/tools/skill.py` — frontmatter `env:` parsed on view; sub-file reads don't register.
+- `tests/test_skill_env_scoping.py` — 9 tests including real `terminal('env')` subprocess assertions.
+
 ## v0.3.5 — 2026-04-28 — TUI input responsiveness + multi-line paste
 
-Two daily-UX bugs in the TUI that compounded each other on long
-sessions. Roadmap **BG** (v0.4) closes the input-lag-during-stream
-loop earlier than planned; multi-line paste was found while
-verifying it.
+Closes roadmap BG early. Two compounding daily-UX TUI bugs:
+typing lagged during streaming because every delta re-parsed
+markdown via `Markdown.get_stream().write()`, and multi-line
+paste delivered only the first line because Textual's `Input`
+hardcodes `splitlines()[0]`. Fix renders in-flight tokens into
+a cheap `Static` and swaps to `Markdown` once finalised; a
+`ChatInput` subclass flattens pasted newlines to spaces.
 
-**Input lag during streaming.** Typing into the prompt was sluggish
-while the agent rendered tokens — the symptom v0.2.x's earlier fix
-reduced but did not eliminate. Hot path: every delta flush ran
-through `Markdown.get_stream().write()`, which re-parses markdown
-over the growing message. With ~12.5 flushes/sec on increasingly
-large content, key events queued behind layout work. The fix
-reshapes the streaming widget: render in-flight tokens into a plain
-`Static` (cheap text replace, no parser invocation), and swap to a
-`Markdown` widget once the message is finalised — markdown re-parse
-runs once at the end instead of 12.5×/sec. Spinner tick rate also
-dropped from 6 Hz to 4 Hz so `ToolCard` and `ThinkingIndicator` no
-longer compete for render budget while a stream is live.
-
-**Multi-line paste.** Pasting clipboard content with `\n` only
-delivered the first line to the agent — Textual's `Input` is
-hardcoded to `event.text.splitlines()[0]`. A `ChatInput` subclass
-overrides `_on_paste` to flatten newlines to spaces so the full
-clipboard payload reaches the engine. `event.prevent_default()` is
-required (not just `event.stop()`) because Textual's MRO dispatch
-otherwise also runs the base handler.
-
-- `alpi/tui/widgets.py` — `AssistantMessage` rewritten:
-  - Streaming body is a `Static` updated via `update(self._buffer)`
-    every `_FLUSH_INTERVAL` (raised from 0.08 s to 0.15 s).
-  - `replace(text)` now always finalises: it swaps the `Static` for
-    a freshly-mounted `Markdown(text)` so the polished render
-    (links, fenced code, headings) lands at completion. Idempotent
-    via `_finalized` flag.
-  - `_initial=` constructor path (rehydrated sessions) mounts as
-    `Markdown` directly, skipping the streaming detour.
-  - `ToolCard._tick` and `ThinkingIndicator._tick` intervals lowered
-    from `1/6` to `1/4`; spinner-frame index synced to the new
-    cadence (`int(time.time() * 4)`) so the animation stays even.
-- `alpi/tui/widgets.py` — new `ChatInput(Input)` subclass overrides
-  `_on_paste` to flatten `\r\n` / `\r` / `\n` to spaces before
-  insertion, then calls `event.prevent_default()` + `event.stop()`.
-- `alpi/tui/app.py` — composes `ChatInput` instead of `Input` for
-  `#chat-input`. Two non-streaming callsites that produced markdown
-  in one shot (`on_mention_done` reply, `_after_compact` summary)
-  now use `replace()` instead of `append()` so they render as
-  Markdown immediately. The `assistant_done` handler always calls
-  `replace(ev.text)` (the previous text-equality check is gone)
-  to guarantee the Static→Markdown swap.
-- `tests/test_tui_streaming_perf.py` — new fixture under
-  `@pytest.mark.perf` (gated; not part of the default run). Mounts
-  a minimal `App` with an `AssistantMessage` + `Input`, drives 240
-  tokens at 60 tok/s into the message while injecting `Key` events
-  into the input, asserts per-keystroke p99 stays under 50 ms.
-  Locks the regression boundary; numbers on a quiet machine sit
-  around p99 ≈ 1–9 ms.
-- `pyproject.toml` — `perf` marker registered (required by
-  `--strict-markers`).
+- `alpi/tui/widgets.py` — `AssistantMessage` rewritten: streaming `Static` updated every 0.15s, `replace()` swaps to `Markdown` at finalise (idempotent via `_finalized`); spinner ticks dropped 6Hz→4Hz. New `ChatInput(Input)` overrides `_on_paste` with `event.prevent_default()` + `event.stop()`.
+- `alpi/tui/app.py` — composes `ChatInput`; non-streaming callsites use `replace()` so markdown lands immediately.
+- `tests/test_tui_streaming_perf.py` — gated `@pytest.mark.perf` fixture: 240 tokens at 60 tok/s with key injection, asserts per-keystroke p99 < 50 ms (observed 1–9 ms).
+- `pyproject.toml` — `perf` marker registered.
 
 ## v0.3.4 — 2026-04-28 — workgroup hardening for tier-2 models
 
-Workgroups had to keep their workflow shape correct on small / tier-2
-models (GPT-class nano in our test runs), accepting that response
-quality degrades but the choreography — peers contribute, hub closes,
-no infinite loops, no protocol violations — should not. Real
-end-to-end runs on `gpt-5.4-nano` exposed three failure modes that
-all live above the wire: members closing tasks they were never
-authorized to close, members refining the same point indefinitely
-without anyone closing, and the workgroup deadlocking when every
-peer is caught up and nobody wakes again. This release moves the
-discipline that used to live in per-workgroup briefings (which the
-small models routinely ignore) down into the protocol + dispatcher,
-so any workgroup inherits the structural rails without re-prompting.
+Workgroups now keep workflow shape on tier-2 models
+(`gpt-5.4-nano`). Three failures fixed: members closing tasks
+they couldn't close, infinite refinement loops, deadlocks when
+every peer was caught up. Discipline moves from per-workgroup
+briefings (which small models ignored) into protocol +
+dispatcher. A 12-post nano run that previously looped now
+closes at post 6.
 
-A 12-post nano run that previously paraphrase-looped without ever
-closing now closes cleanly at post 6 with `#done`, with no
-protocol violations attempted.
-
-- `alpi/alp/tasks.py` — `parse_post(text, seq, by, hub_pubkey=None)`
-  and `active_task(posts, hub_pubkey=None)` gain an optional
-  hub-pubkey filter. When set, markers from non-hub authors are
-  ignored as protocol violations. `has_markers(text)` is a new
-  public helper used by the SDK to refuse non-hub marker posts
-  before encryption.
-- `alpi/alp/workgroup_client.py` — `post()` scans plaintext for
-  `#task` / `#done` markers and refuses to send when the sender
-  is not the hub of the target workgroup. Catching it client-side
-  gives the agent a clear `ValueError` before the network roundtrip.
-  Combined with the `parse_post` filter, non-hub markers are
-  rejected at two layers (SDK rejection + semantic ignore), neither
-  of which requires the hub to break its zero-knowledge posture
-  by decrypting on accept.
-- `alpi/alp/agent_context.py` — `WORKGROUP_GUARDRAILS` rewritten
-  with two role-conditional sections ("IF YOU ARE A NON-HUB
-  MEMBER" / "IF YOU ARE THE HUB"). New mechanical rules small
-  models can apply by counting rather than judging:
-  - **Strict one-post-per-task default for members.** If your
-    pubkey already authored a post since the active `#task` was
-    opened, default to silence unless the most recent post
-    contains `@<your-handle>` with a direct question, or you have
-    new evidence (source link, number, fact) not already in the
-    transcript.
-  - **Hard close-now signal for the hub.** Once the active task
-    has 4+ posts and the last 2 add no new evidence, the hub
-    must close — refinements without new evidence are the close
-    trigger, not noise to wait out.
-- `alpi/service.py` — three additions to the workgroup poller:
-  - `_build_role_aware_addendum()` — appends a state-aware cue to
-    the dispatcher synthetic prompt based on on-disk workgroup
-    state. Hub on a 4+ post task gets an explicit "close NOW if
-    last posts add no new evidence" cue; member who already
-    posted in the active task gets a strict "silence default
-    unless directly @-mentioned by name" cue. Both are mechanical
-    — countable, not subjective — so nano-class models can apply
-    them without re-reading the briefing every turn.
-  - `_maybe_watchdog_close()` — when an active task has 4+ posts
-    and the last post is older than `_STALE_TASK_SECONDS` (180 s,
-    3× the dispatch cooldown), force-fire the hub with a
-    `watchdog: active task stale` reason regardless of
-    `hub_last_responded_seq`. Breaks the deadlock where the hub
-    already saw the latest post, chose silence, and members are
-    caught up too — the workgroup would otherwise sit forever
-    until budget or watcher timeout.
-  - `turn_log_path()` + `_append_turn_event()` — dispatcher now
-    brackets every turn with append-only `start` / `end` /
-    `timeout` / `spawn-failed` events written to
-    `~/.alpi/profiles/<x>/alp/turns.jsonl` (mode 0600).
-    Operators can `tail -f` to see who's running what, since
-    when, and with what outcome.
-  - **Hard turn timeout.** `asyncio.wait_for(proc.wait(),
-    timeout=_TURN_TIMEOUT_SECONDS)` (300 s) wraps the
-    subprocess; on timeout it SIGTERMs with a 5 s grace window
-    then SIGKILLs and records a `timeout` event with `killed:
-    true`. Bounds runaway turns; previously a stuck agent could
-    hold the dispatch indefinitely.
-- `alpi/cli.py` — new `alpi workgroup turns [<wg_id>] [-f]`
-  command reads `turns.jsonl`, optionally filters by workgroup,
-  with `--limit N` (default 20) and `--follow` for live
-  streaming. Color-codes `start` / `end` / `timeout` /
-  `spawn-failed` for quick scan. Closes the observability gap
-  the previous release left open.
-- `tests/test_alp_tasks.py` — three new tests for the hub-pubkey
-  filter: `has_markers` detects `#task` / `#done` correctly,
-  `parse_post` ignores non-hub markers when filter is set,
-  `active_task` keeps the task open when a member tries to close.
-- `tests/test_alp_workgroup_client.py` — new
-  `test_post_rejects_non_hub_marker` asserts the SDK raises
-  `ValueError` with a clear message when a member tries to send
-  text containing a marker.
-- `tests/test_alp_workgroup_poller.py` — four new tests covering
-  the dispatcher telemetry: append creates a 0o600 jsonl, append
-  swallows write failures (telemetry must never crash dispatch),
-  `_dispatch_workgroup_turn` records `start` + `end` events with
-  pid/duration/posts_added, and the timeout path SIGTERMs/kills
-  + records a `timeout` event with `killed: true`.
-- `tests/test_alp_agent_context.py` — guardrails test updated
-  for the new "HUB IS THE MANAGER" + "NEVER post `#task` or
-  `#done`" assertions.
-- `tests/manual/test_alice_bob_workgroup.py` — kickoff posted via
-  alice (the hub) instead of bob, since under the new rule bob's
-  marker post would be rejected by the SDK.
-- `tests/manual/test_money_workgroup.py` — new oneshot 3-peer
-  demo that wipes and rebuilds alice/bob/carol from scratch,
-  copies only `OPENAI_API_KEY` from `~/.alpi/.env`, pins
-  `openai/gpt-5.4-nano` as the model, and drives a strategic
-  bifurcation task ("PATH A privacy-purist niche vs PATH B
-  mainstream broadening"). Includes a per-peer turn panel that
-  reads `turns.jsonl` + `ps` to show running / idle / timed-out
-  status in real time. Designed to verify the workflow shape
-  holds on tier-2 models.
-- `docs/ALP.md` — In-chat protocol section: marker table now
-  reads "hub only" with a paragraph explaining the two
-  enforcement layers. Autonomous engagement section adds three
-  new sub-blocks (role-aware turn cue, stale-task watchdog, turn
-  telemetry + timeout). Changelog v1.1 entry covers the cycle.
+- `alpi/alp/tasks.py` — `parse_post`/`active_task` gain optional `hub_pubkey` filter; non-hub markers ignored. New `has_markers()` helper.
+- `alpi/alp/workgroup_client.py` — `post()` rejects non-hub `#task`/`#done` client-side with `ValueError`.
+- `alpi/alp/agent_context.py` — `WORKGROUP_GUARDRAILS` rewritten with role-conditional rules: members default-silent unless `@`-named, hub must close after 4+ posts with no new evidence.
+- `alpi/service.py` — `_build_role_aware_addendum()` (state-aware dispatcher cue), `_maybe_watchdog_close()` (180s stale-task force-fire), `turn_log_path()`/`_append_turn_event()` (append-only `start`/`end`/`timeout` events at `~/.alpi/profiles/<x>/alp/turns.jsonl`, mode 0600), hard 300s `asyncio.wait_for` turn timeout with SIGTERM→SIGKILL.
+- `alpi/cli.py` — new `alpi workgroup turns [<wg_id>] [-f]` command.
+- `tests/test_alp_tasks.py`, `test_alp_workgroup_client.py`, `test_alp_workgroup_poller.py`, `test_alp_agent_context.py` — hub-pubkey filter, SDK rejection, telemetry, timeout path.
+- `tests/manual/test_money_workgroup.py` — new 3-peer nano demo; `docs/ALP.md` — protocol + autonomous engagement updates.
 
 ## v0.3.3 — 2026-04-28 — workgroup poller + capability fixes
 
-Two ALP.3 bugs were keeping workgroups from cycling. A hub posting
-a `#task` line in its own workgroup wasn't waking its local agent
-(the poller's "don't react to your own posts" rule applied even to
-directives), and a member joining a workgroup couldn't pull from
-the hub afterwards because `workgroup.join` doesn't retroactively
-add `workgroup.*` to the peer's `allow:` list — every subsequent
-`workgroup.pull` / `workgroup.post` was rejected with
-`-32001 capability-denied` despite the join succeeding. Together
-these explained the "I posted a `#task` and nothing happened"
-report: alice ignored her own task, and bob never received it
-because his pull was denied at the transport layer.
+Two ALP.3 bugs kept workgroups from cycling: a hub posting
+`#task` in its own workgroup didn't wake its local agent, and
+joiners couldn't pull because `workgroup.join` doesn't add
+`workgroup.*` to the peer's `allow:`, hitting `-32001
+capability-denied`. Also extracts curated provider model lists
+into shared YAML for the desktop app + adds two hidden `chat`
+flags for desktop GUI drive.
 
-This release also extracts the curated provider model lists into
-a shared YAML file so the desktop app can read the same catalog
-without duplicating it in Rust, and adds two hidden flags to
-`alpi chat` that the desktop app uses to drive a profile from
-the GUI.
-
-- `alpi/service.py` — `_should_dispatch` rewritten to scan every
-  unacknowledged post (not only the latest) so a fast peer reply
-  doesn't shadow an earlier `#task` / `@<profile>` mention.
-  Triggers, in priority: (1) explicit `@<profile>` from someone
-  else, (2) collective `#task` with no `@<peer>` targets — fires
-  for every member including the hub when the hub authored,
-  (3) active-task participant: while a task is open, a post from
-  someone else wakes us if the opener was collective or named us.
-  Self-authored non-task posts within the unprocessed range are
-  treated as "we engaged" and shadow earlier triggers so the
-  poller doesn't re-fire on stale mentions every tick.
-- `alpi/alp/peers.py` — `Peer.may_call` now bypasses the per-peer
-  `allow:` list for any `workgroup.*` method. Workgroup membership
-  (already enforced by every handler with
-  `-32008 workgroup-not-member`) is the real authorization gate;
-  the `peers.yaml` allow list was redundant for these calls and
-  caused silent capability-denied failures whenever a member
-  joined a workgroup after the peer entry was first written.
-- `docs/ALP.md` + `alpi/skills/knowledge/references/alp.md` —
-  peer-list `allow` row clarifies that `workgroup.*` methods
-  bypass the per-peer allow list and rely on the membership gate.
-- `tests/test_alp_workgroup.py` — `test_capability_denied_when_verb_not_allowed`
-  rewritten as `test_workgroup_verbs_bypass_peer_allow_list` to
-  assert the new contract.
-- `tests/test_alp_workgroup_poller.py` — new test
-  `test_collective_task_wakes_any_member_on_peer_reply` covers the
-  collective-task variant of trigger 3; existing tests adjusted
-  for the new range-scan semantics.
-- `alpi/providers/curated_models.yaml` — new shared catalog of
-  curated model ids for OpenAI and Anthropic. Single source of
-  truth read by the Python provider classes and (out of repo
-  scope here) the desktop picker via `include_str!`.
-- `alpi/providers/curated.py` — tiny loader with `lru_cache`,
-  used by the OpenAI / Anthropic provider classes in place of
-  the inline `_CURATED` tuples.
-- `alpi/providers/openai.py` + `alpi/providers/anthropic.py` —
-  `list_models()` now reads from `load_curated(...)`. Behaviour
-  identical; the literal lists moved into YAML.
-- `pyproject.toml` — `tool.setuptools.package-data` now includes
-  `providers/*.yaml` so the curated catalog ships in the wheel.
-- `alpi/cli.py` — `chat` gains two hidden flags:
-  `--session-id` (resume a specific session by id) and
-  `--model` (override `cfg.model` for a single `--once` turn,
-  not persisted). Both are documented as desktop-app helpers.
-  No change to the public CLI surface.
+- `alpi/service.py` — `_should_dispatch` rewritten to scan every unacknowledged post; priority: explicit `@<profile>`, collective `#task`, active-task participant. Self-authored non-task posts shadow earlier triggers.
+- `alpi/alp/peers.py` — `Peer.may_call` bypasses per-peer `allow:` for `workgroup.*`; membership is the real gate.
+- `docs/ALP.md`, `alpi/skills/knowledge/references/alp.md` — clarifies bypass.
+- `tests/test_alp_workgroup.py`, `test_alp_workgroup_poller.py` — rewritten + collective-task wake test.
+- `alpi/providers/curated_models.yaml` (new) + `curated.py` (loader) — single source of truth, replacing inline `_CURATED` tuples in `openai.py`/`anthropic.py`. `pyproject.toml` ships `providers/*.yaml`.
+- `alpi/cli.py` — `chat` gains hidden `--session-id` and `--model` (per-turn, not persisted).
 
 ## v0.3.2 — 2026-04-27 — `@peer` and doctor reach remote peers
 
-Two bugs were keeping ALP.2 (TCP/Noise) traffic from working in
-practice even though the transport itself had been ready since
-v0.3.0. A peer pinned with an `address:` field — the canonical
-signal for "this peer lives on another machine, reach it over
-the network" — was being rejected by the two highest-traffic code
-paths and misreported by the health check, so a Tailscale-exposed
-peer looked unreachable from the outside even when its TCP listener
-was happily accepting Noise handshakes.
+Two bugs kept ALP.2 (TCP/Noise) traffic from working in
+practice. A peer pinned with `address:` (the canonical "remote
+machine" signal) was rejected by the highest-traffic code
+paths and misreported by the health check, so a Tailscale-
+exposed peer looked unreachable from outside even when its TCP
+listener was accepting Noise handshakes.
 
-- `alpi/alp/mention.py` — `execute()` now routes through
-  `alp_client.call_peer()` when the pinned peer has `address:`
-  set, falling back to the local Unix socket only for
-  intra-machine peers. Removes the explicit
-  `"@<id> is remote — ALP.2 pending"` rejection that blocked
-  every TUI mention, gateway DM and `peer` tool call against a
-  remote alpi.
-- `alpi/tools/peer.py` — module docstring and the tool
-  `description` shown to the LLM no longer claim
-  "intra-machine only"; the tool now advertises that pinned
-  peers with an `address:` are routed over TCP/Noise
-  automatically, so the model picks it for cross-machine
-  handoffs.
-- `alpi/doctor.py` — `_check_alp` reuses
-  `alpi.alp.setup._probe_all` to actually fire a `link.ping`
-  against every pinned peer (TCP for remote, Unix socket for
-  local) instead of skipping `address`-bearing peers and
-  reporting the misleading `0/0 reachable · 1 remote (ALP.2)`.
-  A reachable Tailscale peer now shows as `1/1 reachable`; an
-  offline one as `0/1 reachable · offline: <id>`.
-- `tests/test_alp_mention.py` — new
-  `test_execute_routes_remote_peer_over_tcp` pins a peer with
-  `address:`, monkey-patches `call_peer`, and asserts the TCP
-  path is taken with the right `peer_id` / `method` / `params`.
+- `alpi/alp/mention.py` — `execute()` routes through `alp_client.call_peer()` when `address:` is set; removes the "@<id> is remote — ALP.2 pending" rejection.
+- `alpi/tools/peer.py` — docstring + tool description no longer claim "intra-machine only".
+- `alpi/doctor.py` — `_check_alp` reuses `setup._probe_all` to fire `link.ping` over TCP for remote peers; reachable Tailscale peers now show `1/1 reachable`.
+- `tests/test_alp_mention.py` — new `test_execute_routes_remote_peer_over_tcp` asserts TCP path with right `peer_id`/`method`/`params`.
 
 ## v0.3.1 — 2026-04-27 — brand accent unified
 
-Single brand accent across every alpi surface. TUI dropped its
-orange `#ff8800`, the marketing site dropped its desaturated
-`#a89b76`, and both adopted the warmer gold `#c8a24e` that the
-in-progress desktop app also uses. Everything that ships an
-"alpi" pixel now shares the same hue. Behaviour unchanged —
-existing profiles with a custom `tui.accent` keep their override.
+Single brand accent `#c8a24e` across every alpi surface. TUI
+dropped its orange `#ff8800`, the marketing site dropped
+`#a89b76`, and both adopt the warmer gold the desktop app uses.
+Existing profiles with custom `tui.accent` keep their override.
 
-- `alpi/config.py`, `alpi/cli.py`, `alpi/tui/app.py` —
-  default `tui.accent` literal updated to `#c8a24e`.
-- `alpi/skills/knowledge/references/config.md` +
-  `docs/CONFIG.md` — config reference table reflects the new
-  default.
-- `site/templates/demo.css` + `site/templates/landing.html` —
-  hero/playwright console accent and "commercial path
-  available" mono note recoloured.
+- `alpi/config.py`, `alpi/cli.py`, `alpi/tui/app.py` — default `tui.accent` literal updated to `#c8a24e`.
+- `alpi/skills/knowledge/references/config.md`, `docs/CONFIG.md` — config reference reflects new default.
+- `site/templates/demo.css`, `site/templates/landing.html` — hero/playwright console + mono note recoloured.
 
 ## v0.3.0 — 2026-04-26 — public release
 
-First public release of alpi. Marks the line where the project
-becomes installable from PyPI (`uv tool install alpi-agent`) and
-the documentation, site, and onboarding are stable enough for
-external users.
+First public release of alpi: installable from PyPI
+(`uv tool install alpi-agent`); docs, site, and onboarding
+stable for external users. The v0.3 cycle stacked the work
+that makes alpi usable beyond a single hacker on a laptop.
+Per-patch detail preserved in v0.2.x entries below.
 
-The v0.3 cycle stacked the work that makes alpi usable beyond a
-single hacker on a laptop:
-
-- **ALP** — the Alpi Link Protocol shipped end-to-end. ALP.1
-  (Unix sockets, intra-machine), ALP.2 (Noise_XK over TCP, with
-  rate limits + budgets), and ALP.3 (workgroups: hub state,
-  pause/resume, leave + rekey, member bios, `@<peer>` mentions
-  anywhere in the text).
-- **Service unification** — one process per profile hosts the
-  gateway, scheduler, and ALP listener. `alpi service` replaces
-  the legacy `gateway` / `schedule` / `alp` daemons.
-- **Distribution** — packaged as `alpi-agent` on PyPI with a
-  publish workflow. `alpi update` + a version badge in `doctor`
-  and the TUI top bar.
-- **Bundled skills** — first `@alpi/knowledge` skill ships
-  alpi's own user-facing docs as package resources, so the
-  agent answers questions about itself without `web_search`.
-- **Browser tool** — Chromium downloads itself on first use; no
-  separate install step.
-- **Security & budget** — profile `.env` / `config.yaml`
-  off-limits to file tools and terminal; daily spending ledger
-  with profile-level cap.
-- **UX** — wizard section headings + copy pass, TUI markdown
-  link style, `/memory` panel rewrite, streaming lag fix,
-  setup → Delete profile, CLI "did you mean" polish.
-- **Site** — landing + 15 docs pages, Open Graph + JSON-LD,
-  hero/quickstart console demo widget, social banner.
-
-Per-patch detail for the cycle is preserved in the v0.2.x
-entries below; this entry is the umbrella the public release
-ships under.
+- ALP shipped end-to-end: ALP.1 (Unix sockets), ALP.2 (Noise_XK over TCP, rate limits + budgets), ALP.3 (workgroups: hub state, pause/resume, leave + rekey, member bios, `@<peer>` mentions anywhere).
+- Service unification — one `alpi service` per profile hosts gateway, scheduler, ALP listener.
+- Distribution — `alpi-agent` on PyPI with publish workflow; `alpi update` + version badge in doctor + TUI top bar.
+- `@alpi/knowledge` — first bundled skill ships alpi's own docs.
+- Browser tool — Chromium downloads itself on first use.
+- Security & budget — profile `.env`/`config.yaml` off-limits to file tools and terminal; daily spending ledger with profile-level cap.
+- UX + site — wizard headings + copy pass, TUI markdown link style, `/memory` rewrite, streaming lag fix, Delete profile, "did you mean" polish; landing + 15 docs pages, OG + JSON-LD, demo widget.
 
 ## v0.2.97 — 2026-04-26
 
 ### `@alpi/knowledge` — first bundled skill
 
-alpi now ships its first bundled skill under the reserved
-`@alpi/*` namespace: `@alpi/knowledge`. The skill bundles alpi's
-own user-facing documentation (12 `.md` files: README,
-QUICKSTART, INSTALL, PROFILES, SKILLS, MODELS, ALP, ARCHITECTURE,
-CONFIG, SECURITY, DEPLOYMENTS, OPERATIONS) as package resources
-so the agent can answer questions about alpi itself —
-configuration, commands, the ALP protocol, security model,
-deployment — without a `web_search` round-trip and without
-guessing from training data (which predates alpi).
+alpi's first bundled skill bundles 12 user-facing docs as
+package resources so the agent answers questions about alpi
+without `web_search` or training-data guesses. SKILL.md
+carries a topic→reference routing table; skills index has an
+imperative rule biasing small models (~70% follow on nano).
 
-#### How it works
-
-The skill ships as part of the wheel under
-`alpi/skills/knowledge/`. Its `SKILL.md` carries a routing table
-(topic → reference file); the agent loads the body, picks the
-matching reference, reads it, and synthesizes the answer.
-Discovery rides on the existing `skills_index_block` injected
-into every system prompt — bundled skills already render under
-the `@alpi/` heading with the `[bundled]` marker.
-
-The skills index now also carries an explicit imperative rule
-when `@alpi/knowledge` is present: "if the user's question
-mentions alpi, CALL `skill(action='view', name='@alpi/knowledge')`
-FIRST". This biases small models (which otherwise default to
-training data or `web_search`) toward the bundled docs. Real-
-world follow-rate is ~70% on `gpt-5.4-nano` and effectively 100%
-on `gpt-5.4-mini` and above; v0.4 tracks a polish item (`BE`)
-to revisit once we have agent.log evidence from real users.
-
-#### What's NOT bundled (and why)
-
-- `CHANGELOG.md` — stales every release, can't track which
-  version a user has installed. The skill points users at
-  `alpi update --check` and the GitHub releases page instead.
-- `ROADMAP.md` — internal planning, not user knowledge.
-- `RELEASE.md` — maintainer-only.
-- `LICENSE` — legal, not knowledge.
-
-#### Maintenance
-
-`scripts/sync_knowledge.py` keeps the bundled `references/`
-mirror in lockstep with `docs/` and the top-level `README.md` /
-`QUICKSTART.md`. Run it before commit when any user-facing doc
-changes; the test
-`test_skill_md_routing_table_only_lists_existing_files` catches
-drift between the routing table and the references on every
-test run.
-
-#### Documentation
-
-`docs/SKILLS.md` gains a new "Why ship skills with the binary"
-section listing the five properties that fall out of the design
-(no second install step, works offline, version-pinned to the
-binary, auditable, curated). The "Currently bundled" table
-lists `@alpi/knowledge` as the inaugural entry, plus a curation
-policy (when something becomes bundled, what doesn't qualify).
-`QUICKSTART.md` adds a one-line discoverability nudge for new
-users to try asking alpi about itself.
-
-#### Roadmap
-
-`docs/ROADMAP.md` adds **BE** to v0.4 commercial: "revisit
-`@alpi/knowledge` — better follow-rate on small models,
-optionally fetch docs from GitHub instead of bundling".
-
-#### Tests
-
-`tests/test_alpi_knowledge.py` (new) — 10 cases covering: skill
-discovery via `bundled_skills()`, frontmatter shape, view of
-SKILL.md and references, every reference declared in the routing
-table actually exists, mutating actions on a bundled name are
-rejected, the imperative RULE is present in the skills index
-block. Suite at 911 (was 901).
-
----
+- `alpi/skills/knowledge/` — wheel resources (README/QUICKSTART/INSTALL/PROFILES/SKILLS/MODELS/ALP/ARCHITECTURE/CONFIG/SECURITY/DEPLOYMENTS/OPERATIONS); CHANGELOG/ROADMAP/RELEASE/LICENSE excluded.
+- `scripts/sync_knowledge.py` — keeps `references/` in lockstep with `docs/` + READMEs.
+- `tests/test_alpi_knowledge.py` — 10 cases. Suite at 911 (was 901).
+- `docs/SKILLS.md`, `QUICKSTART.md`, `docs/ROADMAP.md` — "Why ship skills" section, curation policy, **BE** for v0.4.
 
 ## v0.2.96 — 2026-04-26
 
 ### `@<peer>` mentions match anywhere in the text — ALP.3.1
 
-The `@<peer>` shortcut used in the TUI input and on incoming
-gateway messages now fires **anywhere** in the text, not just at
-position 0. Humans write naturally — `"hey @mirai can you check
-this?"` pings mirai without forcing the user to put `@mirai` at
-the start of the line.
+The `@<peer>` shortcut now fires anywhere in the text — `"hey
+@mirai can you check?"` pings mirai naturally. Boundary rules:
+`@` must follow whitespace or be at position 0
+(`email@gmail.com` skips), and the id must resolve to a pinned
+peer (`@property` falls to LLM). `#task`/`#done` stay strict
+line-start — state-change markers must not fire by accident.
 
-Two boundary rules keep false positives out:
-
-1. The `@` must be preceded by whitespace or be the very first
-   character. `email@gmail.com` therefore never matches.
-2. The matched id must resolve to a pinned peer in this profile's
-   `peers.yaml`. Strings like `@property` or `@deprecated` in code
-   snippets fall through silently — `parse()` returns `None` and
-   the caller hands the text to the LLM as plain prose.
-
-The prompt sent to the peer is the original text with the
-`@<peer>` token (and its boundary whitespace) removed. Internal
-whitespace inside the surviving prose is preserved, since the
-prompt may be quoted code or deliberately formatted.
-
-#### Scope of the change
-
-- `alpi/alp/mention.py::parse` — relaxed regex with the two
-  boundary rules and an optional `home: Path` parameter that
-  enables the roster check. The signature stays backward-
-  compatible: callers that don't pass `home` get raw structural
-  detection without pinning validation.
-- `alpi/tui/app.py` — input dispatch no longer gates on
-  `text.startswith("@")`. Every non-slash input runs through
-  `mention.parse(text, home=...)`; if a pinned peer matches, the
-  input routes via the @-shortcut, otherwise it goes to the LLM.
-- `alpi/gateway/run.py` — same change for inbound platform
-  messages. `parse(msg.text, home=home)` validates against the
-  pinned roster; non-mention text still flows to the LLM.
-
-#### What stays strict
-
-`#task` and `#done` markers are unchanged — they remain strict
-line-start so a typo'd marker in mid-sentence cannot accidentally
-open or close a workgroup task. The asymmetry is deliberate:
-state-change markers must not trigger by accident, attention
-markers (`@`) are safe to relax.
-
-#### Tests
-
-`tests/test_alp_mention.py` is rewritten — 14 cases covering
-mid-text mentions, end-of-text mentions, email-shape immunity,
-internal-whitespace preservation, multi-mention (first wins),
-punctuation that shouldn't eat into the id, optional roster
-validation against pinned peers. Suite at 901 (was 894).
-
-#### Docs
-
-`docs/ALP.md` updates the "Recognition rule" section to
-distinguish state-change markers (still line-start) from
-attention markers (`@` anywhere with whitespace boundary).
-
----
+- `alpi/alp/mention.py::parse` — relaxed regex + optional `home: Path` for roster validation; backward-compatible.
+- `alpi/tui/app.py`, `alpi/gateway/run.py` — dispatch no longer gates on `text.startswith("@")`.
+- `tests/test_alp_mention.py` — 14 cases (mid-text, email immunity, multi-mention first-wins, roster check). Suite: 901 (was 894).
+- `docs/ALP.md` — Recognition rule distinguishes attention vs state-change markers.
 
 ## v0.2.95 — 2026-04-26
 
 ### `alpi update` — version check and self-upgrade
 
-alpi now tells you when there's a new release on PyPI and gives you
-one command to install it. Two surfaces, one cache, one binary
-upgrade path. Nothing changes in the no-network case — the check is
-fire-and-forget on a daemon thread and never blocks startup.
+alpi tells you when there's a new release on PyPI. Daemon
+thread on every `alpi` invocation (8h TTL) writes
+`~/.alpi/cache/update_check.json`; `doctor` + TUI top bar read
+the cache. `alpi update` bypasses the cache, detects install
+method (uv tool / pipx / dev), upgrades, verifies new version
+matches PyPI.
 
-#### How users notice an update
-
-A daemon thread that fires on every `alpi` invocation hits PyPI's
-JSON API once every eight hours and writes the result to
-`~/.alpi/cache/update_check.json`. Two surfaces read the cache
-when they render:
-
-- `alpi doctor` adds a `Version` row at the top. Up-to-date prints
-  a quiet `✓ alpi-agent  v0.2.95 (latest)`; behind prints a
-  warning `! alpi-agent  v0.2.94 → v0.2.95 available — run
-  `alpi update``.
-- The TUI's top bar adds a small `↑ v0.2.95` badge in the accent
-  colour next to the current version.
-
-If you never use the browser tool, you never download Chromium —
-same shape here. If alpi never reaches PyPI (offline, slow
-network), the daemon dies silently inside its 3-second timeout
-and nothing surfaces.
-
-#### `alpi update`
-
-The new command:
-
-```
-alpi update            # check, then prompt before upgrading
-alpi update --check    # check only, no install
-alpi update -y         # check, upgrade without prompting
-```
-
-It bypasses the cache for a forced fresh fetch, refreshes the
-cache so a stale badge clears immediately, then detects how alpi
-was installed:
-
-- `uv tool list` shows `alpi-agent` → runs `uv tool upgrade
-  alpi-agent`.
-- `pipx list --short` shows it → runs `pipx upgrade alpi-agent`.
-- Neither → prints "you appear to be on a dev install — `git pull`
-  in your alpi checkout" and exits cleanly. Saves a foot-shoot
-  for contributors running from a clone.
-
-After the upgrade, alpi spawns a fresh `alpi --version` and
-verifies the reported version matches what PyPI advertised, so a
-broken upgrade fails loudly instead of silently leaving you on
-the old binary.
-
-#### Configuration knobs
-
-- `ALPI_SKIP_UPDATE_CHECK=1` short-circuits the daemon thread
-  entirely. The autouse fixture in `tests/conftest.py` sets it so
-  the unit suite never reaches PyPI.
-- `ALPI_UPDATE_INDEX` overrides the JSON endpoint. Used to point
-  the updater at TestPyPI during release rehearsals.
-
-#### Tests
-
-- New: `tests/test_updater.py` — 26 cases covering version
-  comparison (including the `0.2.10 > 0.2.9` lexical-sort trap),
-  cache I/O (missing / corrupt / round-trip), TTL window,
-  daemon-thread skip-when-disabled, the dev-install detection
-  branch, and the network failure path. PyPI is mocked at the
-  `httpx.Client` level so the suite stays offline.
-- Suite: 894 passing (was 868).
-
-#### Documentation
-
-- `docs/INSTALL.md` updates the Updating section to describe how
-  the badge surfaces and what `--check` does.
-- `docs/ROADMAP.md` ticks items 1 and 2 of AU as shipped; item 3
-  (the v0.3.0 cut itself) remains open.
-- `docs/ARCHITECTURE.md` adds the two new env vars to the env-var
-  reference.
-- `README.md` lists `alpi update` in the common-commands block.
-
----
+- `alpi/updater.py` (new) — version compare (handles `0.2.10 > 0.2.9`), cache I/O, 3s-timeout daemon, install-method detect.
+- `alpi/cli.py` — `alpi update [--check|-y]`; `alpi/doctor.py`, `alpi/tui/app.py` — Version row + accent badge.
+- Env: `ALPI_SKIP_UPDATE_CHECK=1` (autouse fixture sets it), `ALPI_UPDATE_INDEX` for TestPyPI.
+- `tests/test_updater.py` — 26 cases mocked at `httpx.Client`. Suite: 894 (was 868).
+- `docs/INSTALL.md`, `docs/ARCHITECTURE.md`, `README.md`, `docs/ROADMAP.md` (AU 1+2 ticked).
 
 ## v0.2.94 — 2026-04-26
 
 ### browser tool — Chromium downloads itself on first use
 
-The browser tool already knew how to install Chromium on its first
-run (it catches `Executable doesn't exist` from
-`playwright.chromium.launch`, downloads via
-`python -m playwright install chromium`, and retries). The
-documentation hadn't caught up: README, QUICKSTART, INSTALL, and
-the landing page still told the user to run `playwright install
-chromium` themselves.
+The browser tool already JIT-installed Chromium on first run;
+docs hadn't caught up and still told users to run `playwright
+install chromium` themselves. Aligns docs with code: no
+separate install step, ~200MB download cached at
+`~/.cache/ms-playwright/`, users who never browse pay nothing.
 
-This release aligns the docs with the code. There is no separate
-install step. The first time the agent reaches for the browser
-tool, alpi prints a one-line notice on stderr and downloads
-Chromium (~200 MB, cached at `~/.cache/ms-playwright/`). Users
-who never use the browser pay nothing.
-
-#### Other small fixes
-
-- The install-banner now writes to stderr instead of stdout so it
-  can't be mistaken for model output when alpi runs under
-  `chat --once` or via a gateway.
-- The `playwright import failed` error message no longer suggests
-  `pip install playwright` (which would pollute the system Python
-  on a `uv tool` install). It now points at
-  `uv tool install alpi-agent --reinstall`, which is the correct
-  fix when the wheel is incomplete.
-
-#### Tests
-
-- New: `tests/test_browser.py::test_launch_chromium_installs_on_first_run`
-  — first launch raises, install runs, retry succeeds.
-- New: `tests/test_browser.py::test_launch_chromium_propagates_unrelated_errors`
-  — the JIT install path is for "binary missing", not a swallow-
-  everything wrapper.
-- Suite: 868 passing.
-
----
+- `alpi/tools/browser.py` — install banner now writes to stderr (avoids stdout pollution under `chat --once` / gateway); `playwright import failed` message points at `uv tool install alpi-agent --reinstall` instead of `pip install playwright`.
+- `tests/test_browser.py` — `test_launch_chromium_installs_on_first_run` (raise→install→retry), `test_launch_chromium_propagates_unrelated_errors` (JIT path is for binary-missing only). Suite: 868.
+- `README.md`, `QUICKSTART.md`, `docs/INSTALL.md`, landing — drop the manual playwright install step.
 
 ## v0.2.93 — 2026-04-26
 
 ### distribution — first PyPI publish path
 
-alpi is now installable from PyPI as ``alpi-agent``. Closes the **AU**
-(distribution) gate on the v0.3 roadmap. The CLI binary, the Python
-import, and ``~/.alpi/`` remain ``alpi`` — only the PyPI distribution
-name changes.
+Installable from PyPI as `alpi-agent` — closes **AU**. CLI
+binary + Python import + `~/.alpi/` stay `alpi`. Auto-publish
+on push to `main` when `pyproject.toml` version differs from
+PyPI; smoke install across 5 container images (Python
+3.10/3.11/3.12-slim, Ubuntu 22.04, Debian 12); OIDC Trusted
+Publisher; auto-tag + GitHub release with CHANGELOG body.
 
-```bash
-uv tool install alpi-agent     # install
-alpi setup                     # use
-```
-
-#### Auto-publish workflow (model: merge → release)
-
-``.github/workflows/publish.yml`` runs on every push to ``main`` and
-publishes to PyPI when ``pyproject.toml``'s version differs from the
-one currently on PyPI. Cloudflare-style merge-to-deploy, adapted to
-PyPI's immutability via the version-delta gate.
-
-Steps in order:
-
-1. ``check-version`` — read ``pyproject.toml``, hit
-   ``pypi.org/pypi/alpi-agent/json``, set ``should_publish=true`` if
-   the numbers differ. Skips silently otherwise.
-2. ``build`` — ``uv build`` + ``twine check`` produce wheel + sdist.
-3. ``smoke`` — install the freshly-built wheel inside five clean
-   container images (Python 3.10/3.11/3.12-slim, Ubuntu 22.04,
-   Debian 12) and assert ``alpi --version`` returns the bumped
-   number and ``alpi --help`` opens. Fail-fast: any image failing
-   aborts the publish.
-4. ``publish-pypi`` — publish to PyPI via OIDC (Trusted Publisher;
-   no API tokens stored in repo), tag the commit ``v<version>``,
-   create a GitHub release with the relevant CHANGELOG excerpt as
-   the body.
-
-No environment gate, no required reviewers, no manual click. Smoke
-across five containers is the safety net; the version-bump is the
-release decision.
-
-``workflow_dispatch`` is preserved for two cases: rehearsing on
-TestPyPI before a delicate cut, or re-publishing a tag if the
-auto-run was interrupted (idempotent — version-gate short-circuits
-if PyPI already has the version).
-
-#### Packaging metadata
-
-- ``pyproject.toml`` adopts PEP 639 SPDX license expression
-  (``license = "BUSL-1.1"`` + ``license-files = ["LICENSE"]``).
-- Adds ``[project.urls]`` (Homepage, Repository, Issues, Changelog).
-- Adds ``classifiers`` and ``keywords`` so PyPI search and the
-  project page render properly.
-
-#### Documentation
-
-- ``docs/INSTALL.md`` (new) — user-facing install reference: uv,
-  pipx, dev, update, uninstall, troubleshooting, supported
-  platforms, and the explicit "no curl | bash" stance with the
-  reasoning.
-- ``docs/RELEASE.md`` (new) — maintainer's cut checklist and
-  troubleshooting for the publish workflow.
-- ``QUICKSTART.md`` install step now points at PyPI instead of a
-  local path.
-- ``README.md`` quickstart updated.
-- ``docs/ROADMAP.md`` AU references the published name.
-
-#### Site
-
-- Landing #install simplified: four commands, link to
-  ``INSTALL.md`` for alternatives, update path, and uninstall.
-- ``INSTALL`` added to the docs grid (slug ``02``); subsequent docs
-  renumbered ``03..15``.
-- All install-CTAs across the site point at ``alpi-agent``.
-
----
+- `.github/workflows/publish.yml` — version-delta gate, `uv build`, `twine check`, multi-image smoke, OIDC publish; `workflow_dispatch` preserved for TestPyPI (idempotent).
+- `pyproject.toml` — PEP 639 SPDX (`license = "BUSL-1.1"` + `license-files`), `[project.urls]`, classifiers, keywords.
+- `docs/INSTALL.md` (new) — uv/pipx/dev/update/uninstall/troubleshooting + "no curl|bash" stance.
+- `docs/RELEASE.md` (new) — maintainer cut checklist.
+- `QUICKSTART.md`, `README.md`, `docs/ROADMAP.md`, landing — install step + `INSTALL` in docs grid (slug 02; subsequent renumbered).
 
 ## v0.2.92 — 2026-04-26
 
 ### self-published member bios in workgroups
 
-Each profile now carries an optional one-line ``public_bio`` that
-propagates to every workgroup it joins. The bio surfaces in other
-members' system-prompt rosters as e.g. ``@alice (online, "product
-engineer — velocity") · @bob (online, "systems engineer —
-durability")``, so each agent sees who-does-what from the first
-turn instead of inferring it from posts. AGENT.md stays private —
-the bio is the deliberate cross-agent introduction the user opts
-into sharing.
+Each profile carries an optional one-line `public_bio` that
+propagates to every workgroup it joins. Surfaces in roster as
+`@alice (online, "product engineer — velocity")` so agents see
+who-does-what from turn 1. AGENT.md stays private. Inverts
+earlier creator-assigned `roles` (which didn't scale).
 
-#### Why this shape
-
-The earlier roadmap proposed creator-assigned ``roles`` in
-``meta.yaml`` (the workgroup creator types a role per invitee). It
-didn't scale: invite alice to five workgroups and you type her role
-five times. The self-published bio inverts the direction — alice
-authors her own tag-line once at the profile level, every workgroup
-join carries it, source of truth never duplicates.
-
-#### Mechanism
-
-- New field ``public_bio: str`` in ``config.yaml``. Empty = nothing
-  published; peers see name + liveness only.
-- ``workgroup.join`` accepts an optional ``bio`` parameter (capped
-  at 200 bytes); the hub stamps it on the caller's ``Member`` record.
-- ``workgroup.join`` and ``workgroup.pull`` responses include
-  ``bio`` in each ``members[]`` entry alongside ``last_seen_at``.
-- ``workgroup.create`` accepts ``hub_bio=`` so the hub's own member
-  record carries the same value (the hub never calls ``join`` on
-  itself). The CLI and wizard plumb ``config.public_bio`` through.
-- Re-joining refreshes the bio on the hub, so an edit propagates
-  without a separate verb.
-
-#### Wizard
-
-- New: ``alpi setup → ALP (Alpi Link Protocol) → Identity``. Edit
-  the public bio inline. Three special inputs:
-  - empty → keep current
-  - ``clear`` → unset (peers see handle only)
-  - ``draft`` → one-shot LLM call synthesizes a candidate from
-    your private AGENT.md; you review and edit before saving.
-
-#### Tests
-
-- New: ``tests/test_alp_workgroup_client.py::test_absorb_roster_captures_bios``,
-  ``::test_subscription_persists_roster_bios``,
-  ``::test_join_propagates_public_bio_to_hub``,
-  ``::test_member_bio_persists_on_disk`` — 4 cases covering wire
-  shape, persistence, and end-to-end flow.
-- New: ``tests/test_alp_agent_context.py::test_roster_renders_bios_when_present``,
-  ``::test_hub_workgroup_renders_own_bio`` — 2 cases for the
-  pre-turn hook render.
-- Suite: 866 passing (was 860).
-
-#### Manual integration tests moved to ``tests/manual/``
-
-The autonomous workgroup convergence script (``alice + bob
-collaborate on a stack-decision and close with #done`` — proves the
-PR 5 loop end-to-end) graduates from ``scripts/`` to
-``tests/manual/test_alice_bob_workgroup.py``. Excluded from
-``pytest`` collection via ``norecursedirs`` in ``pyproject.toml``;
-documented in ``tests/manual/README.md`` with the contract every
-manual test in the folder must follow (self-check preconditions,
-wipe state, document cost, assert outcome not text).
-
----
+- `alpi/config.py` — new `public_bio: str` (empty = unpublished).
+- `alpi/alp/workgroup.py` — `workgroup.join`/`create` accept `bio`/`hub_bio` (capped 200 bytes); `pull` returns `bio` per member; re-joining refreshes.
+- `alpi/cli.py` — `alpi setup → ALP → Identity` inline edit; `clear` unsets, `draft` synthesises from AGENT.md via one-shot LLM.
+- `tests/test_alp_workgroup_client.py`, `tests/test_alp_agent_context.py` — 6 new cases. Suite: 866 (was 860).
+- `tests/manual/` (new) — moves alice+bob convergence test out of `scripts/`; `norecursedirs` excludes from collection.
 
 ## v0.2.91 — 2026-04-26
 
 ### alp.3 — workgroups (PR 5): functional autonomy
 
-Closes ALP.3. Workgroups are now self-driving: each member's service
-polls the hub on a fixed tick (30 s) and dispatches one engine turn
-when a new post mentions them, opens a collective ``#task``, or
-names them in the active task. A per-workgroup cooldown (60 s) rate-
-limits ping-pong between peers.
+Closes ALP.3. Workgroups self-drive: each member's service
+polls the hub on a 30s tick and dispatches one engine turn
+when a post mentions them, opens a collective `#task`, or
+names them in the active task. 60s per-workgroup cooldown
+rate-limits ping-pong. Suite: 860.
 
-#### Engine integration
-
-- New: pre-turn context hook (``alpi.alp.agent_context.build``)
-  injects briefing + active task + last 5 decrypted posts +
-  passive-liveness roster + ``WORKGROUP_GUARDRAILS`` into every
-  engine turn (interactive, gateway, scheduled, or workgroup-
-  spawned). Read-only against on-disk caches; no network IO.
-- Engagement guardrails bias the agent toward observer posture:
-  silence by default, react to a peer's concrete proposal with
-  accept / counter / block (never with more research), close with
-  ``#done`` when the discussion converges. Tuned across real
-  alice+bob runs to avoid both paraphrase loops and premature
-  closure.
-- ``workgroup_post`` auto-declares the producing turn's USD/tokens
-  via a ``ContextVar`` usage tracker so the hub's ledger is honest
-  about what each post cost to produce.
-- Hub-of-itself short-circuit: when the local profile is the hub of
-  the target workgroup, ``workgroup_client.post`` writes directly
-  to the local transcript (same gate, same ledger, same checks)
-  without an ALP loopback.
-
-#### Hub additions
-
-- ``Meta.briefing`` (plaintext one-paragraph anchor),
-  ``Meta.auto_kickoff`` (default True), ``Meta.notify_on_close``
-  (default ``"none"``).
-- ``Member.last_seen_at`` stamped on every ``workgroup.pull`` /
-  ``workgroup.post``; returned in the roster on ``join`` and on
-  every ``pull``. Passive liveness signal — no extra probe traffic.
-- In-chat protocol: ``#task <text>`` opens the active task
-  (preempts the previous one), ``#done <text>`` closes it. Markers
-  count only at the start of a line; both parsed client-side on the
-  decrypted transcript so the hub stays zero-knowledge. Single-task
-  model in v0.3; multi-task tracked for v0.4.
-
-#### Service hardening
-
-- ALP TCP bind failure (e.g. Tailscale down) now falls back to
-  unix-socket-only with a warning instead of killing the daemon.
-- Each subsystem (alp, gateways, scheduler, workgroups) runs under
-  ``_supervise`` so one crash doesn't take the others down.
-
-#### Tests
-
-- New: ``tests/test_alp_agent_context.py``, ``tests/test_alp_tasks.py``,
-  ``tests/test_alp_workgroup_poller.py``, ``tests/test_state_turn_usage.py``.
-- Suite at PR 5 close: 860 passing.
-
----
+- `alpi/alp/agent_context.py` (new) — pre-turn hook injects briefing + active task + last 5 posts + roster + `WORKGROUP_GUARDRAILS` into every engine turn. Guardrails: silence default; accept/counter/block peer proposals (not more research); `#done` on convergence.
+- `workgroup_post` auto-declares turn USD/tokens via ContextVar; hub-of-itself short-circuit writes directly to local transcript.
+- `alpi/alp/workgroup.py` — `Meta.briefing`, `auto_kickoff`, `notify_on_close`; `Member.last_seen_at` stamped on `pull`/`post`; `#task`/`#done` parsed client-side (hub zero-knowledge).
+- `alpi/service.py` — TCP bind failure falls back to unix-only with warning; `_supervise` per subsystem.
+- `tests/test_alp_agent_context.py`, `test_alp_tasks.py`, `test_alp_workgroup_poller.py`, `test_state_turn_usage.py`.
 
 ## v0.2.90 — 2026-04-25
 
 ### service unification — one process per profile
 
-The three legacy daemons (gateway, scheduler, ALP listener) collapse
-into a single ``alpi service`` process per profile. One asyncio
-event loop hosts every enabled subsystem, one PID, one log file,
-one launchd plist / systemd-user unit. Memory footprint per profile
-drops by ~2/3 and the OS service inventory becomes legible
-(``com.alpi.service.<profile>`` instead of three look-alike entries
-per profile).
+Three legacy daemons (gateway, scheduler, ALP) collapse into a
+single `alpi service` per profile. One asyncio loop hosts every
+enabled subsystem — one PID, one log, one launchd/systemd
+unit. Memory drops ~2/3. Every profile now starts opt-in
+(auto-install of scheduler removed, aligning with sandbox /
+budgets / peers).
 
-#### Why now
-
-Originally tracked as v0.4 architecture cleanup. Brought into v0.3
-because the workgroup auto-pull work in PR 5 needs a clean home for
-its background loop, and three services × N profiles was already
-the worst UX paper-cut on the public release surface.
-
-#### CLI
-
-- New: ``alpi service {start,stop,restart,status}``. Lifecycle for
-  the unified process. ``status`` prints PID, uptime, installed
-  backend (launchd / systemd / none), and the enabled subsystems.
-- Removed: ``alpi gateway`` and ``alpi alp`` groups entirely
-  (they only had start/stop/restart). ``alpi schedule`` survives
-  but slimmer — ``run-once`` and ``fire`` are kept (operational,
-  not lifecycle); ``start`` / ``stop`` / ``restart`` /
-  ``install`` / ``uninstall`` are gone.
-- Removed: the auto-install of the scheduler on first ``alpi`` run
-  (the legacy ``schedule/.bootstrapped`` marker). Every profile
-  now starts in the **opt-in** state — nothing runs in background
-  until you choose to install. Aligns with the rest of alpi's
-  user-sovereignty model (peers, sandbox, budgets are all opt-in).
-
-#### Wizard
-
-- ``alpi setup → Maintenance → Service`` replaces three legacy
-  entries (``Gateway service``, ``Schedule service``, ``ALP
-  service``). Inside: per-subsystem on/off toggles (writing
-  ``service.{gateway,schedule,alp}: bool`` to ``config.yaml``),
-  Install / Uninstall / Restart / Stop, and the ALP TCP-port
-  config that previously lived under ``ALP service``.
-
-#### Process / OS surface
-
-- One PID file: ``~/.alpi/<profile>/service.pid``.
-- One log: ``~/.alpi/<profile>/logs/service.log`` (the legacy
-  ``gateway.log`` / ``schedule.log`` / ``alp.log`` files are not
-  written by the orchestrator any more — subsystems log via the
-  shared root handler).
-- launchd label: ``com.alpi.service.<profile>``.
-- systemd unit: ``alpi-service-<profile>.service``.
-- ``setproctitle`` makes ``ps aux`` show ``alpi (<profile>)``
-  instead of three identical ``alpi`` lines per profile (added
-  to ``dependencies``).
-- StreamHandler is only attached when stderr is a TTY. Under
-  launchd / systemd the plist already redirects stderr into the
-  log file, so a separate stream handler would write every line
-  twice — fixed.
-
-#### Code shape
-
-- ``alpi/service.py`` — new orchestrator. ``serve(home, profile)``
-  blocks the foreground; ``_main()`` builds an asyncio task per
-  enabled subsystem and waits on them + a SIGTERM/SIGINT signal
-  handler. On stop, all tasks cancel cooperatively and PID/log
-  state is cleaned up. Same module owns the install / uninstall
-  helpers (single plist / unit, no per-name fan-out).
-- ``alpi/gateway/run.py`` and ``alpi/scheduler/run.py`` — expose
-  ``async def serve(home)`` for the orchestrator. Logging + env
-  loading + PID writing is owned by the orchestrator now.
-- ``alpi/cli.py`` — drops the three legacy groups, the
-  ``_stop_daemon`` / ``_restart_daemon`` / ``_read_live_pid`` /
-  ``_check_not_running`` helpers (no more multi-PID fan-out), and
-  the ``_auto_install_scheduler`` helper. Adds the ``service``
-  group, the unified ``_service_wizard`` flow, and the ``Remove
-  gateway`` step inside ``setup → Gateways`` (drops env vars +
-  Gmail token file for one configured gateway).
-- ``alpi/config.py`` — new ``service: dict[str, Any]`` field on
-  ``Config``; persisted in ``config.yaml`` only when non-empty.
-- ``alpi/doctor.py`` — ``_check_services`` collapses three rows
-  into one (``Service``) plus an ``info`` row listing enabled
-  subsystems.
-- ``alpi/tools/schedule.py`` — the "is the daemon running?" hint
-  now asks ``alpi.service.is_running(home)`` and the schedule
-  subsystem flag, instead of the legacy scheduler-only PID.
-
-#### Config
-
-- New optional section in ``config.yaml``::
-
-      service:
-        gateway: true
-        schedule: true
-        alp: true
-
-  Default if the section is missing: all three on, matching the
-  pre-refactor behaviour. Toggle individually to keep the service
-  small (e.g. an ALP-only relay machine sets ``gateway: false`` +
-  ``schedule: false``). A toggle takes effect at the next
-  ``service restart``.
-
-#### Tests
-
-- Removed: ``tests/test_daemon_ops.py``, ``tests/test_bootstrap_autoinstall.py``,
-  legacy ``tests/test_service.py`` (~30 cases for the per-daemon
-  install model and the helpers that no longer exist).
-- New: ``tests/test_service.py`` with 20 cases for the unified
-  surface — backend selection, launchd + systemd install /
-  uninstall round-trips, error surfacing, label per platform,
-  subsystem toggle defaults, PID stale-cleanup, status snapshot,
-  ``etime`` parser.
-- Updated: ``tests/test_cli_surface.py`` to lock the new help
-  surface (gateway / alp groups gone, service group present,
-  schedule keeps run-once / fire only). ``tests/test_profile_cli.py``
-  and ``tests/test_schedule.py`` minor patches for the new
-  ``service.installed(profile)`` signature.
-
-Suite: 804 passed, 8 skipped (was 817 — net change after dropping
-30 obsolete + adding 20 new + a couple of patches).
+- `alpi/service.py` (new) — orchestrator; `serve(home, profile)` builds asyncio task per enabled subsystem, signal handlers, cooperative cancel; owns install/uninstall (single plist/unit).
+- `alpi/cli.py` — `alpi service {start,stop,restart,status}`; removes `gateway`/`alp` groups; `schedule` keeps `run-once`/`fire` only.
+- `alpi/gateway/run.py`, `alpi/scheduler/run.py` — expose `async def serve(home)`; StreamHandler only on TTY (avoids double-logging under launchd/systemd).
+- `alpi/config.py`, `alpi/doctor.py` — new `service: {gateway, schedule, alp}` toggles (default all-on); wizard replaces 3 entries; `_check_services` collapses to one row. `setproctitle` → `ps aux` shows `alpi (<profile>)`.
+- Tests — drops `test_daemon_ops.py`, `test_bootstrap_autoinstall.py`, legacy `test_service.py` (~30); adds 20 new (backend selection, install/uninstall, toggle defaults, PID stale-cleanup, etime parser). Suite: 804 passed, 8 skipped.
 
 ## v0.2.89 — 2026-04-25
 
-### alp.3 — workgroups: pause/resume + member-side state + management UX
+### alp.3 — workgroups: pause/resume + member state + management UX
 
-Two layers landed together. The protocol now carries
-``workgroup.pause`` / ``workgroup.resume``, and members get
-their own subscription state plus a full management surface (CLI
-verbs, ``alpi setup → ALP → Workgroups`` wizard, agent tool).
+Protocol gains `workgroup.pause`/`resume` (idempotent; `post`
+returns `-32010 workgroup-paused`; `pull`/`join`/`leave` keep
+working — pause must not trap members). Members get their own
+`Subscription` state + full management surface. Hub identity
+is explicit per subscription (probing pinned peers would leak
+the id and let a malicious peer impersonate by pre-creating a
+same-id workgroup).
 
-#### Pause / resume
-
-- ``alpi/alp/workgroup.py`` — ``Meta.paused`` / ``paused_at`` /
-  ``paused_by`` (only persisted while paused). Two new handlers
-  ``workgroup.pause`` and ``workgroup.resume``, both idempotent.
-  ``workgroup.post`` now rejects with ``-32010 workgroup-paused``
-  + ``data: {paused_at, paused_by}`` when the flag is set.
-  ``pull`` / ``join`` / ``leave`` keep working — pause must not
-  trap members.
-- ``docs/ALP.md`` — verbs documented; error code ``-32010`` added
-  to the table; hub-state listing notes the optional fields.
-
-#### Member-side state — ``Subscription``
-
-A profile that joined a workgroup hosted by a peer needs local
-state to send ``post`` / ``pull`` / ``leave`` without re-joining
-on every restart, and to decrypt past traffic across rekeys.
-
-- ``alpi/alp/subscription.py`` (new) —
-  ``~/.alpi/<profile>/alp/secrets/subscriptions.yaml`` (mode 0600).
-  Per-workgroup record: ``wg_id``, ``name``, ``hub_id``,
-  ``hub_pubkey``, list of ``SealedKey(version, sealed)`` (hub
-  rotations land here on the next ``pull``), ``last_seq`` cursor,
-  ``joined_at``. Sealed keys stay sealed on disk — they only open
-  with this profile's Ed25519 private key, so file exposure alone
-  reveals nothing without the keypair.
-- ``alpi/alp/workgroup_client.py`` (new) — member-side helpers
-  ``join`` / ``post`` / ``pull`` / ``leave`` / ``pause`` /
-  ``resume`` that resolve the hub via this profile's
-  ``peers.yaml`` (Unix socket intra-machine, Noise_XK over TCP
-  inter-machine), maintain the subscription cache, and refresh
-  the sealed key when the hub signals a new
-  ``current_key_version`` on a pull. Hub identity is **explicit**
-  — we don't probe pinned peers for which one hosts a wg_id
-  (that would leak the id to every pinned peer and let a
-  malicious peer impersonate the real hub by pre-creating a
-  same-id workgroup).
-
-#### CLI surface — ``alpi workgroup``
-
-Nine verbs split by role.
-
-- Both: ``list``, ``show``.
-- Hub: ``create``, ``kick``.
-- Member: ``join``, ``post``, ``pull``, ``pause``, ``resume``,
-  ``leave``.
-
-``create`` accepts ``--member <pubkey | peer-id>`` (repeated) and
-``--budget-usd`` / ``--budget-tokens``. ``kick`` accepts the
-target as either a pubkey or a pinned peer id.
-
-#### Wizard — ``alpi setup → ALP → Workgroups``
-
-- List view: workgroups grouped under ``Hub of`` and ``Member of``
-  headings (no group shown when empty). Status counter on the
-  setup main menu reads ``N hosting · M joined`` instead of the
-  earlier jargon ``N hub-of / M member-of``.
-- Hub detail: split into ``Workgroup`` (Read messages, Members,
-  Budget) and ``Maintenance`` (Pause / Resume, Kick member,
-  Delete workgroup) headings.
-- Read messages: hub-side audit view that decrypts the transcript
-  with the hub's own sealed key.
-- Members: shows each pinned member with role flag (``hub`` /
-  ``joined`` / ``invited``); the current profile's row renders
-  in the configured accent colour.
-- Budget: edit-in-place at any time; clears when both prompts
-  are blanked.
-- Member detail: Read new messages (pull + decrypt), Send a
-  message, Pause / Resume, Leave.
-- Create flow: pick name → toggle members from ``peers.yaml`` →
-  optional budget. **Auto-grants** the six workgroup verbs
-  (``join``, ``post``, ``pull``, ``leave``, ``pause``,
-  ``resume``) to every invited peer's ``allow`` list — without
-  this, the hub's capability gate would reject every join.
-- Join flow: pick the hub from pinned peers → paste the
-  ``wg_id`` shared out-of-band.
-- Kick flow: alias-aware (shows ``@bob`` instead of pubkey
-  fragment).
-- Budget flow mirrors the profile-budget UX exactly: ask for
-  USD and tokens prompts; both are optional; both gate
-  independently when set (whichever trips first freezes posts).
-
-Workgroup budget validation relaxed accordingly — both
-``max_usd`` and ``max_tokens`` may be set; only "neither + non-
-empty dict" or "non-positive value" still raise.
-
-#### Agent tool — ``workgroup_post``
-
-Minimal hook: the agent can drop an encrypted message into a
-workgroup it's already subscribed to. Auto-pull, mention
-awareness, briefing, milestone, and budget-aware behaviour are
-**deferred to PR 5** (closes ALP.3 functional).
-
-#### Tests + demo
-
-- ``tests/test_alp_workgroup.py`` — 9 new tests for pause /
-  resume (gate, idempotence, persists across restart, doesn't
-  block leave, and inverse-action persistence). Suite of
-  workgroup tests now 40 cases.
-- ``tests/test_alp_workgroup_client.py`` (new) — 8 tests:
-  subscription roundtrip with 0600 mode, idempotent upsert,
-  remove, end-to-end member join → post → pull → decrypt with
-  cursor advance, post-rotation pull picks up new sealed key,
-  leave drops subscription, post without subscription raises,
-  hub resolution rejects unpinned peer.
-Suite: 817 passed, 8 skipped (was 800).
-
-**Pending for ALP.3 to close (PR 5):** briefing field, milestone
-abstraction (alive / closed / failed + goal + result), engine
-auto-pull on every turn (interactive / gateway / scheduler) so
-agents see workgroup activity as part of their context, mention
-awareness, ``workgroup_post`` declares cost from the current
-turn's ledger, budget-conscious system prompt guidance (delegate
-to better-funded peers, prefer concise replies near the cap),
-per-member spend breakdown in the wizard.
+- `alpi/alp/workgroup.py` — `Meta.paused`/`paused_at`/`paused_by`; new `pause`/`resume` handlers.
+- `alpi/alp/subscription.py` (new) — `~/.alpi/<profile>/alp/secrets/subscriptions.yaml` (0600); per-wg record (`wg_id`, `name`, `hub_id`, `hub_pubkey`, sealed keys, `last_seq`). Sealed keys stay sealed on disk.
+- `alpi/alp/workgroup_client.py` (new) — member-side `join`/`post`/`pull`/`leave`/`pause`/`resume`; transport-resolved via `peers.yaml`; refreshes sealed key on rotation.
+- `alpi/cli.py` — `alpi workgroup` group (9 verbs split by role); `setup → ALP → Workgroups` wizard (Hub-of/Member-of, Read messages, alias-aware Members, edit-in-place Budget, create auto-grants 6 verbs).
+- Workgroup budget validation relaxed: both `max_usd` + `max_tokens` may be set. Agent tool `workgroup_post` minimal (auto-pull/briefing → PR 5). `tests/test_alp_workgroup.py` (9 new pause/resume) + `test_alp_workgroup_client.py` (8 new). Suite: 817 (was 800).
 
 ## v0.2.88 — 2026-04-25
 
 ### alp.3 — workgroups (PR 2: leave + rekey + lifetime budget)
 
-Second slice of ALP.3. Members can now leave a workgroup and the
-hub rotates the group key for everyone left behind; workgroups can
-carry an optional **lifetime** budget (USD or tokens, project-
-scoped, no daily reset) and posts double-gate against it on top of
-the existing profile-level cap.
+Members can leave; hub rotates the group key for remaining
+members (forward secrecy: old key opens past posts, fails on
+new ones). Optional **lifetime** budget (USD or tokens,
+project-scoped, no daily reset) — posts double-gate on top of
+profile cap. Profile gate fires upstream of workgroup gate.
 
-- `alpi/alp/workgroup.py` — extended:
-  - `Member.key_version` + `Meta.current_key_version` track the
-    monotonic group-key generation. Bumps on every rekey.
-  - `_rekey()` helper: drops a target pubkey, mints a fresh
-    32-byte group key, re-seals it for every remaining member,
-    persists. Used by both the over-the-wire `workgroup.leave`
-    and the local `kick()` primitive.
-  - `workgroup.leave` handler — the leaving member is dropped;
-    the hub itself can't leave its own workgroup (`-32602`).
-  - `workgroup.pull` response now includes `current_key_version`
-    + the caller's currently-sealed key, so members detect rekey
-    on their next pull and update their local key map without an
-    extra verb.
-  - `workgroup.post` accepts `key_version` (which key the
-    ciphertext was encrypted under, recorded in the transcript)
-    and an optional `cost: {usd, tokens}` declaration that the
-    hub gates against the workgroup's lifetime budget.
-  - `_validate_budget()` enforces `max_usd` xor `max_tokens` with
-    positive values; the workgroup `ledger.json` accumulates
-    `{usd, tokens, posts}` over the workgroup's life. Hitting
-    either cap returns `-32005 budget-exceeded` with
-    `data.cap_kind = "workgroup_usd"` or `"workgroup_tokens"`.
-  - `kick(home, wg_id, target_pubkey)` — hub-side primitive
-    equivalent to a remote `leave` (TUI surface lands in PR 4).
-- `docs/ALP.md` — methods table now documents `leave`, the
-  `key_version` / `cost` fields on `post`, and the rekey-via-pull
-  flow. New "Group-key versioning" subsection. Budget section
-  rewritten as project-lifetime cap (`max_usd` / `max_tokens`
-  pick-one) with the author-declared cost trust model spelled
-  out. Hub-state listing extended with `ledger.json` and the
-  per-member `key_version` field.
-
-15 new tests in `tests/test_alp_workgroup.py` (PR 1's 20 still
-green — backward-compat preserved): leave end-to-end with
-forward-secrecy assertion (old key opens past posts, fails on new
-ones), left member loses access (`-32008`), hub can't leave its
-own workgroup, local `kick` rotates and rejects hub / unknown
-targets, budget shape validation, USD-cap admit-then-block,
-tokens-cap admit-then-block, no-budget unbounded posting, ledger
-file initialised on `create`, PR 1 on-disk format loads cleanly
-with `key_version=1` defaults (no migration needed for any
-workgroup already on disk), sequential leaves bump versions
-monotonically (v1→v2→v3 with three drops), race between
-concurrent post + leave serialises cleanly via asyncio's
-single-loop dispatch, profile budget gate fires upstream of the
-workgroup gate (`-32005 cap_kind=usd` before the workgroup
-handler ever runs).
-
-Suite: 804 passed, 8 skipped (was 789).
-
-**Pending for ALP.3 to close:** `pause` / `resume` + `-32010
-workgroup-paused` (PR 3), TUI / CLI surface + engine context
-integration (PR 4), workgroup budget bump UI (folded into PR 4).
+- `alpi/alp/workgroup.py` — `Member.key_version` + `Meta.current_key_version`; `_rekey()` mints fresh 32-byte key, re-seals per remaining member; `workgroup.leave` (hub can't leave own wg, `-32602`); `pull` includes `current_key_version` + caller's sealed key for in-band rekey detect; `post` accepts `key_version` + optional `cost: {usd, tokens}`; `_validate_budget` enforces `max_usd` xor `max_tokens` positive; `ledger.json` accumulates `{usd, tokens, posts}`. `kick(home, wg_id, target_pubkey)` hub-side primitive. Cap hit returns `-32005` with `data.cap_kind = "workgroup_usd"`/`"workgroup_tokens"`.
+- `docs/ALP.md` — `leave`, `key_version`/`cost` on `post`, rekey-via-pull, "Group-key versioning", project-lifetime cap with author-declared cost trust model.
+- `tests/test_alp_workgroup.py` — 15 new (forward-secrecy, hub-can't-leave, kick rotation, budget shape, USD/tokens admit-then-block, ledger init, v1→v2→v3 monotonic, concurrent post+leave, profile gate upstream). PR 1's 20 still green. Suite: 804 (was 789).
 
 ## v0.2.87 — 2026-04-25
 
 ### alp.3 — workgroups (PR 1: hub state + 4 core verbs)
 
-First slice of ALP.3. The hub side of shared workgroups: a profile
-can `create` a workgroup with a chosen roster, and pinned remote
-peers can `join`, `post`, and `pull` over the existing ALP transport
-(Unix socket or Noise_XK/TCP — the dispatch is transport-agnostic).
-End-to-end encrypted: the hub stores ciphertext only, group keys
-are sealed per-member.
+Hub side of shared workgroups: profile can `create` with a
+chosen roster; pinned remote peers `join`/`post`/`pull` over
+existing ALP transport (Unix or Noise_XK/TCP). End-to-end
+encrypted: hub stores ciphertext, group keys sealed per-member.
+Suite: 789 (was 769).
 
-- `alpi/alp/workgroup.py` (new, ~430 lines) — three layers in one
-  module:
-  - **Crypto.** ECIES seal of the group key for each member:
-    X25519 (derived from the member's Ed25519 pubkey via the same
-    birational map Noise uses) + HKDF-SHA256 + ChaCha20-Poly1305
-    with AAD-tagged contexts (`b"seal"`, `b"post"`).
-    `seal_group_key` / `open_sealed_group_key` for keys,
-    `encrypt_post` / `decrypt_post` for transcript entries.
-  - **Storage.** Per-workgroup directory under
-    `~/.alpi/<profile>/alp/workgroups/<wg_id>/` with `meta.yaml`,
-    `members.yaml`, and append-only `transcript.jsonl`. IDs
-    follow `wg_<base32(16 random bytes)>` — name-independent so
-    renames don't break references.
-  - **Local + over-the-wire verbs.** `create()` is a local
-    primitive (the hub creates a workgroup on its own profile;
-    you don't ask another alpi to host one). `register()` wires
-    `workgroup.join`, `workgroup.post`, `workgroup.pull` against
-    an `alp.server.Server`. Capability is enforced at the
-    transport layer; membership is enforced at the handler with
-    the new `-32008 workgroup-not-member` and `-32009
-    workgroup-not-found` error codes.
-- `alpi/cli.py` — `alpi alp start` registers the workgroup
-  handlers alongside the existing `link.ask` handlers.
-- `docs/ALP.md` — workgroup methods rewritten with concrete
-  signatures (`workgroup.post(workgroup_id, nonce, ciphertext)`,
-  not `(workgroup_id, text)` — encryption is client-side, the hub
-  never sees plaintext). New sections document the sealing scheme
-  step-by-step and the hub's on-disk state. Error codes table
-  gains `-32008` and `-32009`. `leave` and `pause`/`resume` flagged
-  as PR 2 / PR 3.
-
-20 new tests in `tests/test_alp_workgroup.py`:
-- crypto round-trip + isolation (sealing only opens with the
-  right Ed25519 key; wrong group key fails post AEAD)
-- local `create` (persistence, dedup, validation, hub auto-join)
-- end-to-end over Unix socket — `join` → encrypt-and-post → `pull`
-  → decrypt
-- multi-member (3 alpis posting, every member decrypts the full
-  transcript)
-- concurrent posts via `asyncio.gather` produce distinct
-  monotonic `seq` values
-- workgroup state survives a server stop+restart (proves
-  on-disk authoritative state)
-- same flow over Noise_XK / TCP via `call_tcp`
-- error paths: `-32008` not-member across all 3 verbs,
-  `-32009` not-found, `-32001` capability-denied.
-
-Suite: 789 passed, 8 skipped (was 769).
-
-**Pending for ALP.3 to close:** `leave` + group-key rotation +
-budget double-gate (PR 2), `pause` / `resume` + `-32010
-workgroup-paused` (PR 3), TUI + CLI surface + engine context
-(PR 4).
+- `alpi/alp/workgroup.py` (new, ~430 lines) — Crypto: ECIES seal X25519 (Ed25519→X25519 birational) + HKDF-SHA256 + ChaCha20-Poly1305 with AAD contexts (`b"seal"`, `b"post"`). Storage: `~/.alpi/<profile>/alp/workgroups/<wg_id>/` with `meta.yaml`, `members.yaml`, append-only `transcript.jsonl`; IDs `wg_<base32(16 random)>`. Verbs: `create()` local; `register()` wires `workgroup.join`/`post`/`pull`. New error codes `-32008 workgroup-not-member`, `-32009 workgroup-not-found`.
+- `alpi/cli.py` — `alpi alp start` registers handlers alongside `link.ask`.
+- `docs/ALP.md` — concrete signatures (`workgroup.post(wg_id, nonce, ciphertext)` — encryption client-side); sealing scheme.
+- `tests/test_alp_workgroup.py` — 20 new (crypto round-trip + isolation, end-to-end Unix + Noise/TCP, 3-alpi multi-member, `asyncio.gather` concurrent posts, restart persistence, error paths).
 
 ## v0.2.86 — 2026-04-25
 
 ### setup wizard — section headings + copy pass
 
-The `alpi setup` main menu split into 5 visual sections (Agent,
-Boundaries, Messaging, ALP, Maintenance), and the model picker into
-Local / Cloud / Manage. Headings are non-selectable, render as-passed
-(no auto case transform), and `ui.menu()` auto-spaces between sections
-and before the close sentinel.
+`alpi setup` main menu splits into 5 sections (Agent,
+Boundaries, Messaging, ALP, Maintenance); model picker into
+Local/Cloud/Manage. Headings non-selectable, verbatim
+rendering, auto-spaced. Copy pass across the wizard —
+Sandbox/Workspace/Budget/TCP-port dim blocks trimmed to 3–6
+lines; daemon-service wizards reduced to one line each.
 
-- `alpi/ui.py` — new `Heading(NamedTuple)` shape; `menu()` recognises it,
-  adds blank rows between sections and above `Back`/`Exit`, and keeps
-  the cursor from landing on either.
-- `alpi/cli.py::setup_cmd` — flat 13/14-item list rewritten as five
-  sections. Dispatch unchanged. `_delete_profile_status` copy trimmed
-  (`Remove all data & N service(s)`).
-- `alpi/model_selector.py` — provider picker grouped Local / Cloud /
-  Manage. Cloud always visible; Manage only when there is something
-  saved to remove.
-- Copy pass across the wizard — Sandbox / Workspace / Budget / TCP-port
-  dim blocks trimmed to 3–6 lines; daemon-service wizards reduced to a
-  single line each (no launchd/systemd plumbing); MCP add-error
-  references the profile's `.env`; Cleanup row relabelled
-  `Stale sessions (>30 days old)`; Peers subtitle replaced with
-  `pubkey + capabilities + reachability per peer`.
-
-`tests/test_ui_menu.py` — 4 cases pinning the heading shape, the
-non-selectable mask with auto-blank, verbatim text rendering, and the
-no-leading-blank-before-first-heading rule.
-
-Suite: 769 passed, 8 skipped.
+- `alpi/ui.py` — new `Heading(NamedTuple)`; `menu()` adds blank rows, keeps cursor off.
+- `alpi/cli.py::setup_cmd` — flat 13/14-item list rewritten as 5 sections; `_delete_profile_status` copy trimmed.
+- `alpi/model_selector.py` — Local/Cloud/Manage grouping; Manage only when removable items exist.
+- `tests/test_ui_menu.py` — 4 cases (heading shape, non-selectable mask, verbatim text, no-leading-blank). Suite: 769 passed, 8 skipped.
 
 ## v0.2.85 — 2026-04-25
 
-### security — profile `.env` and `config.yaml` are off-limits to tools
+### security — profile `.env` and `config.yaml` off-limits to tools
 
-Both file tools and the `terminal` shell now refuse to read or write
-the active profile's `.env` and `config.yaml`. These files hold
-provider API keys, gateway tokens, and security knobs (sandbox flag,
-allowlist, model choice); a prompt-injected mailbox or web page must
-not be able to coax the agent into leaking or rewriting them. They
-remain editable by hand or through `alpi setup`.
+File tools and `terminal` refuse to read/write the active
+profile's `.env` and `config.yaml` (provider API keys, gateway
+tokens, sandbox flag, allowlist). A prompt-injected mailbox or
+page can't coax the agent into leaking or rewriting them; they
+stay editable by hand or `alpi setup`. Workspace `.env`
+outside `~/.alpi/` deliberately untouched (path-scoped, not
+basename-scoped).
 
-- `alpi/tools/_paths.py` — denylist regex now matches
-  `~/.alpi/.env`, `~/.alpi/config.yaml`, and the same pair under
-  any `~/.alpi/profiles/<name>/`. The error message dropped the old
-  "use the terminal tool with sudo" hint, which never applied to
-  user-home paths anyway.
-- `alpi/tools/_guards.py` — three new dangerous-command patterns:
-  `read profile secret` (`cat`/`head`/`tail`/`less`/`more`/`cp`/`mv`/
-  `scp`/`rsync`/`grep`/`awk`/`sed`/`xxd`/`hexdump`/`strings`/`od`
-  against profile `.env` / `config.yaml`), `write profile config`
-  (`>`, `>>`, `tee` into them), and `dump environment` (bare `env`
-  / `printenv`, including in pipes). `env VAR=x cmd` and
-  `printenv HOME` stay allowed.
-
-A workspace `.env` (a project's own dotenv outside `~/.alpi/`) is
-deliberately untouched — the denylist scopes by path, not by basename.
-
-23 new test cases in `tests/test_guards.py` (12 reject, 6 allow) and
-`tests/test_paths_denylist.py` (12 — alpi-profile paths refused,
-workspace paths with the same basename pass).
-
-`docs/SECURITY.md` § Layer 1 lists the new path patterns and the
-terminal-side counterparts; reiterates that skill scripts run inside
-the parent's `os.environ` and can still enumerate secrets through
-Python — closing that vector requires per-skill env scoping (own
-roadmap item).
-
-Suite: 765 passed, 8 skipped (was 734).
+- `alpi/tools/_paths.py` — denylist regex matches `~/.alpi/.env`, `~/.alpi/config.yaml`, and same under `~/.alpi/profiles/<name>/`.
+- `alpi/tools/_guards.py` — three patterns: read profile secret (cat/head/tail/cp/scp/grep/awk/sed/xxd/...), write profile config (`>`/`>>`/`tee`), dump env (bare `env`/`printenv`). `env VAR=x cmd` and `printenv HOME` allowed.
+- `tests/test_guards.py` (12 reject + 6 allow), `tests/test_paths_denylist.py` (12). Suite: 765 (was 734).
+- `docs/SECURITY.md` § Layer 1 — new patterns + note skill scripts still run inside parent's `os.environ` (closed in v0.3.6 / AV).
 
 ## v0.2.84 — 2026-04-25
 
 ### budget — daily spending ledger, profile-level cap
 
-Every spend path through alpi now goes through one ledger and one cap.
-The cap lives at the profile level (`budget.daily_usd` or
-`daily_tokens` in `config.yaml`); per-peer spending sub-caps were
-considered and dropped — peer trust lives in capabilities and rate
-limits, not in a second ledger.
+Every spend path flows through one ledger + one cap
+(`budget.daily_usd` or `daily_tokens`); per-peer sub-caps
+dropped — peer trust lives in capabilities + rate limits.
+Verified live on bob with `daily_usd: $0.05`; `/status` reads
+`daily budget $0.0554 / $0.05 · capped`.
 
-- `alpi/ledger.py` (new) — JSON ledger at
-  `~/.alpi/<profile>/logs/ledger.json` with profile total + per-peer
-  observability buckets, atomic writes, midnight UTC reset, and a
-  context-var that lets the ALP server attribute a turn's spend to
-  the remote peer that asked for it.
-- `alpi/engine.py` — admit-check before every turn, record after
-  each turn body and after each sub-agent (`research`, `delegate`,
-  `read_image`) so the cap covers the whole tree.
-- `alpi/alp/server.py` + `handlers.py` — inbound `link.ask` admits
-  the same way; over-cap responds with JSON-RPC `-32005
-  budget-exceeded` (`cap_kind`/`cap`/`used` in `data`). Engine
-  errors now flow into the reply text instead of as a separate
-  trace event so gateways with `show_tool_trace: true` don't show
-  the message twice.
-- `alpi/cli.py` — `alpi setup → Budget` prompts daily USD or daily
-  tokens (pick-one; empty leaves the profile uncapped).
-- `alpi/status.py` (new) — canonical `(label, value)` rows shared
-  by the TUI `/status` panel and the Telegram `/status` shortcut so
-  the two surfaces no longer drift. Telegram renders the body as a
-  fenced code block to keep column alignment under MarkdownV2.
-
-`alpi/alp/__init__.py`, `docs/CONFIG.md`, `docs/ALP.md`,
-`docs/PROFILES.md`, `docs/OPERATIONS.md`, `docs/ARCHITECTURE.md`, and
-`docs/ROADMAP.md` updated to describe the budget shape and to use
-"workgroup" for the multi-party ALP extension everywhere
-(`alpi-rooms` was the old name; the new term reflects that the
-primary inhabitant is an autonomous agent, not a chat user).
-
-The landing page picks up the budget mention as a one-line addition
-to the operations card — visible without crowding the headline.
-
-19 new tests across `tests/test_ledger.py` (15 — load/save, peer
-context, clamping, stale-day reset, corrupt-file resilience,
-concurrent writers, `pick-one` precedence) and `tests/test_alp_budget.py`
-(3 — over-cap returns `-32005`, under-cap admits, no cap is a
-no-op). Plus 1 status-panel adapter test. Suite: 734 passed, 8
-skipped.
-
-Verified live in TUI and Telegram with bob @ `daily_usd: $0.05`:
-budget reached message renders cleanly in both surfaces, the
-`/status` row shows `daily budget $0.0554 / $0.05 · capped`.
+- `alpi/ledger.py` (new) — JSON at `~/.alpi/<profile>/logs/ledger.json`; profile total + per-peer buckets, atomic writes, midnight UTC reset, ContextVar attributing turn spend to remote peer.
+- `alpi/engine.py` — admit-check before every turn; record after turn body + each sub-agent (`research`, `delegate`, `read_image`).
+- `alpi/alp/server.py` + `handlers.py` — inbound `link.ask` admits; over-cap returns `-32005 budget-exceeded` (`cap_kind`/`cap`/`used` in `data`).
+- `alpi/cli.py` — `alpi setup → Budget` prompts daily USD or tokens (pick-one); `alpi/status.py` (new) shared rows for TUI + Telegram `/status`.
+- `tests/test_ledger.py` (15), `test_alp_budget.py` (3), 1 status-panel test. Suite: 734.
+- Renames "alpi-rooms" → "workgroup" across ALP/CONFIG/PROFILES/OPERATIONS/ARCHITECTURE/ROADMAP.
 
 ## v0.2.83 — 2026-04-24
 
-### alp — inter-machine Noise_XK transport, rate limits, wizard wiring
+### alp — inter-machine Noise_XK transport, rate limits, wizard
 
-Ships the inter-machine half of the ALP spec. Peers with an `address`
-field in `peers.yaml` now route over a TCP+Noise_XK channel; the
-intra-profile Unix socket path from ALP.1 is untouched.
+Inter-machine half of ALP. Peers with `address` in
+`peers.yaml` route over TCP+Noise_XK; ALP.1 Unix socket
+untouched. New roadmap **BG** scopes v0.3 budget shape (one
+ceiling per profile, `daily_usd` or `daily_tokens`).
+Verified on same host and over Tailscale via MagicDNS.
 
-- `alpi/alp/noise.py` — own `Noise_XK_25519_ChaChaPoly_SHA256`
-  implementation on `cryptography` primitives (symmetric state, cipher
-  state, Ed25519→X25519 birational derivation so peers keep one
-  pinned identity).
-- `alpi/alp/transport_tcp.py` — TCP framing (u16 handshake, u32 bulk
-  capped at 1 MiB), handshake orchestration with timeouts, pinned-key
-  cross-check between the Noise-authenticated static and
-  `peers.yaml`.
-- `alpi/alp/rate_limit.py` — sliding-window counter per peer, default
-  60/min overridable via `peers.yaml` `rate_limit.per_minute`. Over-cap
-  requests return JSON-RPC `-32005`.
-- `alpi/alp/server.py` — binds the TCP listener alongside the Unix
-  socket when `alp.tcp_port` is set. Shared dispatch; the TCP path
-  additionally cross-checks that the envelope's claimed sender
-  matches the Noise-authenticated identity before invoking the
-  handler.
-- `alpi/alp/client.py` — new `call_tcp()` + `call_peer()` routing by
-  peer address. Existing `call()` Unix-socket signature preserved for
-  intra-profile callers.
-- `alpi/config.py` — new `alp` section (`tcp_host`, `tcp_port`).
-  Absent → Unix-only listener.
-- `alpi/cli.py` — `alpi alp start --port N --host H` flags with
-  config fallback; `alpi peers ping` routes over TCP when the peer
-  carries an address and prints the resolved transport in the
-  response.
-
-Wizard updates so ALP.2 is configurable end-to-end without editing
-YAML by hand:
-
-- `alpi setup → ALP service → TCP port` — sets `alp.tcp_host` and
-  `alp.tcp_port`. Prompts host first (changes more often once a port
-  is set), with `0.0.0.0` behind a confirm.
-- `alpi setup → Peers → Add peer` — new "Remote address" prompt
-  accepting `host:port`; a valid address routes that peer over TCP.
-- Peer probe in the peer list now uses a real Noise_XK ping for
-  peers with an address — the `?` placeholder is gone; remote peers
-  surface green/grey like local ones.
-
-17 new tests in `tests/test_alp_noise.py` (derivation, XK handshake
-happy path, tampering, bad `rs`, bulk traffic, cipher state) and
-`tests/test_alp_tcp.py` (ping roundtrip, silent drop on unpinned
-peer, capability denial, `-32005` rate-limit trip, `call_peer`
-dispatch + validation). Full suite: 715 passed, 8 skipped.
-
-Verified live between two profiles on the same host and also over
-Tailscale (listener bound to a 100.x.x.x address, dialled from
-another profile via MagicDNS `<machine>.tail*.ts.net` — same code
-path as real remote peers).
-
-### spec — budget roadmap (BG)
-
-`docs/ROADMAP.md` carries a new **BG** item that defines the spending
-budget shape the agent will adopt. One ceiling per profile, expressed
-as either `daily_usd` or `daily_tokens` — paid models pick the dollar
-unit, local Ollama profiles pick tokens, and absent values mean no
-ceiling. The same ledger covers every spending path through alpi
-(interactive turns, gateways, scheduled jobs, sub-agent spawns, and
-inbound ALP from peers). Per-peer spending sub-caps are intentionally
-absent: peer trust lives in capabilities and rate limits, not in a
-secondary spending ledger. BG is v0.3 and unblocks ALP.3 workgroups,
-which double-gate posts against both each member's profile budget
-and an optional per-workgroup pool.
+- `alpi/alp/noise.py` — own `Noise_XK_25519_ChaChaPoly_SHA256` on `cryptography` primitives; Ed25519→X25519 birational so peers keep one pinned identity.
+- `alpi/alp/transport_tcp.py` — TCP framing (u16 handshake, u32 bulk capped 1 MiB), pinned-key cross-check between Noise-authenticated static and `peers.yaml`.
+- `alpi/alp/rate_limit.py` — sliding-window per peer, default 60/min overridable. Over-cap returns `-32005`.
+- `alpi/alp/server.py`, `client.py` — TCP listener alongside Unix when `alp.tcp_port` set; new `call_tcp()`/`call_peer()`.
+- `alpi/config.py`, `alpi/cli.py` — new `alp` section + `alpi setup → ALP → TCP port` wizard (`0.0.0.0` behind confirm); `alpi alp start --port --host`; `alpi peers ping` routes over TCP.
+- `tests/test_alp_noise.py` (17), `test_alp_tcp.py` — handshake happy/tamper, bulk, ping, `-32005`, capability denial. Suite: 715.
 
 ## v0.2.82 — 2026-04-24
 
-### site/docs — private agent network narrative
+### site/docs — private agent network narrative + tool polish
 
-The public narrative now matches the product shape: alpi is a
-profile-based personal AI agent that can grow from one terminal into a
-private network across machines.
+Public narrative matches product shape: alpi is a profile-
+based personal AI that grows into a private network across
+machines. Third pass on AT (prompt + tool descriptions audit
+vs Hermes) — three targeted additions.
 
-- `README.md` now leads with profiles, model/key ownership,
-  multi-machine coordination, and the current ALP surface.
-- Landing copy moved from a privacy-only slogan to
-  `your private / agent network`, with ALP.1 local links, ALP.2
-  machine links, and ALP.3 workgroups stated directly.
-- ALP docs now treat ALP.1/ALP.2/ALP.3 as the current launch surface:
-  Unix sockets, Noise_XK TCP, budgets/rate limits, and hub-anchored
-  workgroups.
-- Deployment, security, operations, profiles, config, and roadmap
-  docs were aligned so the site no longer presents ALP.2/ALP.3 as
-  distant work.
-
-### tools — failure-mode + when-to-use hints on three tool descriptions
-
-Third pass on AT (prompt + tool descriptions audit vs Hermes).
-Three targeted additions; most other tools already had "Use when /
-Not for / failure modes" from the earlier `ff6bb21` pass and need
-no change.
-
-- `browser.py` — added a line on what to do when `click` / `type`
-  can't find an element: re-check the latest snapshot for the real
-  role + accessible name, don't guess selectors blindly. Stops the
-  common loop where the model keeps retrying the same wrong label.
-- `search.py` — added a regex gotcha note. The pattern is a regex
-  in content mode; literal `{ } ( ) | . * +` must be escaped. If a
-  content search returns nothing when hits are expected, metachars
-  are usually the cause.
-- `stt.py` — added a "Use when" preamble so gateway voice-note
-  messages reliably trigger transcription before the reply.
-
-Skipped the Hermes audit's recommendations that didn't match reality
-post-`ff6bb21`: `delegate`, `send_message`, and `research` already
-carry explicit "Use when" + "Not for" sections, and the memory
-"facts vs directives" rule lives in the memory tool description
-with an explicit pointer from `system_prompt.md`. Duplicating would
-be token tax without signal. Model-specific execution guidance (BD)
-stays parked until there's an A/B measurement on `agent.log`.
+- `README.md` — leads with profiles, model/key ownership, multi-machine coordination, current ALP surface.
+- Landing + docs — "your private / agent network"; ALP.1/.2/.3 stated directly across ALP/Deployment/Security/Operations/Profiles/Config/Roadmap.
+- `alpi/tools/browser.py` — "re-check snapshot for real role/name when click/type can't find element" hint (stops blind selector retries).
+- `alpi/tools/search.py` — regex-metachar gotcha (`{ } ( ) | . * +` need escaping in content mode).
+- `alpi/tools/stt.py` — "Use when" preamble so gateway voice notes trigger transcription.
 
 ## v0.2.80 — 2026-04-24
 
 ### site — header/nav unified, docs index redesigned, SEO at 100%
 
-Second pass on the static site under `site/`.
+Second pass on the static site under `site/`. Single shared
+nav across landing/`/docs/`/`/docs/*`; combined logo + alpaca
+favicon; burger menu under 760px in <20 lines inline JS. SEO
+across every page: unique title/description, canonical, Open
+Graph, Twitter Card with `@soyjavi`, JSON-LD, `sitemap.xml`
+(16 URLs with `lastmod`) + `robots.txt` on every build.
 
-- Single shared nav component (`renderNav()` in `build.mjs`) used by
-  landing, `/docs/`, and `/docs/*`. Same HTML, same CSS, same shell
-  width (1240px + `clamp(24px, 5vw, 64px)` horizontal padding),
-  varying only in the breadcrumb tail: landing has no tail, `/docs/`
-  shows `DOCS`, doc pages show `DOCS / {slug}`. Fixed a nasty nested
-  `<a>` bug (crumbs inside the brand link) that was breaking the
-  flex layout on `/docs/*`.
-- Combined `alpi-logo.svg` (alpaca + wordmark, 94×42) in the header;
-  `alpi-alpaca.svg` as the favicon + mask-icon. Assets reduced to
-  three: logo, alpaca, brand social card (`alpi-brand.png`, 1200×800).
-- Burger menu on mobile (< 760px) with slide-down drawer — JS under
-  20 lines, inline in the landing, zero dependencies.
-- `/docs/` rebuilt with the same `.docs > .doc` card grid as the
-  landing docs section, sourced from the single `DOCS` array; title
-  is now `DOCS` at H1 scale (72px / 600 / -.035em) to match the
-  individual doc pages.
-- SEO pass across every page: unique `<title>` and
-  `<meta name="description">`, canonical URL, `robots`,
-  `theme-color`, Open Graph (type/site_name/title/description/url/
-  locale + image w/h/alt), Twitter Card `summary_large_image` with
-  `@soyjavi` as creator/site, JSON-LD structured data (WebSite +
-  SoftwareApplication + Organization on landing, CollectionPage on
-  `/docs/`, TechArticle on doc pages). `sitemap.xml` (16 URLs with
-  `lastmod` + priority tiers) and `robots.txt` are emitted on every
-  build. Deploy URL is configurable via `SITE_URL` env var, default
-  placeholder `https://alpi.satoshi-ltd.com`.
-- Alignment fixes along the way: breadcrumbs baseline-match the
-  "alpi" wordmark inside the logo (`margin-top:4px` on `.bp-tail`),
-  `.shell` no longer shadowed by `.row` shorthand padding, `.doc`
-  article no longer zeroes horizontal padding.
+- `site/scripts/build.mjs` — `renderNav()` shared shell (1240px + `clamp(24px, 5vw, 64px)`); breadcrumb tail varies (DOCS, DOCS/{slug}); fixes nested `<a>` bug.
+- `site/dist/` — three assets (logo, alpaca, social card 1200×800); `/docs/` rebuilt with `.docs > .doc` card grid, H1 72px/600/-.035em.
+- `SITE_URL` env var configurable, default `https://alpi.satoshi-ltd.com`.
 
 ## v0.2.79 — 2026-04-24
 
 ### site — static marketing + docs scaffold under `site/`
 
-Landed the first cut of alpi.site as a zero-dependency static site:
-vanilla HTML/CSS/JS plus a single Node build script
-(`site/scripts/build.mjs`) that reads `README.md`, `QUICKSTART.md`,
-`CHANGELOG.md`, `LICENSE`, and `docs/*.md` at HEAD and bakes
-`site/dist/` — landing page at `/`, doc index at `/docs/`, and one
-pre-rendered HTML per doc. Versions and copy are derived from
-`pyproject.toml` so a rebuild keeps the site in sync with the
-shipped release; no runtime fetch from GitHub, no CORS, no API rate
-limits. Ships with a tiny zero-dep Markdown renderer
-(`site/scripts/markdown.mjs`) covering the subset used in the repo
-(headings, fenced code, lists, tables, blockquotes, inline code,
-bold/italic, links). Based on a mockup generated by `claude design`;
-the mockup folder was removed after migration. Cloudflare Pages
-wiring: build command `node site/scripts/build.mjs`, output
-`site/dist`.
+First cut of alpi.site as zero-dependency static site: vanilla
+HTML/CSS/JS + single Node build script reads `README.md`,
+`QUICKSTART.md`, `CHANGELOG.md`, `LICENSE`, `docs/*.md` at HEAD
+and bakes `site/dist/` — landing at `/`, doc index, one
+pre-rendered HTML per doc. Versions derived from
+`pyproject.toml`; no runtime fetch, CORS, or rate limits.
+
+- `site/scripts/build.mjs` — Node build entry.
+- `site/scripts/markdown.mjs` — zero-dep renderer (headings, fenced code, lists, tables, blockquotes, inline code, bold/italic, links).
+- Cloudflare Pages: build `node site/scripts/build.mjs`, output `site/dist`. Based on a `claude design` mockup (mockup folder removed after migration).
 
 ## v0.2.78 — 2026-04-24
 
 ### skills — auto-validate on every mutation
 
-Every mutating action on a user skill (`create`, `edit`, `patch`,
-`add_file`, `remove_file`) now runs the script validator
-(`_skill_validate.validate_skill` — py_compile, missing imports,
-OAuth race pattern, port coherence) and surfaces findings in the
-tool output. The LLM sees issues immediately and can iterate in
-the same turn without having to call `skill(action="validate")`
-separately. 6 new regression tests in
-`tests/test_skill_auto_validate.py`.
+Every mutating action on a user skill (`create`/`edit`/`patch`/
+`add_file`/`remove_file`) runs `_skill_validate.validate_skill`
+(py_compile, missing imports, OAuth race, port coherence) and
+surfaces findings inline so the LLM iterates without a
+separate `validate` call. Reverted the `@alpi/plan` experiment
+— `@alpi/*` stays reserved + live, but nothing ships by
+default until concrete patterns justify it.
 
-`alpi/prompts/create_skill_guide.md` extended with a Scripts
-section (prefer stdlib, include a dry-run / smoke-test path,
-explicit exit codes) and a note about the automatic validation —
-so the LLM authors scripts knowing it will get feedback.
-
-### skills — AO position clarified, no bundled skill shipped yet
-
-Reverted the `@alpi/plan` experiment. It restyled output without
-adding real capability and imposed a path convention users may not
-want. The honest conclusion: don't ship bundled skills from a
-hermes-style catalog just because BE's infrastructure is ready.
-`docs/ROADMAP.md → AO` and `docs/SKILLS.md` updated to reflect the
-new position: the `@alpi/*` namespace is reserved and live, but
-nothing ships by default. Bundled skills land when concrete
-recurring patterns justify one — not from a catalog import.
+- `alpi/tools/skill.py` — auto-validate hook on each mutation.
+- `alpi/prompts/create_skill_guide.md` — Scripts section (prefer stdlib, dry-run/smoke, exit codes) + auto-validation note.
+- `tests/test_skill_auto_validate.py` — 6 regression tests.
+- `docs/ROADMAP.md → AO`, `docs/SKILLS.md` — bundled-skill position clarified.
 
 ## v0.2.77 — 2026-04-24
 
 ### skills — bundled infrastructure (BE closed)
 
-Adds a read-only namespace for skills that ship with the alpi
-package. No content bundled yet — this is infrastructure only.
+Read-only namespace for skills shipped with the alpi package;
+no content bundled yet, infrastructure only. Bundled skills
+addressed as `@alpi/<name>`; `@` not legal as on-disk category
+so collisions impossible. Suite: 692.
 
-- **`@alpi/` namespace.** Bundled skills are addressed as
-  `@alpi/<name>`. The `@` sigil is not a legal category name on
-  disk, so bundled and user skills cannot collide by construction.
-- **Loader.** `_bundled_root()` resolves against
-  `importlib.resources.files("alpi.skills")`; `_bundled_skill(name)`
-  returns the package resource for a `@alpi/*` name, or `None`.
-  `_find_skill` tries bundled first, then falls through to
-  `{home}/skills/`.
-- **Discovery.** `skills_index_block()` (injected into the system
-  prompt every turn) now lists user skills first, then a separate
-  `@alpi/ [bundled]:` block with the marker visible. `skill list`
-  mirrors the same ordering.
-- **Write guards.** `create`/`edit`/`patch`/`add_file`/`remove_file`/
-  `delete` on a `@alpi/*` name is rejected with a message pointing
-  at the variant pattern (create your own under a non-`@` category).
-- **Defense in depth.** `all_skills` skips any category under
-  `{home}/skills/` whose name starts with `@`, so a rogue direct
-  write cannot shadow a bundled skill.
-
-`pyproject.toml` package-data extended to ship `skills/**/*`; the
-`alpi/skills/` package directory is empty except for `__init__.py`.
-When we land the first real bundled skill, no loader changes are
-needed — drop the SKILL.md in place and it shows up.
-
-14 new regression tests in `tests/test_bundled_skills.py`; 692 green.
-
-Docs: `docs/SKILLS.md` gains a "Bundled vs user skills" section with
-the namespace, variant pattern, and discovery ordering.
-`docs/ARCHITECTURE.md` package tree + runtime note updated.
+- `alpi/tools/skill.py` — `_bundled_root()` via `importlib.resources.files("alpi.skills")`; `_bundled_skill(name)` returns package resource for `@alpi/*` or `None`. `_find_skill` tries bundled first. Discovery: `skills_index_block()` + `skill list` lists user skills then `@alpi/ [bundled]:`. Write guards reject mutating actions on `@alpi/*`. `all_skills` skips on-disk categories starting with `@`.
+- `pyproject.toml` — package-data ships `skills/**/*`; `alpi/skills/` empty except `__init__.py`.
+- `tests/test_bundled_skills.py` — 14 regression tests.
+- `docs/SKILLS.md` "Bundled vs user skills"; `docs/ARCHITECTURE.md` package tree updated.
 
 ## v0.2.76 — 2026-04-24
 
 ### tui — markdown link styling + memory panel rewrite (BB closed)
 
-**BB — shared link renderer.** Textual 8.2.3 exposes only `@click`
-meta on markdown link spans, no visual style — so links rendered as
-plain prose in the chat. New `alpi/tui/_links.py` monkey-patches
-`MarkdownBlock._token_to_content` at import time: every span carrying
-`@click` meta gets **bold + underline** appended. Idempotent install,
-applied globally — works across `AssistantMessage` streaming output
-AND every floating panel that uses `Markdown` (same patch, one pipeline).
+Textual 8.2.3 exposes only `@click` meta on markdown link
+spans, no style — links rendered as plain prose. Fix monkey-
+patches `MarkdownBlock._token_to_content` at import to add
+bold+underline on `@click` spans (idempotent, global).
+`/memory` panel replaces the code-block hack with stacked
+`Static` headers + per-entry `Markdown` widgets split on `§`.
+Streaming input lag fixed by 12.5Hz timer coalesce vs ~60/s
+`asyncio.create_task` per delta.
 
-Per-link hover styling is **not** addressed — Textual renders link
-spans as Rich Text inside a single widget, not as per-link widgets.
-A hover state would require widget-per-link rewriting of the Markdown
-internals, out of scope. Deferred.
-
-### tui — `/memory` panel rewrite
-
-Old `/memory` wrapped each file's content in a ```markdown code block```
-so everything rendered with the `.code_inline` accent color. Inconsistent
-and the code-block hid real markdown structure.
-
-New layout: three stacked sections, each with a `Static` accent-colored
-header + `Markdown` widgets for the content. `USER.md` and `MEMORY.md`
-are split on `§` and rendered as N separate `Markdown` widgets so entries
-appear visually separated (the `§` character no longer leaks into the
-render). `AGENT.md` renders as one unit since it's already markdown.
-
-New `.memory-section` CSS class; all `FloatingPanel Markdown` widgets
-share transparent background + tight margins so panels stay compact.
-
-### prompts / template
-
-`alpi/prompts/default_agent.md` — `# Identity` / `# Voice` / `# Defaults`
-headers downgraded to `##`. Textual renders `h1` centered (it reads as
-"document title" styling); `h2` is left-aligned which is the right look
-for in-document sections. Applied to the template that seeds fresh
-profiles.
-
-### memory tool / description
-
-`§` entry delimiter guidance tightened (English only, terse). New
-`fuzzy_find_unique_entry` error now appends a "note: `§` is the entry
-delimiter, not content — strip it from your match string" hint when the
-match string contains `§`. Catches the common LLM mis-construction
-observed on long-running profiles with many entries.
-
-### tui — streaming input lag
-
-Fixed: typing in the TUI lagged while the assistant streamed output.
-Cause: `AssistantMessage.append(delta)` spawned one `asyncio.create_task`
-per delta (~60/s from the LLM), each re-parsing markdown — saturating the
-event loop so key events queued behind paint work. Fix: deltas now
-accumulate in a buffer and a single timer flushes them at 12.5 Hz
-(`_FLUSH_INTERVAL = 0.08`). One coalesced write per tick instead of
-dozens. Input stays responsive mid-stream.
-
-### docs
-
-`docs/ROADMAP.md` — BF (drop `§` delimiter) removed. Pre-existing
-profiles handle it fine with the new description guidance; refactoring
-the on-disk format isn't worth the migration surface right now.
+- `alpi/tui/_links.py` (new) — monkey-patch; `alpi/tui/widgets.py` — `/memory` rewrite + `_FLUSH_INTERVAL = 0.08` coalesce; new `.memory-section` CSS.
+- `alpi/prompts/default_agent.md` — `# Identity`/`# Voice`/`# Defaults` → `##` (Textual centers `h1`).
+- `alpi/tools/memory.py` — `§` guidance tightened; `fuzzy_find_unique_entry` adds "`§` is delimiter" hint. `docs/ROADMAP.md` — BF removed.
 
 ## v0.2.75 — 2026-04-24
 
 ### wizard / cli — profile lifecycle + polish
 
-- New setup entry `alpi -p <name> setup → Delete profile` (non-default
-  profiles only). One-shot teardown: summary → warn about installed
-  services → typed-name confirmation → uninstall gateway / schedule /
-  alp services → `rmtree` the profile home → exit. Collapses what
-  used to be "uninstall each service manually, then run `alpi profile
-  remove X`" into a single guided action.
-- `alpi profile remove <name>` CLI now redirects to the wizard when
-  services are installed, instead of listing per-service uninstall
-  hints. CLI remains for the happy path (empty profiles, scripting).
-- "Did you mean…?" suggestions in CLI when the target id doesn't
-  exist: `alpi profile remove` (closest profile name), `alpi peers
-  remove` / `alpi peers ping` (closest peer id), `alpi schedule fire`
-  (closest job id). Shared `_suggest()` helper using `difflib`.
-- Fixed the misleading "→ Gateway service" hint in `profile remove`
-  error — it now names the actually-installed service(s) and points
-  at the wizard.
-- Dropped `.githooks/` (pre-push CHANGELOG regen). We've been
-  running `alpi release notes` manually at release time; the hook
-  was opt-in and unused.
+New `alpi -p <name> setup → Delete profile` (non-default
+profiles only) — one-shot teardown: summary → service warning
+→ typed-name confirmation → uninstall services → `rmtree` →
+exit. Collapses what was "uninstall each service manually,
+then `alpi profile remove`" into a single guided action.
+"Did you mean…?" suggestions across `profile remove`, `peers
+remove`/`ping`, `schedule fire` via shared `_suggest()`
+(`difflib`).
 
-### docs
-- `docs/PROFILES.md` — documents the wizard-redirect flow.
-- `docs/ARCHITECTURE.md` — setup menu outline lists "delete profile".
+- `alpi/cli.py` — Delete profile wizard; `profile remove` redirects to wizard when services installed; `_suggest()` helper; fixes the misleading "→ Gateway service" hint.
+- Dropped `.githooks/` (pre-push CHANGELOG regen — opt-in and unused).
+- `docs/PROFILES.md`, `docs/ARCHITECTURE.md` — wizard-redirect flow + setup menu.
 
 ## v0.2.74 — 2026-04-24
 
 ### schedule — ad-hoc job fire (BA closed)
 
-Closes the tightest feedback loop in the schedule lifecycle: add a
+Closes the tightest feedback loop in schedule lifecycle: add
 cron, verify it works, without waiting for the cron window.
 
-- `alpi/scheduler/run.py::fire_by_id(home, job_id)` — loads
-  `jobs.json`, looks up the id, runs the job through the same path
-  the daemon tick uses (`run_job` — threat scan + `alpi chat --once`
-  subprocess + delivery). Updates `last_run_at`; does **not**
-  consume `once` jobs (ad-hoc fire is deliberate testing, not the
-  natural trigger).
-- CLI: `alpi schedule fire <job_id>`. Exit code 1 on failure.
-- Tool: `schedule(action="fire", id=...)` so the LLM can self-test
-  a job right after adding it.
-- Description updated to list the new action + caveat about
-  once-jobs not being consumed.
-
-5 new regression tests in `tests/test_schedule.py`; 675 green.
+- `alpi/scheduler/run.py::fire_by_id(home, job_id)` — runs the job through the same path as the daemon tick (threat scan + `alpi chat --once` subprocess + delivery); updates `last_run_at`; does **not** consume `once` jobs (ad-hoc fire is testing).
+- `alpi/cli.py` — `alpi schedule fire <job_id>` (exit 1 on failure).
+- `alpi/tools/schedule.py` — `schedule(action="fire", id=...)` so the LLM can self-test after adding.
+- `tests/test_schedule.py` — 5 new tests. Suite: 675.
 
 ## v0.2.73 — 2026-04-24
 
 ### skills / memory / docs — stop shipping what we don't use
 
-- Deleted the `alpi/skills/` package directory. The only blueprint
-  there (`meta/consolidate-memory/SKILL.md`) never reached profiles
-  — the `skill` tool only searches `{home}/skills/` and nothing
-  seeds the bundle. Keeping dead literature shipped with the binary
-  violated the "ship what you use" posture. Runtime skills system
-  is untouched — `~/.alpi/skills/<category>/<name>/` still works,
-  the `skill` tool still creates / edits / runs user skills, and
-  the `/skills` TUI panel still lists them.
-- `pyproject.toml` package-data no longer includes `skills/**/*.md`.
-- `alpi/tools/memory.py` — the ≥80% hint now says *"consider
-  consolidating old entries before adding more"* (generic,
-  actionable) instead of pointing at a skill that doesn't exist.
-- `alpi/prompts/system_prompt.md` — same substitution: at ≥80%,
-  prefer `replace` / `remove` over `add`.
-- `alpi/prompts/create_skill_guide.md` — drops the "search the
-  bundled `alpi/skills/`" step, since there's nothing to search.
-- `docs/ARCHITECTURE.md` — package tree no longer lists `skills/`
-  under `alpi/`. Added a bridge paragraph pointing at the Profile
-  home layout where runtime skills / sessions / memories / logs /
-  ALP state actually live. Skills core-systems section unchanged.
-- `docs/ROADMAP.md` — **BE** reframed as "bundled skills
-  infrastructure (loader; no content yet)" rather than a loader
-  pinned to a specific blueprint. **AO** no longer claims
-  consolidate-memory is bundled.
-- Two regression tests in `tests/test_memory_tool_v2.py` now
-  assert the new generic "consolidating" wording.
+Deleted the `alpi/skills/` package — only blueprint
+(`meta/consolidate-memory/SKILL.md`) never reached profiles
+(skill tool only searches `{home}/skills/`). Runtime skills
+system untouched — `~/.alpi/skills/<category>/<name>/` still
+works.
+
+- `pyproject.toml` — package-data no longer includes `skills/**/*.md`.
+- `alpi/tools/memory.py`, `alpi/prompts/system_prompt.md`, `create_skill_guide.md` — ≥80% hint now says "consider consolidating old entries" instead of pointing at a non-existent skill.
+- `docs/ARCHITECTURE.md` — package tree updated; bridge paragraph to Profile home layout.
+- `docs/ROADMAP.md` — **BE** reframed as "bundled skills infrastructure (loader; no content yet)"; **AO** drops consolidate-memory bundling claim.
+- `tests/test_memory_tool_v2.py` — two regressions assert new wording.
 
 ## v0.2.72 — 2026-04-24
 
 ### memory — v2 rules (AI partial)
 
-Renames PERSONALITY.md → **AGENT.md** across the codebase, prompts,
-tests, and docs. The user/agent pair (`USER.md` vs `AGENT.md`) is now
-symmetric and readable. The `memory` tool enum, template file
-(`alpi/prompts/default_agent.md`), home helper, and tool descriptions
-that list memory files are all updated. File migration on existing
-profiles is manual — no auto-migration per project policy.
+Renames `PERSONALITY.md` → **AGENT.md** across codebase /
+prompts / tests / docs (user/agent pair now symmetric). File
+migration manual per project policy. Char limits: USER.md
+1375→3000, MEMORY.md 2200→5000.
 
-- **A** — AGENT.md now uses paragraph-level fold + Jaccard dedup
-  (`is_duplicate_stanza` in `alpi/memory.py`) instead of raw substring
-  match. Paraphrased voice blocks no longer accumulate. Error text
-  nudges toward `replace` when the user is refining an existing rule.
-- **B** — `alpi/prompts/default_agent.md` "Edit me" footer rewritten
-  to teach the correct `replace` vs `add` pattern (append new
-  sections; replace existing lines; never replace unrelated rules
-  to "make room").
-- **C** — cross-file duplicate check: `add` to USER.md (or MEMORY.md)
-  rejects when the content is already in the other file, pointing
-  the caller at the correct target. Prevents the common failure
-  where a fact (e.g. vehicle list) lands in both files.
-- **E** — operational-state warning: `add` returns a ⚠ line in the
-  tool output when the entry matches a session/chat/interaction log
-  pattern (`chat_id`, `session_id`, `first interaction`, 5+-digit id
-  combined with a date). Non-blocking — the LLM sees the hint; it
-  decides whether to honour the user's explicit target.
-- **F** — memory char limits bumped: `USER.md` 1375 → **3000**,
-  `MEMORY.md` 2200 → **5000**. When either target reaches ≥ 80%
-  usage, the tool response carries a `— run the consolidate-memory
-  skill` hint so the model can escalate to consolidation before
-  adding more.
-
-**D deferred** — the "≤1-token entry dedup" idea (lower Jaccard
-guard from 2 → 1) produced false positives on entries that shared
-one generic content token (`Dato A` vs `Dato B` both reduced to
-`{dato}`). Kept the guard at 2.
-
-**G deferred** — periodic self-consolidation trigger stays out:
-explicit over-engineering per the "no fails, no over-engineering"
-directive. The user or the model can run the `consolidate-memory`
-skill on demand.
-
-11 new regression tests in `tests/test_memory_tool_v2.py`.
+- **A** — AGENT.md uses paragraph-fold + Jaccard dedup (`is_duplicate_stanza` in `alpi/memory.py`); paraphrased voice blocks no longer accumulate.
+- **B** — `alpi/prompts/default_agent.md` "Edit me" footer rewritten teaching `replace` vs `add`.
+- **C** — cross-file dedup: `add` to USER.md/MEMORY.md rejects when content is already in the other.
+- **E** — operational-state ⚠ warning when entry matches session/chat log pattern (non-blocking).
+- **F** — `≥80%` usage triggers "run consolidate-memory skill" hint.
+- **D**/**G deferred** — Jaccard 2→1 produced false positives (`Dato A`/`Dato B` collapsed to `{dato}`); periodic self-consolidation out per "no over-engineering".
+- `tests/test_memory_tool_v2.py` — 11 new regressions.
 
 ## v0.2.71 — 2026-04-24
 
 ### engine / prompts (AT partial — 4 of 5 candidate edits applied)
-- new per-surface platform hint in the system prompt: `_platform_hint()` in `alpi/engine.py` reads `ALPI_PLATFORM` env and injects a matching block (`cron`, `telegram`, `email`, `gmail`). Gateway (`alpi/gateway/run.py`) sets it to `msg.platform` on every spawn; scheduler (`alpi/scheduler/run.py`) sets it to `cron`. TUI gets no hint (baseline). Concrete wins: cron jobs stop asking phantom users for clarification; Telegram replies arrive Markdown-aware; email replies arrive plain-text-only. 6 regression tests.
-- `memory` tool description now enforces declarative phrasing with ✓/✗ examples ("User prefers concise replies" ✓ — "Always reply concisely" ✗). Imperative memory entries were being re-read as directives across sessions.
-- `skill` tool description leads with "use when" purpose instead of directory layout.
-- `email` tool description leads with "Read, search, send, or move email. Use when…" instead of "Manage the mailbox".
-- `alpi/prompts/system_prompt.md` — dropped the "Past conversations" section; `session_search` tool description already carries the same rule. Net: ~10 fewer tokens injected on every turn.
 
-### roadmap
-- new **BD** item added for v0.3: model-aware tool-use-enforcement guidance (Claude/MiMo brevity, GPT/Codex/Gemini full block) — requires an A/B measurement on `agent.log` before applying.
+Per-surface platform hint: `_platform_hint()` in
+`alpi/engine.py` reads `ALPI_PLATFORM` and injects a matching
+block (`cron`/`telegram`/`email`/`gmail`). Cron jobs stop
+asking phantom users for clarification; Telegram replies
+arrive Markdown-aware; email replies plain-text-only. New **BD**
+for v0.3 (model-aware tool-use guidance — needs `agent.log` A/B).
 
-### docs
-- `docs/ARCHITECTURE.md` — system-prompt assembly section now documents the `ALPI_PLATFORM` contract between callers (gateway, scheduler) and the engine.
+- `alpi/engine.py` — `_platform_hint()`; `alpi/gateway/run.py` sets `ALPI_PLATFORM=msg.platform`; `alpi/scheduler/run.py` sets `cron`. TUI no hint. 6 regression tests.
+- `alpi/tools/memory.py` — declarative ✓/✗ examples ("User prefers concise replies" ✓ vs "Always reply concisely" ✗).
+- `alpi/tools/skill.py`, `alpi/tools/email.py` — descriptions lead with "Use when".
+- `alpi/prompts/system_prompt.md` — drops "Past conversations" (already in `session_search`). ~10 fewer tokens/turn.
+- `docs/ARCHITECTURE.md` — documents `ALPI_PLATFORM` contract.
 
 ## v0.2.70 — 2026-04-23
 
-### license
-- repo re-licensed under **Business Source Licence 1.1** (`LICENSE`). Licensor: Satoshi Ltd. Change Date 2030-04-23 → Apache 2.0. Additional Use Grant lets individuals run alpi freely on machines they control for personal / research / non-commercial purposes; commercial production deployment by a legal entity requires a licence from `info@satoshi-ltd.com`. `pyproject.toml` license field updated to `BUSL-1.1`; README License section rewritten to explain the split.
+### license + foundational docs
 
-### docs
-- repo rooted in Satoshi Ltd.'s six operating principles (Privacy by Design, User Sovereignty, Security First, Open Source, Zero Knowledge, Digital Sovereignty) across `README.md`, `docs/ARCHITECTURE.md`, `docs/SECURITY.md`, `docs/ALP.md`. Each doc now explicitly maps its content to the principle it expresses.
-- new [`QUICKSTART.md`](QUICKSTART.md) at repo root — first-day walkthrough: install → model → workspace → first chat → resume → gateway → second profile → ALP → doctor.
-- new [`docs/PROFILES.md`](docs/PROFILES.md) — canonical reference for alpi's core isolation primitive (home resolution, what's isolated per profile, identity in ALP, creation patterns, cost).
-- new [`docs/DEPLOYMENTS.md`](docs/DEPLOYMENTS.md) — six topologies from laptop-only to enterprise private agent networks, each with ASCII diagram, trade-offs, and BSL licence boundary.
-- new [`docs/OPERATIONS.md`](docs/OPERATIONS.md) — runbook: the five logs, service lifecycle, upgrades, backup + restore, ALP identity rotation, monitoring, disaster recovery, common failure modes.
-- `docs/ROADMAP.md` sanitised — 64 shipped-item rows + the "Done — v0.1 + shipped v0.2 items" commit table dropped (they duplicated CHANGELOG which already reconstructs them from `git log`). New top table lists only open items with target version + status.
+Repo re-licensed under **Business Source Licence 1.1**.
+Licensor: Satoshi Ltd. Change Date 2030-04-23 → Apache 2.0.
+Additional Use Grant for personal/research/non-commercial;
+commercial production requires a licence from
+`info@satoshi-ltd.com`. Repo rooted in Satoshi Ltd.'s six
+operating principles, each doc mapping to its principle.
+
+- `LICENSE`, `pyproject.toml` (`BUSL-1.1`), `README.md` License section rewritten.
+- `QUICKSTART.md` (new) — first-day walkthrough (install → model → workspace → chat → resume → gateway → second profile → ALP → doctor).
+- `docs/PROFILES.md` (new) — canonical reference for the core isolation primitive.
+- `docs/DEPLOYMENTS.md` (new) — six topologies laptop → enterprise networks with ASCII diagrams + BSL boundaries.
+- `docs/OPERATIONS.md` (new) — runbook (logs, lifecycle, upgrades, backup/restore, ALP rotation, monitoring, DR). `docs/ROADMAP.md` sanitised; dropped 64 shipped-item rows + commit table duplicating CHANGELOG.
 
 ## v0.2.69 — 2026-04-23
 
 ### models
-- `docs/MODELS.md` rebuilt around a neutral 3-tier recommendation sourced from a standalone deep-research pass (Tier 1 quality, Tier 2 cost/service, Tier 3 Ollama) with production-setup suggestions. Personal-usage section and deliberately-left-out list dropped to keep the doc unbiased.
-- fresh profile scaffold (`config.seed_defaults`) no longer pins a default model — `config.yaml` ships with `model: ""` so the setup wizard is the canonical picker.
-- `docs/CONFIG.md` updated to reflect the empty default.
+
+- `docs/MODELS.md` rebuilt around a neutral 3-tier recommendation from a standalone deep-research pass (Tier 1 quality, Tier 2 cost/service, Tier 3 Ollama) with production-setup suggestions. Personal-usage section + deliberately-left-out list dropped to keep the doc unbiased.
+- `alpi/config.py::seed_defaults` — fresh profile scaffold no longer pins a default model; `config.yaml` ships with `model: ""` so the setup wizard is the canonical picker.
+- `docs/CONFIG.md` — empty default reflected.
 
 ## v0.2.68 — 2026-04-23
 
 ### alp (Alpi Link Protocol — ALP.1 closed)
-- new `alpi/alp/` package: Ed25519 identity, signed JSON-RPC envelope with replay cache, fail-closed peer list, Unix-socket server + client. `link.ping`, `link.ask` (reject-fast reentrancy), `link.cancel` (idempotent interrupt).
-- `peer` tool for LLM-driven cross-profile calls. TUI `@peer rest…` gesture with strict leading-`@` rule and `/peers` panel. Telegram / email / webhook gateway inbound interception hits the same code path without firing the local LLM.
-- `alpi alp start|stop|restart` + service install via `alpi setup → ALP service` (launchd / systemd). Doctor granular sub-checks: Identity (key loadable), Socket (listening), Peers (reachable).
-- `alpi setup → Peers` wizard: identity page with clipboard copy, probe-based ●/○/? status list, add/remove/inspect flows.
-- `alpi peers key|list|add|remove|ping` CLI group for scripting.
-- docs: `docs/ALP.md` spec v1 (envelope, verbs, errors, security), `docs/ROADMAP.md` with ALP.1 shipped and ALP.2 / ALP.3 initially tracked for later, `docs/ARCHITECTURE.md` layout + commands.
 
-### setup
-- health-check row no longer blocks menu render on 5–10s of live network probes — status reads "open to run checks", actual checks run on-demand when the user opens the page.
+ALP.1 ships: Ed25519 identity, signed JSON-RPC envelope with
+replay cache, fail-closed peer list, Unix-socket server +
+client. `link.ping`, `link.ask` (reject-fast reentrancy),
+`link.cancel` (idempotent). Setup wizard health-check no
+longer blocks menu render on 5–10s of probes — runs on-demand.
+
+- `alpi/alp/` (new package) — identity, envelope, server, client, `link.*` handlers.
+- `alpi/tools/peer.py` — LLM-driven cross-profile calls; TUI `@peer rest…` gesture (strict leading-`@`); `/peers` panel; gateway inbound interception hits same code path without firing local LLM.
+- `alpi/cli.py` — `alpi alp start|stop|restart`; service install via `alpi setup → ALP service` (launchd/systemd); doctor sub-checks (Identity/Socket/Peers); `alpi setup → Peers` wizard with clipboard copy + ●/○/? probe status; `alpi peers key|list|add|remove|ping` for scripting.
+- `docs/ALP.md` (new) — spec v1 (envelope, verbs, errors, security); `docs/ROADMAP.md`, `docs/ARCHITECTURE.md` updated.
 
 ## v0.2.54 — 2026-04-23
 
 ### gateway
+
 - per-chat session threading (AN closed) + AU backlog entry (`e0f093d`)
 
 ## v0.2.1 – v0.2.53 — 2026-04-21 → 2026-04-23
 
-Two days of rapid iteration after the v0.2.0 split. Patch bumps
-collapsed into thematic groups; full per-commit detail in `git log`.
+Two days of rapid iteration after the v0.2.0 split. Patch
+bumps collapsed into thematic groups; full per-commit detail
+in `git log`.
 
-### brand
-- Project renamed `alf` → `alpi` across the codebase, docs, and
-  config paths (~130 files touched).
-
-### TUI
-- Theme system + floating panels + scaffold polish (foundation for
-  every later panel).
-- New panels: `/model`, `/mcps`, `/tools`, `/help` palette; unified
-  list-row shape across selectable panels (AH closed).
-- Profile disk size + accent diamond + abbreviated path in the
-  profile-list top bar; adapts to narrow widths.
-- `tui.auto_resume` flag so bare `alpi` continues the last session
-  (AL closed).
-- Drop questionary; menus + text inputs rebuilt directly on
-  `prompt_toolkit`.
-
-### setup wizards
-- Normalised UX across every wizard.
-- New wizards: Cleanup (AA), Gateway service install/uninstall
-  (AB), live Doctor (AD/AE/AF), first-time help text in
-  Gateway/MCP wizards (AG), Model wizard reordered (Ollama first).
-- `.env.example` scaffold dropped; profile owns its own `.env` (AP).
-
-### voice + gateways
-- Voice pack: `tts` + `stt` tools + Telegram voice inbound/outbound
-  (M closed).
-- TTS autoplay off on gateway surfaces; terse outputs by default.
-- Gmail OAuth2 gateway + mail tool dispatch (T closed); internal
-  rename `email/` → `mail/imap/`.
-- Telegram offset persistence + backlog catch-up logging.
-
-### tools
-- `browser`: Playwright with stealth-by-default, humanised typing,
-  optional vision; camoufox dismissed.
-- `read_image`: vision tool with URL/SVG/model-override (D);
-  auto-resize oversized images before vision (S closed).
-- `research` + `delegate`: batch parallel tasks (R.3); `delegate`
-  becomes write-capable with file/terminal/web toolsets (R.2);
-  `research` prefixes inner emit with step counter (R.1).
-- `skill`: new `validate` action for correctness checks (Q
-  closed); `tools:` field description tightened.
-- Removed: `config` tool (config is user-owned).
-
-### security
-- Three-severity command gate for terminal (W closed); approval
-  panel restyled; YOLO removed.
-- Tool budget + OSV malware check + schedule threat-scan (security
-  pack).
-- Sandbox promoted from "experimental" to per-profile opt-in;
-  `allow_network=off` now blocks Python-native network tools too.
-- `tos`: removed C (Codex OAuth) and V (Anthropic OAuth) from
-  backlog — ToS-violation principle locked in.
-
-### release pipeline
-- Auto-generated CHANGELOG from git history (AC closed) +
-  pre-push CHANGELOG hook.
-- `cli`: surface shrunk, logs unified.
-- Filesystem tidied: `PERSONALITY.md` → `memories/`, `gmail_token`
-  → `secrets/`.
-
-### MCP + providers
-- OpenAI-compat tool names, curated provider lists, context-window
-  awareness.
-- `/tools` skips MCP-registered tools (rendered in `/mcps` instead).
-- Ollama promoted to first-class provider; generic custom slot
-  removed.
+- **brand** — project renamed `alf` → `alpi` across codebase, docs, config paths (~130 files).
+- **TUI** — theme system + floating panels; new panels `/model`/`/mcps`/`/tools`/`/help`; profile disk size + accent diamond; `tui.auto_resume` (AL closed); dropped questionary, menus + inputs rebuilt on `prompt_toolkit`.
+- **setup wizards** — normalised UX; new wizards Cleanup (AA), Gateway service install/uninstall (AB), live Doctor (AD/AE/AF), first-time help text (AG), Model wizard reordered (Ollama first); `.env.example` dropped (AP).
+- **voice + gateways** — voice pack `tts`+`stt`+Telegram voice (M closed); TTS autoplay off on gateways; Gmail OAuth2 + mail tool (T closed); Telegram offset persistence + backlog catch-up.
+- **tools** — `browser` Playwright with stealth + humanised typing + optional vision; `read_image` URL/SVG/model-override (D, S closed); `research`+`delegate` batch parallel (R.3), delegate write-capable (R.2), research step counter (R.1); `skill` validate action (Q closed); removed `config` tool (config user-owned).
+- **security** — three-severity command gate for terminal (W closed); approval panel restyled, YOLO removed; tool budget + OSV malware check + schedule threat-scan; sandbox per-profile opt-in; `allow_network=off` blocks Python-native net tools; `tos`: removed C (Codex OAuth) and V (Anthropic OAuth) backlog.
+- **release pipeline** — auto-generated CHANGELOG from git history (AC closed) + pre-push CHANGELOG hook; CLI surface shrunk; `PERSONALITY.md` → `memories/`, `gmail_token` → `secrets/`.
+- **MCP + providers** — OpenAI-compat tool names, curated provider lists, context-window awareness; `/tools` skips MCP-registered (rendered in `/mcps`); Ollama first-class; generic custom slot removed.
 
 ## v0.2.0 — 2026-04-21
 
-### docs
-- add MODELS.md — tiered model recommendations for agent use (`df29cfc`)
-- record identity-wizard decision as rejected (`60122b7`)
-- split CONTEXT into ARCHITECTURE + ROADMAP, position alf as lighter Hermes, bump to v0.2.0 (`6b946e4`)
+Foundational v0.2 cut: split CONTEXT → ARCHITECTURE + ROADMAP,
+positions alf as lighter Hermes; tiered model docs; profile
+propagation through tool context; new send_message + schedule
++ email + mcp subsystems; security phases 1–2.
 
-### fix
-- propagate active profile to tool context + sharpen memory prompt (`1470bdb`)
-
-### gateway
-- stream tool traces + typing indicator; simplify allowlist (`fe3a3d4`)
-
-### gateway/schedule
-- fail fast if the profile has no usable workspace (`04bdaba`)
-
-### schedule
-- fix immediate-fire, UTC vs local tz, duplicate delivery (`3dd4522`)
-- kind=once and LLM time grounding (`1fc3610`)
-
-### skills
-- unified tool, subdir contract, live-by-default, path guards (`2e67830`)
-- auto-inject index into system prompt + render skill name in tool cards (`4035327`)
-
-### tooling
-- level-2 comment cleanup across alf/ (`a07e40a`)
-
-### tools
-- rename delegate → research, depth tiers driven by config (`d2ceb74`)
-
-### tui
-- surface inter-tool prose + reasoning tokens in live indicator (`62f7fa7`)
-- reasoning persists across sessions, show_reasoning toggle, tighter layout (`fd1fec4`)
-
-### web_search
-- dedup by domain + lean description (`b04b394`)
-
-### misc
-- remove stray test artifacts and fix layout in README (`56d1711`)
-- send_message tool + delivery refactor (`6e31ace`)
-- schedule daemon: tool + CLI + rename from cron (`2245e42`)
-- install/uninstall for gateway + schedule (launchd + systemd) (`cd62da0`)
-- profile CLI + drop all migration/legacy code (`630f97c`)
-- email subsystem + alf setup UX polish (`c67e618`)
-- email gateway channel + per-platform config namespace (`4691df8`)
-- mcp client — user-configured MCP servers as alf tools (`0d376ac`)
-- setup UX: shared ui primitives, profile-scoped status, CLI polish (`7a81770`)
-- memory tool: compress description to Hermes-style, keep all invariants (`b214ce6`)
-- tool descriptions: compress terminal/email/schedule/send_message/session_search (`19f1287`)
-- config polish: minimal seed, config tool, /new session, accent spinners (`2dadc09`)
-- tool descriptions: restore CALL directives + English-only language rule (`6be1685`)
-- security phase 1: terminal denylist, SSRF block, tool-output injection scan (`a54d99d`)
-- security phase 2: opt-in OS sandbox (sandbox-exec / bubblewrap) (`e78b428`)
-- merge glob + grep into search; fix relative-path resolution (`2b73091`)
-- file tools: drop workspace wall, match terminal's denylist posture (`3e2dc29`)
-- skill tool: patch/view actions, state/ subdir, scanner beef-up (`211c022`)
+- **docs** — `MODELS.md` (tiered model recommendations) (`df29cfc`); identity-wizard rejected (`60122b7`); CONTEXT split into ARCHITECTURE + ROADMAP, bump to v0.2.0 (`6b946e4`).
+- **gateway / schedule** — stream tool traces + typing indicator (`fe3a3d4`); fail fast on bad workspace (`04bdaba`); fix immediate-fire + UTC vs local tz + duplicate delivery (`3dd4522`); kind=once + LLM time grounding (`1fc3610`); schedule daemon tool+CLI+rename from cron (`2245e42`); install/uninstall for gateway+schedule (`cd62da0`); email subsystem (`c67e618`); email gateway + per-platform config (`4691df8`).
+- **skills / tools / tui** — unified skill tool + subdir contract + path guards (`2e67830`); auto-inject skill index into system prompt (`4035327`); rename delegate → research + depth tiers (`d2ceb74`); level-2 comment cleanup (`a07e40a`); inter-tool prose + reasoning tokens in indicator (`62f7fa7`); reasoning persists across sessions + show_reasoning toggle (`fd1fec4`); skill tool patch/view + state subdir (`211c022`).
+- **misc** — fix profile propagation + memory prompt (`1470bdb`); send_message tool (`6e31ace`); profile CLI + drop migration (`630f97c`); mcp client (`0d376ac`); shared ui primitives (`7a81770`); memory description Hermes-style (`b214ce6`); tool description compression (`19f1287`, `6be1685`); minimal config seed + /new session (`2dadc09`); security phase 1 — terminal denylist + SSRF + injection scan (`a54d99d`); security phase 2 — opt-in OS sandbox (`e78b428`); merge glob+grep into search (`2b73091`); file tools drop workspace wall (`3e2dc29`); web_search dedup by domain (`b04b394`); README layout (`56d1711`).
 
 ## v0.1.0 — 2026-04-19
 

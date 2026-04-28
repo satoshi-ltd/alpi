@@ -173,6 +173,7 @@ class Engine:
         # so tools see only THIS turn's spend, not the session total.
         from alpi.tools import _state as _wg_state
         _wg_state.reset_turn_usage()
+        _wg_state.reset_skill_env()
 
         self.session.messages.append({"role": "user", "content": user_text})
         emit(AgentEvent(kind="user", text=user_text))

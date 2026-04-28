@@ -286,6 +286,18 @@ def _frontmatter_from_text(text: str) -> dict[str, str]:
     return out
 
 
+def _parse_env_list(raw: str) -> list[str]:
+    s = (raw or "").strip().strip("[]")
+    if not s:
+        return []
+    out: list[str] = []
+    for part in s.split(","):
+        name = part.strip().strip("'\"")
+        if name and all(c.isalnum() or c == "_" for c in name):
+            out.append(name)
+    return out
+
+
 def _atomic_write(path: Path, content: str, mode: int = 0o644) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(path.suffix + ".tmp")
@@ -578,9 +590,15 @@ def _view(home: Path, name: str, file: str) -> ToolResult:
     if not target.is_file():
         return ToolResult(ok=False, output="", error=f"not found: {file or 'SKILL.md'}")
     try:
-        return ToolResult(ok=True, output=target.read_text())
+        body = target.read_text()
     except (OSError, UnicodeDecodeError) as e:
         return ToolResult(ok=False, output="", error=f"read failed: {e}")
+    if not file:
+        from alpi.tools import _state
+        env_decl = _parse_env_list(_frontmatter_from_text(body).get("env", ""))
+        if env_decl:
+            _state.add_skill_env(env_decl)
+    return ToolResult(ok=True, output=body)
 
 
 def _create(
