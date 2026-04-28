@@ -197,6 +197,51 @@ def test_active_task_returns_none_on_empty_transcript() -> None:
     assert tasks.active_task([]) is None
 
 
+# Hub-only marker enforcement
+
+
+def test_has_markers_detects_task_and_done() -> None:
+    assert tasks.has_markers("#task do the thing") == ["task"]
+    assert tasks.has_markers("@alice #done it's done") == ["done"]
+    assert tasks.has_markers("plain text only") == []
+    assert tasks.has_markers("") == []
+    # Inline mention is not a marker.
+    assert tasks.has_markers("converge with #done eventually") == []
+
+
+def test_parse_post_ignores_non_hub_markers_when_filter_set() -> None:
+    """A non-hub member who writes `#done` in a post body must be
+    ignored by the protocol — the hub is the manager."""
+    HUB = "HUB_PK"
+    BOB = "BOB_PK"
+    # Hub author with hub_pubkey filter → markers count.
+    events = tasks.parse_post(
+        "#task pick stack", seq=1, by=HUB, hub_pubkey=HUB,
+    )
+    assert len(events) == 1 and events[0].kind == "task"
+    # Non-hub author → ignored.
+    events = tasks.parse_post(
+        "#done my unilateral decision", seq=2, by=BOB, hub_pubkey=HUB,
+    )
+    assert events == []
+
+
+def test_active_task_ignores_non_hub_close() -> None:
+    """If a non-hub member posts `#done`, active_task() with hub
+    filter still sees the task as open."""
+    HUB = "HUB_PK"
+    BOB = "BOB_PK"
+    posts = [
+        {"seq": 1, "from": HUB, "text": "#task pick stack"},
+        {"seq": 2, "from": BOB, "text": "#done FastAPI"},  # ignored
+    ]
+    # Without filter, the non-hub close looks valid.
+    assert tasks.active_task(posts) is None
+    # With hub filter, the task remains open.
+    active = tasks.active_task(posts, hub_pubkey=HUB)
+    assert active is not None and active.description == "pick stack"
+
+
 # mentions_in
 
 

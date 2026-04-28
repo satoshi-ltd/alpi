@@ -244,6 +244,42 @@ def _decrypter_for_version(home: Path, wg, kp):
     return _open
 
 
+def _peer_accent(handle: str) -> str:
+    from alpi.home import _ROOT
+    cfg = _ROOT / "profiles" / handle / "config.yaml"
+    if not cfg.exists():
+        return "white"
+    try:
+        import yaml as _yaml
+        data = _yaml.safe_load(cfg.read_text()) or {}
+        accent = (data.get("tui") or {}).get("accent")
+        if isinstance(accent, str) and accent:
+            return accent
+    except Exception:
+        pass
+    return "white"
+
+
+def _print_post_block(
+    seq: int, who: str, text: str,
+    cost: dict[str, Any] | None = None,
+) -> None:
+    handle = who.lstrip("@")
+    col = _peer_accent(handle)
+    bar = f"[{col}]┃[/{col}]"
+    cost_str = ""
+    if cost:
+        cost_str = (
+            f"  [dim]${cost.get('usd', 0):.4f} · "
+            f"{cost.get('tokens', 0):,}tok[/dim]"
+        )
+    ui._console.print(f"{bar} [{col}]#{seq:>2}  {who}[/{col}]{cost_str}")
+    ui._console.print(bar)
+    for line in str(text or "").splitlines() or [""]:
+        ui._console.print(f"{bar} {line}")
+    ui._console.print("")
+
+
 def _print_transcript(home: Path, posts: list[dict[str, Any]], decrypt) -> None:
     ui._console.print("")
     if not posts:
@@ -254,8 +290,7 @@ def _print_transcript(home: Path, posts: list[dict[str, Any]], decrypt) -> None:
     for p in posts:
         who = aliases.get(p["from"], p["from"][:12] + "…")
         text = decrypt(p)
-        ui._console.print(f"  [dim]#{p['seq']}[/dim] [b]{who}[/b]  {text}")
-    ui._console.print("")
+        _print_post_block(int(p["seq"]), who, text, p.get("cost"))
 
 
 def _alias_map(home: Path) -> dict[str, str]:
@@ -359,7 +394,9 @@ def _pull_flow(home: Path, wg_id: str) -> None:
     else:
         for p in posts:
             who = aliases.get(p["from"], p["from"][:12] + "…")
-            ui._console.print(f"  [dim]#{p['seq']}[/dim] [b]{who}[/b]  {p['text']}")
+            _print_post_block(
+                int(p["seq"]), who, p.get("text", ""), p.get("cost"),
+            )
     ui._console.print("")
     ui.press_enter()
 

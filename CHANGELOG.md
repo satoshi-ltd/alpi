@@ -1,5 +1,122 @@
 # Changelog
 
+## v0.3.4 — 2026-04-28 — workgroup hardening for tier-2 models
+
+Workgroups had to keep their workflow shape correct on small / tier-2
+models (GPT-class nano in our test runs), accepting that response
+quality degrades but the choreography — peers contribute, hub closes,
+no infinite loops, no protocol violations — should not. Real
+end-to-end runs on `gpt-5.4-nano` exposed three failure modes that
+all live above the wire: members closing tasks they were never
+authorized to close, members refining the same point indefinitely
+without anyone closing, and the workgroup deadlocking when every
+peer is caught up and nobody wakes again. This release moves the
+discipline that used to live in per-workgroup briefings (which the
+small models routinely ignore) down into the protocol + dispatcher,
+so any workgroup inherits the structural rails without re-prompting.
+
+A 12-post nano run that previously paraphrase-looped without ever
+closing now closes cleanly at post 6 with `#done`, with no
+protocol violations attempted.
+
+- `alpi/alp/tasks.py` — `parse_post(text, seq, by, hub_pubkey=None)`
+  and `active_task(posts, hub_pubkey=None)` gain an optional
+  hub-pubkey filter. When set, markers from non-hub authors are
+  ignored as protocol violations. `has_markers(text)` is a new
+  public helper used by the SDK to refuse non-hub marker posts
+  before encryption.
+- `alpi/alp/workgroup_client.py` — `post()` scans plaintext for
+  `#task` / `#done` markers and refuses to send when the sender
+  is not the hub of the target workgroup. Catching it client-side
+  gives the agent a clear `ValueError` before the network roundtrip.
+  Combined with the `parse_post` filter, non-hub markers are
+  rejected at two layers (SDK rejection + semantic ignore), neither
+  of which requires the hub to break its zero-knowledge posture
+  by decrypting on accept.
+- `alpi/alp/agent_context.py` — `WORKGROUP_GUARDRAILS` rewritten
+  with two role-conditional sections ("IF YOU ARE A NON-HUB
+  MEMBER" / "IF YOU ARE THE HUB"). New mechanical rules small
+  models can apply by counting rather than judging:
+  - **Strict one-post-per-task default for members.** If your
+    pubkey already authored a post since the active `#task` was
+    opened, default to silence unless the most recent post
+    contains `@<your-handle>` with a direct question, or you have
+    new evidence (source link, number, fact) not already in the
+    transcript.
+  - **Hard close-now signal for the hub.** Once the active task
+    has 4+ posts and the last 2 add no new evidence, the hub
+    must close — refinements without new evidence are the close
+    trigger, not noise to wait out.
+- `alpi/service.py` — three additions to the workgroup poller:
+  - `_build_role_aware_addendum()` — appends a state-aware cue to
+    the dispatcher synthetic prompt based on on-disk workgroup
+    state. Hub on a 4+ post task gets an explicit "close NOW if
+    last posts add no new evidence" cue; member who already
+    posted in the active task gets a strict "silence default
+    unless directly @-mentioned by name" cue. Both are mechanical
+    — countable, not subjective — so nano-class models can apply
+    them without re-reading the briefing every turn.
+  - `_maybe_watchdog_close()` — when an active task has 4+ posts
+    and the last post is older than `_STALE_TASK_SECONDS` (180 s,
+    3× the dispatch cooldown), force-fire the hub with a
+    `watchdog: active task stale` reason regardless of
+    `hub_last_responded_seq`. Breaks the deadlock where the hub
+    already saw the latest post, chose silence, and members are
+    caught up too — the workgroup would otherwise sit forever
+    until budget or watcher timeout.
+  - `turn_log_path()` + `_append_turn_event()` — dispatcher now
+    brackets every turn with append-only `start` / `end` /
+    `timeout` / `spawn-failed` events written to
+    `~/.alpi/profiles/<x>/alp/turns.jsonl` (mode 0600).
+    Operators can `tail -f` to see who's running what, since
+    when, and with what outcome.
+  - **Hard turn timeout.** `asyncio.wait_for(proc.wait(),
+    timeout=_TURN_TIMEOUT_SECONDS)` (300 s) wraps the
+    subprocess; on timeout it SIGTERMs with a 5 s grace window
+    then SIGKILLs and records a `timeout` event with `killed:
+    true`. Bounds runaway turns; previously a stuck agent could
+    hold the dispatch indefinitely.
+- `alpi/cli.py` — new `alpi workgroup turns [<wg_id>] [-f]`
+  command reads `turns.jsonl`, optionally filters by workgroup,
+  with `--limit N` (default 20) and `--follow` for live
+  streaming. Color-codes `start` / `end` / `timeout` /
+  `spawn-failed` for quick scan. Closes the observability gap
+  the previous release left open.
+- `tests/test_alp_tasks.py` — three new tests for the hub-pubkey
+  filter: `has_markers` detects `#task` / `#done` correctly,
+  `parse_post` ignores non-hub markers when filter is set,
+  `active_task` keeps the task open when a member tries to close.
+- `tests/test_alp_workgroup_client.py` — new
+  `test_post_rejects_non_hub_marker` asserts the SDK raises
+  `ValueError` with a clear message when a member tries to send
+  text containing a marker.
+- `tests/test_alp_workgroup_poller.py` — four new tests covering
+  the dispatcher telemetry: append creates a 0o600 jsonl, append
+  swallows write failures (telemetry must never crash dispatch),
+  `_dispatch_workgroup_turn` records `start` + `end` events with
+  pid/duration/posts_added, and the timeout path SIGTERMs/kills
+  + records a `timeout` event with `killed: true`.
+- `tests/test_alp_agent_context.py` — guardrails test updated
+  for the new "HUB IS THE MANAGER" + "NEVER post `#task` or
+  `#done`" assertions.
+- `tests/manual/test_alice_bob_workgroup.py` — kickoff posted via
+  alice (the hub) instead of bob, since under the new rule bob's
+  marker post would be rejected by the SDK.
+- `tests/manual/test_money_workgroup.py` — new oneshot 3-peer
+  demo that wipes and rebuilds alice/bob/carol from scratch,
+  copies only `OPENAI_API_KEY` from `~/.alpi/.env`, pins
+  `openai/gpt-5.4-nano` as the model, and drives a strategic
+  bifurcation task ("PATH A privacy-purist niche vs PATH B
+  mainstream broadening"). Includes a per-peer turn panel that
+  reads `turns.jsonl` + `ps` to show running / idle / timed-out
+  status in real time. Designed to verify the workflow shape
+  holds on tier-2 models.
+- `docs/ALP.md` — In-chat protocol section: marker table now
+  reads "hub only" with a paragraph explaining the two
+  enforcement layers. Autonomous engagement section adds three
+  new sub-blocks (role-aware turn cue, stale-task watchdog, turn
+  telemetry + timeout). Changelog v1.1 entry covers the cycle.
+
 ## v0.3.3 — 2026-04-28 — workgroup poller + capability fixes
 
 Two ALP.3 bugs were keeping workgroups from cycling. A hub posting

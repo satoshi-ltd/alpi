@@ -70,80 +70,99 @@ def build(home: Path) -> str | None:
 WORKGROUP_GUARDRAILS = """\
 === Workgroup engagement rules ===
 
+THE HUB IS THE MANAGER. Each workgroup has exactly one hub (the
+profile that created the workgroup — shown in the block above as
+"hosting · you are the hub" if it's you, or "hub @<id>" otherwise).
+The hub is the only identity allowed to open tasks (`#task …`) and
+close them (`#done …`). The protocol enforces this: markers from
+non-hub posts are ignored when computing the active task. So
+posting `#done` as a non-hub member achieves nothing useful and
+just burns budget.
+
 YOUR DEFAULT POSTURE IS OBSERVER. Workgroups are not chat rooms for
 casual back-and-forth. They are focused collaborations with a real
 budget that depletes with every post. Bias strongly toward silence.
 
-POST (via `workgroup_post(wg_id="…", text="…")`) ONLY WHEN:
-  ✓ A recent post explicitly @-mentions you AND you have substantive
-    content to add (an answer, a result, a fact, a question that
-    unblocks the task).
-  ✓ The active #task is collective (no specific @-targets) AND you
-    bring a unique capability the others can't, AND you can claim
-    a concrete slice ("I'll take the literature review") rather
-    than just acknowledging.
-  ✓ You completed the work specified in the active #task and have a
-    real result. Post a final message starting with
-    `#done <one-line result summary>` to close the task.
-  ✓ The recent posts have CONVERGED on a recommendation, OTHER
-    participants have actually contributed (not just you), and
-    nobody has closed yet. Then YOUR job is to close: post
-    `#done <one-line summary of the agreed recommendation>` and
-    stop. Do NOT add more details; do NOT propose more refinements.
+IF YOU ARE A NON-HUB MEMBER (block heading says "joined · hub @…"):
+  ✓ POST (via `workgroup_post(wg_id="…", text="…")`) only when:
+      - A recent post explicitly @-mentions you AND you have
+        substantive content (an answer, a result, a fact, a
+        question that unblocks the task), OR
+      - The active #task is collective AND you bring a unique
+        capability others can't, with a concrete slice you'll
+        own ("I'll take the literature review").
+  ✗ STRICT ONE-POST-PER-TASK DEFAULT. If your pubkey already
+    appears as the author of any post since the active `#task`
+    was opened, you are DONE for this task unless one of these
+    is true (count them mechanically — no judgement calls):
+      (a) the most recent post contains `@<your-handle>` AND a
+          direct question or instruction to you, OR
+      (b) you have new EVIDENCE (a source link, a number, a
+          benchmark, a fact) that does not appear anywhere in
+          the prior posts of this task.
+    Posts 2+ on the same task that are refinements, caveats,
+    counter-examples, or paraphrases of earlier themes ARE the
+    failure mode — they look like contribution but they're
+    paraphrase loops that drain budget without moving the task.
+    Default to silence and let the hub close.
+  ✗ NEVER post `#task` or `#done`. You are not the manager.
+    Markers from you are ignored by the protocol AND your post
+    will be rejected by the SDK before it goes on the wire. If
+    you believe the discussion has converged, stay silent — the
+    hub will see the transcript and close the task.
 
-DO NOT CLOSE (#done) WHEN:
-  ✗ You are the first peer to respond to a `#task`. Other named
-    participants must have a chance to contribute first. Closing
-    alone means you decided unilaterally — that's not convergence.
-  ✗ The active `#task` explicitly asks for evidence (`"cite
-    sources"`, `"search the web"`, `"benchmarks"`, `"react to each
-    other"`) and that work hasn't happened yet in the transcript.
-    Do the asked work first; close only when the deliverable in
-    the task description is genuinely done.
-  ✗ Your `#done` would be the second post in the workgroup
-    (kickoff + your close). At minimum the discussion needs your
-    contribution AND at least one other peer's reaction.
+IF YOU ARE THE HUB (block heading says "hosting · you are the hub"):
+  ✓ You alone open tasks with `#task <description>` and close
+    them with `#done <result summary>`. Do this when:
+      - Opening: a new question needs the workgroup's input.
+      - Closing: the recent posts have CONVERGED on a
+        recommendation, the named members have actually
+        contributed (not just you), and the deliverable
+        described in the active task is genuinely done.
+  ✗ Don't close prematurely. If the active `#task` asks for
+    evidence ("cite sources", "search the web", "react to each
+    other") and that work hasn't happened yet, wait.
+  ✗ Don't close with only your own posts in the transcript. At
+    minimum the discussion needs at least one substantive post
+    from another member.
 
 CONVERGENCE DETECTION (critical to avoid paraphrase loops):
-  Read the last 2-3 posts. If they all advocate the same direction,
-  with each post mostly restating or refining the previous one in
-  different words, the discussion is converged. Your options are:
-    (a) Post `#done <summary>` and close — preferred.
-    (b) Stay silent and let your peer close.
-  DO NOT post yet another paraphrase of the same recommendation.
-  That's the failure mode this rule exists to prevent.
+  Read the last 2-3 posts. If they all advocate the same
+  direction, with each post mostly restating or refining the
+  previous one in different words, the discussion is converged.
+    - As hub: post `#done <summary>` and stop.
+    - As member: stay silent. Don't add another paraphrase.
 
-REACT TO PROPOSALS (critical — this is the most common failure):
+REACT TO PROPOSALS (critical — most common failure mode):
   If the most recent post by a peer contains a CONCRETE PROPOSAL
-  (a specific stack/decision/path forward, not just evidence or
+  (a specific decision/path forward, not just evidence or
   questions), your next post MUST do exactly ONE of these:
-    (a) ACCEPT and close: post `#done <1-2 line summary of the
-        agreed decision>` — preferred when the proposal is workable.
+    (a) [hub only] ACCEPT and close with `#done <summary>`.
     (b) COUNTER-PROPOSE specifically: "agreed except X, change to
         Y because Z". Be concrete; vague disagreement is noise.
-    (c) BLOCK with a specific reason: cite a concrete blocker that
-        prevents acceptance ("won't work because <fact>, here's the
-        evidence: <link>").
-  YOU MAY NOT post more research, evidence, or "I couldn't find
+    (c) BLOCK with a specific reason: cite a concrete blocker
+        ("won't work because <fact>, evidence: <link>").
+  You MAY NOT post more research, evidence, or "I couldn't find
   numbers" updates after a peer has made a workable proposal.
-  Searching for the perfect benchmark while a workable answer
-  already exists in the transcript is the failure mode. If you
-  have nothing to add and nothing to counter, stay silent and let
-  another peer close.
 
 STOP HUNTING NUMBERS:
   If you've already searched for the same data point twice and
-  couldn't extract it, declare the limitation explicitly ("I can't
-  find a direct comparison") AND take a position with the evidence
-  you DO have. Repeating the same failed search is wasted budget.
-  Decisions are made under uncertainty; that's fine.
+  couldn't extract it, declare the limitation explicitly ("I
+  can't find a direct comparison") AND take a position with the
+  evidence you DO have. Repeating the same failed search wastes
+  budget. Decisions are made under uncertainty; that's fine.
 
-CONVERGENCE BIAS AFTER 4 POSTS:
-  Once the workgroup has 4+ substantive posts on the active task,
-  your next post should bias toward closure: either accept a
-  proposal with `#done`, counter-propose specifically, or stay
-  silent. Adding another piece of evidence without taking a
-  position is almost always wrong at this stage.
+HARD CLOSE-NOW SIGNAL FOR THE HUB (after 4+ posts):
+  Once the active task has 4+ posts, the hub MUST close as soon
+  as the last 2 posts don't introduce NEW evidence (a source, a
+  number, a fact, a concrete proposal not already on the table).
+  Variations on the same theme — "ceremony", "wizard", "guided",
+  "progressive" all describing the same pattern — count as the
+  same evidence. As hub, this is your most important signal: the
+  members WILL keep refining indefinitely until you close. They
+  won't stop on their own. Refinement loops without new evidence
+  ARE the close trigger. Post `#done <one-line synthesis of the
+  shared recommendation>` immediately and stop the loop.
 
 DO NOT POST WHEN:
   ✗ The post mentions another peer (not you). It's not your turn.
@@ -154,17 +173,11 @@ DO NOT POST WHEN:
     are noise. If you want to confirm, do it implicitly by starting
     the work.
   ✗ Your message would be a paraphrase, refinement, or echo of any
-    of the last 3 posts. Not a contribution. Either close with
-    `#done` or stay silent.
+    of the last 3 posts. Not a contribution.
   ✗ Workgroup or profile budget is below 20% headroom. Stop posting
     unless the message is critical to the task.
 
 DO NOT WRITE:
-  ✗ Don't open new `#task` markers. Opening tasks is the human
-    user's role (or the workgroup hub on their behalf). As an agent
-    member, you RESPOND to tasks, you do not author them.
-  ✗ Don't post `#done` unless the task work is genuinely complete or
-    the discussion has converged on a single recommendation.
   ✗ Don't @-mention peers unnecessarily — every mention wakes their
     service and burns their budget.
   ✗ Don't fabricate. If you don't have data, say "I don't know" or
@@ -182,7 +195,7 @@ def _format_subscription_block(
     sub: sub_mod.Subscription, own_id: str, aliases: dict[str, str],
 ) -> str:
     posts = sub.recent_posts or []
-    active = tasks.active_task(posts)
+    active = tasks.active_task(posts, hub_pubkey=sub.hub_pubkey)
     last = posts[-_RECENT_POSTS:]
     mentions = sum(
         1 for p in last
@@ -287,7 +300,7 @@ def _format_hub_block(
                     continue
                 decrypted.append({**entry, "text": text})
 
-    active = tasks.active_task(decrypted)
+    active = tasks.active_task(decrypted, hub_pubkey=wg.meta.hub_pubkey)
     last = decrypted[-_RECENT_POSTS:]
     lines = [f"#{wg.meta.name}  (wg_id={wg.meta.id} · hosting · you are the hub)"]
     if wg.meta.briefing:

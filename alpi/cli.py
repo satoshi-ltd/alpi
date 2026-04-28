@@ -2400,6 +2400,86 @@ def workgroup_kick(ctx: click.Context, wg_id: str, member_pubkey: str) -> None:
                f"({len(updated.members)} members remaining)")
 
 
+@workgroup.command("turns")
+@click.argument("wg_id", required=False)
+@click.option("-n", "--limit", type=int, default=20,
+              help="Show only the last N events.")
+@click.option("-f", "--follow", is_flag=True,
+              help="Stream new events as they're appended (like tail -f).")
+@click.pass_context
+def workgroup_turns(
+    ctx: click.Context, wg_id: str | None, limit: int, follow: bool,
+) -> None:
+    """Show the workgroup turn telemetry log for this profile."""
+    import json
+    import time as _time
+    from alpi import service as svc
+
+    h: Path = ctx.obj["home"]
+    p = svc.turn_log_path(h)
+    if not p.exists():
+        click.echo("no turn log yet (no workgroup turn has been dispatched).")
+        return
+
+    def _read_all() -> list[dict]:
+        out = []
+        for line in p.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                e = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if wg_id and e.get("wg_id") != wg_id:
+                continue
+            out.append(e)
+        return out
+
+    def _fmt(e: dict) -> str:
+        ts = e.get("ts", "")
+        ev = e.get("event", "?")
+        wg = e.get("wg_name") or e.get("wg_id", "?")
+        col = {"start": "\033[36m", "end": "\033[32m",
+               "timeout": "\033[31m", "spawn-failed": "\033[31m"}.get(ev, "")
+        rst = "\033[0m" if col else ""
+        bits = [f"{ts}  {col}{ev:<7}{rst}  {wg}"]
+        if "reason" in e:
+            bits.append(f"reason={e['reason']}")
+        if "pid" in e:
+            bits.append(f"pid={e['pid']}")
+        if "duration_s" in e:
+            bits.append(f"{e['duration_s']}s")
+        if "posts_added" in e:
+            bits.append(f"+{e['posts_added']} posts")
+        if "rc" in e and e["rc"] != 0:
+            bits.append(f"rc={e['rc']}")
+        if e.get("killed"):
+            bits.append("KILLED")
+        if "error" in e and e["error"]:
+            bits.append(f"err={e['error'][:80]}")
+        return " · ".join(bits)
+
+    events = _read_all()
+    for e in events[-limit:]:
+        click.echo(_fmt(e))
+
+    if not follow:
+        return
+
+    seen = len(events)
+    try:
+        while True:
+            _time.sleep(1)
+            cur = _read_all()
+            if len(cur) > seen:
+                for e in cur[seen:]:
+                    click.echo(_fmt(e))
+                seen = len(cur)
+    except KeyboardInterrupt:
+        click.echo("")
+
+
 if __name__ == "__main__":
     main(obj={})
     sys.exit(0)

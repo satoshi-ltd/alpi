@@ -68,11 +68,24 @@ class Task:
         return self.closed_seq is None
 
 
-def parse_post(text: str, seq: int, by: str) -> list[TaskEvent]:
+def has_markers(text: str) -> list[str]:
+    out: list[str] = []
+    if _TASK_RE.search(text or ""):
+        out.append("task")
+    if _DONE_RE.search(text or ""):
+        out.append("done")
+    return out
+
+
+def parse_post(
+    text: str, seq: int, by: str, hub_pubkey: str | None = None,
+) -> list[TaskEvent]:
     """Extract markers from a single decrypted post body. Returns the
     events in document order. A post with both a ``#task`` and a
     ``#done`` is **ambiguous** and yields the empty list — the engine
     should treat it as plain prose."""
+    if hub_pubkey is not None and by != hub_pubkey:
+        return []
     tasks = list(_TASK_RE.finditer(text or ""))
     dones = list(_DONE_RE.finditer(text or ""))
     if tasks and dones:
@@ -130,7 +143,9 @@ def fold_tasks(events: Iterable[TaskEvent]) -> list[Task]:
     return closed + ([active] if active is not None else [])
 
 
-def active_task(decrypted_posts: Iterable[dict]) -> Task | None:
+def active_task(
+    decrypted_posts: Iterable[dict], hub_pubkey: str | None = None,
+) -> Task | None:
     """Scan a decrypted transcript and return the active task, or
     None if none is open. Each post must have ``seq`` (int),
     ``from`` (pubkey b64), and ``text`` (decrypted plaintext)."""
@@ -140,6 +155,7 @@ def active_task(decrypted_posts: Iterable[dict]) -> Task | None:
             text=str(p.get("text", "")),
             seq=int(p.get("seq", 0)),
             by=str(p.get("from", "")),
+            hub_pubkey=hub_pubkey,
         ))
     for t in fold_tasks(events):
         if t.is_open:

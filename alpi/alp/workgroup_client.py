@@ -16,6 +16,7 @@ from typing import Any
 from alpi.alp import client as alp_client
 from alpi.alp import peers as peers_mod
 from alpi.alp import subscription as sub_mod
+from alpi.alp import tasks as tasks_mod
 from alpi.alp import workgroup as wg_mod
 from alpi.alp.keys import Keypair, load_or_generate
 
@@ -174,6 +175,19 @@ async def post(
     if sub is None:
         raise ValueError(
             f"not subscribed to {wg_id!r} — run `alpi workgroup join` first",
+        )
+    try:
+        plaintext = text.decode("utf-8", errors="replace")
+    except Exception:  # noqa: BLE001
+        plaintext = ""
+    found_markers = tasks_mod.has_markers(plaintext)
+    if found_markers:
+        raise ValueError(
+            "only the workgroup hub may post #"
+            + "/#".join(found_markers)
+            + " markers — you are a non-hub member of this workgroup. "
+            "If you believe the discussion has converged, stay silent; "
+            "the hub will see the transcript and close the task."
         )
     version = sub.latest_version()
     if version == 0:
