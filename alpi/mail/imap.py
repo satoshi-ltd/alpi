@@ -235,6 +235,8 @@ class ImapClient:
                 filename=path.name,
             )
         recipients = list(to) + (cc or [])
+        from alpi.mail import pgp
+        msg = pgp.maybe_sign_and_encrypt(msg)
         with self._smtp() as smtp:
             smtp.send_message(msg, from_addr=self.address, to_addrs=recipients)
 
@@ -362,7 +364,9 @@ class ImapClient:
         raw = data[0][1]
         if not isinstance(raw, bytes):
             return None
-        return email.message_from_bytes(raw, policy=email.policy.default)
+        msg = email.message_from_bytes(raw, policy=email.policy.default)
+        from alpi.mail import pgp
+        return pgp.maybe_decrypt(msg)
 
 
 # Connection context managers (thin; tests can monkeypatch easily)

@@ -122,12 +122,22 @@ class GmailClient:
 
     def read(self, uid: str, folder: str = "INBOX") -> EmailMessageFull:
         msg = self._get(f"messages/{uid}", format="full")
+        h = _headers_map(msg)
+        if "multipart/encrypted" in h.get("content-type", "").lower():
+            raw_msg = self._get(f"messages/{uid}", format="raw")
+            raw = base64.urlsafe_b64decode(raw_msg.get("raw", ""))
+            em = email.message_from_bytes(raw, policy=email.policy.default)
+            from alpi.mail import pgp
+            from alpi.mail.imap import _parse_full
+            return _parse_full(pgp.maybe_decrypt(em), uid, folder)
         return _message_full(msg, folder)
 
     def send(self, to: list[str], subject: str, body: str,
              cc: list[str] | None = None,
              attachments: list[str] | None = None) -> None:
         mime = _build_mime(to, subject, body, cc or [], attachments or [])
+        from alpi.mail import pgp
+        mime = pgp.maybe_sign_and_encrypt(mime)
         raw = base64.urlsafe_b64encode(mime.as_bytes()).decode()
         self._post("messages/send", json={"raw": raw})
 

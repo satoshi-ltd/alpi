@@ -73,4 +73,6 @@ def run(home: Path) -> None:
     ui._console.print("")
     ui.ok(f"authorized as {token.email}")
     ui.saved(env)
+    from alpi.mail.pgp_setup import maybe_offer
+    maybe_offer(home)
     ui.press_enter()

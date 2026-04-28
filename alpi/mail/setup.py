@@ -102,4 +102,7 @@ def run(home: Path) -> None:
         _append_env(env, key, val)
         os.environ[key] = val
 
-    ui.saved_and_wait(env)
+    ui.saved(env)
+    from alpi.mail.pgp_setup import maybe_offer
+    maybe_offer(home)
+    ui.press_enter()

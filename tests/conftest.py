@@ -7,19 +7,49 @@ Markers
 
 Fixtures
 --------
-- ``tmp_home`` — a fresh, isolated ``~/.alpi/`` rooted at a temp dir. Copies
-  the real ``~/.alpi/.env`` in so LLM calls work for integration tests.
-- ``tmp_home_no_env`` — same as above but without copying ``.env``. Use for
-  unit tests that must not talk to any LLM.
+- ``tmp_home`` — fresh isolated ``~/.alpi/`` at a temp dir, **no** real
+  ``.env`` copied. Default for every unit test.
+- ``tmp_home_no_env`` — alias of ``tmp_home`` (kept so older tests keep
+  passing without churn).
+- ``tmp_home_with_real_env`` — copies the developer's real
+  ``~/.alpi/.env`` in. Only ``--llm`` integration tests should ask for
+  this; an autouse fixture below scrubs sensitive vars from
+  ``os.environ`` at the start of every test, so even if a stray one
+  imports something that reads a token, it sees an empty string.
 """
 
 from __future__ import annotations
 
 import os
-import shutil
 from pathlib import Path
 
 import pytest
+
+
+_SENSITIVE_ENV_VARS = (
+    "TELEGRAM_BOT_TOKEN",
+    "TELEGRAM_ALLOWED_CHAT_IDS",
+    "OPENAI_API_KEY",
+    "ANTHROPIC_API_KEY",
+    "GROQ_API_KEY",
+    "MISTRAL_API_KEY",
+    "DEEPSEEK_API_KEY",
+    "TOGETHER_API_KEY",
+    "FIREWORKS_API_KEY",
+    "OPENROUTER_API_KEY",
+    "GEMINI_API_KEY",
+    "GOOGLE_API_KEY",
+    "GMAIL_CLIENT_ID",
+    "GMAIL_CLIENT_SECRET",
+    "IMAP_ADDRESS",
+    "IMAP_PASSWORD",
+    "IMAP_HOST",
+    "IMAP_PORT",
+    "SMTP_HOST",
+    "SMTP_PORT",
+    "IMAP_ALLOWED_SENDERS",
+    "GMAIL_ALLOWED_SENDERS",
+)
 
 
 # --------------------------------------------------------------------
@@ -55,26 +85,41 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
 # Fixtures
 # --------------------------------------------------------------------
 
-@pytest.fixture
-def tmp_home_no_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """A clean alpi home directory (no API keys). Safe for unit tests.
+@pytest.fixture(autouse=True)
+def _scrub_sensitive_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Deny secrets to every test by default. The developer's shell may
+    have ``TELEGRAM_BOT_TOKEN`` / API keys exported, and ``config.load``
+    paths run ``load_dotenv`` which would otherwise import the profile
+    ``.env``. Tests that genuinely need real creds opt back in via
+    ``tmp_home_with_real_env`` (used only by ``@pytest.mark.llm``)."""
+    for var in _SENSITIVE_ENV_VARS:
+        monkeypatch.delenv(var, raising=False)
 
-    Chdirs into the tmp dir AND points ALPI_HOME at it, so file-tool tests
-    exercising paths under tmp_path pass the cwd sandbox and don't read
-    the developer's real ~/.alpi/config.yaml (which may have a workspace
-    that contradicts the tmp path).
-    """
+
+@pytest.fixture
+def tmp_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Clean alpi home (no API keys). The default for unit tests."""
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("ALPI_HOME", str(tmp_path))
     return tmp_path
 
 
 @pytest.fixture
-def tmp_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """An alpi home with the user's real .env copied (for LLM tests)."""
+def tmp_home_no_env(tmp_home: Path) -> Path:
+    return tmp_home
+
+
+@pytest.fixture
+def tmp_home_with_real_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Real ``~/.alpi/.env`` copied in + loaded into ``os.environ``.
+    Only for ``--llm`` integration tests — do NOT use elsewhere."""
     src_env = Path.home() / ".alpi" / ".env"
     if src_env.exists():
         (tmp_path / ".env").write_text(src_env.read_text())
+        from dotenv import dotenv_values
+        for k, v in dotenv_values(src_env).items():
+            if v is not None:
+                monkeypatch.setenv(k, v)
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("ALPI_HOME", str(tmp_path))
     return tmp_path
