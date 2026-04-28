@@ -1,5 +1,71 @@
 # Changelog
 
+## v0.3.3 — 2026-04-28 — workgroup poller + capability fixes
+
+Two ALP.3 bugs were keeping workgroups from cycling. A hub posting
+a `#task` line in its own workgroup wasn't waking its local agent
+(the poller's "don't react to your own posts" rule applied even to
+directives), and a member joining a workgroup couldn't pull from
+the hub afterwards because `workgroup.join` doesn't retroactively
+add `workgroup.*` to the peer's `allow:` list — every subsequent
+`workgroup.pull` / `workgroup.post` was rejected with
+`-32001 capability-denied` despite the join succeeding. Together
+these explained the "I posted a `#task` and nothing happened"
+report: alice ignored her own task, and bob never received it
+because his pull was denied at the transport layer.
+
+This release also extracts the curated provider model lists into
+a shared YAML file so the desktop app can read the same catalog
+without duplicating it in Rust, and adds two hidden flags to
+`alpi chat` that the desktop app uses to drive a profile from
+the GUI.
+
+- `alpi/service.py` — `_should_dispatch` rewritten to scan every
+  unacknowledged post (not only the latest) so a fast peer reply
+  doesn't shadow an earlier `#task` / `@<profile>` mention.
+  Triggers, in priority: (1) explicit `@<profile>` from someone
+  else, (2) collective `#task` with no `@<peer>` targets — fires
+  for every member including the hub when the hub authored,
+  (3) active-task participant: while a task is open, a post from
+  someone else wakes us if the opener was collective or named us.
+  Self-authored non-task posts within the unprocessed range are
+  treated as "we engaged" and shadow earlier triggers so the
+  poller doesn't re-fire on stale mentions every tick.
+- `alpi/alp/peers.py` — `Peer.may_call` now bypasses the per-peer
+  `allow:` list for any `workgroup.*` method. Workgroup membership
+  (already enforced by every handler with
+  `-32008 workgroup-not-member`) is the real authorization gate;
+  the `peers.yaml` allow list was redundant for these calls and
+  caused silent capability-denied failures whenever a member
+  joined a workgroup after the peer entry was first written.
+- `docs/ALP.md` + `alpi/skills/knowledge/references/alp.md` —
+  peer-list `allow` row clarifies that `workgroup.*` methods
+  bypass the per-peer allow list and rely on the membership gate.
+- `tests/test_alp_workgroup.py` — `test_capability_denied_when_verb_not_allowed`
+  rewritten as `test_workgroup_verbs_bypass_peer_allow_list` to
+  assert the new contract.
+- `tests/test_alp_workgroup_poller.py` — new test
+  `test_collective_task_wakes_any_member_on_peer_reply` covers the
+  collective-task variant of trigger 3; existing tests adjusted
+  for the new range-scan semantics.
+- `alpi/providers/curated_models.yaml` — new shared catalog of
+  curated model ids for OpenAI and Anthropic. Single source of
+  truth read by the Python provider classes and (out of repo
+  scope here) the desktop picker via `include_str!`.
+- `alpi/providers/curated.py` — tiny loader with `lru_cache`,
+  used by the OpenAI / Anthropic provider classes in place of
+  the inline `_CURATED` tuples.
+- `alpi/providers/openai.py` + `alpi/providers/anthropic.py` —
+  `list_models()` now reads from `load_curated(...)`. Behaviour
+  identical; the literal lists moved into YAML.
+- `pyproject.toml` — `tool.setuptools.package-data` now includes
+  `providers/*.yaml` so the curated catalog ships in the wheel.
+- `alpi/cli.py` — `chat` gains two hidden flags:
+  `--session-id` (resume a specific session by id) and
+  `--model` (override `cfg.model` for a single `--once` turn,
+  not persisted). Both are documented as desktop-app helpers.
+  No change to the public CLI surface.
+
 ## v0.3.2 — 2026-04-27 — `@peer` and doctor reach remote peers
 
 Two bugs were keeping ALP.2 (TCP/Noise) traffic from working in

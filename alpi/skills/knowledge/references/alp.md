@@ -153,7 +153,7 @@ before any `id`-based routing occurs.
 | `alias` | no | Optional display label. |
 | `pubkey` | yes | Base64-encoded Ed25519 public key. |
 | `address` | for inter-machine | `host:port`. Omit for intra-profile peers. |
-| `allow` | yes | Fail-closed list of methods the peer may invoke. |
+| `allow` | yes | Fail-closed list of methods the peer may invoke. `workgroup.*` methods bypass this list — workgroup membership (enforced per-handler with `-32008 workgroup-not-member`) is the real gate. |
 | `rate_limit.requests_per_minute` | no | Throttle. Default allows 10/min/peer. Enforced before handler dispatch. |
 
 Spending is not configured here. Every inbound call from every peer

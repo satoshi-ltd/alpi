@@ -2,7 +2,7 @@
 # PyPI distribution name. The CLI binary, the import path, and
 # ``~/.alpi/`` all remain ``alpi`` (see ``[project.scripts]`` below).
 name = "alpi-agent"
-version = "0.3.2"
+version = "0.3.3"
 description = "A profile-based personal AI agent for terminal, messengers, and private ALP networks"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -74,7 +74,7 @@ build-backend = "setuptools.build_meta"
 include = ["alpi*"]
 
 [tool.setuptools.package-data]
-alpi = ["prompts/*.md", "tui/*.tcss", "skills/**/*"]
+alpi = ["prompts/*.md", "tui/*.tcss", "skills/**/*", "providers/*.yaml"]
 
 [tool.ruff]
 line-length = 100

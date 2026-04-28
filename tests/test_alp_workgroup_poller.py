@@ -91,7 +91,23 @@ def test_participant_in_active_task_wakes_on_latest_other_post() -> None:
         {"seq": 1, "text": "#task @alice @bob analyze the stack", "from": "user_pk"},
         {"seq": 2, "text": "I'd lean toward FastAPI + SQLite", "from": "alice_pk"},
     ]
-    reason, new_seq = service._should_dispatch("bob", "bob_pk", posts, 0)
+    # last_responded=1 so the @-mention trigger on seq 1 is already
+    # consumed; only seq 2 (alice's reply) is still unprocessed and
+    # the active-task path is what wakes bob.
+    reason, new_seq = service._should_dispatch("bob", "bob_pk", posts, 1)
+    assert reason and "active task" in reason
+    assert new_seq == 2
+
+
+def test_collective_task_wakes_any_member_on_peer_reply() -> None:
+    """A collective `#task` (no `@<peer>` targets in the opener) is
+    addressed to every member, so a later post from one peer should
+    keep waking the others — not just folks named in the opener."""
+    posts = [
+        {"seq": 1, "text": "#task pick stack for our tracker", "from": "alice_pk"},
+        {"seq": 2, "text": "FastAPI + SQLite", "from": "alice_pk"},
+    ]
+    reason, new_seq = service._should_dispatch("bob", "bob_pk", posts, 1)
     assert reason and "active task" in reason
     assert new_seq == 2
 

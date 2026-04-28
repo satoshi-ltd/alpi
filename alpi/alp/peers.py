@@ -31,7 +31,13 @@ class Peer:
     rate_limit: dict[str, Any] = field(default_factory=dict)
 
     def may_call(self, method: str) -> bool:
-        """Capability check — empty allow list denies everything."""
+        """Capability check — empty allow list denies everything.
+        ``workgroup.*`` bypasses the allow list; membership (enforced
+        per-handler with ``-32008 workgroup-not-member``) is the real
+        gate, and ``workgroup.join`` doesn't retroactively edit
+        ``peers.yaml``."""
+        if method.startswith("workgroup."):
+            return True
         return method in self.allow
 
 

@@ -1,14 +1,7 @@
 from __future__ import annotations
 
 from alpi.providers.base import ModelInfo, Provider
-
-
-_CURATED: list[tuple[str, str]] = [
-    ("claude-opus-4-7",   "flagship"),
-    ("claude-opus-4-6",   "flagship · 1M ctx"),
-    ("claude-sonnet-4-6", "balanced"),
-    ("claude-haiku-4-5",  "cheap · fast"),
-]
+from alpi.providers.curated import load_curated
 
 
 class Anthropic(Provider):
@@ -19,6 +12,6 @@ class Anthropic(Provider):
 
     def list_models(self) -> list[ModelInfo]:
         return [
-            ModelInfo(id=f"anthropic/{m}", display=m, note=tag)
-            for m, tag in _CURATED
+            ModelInfo(id=f"anthropic/{m['id']}", display=m["id"], note=m.get("note", ""))
+            for m in load_curated("anthropic")
         ]

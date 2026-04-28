@@ -520,77 +520,85 @@ def _should_dispatch(
     recent_posts: list[dict],
     last_responded_seq: int,
 ) -> tuple[str | None, int]:
-    """Decide whether the poller should wake the local agent — looks
-    at the cache, not at the per-tick delta, so a missed dispatch
-    (cooldown skip) doesn't lose the trigger. Three triggers ordered
-    by priority:
+    """Decide whether the poller should wake the local agent. Scans
+    every post above ``last_responded_seq`` (not only the latest) so a
+    fast peer reply doesn't shadow an earlier `#task`/`@mention` and
+    drop the trigger. Triggers, by priority:
 
-    1. **Direct @-mention** in the most recent post — always wakes.
-    2. **Collective `#task`** (a `#task` post with NO specific peers
-       tagged) — wakes every member; it's a workgroup-wide call.
-    3. **Participant in the active task** — if there's an active
-       `#task` whose opening post tagged us by name, the latest
-       post being from someone else wakes us so the conversation
-       stays alive without forcing peers to spam @-mentions every
-       reply.
+    1. Direct ``@<profile>`` mention from someone else.
+    2. Collective ``#task`` (a `#task` with no peer-specific
+       ``@<peer>`` targets) — wakes every member, including the hub
+       when the hub authored.
+    3. Active-task participant: while a task is open, a post from
+       someone else wakes us if the opener was collective (no
+       ``@<peer>`` targets) or named us by ``@<profile>``.
 
-    Returns ``(reason, new_responded_seq)``. When ``reason`` is None
-    no dispatch is warranted; ``new_responded_seq`` is what the
-    caller should persist anyway when the latest post is our own
-    (housekeeping — we already covered up to that seq).
+    A self-authored non-task post within the unprocessed range is
+    treated as "we already engaged" and shadows everything before it.
 
-    A targeted `#task` aimed at OTHER peers (``#task @bob ...``
-    when we're carol) does NOT wake us — only the explicit mention
-    does, which trigger 1 handles directly.
-
-    Cooldown is checked by the caller after this returns; persisting
-    ``new_responded_seq`` only happens on actual dispatch, so a
-    cooldown skip leaves the pointer untouched and the next tick
-    re-evaluates against the same cache."""
+    Returns ``(reason, new_responded_seq)``. ``reason`` None means no
+    dispatch; ``new_responded_seq`` is the highest seq evaluated and
+    is what the caller persists when (and only when) it actually
+    dispatches — cooldown skips leave the pointer untouched."""
     from alpi.alp import tasks as wg_tasks
 
     if not recent_posts:
         return None, last_responded_seq
 
-    latest = max(recent_posts, key=lambda p: int(p.get("seq", 0)))
-    latest_seq = int(latest.get("seq", 0))
-    if latest_seq <= last_responded_seq:
-        return None, last_responded_seq
-    # Latest post is our own — bump the pointer so we don't keep
-    # re-checking, but don't dispatch (we don't react to ourselves).
-    if str(latest.get("from") or "") == own_pubkey:
-        return None, latest_seq
-
-    text = str(latest.get("text") or "")
-    mentions = wg_tasks.mentions_in(text)
-
-    # Trigger 1 — explicit @-mention.
-    if profile in mentions:
-        return f"@{profile} mentioned (seq #{latest_seq})", latest_seq
-
-    # Trigger 2 — collective #task (no peer-specific @-targets).
-    events = wg_tasks.parse_post(
-        text, latest_seq, str(latest.get("from") or ""),
+    unprocessed = sorted(
+        (p for p in recent_posts if int(p.get("seq", 0)) > last_responded_seq),
+        key=lambda p: int(p.get("seq", 0)),
     )
-    if any(e.kind == "task" for e in events) and not mentions:
-        return f"collective #task opened (seq #{latest_seq})", latest_seq
-
-    # Trigger 3 — we're a named participant in the active task and
-    # someone else just posted.
-    active = wg_tasks.active_task(recent_posts)
-    if active is None:
+    if not unprocessed:
         return None, last_responded_seq
-    for p in recent_posts:
-        if int(p.get("seq", 0)) != active.opened_seq:
+    high_seq = int(unprocessed[-1].get("seq", 0))
+
+    skip_through = last_responded_seq
+    for p in unprocessed:
+        if str(p.get("from") or "") != own_pubkey:
             continue
-        if profile in wg_tasks.mentions_in(str(p.get("text") or "")):
-            return (
-                f"new content in active task "
-                f"(you're a named participant; seq #{latest_seq})",
-                latest_seq,
-            )
-        break
-    return None, last_responded_seq
+        events = wg_tasks.parse_post(
+            str(p.get("text") or ""),
+            int(p.get("seq", 0)),
+            str(p.get("from") or ""),
+        )
+        if not any(e.kind == "task" for e in events):
+            skip_through = int(p.get("seq", 0))
+    actionable = [
+        p for p in unprocessed if int(p.get("seq", 0)) > skip_through
+    ]
+    active = wg_tasks.active_task(recent_posts)
+
+    for post in actionable:
+        seq = int(post.get("seq", 0))
+        text = str(post.get("text") or "")
+        mentions = wg_tasks.mentions_in(text)
+        is_self = str(post.get("from") or "") == own_pubkey
+        events = wg_tasks.parse_post(text, seq, str(post.get("from") or ""))
+        has_task = any(e.kind == "task" for e in events)
+
+        if is_self and not has_task:
+            continue
+        if not is_self and profile in mentions:
+            return f"@{profile} mentioned (seq #{seq})", high_seq
+        if has_task and not mentions:
+            return f"collective #task opened (seq #{seq})", high_seq
+        if not is_self and active is not None:
+            opener_mentions: list[str] = []
+            for p in recent_posts:
+                if int(p.get("seq", 0)) != active.opened_seq:
+                    continue
+                opener_mentions = wg_tasks.mentions_in(
+                    str(p.get("text") or "")
+                )
+                break
+            if not opener_mentions or profile in opener_mentions:
+                return (
+                    f"new content in active task (seq #{seq})",
+                    high_seq,
+                )
+
+    return None, high_seq
 
 
 async def _dispatch_workgroup_turn(
