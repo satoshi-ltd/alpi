@@ -7,10 +7,30 @@ import time
 from pathlib import Path
 
 from rich.text import Text
+from textual import events
 from textual.app import ComposeResult
 from textual.containers import Horizontal
 from textual.widget import Widget
-from textual.widgets import Markdown, Static
+from textual.widgets import Input, Markdown, Static
+
+
+class ChatInput(Input):
+    # Textual's Input keeps only the first line on paste. Flatten
+    # newlines to spaces so multi-line clipboard content reaches the
+    # agent intact instead of being silently truncated. prevent_default
+    # is required (not stop()) because Textual's MRO dispatch otherwise
+    # also runs the base Input._on_paste after this one.
+    def _on_paste(self, event: events.Paste) -> None:
+        if event.text:
+            text = event.text.replace("\r\n", "\n").replace("\r", "\n")
+            text = text.replace("\n", " ")
+            selection = self.selection
+            if selection.is_empty:
+                self.insert_text_at_cursor(text)
+            else:
+                self.replace(text, *selection)
+        event.prevent_default()
+        event.stop()
 
 
 class UserMessage(Static):
@@ -19,29 +39,28 @@ class UserMessage(Static):
 
 
 class AssistantMessage(Widget):
-    _FLUSH_INTERVAL = 0.08
+    # Streaming renders into a Static (cheap text replace). On
+    # finalisation (replace()) the Static is swapped for a Markdown
+    # widget — markdown re-parse runs once at the end, not 12.5×/sec.
+    _FLUSH_INTERVAL = 0.15
 
     def __init__(self, initial: str = "") -> None:
         super().__init__()
-        self._md: Markdown | None = None
+        self._body: Static | Markdown | None = None
         self._initial: str = initial
         self._buffer: str = initial
-        self._stream = None
-        self._pending: str = ""
+        self._finalized: bool = bool(initial)
         self._flush_buffer: str = ""
         self._flush_timer = None
 
     def compose(self) -> ComposeResult:
-        self._md = Markdown(self._initial)
-        yield self._md
+        if self._finalized:
+            self._body = Markdown(self._initial)
+        else:
+            self._body = Static("")
+        yield self._body
 
     def on_mount(self) -> None:
-        assert self._md is not None
-        self._stream = Markdown.get_stream(self._md)
-        if self._pending:
-            pending, self._pending = self._pending, ""
-            self._buffer += pending
-            asyncio.create_task(self._stream.write(pending))
         self._flush_timer = self.set_interval(
             self._FLUSH_INTERVAL, self._flush_deltas,
         )
@@ -51,33 +70,35 @@ class AssistantMessage(Widget):
             self._flush_timer.stop()
             self._flush_timer = None
         await self._flush_deltas()
-        if self._stream is not None:
-            await self._stream.stop()
-            self._stream = None
 
     def append(self, delta: str) -> None:
-        if not delta:
+        if not delta or self._finalized:
             return
         self._buffer += delta
-        if self._stream is None:
-            self._pending += delta
-            return
         self._flush_buffer += delta
 
     async def _flush_deltas(self) -> None:
-        if not self._flush_buffer or self._stream is None:
+        if not self._flush_buffer or self._finalized:
             return
-        pending, self._flush_buffer = self._flush_buffer, ""
-        await self._stream.write(pending)
+        self._flush_buffer = ""
+        if isinstance(self._body, Static):
+            self._body.update(self._buffer)
 
     def replace(self, text: str) -> None:
         self._buffer = text
         self._flush_buffer = ""
-        if self._md is not None:
-            if self._stream is not None:
-                asyncio.create_task(self._stream.stop())
-                self._stream = None
-            self._md.update(text)
+        self._finalized = True
+        if self._body is None:
+            return
+        old = self._body
+        new = Markdown(text)
+        self._body = new
+        if self.is_mounted:
+            asyncio.create_task(self._swap_body(old, new))
+
+    async def _swap_body(self, old: Widget, new: Widget) -> None:
+        await self.mount(new, after=old)
+        await old.remove()
 
     @property
     def text(self) -> str:
@@ -173,7 +194,7 @@ class ThinkingIndicator(Static):
 
     def on_mount(self) -> None:
         self._tick()
-        self._timer = self.set_interval(1 / 6, self._tick)
+        self._timer = self.set_interval(1 / 4, self._tick)
 
     def append_reasoning(self, delta: str) -> None:
         if not delta:
@@ -186,7 +207,7 @@ class ThinkingIndicator(Static):
         tv = self.app.theme_variables
         accent = tv.get("accent", "")
         muted = tv.get("text-muted", "")
-        frame = _SPINNER_FRAMES[int(time.time() * 6) % len(_SPINNER_FRAMES)]
+        frame = _SPINNER_FRAMES[int(time.time() * 4) % len(_SPINNER_FRAMES)]
         elapsed = fmt_duration(time.time() - self.started)
         spinner_markup = f"[{accent}]{frame}[/{accent}]" if accent else frame
         if self._reasoning:
@@ -224,7 +245,7 @@ class ToolCard(Widget):
         self.add_class("-running")
 
     def on_mount(self) -> None:
-        self._timer = self.set_interval(1 / 6, self._tick)
+        self._timer = self.set_interval(1 / 4, self._tick)
 
     def _tick(self) -> None:
         if not self._done:
@@ -282,7 +303,7 @@ class ToolCard(Widget):
                 text.append(f"   {fmt_duration(self._elapsed_final)}", style=muted)
         else:
             elapsed = time.time() - self.started
-            frame = _SPINNER_FRAMES[int(time.time() * 6) % len(_SPINNER_FRAMES)]
+            frame = _SPINNER_FRAMES[int(time.time() * 4) % len(_SPINNER_FRAMES)]
             icon_style = error_color if self._state_is_error else accent_muted
             spinner_style = error_color if self._state_is_error else accent
             label_style = error_color if self._state_is_error else muted

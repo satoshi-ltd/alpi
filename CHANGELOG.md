@@ -1,5 +1,65 @@
 # Changelog
 
+## v0.3.5 — 2026-04-28 — TUI input responsiveness + multi-line paste
+
+Two daily-UX bugs in the TUI that compounded each other on long
+sessions. Roadmap **BG** (v0.4) closes the input-lag-during-stream
+loop earlier than planned; multi-line paste was found while
+verifying it.
+
+**Input lag during streaming.** Typing into the prompt was sluggish
+while the agent rendered tokens — the symptom v0.2.x's earlier fix
+reduced but did not eliminate. Hot path: every delta flush ran
+through `Markdown.get_stream().write()`, which re-parses markdown
+over the growing message. With ~12.5 flushes/sec on increasingly
+large content, key events queued behind layout work. The fix
+reshapes the streaming widget: render in-flight tokens into a plain
+`Static` (cheap text replace, no parser invocation), and swap to a
+`Markdown` widget once the message is finalised — markdown re-parse
+runs once at the end instead of 12.5×/sec. Spinner tick rate also
+dropped from 6 Hz to 4 Hz so `ToolCard` and `ThinkingIndicator` no
+longer compete for render budget while a stream is live.
+
+**Multi-line paste.** Pasting clipboard content with `\n` only
+delivered the first line to the agent — Textual's `Input` is
+hardcoded to `event.text.splitlines()[0]`. A `ChatInput` subclass
+overrides `_on_paste` to flatten newlines to spaces so the full
+clipboard payload reaches the engine. `event.prevent_default()` is
+required (not just `event.stop()`) because Textual's MRO dispatch
+otherwise also runs the base handler.
+
+- `alpi/tui/widgets.py` — `AssistantMessage` rewritten:
+  - Streaming body is a `Static` updated via `update(self._buffer)`
+    every `_FLUSH_INTERVAL` (raised from 0.08 s to 0.15 s).
+  - `replace(text)` now always finalises: it swaps the `Static` for
+    a freshly-mounted `Markdown(text)` so the polished render
+    (links, fenced code, headings) lands at completion. Idempotent
+    via `_finalized` flag.
+  - `_initial=` constructor path (rehydrated sessions) mounts as
+    `Markdown` directly, skipping the streaming detour.
+  - `ToolCard._tick` and `ThinkingIndicator._tick` intervals lowered
+    from `1/6` to `1/4`; spinner-frame index synced to the new
+    cadence (`int(time.time() * 4)`) so the animation stays even.
+- `alpi/tui/widgets.py` — new `ChatInput(Input)` subclass overrides
+  `_on_paste` to flatten `\r\n` / `\r` / `\n` to spaces before
+  insertion, then calls `event.prevent_default()` + `event.stop()`.
+- `alpi/tui/app.py` — composes `ChatInput` instead of `Input` for
+  `#chat-input`. Two non-streaming callsites that produced markdown
+  in one shot (`on_mention_done` reply, `_after_compact` summary)
+  now use `replace()` instead of `append()` so they render as
+  Markdown immediately. The `assistant_done` handler always calls
+  `replace(ev.text)` (the previous text-equality check is gone)
+  to guarantee the Static→Markdown swap.
+- `tests/test_tui_streaming_perf.py` — new fixture under
+  `@pytest.mark.perf` (gated; not part of the default run). Mounts
+  a minimal `App` with an `AssistantMessage` + `Input`, drives 240
+  tokens at 60 tok/s into the message while injecting `Key` events
+  into the input, asserts per-keystroke p99 stays under 50 ms.
+  Locks the regression boundary; numbers on a quiet machine sit
+  around p99 ≈ 1–9 ms.
+- `pyproject.toml` — `perf` marker registered (required by
+  `--strict-markers`).
+
 ## v0.3.4 — 2026-04-28 — workgroup hardening for tier-2 models
 
 Workgroups had to keep their workflow shape correct on small / tier-2
