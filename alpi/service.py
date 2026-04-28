@@ -294,6 +294,9 @@ async def _maybe_dispatch_for_sub(
     sub_mod.upsert(home, sub)
 
 
+_STALE_TASK_SECONDS = 180
+
+
 async def _maybe_dispatch_for_hub(
     home: Path, profile: str, wg, recent: list[dict],
 ) -> None:
@@ -312,6 +315,7 @@ async def _maybe_dispatch_for_hub(
     if not trigger:
         if new_responded > last_responded:
             _set_hub_responded_seq(home, wg.meta.id, new_responded)
+        await _maybe_watchdog_close(home, profile, wg, recent)
         return
     state = _load_poller_state(home)
     last = state.get("hub_last_dispatch_at", {}).get(wg.meta.id, "")
@@ -327,6 +331,51 @@ async def _maybe_dispatch_for_hub(
     )
     await _dispatch_workgroup_turn(home, profile, wg.meta.id, wg.meta.name, trigger)
     _set_hub_responded_seq(home, wg.meta.id, new_responded)
+    _mark_hub_dispatched(home, wg.meta.id)
+
+
+async def _maybe_watchdog_close(
+    home: Path, profile: str, wg, recent: list[dict],
+) -> None:
+    from alpi.alp import tasks as wg_tasks
+
+    if not recent:
+        return
+    active = wg_tasks.active_task(recent, hub_pubkey=wg.meta.hub_pubkey)
+    if active is None:
+        return
+    posts_in_task = [
+        p for p in recent if int(p.get("seq", 0)) >= active.opened_seq
+    ]
+    if len(posts_in_task) < 4:
+        return
+    last_post_ts = str(posts_in_task[-1].get("ts", "")).strip()
+    if not last_post_ts:
+        return
+    import datetime as _dt
+    try:
+        last_dt = _dt.datetime.strptime(last_post_ts, "%Y-%m-%dT%H:%M:%SZ")
+        last_dt = last_dt.replace(tzinfo=_dt.timezone.utc)
+    except ValueError:
+        return
+    age = (_dt.datetime.now(tz=_dt.timezone.utc) - last_dt).total_seconds()
+    if age < _STALE_TASK_SECONDS:
+        return
+    state = _load_poller_state(home)
+    last = state.get("hub_last_dispatch_at", {}).get(wg.meta.id, "")
+    if _in_cooldown_str(last):
+        return
+    reason = (
+        f"watchdog: active task stale "
+        f"({len(posts_in_task)} posts, last post {int(age)}s ago)"
+    )
+    log.info(
+        "wg poller: %s dispatching watchdog close (reason=%s)",
+        wg.meta.id, reason,
+    )
+    await _dispatch_workgroup_turn(
+        home, profile, wg.meta.id, wg.meta.name, reason,
+    )
     _mark_hub_dispatched(home, wg.meta.id)
 
 
@@ -601,6 +650,140 @@ def _should_dispatch(
     return None, high_seq
 
 
+_TURN_TIMEOUT_SECONDS = 300
+_TURN_SIGTERM_GRACE_SECONDS = 5
+
+
+def turn_log_path(home: Path) -> Path:
+    return home / "alp" / "turns.jsonl"
+
+
+def _append_turn_event(home: Path, event: dict[str, Any]) -> None:
+    import json
+    p = turn_log_path(home)
+    try:
+        p.parent.mkdir(parents=True, exist_ok=True)
+        is_new = not p.exists()
+        with p.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(event, separators=(",", ":")) + "\n")
+            f.flush()
+        if is_new:
+            try:
+                os.chmod(p, 0o600)
+            except OSError:
+                pass
+    except Exception as e:  # noqa: BLE001
+        log.warning("turn-log append failed: %s", e)
+
+
+def _hub_post_count(home: Path, wg_id: str) -> int:
+    try:
+        from alpi.alp import workgroup as wg_mod
+        wg = wg_mod.load(home, wg_id)
+        if wg is None:
+            return 0
+        d = home / "alp" / "workgroups" / wg_id
+        from alpi.alp.workgroup import _read_transcript
+        return len(_read_transcript(d))
+    except Exception:
+        return 0
+
+
+def _sub_post_count(home: Path, wg_id: str) -> int:
+    try:
+        from alpi.alp import subscription as sub_mod
+        sub = sub_mod.get(home, wg_id)
+        if sub is None:
+            return 0
+        return int(sub.last_seq or 0)
+    except Exception:
+        return 0
+
+
+def _post_count_for_role(home: Path, wg_id: str) -> int:
+    n = _hub_post_count(home, wg_id)
+    if n > 0:
+        return n
+    return _sub_post_count(home, wg_id)
+
+
+def _build_role_aware_addendum(
+    home: Path, profile: str, wg_id: str,
+) -> str:
+    try:
+        from alpi.alp import subscription as sub_mod
+        from alpi.alp import tasks as wg_tasks
+        from alpi.alp import workgroup as wg_mod
+        from alpi.alp.keys import load_or_generate
+    except Exception:  # noqa: BLE001
+        return ""
+
+    try:
+        own_pubkey = load_or_generate(home).pubkey_b64()
+    except Exception:  # noqa: BLE001
+        return ""
+
+    wg = wg_mod.load(home, wg_id)
+    is_hub = wg is not None and wg.meta.hub_pubkey == own_pubkey
+
+    if is_hub:
+        try:
+            posts = _all_hub_posts_decrypted(home, wg)
+        except Exception:  # noqa: BLE001
+            return ""
+        hub_pubkey = wg.meta.hub_pubkey
+    else:
+        sub = sub_mod.get(home, wg_id)
+        if sub is None:
+            return ""
+        posts = list(sub.recent_posts or [])
+        hub_pubkey = sub.hub_pubkey
+    if not posts:
+        return ""
+
+    active = wg_tasks.active_task(posts, hub_pubkey=hub_pubkey)
+    if active is None:
+        return ""
+
+    posts_in_task = [
+        p for p in posts if int(p.get("seq", 0)) >= active.opened_seq
+    ]
+    own_in_task = [
+        p for p in posts_in_task if str(p.get("from", "")) == own_pubkey
+    ]
+
+    if is_hub and len(posts_in_task) >= 4:
+        return (
+            "\n\n=== STATE-AWARE CUE (you are the HUB) ===\n"
+            f"The active task has {len(posts_in_task)} posts already. "
+            "Read the last 2-3 — if they refine an earlier theme "
+            "rather than introduce NEW evidence (a fact, source link, "
+            "number, benchmark not already cited), your only valid "
+            "action this turn is to close: post "
+            f"`workgroup_post(wg_id=\"{wg_id}\", text=\"#done "
+            "<one-line synthesis of the shared recommendation>\")`. "
+            "Members will keep paraphrasing forever until you close. "
+            "Don't add another caveat — close it."
+        )
+
+    if not is_hub and own_in_task:
+        last_own_seq = int(own_in_task[-1].get("seq", 0))
+        return (
+            "\n\n=== STATE-AWARE CUE (you already posted in this task) ===\n"
+            f"You already posted in this active task at seq #"
+            f"{last_own_seq}. Your STRICT default this turn is "
+            "SILENCE. Post again only if BOTH count mechanically: "
+            f"(a) the most recent post contains `@{profile}` with a "
+            "direct question or instruction to YOU, or (b) you have "
+            "NEW evidence (a source link, number, fact) that does "
+            "NOT appear in any prior post of this task. Refinements, "
+            "caveats, paraphrases of earlier ideas — DO NOT POST. "
+            "The hub will close when the loop is obvious."
+        )
+
+    return ""
+
+
 async def _dispatch_workgroup_turn(
     home: Path, profile: str, wg_id: str, wg_name: str, reason: str,
 ) -> None:
@@ -636,6 +819,7 @@ async def _dispatch_workgroup_turn(
         "  3. Otherwise, end the turn without posting. Silence is "
         "the right output more often than you expect."
     )
+    prompt += _build_role_aware_addendum(home, profile, wg_id)
     env = dict(os.environ)
     env["ALPI_HOME"] = str(home)
     env["ALPI_WORKGROUP_DISPATCH"] = wg_id
@@ -643,6 +827,8 @@ async def _dispatch_workgroup_turn(
         sys.executable, "-m", "alpi", "-p", profile,
         "chat", "--once", prompt,
     ]
+    posts_before = _post_count_for_role(home, wg_id)
+    started_at = time.monotonic()
     try:
         proc = await asyncio.create_subprocess_exec(
             *argv,
@@ -652,15 +838,72 @@ async def _dispatch_workgroup_turn(
         )
     except OSError as e:
         log.warning("wg poller: subprocess spawn failed: %s", e)
+        _append_turn_event(home, {
+            "ts": _utcnow_iso(), "event": "spawn-failed",
+            "profile": profile, "wg_id": wg_id, "wg_name": wg_name,
+            "reason": reason, "error": str(e),
+        })
         return
 
-    rc = await proc.wait()
-    if rc != 0 and proc.stderr is not None:
-        err = (await proc.stderr.read()).decode(errors="replace")[:300]
+    _append_turn_event(home, {
+        "ts": _utcnow_iso(), "event": "start",
+        "profile": profile, "wg_id": wg_id, "wg_name": wg_name,
+        "reason": reason, "pid": proc.pid,
+    })
+
+    timed_out = False
+    try:
+        rc = await asyncio.wait_for(proc.wait(), timeout=_TURN_TIMEOUT_SECONDS)
+    except asyncio.TimeoutError:
+        timed_out = True
+        try:
+            proc.terminate()  # SIGTERM
+        except ProcessLookupError:
+            pass
+        try:
+            rc = await asyncio.wait_for(
+                proc.wait(), timeout=_TURN_SIGTERM_GRACE_SECONDS,
+            )
+        except asyncio.TimeoutError:
+            try:
+                proc.kill()  # SIGKILL
+            except ProcessLookupError:
+                pass
+            try:
+                rc = await proc.wait()
+            except Exception:  # noqa: BLE001
+                rc = -9
         log.warning(
-            "wg poller: turn for %s exited rc=%s: %s",
-            wg_id, rc, err,
+            "wg poller: turn for %s exceeded %ss — killed",
+            wg_id, _TURN_TIMEOUT_SECONDS,
         )
+
+    duration_s = round(time.monotonic() - started_at, 2)
+    posts_after = _post_count_for_role(home, wg_id)
+    posts_added = max(0, posts_after - posts_before)
+    err_preview = ""
+    if rc != 0 and proc.stderr is not None:
+        try:
+            err_preview = (await proc.stderr.read()).decode(
+                errors="replace",
+            )[:300]
+        except Exception:  # noqa: BLE001
+            err_preview = ""
+        if not timed_out:
+            log.warning(
+                "wg poller: turn for %s exited rc=%s: %s",
+                wg_id, rc, err_preview,
+            )
+
+    _append_turn_event(home, {
+        "ts": _utcnow_iso(),
+        "event": "timeout" if timed_out else "end",
+        "profile": profile, "wg_id": wg_id, "wg_name": wg_name,
+        "duration_s": duration_s, "rc": rc,
+        "posts_added": posts_added,
+        **({"error": err_preview} if err_preview and not timed_out else {}),
+        **({"killed": True} if timed_out else {}),
+    })
 
 
 WORKGROUP_TICK_SECONDS = 30

@@ -202,6 +202,45 @@ async def test_join_persists_subscription_and_pull_decrypts(
 
 
 @pytest.mark.asyncio
+async def test_post_rejects_non_hub_marker(short_tmp: Path) -> None:
+    """A non-hub member trying to post a `#task` or `#done` marker
+    must be rejected by the SDK before encryption + network — the hub
+    is the workgroup manager and the only identity allowed to post
+    protocol markers."""
+    bob_home = short_tmp / "bob"; bob_home.mkdir()
+    load_or_generate(bob_home)
+    # A subscription where bob is a remote member (alice is hub).
+    sub = sub_mod.Subscription(
+        wg_id="wg_test", name="x", hub_id="alice",
+        hub_pubkey="a" * 44,
+    )
+    sub.upsert_key(1, "sealed-stub")
+    sub_mod.upsert(bob_home, sub)
+
+    # `#done` from a member → rejected with a clear error.
+    with pytest.raises(ValueError, match="only the workgroup hub"):
+        await wc.post(bob_home, "wg_test", b"#done unilateral close")
+
+    # `#task` from a member → also rejected.
+    with pytest.raises(ValueError, match="only the workgroup hub"):
+        await wc.post(bob_home, "wg_test", b"#task spawn sub-task")
+
+    # Inline mention of the marker token in prose is fine.
+    # (The SDK won't reach the network — no server here — but the
+    # marker check must NOT fire on this text. Catch the network
+    # error separately so the absence of the ValueError is what we
+    # assert.)
+    try:
+        await wc.post(bob_home, "wg_test", b"converge with #done eventually")
+    except ValueError as e:
+        assert "only the workgroup hub" not in str(e)
+    except Exception:
+        # Any non-marker error (network, decoding) is fine — what
+        # matters is that the marker guard didn't fire.
+        pass
+
+
+@pytest.mark.asyncio
 async def test_pull_picks_up_rotated_key(short_tmp: Path) -> None:
     """After a kick on the hub, bob's next pull learns the new
     `current_key_version` + sealed_key, stores it, and decrypts a v2

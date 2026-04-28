@@ -246,8 +246,10 @@ def restart_services() -> None:
 
 
 def post_kickoff(wg_id: str) -> None:
-    step("posting kickoff via bob (this is the only 'human' message)")
-    res = run(["alpi", "-p", "bob", "workgroup", "post", wg_id, KICKOFF])
+    # Hub-only marker rule: only alice (the hub) can post `#task`. Bob
+    # would be rejected by the SDK before the post leaves his machine.
+    step("posting kickoff via alice (the hub — only the hub can post #task)")
+    res = run(["alpi", "-p", "alice", "workgroup", "post", wg_id, KICKOFF])
     if res.returncode != 0:
         fail(f"kickoff post failed: {res.stderr}")
     ok(f"kickoff posted: {KICKOFF[:100]}…")

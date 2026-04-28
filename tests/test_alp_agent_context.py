@@ -141,7 +141,9 @@ def test_block_contains_engagement_guardrails(short_tmp: Path) -> None:
     # Critical anti-noise rules must be present.
     assert "OBSERVER" in block
     assert "DO NOT POST" in block
-    assert "Don't open new" in block or "do not author" in block.lower()
+    # Hub-only marker rule must be present.
+    assert "HUB IS THE MANAGER" in block
+    assert "NEVER post `#task` or `#done`" in block
     assert "auto-declares" in block.lower()
 
 

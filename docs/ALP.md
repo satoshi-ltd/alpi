@@ -647,8 +647,30 @@ syntax:
 | Marker | Meaning | Posted by |
 |---|---|---|
 | `@<peer-id>` | Direct mention. Pinged member's engine treats this as an explicit handoff signal. | any member |
-| `#task <text>` | Open the active task with `<text>` as its description. Preempts whatever was active before. | any member |
-| `#done <text>` | Close the active task. `<text>` is the result string persisted with the task record. | any member |
+| `#task <text>` | Open the active task with `<text>` as its description. Preempts whatever was active before. | **hub only** |
+| `#done <text>` | Close the active task. `<text>` is the result string persisted with the task record. | **hub only** |
+
+**Hub-only markers (the hub is the manager).** The hub of a
+workgroup is the identity that created it — it already controls
+the budget, the canonical transcript, the group key, and the
+member roster. Lifecycle markers (`#task`, `#done`) are added to
+that authority list: only the hub may open or close tasks. This
+is enforced at two layers:
+
+1. **Client-side rejection.** The member SDK
+   (`workgroup_client.post`) scans the plaintext for `#task` /
+   `#done` markers before encryption and refuses to send if the
+   sender is not the hub of the target workgroup. The agent gets
+   a clear error and a hint to stay silent.
+2. **Semantic filter.** Even if a member crafts a raw post that
+   bypasses the SDK, the parser (`tasks.parse_post(...,
+   hub_pubkey=...)`) ignores markers whose author is not the
+   hub. Active-task computation uses this filter, so non-hub
+   markers carry no protocol effect.
+
+The hub itself remains zero-knowledge against post bodies for
+ordinary content; the marker rule is enforced via the parser
+and the SDK, not via hub-side decryption.
 
 **Recognition rule.** State-change markers (`#task`, `#done`)
 count only when they appear at the **start of a line** in the
@@ -790,6 +812,50 @@ accumulates LLM cost into a context-local variable; when
 cost and attaches `{usd, tokens}` to the envelope so the hub's
 ledger is honest about what the post cost to produce.
 
+**Role-aware turn cue.** The synthetic prompt the dispatcher
+hands the agent ends with a state-aware addendum based on
+on-disk workgroup state:
+
+- **Hub on a 4+ post active task:** an explicit "close NOW if
+  the last posts add no new evidence" cue. Counters the hub's
+  tendency to stay observer while members paraphrase.
+- **Member who has already posted in the active task:** a
+  strict "silence default unless directly @-mentioned by name
+  OR you have new evidence not already in the transcript" cue.
+  Counters paraphrase loops.
+
+These cues are mechanical — countable — so smaller models can
+apply them without subjective judgement.
+
+**Stale-task watchdog.** When an active task has 4+ posts and
+no new post in 180 s (3× the dispatch cooldown), the hub is
+re-dispatched with a `watchdog: active task stale` reason
+regardless of `hub_last_responded_seq`. This breaks the
+deadlock where the hub already saw the latest post and chose
+silence, members are caught up too, and nobody wakes again.
+The watchdog respects the normal per-workgroup cooldown.
+
+**Turn telemetry + timeout.** Each dispatched turn is bracketed
+with append-only events written to `~/.alpi/profiles/<x>/alp/
+turns.jsonl`. The dispatcher writes:
+
+- `start` with `{ts, profile, wg_id, wg_name, reason, pid}` when
+  the subprocess is spawned.
+- `end` with `{ts, duration_s, rc, posts_added, error?}` on
+  normal exit.
+- `timeout` with `{ts, duration_s, killed: true}` when a turn
+  exceeds the hard 5-minute ceiling — the dispatcher SIGTERMs
+  with a 5-second grace then SIGKILLs.
+- `spawn-failed` with `{ts, error}` if `create_subprocess_exec`
+  raised before the child started.
+
+Operators can `tail -f` the file directly or use the
+`alpi workgroup turns [<wg_id>] [-f]` CLI to filter and stream.
+This bounds runaway turns and gives a single observable channel
+for "is this peer thinking, idle, or stuck?" — questions that
+were previously answerable only by inspecting `ps` and the raw
+service log.
+
 ### Member liveness
 
 The hub stamps a `last_seen_at` ISO timestamp on each member every
@@ -902,6 +968,33 @@ stable and short enough to carry in-tree without a framework.
 
 ## Changelog
 
+- **v1.1 (2026-04-28)** — workgroup hardening (designed so the
+  workflow shape stays correct on small / tier-2 models like
+  GPT-class nano; quality of responses degrades, the workflow
+  doesn't):
+  - `#task` and `#done` are **hub-only**. The member SDK refuses to
+    send posts containing these markers, and the client-side
+    parser ignores markers from non-hub authors. The hub is the
+    workgroup manager; lifecycle markers join its existing
+    authority over budget, transcript, and group key.
+  - **Mechanical guardrails**: a strict one-post-per-task default
+    for non-hub members (escapes only via direct `@<name>` callout
+    or genuinely new evidence), and a hard close-now signal for
+    the hub once an active task has 4+ posts with no new evidence.
+  - **Role-aware turn cue**: the dispatcher synthetic prompt ends
+    with a state-aware addendum (count-of-posts + has-this-peer-
+    posted-yet), so the agent doesn't have to remember the
+    briefing — the cue is in front of it every turn.
+  - **Stale-task watchdog**: the poller force-fires the hub on
+    active tasks that have gone 180 s without a new post, so a
+    workgroup never deadlocks on "everyone caught up, nobody
+    wakes".
+  - **Turn telemetry**: every dispatched workgroup turn appends
+    `start` / `end` / `timeout` / `spawn-failed` events to
+    `~/.alpi/profiles/<x>/alp/turns.jsonl`. New CLI:
+    `alpi workgroup turns [<wg_id>] [-f]`.
+  - **Hard turn timeout**: 5 min ceiling per dispatched turn,
+    SIGTERM + 5 s grace + SIGKILL, recorded as a `timeout` event.
 - **v1 (2026-04-24)** — current ALP surface: intra-machine transport over
   Unix-domain socket, inter-machine transport over Noise_XK TCP, core
   `link.*` methods, workgroup extension, envelope format, peer identity via
