@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.3.7 — 2026-04-28 — Email PGP + test env isolation fix
+
+Closes Email PGP from v0.4. Outbound IMAP/Gmail messages are
+signed with the configured key and encrypted when every recipient
+has a public key on `~/.gnupg`; inbound `multipart/encrypted` is
+decrypted before the agent reads it. Default off. Also fixes a
+test fixture that copied the dev's real `~/.alpi/.env` into every
+test home, leaking `TELEGRAM_BOT_TOKEN` + API keys into
+`os.environ` for the test process.
+
+- `alpi/mail/pgp.py` — RFC 3156 PGP/MIME wrapper around `python-gnupg`; passthrough to plaintext on any failure.
+- `alpi/mail/imap.py`, `alpi/mail/gmail.py` — wrap on send + decrypt on read; Gmail re-fetches `format=raw` when encrypted.
+- `alpi/mail/pgp_setup.py` — wizard step at tail of `alpi setup → Gateways → IMAP`/`Gmail`. macOS+brew offers `brew install gnupg`; Linux/Windows print the right hint and skip. Defensive top-level wrap so PGP can never break the gateway flow.
+- `tests/conftest.py` — `tmp_home` no longer copies `.env`. New autouse scrub of TELEGRAM/API/IMAP/SMTP env vars. `tmp_home_with_real_env` fixture isolates real-creds behaviour to `--llm` tests only.
+- `pyproject.toml` — `python-gnupg>=0.5`.
+- `tests/test_mail_pgp.py` (10) + `tests/test_mail_pgp_setup.py` (14).
+
 ## v0.3.6 — 2026-04-28 — terminal subprocess env scoping (AV)
 
 Closes roadmap AV. The `terminal()` tool now starts every

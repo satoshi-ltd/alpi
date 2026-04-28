@@ -19,7 +19,7 @@ private-agent tool on the terminal. v0.4 is the cycle where the
 project earns wider adoption: a desktop app (Ollama-style
 distribution), skills mature into mini-apps, a federated gateway
 ships, and the security story closes with a third-party audit.
-Tightly scoped — 4 items — to ship in 3-4 months without
+Tightly scoped — 3 items — to ship in 3-4 months without
 becoming a broken release.
 
 ### Hardening
@@ -35,7 +35,6 @@ becoming a broken release.
 |---|---|---|
 | AX-desktop | App de escritorio (Tauri) — `alpi service` local + visual UI for chat / profiles / peers / workgroups. In progress on `feat/desktop-app`; lands at v0.4 cut | 🟡 |
 | Matrix | Federated + E2EE gateway — flagship gateway of v0.4. Self-hosted homeserver, no phone number, matches the "private agent network" thesis | 🔵 |
-| Email PGP | Opt-in PGP signing + encryption on the existing IMAP/Gmail outbound path. Pairs with Matrix in the "secure messaging" narrative | 🔵 |
 | BF | Skills v2 (items 1-3) — scaffolder, declared `requires`/`env`, per-skill SQLite. The "skills = mini-apps" pillar. Absorbs BE | 🔵 |
 
 ### Observability
@@ -200,31 +199,6 @@ this — their skills run in their backend, not the user's.
 **Absorbs the v0.3-deferred BE** (revisit `@alpi/knowledge`):
 the scaffolder + declared deps make all skills more reliable
 to author, including the bundled one.
-
-### Email PGP — opt-in hardening of IMAP/Gmail outbound
-
-Not a new gateway — an upgrade of the existing IMAP/Gmail
-gateways. Frontmatter knob per profile:
-
-```yaml
-email:
-  signing_key: <gpg fingerprint>
-  encrypt_when_pubkey_available: true
-```
-
-Outbound replies are PGP-signed when the key is present; if
-the recipient's public key is in the local keyring (`gnupg`),
-the body is also encrypted. Inbound: decrypt PGP-encrypted
-messages before handing them to the agent.
-
-**Why it matters.** Most agent products treat email as
-plaintext because their use case is "automate replies"; we
-treat email as correspondence that may need confidentiality.
-Small feature, outsized signal — pairs with Matrix in the
-v0.4 "secure messaging" narrative.
-
-LOC estimate: ~100, mostly wiring `python-gnupg` into the
-existing send/receive paths.
 
 ### `alpi diff` — what changed in this profile
 
