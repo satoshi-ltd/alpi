@@ -19,7 +19,7 @@ private-agent tool on the terminal. v0.4 is the cycle where the
 project earns wider adoption: a desktop app (Ollama-style
 distribution), skills mature into mini-apps, a federated gateway
 ships, and the security story closes with a third-party audit.
-Tightly scoped — 7 items — to ship in 3-4 months without
+Tightly scoped — 6 items — to ship in 3-4 months without
 becoming a broken release.
 
 ### Hardening
@@ -38,7 +38,6 @@ becoming a broken release.
 | Matrix | Federated + E2EE gateway — flagship gateway of v0.4. Self-hosted homeserver, no phone number, matches the "private agent network" thesis | 🔵 |
 | Email PGP | Opt-in PGP signing + encryption on the existing IMAP/Gmail outbound path. Pairs with Matrix in the "secure messaging" narrative | 🔵 |
 | BF | Skills v2 (items 1-3) — scaffolder, declared `requires`/`env`, per-skill SQLite. The "skills = mini-apps" pillar. Absorbs BE | 🔵 |
-| BG | TUI render perf during streaming — input footer still lags when stream is heavy; keep the input thread responsive | 🔵 |
 
 ### Observability
 
@@ -230,24 +229,6 @@ this — their skills run in their backend, not the user's.
 **Absorbs the v0.3-deferred BE** (revisit `@alpi/knowledge`):
 the scaffolder + declared deps make all skills more reliable
 to author, including the bundled one.
-
-### BG. TUI render perf during streaming
-
-The input footer of the TUI lags during heavy streaming
-output — typing into the prompt feels sluggish when the agent
-is actively rendering tokens. Earlier fixes reduced the symptom
-but didn't eliminate it. v0.4 closes the loop:
-
-- Profile the actual hot path (Textual reactive update
-  cascade, regex-heavy markdown render, ANSI escape cost).
-- Move the input thread off the same render queue as the body,
-  or batch-coalesce body updates so the input gets render
-  budget.
-- Verify with a streaming-stress fixture in CI: type into the
-  input continuously while a 4-paragraph response streams; the
-  per-keystroke latency p99 stays under 50 ms.
-
-Small, contained, daily UX cost — worth the budget in v0.4.
 
 ### Email PGP — opt-in hardening of IMAP/Gmail outbound
 

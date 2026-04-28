@@ -27,6 +27,7 @@ from alpi.tui.widgets import (
     AlpiHeader,
     AlpiTopBar,
     AssistantMessage,
+    ChatInput,
     DimLine,
     ErrorLine,
     ReasoningLine,
@@ -147,7 +148,7 @@ class AlpiApp(App):
         with VerticalScroll(id="chat"):
             pass
         yield AlpiHeader()
-        yield Input(
+        yield ChatInput(
             placeholder="Type a message or /help for commands…",
             id="chat-input",
             suggester=SuggestFromList(slash_commands, case_sensitive=False),
@@ -337,7 +338,7 @@ class AlpiApp(App):
         if ev.kind == "assistant_delta":
             self._on_assistant_delta(ev.text)
         elif ev.kind == "assistant_done":
-            if self._current_assistant is not None and ev.text != self._current_assistant.text:
+            if self._current_assistant is not None:
                 self._current_assistant.replace(ev.text)
         elif ev.kind == "tool_start":
             self._on_tool_start(ev)
@@ -431,7 +432,7 @@ class AlpiApp(App):
         if message.ok and message.reply:
             assistant = AssistantMessage()
             self._mount_message(assistant)
-            assistant.append(message.reply)
+            assistant.replace(message.reply)
 
     def _handle_slash(self, text: str) -> None:
         parts = text[1:].split(maxsplit=1)
@@ -549,7 +550,7 @@ class AlpiApp(App):
     def _after_compact(self, summary: str) -> None:
         msg = AssistantMessage()
         self._mount_message(msg)
-        msg.append(f"**Compacted summary**\n\n{summary}")
+        msg.replace(f"**Compacted summary**\n\n{summary}")
 
     def _cmd_skills(self) -> None:
         self._show_panel(SkillsPanel(self.home))
