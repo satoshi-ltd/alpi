@@ -267,7 +267,11 @@ class Server:
         envelope's Ed25519 signature and insist the envelope's
         ``alp.from`` matches the Noise-authenticated identity."""
         try:
-            parsed = env.verify(body, replay_cache=self.replay)
+            parsed = env.verify(
+                body,
+                replay_cache=self.replay,
+                expected_to=self.kp.pubkey_b64(),
+            )
         except env.EnvelopeError as e:
             log.debug("envelope rejected: %s", e)
             return None

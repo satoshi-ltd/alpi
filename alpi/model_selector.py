@@ -230,6 +230,15 @@ def _add_ollama_connection(cfg: cfg_mod.Config):
     return OllamaProvider(name=name, url=url)
 
 
+def _atomic_write_env(env_path: Path, content: str) -> None:
+    import os as _os
+    env_path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = env_path.with_suffix(env_path.suffix + ".tmp")
+    tmp.write_text(content)
+    _os.chmod(tmp, 0o600)
+    _os.replace(tmp, env_path)
+
+
 def _append_env(env_path: Path, key: str, value: str) -> None:
     lines = env_path.read_text().splitlines() if env_path.exists() else []
     out, replaced = [], False
@@ -241,7 +250,7 @@ def _append_env(env_path: Path, key: str, value: str) -> None:
             out.append(line)
     if not replaced:
         out.append(f"{key}={value}")
-    env_path.write_text("\n".join(out) + "\n")
+    _atomic_write_env(env_path, "\n".join(out) + "\n")
 
 
 def _remove_env_key(env_path: Path, key: str) -> None:
@@ -249,7 +258,7 @@ def _remove_env_key(env_path: Path, key: str) -> None:
         return
     lines = [ln for ln in env_path.read_text().splitlines()
              if not ln.startswith(f"{key}=")]
-    env_path.write_text("\n".join(lines) + ("\n" if lines else ""))
+    _atomic_write_env(env_path, "\n".join(lines) + ("\n" if lines else ""))
 
 
 def _any_saved_keys(builtin: list[Provider]) -> bool:

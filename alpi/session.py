@@ -91,6 +91,7 @@ class Session:
         path = self.home / "sessions" / f"{self.id}.json"
         path.parent.mkdir(parents=True, exist_ok=True)
         import json
+        from alpi._redact import redact
         payload = {
             "id": self.id,
             "model": self.model,
@@ -103,12 +104,13 @@ class Session:
             "turns": [
                 {
                     "at": t.at,
-                    "user": t.user,
-                    "assistant": t.assistant,
+                    "user": redact(t.user),
+                    "assistant": redact(t.assistant),
                     "tools": [
                         {
-                            "at": tl.at, "name": tl.name, "args": tl.args,
-                            "result": tl.result, "ok": tl.ok,
+                            "at": tl.at, "name": tl.name,
+                            "args": redact(tl.args),
+                            "result": redact(tl.result), "ok": tl.ok,
                             "duration_s": round(tl.duration_s, 3),
                             **({"reasoning": tl.reasoning} if tl.reasoning else {}),
                         }

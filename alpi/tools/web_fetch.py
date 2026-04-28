@@ -93,10 +93,33 @@ def _jina_fetch(url: str, max_bytes: int) -> str | None:
 
 def _direct_fetch(url: str, max_bytes: int, raw: bool, strip_links: bool) -> ToolResult:
     import httpx
+    from alpi.tools._guards import check_url
+    current = url
     try:
-        with httpx.Client(follow_redirects=True, timeout=30) as client:
-            r = client.get(url, headers={"User-Agent": "alpi/0.0.1"})
-        r.raise_for_status()
+        with httpx.Client(follow_redirects=False, timeout=30) as client:
+            for _ in range(10):
+                r = client.get(current, headers={"User-Agent": "alpi/0.0.1"})
+                if r.status_code in (301, 302, 303, 307, 308):
+                    nxt = r.headers.get("location") or ""
+                    if not nxt:
+                        return ToolResult(
+                            ok=False, output="", error="redirect without location",
+                        )
+                    if nxt.startswith("/"):
+                        from urllib.parse import urljoin
+                        nxt = urljoin(current, nxt)
+                    ok, reason = check_url(nxt)
+                    if not ok:
+                        return ToolResult(
+                            ok=False, output="",
+                            error=f"redirect blocked: {reason}",
+                        )
+                    current = nxt
+                    continue
+                r.raise_for_status()
+                break
+            else:
+                return ToolResult(ok=False, output="", error="too many redirects")
     except httpx.HTTPError as e:
         return ToolResult(ok=False, output="", error=str(e))
 
