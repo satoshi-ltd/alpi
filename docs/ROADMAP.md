@@ -19,7 +19,7 @@ private-agent tool on the terminal. v0.4 is the cycle where the
 project earns wider adoption: a desktop app (Ollama-style
 distribution), skills mature into mini-apps, a federated gateway
 ships, and the security story closes with a third-party audit.
-Tightly scoped — 6 items — to ship in 3-4 months without
+Tightly scoped — 5 items — to ship in 3-4 months without
 becoming a broken release.
 
 ### Hardening
@@ -44,7 +44,6 @@ becoming a broken release.
 | ID | Item | Status |
 |---|---|---|
 | `alpi diff` | "What changed in my profile in last N hours" — memory writes, peer additions, skill installs, sessions. Pairs with the **BC** audit story | 🔵 |
-| Export | Conversation export format (JSON canonical) — needed by **AX-desktop** to render sessions; defining it in v0.4 avoids a non-canonical interim format | 🔵 |
 
 ---
 
@@ -273,25 +272,6 @@ skill installs, session counts, budget consumption.
 **Why v0.4.** Pairs naturally with **BC** (the external
 audit) — the auditor's threat model and `alpi diff`'s output
 co-design. Both ship in v0.4.
-
-### Conversation export format (JSON canonical)
-
-A canonical, versioned JSON shape for a single session:
-messages, tool calls, memory writes, costs. Used by:
-
-- **AX-desktop** (v0.4) — reads this format to render
-  sessions in the visual UI.
-- **Support.** "Send me your last session" — user pipes
-  `alpi sessions export <id>` to a file.
-- **Marketplace (AY)** + **AX-mobile** (both v0.5) — same
-  format; defined here so they don't ship on a non-canonical
-  interim shape and have to migrate.
-- **Audit trail.** Same format archives via cron.
-
-**Why v0.4.** AX-desktop is the consumer that forces the
-shape's hand. Defining it as part of the cycle that ships the
-desktop app means there's no transitional format and the v0.5
-surfaces (mobile, marketplace) inherit a stable definition.
 
 ---
 
@@ -889,6 +869,19 @@ Not planned. Research-grade, irrelevant for everyday personal use.
   mother.py-style minimal.
 - **SQLite state.db.** Plain JSON files scan fast for <1000
   sessions.
+- **Conversation export format (JSON canonical).** Originally
+  scoped for v0.4 as "needed by AX-desktop to render sessions".
+  The premise was wrong: sessions already serialise to JSON in
+  `~/.alpi/profiles/<name>/sessions/{id}.json` (`session.py:save`),
+  and the desktop app reads them directly via `fs::read`. Old
+  sessions never lost value because no migration was ever
+  required. The de-facto contract between desktop and core lives
+  in three intentionally hidden CLI flags (`--emit-events`,
+  `--session-id`, `--model`) plus the on-disk shape; the desktop
+  itself acts as the regression test in monorepo. Formalising a
+  separate export schema today would be doc for the doc's sake —
+  promote only if a *second* consumer (mobile, marketplace,
+  external integration) ships and needs a versioned contract.
 - **Pending-approval gate for skills.** Tried in v0.1, removed in
   v0.2. Friction outweighed benefit; security scanner is the gate.
 - **Workspace wall on file tools.** Removed in v0.2. Without OS
