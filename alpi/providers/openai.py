@@ -1,15 +1,7 @@
 from __future__ import annotations
 
 from alpi.providers.base import ModelInfo, Provider
-
-
-_CURATED: list[tuple[str, str]] = [
-    ("gpt-5.4",         "flagship"),
-    ("gpt-5.4-mini",    "balanced"),
-    ("gpt-5.4-nano",    "cheap · fast"),
-    ("gpt-5.3-codex",   "coding"),
-    ("o3",              "heavy reasoning"),
-]
+from alpi.providers.curated import load_curated
 
 
 class OpenAI(Provider):
@@ -20,6 +12,6 @@ class OpenAI(Provider):
 
     def list_models(self) -> list[ModelInfo]:
         return [
-            ModelInfo(id=f"openai/{m}", display=m, note=tag)
-            for m, tag in _CURATED
+            ModelInfo(id=f"openai/{m['id']}", display=m["id"], note=m.get("note", ""))
+            for m in load_curated("openai")
         ]

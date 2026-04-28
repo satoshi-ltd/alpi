@@ -140,18 +140,23 @@ def _run_once(
     user_text: str,
     emit_events: bool = False,
     resume_chat_id: str | None = None,
+    session_id: str | None = None,
+    model_override: str | None = None,
 ) -> None:
     import json
     from alpi import session_map
 
     _bootstrap(h)
     cfg = config.load(h)
+    if model_override:
+        cfg.model = model_override
     engine = Engine(home=h, cfg=cfg)
 
-    # Gateway per-chat threading: if the spawner passed a chat id, look up
-    # the pointer and resume that session. Missing pointer = fresh session,
-    # which we'll bind to the chat after the turn saves.
-    if resume_chat_id:
+    # Explicit session id wins. Used by the desktop app to append a turn
+    # to a specific session the user is currently viewing.
+    if session_id:
+        _continue_specific_session(engine, h, session_id)
+    elif resume_chat_id:
         existing = session_map.get(h, resume_chat_id)
         if existing:
             _continue_specific_session(engine, h, existing)
@@ -309,6 +314,20 @@ def main(ctx: click.Context, profile: str | None, continue_last: bool) -> None:
     help="Gateway-only: resume the per-chat session for this id.",
 )
 @click.option(
+    "--session-id",
+    "session_id",
+    default=None,
+    hidden=True,
+    help="Resume a specific session by id (used by the desktop app).",
+)
+@click.option(
+    "--model",
+    "model_override",
+    default=None,
+    hidden=True,
+    help="Override the configured model for this turn only (not persisted).",
+)
+@click.option(
     "-c", "--continue", "continue_last", is_flag=True, help="Resume from the last session."
 )
 @click.pass_context
@@ -317,12 +336,21 @@ def chat(
     input_text: str | None,
     emit_events: bool,
     resume_chat: str | None,
+    session_id: str | None,
+    model_override: str | None,
     continue_last: bool,
 ) -> None:
     """Launch the TUI, or run one turn with ``--once "text"``."""
     h: Path = ctx.obj["home"]
     if input_text is not None:
-        _run_once(h, input_text, emit_events=emit_events, resume_chat_id=resume_chat)
+        _run_once(
+            h,
+            input_text,
+            emit_events=emit_events,
+            resume_chat_id=resume_chat,
+            session_id=session_id,
+            model_override=model_override,
+        )
     else:
         _run_chat(h, continue_last=continue_last)
 

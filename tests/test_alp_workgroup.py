@@ -1617,14 +1617,18 @@ async def test_pause_persists_across_server_restart(short_tmp: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_capability_denied_when_verb_not_allowed(short_tmp: Path) -> None:
-    """Even a workgroup member is rejected at the capability layer if
-    the verb isn't in their peers.yaml ``allow`` list — fail-closed."""
+async def test_workgroup_verbs_bypass_peer_allow_list(short_tmp: Path) -> None:
+    """``workgroup.*`` methods don't require an entry in ``peers.yaml``
+    allow list — membership in the workgroup is the real authorization
+    gate, enforced inside each handler. Without this bypass a member
+    who joined a workgroup couldn't subsequently pull from the hub
+    because ``workgroup.join`` doesn't retroactively edit the peer's
+    capabilities."""
     alice_home = short_tmp / "alice"; alice_home.mkdir()
     bob_home = short_tmp / "bob"; bob_home.mkdir()
     alice_kp = load_or_generate(alice_home)
     bob_kp = load_or_generate(bob_home)
-    # Bob is pinned but with NO workgroup verbs allowed.
+    # Bob is pinned with NO workgroup verbs allowed — only link.ping.
     _pin(alice_home, "bob", bob_kp.pubkey_b64(), ["link.ping"])
 
     wg = wg_mod.create(
@@ -1635,14 +1639,15 @@ async def test_capability_denied_when_verb_not_allowed(short_tmp: Path) -> None:
     wg_mod.register(server, alice_home)
     await server.start()
     try:
-        with pytest.raises(alp_client.RemoteError) as exc:
-            await alp_client.call(
-                socket_path=server.socket_path(),
-                sender=bob_kp,
-                recipient_pubkey_b64=alice_kp.pubkey_b64(),
-                method="workgroup.join",
-                params={"workgroup_id": wg.meta.id},
-            )
-        assert exc.value.code == -32001  # capability-denied
+        # Bob is a member, so workgroup.join succeeds despite his
+        # peer entry on alice not listing any workgroup verb.
+        result = await alp_client.call(
+            socket_path=server.socket_path(),
+            sender=bob_kp,
+            recipient_pubkey_b64=alice_kp.pubkey_b64(),
+            method="workgroup.join",
+            params={"workgroup_id": wg.meta.id},
+        )
+        assert result["workgroup_id"] == wg.meta.id
     finally:
         await server.stop()

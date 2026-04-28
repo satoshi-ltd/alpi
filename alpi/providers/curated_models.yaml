@@ -1,0 +1,20 @@
+openai:
+  - id: gpt-5.4
+    note: flagship
+  - id: gpt-5.4-mini
+    note: balanced
+  - id: gpt-5.4-nano
+    note: cheap · fast
+  - id: gpt-5.3-codex
+    note: coding
+  - id: o3
+    note: heavy reasoning
+anthropic:
+  - id: claude-opus-4-7
+    note: flagship
+  - id: claude-opus-4-6
+    note: flagship · 1M ctx
+  - id: claude-sonnet-4-6
+    note: balanced
+  - id: claude-haiku-4-5
+    note: cheap · fast
