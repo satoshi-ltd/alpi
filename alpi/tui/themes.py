@@ -32,7 +32,7 @@ def build_theme(accent: str, dark: bool = True) -> Theme:
         foreground=fg,
         background=palette["background"],
         surface=palette["surface"],
-        # Status colors need explicit values — omitting falls back to primary
+        # Status colors need explicit values.
         # (= accent), which would make errors/warnings read as accent.
         warning="#ffa62b",
         error="#ba3c5b",

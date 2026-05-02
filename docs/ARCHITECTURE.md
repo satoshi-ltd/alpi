@@ -9,7 +9,9 @@ Audience: any developer (or LLM) reading this codebase from cold.
 ## What alpi is
 
 alpi is a local-first personal AI agent. It has a Textual TUI in the
-terminal, Telegram/IMAP/Gmail gateways as separate processes,
+terminal, a Tauri desktop app (and a planned mobile client) that
+talk to the daemon over a local Unix socket (the host plane),
+Telegram/IMAP/Gmail gateways hosted by the alpi daemon,
 inline-learning memory, scanner-gated live skills, multi-provider LLM
 support via LiteLLM, read-only research, write-capable delegation,
 scheduling, MCP integration, and ALP for private agent-to-agent links.
@@ -75,7 +77,8 @@ alpi profile list              list profiles, mark the active one
 alpi profile create <name>     bootstrap a new profile tree
 alpi profile remove <name>     delete after safety checks + confirm
 
-alpi service start|stop|restart|status         lifecycle of the unified per-profile orchestrator
+alpi daemon install|uninstall                  register / unregister the launchd plist / systemd unit
+alpi daemon start|stop|restart|status          lifecycle of the single per-machine daemon
 alpi schedule run-once|fire <id>                manual cron tick / ad-hoc job fire (operational, not lifecycle)
 
 alpi peers list                list pinned ALP peers for this profile
@@ -94,9 +97,9 @@ alpi workgroup pause|resume|leave <wg_id>          membership ops
 alpi workgroup kick <wg_id> <member-id|pubkey>     hub-only; rotates the group key
 ```
 
-**Shape rules:** containers (profile, peers, workgroups) get `list/create/remove` (or `add/remove`). The unified service gets `start/stop/restart/status` under `alpi service`; install/uninstall lives only in the wizard (`alpi setup → Service`), so users don't memorise two ways of doing the same thing. New profiles default to **opt-in** — nothing runs as a background service until the user installs it. Interactive wizards live exclusively under `alpi setup`; never add a per-feature wizard command.
+**Shape rules:** containers (profile, peers, workgroups) get `list/create/remove` (or `add/remove`). The daemon gets `start/stop/restart/status/install/uninstall` under `alpi daemon`; the same lifecycle is also reachable from `alpi setup → Services → Daemon` (default profile only) so users have one canonical place. The first `alpi setup` auto-installs the daemon — no opt-in step. Per-profile services (gateway, schedule, alp, workgroups, host) toggle from `alpi setup → Services → Subsystems` or directly via the `service:` block in each profile's `config.yaml`. Interactive wizards live exclusively under `alpi setup`; never add a per-feature wizard command.
 
-**Command ordering** in `--help` is frequency-first, not alphabetical: `chat → setup → doctor → logs → profile → peers → workgroup → schedule → service`. See `_OrderedGroup` in `cli.py`.
+**Command ordering** in `--help` is frequency-first, not alphabetical: `chat → setup → doctor → logs → profile → peers → workgroup → schedule → daemon`. See `_OrderedGroup` in `cli.py`.
 
 **`alpi/ui.py`** is the shared interactive layer. Raw `questionary.*` is forbidden outside it. Helpers: `banner`, `menu`, `text`, `password`, `confirm`, `row`, `ok/fail/warn/dim/saved/cancelled`. The close item is added automatically with value `None` (callers treat `None` as "out").
 
@@ -138,8 +141,8 @@ alpi/
 │   └── … (read_file, write_file, edit_file, todo, web_*, schedule,
 │         memory, session_search, send_message, email, config)
 ├── tui/                    Textual app, widgets, screens, theme
-├── gateway/                inbound platforms (Telegram / IMAP / Gmail), hosted by the unified service
-├── scheduler/              cron + once jobs, hosted by the unified service
+├── gateway/                inbound platforms (Telegram / IMAP / Gmail), hosted by the alpi daemon
+├── scheduler/              cron + once jobs, hosted by the alpi daemon
 ├── mail/                   mail backends (imap.py — IMAP+SMTP; gmail.py coming in T)
 ├── mcp/                    MCP client (stdio JSON-RPC) + registry
 ├── alp/                    Alpi Link Protocol (spec: docs/ALP.md)
@@ -150,7 +153,16 @@ alpi/
 │   ├── client.py          one-shot call with typed errors (TargetOffline, RemoteError)
 │   ├── handlers.py        link.ask / link.cancel — engine integration
 │   ├── mention.py         @peer parser + executor (shared by TUI + gateway)
+│   ├── pending.py         pending invites store (unpinned-sender capture)
 │   └── setup.py           `alpi setup → Peers` wizard
+├── host/                   control plane for desktop / mobile clients (default profile only)
+│   ├── server.py          Unix-socket JSON-RPC server (no envelope, no Noise — fs perms = trust)
+│   ├── handlers.py        read verbs (host.workgroup.transcript, host.sessions.*)
+│   ├── chat.py            host.chat.send (streaming) + host.chat.cancel
+│   ├── config.py          mutation verbs (host.providers.*, host.peers.*, host.profile.*, host.mcp.*, host.gateway.*, host.sandbox.*, host.voice.*)
+│   ├── events.py          host.events.subscribe + thread-safe emit() for daemon-pushed updates
+│   ├── workgroup.py       transcript decryption (hub + member shapes)
+│   └── sessions.py        plaintext session list / read
 └── skills/                 bundled skill blueprints; read-only, resolved via `@alpi/<name>` (see docs/SKILLS.md)
 ```
 
@@ -173,13 +185,20 @@ that live at `{home}/skills/<category>/<name>/`.
 ├── skills/<category>/<name>/    SKILL.md + scripts/ + references/ +
 │                                 assets/ + secrets/ (0700) + state/ +
 │                                 .gitignore
-├── sessions/<id>.json      turn-based session log
+├── sessions/<id>.json      turn-based session log (TUI / desktop / `--once`)
+├── mentions/<sender>.json  per-sender @-mention threads (cap 20 turns), receiving side
+├── gateway/                inbound transport state + chat sessions
+│   ├── telegram-state.json, imap-state.json, …   per-platform offsets, last-uid, etc.
+│   └── sessions/<id>.json  Telegram / email / webhook chat logs (hidden from local listings)
+│       └── _map.json       chat_id → session_id pointer
 ├── run/                    background process registry, gateway/schedule pids
 ├── alp/                    ALP state — keypair, peer list, socket, pid
 │   ├── peers.yaml         pinned peers (pubkey + allow + optional address)
 │   ├── alp.sock           Unix-domain socket, 0600, only while listener runs
 │   ├── alp.pid            listener pid
 │   └── secrets/alp_key.{pem,pub}   Ed25519 identity (private 0600, public 0644)
+├── host/                   control-plane state (default profile only)
+│   └── host.sock          Unix socket the desktop / mobile client connects to
 └── logs/                   gateway.log, schedule.log, alp.log (rotated at 1MB)
 
 ~/.alpi/profiles/<name>/     same layout, isolated per profile
@@ -300,47 +319,144 @@ Textual 8.2.x. Layout: `AlpiTopBar` (identity) + chat scroll (`VerticalScroll.an
 
 **`Ctrl+Y`** copies last assistant reply (pbcopy/wl-copy/xclip/xsel/OSC-52 fallback chain). `Ctrl+L` clears.
 
-### Service (`alpi/service.py`)
+### Daemon (`alpi/service.py`)
 
-Single per-profile orchestrator. One Python process runs every
-enabled subsystem (gateway, scheduler, ALP listener) on the same
-asyncio event loop, supervised by one launchd plist
-(`com.alpi.service.<profile>`) on macOS or one systemd-user unit
-(`alpi-service-<profile>.service`) on Linux. The legacy
-"three-services-per-profile" model is gone.
+One alpi daemon per machine, every profile inside. A single
+launchd plist (`com.alpi.daemon`) on macOS or systemd-user unit
+(`alpi-daemon.service`) on Linux supervises one Python process
+that hosts every profile under `~/.alpi/` (default plus each
+`profiles/<name>/`) on the same asyncio loop. Per-(profile,
+service) tasks are independently supervised — a crash in one
+profile's gateway leaves siblings untouched. Tasks are named
+`<profile>/<service>` (e.g. `mirai/gateway`, `ghost/alp`) so logs
++ `asyncio.all_tasks()` stay readable.
 
-`alpi.service.serve(home, profile)` is the foreground entry point
-called from `alpi service start` and from the supervising plist /
-unit's ExecStart. It:
+Per-profile services (`service.{gateway, schedule, alp,
+workgroups, host}` in each profile's `config.yaml`):
 
-1. Reads `service.{gateway,schedule,alp}` from `config.yaml`;
-   defaults to all-on when the section is missing.
-2. Configures the root logger to write to
-   `~/.alpi/<profile>/logs/service.log` (and to stderr only when
-   stderr is a TTY — avoids double-writes when launchd already
-   redirects stderr to the same file).
-3. Sets the process title to `alpi (<profile>)` via `setproctitle`,
-   so `ps aux` shows distinct entries for distinct profiles
-   instead of three look-alike `alpi` lines.
-4. Writes `service.pid`.
-5. Spawns one asyncio task per enabled subsystem and waits.
-   `gateway/run.serve(home)` runs the platform listeners,
-   `scheduler/run.serve(home)` is the tick loop converted to
-   `asyncio.sleep`, and an inline `_run_alp` boots the
-   `alp.server.Server` with `link.ask` + workgroup handlers
-   registered.
-6. SIGTERM / SIGINT cancels every task cooperatively, the PID
-   file is cleaned up on the way out.
+- **gateway** — Telegram / IMAP / Gmail / webhook listeners.
+- **schedule** — cron tick loop.
+- **alp** — ALP **listener** (inbound). Serves the full protocol
+  on a Unix socket plus optional Noise_XK on TCP: `link.ping`,
+  `link.ask`, `link.cancel` (ALP.1/2) **and** every `workgroup.*`
+  verb (ALP.3). When this is off, no peer can reach you, no hub
+  can fan out workgroup posts to you, and no `@-mention` to this
+  profile resolves.
+- **workgroups** — ALP.3 **poller** (outbound). Periodically calls
+  `workgroup.pull` against the hubs of every workgroup this profile
+  subscribes to, decrypts new posts, and dispatches an autonomous
+  agent turn when a post mentions this profile or opens a `#task`.
+  Sibling preempt watcher ticks ~6× faster to abort in-flight
+  responses when a new `#task` lands. Independent from `alp`
+  because direction and lifecycle are different — outbound vs
+  inbound, periodic vs reactive — so a poller crash (timeout
+  against a dead hub, decrypt failure on a malformed post) doesn't
+  take the listener down. The naming is a historical artefact:
+  workgroups IS ALP, this service is its client half.
+- **host** — *default profile only*. The control-plane Unix socket
+  (`~/.alpi/host/host.sock`) the desktop / mobile client uses to
+  drive the daemon. Refused on non-default profiles fast — the
+  client always targets default's socket and reaches sibling
+  profiles via the `profile` param on each verb.
 
-`status(home, profile)` is the snapshot used by `alpi service
-status` and by `alpi setup → Maintenance → Service`: PID, uptime
-(via `ps -o etime`), installed backend (launchd / systemd / none),
-and the enabled subsystems map.
+Default if a key is missing: every service on (so the desktop
+"just works" after install).
+
+`alpi.service.serve_all(root)` is the foreground entry point
+called from `alpi daemon start` and from the supervising unit's
+ExecStart. It:
+
+1. Walks `~/.alpi/` (default + every `profiles/<name>/`) to
+   discover profiles.
+2. For each profile reads `service.*` toggles; missing block →
+   every service on.
+3. Configures the root logger at `~/.alpi/logs/service.log` (stderr
+   only when it's a TTY, to avoid double-writes under launchd).
+4. Sets the process title to `alpi (daemon, N profiles)` via
+   `setproctitle`.
+5. Writes `~/.alpi/service.pid`.
+6. Spawns one supervised asyncio task per (profile, service) and
+   waits. `_supervise` wraps each one so a crash leaves siblings
+   running.
+7. SIGTERM / SIGINT cancels every task cooperatively; PID file
+   removed on exit.
+
+**Active home isolation.** Because N profiles share one process,
+tools that resolve their home via `home.get_home()` would all see
+the same env vars and write to default's home. The engine wraps
+each `run_turn` in a `home.set_active_home(self.home)` contextvar
+binding (per-thread); `get_home()` consults this binding before
+the env. Without it, mirai's memory tool would write to default's
+`USER.md`. See `tests/core/test_home.py` for the isolation tests.
+
+`daemon_status(root)` is the snapshot used by `alpi daemon status`
+and by `alpi setup → Services → Daemon`: PID, uptime (via `ps -o
+etime`), install backend (launchd / systemd / none), and the
+per-profile services map.
+
+### Host plane (`alpi/host/`)
+
+Control-plane for the desktop / mobile client. **Not** ALP — the
+two share a profile but live on different sockets, with different
+auth models. ALP is peer-to-peer (Noise on TCP, envelope-signed,
+peers pinned in `peers.yaml`); host is client-to-daemon (Unix
+socket only, plain JSON-RPC, filesystem perms = trust).
+
+Only the `default` profile hosts this subsystem — the client
+always targets default's socket and reaches sibling profiles via
+the `profile` parameter on each verb. `_run_host` refuses to bind
+on any other profile even if the toggle leaks via manual config
+edit.
+
+Wire shape: one JSON request per line on `~/.alpi/host/host.sock`:
+
+```
+{"id": "<reqid>", "method": "host.<noun>.<verb>", "params": {…}}
+```
+
+The daemon writes either a single response line or, for streaming
+verbs (`host.chat.send`, `host.events.subscribe`), multiple frames
+followed by a `done` frame and connection close.
+
+Verb namespaces in current shape:
+
+- **`host.sessions.list`**, **`host.session.read`**,
+  **`host.workgroup.transcript`** — read-only.
+- **`host.chat.send`** (stream), **`host.chat.cancel`** — run an
+  engine turn for a profile, stream tool / reasoning / assistant
+  events back; cancel via a separate connection that targets the
+  in-flight `request_id`.
+- **`host.providers.*`** (set_key, unset_key, add_ollama,
+  remove_ollama, add_openrouter_model, remove_openrouter_model),
+  **`host.peers.{add,remove,pending_list,pending_accept,pending_discard}`**,
+  **`host.profile.{create,delete}`**,
+  **`host.mcp.{add,remove}`**, **`host.gateway.remove`**,
+  **`host.sandbox.{set,network}`**, **`host.voice.{set_voice,autoplay}`**
+  — config mutations. Each is a thin wrapper around the same
+  internal helper the matching CLI subcommand calls. The
+  `host.peers.pending_*` verbs surface unpinned-sender entries
+  recorded by the ALP server (see [ALP.md → Pending invites](ALP.md#pending-invites));
+  `pending_list` enriches each row with `local_profile` when the
+  pubkey resolves to a profile on this machine, so the desktop /
+  TUI can pre-fill the peer id without prompting.
+- **`host.events.subscribe`** — long-lived push channel. Daemon
+  emits `{event, data}` frames as state changes. Sources call
+  `alpi.host.events.emit(kind, data)`; loop is captured at first
+  subscription and broadcasts via `call_soon_threadsafe` (safe to
+  call from worker threads). Filter optional via `params.kinds`.
+  Currently wired source: `Engine.save_session` → `session_changed`.
+  Pending sources tracked in [ROADMAP.md](ROADMAP.md).
+
+Adding a new verb: create the handler in the matching `host/*.py`
+module, register on `host_server.Server.register` (or
+`register_stream` for multi-frame), and call from the desktop /
+mobile client via the platform's host-client helper. Never expose
+a verb outside `host.*` — the namespace check in `register` enforces it.
 
 ### Gateway (`alpi/gateway/`)
 
 Inbound platform listeners (Telegram long-poll, IMAP polling,
-Gmail OAuth, webhook stub) hosted by the unified service. Each
+Gmail OAuth, webhook stub) hosted by the alpi daemon. Each
 platform iterates `async for msg in platform.listen()`; per
 incoming message the gateway spawns `alpi chat --once --emit-events`,
 streaming tool traces as `◆ {tool} · {arg_hint}` with the typing
@@ -351,12 +467,12 @@ in `.env`, fail-closed if unset. Per-platform config under
 `gateway.{telegram,imap,gmail}` in `config.yaml` (`show_tool_trace`,
 `typing_indicator`, `poll_interval`, etc.).
 
-Disable for a profile via `alpi setup → Maintenance → Service →
+Disable for a profile via `alpi setup → Services → Daemon →
 Gateway · off` (writes `service.gateway: false`).
 
 ### Schedule (`alpi/scheduler/`)
 
-Tick loop (default 30s) hosted inside the unified service. `add`
+Tick loop (default 30s) hosted inside the alpi daemon. `add`
 schedules a job (`kind: cron|once`, expression or `after_hours`).
 `run-once` ticks manually for testing. LLM time grounding: when
 the agent calls `schedule(action='add', kind='once',
@@ -414,9 +530,13 @@ Turn-based JSON: `turns: [{at, user, tools[], assistant}]` plus cumulative metri
 
 **TUI resume.** Bare `alpi` resumes the most recent session when `tui.auto_resume: true`; `-c` / `--continue` is the manual override.
 
-**Gateway per-chat threading (v0.2.54).** Each inbound message carries `external_chat_id` (a Telegram chat id, or the sender email for IMAP/Gmail). `alpi/session_map.py` holds a pointer map at `~/.alpi/sessions/_gateway_map.json`: `{chat_id: session_id}`. When the gateway spawns `alpi chat --once --resume-chat <chat_id>`, the CLI consults the map — if there's a pointer, that session is loaded and continued; otherwise a fresh session starts and the pointer gets bound after save. Same mechanism across every platform; the natural semantics fall out of what each puts in `chat_id`: per-chat threading for Telegram, per-sender threading for IMAP / Gmail.
+**Gateway per-chat threading.** Each inbound message carries `external_chat_id` (a Telegram chat id, or the sender email for IMAP/Gmail). `alpi/session_map.py` holds a pointer map at `~/.alpi/<profile>/gateway/sessions/_map.json`: `{chat_id: session_id}`. When the gateway spawns `alpi chat --once --resume-chat <chat_id>`, the CLI sets `engine.session.subdir = "gateway/sessions"` and consults the map — if there's a pointer, that session is loaded and continued; otherwise a fresh session starts and the pointer gets bound after save. Same mechanism across every platform; the natural semantics fall out of what each puts in `chat_id`: per-chat threading for Telegram, per-sender threading for IMAP / Gmail.
 
-`/new` (wired up in AK) calls `session_map.forget(chat_id)` — the pointer drops but the underlying session file stays on disk. Historical threads remain searchable via `session_search`.
+Gateway sessions live in their own subdir (`gateway/sessions/`) so they don't pollute the local TUI/desktop session list (which scans `sessions/` only) and so the `Cleanup → Gateway` category never collides with transport state files in `gateway/` itself (Telegram offsets, IMAP last-uid, …).
+
+`/new` (wired up in AK) calls `session_map.forget(chat_id)` — the pointer drops but the underlying session file stays on disk. Historical threads remain searchable via `session_search` against the local `sessions/` dir; gateway transcripts are intentionally excluded from local search.
+
+**`@`-mention threads (`alpi/alp/mention_thread.py`).** When peer A `@`-mentions peer B over ALP (`link.ask`), the receiving side runs a fresh `Engine` per turn — but B persists a small per-sender thread at `<B-home>/mentions/<A>.json`, capped at 20 turns. Successive mentions from the same A→B pair carry conversational memory ("what I said before" resolves) without polluting B's local `--continue` (which only reads `sessions/`). Threads are isolated per remitente. Wipe via `setup → Cleanup → Mentions`.
 
 ### Security model
 
@@ -431,7 +551,7 @@ Threat model: prompt injection via email/web content, LLM-issued tool calls on t
 
 ### Profiles
 
-`alpi -p <name>` resolves home to `~/.alpi/profiles/<name>/`. `ALPI_PROFILE` env var is the same. No sticky "current profile" file — resolution is fully explicit. The unified service plist / unit carries the profile name in its label (`com.alpi.service.<profile>` / `alpi-service-<profile>.service`) so multiple profiles coexist without colliding, and `setproctitle` makes them distinguishable in `ps`.
+`alpi -p <name>` resolves home to `~/.alpi/profiles/<name>/`. `ALPI_PROFILE` env var is the same. No sticky "current profile" file — resolution is fully explicit. The single daemon (`com.alpi.daemon` / `alpi-daemon.service`) supervises every profile from one process; tasks are namespaced `<profile>/<service>` so they stay distinguishable in logs and `asyncio.all_tasks()`. Inside a turn, `home.set_active_home(home)` binds the per-thread contextvar consulted by `home.get_home()` so tools resolve to the right profile even though every concurrent turn shares the daemon's env.
 
 ### Workspace
 

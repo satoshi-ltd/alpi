@@ -7,20 +7,18 @@ Pytest-based. One command to run everything.
 ```
 tests/
 ├── conftest.py              # --llm flag, shared fixtures
-├── test_config.py           # config load/save/resolve_model
-├── test_home.py             # HOME_DIR resolution & bootstrap
-├── test_memory.py           # MemoryStore — add/dedup/hygiene/limits
-├── test_memory_tool.py      # Memory tool (LLM-facing)
-├── test_skills.py           # create_skill spec enforcement
-├── test_tools.py            # all other tools (bash, read/write/edit, grep...)
-├── test_session_search.py   # session_search unit
-├── test_reflect_unit.py     # reflect JSON parsing / helpers
-├── test_continue.py         # --continue resume logic
-├── test_llm_chat.py         # ❗ needs --llm — full chat round-trip
-└── test_llm_reflect.py      # ❗ needs --llm — reflect with real LLM
+├── alp/                     # ALP transport, workgroups, keys, mention, TCP
+├── core/                    # config, home, logs, sessions, CLI, engine, status
+├── gateway/                 # Telegram / IMAP / Gmail gateway flows
+├── mail/                    # mail auth/setup helpers
+├── mcp/                     # MCP client and registry
+├── tools/                   # deterministic tool implementations
+├── tui/                     # TUI widgets, panels, and shared UI helpers
+└── manual/                  # runnable scripts, not collected by pytest
 ```
 
 Anything marked with `pytestmark = pytest.mark.llm` is skipped unless you opt in.
+Anything marked with `pytestmark = pytest.mark.integration` is skipped unless you opt in.
 
 ## Running
 
@@ -28,8 +26,11 @@ Anything marked with `pytestmark = pytest.mark.llm` is skipped unless you opt in
 # From the repo root, using the installed alpi's venv:
 PY=/Users/javi/.local/share/uv/tools/alpi/bin/python
 
-# Unit & fast tests only (no LLM, no cost)
+# Unit & fast tests only (integration tests skipped by default)
 $PY -m pytest
+
+# Include integration tests that need sockets, sandboxes, or real subprocesses
+$PY -m pytest --integration
 
 # Everything, including real LLM calls
 $PY -m pytest --llm
@@ -38,10 +39,10 @@ $PY -m pytest --llm
 ALPI_LLM=1 $PY -m pytest --llm
 
 # A specific file
-$PY -m pytest tests/test_memory.py -v
+$PY -m pytest tests/core/test_memory.py -v
 
 # A specific test
-$PY -m pytest tests/test_memory.py::test_add_rejects_exact_duplicate -v
+$PY -m pytest tests/core/test_memory.py::test_add_rejects_exact_duplicate -v
 ```
 
 ## Fixtures

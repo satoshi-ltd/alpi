@@ -13,8 +13,7 @@ from typing import Any
 
 log = logging.getLogger("alpi.mcp")
 
-# Handshake. We speak the November 2024 spec; most servers still
-# accept older/newer versions and negotiate.
+# Handshake uses the November 2024 MCP spec.
 _PROTOCOL_VERSION = "2024-11-05"
 _CLIENT_INFO = {"name": "alpi", "version": "0.2"}
 
@@ -41,17 +40,13 @@ class MCPClient:
         self.name = name
         self.command = command
         self.args = list(args or [])
-        # Preserve the env spec verbatim — expansion happens at start()
-        # so re-starts pick up ``.env`` changes without needing to
-        # reconstruct the client.
+        # Keep env specs verbatim so restarts see fresh `.env` values.
         self._env_spec = dict(env or {})
         self._proc: subprocess.Popen | None = None
         self._req_id = 0
         self._lock = threading.Lock()
         self._tools: list[ToolSpec] = []
-        # stderr of the subprocess is captured here so handshake failures
-        # ("server closed stdout") can surface what the server actually
-        # said before dying. Keeps the background drainer light.
+        # Buffer stderr so handshake failures can surface the real error.
         self._stderr_buf: list[str] = []
         self._stderr_lock = threading.Lock()
 
@@ -79,9 +74,7 @@ class MCPClient:
         except OSError as e:
             raise MCPError(f"{self.name}: spawn failed: {e}") from e
 
-        # Drain stderr in the background so a chatty server can't fill
-        # the pipe and block the subprocess on a write. stderr lines go
-        # to our own log at debug level — useful when a handshake fails.
+        # Drain stderr in the background so chatty servers don't block.
         threading.Thread(
             target=self._drain_stderr, daemon=True,
         ).start()
@@ -134,8 +127,7 @@ class MCPClient:
             },
             timeout=timeout,
         )
-        # Per spec, the client sends a notifications/initialized right
-        # after initialize returns.
+        # MCP expects notifications/initialized right after initialize.
         self._notify("notifications/initialized", {})
 
     def _fetch_tools(self, timeout: float) -> list[ToolSpec]:
@@ -188,9 +180,7 @@ class MCPClient:
                 ))
             line = self._proc.stdout.readline()
             if not line:
-                # Give the stderr drainer a moment to flush any last
-                # lines the server wrote before exiting — that's often
-                # the actual error message (missing dep, bad args, etc.).
+                # Let the stderr drainer flush the last error lines.
                 time.sleep(0.2)
                 raise MCPError(self._wrap_failure("server closed stdout"))
             try:
@@ -226,9 +216,7 @@ class MCPClient:
             if not line:
                 return
             log.debug("%s (stderr): %s", self.name, line.rstrip())
-            # Keep the last N lines so error messages can show context
-            # when the handshake fails. Capped to avoid unbounded growth
-            # for chatty servers that spam stderr for telemetry.
+            # Keep a short stderr tail for failure context.
             with self._stderr_lock:
                 self._stderr_buf.append(line.rstrip())
                 if len(self._stderr_buf) > 40:
@@ -236,7 +224,7 @@ class MCPClient:
 
     def _stderr_tail(self) -> str:
         with self._stderr_lock:
-            # Last ~10 lines, trimmed of empties, joined one per line.
+            # Trim empties and keep the last few lines.
             lines = [ln for ln in self._stderr_buf[-10:] if ln.strip()]
             return "\n".join(lines)
 

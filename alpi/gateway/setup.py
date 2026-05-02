@@ -54,8 +54,7 @@ def run(home: Path) -> None:
     env_path = home / ".env"
     _append_env(env_path, "TELEGRAM_BOT_TOKEN", token)
     _append_env(env_path, "TELEGRAM_ALLOWED_CHAT_IDS", ",".join(chat_ids))
-    # Mirror to os.environ so the setup menu's status line updates
-    # immediately, without requiring a restart.
+    # Mirror to os.environ so the status line updates immediately.
     os.environ["TELEGRAM_BOT_TOKEN"] = token
     os.environ["TELEGRAM_ALLOWED_CHAT_IDS"] = ",".join(chat_ids)
 

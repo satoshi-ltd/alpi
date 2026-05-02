@@ -42,6 +42,10 @@ def fmt_duration(seconds: float) -> str:
 
 
 def fmt_count(n: int) -> str:
+    if n >= 1_000_000:
+        return f"{n / 1_000_000:.1f}M"
+    if n >= 10_000:
+        return f"{n // 1000}K"
     if n >= 1000:
         return f"{n / 1000:.1f}K"
     return str(n)

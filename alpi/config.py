@@ -287,7 +287,7 @@ def save(cfg: Config) -> None:
     if cfg.service:
         data["service"] = cfg.service
 
-    cfg.config_path.write_text(yaml.safe_dump(data, sort_keys=False))
+    cfg.config_path.write_text(yaml.safe_dump(data, sort_keys=False, allow_unicode=True))
 
 
 def _tools_delta(cfg: Config) -> dict:
@@ -371,4 +371,4 @@ def seed_defaults(home: Path) -> None:
     """
     cfg_path = home / "config.yaml"
     if not cfg_path.exists():
-        cfg_path.write_text(yaml.safe_dump(SEED_CONFIG, sort_keys=False))
+        cfg_path.write_text(yaml.safe_dump(SEED_CONFIG, sort_keys=False, allow_unicode=True))

@@ -430,9 +430,7 @@ class AlpiApp(App):
     def on_mention_done(self, message: MentionDone) -> None:
         message.card.finish(message.output, ok=message.ok)
         if message.ok and message.reply:
-            assistant = AssistantMessage()
-            self._mount_message(assistant)
-            assistant.replace(message.reply)
+            self._mount_message(AssistantMessage(initial=message.reply))
 
     def _handle_slash(self, text: str) -> None:
         parts = text[1:].split(maxsplit=1)
@@ -593,30 +591,30 @@ class AlpiApp(App):
         self._show_panel(ProviderPanel(self.cfg, self.home))
 
     def _update_header(self) -> None:
+        from alpi import ledger
+
         hdr = self.query_one(AlpiHeader)
         s = self.engine.session
+        kind, cap = ledger._budget(self.cfg.budget)
+        used = 0.0
+        if kind:
+            snap = ledger.snapshot(self.home)
+            prof = snap.get("profile", {})
+            used = float(prof.get(kind, 0))
         hdr.update_usage(
             model=s.model,
             tokens=s.last_ctx_tokens,
             cost=s.cost_usd,
             ctx_window=self._resolve_ctx_window(s.model),
+            budget_kind=kind,
+            budget_used=used,
+            budget_cap=cap,
         )
 
     def _resolve_ctx_window(self, model: str) -> int:
-        head, _, rest = model.partition("/")
-        for entry in self.cfg.providers.get("ollama", []) or []:
-            if entry.get("name") == head:
-                from alpi.providers.ollama import resolve_num_ctx
-                return resolve_num_ctx(entry.get("url", ""), rest)
-        try:
-            import litellm
-            for key in (model, rest, f"{head}/{rest}"):
-                info = litellm.model_cost.get(key)
-                if info and info.get("max_input_tokens"):
-                    return int(info["max_input_tokens"])
-        except Exception:  # noqa: BLE001
-            pass
-        return 200_000
+        from alpi import ctx_window
+
+        return ctx_window.resolve(self.home, self.cfg, model)
 
     def _mount_message(self, widget) -> None:
         self.query_one("#chat", VerticalScroll).mount(widget)

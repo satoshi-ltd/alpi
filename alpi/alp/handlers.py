@@ -81,8 +81,13 @@ def _run_turn(
 ) -> dict[str, Any]:
     """Synchronous turn — runs in a thread so the ALP server event
     loop stays responsive while the engine blocks on LLM calls."""
+    from alpi.alp import mention_thread
+
     cfg = cfg_mod.load(home)
     engine = Engine(home=home, cfg=cfg)
+
+    thread = mention_thread.load(home, peer_id)
+    mention_thread.hydrate(engine.session.messages, thread)
 
     # Expose the live engine so ``link.cancel`` can reach in and flip
     # the interrupt flag. Cleared on exit regardless of success/failure.
@@ -113,10 +118,11 @@ def _run_turn(
 
         with ledger.peer_context(peer_id):
             engine.run_turn(prompt, emit=sink)
-        try:
-            engine.save_session()
-        except Exception:  # noqa: BLE001
-            pass
+        # Mention threads live in ``mentions/<sender>.json``, not
+        # ``sessions/``, so ``alpi -p <peer> --continue`` stays clean.
+        reply_text = "\n\n".join(parts).strip()
+        if reply_text and not interrupted:
+            mention_thread.append(home, peer_id, prompt, reply_text)
     finally:
         active.engine = None
         active.session_id = ""

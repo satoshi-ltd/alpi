@@ -81,9 +81,18 @@ def _continue_last_session(engine: Engine, h: Path, console=None) -> bool:
     return _hydrate_from_path(engine, candidates[0], console=console)
 
 
-def _continue_specific_session(engine: Engine, h: Path, session_id: str) -> bool:
-    """Resume a session by its exact id. Used by gateway per-chat threading."""
-    path = h / "sessions" / f"{session_id}.json"
+def _continue_specific_session(
+    engine: Engine, h: Path, session_id: str, subdir: str = "sessions",
+) -> bool:
+    """Resume a session by its exact id. Used by gateway per-chat threading.
+
+    ``subdir`` selects ``sessions/`` (default, for desktop replays) or
+    ``gateway/sessions/`` (gateway inbound). The two live in separate
+    dirs so gateway traffic doesn't show up in the TUI/desktop session
+    list, and so the cleanup category for gateway sessions never
+    collides with transport state files in ``gateway/`` itself.
+    """
+    path = h / subdir / f"{session_id}.json"
     if not path.exists():
         return False
     return _hydrate_from_path(engine, path)
@@ -140,26 +149,71 @@ def _run_once(
     user_text: str,
     emit_events: bool = False,
     resume_chat_id: str | None = None,
-    session_id: str | None = None,
-    model_override: str | None = None,
 ) -> None:
     import json
     from alpi import session_map
 
     _bootstrap(h)
     cfg = config.load(h)
-    if model_override:
-        cfg.model = model_override
     engine = Engine(home=h, cfg=cfg)
 
-    # Explicit session id wins. Used by the desktop app to append a turn
-    # to a specific session the user is currently viewing.
-    if session_id:
-        _continue_specific_session(engine, h, session_id)
-    elif resume_chat_id:
+    if resume_chat_id:
+        engine.session.subdir = "gateway/sessions"
         existing = session_map.get(h, resume_chat_id)
         if existing:
-            _continue_specific_session(engine, h, existing)
+            _continue_specific_session(
+                engine, h, existing, subdir="gateway/sessions",
+            )
+
+    from alpi.alp import mention as alp_mention
+    parsed = alp_mention.parse(user_text, home=h)
+    if parsed is not None:
+        import asyncio as _aio, time as _t
+        from alpi.tui.formatting import arg_hint as _arg_hint
+        from alpi.session import ToolLog as _ToolLog
+        started = _t.time()
+        if emit_events:
+            sys.stdout.write(json.dumps({
+                "kind": "tool_start",
+                "name": "peer",
+                "preview": _arg_hint("peer", {
+                    "peer_id": parsed.peer_id, "prompt": parsed.prompt,
+                }),
+            }) + "\n")
+            sys.stdout.flush()
+        result = _aio.run(alp_mention.execute(h, parsed.peer_id, parsed.prompt))
+        reply = result.reply if result.ok else f"[error] {result.error}"
+        if emit_events:
+            sys.stdout.write(json.dumps({
+                "kind": "tool_end", "name": "peer", "ok": result.ok,
+            }) + "\n")
+            sys.stdout.flush()
+        engine.session.messages.append({"role": "user", "content": user_text})
+        engine.session.messages.append({"role": "assistant", "content": reply})
+        engine.session.log_turn(
+            user=user_text, assistant=reply,
+            tools=[_ToolLog(
+                at=started, name="peer",
+                args={"peer_id": parsed.peer_id, "prompt": parsed.prompt},
+                result=reply, ok=result.ok, duration_s=_t.time() - started,
+            )],
+            started_at=started,
+        )
+        try:
+            engine.save_session()
+        except Exception:  # noqa: BLE001
+            pass
+        if resume_chat_id:
+            try:
+                session_map.set(h, resume_chat_id, engine.session.id)
+            except Exception:  # noqa: BLE001
+                pass
+        if emit_events:
+            sys.stdout.write(json.dumps({"kind": "reply", "text": reply}) + "\n")
+        else:
+            sys.stdout.write(reply + "\n")
+        sys.stdout.flush()
+        return
 
     parts: list[str] = []
 
@@ -184,17 +238,24 @@ def _run_once(
         sys.stdout.flush()
 
     def sink(ev: AgentEvent) -> None:
-        # Errors go to the reply (so gateway users see them) instead of
-        # the event stream — emitting both duplicates the message when
-        # the gateway runs with show_tool_trace.
-        if emit_events and ev.kind != "error":
+        if emit_events:
             _emit_event_line(ev)
         if ev.kind == "assistant_done" and ev.text.strip():
             parts.append(ev.text)
-        elif ev.kind == "error":
-            parts.append(ev.text if emit_events else f"[error] {ev.text}")
+        elif ev.kind == "error" and not emit_events:
+            parts.append(f"[error] {ev.text}")
 
-    engine.run_turn(user_text, emit=sink)
+    # Cooperative SIGINT lets the engine save interrupted turns.
+    import signal as _signal
+
+    def _on_sigint(_signum, _frame):
+        engine.request_interrupt()
+
+    prev_handler = _signal.signal(_signal.SIGINT, _on_sigint)
+    try:
+        engine.run_turn(user_text, emit=sink)
+    finally:
+        _signal.signal(_signal.SIGINT, prev_handler)
     try:
         engine.save_session()
     except Exception:  # noqa: BLE001
@@ -297,14 +358,25 @@ def main(ctx: click.Context, profile: str | None, continue_last: bool) -> None:
         _run_chat(h, continue_last=resume)
 
 
+@main.command("ctx")
+@click.argument("model")
+@click.pass_context
+def cmd_ctx(ctx: click.Context, model: str) -> None:
+    """Print the context window (tokens) for ``model`` under this
+    profile. Mirrors what the TUI status bar and desktop header
+    display."""
+    from alpi import ctx_window
+
+    h: Path = ctx.obj["home"]
+    cfg = config.load(h)
+    click.echo(ctx_window.resolve(h, cfg, model))
+
+
 @main.command()
 @click.option(
     "--once", "input_text", default=None, help="Run one turn and print the reply to stdout."
 )
-# Internal gateway-subprocess contract. Hidden from ``--help`` so the
-# public surface stays minimal; users who need one-shot mode use
-# ``--once`` alone. The gateway sets this flag when spawning so it
-# can parse tool activity from the agent's stdout.
+# Hidden gateway contract for stdout event streaming.
 @click.option("--emit-events", is_flag=True, default=False, hidden=True)
 @click.option(
     "--resume-chat",
@@ -312,20 +384,6 @@ def main(ctx: click.Context, profile: str | None, continue_last: bool) -> None:
     default=None,
     hidden=True,
     help="Gateway-only: resume the per-chat session for this id.",
-)
-@click.option(
-    "--session-id",
-    "session_id",
-    default=None,
-    hidden=True,
-    help="Resume a specific session by id (used by the desktop app).",
-)
-@click.option(
-    "--model",
-    "model_override",
-    default=None,
-    hidden=True,
-    help="Override the configured model for this turn only (not persisted).",
 )
 @click.option(
     "-c", "--continue", "continue_last", is_flag=True, help="Resume from the last session."
@@ -336,8 +394,6 @@ def chat(
     input_text: str | None,
     emit_events: bool,
     resume_chat: str | None,
-    session_id: str | None,
-    model_override: str | None,
     continue_last: bool,
 ) -> None:
     """Launch the TUI, or run one turn with ``--once "text"``."""
@@ -348,8 +404,6 @@ def chat(
             input_text,
             emit_events=emit_events,
             resume_chat_id=resume_chat,
-            session_id=session_id,
-            model_override=model_override,
         )
     else:
         _run_chat(h, continue_last=continue_last)
@@ -372,79 +426,77 @@ def _require_workspace(h: Path) -> None:
         )
 
 
-# Service — single per-profile orchestrator. Runs gateway / schedule /
-# alp listener (whichever the config enables) on one asyncio loop in
-# one process. Replaces the legacy `gateway`, `schedule {start,stop,
-# restart}`, and `alp` lifecycle groups.
+# Daemon: single machine-wide supervisor; per-profile toggles live in config.
 
 
 @main.group()
-def service() -> None:
-    """Per-profile service: gateway + scheduler + ALP listener in one process."""
+def daemon() -> None:
+    """The alpi daemon — one supervisor for every profile under ``~/.alpi``."""
 
 
-@service.command("start")
-@click.pass_context
-def service_start(ctx: click.Context) -> None:
-    """Run the service in the foreground (blocking).
+def _root() -> Path:
+    """Daemon commands always operate on the machine root."""
+    return home._ROOT
 
-    Reads ``service.{gateway,schedule,alp}`` from this profile's
-    ``config.yaml`` to decide which subsystems to spin up. Default if
-    the section is missing: all three on. Used by both the install
-    path (launchd/systemd ExecStart) and one-shot dev runs.
-    """
+
+@daemon.command("start")
+def daemon_start() -> None:
+    """Run the daemon in the foreground."""
     from alpi import service as svc
 
-    h: Path = ctx.obj["home"]
-    profile: str = ctx.obj.get("profile") or "default"
-    _bootstrap(h)
-    _require_workspace(h)
-    if svc.is_running(h):
+    root = _root()
+    _bootstrap(root)
+    if svc.daemon_running_pid(root) is not None:
         raise click.ClickException(
-            f"service already running (pid {svc.running_pid(h)}). "
-            "Use `alpi service stop` first.",
+            f"daemon already running (pid {svc.daemon_running_pid(root)}). "
+            "Use `alpi daemon stop` first.",
         )
-    svc.serve(h, profile)
+    svc.serve_all(root)
 
 
-@service.command("stop")
-@click.pass_context
-def service_stop(ctx: click.Context) -> None:
-    """Send SIGTERM to a running service."""
+@daemon.command("stop")
+def daemon_stop() -> None:
+    """SIGTERM the daemon."""
     from alpi import service as svc
 
-    h: Path = ctx.obj["home"]
-    if not svc.stop(h, ctx.obj.get("profile") or "default"):
-        click.echo("service is not running")
+    if not svc.stop_daemon(_root()):
+        click.echo("daemon is not running")
         return
-    click.echo("service stopped")
+    click.echo("daemon stopped")
 
 
-@service.command("restart")
-@click.pass_context
-def service_restart(ctx: click.Context) -> None:
-    """Stop the service so the supervising launchd / systemd brings it
-    back. Without an installed service, the process stays stopped."""
+@daemon.command("restart")
+def daemon_restart() -> None:
+    """Stop the daemon and let the supervisor respawn it."""
     from alpi import service as svc
+    import subprocess
+    import shutil
 
-    h: Path = ctx.obj["home"]
-    profile: str = ctx.obj.get("profile") or "default"
-    if not svc.is_running(h):
-        click.echo("service is not running")
+    root = _root()
+    if svc.daemon_running_pid(root) is None:
+        click.echo("daemon is not running")
         return
-    svc.stop(h, profile)
-    click.echo("service stopped — supervisor will respawn it shortly")
+    svc.stop_daemon(root)
+    if svc.daemon_installed():
+        click.echo("daemon stopped — supervisor will respawn it shortly")
+        return
+    alpi_bin = shutil.which("alpi") or "alpi"
+    subprocess.Popen(
+        [alpi_bin, "daemon", "start"],
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
+    )
+    click.echo("daemon restarting (on-demand)")
 
 
-@service.command("status")
-@click.pass_context
-def service_status(ctx: click.Context) -> None:
-    """Print PID, uptime, and which subsystems are active."""
+@daemon.command("status")
+def daemon_status_cmd() -> None:
+    """Print PID, uptime, and per-profile service state."""
     from alpi import service as svc
 
-    h: Path = ctx.obj["home"]
-    profile: str = ctx.obj.get("profile") or "default"
-    info = svc.status(h, profile)
+    info = svc.daemon_status(_root())
     if info["running"]:
         up = info.get("uptime_seconds")
         up_s = f"  · uptime {up}s" if up is not None else ""
@@ -453,17 +505,41 @@ def service_status(ctx: click.Context) -> None:
         click.echo("not running")
     backend = info["installed_via"]
     click.echo(f"installed via {backend}" if backend else "not installed")
-    on = [k for k, v in info["subsystems"].items() if v]
-    click.echo(f"subsystems: {', '.join(on) if on else '(none enabled)'}")
+    profiles = info["profiles"]
+    click.echo(f"profiles: {len(profiles)}")
+    for name, subs in profiles.items():
+        on = [k for k, v in subs.items() if v]
+        line = ", ".join(on) if on else "(none)"
+        click.echo(f"  {name}: {line}")
 
 
-# Schedule — only operational verbs survive (run-once, fire). Lifecycle
-# moved to `alpi service`. The `schedule` group lives on as a namespace.
+@daemon.command("install")
+def daemon_install() -> None:
+    """Register the daemon with launchd / systemd."""
+    from alpi import service as svc
+
+    kind = svc.install_daemon(_root())
+    click.echo(f"daemon installed via {kind}")
+
+
+@daemon.command("uninstall")
+def daemon_uninstall() -> None:
+    """Unregister the daemon from launchd / systemd."""
+    from alpi import service as svc
+
+    if not svc.daemon_installed():
+        click.echo("daemon not installed")
+        return
+    kind = svc.uninstall_daemon()
+    click.echo(f"daemon uninstalled ({kind})")
+
+
+# Schedule keeps only run-once/fire.
 
 
 @main.group()
 def schedule() -> None:
-    """Schedule operations (lifecycle is `alpi service`)."""
+    """Schedule operations."""
 
 
 @schedule.command("run-once")
@@ -502,7 +578,399 @@ def schedule_fire(ctx: click.Context, job_id: str) -> None:
         ctx.exit(1)
 
 
+@main.group()
+def gateway() -> None:
+    """Inspect external messaging gateways."""
+
+
+@gateway.command("probe")
+@click.argument("name", type=click.Choice(["telegram", "imap", "gmail"]))
+@click.pass_context
+def gateway_probe(ctx: click.Context, name: str) -> None:
+    """Probe a gateway and print JSON ``{status, reason?}``."""
+    import json
+    from alpi import home as home_mod
+
+    h: Path = ctx.obj["home"]
+    env = _read_profile_env(h)
+    out: dict[str, str] = {}
+    if name == "telegram":
+        token = env.get("TELEGRAM_BOT_TOKEN", "").strip()
+        if not token:
+            out = {"status": "off"}
+        else:
+            try:
+                import urllib.request as _ur
+                with _ur.urlopen(
+                    f"https://api.telegram.org/bot{token}/getMe", timeout=2.0
+                ) as resp:
+                    body = json.loads(resp.read().decode("utf-8"))
+                if body.get("ok"):
+                    out = {"status": "on"}
+                else:
+                    out = {"status": "error", "reason": "token rejected"}
+            except Exception as e:  # noqa: BLE001
+                out = {"status": "error", "reason": str(e)[:80]}
+    elif name == "imap":
+        addr = env.get("IMAP_ADDRESS", "").strip()
+        if not addr:
+            out = {"status": "off"}
+        else:
+            host = env.get("IMAP_HOST", "").strip() or "imap.gmail.com"
+            port = int(env.get("IMAP_PORT", "993").strip() or "993")
+            try:
+                import socket as _s
+                with _s.create_connection((host, port), timeout=2.0):
+                    out = {"status": "on"}
+            except Exception as e:  # noqa: BLE001
+                out = {"status": "error", "reason": str(e)[:80]}
+    elif name == "gmail":
+        client_id = env.get("GMAIL_CLIENT_ID", "").strip()
+        token_path = h / "secrets" / "gmail_token.json"
+        if not client_id and not token_path.exists():
+            out = {"status": "off"}
+        elif not token_path.exists():
+            out = {"status": "error", "reason": "no token file"}
+        else:
+            try:
+                tok = json.loads(token_path.read_text())
+                expiry = tok.get("expiry") or tok.get("expires_at")
+                refresh = tok.get("refresh_token")
+                if not refresh and expiry:
+                    import datetime as _dt
+                    exp = _dt.datetime.fromisoformat(
+                        expiry.replace("Z", "+00:00")
+                    )
+                    if exp < _dt.datetime.now(_dt.timezone.utc):
+                        out = {"status": "error", "reason": "token expired"}
+                    else:
+                        out = {"status": "on"}
+                else:
+                    out = {"status": "on"}
+            except Exception as e:  # noqa: BLE001
+                out = {"status": "error", "reason": str(e)[:80]}
+    click.echo(json.dumps(out))
+
+
+@gateway.command("remove")
+@click.argument("name", type=click.Choice(["telegram", "imap", "gmail"]))
+@click.option("--yes", is_flag=True, default=False,
+              help="Skip the confirmation prompt.")
+@click.pass_context
+def gateway_remove(ctx: click.Context, name: str, yes: bool) -> None:
+    """Drop env vars (and Gmail token file) for one configured gateway."""
+    from alpi.model_selector import _remove_env_key
+
+    h: Path = ctx.obj["home"]
+    cfg = config.load(h)
+    if not yes:
+        if not click.confirm(
+            f"Remove {name} gateway? Drops env vars and you can re-add later.",
+            default=False,
+        ):
+            click.echo("aborted")
+            return
+    for key in _GATEWAY_ENV_KEYS.get(name, ()):
+        _remove_env_key(cfg.env_path, key)
+    if name == "gmail":
+        token_file = h / "secrets" / "gmail_token.json"
+        if token_file.exists():
+            try:
+                token_file.unlink()
+            except OSError:
+                pass
+    click.echo(f"removed {name} gateway · restart daemon to apply")
+
+
 # Release — auto-generate CHANGELOG sections from git history
+
+
+@main.group()
+def mcp() -> None:
+    """Manage MCP (Model Context Protocol) servers for this profile."""
+
+
+@mcp.command("add")
+@click.argument("name")
+@click.option("--command", "command", required=True,
+              help="Executable that spawns the MCP server (e.g. npx, uvx).")
+@click.option("--args", "args_str", default="",
+              help="Space-separated arguments. Use shell-style quoting.")
+@click.option("--env", "env_pairs", multiple=True,
+              help="KEY=VALUE env var. Repeat for multiple.")
+@click.pass_context
+def mcp_add(
+    ctx: click.Context, name: str, command: str,
+    args_str: str, env_pairs: tuple[str, ...],
+) -> None:
+    """Add (or replace) an MCP server entry."""
+    import shlex
+
+    name = name.strip()
+    if ":" in name or "/" in name or name.startswith("."):
+        raise click.ClickException(f"invalid name: {name!r}")
+    if not command.strip():
+        raise click.ClickException("--command required")
+    args = shlex.split(args_str) if args_str else []
+    env: dict[str, str] = {}
+    for pair in env_pairs:
+        if "=" not in pair:
+            raise click.ClickException(
+                f"invalid --env entry {pair!r} (expected KEY=VALUE)"
+            )
+        k, v = pair.split("=", 1)
+        env[k.strip()] = v.strip()
+
+    h: Path = ctx.obj["home"]
+    cfg = config.load(h)
+    cfg.raw.setdefault("mcp", {}).setdefault("servers", {})[name] = {
+        "command": command.strip(),
+        "args": args,
+        "env": env,
+    }
+    config.save(cfg)
+    click.echo(f"added MCP {name!r}")
+
+
+@mcp.command("remove")
+@click.argument("name")
+@click.pass_context
+def mcp_remove(ctx: click.Context, name: str) -> None:
+    """Drop an MCP server entry."""
+    h: Path = ctx.obj["home"]
+    cfg = config.load(h)
+    servers = cfg.raw.setdefault("mcp", {}).setdefault("servers", {})
+    if name not in servers:
+        raise click.ClickException(f"no MCP named {name!r}")
+    servers.pop(name)
+    config.save(cfg)
+    click.echo(f"removed MCP {name!r}")
+
+
+@main.group()
+def voice() -> None:
+    """Configure TTS voice + autoplay for this profile."""
+
+
+@voice.command("set-voice")
+@click.argument("voice_id")
+@click.pass_context
+def voice_set_voice(ctx: click.Context, voice_id: str) -> None:
+    """Set the TTS voice id (e.g. ``en-US-AriaNeural``)."""
+    h: Path = ctx.obj["home"]
+    cfg = config.load(h)
+    cfg.tools.tts.voice = voice_id.strip()
+    config.save(cfg)
+    click.echo(f"voice set to {cfg.tools.tts.voice}")
+
+
+@voice.command("autoplay")
+@click.argument("state", type=click.Choice(["on", "off"]))
+@click.pass_context
+def voice_autoplay(ctx: click.Context, state: str) -> None:
+    """Toggle speaker playback when the assistant emits TTS."""
+    h: Path = ctx.obj["home"]
+    cfg = config.load(h)
+    cfg.tools.tts.autoplay = state == "on"
+    config.save(cfg)
+    click.echo(f"autoplay {state}")
+
+
+_VOICE_TEST_PHRASES = {
+    "en": "Hello, I'm Alpi.",
+    "es": "Hola, soy Alpi.",
+    "fr": "Bonjour, je suis Alpi.",
+    "de": "Hallo, ich bin Alpi.",
+    "it": "Ciao, sono Alpi.",
+    "pt": "Olá, sou Alpi.",
+}
+
+
+@voice.command("test")
+@click.option("--voice", "voice_override", default=None,
+              help="Override the configured voice id for this preview.")
+@click.pass_context
+def voice_test(ctx: click.Context, voice_override: str | None) -> None:
+    """Synthesize a short greeting in the voice's locale and play it.
+    Uses the configured voice unless ``--voice`` is passed."""
+    import asyncio
+    import tempfile
+    from alpi.tools.tts import _player_cmd, _synthesize
+
+    h: Path = ctx.obj["home"]
+    cfg = config.load(h)
+    voice_id = (voice_override or cfg.tools.tts.voice or "en-US-AriaNeural").strip()
+    lang = voice_id.split("-", 1)[0].lower() if "-" in voice_id else "en"
+    phrase = _VOICE_TEST_PHRASES.get(lang, _VOICE_TEST_PHRASES["en"])
+
+    if _player_cmd() is None:
+        raise click.ClickException(
+            "no audio player found — install afplay (macOS), paplay/aplay/ffplay (Linux), or PowerShell (Windows)"
+        )
+    with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tmp:
+        out = Path(tmp.name)
+    try:
+        asyncio.run(_synthesize(phrase, voice_id, out))
+        import subprocess as _sp
+        cmd = _player_cmd()
+        _sp.run([*cmd, str(out)], capture_output=True, timeout=30)
+    finally:
+        try:
+            out.unlink()
+        except OSError:
+            pass
+    click.echo(f"played: {phrase}")
+
+
+@main.group()
+def sandbox() -> None:
+    """Configure the terminal sandbox for this profile."""
+
+
+@sandbox.command("set")
+@click.argument("state", type=click.Choice(["on", "off"]))
+@click.pass_context
+def sandbox_set(ctx: click.Context, state: str) -> None:
+    """Toggle the terminal sandbox. Disabling also resets allow-network."""
+    h: Path = ctx.obj["home"]
+    cfg = config.load(h)
+    if state == "on":
+        cfg.tools.terminal.sandbox = True
+    else:
+        cfg.tools.terminal.sandbox = False
+        cfg.tools.terminal.allow_network = False
+    config.save(cfg)
+    click.echo(f"sandbox {state}")
+
+
+@sandbox.command("network")
+@click.argument("state", type=click.Choice(["on", "off"]))
+@click.pass_context
+def sandbox_network(ctx: click.Context, state: str) -> None:
+    """Allow / deny network for sandboxed shell commands."""
+    h: Path = ctx.obj["home"]
+    cfg = config.load(h)
+    if not cfg.tools.terminal.sandbox:
+        raise click.ClickException(
+            "sandbox is off — enable it first with `alpi sandbox set on`"
+        )
+    cfg.tools.terminal.allow_network = state == "on"
+    config.save(cfg)
+    click.echo(f"sandbox network {state}")
+
+
+@main.group()
+def providers() -> None:
+    """Manage provider credentials (.env) and Ollama connections."""
+
+
+@providers.command("set-key")
+@click.argument("key")
+@click.argument("value")
+@click.pass_context
+def providers_set_key(ctx: click.Context, key: str, value: str) -> None:
+    """Write or replace ``KEY=VALUE`` in this profile's .env (mode 0600)."""
+    from alpi.model_selector import _append_env
+
+    h: Path = ctx.obj["home"]
+    cfg = config.load(h)
+    _append_env(cfg.env_path, key.strip(), value)
+    click.echo(f"set {key} in {cfg.env_path}")
+
+
+@providers.command("unset-key")
+@click.argument("key")
+@click.pass_context
+def providers_unset_key(ctx: click.Context, key: str) -> None:
+    """Remove ``KEY`` from this profile's .env."""
+    from alpi.model_selector import _remove_env_key
+
+    h: Path = ctx.obj["home"]
+    cfg = config.load(h)
+    _remove_env_key(cfg.env_path, key.strip())
+    click.echo(f"unset {key}")
+
+
+@providers.command("add-ollama")
+@click.argument("name")
+@click.argument("url")
+@click.pass_context
+def providers_add_ollama(ctx: click.Context, name: str, url: str) -> None:
+    """Pin a new Ollama server under ``NAME`` at ``URL``."""
+    h: Path = ctx.obj["home"]
+    cfg = config.load(h)
+    name = name.strip()
+    url = url.strip().rstrip("/")
+    if not name:
+        raise click.ClickException("name required")
+    if not url:
+        raise click.ClickException("url required")
+    taken = {e.get("name") for e in cfg.providers.get("ollama", []) or []}
+    if name in taken:
+        raise click.ClickException(f"name {name!r} already exists")
+    cfg.providers.setdefault("ollama", []).append({"name": name, "url": url})
+    config.save(cfg)
+    click.echo(f"added ollama {name!r} -> {url}")
+
+
+@providers.command("remove-ollama")
+@click.argument("name")
+@click.pass_context
+def providers_remove_ollama(ctx: click.Context, name: str) -> None:
+    """Remove the Ollama server registered under ``NAME``."""
+    h: Path = ctx.obj["home"]
+    cfg = config.load(h)
+    name = name.strip()
+    items = cfg.providers.get("ollama", []) or []
+    remaining = [e for e in items if e.get("name") != name]
+    if len(remaining) == len(items):
+        raise click.ClickException(f"no ollama server named {name!r}")
+    cfg.providers["ollama"] = remaining
+    config.save(cfg)
+    click.echo(f"removed ollama {name!r}")
+
+
+@providers.command("add-openrouter-model")
+@click.argument("model")
+@click.pass_context
+def providers_add_openrouter_model(ctx: click.Context, model: str) -> None:
+    """Remember ``MODEL`` (suffix only, no ``openrouter/`` prefix) under
+    ``providers.openrouter.models``. Most-recent-first."""
+    h: Path = ctx.obj["home"]
+    cfg = config.load(h)
+    suffix = model.strip()
+    if suffix.startswith("openrouter/"):
+        suffix = suffix.split("/", 1)[1]
+    if not suffix:
+        raise click.ClickException("model required")
+    or_cfg = cfg.providers.setdefault("openrouter", {})
+    models = or_cfg.setdefault("models", [])
+    if suffix in models:
+        models.remove(suffix)
+    models.insert(0, suffix)
+    config.save(cfg)
+    click.echo(f"added openrouter model {suffix!r}")
+
+
+@providers.command("remove-openrouter-model")
+@click.argument("model")
+@click.pass_context
+def providers_remove_openrouter_model(ctx: click.Context, model: str) -> None:
+    """Drop ``MODEL`` from ``providers.openrouter.models``."""
+    h: Path = ctx.obj["home"]
+    cfg = config.load(h)
+    suffix = model.strip()
+    if suffix.startswith("openrouter/"):
+        suffix = suffix.split("/", 1)[1]
+    or_cfg = cfg.providers.get("openrouter") or {}
+    models = list(or_cfg.get("models") or [])
+    if suffix not in models:
+        raise click.ClickException(f"no openrouter model {suffix!r}")
+    models.remove(suffix)
+    or_cfg["models"] = models
+    cfg.providers["openrouter"] = or_cfg
+    config.save(cfg)
+    click.echo(f"removed openrouter model {suffix!r}")
 
 
 @main.group()
@@ -614,6 +1082,7 @@ def setup_cmd(ctx: click.Context) -> None:
 
     h: Path = ctx.obj["home"]
     _bootstrap(h)
+    _ensure_daemon_installed(home._ROOT)
 
     profile_name = ctx.obj.get("profile") or "default"
     while True:
@@ -629,16 +1098,21 @@ def setup_cmd(ctx: click.Context) -> None:
             ("Sandbox", "sandbox", _sandbox_status(cfg)),
             ("Budget", "budget", _budget_status(cfg)),
 
-            ui.Heading("Messaging"),
-            ("Gateways", "gateways", _gateways_status(h)),
-
             ui.Heading("ALP (Alpi Link Protocol)"),
             ("Identity", "identity", _identity_status(cfg)),
             ("Peers", "peers", _peers_status(h)),
             ("Workgroups", "workgroups", _workgroups_status(h)),
 
+            ui.Heading("Services"),
+        ]
+        # Only default exposes the daemon row.
+        if profile_name == "default":
+            items.append(("Daemon", "daemon", _daemon_lifecycle_status()))
+        items += [
+            ("Subsystems", "subsystems", _subsystems_summary(h)),
+            ("Gateways", "gateways", _gateways_status(h)),
+
             ui.Heading("Maintenance"),
-            ("Service", "service", _service_status(h, profile_name)),
             ("Health check", "doctor", _doctor_status(h, profile_name)),
             ("Cleanup", "cleanup", _cleanup_status(h)),
         ]
@@ -646,10 +1120,7 @@ def setup_cmd(ctx: click.Context) -> None:
             items.append(
                 ("Delete profile", "delete-profile", _delete_profile_status(h, profile_name))
             )
-        # Every title starts with ``alpi`` as a lightweight brand +
-        # "you are here" marker. The active profile goes in the
-        # subtitle so the user always knows which one they're
-        # configuring without it bloating the title itself.
+        # Keep the section label short; the profile stays in the subtitle.
         choice = ui.menu(
             ui.crumb("setup"),
             items,
@@ -680,8 +1151,10 @@ def setup_cmd(ctx: click.Context) -> None:
             _voice_setup(h)
         elif choice == "cleanup":
             _cleanup_setup(h)
-        elif choice == "service":
-            _service_wizard(h, profile_name)
+        elif choice == "subsystems":
+            _subsystems_wizard(h, profile_name)
+        elif choice == "daemon":
+            _daemon_lifecycle_wizard(h)
         elif choice == "identity":
             _identity_setup(h)
         elif choice == "peers":
@@ -818,70 +1291,228 @@ def _gateway_summary(h: Path, name: str) -> str:
     return ""
 
 
-def _service_status(h: Path, profile: str) -> str:
-    """Status line for the unified service entry in the setup menu."""
+def _subsystems_summary(h: Path) -> str:
+    """Compact roll-up of enabled subsystems for this profile."""
     from alpi import service as svc
 
-    backend = svc.installed(profile)
-    if svc.is_running(h):
-        running = f"running (pid {svc.running_pid(h)})"
+    on = svc.enabled_subsystems(h)
+    enabled = [k for k, v in on.items() if v]
+    if not enabled:
+        return "all off"
+    return ", ".join(enabled)
+
+
+def _daemon_lifecycle_status() -> str:
+    """One-line label for the daemon row on default's setup menu."""
+    from alpi import service as svc
+
+    pid = svc.daemon_running_pid(home._ROOT)
+    installed = svc.daemon_installed()
+    if pid is not None:
+        base = f"running · pid {pid}"
+    elif installed:
+        base = "installed · stopped"
     else:
-        running = "stopped"
-    if backend:
-        return f"{running} · installed via {backend}"
-    return f"{running} · not installed"
+        base = "not installed"
+    return base
 
 
-_SERVICE_WIZARD_COPY = (
-    "One process per profile runs every enabled subsystem (gateway,\n"
-    "scheduler, ALP listener) on a single asyncio loop. Install registers\n"
-    "the launchd / systemd unit so it autostarts on boot; toggle which\n"
-    "subsystems run from this same screen."
+_DAEMON_LIFECYCLE_COPY = (
+    "The alpi daemon: one supervisor for every profile under ~/.alpi.\n"
+    "Install once → autostarts on boot → hosts default plus every\n"
+    "profile you create. Per-profile services are configured from\n"
+    "each profile's `Services` row."
 )
 
 
-def _service_wizard(h: Path, profile: str) -> None:
-    """Unified setup for `alpi service`. Replaces the legacy
-    Gateway / Schedule / ALP service wizards."""
+def _daemon_lifecycle_wizard(h: Path) -> None:
+    """Daemon lifecycle UI for the machine."""
+    from alpi import service as svc
+    from alpi import ui
+
+    root = home._ROOT
+    while True:
+        installed = svc.daemon_installed()
+        running_pid = svc.daemon_running_pid(root)
+        if running_pid is not None:
+            head = f"running · pid {running_pid}"
+        elif installed:
+            head = "installed · stopped"
+        else:
+            head = "not installed"
+
+        ui.banner(ui.crumb("setup", "daemon"), subtitle=head, home=h)
+        ui.dim(_DAEMON_LIFECYCLE_COPY)
+        ui._console.print("")
+
+        items: list = [ui.Heading("Lifecycle")]
+        if installed:
+            if running_pid is not None:
+                items.append(("Restart", "restart",
+                              "stop + supervisor respawns"))
+                items.append(("Stop", "stop",
+                              "SIGTERM (supervisor will respawn)"))
+            else:
+                items.append(("Start", "start",
+                              "ask the supervisor to launch it now"))
+            items.append(("Uninstall", "uninstall",
+                          "unregister + stop the daemon"))
+        else:
+            items.append(("Install", "install",
+                          "register the daemon + start now"))
+
+        choice = ui.menu("", items, home=h, close="Back")
+        if choice is None:
+            return
+        try:
+            if choice == "install":
+                kind = svc.install_daemon(root)
+                _wait_for_daemon(root, up=True)
+                ui.ok_and_wait(f"daemon installed via {kind} · running")
+            elif choice == "uninstall":
+                svc.stop_daemon(root)
+                kind = svc.uninstall_daemon()
+                ui.ok_and_wait(f"daemon uninstalled ({kind})")
+            elif choice == "start":
+                _kickstart_daemon()
+                if _wait_for_daemon(root, up=True):
+                    ui.ok_and_wait("daemon running")
+                else:
+                    ui.fail_and_wait("did not come up within 10s — check log")
+            elif choice == "restart":
+                svc.stop_daemon(root)
+                if _wait_for_daemon(root, up=True):
+                    ui.ok_and_wait("daemon restarted")
+                else:
+                    ui.fail_and_wait(
+                        "supervisor did not respawn within 10s — check log",
+                    )
+            elif choice == "stop":
+                svc.stop_daemon(root)
+                # KeepAlive may respawn it immediately.
+                if svc.daemon_running_pid(root) is None:
+                    ui.ok_and_wait("stopped")
+                else:
+                    ui.ok_and_wait(
+                        "SIGTERM sent — supervisor respawned it (KeepAlive)",
+                    )
+        except Exception as e:  # noqa: BLE001
+            ui.fail_and_wait(str(e))
+
+
+def _wait_for_daemon(root: Path, *, up: bool, timeout: float = 10.0) -> bool:
+    """Poll the central PID file until it matches ``up``."""
+    from alpi import service as svc
+    import time
+
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        running = svc.daemon_running_pid(root) is not None
+        if running == up:
+            return True
+        time.sleep(0.2)
+    return False
+
+
+def _kickstart_daemon() -> None:
+    """Ask the OS supervisor to start the central unit."""
+    import subprocess
+
+    if sys.platform == "darwin":
+        uid = os.getuid()
+        subprocess.run(
+            ["launchctl", "kickstart", "-k", f"gui/{uid}/com.alpi.daemon"],
+            capture_output=True, text=True, check=False,
+        )
+    elif sys.platform.startswith("linux"):
+        subprocess.run(
+            ["systemctl", "--user", "start", "alpi-daemon.service"],
+            capture_output=True, text=True, check=False,
+        )
+
+
+def _restart_daemon_for_apply(root: Path) -> str:
+    """SIGTERM the running daemon so the supervisor respawns it with
+    the freshly-saved config. Best-effort, returns the suffix to
+    append to the wizard's success line."""
+    from alpi import service as svc
+
+    if svc.daemon_running_pid(root) is None:
+        return ""
+    svc.stop_daemon(root, timeout=2.0)
+    return " · daemon restarting"
+
+
+def _ensure_daemon_installed(root: Path) -> None:
+    """First-run hook: install the daemon if it is missing."""
+    from alpi import service as svc
+
+    try:
+        if svc.daemon_installed():
+            return
+        kind = svc.install_daemon(root)
+        click.echo(f"alpi: daemon installed via {kind}")
+    except svc.ServiceError as e:
+        click.echo(f"alpi: service install skipped — {e}", err=True)
+
+
+def _service_status(h: Path, profile: str) -> str:
+    """Status line for the daemon entry in the setup menu."""
+    from alpi import service as svc
+
+    root = home._ROOT
+    pid = svc.daemon_running_pid(root)
+    installed = svc.daemon_installed()
+    running = f"running (pid {pid})" if pid is not None else "stopped"
+    return (
+        f"{running} · installed" if installed
+        else f"{running} · not installed"
+    )
+
+
+_SERVICES_WIZARD_COPY = (
+    "Which services the alpi daemon runs for THIS profile. The daemon\n"
+    "itself is global (one per machine, see Setup → Daemon on default);\n"
+    "these flags only decide what it activates here. A daemon restart\n"
+    "picks up changes: `alpi daemon restart`."
+)
+
+
+def _subsystems_wizard(h: Path, profile: str) -> None:
+    """Per-profile subsystem toggles; daemon lifecycle lives in ``alpi daemon``."""
     from alpi import config as cfg_mod
     from alpi import service as svc
     from alpi import ui
 
     while True:
-        backend = svc.installed(profile)
-        running_pid = svc.running_pid(h)
         on_subsystems = svc.enabled_subsystems(h)
+        running_pid = svc.daemon_running_pid(home._ROOT)
+        head = (
+            f"daemon: running · pid {running_pid}" if running_pid
+            else "daemon: stopped"
+        )
 
-        if running_pid is not None:
-            head = f"running · pid {running_pid}"
-        elif backend:
-            head = f"installed via {backend} · stopped"
-        else:
-            head = "not installed"
-
-        ui.banner(ui.crumb("setup", "service"), subtitle=head, home=h)
-        ui.dim(_SERVICE_WIZARD_COPY)
+        ui.banner(ui.crumb("setup", "services"), subtitle=head, home=h)
+        ui.dim(_SERVICES_WIZARD_COPY)
         ui._console.print("")
 
         items: list = [
-            ui.Heading("Subsystems"),
+            ui.Heading(f"Services · profile: {profile}"),
             (("Gateway · " + _on_off(on_subsystems["gateway"])),
              "toggle-gateway", _gateways_status(h)),
             (("Scheduler · " + _on_off(on_subsystems["schedule"])),
              "toggle-schedule", "cron jobs"),
             (("ALP listener · " + _on_off(on_subsystems["alp"])),
              "toggle-alp", _alp_subsystem_status(h)),
-            ui.Heading("Lifecycle"),
+            (("Workgroups · " + _on_off(on_subsystems["workgroups"])),
+             "toggle-workgroups", "ALP.3 outbound poller"),
         ]
-        if backend:
-            items.append(("Uninstall", "uninstall",
-                          f"unregister from {backend}"))
-            items.append(("Restart", "restart", "stop + supervisor respawns"))
-        else:
-            items.append(("Install", "install",
-                          "register + start now"))
-        if running_pid is not None:
-            items.append(("Stop", "stop", "send SIGTERM to the process"))
+        if profile == "default":
+            items.append((
+                ("Host API · " + _on_off(on_subsystems["host"])),
+                "toggle-host",
+                "control plane for desktop / mobile clients",
+            ))
         items.append(ui.Heading("ALP"))
         items.append(("TCP port (inter-machine)", "tcp",
                       _alp_tcp_label(h)))
@@ -890,33 +1521,26 @@ def _service_wizard(h: Path, profile: str) -> None:
         if choice is None:
             return
         try:
-            if choice in ("toggle-gateway", "toggle-schedule", "toggle-alp"):
+            if choice in (
+                "toggle-gateway", "toggle-schedule", "toggle-alp",
+                "toggle-host", "toggle-workgroups",
+            ):
                 key = choice.split("-", 1)[1]
                 cfg = cfg_mod.load(h)
                 svc_cfg = dict(cfg.service or {})
                 svc_cfg[key] = not on_subsystems[key]
                 cfg.service = svc_cfg
                 cfg_mod.save(cfg)
-                ui.ok_and_wait(f"{key}: {_on_off(svc_cfg[key])} (restart to apply)")
-            elif choice == "install":
-                kind = svc.install(h, profile)
-                ui.ok_and_wait(f"service installed via {kind}")
-            elif choice == "uninstall":
-                kind = svc.uninstall(h, profile)
-                ui.ok_and_wait(f"service uninstalled ({kind})")
-            elif choice == "restart":
-                if not running_pid:
-                    ui.fail_and_wait("not running")
-                else:
-                    svc.stop(h, profile)
-                    ui.ok_and_wait("stopped — supervisor will respawn")
-            elif choice == "stop":
-                svc.stop(h, profile)
-                ui.ok_and_wait("stopped")
+                msg = _restart_daemon_for_apply(home._ROOT)
+                ui.ok_and_wait(f"{key}: {_on_off(svc_cfg[key])}{msg}")
             elif choice == "tcp":
                 _alp_tcp_port_setup(h)
         except Exception as e:  # noqa: BLE001
             ui.fail_and_wait(str(e))
+
+
+# Back-compat alias for callers still using ``_service_wizard``.
+_service_wizard = _subsystems_wizard
 
 
 def _on_off(b: bool) -> str:
@@ -949,7 +1573,7 @@ def _alp_tcp_port_setup(h: Path) -> None:
     current_host = (cfg.alp or {}).get("tcp_host") or "127.0.0.1"
 
     ui.banner(
-        ui.crumb("setup", "alp-service", "tcp"),
+        ui.crumb("setup", "alp-tcp", "tcp"),
         subtitle="Noise_XK over TCP — inter-machine peers",
         home=h,
     )
@@ -993,7 +1617,8 @@ def _alp_tcp_port_setup(h: Path) -> None:
         alp_cfg.pop("tcp_host", None)
         cfg.alp = alp_cfg
         cfg_mod.save(cfg)
-        ui.ok_and_wait("TCP disabled — Unix socket only")
+        msg = _restart_daemon_for_apply(home._ROOT)
+        ui.ok_and_wait(f"TCP disabled — Unix socket only{msg}")
         return
 
     try:
@@ -1009,7 +1634,8 @@ def _alp_tcp_port_setup(h: Path) -> None:
     alp_cfg["tcp_host"] = host
     cfg.alp = alp_cfg
     cfg_mod.save(cfg)
-    ui.ok_and_wait(f"TCP bound to {host}:{port} — restart the service (`alpi service restart`) to pick it up")
+    msg = _restart_daemon_for_apply(home._ROOT)
+    ui.ok_and_wait(f"TCP bound to {host}:{port}{msg}")
 
 
 def _workgroups_status(h: Path) -> str:
@@ -1030,11 +1656,15 @@ def _workgroups_status(h: Path) -> str:
 
 def _peers_status(h: Path) -> str:
     from alpi.alp import peers as peers_mod
+    from alpi.alp import pending as pending_mod
 
     count = len(peers_mod.load(h))
-    if count == 0:
-        return "none pinned"
-    return f"{count} pinned"
+    pending = len(pending_mod.load(h))
+    base = "none pinned" if count == 0 else f"{count} pinned"
+    if pending:
+        word = "invite" if pending == 1 else "invites"
+        return f"{base} · {pending} {word} pending"
+    return base
 
 
 def _doctor_status(h: Path, profile: str) -> str:
@@ -1151,73 +1781,96 @@ def _budget_setup(h: Path) -> None:
 
     cfg = config.load(h)
     b = dict(cfg.budget or {})
-    current_usd = b.get("daily_usd") or ""
-    current_tokens = b.get("daily_tokens") or ""
+    current_usd = b.get("daily_usd")
+    current_tokens = b.get("daily_tokens")
 
-    ui.banner(
+    if current_tokens is not None:
+        current_kind = "tokens"
+    elif current_usd is not None:
+        current_kind = "usd"
+    else:
+        current_kind = "unlimited"
+
+    items = [
+        (
+            ("● " if current_kind == "unlimited" else "  ") + "Unlimited",
+            "unlimited",
+            "no daily ceiling",
+        ),
+        (
+            ("● " if current_kind == "usd" else "  ") + "Daily USD cap",
+            "usd",
+            "for paid models — measured in dollars",
+        ),
+        (
+            ("● " if current_kind == "tokens" else "  ") + "Daily token cap",
+            "tokens",
+            "for local / free models — measured in tokens",
+        ),
+    ]
+    kind = ui.menu(
         ui.crumb("setup", "budget"),
-        subtitle="daily spend cap for this profile",
+        items,
+        subtitle="daily spend cap for this profile · pick one or unlimited",
         home=h,
+        close="Back",
     )
-    ui.dim(
-        "Paid models → USD cap. Local / free models → token cap. Empty = no\n"
-        "ceiling. Cap covers every turn this profile runs (interactive,\n"
-        "gateway, scheduled, sub-agents, ALP). Resets at UTC midnight."
-    )
-    ui._console.print("")
+    if kind is None:
+        return
+    if kind == "unlimited":
+        cfg.budget = {}
+        config.save(cfg)
+        ui.ok_and_wait("budget cleared — unlimited")
+        return
 
-    usd_s = ui.text(
-        f"Daily USD cap (empty to skip) [{current_usd}]:",
-        default=str(current_usd),
-    )
-    if usd_s is None:
-        return ui.cancelled()
-    usd_s = (usd_s or "").strip()
-
-    tokens_s = ui.text(
-        f"Daily token cap (empty to skip) [{current_tokens}]:",
-        default=str(current_tokens),
-    )
-    if tokens_s is None:
-        return ui.cancelled()
-    tokens_s = (tokens_s or "").strip()
-
-    new_budget: dict[str, Any] = {}
-    if usd_s:
+    if kind == "usd":
+        default_s = str(current_usd) if current_usd is not None else ""
+        raw = ui.text(
+            "Daily USD cap (must be > 0):",
+            default=default_s,
+        )
+        if raw is None:
+            return ui.cancelled()
+        raw = (raw or "").strip()
+        if not raw:
+            ui.fail_and_wait("USD cap required (or pick Unlimited)")
+            return
         try:
-            v = float(usd_s)
+            v = float(raw)
         except ValueError:
-            ui.fail_and_wait(f"not a number: {usd_s!r}")
+            ui.fail_and_wait(f"not a number: {raw!r}")
             return
         if v <= 0:
             ui.fail_and_wait("USD cap must be > 0")
             return
-        new_budget["daily_usd"] = v
+        cfg.budget = {"daily_usd": v}
+        config.save(cfg)
+        ui.ok_and_wait(f"cap: ${v:.2f}/day")
+        return
 
-    if tokens_s:
-        try:
-            v_int = int(tokens_s)
-        except ValueError:
-            ui.fail_and_wait(f"not an integer: {tokens_s!r}")
-            return
-        if v_int <= 0:
-            ui.fail_and_wait("token cap must be > 0")
-            return
-        new_budget["daily_tokens"] = v_int
-
-    cfg.budget = new_budget
+    # kind == "tokens"
+    default_s = str(current_tokens) if current_tokens is not None else ""
+    raw = ui.text(
+        "Daily token cap (must be > 0):",
+        default=default_s,
+    )
+    if raw is None:
+        return ui.cancelled()
+    raw = (raw or "").strip()
+    if not raw:
+        ui.fail_and_wait("token cap required (or pick Unlimited)")
+        return
+    try:
+        v_int = int(raw)
+    except ValueError:
+        ui.fail_and_wait(f"not an integer: {raw!r}")
+        return
+    if v_int <= 0:
+        ui.fail_and_wait("token cap must be > 0")
+        return
+    cfg.budget = {"daily_tokens": v_int}
     config.save(cfg)
-    if not new_budget:
-        ui.ok_and_wait("budget cleared — unlimited")
-    elif "daily_usd" in new_budget and "daily_tokens" in new_budget:
-        ui.ok_and_wait(
-            f"cap: ${new_budget['daily_usd']:.2f}/day · "
-            f"{new_budget['daily_tokens']:,} tokens/day"
-        )
-    elif "daily_usd" in new_budget:
-        ui.ok_and_wait(f"cap: ${new_budget['daily_usd']:.2f}/day")
-    else:
-        ui.ok_and_wait(f"cap: {new_budget['daily_tokens']:,} tokens/day")
+    ui.ok_and_wait(f"cap: {v_int:,} tokens/day")
 
 
 def _identity_status(cfg: config.Config) -> str:
@@ -1561,15 +2214,7 @@ def _voice_setup(h: Path) -> None:
         return
 
 
-_SESSION_STALE_DAYS = 30
-
-
 def _cleanup_categories(h: Path) -> list[dict]:
-    import time
-
-    now = time.time()
-    stale_cutoff = now - _SESSION_STALE_DAYS * 86400
-
     def _dir(name: str) -> Path:
         return h / name
 
@@ -1587,25 +2232,20 @@ def _cleanup_categories(h: Path) -> list[dict]:
             return []
         return [p for p in d.iterdir() if p.is_file()]
 
-    def _older_than(d: Path, cutoff: float) -> list[Path]:
-        if not d.exists():
-            return []
-        out: list[Path] = []
-        for p in d.iterdir():
-            if not p.is_file():
-                continue
-            try:
-                if p.stat().st_mtime < cutoff:
-                    out.append(p)
-            except OSError:
-                continue
-        return out
-
     tts_files = _all(_dir("cache/tts"))
     inbound_files = _all(_dir("cache/inbound"))
-    session_files = _older_than(_dir("sessions"), stale_cutoff)
+    session_files = _all(_dir("sessions"))
+    mention_files = _all(_dir("mentions"))
+    gateway_files = _all(_dir("gateway/sessions"))
     log_files = _all(_dir("logs"))
     sched_files = _all(_dir("schedule/output"))
+    wg_root = _dir("alp/workgroups")
+    wg_files: list[Path] = (
+        [p for p in wg_root.rglob("*") if p.is_file()] if wg_root.exists() else []
+    )
+    turns_path = _dir("alp/turns.jsonl")
+    if turns_path.is_file():
+        wg_files.append(turns_path)
 
     return [
         {
@@ -1617,10 +2257,24 @@ def _cleanup_categories(h: Path) -> list[dict]:
         },
         {
             "key": "sessions",
-            "label": f"Stale sessions (>{_SESSION_STALE_DAYS} days old)",
-            "desc": "conversation transcripts kept in `sessions/`",
+            "label": "Sessions",
+            "desc": "chat transcripts kept in `sessions/`",
             "files": session_files,
             "size": _sum(session_files),
+        },
+        {
+            "key": "mentions",
+            "label": "Mentions",
+            "desc": "per-sender @-mention threads in `mentions/`",
+            "files": mention_files,
+            "size": _sum(mention_files),
+        },
+        {
+            "key": "gateway",
+            "label": "Gateway",
+            "desc": "Telegram / email / webhook chats in `gateway/sessions/`",
+            "files": gateway_files,
+            "size": _sum(gateway_files),
         },
         {
             "key": "logs",
@@ -1635,6 +2289,13 @@ def _cleanup_categories(h: Path) -> list[dict]:
             "desc": "stdout/stderr of past scheduled jobs",
             "files": sched_files,
             "size": _sum(sched_files),
+        },
+        {
+            "key": "workgroups",
+            "label": "Workgroups",
+            "desc": "encrypted transcripts + turn telemetry under `alp/`",
+            "files": wg_files,
+            "size": _sum(wg_files),
         },
     ]
 
@@ -1799,7 +2460,7 @@ def profile_create(name: str) -> None:
     if "/" in name or name.startswith("."):
         raise click.ClickException(f"invalid profile name: {name!r}")
 
-    h = home.get_home(name)
+    h = home.home_for(name)
     if h.exists() and any(h.iterdir()):
         raise click.ClickException(f"profile {name!r} already exists at {h}")
 
@@ -1819,7 +2480,11 @@ def profile_create(name: str) -> None:
 
 @profile.command("remove")
 @click.argument("name")
-def profile_remove(name: str) -> None:
+@click.option("--yes", is_flag=True, default=False,
+              help="Skip the interactive confirmation prompt.")
+@click.option("--force", is_flag=True, default=False,
+              help="Uninstall an installed service first instead of refusing.")
+def profile_remove(name: str, yes: bool, force: bool) -> None:
     """Permanently remove a profile directory after safety checks."""
     import shutil
 
@@ -1830,11 +2495,9 @@ def profile_remove(name: str) -> None:
     if "/" in name or name.startswith("."):
         raise click.ClickException(f"invalid profile name: {name!r}")
 
-    h = home.get_home(name)
+    h = home.home_for(name)
     if not h.exists():
-        from alpi.home import _ROOT
-
-        profiles_root = _ROOT / "profiles"
+        profiles_root = home._ROOT / "profiles"
         available = (
             [p.name for p in profiles_root.iterdir() if p.is_dir()]
             if profiles_root.exists()
@@ -1844,28 +2507,31 @@ def profile_remove(name: str) -> None:
             f"profile {name!r} does not exist{_suggest(name, available)}",
         )
 
-    # Safety: refuse if the profile has a registered system service.
-    # Uninstalling it is an explicit step the user has to take so they
-    # understand what's being torn down.
-    if service.installed(name):
-        raise click.ClickException(
-            f"profile {name!r} has an installed service.\n"
-            f"Run `alpi -p {name} setup → Delete profile` to uninstall "
-            f"the service and delete in one step."
-        )
+    if not yes:
+        # Summary — user wants to see what they're losing before saying yes.
+        summary = _profile_summary(h)
+        ui.banner(f"Remove profile · {name}", subtitle=str(h))
+        for line in summary:
+            click.echo(f"  {line}")
+        click.echo("")
+        if not ui.confirm(
+            f"Remove profile {name!r}? This cannot be undone.", default=False,
+        ):
+            ui.cancelled()
+            return
 
-    # Summary — user wants to see what they're losing before saying yes.
-    summary = _profile_summary(h)
-    ui.banner(f"Remove profile · {name}", subtitle=str(h))
-    for line in summary:
-        click.echo(f"  {line}")
-    click.echo("")
-    if not ui.confirm(f"Remove profile {name!r}? This cannot be undone.", default=False):
-        ui.cancelled()
-        return
+    # The daemon picks up the change on its next restart — there's no
+    # per-profile service to uninstall, so deletion is just an archive.
+    _ = force  # legacy flag, kept for CLI surface stability.
 
-    shutil.rmtree(h)
-    ui.ok(f"removed profile {name!r} at {h}")
+    # Archive — recoverable with ``mv`` until cleanup sweeps it.
+    import time as _time
+    trash_root = home._ROOT / ".trash"
+    trash_root.mkdir(parents=True, exist_ok=True)
+    archived = trash_root / f"{name}-{_time.strftime('%Y%m%d-%H%M%S')}"
+    h.rename(archived)
+    click.echo(f"archived profile {name!r} to {archived}")
+    click.echo("(restore with `mv` if needed; auto-swept after 30 days from setup → Cleanup)")
 
 
 def _profile_summary(home_dir: Path) -> list[str]:
@@ -1893,10 +2559,6 @@ def _profile_summary(home_dir: Path) -> list[str]:
 
 
 def _delete_profile_status(h: Path, profile_name: str) -> str:
-    from alpi import service
-
-    if service.installed(profile_name):
-        return "Remove all data & uninstall service"
     return "Remove all data"
 
 
@@ -1904,7 +2566,7 @@ def _delete_profile_wizard(h: Path, profile_name: str) -> bool:
     """Return True if the profile was deleted — the caller must exit the
     setup loop because there is nothing left to edit."""
     import shutil
-    from alpi import service, ui
+    from alpi import ui
 
     ui.banner(ui.crumb("setup", "danger", f"delete {profile_name}"), subtitle=str(h), home=h)
     ui._console.print("")
@@ -1912,11 +2574,6 @@ def _delete_profile_wizard(h: Path, profile_name: str) -> bool:
     summary = _profile_summary(h)
     for line in summary:
         ui._console.print(f"  {line}")
-
-    has_service = service.installed(profile_name) is not None
-    if has_service:
-        ui._console.print("")
-        ui.warn("service is installed — it will be uninstalled before deletion")
     ui._console.print("")
 
     if not ui.confirm(
@@ -1931,18 +2588,12 @@ def _delete_profile_wizard(h: Path, profile_name: str) -> bool:
         ui.cancelled()
         return False
 
-    if has_service:
-        try:
-            kind = service.uninstall(h, profile_name)
-            ui.ok(f"uninstalled service ({kind})")
-        except Exception as e:  # noqa: BLE001
-            ui.fail(f"failed to uninstall service: {e}")
-            ui.warn("aborting delete — address the service issue and retry.")
-            ui.press_enter()
-            return False
-
     try:
-        shutil.rmtree(h)
+        import time as _time
+        trash_root = home._ROOT / ".trash"
+        trash_root.mkdir(parents=True, exist_ok=True)
+        archived = trash_root / f"{profile_name}-{_time.strftime('%Y%m%d-%H%M%S')}"
+        h.rename(archived)
     except Exception as e:  # noqa: BLE001
         ui.fail_and_wait(f"rmtree failed: {e}")
         return False
@@ -2011,12 +2662,32 @@ def peers_add(
     alias: str,
 ) -> None:
     """Pin a peer's pubkey + capabilities."""
+    import base64
+
     from alpi.alp import peers as peers_mod
+
+    original_id = peer_id
+    peer_id = peer_id.strip().lower()
+    if not peer_id:
+        raise click.ClickException("peer id cannot be empty")
+    if peer_id != original_id.strip():
+        click.echo(f"id normalized to {peer_id!r}", err=True)
+    pk = pubkey_b64.strip()
+    try:
+        raw = base64.b64decode(pk, validate=True)
+    except Exception:
+        raise click.ClickException(
+            "invalid pubkey: expected base64-encoded Ed25519 public key"
+        )
+    if len(raw) != 32:
+        raise click.ClickException(
+            f"invalid pubkey: Ed25519 keys decode to 32 bytes (got {len(raw)})"
+        )
 
     h: Path = ctx.obj["home"]
     peer = peers_mod.Peer(
         id=peer_id,
-        pubkey=pubkey_b64.strip(),
+        pubkey=pk,
         alias=alias,
         address=address,
         allow=[m.strip() for m in allow.split(",") if m.strip()],
@@ -2118,7 +2789,7 @@ def peers_ping(ctx: click.Context, peer_id: str) -> None:
     )
 
 
-# `alpi alp` group has been removed — lifecycle moved to `alpi service`.
+# `alpi alp` lifecycle moved to `alpi daemon`.
 # All ALP listener bootstrap (Unix socket + optional TCP, link.* + workgroup
 # handler registration) lives in ``alpi.service._run_alp``.
 
@@ -2237,10 +2908,13 @@ def _read_local_transcript(h: Path, wg_id: str) -> list[dict]:
               help="Lifetime USD cap (paid models).")
 @click.option("--budget-tokens", type=int, default=None,
               help="Lifetime token cap (local / free models).")
+@click.option("--briefing", default="",
+              help="Initial briefing text. Hub can edit later via set-briefing.")
 @click.pass_context
 def workgroup_create(
     ctx: click.Context, name: str,
-    members: tuple[str, ...], budget_usd: float | None, budget_tokens: int | None,
+    members: tuple[str, ...], budget_usd: float | None,
+    budget_tokens: int | None, briefing: str,
 ) -> None:
     """Create a workgroup; you become the hub. Members are pubkeys or
     pinned peer ids (the latter resolve via this profile's peers.yaml)."""
@@ -2265,14 +2939,13 @@ def workgroup_create(
     if budget_tokens is not None:
         budget["max_tokens"] = budget_tokens
 
-    # Carry the profile's ``public_bio`` onto the hub's own member
-    # record. Members joining later send their own via ``workgroup.join``;
-    # the hub never calls join on itself, so the CLI plumbs it here.
     hub_bio = (config.load(h).public_bio or "").strip()
     try:
         wg = wg_mod.create(
             h, name=name, hub_kp=load_or_generate(h),
-            member_pubkeys=pubkeys, budget=budget, hub_bio=hub_bio,
+            member_pubkeys=pubkeys, budget=budget,
+            briefing=(briefing or "").strip(),
+            hub_bio=hub_bio,
         )
     except ValueError as e:
         raise click.ClickException(str(e))
@@ -2344,7 +3017,7 @@ def workgroup_pull(ctx: click.Context, wg_id: str, since: int | None) -> None:
 @click.argument("wg_id")
 @click.pass_context
 def workgroup_pause(ctx: click.Context, wg_id: str) -> None:
-    """Pause a workgroup (any member can; idempotent)."""
+    """Pause a workgroup (hub-only; idempotent)."""
     _wg_simple(ctx, wg_id, "pause", "paused")
 
 
@@ -2398,6 +3071,145 @@ def workgroup_kick(ctx: click.Context, wg_id: str, member_pubkey: str) -> None:
         raise click.ClickException(str(e))
     click.echo(f"kicked + rekeyed · v{updated.meta.current_key_version} "
                f"({len(updated.members)} members remaining)")
+
+
+@workgroup.command("add-member")
+@click.argument("wg_id")
+@click.argument("member")
+@click.pass_context
+def workgroup_add_member(ctx: click.Context, wg_id: str, member: str) -> None:
+    """Hub-side: invite a new member and rotate the group key. ``member``
+    can be a pubkey or a pinned peer id. The peer must already be
+    pinned in this profile's peers.yaml; workgroup verbs are granted
+    automatically."""
+    from alpi.alp import peers as peers_mod
+    from alpi.alp import workgroup as wg_mod
+    from alpi.alp import workgroup_setup as wg_setup
+
+    h: Path = ctx.obj["home"]
+    peer = peers_mod.get_by_id(h, member)
+    target = peer.pubkey if peer else member
+    try:
+        updated = wg_mod.add_member(h, wg_id, target)
+    except ValueError as e:
+        raise click.ClickException(str(e))
+    wg_setup._grant_workgroup_verbs(h, [target])
+    click.echo(f"added + rekeyed · v{updated.meta.current_key_version} "
+               f"({len(updated.members)} members)")
+
+
+@workgroup.command("remove")
+@click.argument("wg_id")
+@click.option("--yes", is_flag=True, default=False,
+              help="Skip the confirmation prompt.")
+@click.pass_context
+def workgroup_remove(ctx: click.Context, wg_id: str, yes: bool) -> None:
+    """Hub-only: delete a workgroup permanently (transcript + members
+    + any local-machine subscriptions to it)."""
+    import shutil
+    from alpi.alp import subscription as sub_mod
+    from alpi.alp import workgroup as wg_mod
+    from alpi.alp.keys import load_or_generate
+    from alpi.home import _ROOT
+
+    h: Path = ctx.obj["home"]
+    wg = wg_mod.load(h, wg_id)
+    if wg is None:
+        raise click.ClickException(f"workgroup {wg_id!r} not found")
+    own_pubkey = load_or_generate(h).pubkey_b64()
+    if wg.meta.hub_pubkey != own_pubkey:
+        raise click.ClickException("only the hub can remove this workgroup")
+    if not yes and not click.confirm(
+        f"Delete workgroup {wg.meta.name} permanently? "
+        f"This wipes the transcript and all member entries.",
+        default=False,
+    ):
+        raise click.ClickException("aborted")
+    shutil.rmtree(h / "alp" / "workgroups" / wg_id, ignore_errors=True)
+
+    # Cascading purge — any other profile on this same machine that
+    # has a subscription to this wg_id is now an orphan (the hub is
+    # gone, their `workgroup leave` would have nothing to talk to).
+    # Walk the profiles tree and drop matching subscriptions so the
+    # workgroup disappears uniformly across the operator's whole
+    # local install. Cross-machine peers (a member on a different
+    # box) we cannot reach from here — they keep the orphan until
+    # they `leave` themselves; the SDK's leave is best-effort and
+    # will purge locally even when the hub is gone.
+    profiles_root = _ROOT / "profiles"
+    purged: list[str] = []
+    if profiles_root.exists():
+        for prof_dir in profiles_root.iterdir():
+            if not prof_dir.is_dir():
+                continue
+            try:
+                if sub_mod.get(prof_dir, wg_id) is not None:
+                    sub_mod.remove(prof_dir, wg_id)
+                    purged.append(prof_dir.name)
+            except Exception:  # noqa: BLE001
+                pass
+    # Also check the default-profile root, which lives directly
+    # under ``~/.alpi/`` rather than under ``profiles/``.
+    try:
+        if sub_mod.get(_ROOT, wg_id) is not None:
+            sub_mod.remove(_ROOT, wg_id)
+            purged.append("default")
+    except Exception:  # noqa: BLE001
+        pass
+
+    click.echo(f"removed {wg_id}")
+    if purged:
+        click.echo(
+            f"  also purged subscriptions on: {', '.join(sorted(set(purged)))}"
+        )
+
+
+@workgroup.command("update")
+@click.argument("wg_id")
+@click.option("--briefing", default=None,
+              help="Replace the briefing text.")
+@click.option("--budget-usd", type=float, default=None,
+              help="Set the lifetime USD cap.")
+@click.option("--clear-budget", is_flag=True, default=False,
+              help="Remove any lifetime budget.")
+@click.pass_context
+def workgroup_update(
+    ctx: click.Context, wg_id: str, briefing: str | None,
+    budget_usd: float | None, clear_budget: bool,
+) -> None:
+    """Hub-only: edit a workgroup's mutable metadata."""
+    from alpi.alp import workgroup as wg_mod
+    from alpi.alp.keys import load_or_generate
+
+    h: Path = ctx.obj["home"]
+    wg = wg_mod.load(h, wg_id)
+    if wg is None:
+        raise click.ClickException(f"workgroup {wg_id!r} not found")
+    own_pubkey = load_or_generate(h).pubkey_b64()
+    if wg.meta.hub_pubkey != own_pubkey:
+        raise click.ClickException("only the hub can edit this workgroup")
+    if budget_usd is not None and clear_budget:
+        raise click.ClickException(
+            "--budget-usd and --clear-budget are mutually exclusive"
+        )
+    changes: list[str] = []
+    if briefing is not None:
+        wg.meta.briefing = (briefing or "").strip()
+        changes.append(f"briefing={len(wg.meta.briefing)} chars")
+    if clear_budget:
+        wg.meta.budget = {}
+        changes.append("budget cleared")
+    elif budget_usd is not None:
+        if budget_usd <= 0:
+            raise click.ClickException("--budget-usd must be > 0")
+        wg.meta.budget = wg_mod._validate_budget({"max_usd": budget_usd})
+        changes.append(f"budget=${budget_usd:.2f}")
+    if not changes:
+        raise click.ClickException(
+            "nothing to update — pass --briefing, --budget-usd or --clear-budget"
+        )
+    wg_mod._save_meta(wg_mod._wg_dir(h, wg_id), wg.meta)
+    click.echo(f"updated {wg_id} · {' · '.join(changes)}")
 
 
 @workgroup.command("turns")

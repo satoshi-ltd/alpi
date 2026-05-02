@@ -1,4 +1,4 @@
-"""Shared UI primitives for every ``alpi setup`` wizard + menu."""
+"""Shared UI primitives for ``alpi setup``."""
 
 from __future__ import annotations
 
@@ -69,15 +69,19 @@ def _render_title(title: str, *, home: Path | None) -> str:
     return f"[b]{title}[/b]"
 
 
+# Theme default matches the desktop accent token.
+DEFAULT_ACCENT = "#c8a24e"
+
+
 def _accent_hex(home: Path | None) -> str:
     try:
         from alpi import config as config_mod
         from alpi import home as home_mod
         resolved = home or home_mod.get_home()
         cfg = config_mod.load(resolved)
-        return (cfg.tui or {}).get("accent", "") or ""
+        return (cfg.tui or {}).get("accent", "") or DEFAULT_ACCENT
     except Exception:  # noqa: BLE001
-        return ""
+        return DEFAULT_ACCENT
 
 
 _TRAILING_PAREN = __import__("re").compile(r"\s*\([^)]*\)\s*$")
@@ -105,12 +109,12 @@ def row_accent(label: str, status: str, accent: str, width: int | None = None):
     return parts
 
 
-# Separator sentinel — pass `None` in the items list to get a blank row.
+# Separator sentinel for blank menu rows.
 _SEPARATOR = object()
 
 
 class Heading(NamedTuple):
-    """Non-selectable section label inside a ``menu()`` items list."""
+    """Non-selectable section label in a menu."""
     text: str
 
 
@@ -122,15 +126,7 @@ def menu(
     home: Path | None = None,
     close: str = "Exit",
 ) -> Any:
-    """Render a banner + arrow-key select list + muted close row.
-
-    Items accept the same shapes as before:
-        - ``(label, value)``
-        - ``(label, value, status)`` → rendered via ``row(label, status)``
-        - ``None`` → blank separator row
-        - ``Heading("Section")`` → muted-bold uppercase divider, non-selectable
-        - bare string → used as both label and value
-    """
+    """Render a banner and arrow-key menu."""
     if title:
         _console.clear()
         line = _render_title(title, home=home)
@@ -140,9 +136,7 @@ def menu(
         _console.print(f"[dim]{NAV_HINT}[/dim]")
         _console.print("")
 
-    # First pass: find the widest plain-text label across 3-tuple items
-    # so the muted status column lines up per menu, independent of the
-    # module-level LABEL_WIDTH floor.
+    # Find the widest labeled row so status columns line up.
     auto_width = LABEL_WIDTH
     for item in items:
         if isinstance(item, tuple) and len(item) == 3:
@@ -155,8 +149,7 @@ def menu(
         if item is None:
             entries.append((" ", _SEPARATOR, False))
         elif isinstance(item, Heading):
-            # Visually breathe between sections — every heading after the
-            # first one gets an automatic blank row above it.
+            # Insert a blank row before each heading after the first.
             if entries:
                 entries.append((" ", _SEPARATOR, False))
             entries.append((
@@ -224,8 +217,7 @@ def _run_select(entries, *, home: Path | None):
             else:
                 out.append(("", str(title_ft)))
             out.append(("", "\n"))
-        # Strip final newline so the control doesn't render an extra
-        # blank row under the last entry.
+        # Strip the trailing newline so the last row stays tight.
         if out and out[-1] == ("", "\n"):
             out.pop()
         return out
@@ -284,11 +276,7 @@ def _run_select(entries, *, home: Path | None):
 
 
 def text(label: str, default: str = "") -> str | None:
-    """Single-line free-text input. ENTER submits, ESC/Ctrl-C return None.
-
-    When ``default`` is provided and the user submits empty input, the
-    default is returned.
-    """
+    """Single-line input; empty submit returns the default."""
     from prompt_toolkit import PromptSession
     from prompt_toolkit.formatted_text import FormattedText
     from prompt_toolkit.key_binding import KeyBindings
@@ -434,13 +422,7 @@ def _visible_len(s: str) -> int:
 
 
 def columns(rows: Sequence[Sequence[str]], gap: int = 2) -> None:
-    """Print rows with per-column widths computed from the widest cell.
-
-    Each row is a sequence of cell strings (Rich markup allowed — the
-    visible length is computed by stripping ``[tag]`` markers). The last
-    column is never padded so long right-hand values (paths, URLs) don't
-    force trailing whitespace.
-    """
+    """Print rows with aligned columns."""
     if not rows:
         return
     ncols = max(len(r) for r in rows)
@@ -461,9 +443,7 @@ def columns(rows: Sequence[Sequence[str]], gap: int = 2) -> None:
 
 
 def accent_style(accent: str):
-    """Legacy — returns a prompt_toolkit Style or None. Retained because
-    a couple of model-selector helpers still import it to tint prompts
-    outside of ``menu()``."""
+    """Legacy prompt_toolkit style helper."""
     if not accent or not accent.strip():
         return None
     try:

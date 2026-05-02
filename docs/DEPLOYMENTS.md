@@ -21,23 +21,26 @@ gateway for messaging.
 ┌─────────────────────────────────────┐
 │ laptop                              │
 │                                     │
-│   alpi (TUI)                        │
+│   alpi (TUI / desktop)              │
 │     │                               │
 │     ├─ ~/.alpi/  (default profile)  │
-│     └─ alpi service (optional)      │
+│     └─ alpi daemon                  │
 │          ├─ gateway: Telegram /     │
 │          │           IMAP / Gmail   │
 │          ├─ scheduler (cron)        │
-│          └─ ALP listener            │
+│          ├─ ALP listener            │
+│          ├─ workgroups poller       │
+│          └─ host plane (default)    │
 └─────────────────────────────────────┘
 ```
 
 - **Profiles:** 1 (`default`).
-- **ALP:** the listener is part of the unified service — leave it
+- **ALP:** the listener is one of the daemon's services — leave it
   on (default) even when nothing else dials in; it's idle and
   costs nothing.
-- **Ops:** `alpi setup → Maintenance → Service → Install` if you
-  want 24/7 messaging + cron.
+- **Ops:** the daemon is installed automatically on the first
+  `alpi setup` (launchd plist on macOS, systemd-user unit on
+  Linux). 24/7 messaging + cron from minute one.
 - **Best for:** individual, personal use. Zero-config after the
   quickstart.
 
@@ -52,7 +55,7 @@ but that'd just be two profiles — see topology 3).
 ┌──────────────────┐                ┌──────────────────────┐
 │ laptop           │                │ home server          │
 │                  │   ALP.2 over   │                      │
-│  alpi (TUI)      │───Tailscale───▶│  alpi service        │
+│  alpi (TUI)      │───Tailscale───▶│  alpi daemon         │
 │  ~/.alpi/        │                │  ~/.alpi/            │
 │  peers: home     │                │  peers: laptop       │
 │                  │◀───────────────│  (reaches back only  │
@@ -67,9 +70,9 @@ but that'd just be two profiles — see topology 3).
 - **Peers:** cross-pinned. Capabilities narrow — laptop grants
   `home-server` only `link.ping` + `link.ask`; home-server grants
   laptop only `link.ask`. See [ALP.md §Capability model](ALP.md).
-- **Ops:** home server installs the unified `alpi service` (one
-  PID per profile hosts gateway + scheduler + ALP listener).
-  Laptop just runs `alpi` when the user sits down.
+- **Ops:** home server runs `alpi setup` once (auto-installs the
+  daemon, which hosts gateway + scheduler + ALP listener). Laptop
+  just runs `alpi` when the user sits down.
 - **Best for:** power-user individual with a house NAS /
   mini-server. Also: "I want scheduled jobs to run even when my
   laptop is closed."
@@ -98,16 +101,19 @@ starter kit on a single host.
 ```
 
 - **Profiles:** N, each with its own identity, model, memory,
-  skills, and capability surface.
+  skills, and capability surface. **One daemon** supervises every
+  profile — N profiles do not mean N processes or N plists.
 - **ALP:** ALP.1 (Unix sockets). Each profile's `alp/alp.sock` is
   `0600`; the OS file-system permissions are the first line of
   defence, Ed25519 signatures the second.
 - **Capabilities are how you specialise.** `cron` might only grant
   `link.ask` to `assistant` and nothing to `researcher`.
   `researcher` grants `link.ask` to both.
-- **Gateway identity:** any subset of the profiles can run their
-  own gateway. `assistant` takes user messages; `cron` stays
-  silent (no Telegram, no IMAP).
+- **Per-profile services.** Each profile's `service:` block in
+  `config.yaml` decides what the daemon spawns: `assistant` runs
+  Telegram + scheduler + ALP; `cron` runs only the scheduler;
+  `researcher` only ALP. Add or remove a profile and `alpi daemon
+  restart` to apply.
 - **Best for:** family on one home server, individual with
   specialised-role agents, prototyping an enterprise rollout on
   one box before distributing.

@@ -104,10 +104,10 @@ point you for tokens and credentials), then install the unified
 background service so alpi answers 24/7:
 
 ```bash
-alpi setup → Service → Install
+alpi setup → Daemon → Install
 ```
 
-The single `alpi service` orchestrator hosts the gateway, the
+The single `alpi daemon` orchestrator hosts the gateway, the
 scheduler, and the ALP listener on one event loop — one PID, one
 log file, one launchd / systemd unit per profile. From now on
 alpi answers you over the channel 24/7 — on boot, on crash-
@@ -138,7 +138,7 @@ listener — no separate install. Run the service if you haven't
 already, then exchange pubkeys with peers:
 
 ```bash
-alpi setup → Service → Install      # if not already running
+alpi setup → Daemon → Install      # if not already running
 alpi setup → ALP → Peers
 ```
 

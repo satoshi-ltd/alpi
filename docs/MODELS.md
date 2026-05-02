@@ -73,7 +73,7 @@ Reality check on pricing: at list prices, **Step 3.5 Flash** runs
 **~30× cheaper on input and ~50× cheaper on output** than
 **Sonnet 4.6**. **MiMo-V2-Flash** lands ~33× / ~52× cheaper.
 **DeepSeek V3.2** is ~12× / ~40× cheaper. For a profile that runs a
-unified service hitting Telegram inbound all day, those multipliers
+the alpi daemon hitting Telegram inbound all day, those multipliers
 compound into real savings — many of those turns don't need
 Tier 1 reasoning.
 

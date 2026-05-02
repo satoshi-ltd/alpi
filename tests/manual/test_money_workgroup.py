@@ -1,4 +1,4 @@
-"""Oneshot end-to-end test of a 3-peer ALP.3 autonomous workgroup.
+"""Oneshot end-to-end test of TWO concurrent ALP.3 workgroups.
 
 Run::
 
@@ -7,13 +7,41 @@ Run::
 This script owns the three profiles (alice, bob, carol) end-to-end:
 nukes them, recreates them, copies only OPENAI_API_KEY from
 ~/.alpi/.env, pins openai/gpt-5.4-nano as the model, writes role bios,
-installs the launchd services, cross-pins all three pairs, then drives
-a workgroup task: scope the next feature for the Money app
-(https://satoshi-ltd.com/case-studies/money).
+installs the launchd services, cross-pins all three pairs, then runs
+TWO workgroups in parallel:
 
-  carol — user researcher: web_fetches the page, extracts facts.
-  alice — product manager: turns research into feature candidates.
-  bob   — marketer: pushes back on positioning, picks the GTM winner.
+  ▸ money-2026 (hub=alice, members=[alice, bob, carol])
+    Pick PATH A vs B for the Money app's 2026 strategy.
+
+  ▸ alpi-v05-roadmap (hub=carol, members=[carol, alice])
+    Read https://alpi-agent.com/docs/ROADMAP and decide whether the
+    proposed v0.5 scope is the right next step. Bob is intentionally
+    excluded — this is a focused PM + researcher pairing.
+
+Roles (per profile, both workgroups):
+
+  carol — user researcher: web_fetches & extracts facts.
+  alice — product manager: synthesises into options + roadmap fit.
+  bob   — marketer: GTM lens (only money-2026).
+
+Running both in parallel exercises the per-profile poller's ability
+to dispatch into multiple wgs without bleeding state, and the
+cross-machine transport (alice + carol intra unix socket; bob over
+TCP/Noise_XK on a Tailscale hostname).
+
+Transport topology (mirrors a real cross-machine setup as much as a
+single laptop allows):
+
+  alice — unix socket (intra-machine).
+  carol — unix socket (intra-machine).
+  bob   — TCP (Noise_XK) on a Tailscale hostname. Alice and carol pin
+          bob with the explicit host:port so their dispatcher uses
+          ``call_tcp`` instead of unix-socket dial. Bob's listener
+          binds the same hostname so the path matches what an actual
+          remote peer would observe.
+
+Conversation language is forced to English in every briefing — gpt-5.4
+otherwise drifts to the user's locale and tanks downstream parsing.
 
 WARNING: this WIPES ~/.alpi/profiles/{alice,bob,carol} every run. Do
 not point this at profiles you actually use day-to-day.
@@ -33,22 +61,29 @@ _DONE_MARKER = re.compile(r"^\s*(?:@\S+\s+)*#done(?:\s|$)")
 
 ROOT = Path.home() / ".alpi"
 PROFILES = ("alice", "bob", "carol")
-HUB = "alice"
 HOMES = {p: ROOT / "profiles" / p for p in PROFILES}
 MODEL = "openai/gpt-5.4-nano"
 WORKSPACE = str(Path.home())
 
+# Per-profile transport. Anyone with TCP info gets the listener bound
+# to that host:port and is pinned by peers with the same address —
+# exercising the Noise_XK path. Profiles without TCP entry stay on
+# unix sockets (intra-machine only).
+TCP = {
+    "bob": {"host": "macbook-pro-m4.tail3442b7.ts.net", "port": 9101},
+}
+
 BIOS = {
     "alice": (
-        "Product manager — turns research into 2-3 feature candidates "
+        "Product manager - turns research into 2-3 feature candidates "
         "scored on user value, build cost, and roadmap fit."
     ),
     "bob": (
-        "Marketer — pushes positioning and GTM; picks the candidate "
+        "Marketer - pushes positioning and GTM; picks the candidate "
         "with the strongest audience narrative and 2024-2026 signals."
     ),
     "carol": (
-        "User researcher — extracts pain points, audience signals, "
+        "User researcher - extracts pain points, audience signals, "
         "and feature gaps from product pages and case studies."
     ),
 }
@@ -58,77 +93,70 @@ ACCENTS = {
     "carol": "#d75f87",
 }
 
-WG_NAME = "money-2026"
-URL = "https://satoshi-ltd.com/case-studies/money"
-BRIEFING = (
-    "Money (a privacy-first personal-finance app by Satoshi Ltd, "
-    f"case study at {URL}) is at a strategic bifurcation for 2026. "
-    "Two paths on the table, both viable, both with real costs:\n"
-    "\n"
-    "  PATH A — DOUBLE DOWN ON PRIVACY-PURIST NICHE. Stay 100% "
-    "on-device, no cloud anything, deepen the iOS-only experience "
-    "with on-device LLM-driven categorization + insights, launch "
-    "a paid premium tier ($3/mo) for power users. Trade-off: TAM "
-    "stays small but defensibility and narrative are sharp.\n"
-    "\n"
-    "  PATH B — BROADEN TO MAINSTREAM WITH OPTIONAL E2E-ENCRYPTED "
-    "SYNC. Add multi-device sync (iCloud/CloudKit or self-hosted) "
-    "with end-to-end encryption so the privacy promise survives, "
-    "ship Android, run mainstream paid acquisition. Trade-off: "
-    "TAM expands ~5x but the narrative softens (\"E2E encrypted "
-    "is not the same as zero-bytes-sent\") and dev complexity "
-    "balloons.\n"
-    "\n"
-    "Pick ONE path. The right answer requires both a PM lens "
-    "(feasibility, cost, roadmap, retention) AND a GTM lens "
-    "(narrative, positioning, audience signal) to land on the "
-    "same path with explicit defenses, not assertions.\n"
-    "\n"
-    "Per-role contributions:\n"
-    "\n"
-    "@carol — user researcher. BOOTSTRAP ONLY: you post ONCE, then "
-    "stay silent for the rest of the session. Before posting you "
-    "MUST (a) call web_fetch on the case-study URL, AND (b) call "
-    "web_search for at least one 2024-2026 signal about the "
-    "privacy-finance category (DAU trends, competitor launches, "
-    "App Store review themes about bank-linking apps, paid-sync "
-    "service adoption). Your single post is a bullet summary of "
-    "what the page promises + what the market is actually doing, "
-    "in a way that gives BOTH paths real evidence. Do NOT take a "
-    "side. If you have not invoked web_fetch + web_search this "
-    "turn, stay silent.\n"
-    "\n"
-    "@alice — product manager (also the workgroup hub). After "
-    "carol's research lands, post your PM read: which path has "
-    "better feasibility / build cost / 12-month roadmap fit / "
-    "retention math? Default lean: B (TAM math + retention from "
-    "multi-device usually wins on PM lens). EXPECT BOB TO PUSH "
-    "BACK on narrative grounds. When he does, you MUST respond — "
-    "defend B with concrete PM arguments OR concede to A if his "
-    "counter on dev complexity / niche defensibility is stronger. "
-    "Iterate. Your goal is not to win but to find the path where "
-    "both lenses align with explicit defenses in the transcript. "
-    "As the hub, you close the task with #done once that's real.\n"
-    "\n"
-    "@bob — marketer. After carol's research AND alice's PM read, "
-    "post your GTM read on both paths. Default lean: A (privacy "
-    "purist has the sharper 2024-2026 narrative — every "
-    "bank-linking competitor breach is free marketing). If alice "
-    "advocated B, push back hard with audience evidence: cite the "
-    "real signal carol surfaced or one of your own. Do NOT "
-    "capitulate just because she's the hub or PM — narrative "
-    "trumps TAM if the broader audience never trusts you. You "
-    "may concede only after alice gives a concrete defense you "
-    "can't break."
+URL_MONEY = "https://satoshi-ltd.com/case-studies/money"
+URL_ROADMAP = "https://alpi-agent.com/docs/ROADMAP"
+
+# Briefings are TOPIC + ROLE only. Meta-rules about transcript
+# language and #done timing live in WORKGROUP_GUARDRAILS (the agent's
+# system prompt).
+
+MONEY_BRIEFING = (
+    "Money is a privacy-first personal-finance app by Satoshi Ltd. "
+    f"Public case study: {URL_MONEY}. The decision: pick the 2026 "
+    "strategic path. PATH A is privacy-purist niche - stay 100% "
+    "on-device, iOS-only, deepen the experience with on-device LLM "
+    "categorization plus insights, launch a paid premium tier "
+    "($3/mo); trade-off: TAM stays small but defensibility and "
+    "narrative stay sharp. PATH B is mainstream broadening with "
+    "E2E-encrypted sync - add multi-device sync (CloudKit or "
+    "self-hosted) with end-to-end encryption, ship Android, run "
+    "paid acquisition; trade-off: TAM grows ~5x but narrative "
+    "softens and dev complexity grows. Pick ONE path in one line. "
+    "Defend with a PM lens (feasibility, cost, retention) and a "
+    "GTM lens (narrative, positioning, audience). Cite the case "
+    "study at most once if useful, then commit."
 )
-KICKOFF = (
-    "#task Money is at a strategic bifurcation for 2026: pick "
-    "PATH A (privacy-purist niche, on-device only, paid premium) "
-    "vs PATH B (mainstream broadening with E2E-encrypted sync + "
-    "Android). Each path has real tradeoffs — defend the choice "
-    "with both PM and GTM lenses, not just assertions."
+MONEY_KICKOFF = (
+    "#task Money 2026 strategy: pick PATH A (privacy-purist "
+    "iOS-only paid premium) vs PATH B (mainstream broadening with "
+    "E2E sync + Android). Defend the choice with PM + GTM lenses."
 )
-BUDGET_USD = 5.0
+
+ROADMAP_BRIEFING = (
+    "alpi (open, local-first agent runtime - github.com/soyjavi/alpi) "
+    "is approaching v0.5. The maintainer wants a focused review: is "
+    "the proposed v0.5 scope right, or are we missing something? "
+    f"Source of truth: {URL_ROADMAP} — sections to ground the "
+    "discussion are \"Open release gates\", \"ALP launch work\", "
+    "\"Long-term bets\", and \"Discarded decisions\". Converge on "
+    "one explicit recommendation by name: \"ship as planned\", "
+    "\"ship subset X / defer Y\", or \"add Z first\"."
+)
+ROADMAP_KICKOFF = (
+    f"#task Read {URL_ROADMAP} and decide together: is the "
+    "proposed v0.5 scope the right next step? Converge on one "
+    "explicit recommendation."
+)
+
+WORKGROUPS = [
+    {
+        "name": "money-2026",
+        "hub": "alice",
+        "members": ("alice", "bob", "carol"),
+        "briefing": MONEY_BRIEFING,
+        "kickoff": MONEY_KICKOFF,
+        "budget": 5.0,
+    },
+    {
+        "name": "alpi-v05-roadmap",
+        "hub": "carol",
+        "members": ("carol", "alice"),
+        "briefing": ROADMAP_BRIEFING,
+        "kickoff": ROADMAP_KICKOFF,
+        "budget": 3.0,
+    },
+]
+
 TIMEOUT_SECONDS = 30 * 60
 POLL_SECONDS = 20
 
@@ -162,25 +190,25 @@ def run(cmd: list[str], **kw) -> subprocess.CompletedProcess:
 # Step 1 — nuke
 
 
+def _hard_remove(p: str) -> None:
+    """Best-effort uninstall + rmtree. Does NOT fail — anything
+    persistent is handled by the bootstrap retry loop, which is the
+    only place that has the full create-after-remove atomicity needed
+    to win against a desktop watcher that may re-shell `alpi -p p`
+    (which itself re-bootstraps the dir) at any moment."""
+    if HOMES[p].exists():
+        run(["alpi", "profile", "remove", p, "--yes", "--force"])
+    if HOMES[p].exists():
+        shutil.rmtree(HOMES[p], ignore_errors=True)
+
+
 def nuke_profiles() -> None:
-    step("nuking profiles (uninstall launchd + stop + remove dir)")
+    step("nuking profiles (uninstall launchd + remove dir)")
     for p in PROFILES:
-        run(["alpi", "-p", p, "service", "stop"])
-        uninstall_code = (
-            "from alpi import service as svc\n"
-            "from pathlib import Path\n"
-            f"home = Path.home() / '.alpi' / 'profiles' / '{p}'\n"
-            "try:\n"
-            f"    svc.uninstall(home, '{p}')\n"
-            "except Exception:\n"
-            "    pass\n"
-        )
-        run(["uv", "run", "python", "-c", uninstall_code],
-            cwd=str(Path(__file__).parent.parent))
         if HOMES[p].exists():
-            shutil.rmtree(HOMES[p])
+            _hard_remove(p)
             ok(f"removed {HOMES[p]}")
-    time.sleep(1)
+    time.sleep(0.5)
 
 
 # Step 2 — read default OPENAI_API_KEY
@@ -203,14 +231,36 @@ def read_openai_key() -> str:
 # Step 3 — bootstrap profiles
 
 
+def _force_create(p: str, max_attempts: int = 6) -> None:
+    """Create the profile, retrying through the race where another
+    alpi invocation (e.g. a desktop poll) re-creates the home dir
+    between our rmtree and ``profile create``. Each attempt does:
+    rmtree (idempotent), then create. If create still says "already
+    exists", we lost the race — sleep a moment and retry."""
+    for attempt in range(1, max_attempts + 1):
+        _hard_remove(p)
+        res = run(["alpi", "profile", "create", p])
+        if res.returncode == 0:
+            return
+        # Ignore other shell side-effects; re-arm and retry.
+        msg = (res.stderr or res.stdout or "").strip()
+        if "already exists" not in msg.lower():
+            fail(f"profile create {p} failed: {msg}")
+        warn(f"{p}: race lost on attempt {attempt}/{max_attempts} ({msg}); retrying")
+        time.sleep(0.5 * attempt)
+    fail(
+        f"profile create {p} could not win the race after {max_attempts} "
+        "attempts — close the desktop app (or pause its workgroup polling) "
+        "and rerun the script"
+    )
+
+
 def bootstrap_profiles(api_key: str) -> None:
-    step("creating fresh profiles + writing config + installing services")
+    step("creating fresh profiles + writing config")
     import yaml
 
     for p in PROFILES:
-        res = run(["alpi", "profile", "create", p])
-        if res.returncode != 0:
-            fail(f"profile create {p} failed: {res.stderr}")
+        _force_create(p)
 
         (HOMES[p] / ".env").write_text(f"OPENAI_API_KEY={api_key}\n")
 
@@ -220,20 +270,29 @@ def bootstrap_profiles(api_key: str) -> None:
         cfg["workspace"] = WORKSPACE
         cfg["public_bio"] = BIOS[p]
         cfg.setdefault("tui", {})["accent"] = ACCENTS[p]
-        cfg_path.write_text(yaml.safe_dump(cfg, sort_keys=False))
-
-        install_code = (
-            "from alpi import service as svc\n"
-            "from pathlib import Path\n"
-            f"home = Path.home() / '.alpi' / 'profiles' / '{p}'\n"
-            f"svc.install(home, '{p}')\n"
-            "print('installed')\n"
+        if p in TCP:
+            tcp = TCP[p]
+            alp = cfg.setdefault("alp", {})
+            alp["tcp_host"] = tcp["host"]
+            alp["tcp_port"] = int(tcp["port"])
+        cfg_path.write_text(
+            yaml.safe_dump(cfg, sort_keys=False, allow_unicode=True),
         )
-        res = run(["uv", "run", "python", "-c", install_code],
-                  cwd=str(Path(__file__).parent.parent))
-        if res.returncode != 0:
-            fail(f"service install {p} failed: {res.stderr}")
-        ok(f"{p}: profile + config + .env + launchd")
+        ok(f"{p}: profile + config + .env")
+
+    # Single daemon for the machine; idempotent. Restart picks up the
+    # newly-created profile homes that were just bootstrapped above.
+    install_code = (
+        "from alpi import service as svc\n"
+        "from alpi import home as home_mod\n"
+        "svc.install_daemon(home_mod._ROOT)\n"
+        "print('installed')\n"
+    )
+    res = run(["uv", "run", "python", "-c", install_code],
+              cwd=str(Path(__file__).parent.parent))
+    if res.returncode != 0:
+        fail(f"daemon install failed: {res.stderr}")
+    ok("daemon installed (one launchd plist / systemd unit, all profiles)")
 
     step("waiting for ALP keypairs to be generated")
     deadline = time.time() + 30
@@ -263,52 +322,71 @@ def cross_pin() -> None:
     pairs = [(a, b) for i, a in enumerate(PROFILES) for b in PROFILES[i + 1:]]
     for a, b in pairs:
         for hub, peer in ((a, b), (b, a)):
-            res = run(["alpi", "-p", hub, "peers", "add", peer, pubkeys[peer]])
+            cmd = ["alpi", "-p", hub, "peers", "add", peer, pubkeys[peer]]
+            # If the peer is reachable over TCP, pin its host:port so
+            # the dispatcher uses ``call_tcp`` instead of unix.
+            if peer in TCP:
+                tcp = TCP[peer]
+                cmd += ["--address", f"{tcp['host']}:{tcp['port']}"]
+            res = run(cmd)
             if res.returncode != 0:
                 fail(f"{hub} peers add {peer} failed: {res.stderr}")
-    ok(f"6 directional pins written")
+    ok(f"6 directional pins written ({len(TCP)} via TCP)")
 
 
 # Step 5 — create workgroup
 
 
-def create_workgroup() -> str:
-    step(f"creating workgroup as {HUB}")
+def create_workgroup(spec: dict) -> str:
+    name = spec["name"]
+    hub = spec["hub"]
+    members = spec["members"]
+    step(f"creating workgroup '{name}' as {hub}")
     members_args: list[str] = []
-    for m in PROFILES:
-        if m == HUB:
+    for m in members:
+        if m == hub:
             continue
         members_args += ["--member", m]
     res = run([
-        "alpi", "-p", HUB, "workgroup", "create", WG_NAME,
-        *members_args, "--budget-usd", str(BUDGET_USD),
+        "alpi", "-p", hub, "workgroup", "create", name,
+        *members_args, "--budget-usd", str(spec["budget"]),
     ])
     if res.returncode != 0:
-        fail(f"workgroup create failed: {res.stderr}")
-    wg_dirs = list((HOMES[HUB] / "alp" / "workgroups").iterdir())
+        fail(f"workgroup create '{name}' failed: {res.stderr}")
+    # New workgroup is the youngest dir under hub's workgroups/.
+    wg_dirs = sorted(
+        (
+            d
+            for d in (HOMES[hub] / "alp" / "workgroups").iterdir()
+            if d.is_dir() and not d.name.startswith(".")
+        ),
+        key=lambda d: d.stat().st_mtime,
+        reverse=True,
+    )
     if not wg_dirs:
-        fail("workgroup directory not created")
+        fail(f"workgroup '{name}' directory not created")
     wg_dir = wg_dirs[0]
     wg_id = wg_dir.name
 
     import yaml
     meta_path = wg_dir / "meta.yaml"
     meta = yaml.safe_load(meta_path.read_text())
-    meta["briefing"] = BRIEFING
-    meta_path.write_text(yaml.safe_dump(meta, sort_keys=False))
-    ok(f"created {wg_id} ({WG_NAME}) with briefing + ${BUDGET_USD} budget")
+    meta["briefing"] = spec["briefing"]
+    meta_path.write_text(yaml.safe_dump(meta, sort_keys=False, allow_unicode=True))
+    ok(f"created {wg_id} ({name}) with briefing + ${spec['budget']} budget")
     return wg_id
 
 
 # Step 6 — members join
 
 
-def members_join(wg_id: str) -> None:
-    for member in PROFILES:
-        if member == HUB:
+def members_join(spec: dict, wg_id: str) -> None:
+    hub = spec["hub"]
+    for member in spec["members"]:
+        if member == hub:
             continue
-        step(f"{member} joining as remote member")
-        res = run(["alpi", "-p", member, "workgroup", "join", HUB, wg_id])
+        step(f"{member} joining '{spec['name']}' as remote member")
+        res = run(["alpi", "-p", member, "workgroup", "join", hub, wg_id])
         if res.returncode != 0:
             fail(f"{member} join failed: {res.stderr}")
         ok(f"{member} received sealed group key + briefing")
@@ -345,43 +423,48 @@ def reset_poller_state() -> None:
     ok("cursors + cooldowns + recent_posts cache cleared")
 
 
-# Step 8 — restart services so they reload peers + subscriptions
+# Step 8 — restart the daemon so it reloads peers + subscriptions
 
 
 def restart_services() -> None:
-    step("restarting services to load fresh peers + subscriptions")
-    for p in PROFILES:
-        res = run(["alpi", "-p", p, "service", "restart"])
-        if res.returncode != 0:
-            fail(f"{p} service restart failed: {res.stderr}")
+    step("restarting daemon to load fresh peers + subscriptions")
+    res = run(["alpi", "daemon", "restart"])
+    if res.returncode != 0:
+        fail(f"daemon restart failed: {res.stderr}")
 
-    deadline = time.time() + 30
-    pending = {p for p in PROFILES if p != HUB}
+    # Wait until every hub responds to a ping from each of its
+    # non-hub members. That covers all transports we exercise (unix
+    # + TCP) and all hubs across both workgroups.
+    pending: set[tuple[str, str]] = set()
+    for spec in WORKGROUPS:
+        for m in spec["members"]:
+            if m != spec["hub"]:
+                pending.add((m, spec["hub"]))
+    deadline = time.time() + 45
     started = time.time()
     while time.time() < deadline and pending:
-        for p in list(pending):
-            probe = run(["alpi", "-p", p, "peers", "ping", HUB])
+        for (caller, target) in list(pending):
+            probe = run(["alpi", "-p", caller, "peers", "ping", target])
             if probe.returncode == 0:
-                pending.discard(p)
+                pending.discard((caller, target))
         if pending:
             time.sleep(1)
     if pending:
-        fail(
-            f"{HUB}'s ALP listener didn't answer ping from {sorted(pending)} "
-            f"within 30s — check `alpi -p {HUB} service status`"
-        )
-    ok(f"all services up — pings answered in {int(time.time() - started)}s")
+        details = ", ".join(f"{a}→{b}" for (a, b) in sorted(pending))
+        fail(f"ALP listeners didn't answer pings within 45s: {details}")
+    ok(f"daemon up — every hub answered pings in {int(time.time() - started)}s")
 
 
 # Step 9 — kickoff
 
 
-def post_kickoff(wg_id: str) -> None:
-    step(f"posting kickoff via {HUB} (the only 'human' message)")
-    res = run(["alpi", "-p", HUB, "workgroup", "post", wg_id, KICKOFF])
+def post_kickoff(spec: dict, wg_id: str) -> None:
+    hub = spec["hub"]
+    step(f"posting kickoff for '{spec['name']}' via {hub}")
+    res = run(["alpi", "-p", hub, "workgroup", "post", wg_id, spec["kickoff"]])
     if res.returncode != 0:
-        fail(f"kickoff post failed: {res.stderr}")
-    ok(f"kickoff posted: {KICKOFF[:120]}…")
+        fail(f"kickoff post '{spec['name']}' failed: {res.stderr}")
+    ok(f"kickoff posted to {spec['name']}: {spec['kickoff'][:100]}…")
 
 
 # Step 10 — watch
@@ -409,57 +492,83 @@ def _load_pubkeys() -> dict[str, str]:
     return handle_by_pubkey
 
 
-def watch(wg_id: str) -> None:
+def watch(specs: list[dict], wg_ids: dict[str, str]) -> None:
+    """Poll all workgroups in parallel until every one closes with
+    ``#done``, any workgroup hits 95% of its budget, or we time out."""
     print()
-    print(f"{BLUE}=== watching transcript (poll every {POLL_SECONDS}s, "
-          f"timeout {TIMEOUT_SECONDS // 60} min) ==={RESET}")
-    print(f"{GREY}expect: carol researches → alice/bob debate path A "
-          f"vs B with defenses → converge → alice (hub) closes{RESET}")
+    print(
+        f"{BLUE}=== watching {len(specs)} workgroup(s) (poll every "
+        f"{POLL_SECONDS}s, timeout {TIMEOUT_SECONDS // 60} min) ==={RESET}"
+    )
+    for spec in specs:
+        print(
+            f"{GREY}  · {spec['name']} · hub={spec['hub']} · "
+            f"members={list(spec['members'])} · ${spec['budget']:.2f} cap{RESET}"
+        )
     print()
 
     pubkey_to_handle = _load_pubkeys()
-    seen_seq = 0
-    closed = False
+    seen_seq: dict[str, int] = {spec["name"]: 0 for spec in specs}
+    closed: dict[str, bool] = {spec["name"]: False for spec in specs}
     deadline = time.time() + TIMEOUT_SECONDS
     last_status_at = 0.0
     started = time.time()
 
     while time.time() < deadline:
-        posts, ledger = read_state(wg_id)
-        if posts:
+        all_done = True
+        for spec in specs:
+            name = spec["name"]
+            if closed[name]:
+                continue
+            all_done = False
+            posts, ledger = read_state(spec["hub"], wg_ids[name])
             for p in posts:
-                if int(p["seq"]) <= seen_seq:
+                if int(p["seq"]) <= seen_seq[name]:
                     continue
-                seen_seq = int(p["seq"])
-                _print_post(p, pubkey_to_handle)
-                if any(_DONE_MARKER.match(line) for line in p.get("text", "").splitlines()):
-                    closed = True
+                seen_seq[name] = int(p["seq"])
+                _print_post(p, pubkey_to_handle, wg_label=name)
+                if any(
+                    _DONE_MARKER.match(line)
+                    for line in p.get("text", "").splitlines()
+                ):
+                    closed[name] = True
+                    print()
+                    ok(
+                        f"[{name}] CLOSED with #done — "
+                        f"${ledger.get('usd', 0):.4f} / "
+                        f"{ledger.get('tokens', 0):,} tokens / "
+                        f"{ledger.get('posts', 0)} posts"
+                    )
 
-            if closed:
-                print()
-                ok(f"task CLOSED with #done — final ledger: "
-                   f"${ledger.get('usd', 0):.4f} / "
-                   f"{ledger.get('tokens', 0):,} tokens / "
-                   f"{ledger.get('posts', 0)} posts")
-                return
+            if ledger.get("usd", 0) >= spec["budget"] * 0.95 and not closed[name]:
+                warn(
+                    f"[{name}] budget at 95%+ "
+                    f"(${ledger['usd']:.2f}/${spec['budget']}) — "
+                    f"hub will start refusing posts"
+                )
 
-        if ledger.get("usd", 0) >= BUDGET_USD * 0.95:
-            warn(f"workgroup budget at 95%+ (${ledger['usd']:.2f}/${BUDGET_USD}) — "
-                 f"hub will start refusing posts soon")
+        if all_done:
+            print()
+            ok("all workgroups closed.")
+            return
 
         if time.time() - last_status_at > 60:
             last_status_at = time.time()
             elapsed = int(time.time() - started)
+            running = [s["name"] for s in specs if not closed[s["name"]]]
             print(
-                f"{GREY}  · {elapsed}s elapsed · {len(posts)} posts · "
-                f"${ledger.get('usd', 0):.4f} spent{RESET}"
+                f"{GREY}  · {elapsed}s elapsed · still running: "
+                f"{', '.join(running)}{RESET}"
             )
             _print_turn_panel()
 
         time.sleep(POLL_SECONDS)
 
-    warn(f"timed out after {TIMEOUT_SECONDS}s — task still open. "
-         "investigate prompt or guardrails.")
+    pending = [s["name"] for s in specs if not closed[s["name"]]]
+    warn(
+        f"timed out after {TIMEOUT_SECONDS}s — still open: {pending}. "
+        f"investigate prompt or guardrails."
+    )
 
 
 def _print_turn_panel() -> None:
@@ -564,13 +673,13 @@ def _fmt_dur(secs: int) -> str:
     return f"{secs // 60}m{secs % 60:02d}s"
 
 
-def read_state(wg_id: str) -> tuple[list[dict], dict]:
+def read_state(hub: str, wg_id: str) -> tuple[list[dict], dict]:
     code = (
         "import json, sys\n"
         "from pathlib import Path\n"
         "from alpi import service as svc\n"
         "from alpi.alp import workgroup as wg_mod\n"
-        f"home = Path.home() / '.alpi' / 'profiles' / '{HUB}'\n"
+        f"home = Path.home() / '.alpi' / 'profiles' / '{hub}'\n"
         f"wg = wg_mod.load(home, '{wg_id}')\n"
         "if wg is None:\n"
         "    print(json.dumps({'posts': [], 'ledger': {}})); sys.exit(0)\n"
@@ -593,7 +702,7 @@ def read_state(wg_id: str) -> tuple[list[dict], dict]:
         return [], {}
 
 
-def _print_post(p: dict, pubkey_to_handle: dict[str, str]) -> None:
+def _print_post(p: dict, pubkey_to_handle: dict[str, str], wg_label: str = "") -> None:
     pubkey = p.get("from", "")
     handle = pubkey_to_handle.get(pubkey)
     color = PEER_COLOR.get(handle, GREY) if handle else GREY
@@ -604,12 +713,13 @@ def _print_post(p: dict, pubkey_to_handle: dict[str, str]) -> None:
         f"{cost.get('tokens', 0):,}tok{RESET}"
         if cost else ""
     )
+    label = f"  {GREY}[{wg_label}]{RESET}" if wg_label else ""
     text = p.get("text", "").strip()
     if len(text) > 800:
         text = text[:797] + "…"
     bar = f"{color}┃{RESET}"
     print()
-    print(f"{bar} {color}#{p['seq']:>2}  {who}{RESET}{cost_str}")
+    print(f"{bar} {color}#{p['seq']:>2}  {who}{RESET}{cost_str}{label}")
     print(bar)
     for line in text.splitlines():
         print(f"{bar} {line}")
@@ -617,19 +727,28 @@ def _print_post(p: dict, pubkey_to_handle: dict[str, str]) -> None:
 
 
 def main() -> int:
-    print(f"{BLUE}=== ALP.3 oneshot 3-peer Money workgroup test ==={RESET}")
-    print(f"{GREY}wipes & rebuilds {', '.join(PROFILES)} from scratch{RESET}")
+    print(f"{BLUE}=== ALP.3 oneshot multi-workgroup test ==={RESET}")
+    print(f"{GREY}wipes & rebuilds {', '.join(PROFILES)} from scratch · "
+          f"runs {len(WORKGROUPS)} workgroup(s) in parallel{RESET}")
     print()
     api_key = read_openai_key()
     nuke_profiles()
     bootstrap_profiles(api_key)
     cross_pin()
-    wg_id = create_workgroup()
-    members_join(wg_id)
+
+    wg_ids: dict[str, str] = {}
+    for spec in WORKGROUPS:
+        wg_id = create_workgroup(spec)
+        members_join(spec, wg_id)
+        wg_ids[spec["name"]] = wg_id
+
     reset_poller_state()
     restart_services()
-    post_kickoff(wg_id)
-    watch(wg_id)
+
+    for spec in WORKGROUPS:
+        post_kickoff(spec, wg_ids[spec["name"]])
+
+    watch(WORKGROUPS, wg_ids)
     print()
     return 0
 

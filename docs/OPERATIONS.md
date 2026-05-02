@@ -24,7 +24,7 @@ generation.
 
 | File | What it answers | Who writes it |
 |---|---|---|
-| `service.log` | Did my unified service start? Which subsystems came up? Did the gateway accept this inbound? Did a peer hit the ALP listener? Did a cron job fire? | the unified `alpi.service` orchestrator + every subsystem that logs through the root logger |
+| `service.log` | Did the daemon start? Which services came up for which profile? Did a gateway accept this inbound? Did a peer hit an ALP listener? Did a cron job fire? | the daemon supervisor + every per-profile service that logs through the root logger |
 | `agent.log` | What has the agent *been doing*? One line per turn: session id, elapsed, tools called, reply length, cost, user prompt preview. Cross-session grep index. | the engine (every turn on every surface) |
 | `approval.log` | Security audit of every non-safe shell command the LLM tried to run: caution (pending / once / session / always / deny) or dangerous (always denied). | the approval system |
 
@@ -42,20 +42,22 @@ Anyone who needs to answer "what did alpi do this week?" or "did
 the agent run anything risky?" should be grepping those two
 files.
 
-## Service — one process per profile
+## Daemon — one process per machine, every profile inside
 
-alpi runs a single per-profile orchestrator that hosts every
-enabled subsystem (gateway, scheduler, ALP listener) on the same
-asyncio event loop. It registers as one launchd plist (macOS) or
-one systemd-user unit (Linux) per profile.
+alpi runs a single `com.alpi.daemon` process (launchd plist on
+macOS, systemd-user unit on Linux) that supervises every profile
+under `~/.alpi/` — default plus each `profiles/<name>/`. Each
+profile gets its own per-service supervised tasks named
+`<profile>/<service>` (e.g. `mirai/gateway`, `ghost/alp`); a crash
+in one profile's service leaves siblings untouched.
 
 | What it does | Lifecycle | Install / config |
 |---|---|---|
-| Gateway listener (Telegram / IMAP / Gmail / webhook) + scheduler tick + ALP socket (Unix + optional TCP/Noise_XK), all in one Python process. Toggle individual subsystems via `service.{gateway,schedule,alp}: bool` in `config.yaml`. | `alpi service start\|stop\|restart\|status` | `alpi setup → Maintenance → Service` |
+| Boots one task per (profile, service) on a single asyncio loop: gateway (Telegram / IMAP / Gmail / webhook), scheduler tick, ALP socket (Unix + optional TCP/Noise_XK), workgroups poller, host plane. Toggle which services run for a profile via `service.{gateway,schedule,alp,workgroups,host}: bool` in that profile's `config.yaml`. | `alpi daemon start\|stop\|restart\|status` | auto-installed on first `alpi setup`; manage from `alpi setup → Services → Daemon` (default profile only) |
 
-Every install is per-profile — installing for `work` doesn't
-install for `default`. New profiles default to **opt-in**: nothing
-runs in background until you choose to install. Operational verbs
+There's exactly one daemon per machine, one plist / unit. Adding
+a new profile just creates a directory under `~/.alpi/profiles/`;
+the daemon picks it up on its next restart. Operational verbs
 that aren't lifecycle survive on their own:
 
 ```bash
@@ -63,26 +65,36 @@ alpi schedule run-once          # tick the scheduler once, in-process
 alpi schedule fire <job-id>     # ad-hoc run of a specific job
 ```
 
+### Linux: lingering
+
+`systemctl --user` services die when you log out unless lingering
+is enabled. `alpi daemon install` runs `loginctl enable-linger
+$USER` automatically; on restricted environments (WSL without
+`systemd=true` in `/etc/wsl.conf`, minimal containers) `loginctl`
+may not exist — the install logs a warning and you'll need to
+keep the daemon foregrounded under `tmux` / `screen`, or fix the
+linger setup manually.
+
 ### When `stop` doesn't stop
 
-If you run `alpi service stop` on a launchd / systemd-managed
-service, the supervisor will respawn it within seconds (the plist
-declares `KeepAlive=true`). To permanently stop:
+If you run `alpi daemon stop` while the unit is installed, the
+supervisor will respawn it within seconds (the plist declares
+`KeepAlive=true`). To permanently stop:
 
 ```bash
-alpi setup → Maintenance → Service → Uninstall
+alpi setup → Services → Daemon → Uninstall
 ```
 
 ### When `restart` is really what you want
 
-After `uv tool install --reinstall`, the long-running service
+After `uv tool install --reinstall`, the long-running daemon
 still holds the old binary's code. Use:
 
 ```bash
-alpi service restart      # stop + wait for the supervisor to respawn
+alpi daemon restart      # stop + wait for the supervisor to respawn
 ```
 
-`alpi doctor` flags "stale binary — `alpi service restart` to
+`alpi doctor` flags "stale binary — `alpi daemon restart` to
 reload" when the binary on disk is newer than the running
 process.
 
@@ -94,10 +106,10 @@ hand. Today's upgrade rule of thumb:
 
 1. `git pull` + `uv tool install --reinstall .` (or the equivalent
    with `uv tool install <version>`).
-2. `alpi doctor` — the Service row flags a stale binary.
-3. `alpi -p <profile> service restart` for each profile that's
-   actually installed (use `launchctl list | grep alpi.service`
-   to see them at a glance).
+2. `alpi doctor` — the Daemon row flags a stale binary.
+3. `alpi daemon restart` — one daemon supervises every profile,
+   so a single restart picks up the new code for all of them.
+   (`launchctl list | grep com.alpi.daemon` confirms the unit.)
 4. If the CHANGELOG entry calls for file moves (e.g. the ALP
    layout change in v0.2.68), follow them for **every profile**.
 5. Re-run `alpi doctor` — should be clean.
@@ -144,9 +156,9 @@ Every peer who pinned your old pubkey must update their
 `peers.yaml` before you can reach them again.
 
 ```bash
-alpi service stop                      # or: alpi setup → Maintenance → Service → Uninstall
+alpi daemon stop                       # or: alpi setup → Services → Daemon → Stop
 rm ~/.alpi/alp/secrets/alp_key.{pem,pub}
-alpi service start                     # generates a fresh pair when the ALP listener boots
+alpi daemon start                      # generates a fresh pair when the ALP listener boots
 alpi peers key                         # print the new pubkey; send OOB to every peer
 ```
 
@@ -165,9 +177,9 @@ alpi has no built-in metrics endpoint by design (**Zero Knowledge**
 principle — no telemetry, no phone-home). For in-house
 observability, the signals to watch:
 
-- **Service liveness.** `alpi doctor` in a cron; exits non-zero if
-  any live check fails. Alert on non-zero. The Service row covers
-  the unified orchestrator's PID + supervisor backend.
+- **Daemon liveness.** `alpi doctor` in a cron; exits non-zero if
+  any live check fails. Alert on non-zero. The Daemon row covers
+  the supervisor's PID + install backend.
 - **Log tail error rate.** `grep ERROR ~/.alpi/logs/*.log | wc -l`
   over a window — spike = misconfig, broken credentials, LLM API
   outage.
@@ -201,17 +213,17 @@ You've lost a machine. Here's the order of operations to restore.
 
 1. Reinstall alpi on the replacement machine (`uv tool install`).
 2. Restore `~/.alpi/` from backup.
-3. `alpi doctor` — the Service row will read "not installed" for
-   each profile.
-4. Re-install the service for the profiles you want active
-   (`alpi setup → Maintenance → Service → Install`).
+3. Run `alpi setup` once — it auto-installs the daemon if the
+   plist / unit isn't already in place. (Or manually:
+   `alpi daemon install`.)
+4. `alpi doctor` — the Daemon row should read "running".
 5. If your ALP identity is intact (backup included
    `alp/secrets/`), your peers still reach you. If you had to
    regenerate, see **ALP identity rotation** above.
 6. `alpi` → test a turn. Send a message from Telegram; verify the
    reply lands.
-7. Tail `service.log` and `agent.log` for 24 h to confirm the
-   gateway and scheduler are firing normally.
+7. Tail `service.log` and `agent.log` for 24 h to confirm every
+   profile's gateway and scheduler are firing normally.
 
 If you had no backup: you've lost the profile. Start from
 quickstart, re-pair your ALP peers, re-install your skills. The
@@ -221,15 +233,15 @@ phone home, so there's no "recover from the cloud" path.
 ## Common failure modes
 
 **"Listener not running"** when calling `@peer …`. The peer's
-service is down or its ALP subsystem is disabled. Check
-`alpi -p <peer> service status` on the peer's machine.
+daemon is down or its `alp` service is disabled for that profile.
+Check `alpi daemon status` on the peer's machine and the
+`service.alp` flag in the peer profile's `config.yaml`.
 
-**Two services running simultaneously for the same profile.**
-`ps aux | grep "alpi ("` shows more than one entry for the same
-profile name. Usually after a failed reinstall, or after running
-`alpi service start` foreground while the supervisor was already
-running. Fix:
-`pkill -f "alpi (<profile>)" && alpi -p <profile> service restart`.
+**Two daemons running simultaneously.** `ps aux | grep "alpi ("`
+shows more than one `alpi (daemon, …)` entry. Usually after a
+failed reinstall, or after running `alpi daemon start` foreground
+while the supervisor was already running. Fix:
+`pkill -f "alpi (daemon" && alpi daemon restart`.
 
 **Message didn't save to memory.** Check the session file:
 `jq '.turns[-1].tools' ~/.alpi/sessions/*.json` — if no `memory`
@@ -239,9 +251,9 @@ capture, tell alpi explicitly ("remember that…").
 
 **Telegram is silent.** `alpi logs --source service -n 100`.
 Expected to see inbound lines with `[telegram]` prefix. If
-nothing: bot token revoked, offset corrupted, or the service
+nothing: bot token revoked, offset corrupted, or the daemon
 crashed. `alpi doctor` flags credential problems explicitly.
 
 **Stale binary.** After `uv tool install --reinstall`, the
 daemon still runs the old code. `alpi doctor` warns; fix with
-`alpi {gateway,schedule,alp} restart`.
+`alpi daemon restart`.

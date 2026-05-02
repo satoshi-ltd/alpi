@@ -168,7 +168,7 @@ class HelpPanel(FloatingPanel):
         from alpi.tui.list_row import build_options, name_width, row_text
 
         cmd_items = [(k, f"/{k}", desc) for k, desc in self._COMMANDS]
-        # No active key — /help is a palette, nothing is "currently selected".
+        # No active key: /help is a palette, nothing is selected.
         # with_marker=False kills the 2-char prefix so rows align with the
         # section header instead of sitting indented inside the highlight bar.
         options = build_options(cmd_items, with_marker=False)
@@ -202,7 +202,7 @@ class HelpPanel(FloatingPanel):
         if not cmd:
             return
         self.remove()
-        # Defer so the panel is fully gone before the next one (if any) mounts.
+        # Defer so the panel is fully gone before the next one mounts.
         self.app.call_after_refresh(self.app._handle_slash, f"/{cmd}")
 
 

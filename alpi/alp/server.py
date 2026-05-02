@@ -214,13 +214,6 @@ class Server:
                 log.info("alp tcp: handshake failed from %s: %s", peername, e)
                 return
 
-            # Noise proved the peer owns *some* static key; still require
-            # that key to be pinned in peers.yaml before we dispatch.
-            expected_peer = tcp.find_peer_by_x25519(self.home, remote_x)
-            if expected_peer is None:
-                log.info("alp tcp: unpinned peer from %s — silent drop", peername)
-                return
-
             # One request per connection, mirroring the Unix socket shape.
             try:
                 plaintext = await tcp.recv_envelope(reader, cs_recv)
@@ -233,6 +226,10 @@ class Server:
                 log.debug("alp tcp: malformed JSON after decrypt; dropping")
                 return
 
+            # Look up by X25519 first; if not pinned, fall through to
+            # the dispatcher which extracts the Ed25519 from the envelope
+            # and records a pending invite before silent-dropping.
+            expected_peer = tcp.find_peer_by_x25519(self.home, remote_x)
             response = await self._dispatch(body, pinned_peer=expected_peer)
             if response is None:
                 return
@@ -281,6 +278,8 @@ class Server:
         peer = peers_mod.get_by_pubkey(self.home, sender_pk)
         if peer is None:
             log.info("alp drop: unpinned sender %s...", sender_pk[:12])
+            from alpi.alp import pending as _pending
+            _pending.record(self.home, sender_pk)
             return None
 
         # A peer that passes Noise as A but signs the envelope as B is

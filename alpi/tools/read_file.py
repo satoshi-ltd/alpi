@@ -42,9 +42,7 @@ class ReadFile(Tool):
             if hints:
                 msg += ". Similar: " + ", ".join(hints)
             return ToolResult(ok=False, output="", error=msg)
-        # Sniff the first few KB to refuse binaries early (PNG, ZIP, PDF,
-        # compiled binaries, etc.) — otherwise we'd dump garbage into the
-        # LLM context.
+        # Sniff the first bytes to reject binaries early.
         try:
             head = p.open("rb").read(8192)
         except OSError as e:
@@ -67,8 +65,7 @@ def _looks_binary(blob: bytes) -> bool:
         return False
     if b"\x00" in blob:
         return True
-    # Text bytes: tab, LF, CR, form-feed + printable ASCII + high bytes
-    # (UTF-8 continuation) — control chars in the C0 range count against.
+    # Treat tabs, newlines, printable ASCII, and UTF-8 bytes as text.
     text_chars = bytes(range(0x20, 0x7F)) + b"\t\n\r\f\b"
     non_text = sum(1 for b in blob if b not in text_chars and b < 0x80)
     return non_text / len(blob) > 0.30
