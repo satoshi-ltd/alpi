@@ -1,0 +1,83 @@
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from typing import Any
+
+
+_FIRST_USER_MAX = 140
+
+
+def list_sessions(home: Path) -> list[dict[str, Any]]:
+    d = home / "sessions"
+    if not d.exists():
+        return []
+    rows: list[dict[str, Any]] = []
+    for p in d.iterdir():
+        if not p.is_file() or p.suffix != ".json":
+            continue
+        if p.stem.startswith("_"):
+            continue
+        try:
+            data = json.loads(p.read_text(encoding="utf-8"))
+        except Exception:  # noqa: BLE001
+            data = {}
+        turns = data.get("turns") or []
+        first_user = ""
+        if turns:
+            first_user = _truncate(str(turns[0].get("user") or ""), _FIRST_USER_MAX)
+        try:
+            mtime = int(p.stat().st_mtime)
+        except OSError:
+            mtime = 0
+        rows.append({
+            "id": p.stem,
+            "mtime": mtime,
+            "started_at": data.get("started_at"),
+            "first_user": first_user,
+            "model": data.get("model"),
+            "turn_count": len(turns),
+            "kind": _classify(first_user),
+            "input_tokens": int(data.get("input_tokens") or 0),
+            "output_tokens": int(data.get("output_tokens") or 0),
+            "cost_usd": float(data.get("cost_usd") or 0.0),
+            "last_ctx_tokens": int(data.get("last_ctx_tokens") or 0),
+        })
+    rows.sort(key=lambda r: r["mtime"], reverse=True)
+    return rows
+
+
+def read_session(home: Path, session_id: str) -> dict[str, Any]:
+    p = home / "sessions" / f"{session_id}.json"
+    if not p.exists():
+        raise FileNotFoundError(f"no session {session_id!r}")
+    return json.loads(p.read_text(encoding="utf-8"))
+
+
+def _classify(first_user: str) -> str:
+    s = first_user.lstrip()
+    if s.startswith("[workgroup-poller]") or s.startswith("[workgroup "):
+        return "workgroup"
+    if s.startswith("[SCHEDULED:") or s.startswith("[CRON"):
+        return "scheduled"
+    if s.startswith("[INBOUND TELEGRAM"):
+        return "telegram"
+    if s.startswith("[INBOUND IMAP") or s.startswith("[INBOUND GMAIL"):
+        return "email"
+    if s.startswith("[INBOUND "):
+        return "gateway"
+    if s.startswith("["):
+        return "system"
+    if not s:
+        return "empty"
+    return "chat"
+
+
+def _truncate(s: str, max_chars: int) -> str:
+    out: list[str] = []
+    for i, ch in enumerate(s):
+        if i >= max_chars:
+            out.append("…")
+            break
+        out.append(" " if ch in ("\n", "\r") else ch)
+    return "".join(out).strip()
