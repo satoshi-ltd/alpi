@@ -1,0 +1,176 @@
+name: desktop-release
+
+# Release pipeline for the Tauri desktop app. Independent of the
+# alpi (CLI) release chain in ``publish.yml`` — the two ship on
+# their own cadences with their own version schemes:
+#
+#   alpi (CLI)  → ``vX.Y.Z``         → PyPI + GitHub release
+#   desktop app → ``desktop-vX.Y.Z`` → GitHub release only
+#
+# Trigger: pushing a ``desktop-v*`` tag. The tag's version must
+# match ``desktop/src-tauri/tauri.conf.json``'s ``version`` field
+# or the build aborts (mismatched binaries are how a version
+# bumped on disk but never released happens).
+#
+# Two releases are produced from one tag:
+#   1. ``desktop-vX.Y.Z`` — the immutable, version-stamped release.
+#   2. ``desktop-latest`` — a rolling release that the Tauri
+#      updater endpoint in ``tauri.conf.json`` points to. Same
+#      assets, but the tag moves on every publish so the URL stays
+#      stable.
+#
+# Signing: minisign keypair via ``TAURI_SIGNING_PRIVATE_KEY`` +
+# ``TAURI_SIGNING_PRIVATE_KEY_PASSWORD`` repo secrets. Public key
+# lives in ``tauri.conf.json`` so the installed app verifies
+# updates against it.
+
+on:
+  push:
+    tags: ["desktop-v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "tag to (re)build, e.g. desktop-v0.1.0"
+        required: true
+        type: string
+
+permissions: {}
+
+jobs:
+  # 1. Sanity gate: the git tag and ``tauri.conf.json`` must agree
+  #    on the version. Mismatch = bail before burning matrix minutes.
+  check-version:
+    name: tag matches tauri.conf.json
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.gate.outputs.version }}
+      tag: ${{ steps.gate.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: gate
+        run: |
+          tag="${{ github.event.inputs.tag || github.ref_name }}"
+          version="${tag#desktop-v}"
+          conf=$(python3 -c "import json, pathlib; print(json.loads(pathlib.Path('desktop/src-tauri/tauri.conf.json').read_text())['version'])")
+          echo "tag=$tag    conf=$conf    version=$version"
+          if [ "$version" != "$conf" ]; then
+            echo "::error::tag $tag implies version $version but tauri.conf.json says $conf"
+            exit 1
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  # 2. Cross-platform bundle build. ``tauri-action`` invokes
+  #    ``pnpm tauri build`` per OS, signs with the minisign key,
+  #    emits ``latest.json`` (the updater manifest), and uploads
+  #    every artefact to the version-stamped release.
+  build:
+    name: build (${{ matrix.os }})
+    needs: check-version
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            target: universal-apple-darwin
+            args: "--target universal-apple-darwin"
+          - os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            args: ""
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            args: ""
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: desktop/pnpm-lock.yaml
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: desktop/src-tauri
+
+      - name: linux deps (webkit2gtk + appindicator)
+        if: matrix.os == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf
+
+      - run: pnpm install --frozen-lockfile
+        working-directory: desktop
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: desktop
+          tagName: ${{ needs.check-version.outputs.tag }}
+          releaseName: ${{ needs.check-version.outputs.tag }}
+          releaseBody: "See [desktop/CHANGELOG.md](https://github.com/satoshi-ltd/alpi/blob/main/desktop/CHANGELOG.md) for the full changelog."
+          releaseDraft: false
+          prerelease: false
+          includeUpdaterJson: true
+          args: ${{ matrix.args }}
+
+  # 3. Roll the ``desktop-latest`` tag onto the same commit and
+  #    re-publish the same assets there. The Tauri updater hits
+  #    ``releases/download/desktop-latest/latest.json`` — that URL
+  #    must always serve the most recent release's manifest.
+  promote-latest:
+    name: promote to desktop-latest
+    needs: [check-version, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: move desktop-latest tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.check-version.outputs.tag }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -f desktop-latest "$TAG"
+          git push origin -f desktop-latest
+
+      - name: download assets from version release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.check-version.outputs.tag }}
+        run: |
+          mkdir -p latest-assets
+          gh release download "$TAG" --dir latest-assets
+
+      - name: (re)publish desktop-latest with same assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release delete desktop-latest --yes || true
+          gh release create desktop-latest \
+            latest-assets/* \
+            --title "desktop-latest (rolling)" \
+            --notes "Rolling alias for the most recent desktop release. The Tauri updater endpoint in tauri.conf.json points here so the URL stays stable across versions."
