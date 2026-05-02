@@ -207,6 +207,37 @@ For enterprise setups, ship the log dir through a forwarder
 The log format is standard Python logging with ISO timestamps;
 there's no parser to write.
 
+## What changed in this profile?
+
+`alpi diff [--since 24h]` summarises profile-level activity since
+the cutoff. mtime-driven, side-effect free; safe to run from cron
+or a remote SSH session.
+
+```bash
+alpi diff                       # last 24h, default profile
+alpi diff --since 7d            # weekly digest
+alpi diff --since 2026-04-25    # since an explicit date
+alpi -p personal diff --since 1h
+alpi diff --since 7d --json     # machine-readable for scripts / dashboards
+```
+
+What it covers: memory edits (which file, when), local + gateway
+sessions (count, turns, tool calls, cost, tokens, agent time),
+mention threads touched, skill installs, peer-list mutations,
+fired schedule jobs grouped by job id, and today's budget usage.
+
+The same primitive is exposed in the TUI as `/diff [since]`
+(default `24h`). One implementation — three surfaces (CLI, TUI,
+host-plane verb when the desktop catches up).
+
+Use cases:
+- **Came back from holiday** — `alpi diff --since 7d` answers
+  "what did my service do?".
+- **Pre-backup smoke check** — `alpi diff --since <last-backup>`
+  before `alpi backup` so you know what's about to be archived.
+- **Cron snapshot** — `alpi diff --since 24h --json` piped into
+  whatever dashboard collects per-profile activity.
+
 ## Disaster recovery checklist
 
 You've lost a machine. Here's the order of operations to restore.

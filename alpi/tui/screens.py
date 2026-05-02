@@ -149,6 +149,7 @@ class HelpPanel(FloatingPanel):
         ("status",    "session snapshot — model, turns, tokens, cost"),
         ("skills",    "list installed skills"),
         ("peers",     "list ALP peers; pick one to drop @id into the input"),
+        ("diff",      "what changed in this profile in the last 24h"),
         ("clear",     "clear chat history (keeps session)"),
         ("new",       "start a fresh session (new id, history wiped)"),
         ("compact",   "summarize history to save tokens"),
@@ -268,6 +269,32 @@ class ToolsPanel(FloatingPanel):
                     continue
                 yield Static(cls.name, classes="entry-name")
                 yield Static(_short(cls.description), classes="entry-desc")
+
+
+class DiffPanel(FloatingPanel):
+    """``/diff [since]`` — what changed in this profile since the cutoff.
+    ``since`` accepts ``Nh`` / ``Nd`` / ``Nw`` (default ``24h``) or an
+    ISO-8601 timestamp."""
+
+    panel_title = "/diff"
+
+    def __init__(self, home: Path, since: str = "24h") -> None:
+        super().__init__()
+        self.home = home
+        self.since_spec = since or "24h"
+
+    def compose_body(self) -> ComposeResult:
+        from alpi import diff as diff_mod
+
+        try:
+            cutoff = diff_mod.parse_since(self.since_spec)
+        except ValueError as e:
+            yield Static(str(e), classes="entry-desc")
+            return
+        report = diff_mod.compute(self.home, cutoff)
+        text = diff_mod.render(report, profile=self.home.name or "default")
+        with VerticalScroll():
+            yield Static(text, classes="entry-desc")
 
 
 class McpPanel(FloatingPanel):

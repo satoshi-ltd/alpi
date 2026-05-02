@@ -15,6 +15,7 @@ from alpi import config, home, memory
 from alpi.engine import AgentEvent, Engine
 from alpi.tui.screens import (
     StatusPanel,
+    DiffPanel,
     FloatingPanel,
     HelpPanel,
     McpPanel,
@@ -121,7 +122,7 @@ class AlpiApp(App):
         from alpi import __version__ as alpi_version
         slash_commands = [
             "/help", "/memory", "/tools", "/mcps", "/status", "/clear", "/new",
-            "/compact", "/skills", "/model", "/peers",
+            "/compact", "/skills", "/model", "/peers", "/diff",
             "/exit", "/quit",
         ]
         # Peer mentions share the same popup — typing ``@`` surfaces pinned
@@ -452,6 +453,7 @@ class AlpiApp(App):
             "skills": lambda _a: self._cmd_skills(),
             "model": lambda _a: self._cmd_model(),
             "peers": lambda _a: self._show_panel(PeersPanel(self.home)),
+            "diff": lambda a: self._show_panel(DiffPanel(self.home, since=a or "24h")),
             "exit": lambda _a: self.action_quit(),
             "quit": lambda _a: self.action_quit(),
         }
