@@ -1,21 +1,23 @@
 name: publish
 
-# Auto-publish to PyPI on every merge to main where the
-# pyproject.toml version differs from the version currently on PyPI
-# — Cloudflare-style "merge → deploy", adapted to the immutability
-# of PyPI by gating on the version delta.
+# Release pipeline. Strict chain — every stage gates the next:
 #
-# Why this design:
-#   - alpi already bumps patch in every commit (memory rule), so a
-#     PR that lands on main is, by convention, a release.
-#   - PyPI versions are immutable; we never reuse a number. Skipping
-#     no-op publishes (version unchanged) prevents accidents.
-#   - Smoke-install runs *before* publish, so a wheel that builds
-#     locally but fails on a clean container can't reach users.
+#   tests → check-version → build → smoke → publish PyPI → tag + GH release
 #
-# Manual ``workflow_dispatch`` is preserved for two reasons: (1)
-# rehearse a release on TestPyPI, (2) re-publish a tag if the
-# original auto-publish was interrupted (e.g. CI outage).
+# A failing test never produces a wheel. A no-op version (same as
+# PyPI's) never builds. A wheel that breaks smoke install never
+# reaches users. The "merge → deploy" convention from Cloudflare,
+# constrained by PyPI's immutability via the version delta gate.
+#
+# Why tests live here, not in ``test.yml``: ``test.yml`` is the
+# PR-feedback workflow. The push-to-main path needs the same
+# tests as the gate of the release chain — duplicating them in
+# both files would mean a green ``test.yml`` PR run could still
+# slip a red main-branch run into PyPI if they raced. Single
+# source of truth on main = this workflow.
+#
+# Manual ``workflow_dispatch`` still runs the tests: rehearsing
+# on TestPyPI without testing defeats the rehearsal.
 #
 # Trusted Publisher (OIDC) is configured on PyPI; no API tokens
 # live in this repo.
@@ -37,10 +39,32 @@ on:
 permissions: {}
 
 jobs:
-  # 1. Cheap probe: is the version different from what's on PyPI?
-  #    If not, exit early — no build, no smoke, no publish, no spam.
+  # 1a. Test gate. Same suite the dev runs locally (``pytest -q``,
+  #     no integration markers — those need real sockets / sandbox
+  #     / bwrap and are not part of the dev loop). If a test
+  #     fails here the chain stops — no version probe, no build,
+  #     no smoke, no publish. Integration tests live in
+  #     ``test.yml`` for PRs + manual dispatch, deliberately not
+  #     in the release gate so the publish path matches what the
+  #     dev validates locally.
+  tests:
+    name: tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -e ".[dev]"
+      - run: pytest -q
+
+  # 1b. Cheap probe: is the version different from what's on PyPI?
+  #     If not, exit early — no build, no smoke, no publish, no spam.
   check-version:
     name: should we publish?
+    needs: tests
     runs-on: ubuntu-latest
     outputs:
       should_publish: ${{ steps.gate.outputs.should_publish }}
