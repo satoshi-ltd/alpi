@@ -1,28 +1,4 @@
-"""Single per-profile service: orchestrator + install.
-
-One process per profile runs every enabled subsystem (gateway,
-scheduler, ALP listener) on the same asyncio event loop. The PID,
-log, and OS-level service registration (launchd plist on macOS,
-systemd-user unit on Linux) all share the single ``service`` name —
-no more three-process / three-plist sprawl per profile.
-
-Subsystems are toggled per profile in ``config.yaml``::
-
-    service:
-      gateway: true     # Telegram / IMAP / Gmail polling
-      schedule: true    # cron jobs
-      alp: true         # peer listener (Unix socket + optional TCP)
-
-Default if the section is missing: all three on, since that matches
-the previous (split-services) behaviour.
-
-Lifecycle commands live under ``alpi service`` in the CLI:
-``start`` (foreground), ``stop`` (signal a running process),
-``restart``, ``status`` (PID + uptime + which subsystems are active).
-``install`` and ``uninstall`` are reached from the wizard
-(``alpi setup → Service``) — they register one plist / unit per
-profile that supervises the same ``alpi service start`` command.
-"""
+"""Central daemon for all profiles under ``~/.alpi``."""
 
 from __future__ import annotations
 
@@ -46,18 +22,31 @@ log = logging.getLogger("alpi.service")
 # Public — orchestration
 
 
-def pid_path(home: Path) -> Path:
-    return home / "service.pid"
+def enabled_subsystems(home: Path) -> dict[str, bool]:
+    """Read which subsystems this profile wants; missing config means all on."""
+    from alpi import config as cfg_mod
+    cfg = cfg_mod.load(home)
+    raw = getattr(cfg, "service", None) or {}
+    return {
+        "gateway": bool(raw.get("gateway", True)),
+        "schedule": bool(raw.get("schedule", True)),
+        "alp": bool(raw.get("alp", True)),
+        "workgroups": bool(raw.get("workgroups", True)),
+        "host": bool(raw.get("host", True)),
+    }
 
 
-def log_path(home: Path) -> Path:
-    return home / "logs" / "service.log"
+def daemon_pid_path(root: Path) -> Path:
+    return root / "service.pid"
 
 
-def running_pid(home: Path) -> int | None:
-    """Return the PID of the live service or ``None`` if nothing is
-    running. Stale PID files (process gone) are cleaned up on the way."""
-    p = pid_path(home)
+def daemon_log_path(root: Path) -> Path:
+    return root / "logs" / "service.log"
+
+
+def daemon_running_pid(root: Path) -> int | None:
+    """Liveness check for the central PID file."""
+    p = daemon_pid_path(root)
     if not p.exists():
         return None
     try:
@@ -75,123 +64,128 @@ def running_pid(home: Path) -> int | None:
     return pid
 
 
-def is_running(home: Path) -> bool:
-    return running_pid(home) is not None
-
-
-def enabled_subsystems(home: Path) -> dict[str, bool]:
-    """Read which subsystems this profile wants. Missing config →
-    everything on (matches pre-refactor default).
-
-    ``workgroups`` is a separate subsystem (PR 5) — the background
-    poller that pulls subscribed workgroups and dispatches a turn
-    when there's new content addressed at us. Defaults to True; set
-    to False on a profile that participates in no workgroups (cheap
-    no-op anyway, but silences a wasted log line at start)."""
-    from alpi import config as cfg_mod
-    cfg = cfg_mod.load(home)
-    raw = getattr(cfg, "service", None) or {}
-    return {
-        "gateway": bool(raw.get("gateway", True)),
-        "schedule": bool(raw.get("schedule", True)),
-        "alp": bool(raw.get("alp", True)),
-        "workgroups": bool(raw.get("workgroups", True)),
-    }
-
-
-def serve(home: Path, profile: str = "default") -> None:
-    """Foreground entry point — boots every enabled subsystem on a
-    single asyncio loop, writes the PID, sets the process title to
-    ``alpi (<profile>)``, and waits until SIGTERM / SIGINT."""
-    _configure_logging(home)
-    _load_env(home)
-    _set_proctitle(profile)
-    _write_pid(home)
-
-    subsystems = enabled_subsystems(home)
-    log.info(
-        "service starting · profile=%s · subsystems=%s",
-        profile,
-        ",".join(name for name, on in subsystems.items() if on) or "(none)",
-    )
-
+def stop_daemon(root: Path, *, timeout: float = 5.0) -> bool:
+    """SIGTERM the central daemon."""
+    pid = daemon_running_pid(root)
+    if pid is None:
+        return False
     try:
-        asyncio.run(_main(home, profile, subsystems))
+        os.kill(pid, signal.SIGTERM)
+    except OSError:
+        return False
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if daemon_running_pid(root) is None:
+            return True
+        time.sleep(0.1)
+    try:
+        os.kill(pid, signal.SIGKILL)
+    except OSError:
+        pass
+    return True
+
+
+def serve_all(root: Path) -> None:
+    """Foreground entry point for the central daemon."""
+    from alpi import home as home_mod
+
+    _configure_logging_daemon(root)
+    profiles = home_mod.list_profiles(root)
+    log.info("central service starting · profiles=%s", ",".join(profiles))
+    _set_proctitle_daemon(len(profiles))
+    _write_daemon_pid(root)
+    try:
+        asyncio.run(_main_all(root, profiles))
     except KeyboardInterrupt:
         pass
     finally:
-        _clear_pid(home)
-        log.info("service stopped · profile=%s", profile)
+        _clear_daemon_pid(root)
+        log.info("central service stopped")
 
 
-async def _main(
-    home: Path, profile: str, subsystems: dict[str, bool],
-) -> None:
+async def _main_all(root: Path, profiles: list[str]) -> None:
+    from alpi import home as home_mod
+
     stop = asyncio.Event()
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGTERM, signal.SIGINT):
         try:
             loop.add_signal_handler(sig, stop.set)
         except NotImplementedError:
-            # Windows / restricted env — fall back to KeyboardInterrupt.
             pass
 
     tasks: list[asyncio.Task] = []
-    if subsystems.get("gateway"):
-        tasks.append(asyncio.create_task(
-            _supervise(_run_gateway, home, profile, "gateway"),
-            name="gateway",
-        ))
-    if subsystems.get("schedule"):
-        tasks.append(asyncio.create_task(
-            _supervise(_run_scheduler, home, profile, "schedule"),
-            name="schedule",
-        ))
-    if subsystems.get("alp"):
-        tasks.append(asyncio.create_task(
-            _supervise(_run_alp, home, profile, "alp"),
-            name="alp",
-        ))
-    if subsystems.get("workgroups"):
-        tasks.append(asyncio.create_task(
-            _supervise(_run_workgroup_poller, home, profile, "workgroups"),
-            name="workgroups",
-        ))
+    for profile in profiles:
+        home = home_mod.home_for(profile)
+        _load_env(home)
+        try:
+            subsystems = enabled_subsystems(home)
+        except Exception:  # noqa: BLE001
+            log.exception("profile %s: cannot read config — skipping boot", profile)
+            continue
+        tasks.extend(_profile_tasks(home, profile, subsystems))
 
     if not tasks:
-        log.warning("no subsystems enabled — service will idle")
+        log.warning("no profile subsystems enabled — central will idle")
         await stop.wait()
         return
 
-    # Wait until SIGTERM/SIGINT — subsystems are independently
-    # supervised inside ``_supervise`` so a crash in one no longer
-    # collapses the rest. Only the explicit stop signal shuts the
-    # service down.
     await stop.wait()
     for t in tasks:
         t.cancel()
     await asyncio.gather(*tasks, return_exceptions=True)
 
 
+def _profile_tasks(
+    home: Path, profile: str, subsystems: dict[str, bool],
+) -> list[asyncio.Task]:
+    """Build the supervised task set for one profile."""
+    out: list[asyncio.Task] = []
+    if subsystems.get("gateway"):
+        out.append(asyncio.create_task(
+            _supervise(_run_gateway, home, profile, "gateway"),
+            name=f"{profile}/gateway",
+        ))
+    if subsystems.get("schedule"):
+        out.append(asyncio.create_task(
+            _supervise(_run_scheduler, home, profile, "schedule"),
+            name=f"{profile}/schedule",
+        ))
+    if subsystems.get("alp"):
+        out.append(asyncio.create_task(
+            _supervise(_run_alp, home, profile, "alp"),
+            name=f"{profile}/alp",
+        ))
+    # Host plane is default-only.
+    if subsystems.get("host") and profile == "default":
+        out.append(asyncio.create_task(
+            _supervise(_run_host, home, profile, "host"),
+            name=f"{profile}/host",
+        ))
+    if subsystems.get("workgroups"):
+        out.append(asyncio.create_task(
+            _supervise(_run_workgroup_poller, home, profile, "workgroups"),
+            name=f"{profile}/workgroups",
+        ))
+        out.append(asyncio.create_task(
+            _supervise(_run_preempt_watcher, home, profile, "workgroup-preempt"),
+            name=f"{profile}/workgroup-preempt",
+        ))
+    return out
+
+
 async def _supervise(coro_fn, home: Path, profile: str, name: str) -> None:
-    """Wrap a subsystem's run loop so a crash doesn't take down the
-    whole service. The crashed subsystem stays dead (we don't auto-
-    restart yet — would risk tight loops on a persistent failure
-    like a missing config); the others keep running. Operator sees
-    the traceback in the log and can fix + restart manually."""
+    """Wrap a subsystem so one crash does not take down the others."""
     try:
-        # Subsystems that need the profile name take it as a second
-        # arg; the simple ones only need the home path. Pass both
-        # uniformly, let each function declare what it accepts.
-        if name in ("alp", "workgroups"):
+        # Some subsystems need the profile name; others only need home.
+        if name in ("alp", "workgroups", "workgroup-preempt", "host"):
             await coro_fn(home, profile)
         else:
             await coro_fn(home)
     except asyncio.CancelledError:
         raise
     except Exception:  # noqa: BLE001
-        log.exception("subsystem %s crashed — staying down, "
-                      "other subsystems unaffected", name)
+        log.exception("subsystem %s crashed — staying down, other subsystems unaffected", name)
 
 
 async def _run_gateway(home: Path) -> None:
@@ -205,19 +199,7 @@ async def _run_scheduler(home: Path) -> None:
 
 
 async def _run_workgroup_poller(home: Path, profile: str) -> None:
-    """Watch every workgroup this profile participates in (subscriptions
-    AND hub-of) and dispatch an autonomous agent turn when something
-    arrives we should react to: a post tagging this profile, or a new
-    ``#task`` opening. Hub-of workgroups read the transcript locally
-    (no network); subscribed workgroups go through ``wc.pull`` so the
-    cache + cursor advance.
-
-    Per-workgroup cooldown (``DISPATCH_COOLDOWN_SECONDS``) prevents
-    tight ping-pong between two alpis. Profile / workgroup budgets are
-    the ultimate stop — every spawned turn admits against the profile
-    ledger and every ``workgroup_post`` it produces declares cost
-    against the workgroup ledger.
-    """
+    """Watch workgroups for new triggers and dispatch turns."""
     from alpi.alp import subscription as sub_mod
     from alpi.alp import workgroup as wg_mod
     from alpi.alp import workgroup_client as wc
@@ -225,11 +207,7 @@ async def _run_workgroup_poller(home: Path, profile: str) -> None:
     log.info("workgroup poller running (tick=%ss)", WORKGROUP_TICK_SECONDS)
     while True:
         try:
-            # Member-of workgroups — pull (advances cursor + fills the
-            # cache), then check the cache for "do I owe a response?"
-            # via _should_dispatch. We always check, even when no new
-            # posts arrived this tick, so a missed cooldown window
-            # doesn't lose the trigger.
+            # Pull member workgroups, then check whether they need a response.
             for sub in sub_mod.load(home):
                 try:
                     await wc.pull(home, sub.wg_id)
@@ -242,7 +220,7 @@ async def _run_workgroup_poller(home: Path, profile: str) -> None:
                     continue
                 await _maybe_dispatch_for_sub(home, profile, refreshed)
 
-            # Hub-of workgroups — local transcript, hub is also a member
+            # Hub workgroups use the local transcript.
             for wg in wg_mod.list_workgroups(home):
                 try:
                     recent = _all_hub_posts_decrypted(home, wg)
@@ -260,10 +238,7 @@ async def _run_workgroup_poller(home: Path, profile: str) -> None:
 async def _maybe_dispatch_for_sub(
     home: Path, profile: str, sub,
 ) -> None:
-    """Member-side dispatch decision. Reads ``sub.recent_posts`` (cache
-    refreshed by the most recent pull) and ``sub.last_responded_seq``
-    so a missed cooldown window doesn't lose the trigger. Persists
-    ``last_responded_seq`` only on actual dispatch."""
+    """Decide whether a member-side workgroup should dispatch."""
     from alpi.alp import keys as _keys
     from alpi.alp import subscription as sub_mod
 
@@ -271,8 +246,7 @@ async def _maybe_dispatch_for_sub(
     trigger, new_responded = _should_dispatch(
         profile, own_pubkey, sub.recent_posts or [], sub.last_responded_seq,
     )
-    # Pointer-only update (latest post is our own → no dispatch but
-    # advance the responded pointer so we don't keep re-checking).
+    # Advance the pointer when the latest post is ours.
     if not trigger:
         if new_responded > sub.last_responded_seq:
             sub.last_responded_seq = new_responded
@@ -284,27 +258,101 @@ async def _maybe_dispatch_for_sub(
             sub.wg_id, trigger,
         )
         return
+    if sub.wg_id in _INFLIGHT:
+        log.info(
+            "wg poller: %s skipped (in-flight dispatch, reason=%s)",
+            sub.wg_id, trigger,
+        )
+        return
     log.info(
         "wg poller: %s dispatching turn (reason=%s, member-of)",
         sub.wg_id, trigger,
     )
-    await _dispatch_workgroup_turn(home, profile, sub.wg_id, sub.name, trigger)
+    # Snapshot the round identity so stale reactions can be rejected.
+    round_seq = max(
+        (
+            int(p.get("seq", 0))
+            for p in (sub.recent_posts or [])
+            if str(p.get("from") or "") == sub.hub_pubkey
+        ),
+        default=0,
+    )
+    started_against = _latest_hub_task_seq_for(home, sub.wg_id, sub.hub_pubkey)
     sub.last_responded_seq = new_responded
     sub.last_dispatch_at = _utcnow_iso()
     sub_mod.upsert(home, sub)
+    # Spawn dispatch in the background so polling and preemption keep moving.
+    _spawn_dispatch(
+        sub.wg_id,
+        _dispatch_workgroup_turn(
+            home, profile, sub.wg_id, sub.name, trigger,
+            round_hub_seq=round_seq,
+            hub_pubkey=sub.hub_pubkey,
+            started_against_task_seq=started_against,
+        ),
+    )
 
 
-_STALE_TASK_SECONDS = 180
+# Members stay silent after a hub follow-up; the watchdog re-pokes the hub.
+_HUB_FOLLOWUP_STALE_SECONDS = 60
+
+
+# In-flight workgroup dispatches keyed by ``wg_id``.
+_INFLIGHT: dict[str, dict] = {}
+
+
+# Strong refs for fire-and-forget dispatch tasks.
+_BG_TASKS: set[asyncio.Task] = set()
+
+
+def _spawn_dispatch(wg_id: str, coro) -> asyncio.Task:
+    """Schedule a dispatch coroutine and keep a strong task reference."""
+    task = asyncio.create_task(coro, name=f"wg-dispatch-{wg_id}")
+    _BG_TASKS.add(task)
+    task.add_done_callback(_BG_TASKS.discard)
+    return task
+
+
+def _latest_hub_task_seq_for(
+    home: Path, wg_id: str, hub_pubkey: str,
+) -> int:
+    """Highest task seq seen for the hub pubkey."""
+    from alpi.alp import subscription as sub_mod
+    from alpi.alp import tasks as wg_tasks
+    from alpi.alp import workgroup as wg_mod
+
+    posts: list[dict] = []
+    wg = wg_mod.load(home, wg_id)
+    if wg is not None and wg.meta.hub_pubkey == hub_pubkey:
+        try:
+            posts = _all_hub_posts_decrypted(home, wg)
+        except Exception:  # noqa: BLE001
+            posts = []
+    else:
+        sub = sub_mod.get(home, wg_id)
+        if sub is not None:
+            posts = list(sub.recent_posts or [])
+
+    best = 0
+    for p in posts:
+        if str(p.get("from") or "") != hub_pubkey:
+            continue
+        evs = wg_tasks.parse_post(
+            str(p.get("text") or ""),
+            int(p.get("seq", 0)),
+            str(p.get("from") or ""),
+        )
+        if any(e.kind == "task" for e in evs):
+            seq = int(p.get("seq", 0))
+            if seq > best:
+                best = seq
+    return best
 
 
 async def _maybe_dispatch_for_hub(
     home: Path, profile: str, wg, recent: list[dict],
 ) -> None:
-    """Hub-side dispatch decision. ``recent`` is the full decrypted
-    transcript window for this workgroup; ``hub_last_responded_seq``
-    in the poller state file gates re-dispatch of the same content
-    independently of the cooldown so a missed window doesn't drop
-    the trigger."""
+    """Decide whether a hub-side workgroup should dispatch."""
     from alpi.alp import keys as _keys
 
     own_pubkey = _keys.load_or_generate(home).pubkey_b64()
@@ -325,18 +373,38 @@ async def _maybe_dispatch_for_hub(
             wg.meta.id, trigger,
         )
         return
+    if wg.meta.id in _INFLIGHT:
+        log.info(
+            "wg poller: %s skipped (in-flight dispatch, reason=%s)",
+            wg.meta.id, trigger,
+        )
+        return
     log.info(
         "wg poller: %s dispatching turn (reason=%s, hub-of)",
         wg.meta.id, trigger,
     )
-    await _dispatch_workgroup_turn(home, profile, wg.meta.id, wg.meta.name, trigger)
+    started_against = _latest_hub_task_seq_for(
+        home, wg.meta.id, wg.meta.hub_pubkey,
+    )
     _set_hub_responded_seq(home, wg.meta.id, new_responded)
     _mark_hub_dispatched(home, wg.meta.id)
+    _spawn_dispatch(
+        wg.meta.id,
+        _dispatch_workgroup_turn(
+            home, profile, wg.meta.id, wg.meta.name, trigger,
+            hub_pubkey=wg.meta.hub_pubkey,
+            started_against_task_seq=started_against,
+        ),
+    )
+
+
+_HUB_WATCHDOG_REFIRE_SECONDS = 5 * 60  # 5 min between re-fires
 
 
 async def _maybe_watchdog_close(
     home: Path, profile: str, wg, recent: list[dict],
 ) -> None:
+    """Re-poke stalled hub workgroups so they can close or keep waiting."""
     from alpi.alp import tasks as wg_tasks
 
     if not recent:
@@ -347,9 +415,12 @@ async def _maybe_watchdog_close(
     posts_in_task = [
         p for p in recent if int(p.get("seq", 0)) >= active.opened_seq
     ]
-    if len(posts_in_task) < 4:
+    if not posts_in_task:
         return
-    last_post_ts = str(posts_in_task[-1].get("ts", "")).strip()
+    last_post = posts_in_task[-1]
+    last_seq = int(last_post.get("seq", 0))
+
+    last_post_ts = str(last_post.get("ts", "")).strip()
     if not last_post_ts:
         return
     import datetime as _dt
@@ -359,32 +430,66 @@ async def _maybe_watchdog_close(
     except ValueError:
         return
     age = (_dt.datetime.now(tz=_dt.timezone.utc) - last_dt).total_seconds()
-    if age < _STALE_TASK_SECONDS:
+    if age < _HUB_FOLLOWUP_STALE_SECONDS:
         return
+
+    fired_seq = _get_hub_watchdog_seq(home, wg.meta.id)
     state = _load_poller_state(home)
-    last = state.get("hub_last_dispatch_at", {}).get(wg.meta.id, "")
-    if _in_cooldown_str(last):
+    last_dispatch_str = state.get("hub_last_dispatch_at", {}).get(
+        wg.meta.id, ""
+    )
+    if last_seq <= fired_seq:
+        # Allow re-fire only after a substantial gap.
+        if not last_dispatch_str:
+            return
+        try:
+            last_dispatch_dt = _dt.datetime.strptime(
+                last_dispatch_str, "%Y-%m-%dT%H:%M:%SZ",
+            ).replace(tzinfo=_dt.timezone.utc)
+        except ValueError:
+            return
+        elapsed_since_fire = (
+            _dt.datetime.now(tz=_dt.timezone.utc) - last_dispatch_dt
+        ).total_seconds()
+        if elapsed_since_fire < _HUB_WATCHDOG_REFIRE_SECONDS:
+            return
+
+    if _in_cooldown_str(last_dispatch_str):
         return
+    if wg.meta.id in _INFLIGHT:
+        return
+    last_author_is_hub = str(
+        last_post.get("from") or ""
+    ) == wg.meta.hub_pubkey
+    stall_kind = (
+        "hub talked last" if last_author_is_hub else "member talked last"
+    )
     reason = (
-        f"watchdog: active task stale "
-        f"({len(posts_in_task)} posts, last post {int(age)}s ago)"
+        f"watchdog: {stall_kind} (seq #{last_seq}), nothing new for "
+        f"{int(age)}s — closure-or-silence only"
     )
     log.info(
-        "wg poller: %s dispatching watchdog close (reason=%s)",
+        "wg poller: %s dispatching watchdog (reason=%s)",
         wg.meta.id, reason,
     )
-    await _dispatch_workgroup_turn(
-        home, profile, wg.meta.id, wg.meta.name, reason,
+    started_against = _latest_hub_task_seq_for(
+        home, wg.meta.id, wg.meta.hub_pubkey,
     )
+    _set_hub_watchdog_seq(home, wg.meta.id, last_seq)
     _mark_hub_dispatched(home, wg.meta.id)
+    _spawn_dispatch(
+        wg.meta.id,
+        _dispatch_workgroup_turn(
+            home, profile, wg.meta.id, wg.meta.name, reason,
+            closure_only=True,
+            hub_pubkey=wg.meta.hub_pubkey,
+            started_against_task_seq=started_against,
+        ),
+    )
 
 
 def _all_hub_posts_decrypted(home: Path, wg) -> list[dict]:
-    """Full decrypted recent transcript for hub workgroups — used by
-    the active-task participant trigger. Mirrors ``_new_hub_posts``
-    but ignores the cursor (we want context, not new-post detection)
-    and includes the hub's own posts (active-task lookup needs to
-    see all participants' contributions)."""
+    """Return the decrypted hub transcript."""
     import json
     from alpi.alp import workgroup as wg_mod
     from alpi.alp.keys import load_or_generate
@@ -422,10 +527,7 @@ def _all_hub_posts_decrypted(home: Path, wg) -> list[dict]:
 
 
 def _new_hub_posts(home: Path, wg) -> list[dict]:
-    """Read the local transcript, decrypt with the hub's own sealed key,
-    return posts with ``seq`` greater than the last cursor we saved.
-    The hub is always a member of its own workgroup, so it holds a
-    sealed copy of the current group key."""
+    """Return new decrypted hub posts after the saved cursor."""
     import json
     from alpi.alp import workgroup as wg_mod
     from alpi.alp.keys import load_or_generate
@@ -471,7 +573,7 @@ def _new_hub_posts(home: Path, wg) -> list[dict]:
     return out
 
 
-# Hub-side cursor + cooldown state, stored under the profile root.
+# Hub-side cursor and cooldown state live under the profile root.
 
 
 def _poller_state_path(home: Path) -> Path:
@@ -529,14 +631,26 @@ def _set_hub_responded_seq(home: Path, wg_id: str, seq: int) -> None:
         _save_poller_state(home, state)
 
 
+def _get_hub_watchdog_seq(home: Path, wg_id: str) -> int:
+    """Latest hub seq for which the watchdog already fired."""
+    state = _load_poller_state(home)
+    return int(state.get("hub_watchdog_fired_seq", {}).get(wg_id, 0))
+
+
+def _set_hub_watchdog_seq(home: Path, wg_id: str, seq: int) -> None:
+    state = _load_poller_state(home)
+    table = state.setdefault("hub_watchdog_fired_seq", {})
+    table[wg_id] = int(seq)
+    _save_poller_state(home, state)
+
+
 def _utcnow_iso() -> str:
     import datetime as _dt
     return _dt.datetime.now(tz=_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _mark_sub_dispatched(home: Path, wg_id: str) -> None:
-    """Persist the dispatch timestamp on the subscription itself so the
-    cooldown survives across poller ticks."""
+    """Persist the subscription dispatch timestamp."""
     import datetime as _dt
     from alpi.alp import subscription as sub_mod
     sub = sub_mod.get(home, wg_id)
@@ -549,8 +663,7 @@ def _mark_sub_dispatched(home: Path, wg_id: str) -> None:
 
 
 def _in_cooldown_str(stamp: str) -> bool:
-    """``True`` when ``stamp`` is within ``DISPATCH_COOLDOWN_SECONDS`` of
-    now. Robust to malformed / missing timestamps."""
+    """Return ``True`` when ``stamp`` is still inside the cooldown."""
     import datetime as _dt
     from alpi.alp.subscription import DISPATCH_COOLDOWN_SECONDS
     if not stamp:
@@ -569,26 +682,7 @@ def _should_dispatch(
     recent_posts: list[dict],
     last_responded_seq: int,
 ) -> tuple[str | None, int]:
-    """Decide whether the poller should wake the local agent. Scans
-    every post above ``last_responded_seq`` (not only the latest) so a
-    fast peer reply doesn't shadow an earlier `#task`/`@mention` and
-    drop the trigger. Triggers, by priority:
-
-    1. Direct ``@<profile>`` mention from someone else.
-    2. Collective ``#task`` (a `#task` with no peer-specific
-       ``@<peer>`` targets) — wakes every member, including the hub
-       when the hub authored.
-    3. Active-task participant: while a task is open, a post from
-       someone else wakes us if the opener was collective (no
-       ``@<peer>`` targets) or named us by ``@<profile>``.
-
-    A self-authored non-task post within the unprocessed range is
-    treated as "we already engaged" and shadows everything before it.
-
-    Returns ``(reason, new_responded_seq)``. ``reason`` None means no
-    dispatch; ``new_responded_seq`` is the highest seq evaluated and
-    is what the caller persists when (and only when) it actually
-    dispatches — cooldown skips leave the pointer untouched."""
+    """Decide whether the poller should wake the local agent."""
     from alpi.alp import tasks as wg_tasks
 
     if not recent_posts:
@@ -633,6 +727,12 @@ def _should_dispatch(
         if has_task and not mentions:
             return f"collective #task opened (seq #{seq})", high_seq
         if not is_self and active is not None:
+            # The hub of the active task always stays in the loop.
+            if active.opened_by == own_pubkey:
+                return (
+                    f"new content in active task we opened (seq #{seq})",
+                    high_seq,
+                )
             opener_mentions: list[str] = []
             for p in recent_posts:
                 if int(p.get("seq", 0)) != active.opened_seq:
@@ -707,122 +807,98 @@ def _post_count_for_role(home: Path, wg_id: str) -> int:
     return _sub_post_count(home, wg_id)
 
 
-def _build_role_aware_addendum(
-    home: Path, profile: str, wg_id: str,
-) -> str:
-    try:
-        from alpi.alp import subscription as sub_mod
-        from alpi.alp import tasks as wg_tasks
-        from alpi.alp import workgroup as wg_mod
-        from alpi.alp.keys import load_or_generate
-    except Exception:  # noqa: BLE001
-        return ""
-
-    try:
-        own_pubkey = load_or_generate(home).pubkey_b64()
-    except Exception:  # noqa: BLE001
-        return ""
-
-    wg = wg_mod.load(home, wg_id)
-    is_hub = wg is not None and wg.meta.hub_pubkey == own_pubkey
-
-    if is_hub:
-        try:
-            posts = _all_hub_posts_decrypted(home, wg)
-        except Exception:  # noqa: BLE001
-            return ""
-        hub_pubkey = wg.meta.hub_pubkey
-    else:
-        sub = sub_mod.get(home, wg_id)
-        if sub is None:
-            return ""
-        posts = list(sub.recent_posts or [])
-        hub_pubkey = sub.hub_pubkey
-    if not posts:
-        return ""
-
-    active = wg_tasks.active_task(posts, hub_pubkey=hub_pubkey)
-    if active is None:
-        return ""
-
-    posts_in_task = [
-        p for p in posts if int(p.get("seq", 0)) >= active.opened_seq
-    ]
-    own_in_task = [
-        p for p in posts_in_task if str(p.get("from", "")) == own_pubkey
-    ]
-
-    if is_hub and len(posts_in_task) >= 4:
-        return (
-            "\n\n=== STATE-AWARE CUE (you are the HUB) ===\n"
-            f"The active task has {len(posts_in_task)} posts already. "
-            "Read the last 2-3 — if they refine an earlier theme "
-            "rather than introduce NEW evidence (a fact, source link, "
-            "number, benchmark not already cited), your only valid "
-            "action this turn is to close: post "
-            f"`workgroup_post(wg_id=\"{wg_id}\", text=\"#done "
-            "<one-line synthesis of the shared recommendation>\")`. "
-            "Members will keep paraphrasing forever until you close. "
-            "Don't add another caveat — close it."
-        )
-
-    if not is_hub and own_in_task:
-        last_own_seq = int(own_in_task[-1].get("seq", 0))
-        return (
-            "\n\n=== STATE-AWARE CUE (you already posted in this task) ===\n"
-            f"You already posted in this active task at seq #"
-            f"{last_own_seq}. Your STRICT default this turn is "
-            "SILENCE. Post again only if BOTH count mechanically: "
-            f"(a) the most recent post contains `@{profile}` with a "
-            "direct question or instruction to YOU, or (b) you have "
-            "NEW evidence (a source link, number, fact) that does "
-            "NOT appear in any prior post of this task. Refinements, "
-            "caveats, paraphrases of earlier ideas — DO NOT POST. "
-            "The hub will close when the loop is obvious."
-        )
-
-    return ""
+# Previous role-aware addendum removed; rotation checks enforce it now.
 
 
 async def _dispatch_workgroup_turn(
     home: Path, profile: str, wg_id: str, wg_name: str, reason: str,
+    *, closure_only: bool = False, round_hub_seq: int | None = None,
+    hub_pubkey: str = "", started_against_task_seq: int = 0,
 ) -> None:
-    """Spawn ``alpi -p <profile> chat --once <synthetic prompt>`` so the
-    agent runs a turn out-of-band. The engine's pre-turn hook injects
-    the workgroup context block; the agent reads it, decides whether
-    to engage, and posts via the ``workgroup_post`` tool when useful.
-    Same subprocess pattern as the gateway uses for inbound messages."""
-    prompt = (
-        f"[workgroup-poller] new activity in workgroup "
-        f"'#{wg_name or wg_id}' (wg_id={wg_id}). Reason: {reason}. "
-        "\n\nYou are running ALONE — no human is reading this turn. "
-        "Assistant text goes NOWHERE; the only way to contribute is "
-        f"to call `workgroup_post(wg_id=\"{wg_id}\", text=\"…\")`. "
-        "Do NOT ask permission, do NOT describe what you would post. "
-        "\n\nBefore choosing an action, re-read the BRIEFING and the "
-        "ACTIVE TASK in your workgroup context block. If the task "
-        "asks for evidence (cite sources, search the web, "
-        "benchmarks, etc.), you MUST do that work BEFORE posting "
-        "anything substantive — use `web_search` / `web_fetch` / "
-        "`research` first, then post citing what you found. "
-        "\n\nFollow your `Workgroup engagement rules` exactly. The "
-        "default posture is OBSERVER. Valid actions, in priority:"
-        "\n  1. If the discussion has had multiple peer "
-        "contributions AND converged on a recommendation, "
-        f"post `workgroup_post(wg_id=\"{wg_id}\", "
-        "text=\"#done <one-line result summary>\")` to close. "
-        "Do NOT close as the first peer to respond — that's a "
-        "unilateral decision, not convergence.\n"
-        "  2. If you have a SUBSTANTIVE new contribution (a fact, "
-        "evidence, concern, or option not raised yet), post it. A "
-        "paraphrase of the latest post is NOT a contribution.\n"
-        "  3. Otherwise, end the turn without posting. Silence is "
-        "the right output more often than you expect."
-    )
-    prompt += _build_role_aware_addendum(home, profile, wg_id)
+    """Spawn a background ``chat --once`` turn for a workgroup."""
+    if closure_only:
+        prompt = (
+            f"[workgroup-watchdog] '#{wg_name or wg_id}' "
+            f"(wg_id={wg_id}). {reason}.\n\n"
+            "You are the HUB and you were the most recent poster in "
+            "this task. Members have stayed silent — that is "
+            "intentional, the engagement rules tell them not to "
+            "back-and-forth with the hub.\n\n"
+            "TURN-ROTATION RULE: the hub never speaks twice in a "
+            "row about content. Your only valid outcomes this turn "
+            "are:\n"
+            "  (A) Close the task. If the transcript already "
+            "contains enough material to answer the active `#task`, "
+            f"call `workgroup_post(wg_id=\"{wg_id}\", text=\"#done "
+            "<one-line synthesis of the recommendation>\")` and "
+            "stop.\n"
+            "  (B) End the turn WITHOUT posting. If you genuinely "
+            "need more from the members but they have not "
+            "delivered, just end the turn — a future member post "
+            "will wake you again. Do NOT post more analysis, more "
+            "caveats, more questions, or another @-mention. Silence "
+            "preserves the rotation.\n\n"
+            "DO NOT invent option C. Posting any non-`#done` "
+            "message here is a protocol violation: it monopolises "
+            "the transcript and burns budget."
+        )
+        env_extra = {"ALPI_WORKGROUP_CLOSURE_ONLY": "1"}
+    else:
+        prompt = (
+            f"[workgroup-poller] new activity in workgroup "
+            f"'#{wg_name or wg_id}' (wg_id={wg_id}). Reason: {reason}. "
+            "\n\nYou are running ALONE — no human is reading this turn. "
+            "Assistant text goes NOWHERE; the only way to contribute is "
+            f"to call `workgroup_post(wg_id=\"{wg_id}\", text=\"…\")`. "
+            "Do NOT ask permission, do NOT describe what you would post. "
+            "\n\nBefore choosing an action, re-read the BRIEFING and the "
+            "ACTIVE TASK in your workgroup context block. If the task "
+            "asks for evidence (cite sources, search the web, "
+            "benchmarks, etc.), you MUST do that work BEFORE posting "
+            "anything substantive — use `web_search` / `web_fetch` / "
+            "`research` first, then post citing what you found. "
+            "\n\nFollow your `Workgroup engagement rules` exactly. "
+            "Valid actions, in priority:"
+            "\n  1. [hub only] If the deliverable is in the "
+            "transcript AND full quorum is reached (every member "
+            "has posted substantive content or `#skip`; at least "
+            "one member's post is substantive), post "
+            f"`workgroup_post(wg_id=\"{wg_id}\", "
+            "text=\"#done <one-line result summary>\")` to close.\n"
+            "  2. [member, you'll use slow tools next] If your "
+            "next step is web_fetch / research / multi-step "
+            "delegate that will take >30s, FIRST post "
+            f"`workgroup_post(wg_id=\"{wg_id}\", text=\"#working "
+            "<one-line reason>\")` to signal the hub to wait, then "
+            "do the tools, then come back and post substantive. "
+            "Without this, the hub may close around you.\n"
+            "  3. [member, your FIRST post on this active task] "
+            "Find your angle from YOUR role's identity (your "
+            "public_bio + memories) and post substantive content. "
+            "Even a single concrete sentence is value. The hub "
+            "assembled this workgroup specifically for the listed "
+            "members — if you're here, your lens applies. Default "
+            "to substantive, NOT to `#skip`.\n"
+            "  4. [member, follow-up rounds] Post a NEW "
+            "contribution (fact, evidence, blocker not raised "
+            "yet). Paraphrase of earlier content is NOT a "
+            "contribution.\n"
+            "  5. [member, last resort] Post `#skip <reason>` "
+            "ONLY if your identity has zero overlap with this "
+            "task, OR you already said your piece on this task: "
+            f"`workgroup_post(wg_id=\"{wg_id}\", text=\"#skip "
+            "<one-line reason>\")`.\n"
+            "  6. Otherwise, end the turn without posting "
+            "(genuine silence — not your turn, no slot left, or "
+            "still working from a prior `#working`)."
+        )
+        env_extra = {}
     env = dict(os.environ)
     env["ALPI_HOME"] = str(home)
     env["ALPI_WORKGROUP_DISPATCH"] = wg_id
+    if round_hub_seq is not None and round_hub_seq > 0:
+        env["ALPI_WORKGROUP_ROUND_HUB_SEQ"] = str(round_hub_seq)
+    env.update(env_extra)
     argv = [
         sys.executable, "-m", "alpi", "-p", profile,
         "chat", "--once", prompt,
@@ -851,32 +927,72 @@ async def _dispatch_workgroup_turn(
         "reason": reason, "pid": proc.pid,
     })
 
+    # Register in-flight state so the preempt watcher can SIGTERM us.
+    _INFLIGHT[wg_id] = {
+        "proc": proc,
+        "profile": profile,
+        "wg_name": wg_name,
+        "hub_pubkey": hub_pubkey,
+        "started_against_task_seq": int(started_against_task_seq),
+        "started_at": started_at,
+    }
+
     timed_out = False
+    cancelled = False
     try:
-        rc = await asyncio.wait_for(proc.wait(), timeout=_TURN_TIMEOUT_SECONDS)
-    except asyncio.TimeoutError:
-        timed_out = True
-        try:
-            proc.terminate()  # SIGTERM
-        except ProcessLookupError:
-            pass
         try:
             rc = await asyncio.wait_for(
-                proc.wait(), timeout=_TURN_SIGTERM_GRACE_SECONDS,
+                proc.wait(), timeout=_TURN_TIMEOUT_SECONDS,
             )
         except asyncio.TimeoutError:
+            timed_out = True
             try:
-                proc.kill()  # SIGKILL
+                proc.terminate()  # SIGTERM
             except ProcessLookupError:
                 pass
             try:
-                rc = await proc.wait()
-            except Exception:  # noqa: BLE001
-                rc = -9
-        log.warning(
-            "wg poller: turn for %s exceeded %ss — killed",
-            wg_id, _TURN_TIMEOUT_SECONDS,
-        )
+                rc = await asyncio.wait_for(
+                    proc.wait(), timeout=_TURN_SIGTERM_GRACE_SECONDS,
+                )
+            except asyncio.TimeoutError:
+                try:
+                    proc.kill()  # SIGKILL
+                except ProcessLookupError:
+                    pass
+                try:
+                    rc = await proc.wait()
+                except Exception:  # noqa: BLE001
+                    rc = -9
+            log.warning(
+                "wg poller: turn for %s exceeded %ss — killed",
+                wg_id, _TURN_TIMEOUT_SECONDS,
+            )
+        except asyncio.CancelledError:
+            # Shut down the child explicitly; cancellation does not kill it.
+            cancelled = True
+            try:
+                proc.terminate()
+            except ProcessLookupError:
+                pass
+            try:
+                # Use a bounded shielded wait because we're already cancelled.
+                rc = await asyncio.shield(asyncio.wait_for(
+                    proc.wait(), timeout=_TURN_SIGTERM_GRACE_SECONDS,
+                ))
+            except (asyncio.TimeoutError, asyncio.CancelledError):
+                try:
+                    proc.kill()
+                except ProcessLookupError:
+                    pass
+                try:
+                    rc = await asyncio.shield(proc.wait())
+                except Exception:  # noqa: BLE001
+                    rc = -9
+            raise
+    finally:
+        info = _INFLIGHT.pop(wg_id, {})
+    preempted = bool(info.get("preempted"))
+    preempted_by_seq = int(info.get("preempted_by_seq", 0))
 
     duration_s = round(time.monotonic() - started_at, 2)
     posts_after = _post_count_for_role(home, wg_id)
@@ -889,24 +1005,69 @@ async def _dispatch_workgroup_turn(
             )[:300]
         except Exception:  # noqa: BLE001
             err_preview = ""
-        if not timed_out:
+        if not (timed_out or preempted):
             log.warning(
                 "wg poller: turn for %s exited rc=%s: %s",
                 wg_id, rc, err_preview,
             )
 
+    if preempted:
+        event = "preempted"
+        extra = {"preempted_by_seq": preempted_by_seq, "killed": True}
+    elif timed_out:
+        event = "timeout"
+        extra = {"killed": True}
+    else:
+        event = "end"
+        extra = {"error": err_preview} if err_preview else {}
     _append_turn_event(home, {
         "ts": _utcnow_iso(),
-        "event": "timeout" if timed_out else "end",
+        "event": event,
         "profile": profile, "wg_id": wg_id, "wg_name": wg_name,
         "duration_s": duration_s, "rc": rc,
         "posts_added": posts_added,
-        **({"error": err_preview} if err_preview and not timed_out else {}),
-        **({"killed": True} if timed_out else {}),
+        **extra,
     })
 
 
 WORKGROUP_TICK_SECONDS = 30
+_PREEMPT_TICK_SECONDS = 5
+
+
+async def _run_preempt_watcher(home: Path, profile: str) -> None:
+    """Watch for new hub tasks and preempt in-flight dispatches."""
+    log.info("workgroup preempt watcher running (tick=%ss)", _PREEMPT_TICK_SECONDS)
+    while True:
+        try:
+            for wg_id in list(_INFLIGHT.keys()):
+                info = _INFLIGHT.get(wg_id)
+                if info is None or info.get("preempted"):
+                    continue
+                proc = info.get("proc")
+                if proc is None or proc.returncode is not None:
+                    continue
+                hub_pubkey = str(info.get("hub_pubkey") or "")
+                if not hub_pubkey:
+                    continue
+                started_against = int(info.get("started_against_task_seq", 0))
+                latest = _latest_hub_task_seq_for(home, wg_id, hub_pubkey)
+                if latest <= started_against:
+                    continue
+                # New task landed; preempt this dispatch.
+                info["preempted"] = True
+                info["preempted_by_seq"] = latest
+                try:
+                    proc.terminate()
+                except ProcessLookupError:
+                    pass
+                log.info(
+                    "wg preempt: %s SIGTERM (new #task seq #%d, dispatch "
+                    "started against #%d)",
+                    wg_id, latest, started_against,
+                )
+        except Exception:  # noqa: BLE001
+            log.exception("preempt watcher tick failed")
+        await asyncio.sleep(_PREEMPT_TICK_SECONDS)
 
 
 async def _run_alp(home: Path, profile: str) -> None:
@@ -932,25 +1093,48 @@ async def _run_alp(home: Path, profile: str) -> None:
         await server.stop()
 
 
+async def _run_host(home: Path, profile: str) -> None:
+    if profile != "default":
+        log.warning("host subsystem requested for %r — only default can host", profile)
+        return
+
+    from alpi.host import chat as host_chat
+    from alpi.host import config as host_config
+    from alpi.host import daemon as host_daemon
+    from alpi.host import events as host_events
+    from alpi.host import handlers as host_handlers
+    from alpi.host import schedule as host_schedule
+    from alpi.host.server import Server as HostServer
+
+    server = HostServer(home=home)
+    host_handlers.register(server)
+    host_chat.register(server)
+    host_config.register(server)
+    host_daemon.register(server)
+    host_events.register(server)
+    host_schedule.register(server)
+    await server.start()
+    try:
+        await server.serve_forever()
+    finally:
+        await server.stop()
+
+
 # Helpers
 
 
-def _set_proctitle(profile: str) -> None:
+def _set_proctitle_daemon(n_profiles: int) -> None:
     try:
         import setproctitle
-        setproctitle.setproctitle(f"alpi ({profile})")
+        setproctitle.setproctitle(f"alpi (daemon, {n_profiles} profiles)")
     except Exception:  # noqa: BLE001
         pass
 
 
-def _configure_logging(home: Path) -> None:
-    """Root logger goes to ``service.log``. Add a stderr stream only
-    when running interactively (TTY) — under launchd / systemd the
-    plist already redirects stderr to the same log file, and a
-    second handler would write every line twice."""
+def _configure_logging_daemon(root: Path) -> None:
     from alpi._log import FORMAT, MAX_BYTES
 
-    p = log_path(home)
+    p = daemon_log_path(root)
     p.parent.mkdir(parents=True, exist_ok=True)
     handlers: list[logging.Handler] = [
         RotatingFileHandler(p, maxBytes=MAX_BYTES, backupCount=0),
@@ -965,21 +1149,14 @@ def _configure_logging(home: Path) -> None:
     )
 
 
-def _load_env(home: Path) -> None:
-    env_path = home / ".env"
-    if env_path.exists():
-        from dotenv import load_dotenv
-        load_dotenv(env_path, override=False)
-
-
-def _write_pid(home: Path) -> None:
-    p = pid_path(home)
+def _write_daemon_pid(root: Path) -> None:
+    p = daemon_pid_path(root)
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(str(os.getpid()))
 
 
-def _clear_pid(home: Path) -> None:
-    p = pid_path(home)
+def _clear_daemon_pid(root: Path) -> None:
+    p = daemon_pid_path(root)
     if p.exists():
         try:
             p.unlink()
@@ -987,54 +1164,87 @@ def _clear_pid(home: Path) -> None:
             pass
 
 
-# OS-level service install — single per profile
+def _load_env(home: Path) -> None:
+    env_path = home / ".env"
+    if env_path.exists():
+        from dotenv import load_dotenv
+        load_dotenv(env_path, override=False)
+
+
+# OS-level daemon install (single supervisor, every profile under one process)
+
+
+_DAEMON_LABEL = "com.alpi.daemon"
+
+
+def daemon_installed() -> bool:
+    backend = _detect_backend()
+    if backend == "launchd":
+        return _daemon_plist_path().exists()
+    if backend == "systemd":
+        return _daemon_unit_path().exists()
+    return False
+
+
+def daemon_running(root: Path) -> bool:
+    return daemon_running_pid(root) is not None
+
+
+def install_daemon(root: Path) -> str:
+    """Register the central daemon unit."""
+    backend = _detect_backend()
+    alpi_bin = _locate_alpi()
+    if backend == "launchd":
+        _launchd_install_daemon(root, alpi_bin)
+        return "launchd"
+    if backend == "systemd":
+        _systemd_install_daemon(root, alpi_bin)
+        return "systemd"
+    raise ServiceError(f"unsupported platform: {platform.system()}")
+
+
+def uninstall_daemon() -> str:
+    backend = _detect_backend()
+    if backend == "launchd":
+        _launchd_uninstall_daemon()
+        return "launchd"
+    if backend == "systemd":
+        _systemd_uninstall_daemon()
+        return "systemd"
+    raise ServiceError(f"unsupported platform: {platform.system()}")
+
+
+def daemon_status(root: Path) -> dict[str, Any]:
+    """Return the daemon status snapshot."""
+    from alpi import home as home_mod
+
+    pid = daemon_running_pid(root)
+    backend = "launchd" if (
+        _detect_backend() == "launchd" and _daemon_plist_path().exists()
+    ) else "systemd" if (
+        _detect_backend() == "systemd" and _daemon_unit_path().exists()
+    ) else None
+
+    profiles: dict[str, dict[str, bool]] = {}
+    for name in home_mod.list_profiles(root):
+        try:
+            profiles[name] = enabled_subsystems(home_mod.home_for(name))
+        except Exception:  # noqa: BLE001
+            profiles[name] = {}
+
+    info: dict[str, Any] = {
+        "pid": pid,
+        "running": pid is not None,
+        "installed_via": backend,
+        "profiles": profiles,
+    }
+    if pid is not None:
+        info["uptime_seconds"] = _uptime_seconds(pid)
+    return info
 
 
 class ServiceError(Exception):
     """Surface install/uninstall failures to the CLI."""
-
-
-def install(home: Path, profile: str = "default") -> str:
-    """Register a per-profile launchd plist (macOS) or systemd-user unit
-    (Linux) that supervises ``alpi -p <profile> service start``. Returns
-    the backend used."""
-    backend = _detect_backend()
-    alpi_bin = _locate_alpi()
-    if backend == "launchd":
-        _launchd_install(home, profile, alpi_bin)
-        return "launchd"
-    if backend == "systemd":
-        _systemd_install(home, profile, alpi_bin)
-        return "systemd"
-    raise ServiceError(f"unsupported platform: {platform.system()}")
-
-
-def uninstall(home: Path, profile: str = "default") -> str:
-    backend = _detect_backend()
-    if backend == "launchd":
-        _launchd_uninstall(profile)
-        return "launchd"
-    if backend == "systemd":
-        _systemd_uninstall(profile)
-        return "systemd"
-    raise ServiceError(f"unsupported platform: {platform.system()}")
-
-
-def installed(profile: str = "default") -> str | None:
-    """Return the backend name if a service unit exists on disk, else None."""
-    backend = _detect_backend()
-    if backend == "launchd" and _launchd_plist_path(profile).exists():
-        return "launchd"
-    if backend == "systemd" and _systemd_unit_path(profile).exists():
-        return "systemd"
-    return None
-
-
-def label(profile: str) -> str:
-    """Public label used in messages + ps output."""
-    if _detect_backend() == "launchd":
-        return f"com.alpi.service.{profile}"
-    return f"alpi-service-{profile}"
 
 
 def _detect_backend() -> str | None:
@@ -1056,7 +1266,7 @@ def _locate_alpi() -> str:
 # launchd (macOS)
 
 
-_PLIST_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
+_DAEMON_PLIST_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
@@ -1068,8 +1278,6 @@ _PLIST_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
   </array>
   <key>EnvironmentVariables</key>
   <dict>
-    <key>ALPI_HOME</key>
-    <string>{home}</string>
     <key>PATH</key>
     <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
   </dict>
@@ -1086,28 +1294,31 @@ _PLIST_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
 """
 
 
-def _launchd_plist_path(profile: str) -> Path:
+def _daemon_plist_path() -> Path:
     return (
-        Path.home() / "Library" / "LaunchAgents"
-        / f"com.alpi.service.{profile}.plist"
+        Path.home() / "Library" / "LaunchAgents" / "com.alpi.daemon.plist"
     )
 
 
-def _launchd_install(home: Path, profile: str, alpi_bin: str) -> None:
-    lbl = f"com.alpi.service.{profile}"
-    plist = _launchd_plist_path(profile)
+def _daemon_program_args_xml(alpi_bin: str) -> str:
+    parts = alpi_bin.split() + ["daemon", "start"]
+    return "\n".join(f"    <string>{x}</string>" for x in parts)
+
+
+def _launchd_install_daemon(root: Path, alpi_bin: str) -> None:
+    plist = _daemon_plist_path()
     plist.parent.mkdir(parents=True, exist_ok=True)
-    log_p = log_path(home)
+    log_p = daemon_log_path(root)
     log_p.parent.mkdir(parents=True, exist_ok=True)
 
-    plist.write_text(_PLIST_TEMPLATE.format(
-        label=lbl,
-        program_args=_program_args_xml(alpi_bin, profile),
-        home=str(home),
+    plist.write_text(_DAEMON_PLIST_TEMPLATE.format(
+        label=_DAEMON_LABEL,
+        program_args=_daemon_program_args_xml(alpi_bin),
         log=str(log_p),
     ))
 
     uid = os.getuid()
+    # Reinstall by booting out first so template changes apply.
     _run(["launchctl", "bootout", f"gui/{uid}", str(plist)], check=False)
     res = _run(["launchctl", "bootstrap", f"gui/{uid}", str(plist)], check=False)
     if res.returncode != 0:
@@ -1117,25 +1328,27 @@ def _launchd_install(home: Path, profile: str, alpi_bin: str) -> None:
         )
 
 
-def _launchd_uninstall(profile: str) -> None:
-    plist = _launchd_plist_path(profile)
+def _launchd_uninstall_daemon() -> None:
+    plist = _daemon_plist_path()
     if not plist.exists():
-        raise ServiceError(f"service is not installed (no plist at {plist})")
+        return
     uid = os.getuid()
     _run(["launchctl", "bootout", f"gui/{uid}", str(plist)], check=False)
     plist.unlink(missing_ok=True)
 
 
-# systemd --user (Linux)
+def _daemon_unit_path() -> Path:
+    return (
+        Path.home() / ".config" / "systemd" / "user" / "alpi-daemon.service"
+    )
 
 
-_UNIT_TEMPLATE = """[Unit]
-Description=alpi service ({profile})
+_DAEMON_UNIT_TEMPLATE = """[Unit]
+Description=alpi central service (all profiles)
 After=network-online.target
 
 [Service]
 Type=simple
-Environment=ALPI_HOME={home}
 ExecStart={exec_start}
 Restart=on-failure
 RestartSec=5
@@ -1147,34 +1360,37 @@ WantedBy=default.target
 """
 
 
-def _systemd_unit_path(profile: str) -> Path:
-    return (
-        Path.home() / ".config" / "systemd" / "user"
-        / f"alpi-service-{profile}.service"
-    )
-
-
-def _systemd_install(home: Path, profile: str, alpi_bin: str) -> None:
-    unit = _systemd_unit_path(profile)
+def _systemd_install_daemon(root: Path, alpi_bin: str) -> None:
+    unit = _daemon_unit_path()
     unit.parent.mkdir(parents=True, exist_ok=True)
-    log_p = log_path(home)
+    log_p = daemon_log_path(root)
     log_p.parent.mkdir(parents=True, exist_ok=True)
 
-    unit.write_text(_UNIT_TEMPLATE.format(
-        profile=profile,
-        home=str(home),
-        exec_start=f"{alpi_bin} -p {profile} service start",
+    unit.write_text(_DAEMON_UNIT_TEMPLATE.format(
+        exec_start=f"{alpi_bin} daemon start",
         log=str(log_p),
     ))
 
-    unit_id = f"alpi-service-{profile}.service"
+    # Best-effort linger keeps the user manager alive after logout.
+    linger = _run(["loginctl", "enable-linger", _current_user()], check=False)
+    if linger.returncode != 0:
+        log.warning(
+            "loginctl enable-linger failed (rc=%s) — service may not "
+            "survive logout: %s",
+            linger.returncode,
+            (linger.stderr or linger.stdout).strip(),
+        )
+
     res = _run(["systemctl", "--user", "daemon-reload"], check=False)
     if res.returncode != 0:
         raise ServiceError(
             f"systemctl daemon-reload failed (rc={res.returncode}): "
             f"{(res.stderr or res.stdout).strip()}{_systemd_hint(res)}"
         )
-    res = _run(["systemctl", "--user", "enable", "--now", unit_id], check=False)
+    res = _run(
+        ["systemctl", "--user", "enable", "--now", "alpi-daemon.service"],
+        check=False,
+    )
     if res.returncode != 0:
         raise ServiceError(
             f"systemctl enable --now failed (rc={res.returncode}): "
@@ -1182,12 +1398,19 @@ def _systemd_install(home: Path, profile: str, alpi_bin: str) -> None:
         )
 
 
-def _systemd_uninstall(profile: str) -> None:
-    unit = _systemd_unit_path(profile)
+def _current_user() -> str:
+    import getpass
+    return getpass.getuser()
+
+
+def _systemd_uninstall_daemon() -> None:
+    unit = _daemon_unit_path()
     if not unit.exists():
-        raise ServiceError(f"service is not installed (no unit at {unit})")
-    unit_id = f"alpi-service-{profile}.service"
-    _run(["systemctl", "--user", "disable", "--now", unit_id], check=False)
+        return
+    _run(
+        ["systemctl", "--user", "disable", "--now", "alpi-daemon.service"],
+        check=False,
+    )
     unit.unlink(missing_ok=True)
     _run(["systemctl", "--user", "daemon-reload"], check=False)
 
@@ -1198,64 +1421,17 @@ def _systemd_hint(result: subprocess.CompletedProcess) -> str:
         return (
             "\nNote: `systemd --user` must be available. On WSL without "
             "`systemd=true` in /etc/wsl.conf, or in minimal containers, "
-            "run `alpi service start` in a tmux/screen session instead."
+            "run `alpi daemon start` in a tmux/screen session instead."
         )
     return ""
-
-
-def _program_args_xml(alpi_bin: str, profile: str) -> str:
-    parts = alpi_bin.split() + ["-p", profile, "service", "start"]
-    return "\n".join(f"    <string>{x}</string>" for x in parts)
 
 
 def _run(cmd: list[str], *, check: bool) -> subprocess.CompletedProcess:
     return subprocess.run(cmd, capture_output=True, text=True, check=check)
 
 
-# Stop / restart helpers used by the CLI
-
-
-def stop(home: Path, profile: str, *, timeout: float = 5.0) -> bool:
-    """Send SIGTERM to the service. Returns True if a process was
-    signalled, False if nothing was running."""
-    pid = running_pid(home)
-    if pid is None:
-        return False
-    try:
-        os.kill(pid, signal.SIGTERM)
-    except OSError:
-        return False
-    deadline = time.time() + timeout
-    while time.time() < deadline:
-        if running_pid(home) is None:
-            return True
-        time.sleep(0.1)
-    # Last-ditch — SIGKILL if it ignored SIGTERM
-    try:
-        os.kill(pid, signal.SIGKILL)
-    except OSError:
-        pass
-    return True
-
-
-def status(home: Path, profile: str) -> dict[str, Any]:
-    """Snapshot for ``alpi service status``."""
-    pid = running_pid(home)
-    info: dict[str, Any] = {
-        "profile": profile,
-        "pid": pid,
-        "running": pid is not None,
-        "installed_via": installed(profile),
-        "subsystems": enabled_subsystems(home),
-    }
-    if pid is not None:
-        info["uptime_seconds"] = _uptime_seconds(pid)
-    return info
-
-
 def _uptime_seconds(pid: int) -> int | None:
-    """Best-effort process uptime via ``ps -o lstart``. Returns None on
-    failure — uptime is observability, not load-bearing."""
+    """Best-effort process uptime."""
     try:
         res = subprocess.run(
             ["ps", "-o", "etime=", "-p", str(pid)],
@@ -1270,7 +1446,7 @@ def _uptime_seconds(pid: int) -> int | None:
 
 
 def _parse_etime(s: str) -> int | None:
-    """Parse `ps -o etime` output like ``[[dd-]hh:]mm:ss``."""
+    """Parse ``ps -o etime`` output."""
     days = 0
     if "-" in s:
         d, _, s = s.partition("-")

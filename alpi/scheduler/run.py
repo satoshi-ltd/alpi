@@ -76,6 +76,10 @@ def _parse_iso(s: str | None) -> datetime | None:
 
 def is_due(job: dict, now: datetime | None = None, home: Path | None = None) -> bool:
     """True if the job should run right now."""
+    # Paused jobs never auto-fire from the tick. ``fire_by_id`` still
+    # runs them — pause is a "stop the schedule" knob, not "delete".
+    if job.get("paused"):
+        return False
     now = now or _now()
     kind = job.get("kind", "cron")
     last = _parse_iso(job.get("last_run_at"))
