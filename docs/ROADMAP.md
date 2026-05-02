@@ -16,11 +16,13 @@ Legend: 🔵 backlog · 🟡 next up · ⏸ blocked · 🔴 gate.
 
 **Theme: alpi gets a face.** v0.3 made alpi a credible
 private-agent tool on the terminal. v0.4 is the cycle where the
-project earns wider adoption: a desktop app (Ollama-style
-distribution), skills mature into mini-apps, a federated gateway
-ships, and the security story closes with a third-party audit.
-Tightly scoped — 2 items — to ship in 3-4 months without
-becoming a broken release.
+project earns wider adoption: skills mature into mini-apps, a
+federated gateway ships, and the security story closes with a
+third-party audit. The first public Tauri desktop client already
+landed on its own track as ``desktop-v0.1.0`` — see
+[../desktop/CHANGELOG.md](../desktop/CHANGELOG.md). Tightly
+scoped on the alpi side to ship in 3-4 months without becoming a
+broken release.
 
 ### Hardening
 
@@ -32,7 +34,6 @@ becoming a broken release.
 
 | ID | Item | Status |
 |---|---|---|
-| AX-desktop | App de escritorio (Tauri) — `alpi daemon` local + visual UI for chat / profiles / peers / workgroups. In progress on `feat/desktop-app`; lands at v0.4 cut | 🟡 |
 | Matrix | Federated + E2EE gateway — flagship gateway of v0.4. Self-hosted homeserver, no phone number, matches the "private agent network" thesis | 🔵 |
 | BF | Skills v2 (items 1-3) — scaffolder, declared `requires`/`env`, per-skill SQLite. The "skills = mini-apps" pillar. Absorbs BE | 🔵 |
 
@@ -94,49 +95,6 @@ party who can decrypt; we never see the plaintext.
 machines" + "no vendor lock-in" + "if your laptop dies, you have
 your agent back" — every commercial AI tool today loses your
 context when you re-install. We don't.
-
-### AX-desktop. Desktop app — Tauri, ALP.1 client to local service
-
-The flagship adoption item of v0.4. Ollama proved that a CLI
-project crosses the chasm to non-hacker users when it ships a
-proper desktop app — tray icon, native window, "download the
-.dmg, click open, you're running". alpi gets the same.
-
-**Architecture.** A Tauri (Rust + WebView) app that talks to the
-local `alpi daemon` over the host plane on a Unix socket
-(`~/.alpi/host/host.sock`, default profile only — sibling
-profiles are reached via a `profile` parameter on every host
-verb). The agent itself stays in the daemon — the desktop does
-not run an LLM, does not own tools, does not duplicate security.
-It is a visual host-plane client: chat surface, profile manager,
-peer / workgroup viewer, settings, log viewer. Same model
-**AX-mobile** (v0.5) will use over ALP.2.
-
-**Why Tauri, not Electron, not native.** Tauri = one codebase
-for macOS / Linux / Windows, ~10 MB binary, Rust ecosystem
-(`snow` covers Noise_XK if we ever need it inter-machine).
-Electron rejected: 200 MB per app contradicts the "no fat
-dependencies" posture. Native (SwiftUI / GTK / WPF) rejected
-for v0.4 — 3× engineering for marginal polish. Revisit per-OS
-native if Tauri hits a ceiling.
-
-**Distribution.** Signed `.dmg` (macOS), `.AppImage` (Linux),
-`.exe` installer (Windows). Self-update via the same
-`alpi update` cache the CLI uses, with a UI prompt instead of
-a shell command.
-
-**Branch parallel.** Work begins immediately on
-`feat/desktop-app`, in parallel with v0.3.x patch releases on
-`main`. The branch lands at v0.4 cut after the rest of the v0.4
-backlog (BC, AV, AW, Matrix, BF 1-3, BG) is in.
-
-**What it explicitly does NOT do in v0.4.**
-- No mobile (iOS / Android) — that's **AX-mobile** in v0.5,
-  which adds App Store / signing / background-restriction work
-  on top of an already-validated UI.
-- No standalone agent. Always talks to a local `alpi daemon`.
-- No theme marketplace, no plugins. Boring shell on top of the
-  agent — that's the design.
 
 ### Matrix. Federated + E2EE gateway
 
@@ -236,8 +194,8 @@ versions** section below this one.
 
 | ID | Item | Status |
 |---|---|---|
-| AX-mobile | Mobile companion (iOS / Android) — same client model as AX-desktop, over ALP.2 | 🔵 |
-| AZ | Workgroup viewer — folds into AX-mobile and AX-desktop (read-only or read/write transcript) | 🔵 |
+| AX-mobile | Mobile companion (iOS / Android) — same client model as the desktop app, over ALP.2 | 🔵 |
+| AZ | Workgroup viewer — folds into AX-mobile and the desktop app (read-only or read/write transcript) | 🔵 |
 
 ### Gateways
 
@@ -275,8 +233,8 @@ versions** section below this one.
 
 ### AX-mobile. Mobile companion (iOS / Android)
 
-After **AX-desktop** validates the visual UI in v0.4, mobile is
-the next surface. Same architecture (ALP client to a remote
+After **desktop-v0.1.0** validated the visual UI, mobile is the
+next surface. Same architecture (ALP client to a remote
 alpi profile), more friction (App Store signing, iOS
 background restrictions, distribution).
 
@@ -306,7 +264,7 @@ companion is just another peer.
 
 ### AZ. Workgroup viewer
 
-Folds into AX-mobile and AX-desktop. The same companion that
+Folds into AX-mobile and the desktop app. The same companion that
 mirrors a 1:1 chat shows the workgroup transcript: read-only
 view by default; read/write when the user is an active member.
 No separate codebase, no separate distribution.
@@ -316,8 +274,8 @@ No separate codebase, no separate distribution.
 Signal has the strongest E2EE posture of any consumer
 messenger; integration runs `signal-cli` as a local daemon
 exposing an HTTP/JSON-RPC endpoint that alpi POST/GETs against.
-v0.5 because the user-facing setup needs **AX-desktop** (v0.4)
-to make the SIM-registration flow tolerable.
+v0.5 because the user-facing setup needs the desktop app
+(``desktop-v0.1.0``) to make the SIM-registration flow tolerable.
 
 **Scope.** `alpi/gateway/platforms/signal.py` talking to a
 locally-running `signal-cli daemon --http 127.0.0.1:…`.
@@ -531,11 +489,11 @@ v0.5 extends it across the rest of the rich-text surface:
 - Headings inside chat replies — sized hierarchy, not just
   bold.
 
-**Why v0.5, not v0.4.** Once **AX-desktop** ships (v0.4), the
-heavy rich-text surface lives there — Markdown rendering in
-WebView is a solved problem. The TUI rich-text work in v0.5
-is "polish for users who stay on the terminal", not "the
-place we render structured replies".
+**Why v0.5, not v0.4.** With the desktop app shipped
+(``desktop-v0.1.0``), the heavy rich-text surface lives there
+— Markdown rendering in WebView is a solved problem. The TUI
+rich-text work in v0.5 is "polish for users who stay on the
+terminal", not "the place we render structured replies".
 
 ---
 
@@ -817,7 +775,7 @@ Not planned. Research-grade, irrelevant for everyday personal use.
 - **SQLite state.db.** Plain JSON files scan fast for <1000
   sessions.
 - **Conversation export format (JSON canonical).** Originally
-  scoped for v0.4 as "needed by AX-desktop to render sessions".
+  scoped for v0.4 as "needed by the desktop app to render sessions".
   The premise was wrong: sessions already serialise to JSON in
   `~/.alpi/profiles/<name>/sessions/{id}.json` (`session.py:save`).
   The desktop / mobile client now reads them via the host control
@@ -858,7 +816,7 @@ Not planned. Research-grade, irrelevant for everyday personal use.
   that each user shapes their own profile. Templates live in
   the docs as examples, not in the binary as commands.
 - **TUI accessibility pass.** Deferred indefinitely. The
-  desktop app (**AX-desktop**, v0.4) is the right surface for
+  desktop app (``desktop-v0.1.0``) is the right surface for
   screen-reader / large-text / high-contrast use cases —
   modern accessibility APIs are richer there than in any
   terminal. The TUI keeps the current minimal posture.

@@ -1,14 +1,16 @@
 # Changelog
 
-## v0.3.9 — 2026-05-02 — desktop app + daemon refactor
+## v0.3.9 — 2026-05-02 — daemon refactor + host plane
 
-The v0.4 cycle lands as a single 0.3.9 release: a Tauri desktop
-client, a unified per-machine daemon (replacing the per-profile
-service model), a new host-plane control API the desktop talks
-to, and the cycle of alpi improvements (workgroups protocol
-overhaul, peer mention via ``link.ask``, mention thread fix,
-pending invites, gateway session isolation, budget-zone signal,
-test reorg).
+The v0.4 cycle lands as a single 0.3.9 release on the alpi side:
+a unified per-machine daemon (replacing the per-profile service
+model), a new host-plane control API for visual / remote clients
+to talk to, and the cycle of alpi improvements (workgroups
+protocol overhaul, peer mention via ``link.ask``, mention thread
+fix, pending invites, gateway session isolation, budget-zone
+signal, test reorg). The first public Tauri desktop client ships
+on its own track as ``desktop-v0.1.0`` — see
+[desktop/CHANGELOG.md](desktop/CHANGELOG.md).
 
 ### alpi cycle
 
@@ -36,13 +38,9 @@ test reorg).
 - Path-traversal-safe via shared ``_check_id`` regex; protected env keys (``HOME``, ``PATH``, ``ALPI_HOME``, etc.) refused at the verb layer.
 - Schedule creation stays in the agent (``schedule`` tool) so the threat-scan + skill rules continue to gate prompt content; the host-plane is a visibility + cleanup surface.
 
-### Desktop (Tauri)
+### Desktop
 
-- New Tauri 2 desktop client under ``desktop/`` — Rust + React + plain JS (no TypeScript). Talks to the daemon through the host plane on the local Unix socket; does not run an LLM, does not own tools, does not duplicate security.
-- Settings: ``Services`` section with ``subsystems`` chips, ``gateways`` chips (disabled when ``gateway`` service is off), ALP identity / peers / workgroups, ``Schedule`` section with one row per job (Fire / Enable / Disable / Delete + state bullet).
-- Subsystem toggles, TCP port edits, gateway saves auto-restart the daemon (``host.daemon.restart``) so the change applies without a manual nag.
-- ``@<peer>`` mentions in chat go through the same host-plane shortcut, persisted as a real session turn so the desktop's tool card survives the round-trip.
-- Tray icon, native window, auto-update via the same ``alpi update`` cache the CLI uses.
+- First public Tauri client lands as ``desktop-v0.1.0`` on its own release track. See [desktop/CHANGELOG.md](desktop/CHANGELOG.md) for the per-release notes.
 
 ## v0.3.8 — 2026-04-28 — security audit hardening
 
