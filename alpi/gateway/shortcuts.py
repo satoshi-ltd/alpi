@@ -1,15 +1,4 @@
-"""Gateway slash-command shortcuts — intercepted before the LLM.
-
-A handful of operations that don't need an agent turn: reset the
-chat's thread, inspect what's active, list the commands. Runs
-cheap + instant; no tokens spent.
-
-Cross-platform: every platform that sets ``IncomingMessage.raw_text``
-(Telegram, IMAP, Gmail, webhook) reuses the same handler. The
-shortcut scope deliberately stays narrow — anything useful beyond
-these five should go through the agent so the behaviour is
-consistent with the TUI surface.
-"""
+"""Gateway slash-command shortcuts."""
 
 from __future__ import annotations
 
@@ -33,8 +22,7 @@ SHORTCUTS: tuple[str, ...] = tuple(name for name, _ in _COMMANDS)
 
 
 def catalog() -> list[tuple[str, str]]:
-    """Public (name, description) list — used by Telegram's setMyCommands
-    so typing `/` opens the native command menu."""
+    """Public command list used by Telegram."""
     return list(_COMMANDS)
 
 
@@ -45,7 +33,7 @@ class Shortcut:
 
 
 def parse(raw_text: str) -> Shortcut | None:
-    """Return a Shortcut if the first line is ``/cmd [arg]``, else None."""
+    """Return a Shortcut for a leading `/cmd [arg]`, else `None`."""
     if not raw_text:
         return None
     first = raw_text.strip().splitlines()[0].strip()
@@ -59,7 +47,7 @@ def parse(raw_text: str) -> Shortcut | None:
 
 
 def handle(shortcut: Shortcut, chat_id: str, home: Path) -> str:
-    """Render the reply for ``shortcut``. Returns empty string on unknown."""
+    """Render a reply for ``shortcut``."""
     if shortcut.name == "help":
         return _help()
     if shortcut.name == "new":
@@ -132,7 +120,7 @@ def _status(chat_id: str, home: Path) -> str:
         cfg_budget=cfg.budget,
     )
 
-    # Fenced block keeps column alignment and skips MarkdownV2 escaping.
+    # Fenced block keeps alignment and skips MarkdownV2 escaping.
     label_w = max(len(label) for label, _ in rows)
     body = "\n".join(
         f"{label.ljust(label_w)}  {value}" for label, value in rows
@@ -141,9 +129,7 @@ def _status(chat_id: str, home: Path) -> str:
 
 
 def _peers(home: Path) -> str:
-    """Render pinned peers straight from ``peers.yaml``. Reachability is
-    implicit — if you actually ``@<peer>`` it and it's down, you'll
-    see ``listener not running`` in the reply."""
+    """Render pinned peers from ``peers.yaml``."""
     from alpi.alp import peers as peers_mod
 
     entries = peers_mod.load(home)

@@ -36,7 +36,12 @@ class PeerTool(Tool):
         "properties": {
             "peer_id": {
                 "type": "string",
-                "description": "Pinned peer id from peers.yaml (e.g. 'personal').",
+                "description": (
+                    "The exact pinned id from this profile's peers.yaml. "
+                    "When the user writes `@<id>` in their message, copy "
+                    "that id verbatim — do NOT invent or substitute names. "
+                    "Run `alpi peers list` to see what's pinned."
+                ),
             },
             "prompt": {
                 "type": "string",

@@ -37,16 +37,16 @@ Three options:
 
 - **CLI wizards**: `alpi setup` covers model selection, gateway
   credentials, MCP servers, sandbox posture, voice, peers,
-  workgroups, disk cleanup, and installing the unified service as
-  an OS-level autorun. `alpi setup → Cleanup` inspects the
-  profile's heavy dirs (audio cache, old sessions, schedule output)
-  and deletes after one-shot confirmation. `alpi setup →
-  Maintenance → Service` registers the per-profile orchestrator
-  under launchd (macOS) or systemd --user (Linux) so it starts on
-  boot and restarts on crash; the same screen toggles which
-  subsystems (gateway / scheduler / ALP) the orchestrator activates
-  and configures the inter-machine TCP port for ALP. Uninstall from
-  the same menu.
+  workgroups, disk cleanup, and the alpi daemon's lifecycle.
+  `alpi setup → Cleanup` inspects the profile's heavy dirs (audio
+  cache, old sessions, schedule output) and deletes after one-shot
+  confirmation. `alpi setup → Services` exposes two rows:
+  **Daemon** (default profile only — install / uninstall / start /
+  stop / restart of the per-machine launchd plist or systemd-user
+  unit) and **Subsystems** (per-profile toggles for gateway /
+  scheduler / ALP / workgroups / host, plus the inter-machine TCP
+  port for ALP). The first `alpi setup` auto-installs the daemon,
+  so the lifecycle row is mostly read-only after that.
 - **Edit the YAML**: open `~/.alpi/config.yaml` (or
   `~/.alpi/profiles/<name>/config.yaml` for non-default profiles)
   and change values manually. Restart whatever surface was affected.
@@ -333,11 +333,19 @@ Configure both if you want: `imap` polls your primary mailbox via password, `gma
 
 ### Budget
 
-One daily spending ceiling per profile. Pick whichever unit matches
-the profile's provider: `daily_usd` for paid APIs (Claude, OpenAI,
-Gemini, OpenRouter) where LiteLLM reports a real cost per turn;
-`daily_tokens` for local Ollama and other free inference paths where
-cost is always zero. Leave both unset for no ceiling.
+One daily spending ceiling per profile. Pick **either** USD or tokens
+— they are mutually exclusive, matching the profile's provider:
+
+- `daily_usd` for paid APIs (Claude, OpenAI, Gemini, OpenRouter) where
+  LiteLLM reports a real cost per turn.
+- `daily_tokens` for local Ollama and other free inference paths where
+  cost is always zero.
+- Leave both unset for no ceiling.
+
+The setup flows (`alpi setup → Budget` and the desktop app) enforce
+the mutex by clearing the other key when you save one. If you
+hand-edit `config.yaml` and end up with both, `daily_usd` takes
+precedence at runtime.
 
 The cap covers **every** turn this profile runs: interactive TUI
 replies, gateway responses (Telegram / IMAP / Gmail), scheduled jobs,
@@ -352,8 +360,6 @@ the profile total gates new turns.
 | `budget.daily_usd` | unset | Hard daily USD cap. Exceeding it surfaces `budget-exceeded` (interactive) or JSON-RPC `-32005 budget-exceeded` (ALP). |
 | `budget.daily_tokens` | unset | Hard daily token cap. Same behaviour; use instead of `daily_usd` for local / free providers. |
 
-If both are set (uncommon), `daily_usd` takes precedence.
-
 ```yaml
 # Paid-API profile
 budget:
@@ -364,7 +370,8 @@ budget:
   daily_tokens: 500000
 ```
 
-Edit interactively via `alpi setup → Budget`.
+Edit interactively via `alpi setup → Budget` or the desktop app's
+profile detail.
 
 ### ALP
 
@@ -376,7 +383,7 @@ internet exposure is not the recommended shape.
 
 | Key | Default | Notes |
 |---|---|---|
-| `alp.tcp_port` | unset | Enables ALP.2 Noise_XK-over-TCP for this profile. The ALP listener subsystem of `alpi service` picks it up at start. |
+| `alp.tcp_port` | unset | Enables ALP.2 Noise_XK-over-TCP for this profile. The daemon's `alp` service picks it up when it boots this profile's listener. |
 | `alp.tcp_host` | `127.0.0.1` when `tcp_port` is set | TCP bind host. Use a VPN IP or `0.0.0.0` when remote peers need to dial in. |
 
 Example:
@@ -408,26 +415,36 @@ Add via `alpi setup → Model → Add Ollama`. Remove via `alpi setup → Model 
 |---|---|---|
 | `mcp.servers` | `{}` | Map of `<name> → {command, args, env}`. Secrets in `env` use the `env:VAR_NAME` reference. Add via `alpi setup → MCPs` — hand-editing is supported but the wizard is easier. |
 
-### Service
+### Services (per profile)
 
-The unified per-profile orchestrator (gateway + scheduler + ALP
-listener in one process). Every subsystem is on by default; toggle
-individually if you want a slim profile (e.g. an ALP-only relay
-machine sets gateway and scheduler to false).
+Which services the alpi daemon spawns for THIS profile. The
+daemon itself is one-per-machine (see [OPERATIONS.md →
+Daemon](OPERATIONS.md)); these flags only decide what it
+activates here.
 
 ```yaml
 service:
-  gateway: true
-  schedule: true
-  alp: true
+  gateway: true     # Telegram / IMAP / Gmail / webhook listeners
+  schedule: true    # cron tick loop
+  alp: true         # peer-to-peer ALP listener
+  workgroups: true  # ALP.3 outbound poller for joined workgroups
+  host: true        # control-plane socket for desktop / mobile clients (default profile only)
 ```
 
-Missing section = all three on, matching the pre-refactor
-default. A toggle takes effect at the next `alpi service restart`.
+The block name remains `service:` for back-compat; conceptually
+each entry is a service the daemon runs for this profile. Missing
+keys default to ``True``. Toggling takes effect at the next
+``alpi daemon restart``.
+
+`host` is meaningful only on the ``default`` profile; on any other
+profile the toggle is honoured but the runner refuses to bind a
+socket (the desktop / mobile client always targets default's
+socket and reaches sibling profiles via the ``profile`` parameter
+on each verb).
 
 ## Takes-effect cheat sheet
 
 - **next turn** — change is live on the agent's next response.
 - **next session** — restart `alpi` to pick it up.
-- **next service restart** — `alpi service restart` (or reload
+- **next daemon restart** — `alpi daemon restart` (or reload
   through launchd / systemd if installed as an autorun).

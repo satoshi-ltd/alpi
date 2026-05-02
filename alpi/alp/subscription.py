@@ -70,21 +70,11 @@ class Subscription:
     # post and returns the whole list on join + pull, so we always
     # have a recent passive liveness signal without extra probing.
     roster: dict[str, str] = field(default_factory=dict)
-    # Parallel map pubkey → public bio string. Each peer self-publishes
-    # its tag-line as a ``workgroup.join`` parameter; the hub stores
-    # it and returns it in roster responses. Lets the engine pre-turn
-    # hook render "@alice (online, 'product engineer — velocity')"
-    # without the workgroup creator having to type a role per member.
+    # Parallel map pubkey → public bio string.
     roster_bios: dict[str, str] = field(default_factory=dict)
-    # Cooldown — populated by the workgroup poller after dispatching
-    # an autonomous turn. Stops the same workgroup triggering another
-    # spawn within ``DISPATCH_COOLDOWN_SECONDS`` and helps catch
-    # feedback loops between two alpis ping-ponging.
+    # Populated by the poller after dispatch.
     last_dispatch_at: str = ""
-    # Last RECENT_POSTS_CACHE decrypted posts, kept here so the engine
-    # pre-turn hook reads context cheaply (no extra network call) and
-    # the workgroup poller can compare to detect new content. Each
-    # entry is ``{seq, ts, from, text, key_version}``.
+    # Cached decrypted posts for the engine hook and poller.
     recent_posts: list[dict] = field(default_factory=list)
 
     def latest_version(self) -> int:
@@ -99,8 +89,7 @@ class Subscription:
         return None
 
     def upsert_key(self, version: int, sealed: str) -> None:
-        """Add or replace the sealed key for ``version``. Called on
-        ``join`` and on ``pull`` when the hub signals a new version."""
+        """Add or replace the sealed key for `version`."""
         for i, sk in enumerate(self.sealed_keys):
             if sk.version == version:
                 self.sealed_keys[i] = SealedKey(version=version, sealed=sealed)
@@ -108,9 +97,7 @@ class Subscription:
         self.sealed_keys.append(SealedKey(version=version, sealed=sealed))
 
     def append_recent(self, posts: list[dict]) -> None:
-        """Add freshly-decrypted posts to the cache, dedupe by seq, trim
-        to the most recent ``RECENT_POSTS_CACHE`` entries. Posts must
-        carry at least ``seq`` and ``text``."""
+        """Deduplicate decrypted posts by seq and trim the cache."""
         if not posts:
             return
         merged: dict[int, dict] = {int(p["seq"]): p for p in self.recent_posts}
@@ -202,7 +189,7 @@ def save(home: Path, subs: list[Subscription]) -> None:
         if s.recent_posts:
             entry["recent_posts"] = s.recent_posts
         data.append(entry)
-    p.write_text(yaml.safe_dump(data, sort_keys=False))
+    p.write_text(yaml.safe_dump(data, sort_keys=False, allow_unicode=True))
     try:
         os.chmod(p, 0o600)
     except OSError:

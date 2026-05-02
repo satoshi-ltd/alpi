@@ -75,7 +75,7 @@ alpi profile list              list profiles, mark the active one
 alpi profile create <name>     bootstrap a new profile tree
 alpi profile remove <name>     delete after safety checks + confirm
 
-alpi service start|stop|restart|status         lifecycle of the unified per-profile orchestrator
+alpi daemon start|stop|restart|status         lifecycle of the unified per-profile orchestrator
 alpi schedule run-once|fire <id>                manual cron tick / ad-hoc job fire (operational, not lifecycle)
 
 alpi peers list                list pinned ALP peers for this profile
@@ -94,7 +94,7 @@ alpi workgroup pause|resume|leave <wg_id>          membership ops
 alpi workgroup kick <wg_id> <member-id|pubkey>     hub-only; rotates the group key
 ```
 
-**Shape rules:** containers (profile, peers, workgroups) get `list/create/remove` (or `add/remove`). The unified service gets `start/stop/restart/status` under `alpi service`; install/uninstall lives only in the wizard (`alpi setup → Service`), so users don't memorise two ways of doing the same thing. New profiles default to **opt-in** — nothing runs as a background service until the user installs it. Interactive wizards live exclusively under `alpi setup`; never add a per-feature wizard command.
+**Shape rules:** containers (profile, peers, workgroups) get `list/create/remove` (or `add/remove`). The unified service gets `start/stop/restart/status` under `alpi daemon`; install/uninstall lives only in the wizard (`alpi setup → Daemon`), so users don't memorise two ways of doing the same thing. New profiles default to **opt-in** — nothing runs as a background service until the user installs it. Interactive wizards live exclusively under `alpi setup`; never add a per-feature wizard command.
 
 **Command ordering** in `--help` is frequency-first, not alphabetical: `chat → setup → doctor → logs → profile → peers → workgroup → schedule → service`. See `_OrderedGroup` in `cli.py`.
 
@@ -300,42 +300,43 @@ Textual 8.2.x. Layout: `AlpiTopBar` (identity) + chat scroll (`VerticalScroll.an
 
 **`Ctrl+Y`** copies last assistant reply (pbcopy/wl-copy/xclip/xsel/OSC-52 fallback chain). `Ctrl+L` clears.
 
-### Service (`alpi/service.py`)
+### Daemon (`alpi/service.py`)
 
-Single per-profile orchestrator. One Python process runs every
-enabled subsystem (gateway, scheduler, ALP listener) on the same
-asyncio event loop, supervised by one launchd plist
-(`com.alpi.service.<profile>`) on macOS or one systemd-user unit
-(`alpi-service-<profile>.service`) on Linux. The legacy
-"three-services-per-profile" model is gone.
+One alpi daemon per machine, every profile inside. A single
+launchd plist (`com.alpi.daemon`) on macOS or systemd-user unit
+(`alpi-daemon.service`) on Linux supervises a single Python
+process that hosts every profile under `~/.alpi/` (default plus
+each `profiles/<name>/`) on the same asyncio loop. Tasks are
+namespaced `<profile>/<service>` (e.g. `mirai/gateway`,
+`ghost/alp`) and independently supervised — a crash in one
+profile's gateway does not take siblings down.
 
-`alpi.service.serve(home, profile)` is the foreground entry point
-called from `alpi service start` and from the supervising plist /
-unit's ExecStart. It:
+`alpi.service.serve_all(root)` is the foreground entry point
+called from `alpi daemon start` and from the supervising unit's
+ExecStart. It:
 
-1. Reads `service.{gateway,schedule,alp}` from `config.yaml`;
-   defaults to all-on when the section is missing.
-2. Configures the root logger to write to
-   `~/.alpi/<profile>/logs/service.log` (and to stderr only when
-   stderr is a TTY — avoids double-writes when launchd already
+1. Walks `~/.alpi/` to discover profiles (default + every
+   `profiles/<name>/`).
+2. For each profile, reads `service.{gateway,schedule,alp,
+   workgroups,host}` from its `config.yaml`; missing section →
+   every service on. `host` is allowed only on the default
+   profile.
+3. Configures the root logger to write to
+   `~/.alpi/logs/service.log` (and to stderr only when stderr is
+   a TTY — avoids double-writes when the supervisor already
    redirects stderr to the same file).
-3. Sets the process title to `alpi (<profile>)` via `setproctitle`,
-   so `ps aux` shows distinct entries for distinct profiles
-   instead of three look-alike `alpi` lines.
-4. Writes `service.pid`.
-5. Spawns one asyncio task per enabled subsystem and waits.
-   `gateway/run.serve(home)` runs the platform listeners,
-   `scheduler/run.serve(home)` is the tick loop converted to
-   `asyncio.sleep`, and an inline `_run_alp` boots the
-   `alp.server.Server` with `link.ask` + workgroup handlers
-   registered.
-6. SIGTERM / SIGINT cancels every task cooperatively, the PID
+4. Sets the process title to `alpi (daemon, N profiles)` via
+   `setproctitle`.
+5. Writes `~/.alpi/service.pid`.
+6. Spawns one supervised asyncio task per (profile, service) and
+   waits. Sibling tasks crash-isolated via `_supervise`.
+7. SIGTERM / SIGINT cancels every task cooperatively, the PID
    file is cleaned up on the way out.
 
-`status(home, profile)` is the snapshot used by `alpi service
-status` and by `alpi setup → Maintenance → Service`: PID, uptime
+`daemon_status(root)` is the snapshot used by `alpi daemon
+status` and by `alpi setup → Maintenance → Daemon`: PID, uptime
 (via `ps -o etime`), installed backend (launchd / systemd / none),
-and the enabled subsystems map.
+and the per-profile services map.
 
 ### Gateway (`alpi/gateway/`)
 
@@ -351,7 +352,7 @@ in `.env`, fail-closed if unset. Per-platform config under
 `gateway.{telegram,imap,gmail}` in `config.yaml` (`show_tool_trace`,
 `typing_indicator`, `poll_interval`, etc.).
 
-Disable for a profile via `alpi setup → Maintenance → Service →
+Disable for a profile via `alpi setup → Maintenance → Daemon →
 Gateway · off` (writes `service.gateway: false`).
 
 ### Schedule (`alpi/scheduler/`)
@@ -431,7 +432,7 @@ Threat model: prompt injection via email/web content, LLM-issued tool calls on t
 
 ### Profiles
 
-`alpi -p <name>` resolves home to `~/.alpi/profiles/<name>/`. `ALPI_PROFILE` env var is the same. No sticky "current profile" file — resolution is fully explicit. The unified service plist / unit carries the profile name in its label (`com.alpi.service.<profile>` / `alpi-service-<profile>.service`) so multiple profiles coexist without colliding, and `setproctitle` makes them distinguishable in `ps`.
+`alpi -p <name>` resolves home to `~/.alpi/profiles/<name>/`. `ALPI_PROFILE` env var is the same. No sticky "current profile" file — resolution is fully explicit. The single alpi daemon (`com.alpi.daemon` / `alpi-daemon.service`) supervises every profile from one process; each profile's tasks are named `<profile>/<service>` so they stay distinguishable in logs and `asyncio.all_tasks()`.
 
 ### Workspace
 

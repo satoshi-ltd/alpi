@@ -20,8 +20,7 @@ from alpi.gateway.platforms.webhook import Webhook
 
 log = logging.getLogger("alpi.gateway")
 
-# Telegram's "typing…" indicator drops after ~5s, so we refresh slightly
-# sooner to keep it steady while a turn is in flight.
+# Refresh typing slightly before Telegram times out.
 _TYPING_REFRESH_SECONDS = 4.0
 
 
@@ -35,30 +34,22 @@ async def _handle_platform(platform: Platform, home: Path) -> None:
             continue
         if msg.ack is not None:
             await msg.ack()
-        # Flatten newlines so multi-line inbound (email bodies with
-        # a Subject line + blank line + body) stays a single log entry.
+        # Flatten newlines so logs stay single-line.
         preview = " ".join(msg.text.split())[:120]
         log.info("[%s] %s: %s", msg.platform, msg.external_user_id, preview)
         asyncio.create_task(_process(platform, msg, home))
 
 
 async def _process(platform: Platform, msg: IncomingMessage, home: Path) -> None:
-    # Intercept slash-command shortcuts before we spawn an agent turn.
-    # Every shortcut (`/help`, `/status`, `/new`, `/continue`, `/model`)
-    # resolves locally from session_map + config.yaml — no LLM round-trip.
+    # Handle slash commands before spawning an agent turn.
     from alpi.gateway import shortcuts as shortcuts_mod
 
-    # ALP @peer mentions route directly through link.ask — no local
-    # LLM turn. Same parser + executor as the TUI so ``@mirai hi``
-    # from Telegram behaves exactly like it does in the TUI.
+    # Route @mentions directly without an LLM turn.
     from alpi.alp import mention as alp_mention
 
     parsed_mention = alp_mention.parse(msg.text, home=home)
     if parsed_mention is not None:
-        # Mirror the tool-trace UX from the LLM path: if the platform has
-        # ``show_tool_trace`` on, emit a ``◆ peer · peer_id=…`` line first
-        # so the user sees the same "tool call happened" feedback whether
-        # the ``peer`` tool was invoked by the LLM or by an @-mention.
+        # Mirror the LLM tool-trace UX.
         platform_cfg = _load_platform_cfg(home, platform.name)
         if bool(platform_cfg.get("show_tool_trace", True)):
             trace = _format_tool_trace({
@@ -80,9 +71,7 @@ async def _process(platform: Platform, msg: IncomingMessage, home: Path) -> None
 
     cmd = shortcuts_mod.parse(msg.text)
     if cmd is not None:
-        # /model on Telegram opens an interactive inline-keyboard picker —
-        # other platforms (IMAP, Gmail) fall through to the plain-text
-        # handler which just reports the currently configured model.
+        # Telegram opens the inline picker; others reply in text.
         if cmd.name == "model" and hasattr(platform, "send_model_picker"):
             await platform.send_model_picker(msg.external_chat_id)  # type: ignore[attr-defined]
             return
@@ -93,8 +82,7 @@ async def _process(platform: Platform, msg: IncomingMessage, home: Path) -> None
             ))
         return
 
-    # Per-platform UX config. Telegram has typing + tool traces; email has
-    # different concepts and reads its own sub-dict. Stays platform-agnostic.
+    # Per-platform UX config.
     platform_cfg = _load_platform_cfg(home, platform.name)
     typing_task: asyncio.Task | None = None
     if platform_cfg.get("typing_indicator", True):
@@ -130,13 +118,7 @@ async def _typing_loop(platform: Platform, chat_id: str) -> None:
 
 
 def _llm_prompt(msg: IncomingMessage) -> str:
-    """Build the LLM-facing prompt from an inbound message.
-
-    Platforms yield the user's raw text; the agent-boundary prefix
-    (`[INBOUND TELEGRAM from …]`, email subject line) is constructed
-    here so ``IncomingMessage.text`` stays a clean single source of
-    truth for shortcut parsing, logging, and tests.
-    """
+    """Build the LLM-facing prompt."""
     if msg.platform == "telegram":
         return f"[INBOUND TELEGRAM from {msg.external_user_id}]\n{msg.text}"
     if msg.platform in ("email", "gmail"):
@@ -161,9 +143,7 @@ async def _run_agent(msg: IncomingMessage, platform: Platform, home: Path,
         sys.executable, "-m", "alpi", "chat", "--once", prompt,
         "--emit-events",
     ]
-    # Per-chat session threading: the CLI consults `sessions/_gateway_map.json`
-    # and resumes whichever session was last bound to this chat id, or starts
-    # fresh and binds it after save.
+    # Resume the chat-bound session if one exists.
     if msg.external_chat_id:
         argv += ["--resume-chat", msg.external_chat_id]
     proc = await asyncio.create_subprocess_exec(

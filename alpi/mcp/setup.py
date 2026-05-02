@@ -235,7 +235,7 @@ def _persist(
         "args": args,
         "env": cleaned_env,
     }
-    cfg_path.write_text(yaml.safe_dump(data, sort_keys=False))
+    cfg_path.write_text(yaml.safe_dump(data, sort_keys=False, allow_unicode=True))
 
 
 def _unpersist(home: Path, name: str) -> None:
@@ -245,7 +245,7 @@ def _unpersist(home: Path, name: str) -> None:
     data = yaml.safe_load(cfg_path.read_text()) or {}
     servers = ((data.get("mcp") or {}).get("servers") or {})
     servers.pop(name, None)
-    cfg_path.write_text(yaml.safe_dump(data, sort_keys=False))
+    cfg_path.write_text(yaml.safe_dump(data, sort_keys=False, allow_unicode=True))
 
 
 

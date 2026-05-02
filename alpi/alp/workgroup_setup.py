@@ -1,10 +1,4 @@
-"""Interactive setup for ALP workgroups — ``alpi setup → ALP → Workgroups``.
-
-Lists workgroups this profile is **hub of** (created here) and
-**member of** (joined remotely), with detail panes that show the
-decrypted transcript and the management actions (pause / resume /
-leave / kick) appropriate for the role.
-"""
+"""Interactive setup for ALP workgroups."""
 
 from __future__ import annotations
 
@@ -108,6 +102,8 @@ def _hub_detail_view(home: Path, wg_id: str) -> None:
             ui.Heading("Workgroup"),
             ("Read messages", "transcript",
              f"{post_count} message{'s' if post_count != 1 else ''}"),
+            ("Send a message",  "post",
+             "post a `#task`, `#done`, or substantive content"),
             ("Members",         "members",
              f"{len(wg.members)} pinned"),
             ("Briefing",        "briefing",
@@ -125,6 +121,8 @@ def _hub_detail_view(home: Path, wg_id: str) -> None:
             return
         if choice == "transcript":
             _show_transcript_hub(home, wg)
+        elif choice == "post":
+            _post_flow(home, wg_id)
         elif choice == "members":
             _show_members(home, wg)
         elif choice == "budget":
@@ -208,8 +206,7 @@ def _spend_per_member(home: Path, wg) -> dict[str, dict[str, Any]]:
 
 
 def _show_transcript_hub(home: Path, wg) -> None:
-    """The hub holds ciphertext only — open with the hub's own sealed
-    key + private key so the operator can audit posts."""
+    """Open the hub transcript with the hub's own key."""
     kp = load_or_generate(home)
     member = wg.member(kp.pubkey_b64())
     if member is None:
@@ -222,10 +219,7 @@ def _show_transcript_hub(home: Path, wg) -> None:
 
 
 def _decrypter_for_version(home: Path, wg, kp):
-    """Hub may have rotated keys; the hub's `members.yaml` only stores
-    the CURRENT sealed key. Past versions can't be decrypted on the
-    hub side (that's by design — past keys are gone). Fall back to a
-    placeholder for stale ciphertext."""
+    """Open current hub ciphertext; stale versions fall back to a placeholder."""
     cur_sealed = wg.member(kp.pubkey_b64()).sealed_key
     cur_version = wg.member(kp.pubkey_b64()).key_version
 
@@ -351,12 +345,15 @@ def _sub_detail_view(home: Path, wg_id: str) -> None:
         ui._console.print(f"  cursor   seq {sub.last_seq}")
         ui._console.print(f"  keys     v{sub.latest_version()} (cached)")
         ui._console.print("")
+        # Member view — pause/resume are hub-only at the protocol
+        # layer (the SDK rejects with `-32008 workgroup-not-hub` and
+        # the workgroup_client SDK refuses to even dial). Don't
+        # offer those choices here; members can only post, pull,
+        # and leave.
         items = [
-            ("Read new messages", "pull",   "fetch + decrypt anything new"),
-            ("Send a message",    "post",   "encrypt + send to the hub"),
-            ("Pause workgroup",   "pause",  "any member can"),
-            ("Resume workgroup",  "resume", "any member can"),
-            ("Leave",             "leave",  "drop subscription + hub rekeys"),
+            ("Read new messages", "pull",  "fetch + decrypt anything new"),
+            ("Send a message",    "post",  "encrypt + send to the hub"),
+            ("Leave",             "leave", "drop subscription + hub rekeys"),
         ]
         choice = ui.menu("", items, home=home, close="Back")
         if choice is None:
@@ -365,12 +362,6 @@ def _sub_detail_view(home: Path, wg_id: str) -> None:
             _pull_flow(home, wg_id)
         elif choice == "post":
             _post_flow(home, wg_id)
-        elif choice == "pause":
-            _safe(lambda: asyncio.run(wc_mod.pause(home, wg_id)),
-                  "paused", f"pause {wg_id}")
-        elif choice == "resume":
-            _safe(lambda: asyncio.run(wc_mod.resume(home, wg_id)),
-                  "resumed", f"resume {wg_id}")
         elif choice == "leave":
             if not ui.confirm("Leave the workgroup?", default=False):
                 continue

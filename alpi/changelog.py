@@ -162,7 +162,7 @@ def _group(commits: list[Commit], bumps: list[tuple[str, str, str]]) -> list[Rel
             releases[-1].date = date
             releases.append(Release(version=None, date=None))
 
-    # Trailing bucket (unreleased): drop if empty, keep as "unreleased" if not.
+    # Drop the trailing unreleased bucket if empty.
     if releases[-1].version is None and not releases[-1].commits:
         releases.pop()
     return releases

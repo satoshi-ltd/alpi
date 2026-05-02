@@ -30,7 +30,7 @@ The design goal is sovereignty:
   Web and email content is treated as hostile data. Skills and MCPs
   are scanned before install.
 - **Operational UX.** One setup wizard, a live `doctor`, a single
-  per-profile `alpi service` orchestrator (gateway + scheduler + ALP
+  per-profile `alpi daemon` orchestrator (gateway + scheduler + ALP
   listener on one asyncio loop), merged logs, and cleanup.
 - **Private coordination.** ALP.1 links local profiles, ALP.2 links
   machines over Noise_XK, and ALP.3 adds shared workgroups. Peers are
@@ -101,7 +101,7 @@ alpi profile list
 alpi profile create work
 alpi profile remove work
 
-alpi service start|stop|restart|status   # unified per-profile orchestrator
+alpi daemon start|stop|restart|status   # unified per-profile orchestrator
 alpi schedule run-once|fire <job-id>     # operational scheduler verbs
 
 alpi peers key

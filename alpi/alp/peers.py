@@ -91,7 +91,7 @@ def save(home: Path, peers: list[Peer]) -> None:
             entry.pop("budget", None)
         if not entry.get("rate_limit"):
             entry.pop("rate_limit", None)
-    p.write_text(yaml.safe_dump(data, sort_keys=False))
+    p.write_text(yaml.safe_dump(data, sort_keys=False, allow_unicode=True))
 
 
 def get_by_id(home: Path, peer_id: str) -> Peer | None:

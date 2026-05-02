@@ -36,8 +36,10 @@ Everything that represents state, identity, or cost:
 | `config.yaml` | ✓ | Model, fallbacks, tool limits, gateway config, MCP servers. |
 | `.env` | ✓ | API keys. A leak in one profile doesn't touch the other. |
 | `memories/` (USER.md, MEMORY.md, AGENT.md) | ✓ | Your identity and what alpi remembers. |
-| `sessions/<id>.json` | ✓ | Turn-by-turn chat log. |
-| `sessions/_gateway_map.json` | ✓ | Per-chat session threading. |
+| `sessions/<id>.json` | ✓ | Turn-by-turn chat log (TUI / desktop / `--once`). |
+| `mentions/<sender>.json` | ✓ | Per-sender `@`-mention threads (capped at 20 turns). Receiving side only. |
+| `gateway/sessions/<id>.json` | ✓ | Telegram / email / webhook chat logs. Hidden from TUI/desktop listings on purpose. |
+| `gateway/sessions/_map.json` | ✓ | `chat_id → session_id` pointer for per-chat threading. |
 | `skills/` | ✓ | Installed skills (live under this profile's allowlist). |
 | `alp/` (peers.yaml, socket, keypair) | ✓ | ALP identity + pinned peers. Two profiles on the same machine are two distinct peers. |
 | `schedule/jobs.json` | ✓ | Cron + one-shot jobs. |
@@ -60,21 +62,18 @@ alpi profile list              # shows all profiles, active one flagged
 alpi profile remove work       # deletes after safety checks + confirm
 ```
 
-`profile remove` is the happy-path CLI — works when the profile has
-no system services installed. When it does, it redirects to
-**`alpi -p <name> setup → Delete profile`**, which is the canonical
-one-shot flow: uninstalls every registered service (gateway /
-schedule / alp), rmtree's the profile home, and exits. CLI is kept
-for scripting and empty-profile cleanup; the wizard is the path most
-users want.
+`profile remove` archives the profile home under
+`~/.alpi/.trash/<name>-<timestamp>/`. There's no per-profile
+service to uninstall — the daemon is per-machine and picks up the
+removal on its next restart. **`alpi -p <name> setup → Delete
+profile`** is the same operation from the wizard.
 
 Every command in alpi's CLI accepts `-p <name>` to scope to a
 profile:
 
 ```bash
 alpi -p work                   # launch TUI for the work profile
-alpi -p work setup             # configure the work profile
-alpi -p work gateway start     # run the work profile's gateway
+alpi -p work setup             # configure the work profile (services + gateways)
 alpi -p work peers list        # list peers pinned by the work profile
 ```
 
@@ -93,8 +92,8 @@ exactly like they'd talk to a profile on a different machine over
 ALP.2.
 
 Rotation is deliberate: delete `alp/secrets/` and the next
-`alpi service start` generates a fresh pair when the ALP
-subsystem boots. Every peer who pinned the old pubkey must update
+`alpi daemon restart` generates a fresh pair when the ALP
+service boots for this profile. Every peer who pinned the old pubkey must update
 their entry — rotation is an *outage* for the peer mesh, not a
 silent operation. Treat it the way you'd treat rotating an SSH
 key.
@@ -107,9 +106,9 @@ Create a new profile when:
 - **Different cost / compliance boundary.** Work charges tokens to
   the company API key; personal pays out of pocket. Per-profile
   `.env` + `config.yaml` prevents mixing, and a per-profile
-  `budget.daily_usd` (or `daily_tokens` for local models) caps the
-  spend independently — the work profile can be aggressive while
-  the personal one runs on a $1/day leash.
+  `budget.daily_usd` (paid models) **or** `daily_tokens` (local
+  models, mutex) caps the spend independently — the work profile can
+  be aggressive while the personal one runs on a $1/day leash.
 - **Different memory.** You don't want work context (calendar,
   colleagues, ongoing projects) bleeding into a personal chat
   about weekend plans. MEMORY.md is profile-scoped.
@@ -137,10 +136,12 @@ sessions, rotated logs, and schedule output on demand.
 
 On CPU / memory: a profile not in active use costs *nothing*.
 Active surfaces collapse into two processes: the TUI instance
-(when you launch it) and the unified service (one process per
-profile, hosting gateway + scheduler + ALP listener on a single
-asyncio loop). The service can be started ad-hoc, installed as a
-launchd / systemd autorun, or left off entirely.
+(when you launch it) and the alpi daemon — one process per
+machine, hosting every profile's gateway / scheduler / ALP
+listener / workgroups poller as supervised tasks named
+`<profile>/<service>` on a single asyncio loop. The daemon is
+auto-installed on the first `alpi setup` and managed from `alpi
+setup → Services → Daemon` thereafter.
 
 ## Common patterns
 
@@ -151,9 +152,10 @@ launchd / systemd autorun, or left off entirely.
 ~/.alpi/profiles/work/       → work
 ```
 
-Both profiles' gateways can run simultaneously (each with its own
-launchd / systemd unit). Both can be ALP peers of each other if
-you want cross-profile handoffs (`@work ...` from personal).
+Both profiles' gateways run simultaneously inside the single
+machine-wide alpi daemon (one launchd plist / systemd unit
+total). Both can be ALP peers of each other if you want
+cross-profile handoffs (`@work ...` from personal).
 
 ### Per-employee in an organisation
 

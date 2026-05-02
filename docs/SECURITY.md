@@ -138,7 +138,7 @@ push` over SSH relies on `~/.ssh`, Apple Silicon Homebrew lives in
 Layer 1 denylist is already sufficient.
 
 **Where it really earns its keep: unattended profiles.** The
-unified service (Telegram gateway + scheduler subsystems),
+the alpi daemon (Telegram gateway + scheduler subsystems),
 `research` / `delegate` sub-agents — these
 run without a human approving each command. A prompt-injected email
 or a hallucinating sub-agent can issue `rm -rf ~/anything` with no

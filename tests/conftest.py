@@ -58,6 +58,12 @@ _SENSITIVE_ENV_VARS = (
 
 def pytest_addoption(parser: pytest.Parser) -> None:
     parser.addoption(
+        "--integration",
+        action="store_true",
+        default=bool(os.environ.get("ALPI_INTEGRATION")),
+        help="Run tests that need real sockets, sandboxes, or external processes.",
+    )
+    parser.addoption(
         "--llm",
         action="store_true",
         default=bool(os.environ.get("ALPI_LLM")),
@@ -68,11 +74,20 @@ def pytest_addoption(parser: pytest.Parser) -> None:
 def pytest_configure(config: pytest.Config) -> None:
     config.addinivalue_line(
         "markers",
+        "integration: test needs real sockets, sandboxes, or external processes",
+    )
+    config.addinivalue_line(
+        "markers",
         "llm: test makes real LLM calls; requires --llm or ALPI_LLM=1",
     )
 
 
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    if not config.getoption("--integration"):
+        skip = pytest.mark.skip(reason="needs --integration flag for external dependencies")
+        for item in items:
+            if "integration" in item.keywords:
+                item.add_marker(skip)
     if config.getoption("--llm"):
         return
     skip = pytest.mark.skip(reason="needs --llm flag to make real LLM calls")

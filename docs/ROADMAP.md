@@ -32,7 +32,7 @@ becoming a broken release.
 
 | ID | Item | Status |
 |---|---|---|
-| AX-desktop | App de escritorio (Tauri) — `alpi service` local + visual UI for chat / profiles / peers / workgroups. In progress on `feat/desktop-app`; lands at v0.4 cut | 🟡 |
+| AX-desktop | App de escritorio (Tauri) — `alpi daemon` local + visual UI for chat / profiles / peers / workgroups. In progress on `feat/desktop-app`; lands at v0.4 cut | 🟡 |
 | Matrix | Federated + E2EE gateway — flagship gateway of v0.4. Self-hosted homeserver, no phone number, matches the "private agent network" thesis | 🔵 |
 | BF | Skills v2 (items 1-3) — scaffolder, declared `requires`/`env`, per-skill SQLite. The "skills = mini-apps" pillar. Absorbs BE | 🔵 |
 
@@ -102,13 +102,15 @@ project crosses the chasm to non-hacker users when it ships a
 proper desktop app — tray icon, native window, "download the
 .dmg, click open, you're running". alpi gets the same.
 
-**Architecture.** A Tauri (Rust + WebView) app that speaks
-**ALP.1** (Unix sockets) to the local `alpi service` on the
-same machine. The agent itself stays in the service — the
-desktop app does not run an LLM, does not own tools, does not
-duplicate security. It is a visual ALP client: chat surface,
-profile manager, peer / workgroup viewer, settings, log viewer.
-Same model **AX-mobile** (v0.5) will use over ALP.2.
+**Architecture.** A Tauri (Rust + WebView) app that talks to the
+local `alpi daemon` over the host plane on a Unix socket
+(`~/.alpi/host/host.sock`, default profile only — sibling
+profiles are reached via a `profile` parameter on every host
+verb). The agent itself stays in the daemon — the desktop does
+not run an LLM, does not own tools, does not duplicate security.
+It is a visual host-plane client: chat surface, profile manager,
+peer / workgroup viewer, settings, log viewer. Same model
+**AX-mobile** (v0.5) will use over ALP.2.
 
 **Why Tauri, not Electron, not native.** Tauri = one codebase
 for macOS / Linux / Windows, ~10 MB binary, Rust ecosystem
@@ -132,7 +134,7 @@ backlog (BC, AV, AW, Matrix, BF 1-3, BG) is in.
 - No mobile (iOS / Android) — that's **AX-mobile** in v0.5,
   which adds App Store / signing / background-restriction work
   on top of an already-validated UI.
-- No standalone agent. Always talks to a local `alpi service`.
+- No standalone agent. Always talks to a local `alpi daemon`.
 - No theme marketplace, no plugins. Boring shell on top of the
   agent — that's the design.
 
@@ -817,16 +819,13 @@ Not planned. Research-grade, irrelevant for everyday personal use.
 - **Conversation export format (JSON canonical).** Originally
   scoped for v0.4 as "needed by AX-desktop to render sessions".
   The premise was wrong: sessions already serialise to JSON in
-  `~/.alpi/profiles/<name>/sessions/{id}.json` (`session.py:save`),
-  and the desktop app reads them directly via `fs::read`. Old
-  sessions never lost value because no migration was ever
-  required. The de-facto contract between desktop and core lives
-  in three intentionally hidden CLI flags (`--emit-events`,
-  `--session-id`, `--model`) plus the on-disk shape; the desktop
-  itself acts as the regression test in monorepo. Formalising a
-  separate export schema today would be doc for the doc's sake —
-  promote only if a *second* consumer (mobile, marketplace,
-  external integration) ships and needs a versioned contract.
+  `~/.alpi/profiles/<name>/sessions/{id}.json` (`session.py:save`).
+  The desktop / mobile client now reads them via the host control
+  plane (`host.session.read`, `host.sessions.list`) — the contract
+  is the JSON-RPC verb shape, not a separate export schema. The
+  desktop in this monorepo acts as the regression test. Formalise
+  a versioned export schema only when a *second* consumer
+  (marketplace, external integration) ships and needs one.
 - **Pending-approval gate for skills.** Tried in v0.1, removed in
   v0.2. Friction outweighed benefit; security scanner is the gate.
 - **Workspace wall on file tools.** Removed in v0.2. Without OS

@@ -41,7 +41,7 @@ Three options:
   an OS-level autorun. `alpi setup → Cleanup` inspects the
   profile's heavy dirs (audio cache, old sessions, schedule output)
   and deletes after one-shot confirmation. `alpi setup →
-  Maintenance → Service` registers the per-profile orchestrator
+  Maintenance → Daemon` registers the per-profile orchestrator
   under launchd (macOS) or systemd --user (Linux) so it starts on
   boot and restarts on crash; the same screen toggles which
   subsystems (gateway / scheduler / ALP) the orchestrator activates
@@ -376,7 +376,7 @@ internet exposure is not the recommended shape.
 
 | Key | Default | Notes |
 |---|---|---|
-| `alp.tcp_port` | unset | Enables ALP.2 Noise_XK-over-TCP for this profile. The ALP listener subsystem of `alpi service` picks it up at start. |
+| `alp.tcp_port` | unset | Enables ALP.2 Noise_XK-over-TCP for this profile. The ALP listener subsystem of `alpi daemon` picks it up at start. |
 | `alp.tcp_host` | `127.0.0.1` when `tcp_port` is set | TCP bind host. Use a VPN IP or `0.0.0.0` when remote peers need to dial in. |
 
 Example:
@@ -423,11 +423,11 @@ service:
 ```
 
 Missing section = all three on, matching the pre-refactor
-default. A toggle takes effect at the next `alpi service restart`.
+default. A toggle takes effect at the next `alpi daemon restart`.
 
 ## Takes-effect cheat sheet
 
 - **next turn** — change is live on the agent's next response.
 - **next session** — restart `alpi` to pick it up.
-- **next service restart** — `alpi service restart` (or reload
+- **next service restart** — `alpi daemon restart` (or reload
   through launchd / systemd if installed as an autorun).
