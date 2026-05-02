@@ -51,7 +51,7 @@ one systemd-user unit (Linux) per profile.
 
 | What it does | Lifecycle | Install / config |
 |---|---|---|
-| Gateway listener (Telegram / IMAP / Gmail / webhook) + scheduler tick + ALP socket (Unix + optional TCP/Noise_XK), all in one Python process. Toggle individual subsystems via `service.{gateway,schedule,alp}: bool` in `config.yaml`. | `alpi service start\|stop\|restart\|status` | `alpi setup → Maintenance → Service` |
+| Gateway listener (Telegram / IMAP / Gmail / webhook) + scheduler tick + ALP socket (Unix + optional TCP/Noise_XK), all in one Python process. Toggle individual subsystems via `service.{gateway,schedule,alp}: bool` in `config.yaml`. | `alpi daemon start\|stop\|restart\|status` | `alpi setup → Maintenance → Daemon` |
 
 Every install is per-profile — installing for `work` doesn't
 install for `default`. New profiles default to **opt-in**: nothing
@@ -65,12 +65,12 @@ alpi schedule fire <job-id>     # ad-hoc run of a specific job
 
 ### When `stop` doesn't stop
 
-If you run `alpi service stop` on a launchd / systemd-managed
+If you run `alpi daemon stop` on a launchd / systemd-managed
 service, the supervisor will respawn it within seconds (the plist
 declares `KeepAlive=true`). To permanently stop:
 
 ```bash
-alpi setup → Maintenance → Service → Uninstall
+alpi setup → Maintenance → Daemon → Uninstall
 ```
 
 ### When `restart` is really what you want
@@ -79,10 +79,10 @@ After `uv tool install --reinstall`, the long-running service
 still holds the old binary's code. Use:
 
 ```bash
-alpi service restart      # stop + wait for the supervisor to respawn
+alpi daemon restart      # stop + wait for the supervisor to respawn
 ```
 
-`alpi doctor` flags "stale binary — `alpi service restart` to
+`alpi doctor` flags "stale binary — `alpi daemon restart` to
 reload" when the binary on disk is newer than the running
 process.
 
@@ -144,9 +144,9 @@ Every peer who pinned your old pubkey must update their
 `peers.yaml` before you can reach them again.
 
 ```bash
-alpi service stop                      # or: alpi setup → Maintenance → Service → Uninstall
+alpi daemon stop                      # or: alpi setup → Maintenance → Daemon → Uninstall
 rm ~/.alpi/alp/secrets/alp_key.{pem,pub}
-alpi service start                     # generates a fresh pair when the ALP listener boots
+alpi daemon start                     # generates a fresh pair when the ALP listener boots
 alpi peers key                         # print the new pubkey; send OOB to every peer
 ```
 
@@ -204,7 +204,7 @@ You've lost a machine. Here's the order of operations to restore.
 3. `alpi doctor` — the Service row will read "not installed" for
    each profile.
 4. Re-install the service for the profiles you want active
-   (`alpi setup → Maintenance → Service → Install`).
+   (`alpi setup → Maintenance → Daemon → Install`).
 5. If your ALP identity is intact (backup included
    `alp/secrets/`), your peers still reach you. If you had to
    regenerate, see **ALP identity rotation** above.
@@ -227,7 +227,7 @@ service is down or its ALP subsystem is disabled. Check
 **Two services running simultaneously for the same profile.**
 `ps aux | grep "alpi ("` shows more than one entry for the same
 profile name. Usually after a failed reinstall, or after running
-`alpi service start` foreground while the supervisor was already
+`alpi daemon start` foreground while the supervisor was already
 running. Fix:
 `pkill -f "alpi (<profile>)" && alpi -p <profile> service restart`.
 

@@ -93,7 +93,7 @@ exactly like they'd talk to a profile on a different machine over
 ALP.2.
 
 Rotation is deliberate: delete `alp/secrets/` and the next
-`alpi service start` generates a fresh pair when the ALP
+`alpi daemon start` generates a fresh pair when the ALP
 subsystem boots. Every peer who pinned the old pubkey must update
 their entry — rotation is an *outage* for the peer mesh, not a
 silent operation. Treat it the way you'd treat rotating an SSH

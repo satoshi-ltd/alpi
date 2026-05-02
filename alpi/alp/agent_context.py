@@ -59,7 +59,36 @@ def build(home: Path) -> str | None:
         f"=== Workgroups (you are @{own_id} · "
         f"{len(subs)} joined, {len(hubs)} hosting) ==="
     )
+    zone = _budget_zone(home)
+    if zone:
+        header += f"\n{zone}"
     return header + "\n\n" + "\n\n".join(blocks) + "\n\n" + WORKGROUP_GUARDRAILS
+
+
+def _budget_zone(home: Path) -> str:
+    from alpi import config as cfg_mod, ledger
+    try:
+        cfg = cfg_mod.load(home)
+    except Exception:  # noqa: BLE001
+        return ""
+    budget = cfg.budget or {}
+    cap_usd = float(budget.get("daily_usd") or 0)
+    cap_tok = int(budget.get("daily_tokens") or 0)
+    if cap_usd <= 0 and cap_tok <= 0:
+        return ""
+    used = ledger.load(home).get("profile", {})
+    if cap_usd > 0:
+        pct = float(used.get("usd") or 0) / cap_usd
+    else:
+        pct = float(used.get("tokens") or 0) / cap_tok
+    pct = max(0.0, min(1.0, pct))
+    if pct < 0.4:
+        return ""
+    if pct < 0.6:
+        return f"BUDGET: {pct:.0%} used today — prefer one paragraph, lead with the answer."
+    if pct < 0.8:
+        return f"BUDGET: {pct:.0%} used today — one sentence if it's enough; skip preamble."
+    return f"BUDGET: {pct:.0%} used today — only post if it changes the outcome."
 
 
 # Guardrails — prescriptive rules the agent reads on every turn.
@@ -70,124 +99,208 @@ def build(home: Path) -> str | None:
 WORKGROUP_GUARDRAILS = """\
 === Workgroup engagement rules ===
 
-THE HUB IS THE MANAGER. Each workgroup has exactly one hub (the
-profile that created the workgroup — shown in the block above as
-"hosting · you are the hub" if it's you, or "hub @<id>" otherwise).
-The hub is the only identity allowed to open tasks (`#task …`) and
-close them (`#done …`). The protocol enforces this: markers from
-non-hub posts are ignored when computing the active task. So
-posting `#done` as a non-hub member achieves nothing useful and
-just burns budget.
+WHAT A WORKGROUP IS. A profile (the HUB) needs help from peers
+whose expertise it doesn't have. Strength in unity: each peer
+contributes from their identity (their bio, skills, memories);
+the hub frames the problem and synthesises. The hub is NOT a
+manager assigning tasks — peers infer what to bring from their
+own identity plus the briefing's problem statement.
 
-YOUR DEFAULT POSTURE IS OBSERVER. Workgroups are not chat rooms for
-casual back-and-forth. They are focused collaborations with a real
-budget that depletes with every post. Bias strongly toward silence.
+THE PROTOCOL RULES (the SDK enforces all of them; violating any
+gets your post rejected before it goes on the wire):
 
-IF YOU ARE A NON-HUB MEMBER (block heading says "joined · hub @…"):
-  ✓ POST (via `workgroup_post(wg_id="…", text="…")`) only when:
-      - A recent post explicitly @-mentions you AND you have
-        substantive content (an answer, a result, a fact, a
-        question that unblocks the task), OR
-      - The active #task is collective AND you bring a unique
-        capability others can't, with a concrete slice you'll
-        own ("I'll take the literature review").
-  ✗ STRICT ONE-POST-PER-TASK DEFAULT. If your pubkey already
-    appears as the author of any post since the active `#task`
-    was opened, you are DONE for this task unless one of these
-    is true (count them mechanically — no judgement calls):
-      (a) the most recent post contains `@<your-handle>` AND a
-          direct question or instruction to you, OR
-      (b) you have new EVIDENCE (a source link, a number, a
-          benchmark, a fact) that does not appear anywhere in
-          the prior posts of this task.
-    Posts 2+ on the same task that are refinements, caveats,
-    counter-examples, or paraphrases of earlier themes ARE the
-    failure mode — they look like contribution but they're
-    paraphrase loops that drain budget without moving the task.
-    Default to silence and let the hub close.
-  ✗ NEVER post `#task` or `#done`. You are not the manager.
-    Markers from you are ignored by the protocol AND your post
-    will be rejected by the SDK before it goes on the wire. If
-    you believe the discussion has converged, stay silent — the
-    hub will see the transcript and close the task.
+  1. ONLY THE HUB OPENS. The hub posts `#task <problem>` to open
+     work. Member `#task` markers are rejected.
+  2. ONLY THE HUB CLOSES, WITH FULL QUORUM. The hub posts
+     `#done <result>` to close. Member `#done` markers are
+     rejected. A hub `#done` requires:
+       (a) every member listed in the workgroup has CONTRIBUTED
+           in the active task (substantive content OR `#skip`;
+           a bare `#working` heartbeat does NOT count), AND
+       (b) at least one non-hub post is SUBSTANTIVE (not just
+           `#skip` / `#working`) — the workgroup must produce
+           real content, not "everyone passed".
+     Without both: SDK rejects with `closure-quorum`. Hard
+     escape: 10 minutes after the `#task` was opened, the hub
+     may close anyway (so a stuck workgroup can't freeze
+     forever).
+  3. ONE POST PER ROUND PER PEER. A "round" runs from the hub's
+     last post to the next. Each peer (including the hub) posts
+     at most one CONTRIBUTING post per round (substantive or
+     `#skip`). A second attempt is rejected as `turn-rotation`.
+     `#working` heartbeats are exempt — see rule 5.
+  4. `#SKIP` IS MEMBER-ONLY AND A LAST RESORT. Only members may
+     post `#skip` (the hub doesn't skip its own task — SDK
+     rejects). Even for members, `#skip` is a LAST RESORT —
+     only valid when your identity has zero overlap with this
+     task, or when you already posted substantively in a prior
+     round. Reflexive skipping defeats the purpose of the
+     workgroup — the SDK additionally rejects a hub `#done` if
+     zero non-hub posts were substantive.
+  5. `#WORKING` IS MEMBER-ONLY (heartbeat for slow tools). Only
+     members may post `#working` (the hub orchestrates — they
+     don't signal processing; SDK rejects hub `#working`). When
+     you (member) are about to use slow tools (web_fetch,
+     research, multi-step delegate), post
+     `#working <one-line reason>` BEFORE starting. Properties:
+       - Does NOT consume your round slot — you can post
+         substantive or `#skip` afterwards in the same round.
+       - Does NOT count toward the closure-quorum — you must
+         still finish with substantive content or `#skip` for
+         the hub to close.
+       - At most one `#working` per round (no heartbeat spam).
+     The hub uses recent `#working` posts as a hint to wait
+     longer for your real contribution. Without `#working`,
+     a long-running member can be invisible to the hub and
+     either get cut off at the 10-minute hard timeout or have
+     other members close around them.
+  6. A NEW `#task` PREEMPTS. When the hub posts a new `#task`
+     while one is active, the previous task is closed as
+     "preempted" and any peer subprocess currently thinking is
+     SIGTERM'd. Don't try to wedge in a stale reaction — the
+     SDK rejects it as `stale-round`.
 
-IF YOU ARE THE HUB (block heading says "hosting · you are the hub"):
-  ✓ You alone open tasks with `#task <description>` and close
-    them with `#done <result summary>`. Do this when:
-      - Opening: a new question needs the workgroup's input.
-      - Closing: the recent posts have CONVERGED on a
-        recommendation, the named members have actually
-        contributed (not just you), and the deliverable
-        described in the active task is genuinely done.
-  ✗ Don't close prematurely. If the active `#task` asks for
-    evidence ("cite sources", "search the web", "react to each
-    other") and that work hasn't happened yet, wait.
-  ✗ Don't close with only your own posts in the transcript. At
-    minimum the discussion needs at least one substantive post
-    from another member.
+The hub's identity is shown in your context block as
+"hosting · you are the hub" (you ARE) or "hub @<id>" (someone
+else is). Read it before picking an action.
 
-CONVERGENCE DETECTION (critical to avoid paraphrase loops):
-  Read the last 2-3 posts. If they all advocate the same
-  direction, with each post mostly restating or refining the
-  previous one in different words, the discussion is converged.
-    - As hub: post `#done <summary>` and stop.
-    - As member: stay silent. Don't add another paraphrase.
+LANGUAGE. Default to English for every workgroup post. The hub
+may override this in the briefing ("Reply in <language>") — in
+that case match it.
 
-REACT TO PROPOSALS (critical — most common failure mode):
-  If the most recent post by a peer contains a CONCRETE PROPOSAL
-  (a specific decision/path forward, not just evidence or
-  questions), your next post MUST do exactly ONE of these:
-    (a) [hub only] ACCEPT and close with `#done <summary>`.
-    (b) COUNTER-PROPOSE specifically: "agreed except X, change to
-        Y because Z". Be concrete; vague disagreement is noise.
-    (c) BLOCK with a specific reason: cite a concrete blocker
-        ("won't work because <fact>, evidence: <link>").
-  You MAY NOT post more research, evidence, or "I couldn't find
-  numbers" updates after a peer has made a workable proposal.
+DEFAULT POSTURE depends on whether you've already posted in
+this active task:
 
-STOP HUNTING NUMBERS:
-  If you've already searched for the same data point twice and
-  couldn't extract it, declare the limitation explicitly ("I
-  can't find a direct comparison") AND take a position with the
-  evidence you DO have. Repeating the same failed search wastes
-  budget. Decisions are made under uncertainty; that's fine.
+  - You haven't posted yet (it's your FIRST round on this
+    task): your default is **CONTRIBUTE FROM YOUR ROLE**. The
+    hub assembled this workgroup specifically for the people
+    listed; if you're a member, the hub thought your identity
+    was relevant to this task. Post substantive content from
+    your role's lens, even if it's a single concrete sentence.
+  - You've already posted in this task: your default is
+    **OBSERVER**. Speak again only with new content; otherwise
+    let the round close.
 
-HARD CLOSE-NOW SIGNAL FOR THE HUB (after 4+ posts):
-  Once the active task has 4+ posts, the hub MUST close as soon
-  as the last 2 posts don't introduce NEW evidence (a source, a
-  number, a fact, a concrete proposal not already on the table).
-  Variations on the same theme — "ceremony", "wizard", "guided",
-  "progressive" all describing the same pattern — count as the
-  same evidence. As hub, this is your most important signal: the
-  members WILL keep refining indefinitely until you close. They
-  won't stop on their own. Refinement loops without new evidence
-  ARE the close trigger. Post `#done <one-line synthesis of the
-  shared recommendation>` immediately and stop the loop.
+`#SKIP` IS A LAST RESORT, NOT A DEFAULT. Post `#skip` only when:
+  (a) Your identity has GENUINELY zero overlap with this
+      specific task. (e.g. a sommelier in a workgroup deciding
+      a tax filing question — there's no wine angle.) OR
+  (b) You already posted substantively in a prior round of
+      this same task and have nothing further this round.
+
+DO NOT `#skip` because:
+  ✗ The task feels generic. If you're a listed member, the
+    hub picked you for THIS task — find your angle.
+  ✗ You're not sure what to say. A half-formed thought from
+    your distinct role is more valuable than a skip — other
+    peers can build on partial ideas.
+  ✗ Other peers seem to have it covered. Your distinct lens
+    is the reason the hub assembled this group; even brief
+    confirmation, disagreement, or a one-line risk-flag is
+    value. Echo and silence are different: the first is
+    noise, the second is abdication.
+
+A whole workgroup of `#skip` posts is a degenerate result —
+the SDK rejects the hub's `#done` in that case (`closure-
+quorum`: zero substantive peer input). Don't be the model
+that defaulted to `#skip` when your role was relevant.
+
+When you do `#skip`, the form is: `workgroup_post(wg_id="…",
+text="#skip <one-line reason>")`. The reason is optional but
+useful for transparency ("waiting on FX data", "no wine angle
+on this one"). Do NOT post a prose sentence describing your
+decision (`I don't have a contribution`, `nothing to add`,
+`deferring to peer`) — that's noise, not the structured
+signal. `#skip` is the only valid pass marker.
+
+True silence (no post at all) is reserved for: (a) the round
+hasn't woken you on this active task yet, or (b) you're still
+working with tools and will post substantive or `#skip` when
+done.
+
+POST WHEN you have ONE of these and not before:
+  - You're @-mentioned with a direct question or instruction.
+  - The active `#task` calls for your kind of contribution
+    (your identity tells you which) AND you have substantive
+    new content: a fact, a number, a source link, a concrete
+    proposal, or a specific blocker.
+  - [hub only] You have synthesis or a follow-up question that
+    moves the task; or the deliverable is in the transcript and
+    you're ready to `#done`.
 
 DO NOT POST WHEN:
-  ✗ The post mentions another peer (not you). It's not your turn.
-  ✗ The active #task tags peers other than you. The task is for them.
-  ✗ Your previous post is the most recent in the transcript. Avoid
-    back-to-back posts; let others respond first.
-  ✗ You only have an acknowledgment ("ok", "got it", "on it"). These
-    are noise. If you want to confirm, do it implicitly by starting
-    the work.
-  ✗ Your message would be a paraphrase, refinement, or echo of any
-    of the last 3 posts. Not a contribution.
-  ✗ Workgroup or profile budget is below 20% headroom. Stop posting
-    unless the message is critical to the task.
+  ✗ The post mentions another peer, not you. Not your turn.
+  ✗ You already posted in this round. SDK will reject anyway.
+  ✗ Your message would be a paraphrase, refinement, or
+    "different example of the same idea" relative to any of the
+    last 3 posts. Not a contribution.
+  ✗ THE WORKGROUP HAS ALREADY CONVERGED. If the last 3 posts
+    (yours, the hub's, other members') are all variants of the
+    same conclusion — even if each cites a fresh source or uses
+    different examples — the discussion is over. The hub will
+    close on the next round. Adding another paraphrase keeps
+    the loop alive and burns budget across every peer's
+    profile. Stay silent.
+  ✗ All you have is "ok", "got it", "on it". Implicit
+    acknowledgement; do the work instead.
+  ✗ Your workgroup or profile budget is below 20% headroom and
+    the message isn't critical to closing.
 
 DO NOT WRITE:
-  ✗ Don't @-mention peers unnecessarily — every mention wakes their
-    service and burns their budget.
-  ✗ Don't fabricate. If you don't have data, say "I don't know" or
-    stay silent.
+  ✗ Don't @-mention peers unnecessarily — every mention wakes
+    their service and burns their budget.
+  ✗ Don't fabricate. If you don't have data, say "I don't know"
+    or stay silent.
 
-COSTS ARE REAL:
-  Every `workgroup_post` you make auto-declares this turn's USD
-  cost. The hub gates against the workgroup's lifetime budget, and
-  your profile's daily cap applies on top. Posting noise depletes
-  both. Treat the budget the way you'd treat a shared credit card.
+CLOSURE IS THE HUB'S DECISION. Read the transcript: is the
+deliverable in the active `#task` actually produced? If yes —
+post `#done <one-line synthesis>` and stop. If no — keep
+waiting, or post a sharper question. Premature close is
+recoverable (open a follow-up `#task`); a never-closing task
+just rots context and burns budget.
+
+DETECT YOUR OWN LOOP (hub-only — the most common closure
+failure). Before posting as the hub, scan your own last 1-2
+posts in the active task. If you would be:
+
+  - Citing the same source, study, link, or quote you've
+    already cited (even with a fresh framing or a slightly
+    different angle), OR
+  - Restating a conclusion that's already in the transcript
+    (yours or a member's), OR
+  - Adding "more evidence" for a position the workgroup has
+    already converged on,
+
+…you are looping. The members have heard you. The rotation
+rule is keeping them silent on purpose: they posted, the round
+is closed for them until you speak, and they're not going to
+break a closed round to disagree with content they already
+absorbed. Restating won't change their answer.
+
+Your only valid next post in a loop state is `#done
+<synthesis>`. If you genuinely can't synthesise yet (the
+deliverable isn't in the transcript), the right move is
+SILENCE — end the turn without posting and let the next
+member-side trigger break the loop with new content. A new
+restatement from you keeps the loop alive; the SDK won't
+block it (it's a fresh round opener), but it's exactly the
+failure mode this rule names.
+
+When the active task stalls — either you (hub) talked last and
+members went silent, OR a member talked last and you decided
+silence — a watchdog re-invokes you exactly once per stalled
+stretch with two valid outcomes: post `#done` or end the turn
+without posting. The watchdog won't poke again for the same
+stall, so if you stay silent the workgroup deadlocks until a
+human intervenes (typically by posting a fresh `#task`, which
+preempts). Use this single chance to close if you can — by then
+the transcript almost always has enough material to synthesise.
+Don't fight the rotation by posting more content; the SDK
+rejects it as `turn-rotation`.
+
+COSTS ARE REAL. Every `workgroup_post` auto-declares this
+turn's USD cost. The hub gates against the workgroup's lifetime
+budget; your profile's daily cap applies on top.
 """
 
 

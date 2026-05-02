@@ -1,16 +1,4 @@
-"""workgroup_post — post a message to an ALP workgroup.
-
-Minimal hook so the agent can drop a message into a multi-party
-shared transcript. The tool only handles the *post* leg —
-auto-pulling new posts as turn context, surfacing notifications, or
-routing @mentions inside workgroups are deferred (ALP.6 / ALP.7
-in v0.5).
-
-The workgroup must already be subscribed to (``alpi workgroup join``
-or wizard) — otherwise we have no group key. Encryption + the
-optional cost declaration happen client-side via
-``alpi.alp.workgroup_client``.
-"""
+"""Post a message to an ALP workgroup."""
 
 from __future__ import annotations
 
@@ -27,15 +15,10 @@ class WorkgroupPostTool(Tool):
     name = "workgroup_post"
     description = (
         "Post a message into a shared ALP workgroup transcript. Use this "
-        "when (a) the user asks you to broadcast something to a workgroup, "
-        "or (b) the workgroup-poller woke this turn because you were "
-        "@-mentioned or a collective `#task` opened — see the "
-        "`Workgroup engagement rules` block in your system prompt for the "
-        "full posture. Default posture is OBSERVER; only post when you "
-        "have substantive content. The `wg_id` is the `wg_*` string in "
-        "your workgroup context block. Cost is auto-declared from this "
-        "turn's accumulated USD/tokens; the hub gates against the "
-        "workgroup's lifetime budget. Returns the assigned sequence number."
+        "when the user asks for a workgroup broadcast or when the poller "
+        "wakes this turn. Post only with substantive content. The `wg_id` "
+        "is the `wg_*` string in your workgroup context. Cost is declared "
+        "from this turn's accumulated USD/tokens. Returns the sequence number."
     )
     parameters = {
         "type": "object",
@@ -58,9 +41,7 @@ class WorkgroupPostTool(Tool):
         if not wg_id or not text:
             return ToolResult(ok=False, output="", error="wg_id and text required")
 
-        # Auto-declare cost from the current turn's accumulated spend.
-        # Workgroup hubs gate against this declaration; reporting truthfully
-        # keeps the workgroup ledger meaningful and the lifetime cap real.
+        # Auto-declare the current turn's spend for the hub ledger.
         from alpi.tools import _state as _wg_state
         tally = _wg_state.get_turn_usage()
         cost = None
@@ -75,12 +56,13 @@ class WorkgroupPostTool(Tool):
                 wc.post(get_home(), wg_id, text.encode("utf-8"), cost=cost),
             )
         except alp_client.RemoteError as e:
-            return ToolResult(
-                ok=False, output="",
-                error=f"hub rejected: {e.code} {e.message}",
-            )
+            err = f"hub rejected: {e.code} {e.message}"
+            _record_post_failure(wg_id, err, text)
+            return ToolResult(ok=False, output="", error=err)
         except (ValueError, alp_client.ClientError) as e:
-            return ToolResult(ok=False, output="", error=str(e))
+            err = str(e)
+            _record_post_failure(wg_id, err, text)
+            return ToolResult(ok=False, output="", error=err)
         cost_hint = ""
         if cost:
             cost_hint = (
@@ -90,6 +72,27 @@ class WorkgroupPostTool(Tool):
             ok=True,
             output=f"posted seq {result.get('seq')} at {result.get('ts')}{cost_hint}",
         )
+
+
+def _record_post_failure(wg_id: str, error: str, attempted_text: str) -> None:
+    """Record a rejected post in ``turns.jsonl``."""
+    import json
+    import os
+    try:
+        from alpi import service
+        home = get_home()
+        # Truncate the attempted body so the log stays bounded.
+        preview = attempted_text[:240] + ("…" if len(attempted_text) > 240 else "")
+        service._append_turn_event(home, {
+            "ts": service._utcnow_iso(),
+            "event": "post-rejected",
+            "wg_id": wg_id,
+            "error": error,
+            "attempted_preview": preview,
+            "pid": os.getpid(),
+        })
+    except Exception:  # noqa: BLE001
+        pass
 
 
 TOOL = WorkgroupPostTool

@@ -66,7 +66,7 @@ def _write_email_cfg(home: Path, signing_key: str, encrypt: bool) -> Path:
     else:
         data.pop("email", None)
     cfg_path.parent.mkdir(parents=True, exist_ok=True)
-    cfg_path.write_text(yaml.safe_dump(data, sort_keys=False))
+    cfg_path.write_text(yaml.safe_dump(data, sort_keys=False, allow_unicode=True))
     return cfg_path
 
 

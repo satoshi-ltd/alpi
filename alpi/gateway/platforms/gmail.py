@@ -1,9 +1,4 @@
-"""Gmail platform adapter — inbound poll + outbound send via Gmail REST API.
-
-Uses Google's history API for delta polling (``users.history.list``):
-start from the user's current ``historyId`` and ask Google what's new
-since, instead of scanning the whole inbox every cycle.
-"""
+"""Gmail platform adapter."""
 
 from __future__ import annotations
 
@@ -33,7 +28,7 @@ def _state_path(home: Path) -> Path:
 
 
 class Gmail(Platform):
-    """Gateway inbound/outbound adapter for a Gmail mailbox via OAuth."""
+    """Gmail mailbox adapter via OAuth."""
 
     name = "gmail"
 

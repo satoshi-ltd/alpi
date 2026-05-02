@@ -130,9 +130,7 @@ class ModelListPanel(FloatingPanel):
     def _load_models(self) -> None:
         from alpi.tui.list_row import build_options
 
-        # call_after_refresh can fire after the panel was dismissed (e.g. the
-        # click that opened us also triggered an outside-click dismiss). Bail
-        # quietly — there's nothing to render into anymore.
+        # `call_after_refresh` can fire after dismiss; bail quietly.
         if not self.is_mounted:
             return
 
@@ -183,9 +181,7 @@ class ModelListPanel(FloatingPanel):
         model_id = self._model_ids.get(event.option_id)
         if not model_id:
             return
-        # Session-only switch: update in-memory cfg + engine, do NOT persist
-        # to config.yaml. The saved default only changes via `alpi setup`.
-        # `/new` reloads cfg from disk, so the switch also resets there.
+        # Session-only switch: update memory only; do not persist.
         self.cfg.model = model_id
         app = self.app
         app.cfg = self.cfg                            # type: ignore[attr-defined]

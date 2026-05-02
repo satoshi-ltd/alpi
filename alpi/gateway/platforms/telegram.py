@@ -1,4 +1,4 @@
-"""Telegram adapter — long-poll via getUpdates."""
+"""Telegram adapter."""
 
 from __future__ import annotations
 
@@ -30,9 +30,7 @@ class Telegram(Platform):
     def __init__(self, home) -> None:
         super().__init__(home)
         self._offset = self._load_offset()
-        # Per-chat state for the interactive /model picker. Stored here on
-        # the Platform instance rather than in session_map because it's
-        # transient UI state — lives only until the user picks or cancels.
+        # Per-chat state for the transient `/model` picker.
         self._model_picker: dict[str, dict[str, Any]] = {}
 
     def _load_offset(self) -> int:
@@ -89,8 +87,7 @@ class Telegram(Platform):
                     self._offset = update["update_id"] + 1
                     self._save_offset()
 
-                    # Inline-keyboard callbacks (model picker, future
-                    # approval buttons) — handled Telegram-side, no yield.
+                    # Callback buttons are handled in Telegram.
                     cq = update.get("callback_query")
                     if cq:
                         try:
@@ -158,12 +155,7 @@ class Telegram(Platform):
                     client, url, message.external_chat_id, chunk, markup,
                 )
 
-    # Interactive /model picker — two-step drill-down via inline keyboards.
-    #
-    # Step 1: send a card with [Anthropic, OpenAI, …] + Cancel. State is
-    # keyed by chat_id; the message id is remembered so step 2 edits in
-    # place. Callback data uses compact tags (``mp:`` provider, ``mm:``
-    # model, ``mx`` cancel) because Telegram caps it at 64 bytes.
+    # Two-step inline /model picker.
     async def send_model_picker(self, chat_id: str) -> None:
         token = os.environ.get("TELEGRAM_BOT_TOKEN")
         if not token:
@@ -290,14 +282,7 @@ async def _send_text_chunk(
     client: httpx.AsyncClient, url: str, chat_id: str,
     text: str, reply_markup: dict | None,
 ) -> None:
-    """Send one text chunk as MarkdownV2 with a plain-text fallback.
-
-    The agent emits standard Markdown; we render it to Telegram's
-    MarkdownV2 dialect so users see proper formatting. If Telegram
-    rejects the body (status 400 with ``parse error`` — usually a
-    rogue character the renderer missed), retry once as plain text
-    WITHOUT ``parse_mode`` so at least the content gets through.
-    """
+    """Send one chunk as MarkdownV2, then plain text on parse errors."""
     from alpi.gateway.platforms._md2 import to_markdown_v2
 
     rendered = to_markdown_v2(text)
@@ -317,10 +302,7 @@ async def _send_text_chunk(
     if resp.status_code == 200:
         return
 
-    # MarkdownV2 parse errors return 400 with ``description`` starting
-    # with "Bad Request: can't parse entities". Any other status is
-    # likely a transport/chat-id problem and retrying without markup
-    # won't help — log and move on.
+    # Retry plain text only on Markdown parse errors.
     body = {}
     try:
         body = resp.json()
@@ -344,26 +326,14 @@ async def _send_text_chunk(
 
 
 async def _register_bot_commands(url_base: str) -> None:
-    """Publish the slash-shortcut menu via Telegram's setMyCommands.
-
-    Once registered, typing ``/`` in any chat with the bot shows a
-    native list with names + descriptions. Idempotent — re-POSTing
-    the same list is fine; Telegram stores it server-side.
-
-    Telegram caches the command list per-client, so after a refresh
-    you may need to close + reopen the app (or wait a minute) before
-    the new menu shows. Groups also need ``scope: all_group_chats``;
-    we set it explicitly so the bot works the same in DMs and groups.
-    """
+    """Publish the slash-shortcut menu."""
     from alpi.gateway import shortcuts as shortcuts_mod
 
     commands = [
         {"command": name, "description": desc}
         for name, desc in shortcuts_mod.catalog()
     ]
-    # Register twice — once for the default scope (DMs), once for groups
-    # the bot is added to. Without the second call, group members don't
-    # see the command menu at all.
+    # Register for DMs and groups.
     targets = (
         ("default (DMs)", {"type": "default"}),
         ("all_group_chats", {"type": "all_group_chats"}),
@@ -394,14 +364,11 @@ async def _register_bot_commands(url_base: str) -> None:
         log.warning("setMyCommands request crashed: %s", e)
 
 
-# /model picker helpers — platform-agnostic shape of provider/model data.
+    # `/model` picker helpers.
 
 
 def _discover_providers(home: Path) -> list[dict[str, Any]]:
-    """Return the list of providers the picker can offer (those with keys
-    + configured Ollama endpoints). Each entry carries a ``list_models``
-    callable so the picker can fetch on demand in a worker thread.
-    """
+    """Return providers the picker can offer."""
     from alpi import config as cfg_mod
     from alpi import providers as prov_mod
 
@@ -432,7 +399,7 @@ def _discover_providers(home: Path) -> list[dict[str, Any]]:
 
 
 def _read_current_model(home: Path) -> tuple[str, str]:
-    """Return ``(provider_slug, model_id)`` for the currently configured model."""
+    """Return the current ``(provider_slug, model_id)``."""
     from alpi import config as cfg_mod
     try:
         cfg = cfg_mod.load(home)
@@ -460,13 +427,7 @@ def _provider_keyboard(
 def _model_keyboard(
     slug: str, models, current_model: str,
 ) -> dict[str, Any]:
-    # Telegram caps callback_data at 64 bytes. Use the list index to keep
-    # the payload short when model ids are long. Map index → id when the
-    # click comes back; see _handle_callback_query `mm:` branch.
-    # Actually we embed the full id because the picker state lives in
-    # memory anyway — providers + ids stay in _model_picker[chat_id]
-    # until the user resolves. If the id exceeds the cap, we truncate
-    # and fall back to "model not found" in that unlikely case.
+    # Keep callback payloads short.
     buttons: list[dict[str, str]] = []
     for m in models:
         label = m.display
@@ -474,7 +435,7 @@ def _model_keyboard(
             label = f"✓ {label}"
         payload = f"mm:{slug}:{m.id}"
         if len(payload.encode()) > 60:
-            continue  # drop models whose id blows the callback_data cap
+            continue
         buttons.append({"text": label, "callback_data": payload})
     rows = [buttons[i:i + 2] for i in range(0, len(buttons), 2)]
     rows.append([{"text": "✗ Cancel", "callback_data": "mx"}])
@@ -482,8 +443,7 @@ def _model_keyboard(
 
 
 def _persist_model(home: Path, provider_slug: str, model_id: str) -> None:
-    """Write the new model to ``config.yaml``. Also written to the active
-    profile's env if one is set — matches how ``alpi setup`` persists."""
+    """Write the selected model to `config.yaml`."""
     from alpi import config as cfg_mod
     cfg = cfg_mod.load(home)
     cfg.model = model_id
@@ -516,7 +476,6 @@ async def _send_attachment(
 
     data: dict[str, str] = {"chat_id": chat_id}
     if caption:
-        # Same MarkdownV2 rendering + fallback as text messages.
         data["caption"] = to_markdown_v2(caption[:1024])
         data["parse_mode"] = "MarkdownV2"
 

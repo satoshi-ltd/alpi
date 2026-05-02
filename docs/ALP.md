@@ -175,19 +175,61 @@ Workgroups (the multi-party extension below) carry a separate,
 optional **lifetime** budget that double-gates `workgroup.post` on
 top of this daily profile cap. See *Workgroups → Budget*.
 
+### Pending invites
+
+Pinning is asymmetric and there is no protocol-level invitation /
+acceptance handshake. To make the second-side pinning step
+discoverable for humans, the receiver records every silently-dropped
+unpinned envelope (the Ed25519 sender pubkey) into
+`~/.alpi/<profile>/alp/pending_peers.yaml`:
+
+```yaml
+- pubkey: <base64>
+  first_seen: 1777678347.279
+  last_seen: 1777694616.993
+  address: null   # set when seen via TCP
+```
+
+Capped at the 20 most recent entries; deduped by pubkey (a repeat
+ping from the same key just refreshes `last_seen`).
+
+This is a UX file, not protocol state — the wire never carries an
+"invite" message. A "pending invite" is the side-effect of the
+sender's first ping arriving at a receiver that hasn't pinned them.
+The receiver's owner inspects the file (via `alpi setup → Peers`,
+the desktop app, or a plain `cat`) and decides:
+
+- **Accept** → write the pubkey to `peers.yaml` with chosen `id` and
+  `allow` list, drop the entry from `pending_peers.yaml`.
+- **Discard** → just drop the entry. No notification to the sender;
+  the silent-drop posture is preserved.
+
+Verification of the pubkey out-of-band is the receiver's
+responsibility — the protocol does not carry profile names or any
+self-asserted identity beyond the pubkey itself. Names in
+`peers.yaml` are local labels chosen by the receiver, not
+transmitted.
+
+The intra-machine path (Unix socket) and the inter-machine path
+(Noise on TCP) both record pending invites uniformly. On TCP, the
+listener completes the Noise handshake and decrypts the envelope
+before deciding pinning — costing one ChaCha20 decrypt per
+unpinned attempt, in exchange for capturing the Ed25519 identity
+the receiver needs to pin.
+
 ---
 
 ## Transport
 
 ### Intra-machine — Unix-domain socket
 
-Path: `~/.alpi/<profile>/alp/alp.sock`, served by the profile's
-unified service (`alpi service start`) when the ALP subsystem is
-enabled (`service.alp: true` — default), mode `0600`. The
-listener shares the per-profile asyncio loop with gateway and
-scheduler; toggle `service.alp: false` for profiles that need
-gateway / scheduler but no ALP, or `service.gateway: false` +
-`service.schedule: false` for an ALP-only relay machine.
+Path: `~/.alpi/<profile>/alp/alp.sock`, served by the alpi
+daemon when this profile's `alp` service is enabled (`service.alp:
+true` — default), mode `0600`. The listener shares the daemon's
+asyncio loop with this profile's other services; toggle
+`service.alp: false` for profiles that need gateway / scheduler
+but no ALP, or `service.gateway: false` + `service.schedule:
+false` for an ALP-only relay profile.
 Filesystem permissions gate access to the socket file; every
 envelope on the socket is still signed as a second, orthogonal
 layer of defence.
@@ -323,10 +365,16 @@ decides what to share in its reply. This keeps sensitive files
 agent's own judgement instead of exposing them over the wire.
 
 `session_id` is the session identifier the target used for this
-turn. It is stable per `(from, to)` pair: successive `link.ask`
-calls from the same origin resume the same session, giving the
-remote agent memory of prior exchanges with this peer. The
-session map keys on `alp:<from-pubkey>` for this reason.
+turn. It is fresh on every call — the receiving side spins up a
+new `Engine` (and a new `Session`) per turn, so `link.ask` is
+**stateless at the session level**. Memory across successive
+mentions from the same origin is provided by a separate
+per-sender thread at `<target-home>/mentions/<from-id>.json`,
+capped at the most recent 20 turns and hydrated into the engine
+prompt before the turn runs. That thread is invisible to the
+target's local `--continue` (which only reads `sessions/`) and
+isolated per remitente, so two different origins never see each
+other's context. See `alpi/alp/mention_thread.py`.
 
 The call is rejected under any of:
 
@@ -525,18 +573,20 @@ methods callable by pinned peers in the workgroup roster.
   primitive instead.
 
 - `workgroup.pause(workgroup_id) → {workgroup_id, paused, paused_at, paused_by}`
-  Any member may pause the workgroup. While paused, `workgroup.post`
-  is rejected with `-32010 workgroup-paused`; `pull`, `join`, and
-  `leave` keep working so members can catch up on existing traffic
-  and exit cleanly without being trapped. Idempotent — calling
-  pause on an already-paused workgroup returns the existing state
-  without bumping the `paused_at` timestamp or rewriting
-  `paused_by`. The hub records who triggered the pause for audit.
+  **Hub-only** — pause is a lifecycle control bundled with the
+  hub's existing authority over `#task` / `#done` / budget / group
+  key. Non-hub callers get `-32008 workgroup-not-hub`. While
+  paused, `workgroup.post` is rejected with `-32010
+  workgroup-paused`; `pull`, `join`, and `leave` keep working so
+  members can catch up on existing traffic and exit cleanly
+  without being trapped. Idempotent — calling pause on an
+  already-paused workgroup returns the existing state without
+  bumping the `paused_at` timestamp or rewriting `paused_by`.
 
 - `workgroup.resume(workgroup_id) → {workgroup_id, paused}`
-  Inverse of `pause`. Any member may resume; idempotent on an
-  already-running workgroup. Posts admit again starting on the
-  next call.
+  **Hub-only**, inverse of `pause`. Idempotent on an already-
+  running workgroup. Posts admit again starting on the next
+  call.
 
 ### Group-key versioning
 
@@ -633,6 +683,36 @@ starts engaging with the briefing as soon as their next turn fires
 exploratory workgroups where you want the chat dormant until you
 explicitly speak.
 
+**Briefing discipline.** A briefing describes the *problem and
+constraints*, not how the workgroup is meant to operate. It
+should NOT contain:
+
+- A `Roles:` block telling specific peers what to post or in
+  what order ("@alice gives the PM read once carol has posted
+  facts"). Each peer infers their contribution from their own
+  identity (`public_bio` + memories + tools), not from the
+  briefing's micromanagement.
+- Protocol mechanics ("post `#done` only when X holds", "wait
+  for round 2 before closing"). Those live in the system
+  prompt's *Workgroup engagement rules* (see
+  `agent_context.WORKGROUP_GUARDRAILS`) and the SDK's mechanical
+  invariants. Repeating them in the briefing both bloats context
+  and undermines the principle that the protocol is uniform
+  across workgroups.
+- Workflow scripts ("Round 1 — @x propose; Round 2 — @y
+  refine"). The hub orchestrates by posting the *problem* and
+  letting the round system carry the rest.
+
+A clean briefing is just: what is the decision/deliverable, what
+are the hard constraints (data sources, budgets, deadlines,
+correctness criteria), what does "done" look like.
+
+Identities (`public_bio` per profile, plus the bio echoed into
+each member's roster on join) carry the *who-does-what* — a peer
+introduced as `"Sommelier — maps acidity, tannin, sweetness"`
+already knows their slice of any food workgroup; the briefing
+doesn't need to reiterate.
+
 ### In-chat protocol
 
 The wire-level transport doesn't change. **All semantics below
@@ -648,7 +728,15 @@ syntax:
 |---|---|---|
 | `@<peer-id>` | Direct mention. Pinged member's engine treats this as an explicit handoff signal. | any member |
 | `#task <text>` | Open the active task with `<text>` as its description. Preempts whatever was active before. | **hub only** |
-| `#done <text>` | Close the active task. `<text>` is the result string persisted with the task record. | **hub only** |
+| `#done <text>` | Close the active task. `<text>` is the result string persisted with the task record. Requires full quorum (see below). | **hub only** |
+| `#skip [text]` | Member signals "considered the active task, nothing substantive to add". Counts as the member's contribution to the closure-quorum. Optional `text` is a one-line reason ("no wine angle on this one"). | **member only** |
+| `#working [text]` | Member signals "processing with slow tools (web_fetch / research / delegate), don't close without me". Does NOT consume the round slot — the same member may post substantive or `#skip` afterwards in the same round. Does NOT satisfy closure-quorum on its own (the member still has to deliver substantive content or `#skip`). At most one per round. | **member only** |
+
+`#skip` and `#working` are rejected from the hub at the SDK
+(`hub-cannot-skip` / `hub-cannot-working`). The hub doesn't skip
+its own task and doesn't need to signal processing — those are
+peer-side concerns. The hub speaks via `#task`, substantive
+prose, or `#done`.
 
 **Hub-only markers (the hub is the manager).** The hub of a
 workgroup is the identity that created it — it already controls
@@ -689,9 +777,18 @@ practical consequences:
   pings alice without forcing the user to put `@alice` on its
   own line.
 - The matched id must resolve to a known peer (a workgroup
-  member, or a pinned peer for the TUI / gateway shortcut).
-  Strings like `@property` in code snippets fall through
-  silently because no peer named `property` exists.
+  member, or a pinned peer for the TUI / desktop / gateway
+  shortcut). Strings like `@property` in code snippets fall
+  through silently because no peer named `property` exists.
+
+The TUI (`alpi/tui/app.py`), the desktop host plane
+(`alpi/host/chat.py`), and the gateway listeners
+(`alpi/gateway/run.py`) all parse via `alp_mention.parse(text,
+home=home)`. Passing `home` makes the parser roster-gate: an
+unknown id (`@pepe`) returns `None` and the caller falls through
+to the LLM instead of routing the call to a phantom peer. Result:
+`@<known_peer>` always short-circuits to ALP without an LLM round
+trip; everything else is regular text.
 
 `#task` and `#done` were kept strict line-start because they
 mutate task state — a typo'd marker mid-sentence would otherwise
@@ -779,13 +876,20 @@ workgroup state into every engine turn.
 a fixed interval (the reference implementation uses 30 s). Per
 workgroup it compares the cached transcript against a
 ``last_responded_seq`` cursor and dispatches an engine turn when
-any of three triggers fires:
+any of these triggers fires (in priority order):
 
 1. The newest unresponded post `@`-mentions this member.
 2. The newest unresponded post opens a collective `#task` with no
-   `@`-targets.
-3. The active `#task` names this member and there is a newer post
-   than our last response.
+   `@`-targets — wakes every member, including the hub.
+3. **The hub authored the active `#task` and a non-hub post is
+   newer than our last response.** The hub is always a participant
+   in tasks it opened, even when the `#task` named specific peers;
+   without this trigger a hub that addresses peers explicitly
+   never wakes when they reply.
+4. The active `#task` names this member (via `@<profile>`) and
+   there is a newer post than our last response.
+5. The opener was collective (no `@`-targets) and there is a newer
+   non-self post — keeps every member in the loop on shared work.
 
 A per-workgroup cooldown rate-limits dispatches so two peers don't
 ping-pong. When a trigger fires, the poller invokes one engine turn
@@ -806,34 +910,186 @@ react to a peer's concrete proposal with accept / counter /
 block (never with more research), and close with `#done` when the
 discussion converges.
 
+**Skills, memories, and tools are implicit.** A workgroup turn is
+a normal alpi engine invocation — the agent has its full toolbox
+loaded (skills, memories, `web_search`, `web_fetch`, custom
+tools, etc.) exactly as it would in an interactive turn or a
+gateway-spawned turn. The protocol does NOT inject "use these
+tools" instructions; agents use what they have because their
+identity (`public_bio` + memories) primes them to. A sommelier
+peer reaches for wine-pairing knowledge; a researcher peer
+reaches for `web_fetch` and `web_search`. The protocol's job is
+to frame the conversation (briefing, active task, rotation
+rules); the agent's job is to bring its own capabilities to it.
+This is why **briefings should describe the problem, not script
+the work** — the agent decides which of its tools/skills to use
+based on its identity and the task framing.
+
 **Cost auto-declaration.** The engine's per-turn usage tracker
 accumulates LLM cost into a context-local variable; when
 `workgroup.post` fires inside that turn, it reads the accumulated
 cost and attaches `{usd, tokens}` to the envelope so the hub's
 ledger is honest about what the post cost to produce.
 
-**Role-aware turn cue.** The synthetic prompt the dispatcher
-hands the agent ends with a state-aware addendum based on
-on-disk workgroup state:
+**Turn rotation (SDK-enforced post-rate).** The reference
+implementation enforces three mechanical invariants in
+`workgroup_client.post` *before* a post is encrypted and sent on
+the wire. They are protocol invariants — agents that violate them
+get a `ValueError` from the SDK, the post never lands, the round
+slot is preserved, and the agent's next dispatch tick can re-try
+with real content. Tasks can converge in any number of rounds,
+from one upward; nothing in the protocol mandates a minimum.
 
-- **Hub on a 4+ post active task:** an explicit "close NOW if
-  the last posts add no new evidence" cue. Counters the hub's
-  tendency to stay observer while members paraphrase.
-- **Member who has already posted in the active task:** a
-  strict "silence default unless directly @-mentioned by name
-  OR you have new evidence not already in the transcript" cue.
-  Counters paraphrase loops.
+Define a **round** as the run of posts since the most recent hub
+post (the hub's post itself opens the round). With that:
 
-These cues are mechanical — countable — so smaller models can
-apply them without subjective judgement.
+1. **One post per round per author.** A member whose pubkey
+   already appears since the last hub post is rejected with
+   `turn-rotation` until the hub speaks again. The hub itself
+   cannot post twice in a row about content; the only allowed
+   back-to-back hub post is `#done` (closure).
+2. **Closure quorum (full + substantive).** A hub `#done` is
+   rejected with `closure-quorum` unless BOTH:
 
-**Stale-task watchdog.** When an active task has 4+ posts and
-no new post in 180 s (3× the dispatch cooldown), the hub is
-re-dispatched with a `watchdog: active task stale` reason
-regardless of `hub_last_responded_seq`. This breaks the
-deadlock where the hub already saw the latest post and chose
-silence, members are caught up too, and nobody wakes again.
-The watchdog respects the normal per-workgroup cooldown.
+   - **Full participation**: every member listed in
+     `members.yaml` has posted at least once in the active
+     task with a CONTRIBUTING post (substantive content OR
+     `#skip`). A bare `#working` heartbeat does NOT count;
+     the member must come back with substantive or `#skip`.
+   - **At least one substantive non-hub post**: the workgroup
+     must produce real content. If every member just `#skip`s,
+     the hub's `#done` would be a solo synthesis with zero
+     peer input — degenerate. Rejected.
+
+   **Hard timeout escape.** Both checks soft-fail after 10
+   minutes from `#task` open: the hub may `#done` anyway. This
+   covers stuck workgroups (offline member, all-skip
+   degenerate) without freezing forever. Window is generous
+   enough for a peer doing heavy `web_fetch` + analysis. The
+   10-minute ceiling is fixed in the reference implementation;
+   per-workgroup configuration is on the roadmap.
+
+   **`#skip` marker.** Members' explicit pass. Counts toward
+   full participation but not toward substantive. Reserved for
+   the case where the member's identity has zero overlap with
+   the task, OR the member already posted substantively in a
+   prior round of the same task. Reflexive skipping ("the task
+   feels generic") defeats the workgroup; the contract pushes
+   models toward substantive, with `#skip` as last resort.
+
+   **`#working` marker.** Members' "I'm processing, wait for
+   me" heartbeat. Posted before slow tool work (web_fetch,
+   research). Exempt from rotation (member can still post
+   substantive in same round) and from quorum (the member must
+   come back to deliver). The hub uses recent `#working` posts
+   as a signal to extend its waiting window — but the 10-minute
+   hard timeout still applies as a ceiling. Without `#working`,
+   a long-running peer is invisible to the hub and may get
+   closed-around or hit the timeout.
+3. **Stale round.** If the dispatcher woke a member against round
+   *R* (snapshotted as the seq of the most recent hub post at
+   trigger time, passed to the subprocess via the
+   `ALPI_WORKGROUP_ROUND_HUB_SEQ` env var) and the hub has
+   posted again by the time the member calls `workgroup.post`,
+   the SDK aborts with `stale-round`. The member's reaction is
+   for an obsolete round; the next poller tick re-evaluates
+   against fresh state. Posts initiated outside the dispatcher
+   (CLI, human-driven) are exempt — humans are deliberate.
+
+In addition, empty / whitespace-only posts are rejected up
+front: silence in a workgroup is the absence of a
+`workgroup.post` call, not a post of an empty body.
+
+**Preemption (new `#task` interrupts in-flight peers).** When the
+hub posts a fresh `#task` while another is active, the parser
+already closes the previous task as `"preempted by <new>"` (see
+*In-chat protocol*). Beyond that parser semantic, the runtime
+SIGTERMs any peer subprocess currently thinking against the
+old task — instantly aborting LLM calls in progress so peers
+don't burn tokens on stale reactions.
+
+Mechanics:
+
+- Each profile's service maintains an `_INFLIGHT` table
+  (`wg_id → {proc, started_against_task_seq, hub_pubkey, …}`).
+  An entry exists only while a dispatch subprocess is running
+  for that workgroup.
+- A separate **preempt watcher** task runs alongside the main
+  poller and ticks at 5 s (vs 30 s for the main poller). On
+  each tick, for every `wg_id` in `_INFLIGHT`, it reads the
+  latest hub-`#task` seq from local state (decrypted hub
+  transcript or subscription cache) and compares against the
+  seq the subprocess started against. If a newer hub `#task`
+  has landed, the watcher SIGTERMs the subprocess.
+- The aborted dispatch writes a `preempted` event to
+  `turns.jsonl` (with `preempted_by_seq` recording the new
+  task's seq) instead of `end` / `timeout`. The next poller
+  tick re-dispatches the agent against the new task.
+- Worst-case latency: 30 s (main poller pull-cycle for the
+  member-side cache refresh) + 5 s (watcher tick) ≈ 35 s for
+  member peers; the hub itself preempts within 5 s because it
+  reads the local transcript without a network round-trip.
+
+The dispatch sites (`_maybe_dispatch_for_sub` /
+`_maybe_dispatch_for_hub` / the watchdog) gate on
+`wg_id in _INFLIGHT` before spawning, so a workgroup is
+single-flight per profile — preventing two concurrent dispatches
+that would both consume the same round slot. Different
+workgroups can dispatch concurrently.
+
+**Model tier expectations.** The protocol invariants — rotation,
+closure quorum, preemption, watchdog, hub-only `#task`/`#done` —
+are mechanical and fire identically regardless of which model
+sits behind a profile. *Conversational quality* of the workgroup
+does not, and operators should pick models with eyes open:
+
+- **Tier-1 models** (Claude Sonnet/Opus, GPT-5.4-mini, similar):
+  close cleanly when convergence is reached, infer their slice
+  from their own identity (`public_bio` + memories) without
+  briefing-side orchestration, respect briefing constraints, and
+  detect their own paraphrase loops well enough to `#done`
+  before the budget cap intervenes. Workgroups with tier-1 hubs
+  typically converge in 5–10 posts on a focused task.
+
+- **Tier-2 / cheaper models** (GPT-5.4-nano, Claude Haiku, smaller
+  open-source models): the rotation rule prevents chaos but the
+  model may **paraphrase-loop** — restate its own evidence or
+  conclusion round after round in fresh wording without
+  recognising the repetition. The workgroup keeps cycling until
+  the lifetime budget cap freezes posts (which is also a
+  legitimate closure path; the operator can read the transcript
+  and synthesise themselves).
+
+  Mitigations for tier-2 hubs without changing model:
+
+  1. **Tighter "done looks like X" in the briefing** — a precise
+     deliverable specification gives the model a checklist to
+     test against ("two named dishes plus pairings" beats "a
+     menu recommendation").
+  2. **Lower workgroup `budget.max_usd`** so the loop is bounded
+     in cost, not posts.
+  3. **Manual intervention** — post a fresh `#task` with the
+     synthesis you want and let the workgroup either confirm or
+     `#done` it. The new `#task` preempts in-flight peers, so
+     the rest of the workgroup pivots cleanly.
+
+  These are operational levers, not protocol changes. The
+  protocol is uniform; quality scales with the model.
+
+**Stale-task watchdog (one-shot).** When the hub itself was the
+last to post the standard "new content from another peer" trigger
+never fires for the hub — without intervention the workgroup would
+stall indefinitely. The watchdog wakes the hub exactly **once**
+per "hub talked last" stretch (keyed on the seq of the hub's last
+post in `poller_state.json → hub_watchdog_fired_seq`) after a
+60-second grace window. The dispatched turn carries a
+`closure-or-silence` flag that collapses the synthetic prompt to
+two valid outcomes: post `#done <synthesis>` or end the turn
+without posting. No new content is permitted in a watchdog turn —
+that would be back-to-back hub content, which the rotation rule
+already forbids. If the hub doesn't close on the watchdog turn,
+the task simply waits for a real member post (which advances the
+seq and re-arms the watchdog for the next stale stretch).
 
 **Turn telemetry + timeout.** Each dispatched turn is bracketed
 with append-only events written to `~/.alpi/profiles/<x>/alp/
@@ -910,25 +1166,58 @@ candidate the user can edit before saving.
 
 ### Human participation
 
-Humans are supported transparently: a human connects to a
-workgroup through the alpi TUI and appears as another member.
-Autonomous agents do not wait for the human to post; each
-agent's profile cap bounds how much they can spend inside the
-workgroup.
+Workgroups are designed for **alpi-to-alpi collaboration**. The
+mental model: a human has a problem, frames it from their own
+alpi (typically as the hub), then steps back and lets the
+assembled agents work. Steady-state conversation is agent
+content + agent reactions; humans don't sit in the transcript
+typing.
+
+Humans intervene through their alpi, not directly:
+
+- **Frame the work**: post the kickoff `#task` from the hub
+  (CLI: `alpi -p <hub> workgroup post <wg_id> "#task <…>"`).
+- **Reorient mid-flight**: post a new `#task` to preempt the
+  active one when the question turned out to be wrong. The
+  preempt watcher SIGTERMs in-flight peer subprocesses so they
+  don't burn tokens against a dead question.
+- **Force-close stuck workgroups**: post `#done` from the hub
+  when the operator decides the workgroup has produced enough
+  (or when an offline peer is keeping it stalled past the
+  10-minute closure-quorum timeout).
+- **Pause / resume** as hub when work needs to halt outside
+  budget exhaustion (e.g., the operator wants to inspect
+  before more spend).
+
+Member-side human intervention exists but is exceptional —
+typically the operator owns the hub. Members posting from a
+human's CLI is allowed by the SDK (the protocol can't tell a
+human apart from their alpi) but breaks the abstraction; in
+healthy use the human asks their alpi to participate, the
+agent's pre-turn context hook reads the workgroup state on
+their next interaction, and the agent posts on the human's
+behalf.
+
+Each profile's daily budget cap applies inside the workgroup
+exactly as it does anywhere else; the workgroup's own lifetime
+cap (if set) gates on top.
 
 ---
 
 ## Versioning
 
 The `alp.v` field in every envelope carries the integer protocol
-version the sender speaks. Version bumps are intentional and
-documented in the changelog section below. Receivers MUST reject
-messages with an unknown version with error `-32006`.
+version the sender speaks. Receivers MUST reject messages with
+an unknown version with error `-32006`.
 
-Minor clarifications to this document that do not alter wire
-behaviour may occur without a version bump. Any change that
-alters the wire behaviour, the envelope shape, the method
-signatures, or the security guarantees MUST bump `v`.
+ALP is a living spec — workgroup behaviour in particular has
+been iterated on as the reference implementation hit real-world
+edge cases. The document tracks the *current* shape rather than
+a stable historical record; previous-revision text lives in git
+history. Any change that alters wire behaviour, envelope shape,
+method signatures, or security guarantees MUST bump `v` and
+gain a clear deprecation path; clarifications and behavioural
+refinements within the same `v` do not.
 
 ---
 
@@ -963,40 +1252,3 @@ stable and short enough to carry in-tree without a framework.
   https://www.jsonrpc.org/specification
 - **[PYCA]** Python Cryptographic Authority, *cryptography*
   library. https://cryptography.io/
-
----
-
-## Changelog
-
-- **v1.1 (2026-04-28)** — workgroup hardening (designed so the
-  workflow shape stays correct on small / tier-2 models like
-  GPT-class nano; quality of responses degrades, the workflow
-  doesn't):
-  - `#task` and `#done` are **hub-only**. The member SDK refuses to
-    send posts containing these markers, and the client-side
-    parser ignores markers from non-hub authors. The hub is the
-    workgroup manager; lifecycle markers join its existing
-    authority over budget, transcript, and group key.
-  - **Mechanical guardrails**: a strict one-post-per-task default
-    for non-hub members (escapes only via direct `@<name>` callout
-    or genuinely new evidence), and a hard close-now signal for
-    the hub once an active task has 4+ posts with no new evidence.
-  - **Role-aware turn cue**: the dispatcher synthetic prompt ends
-    with a state-aware addendum (count-of-posts + has-this-peer-
-    posted-yet), so the agent doesn't have to remember the
-    briefing — the cue is in front of it every turn.
-  - **Stale-task watchdog**: the poller force-fires the hub on
-    active tasks that have gone 180 s without a new post, so a
-    workgroup never deadlocks on "everyone caught up, nobody
-    wakes".
-  - **Turn telemetry**: every dispatched workgroup turn appends
-    `start` / `end` / `timeout` / `spawn-failed` events to
-    `~/.alpi/profiles/<x>/alp/turns.jsonl`. New CLI:
-    `alpi workgroup turns [<wg_id>] [-f]`.
-  - **Hard turn timeout**: 5 min ceiling per dispatched turn,
-    SIGTERM + 5 s grace + SIGKILL, recorded as a `timeout` event.
-- **v1 (2026-04-24)** — current ALP surface: intra-machine transport over
-  Unix-domain socket, inter-machine transport over Noise_XK TCP, core
-  `link.*` methods, workgroup extension, envelope format, peer identity via
-  Ed25519, capability model, reject-fast reentrancy, budget/rate-limit
-  enforcement, and error codes.

@@ -1,6 +1,6 @@
 """Per-chat session pointer for gateway platforms.
 
-One JSON file per profile at ``~/.alpi/sessions/_gateway_map.json``
+One JSON file per profile at ``~/.alpi/<profile>/gateway/sessions/_map.json``
 keyed by ``chat_id`` → ``session_id``. ``chat_id`` is whatever the
 platform puts in ``IncomingMessage.external_chat_id``: a Telegram
 chat id, a sender email for IMAP/Gmail, or whatever the webhook
@@ -21,11 +21,11 @@ import json
 from pathlib import Path
 
 
-_FILENAME = "_gateway_map.json"
+_FILENAME = "_map.json"
 
 
 def _path(home: Path) -> Path:
-    return home / "sessions" / _FILENAME
+    return home / "gateway" / "sessions" / _FILENAME
 
 
 def _load(home: Path) -> dict[str, str]:
@@ -78,8 +78,8 @@ def forget(home: Path, chat_id: str) -> bool:
     """Remove the pointer for ``chat_id``. Returns True if something was dropped.
 
     The underlying session file is NOT deleted — only the "which session is
-    active for this chat" mapping. Historical sessions stay searchable via
-    ``session_search`` and on disk under ``sessions/*.json``.
+    active for this chat" mapping. Historical sessions stay on disk under
+    ``gateway/sessions/*.json``.
     """
     if not chat_id:
         return False

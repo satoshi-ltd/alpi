@@ -178,8 +178,6 @@ def _fmt_cost(cost: float) -> str:
         return "$0"
     if cost < 0.01:
         return f"${cost:.4f}"
-    if cost < 1:
-        return f"${cost:.3f}"
     return f"${cost:.2f}"
 
 
@@ -258,7 +256,7 @@ class ToolCard(Widget):
 
     def finish(self, output: str, ok: bool, *, skip_duration: bool = False) -> None:
         self._done = True
-        # None signals "no real duration" (e.g. --continue replay); render() hides it.
+        # None means "no real duration"; render() hides it.
         self._elapsed_final = None if skip_duration else (time.time() - self.started)
         from rich.markup import escape
         from alpi.tui.formatting import result_hint, truncate
@@ -407,6 +405,9 @@ class AlpiHeader(Static):
         self._tokens: int = 0
         self._cost: float = 0.0
         self._ctx_window: int = 200_000
+        self._budget_kind: str | None = None
+        self._budget_used: float = 0.0
+        self._budget_cap: float = 0.0
 
     def on_mount(self) -> None:
         self._refresh()
@@ -414,12 +415,23 @@ class AlpiHeader(Static):
     def on_resize(self, event) -> None:  # noqa: ARG002
         self._refresh()
 
-    def update_usage(self, model: str, tokens: int, cost: float,
-                     ctx_window: int = 200_000) -> None:
+    def update_usage(
+        self,
+        model: str,
+        tokens: int,
+        cost: float,
+        ctx_window: int = 200_000,
+        budget_kind: str | None = None,
+        budget_used: float = 0.0,
+        budget_cap: float = 0.0,
+    ) -> None:
         self._model = model
         self._tokens = tokens
         self._cost = cost
         self._ctx_window = ctx_window
+        self._budget_kind = budget_kind
+        self._budget_used = budget_used
+        self._budget_cap = budget_cap
         self._refresh()
 
     def _refresh(self) -> None:
@@ -446,13 +458,33 @@ class AlpiHeader(Static):
         else:
             bar_color = accent
         sep = f"  [{muted}]│[/{muted}]  "
-        ctx_label = f"[{muted}]ctx[/{muted}] " if not narrow else ""
         markup = (
             f"[{accent}]◆[/{accent}] [b {accent}]{model_label}[/b {accent}]"
             f"{sep}"
-            f"{ctx_label}{fmt_count(self._tokens)}/{fmt_count(self._ctx_window)}  "
+            f"{fmt_count(self._tokens)}/{fmt_count(self._ctx_window)}  "
             f"[{bar_color}]{bar_str}[/{bar_color}] [{muted}]{pct}%[/{muted}]"
         )
         if self._cost > 0:
             markup += f"{sep}[{muted}]{_fmt_cost(self._cost)}[/{muted}]"
+        if self._budget_kind and self._budget_cap > 0:
+            b_pct = int(self._budget_used / self._budget_cap * 100)
+            b_pct = max(0, min(100, b_pct))
+            if b_pct >= 90:
+                b_color = error
+            elif b_pct >= 70:
+                b_color = warning
+            else:
+                b_color = accent
+            b_bar = bar(int(self._budget_used * 1000), int(self._budget_cap * 1000), bar_cells)
+            if self._budget_kind == "usd":
+                b_label = f"{_fmt_cost(self._budget_used)}/${self._budget_cap:.2f}"
+            else:
+                b_label = (
+                    f"{fmt_count(int(self._budget_used))}/"
+                    f"{fmt_count(int(self._budget_cap))} tok"
+                )
+            markup += (
+                f"{sep}{b_label}  "
+                f"[{b_color}]{b_bar}[/{b_color}] [{muted}]{b_pct}%[/{muted}]"
+            )
         self.update(Text.from_markup(markup))
