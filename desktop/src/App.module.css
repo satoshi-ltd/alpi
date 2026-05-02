@@ -1,0 +1,35 @@
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100vw;
+  background: var(--color-bg-solid);
+  color: var(--color-fg);
+  overflow: hidden;
+}
+
+.shell {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+.main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: var(--color-bg-solid);
+}
+
+.error {
+  margin: var(--space-3) var(--space-4);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  background: rgba(255, 69, 58, 0.08);
+  color: var(--color-danger);
+  font-size: var(--font-size-small);
+  font-family: var(--font-mono);
+  -webkit-user-select: text;
+  user-select: text;
+}
