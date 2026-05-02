@@ -169,13 +169,15 @@ class Schedule(Tool):
             jobs_path.write_text(json.dumps(jobs, indent=2))
 
             # Tell the user how to activate delivery. Nothing fires
-            # without the unified service running with the scheduler
-            # subsystem enabled.
+            # without the alpi daemon running with the schedule
+            # subsystem enabled for this profile.
+            from alpi import home as home_mod
             from alpi import service as svc
-            if svc.is_running(home) and svc.enabled_subsystems(home).get("schedule"):
-                hint = "service is running — job will fire on schedule"
+            running = svc.daemon_running_pid(home_mod._ROOT) is not None
+            if running and svc.enabled_subsystems(home).get("schedule"):
+                hint = "daemon is running — job will fire on schedule"
             else:
-                hint = "start the service ('alpi service start' or install it) to fire jobs"
+                hint = "start the daemon ('alpi daemon start' or install it) to fire jobs"
 
             return ToolResult(
                 ok=True,

@@ -1,50 +1,46 @@
-"""Oneshot end-to-end test of TWO concurrent ALP.3 workgroups.
+"""Oneshot end-to-end test of an ALP.3 workgroup with 4 complementary
+peers — designed to stress turn-rotation under genuinely distinct
+roles that do NOT paraphrase each other.
 
 Run::
 
-    uv run python tests/manual/test_money_workgroup.py
+    uv run python tests/manual/test_tasting_menu_workgroup.py
 
-This script owns the three profiles (alice, bob, carol) end-to-end:
-nukes them, recreates them, copies only OPENAI_API_KEY from
-~/.alpi/.env, pins openai/gpt-5.4-nano as the model, writes role bios,
-installs the launchd services, cross-pins all three pairs, then runs
-TWO workgroups in parallel:
+Owns four profiles end-to-end (dana, emil, freya, gus): nukes them,
+recreates them, copies only OPENAI_API_KEY from ~/.alpi/.env, pins
+openai/gpt-5.4-nano as the model, writes role bios, installs the
+launchd services, cross-pins all six pairs, then runs ONE
+workgroup:
 
-  ▸ money-2026 (hub=alice, members=[alice, bob, carol])
-    Pick PATH A vs B for the Money app's 2026 strategy.
+  ▸ autumn-tasting-menu (hub=dana, members=[dana, emil, freya, gus])
+    Pick the opening + signature courses for Foundry & Field's
+    autumn 2026 tasting menu under hard constraints (hyper-local
+    sourcing, fermentation thread, 130€ price, 90 min service).
 
-  ▸ alpi-v05-roadmap (hub=carol, members=[carol, alice])
-    Read https://alpi-agent.com/docs/ROADMAP and decide whether the
-    proposed v0.5 scope is the right next step. Bob is intentionally
-    excluded — this is a focused PM + researcher pairing.
+Why this complements `test_money_workgroup.py`: money is a
+business-strategy decision (PM + GTM + research) that converges on
+PATH A vs PATH B. This one is a creative/operational decision in a
+totally different vocabulary (chef + sommelier + pastry + service)
+where each role brings non-overlapping concerns. A sommelier can't
+paraphrase a service captain — the language is different — so the
+SDK's "one post per round" rule has more concrete signal to lean
+on.
 
-Roles (per profile, both workgroups):
+Topology (one peer over TCP, three intra-machine, mirrors a real
+home-server + remote member setup):
 
-  carol — user researcher: web_fetches & extracts facts.
-  alice — product manager: synthesises into options + roadmap fit.
-  bob   — marketer: GTM lens (only money-2026).
+  dana  — unix socket (intra-machine, hub).
+  emil  — unix socket.
+  freya — unix socket.
+  gus   — TCP (Noise_XK) on a Tailscale hostname; the other three
+          pin gus with that host:port so the dispatcher uses
+          ``call_tcp`` instead of unix-socket dial.
 
-Running both in parallel exercises the per-profile poller's ability
-to dispatch into multiple wgs without bleeding state, and the
-cross-machine transport (alice + carol intra unix socket; bob over
-TCP/Noise_XK on a Tailscale hostname).
+Conversation language is forced to English in every briefing — the
+WORKGROUP_GUARDRAILS contract already requires English by default.
 
-Transport topology (mirrors a real cross-machine setup as much as a
-single laptop allows):
-
-  alice — unix socket (intra-machine).
-  carol — unix socket (intra-machine).
-  bob   — TCP (Noise_XK) on a Tailscale hostname. Alice and carol pin
-          bob with the explicit host:port so their dispatcher uses
-          ``call_tcp`` instead of unix-socket dial. Bob's listener
-          binds the same hostname so the path matches what an actual
-          remote peer would observe.
-
-Conversation language is forced to English in every briefing — gpt-5.4
-otherwise drifts to the user's locale and tanks downstream parsing.
-
-WARNING: this WIPES ~/.alpi/profiles/{alice,bob,carol} every run. Do
-not point this at profiles you actually use day-to-day.
+WARNING: this WIPES ~/.alpi/profiles/{dana,emil,freya,gus} every
+run. Do not point this at profiles you actually use day-to-day.
 """
 
 from __future__ import annotations
@@ -60,110 +56,102 @@ from pathlib import Path
 _DONE_MARKER = re.compile(r"^\s*(?:@\S+\s+)*#done(?:\s|$)")
 
 ROOT = Path.home() / ".alpi"
-PROFILES = ("alice", "bob", "carol")
+PROFILES = ("dana", "emil", "freya", "gus")
 HOMES = {p: ROOT / "profiles" / p for p in PROFILES}
-MODEL = "openai/gpt-5.4-nano"
+MODEL = "openai/gpt-5.4-mini"
 WORKSPACE = str(Path.home())
 
 # Per-profile transport. Anyone with TCP info gets the listener bound
 # to that host:port and is pinned by peers with the same address —
 # exercising the Noise_XK path. Profiles without TCP entry stay on
-# unix sockets (intra-machine only).
+# unix sockets (intra-machine only). Port 9102 to avoid colliding
+# with the money test's bob (9101) when both run back-to-back.
 TCP = {
-    "bob": {"host": "macbook-pro-m4.tail3442b7.ts.net", "port": 9101},
+    "gus": {"host": "macbook-pro-m4.tail3442b7.ts.net", "port": 9102},
 }
 
 BIOS = {
-    "alice": (
-        "Product manager - turns research into 2-3 feature candidates "
-        "scored on user value, build cost, and roadmap fit."
+    "dana": (
+        "Head chef - turns a seasonal larder into a coherent tasting "
+        "menu; trades novelty for craft and dish-to-dish narrative."
     ),
-    "bob": (
-        "Marketer - pushes positioning and GTM; picks the candidate "
-        "with the strongest audience narrative and 2024-2026 signals."
+    "emil": (
+        "Sommelier - maps acidity, tannin, and sweetness through a "
+        "menu; sources beverages within 80km of the kitchen."
     ),
-    "carol": (
-        "User researcher - extracts pain points, audience signals, "
-        "and feature gaps from product pages and case studies."
+    "freya": (
+        "Pastry chef - bread, transitions, dessert, petit fours; "
+        "guards plating feasibility at fixed menu price points."
+    ),
+    "gus": (
+        "Service captain - 90 minute pacing, dietary substitutions, "
+        "course-to-course service choreography front of house."
     ),
 }
 ACCENTS = {
-    "alice": "#c8a24e",
-    "bob":   "#5fafd7",
-    "carol": "#d75f87",
+    "dana":  "#d4a017",  # saffron
+    "emil":  "#7d3cfc",  # wine purple
+    "freya": "#ff6b9d",  # rose
+    "gus":   "#3aae5e",  # service green
 }
 
-URL_MONEY = "https://satoshi-ltd.com/case-studies/money"
-URL_ROADMAP = "https://alpi-agent.com/docs/ROADMAP"
+# Briefing is TOPIC + ROLES only. Meta-rules about transcript
+# language, hub-only #task/#done, and one-post-per-round live in
+# WORKGROUP_GUARDRAILS (the agent's system prompt) and are enforced
+# by the SDK on top.
 
-# Briefings are TOPIC + ROLE only. Meta-rules about transcript
-# language and #done timing live in WORKGROUP_GUARDRAILS (the agent's
-# system prompt).
-
-MONEY_BRIEFING = (
-    "Money is a privacy-first personal-finance app by Satoshi Ltd. "
-    f"Public case study: {URL_MONEY}. The decision: pick the 2026 "
-    "strategic path. PATH A is privacy-purist niche - stay 100% "
-    "on-device, iOS-only, deepen the experience with on-device LLM "
-    "categorization plus insights, launch a paid premium tier "
-    "($3/mo); trade-off: TAM stays small but defensibility and "
-    "narrative stay sharp. PATH B is mainstream broadening with "
-    "E2E-encrypted sync - add multi-device sync (CloudKit or "
-    "self-hosted) with end-to-end encryption, ship Android, run "
-    "paid acquisition; trade-off: TAM grows ~5x but narrative "
-    "softens and dev complexity grows. Pick ONE path in one line. "
-    "Defend with a PM lens (feasibility, cost, retention) and a "
-    "GTM lens (narrative, positioning, audience). Cite the case "
-    "study at most once if useful, then commit."
-)
-MONEY_KICKOFF = (
-    "#task Money 2026 strategy: pick PATH A (privacy-purist "
-    "iOS-only paid premium) vs PATH B (mainstream broadening with "
-    "E2E sync + Android). Defend the choice with PM + GTM lenses."
+MENU_BRIEFING = (
+    "Foundry & Field is a 28-seat farm-to-table restaurant launching "
+    "its autumn 2026 tasting menu. The decision: pick the OPENING "
+    "course (course 1, sets palate and tone) and the SIGNATURE course "
+    "(course 4, the mid-menu table moment). These two anchor the "
+    "narrative of the other five courses. "
+    "Hard constraints: every ingredient sourced within 80km of the "
+    "kitchen; fermentation must touch BOTH anchor dishes (kraut, "
+    "miso, koji, vinegar, lacto, kefir, kombucha — chef's call); "
+    "menu price point 130 euros; beverage program is 4 wine pairings "
+    "plus 1 non-alcoholic alternative across the full menu, with an "
+    "explicit non-alcoholic option named for the signature course; "
+    "90 minute average service window across the 7 courses; 1 vegan "
+    "substitution path and 1 gluten-free substitution path must be "
+    "plate-feasible for both anchors. "
+    "Deliverable: 2 named dishes (one line each), 1 wine pairing "
+    "for each anchor, 1 non-alcoholic alternative named for the "
+    "signature, plus the vegan and gluten-free substitution paths "
+    "for both anchors."
 )
 
-ROADMAP_BRIEFING = (
-    "alpi (open, local-first agent runtime - github.com/soyjavi/alpi) "
-    "is approaching v0.5. The maintainer wants a focused review: is "
-    "the proposed v0.5 scope right, or are we missing something? "
-    f"Source of truth: {URL_ROADMAP} — sections to ground the "
-    "discussion are \"Open release gates\", \"ALP launch work\", "
-    "\"Long-term bets\", and \"Discarded decisions\". Converge on "
-    "one explicit recommendation by name: \"ship as planned\", "
-    "\"ship subset X / defer Y\", or \"add Z first\"."
-)
-ROADMAP_KICKOFF = (
-    f"#task Read {URL_ROADMAP} and decide together: is the "
-    "proposed v0.5 scope the right next step? Converge on one "
-    "explicit recommendation."
+MENU_KICKOFF = (
+    "#task Pick the opening course (course 1) and the signature "
+    "course (course 4) for Foundry & Field's autumn 2026 tasting "
+    "menu under the briefing's constraints. Converge on 2 named "
+    "dishes plus pairings."
 )
 
 WORKGROUPS = [
     {
-        "name": "money-2026",
-        "hub": "alice",
-        "members": ("alice", "bob", "carol"),
-        "briefing": MONEY_BRIEFING,
-        "kickoff": MONEY_KICKOFF,
-        "budget": 5.0,
-    },
-    {
-        "name": "alpi-v05-roadmap",
-        "hub": "carol",
-        "members": ("carol", "alice"),
-        "briefing": ROADMAP_BRIEFING,
-        "kickoff": ROADMAP_KICKOFF,
-        "budget": 3.0,
+        "name": "autumn-tasting-menu",
+        "hub": "dana",
+        "members": ("dana", "emil", "freya", "gus"),
+        "briefing": MENU_BRIEFING,
+        "kickoff": MENU_KICKOFF,
+        "budget": 4.0,
     },
 ]
 
 TIMEOUT_SECONDS = 30 * 60
 POLL_SECONDS = 20
 
-GREY, BLUE, GREEN, YELLOW, RED, MAGENTA, RESET = (
-    "\033[2m", "\033[36m", "\033[32m", "\033[33m", "\033[31m", "\033[35m", "\033[0m",
+GREY, BLUE, GREEN, YELLOW, RED, MAGENTA, CYAN, RESET = (
+    "\033[2m", "\033[36m", "\033[32m", "\033[33m",
+    "\033[31m", "\033[35m", "\033[96m", "\033[0m",
 )
-PEER_COLOR = {"alice": BLUE, "bob": GREEN, "carol": MAGENTA}
+PEER_COLOR = {
+    "dana":  YELLOW,
+    "emil":  MAGENTA,
+    "freya": RED,
+    "gus":   GREEN,
+}
 
 
 def step(msg: str) -> None:
@@ -234,15 +222,12 @@ def read_openai_key() -> str:
 def _force_create(p: str, max_attempts: int = 6) -> None:
     """Create the profile, retrying through the race where another
     alpi invocation (e.g. a desktop poll) re-creates the home dir
-    between our rmtree and ``profile create``. Each attempt does:
-    rmtree (idempotent), then create. If create still says "already
-    exists", we lost the race — sleep a moment and retry."""
+    between our rmtree and ``profile create``."""
     for attempt in range(1, max_attempts + 1):
         _hard_remove(p)
         res = run(["alpi", "profile", "create", p])
         if res.returncode == 0:
             return
-        # Ignore other shell side-effects; re-arm and retry.
         msg = (res.stderr or res.stdout or "").strip()
         if "already exists" not in msg.lower():
             fail(f"profile create {p} failed: {msg}")
@@ -280,8 +265,6 @@ def bootstrap_profiles(api_key: str) -> None:
         )
         ok(f"{p}: profile + config + .env")
 
-    # Single daemon for the machine; idempotent. Restart picks up the
-    # newly-created profile homes that were just bootstrapped above.
     install_code = (
         "from alpi import service as svc\n"
         "from alpi import home as home_mod\n"
@@ -305,14 +288,14 @@ def bootstrap_profiles(api_key: str) -> None:
             time.sleep(1)
     if pending:
         fail(f"ALP keys not generated for {sorted(pending)} after 30s")
-    ok("all 3 ALP keypairs generated")
+    ok(f"all {len(PROFILES)} ALP keypairs generated")
 
 
 # Step 4 — cross-pin
 
 
 def cross_pin() -> None:
-    step("cross-pinning all 3 pairs")
+    step(f"cross-pinning all {len(PROFILES) * (len(PROFILES) - 1) // 2} pairs")
     pubkeys: dict[str, str] = {}
     for p in PROFILES:
         res = run(["alpi", "-p", p, "peers", "key"])
@@ -323,15 +306,13 @@ def cross_pin() -> None:
     for a, b in pairs:
         for hub, peer in ((a, b), (b, a)):
             cmd = ["alpi", "-p", hub, "peers", "add", peer, pubkeys[peer]]
-            # If the peer is reachable over TCP, pin its host:port so
-            # the dispatcher uses ``call_tcp`` instead of unix.
             if peer in TCP:
                 tcp = TCP[peer]
                 cmd += ["--address", f"{tcp['host']}:{tcp['port']}"]
             res = run(cmd)
             if res.returncode != 0:
                 fail(f"{hub} peers add {peer} failed: {res.stderr}")
-    ok(f"6 directional pins written ({len(TCP)} via TCP)")
+    ok(f"{len(pairs) * 2} directional pins written ({len(TCP)} via TCP)")
 
 
 # Step 5 — create workgroup
@@ -353,7 +334,6 @@ def create_workgroup(spec: dict) -> str:
     ])
     if res.returncode != 0:
         fail(f"workgroup create '{name}' failed: {res.stderr}")
-    # New workgroup is the youngest dir under hub's workgroups/.
     wg_dirs = sorted(
         (
             d
@@ -408,6 +388,7 @@ def reset_poller_state() -> None:
         "    state.pop('hub_cursors', None)\n"
         "    state.pop('hub_last_dispatch_at', None)\n"
         "    state.pop('hub_last_responded_seq', None)\n"
+        "    state.pop('hub_watchdog_fired_seq', None)\n"
         "    svc._save_poller_state(home, state)\n"
         "    subs = sub_mod.load(home)\n"
         "    for s in subs:\n"
@@ -432,9 +413,6 @@ def restart_services() -> None:
     if res.returncode != 0:
         fail(f"daemon restart failed: {res.stderr}")
 
-    # Wait until every hub responds to a ping from each of its
-    # non-hub members. That covers all transports we exercise (unix
-    # + TCP) and all hubs across both workgroups.
     pending: set[tuple[str, str]] = set()
     for spec in WORKGROUPS:
         for m in spec["members"]:
@@ -578,7 +556,6 @@ def _print_turn_panel() -> None:
     without ssh-ing into log files."""
     import datetime as _dt
 
-    # 1) Live PIDs of any in-flight `chat --once` per profile.
     res = run(["sh", "-c", "ps -eo pid,command | grep 'alpi.*chat --once' | grep -v grep || true"])
     live_pids: dict[str, tuple[int, float]] = {}
     now = time.time()
@@ -593,8 +570,6 @@ def _print_turn_panel() -> None:
         cmd = parts[1]
         for p in PROFILES:
             if f"-p {p} " in cmd or f"-p {p}\n" in cmd:
-                # PID start time via ps -o lstart= would be nicer but
-                # parsing varies by OS. Use elapsed seconds instead.
                 ts = run(["ps", "-p", str(pid), "-o", "etimes="])
                 try:
                     elapsed = float(ts.stdout.strip())
@@ -603,7 +578,6 @@ def _print_turn_panel() -> None:
                 live_pids[p] = (pid, now - elapsed)
                 break
 
-    # 2) Last turn event per profile (from turns.jsonl).
     last_event: dict[str, dict] = {}
     for p in PROFILES:
         log_path = HOMES[p] / "alp" / "turns.jsonl"
@@ -620,7 +594,6 @@ def _print_turn_panel() -> None:
             except json.JSONDecodeError:
                 pass
 
-    # 3) Render compact panel.
     print(f"{GREY}    turns:{RESET}")
     for p in PROFILES:
         col = PEER_COLOR.get(p, GREY)
@@ -727,9 +700,9 @@ def _print_post(p: dict, pubkey_to_handle: dict[str, str], wg_label: str = "") -
 
 
 def main() -> int:
-    print(f"{BLUE}=== ALP.3 oneshot multi-workgroup test ==={RESET}")
+    print(f"{BLUE}=== ALP.3 oneshot 4-peer tasting-menu test ==={RESET}")
     print(f"{GREY}wipes & rebuilds {', '.join(PROFILES)} from scratch · "
-          f"runs {len(WORKGROUPS)} workgroup(s) in parallel{RESET}")
+          f"runs {len(WORKGROUPS)} workgroup(s){RESET}")
     print()
     api_key = read_openai_key()
     nuke_profiles()

@@ -75,7 +75,7 @@ def run_all(home: Path, profile: str) -> list[Check]:
             except Exception as e:  # noqa: BLE001
                 live[key] = [Check("Live", key, "fail", str(e))]
 
-    # Final render order: version → model → workspace → gateways → services → mcps → security.
+    # Render order: version → model → workspace → gateways → services → mcps → security.
     out: list[Check] = []
     out.extend(sync_checks["version"])
     out.extend(sync_checks["model"])
@@ -393,33 +393,34 @@ def _check_gmail_live(home: Path, env: dict[str, str]) -> list[Check]:
 
 
 def _check_services(home: Path, profile: str) -> list[Check]:
+    from alpi import home as home_mod
     from alpi import service as svc
     out: list[Check] = []
 
-    backend = svc.installed(profile)
-    pid = svc.running_pid(home)
+    installed = svc.daemon_installed()
+    pid = svc.daemon_running_pid(home_mod._ROOT)
     bin_mtime = _alpi_binary_mtime()
 
-    if backend and pid:
+    if installed and pid:
         if _is_binary_newer_than_process(bin_mtime, pid):
             out.append(Check(
-                "Services", "Service", "warn",
-                "running — stale binary — `alpi service restart` to reload",
+                "Services", "Daemon", "warn",
+                "running — stale binary — `alpi daemon restart` to reload",
             ))
         else:
             out.append(Check(
-                "Services", "Service", "ok",
-                f"running via {backend} (pid {pid})",
+                "Services", "Daemon", "ok",
+                f"running (pid {pid})",
             ))
-    elif backend:
-        out.append(Check("Services", "Service", "warn",
-                         f"installed via {backend} but no live pid"))
+    elif installed:
+        out.append(Check("Services", "Daemon", "warn",
+                         "installed but no live pid"))
     elif pid:
-        out.append(Check("Services", "Service", "info",
+        out.append(Check("Services", "Daemon", "info",
                          f"running foreground (pid {pid}) — not installed"))
     else:
-        out.append(Check("Services", "Service", "info",
-                         "not installed — `alpi setup → Service` to enable"))
+        out.append(Check("Services", "Daemon", "info",
+                         "not installed — `alpi setup → Daemon` to enable"))
 
     on = [k for k, v in svc.enabled_subsystems(home).items() if v]
     out.append(Check(
@@ -461,7 +462,7 @@ def _check_alp(home: Path) -> list[Check]:
                                  f"key files exist but failed to load: {e}"))
         else:
             out.append(Check("ALP", "Identity", "info",
-                             "no keypair yet — generated on first `alpi service start`"))
+                             "no keypair yet — generated on first `alpi daemon start`"))
     except Exception as e:  # noqa: BLE001
         out.append(Check("ALP", "Identity", "fail", f"keys module error: {e}"))
 
@@ -480,7 +481,7 @@ def _check_alp(home: Path) -> list[Check]:
             s.close()
     else:
         out.append(Check("ALP", "Socket", "info",
-                         "not listening — `alpi setup → Service → Install` or `alpi service start`"))
+                         "not listening — `alpi setup → Daemon → Install` or `alpi daemon start`"))
 
     # Peers — pinned and reachable?
     try:
