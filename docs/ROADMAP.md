@@ -37,44 +37,9 @@ broken release.
 | Matrix | Federated + E2EE gateway — flagship gateway of v0.4. Self-hosted homeserver, no phone number, matches the "private agent network" thesis | 🔵 |
 | BF | Skills v2 (items 1-3) — scaffolder, declared `requires`/`env`, per-skill SQLite. The "skills = mini-apps" pillar. Absorbs BE | 🔵 |
 
-### Observability
-
-| ID | Item | Status |
-|---|---|---|
-| `alpi diff` | "What changed in my profile in last N hours" — memory writes, peer additions, skill installs, sessions. Pairs with the **BC** audit story | 🔵 |
-
 ---
 
 ## v0.4 — detailed scope
-
-### BC. External security audit before public release
-
-**Why before v0.4, not v0.3.** A real audit is 4-8 weeks of vendor
-engagement plus remediation. Forcing it into the v0.3 window would
-be theatre. v0.3 ships with a public commitment: the contract
-becomes part of the launch story, the report lands at
-`docs/audits/v0.4-<vendor>.md` before the v0.4 cut.
-
-**Scope of the engagement.**
-
-- Threat model: who is the attacker, what's protected, what's
-  non-goal. Draft lives in `docs/SECURITY.md` today; the auditor
-  formalises and challenges it.
-- ALP cryptography review: envelope signing (Ed25519 PKCS8),
-  replay cache, Noise_XK wrapper, peer-pinning workflow, workgroup
-  key handling.
-- Tool surface review: approval system, sandbox posture (macOS
-  sandbox-exec profile + Linux bwrap), shell denylist, skill
-  scanner, OSV check, SSRF guards in `browser` / `web_*` tools.
-- Dependency posture: `pip-audit` output, third-party-code risks
-  documented in `docs/SECURITY.md → Third-party code`.
-- Privacy review: confirm **Zero Knowledge** + **Privacy by
-  Design** claims match the code — no hidden telemetry paths, no
-  analytics beacons, no cloud coupling that's not user-chosen.
-
-**Output.** A public report. Issues found are either fixed before
-v0.4 or documented in the report with a timeline. The report being
-published is part of the trust story — sitting on findings isn't.
 
 ### AW. Encrypted profile backup/restore
 
@@ -158,25 +123,6 @@ this — their skills run in their backend, not the user's.
 **Absorbs the v0.3-deferred BE** (revisit `@alpi/knowledge`):
 the scaffolder + declared deps make all skills more reliable
 to author, including the bundled one.
-
-### `alpi diff` — what changed in this profile
-
-`alpi diff [--since 7d]` lists what changed in the profile's
-state since N hours/days ago: memory writes, peer additions,
-skill installs, session counts, budget consumption.
-
-**Use cases.**
-- Came back from holiday — "what did my service do while I
-  was away?"
-- Workgroup ran autonomously overnight — daily summary view.
-- Audit / post-incident review — alternative to grepping
-  `agent.log` by hand.
-- Sync between machines — "what changed in
-  `~/.alpi/personal/` that I should propagate?"
-
-**Why v0.4.** Pairs naturally with **BC** (the external
-audit) — the auditor's threat model and `alpi diff`'s output
-co-design. Both ship in v0.4.
 
 ---
 

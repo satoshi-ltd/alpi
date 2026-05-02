@@ -296,6 +296,7 @@ class _OrderedGroup(click.Group):
         "setup",
         "doctor",
         "update",
+        "diff",
         "logs",
         "profile",
         "peers",
@@ -407,6 +408,37 @@ def chat(
         )
     else:
         _run_chat(h, continue_last=continue_last)
+
+
+@main.command("diff")
+@click.option(
+    "--since",
+    default="24h",
+    show_default=True,
+    help="Cutoff: ``Nh``/``Nd``/``Nm``/``Nw`` or an ISO-8601 timestamp.",
+)
+@click.option("--json", "as_json", is_flag=True, help="Emit the raw report dict as JSON.")
+@click.pass_context
+def cmd_diff(ctx: click.Context, since: str, as_json: bool) -> None:
+    """List what changed in this profile since the cutoff.
+
+    Memory edits, sessions, mentions, skills, peer-list mutations,
+    fired schedules and today's budget. mtime-driven, side-effect
+    free."""
+    from alpi import diff as diff_mod
+
+    h: Path = ctx.obj["home"]
+    profile: str = ctx.obj["profile"]
+    try:
+        cutoff = diff_mod.parse_since(since)
+    except ValueError as e:
+        raise click.UsageError(str(e)) from None
+    report = diff_mod.compute(h, cutoff)
+    if as_json:
+        import json as _json
+        click.echo(_json.dumps(report, indent=2, sort_keys=True))
+        return
+    click.echo(diff_mod.render(report, profile=profile))
 
 
 def _require_workspace(h: Path) -> None:

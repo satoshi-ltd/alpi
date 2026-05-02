@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.3.10 — 2026-05-02 — `alpi diff`
+
+What changed in this profile since N hours/days ago — memory
+edits, sessions, mentions, skills, peer-list mutations, fired
+schedules, today's budget. mtime-driven, side-effect free, safe
+from cron or SSH. One primitive (``alpi/diff.py``) shared by the
+CLI subcommand and the TUI ``/diff`` panel; a host-plane verb
+will follow once the desktop has a use for it.
+
+- ``alpi diff [--since 24h|7d|2026-04-25] [--json]`` — top-level command. ``--json`` emits the raw report dict for scripts / dashboards.
+- ``/diff [since]`` slash command in the TUI; opens a floating panel rendered from the same report.
+- ``docs/OPERATIONS.md`` — new "What changed in this profile?" section with cron / pre-backup / SSH-snapshot use cases.
+- ``tests/core/test_diff.py`` — 23 cases covering ``parse_since``, every scanner branch, the empty-profile baseline, and a render smoke test.
+
 ## v0.3.9 — 2026-05-02 — daemon refactor + host plane
 
 The v0.4 cycle lands as a single 0.3.9 release on the alpi side:
