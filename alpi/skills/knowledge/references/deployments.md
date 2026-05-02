@@ -24,7 +24,7 @@ gateway for messaging.
 │   alpi (TUI)                        │
 │     │                               │
 │     ├─ ~/.alpi/  (default profile)  │
-│     └─ alpi service (optional)      │
+│     └─ alpi daemon (optional)      │
 │          ├─ gateway: Telegram /     │
 │          │           IMAP / Gmail   │
 │          ├─ scheduler (cron)        │
@@ -36,7 +36,7 @@ gateway for messaging.
 - **ALP:** the listener is part of the unified service — leave it
   on (default) even when nothing else dials in; it's idle and
   costs nothing.
-- **Ops:** `alpi setup → Maintenance → Service → Install` if you
+- **Ops:** `alpi setup → Maintenance → Daemon → Install` if you
   want 24/7 messaging + cron.
 - **Best for:** individual, personal use. Zero-config after the
   quickstart.
@@ -52,7 +52,7 @@ but that'd just be two profiles — see topology 3).
 ┌──────────────────┐                ┌──────────────────────┐
 │ laptop           │                │ home server          │
 │                  │   ALP.2 over   │                      │
-│  alpi (TUI)      │───Tailscale───▶│  alpi service        │
+│  alpi (TUI)      │───Tailscale───▶│  alpi daemon         │
 │  ~/.alpi/        │                │  ~/.alpi/            │
 │  peers: home     │                │  peers: laptop       │
 │                  │◀───────────────│  (reaches back only  │
@@ -67,7 +67,7 @@ but that'd just be two profiles — see topology 3).
 - **Peers:** cross-pinned. Capabilities narrow — laptop grants
   `home-server` only `link.ping` + `link.ask`; home-server grants
   laptop only `link.ask`. See [ALP.md §Capability model](ALP.md).
-- **Ops:** home server installs the unified `alpi service` (one
+- **Ops:** home server installs the unified `alpi daemon` (one
   PID per profile hosts gateway + scheduler + ALP listener).
   Laptop just runs `alpi` when the user sits down.
 - **Best for:** power-user individual with a house NAS /

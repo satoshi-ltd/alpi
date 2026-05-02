@@ -34,6 +34,21 @@ alpi
 
 Pin a specific version with `uv tool install alpi-agent==0.3.0`.
 
+The first `alpi setup` auto-installs the alpi daemon — one launchd
+plist on macOS (`com.alpi.daemon`), one systemd-user unit on Linux
+(`alpi-daemon.service`) — and starts it. The daemon supervises
+every profile under `~/.alpi/`, so a single install gets you
+24/7 messaging + cron + ALP listener for every profile you create.
+Manage it later with `alpi daemon {status,restart,uninstall}` or
+from `alpi setup → Services → Daemon`.
+
+**Linux note.** `systemctl --user` services die when you log out
+unless lingering is enabled. The install runs `loginctl
+enable-linger $USER` automatically; on minimal containers / WSL
+without `systemd=true`, `loginctl` may be missing — alpi logs a
+warning and you'll need to keep the daemon foregrounded under
+`tmux` / `screen`, or fix lingering by hand.
+
 The first time the agent runs the `browser` tool, alpi downloads
 Chromium (~200 MB, one-time, cached at `~/.cache/ms-playwright/`).
 No separate install command. If you never use the browser tool,

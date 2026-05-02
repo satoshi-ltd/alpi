@@ -45,42 +45,65 @@ Every script:
 
 ## Index
 
-### `test_alice_bob_workgroup.py`
+### `test_money_workgroup.py`
 
-Verifies the full autonomous workgroup loop: two alpi profiles
-(alice as hub, bob as remote member) collaborate on a stack-decision
-`#task` and close it with `#done` without any human in the loop.
+End-to-end one-shot that owns three profiles (`alice`, `bob`,
+`carol`) from scratch and runs **two workgroups in parallel** to
+exercise concurrent dispatcher behaviour:
+
+- **`money-2026`** (hub=alice, members=alice/bob/carol) — pick PATH
+  A vs B for the [Money app](https://satoshi-ltd.com/case-studies/money)
+  2026 strategy.
+- **`alpi-v05-roadmap`** (hub=carol, members=carol/alice) — read
+  https://alpi-agent.com/docs/ROADMAP and decide whether the
+  proposed v0.5 scope is right. Bob excluded.
+
+Roles:
+
+- **alice** — product manager (hub of money, member of roadmap).
+- **bob** — marketer (member of money only).
+- **carol** — user researcher (member of money, hub of roadmap;
+  web-fetches both source pages).
+
+Transport: alice + carol intra-machine unix socket; bob over
+TCP/Noise_XK on a Tailscale hostname (`TCP` dict at top of script —
+edit this to match your environment).
 
 **Preconditions:**
 
-- Profiles `alice` and `bob` exist under `~/.alpi/profiles/`, each
-  with a configured model, a workspace, and the other peer pinned.
-- Both profiles have ALP listening on the conventional addresses
-  (the script restarts both services to pick up the latest code).
-- Optional: distinct `public_bio` set on each profile via
-  `alpi -p <name> setup → ALP → Identity` (the script no longer
-  overrides them).
+- `OPENAI_API_KEY` in `~/.alpi/.env` (it's the only secret the
+  script propagates).
+- Tailscale up and the configured hostname resolves to your machine
+  (else change `TCP["bob"]["host"]` to `127.0.0.1`).
 
-**Cost ballpark:** ~$0.01–$0.05 per run; capped at $3 by the
-workgroup's lifetime budget regardless.
+**Cost ballpark:** ~$0.10–$0.30 total per run across both workgroups
+(money cap $5, roadmap cap $3 — set inside the script).
 
 **Run:**
 
 ```bash
-uv run python tests/manual/test_alice_bob_workgroup.py
+uv run python tests/manual/test_money_workgroup.py
 ```
 
-**Success looks like:** the script prints each new post with the
-poster's spend, and exits with `task CLOSED with #done` typically
-within 5–10 posts (~3–8 minutes wall clock).
+> **Warning:** this WIPES `~/.alpi/profiles/{alice,bob,carol}` every
+> run. Don't point it at profiles you actually use.
+
+**Success looks like:** the script prints each new post tagged with
+its workgroup name and the poster's spend, and exits with `all
+workgroups closed.` once both have hit `#done`.
 
 **Failure modes worth investigating:**
 
-- Timeout (25 min) without `#done` → engagement rules failing to
-  trigger closure. Inspect transcript for paraphrase loops or
+- One workgroup stalls while the other progresses → poller starvation
+  (one wg dominating the per-profile dispatcher). Check
+  `_print_turn_panel` output for which profile is wedged.
+- TCP path failures (only affect bob) → `peers ping bob` from alice
+  or carol returns connection refused. Verify Tailscale hostname
+  resolves and bob's listener bound it (`alpi daemon status`
+  shows the daemon's per-profile services and listener bindings).
+- Timeout without `#done` → engagement rules failing to trigger
+  closure. Inspect transcripts for paraphrase loops or
   evidence-hunting rabbit holes.
-- Cost climbing past ~$0.50 → guardrails not biasing toward
+- Cost climbing past the budget → guardrails not biasing toward
   silence. Check `WORKGROUP_GUARDRAILS` in
   `alpi/alp/agent_context.py`.
-- Connection refused on kickoff → alpi service didn't bind in
-  time. Check `~/.alpi/profiles/<name>/service.log`.

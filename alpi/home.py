@@ -3,13 +3,34 @@
 from __future__ import annotations
 
 import os
+from contextvars import ContextVar
 from pathlib import Path
 from typing import Optional
 
 _ROOT = Path.home() / ".alpi"
 
 
+# Active-home context for concurrent daemon turns.
+_HOME_CTX: ContextVar[Optional[Path]] = ContextVar(
+    "alpi_active_home", default=None,
+)
+
+
+def set_active_home(home: Optional[Path]) -> object:
+    """Bind ``home`` to the current context and return the reset token."""
+    return _HOME_CTX.set(home)
+
+
+def reset_active_home(token: object) -> None:
+    _HOME_CTX.reset(token)
+
+
 def get_home(profile: Optional[str] = None) -> Path:
+    # Context binding wins; env fallback is for one-shot commands.
+    active = _HOME_CTX.get()
+    if active is not None:
+        return active
+
     override = os.environ.get("ALPI_HOME")
     if override:
         return Path(override).expanduser()
@@ -18,6 +39,25 @@ def get_home(profile: Optional[str] = None) -> Path:
     if name and name != "default":
         return _ROOT / "profiles" / name
     return _ROOT
+
+
+def home_for(name: str) -> Path:
+    """Resolve a profile literally; never honour ``ALPI_HOME``."""
+    if not name or name == "default":
+        return _ROOT
+    return _ROOT / "profiles" / name
+
+
+def list_profiles(root: Path | None = None) -> list[str]:
+    """Return ``default`` plus each profile directory under ``<root>``."""
+    base = root or _ROOT
+    out = ["default"]
+    sub = base / "profiles"
+    if sub.exists():
+        for p in sorted(sub.iterdir(), key=lambda x: x.name):
+            if p.is_dir() and not p.name.startswith("."):
+                out.append(p.name)
+    return out
 
 
 def ensure_home(home: Path) -> None:
@@ -37,6 +77,8 @@ def ensure_home(home: Path) -> None:
             ".env\n"
             "secrets/\n"
             "sessions/\n"
+            "mentions/\n"
+            "gateway/sessions/\n"
             "schedule/output/\n"
             "logs/\n"
             "cache/\n"

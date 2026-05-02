@@ -22,8 +22,7 @@ _SENSITIVE_PATH_REGEX: tuple[re.Pattern[str], ...] = (
     re.compile(r"\.(?:pem|p12|pfx)$", re.I),
     re.compile(r"(?:^|/)\.aws/credentials$", re.I),
     re.compile(r"(?:^|/)\.gnupg/", re.I),
-    # Profile secrets and config — must only be edited by hand or via
-    # `alpi setup`, never through file tools or terminal redirection.
+    # Profile secrets and config must only be edited by hand or setup.
     re.compile(r"(?:^|/)\.alpi(?:/profiles/[^/]+)?/(?:\.env|config\.yaml)$"),
 )
 
@@ -40,10 +39,7 @@ def _workspace_root() -> Path:
 
 
 def _is_sensitive(*paths: Path | str) -> str | None:
-    # Check each variant we were given: the user-typed path (pre-resolve)
-    # can be /var/run/docker.sock on macOS while resolve() rewrites it to
-    # /private/var/run/docker.sock via the /var symlink. Either form
-    # should match.
+    # Check both the typed path and the resolved path.
     for p in paths:
         s = str(p)
         if s in _SENSITIVE_EXACT_PATHS:
@@ -99,5 +95,4 @@ def suggest_similar_paths(target: Path, limit: int = 5) -> list[str]:
         return []
     scored.sort(key=lambda t: (t[0], t[1]))
     return [s for _, s in scored[:limit]]
-
 

@@ -17,8 +17,7 @@ _ADD_OLLAMA = "__add_ollama__"
 _ENTER_CUSTOM_MODEL = "__custom_model__"
 
 
-# Re-exported for back-compat with existing callers (wizards import
-# ``accent_style`` from here). New code should import from ``alpi.ui``.
+# Back-compat re-export for callers that still import from here.
 def accent_style(accent: str):
     return ui.accent_style(accent)
 
@@ -140,8 +139,7 @@ def _pick_model(provider: Provider, cfg: cfg_mod.Config) -> str | None:
     if cfg.model.startswith(f"{provider.name}/"):
         current_suffix = cfg.model.split("/", 1)[1]
 
-    # Empty list (openrouter without registered models, fetch failed,
-    # etc.) → drop the menu and prompt directly.
+    # If no models come back, skip the menu and prompt directly.
     if not models:
         return _prompt_custom_model(provider, current_suffix)
 
@@ -265,10 +263,7 @@ def _any_saved_keys(builtin: list[Provider]) -> bool:
     return any(p.has_key() for p in builtin if p.api_key_env)
 
 
-
-# Manage saved (submenu, out of the main picker)
-
-
+# Saved keys submenu.
 def _manage_saved(cfg: cfg_mod.Config) -> None:
     builtin = prov_mod.builtin()
 

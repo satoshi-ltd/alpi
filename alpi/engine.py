@@ -64,6 +64,19 @@ _PLATFORM_HINTS: dict[str, str] = {
 }
 
 
+def _last_peer_reply(turn_tools) -> str:
+    """Return the reply when peer is the most recent successful tool."""
+    for log in reversed(turn_tools):
+        if not log.ok:
+            continue
+        if log.name != "peer":
+            return ""
+        result = log.result or ""
+        idx = result.rfind("\n\n---\ntokens:")
+        return result[:idx].strip() if idx != -1 else result.strip()
+    return ""
+
+
 def _platform_hint() -> str:
     import os
     platform = (os.environ.get("ALPI_PLATFORM") or "").strip().lower()
@@ -76,6 +89,15 @@ def _maybe_load_mcps(cfg: cfg_mod.Config) -> list:
         return []
     from alpi.mcp import registry as mcp_registry
     return mcp_registry.load_and_register(cfg)
+
+
+def _profile_name(home: Path) -> str:
+    parts = home.parts
+    if "profiles" in parts:
+        i = parts.index("profiles")
+        if i + 1 < len(parts):
+            return parts[i + 1]
+    return "default"
 
 
 @dataclass
@@ -100,24 +122,17 @@ class Engine:
         self.home = home
         self.cfg = cfg
         self.session = session.Session(home=home, model=cfg.model)
-        # Spawn MCP servers the user configured and register their
-        # tools BEFORE we bake the system prompt, so the tool list in
-        # the prompt includes them.
+        # Register MCP tools before building the system prompt.
         self._mcp_clients = _maybe_load_mcps(cfg)
         self._system_prompt = self._build_system_prompt()
         self.session.messages.append({"role": "system", "content": self._system_prompt})
-        # Cross-thread flag: the UI sets this to True on new user input while
-        # a turn is still running. The loop polls it between LLM streaming,
-        # between tool-use iterations, and between individual tool calls.
+        # UI flips this on new input while a turn is still running.
         self.interrupt_requested: bool = False
-        # Serializes turns. A new run_turn() blocks on this lock until the
-        # previous one has fully exited — otherwise two turns race on
-        # session.messages and a slow tool call (e.g. delegate mid-stream)
-        # can vomit its result into the *next* turn's context.
+        # Serialize turns so concurrent runs do not race on session state.
         self._turn_lock = threading.Lock()
 
     def request_interrupt(self) -> None:
-        """Ask the current run_turn() to stop at the next check-point."""
+        """Ask the current turn to stop at the next checkpoint."""
         self.interrupt_requested = True
 
     def reset_session(self) -> None:
@@ -130,35 +145,41 @@ class Engine:
         self.interrupt_requested = False
 
     def run_turn(self, user_text: str, emit: EventSink) -> None:
-        """Run a full user turn. Blocking — call from a worker thread."""
-        with self._turn_lock:
-            self._run_turn_locked(user_text, emit)
+        """Run a full turn and bind ``self.home`` for the duration."""
+        from alpi.home import reset_active_home, set_active_home
+
+        token = set_active_home(self.home)
+        try:
+            with self._turn_lock:
+                self._run_turn_locked(user_text, emit)
+        finally:
+            reset_active_home(token)
 
     def _run_turn_locked(self, user_text: str, emit: EventSink) -> None:
+        from alpi import config as _cfg_mod
         from alpi import ledger
 
+        # Re-read budget from disk so live edits apply on the next turn.
         try:
-            ledger.check(self.home, self.cfg.budget)
+            fresh_budget = _cfg_mod.load(self.home).budget
+        except Exception:  # noqa: BLE001
+            fresh_budget = self.cfg.budget
+        self.cfg.budget = fresh_budget
+        try:
+            ledger.check(self.home, fresh_budget)
         except ledger.BudgetExceeded as e:
             emit(AgentEvent(kind="error", text=str(e)))
             return
 
-        # Fresh run: clear any lingering interrupt request from the previous
-        # turn before we start consuming input.
+        # Clear any lingering interrupt request before starting.
         self.interrupt_requested = False
 
-        # Accumulate this turn's state. The try/finally at the bottom
-        # always appends a Turn to the persistent log, regardless of how
-        # we exit (normal / interrupt / error / max_steps).
+        # Accumulate this turn's state for the persistent log.
         turn_started = time.time()
         turn_tools: list[ToolLog] = []
         final_assistant = ""
 
-        # ALP.3 PR 5 — workgroup context (briefing, active task, recent
-        # posts, mentions of self) injected as a transient system
-        # message just before the user input. Read from on-disk caches
-        # populated by the workgroup poller — no network in the hot
-        # path. Silent no-op when the profile has no workgroups.
+        # Inject transient workgroup context before user input.
         try:
             from alpi.alp import agent_context as _wg_ctx
             wg_block = _wg_ctx.build(self.home)
@@ -167,10 +188,7 @@ class Engine:
         if wg_block:
             self.session.messages.append({"role": "system", "content": wg_block})
 
-        # ALP.3 PR 5 — workgroup_post and friends read this turn's
-        # accumulated cost via ``_state.get_turn_usage`` to declare
-        # spend honestly when posting to a workgroup. Reset every turn
-        # so tools see only THIS turn's spend, not the session total.
+        # Reset per-turn workgroup usage tracking.
         from alpi.tools import _state as _wg_state
         _wg_state.reset_turn_usage()
         _wg_state.reset_skill_env()
@@ -365,6 +383,13 @@ class Engine:
                     self._finalize_interrupt(emit)
                     return
 
+                peer_reply = _last_peer_reply(turn_tools)
+                if peer_reply:
+                    final_assistant = peer_reply
+                    emit(AgentEvent(kind="assistant_done", text=peer_reply))
+                    emit(AgentEvent(kind="done"))
+                    return
+
             emit(AgentEvent(kind="error", text="Reached max tool steps; stopping."))
         finally:
             # Always log a turn when one was started — even on interrupt,
@@ -411,7 +436,21 @@ class Engine:
         self.interrupt_requested = False
 
     def save_session(self) -> Path:
-        return self.session.save()
+        path = self.session.save()
+        if path is not None:
+            try:
+                from alpi.host import events as data_events
+                data_events.emit(
+                    "session_changed",
+                    {
+                        "profile": _profile_name(self.home),
+                        "id": self.session.id,
+                        "subdir": self.session.subdir,
+                    },
+                )
+            except Exception:  # noqa: BLE001
+                pass
+        return path
 
     def _build_system_prompt(self) -> str:
         from importlib import resources

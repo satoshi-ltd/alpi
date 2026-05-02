@@ -1,0 +1,133 @@
+/* Shared composer used by ChatPane and WorkgroupView. */
+
+.wrap {
+  padding: 4px var(--space-3) var(--space-2);
+}
+
+/* `embedded` is the centered zero-state variant. */
+.wrapEmbedded {
+  width: 100%;
+  padding: 0;
+  margin-top: var(--space-2);
+}
+
+.body {
+  background: var(--color-bg);
+  border-radius: var(--radius-xl);
+  padding: 8px 14px 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: var(--chat-max-width);
+  margin: 0 auto;
+  cursor: text;
+  /* Anchor for the mention popover. */
+  position: relative;
+}
+
+.body button,
+.body [role="button"] {
+  cursor: pointer;
+}
+
+.input {
+  width: 100%;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  resize: none;
+  font: inherit;
+  font-size: var(--font-size-body);
+  line-height: 1.5;
+  color: var(--color-fg);
+  padding: 2px 4px;
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+.input::placeholder {
+  color: var(--color-fg-subtle);
+}
+
+.input:disabled {
+  cursor: not-allowed;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.spacer {
+  flex: 1;
+}
+
+/* Mention popover for `@<query>`, anchored to `.body`. */
+.mentionPopover {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  /* Width hugs the longest item, with a sensible cap. */
+  width: max-content;
+  min-width: 140px;
+  max-width: 280px;
+  z-index: 20;
+  background: var(--color-bg-solid);
+  border: 1px solid var(--color-border, rgba(0, 0, 0, 0.08));
+  border-radius: var(--radius-md);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  padding: 4px;
+  max-height: 240px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.mentionItem {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+  color: var(--color-fg);
+  width: 100%;
+}
+
+.mentionItemActive,
+.mentionItem:hover:not(:disabled) {
+  background: var(--color-hover);
+}
+
+.mentionItemDisabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.mentionUnverified {
+  margin-left: auto;
+  font-size: var(--font-size-tiny);
+  color: var(--color-fg-subtle);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.mentionDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-fg-subtle);
+  flex-shrink: 0;
+}
+
+.mentionId {
+  font-size: var(--font-size-ui);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-fg);
+}

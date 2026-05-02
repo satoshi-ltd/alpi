@@ -1,4 +1,4 @@
-"""IMAP platform adapter — inbound IMAP poll + outbound SMTP reply."""
+"""IMAP platform adapter."""
 
 from __future__ import annotations
 
@@ -17,22 +17,17 @@ from alpi.gateway.base import IncomingMessage, OutgoingMessage, Platform
 log = logging.getLogger("alpi.gateway.imap")
 
 DEFAULT_POLL_INTERVAL = 60
-# Folder alpi listens on. We deliberately don't look in Spam/Junk — the
-# provider's DKIM/SPF checks already flagged those. Raising this to
-# "All Mail" or similar would open us up to spoofs the provider already
-# rejected.
+# Only poll INBOX; Spam/Junk already went through provider checks.
 INBOX = "INBOX"
 
-# Noreply / auto / bounce / list-serv patterns. Matched against the
-# sender address (lowercased, local-part included) as a substring —
-# cheap and catches the common cases.
+# Common noreply / auto / bounce patterns.
 _NOREPLY_PATTERNS = (
     "noreply", "no-reply", "no_reply", "donotreply", "do-not-reply",
     "mailer-daemon", "postmaster", "bounce", "notifications@",
     "automated@", "auto-confirm", "auto-reply", "automailer",
 )
 
-# Headers that indicate bulk / automated mail. Any of these → skip.
+# Headers that indicate bulk or automated mail.
 _AUTOMATED_HEADERS = {
     "Auto-Submitted": lambda v: v.lower() != "no",
     "Precedence": lambda v: v.lower() in ("bulk", "list", "junk"),
@@ -46,7 +41,7 @@ def _state_path(home: Path) -> Path:
 
 
 class Imap(Platform):
-    """Gateway inbound/outbound adapter for an IMAP+SMTP mailbox."""
+    """IMAP+SMTP mailbox adapter."""
 
     name = "email"
 
@@ -100,9 +95,7 @@ class Imap(Platform):
             first_poll = False
 
             for raw_uid, msg_obj in new_msgs:
-                # Track max UID regardless of whether we surface it —
-                # otherwise a noreply-filter chain re-processes the
-                # same skipped message forever.
+                # Track max UID even for skipped messages.
                 try:
                     uid_int = int(raw_uid)
                 except ValueError:
@@ -142,7 +135,7 @@ class Imap(Platform):
 
             await asyncio.sleep(self._poll_interval)
 
-    # Send — used by the gateway to reply to the sender
+    # Send replies back through SMTP.
 
     async def send(self, message: OutgoingMessage) -> None:
         def _do_send() -> None:
@@ -157,7 +150,7 @@ class Imap(Platform):
         except ImapError as e:
             log.warning("email send failed: %s", e)
 
-    # Sync IMAP helpers (run under asyncio.to_thread to avoid blocking)
+    # Sync IMAP helpers run in threads to avoid blocking.
 
     def _discover_baseline_uid(self) -> int:
         client = ImapClient.from_env()
@@ -174,8 +167,7 @@ class Imap(Platform):
             uids = client._uid_search(imap, ["UID", f"{since_uid + 1}:*"])
             for uid in uids:
                 if int(uid) <= since_uid:
-                    # IMAP UID range is inclusive, and `:*` returns the
-                    # latest message even if nothing qualifies — filter.
+                    # UID ranges are inclusive; filter the upper bound.
                     continue
                 typ, data = imap.uid("FETCH", uid, "(BODY.PEEK[])")
                 if typ != "OK" or not data or not isinstance(data[0], tuple):

@@ -199,8 +199,8 @@ class Meta:
     # ``pull`` / ``join`` / ``leave`` keep working so members can
     # catch up on past traffic and exit cleanly. Idempotent verbs.
     paused: bool = False
-    paused_at: str = ""        # ISO-8601, set when paused flips True
-    paused_by: str = ""        # Ed25519 pubkey of the member who paused
+    paused_at: str = ""
+    paused_by: str = ""
     # PR 5: human-readable description of the workgroup's purpose,
     # injected into every member agent's system prompt as the
     # workgroup's stable anchor. Plaintext on the hub — it's metadata
@@ -294,7 +294,7 @@ def _save_meta(d: Path, meta: Meta) -> None:
         payload["auto_kickoff"] = False
     if meta.notify_on_close and meta.notify_on_close != "none":
         payload["notify_on_close"] = meta.notify_on_close
-    (d / _META).write_text(yaml.safe_dump(payload, sort_keys=False))
+    (d / _META).write_text(yaml.safe_dump(payload, sort_keys=False, allow_unicode=True))
 
 
 def _load_members(d: Path) -> list[Member]:
@@ -340,7 +340,7 @@ def _save_members(d: Path, members: list[Member]) -> None:
         if m.bio:
             entry["bio"] = m.bio
         data.append(entry)
-    (d / _MEMBERS).write_text(yaml.safe_dump(data, sort_keys=False))
+    (d / _MEMBERS).write_text(yaml.safe_dump(data, sort_keys=False, allow_unicode=True))
 
 
 def load(home: Path, wg_id: str) -> Workgroup | None:
@@ -453,7 +453,111 @@ def create(
         {"usd": 0.0, "tokens": 0, "posts": 0}, separators=(",", ":"),
     ))
 
-    return Workgroup(meta=meta, members=members)
+    wg = Workgroup(meta=meta, members=members)
+    _auto_join_local_members(home, wg)
+    return wg
+
+
+def _auto_join_local_members(hub_home: Path, wg: "Workgroup") -> None:
+    """Join every member that lives on the same machine as the hub.
+
+    Cross-machine peers must run ``alpi workgroup join`` themselves
+    (no push transport). For peers whose `~/.alpi/profiles/<name>/`
+    is on this filesystem we have direct access to both sides — we
+    seed the subscription and stamp ``joined: true`` on the hub's
+    member record so the briefing + bio propagate without round-trip.
+    """
+    from alpi import config as _cfg
+    from alpi.alp import peers as peers_mod
+    from alpi.alp import subscription as sub_mod
+    from alpi.alp.keys import load_or_generate
+    from alpi.home import _ROOT
+
+    profiles_root = _ROOT / "profiles"
+    if not profiles_root.exists():
+        return
+
+    pubkey_to_home: dict[str, Path] = {}
+    for prof_dir in profiles_root.iterdir():
+        if not prof_dir.is_dir():
+            continue
+        try:
+            kp = load_or_generate(prof_dir)
+            pubkey_to_home[kp.pubkey_b64()] = prof_dir
+        except Exception:  # noqa: BLE001
+            continue
+
+    now = _utcnow()
+    roster_payload = [
+        {"pubkey": m.pubkey, "last_seen_at": m.last_seen_at, "bio": m.bio}
+        for m in wg.members
+    ]
+    hub_pinned = peers_mod.load(hub_home)
+    members_changed = False
+    for m in wg.members:
+        if m.pubkey == wg.meta.hub_pubkey:
+            continue
+        member_home = pubkey_to_home.get(m.pubkey)
+        if member_home is None:
+            continue
+
+        member_bio = (_cfg.load(member_home).public_bio or "").strip()
+        if member_bio:
+            m.bio = member_bio[:_BIO_MAX]
+        if not m.joined:
+            m.joined = True
+            m.joined_at = now
+            m.last_seen_at = now
+            members_changed = True
+
+        hub_id = _resolve_hub_alias(member_home, wg.meta.hub_pubkey, hub_pinned)
+        if hub_id is None:
+            continue
+        sub = sub_mod.get(member_home, wg.meta.id) or sub_mod.Subscription(
+            wg_id=wg.meta.id,
+            name=wg.meta.name,
+            hub_id=hub_id,
+            hub_pubkey=wg.meta.hub_pubkey,
+        )
+        sub.name = wg.meta.name
+        sub.hub_id = hub_id
+        sub.hub_pubkey = wg.meta.hub_pubkey
+        sub.briefing = wg.meta.briefing
+        sub.upsert_key(m.key_version, m.sealed_key)
+        if not sub.joined_at:
+            sub.joined_at = now
+        sub.roster = {
+            r["pubkey"]: r["last_seen_at"] for r in roster_payload
+        }
+        sub.roster_bios = {
+            r["pubkey"]: r["bio"] for r in roster_payload if r.get("bio")
+        }
+        sub_mod.upsert(member_home, sub)
+
+    if members_changed:
+        _save_members(_wg_dir(hub_home, wg.meta.id), wg.members)
+
+
+def _resolve_hub_alias(
+    member_home: Path,
+    hub_pubkey: str,
+    hub_pinned: list,
+) -> str | None:
+    """Find the alias the member has for the hub in their peers.yaml.
+
+    Falls back to the alias the hub uses for itself in *its own*
+    peers.yaml shape — but that's almost never useful; we just need
+    a string identifier for ``Subscription.hub_id``.
+    """
+    from alpi.alp import peers as peers_mod
+    pinned = peers_mod.load(member_home)
+    for p in pinned:
+        if p.pubkey == hub_pubkey:
+            return p.id
+    for p in hub_pinned:
+        if p.pubkey == hub_pubkey:
+            return p.id
+    return None
 
 
 # Rekey + remove (used by leave + kick)
@@ -495,6 +599,47 @@ def kick(home: Path, wg_id: str, target_pubkey: str) -> Workgroup:
     ``workgroup.leave`` themselves, but initiated locally. Raises
     ``ValueError`` if the target is the hub or not in the roster."""
     return _rekey(home, wg_id, target_pubkey)
+
+
+def add_member(home: Path, wg_id: str, target_pubkey: str) -> Workgroup:
+    """Hub-side primitive — invite a new member by pubkey. Mints a
+    fresh group key, re-seals it for every existing member plus the
+    new one, bumps the key version, persists, and auto-joins the new
+    member if it maps to a local profile. Raises ``ValueError`` if the
+    workgroup is unknown, the pubkey is malformed, or the pubkey is
+    already in the roster."""
+    wg = load(home, wg_id)
+    if wg is None:
+        raise ValueError(f"workgroup {wg_id!r} not found")
+    pk = (target_pubkey or "").strip()
+    if not pk:
+        raise ValueError("target pubkey required")
+    try:
+        decode_pubkey(pk)
+    except Exception as e:  # noqa: BLE001
+        raise ValueError(f"invalid pubkey: {pk!r}") from e
+    if wg.member(pk) is not None:
+        raise ValueError(f"pubkey {pk!r} already in roster")
+
+    new_key = secrets.token_bytes(GROUP_KEY_BYTES)
+    new_version = wg.meta.current_key_version + 1
+    for m in wg.members:
+        m.sealed_key = seal_group_key(new_key, m.pubkey)
+        m.key_version = new_version
+    wg.members.append(
+        Member(
+            pubkey=pk,
+            sealed_key=seal_group_key(new_key, pk),
+            key_version=new_version,
+        )
+    )
+    wg.meta.current_key_version = new_version
+
+    d = _wg_dir(home, wg_id)
+    _save_meta(d, wg.meta)
+    _save_members(d, wg.members)
+    _auto_join_local_members(home, wg)
+    return wg
 
 
 # Transcript
@@ -834,9 +979,11 @@ def register(server: alp_server.Server, home: Path) -> None:
         wg = load(home, wg_id)
         if wg is None:
             raise alp_server.HandlerError(-32009, "workgroup-not-found")
-        if wg.member(peer.pubkey) is None:
-            raise alp_server.HandlerError(-32008, "workgroup-not-member")
-        # Idempotent — already paused returns the existing state.
+        if peer.pubkey != wg.meta.hub_pubkey:
+            raise alp_server.HandlerError(
+                -32008, "workgroup-not-hub",
+                data={"detail": "only the hub may pause this workgroup"},
+            )
         if not wg.meta.paused:
             wg.meta.paused = True
             wg.meta.paused_at = _utcnow()
@@ -863,9 +1010,11 @@ def register(server: alp_server.Server, home: Path) -> None:
         wg = load(home, wg_id)
         if wg is None:
             raise alp_server.HandlerError(-32009, "workgroup-not-found")
-        if wg.member(peer.pubkey) is None:
-            raise alp_server.HandlerError(-32008, "workgroup-not-member")
-        # Idempotent — already running returns the cleared state.
+        if peer.pubkey != wg.meta.hub_pubkey:
+            raise alp_server.HandlerError(
+                -32008, "workgroup-not-hub",
+                data={"detail": "only the hub may resume this workgroup"},
+            )
         if wg.meta.paused:
             wg.meta.paused = False
             wg.meta.paused_at = ""

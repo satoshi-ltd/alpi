@@ -182,7 +182,7 @@ top of this daily profile cap. See *Workgroups → Budget*.
 ### Intra-machine — Unix-domain socket
 
 Path: `~/.alpi/<profile>/alp/alp.sock`, served by the profile's
-unified service (`alpi service start`) when the ALP subsystem is
+unified service (`alpi daemon start`) when the ALP subsystem is
 enabled (`service.alp: true` — default), mode `0600`. The
 listener shares the per-profile asyncio loop with gateway and
 scheduler; toggle `service.alp: false` for profiles that need
@@ -525,18 +525,19 @@ methods callable by pinned peers in the workgroup roster.
   primitive instead.
 
 - `workgroup.pause(workgroup_id) → {workgroup_id, paused, paused_at, paused_by}`
-  Any member may pause the workgroup. While paused, `workgroup.post`
-  is rejected with `-32010 workgroup-paused`; `pull`, `join`, and
-  `leave` keep working so members can catch up on existing traffic
-  and exit cleanly without being trapped. Idempotent — calling
-  pause on an already-paused workgroup returns the existing state
-  without bumping the `paused_at` timestamp or rewriting
-  `paused_by`. The hub records who triggered the pause for audit.
+  **Hub-only.** Pause is a lifecycle control bundled with the hub's
+  authority over `#task` / `#done` / budget / group key. Non-hub
+  callers get `-32008 workgroup-not-hub`. While paused,
+  `workgroup.post` is rejected with `-32010 workgroup-paused`;
+  `pull`, `join`, and `leave` keep working so members can catch
+  up on existing traffic and exit cleanly without being trapped.
+  Idempotent — calling pause on an already-paused workgroup
+  returns the existing state without bumping the `paused_at`
+  timestamp.
 
 - `workgroup.resume(workgroup_id) → {workgroup_id, paused}`
-  Inverse of `pause`. Any member may resume; idempotent on an
-  already-running workgroup. Posts admit again starting on the
-  next call.
+  **Hub-only**, inverse of `pause`. Idempotent on an already-
+  running workgroup. Posts admit again starting on the next call.
 
 ### Group-key versioning
 

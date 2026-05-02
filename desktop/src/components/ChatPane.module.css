@@ -1,0 +1,287 @@
+.body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  color: var(--color-fg-muted);
+}
+
+.emptyShell {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-5) var(--space-4);
+  min-height: 0;
+}
+
+.emptyContent {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+  width: 100%;
+  max-width: var(--chat-max-width);
+}
+
+
+.emptyMark {
+  color: var(--color-fg);
+  opacity: 0.85;
+}
+
+.logoMask {
+  display: inline-block;
+  width: 64px;
+  height: 101px;
+  background: currentColor;
+  -webkit-mask: var(--mask-image) no-repeat center / contain;
+  mask: var(--mask-image) no-repeat center / contain;
+}
+
+
+.emptyHeading {
+  font-size: var(--font-size-display);
+  font-weight: var(--font-weight-medium);
+  letter-spacing: -0.02em;
+  color: var(--color-fg);
+  margin: 0;
+  text-align: center;
+}
+
+.emptyHint {
+  font-size: var(--font-size-body);
+  color: var(--color-fg-muted);
+  text-align: center;
+}
+
+.emptyHint strong {
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-fg);
+}
+
+.emptyModel {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-ui);
+  color: var(--color-fg-subtle);
+}
+
+.emptyHint code {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-small);
+  color: var(--color-fg);
+  background: var(--color-hover);
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+}
+
+
+.transcript {
+  flex: 1;
+  overflow: auto;
+  padding: var(--space-5) var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.transcript > * {
+  width: 100%;
+  max-width: var(--chat-max-width);
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.turn {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.loading {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-fg-muted);
+  font-size: var(--font-size-small);
+}
+
+.tool {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 12px;
+  border-radius: var(--radius-md);
+  background: var(--color-bg);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-small);
+  color: var(--color-fg);
+  align-self: flex-start;
+  max-width: 100%;
+}
+
+.toolHeader {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  width: 100%;
+}
+
+.toolHeader:disabled {
+  cursor: default;
+}
+
+.toolChevron {
+  margin-left: auto;
+  color: var(--color-fg-subtle);
+  font-size: var(--font-size-tiny);
+}
+
+.toolStates {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-left: 22px;
+  font-size: var(--font-size-tiny);
+  color: var(--color-fg-muted);
+}
+
+.toolStateLine {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.toolStateLineErr {
+  color: var(--color-danger);
+}
+
+.toolOutput {
+  margin: 4px 0 0 22px;
+  padding: 6px 8px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-tiny);
+  color: var(--color-fg-muted);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.toolIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 12px;
+  height: 12px;
+  font-size: var(--font-size-tiny);
+  flex-shrink: 0;
+  color: var(--color-accent);
+}
+
+.tool_running .toolIcon {
+  color: var(--color-fg-muted);
+}
+
+.tool_fail .toolIcon {
+  color: var(--color-danger);
+}
+
+.toolName {
+  font-family: var(--font-mono);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-fg);
+  flex-shrink: 0;
+}
+
+.toolPreview {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-small);
+  color: var(--color-fg-subtle);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.toolError {
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  background: rgba(255, 69, 58, 0.08);
+  border: 1px solid rgba(255, 69, 58, 0.2);
+  color: var(--color-danger);
+  font-size: var(--font-size-small);
+  font-family: var(--font-mono);
+  align-self: flex-start;
+  max-width: 100%;
+}
+
+.spinner {
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.thinking {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 0;
+  align-self: flex-start;
+}
+
+.thinkingDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-fg-muted);
+  opacity: 0.4;
+  animation: thinkingPulse 1.2s ease-in-out infinite;
+}
+
+.thinkingDot:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.thinkingDot:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes thinkingPulse {
+  0%, 80%, 100% {
+    opacity: 0.3;
+    transform: scale(0.85);
+  }
+  40% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Composer styles moved to ``primitives/Composer.module.css`` so
+ * ChatPane and WorkgroupView share the same chrome. The empty-state
+ * override below is the only ChatPane-specific rule still needed —
+ * ``Composer`` exposes ``embedded`` to switch into the centered
+ * zero-state layout. */
+

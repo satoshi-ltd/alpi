@@ -1,4 +1,4 @@
-"""Message delivery — outbound sending + allowlist check."""
+"""Message delivery."""
 
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ def _allowlist_env(platform: str) -> str:
 
 
 class DeliveryError(Exception):
-    """Raised when a message can't be delivered (permission, unknown platform, HTTP)."""
+    """Raised when delivery fails."""
 
 
 
@@ -42,7 +42,7 @@ def is_allowed(platform: str, chat_id: str) -> bool:
 
 
 def default_chat_id(platform: str) -> str | None:
-    """First allowed chat for ``platform`` — useful as a fallback target."""
+    """First allowed chat for ``platform``."""
     ids = allowed_chat_ids(platform)
     return ids[0] if ids else None
 
@@ -67,11 +67,7 @@ def send_to(
     platform: str, chat_id: str, text: str,
     attachment: str | None = None,
 ) -> None:
-    """Deliver ``text`` (and optionally ``attachment``) to ``(platform, chat_id)``.
-
-    Raises ``DeliveryError`` on unknown platform, disallowed chat, or
-    an attachment on a platform that doesn't support it.
-    """
+    """Deliver text, optionally with an attachment."""
     if not is_allowed(platform, chat_id):
         raise DeliveryError(
             f"chat {chat_id!r} is not in {_allowlist_env(platform)}"
@@ -164,9 +160,7 @@ def _send_gmail_sync(chat_id: str, text: str) -> None:
 
 
 def _send_webhook_sync(chat_id: str, text: str) -> None:
-    # Webhook is a stub in v0.1 — the gateway adapter doesn't actually
-    # listen yet. We accept the call and POST to a configured URL if set,
-    # so scheduled jobs targeting "webhook" at least try something.
+    # Webhook is still a stub; POST to a configured URL if present.
     url = os.environ.get("WEBHOOK_POST_URL", "")
     if not url:
         raise DeliveryError("webhook platform has no WEBHOOK_POST_URL configured")

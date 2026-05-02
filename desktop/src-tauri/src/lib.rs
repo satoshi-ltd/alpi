@@ -1,0 +1,1325 @@
+mod host_client;
+mod home;
+mod state;
+mod tray;
+mod watcher;
+
+use std::collections::HashMap;
+use std::process::{Command, Stdio};
+use std::sync::{Mutex, OnceLock};
+use std::thread;
+
+fn active_chats() -> &'static Mutex<HashMap<String, String>> {
+    static SLOT: OnceLock<Mutex<HashMap<String, String>>> = OnceLock::new();
+    SLOT.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+use serde::Serialize;
+use tauri::{AppHandle, Emitter};
+
+use crate::state::{
+    list_gateway_status, list_ollama_models_for, list_profile_summaries, list_profiles,
+    list_skills_for, list_workgroup_members, list_workgroups_all, list_workgroups_for,
+    profile_storage as profile_storage_state, read_file_in_home, read_gateway_config,
+    DecryptedMessage, GatewayStatus, ProfileEntry, ProfileSummary, SessionEntry,
+    SkillEntry, StorageEntry, WorkgroupEntry, WorkgroupMember,
+};
+
+#[derive(Serialize, Clone)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+enum ChatEvent {
+    ToolStart {
+        tool_id: String,
+        name: String,
+        preview: String,
+        args: serde_json::Value,
+    },
+    ToolState {
+        tool_id: String,
+        name: String,
+        text: String,
+        ok: bool,
+    },
+    ToolEnd {
+        tool_id: String,
+        name: String,
+        ok: bool,
+        output: String,
+    },
+    ReasoningDelta {
+        text: String,
+    },
+    AssistantDelta {
+        text: String,
+    },
+    Error {
+        text: String,
+    },
+    Interrupted,
+    Reply {
+        text: String,
+        session_id: String,
+    },
+    Done {
+        session_id: String,
+    },
+}
+
+#[tauri::command]
+fn profiles() -> Vec<ProfileEntry> {
+    list_profiles()
+}
+
+#[tauri::command]
+fn profile_summaries() -> Vec<ProfileSummary> {
+    list_profile_summaries()
+}
+
+#[tauri::command]
+fn sessions(profile: Option<String>) -> Vec<SessionEntry> {
+    match profile {
+        Some(p) => sessions_via_alp(&p),
+        None => list_profiles()
+            .into_iter()
+            .flat_map(|p| sessions_via_alp(&p.name))
+            .collect(),
+    }
+}
+
+fn sessions_via_alp(profile: &str) -> Vec<SessionEntry> {
+    let result = match host_client::call(
+        "host.sessions.list",
+        serde_json::json!({"profile": profile}),
+    ) {
+        Ok(v) => v,
+        Err(_) => return vec![],
+    };
+    let rows = result
+        .get("sessions")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
+    let mut out: Vec<SessionEntry> = Vec::with_capacity(rows.len());
+    for row in rows {
+        let id = row.get("id").and_then(|v| v.as_str()).unwrap_or("").to_string();
+        if id.is_empty() {
+            continue;
+        }
+        let mtime = row.get("mtime").and_then(|v| v.as_u64()).unwrap_or(0);
+        let started_at = row
+            .get("started_at")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.0);
+        let model = row
+            .get("model")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+        let first_user = row
+            .get("first_user")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        let turn_count = row
+            .get("turn_count")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0) as usize;
+        let kind = row
+            .get("kind")
+            .and_then(|v| v.as_str())
+            .unwrap_or("chat")
+            .to_string();
+        let input_tokens = row
+            .get("input_tokens")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0);
+        let output_tokens = row
+            .get("output_tokens")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0);
+        let cost_usd = row.get("cost_usd").and_then(|v| v.as_f64()).unwrap_or(0.0);
+        let last_ctx_tokens = row
+            .get("last_ctx_tokens")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0);
+        out.push(SessionEntry {
+            id,
+            profile: profile.to_string(),
+            mtime,
+            started_at,
+            first_user,
+            model,
+            turn_count,
+            kind,
+            input_tokens,
+            output_tokens,
+            cost_usd,
+            last_ctx_tokens,
+        });
+    }
+    out
+}
+
+#[tauri::command]
+fn session_detail(profile: String, id: String) -> Result<serde_json::Value, String> {
+    let result = host_client::call(
+        "host.session.read",
+        serde_json::json!({"profile": profile, "id": id}),
+    )?;
+    Ok(result.get("session").cloned().unwrap_or(serde_json::Value::Null))
+}
+
+#[tauri::command]
+fn workgroups(profile: Option<String>) -> Vec<WorkgroupEntry> {
+    match profile {
+        Some(p) => list_workgroups_for(&p),
+        None => list_workgroups_all(),
+    }
+}
+
+#[tauri::command]
+fn read_file(profile: Option<String>, rel_path: String) -> Result<String, String> {
+    read_file_in_home(profile.as_deref(), &rel_path)
+}
+
+#[tauri::command]
+async fn set_config_field(
+    profile: String,
+    key: String,
+    value: String,
+) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || crate::state::set_config_field(&profile, &key, &value))
+        .await
+        .map_err(|e| format!("join: {e}"))?
+}
+
+#[tauri::command]
+async fn unset_config_field(profile: String, key: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::state::unset_config_field(&profile, &key)
+    })
+    .await
+    .map_err(|e| format!("join: {e}"))?
+}
+
+#[tauri::command]
+async fn port_available(host: String, port: u16) -> bool {
+    tauri::async_runtime::spawn_blocking(move || {
+        let bind_host = if host.is_empty() { "127.0.0.1" } else { &host };
+        std::net::TcpListener::bind((bind_host, port)).is_ok()
+    })
+    .await
+    .unwrap_or(false)
+}
+
+#[tauri::command]
+async fn service_action(profile: String, action: String) -> Result<String, String> {
+    if !matches!(
+        action.as_str(),
+        "start" | "stop" | "restart" | "install" | "uninstall"
+    ) {
+        return Err(format!("invalid action: {action}"));
+    }
+    if action == "start" {
+        return tauri::async_runtime::spawn_blocking(move || {
+            Command::new("alpi")
+                .args(["-p", &profile, "service", "start"])
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .spawn()
+                .map_err(|e| format!("spawn `alpi`: {e}"))?;
+            if let Some(home) = crate::home::resolve_home(Some(&profile)) {
+                let pid_path = home.join("service.pid");
+                for _ in 0..60 {
+                    if pid_path.exists() {
+                        break;
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(50));
+                }
+            }
+            Ok("started".into())
+        })
+        .await
+        .map_err(|e| format!("join: {e}"))?;
+    }
+    let action_for_msg = action.clone();
+    let profile_for_wait = profile.clone();
+    let action_for_wait = action.clone();
+    let out = tauri::async_runtime::spawn_blocking(move || {
+        Command::new("alpi")
+            .args(["-p", &profile, "service", &action])
+            .output()
+    })
+    .await
+    .map_err(|e| format!("join: {e}"))?
+    .map_err(|e| format!("spawn `alpi`: {e}"))?;
+    if !out.status.success() {
+        return Err(format!(
+            "service {} failed: {}",
+            action_for_msg,
+            String::from_utf8_lossy(&out.stderr).trim()
+        ));
+    }
+    if action_for_wait == "restart" || action_for_wait == "install" {
+        tauri::async_runtime::spawn_blocking(move || {
+            if let Some(home) = crate::home::resolve_home(Some(&profile_for_wait)) {
+                let pid_path = home.join("service.pid");
+                for _ in 0..60 {
+                    if pid_path.exists() {
+                        break;
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(50));
+                }
+            }
+        })
+        .await
+        .map_err(|e| format!("join: {e}"))?;
+    }
+    Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
+}
+
+#[tauri::command]
+fn gateway_status(profile: String) -> Vec<GatewayStatus> {
+    list_gateway_status(&profile)
+}
+
+#[tauri::command]
+fn skills(profile: String) -> Vec<SkillEntry> {
+    list_skills_for(&profile)
+}
+
+#[tauri::command]
+fn profile_storage(profile: String) -> Vec<StorageEntry> {
+    profile_storage_state(&profile)
+}
+
+#[tauri::command]
+fn workgroup_members(profile: String, wg_id: String) -> Vec<WorkgroupMember> {
+    list_workgroup_members(&profile, &wg_id)
+}
+
+#[tauri::command]
+async fn workgroup_create(
+    profile: String,
+    name: String,
+    member_peer_ids: Vec<String>,
+    budget_usd: Option<f64>,
+    briefing: Option<String>,
+) -> Result<String, String> {
+    let out = tauri::async_runtime::spawn_blocking(move || {
+        let mut cmd = Command::new("alpi");
+        cmd.args(["-p", &profile, "workgroup", "create", &name]);
+        for id in &member_peer_ids {
+            cmd.args(["--member", id]);
+        }
+        if let Some(b) = budget_usd {
+            cmd.args(["--budget-usd", &b.to_string()]);
+        }
+        if let Some(b) = briefing.as_deref() {
+            if !b.is_empty() {
+                cmd.args(["--briefing", b]);
+            }
+        }
+        cmd.output()
+    })
+    .await
+    .map_err(|e| format!("join: {e}"))?
+    .map_err(|e| format!("spawn `alpi`: {e}"))?;
+    if !out.status.success() {
+        return Err(String::from_utf8_lossy(&out.stderr).trim().to_string());
+    }
+    let stdout = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    let wg_id = stdout
+        .split_whitespace()
+        .nth(1)
+        .map(str::to_string)
+        .unwrap_or_default();
+    Ok(wg_id)
+}
+
+#[tauri::command]
+async fn workgroup_update(
+    profile: String,
+    wg_id: String,
+    briefing: Option<String>,
+    budget_usd: Option<f64>,
+    clear_budget: Option<bool>,
+) -> Result<(), String> {
+    let out = tauri::async_runtime::spawn_blocking(move || {
+        let mut cmd = Command::new("alpi");
+        cmd.args(["-p", &profile, "workgroup", "update", &wg_id]);
+        if let Some(b) = briefing.as_deref() {
+            cmd.args(["--briefing", b]);
+        }
+        if clear_budget.unwrap_or(false) {
+            cmd.arg("--clear-budget");
+        } else if let Some(b) = budget_usd {
+            cmd.args(["--budget-usd", &format!("{b}")]);
+        }
+        cmd.output()
+    })
+    .await
+    .map_err(|e| format!("join: {e}"))?
+    .map_err(|e| format!("spawn `alpi`: {e}"))?;
+    if !out.status.success() {
+        return Err(String::from_utf8_lossy(&out.stderr).trim().to_string());
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn workgroup_add_member(
+    profile: String,
+    wg_id: String,
+    member: String,
+) -> Result<(), String> {
+    let out = tauri::async_runtime::spawn_blocking(move || {
+        Command::new("alpi")
+            .args([
+                "-p", &profile, "workgroup", "add-member", &wg_id, &member,
+            ])
+            .output()
+    })
+    .await
+    .map_err(|e| format!("workgroup_add_member: {e}"))?
+    .map_err(|e| format!("spawn `alpi`: {e}"))?;
+    if !out.status.success() {
+        return Err(String::from_utf8_lossy(&out.stderr).trim().to_string());
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn workgroup_action(
+    profile: String,
+    wg_id: String,
+    action: String,
+    member_pubkey: Option<String>,
+) -> Result<String, String> {
+    if !matches!(
+        action.as_str(),
+        "pause" | "resume" | "leave" | "kick" | "remove"
+    ) {
+        return Err(format!("invalid action: {action}"));
+    }
+    let action_for_msg = action.clone();
+    let out = tauri::async_runtime::spawn_blocking(move || {
+        let mut cmd = Command::new("alpi");
+        cmd.args(["-p", &profile, "workgroup", &action, &wg_id]);
+        if action == "kick" {
+            if let Some(pk) = member_pubkey.as_deref() {
+                cmd.arg(pk);
+            }
+        }
+        if action == "remove" {
+            cmd.arg("--yes");
+        }
+        cmd.output()
+    })
+    .await
+    .map_err(|e| format!("join: {e}"))?
+    .map_err(|e| format!("spawn `alpi`: {e}"))?;
+    if !out.status.success() {
+        return Err(format!(
+            "workgroup {} failed: {}",
+            action_for_msg,
+            String::from_utf8_lossy(&out.stderr).trim()
+        ));
+    }
+    Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
+}
+
+#[derive(Serialize)]
+struct PeerProbe {
+    id: String,
+    status: String,
+    reason: Option<String>,
+}
+
+#[derive(Serialize)]
+struct GatewayProbe {
+    name: String,
+    status: String,
+    reason: Option<String>,
+}
+
+#[tauri::command]
+async fn probe_gateways(
+    profile: String,
+    only: Option<Vec<String>>,
+) -> Vec<GatewayProbe> {
+    let names: Vec<String> = match only {
+        Some(list) if !list.is_empty() => list,
+        _ => vec!["telegram".into(), "imap".into(), "gmail".into()],
+    };
+    let mut handles = vec![];
+    for name in names {
+        let p = profile.clone();
+        let n = name.clone();
+        handles.push(tauri::async_runtime::spawn_blocking(move || {
+            let out = Command::new("alpi")
+                .args(["-p", &p, "gateway", "probe", &n])
+                .output();
+            let (status, reason) = match out {
+                Ok(o) if o.status.success() => {
+                    let stdout = String::from_utf8_lossy(&o.stdout);
+                    let v: serde_json::Value =
+                        serde_json::from_str(stdout.trim()).unwrap_or_default();
+                    let s = v["status"].as_str().unwrap_or("off").to_string();
+                    let r = v["reason"].as_str().map(|x| x.to_string());
+                    (s, r)
+                }
+                _ => ("off".to_string(), None),
+            };
+            GatewayProbe {
+                name: n,
+                status,
+                reason,
+            }
+        }));
+    }
+    let mut out = vec![];
+    for h in handles {
+        if let Ok(p) = h.await {
+            out.push(p);
+        }
+    }
+    out
+}
+
+#[tauri::command]
+async fn probe_peers(profile: String, ids: Vec<String>) -> Vec<PeerProbe> {
+    let mut handles = vec![];
+    for id in ids {
+        let p = profile.clone();
+        let id_owned = id.clone();
+        handles.push(tauri::async_runtime::spawn_blocking(move || {
+            let out = Command::new("alpi")
+                .args(["-p", &p, "peers", "ping", &id_owned])
+                .output();
+            let (status, reason) = match out {
+                Ok(o) if o.status.success() => ("on", None),
+                Ok(o) => {
+                    let stderr = String::from_utf8_lossy(&o.stderr).trim().to_string();
+                    let stdout = String::from_utf8_lossy(&o.stdout).trim().to_string();
+                    let msg = if !stderr.is_empty() { stderr } else { stdout };
+                    let lower = msg.to_lowercase();
+                    let s = if lower.contains("target-offline")
+                        || lower.contains("target socket not found")
+                        || lower.contains("connection refused")
+                    {
+                        "off"
+                    } else if lower.contains("empty response")
+                        || lower.contains("decryption")
+                        || lower.contains("signature")
+                        || lower.contains("handshake")
+                        || lower.contains("transport-error")
+                        || lower.contains("remote-error")
+                    {
+                        "unverified"
+                    } else {
+                        "off"
+                    };
+                    (s, if msg.is_empty() { None } else { Some(msg) })
+                }
+                Err(e) => ("off", Some(format!("spawn alpi: {e}"))),
+            };
+            PeerProbe {
+                id: id_owned,
+                status: status.to_string(),
+                reason,
+            }
+        }));
+    }
+    let mut out = vec![];
+    for h in handles {
+        if let Ok(p) = h.await {
+            out.push(p);
+        }
+    }
+    out
+}
+
+#[tauri::command]
+async fn peer_add(
+    profile: String,
+    peer_id: String,
+    pubkey: String,
+    address: Option<String>,
+    alias: Option<String>,
+    allow: Option<String>,
+) -> Result<(), String> {
+    let allow_list: Vec<String> = allow
+        .as_deref()
+        .filter(|s| !s.is_empty())
+        .map(|s| s.split(',').map(|x| x.trim().to_string()).collect())
+        .unwrap_or_else(|| vec!["link.ping".into(), "link.ask".into()]);
+    let mut params = serde_json::json!({
+        "profile": profile,
+        "id": peer_id,
+        "pubkey": pubkey,
+        "allow": allow_list,
+    });
+    if let Some(a) = address.filter(|s| !s.is_empty()) {
+        params["address"] = serde_json::Value::String(a);
+    }
+    if let Some(a) = alias.filter(|s| !s.is_empty()) {
+        params["alias"] = serde_json::Value::String(a);
+    }
+    alp_call_async("host.peers.add", params).await
+}
+
+#[tauri::command]
+fn gateway_config(profile: String, name: String) -> std::collections::HashMap<String, String> {
+    read_gateway_config(&profile, &name)
+}
+
+#[tauri::command]
+async fn gateway_remove(profile: String, name: String) -> Result<(), String> {
+    alp_call_async(
+        "host.gateway.remove",
+        serde_json::json!({"profile": profile, "name": name}),
+    )
+    .await
+}
+
+#[tauri::command]
+async fn mcp_add(
+    profile: String,
+    name: String,
+    command: String,
+    args: String,
+    env: Vec<String>,
+) -> Result<(), String> {
+    let args_vec: Vec<String> = if args.trim().is_empty() {
+        vec![]
+    } else {
+        match shellwords_split(&args) {
+            Ok(v) => v,
+            Err(e) => return Err(format!("invalid args: {e}")),
+        }
+    };
+    let mut env_map = serde_json::Map::new();
+    for pair in env {
+        if let Some((k, v)) = pair.split_once('=') {
+            env_map.insert(k.trim().to_string(), serde_json::Value::String(v.trim().to_string()));
+        }
+    }
+    alp_call_async(
+        "host.mcp.add",
+        serde_json::json!({
+            "profile": profile,
+            "name": name,
+            "command": command,
+            "args": args_vec,
+            "env": env_map,
+        }),
+    )
+    .await
+}
+
+#[tauri::command]
+async fn mcp_remove(profile: String, name: String) -> Result<(), String> {
+    alp_call_async(
+        "host.mcp.remove",
+        serde_json::json!({"profile": profile, "name": name}),
+    )
+    .await
+}
+
+fn shellwords_split(s: &str) -> Result<Vec<String>, String> {
+    let mut out: Vec<String> = vec![];
+    let mut cur = String::new();
+    let mut in_single = false;
+    let mut in_double = false;
+    let mut chars = s.chars().peekable();
+    while let Some(c) = chars.next() {
+        match c {
+            '\\' if !in_single => {
+                if let Some(n) = chars.next() {
+                    cur.push(n);
+                }
+            }
+            '\'' if !in_double => in_single = !in_single,
+            '"' if !in_single => in_double = !in_double,
+            c if c.is_whitespace() && !in_single && !in_double => {
+                if !cur.is_empty() {
+                    out.push(std::mem::take(&mut cur));
+                }
+            }
+            c => cur.push(c),
+        }
+    }
+    if in_single || in_double {
+        return Err("unterminated quote".into());
+    }
+    if !cur.is_empty() {
+        out.push(cur);
+    }
+    Ok(out)
+}
+
+#[tauri::command]
+async fn voice_set_voice(profile: String, voice_id: String) -> Result<(), String> {
+    alp_call_async(
+        "host.voice.set_voice",
+        serde_json::json!({"profile": profile, "voice_id": voice_id}),
+    )
+    .await
+}
+
+#[tauri::command]
+async fn voice_test(profile: String, voice_id: Option<String>) -> Result<(), String> {
+    // Stays subprocess: the audio player must run on the client machine.
+    let out = tauri::async_runtime::spawn_blocking(move || {
+        let mut cmd = Command::new("alpi");
+        cmd.args(["-p", &profile, "voice", "test"]);
+        if let Some(v) = voice_id.as_deref() {
+            cmd.args(["--voice", v]);
+        }
+        cmd.output()
+    })
+    .await
+    .map_err(|e| format!("voice_test: {e}"))?
+    .map_err(|e| format!("spawn `alpi`: {e}"))?;
+    if !out.status.success() {
+        return Err(String::from_utf8_lossy(&out.stderr).trim().to_string());
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn voice_autoplay(profile: String, state: String) -> Result<(), String> {
+    alp_call_async(
+        "host.voice.autoplay",
+        serde_json::json!({"profile": profile, "state": state}),
+    )
+    .await
+}
+
+#[tauri::command]
+async fn sandbox_set(profile: String, state: String) -> Result<(), String> {
+    alp_call_async(
+        "host.sandbox.set",
+        serde_json::json!({"profile": profile, "state": state}),
+    )
+    .await
+}
+
+#[tauri::command]
+async fn sandbox_network(profile: String, state: String) -> Result<(), String> {
+    alp_call_async(
+        "host.sandbox.network",
+        serde_json::json!({"profile": profile, "state": state}),
+    )
+    .await
+}
+
+async fn alp_call_async(method: &'static str, params: serde_json::Value) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || host_client::call(method, params))
+        .await
+        .map_err(|e| format!("{method}: {e}"))?
+        .map(|_| ())
+}
+
+#[tauri::command]
+async fn provider_set_key(
+    profile: String, key: String, value: String,
+) -> Result<(), String> {
+    alp_call_async(
+        "host.providers.set_key",
+        serde_json::json!({"profile": profile, "key": key, "value": value}),
+    )
+    .await
+}
+
+#[tauri::command]
+async fn provider_unset_key(profile: String, key: String) -> Result<(), String> {
+    alp_call_async(
+        "host.providers.unset_key",
+        serde_json::json!({"profile": profile, "key": key}),
+    )
+    .await
+}
+
+#[tauri::command]
+async fn provider_add_openrouter_model(
+    profile: String, model: String,
+) -> Result<(), String> {
+    alp_call_async(
+        "host.providers.add_openrouter_model",
+        serde_json::json!({"profile": profile, "model": model}),
+    )
+    .await
+}
+
+#[tauri::command]
+async fn provider_remove_openrouter_model(
+    profile: String, model: String,
+) -> Result<(), String> {
+    alp_call_async(
+        "host.providers.remove_openrouter_model",
+        serde_json::json!({"profile": profile, "model": model}),
+    )
+    .await
+}
+
+#[tauri::command]
+async fn provider_add_ollama(
+    profile: String, name: String, url: String,
+) -> Result<(), String> {
+    alp_call_async(
+        "host.providers.add_ollama",
+        serde_json::json!({"profile": profile, "name": name, "url": url}),
+    )
+    .await
+}
+
+#[tauri::command]
+async fn provider_remove_ollama(profile: String, name: String) -> Result<(), String> {
+    alp_call_async(
+        "host.providers.remove_ollama",
+        serde_json::json!({"profile": profile, "name": name}),
+    )
+    .await
+}
+
+#[tauri::command]
+async fn profile_create(name: String) -> Result<(), String> {
+    alp_call_async("host.profile.create", serde_json::json!({"name": name})).await
+}
+
+#[tauri::command]
+async fn profile_delete(name: String) -> Result<(), String> {
+    alp_call_async("host.profile.delete", serde_json::json!({"name": name})).await
+}
+
+#[tauri::command]
+async fn peer_remove(profile: String, peer_id: String) -> Result<(), String> {
+    alp_call_async(
+        "host.peers.remove",
+        serde_json::json!({"profile": profile, "id": peer_id}),
+    )
+    .await
+}
+
+#[tauri::command]
+async fn peers_pending_list(profile: String) -> Result<serde_json::Value, String> {
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        host_client::call(
+            "host.peers.pending_list",
+            serde_json::json!({"profile": profile}),
+        )
+    })
+    .await
+    .map_err(|e| format!("peers_pending_list: {e}"))??;
+    Ok(result.get("pending").cloned().unwrap_or(serde_json::Value::Array(vec![])))
+}
+
+#[tauri::command]
+async fn peers_pending_accept(
+    profile: String,
+    peer_id: String,
+    pubkey: String,
+) -> Result<(), String> {
+    alp_call_async(
+        "host.peers.pending_accept",
+        serde_json::json!({
+            "profile": profile,
+            "id": peer_id,
+            "pubkey": pubkey,
+        }),
+    )
+    .await
+}
+
+#[tauri::command]
+async fn peers_pending_discard(
+    profile: String,
+    pubkey: String,
+) -> Result<(), String> {
+    alp_call_async(
+        "host.peers.pending_discard",
+        serde_json::json!({"profile": profile, "pubkey": pubkey}),
+    )
+    .await
+}
+
+#[tauri::command]
+async fn schedules(profile: String) -> Result<serde_json::Value, String> {
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        host_client::call(
+            "host.schedule.list",
+            serde_json::json!({"profile": profile}),
+        )
+    })
+    .await
+    .map_err(|e| format!("schedules: {e}"))??;
+    Ok(result.get("jobs").cloned().unwrap_or(serde_json::Value::Array(vec![])))
+}
+
+#[tauri::command]
+async fn schedule_remove(profile: String, id: String) -> Result<(), String> {
+    alp_call_async(
+        "host.schedule.remove",
+        serde_json::json!({"profile": profile, "id": id}),
+    )
+    .await
+}
+
+#[tauri::command]
+async fn schedule_set_paused(
+    profile: String,
+    id: String,
+    paused: bool,
+) -> Result<(), String> {
+    alp_call_async(
+        "host.schedule.set_paused",
+        serde_json::json!({"profile": profile, "id": id, "paused": paused}),
+    )
+    .await
+}
+
+#[tauri::command]
+async fn schedule_fire(profile: String, id: String) -> Result<(), String> {
+    alp_call_async(
+        "host.schedule.fire",
+        serde_json::json!({"profile": profile, "id": id}),
+    )
+    .await
+}
+
+#[tauri::command]
+async fn daemon_restart() -> Result<(), String> {
+    alp_call_async("host.daemon.restart", serde_json::json!({})).await
+}
+
+#[tauri::command]
+async fn resolve_ctx_window(profile: String, model: String) -> Result<u64, String> {
+    let out = tauri::async_runtime::spawn_blocking(move || {
+        Command::new("alpi")
+            .args(["-p", &profile, "ctx", &model])
+            .output()
+    })
+    .await
+    .map_err(|e| format!("resolve_ctx_window: {e}"))?
+    .map_err(|e| format!("spawn `alpi`: {e}"))?;
+    if !out.status.success() {
+        return Err(String::from_utf8_lossy(&out.stderr).trim().to_string());
+    }
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    stdout
+        .trim()
+        .parse::<u64>()
+        .map_err(|e| format!("parse ctx: {e} (stdout={stdout:?})"))
+}
+
+#[tauri::command]
+async fn pick_folder() -> Result<Option<String>, String> {
+    let out = tauri::async_runtime::spawn_blocking(|| {
+        Command::new("osascript")
+            .args([
+                "-e",
+                "POSIX path of (choose folder with prompt \"Select workspace\")",
+            ])
+            .output()
+    })
+    .await
+    .map_err(|e| format!("join: {e}"))?
+    .map_err(|e| format!("osascript: {e}"))?;
+    if !out.status.success() {
+        return Ok(None);
+    }
+    let p = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    if p.is_empty() {
+        Ok(None)
+    } else {
+        Ok(Some(p.trim_end_matches('/').to_string()))
+    }
+}
+
+#[tauri::command]
+fn reveal_in_finder(path: String) -> Result<(), String> {
+    Command::new("open")
+        .args(["-R", &path])
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| format!("open: {e}"))
+}
+
+#[tauri::command]
+async fn ollama_models(profile: String) -> Result<Vec<String>, String> {
+    tauri::async_runtime::spawn_blocking(move || list_ollama_models_for(&profile))
+        .await
+        .map_err(|e| format!("join: {e}"))
+}
+
+#[tauri::command]
+async fn chat_cancel(profile: String) -> Result<(), String> {
+    let request_id = {
+        let map = active_chats().lock().unwrap();
+        map.get(&profile).cloned()
+    };
+    let Some(request_id) = request_id else {
+        return Ok(());
+    };
+    tauri::async_runtime::spawn_blocking(move || {
+        host_client::call(
+            "host.chat.cancel",
+            serde_json::json!({"request_id": request_id}),
+        )
+    })
+    .await
+    .map_err(|e| format!("chat_cancel: {e}"))?
+    .map(|_| ())
+}
+
+#[tauri::command]
+fn chat_send_stream(
+    app: AppHandle,
+    profile: String,
+    session_id: Option<String>,
+    text: String,
+    model: Option<String>,
+) {
+    thread::spawn(move || stream_chat(app, profile, session_id, text, model));
+}
+
+fn stream_chat(
+    app: AppHandle,
+    profile: String,
+    session_id: Option<String>,
+    text: String,
+    model: Option<String>,
+) {
+    let request_id = format!(
+        "tauri-{}-{}",
+        profile,
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_micros())
+            .unwrap_or(0)
+    );
+    active_chats()
+        .lock()
+        .unwrap()
+        .insert(profile.clone(), request_id.clone());
+
+    let mut params = serde_json::json!({
+        "profile": profile,
+        "text": text,
+        "request_id": request_id,
+    });
+    if let Some(id) = session_id {
+        params["session_id"] = serde_json::Value::String(id);
+    }
+    if let Some(m) = model {
+        params["model"] = serde_json::Value::String(m);
+    }
+
+    let mut got_error = false;
+    let mut got_interrupted = false;
+    let mut resolved_id = String::new();
+    let mut final_reply = String::new();
+    let app_for_frames = app.clone();
+
+    let result = host_client::call_stream("host.chat.send", params, |frame| {
+        if let Some(err) = frame.get("error") {
+            got_error = true;
+            let _ = app_for_frames.emit(
+                "chat-event",
+                ChatEvent::Error {
+                    text: err
+                        .get("message")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("internal error")
+                        .to_string(),
+                },
+            );
+            return;
+        }
+        match frame
+            .get("event")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+        {
+            "tool_start" => {
+                let _ = app_for_frames.emit(
+                    "chat-event",
+                    ChatEvent::ToolStart {
+                        tool_id: frame["tool_id"].as_str().unwrap_or("").to_string(),
+                        name: frame["name"].as_str().unwrap_or("").to_string(),
+                        preview: frame["preview"]
+                            .as_str()
+                            .unwrap_or("")
+                            .to_string(),
+                        args: frame
+                            .get("args")
+                            .cloned()
+                            .unwrap_or(serde_json::Value::Object(Default::default())),
+                    },
+                );
+            }
+            "tool_state" => {
+                let _ = app_for_frames.emit(
+                    "chat-event",
+                    ChatEvent::ToolState {
+                        tool_id: frame["tool_id"].as_str().unwrap_or("").to_string(),
+                        name: frame["name"].as_str().unwrap_or("").to_string(),
+                        text: frame["text"].as_str().unwrap_or("").to_string(),
+                        ok: frame["ok"].as_bool().unwrap_or(true),
+                    },
+                );
+            }
+            "tool_end" => {
+                let _ = app_for_frames.emit(
+                    "chat-event",
+                    ChatEvent::ToolEnd {
+                        tool_id: frame["tool_id"].as_str().unwrap_or("").to_string(),
+                        name: frame["name"].as_str().unwrap_or("").to_string(),
+                        ok: frame["ok"].as_bool().unwrap_or(false),
+                        output: frame["output"]
+                            .as_str()
+                            .unwrap_or("")
+                            .to_string(),
+                    },
+                );
+            }
+            "reasoning_delta" => {
+                let _ = app_for_frames.emit(
+                    "chat-event",
+                    ChatEvent::ReasoningDelta {
+                        text: frame["text"].as_str().unwrap_or("").to_string(),
+                    },
+                );
+            }
+            "assistant_delta" => {
+                let _ = app_for_frames.emit(
+                    "chat-event",
+                    ChatEvent::AssistantDelta {
+                        text: frame["text"].as_str().unwrap_or("").to_string(),
+                    },
+                );
+            }
+            "error" => {
+                got_error = true;
+                let _ = app_for_frames.emit(
+                    "chat-event",
+                    ChatEvent::Error {
+                        text: frame["text"].as_str().unwrap_or("").to_string(),
+                    },
+                );
+            }
+            "interrupted" => {
+                got_interrupted = true;
+                let _ = app_for_frames.emit("chat-event", ChatEvent::Interrupted);
+            }
+            "reply" => {
+                final_reply = frame["text"].as_str().unwrap_or("").to_string();
+                if let Some(sid) = frame.get("session_id").and_then(|v| v.as_str()) {
+                    resolved_id = sid.to_string();
+                }
+            }
+            "done" => {
+                if let Some(sid) = frame.get("session_id").and_then(|v| v.as_str()) {
+                    resolved_id = sid.to_string();
+                }
+            }
+            _ => {}
+        }
+    });
+
+    if let Err(e) = result {
+        if !got_error && !got_interrupted {
+            let _ = app.emit("chat-event", ChatEvent::Error { text: e });
+        }
+    }
+
+    {
+        let mut map = active_chats().lock().unwrap();
+        if map.get(&profile).map(|s| s.as_str()) == Some(&request_id) {
+            map.remove(&profile);
+        }
+    }
+
+    let _ = app.emit(
+        "chat-event",
+        ChatEvent::Reply {
+            text: final_reply,
+            session_id: resolved_id.clone(),
+        },
+    );
+    let _ = app.emit(
+        "chat-event",
+        ChatEvent::Done {
+            session_id: resolved_id,
+        },
+    );
+}
+
+#[tauri::command]
+fn workgroup_transcript(profile: String, wg_id: String) -> Result<Vec<DecryptedMessage>, String> {
+    let result = host_client::call(
+        "host.workgroup.transcript",
+        serde_json::json!({"profile": profile, "wg_id": wg_id}),
+    )?;
+    let posts = result
+        .get("posts")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
+    let mut out: Vec<DecryptedMessage> = Vec::with_capacity(posts.len());
+    for post in posts {
+        let seq = post.get("seq").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+        let from = post
+            .get("from")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        let from_pubkey = post
+            .get("from_pubkey")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        let body = post
+            .get("body")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        out.push(DecryptedMessage {
+            seq,
+            from,
+            from_pubkey,
+            body,
+        });
+    }
+    Ok(out)
+}
+
+#[tauri::command]
+async fn workgroup_post(
+    profile: String,
+    wg_id: String,
+    text: String,
+) -> Result<String, String> {
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        Command::new("alpi")
+            .args(["-p", &profile, "workgroup", "post", &wg_id, &text])
+            .output()
+    })
+    .await
+    .map_err(|e| format!("join: {e}"))?
+    .map_err(|e| format!("spawn `alpi`: {e}"))?;
+    if !result.status.success() {
+        return Err(format!(
+            "`alpi workgroup post` exited {}: {}",
+            result.status.code().unwrap_or(-1),
+            String::from_utf8_lossy(&result.stderr).trim()
+        ));
+    }
+    Ok(String::from_utf8_lossy(&result.stdout).trim().to_string())
+}
+
+#[tauri::command]
+fn tray_announce_update(app: AppHandle, available: bool, version: Option<String>) {
+    tray::announce_update(&app, available, version.as_deref());
+}
+
+fn subscribe_daemon_events(app: AppHandle) {
+    loop {
+        let app_for_frames = app.clone();
+        let result = host_client::call_stream(
+            "host.events.subscribe",
+            serde_json::json!({}),
+            move |frame| {
+                let _ = app_for_frames.emit("daemon-event", frame);
+            },
+        );
+        if let Err(e) = result {
+            eprintln!("daemon-event subscribe disconnected: {e}");
+        }
+        std::thread::sleep(std::time::Duration::from_secs(2));
+    }
+}
+
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+    tauri::Builder::default()
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
+        .setup(|app| {
+            tray::install(app)?;
+            if let Err(e) = watcher::install(app.handle()) {
+                eprintln!("watcher install failed: {e}");
+            }
+            let app_handle = app.handle().clone();
+            thread::spawn(move || subscribe_daemon_events(app_handle));
+            Ok(())
+        })
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                let _ = window.hide();
+                api.prevent_close();
+            }
+        })
+        .invoke_handler(tauri::generate_handler![
+            profiles,
+            profile_summaries,
+            sessions,
+            session_detail,
+            workgroups,
+            workgroup_transcript,
+            workgroup_post,
+            read_file,
+            chat_send_stream,
+            chat_cancel,
+            ollama_models,
+            set_config_field,
+            unset_config_field,
+            port_available,
+            service_action,
+            reveal_in_finder,
+            gateway_status,
+            pick_folder,
+            probe_peers,
+            peer_add,
+            peer_remove,
+            peers_pending_list,
+            peers_pending_accept,
+            peers_pending_discard,
+            schedules,
+            schedule_remove,
+            schedule_set_paused,
+            schedule_fire,
+            daemon_restart,
+            profile_create,
+            profile_delete,
+            provider_set_key,
+            provider_unset_key,
+            provider_add_ollama,
+            provider_remove_ollama,
+            provider_add_openrouter_model,
+            provider_remove_openrouter_model,
+            sandbox_set,
+            sandbox_network,
+            voice_set_voice,
+            voice_autoplay,
+            voice_test,
+            gateway_config,
+            gateway_remove,
+            mcp_add,
+            mcp_remove,
+            resolve_ctx_window,
+            probe_gateways,
+            skills,
+            profile_storage,
+            workgroup_members,
+            workgroup_action,
+            workgroup_update,
+            workgroup_create,
+            workgroup_add_member,
+            tray_announce_update
+        ])
+        .run(tauri::generate_context!())
+        .expect("error while running tauri application");
+}

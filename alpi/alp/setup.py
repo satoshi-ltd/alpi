@@ -24,18 +24,38 @@ _PING_TIMEOUT = 0.5
 
 def run(home: Path) -> None:
     """Top-level entry — shows identity + pinned peers, with add/remove."""
+    from alpi.alp import pending as pending_mod
+
     kp = load_or_generate(home)
     while True:
         entries = peers_mod.load(home)
-        statuses = asyncio.run(_probe_all(home, entries, kp.pubkey_b64()))
+        probes = asyncio.run(_probe_all(home, entries, kp.pubkey_b64()))
+        mismatches = _detect_local_mismatches(entries)
+        pending_entries = pending_mod.load(home)
 
         items: list = []
         items.append(("Your identity", ("identity", None), _short_pubkey(kp.pubkey_b64())))
+        if pending_entries:
+            items.append(None)
+            items.append(ui.Heading("Pending invites"))
+            for pe in pending_entries:
+                items.append((
+                    f"? {_short_pubkey(pe.pubkey)}",
+                    ("pending", pe.pubkey),
+                    "tried to contact you — pin or discard",
+                ))
         if entries:
             items.append(None)
         for peer in entries:
-            label = f"{_status_dot(statuses.get(peer.id, '?'))} @{peer.id}"
-            detail = _peer_detail(peer)
+            status, _ = probes.get(peer.id, ("?", None))
+            mismatch = mismatches.get(peer.id)
+            glyph = "⚠" if mismatch else _status_dot(status)
+            label = f"{glyph} @{peer.id}"
+            detail = (
+                f"pubkey mismatch — actual: {_short_pubkey(mismatch)}"
+                if mismatch
+                else _peer_detail(peer)
+            )
             items.append((label, ("use", peer.id), detail))
         items.append(None)
         items.append(("+ Add peer", ("add", None), ""))
@@ -55,11 +75,66 @@ def run(home: Path) -> None:
         if action == "identity":
             _show_identity(home, kp.pubkey_b64())
         elif action == "use":
-            _inspect(home, target, statuses.get(target, "?"))
+            status, reason = probes.get(target, ("?", None))
+            _inspect(
+                home,
+                target,
+                status,
+                reason,
+                mismatches.get(target),
+                kp.pubkey_b64(),
+            )
         elif action == "add":
             _add(home)
         elif action == "remove":
             _remove(home, entries)
+        elif action == "pending":
+            _accept_or_discard_pending(home, target)
+
+
+def _accept_or_discard_pending(home: Path, pubkey: str) -> None:
+    from alpi.alp import pending as pending_mod
+
+    ui.banner(
+        ui.crumb("setup", "peers", "pending"),
+        subtitle=f"incoming pubkey: {_short_pubkey(pubkey)}",
+        home=home,
+    )
+    ui._console.print("")
+    ui._console.print(f"  full pubkey: {pubkey}")
+    ui._console.print("")
+    ui.dim(
+        "Verify out-of-band that this pubkey belongs to who you think it does\n"
+        "before pinning. The protocol can't tell strangers from friends."
+    )
+    ui._console.print("")
+    choice = ui.menu(
+        "",
+        [
+            ("Accept — pin as peer", "accept", "link.ping + link.ask"),
+            ("Discard", "discard", "drop from pending list"),
+        ],
+        home=home,
+        close="Back",
+    )
+    if choice == "accept":
+        peer_id = ui.text("Pin under id (e.g. 'mirai')")
+        if not peer_id:
+            return
+        peer_id = peer_id.strip()
+        try:
+            peers_mod.add(home, Peer(
+                id=peer_id, pubkey=pubkey,
+                allow=["link.ping", "link.ask"],
+            ))
+        except ValueError as e:
+            ui.fail_and_wait(str(e))
+            return
+        pending_mod.remove(home, pubkey)
+        ui.ok_and_wait(f"pinned @{peer_id}")
+    elif choice == "discard":
+        pending_mod.remove(home, pubkey)
+        ui.ok_and_wait("discarded")
 
 
 # Probe
@@ -69,23 +144,33 @@ async def _probe_all(
     home: Path,
     entries: list[Peer],
     self_pubkey: str,
-) -> dict[str, str]:
+) -> dict[str, tuple[str, str | None]]:
     """Fire a concurrent ``link.ping`` at every peer. 500ms timeout,
-    returns a dict ``{peer_id: "on"|"off"|"?"}``."""
+    returns a dict ``{peer_id: (status, reason)}`` where status is
+    ``"on" | "off" | "unverified"``. Reason is the underlying error
+    message when not online, else None."""
     if not entries:
         return {}
     tasks = [_probe_one(home, p, self_pubkey) for p in entries]
     results = await asyncio.gather(*tasks, return_exceptions=True)
-    return {p.id: (r if isinstance(r, str) else "off") for p, r in zip(entries, results)}
+    out: dict[str, tuple[str, str | None]] = {}
+    for p, r in zip(entries, results):
+        if isinstance(r, tuple):
+            out[p.id] = r
+        else:
+            out[p.id] = ("off", str(r) if r else None)
+    return out
 
 
-async def _probe_one(home: Path, peer: Peer, _self: str) -> str:
+async def _probe_one(
+    home: Path, peer: Peer, _self: str
+) -> tuple[str, str | None]:
     kp = load_or_generate(home)
     try:
         if peer.address:
             host, _, port_s = peer.address.rpartition(":")
             if not host or not port_s.isdigit():
-                return "off"
+                return ("off", f"invalid address: {peer.address!r}")
             await alp_client.call_tcp(
                 host=host,
                 port=int(port_s),
@@ -95,10 +180,10 @@ async def _probe_one(home: Path, peer: Peer, _self: str) -> str:
                 params={"nonce": "setup"},
                 timeout=_PING_TIMEOUT,
             )
-            return "on"
+            return ("on", None)
         socket_path = _target_home(peer.id) / "alp" / "alp.sock"
         if not socket_path.exists():
-            return "off"
+            return ("off", f"socket missing: {socket_path}")
         await alp_client.call(
             socket_path=socket_path,
             sender=kp,
@@ -107,9 +192,34 @@ async def _probe_one(home: Path, peer: Peer, _self: str) -> str:
             params={"nonce": "setup"},
             timeout=_PING_TIMEOUT,
         )
-        return "on"
-    except Exception:  # noqa: BLE001
-        return "off"
+        return ("on", None)
+    except alp_client.TargetOffline as e:
+        return ("off", str(e))
+    except (alp_client.ClientError, alp_client.RemoteError) as e:
+        return ("unverified", str(e))
+    except Exception as e:  # noqa: BLE001
+        return ("off", str(e))
+
+
+def _detect_local_mismatches(entries: list[Peer]) -> dict[str, str]:
+    """For each pinned peer that corresponds to a local profile on this
+    machine, compare the pinned pubkey against the profile's actual
+    keypair. Returns ``{peer_id: actual_pubkey_b64}`` for mismatches."""
+    from alpi.alp import keys as keys_mod
+
+    out: dict[str, str] = {}
+    for peer in entries:
+        target = _target_home(peer.id)
+        if not keys_mod.exists(target):
+            continue
+        try:
+            kp = keys_mod.load(target)
+        except Exception:  # noqa: BLE001
+            continue
+        actual = kp.pubkey_b64()
+        if actual != peer.pubkey:
+            out[peer.id] = actual
+    return out
 
 
 def _target_home(peer_id: str) -> Path:
@@ -124,6 +234,8 @@ def _target_home(peer_id: str) -> Path:
 def _status_dot(status: str) -> str:
     if status == "on":
         return "●"
+    if status == "unverified":
+        return "◐"
     if status == "off":
         return "○"
     return "?"
@@ -189,23 +301,53 @@ def _copy_to_clipboard(text: str) -> None:
 # Inspect / remove / add
 
 
-def _inspect(home: Path, peer_id: str, status: str) -> None:
+def _inspect(
+    home: Path,
+    peer_id: str,
+    status: str,
+    reason: str | None,
+    mismatch: str | None,
+    self_pubkey: str,
+) -> None:
     peer = peers_mod.get_by_id(home, peer_id)
     if peer is None:
         ui.fail_and_wait(f"peer {peer_id!r} disappeared")
         return
     ui.banner(ui.crumb("setup", "peers", f"@{peer_id}"), subtitle="peer detail", home=home)
     ui._console.print("")
-    status_label = {"on": "online", "off": "offline", "?": "remote (not probed)"}[status]
+    status_label = {
+        "on": "online",
+        "off": "offline",
+        "unverified": "unverified — handshake aborted",
+        "?": "unknown",
+    }.get(status, status)
     ui._console.print(f"  status   {status_label}")
+    if reason and status != "on":
+        ui._console.print(f"           [dim]{reason}[/dim]")
     ui._console.print(f"  pubkey   {peer.pubkey}")
+    if mismatch:
+        ui._console.print(
+            f"           [bold red]⚠ mismatch — actual local key: {mismatch}[/bold red]"
+        )
     if peer.alias:
         ui._console.print(f"  alias    {peer.alias}")
     if peer.address:
         ui._console.print(f"  address  {peer.address}")
     ui._console.print(f"  allow    {', '.join(peer.allow) or '(none)'}")
     ui._console.print("")
-    ui.press_enter()
+    if status == "unverified":
+        ui.dim(
+            f"Tip: @{peer_id} likely has not pinned your pubkey. Share it\n"
+            "with them and have them add you in their setup → Peers → Add.\n"
+        )
+        ui._console.print("")
+    if ui.confirm(
+        f"Copy your pubkey to clipboard? (share with @{peer_id})", default=False
+    ):
+        _copy_to_clipboard(self_pubkey)
+        ui.ok_and_wait("copied")
+    else:
+        ui.press_enter()
 
 
 def _remove(home: Path, entries: list[Peer]) -> None:
@@ -237,13 +379,20 @@ def _add(home: Path) -> None:
     )
     ui._console.print("")
 
-    peer_id = ui.text("Peer id (short handle, e.g. mirai, home-server):")
-    if not peer_id:
+    raw_id = ui.text("Peer id (short handle, e.g. mirai, home-server):")
+    if not raw_id:
         return ui.cancelled()
-    peer_id = peer_id.strip()
-    if "/" in peer_id or " " in peer_id or ":" in peer_id:
-        ui.fail_and_wait(f"invalid id: {peer_id!r}")
+    peer_id = raw_id.strip().lower()
+    if not peer_id:
+        ui.fail_and_wait(f"invalid id: {raw_id!r}")
         return
+    if not all(c.isalnum() or c in "-_" for c in peer_id):
+        ui.fail_and_wait(
+            f"invalid id: {peer_id!r} (use a-z, 0-9, '-', '_' only)"
+        )
+        return
+    if peer_id != raw_id.strip():
+        ui.dim(f"id normalized to {peer_id!r}")
     if peers_mod.get_by_id(home, peer_id) is not None:
         ui.fail_and_wait(f"@{peer_id} already pinned; remove it first")
         return

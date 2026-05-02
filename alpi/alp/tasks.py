@@ -42,6 +42,24 @@ _TASK_RE = re.compile(
 _DONE_RE = re.compile(
     r"^(?:@\S+\s+)*#done\s+(.+?)\s*$", re.MULTILINE,
 )
+# ``#skip`` is the member-side "I considered and have nothing to add"
+# signal. Final answer for this round — counts toward closure-quorum
+# but NOT as substantive. Payload optional ("waiting on FX data").
+_SKIP_RE = re.compile(
+    r"^(?:@\S+\s+)*#skip(?:\s+(.+?))?\s*$", re.MULTILINE,
+)
+# ``#working`` is the member-side "I'm processing, give me time"
+# heartbeat. Posted at the start of a turn that will use slow tools
+# (web_fetch, research, multi-step delegate). Does NOT consume the
+# round slot — the same member may post substantive or `#skip`
+# afterwards in the same round. Does NOT satisfy closure-quorum on
+# its own (a member who only `#working`'d hasn't actually
+# contributed). The hub uses recent `#working` posts as a hint to
+# wait longer, but the 10-minute closure-quorum timeout still
+# applies as a hard ceiling.
+_WORKING_RE = re.compile(
+    r"^(?:@\S+\s+)*#working(?:\s+(.+?))?\s*$", re.MULTILINE,
+)
 
 
 @dataclass(frozen=True)
@@ -69,12 +87,56 @@ class Task:
 
 
 def has_markers(text: str) -> list[str]:
+    """Return the lifecycle markers (``task``, ``done``) present in
+    ``text``. ``#skip`` is intentionally NOT in this list — it is a
+    member-side signal, not a hub-only lifecycle marker, so it
+    doesn't gate the same SDK rejection path."""
     out: list[str] = []
     if _TASK_RE.search(text or ""):
         out.append("task")
     if _DONE_RE.search(text or ""):
         out.append("done")
     return out
+
+
+def is_done(text: str) -> bool:
+    """``True`` when the post contains a valid ``#done <…>`` marker
+    (start of line, line-anchored, with a non-empty payload). Used by
+    the rotation enforcement to allow the hub one back-to-back post
+    when (and only when) it is closing the active task."""
+    return _DONE_RE.search(text or "") is not None
+
+
+def is_task(text: str) -> bool:
+    """``True`` when the post contains a valid ``#task <…>`` marker.
+    Used by the rotation enforcement to allow a hub `#task` post
+    even when the hub spoke last — opening a new task is a
+    lifecycle action that preempts the previous one, not "more
+    content", so the back-to-back rule doesn't apply."""
+    return _TASK_RE.search(text or "") is not None
+
+
+def is_skip(text: str) -> bool:
+    """``True`` when the post contains a ``#skip`` marker (member
+    signals "considered, no contribution this round"). Used by the
+    closure-quorum check to count a member as having participated
+    in the active task even when they had nothing substantive."""
+    return _SKIP_RE.search(text or "") is not None
+
+
+def is_working(text: str) -> bool:
+    """``True`` when the post contains a ``#working`` marker (member
+    signals "processing with tools, give me more time"). Used by:
+
+    - **Rotation**: ``#working`` posts don't consume the round slot,
+      so a member can `#working` then later post substantive in the
+      same round. The SDK still caps at one `#working` per round to
+      prevent heartbeat spam.
+    - **Closure-quorum**: a member who only posted ``#working`` (and
+      neither substantive content nor ``#skip``) hasn't actually
+      contributed and is still pending in the quorum check.
+    """
+    return _WORKING_RE.search(text or "") is not None
 
 
 def parse_post(

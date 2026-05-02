@@ -1,4 +1,4 @@
-"""Platform base — every channel (Telegram, webhook, ...) subclasses this."""
+"""Platform base."""
 
 from __future__ import annotations
 
@@ -13,8 +13,8 @@ class IncomingMessage:
     platform: str
     external_user_id: str
     external_chat_id: str
-    text: str                        # user's raw message; the LLM prefix is built at the run boundary
-    subject: str = ""                # used by email platforms for the prompt prefix
+    text: str
+    subject: str = ""
     reply_to: str | None = None
     ack: Callable[[], Awaitable[Any]] | None = field(default=None, repr=False)
 
@@ -24,7 +24,7 @@ class OutgoingMessage:
     external_chat_id: str
     text: str
     attachment: str | None = None
-    reply_markup: dict[str, Any] | None = None  # platform-specific UI hint (Telegram inline_keyboard etc.); ignored by platforms that don't understand it
+    reply_markup: dict[str, Any] | None = None
 
 
 class Platform(abc.ABC):
@@ -46,5 +46,5 @@ class Platform(abc.ABC):
     async def send(self, message: OutgoingMessage) -> None: ...
 
     async def send_typing(self, chat_id: str) -> None:
-        """Optional: signal that the agent is working."""
+        """Optional typing signal."""
         return None
