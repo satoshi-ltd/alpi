@@ -441,6 +441,119 @@ def cmd_diff(ctx: click.Context, since: str, as_json: bool) -> None:
     click.echo(diff_mod.render(report, profile=profile))
 
 
+@main.command("backup")
+@click.option(
+    "--out", "out_path", type=click.Path(dir_okay=False, path_type=Path), default=None,
+    help="Output file. Defaults to ``./<profile>.<YYYY-MM-DD>.alpi-backup``.",
+)
+@click.option(
+    "--passphrase-stdin", is_flag=True, default=False,
+    help="Read the passphrase from stdin instead of prompting (one line, no echo).",
+)
+@click.option(
+    "--force", is_flag=True, default=False,
+    help="Overwrite ``--out`` if it already exists.",
+)
+@click.pass_context
+def cmd_backup(
+    ctx: click.Context, out_path: Path | None, passphrase_stdin: bool, force: bool,
+) -> None:
+    """Encrypt this profile into a single passphrase-protected file.
+
+    Zero-knowledge: the passphrase derives the key (Scrypt) and never
+    leaves the local machine. Lose it and the archive is unrecoverable.
+    Caches, logs, sockets and PIDs are excluded; nested profiles are not
+    recursed into."""
+    from alpi import backup as backup_mod
+
+    h: Path = ctx.obj["home"]
+    profile: str = ctx.obj["profile"]
+    if out_path is None:
+        out_path = Path.cwd() / backup_mod.default_filename(profile)
+    if out_path.exists():
+        if not force:
+            raise click.UsageError(
+                f"{out_path} already exists; pass --force to overwrite."
+            )
+        out_path.unlink()
+
+    if passphrase_stdin:
+        passphrase = sys.stdin.readline().rstrip("\n")
+    else:
+        passphrase = click.prompt(
+            "Passphrase", hide_input=True, confirmation_prompt=True,
+        )
+    if not passphrase:
+        raise click.UsageError("passphrase must not be empty")
+
+    try:
+        info = backup_mod.create_backup(h, out_path, passphrase, profile_name=profile)
+    except backup_mod.BackupError as e:
+        raise click.ClickException(str(e)) from None
+
+    click.echo(
+        f"backup: {info.path}\n"
+        f"  profile:    {info.profile}\n"
+        f"  files:      {info.file_count}\n"
+        f"  plaintext:  {home.format_bytes(info.plaintext_bytes)}\n"
+        f"  archive:    {home.format_bytes(info.archive_bytes)}"
+    )
+
+
+@main.command("restore")
+@click.argument("archive", type=click.Path(exists=True, dir_okay=False, path_type=Path))
+@click.option(
+    "--passphrase-stdin", is_flag=True, default=False,
+    help="Read the passphrase from stdin instead of prompting.",
+)
+@click.option(
+    "--force", is_flag=True, default=False,
+    help="Restore even if the target profile directory already has files.",
+)
+@click.pass_context
+def cmd_restore(
+    ctx: click.Context, archive: Path, passphrase_stdin: bool, force: bool,
+) -> None:
+    """Decrypt an alpi backup into the active profile.
+
+    The target profile is the one selected by ``-p`` (default
+    ``~/.alpi/``). Refuses to overwrite existing files unless
+    ``--force`` is passed."""
+    from alpi import backup as backup_mod
+
+    h: Path = ctx.obj["home"]
+    try:
+        header = backup_mod.inspect(archive)
+    except backup_mod.BackupError as e:
+        raise click.ClickException(str(e)) from None
+
+    click.echo(
+        f"archive:  {archive}\n"
+        f"  source profile: {header.get('profile', '?')}\n"
+        f"  created:        {header.get('created_at', '?')}\n"
+        f"  files:          {header.get('file_count', '?')}\n"
+        f"target:   {h}"
+    )
+
+    if passphrase_stdin:
+        passphrase = sys.stdin.readline().rstrip("\n")
+    else:
+        passphrase = click.prompt("Passphrase", hide_input=True)
+    if not passphrase:
+        raise click.UsageError("passphrase must not be empty")
+
+    try:
+        info = backup_mod.restore_backup(archive, h, passphrase, force=force)
+    except backup_mod.BackupError as e:
+        raise click.ClickException(str(e)) from None
+
+    click.echo(
+        f"restored: {info.target}\n"
+        f"  files:   {info.file_count}\n"
+        f"  source:  {info.profile} (backup created {info.created_at})"
+    )
+
+
 def _require_workspace(h: Path) -> None:
     cfg = config.load(h)
     wp = cfg.workspace_path

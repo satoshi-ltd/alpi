@@ -30,64 +30,11 @@ not sitting at the machine."
 
 | ID | Item | Status |
 |---|---|---|
-| Matrix | Federated gateway MVP — Matrix sync/send, room + sender allowlists, setup/docs/tests; E2EE is a follow-up gate, not a launch claim | 🟡 |
-| AW | Encrypted profile backup/restore — zero-knowledge passphrase-encrypted archive of `~/.alpi/<profile>/` | 🔵 |
 | Desktop-host | Desktop host-plane hardening — move remaining desktop profile-state reads behind `host.*` verbs | 🔵 |
 
 ---
 
 ## v0.4 — detailed scope
-
-### AW. Encrypted profile backup/restore
-
-Zero-knowledge archive of `~/.alpi/<profile>/`: memories, peers,
-skills, sessions, the `.env`, the `config.yaml`. Two verbs:
-
-- `alpi backup [--out PATH]` — passphrase-prompt; emits a single
-  age-encrypted file (`profile-name.YYYY-MM-DD.alpi-backup`).
-- `alpi restore PATH` — passphrase-prompt; reverses the above into
-  `~/.alpi/<profile>/`, refusing to overwrite a non-empty profile
-  unless `--force`.
-
-Crypto: **age** with passphrase recipient (no asymmetric keys for
-the user to manage). Argon2id KDF. The profile owner is the only
-party who can decrypt; we never see the plaintext.
-
-**Why it matters commercially.** "Carry your agent between
-machines" + "no vendor lock-in" + "if your laptop dies, you have
-your agent back." A local-first agent should not lose its durable
-context when the user changes machines.
-
-### Matrix. Federated gateway MVP
-
-Matrix is not a mass-market adoption bet. It is the smallest remote
-channel that matches alpi's deployment thesis: a home server can host
-the daemon, the user can choose a homeserver, and no phone number or
-central account from alpi is required.
-
-**Launch scope.** `alpi/gateway/platforms/matrix.py` with
-`matrix-nio`, sync/send, cursor persistence, room allowlist, sender
-allowlist, setup wizard, operations docs, and mocked adapter tests.
-The current adapter is a no-E2EE MVP; docs and UI must say that
-plainly. Do not market this as encrypted until Olm/Megolm storage,
-device verification, and encrypted-room send/read tests exist.
-
-**Why keep it even with mobile planned.** Mobile is the owned client;
-Matrix is the federated bridge. They solve different problems:
-
-- Mobile is the best personal UX for talking to your own profile over
-  ALP.2.
-- Matrix is a durable gateway for users who already run a homeserver
-  or want a standards-based room shared with humans and agents.
-- Matrix works before app-store distribution, push-notification
-  plumbing, and mobile pairing are finished.
-- Matrix is useful from machines where installing the mobile app is
-  impossible or undesirable.
-
-**Done means:** first-run setup works, `alpi doctor` reports Matrix
-health, docs call out the no-E2EE boundary, and the fast suite covers
-cursor, allowlists, self-message filtering, backlog skip, send, and
-missing dependency behaviour.
 
 ### Desktop-host. Desktop host-plane hardening
 
@@ -115,7 +62,9 @@ Audit points:
 a federated gateway. v0.5 should make the secure remote-access story
 obvious: a mobile companion reaches the user's own profile over ALP,
 brings the existing desktop workgroup experience to the phone, and ALP
-streaming makes remote turns feel live.
+streaming makes remote turns feel live. Umbrel support gives that
+mobile client an easy always-on home-server target without turning
+alpi into a hosted service.
 
 This is the cycle where gateways stop being the main mobile story.
 Telegram, IMAP, Gmail, and Matrix stay useful, but the project should
@@ -128,6 +77,12 @@ personal agent.
 |---|---|---|
 | AX-mobile | Mobile companion (iOS / Android) — chat, status, peers, and workgroups from the user's own profile over ALP.2 | 🔵 |
 | ALP.4 | Streaming `link.ask` — incremental remote replies for peer calls, mobile, and workgroups | 🔵 |
+
+### Server distribution
+
+| ID | Item | Status |
+|---|---|---|
+| Umbrel | Umbrel app MVP — one-click home-server deployment for an always-on alpi profile with setup/status/pairing UI | 🔵 |
 
 ### ALP depth
 
@@ -203,6 +158,39 @@ desktop.
   connections to the user's profile rather than accepting them.
 - Distribution — TestFlight + Play Store internal track at
   first.
+
+### Umbrel. Home-server app MVP
+
+Umbrel is not another client surface. It is the easiest way to put an
+alpi profile on a machine that is already meant to run 24/7 at home.
+That makes it a natural companion to mobile: the phone talks to the
+user's own always-on profile instead of relying on chat gateways as
+the remote-access story.
+
+**MVP scope.**
+
+- Docker image for `alpi-agent` with persistent profile storage.
+- Umbrel app package (`umbrel-app.yml`, `docker-compose.yml`,
+  `exports.sh` when useful).
+- `alpi daemon start` as the long-running service.
+- Minimal web UI served through Umbrel's app proxy with status,
+  setup guidance, ALP public key, pairing instructions / QR, and
+  basic doctor/log output.
+- Volume layout documented so backup/restore works cleanly with
+  v0.4's encrypted profile archive.
+
+**Non-goals for the MVP.**
+
+- No full desktop-app port to web.
+- No browser access to raw profile files.
+- No direct exposure of the host Unix socket to the browser.
+- No broad settings dashboard until the minimal server install proves
+  useful.
+
+**Why v0.5.** Mobile needs a credible always-on host. Umbrel users
+already understand local servers, app proxies, backups, and Tailscale.
+The app gives alpi a home-server install path without requiring the
+user to SSH into a box and run CLI setup by hand.
 
 ### ALP.4. Streaming `link.ask`
 

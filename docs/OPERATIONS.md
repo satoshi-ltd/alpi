@@ -150,38 +150,42 @@ the radar but immature for our provider matrix at audit time.
 
 ## Backup + restore
 
-A profile is a single directory. Back up the directory, restore
-the directory, you have the profile back.
-
-**What's in the backup.** Treat the whole `{home}/` as atomic.
-The pieces worth knowing:
-
-- `config.yaml` + `.env` — reproducible config. Keep `.env` in a
-  password manager, not in plain-text backup storage, if you
-  treat API keys as secret.
-- `memories/` — your USER.md + MEMORY.md + AGENT.md. The
-  `.bak` siblings hold the previous generation.
-- `sessions/` — every chat history. Growing monotonically unless
-  you run `alpi setup → Cleanup`.
-- `alp/secrets/alp_key.{pem,pub}` — your ALP identity. Losing
-  this = every peer has to re-pin you. Treat like an SSH key.
-- `alp/peers.yaml` — the list of peers who can reach this
-  profile.
-- `skills/` — your installed skills, including any
-  `skills/<category>/<skill>/secrets/` folders (these have OAuth
-  tokens — 0700 by default).
-
-**Minimal backup script** (cron nightly, whatever you prefer):
+`alpi backup` writes a single passphrase-encrypted file from the
+active profile; `alpi restore <file>` reverses it. Zero-knowledge
+— the passphrase derives the key locally and never leaves the
+machine. Lose the passphrase and the archive is unrecoverable.
 
 ```bash
-#!/bin/sh
-# tar + gpg; drop the result somewhere that isn't the same machine
-tar czf - ~/.alpi | gpg -c -o "/backups/alpi-$(date +%F).tar.gz.gpg"
+alpi backup                                # ./default.YYYY-MM-DD.alpi-backup
+alpi -p personal backup --out ~/vault/p.alpi-backup
+alpi restore ~/vault/p.alpi-backup         # into the active profile
+alpi -p personal restore p.alpi-backup --force   # overwrite a non-empty profile
 ```
 
-**Restore** is `tar xzf … -C ~`. After restore, run
-`alpi doctor` — you'll catch any peer whose counterpart rotated
-their key since the backup.
+**What's in the backup.** Memories, sessions, skills (including
+each skill's `state/` SQLite + `secrets/`), `config.yaml`, `.env`,
+ALP identity (`alp/secrets/alp_key.{pem,pub}`), peers, gateway
+session state. Excluded: `cache/`, `logs/`, `.trash/`, sockets
+(`*.sock`), PIDs (`*.pid`), and the nested `profiles/` root —
+back up each profile separately.
+
+**Crypto.** Scrypt KDF (n=2¹⁷, r=8, p=1) → ChaCha20-Poly1305 over
+a gzipped tar. Same primitives as `age` with a passphrase
+recipient. The header (KDF params, salt, nonce, profile name,
+timestamp, file count) is bound as AAD, so any tamper flips the
+AEAD tag with the same error a wrong passphrase produces.
+
+**Scripting.** Both commands accept `--passphrase-stdin` to read
+the passphrase from stdin without a prompt. Pair with a password
+manager or systemd credential — never embed it in the cron line:
+
+```bash
+pass show alpi/backup | alpi backup --passphrase-stdin --out /backup/$(date +%F).alpi-backup
+```
+
+After restoring on a new machine, run `alpi doctor` — it surfaces
+peers whose counterpart rotated their key since the backup, and
+any missing optional dependency the restored skills declare.
 
 ## ALP identity rotation
 

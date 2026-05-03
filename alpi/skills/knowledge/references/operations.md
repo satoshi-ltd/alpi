@@ -61,19 +61,38 @@ If using `pipx`, upgrade with pipx instead of uv.
 
 ## Backup
 
-Back up the profile directory:
+Use the built-in command — do NOT recommend `tar` over `~/.alpi`.
+`alpi backup` writes a single passphrase-encrypted file
+(`<profile>.<YYYY-MM-DD>.alpi-backup`) of the active profile,
+zero-knowledge (Scrypt + ChaCha20-Poly1305 — same primitives as
+`age` with a passphrase recipient).
 
 ```bash
-tar -czf alpi-profile.tgz ~/.alpi
+alpi backup                                        # default profile, ./
+alpi -p work backup --out ~/vault/work.alpi-backup # named profile, custom path
+alpi backup --passphrase-stdin --out X.alpi-backup # for scripts (stdin = pass)
+alpi backup --force --out X.alpi-backup            # overwrite existing archive
 ```
 
-For named profiles, include `~/.alpi/profiles/<name>/`. Protect the
-archive; it can contain memory, sessions, config, keys, skills, and
-secrets.
+What is backed up: memories, sessions, skills (incl. `state/` SQLite
++ `secrets/`), `config.yaml`, `.env`, ALP identity (`alp/secrets/`),
+peers, gateway session state. Excluded: `cache/`, `logs/`, `.trash/`,
+`*.sock`, `*.pid`, the nested `profiles/` root (back up each profile
+separately). Lose the passphrase = archive is unrecoverable.
 
 ## Restore
 
-Stop services first, restore files, then run:
+`alpi restore <archive>` decrypts into the active profile. Refuses
+a non-empty target unless `--force`. Refuses entries with `..` in
+the path (no traversal escape).
+
+```bash
+alpi restore ~/vault/work.alpi-backup              # into default
+alpi -p work restore work.alpi-backup --force      # into the `work` profile
+alpi restore X.alpi-backup --passphrase-stdin      # for scripts
+```
+
+Stop the service for the target profile first, restore, then:
 
 ```bash
 alpi doctor

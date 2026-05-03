@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.3.14 — 2026-05-03 — encrypted profile backup / restore
+
+Two new top-level commands close the v0.4 **AW** roadmap item and
+make the profile portable between machines: ``alpi backup`` writes
+``<profile>.<YYYY-MM-DD>.alpi-backup`` (single file, 0600,
+passphrase-encrypted, zero-knowledge); ``alpi restore PATH``
+reverses it into the active profile, refusing a non-empty target
+unless ``--force``.
+
+- ``alpi/backup.py`` — Scrypt KDF (n=2¹⁷, r=8, p=1) → ChaCha20-Poly1305 over a gzipped tar of the profile. Same primitives as ``age`` with a passphrase recipient, but no new runtime dep — ``cryptography`` is already pinned. Header (KDF params, salt, nonce, profile name, timestamp, file count) is bound as AAD so any tamper flips the AEAD tag.
+- Excludes: ``cache/``, ``logs/``, ``profiles/`` (nested-profile root), ``.trash/``, ``*.sock``, ``*.pid``. Memories, skills (incl. ``state/``), sessions, ``.env``, ``config.yaml``, ALP keys all round-trip.
+- Both commands accept ``--passphrase-stdin`` for scripting; otherwise prompt with hidden input (and confirmation on backup). Restore refuses entries with ``..`` segments — a hostile archive cannot escape the target dir.
+- ``tests/core/test_backup.py`` — 14 cases: round-trip, ephemeral exclusion, wrong passphrase, header tamper, archive overwrite refusal, target overwrite refusal + ``--force``, header inspect without decrypt, non-backup file rejection, path-traversal rejection, empty passphrase, empty profile, plus two CLI end-to-end via ``CliRunner``.
+
 ## v0.3.12 — 2026-05-03 — `default_agent.md` slim
 
 Rewrote the persona seed and lifted operative rules into the
