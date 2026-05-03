@@ -1282,6 +1282,7 @@ const GATEWAY_DESC = {
   telegram: "Telegram bot",
   imap: "Email via IMAP",
   gmail: "Email via Gmail OAuth",
+  matrix: "Matrix bot (no-E2EE MVP)",
 };
 
 function SubsystemsCell({ profile, onSaved }) {
@@ -2459,6 +2460,7 @@ function GatewaysCell({ profile }) {
         { name: "telegram", configured: false },
         { name: "imap", configured: false },
         { name: "gmail", configured: false },
+        { name: "matrix", configured: false },
       ]).map((g) => {
         const desc = GATEWAY_DESC[g.name] ?? g.name;
         const probe = probes?.[g.name];
@@ -2740,6 +2742,44 @@ const GATEWAY_FIELDS = {
       label: "Allowed senders",
       secret: false,
       hint: "comma-separated emails · empty = anyone",
+    },
+  ],
+  matrix: [
+    {
+      env: "MATRIX_HOMESERVER_URL",
+      label: "Homeserver URL",
+      secret: false,
+      hint: "http://umbrel.local:8008 · https://matrix.example.com",
+    },
+    {
+      env: "MATRIX_USER_ID",
+      label: "Bot user id",
+      secret: false,
+      hint: "@alpi-bot:server",
+    },
+    {
+      env: "MATRIX_ACCESS_TOKEN",
+      label: "Access token",
+      secret: true,
+      hint: "from /_matrix/client/r0/login",
+    },
+    {
+      env: "MATRIX_DEVICE_ID",
+      label: "Device id",
+      secret: false,
+      hint: "from the login response · optional but recommended",
+    },
+    {
+      env: "MATRIX_ALLOWED_ROOMS",
+      label: "Allowed rooms",
+      secret: false,
+      hint: "comma-separated room IDs (!abc:server) · fail-closed",
+    },
+    {
+      env: "MATRIX_ALLOWED_SENDERS",
+      label: "Allowed senders",
+      secret: false,
+      hint: "comma-separated user IDs (@user:server) · empty = all room members",
     },
   ],
 };

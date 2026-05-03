@@ -450,7 +450,7 @@ async fn probe_gateways(
 ) -> Vec<GatewayProbe> {
     let names: Vec<String> = match only {
         Some(list) if !list.is_empty() => list,
-        _ => vec!["telegram".into(), "imap".into(), "gmail".into()],
+        _ => vec!["telegram".into(), "imap".into(), "gmail".into(), "matrix".into()],
     };
     let mut handles = vec![];
     for name in names {

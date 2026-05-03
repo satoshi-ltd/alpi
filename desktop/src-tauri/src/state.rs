@@ -1636,6 +1636,14 @@ pub fn read_gateway_config(profile: &str, name: &str) -> std::collections::HashM
             put_secret(&mut out, "GMAIL_CLIENT_SECRET");
             put_plain(&mut out, "GMAIL_ALLOWED_SENDERS");
         }
+        "matrix" => {
+            put_plain(&mut out, "MATRIX_HOMESERVER_URL");
+            put_plain(&mut out, "MATRIX_USER_ID");
+            put_secret(&mut out, "MATRIX_ACCESS_TOKEN");
+            put_plain(&mut out, "MATRIX_DEVICE_ID");
+            put_plain(&mut out, "MATRIX_ALLOWED_ROOMS");
+            put_plain(&mut out, "MATRIX_ALLOWED_SENDERS");
+        }
         _ => {}
     }
     out
@@ -1660,6 +1668,10 @@ pub fn list_gateway_status(profile: &str) -> Vec<GatewayStatus> {
             name: "gmail".into(),
             configured: env.get("GMAIL_CLIENT_ID").map_or(false, |v| !v.is_empty())
                 || gmail_token,
+        },
+        GatewayStatus {
+            name: "matrix".into(),
+            configured: env.get("MATRIX_ACCESS_TOKEN").map_or(false, |v| !v.is_empty()),
         },
     ]
 }
