@@ -160,6 +160,7 @@ alpi/
 │   ├── handlers.py        read verbs (host.workgroup.transcript, host.sessions.*)
 │   ├── chat.py            host.chat.send (streaming) + host.chat.cancel
 │   ├── config.py          mutation verbs (host.providers.*, host.peers.*, host.profile.*, host.mcp.*, host.gateway.*, host.sandbox.*, host.voice.*)
+│   ├── device_state.py    device-facing profile state (profiles, summaries, storage, gateways, skills, workgroups)
 │   ├── events.py          host.events.subscribe + thread-safe emit() for daemon-pushed updates
 │   ├── workgroup.py       transcript decryption (hub + member shapes)
 │   └── sessions.py        plaintext session list / read
@@ -358,6 +359,23 @@ workgroups, host}` in each profile's `config.yaml`):
   drive the daemon. Refused on non-default profiles fast — the
   client always targets default's socket and reaches sibling
   profiles via the `profile` param on each verb.
+
+### Host plane (`alpi/host/`)
+
+The host plane is the local device API. It is JSON-RPC-shaped over
+`~/.alpi/host/host.sock` with filesystem permissions as the trust
+boundary. It is not ALP: there is no peer identity, no envelope, no
+Noise handshake, and no remote transport. Desktop and future mobile
+clients talk to this API; they do not read profile files directly.
+
+`host.device_state` owns the device-facing profile state contract:
+profile lists/summaries, bounded profile file reads, storage stats,
+gateway status/config previews, skill lists, workgroup lists, workgroup
+member rosters, config field edits, and local Ollama model discovery.
+The desktop Tauri layer keeps its existing `invoke(...)` command names
+for UI stability, but those commands proxy to `host.*` verbs instead of
+parsing `~/.alpi` themselves. Mobile should use the same verb shapes
+rather than inventing a separate state API.
 
 Default if a key is missing: every service on (so the desktop
 "just works" after install).

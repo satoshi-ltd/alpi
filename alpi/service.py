@@ -1101,6 +1101,7 @@ async def _run_host(home: Path, profile: str) -> None:
     from alpi.host import chat as host_chat
     from alpi.host import config as host_config
     from alpi.host import daemon as host_daemon
+    from alpi.host import device_state as host_device_state
     from alpi.host import events as host_events
     from alpi.host import handlers as host_handlers
     from alpi.host import schedule as host_schedule
@@ -1110,6 +1111,7 @@ async def _run_host(home: Path, profile: str) -> None:
     host_handlers.register(server)
     host_chat.register(server)
     host_config.register(server)
+    host_device_state.register(server)
     host_daemon.register(server)
     host_events.register(server)
     host_schedule.register(server)

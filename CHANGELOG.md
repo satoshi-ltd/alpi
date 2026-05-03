@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.4.0 — 2026-05-03 — secure device access
+
+Closes the alpi side of the v0.4 cycle: profile state now has a
+shared device-facing host-plane API, profiles are portable through
+encrypted backup/restore, and desktop/mobile clients can use the
+daemon contract instead of reading profile files directly.
+
+- ``alpi/host/device_state.py`` — new host-plane read/mutation surface for device clients: profile list/summaries, bounded file reads, profile storage, config field edits, gateway status/config, skills, workgroups, workgroup members, and Ollama model discovery. These are ``host.*`` verbs, not desktop-only helpers, so mobile can reuse the same daemon contract.
+- ``alpi/backup.py`` — encrypted profile archive/restore is part of the 0.4 baseline. Restore validates v1 crypto parameters before Scrypt and pre-validates archive paths before writing, so hostile archives cannot force partial extraction or unbounded KDF work.
+- Docs — roadmap moves v0.4 to shipped history; architecture documents ``host.device_state`` as the shared desktop/mobile device state layer.
+
 ## v0.3.14 — 2026-05-03 — encrypted profile backup / restore
 
 Two new top-level commands close the v0.4 **AW** roadmap item and

@@ -12,59 +12,16 @@ Legend: 🔵 backlog · 🟡 next up · ⏸ blocked · 🔴 gate.
 
 ---
 
-## v0.4 cycle (active)
+## v0.5 cycle (active)
 
-**Theme: secure access from outside the terminal.** v0.3 made alpi
-a credible private-agent tool in the terminal and shipped the ALP
-network shape. v0.4 makes that useful day to day: the desktop app is
-already operable, Matrix gives the daemon a federated remote-access
-channel, backup/restore makes profiles portable, and the existing
-security posture stays explicit in `docs/SECURITY.md`.
-
-The scope is intentionally narrow. v0.4 does not chase gateway count
-or generic app-platform breadth. It strengthens the route from "my
-agent runs on my machine" to "I can safely reach that agent when I am
-not sitting at the machine."
-
-### Access + recovery
-
-| ID | Item | Status |
-|---|---|---|
-| Desktop-host | Desktop host-plane hardening — move remaining desktop profile-state reads behind `host.*` verbs | 🔵 |
-
----
-
-## v0.4 — detailed scope
-
-### Desktop-host. Desktop host-plane hardening
-
-The desktop app is already the right architectural shape: Rust/Tauri
-front-end, local Unix-socket host client, no LLM runtime, no duplicated
-tool execution. The workgroup view is already operational: it can show
-transcripts, create/manage workgroups, add peers, post tasks, and show
-who is working. v0.4 hardening is about closing the remaining host-plane
-gaps, not building the viewer from scratch.
-
-Audit points:
-
-- every desktop action maps to a `host.*` verb;
-- desktop workgroup metadata, members, costs, and lists move behind
-  host verbs instead of ad-hoc file reads;
-- streaming chat and cancel remain daemon-mediated;
-- daemon restarts are explicit host-plane actions;
-- errors are surfaced as user-actionable states, not silent failures.
-
----
-
-## v0.5 cycle
-
-**Theme: owned mobile access.** v0.4 gives alpi a working desktop and
-a federated gateway. v0.5 should make the secure remote-access story
-obvious: a mobile companion reaches the user's own profile over ALP,
-brings the existing desktop workgroup experience to the phone, and ALP
-streaming makes remote turns feel live. Umbrel support gives that
-mobile client an easy always-on home-server target without turning
-alpi into a hosted service.
+**Theme: owned mobile access.** v0.4 shipped the secure local-device
+foundation: desktop is a host-plane client, profile state sits behind
+`host.*`, and encrypted backup/restore makes a profile portable. v0.5
+should make the remote-access story obvious: a mobile companion reaches
+the user's own profile over ALP, brings the existing desktop workgroup
+experience to the phone, and ALP streaming makes remote turns feel
+live. Umbrel support gives that mobile client an easy always-on
+home-server target without turning alpi into a hosted service.
 
 This is the cycle where gateways stop being the main mobile story.
 Telegram, IMAP, Gmail, and Matrix stay useful, but the project should
@@ -177,7 +134,7 @@ the remote-access story.
   setup guidance, ALP public key, pairing instructions / QR, and
   basic doctor/log output.
 - Volume layout documented so backup/restore works cleanly with
-  v0.4's encrypted profile archive.
+  the encrypted profile archive.
 
 **Non-goals for the MVP.**
 
@@ -417,11 +374,10 @@ v0.5 extends it across the rest of the rich-text surface:
 - Headings inside chat replies — sized hierarchy, not just
   bold.
 
-**Why v0.5, not v0.4.** With the desktop app shipped
-(``desktop-v0.1.0``), the heavy rich-text surface lives there
-— Markdown rendering in WebView is a solved problem. The TUI
-rich-text work in v0.5 is "polish for users who stay on the
-terminal", not "the place we render structured replies".
+**Why now.** With the desktop app shipped, the heavy rich-text
+surface lives there — Markdown rendering in WebView is a solved
+problem. The TUI rich-text work is "polish for users who stay on
+the terminal", not "the place we render structured replies".
 
 ---
 
@@ -578,7 +534,7 @@ Gemma / Grok appear to need it.
 `agent.log` evidence: tool-call rate on a Claude session with
 vs without the block (same prompts). Apply the split only if
 no regression on the shorter variant. The data isn't there
-yet; once v0.4 + v0.5 generate enough real sessions, the
+yet; once the desktop/mobile surfaces generate enough real sessions, the
 decision becomes calibrated rather than guessed.
 
 ### Webhook. Inbound HTTP triggers (HMAC-signed)
@@ -705,7 +661,7 @@ Not planned. Research-grade, irrelevant for everyday personal use.
 - **SQLite state.db.** Plain JSON files scan fast for <1000
   sessions.
 - **Conversation export format (JSON canonical).** Originally
-  scoped for v0.4 as "needed by the desktop app to render sessions".
+  scoped as "needed by the desktop app to render sessions".
   The premise was wrong: sessions already serialise to JSON in
   `~/.alpi/profiles/<name>/sessions/{id}.json` (`session.py:save`).
   The desktop / mobile client now reads them via the host control
@@ -746,7 +702,7 @@ Not planned. Research-grade, irrelevant for everyday personal use.
   that each user shapes their own profile. Templates live in
   the docs as examples, not in the binary as commands.
 - **TUI accessibility pass.** Deferred indefinitely. The
-  desktop app (``desktop-v0.1.0``) is the right surface for
+  desktop app is the right surface for
   screen-reader / large-text / high-contrast use cases —
   modern accessibility APIs are richer there than in any
   terminal. The TUI keeps the current minimal posture.
