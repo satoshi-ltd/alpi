@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title">
+  <title>Alpi</title>
+  <rect width="256" height="256" fill="#12383f"/>
+  <path fill="#f7f4ec" d="M83 83c-9-22-8-43 5-62 17 15 25 32 27 54 8-5 17-8 28-8 10 0 20 3 28 8 2-22 10-39 27-54 13 19 14 40 5 62 11 12 18 28 18 46 0 44-37 81-78 81s-78-37-78-81c0-18 7-34 18-46z"/>
+  <path fill="#d8d0c3" d="M102 124c0-24 17-41 41-41s41 17 41 41v24c0 31-18 50-41 50s-41-19-41-50z"/>
+  <path fill="#12383f" d="M103 97c-5-11-9-25-8-39 8 12 12 23 13 36zM183 97c5-11 9-25 8-39-8 12-12 23-13 36z"/>
+  <path fill="#12383f" d="M111 122c0-5 4-9 9-9s9 4 9 9-4 9-9 9-9-4-9-9zM157 122c0-5 4-9 9-9s9 4 9 9-4 9-9 9-9-4-9-9z"/>
+  <path fill="none" stroke="#12383f" stroke-linecap="round" stroke-linejoin="round" stroke-width="8" d="M130 144c4 4 9 4 13 0 4 4 9 4 13 0M143 144v13M118 169c12 10 38 10 50 0"/>
+  <path fill="none" stroke="#12383f" stroke-linecap="round" stroke-width="8" d="M82 151h28M176 151h28M92 169h25M169 169h25"/>
+  <path fill="#f7f4ec" d="M95 80c-4-13 2-26 14-31 8 8 11 19 9 31zM168 80c-2-12 1-23 9-31 12 5 18 18 14 31z"/>
+  <path fill="#12383f" d="M101 75c-2-8 1-15 7-20 3 6 5 12 4 20zM174 75c-1-8 1-14 4-20 6 5 9 12 7 20z"/>
+</svg>

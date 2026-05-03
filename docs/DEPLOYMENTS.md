@@ -77,6 +77,45 @@ but that'd just be two profiles — see topology 3).
   mini-server. Also: "I want scheduled jobs to run even when my
   laptop is closed."
 
+## 2a. Umbrel home server
+
+Umbrel is the packaged form of the home-server topology. The app runs
+inside Docker, stores the Alpi root on a persistent Umbrel volume, and
+opens the existing TUI through Umbrel's authenticated app proxy.
+
+```
+┌──────────────────────────────────────┐
+│ Umbrel                               │
+│                                      │
+│  app_proxy                           │
+│      │                               │
+│      ▼                               │
+│  ttyd → alpi TUI                     │
+│                                      │
+│  alpi daemon                         │
+│    ├─ gateway: Telegram / IMAP /     │
+│    │           Gmail / Matrix        │
+│    ├─ scheduler                      │
+│    ├─ ALP listener                   │
+│    └─ workgroups poller              │
+│                                      │
+│  /data/.alpi  (persistent volume)    │
+└──────────────────────────────────────┘
+```
+
+- **Package:** `deploy/umbrel/alpi/`.
+- **Profiles:** starts with `default`, with the same multi-profile
+  layout as any Linux install.
+- **UI:** browser terminal running `alpi`; no separate web dashboard.
+- **Storage:** `${APP_DATA_DIR}/data` is mounted as `/data`, and
+  `HOME=/data` makes `/data/.alpi` the profile root.
+- **Security boundary:** Umbrel authentication protects the terminal
+  surface. The host Unix socket and raw profile files are not exposed
+  to the browser.
+- **Backup:** use the normal encrypted archive flow (`alpi backup
+  create` / `alpi backup restore`) for portable profile moves; Umbrel
+  can also back up the app volume.
+
 ## 3. One machine, many profiles
 
 Same machine, multiple profiles with different roles, linked

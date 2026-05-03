@@ -39,7 +39,7 @@ personal agent.
 
 | ID | Item | Status |
 |---|---|---|
-| Umbrel | Umbrel app MVP — one-click home-server deployment for an always-on alpi profile with setup/status/pairing UI | 🔵 |
+| Umbrel | Umbrel app MVP — one-click home-server deployment for an always-on alpi profile through the existing TUI | 🟡 |
 
 ### ALP depth
 
@@ -130,15 +130,16 @@ the remote-access story.
 - Umbrel app package (`umbrel-app.yml`, `docker-compose.yml`,
   `exports.sh` when useful).
 - `alpi daemon start` as the long-running service.
-- Minimal web UI served through Umbrel's app proxy with status,
-  setup guidance, ALP public key, pairing instructions / QR, and
-  basic doctor/log output.
+- Existing Alpi TUI served through Umbrel's app proxy with a browser
+  terminal. The app should feel like opening Alpi on the home server,
+  not like a second web product.
 - Volume layout documented so backup/restore works cleanly with
   the encrypted profile archive.
 
 **Non-goals for the MVP.**
 
 - No full desktop-app port to web.
+- No separate web dashboard unless the terminal TUI proves insufficient.
 - No browser access to raw profile files.
 - No direct exposure of the host Unix socket to the browser.
 - No broad settings dashboard until the minimal server install proves

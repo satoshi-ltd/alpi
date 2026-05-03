@@ -1,0 +1,16 @@
+.git
+.pytest_cache
+.ruff_cache
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+build
+dist
+*.egg-info
+alpi.egg-info
+alpi_agent.egg-info
+desktop/node_modules
+desktop/dist
+desktop/src-tauri/target
+site

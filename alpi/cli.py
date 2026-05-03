@@ -1625,6 +1625,9 @@ def _ensure_daemon_installed(root: Path) -> None:
     """First-run hook: install the daemon if it is missing."""
     from alpi import service as svc
 
+    if os.environ.get("ALPI_PLATFORM") == "umbrel":
+        return
+
     try:
         if svc.daemon_installed():
             return
