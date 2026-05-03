@@ -11,6 +11,21 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.2.0 — 2026-05-03 — host-plane only profile state
+
+Requires alpi ``v0.4.0`` or newer.
+
+- Desktop profile-state reads now go through the daemon's ``host.*``
+  device-state verbs: profiles, summaries, skills, storage, gateway
+  views, workgroups, workgroup members, bounded file reads, and
+  config field mutations.
+- ``desktop/src-tauri/src/state.rs`` no longer mirrors profile parsing
+  logic in Rust. The app remains a client of the host plane instead of
+  a second reader of ``~/.alpi``.
+- This is an architectural release: the same daemon verbs are suitable
+  for the mobile companion, so desktop no longer owns a private state
+  contract.
+
 ## v0.1.0 — 2026-05-02 — first public desktop release
 
 First Tauri client landed. Requires alpi ``v0.3.9`` or newer for

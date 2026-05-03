@@ -17,13 +17,7 @@ fn active_chats() -> &'static Mutex<HashMap<String, String>> {
 use serde::Serialize;
 use tauri::{AppHandle, Emitter};
 
-use crate::state::{
-    list_gateway_status, list_ollama_models_for, list_profile_summaries, list_profiles,
-    list_skills_for, list_workgroup_members, list_workgroups_all, list_workgroups_for,
-    profile_storage as profile_storage_state, read_file_in_home, read_gateway_config,
-    DecryptedMessage, GatewayStatus, ProfileEntry, ProfileSummary, SessionEntry,
-    SkillEntry, StorageEntry, WorkgroupEntry, WorkgroupMember,
-};
+use crate::state::{DecryptedMessage, SessionEntry};
 
 #[derive(Serialize, Clone)]
 #[serde(tag = "kind", rename_all = "snake_case")]
@@ -66,24 +60,42 @@ enum ChatEvent {
 }
 
 #[tauri::command]
-fn profiles() -> Vec<ProfileEntry> {
-    list_profiles()
+fn profiles() -> serde_json::Value {
+    host_array_value("host.profiles.list", serde_json::json!({}), "profiles")
 }
 
 #[tauri::command]
-fn profile_summaries() -> Vec<ProfileSummary> {
-    list_profile_summaries()
+fn profile_summaries() -> serde_json::Value {
+    host_array_value("host.profile.summaries", serde_json::json!({}), "profiles")
 }
 
 #[tauri::command]
 fn sessions(profile: Option<String>) -> Vec<SessionEntry> {
     match profile {
         Some(p) => sessions_via_alp(&p),
-        None => list_profiles()
+        None => host_profile_names()
             .into_iter()
-            .flat_map(|p| sessions_via_alp(&p.name))
+            .flat_map(|p| sessions_via_alp(&p))
             .collect(),
     }
+}
+
+fn host_profile_names() -> Vec<String> {
+    let value = host_array_value("host.profiles.list", serde_json::json!({}), "profiles");
+    value
+        .as_array()
+        .cloned()
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|row| row.get("name").and_then(|v| v.as_str()).map(str::to_string))
+        .collect()
+}
+
+fn host_array_value(method: &str, params: serde_json::Value, key: &str) -> serde_json::Value {
+    host_client::call(method, params)
+        .ok()
+        .and_then(|v| v.get(key).cloned())
+        .unwrap_or_else(|| serde_json::Value::Array(vec![]))
 }
 
 fn sessions_via_alp(profile: &str) -> Vec<SessionEntry> {
@@ -169,16 +181,26 @@ fn session_detail(profile: String, id: String) -> Result<serde_json::Value, Stri
 }
 
 #[tauri::command]
-fn workgroups(profile: Option<String>) -> Vec<WorkgroupEntry> {
-    match profile {
-        Some(p) => list_workgroups_for(&p),
-        None => list_workgroups_all(),
-    }
+fn workgroups(profile: Option<String>) -> serde_json::Value {
+    let params = match profile {
+        Some(p) => serde_json::json!({"profile": p}),
+        None => serde_json::json!({}),
+    };
+    host_array_value("host.workgroups.list", params, "workgroups")
 }
 
 #[tauri::command]
 fn read_file(profile: Option<String>, rel_path: String) -> Result<String, String> {
-    read_file_in_home(profile.as_deref(), &rel_path)
+    let mut params = serde_json::json!({"rel_path": rel_path});
+    if let Some(p) = profile {
+        params["profile"] = serde_json::Value::String(p);
+    }
+    let result = host_client::call("host.profile.read_file", params)?;
+    Ok(result
+        .get("text")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string())
 }
 
 #[tauri::command]
@@ -187,18 +209,20 @@ async fn set_config_field(
     key: String,
     value: String,
 ) -> Result<(), String> {
-    tauri::async_runtime::spawn_blocking(move || crate::state::set_config_field(&profile, &key, &value))
-        .await
-        .map_err(|e| format!("join: {e}"))?
+    alp_call_async(
+        "host.config.set_field",
+        serde_json::json!({"profile": profile, "key": key, "value": value}),
+    )
+    .await
 }
 
 #[tauri::command]
 async fn unset_config_field(profile: String, key: String) -> Result<(), String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        crate::state::unset_config_field(&profile, &key)
-    })
+    alp_call_async(
+        "host.config.unset_field",
+        serde_json::json!({"profile": profile, "key": key}),
+    )
     .await
-    .map_err(|e| format!("join: {e}"))?
 }
 
 #[tauri::command]
@@ -279,23 +303,39 @@ async fn service_action(profile: String, action: String) -> Result<String, Strin
 }
 
 #[tauri::command]
-fn gateway_status(profile: String) -> Vec<GatewayStatus> {
-    list_gateway_status(&profile)
+fn gateway_status(profile: String) -> serde_json::Value {
+    host_array_value(
+        "host.gateway.status",
+        serde_json::json!({"profile": profile}),
+        "gateways",
+    )
 }
 
 #[tauri::command]
-fn skills(profile: String) -> Vec<SkillEntry> {
-    list_skills_for(&profile)
+fn skills(profile: String) -> serde_json::Value {
+    host_array_value(
+        "host.skills.list",
+        serde_json::json!({"profile": profile}),
+        "skills",
+    )
 }
 
 #[tauri::command]
-fn profile_storage(profile: String) -> Vec<StorageEntry> {
-    profile_storage_state(&profile)
+fn profile_storage(profile: String) -> serde_json::Value {
+    host_array_value(
+        "host.profile.storage",
+        serde_json::json!({"profile": profile}),
+        "storage",
+    )
 }
 
 #[tauri::command]
-fn workgroup_members(profile: String, wg_id: String) -> Vec<WorkgroupMember> {
-    list_workgroup_members(&profile, &wg_id)
+fn workgroup_members(profile: String, wg_id: String) -> serde_json::Value {
+    host_array_value(
+        "host.workgroup.members",
+        serde_json::json!({"profile": profile, "wg_id": wg_id}),
+        "members",
+    )
 }
 
 #[tauri::command]
@@ -571,7 +611,14 @@ async fn peer_add(
 
 #[tauri::command]
 fn gateway_config(profile: String, name: String) -> std::collections::HashMap<String, String> {
-    read_gateway_config(&profile, &name)
+    host_client::call(
+        "host.gateway.config",
+        serde_json::json!({"profile": profile, "name": name}),
+    )
+    .ok()
+    .and_then(|v| v.get("config").cloned())
+    .and_then(|v| serde_json::from_value(v).ok())
+    .unwrap_or_default()
 }
 
 #[tauri::command]
@@ -949,9 +996,23 @@ fn reveal_in_finder(path: String) -> Result<(), String> {
 
 #[tauri::command]
 async fn ollama_models(profile: String) -> Result<Vec<String>, String> {
-    tauri::async_runtime::spawn_blocking(move || list_ollama_models_for(&profile))
-        .await
-        .map_err(|e| format!("join: {e}"))
+    tauri::async_runtime::spawn_blocking(move || {
+        host_client::call(
+            "host.providers.ollama_models",
+            serde_json::json!({"profile": profile}),
+        )
+        .map(|v| {
+            v.get("models")
+                .and_then(|x| x.as_array())
+                .cloned()
+                .unwrap_or_default()
+                .into_iter()
+                .filter_map(|x| x.as_str().map(str::to_string))
+                .collect::<Vec<String>>()
+        })
+    })
+    .await
+    .map_err(|e| format!("join: {e}"))?
 }
 
 #[tauri::command]
