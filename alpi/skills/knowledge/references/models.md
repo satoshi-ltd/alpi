@@ -61,15 +61,10 @@ specialists than general personal-agent brains.
 
 ## Evidence
 
-OpenRouter public app pages are useful because they show model use in
-agent workloads similar to alpi:
-
-- OpenClaw: messaging, commands, web browsing, files, email.
-- Hermes Agent: persistent memory, reusable skills, browser/search,
-  scheduled automations, subagents.
-
-Usage is not quality, but sustained usage in comparable tool-heavy
-agents is more relevant than generic chat benchmarks.
+Public provider dashboards can be useful when they show model use in
+tool-heavy agent workloads rather than chat-only benchmarks. Usage is
+not quality, but sustained use in comparable workloads is more relevant
+than generic leaderboard wins.
 
 ## Production guidance
 

@@ -27,29 +27,15 @@ while still being a bad primary model for a profile with many skills.
 
 ## External usage signal
 
-OpenRouter's public app rankings are useful because they measure
-models inside agents that look like alpi, not chat-only benchmarks:
+Public provider dashboards can be useful when they show model use in
+tool-heavy agent workloads rather than chat-only benchmarks. Treat
+that data as a weak signal, not a ranking: defaults, price, rate
+limits, regional availability, and provider wrappers all bias usage.
 
-- [OpenClaw][oc] is an agent that connects to messaging apps and takes
-  actions with commands, web browsing, file management, and email. On
-  2026-05-03 OpenRouter showed it at **11.7T total tokens**, **#1
-  daily global rank**, and **374 models used**.
-- [Hermes Agent][h] is a persistent-memory agent with reusable skills,
-  web search, browser automation, vision, scheduled automations, and
-  subagents. On 2026-05-03 OpenRouter showed it at **5.59T total
-  tokens**, **#2 daily global rank**, and **341 models used**.
-
-Usage is not quality. Defaults, price, rate limits, and availability
-all bias the chart. Still, sustained usage inside comparable
-tool-heavy agents is a better signal than generic leaderboard wins.
-
-Common high-usage models across those agents currently include
+Common high-usage models in tool-heavy agent workloads currently include
 MiMo-V2-Pro, Qwen3.6 Plus, MiniMax M2.7, Step 3.5 Flash, Nemotron 3
 Super, Claude Sonnet / Opus 4.6, GLM 5.x, Gemini Flash variants,
 Kimi K2.x, DeepSeek V3/V4, and OpenAI GPT-5.4 / 5.4-mini.
-
-[h]: https://openrouter.ai/apps/hermes-agent
-[oc]: https://openrouter.ai/apps/openclaw
 
 ## Pick by workload
 
@@ -61,9 +47,9 @@ daily interactive alpi use.
 
 | Model | OpenRouter ID | Why |
 |---|---|---|
-| **MiMo-V2-Pro** | `xiaomi/mimo-v2-pro` | Strong adoption in Hermes-style persistent agents; good price/context balance for tool-heavy profiles. |
+| **MiMo-V2-Pro** | `xiaomi/mimo-v2-pro` | Strong adoption in persistent-agent workloads; good price/context balance for tool-heavy profiles. |
 | **Claude Sonnet 4.6** | `anthropic/claude-sonnet-4.6` | Strong general tool discipline and coding judgement; sensible premium daily driver. |
-| **Qwen3.6 Plus** | `qwen/qwen3.6-plus` | High OpenClaw usage; good price-for-quality candidate for skill routing. |
+| **Qwen3.6 Plus** | `qwen/qwen3.6-plus` | Strong price-for-quality candidate for skill routing. |
 | **MiniMax M2.7** | `minimax/minimax-m2.7` | Strong mid-tier agent model; good for persistent sessions, with occasional parameter-filling slips. |
 | **GLM 5.1 / GLM 5 Turbo** | `z-ai/glm-5.1`, `z-ai/glm-5-turbo` | Strong usage in coding-agent workloads; watch wrapper/version stability. |
 | **GPT-5.4** | `openai/gpt-5.4` | Good premium fallback when OpenAI compatibility matters. |
@@ -80,9 +66,9 @@ creating or debugging skills.
 
 | Model | OpenRouter ID | Why |
 |---|---|---|
-| **Step 3.5 Flash** | `stepfun-ai/step-3.5-flash` | Very high Hermes usage after 2026-04-24; good cheap workhorse for simple turns. |
+| **Step 3.5 Flash** | `stepfun-ai/step-3.5-flash` | Good cheap workhorse for simple turns. |
 | **MiMo-V2-Flash** | `xiaomi/mimo-v2-flash` | Budget sibling to MiMo-V2-Pro; useful for A/B testing cheap service profiles. |
-| **Gemini Flash / Flash Lite** | provider-specific | High OpenClaw usage; good for simple tasks, less convincing as the main skill router. |
+| **Gemini Flash / Flash Lite** | provider-specific | Good for simple tasks, less convincing as the main skill router. |
 | **DeepSeek V3.2 / V4 Flash** | provider-specific | Good cost floor; use when price matters more than perfect tool discipline. |
 | **GPT-5.4-mini** | `openai/gpt-5.4-mini` | Reasonable budget OpenAI choice for simple tool use; acceptable as a router only when the skill catalog is clean and small. |
 

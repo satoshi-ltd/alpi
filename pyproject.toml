@@ -2,7 +2,7 @@
 # PyPI distribution name. The CLI binary, the import path, and
 # ``~/.alpi/`` all remain ``alpi`` (see ``[project.scripts]`` below).
 name = "alpi-agent"
-version = "0.3.12"
+version = "0.3.13"
 description = "A profile-based personal AI agent for terminal, messengers, and private ALP networks"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -29,7 +29,7 @@ classifiers = [
     "Topic :: Utilities",
 ]
 dependencies = [
-    "litellm>=1.50.0",
+    "litellm>=1.83,<1.85",
     "rich>=13.7.0",
     "prompt_toolkit>=3.0.43",
     "pyyaml>=6.0",
@@ -57,11 +57,11 @@ Issues = "https://github.com/satoshi-ltd/alpi/issues"
 Changelog = "https://github.com/satoshi-ltd/alpi/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
-# No `gateway` extra — the Telegram / IMAP / Gmail gateways live in core
-# and use raw httpx long-poll / smtplib. python-telegram-bot, fastapi,
-# and uvicorn used to be listed here for a webhook server that never
-# shipped; dropped in v0.2.66 after a dependency audit confirmed zero
-# imports. If a FastAPI webhook ever lands, add the extra back then.
+# No `gateway` extra for Telegram / IMAP / Gmail — they use raw httpx /
+# smtplib in core. Matrix needs ``matrix-nio`` (pure Python, no native
+# deps in the no-E2EE path); kept opt-in to avoid imposing it on users
+# who only want Telegram.
+matrix = ["matrix-nio>=0.25,<0.26"]
 dev = ["pytest>=8.0", "pytest-asyncio>=0.23", "ruff>=0.3.0", "pip-audit>=2.7"]
 
 [project.scripts]

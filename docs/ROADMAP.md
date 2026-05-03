@@ -14,28 +14,25 @@ Legend: 🔵 backlog · 🟡 next up · ⏸ blocked · 🔴 gate.
 
 ## v0.4 cycle (active)
 
-**Theme: alpi gets a face.** v0.3 made alpi a credible
-private-agent tool on the terminal. v0.4 is the cycle where the
-project earns wider adoption: skills mature into mini-apps, a
-federated gateway ships, and the security story closes with a
-third-party audit. The first public Tauri desktop client already
-landed on its own track as ``desktop-v0.1.0`` — see
-[../desktop/CHANGELOG.md](../desktop/CHANGELOG.md). Tightly
-scoped on the alpi side to ship in 3-4 months without becoming a
-broken release.
+**Theme: secure access from outside the terminal.** v0.3 made alpi
+a credible private-agent tool in the terminal and shipped the ALP
+network shape. v0.4 makes that useful day to day: the desktop app is
+already operable, Matrix gives the daemon a federated remote-access
+channel, backup/restore makes profiles portable, and the existing
+security posture stays explicit in `docs/SECURITY.md`.
 
-### Hardening
+The scope is intentionally narrow. v0.4 does not chase gateway count
+or generic app-platform breadth. It strengthens the route from "my
+agent runs on my machine" to "I can safely reach that agent when I am
+not sitting at the machine."
+
+### Access + recovery
 
 | ID | Item | Status |
 |---|---|---|
+| Matrix | Federated gateway MVP — Matrix sync/send, room + sender allowlists, setup/docs/tests; E2EE is a follow-up gate, not a launch claim | 🟡 |
 | AW | Encrypted profile backup/restore — zero-knowledge passphrase-encrypted archive of `~/.alpi/<profile>/` | 🔵 |
-| BG | LiteLLM audit — pin to a tested version, evaluate alternatives (chuk-llm, raw provider SDKs) | 🔵 |
-
-### Commercial track
-
-| ID | Item | Status |
-|---|---|---|
-| Matrix | Federated + E2EE gateway — flagship gateway of v0.4. Self-hosted homeserver, no phone number, matches the "private agent network" thesis | 🔵 |
+| Desktop-host | Desktop host-plane hardening — move remaining desktop profile-state reads behind `host.*` verbs | 🔵 |
 
 ---
 
@@ -58,80 +55,86 @@ party who can decrypt; we never see the plaintext.
 
 **Why it matters commercially.** "Carry your agent between
 machines" + "no vendor lock-in" + "if your laptop dies, you have
-your agent back" — every commercial AI tool today loses your
-context when you re-install. We don't.
+your agent back." A local-first agent should not lose its durable
+context when the user changes machines.
 
-### BG. LiteLLM audit
+### Matrix. Federated gateway MVP
 
-Today: `litellm>=1.50.0` floor in `pyproject.toml`, lock pins
-`1.83.0`. LiteLLM is alpi's universal LLM client — every provider
-goes through it. The library moves fast; minor releases break
-streaming, tool-call shapes, or cost-tracking semantics roughly
-once a quarter. We've avoided this so far by locking, but we've
-never run a deliberate audit.
+Matrix is not a mass-market adoption bet. It is the smallest remote
+channel that matches alpi's deployment thesis: a home server can host
+the daemon, the user can choose a homeserver, and no phone number or
+central account from alpi is required.
 
-Goal: a single deliberate review producing a tightened floor + a
-"recheck quarterly" cadence in `OPERATIONS.md`.
+**Launch scope.** `alpi/gateway/platforms/matrix.py` with
+`matrix-nio`, sync/send, cursor persistence, room allowlist, sender
+allowlist, setup wizard, operations docs, and mocked adapter tests.
+The current adapter is a no-E2EE MVP; docs and UI must say that
+plainly. Do not market this as encrypted until Olm/Megolm storage,
+device verification, and encrypted-room send/read tests exist.
 
-- Inventory which provider features alpi actually uses (tool calls, streaming, vision, prompt cache, cost reporting, fallback chains).
-- Read the LiteLLM changelog from our floor to latest; flag any breaking change touching those features.
-- Decide a tight version range (e.g. `>=1.83,<2.0`) instead of the open `>=1.50`.
-- Spike alternatives: `chuk-llm`, raw provider SDKs (Anthropic + OpenAI + Google directly), or the OpenAI-compatible-only path (most providers expose one). Honest writeup of trade-offs (one less dep vs N provider quirks to absorb), commit to keeping LiteLLM unless the writeup says otherwise.
+**Why keep it even with mobile planned.** Mobile is the owned client;
+Matrix is the federated bridge. They solve different problems:
 
-### Matrix. Federated + E2EE gateway
+- Mobile is the best personal UX for talking to your own profile over
+  ALP.2.
+- Matrix is a durable gateway for users who already run a homeserver
+  or want a standards-based room shared with humans and agents.
+- Matrix works before app-store distribution, push-notification
+  plumbing, and mobile pairing are finished.
+- Matrix is useful from machines where installing the mobile app is
+  impossible or undesirable.
 
-The gateway most aligned with the project's thesis. Federated
-(user chooses homeserver), E2EE by default (Olm/Megolm),
-self-hostable (Synapse, Conduit), no phone number. Pairs with
-the "home server hosts your alpi" topology in DEPLOYMENTS §2.
+**Done means:** first-run setup works, `alpi doctor` reports Matrix
+health, docs call out the no-E2EE boundary, and the fast suite covers
+cursor, allowlists, self-message filtering, backlog skip, send, and
+missing dependency behaviour.
 
-**Scope.** `alpi/gateway/platforms/matrix.py` using `matrix-nio`
-(Python, well-maintained). `alpi setup → Gateways → Matrix`
-prompts for homeserver URL + access token + room allowlist.
-Outbound replies E2EE by default; the bot device gets verified
-on first run via emoji SAS.
+### Desktop-host. Desktop host-plane hardening
 
-**Why flagship and not parity-with-Telegram.** Telegram is
-"what people have" (so it shipped first, in v0.3). Matrix is
-"what makes alpi's pitch unique" — the gateway you use when you
-don't want to depend on anyone, including us. That's a story
-neither Hermes nor openclaw can tell because their backends
-hold every platform's tokens centrally.
+The desktop app is already the right architectural shape: Rust/Tauri
+front-end, local Unix-socket host client, no LLM runtime, no duplicated
+tool execution. The workgroup view is already operational: it can show
+transcripts, create/manage workgroups, add peers, post tasks, and show
+who is working. v0.4 hardening is about closing the remaining host-plane
+gaps, not building the viewer from scratch.
 
-LOC estimate: ~250.
+Audit points:
+
+- every desktop action maps to a `host.*` verb;
+- desktop workgroup metadata, members, costs, and lists move behind
+  host verbs instead of ad-hoc file reads;
+- streaming chat and cancel remain daemon-mediated;
+- daemon restarts are explicit host-plane actions;
+- errors are surfaced as user-actionable states, not silent failures.
 
 ---
 
 ## v0.5 cycle
 
-**Theme: depth + reach.** v0.4 made alpi adoptable (desktop
-app, Skills v2 foundation, Matrix gateway, audited security).
-v0.5 extends reach (mobile, second gateway, second bundled
-skill) and deepens what already exists (ALP streaming + blobs,
-workgroup search, RAG, skills v2 composition). Tightly scoped
-— items waiting on user evidence live in the **Future
-versions** section below this one.
+**Theme: owned mobile access.** v0.4 gives alpi a working desktop and
+a federated gateway. v0.5 should make the secure remote-access story
+obvious: a mobile companion reaches the user's own profile over ALP,
+brings the existing desktop workgroup experience to the phone, and ALP
+streaming makes remote turns feel live.
 
-### Adoption — mobile + viewers
+This is the cycle where gateways stop being the main mobile story.
+Telegram, IMAP, Gmail, and Matrix stay useful, but the project should
+not depend on third-party chat apps as the primary way to reach a
+personal agent.
 
-| ID | Item | Status |
-|---|---|---|
-| AX-mobile | Mobile companion (iOS / Android) — same client model as the desktop app, over ALP.2 | 🔵 |
-| AZ | Workgroup viewer — folds into AX-mobile and the desktop app (read-only or read/write transcript) | 🔵 |
-
-### Gateways
+### Mobile + live access
 
 | ID | Item | Status |
 |---|---|---|
-| Signal | Signal gateway via signal-cli — best E2EE consumer messenger | 🔵 |
+| AX-mobile | Mobile companion (iOS / Android) — chat, status, peers, and workgroups from the user's own profile over ALP.2 | 🔵 |
+| ALP.4 | Streaming `link.ask` — incremental remote replies for peer calls, mobile, and workgroups | 🔵 |
 
 ### ALP depth
 
 | ID | Item | Status |
 |---|---|---|
-| ALP.4 | Streaming `link.ask` — SSE-style chunked replies between peers | 🔵 |
 | ALP.5 | Blob transfer — `link.put_blob` / `link.get_blob`, content-addressed, chunked AEAD | 🔵 |
-| ALP.6 | Workgroup search — semantic search over a workgroup transcript via local RAG (depends on **BA**) | 🔵 |
+| ALP.6 | Workgroup search — semantic search over a workgroup transcript via local RAG (pairs with **BA**) | 🔵 |
 
 ### Skills + bundled
 
@@ -168,12 +171,28 @@ protocol for "another machine talks to my profile" — the
 companion is just another peer.
 
 **Surfaces this could replace or extend:**
-- Telegram gateway (today's mobile story) — keep working but
-  optional once the companion is real.
+- Telegram / Matrix gateways — keep working, but optional once the
+  companion is real.
 - `/peers`, `/budget`, `/memory` panels exposed read-only on
   the go.
-- Workgroup viewer (**AZ**) folds in here — the same companion
-  that mirrors a 1:1 chat shows the workgroup transcript.
+- Workgroups use the desktop view as the reference surface:
+  transcript, roster, active task, post composer, pause/resume state,
+  and task markers.
+
+**Workgroup scope.** Desktop workgroups are already operational, so
+mobile does not invent a separate viewer. It ports the same product
+surface into the companion:
+
+- transcript with speaker identity, task markers, and working/done
+  state;
+- roster + peer status;
+- create/join/manage where the mobile UX can do it safely;
+- post composer for active members;
+- notifications for mentions, new `#task`, and task completion.
+
+The mobile surface can start read-only if pairing, posting, or key
+handling need more hardening, but the target is the same capability as
+desktop.
 
 **Open questions before scope locks:**
 - Tauri vs. native (SwiftUI / Kotlin) — Tauri wins on desktop
@@ -184,35 +203,6 @@ companion is just another peer.
   connections to the user's profile rather than accepting them.
 - Distribution — TestFlight + Play Store internal track at
   first.
-
-### AZ. Workgroup viewer
-
-Folds into AX-mobile and the desktop app. The same companion that
-mirrors a 1:1 chat shows the workgroup transcript: read-only
-view by default; read/write when the user is an active member.
-No separate codebase, no separate distribution.
-
-### Signal. Gateway via signal-cli
-
-Signal has the strongest E2EE posture of any consumer
-messenger; integration runs `signal-cli` as a local daemon
-exposing an HTTP/JSON-RPC endpoint that alpi POST/GETs against.
-v0.5 because the user-facing setup needs the desktop app
-(``desktop-v0.1.0``) to make the SIM-registration flow tolerable.
-
-**Scope.** `alpi/gateway/platforms/signal.py` talking to a
-locally-running `signal-cli daemon --http 127.0.0.1:…`.
-First-run: user registers a bot number, follows signal-cli's
-captcha + SMS verify flow once
-(`signal-cli -u <num> register`), then
-`alpi setup → Gateways → Signal` stores the daemon URL +
-allowlist of sender numbers.
-
-**Operational note.** Requires a SIM / VoIP number (~$5/mo on
-Twilio / JustCall). Niche unless the user values E2EE +
-self-hosted on a messenger non-techies can already use.
-
-LOC estimate: ~200 (HTTP client + polling loop + send).
 
 ### ALP.4. Streaming `link.ask`
 
@@ -267,7 +257,7 @@ intermediary.
 Once a workgroup runs for weeks, scrolling becomes useless.
 `workgroup.search(workgroup_id, query)` returns the top-K posts
 matching a query, ranked by semantic similarity using the local RAG
-index (**BA**, shipped in v0.4). The hub indexes its own
+index (**BA**). The hub indexes its own
 transcript on disk; members search remotely via the existing ALP
 transport.
 
@@ -346,7 +336,7 @@ sub-item to attack. Scope of the work is intentionally
 
 After `@alpi/knowledge` (v0.3) validated the bundled-skills
 pattern, `@alpi/home` is the second one — and demonstrates the
-v0.4 Skills v2 primitives in real use. One coherent voice/text
+Skills v2 primitives in real use. One coherent voice/text
 interface to the user's home, regardless of which underlying
 ecosystem(s) they run.
 
@@ -363,7 +353,7 @@ The user enables only the integrations they have. The skill
 declares each as an optional `requires:` and degrades
 gracefully when an integration isn't configured.
 
-**Per-skill SQLite (BF item 3, v0.4).** Caches device state +
+**Per-skill SQLite.** Caches device state +
 last-seen timestamps so the agent doesn't re-poll every
 turn ("is the kitchen light on?" answers from cache; "turn it
 on" pushes through).
@@ -458,6 +448,7 @@ already analysed; the "why now?" question is the open one.
 |---|---|---|
 | ALP.3+ | Multi-task workgroups (`multitask: true`, letter-prefixed task IDs) | Single-task model has not yet proven insufficient |
 | ALP.7 | Pinned shared memory per workgroup (hub-anchored `wiki.md`) | Heavy new surface (concurrency, history, roles) only justified if workgroups become heavily used |
+| Signal | Signal gateway via signal-cli | Strong privacy fit, but phone-number/SIM setup and daemon dependency make it less important once mobile is planned |
 | AY | Skills marketplace — federated, signed, never centralised | Presupposes an active author community + adoption for discovery to matter |
 | AI (2) | Memory v2 — TUI panel (collapsible, edit-in-place, "forget this") | UI weight for niche audience (power users with much memory); item 1 covers the substantive part |
 | AJ | Browser realism — Cloudflare / captcha / fingerprint depth | Cat-and-mouse perpetuo; without concrete failing use case, scope can't close |
@@ -465,6 +456,8 @@ already analysed; the "why now?" question is the open one.
 | BD | Model-aware tool-use-enforcement guidance | Small change, but value unproven; needs `agent.log` evidence first |
 | Webhook | Inbound HTTP triggers (HMAC-signed) | "Swiss-army-knife trap" — needs real demand, not speculation |
 | Cost telemetry | Cost split per-skill / per-tool | Only pays off with many skills + notably different costs; today neither holds |
+| BG re-audit | LiteLLM quarterly review — bump pin, run LLM probe, swap if better alternative emerges | Standing maintenance task; cadence + procedure documented in `OPERATIONS.md → Dependencies` |
+| Matrix E2EE | Olm/Megolm sessions, encryption store, SAS device verification, encrypted-room send/read tests | MVP intentionally unencrypted; promote when an external user runs the bot against a non-self-hosted homeserver |
 
 Promotion criteria: real user demand, or concrete blocker for
 a v0.x feature that depends on it. None of these items
@@ -643,9 +636,8 @@ the same quota is:
 - Unsafe for users (accounts can be banned; the reversed flow can
   break any time).
 
-The competitor landscape routinely ships "Codex OAuth" / "Claude Code
-OAuth" features.
-**alpi does not, and will not.** If a vendor publishes an official
+Private subscription routing is not part of alpi's product shape. If
+a vendor publishes an official
 OAuth-for-third-parties flow in the future (documented, stable,
 bindable), we adopt it then.
 

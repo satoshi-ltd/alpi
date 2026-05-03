@@ -616,7 +616,7 @@ def gateway() -> None:
 
 
 @gateway.command("probe")
-@click.argument("name", type=click.Choice(["telegram", "imap", "gmail"]))
+@click.argument("name", type=click.Choice(["telegram", "imap", "gmail", "matrix"]))
 @click.pass_context
 def gateway_probe(ctx: click.Context, name: str) -> None:
     """Probe a gateway and print JSON ``{status, reason?}``."""
@@ -681,11 +681,31 @@ def gateway_probe(ctx: click.Context, name: str) -> None:
                     out = {"status": "on"}
             except Exception as e:  # noqa: BLE001
                 out = {"status": "error", "reason": str(e)[:80]}
+    elif name == "matrix":
+        token = env.get("MATRIX_ACCESS_TOKEN", "").strip()
+        url = env.get("MATRIX_HOMESERVER_URL", "").strip()
+        if not token or not url:
+            out = {"status": "off"}
+        else:
+            try:
+                import urllib.request as _ur
+                req = _ur.Request(
+                    f"{url.rstrip('/')}/_matrix/client/r0/account/whoami",
+                    headers={"Authorization": f"Bearer {token}"},
+                )
+                with _ur.urlopen(req, timeout=2.0) as resp:
+                    body = json.loads(resp.read().decode("utf-8"))
+                if body.get("user_id"):
+                    out = {"status": "on"}
+                else:
+                    out = {"status": "error", "reason": "whoami missing user_id"}
+            except Exception as e:  # noqa: BLE001
+                out = {"status": "error", "reason": str(e)[:80]}
     click.echo(json.dumps(out))
 
 
 @gateway.command("remove")
-@click.argument("name", type=click.Choice(["telegram", "imap", "gmail"]))
+@click.argument("name", type=click.Choice(["telegram", "imap", "gmail", "matrix"]))
 @click.option("--yes", is_flag=True, default=False,
               help="Skip the confirmation prompt.")
 @click.pass_context
@@ -1220,6 +1240,10 @@ _GATEWAY_ENV_KEYS = {
     "gmail": (
         "GMAIL_CLIENT_ID", "GMAIL_CLIENT_SECRET", "GMAIL_ALLOWED_SENDERS",
     ),
+    "matrix": (
+        "MATRIX_HOMESERVER_URL", "MATRIX_USER_ID", "MATRIX_ACCESS_TOKEN",
+        "MATRIX_DEVICE_ID", "MATRIX_ALLOWED_ROOMS", "MATRIX_ALLOWED_SENDERS",
+    ),
 }
 
 
@@ -1232,6 +1256,7 @@ def _gateways_setup(h: Path) -> None:
             ("Telegram", "telegram", _telegram_status(h)),
             ("IMAP", "imap", _email_status(h)),
             ("Gmail", "gmail", _gmail_status(h)),
+            ("Matrix", "matrix", _matrix_status(h)),
         ]
         if configured:
             items.append(None)
@@ -1258,6 +1283,10 @@ def _gateways_setup(h: Path) -> None:
             from alpi.mail.gmail_setup import run as gmail_setup
 
             gmail_setup(h)
+        elif choice == "matrix":
+            from alpi.gateway.matrix_setup import run as matrix_setup
+
+            matrix_setup(h)
         elif choice == "remove":
             _remove_gateway_flow(h, configured)
 
@@ -1272,6 +1301,8 @@ def _configured_gateways(h: Path) -> list[str]:
         out.append("imap")
     if env.get("GMAIL_CLIENT_ID") or (h / "secrets" / "gmail_token.json").exists():
         out.append("gmail")
+    if env.get("MATRIX_ACCESS_TOKEN"):
+        out.append("matrix")
     return out
 
 
@@ -1320,6 +1351,8 @@ def _gateway_summary(h: Path, name: str) -> str:
         return _email_status(h)
     if name == "gmail":
         return _gmail_status(h)
+    if name == "matrix":
+        return _matrix_status(h)
     return ""
 
 
@@ -1776,6 +1809,17 @@ def _telegram_status(h: Path) -> str:
     if n == 0:
         return "ready · no one allowlisted yet"
     return f"ready · {n} allowlisted chat{'s' if n != 1 else ''}"
+
+
+def _matrix_status(h: Path) -> str:
+    env = _read_profile_env(h)
+    if not env.get("MATRIX_ACCESS_TOKEN"):
+        return "not set up"
+    rooms = env.get("MATRIX_ALLOWED_ROOMS", "")
+    n = len([r for r in rooms.split(",") if r.strip()])
+    if n == 0:
+        return "ready · no rooms allowlisted yet"
+    return f"ready · {n} allowlisted room{'s' if n != 1 else ''}"
 
 
 def _mcp_status(h: Path) -> str:

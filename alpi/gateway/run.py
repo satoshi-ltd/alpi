@@ -15,6 +15,7 @@ from alpi.gateway import delivery
 from alpi.gateway.base import IncomingMessage, OutgoingMessage, Platform
 from alpi.gateway.platforms.gmail import Gmail
 from alpi.gateway.platforms.imap import Imap
+from alpi.gateway.platforms.matrix import Matrix
 from alpi.gateway.platforms.telegram import Telegram
 from alpi.gateway.platforms.webhook import Webhook
 
@@ -121,6 +122,8 @@ def _llm_prompt(msg: IncomingMessage) -> str:
     """Build the LLM-facing prompt."""
     if msg.platform == "telegram":
         return f"[INBOUND TELEGRAM from {msg.external_user_id}]\n{msg.text}"
+    if msg.platform == "matrix":
+        return f"[INBOUND MATRIX from {msg.external_user_id} in {msg.external_chat_id}]\n{msg.text}"
     if msg.platform in ("email", "gmail"):
         subject = msg.subject or "(no subject)"
         return (
@@ -211,6 +214,6 @@ async def serve(home: Path) -> None:
     Logging + env are owned by the orchestrator now (one shared
     config), so this only spins up the platform listeners."""
     platforms: list[Platform] = [
-        Telegram(home), Imap(home), Gmail(home), Webhook(home),
+        Telegram(home), Imap(home), Gmail(home), Matrix(home), Webhook(home),
     ]
     await asyncio.gather(*(_handle_platform(p, home) for p in platforms))

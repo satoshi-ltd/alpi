@@ -448,12 +448,12 @@ residue left behind.
   hardcoded API keys, passwords, or tokens. Security scanner blocks.
 - Hidden files (`.foo`, `.secret`). Rejected by the filename regex.
 
-## Migration from Hermes or other sources
+## Migration from other skill layouts
 
-Hermes skills map cleanly for the simple case (just `SKILL.md`). For
-richer ones, reshape:
+Skills from other agents usually map cleanly for the simple case
+(just `SKILL.md`). For richer ones, reshape:
 
-| Hermes | alpi |
+| Source layout | alpi |
 |---|---|
 | `skills/<cat>/<name>/SKILL.md` | `~/.alpi/skills/<cat>/<name>/SKILL.md` |
 | `skills/<cat>/<name>/scripts/*.py` | `scripts/*.py` (flat, no subdirs) |
@@ -462,5 +462,6 @@ richer ones, reshape:
 | Credentials in random `whoop.json` at skill root | Move to `secrets/` |
 | `DESCRIPTION.md` at category level | Drop; redundant |
 
-The frontmatter also needs adapting: Hermes uses `metadata.hermes`,
-alpi uses flat fields (`name`, `description`, `category`, etc.).
+The frontmatter also needs adapting: alpi uses flat fields (`name`,
+`description`, `category`, etc.) instead of nested tool-specific
+metadata.

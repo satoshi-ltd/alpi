@@ -114,6 +114,40 @@ hand. Today's upgrade rule of thumb:
    layout change in v0.2.68), follow them for **every profile**.
 5. Re-run `alpi doctor` — should be clean.
 
+## Dependencies — cadence + LiteLLM
+
+alpi pins a tight range on its hot-path deps so a silent SDK release
+can't break tool-calling, streaming, or cost reporting. The one to
+watch is **LiteLLM** — every provider (OpenAI, Anthropic, Ollama,
+OpenRouter, Gemini, Groq, Mistral, DeepSeek…) flows through it.
+
+**Why LiteLLM and not raw provider SDKs.** alpi is single-maintainer.
+Writing and maintaining one adapter per provider is a maintenance
+trap. LiteLLM costs one dep + a quarterly changelog read; raw SDKs
+cost N adapters forever.
+
+**Re-audit cadence — quarterly.** When the calendar hits the next
+review:
+
+1. Read [LiteLLM release notes](https://docs.litellm.ai/release_notes)
+   from our current pin to latest.
+2. Diff the surface alpi uses (5 entry points): ``litellm.completion``,
+   ``litellm.completion_cost``, ``litellm.model_cost``,
+   ``litellm.get_llm_provider``, the suppress/telemetry flags.
+3. Run the LLM-in-loop probe (``pytest tests/llm --llm``) against the
+   model matrix on the candidate version.
+4. Bump the floor in ``pyproject.toml`` to the new tested version,
+   keep the upper bound one minor ahead (``>=1.83,<1.85`` shape).
+5. ``uv lock``, commit.
+
+**CVEs.** Filter by surface: alpi uses the **SDK**, not the **Proxy**
+server. CVEs scoped to LiteLLM Proxy (e.g. CVE-2026-30623, MCP stdio
+RCE) don't apply. SDK CVEs do — bump promptly.
+
+**Alternatives evaluated.** Raw SDKs (rejected: maintenance cost,
+see above). [chuk-llm](https://github.com/chrishayuk/chuk-llm) on
+the radar but immature for our provider matrix at audit time.
+
 ## Backup + restore
 
 A profile is a single directory. Back up the directory, restore

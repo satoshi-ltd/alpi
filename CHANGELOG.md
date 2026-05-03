@@ -5,7 +5,7 @@
 Rewrote the persona seed and lifted operative rules into the
 system prompt. New profiles boot with a 10-line audience-neutral
 persona (no "engineering-level familiarity assumed", no project-
-ethos baked in) — same model hermes / openclaw use. Project rules
+ethos baked in). Project rules
 live in `system_prompt.md` where they apply to every profile.
 
 - ``alpi/prompts/default_agent.md`` — 30 → 10 lines. Identity + Voice (5 bullets) only. Stance section dropped (paternalistic / audience-assuming). "Edit me" meta-block dropped (the user edits via chat).
@@ -23,9 +23,8 @@ all at once.
 
 ## v0.3.11 — 2026-05-03 — skills overhaul
 
-Skill surface tightened after a strategic review against
-hermes-agent and openclaw, plus integration probing on real
-profiles.
+Skill surface tightened after a strategic review of comparable
+agent workflows, plus integration probing on real profiles.
 
 - **Persistence in English.** `memory` / `skill` / `schedule` tool descriptions mandate English on every persisted entry regardless of chat language (they reload into context every turn). Three pre-existing Spanish examples in `system_prompt.md` translated.
 - **`requires_env` enforced + subprocess passthrough fixed.** `skills_index_block` filters skills with unset env vars; `_list` tags them `[inactive: missing env var FOO]`. `_view` now forwards declared vars to terminal subprocesses — without that fix scripts ran with empty `$VAR`.
@@ -481,7 +480,8 @@ Verified on same host and over Tailscale via MagicDNS.
 Public narrative matches product shape: alpi is a profile-
 based personal AI that grows into a private network across
 machines. Third pass on AT (prompt + tool descriptions audit
-vs Hermes) — three targeted additions.
+against comparable persistent-agent behaviour) — three targeted
+additions.
 
 - `README.md` — leads with profiles, model/key ownership, multi-machine coordination, current ALP surface.
 - Landing + docs — "your private / agent network"; ALP.1/.2/.3 stated directly across ALP/Deployment/Security/Operations/Profiles/Config/Roadmap.
@@ -710,14 +710,14 @@ in `git log`.
 ## v0.2.0 — 2026-04-21
 
 Foundational v0.2 cut: split CONTEXT → ARCHITECTURE + ROADMAP,
-positions alf as lighter Hermes; tiered model docs; profile
+positions alf as a lighter private-agent runtime; tiered model docs; profile
 propagation through tool context; new send_message + schedule
 + email + mcp subsystems; security phases 1–2.
 
 - **docs** — `MODELS.md` (tiered model recommendations) (`df29cfc`); identity-wizard rejected (`60122b7`); CONTEXT split into ARCHITECTURE + ROADMAP, bump to v0.2.0 (`6b946e4`).
 - **gateway / schedule** — stream tool traces + typing indicator (`fe3a3d4`); fail fast on bad workspace (`04bdaba`); fix immediate-fire + UTC vs local tz + duplicate delivery (`3dd4522`); kind=once + LLM time grounding (`1fc3610`); schedule daemon tool+CLI+rename from cron (`2245e42`); install/uninstall for gateway+schedule (`cd62da0`); email subsystem (`c67e618`); email gateway + per-platform config (`4691df8`).
 - **skills / tools / tui** — unified skill tool + subdir contract + path guards (`2e67830`); auto-inject skill index into system prompt (`4035327`); rename delegate → research + depth tiers (`d2ceb74`); level-2 comment cleanup (`a07e40a`); inter-tool prose + reasoning tokens in indicator (`62f7fa7`); reasoning persists across sessions + show_reasoning toggle (`fd1fec4`); skill tool patch/view + state subdir (`211c022`).
-- **misc** — fix profile propagation + memory prompt (`1470bdb`); send_message tool (`6e31ace`); profile CLI + drop migration (`630f97c`); mcp client (`0d376ac`); shared ui primitives (`7a81770`); memory description Hermes-style (`b214ce6`); tool description compression (`19f1287`, `6be1685`); minimal config seed + /new session (`2dadc09`); security phase 1 — terminal denylist + SSRF + injection scan (`a54d99d`); security phase 2 — opt-in OS sandbox (`e78b428`); merge glob+grep into search (`2b73091`); file tools drop workspace wall (`3e2dc29`); web_search dedup by domain (`b04b394`); README layout (`56d1711`).
+- **misc** — fix profile propagation + memory prompt (`1470bdb`); send_message tool (`6e31ace`); profile CLI + drop migration (`630f97c`); mcp client (`0d376ac`); shared ui primitives (`7a81770`); memory description tightened (`b214ce6`); tool description compression (`19f1287`, `6be1685`); minimal config seed + /new session (`2dadc09`); security phase 1 — terminal denylist + SSRF + injection scan (`a54d99d`); security phase 2 — opt-in OS sandbox (`e78b428`); merge glob+grep into search (`2b73091`); file tools drop workspace wall (`3e2dc29`); web_search dedup by domain (`b04b394`); README layout (`56d1711`).
 
 ## v0.1.0 — 2026-04-19
 
