@@ -29,6 +29,7 @@ broken release.
 | ID | Item | Status |
 |---|---|---|
 | AW | Encrypted profile backup/restore — zero-knowledge passphrase-encrypted archive of `~/.alpi/<profile>/` | 🔵 |
+| BG | LiteLLM audit — pin to a tested version, evaluate alternatives (chuk-llm, raw provider SDKs) | 🔵 |
 
 ### Commercial track
 
@@ -59,6 +60,23 @@ party who can decrypt; we never see the plaintext.
 machines" + "no vendor lock-in" + "if your laptop dies, you have
 your agent back" — every commercial AI tool today loses your
 context when you re-install. We don't.
+
+### BG. LiteLLM audit
+
+Today: `litellm>=1.50.0` floor in `pyproject.toml`, lock pins
+`1.83.0`. LiteLLM is alpi's universal LLM client — every provider
+goes through it. The library moves fast; minor releases break
+streaming, tool-call shapes, or cost-tracking semantics roughly
+once a quarter. We've avoided this so far by locking, but we've
+never run a deliberate audit.
+
+Goal: a single deliberate review producing a tightened floor + a
+"recheck quarterly" cadence in `OPERATIONS.md`.
+
+- Inventory which provider features alpi actually uses (tool calls, streaming, vision, prompt cache, cost reporting, fallback chains).
+- Read the LiteLLM changelog from our floor to latest; flag any breaking change touching those features.
+- Decide a tight version range (e.g. `>=1.83,<2.0`) instead of the open `>=1.50`.
+- Spike alternatives: `chuk-llm`, raw provider SDKs (Anthropic + OpenAI + Google directly), or the OpenAI-compatible-only path (most providers expose one). Honest writeup of trade-offs (one less dep vs N provider quirks to absorb), commit to keeping LiteLLM unless the writeup says otherwise.
 
 ### Matrix. Federated + E2EE gateway
 
@@ -120,6 +138,7 @@ versions** section below this one.
 | ID | Item | Status |
 |---|---|---|
 | BF (4, 6-8) | Skills v2 — output schemas, composition, test harness, versioning (triggers shipped as keyword hint in v0.3.11) | 🔵 |
+| BJ | Skills capability stress test — author one non-trivial real skill end-to-end (web a11y reviewer with Playwright) and let the gaps drive the BF backlog | 🔵 |
 | `@alpi/home` | Second bundled skill (after `@alpi/knowledge` in v0.3). Orchestrates Home Assistant + optional connectors (Hue, Xiaomi, Alexa / Google Home) behind a single voice/text interface | 🔵 |
 
 ### Knowledge + memory
@@ -291,6 +310,37 @@ were dropped as redundant with the existing `schedule` tool.
 Each item shippable independently. Composition and output
 schemas pair: schemas have most of their value when consumed by
 a calling skill.
+
+### BJ. Skills capability stress test
+
+v0.3.11 shipped the foundation (eligibility, schema, db, set_meta,
+keyword hint). The honest question is: is it enough to author a
+**non-trivial real skill** end-to-end? The hypothetical canary:
+
+> *"web accessibility reviewer — open the landing + a docs page in
+> headless Playwright, on desktop and mobile viewports, run an
+> axe-core or lighthouse pass, persist findings in
+> ``state/db.sqlite``, regress against the previous run."*
+
+The skill needs to: declare `requires_env` for any auth, declare
+optional Playwright/axe-core deps and degrade gracefully when
+absent, run scripts that capture screenshots into `assets/`, store
+structured findings in SQLite, present a diff against the previous
+run.
+
+What we'll likely find missing (driving BF backlog):
+
+- **Output schemas** so the parent agent gets a structured report, not free-form prose.
+- **Composition** if we factor "open page" / "axe pass" / "diff vs previous" into separate sub-skills.
+- **Test harness** to validate the skill keeps working as Playwright versions move.
+- **Version pinning** so a Playwright API change doesn't silently break the skill.
+- A way to declare "needs Playwright; degrade if absent" (currently `requires_env` covers env vars only — no analogous `requires_python_pkg`).
+
+Author the skill, ship it as `@alpi/web-a11y` if it earns its way
+to bundled (or as a documented user skill if not). Whatever the
+authoring surfaces complains about loudest becomes the next BF
+sub-item to attack. Scope of the work is intentionally
+**capability-driven**, not feature-driven.
 
 ### `@alpi/home`. Second bundled skill — home orchestration
 
