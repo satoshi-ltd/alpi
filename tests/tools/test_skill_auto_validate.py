@@ -72,6 +72,28 @@ def test_patch_re_runs_validation(isolated_home: Path) -> None:
     assert "validation:" in r.output
 
 
+def test_validate_returns_not_ok_for_errors(isolated_home: Path) -> None:
+    _create_plain(isolated_home)
+    Skill().run(
+        action="add_file", name="demo", subdir="scripts", filename="run.py",
+        content="print('broken'\n", confirm_user_skill=True,
+    )
+    r = Skill().run(action="validate", name="demo")
+    assert not r.ok
+    assert "✗" in r.output
+
+
+def test_validate_does_not_write_pycache(isolated_home: Path) -> None:
+    _create_plain(isolated_home)
+    Skill().run(
+        action="add_file", name="demo", subdir="scripts", filename="run.py",
+        content="import sys\nprint(sys.version)\n", confirm_user_skill=True,
+    )
+    r = Skill().run(action="validate", name="demo")
+    assert r.ok, r.error
+    assert "__pycache__" not in {p.name for p in isolated_home.rglob("*")}
+
+
 def test_remove_file_revalidates(isolated_home: Path) -> None:
     _create_plain(isolated_home)
     Skill().run(
@@ -100,7 +122,11 @@ def test_edit_body_revalidates(isolated_home: Path) -> None:
     # A wrong port should trigger the coherence check.
     r = Skill().run(
         action="edit", name="demo",
-        body="# demo\nRuns on localhost:9999.",
+        body=(
+            "# demo\n\nThis skill runs on localhost:9999.\n\n"
+            "Long enough body to clear the placeholder guard, "
+            "with a port mismatch versus scripts/run.py.\n"
+        ),
         confirm_user_skill=True,
     )
     assert r.ok, r.error

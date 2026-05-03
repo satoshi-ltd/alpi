@@ -161,43 +161,66 @@ Things that **don't** belong in `@alpi/*`:
 ```yaml
 ---
 name: whoop-integration
-description: Fetch daily health metrics from the Whoop API via OAuth.
+description: Fetch daily health metrics from the Whoop API via OAuth
 category: personal
 version: 0.1.0
 origin: agent                   # "agent" (proposed) or "user" (hand-written)
-requires_env: []                # pre-provisioned env vars in ~/.alpi/.env
+requires_env: []                # env vars the skill needs; missing ones hide it
 tools: [read_file, terminal]    # tools the skill is allowed to call
-stores_secrets: true            # if true, secrets/ is created mode 0700
+keywords: [whoop, workout]      # optional lowercase tokens for keyword boost
 created_at: 2026-04-20
 ---
 ```
 
+The frontmatter is validated field-by-field on every `create` /
+`edit`; errors block the operation, warnings inform. Run
+`skill(action='validate', name=...)` against any installed skill to
+see both schema findings and runtime checks (syntax, imports,
+OAuth ordering, port coherence) in one pass.
+
 ### `description`
 
-One line, ≤150 chars, starts with a verb. This is what the agent
-matches against the current task to decide whether to load the skill.
+One line, ≤150 chars. Headline — drop the trailing period (the
+schema warns if you forget). This is what the agent matches against
+the current task to decide whether to load the skill.
 
-### `requires_env`
+### `requires_env` — conditional activation
 
-Names of env vars the skill expects in `~/.alpi/.env`. Use this for
-**pre-provisioned** secrets — API keys you paste in manually:
+`requires_env` gates **whether the agent sees the skill at all**.
+At system-prompt build time, every entry is checked against
+`os.environ` (the profile's `.env` is loaded into the process
+env at engine bootstrap, so anything in `~/.alpi/.env` counts).
+Missing or empty value → the skill is hidden from the LLM.
 
 ```yaml
 requires_env: [WHOOP_CLIENT_ID, WHOOP_CLIENT_SECRET]
 ```
 
-Values never land in the skill directory. `~/.alpi/.env` is the single
-source of truth for pre-provisioned static secrets.
+Hidden skills do not disappear from `skill(action='list')` — they
+appear with `[inactive: missing env var X]` so the user knows the
+skill exists but lacks credentials. Populate `~/.alpi/.env` and
+the skill becomes available on the next session.
 
-### `stores_secrets`
+Values never land in the skill directory. `~/.alpi/.env` is the
+single source of truth for pre-provisioned static secrets.
 
-Set to `true` when the skill needs to **write** credentials at
-runtime — OAuth tokens, refresh tokens, session cookies, anything
-that rotates. The skill system creates `secrets/` with mode 0700 and
-adds `skills/**/secrets/` to the profile's `.gitignore`.
+### `keywords` — per-turn discovery boost
 
-Scripts inside the skill access these via a path relative to the
-skill directory: `Path(__file__).parent.parent / "secrets" / "auth.json"`.
+Optional lowercase tokens. When the user's current message contains
+any of them, the engine injects a one-line "skill hint" system
+message for that turn pointing at this skill. Helps small models
+(local Llama, Haiku) that miss obvious matches from descriptions
+alone; big models (Sonnet, Opus) usually don't need it.
+
+```yaml
+keywords: [whoop, workout, fitness]
+```
+
+The matcher lower-cases the user's message and matches whole tokens.
+Use concrete domain terms — `whoop`, `notion`, `pomodoro` — never
+generic verbs (`do`, `run`, `fetch`) which hit too often. Inactive
+skills (failing `requires_env`) do not get boosted, even if a
+keyword matches.
 
 ## Where credentials live
 
@@ -206,7 +229,7 @@ Two separate stores, two clear purposes:
 | Store | Purpose | Lifecycle |
 |---|---|---|
 | `~/.alpi/.env` | Pre-provisioned static secrets declared in `requires_env`. User pastes the value in once. | Edited by hand. Shared across skills if they reference the same var. |
-| `~/.alpi/skills/<cat>/<name>/secrets/` | Runtime-generated credentials (OAuth access+refresh, session blobs). Per-skill, never shared. | Created at runtime by scripts. Wiped when the skill is deleted. |
+| `~/.alpi/skills/<cat>/<name>/secrets/` | Runtime-generated credentials (OAuth access+refresh, session blobs). Per-skill, never shared. | Created lazily when the skill writes a secret. Wiped when the skill is deleted. |
 
 **Never** hardcode secrets inside `SKILL.md`, `scripts/`, `references/`,
 or `assets/`. The security scanner rejects the most obvious patterns
@@ -215,11 +238,83 @@ and on every file added via `add_file` to `scripts`, `references`, or
 `assets`. The `secrets/` subdir skips the scanner by design (the
 whole point is that it holds keys).
 
+## Model quality matters
+
+Skills rely on tool-calling discipline and correct routing. Weak or
+very small models may ignore the skill index, over-trigger generic
+tools, or skip `skill(action="view")` even when a skill matches. For
+skill-heavy profiles, use a model recommended for routing in
+[MODELS.md](MODELS.md); reserve low-end models for simple, low-risk
+turns.
+
+## Persistent state — SQLite via the `db` tool
+
+Skills that need structured state (more than a single JSON blob,
+multi-row history, set / lookup / aggregate semantics) use the
+`db` tool — first-class SQL without writing a Python script:
+
+```
+db(action="exec",  skill="whoop-tracker",
+   sql="CREATE TABLE IF NOT EXISTS workouts (id INTEGER PRIMARY KEY, date TEXT, mins INTEGER)")
+
+db(action="exec",  skill="whoop-tracker",
+   sql="INSERT INTO workouts (date, mins) VALUES (?, ?)",
+   params=["2026-05-03", 35])
+
+db(action="query", skill="whoop-tracker",
+   sql="SELECT date, mins FROM workouts ORDER BY date DESC LIMIT 7")
+```
+
+Backed by `~/.alpi/<profile>/skills/<cat>/<skill>/state/db.sqlite`.
+Always parameterised — `params=[…]` binds to `?` placeholders;
+never string-interpolate user data into the SQL. Schema is owned
+by the skill body — the LLM runs `CREATE TABLE IF NOT EXISTS …`
+on first invocation; idempotent.
+
+**Quotas (enforced):**
+
+- 50 MB max file size — prune with `DELETE` or run
+  `skill(action='reset_state', name=…)` to nuke and start over.
+- 10 000 rows max per `query` result — tighten with `WHERE` /
+  `LIMIT`.
+- 5 s busy / lock timeout (sqlite-level — query duration is not
+  killed mid-flight, but skill DBs are tiny so this hasn't bitten
+  in practice).
+
+**Scope:** strictly per-skill. The `skill` argument resolves
+against the profile's installed skills; bundled `@alpi/*` skills
+cannot use `db` (read-only by design). Backup-friendly: when AW
+ships, `db.sqlite` flows through the encrypted archive like any
+other file under the skill directory.
+
+`skill(action='reset_state', name=…)` wipes everything under
+`<skill>/state/` (including `db.sqlite`, JSONL logs, anything
+else). Useful when a schema change leaves the DB inconsistent;
+preserves the rest of the skill (scripts, secrets, SKILL.md).
+
+## Language: skills are written in English
+
+Every file inside a skill directory — `SKILL.md` (frontmatter +
+body), `scripts/`, `references/`, `assets/` — is written in
+**English**, regardless of the language the user / author speaks.
+SKILL.md bodies reload into the system prompt every time the
+agent opens the skill; non-English content there biases the
+agent's reply language across every future session and every
+profile that has the skill installed.
+
+The rule is enforced at the prompt level (the `skill` tool's own
+description tells the LLM to translate before writing). When
+authoring a skill by hand, follow the same rule: write in English
+even if you happen to be working in another language right now.
+The user-facing surface — the agent's chat replies — still
+matches the user's language. Only the persisted content is
+fixed.
+
 ## Actions on the `skill` tool
 
 ```
 skill(action="create", name=..., category=..., description=..., body=...,
-      [requires_env], [tools], [stores_secrets])
+      [requires_env], [tools])
 skill(action="edit",   name=..., body=..., [confirm_user_skill])
 skill(action="add_file",    name=..., subdir=..., filename=..., content=...,
                              [confirm_user_skill])
@@ -234,8 +329,8 @@ skill(action="list")
 `create` writes **only** `SKILL.md` and goes live immediately under
 `~/.alpi/skills/<category>/<name>/`. Subdirectories come later via
 `add_file`. A just-created skill has no scripts, no references, no
-assets, no secrets (unless `stores_secrets=true`, which creates the
-empty `secrets/` directory alongside SKILL.md).
+assets, no secrets. If the skill later writes a file under `secrets/`,
+the tool creates that directory mode 0700 automatically.
 
 The agent is capped at 40 agent-created skills total (tweakable via
 `MAX_AGENT_SKILLS`). Beyond that, `create` errors and asks the user
@@ -254,7 +349,14 @@ skill(action="add_file",
 - `scripts/`, `references/`, `assets/` content is scanned for
   dangerous patterns (rm -rf, curl|sh, eval(), hardcoded keys, etc).
 - `secrets/` content is not scanned (by design). Files written there
-  are `chmod 0600`.
+  create the directory mode 0700 and are `chmod 0600`.
+
+### Viewing and running skill files
+
+`skill(action="view", name=..., file="scripts/foo.py")` returns the
+file content prefixed with `absolute_path: ...`. Use that absolute
+path when executing a script. Do not run `scripts/foo.py` relative to
+the current workspace; skill files live under the active profile home.
 
 ### Origin gate
 
@@ -271,7 +373,7 @@ The agent can hold at most **40 agent-created skills** at a time
 
 ## Example skill: Whoop OAuth integration
 
-Start with the prose + secrets flag:
+Start with the prose:
 
 ```python
 skill(
@@ -287,7 +389,6 @@ skill(
         "scripts/oauth.py to refresh.\n"
         "2. Read scripts/fetch.py for the metric the user asked about.\n"
     ),
-    stores_secrets=True,
 )
 ```
 
@@ -358,7 +459,7 @@ richer ones, reshape:
 | `skills/<cat>/<name>/scripts/*.py` | `scripts/*.py` (flat, no subdirs) |
 | `skills/<cat>/<name>/references/*.md` | `references/*.md` (flat) |
 | `skills/<cat>/<name>/templates/<subfolder>/*` | `assets/*` (flatten, prefix filenames if needed) |
-| Credentials in random `whoop.json` at skill root | Move to `secrets/` and set `stores_secrets: true` |
+| Credentials in random `whoop.json` at skill root | Move to `secrets/` |
 | `DESCRIPTION.md` at category level | Drop; redundant |
 
 The frontmatter also needs adapting: Hermes uses `metadata.hermes`,

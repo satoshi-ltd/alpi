@@ -6,6 +6,7 @@ from alpi.tools.base import Tool, ToolResult
 from alpi.tools import (
     peer,
     browser,
+    db as db_tool,
     delegate,
     research,
     edit_file,
@@ -81,6 +82,7 @@ for _mod in (
     web_extract,
     browser,
     schedule_tool,
+    db_tool,
     memory_tool,
     session_search,
     skill_tool,

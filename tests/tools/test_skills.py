@@ -103,6 +103,51 @@ def test_scan_skill_body_clean() -> None:
     assert scan_skill_body("just prose about how to do X step by step") == []
 
 
+def test_scanner_allows_declared_secret_env_read(isolated_home: Path) -> None:
+    r = _create(
+        name="declared-env",
+        category="software",
+        description="Uses declared env",
+        requires_env=["SERVICE_API_KEY"],
+        body=(
+            "## When to use\n"
+            "Run a script that calls os.getenv('SERVICE_API_KEY') "
+            "without printing it.\n"
+        ),
+    )
+    assert r.ok, r.error
+
+
+def test_scanner_blocks_undeclared_secret_env_read(isolated_home: Path) -> None:
+    r = _create(
+        name="undeclared-env",
+        category="software",
+        description="Uses undeclared env",
+        body="## When to use\nRun os.getenv('SERVICE_API_KEY').\n",
+    )
+    assert not r.ok
+    assert "undeclared secret env" in (r.error or "")
+
+
+def test_scanner_blocks_printing_declared_secret_env(isolated_home: Path) -> None:
+    _create(
+        name="print-secret",
+        category="software",
+        description="Uses declared env",
+        requires_env=["SERVICE_API_KEY"],
+        body="## When to use\nUse the helper script.\n",
+    )
+    r = Skill().run(
+        action="add_file",
+        name="print-secret",
+        subdir="scripts",
+        filename="run.py",
+        content="import os\nprint(os.getenv('SERVICE_API_KEY'))\n",
+    )
+    assert not r.ok
+    assert "prints secret env" in (r.error or "")
+
+
 def test_delete_skill_respects_origin(isolated_home: Path) -> None:
     _create(name="agentic", category="software", description="x", body="body")
     r = _delete(name="agentic")
@@ -122,15 +167,19 @@ def test_delete_skill_respects_origin(isolated_home: Path) -> None:
 
 
 def test_edit_skill_writes_backup(isolated_home: Path) -> None:
-    _create(name="edit-me", category="software",
-            description="x", body="original body")
-    r = _edit(name="edit-me", body="new body")
+    _create(
+        name="edit-me", category="software",
+        description="x",
+        body="original body content goes here, long enough to pass the placeholder guard",
+    )
+    new_body = "## When to use\nUpdated body content with sections and prose.\n\nMore prose to clear the minimum length guard.\n"
+    r = _edit(name="edit-me", body=new_body)
     assert r.ok
     md = isolated_home / "skills" / "software" / "edit-me" / "SKILL.md"
     bak = md.with_suffix(".md.bak")
     assert bak.exists()
     assert "original" in bak.read_text()
-    assert "new body" in md.read_text()
+    assert "Updated body content" in md.read_text()
 
 
 def test_requires_env_creates_example(isolated_home: Path) -> None:
@@ -168,15 +217,6 @@ def test_unknown_action_rejected() -> None:
     assert "unknown action" in (r.error or "").lower()
 
 
-def test_stores_secrets_creates_mode_0700_dir(isolated_home: Path) -> None:
-    _create(name="with-secrets", category="personal", description="x",
-            body="body", stores_secrets=True)
-    secrets = isolated_home / "skills" / "personal" / "with-secrets" / "secrets"
-    assert secrets.is_dir()
-    import os
-    assert (os.stat(secrets).st_mode & 0o777) == 0o700
-
-
 def test_add_file_scripts(isolated_home: Path) -> None:
     _create(name="withscripts", category="software", description="x", body="y")
     r = Skill().run(action="add_file", name="withscripts", subdir="scripts",
@@ -202,7 +242,7 @@ def test_add_file_assets(isolated_home: Path) -> None:
 
 def test_add_file_secrets_skips_security_scan(isolated_home: Path) -> None:
     _create(name="secret-skip", category="personal", description="x",
-            body="y", stores_secrets=True)
+            body="y")
     r = Skill().run(
         action="add_file", name="secret-skip", subdir="secrets",
         filename="auth.json",
@@ -212,6 +252,7 @@ def test_add_file_secrets_skips_security_scan(isolated_home: Path) -> None:
     p = isolated_home / "skills" / "personal" / "secret-skip" / "secrets" / "auth.json"
     assert p.exists()
     import os
+    assert (os.stat(p.parent).st_mode & 0o777) == 0o700
     assert (os.stat(p).st_mode & 0o777) == 0o600
 
 
@@ -257,7 +298,7 @@ def test_remove_file(isolated_home: Path) -> None:
 
 def test_delete_nukes_secrets_too(isolated_home: Path) -> None:
     _create(name="del-secrets", category="personal", description="x",
-            body="y", stores_secrets=True)
+            body="y")
     Skill().run(action="add_file", name="del-secrets", subdir="secrets",
                 filename="token.json", content='{"t": "val"}')
     _delete(name="del-secrets")
@@ -378,6 +419,8 @@ def test_view_returns_subdir_file(isolated_home: Path) -> None:
                 filename="notes.md", content="# Notes\nsome content\n")
     r = Skill().run(action="view", name="v2", file="references/notes.md")
     assert r.ok
+    assert "absolute_path:" in r.output
+    assert str(isolated_home / "skills" / "personal" / "v2" / "references" / "notes.md") in r.output
     assert "# Notes" in r.output
 
 

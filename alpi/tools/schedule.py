@@ -41,7 +41,16 @@ class Schedule(Tool):
         "`prompt` is what alpi should do when the job fires. Its reply "
         "is AUTO-DELIVERED to `platform` + `chat_id` (defaults: telegram "
         "+ first allowlisted chat). Do NOT include 'send to telegram' "
-        "in the prompt — delivery is automatic; adding it sends twice."
+        "in the prompt — delivery is automatic; adding it sends twice.\n"
+        "\n"
+        "Language: write the `prompt` in ENGLISH, regardless of the "
+        "chat language. Schedule prompts are persisted in jobs.json and "
+        "re-injected into the LLM context every time the job fires — "
+        "non-English prompts bias replies forever, exactly like memory "
+        "and skill bodies. If the OUTPUT must be in another language "
+        "(e.g. a Spanish daily message), say so inside the prompt: "
+        "``\"Send a Telegram greeting in Spanish: 'Buenos dias' …\"`` "
+        "— English instruction, target-language content."
     )
     parameters = {
         "type": "object",

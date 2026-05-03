@@ -1,12 +1,4 @@
-"""``alpi diff`` — what changed in this profile since a cutoff.
-
-Single primitive shared by three surfaces: the CLI subcommand,
-the TUI ``/diff`` panel, and (later) a ``host.profile.diff`` verb
-the desktop calls. ``compute(home, since)`` walks the profile
-tree using file mtimes as the source of truth — no separate
-audit log to keep in sync. ``render(report, since, profile)``
-formats it for terminal output.
-"""
+"""``alpi diff`` — mtime-driven profile-state report shared by CLI / TUI / future host verb."""
 
 from __future__ import annotations
 
@@ -100,10 +92,7 @@ def _scan_sessions(directory: Path, cutoff_epoch: float) -> _SessionFacts:
 
 
 def _scan_memory(home: Path, cutoff_epoch: float) -> list[dict[str, Any]]:
-    """Memory files (``memories/*.md``) modified since cutoff. We don't
-    diff *contents* — that would require keeping snapshots; the file's
-    mtime + current size is enough to tell the user 'something happened
-    here, go look'."""
+    """Memory files modified since cutoff (mtime + size only; no content diff)."""
     root = home / "memories"
     if not root.exists():
         return []
@@ -189,9 +178,7 @@ def _scan_schedule_runs(home: Path, cutoff_epoch: float) -> dict[str, Any]:
             continue
         if mtime < cutoff_epoch:
             continue
-        # ``schedule/output/<job_id>/<run-stamp>.…`` — the parent dir
-        # name is the job id. Files written at the top level (no
-        # per-job subdir) are bucketed under ``"_misc"``.
+        # Layout: ``schedule/output/<job_id>/<run-stamp>``; top-level files → ``_misc``.
         rel = path.relative_to(root)
         job = rel.parts[0] if len(rel.parts) > 1 else "_misc"
         by_job[job] = by_job.get(job, 0) + 1
@@ -221,9 +208,7 @@ def _budget_today(home: Path) -> dict[str, Any]:
 
 
 def compute(home: Path, since: datetime) -> dict[str, Any]:
-    """Walk the profile tree at ``home`` and return a structured report
-    of state changes whose mtime is at-or-after ``since``. Side-effect
-    free: never writes, never raises on a malformed file (skips it)."""
+    """Profile-state report; side-effect free; skips malformed files silently."""
     cutoff = since.timestamp()
     sessions_local = _scan_sessions(home / "sessions", cutoff)
     sessions_gw = _scan_sessions(home / "gateway" / "sessions", cutoff)
@@ -281,9 +266,7 @@ def _fmt_duration(secs: float) -> str:
 
 
 def render(report: dict[str, Any], *, profile: str) -> str:
-    """Plain-text rendering, no terminal escapes — the TUI formats with
-    its own widgets and the CLI is happy without colour. Stable layout:
-    one section header per group, ``  key  value`` rows underneath."""
+    """Plain-text render; no escapes; stable layout (one header per section)."""
     since = report["since"]
     lines: list[str] = []
     lines.append(f"profile: {profile}")
