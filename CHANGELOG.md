@@ -1,5 +1,82 @@
 # Changelog
 
+## v0.3.11 — 2026-05-03 — skills overhaul
+
+Skill surface tightened end-to-end. Persistence in English,
+declared `requires_env` enforced (and forwarded to subprocesses),
+field-validated frontmatter, first-class SQLite, keyword
+discovery boost, surgical `set_meta` for frontmatter edits.
+
+### Persistence in English
+
+`memory`, `skill`, and `schedule` tool descriptions now mandate
+English for every persisted entry / SKILL.md body / cron prompt
+regardless of chat language — they all reload into the LLM
+context and one non-English entry biases replies forever. Three
+pre-existing Spanish examples in `system_prompt.md` translated.
+No runtime detector (would break on Japanese / Russian / Arabic).
+
+### `requires_env` enforced + subprocess passthrough fixed
+
+- `skills_index_block` filters out skills whose env vars are unset.
+- `skill(action='list')` tags inactive skills `[inactive: missing env var FOO]`.
+- `_view` now reads both `requires_env` (canonical) and legacy `env:` and forwards them to terminal subprocesses — without this, a skill could land in the index but its scripts ran with empty `$VAR`.
+
+### Frontmatter schema validator
+
+`alpi/tools/_skill_schema.py` — single source of truth.
+`validate_frontmatter(meta, categories)` returns
+`[Issue(field, severity, message), …]`. Errors block creation;
+warnings surface in the success message so the agent can fix the
+same turn. Covers `name`, `description`, `category`, `version`,
+`origin`, `requires_env`, `tools`, `keywords`, `stores_secrets`,
+`created_at`. `skill(action='validate')` returns `ok=False` when
+errors exist; `compile()` instead of `py_compile` so it no longer
+writes `__pycache__`.
+
+### SQLite first-class — `db` tool + `reset_state`
+
+- `db(action='query'|'exec', skill=…, sql=…, params=[…])` — stdlib `sqlite3`, zero new deps. Quotas: 50 MB file, 10 000 rows max per query, 5 s busy timeout. Strict per-skill scope; bundled `@alpi/*` rejected.
+- `skill(action='reset_state', name=…)` wipes `<skill>/state/` without touching scripts, secrets, or SKILL.md.
+- Scanner is now env-aware: `os.getenv("VAR")` allowed only when `VAR` is in the skill's `requires_env`; printing a declared secret is still blocked.
+
+### Keyword discovery boost
+
+Optional `keywords: [whoop, workout, deep-research]` in
+frontmatter. The engine injects a per-turn `# SKILL HINT` when
+the user message contains any keyword as a whole token —
+substring matching produced false positives (`car` → `cardio`).
+Hyphenated keywords stay one token. Capped at 3 hits per turn;
+inactive skills excluded.
+
+### `set_meta` + `edit` hardening
+
+Surfaced during integration testing on a real profile.
+`edit` with body containing `---\n…\n---` left a SKILL.md with
+two frontmatter blocks; placeholder bodies (`[PENDING_VIEW]`,
+`TODO`) nuked the prose. Both fixed.
+
+- New `skill(action='set_meta', name=…, fields={…})` — surgical frontmatter update; prose preserved byte-for-byte. Accepts top-level kwargs (`requires_env=…`, `tools=…`, `keywords=…`, …) for ergonomics. Schema-validated; bundled rejected; origin-user gated.
+- `_edit` rejects bodies containing a frontmatter block (points at `set_meta`).
+- `_edit` rejects placeholder bodies via `_EDIT_PLACEHOLDER_RE`; legitimate short bodies pass.
+
+### `_list` state tags
+
+Three states inline:
+
+- (no tag) — active.
+- `[invalid: <field> (<message>)]` — schema errors.
+- `[inactive: missing env var FOO]` — eligibility gate failed.
+
+Runtime "broken" (script syntax / missing imports) stays in
+`skill(action='validate')` to keep `list` cheap.
+
+### Misc
+
+- `alpi/skills/knowledge/references/` rewritten as compact answer-packs (~3500 → ~1000 lines).
+- `docs/MODELS.md` reorganised by workload (skill router / cheap service / engineering / local) instead of tier ranking.
+- 95+ new tests across `test_db`, `test_skill_eligibility`, `test_skill_env_chain`, `test_skill_reset_keywords`, `test_skill_schema`, `test_skill_set_meta`.
+
 ## v0.3.10 — 2026-05-02 — `alpi diff`
 
 What changed in this profile since N hours/days ago — memory

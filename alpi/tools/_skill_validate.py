@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import ast
 import importlib.util
-import py_compile
 import re
 import sys
 from pathlib import Path
@@ -39,10 +38,11 @@ def _check_syntax(files: Iterable[Path], root: Path) -> list[str]:
     out: list[str] = []
     for p in files:
         try:
-            py_compile.compile(str(p), doraise=True)
-        except py_compile.PyCompileError as e:
-            msg = str(e).splitlines()[-1].strip() or "syntax error"
-            out.append(f"✗ {_rel(p, root)}: {msg}")
+            source = p.read_text(encoding="utf-8", errors="replace")
+            compile(source, str(p), "exec", dont_inherit=True)
+        except SyntaxError as e:
+            detail = f"line {e.lineno}: {e.msg}" if e.lineno else e.msg
+            out.append(f"✗ {_rel(p, root)}: SyntaxError: {detail}")
         except Exception as e:  # noqa: BLE001
             out.append(f"✗ {_rel(p, root)}: {type(e).__name__}: {e}")
     return out

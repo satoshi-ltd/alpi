@@ -35,7 +35,6 @@ broken release.
 | ID | Item | Status |
 |---|---|---|
 | Matrix | Federated + E2EE gateway — flagship gateway of v0.4. Self-hosted homeserver, no phone number, matches the "private agent network" thesis | 🔵 |
-| BF | Skills v2 (items 1-3) — scaffolder, declared `requires`/`env`, per-skill SQLite. The "skills = mini-apps" pillar. Absorbs BE | 🔵 |
 
 ---
 
@@ -83,47 +82,6 @@ hold every platform's tokens centrally.
 
 LOC estimate: ~250.
 
-### BF. Skills v2 — items 1-3 (mini-app pillar)
-
-v0.3 ships skills as prompt augmentation. v0.4 adds the three
-foundational items that turn skills into **real mini-apps with
-state**; the discoverability / composition / testing items
-follow in v0.5 once `agent.log` evidence calibrates them.
-
-1. **Scaffolder.** `alpi skill new <name>` — wizard producing
-   a SKILL.md skeleton with a discoverability-friendly
-   description, declared `requires` / `env`, and an example
-   invocation prompt. Validates uniqueness, lints frontmatter.
-2. **Declared dependencies.** Frontmatter
-   `requires: [browser, read_file]` + `env: [HTTP_PROXY]`.
-   Loud failure at install if a required tool is disabled in
-   the profile (instead of a silent bad-LLM-call later). Pairs
-   with **AV** — the env allowlist becomes the same primitive.
-3. **Per-skill SQLite.** `~/.alpi/<profile>/skills_db/<name>.db`,
-   exposed as `db.query` / `db.exec` only to the owning skill.
-   Schema declared in frontmatter (`db.migrations: [...]`).
-   Quotas: 50 MB size / 5 s query / 10k rows. Backed up by
-   `alpi backup` (**AW**). `alpi skill reset <name>` nukes the
-   DB without touching others.
-
-**Why these three first, not the full eight.** They form the
-narrative pillar — a user can write a skill, declare its
-dependencies, and persist structured state. That alone is a
-mini-app. Output schemas, triggers, composition, test harness
-and versioning (items 4-8, in v0.5) layer on top once the
-foundation is solid and `agent.log` shows where authoring
-breaks down in practice.
-
-**Marketing differentiator.** Skills with their own SQLite
-travel with the user's profile via **AW** backup =
-**mini-apps you wrote in 50 lines**, living inside *your*
-agent, not a vendor's backend. Hermes and openclaw can't ship
-this — their skills run in their backend, not the user's.
-
-**Absorbs the v0.3-deferred BE** (revisit `@alpi/knowledge`):
-the scaffolder + declared deps make all skills more reliable
-to author, including the bundled one.
-
 ---
 
 ## v0.5 cycle
@@ -161,7 +119,7 @@ versions** section below this one.
 
 | ID | Item | Status |
 |---|---|---|
-| BF (4-8) | Skills v2 — output schemas, triggers, composition, test harness, versioning. Layers on the v0.4 foundation | 🔵 |
+| BF (4, 6-8) | Skills v2 — output schemas, composition, test harness, versioning (triggers shipped as keyword hint in v0.3.11) | 🔵 |
 | `@alpi/home` | Second bundled skill (after `@alpi/knowledge` in v0.3). Orchestrates Home Assistant + optional connectors (Hue, Xiaomi, Alexa / Google Home) behind a single voice/text interface | 🔵 |
 
 ### Knowledge + memory
@@ -307,21 +265,18 @@ to the same RAG backend that ALP.6 uses, so one embedding
 stack covers two surfaces (knowledge over docs, search over
 transcripts).
 
-### BF (items 4-8). Skills v2 — composition, schemas, triggers, tests, versioning
+### BF (items 4, 6-8). Skills v2 — schemas, composition, tests, versioning
 
-Layers on the v0.4 foundation (scaffolder + declared deps +
-per-skill SQLite). Each item shippable independently; order
-driven by `agent.log` evidence from real v0.4 usage.
+Layers on the v0.3.11 foundation (declared `requires_env`,
+per-skill SQLite via the `db` tool, schema-validated frontmatter,
+`set_meta` for surgical updates). Item 5 (triggers) shipped as
+the `keywords` hint in v0.3.11; the schedule/workgroup flavors
+were dropped as redundant with the existing `schedule` tool.
 
 4. **Output schemas.** Optional
    `output: { schema: json, fields: [...] }` in frontmatter.
    Runner validates and surfaces structured findings to the
    user instead of free text.
-5. **Triggers.** `trigger: { schedule: "weekly", on_keywords:
-   [...], on_workgroup_post: true }`. Hooks the existing
-   scheduler; keyword triggers boost dispatch prior in the
-   system prompt — fixes the `@alpi/knowledge` follow-rate
-   problem on small models without a special case.
 6. **Composition.** `skill.invoke(name, args)` as a tool. A
    skill can call another skill; reuses the existing surface;
    no new wire format.
@@ -333,10 +288,9 @@ driven by `agent.log` evidence from real v0.4 usage.
    hash. `alpi skill update <name>` shows the diff before
    applying.
 
-**Why these five later, not in v0.4.** They depend on the
-foundation landing first (items 1-3) and on agent.log evidence
-to calibrate the discoverability mechanism (item 5 in
-particular).
+Each item shippable independently. Composition and output
+schemas pair: schemas have most of their value when consumed by
+a calling skill.
 
 ### `@alpi/home`. Second bundled skill — home orchestration
 

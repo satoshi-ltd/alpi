@@ -1,141 +1,159 @@
 # Model recommendations
 
 alpi works with any model that speaks the OpenAI tool-calling protocol
-via LiteLLM, but **not every model is a good agent**. Tool-calling
-fluency, system-prompt adherence, memory-tool triggering, and
-tolerance for long tool chains vary wildly — and token cost / latency
-vary just as much. This page is the distilled recommendation so you
-don't have to learn the hard way.
+via LiteLLM, but **not every model is a good agent**. The important
+question is not "what scores highest on a benchmark?" but "what model
+keeps choosing the right tool after 20 turns, with memory, skills,
+shell commands, browser calls, and user-specific state in context?"
 
-## How this list was built
+Use this page as a practical selector. Prices, context windows, and
+provider wrappers move quickly; re-check them every 2-3 months.
 
-Signals combined, in order of weight:
+Last updated: **2026-05-03**.
 
-- **Hands-on testing inside alpi** — each candidate ran the same
-  smoke tests: persona adoption on turn 1, proactive `memory`
-  writes, `session_search` usage, tool-chain discipline, behaviour
-  across 30+ turn sessions.
-- **Usage signal on comparable agents** — OpenRouter's public
-  rankings for [Hermes Agent][h] (Nous Research's persistent-memory
-  agent, 4.11T tokens/month, #3 global) and [OpenClaw][oc] (17.2T
-  tokens/month, #1 global, agent loop with shell + browser +
-  email). Both share alpi's shape: tool-heavy, long sessions, real
-  actions.
-- **Community field reports** — Reddit's `/r/LocalLLaMA` megathreads
-  and GitHub issues on wrapper compatibility. Benchmarks deliberately
-  down-weighted; real loop behaviour up-weighted.
-- **Integration friction** — models with repeated wrapper-support
-  issues (e.g. GPT-5.4 on OpenClaw at launch) penalised, regardless
-  of benchmark score.
+## What matters for alpi
+
+For skill-heavy profiles, model quality mostly shows up in routing:
+
+- noticing that a skill exists before reaching for generic tools,
+- calling `skill(action="view", name=...)` with the right name,
+- preserving tool schemas across long chains,
+- passing the right parameters to `terminal`, `db`, `memory`, and
+  `session_search`,
+- recovering when a tool result says a skill is inactive or invalid.
+
+A cheap model can be excellent for status checks and short commands
+while still being a bad primary model for a profile with many skills.
+
+## External usage signal
+
+OpenRouter's public app rankings are useful because they measure
+models inside agents that look like alpi, not chat-only benchmarks:
+
+- [OpenClaw][oc] is an agent that connects to messaging apps and takes
+  actions with commands, web browsing, file management, and email. On
+  2026-05-03 OpenRouter showed it at **11.7T total tokens**, **#1
+  daily global rank**, and **374 models used**.
+- [Hermes Agent][h] is a persistent-memory agent with reusable skills,
+  web search, browser automation, vision, scheduled automations, and
+  subagents. On 2026-05-03 OpenRouter showed it at **5.59T total
+  tokens**, **#2 daily global rank**, and **341 models used**.
+
+Usage is not quality. Defaults, price, rate limits, and availability
+all bias the chart. Still, sustained usage inside comparable
+tool-heavy agents is a better signal than generic leaderboard wins.
+
+Common high-usage models across those agents currently include
+MiMo-V2-Pro, Qwen3.6 Plus, MiniMax M2.7, Step 3.5 Flash, Nemotron 3
+Super, Claude Sonnet / Opus 4.6, GLM 5.x, Gemini Flash variants,
+Kimi K2.x, DeepSeek V3/V4, and OpenAI GPT-5.4 / 5.4-mini.
 
 [h]: https://openrouter.ai/apps/hermes-agent
 [oc]: https://openrouter.ai/apps/openclaw
 
-Last updated: **2026-04-23**. Re-check every 2-3 months — rankings
-shift fast and new releases reset the bar. Prices are list from
-OpenRouter, per 1M tokens in / out; reasoning tokens, retries, and
-agent loops can push real spend well above list.
+## Pick by workload
 
-## Tier 1 — best quality
+### Skill router / long tool chains
 
-Pick when the cost of a wrong tool call or a missed refactor beats
-the cost of API tokens. These adopt the persona from
-`AGENT.md` on turn 1, call `memory` proactively, respect the
-tool schema, and hold coherence across long sessions.
+Use these when the profile has many skills, persistent memory,
+stateful tools, or real side effects. This is the default category for
+daily interactive alpi use.
 
-| Model | OpenRouter ID | Input | Output | Notes |
-|---|---|---:|---:|---|
-| **MiMo-V2-Pro** | `xiaomi/mimo-v2-pro` | $1.00 | $3.00 | Default premium recommendation. #1 on Hermes Agent globally. 1M context, built for agent frameworks, feels close to Opus 4.6 in perceived quality at a fraction of the cost. |
-| **Claude Opus 4.6** | `anthropic/claude-opus-4.6` | $5.00 | $25.00 | Ceiling when debugging long chains or doing multi-step refactors matters more than the bill. OpenRouter positions it as their strongest coding model. |
-| **Claude Sonnet 4.6** | `anthropic/claude-sonnet-4.6` | $3.00 | $15.00 | Most sensible daily premium. 1M context, strong coding + computer-use story, clearly cheaper than Opus for frequent sessions. |
-| **Qwen3.6 Plus** | `qwen/qwen3.6-plus` | $0.325 | $1.95 | Challenger that wins on price-for-quality. 1M context, 78.8 on SWE-bench Verified, field reports in agentic coding noticeably better than Qwen 3.5. |
-| **GLM 5.1** | `z-ai/glm-5.1` | $1.05 | $3.50 | Frontier open-weight for long-horizon engineering. OpenRouter's copy talks about >8h tasks; community rates it especially high on code review. Slight wrapper lag — pin a newer version when available. |
+| Model | OpenRouter ID | Why |
+|---|---|---|
+| **MiMo-V2-Pro** | `xiaomi/mimo-v2-pro` | Strong adoption in Hermes-style persistent agents; good price/context balance for tool-heavy profiles. |
+| **Claude Sonnet 4.6** | `anthropic/claude-sonnet-4.6` | Strong general tool discipline and coding judgement; sensible premium daily driver. |
+| **Qwen3.6 Plus** | `qwen/qwen3.6-plus` | High OpenClaw usage; good price-for-quality candidate for skill routing. |
+| **MiniMax M2.7** | `minimax/minimax-m2.7` | Strong mid-tier agent model; good for persistent sessions, with occasional parameter-filling slips. |
+| **GLM 5.1 / GLM 5 Turbo** | `z-ai/glm-5.1`, `z-ai/glm-5-turbo` | Strong usage in coding-agent workloads; watch wrapper/version stability. |
+| **GPT-5.4** | `openai/gpt-5.4` | Good premium fallback when OpenAI compatibility matters. |
 
-If you can only run one Tier 1 model across every profile, pick
-**MiMo-V2-Pro**. If the cost of mistakes dwarfs the API bill, go
-**Opus 4.6**. For the best middle ground, **Sonnet 4.6**.
+If you can only choose one model for a skill-heavy profile, start with
+MiMo-V2-Pro, Qwen3.6 Plus, MiniMax M2.7, or Sonnet 4.6 depending on
+budget and provider preference.
 
-## Tier 2 — cost / service
+### Cheap service turns
 
-Best return per token when there are tools, long context, and
-repeated calls. Not the cheapest available — the cheapest that
-still respects the tool schema and doesn't derail past turn 20.
+Use these for Telegram gateway traffic, heartbeats, summaries, simple
+lookups, and low-risk commands. They are not the first choice for
+creating or debugging skills.
 
-| Model | OpenRouter ID | Input | Output | Notes |
-|---|---|---:|---:|---|
-| **Step 3.5 Flash** | `stepfun-ai/step-3.5-flash` | $0.10 | $0.30 | Best cheap workhorse. Open-source reasoning, 400K context, heavy real-use adoption. Ideal for heartbeats, status checks, low-stakes turns. |
-| **MiniMax M2.7** | `minimax/minimax-m2.7` | $0.30 | $1.20 | Favourite mid-tier. Agentic-serious, strong benchmarks on real workflows, community reports excellent tool-parallelism vs M2.5. Occasional slip on tool-parameter filling. |
-| **MiMo-V2-Flash** | `xiaomi/mimo-v2-flash` | $0.09 | $0.29 | Best A/B budget pick. 1M context, #1 open-source multimodal on SWE-bench Verified per OpenRouter, comparable to Sonnet 4.5 at ~3.5% of the cost. |
-| **DeepSeek V3.2** | `deepseek/deepseek-v3.2` | $0.252 | $0.378 | Price floor that's still hard to beat for reasoning + tool use. Still described as strong on agentic tool use. |
-| **Nemotron 3 Super** | `nvidia/nemotron-3-super-120b-a12b:free` | free | free | Value wildcard. 1M context, explicit multi-agent focus. Don't rank it above M2.7 or MiMo on raw quality, but on dollars-per-turn it's unbeatable. Expect rate limits on free tier. |
+| Model | OpenRouter ID | Why |
+|---|---|---|
+| **Step 3.5 Flash** | `stepfun-ai/step-3.5-flash` | Very high Hermes usage after 2026-04-24; good cheap workhorse for simple turns. |
+| **MiMo-V2-Flash** | `xiaomi/mimo-v2-flash` | Budget sibling to MiMo-V2-Pro; useful for A/B testing cheap service profiles. |
+| **Gemini Flash / Flash Lite** | provider-specific | High OpenClaw usage; good for simple tasks, less convincing as the main skill router. |
+| **DeepSeek V3.2 / V4 Flash** | provider-specific | Good cost floor; use when price matters more than perfect tool discipline. |
+| **GPT-5.4-mini** | `openai/gpt-5.4-mini` | Reasonable budget OpenAI choice for simple tool use; acceptable as a router only when the skill catalog is clean and small. |
 
-Reality check on pricing: at list prices, **Step 3.5 Flash** runs
-**~30× cheaper on input and ~50× cheaper on output** than
-**Sonnet 4.6**. **MiMo-V2-Flash** lands ~33× / ~52× cheaper.
-**DeepSeek V3.2** is ~12× / ~40× cheaper. For a profile that runs a
-the alpi daemon hitting Telegram inbound all day, those multipliers
-compound into real savings — many of those turns don't need
-Tier 1 reasoning.
+### High-stakes engineering
 
-## Tier 3 — best on Ollama
+Use these when a wrong tool call is expensive: refactors, code review,
+long debugging sessions, schema changes, release work.
 
-"Best" here means best inside the Ollama ecosystem specifically.
-Explicit OpenClaw / coding-agent launches, useful context windows,
-sensible sizes, and recent updates weighed more than raw benchmark
-numbers. Mark each as local-only or local + `:cloud` variant.
+| Model | OpenRouter ID | Why |
+|---|---|---|
+| **Claude Opus 4.6** | `anthropic/claude-opus-4.6` | Expensive ceiling for hard multi-step engineering and long-context judgement. |
+| **Claude Sonnet 4.6** | `anthropic/claude-sonnet-4.6` | Best daily premium balance for coding-heavy profiles. |
+| **GLM 5.1** | `z-ai/glm-5.1` | Strong open-weight engineering candidate; useful for reviews and long tasks. |
+| **GPT-5.5 / GPT-5.4** | provider-specific | Good choice when OpenAI compatibility or ecosystem behaviour is the constraint. |
+
+### Local / sovereign profiles
+
+"Best" here means best inside the Ollama-style local ecosystem, not
+best overall. Expect more prompt sensitivity than cloud frontier
+models.
 
 | Model | Mode | Notes |
 |---|---|---|
-| **Qwen3.6** | local — 27B/35B, 17–24GB, 256K ctx | Default local pick. Ollama positions it for agentic coding with thinking preservation, ships direct OpenClaw launch integration, clear step-up from 3.5. Community preference leans 27B over 35B for long-session stability. |
-| **Gemma4** | local + cloud — 7.2GB–20GB, 128K–256K ctx | Best "sovereign" local family if you want multimodal + native function calling. Official OpenClaw launch documented; some field reports of crashes on very long coding-agent loops. |
-| **qwen3-coder-next** | local + cloud — 52GB q4, 256K ctx | Pure coding specialist. Ollama page covers OpenClaw launch, 800K executable tasks, 3B active-per-token, production-ready tool calling. Use as a dedicated coder rather than a general brain. |
-| **devstral-small-2** | local + cloud — 15GB q4, 384K ctx | Best repo-tooling option at moderate size. Official Ollama page lists OpenClaw integration and 65.8% on SWE-bench Verified. Built for cross-file editing in large codebases. |
-| **Kimi K2.6** | cloud on Ollama — 256K ctx | High-end expert *within* the Ollama ecosystem, not a true local. Ollama page frames it for long-horizon coding, swarms, 24/7 agents. Field reports still call out over-thinking and token burn on hard debugging. |
+| **Qwen3.6** | local, 27B/35B class | Default local pick for balanced agentic use. |
+| **Gemma4** | local + cloud variants | Good local family when multimodal/function-calling support matters. |
+| **qwen3-coder-next** | local + cloud variants | Coding specialist; do not treat it as the general personal-agent brain. |
+| **devstral-small-2** | local + cloud variants | Good repo-tooling option at moderate size. |
+| **Kimi K2.6** | cloud on Ollama | Strong within the Ollama ecosystem, but not a true local model. |
 
-If your constraint is **truly zero cloud**, the realistic order is
-**Qwen3.6 > Gemma4 > qwen3-coder-next > devstral-small-2**, with
-**Kimi K2.6** excluded (it's `:cloud`-tagged on Ollama's own page).
+## Not recommended as the primary skill router
 
-## Recommended production setups
+These can still be useful as workers, but they should not be the main
+model for a profile that depends on skills:
 
-alpi supports a primary model with automatic fallbacks, so mixing
-tiers by role is cheap to wire up:
+- **Nano-class models**: too likely to miss the skill index, skip
+  `skill(action="view")`, or fill tool parameters loosely. Use only for
+  low-risk, mechanical turns.
+- **Free-tier models**: rate limits and provider variability can break
+  tool loops mid-turn. Good for smoke tests, not daily automation.
+- **Small local models without proven tool calling**: acceptable for
+  privacy-constrained short tasks, poor fit for multi-tool skill
+  routing.
+- **Models with wrapper instability**: avoid as the primary model even
+  when benchmark numbers look strong. Agents fail at integration
+  boundaries first.
 
-- **Single-model, every profile**: **MiMo-V2-Pro**. Best adoption
-  across tool-heavy agents, good context, sensible price.
-- **Router-style (high-volume profiles whose service hosts gateway listeners)**:
-  **Step 3.5 Flash** as base + **MiMo-V2-Pro** or
-  **Sonnet 4.6** as fallback for hard turns. Matches how long-running
-  agents are deployed elsewhere — heartbeats and simple shell calls
-  don't need frontier reasoning.
-- **Persistent / multi-session heavy**: **MiniMax M2.7** or
-  **Qwen3.6 Plus** as daily driver, **GLM 5.1** for code review,
-  refactors, and autonomous engineering tasks.
-- **Sovereign local**: **Qwen3.6 27B** for balanced coverage or
-  **Gemma4 26B / 31B** if you want multimodal and a well-packaged
-  stack, plus **qwen3-coder-next** or **devstral-small-2** as a
-  coding specialist for repo-heavy work.
+## Production setups
 
-## Free tier reality check
+alpi currently selects one primary model per profile. `fallback_models`
+exists in config, but do not rely on automatic runtime escalation unless
+your installed version explicitly implements it. Use profiles to split
+roles today:
 
-OpenRouter's `:free` variants exist to funnel users into the
-ecosystem. For agent use:
-
-- **Mostly useless** for disciplined tool chains — the `:free` tag
-  tracks the model, not a quality threshold.
-- **Rate-limited aggressively** — long sessions hit the ceiling and
-  return 429s mid-tool-call, which breaks the loop.
-- **Still worth a smoke test** to check a workflow runs at all.
-  Don't make them your daily driver.
+- **Personal skill-heavy profile**: MiMo-V2-Pro, Qwen3.6 Plus,
+  MiniMax M2.7, or Sonnet 4.6.
+- **High-volume gateway profile**: Step 3.5 Flash, MiMo-V2-Flash,
+  Gemini Flash Lite, or GPT-5.4-mini, with fewer skills and tighter
+  prompts.
+- **Engineering profile**: Sonnet 4.6, Opus 4.6, GLM 5.1, GPT-5.5, or
+  GPT-5.4.
+- **Local/private profile**: Qwen3.6 first, then Gemma4 or a coding
+  specialist for repo-specific work.
 
 ## Switching model
 
 Three ways, any of them works:
 
-- `alpi setup` → Model / Provider → pick provider, pick model.
+- `alpi setup` -> Model / Provider -> pick provider, pick model.
 - `/model` slash command inside the TUI.
-- Edit `model:` in `~/.alpi/config.yaml` (or
-  `~/.alpi/profiles/<name>/config.yaml`).
+- Edit `model:` in `~/.alpi/config.yaml` or
+  `~/.alpi/profiles/<name>/config.yaml`.
 
 The choice is per-profile. `alpi -p work` can run Sonnet 4.6 while
-`alpi -p personal` runs MiMo-V2-Flash — no interference.
+`alpi -p personal` runs MiMo-V2-Flash without interference.

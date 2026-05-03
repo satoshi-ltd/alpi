@@ -188,6 +188,15 @@ class Engine:
         if wg_block:
             self.session.messages.append({"role": "system", "content": wg_block})
 
+        # Per-turn skill boost; only fires when ``user_text`` matches a declared keyword.
+        try:
+            from alpi.tools.skill import keyword_match_hint as _kw_hint
+            hint = _kw_hint(self.home, user_text)
+        except Exception:  # noqa: BLE001
+            hint = ""
+        if hint:
+            self.session.messages.append({"role": "system", "content": hint})
+
         # Reset per-turn workgroup usage tracking.
         from alpi.tools import _state as _wg_state
         _wg_state.reset_turn_usage()
