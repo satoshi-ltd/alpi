@@ -402,11 +402,20 @@ def _installed_via() -> str | None:
 
 
 def _latest_chat_for(home: Path) -> dict[str, Any] | None:
-    rows = [r for r in host_sessions.list_sessions(home) if r.get("kind") == "chat"]
+    """Return the most recent session of ANY kind. The conversations
+    list on mobile / sidebar on desktop need a single recency signal —
+    a profile that only handled scheduled jobs or inbound gateway turns
+    must still surface as 'recent'."""
+    rows = host_sessions.list_sessions(home)
     if not rows:
         return None
     r = rows[0]
-    return {"id": r["id"], "mtime": r["mtime"], "first_user": r["first_user"]}
+    return {
+        "id": r["id"],
+        "mtime": r["mtime"],
+        "first_user": r["first_user"],
+        "kind": r.get("kind"),
+    }
 
 
 def _today_ledger(home: Path) -> tuple[float, int]:

@@ -23,6 +23,7 @@ gateway, budget, service, and "when does a setting take effect?"
 | `schedule` | Scheduler/service settings. |
 | `service` | Local daemon toggles and host options. |
 | `alp` | ALP peer/workgroup configuration. |
+| `host` | Host-plane TCP/WS port (`host.tcp_port`, default 49200). Bind auto-detected (Tailscale → LAN). |
 
 ## Model examples
 

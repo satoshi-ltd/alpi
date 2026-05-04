@@ -417,8 +417,7 @@ per-profile services map.
 Control-plane for the desktop / mobile client. **Not** ALP — the
 two share a profile but live on different sockets, with different
 auth models. ALP is peer-to-peer (Noise on TCP, envelope-signed,
-peers pinned in `peers.yaml`); host is client-to-daemon (Unix
-socket only, plain JSON-RPC, filesystem perms = trust).
+peers pinned in `peers.yaml`); host is client-to-daemon.
 
 Only the `default` profile hosts this subsystem — the client
 always targets default's socket and reaches sibling profiles via
@@ -426,15 +425,59 @@ the `profile` parameter on each verb. `_run_host` refuses to bind
 on any other profile even if the toggle leaks via manual config
 edit.
 
-Wire shape: one JSON request per line on `~/.alpi/host/host.sock`:
+Two transports, one dispatcher:
+
+1. **Unix socket** (`~/.alpi/host/host.sock`, mode 0600). Local
+   trust = filesystem perms. Used by desktop on the same machine.
+   No token required.
+2. **WebSocket on Tailscale or LAN** (`ws://<bind>:49200` by
+   default). Used by mobile and any remote desktop. Bind address
+   is auto-detected: Tailscale CGNAT (`100.64.0.0/10`) first, else
+   first private RFC1918 LAN address. The listener never binds to
+   `0.0.0.0`, loopback, or public IPs — that would leak the pairing
+   token over plaintext on any sniffed path. **Per-device pairing
+   token required** in every request's `params.auth_token`.
+
+Wire shape (both transports):
 
 ```
-{"id": "<reqid>", "method": "host.<noun>.<verb>", "params": {…}}
+{"id": "<reqid>", "method": "host.<noun>.<verb>", "params": {…, "auth_token": "<token>"}}
 ```
+
+Unix socket payload omits `auth_token`. WS payload requires it once
+at least one device has been paired — empty store stays open as a
+migration window for setups that predate v0.5.
 
 The daemon writes either a single response line or, for streaming
 verbs (`host.chat.send`, `host.events.subscribe`), multiple frames
 followed by a `done` frame and connection close.
+
+#### Pairing tokens (`alpi/host/devices.py`)
+
+Each remote device holds its own opaque token. The store lives at
+`~/.alpi/host/devices.yaml` (mode 0600) as a list of
+`{token, label, created, last_seen}`. The daemon validates the
+token in `_check_token` (`alpi/host/server.py`); a hit also bumps
+`last_seen` so the user sees who's active.
+
+Token lifecycle:
+
+- **Generate**: `host.devices.generate(label?)` returns a fresh
+  `secrets.token_urlsafe(24)` (192 bits, 32 chars). The token is
+  embedded in the QR shown by `alpi setup → Devices → + Add
+  device`. Mobile / desktop save it to their secure store.
+- **Use**: every WS request carries `auth_token`. Fail =
+  JSON-RPC `{code: -32000, message: "auth-failed"}` and the
+  connection closes; the mobile app's auth-failed handler wipes
+  its endpoint and bounces back to the pair screen.
+- **Revoke**: `host.devices.revoke(token_id)` (last 8 chars of
+  the token). The TUI lists devices with `Last seen` and a
+  Revoke action; revoked devices fail the next request.
+
+`host.devices.list` redacts the full token to a `token_id` (last
+8 chars) so the TUI can show paired devices without leaking
+secrets. The full token only escapes the daemon once, at
+`generate` time, into the one-shot QR.
 
 Verb namespaces in current shape:
 
@@ -457,6 +500,20 @@ Verb namespaces in current shape:
   `pending_list` enriches each row with `local_profile` when the
   pubkey resolves to a profile on this machine, so the desktop /
   TUI can pre-fill the peer id without prompting.
+- **`host.workgroup.{create,update,add_member,kick,remove,action,post}`**
+  — workgroup CRUD, hub-only for create/update/add_member/kick/remove,
+  member-side for action (pause/resume/leave) and post. The desktop
+  Tauri layer used to shell out to `alpi workgroup …` for these;
+  v0.5 routes them through the host plane so mobile reuses the same
+  contract.
+- **`host.devices.{list,generate,revoke,rename}`** — pairing-token
+  management for the WebSocket transport. `list` redacts the full
+  token to `token_id` (last 8 chars); `generate` returns the fresh
+  full token exactly once.
+- **`host.gateway.probe`**, **`host.peers.ping`**,
+  **`host.model.ctx_window`** — diagnostic probes the desktop / TUI
+  used to invoke via `alpi gateway probe`, `alpi peers ping`, and
+  `alpi ctx`. Same logic, host-plane entry point.
 - **`host.events.subscribe`** — long-lived push channel. Daemon
   emits `{event, data}` frames as state changes. Sources call
   `alpi.host.events.emit(kind, data)`; loop is captured at first

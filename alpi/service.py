@@ -1098,16 +1098,35 @@ async def _run_host(home: Path, profile: str) -> None:
         log.warning("host subsystem requested for %r — only default can host", profile)
         return
 
+    from alpi import config as cfg_mod
     from alpi.host import chat as host_chat
     from alpi.host import config as host_config
     from alpi.host import daemon as host_daemon
     from alpi.host import device_state as host_device_state
     from alpi.host import events as host_events
     from alpi.host import handlers as host_handlers
+    from alpi.host import devices as host_devices
+    from alpi.host import probes as host_probes
     from alpi.host import schedule as host_schedule
-    from alpi.host.server import Server as HostServer
+    from alpi.host import workgroup_admin as host_wg_admin
+    from alpi.host.network import detect_bind_ip
+    from alpi.host.server import DEFAULT_TCP_PORT, Server as HostServer
 
-    server = HostServer(home=home)
+    cfg = cfg_mod.load(home)
+    tcp_bind: tuple[str, int] | None = None
+    detected = detect_bind_ip()
+    if detected is not None:
+        ip, scope = detected
+        port = int((cfg.host or {}).get("tcp_port") or DEFAULT_TCP_PORT)
+        tcp_bind = (ip, port)
+        log.info("host TCP bind chosen: %s:%d (%s)", ip, port, scope)
+    else:
+        log.info(
+            "no Tailscale or LAN address found; "
+            "host TCP listener disabled (Unix socket still up)",
+        )
+
+    server = HostServer(home=home, tcp_bind=tcp_bind)
     host_handlers.register(server)
     host_chat.register(server)
     host_config.register(server)
@@ -1115,6 +1134,9 @@ async def _run_host(home: Path, profile: str) -> None:
     host_daemon.register(server)
     host_events.register(server)
     host_schedule.register(server)
+    host_wg_admin.register(server)
+    host_probes.register(server)
+    host_devices.register(server)
     await server.start()
     try:
         await server.serve_forever()

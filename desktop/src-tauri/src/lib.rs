@@ -235,6 +235,10 @@ async fn port_available(host: String, port: u16) -> bool {
     .unwrap_or(false)
 }
 
+// Local subprocess: the daemon may not be running yet (start/install
+// case), so it cannot be reached via host JSON-RPC. This is the only
+// inherently-local invocation alongside ``voice_test`` (audio plays on
+// the client machine).
 #[tauri::command]
 async fn service_action(profile: String, action: String) -> Result<String, String> {
     if !matches!(
@@ -346,35 +350,27 @@ async fn workgroup_create(
     budget_usd: Option<f64>,
     briefing: Option<String>,
 ) -> Result<String, String> {
-    let out = tauri::async_runtime::spawn_blocking(move || {
-        let mut cmd = Command::new("alpi");
-        cmd.args(["-p", &profile, "workgroup", "create", &name]);
-        for id in &member_peer_ids {
-            cmd.args(["--member", id]);
-        }
-        if let Some(b) = budget_usd {
-            cmd.args(["--budget-usd", &b.to_string()]);
-        }
-        if let Some(b) = briefing.as_deref() {
-            if !b.is_empty() {
-                cmd.args(["--briefing", b]);
-            }
-        }
-        cmd.output()
+    let mut params = serde_json::json!({
+        "profile": profile,
+        "name": name,
+        "members": member_peer_ids,
+    });
+    if let Some(b) = budget_usd {
+        params["budget_usd"] = serde_json::json!(b);
+    }
+    if let Some(b) = briefing.filter(|s| !s.is_empty()) {
+        params["briefing"] = serde_json::Value::String(b);
+    }
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        host_client::call("host.workgroup.create", params)
     })
     .await
-    .map_err(|e| format!("join: {e}"))?
-    .map_err(|e| format!("spawn `alpi`: {e}"))?;
-    if !out.status.success() {
-        return Err(String::from_utf8_lossy(&out.stderr).trim().to_string());
-    }
-    let stdout = String::from_utf8_lossy(&out.stdout).trim().to_string();
-    let wg_id = stdout
-        .split_whitespace()
-        .nth(1)
-        .map(str::to_string)
-        .unwrap_or_default();
-    Ok(wg_id)
+    .map_err(|e| format!("join: {e}"))??;
+    Ok(result
+        .get("wg_id")
+        .and_then(|v| v.as_str())
+        .unwrap_or_default()
+        .to_string())
 }
 
 #[tauri::command]
@@ -385,25 +381,20 @@ async fn workgroup_update(
     budget_usd: Option<f64>,
     clear_budget: Option<bool>,
 ) -> Result<(), String> {
-    let out = tauri::async_runtime::spawn_blocking(move || {
-        let mut cmd = Command::new("alpi");
-        cmd.args(["-p", &profile, "workgroup", "update", &wg_id]);
-        if let Some(b) = briefing.as_deref() {
-            cmd.args(["--briefing", b]);
-        }
-        if clear_budget.unwrap_or(false) {
-            cmd.arg("--clear-budget");
-        } else if let Some(b) = budget_usd {
-            cmd.args(["--budget-usd", &format!("{b}")]);
-        }
-        cmd.output()
+    let mut params = serde_json::json!({ "profile": profile, "wg_id": wg_id });
+    if let Some(b) = briefing {
+        params["briefing"] = serde_json::Value::String(b);
+    }
+    if clear_budget.unwrap_or(false) {
+        params["clear_budget"] = serde_json::json!(true);
+    } else if let Some(b) = budget_usd {
+        params["budget_usd"] = serde_json::json!(b);
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        host_client::call("host.workgroup.update", params)
     })
     .await
-    .map_err(|e| format!("join: {e}"))?
-    .map_err(|e| format!("spawn `alpi`: {e}"))?;
-    if !out.status.success() {
-        return Err(String::from_utf8_lossy(&out.stderr).trim().to_string());
-    }
+    .map_err(|e| format!("join: {e}"))??;
     Ok(())
 }
 
@@ -413,19 +404,12 @@ async fn workgroup_add_member(
     wg_id: String,
     member: String,
 ) -> Result<(), String> {
-    let out = tauri::async_runtime::spawn_blocking(move || {
-        Command::new("alpi")
-            .args([
-                "-p", &profile, "workgroup", "add-member", &wg_id, &member,
-            ])
-            .output()
+    let params = serde_json::json!({ "profile": profile, "wg_id": wg_id, "member": member });
+    tauri::async_runtime::spawn_blocking(move || {
+        host_client::call("host.workgroup.add_member", params)
     })
     .await
-    .map_err(|e| format!("workgroup_add_member: {e}"))?
-    .map_err(|e| format!("spawn `alpi`: {e}"))?;
-    if !out.status.success() {
-        return Err(String::from_utf8_lossy(&out.stderr).trim().to_string());
-    }
+    .map_err(|e| format!("join: {e}"))??;
     Ok(())
 }
 
@@ -436,37 +420,29 @@ async fn workgroup_action(
     action: String,
     member_pubkey: Option<String>,
 ) -> Result<String, String> {
-    if !matches!(
-        action.as_str(),
-        "pause" | "resume" | "leave" | "kick" | "remove"
-    ) {
-        return Err(format!("invalid action: {action}"));
-    }
-    let action_for_msg = action.clone();
-    let out = tauri::async_runtime::spawn_blocking(move || {
-        let mut cmd = Command::new("alpi");
-        cmd.args(["-p", &profile, "workgroup", &action, &wg_id]);
-        if action == "kick" {
-            if let Some(pk) = member_pubkey.as_deref() {
-                cmd.arg(pk);
-            }
-        }
-        if action == "remove" {
-            cmd.arg("--yes");
-        }
-        cmd.output()
-    })
-    .await
-    .map_err(|e| format!("join: {e}"))?
-    .map_err(|e| format!("spawn `alpi`: {e}"))?;
-    if !out.status.success() {
-        return Err(format!(
-            "workgroup {} failed: {}",
-            action_for_msg,
-            String::from_utf8_lossy(&out.stderr).trim()
-        ));
-    }
-    Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
+    let (method, params) = match action.as_str() {
+        "pause" | "resume" | "leave" => (
+            "host.workgroup.action",
+            serde_json::json!({ "profile": profile, "wg_id": wg_id, "action": action }),
+        ),
+        "kick" => (
+            "host.workgroup.kick",
+            serde_json::json!({
+                "profile": profile,
+                "wg_id": wg_id,
+                "member": member_pubkey.unwrap_or_default(),
+            }),
+        ),
+        "remove" => (
+            "host.workgroup.remove",
+            serde_json::json!({ "profile": profile, "wg_id": wg_id }),
+        ),
+        _ => return Err(format!("invalid action: {action}")),
+    };
+    tauri::async_runtime::spawn_blocking(move || host_client::call(method, params))
+        .await
+        .map_err(|e| format!("join: {e}"))??;
+    Ok(String::new())
 }
 
 #[derive(Serialize)]
@@ -497,19 +473,16 @@ async fn probe_gateways(
         let p = profile.clone();
         let n = name.clone();
         handles.push(tauri::async_runtime::spawn_blocking(move || {
-            let out = Command::new("alpi")
-                .args(["-p", &p, "gateway", "probe", &n])
-                .output();
-            let (status, reason) = match out {
-                Ok(o) if o.status.success() => {
-                    let stdout = String::from_utf8_lossy(&o.stdout);
-                    let v: serde_json::Value =
-                        serde_json::from_str(stdout.trim()).unwrap_or_default();
-                    let s = v["status"].as_str().unwrap_or("off").to_string();
-                    let r = v["reason"].as_str().map(|x| x.to_string());
-                    (s, r)
-                }
-                _ => ("off".to_string(), None),
+            let result = host_client::call(
+                "host.gateway.probe",
+                serde_json::json!({ "profile": p, "name": n.clone() }),
+            );
+            let (status, reason) = match result {
+                Ok(v) => (
+                    v.get("status").and_then(|x| x.as_str()).unwrap_or("off").to_string(),
+                    v.get("reason").and_then(|x| x.as_str()).map(|x| x.to_string()),
+                ),
+                Err(_) => ("off".to_string(), None),
             };
             GatewayProbe {
                 name: n,
@@ -534,39 +507,20 @@ async fn probe_peers(profile: String, ids: Vec<String>) -> Vec<PeerProbe> {
         let p = profile.clone();
         let id_owned = id.clone();
         handles.push(tauri::async_runtime::spawn_blocking(move || {
-            let out = Command::new("alpi")
-                .args(["-p", &p, "peers", "ping", &id_owned])
-                .output();
-            let (status, reason) = match out {
-                Ok(o) if o.status.success() => ("on", None),
-                Ok(o) => {
-                    let stderr = String::from_utf8_lossy(&o.stderr).trim().to_string();
-                    let stdout = String::from_utf8_lossy(&o.stdout).trim().to_string();
-                    let msg = if !stderr.is_empty() { stderr } else { stdout };
-                    let lower = msg.to_lowercase();
-                    let s = if lower.contains("target-offline")
-                        || lower.contains("target socket not found")
-                        || lower.contains("connection refused")
-                    {
-                        "off"
-                    } else if lower.contains("empty response")
-                        || lower.contains("decryption")
-                        || lower.contains("signature")
-                        || lower.contains("handshake")
-                        || lower.contains("transport-error")
-                        || lower.contains("remote-error")
-                    {
-                        "unverified"
-                    } else {
-                        "off"
-                    };
-                    (s, if msg.is_empty() { None } else { Some(msg) })
-                }
-                Err(e) => ("off", Some(format!("spawn alpi: {e}"))),
+            let result = host_client::call(
+                "host.peers.ping",
+                serde_json::json!({ "profile": p, "peer_id": id_owned.clone() }),
+            );
+            let (status, reason) = match result {
+                Ok(v) => (
+                    v.get("status").and_then(|x| x.as_str()).unwrap_or("off").to_string(),
+                    v.get("reason").and_then(|x| x.as_str()).map(|x| x.to_string()),
+                ),
+                Err(e) => ("off".to_string(), Some(e)),
             };
             PeerProbe {
                 id: id_owned,
-                status: status.to_string(),
+                status,
                 reason,
             }
         }));
@@ -943,22 +897,18 @@ async fn daemon_restart() -> Result<(), String> {
 
 #[tauri::command]
 async fn resolve_ctx_window(profile: String, model: String) -> Result<u64, String> {
-    let out = tauri::async_runtime::spawn_blocking(move || {
-        Command::new("alpi")
-            .args(["-p", &profile, "ctx", &model])
-            .output()
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        host_client::call(
+            "host.model.ctx_window",
+            serde_json::json!({ "profile": profile, "model": model }),
+        )
     })
     .await
-    .map_err(|e| format!("resolve_ctx_window: {e}"))?
-    .map_err(|e| format!("spawn `alpi`: {e}"))?;
-    if !out.status.success() {
-        return Err(String::from_utf8_lossy(&out.stderr).trim().to_string());
-    }
-    let stdout = String::from_utf8_lossy(&out.stdout);
-    stdout
-        .trim()
-        .parse::<u64>()
-        .map_err(|e| format!("parse ctx: {e} (stdout={stdout:?})"))
+    .map_err(|e| format!("join: {e}"))??;
+    Ok(result
+        .get("ctx_window")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0))
 }
 
 #[tauri::command]
@@ -1263,22 +1213,16 @@ async fn workgroup_post(
     wg_id: String,
     text: String,
 ) -> Result<String, String> {
+    let params = serde_json::json!({ "profile": profile, "wg_id": wg_id, "text": text });
     let result = tauri::async_runtime::spawn_blocking(move || {
-        Command::new("alpi")
-            .args(["-p", &profile, "workgroup", "post", &wg_id, &text])
-            .output()
+        host_client::call("host.workgroup.post", params)
     })
     .await
-    .map_err(|e| format!("join: {e}"))?
-    .map_err(|e| format!("spawn `alpi`: {e}"))?;
-    if !result.status.success() {
-        return Err(format!(
-            "`alpi workgroup post` exited {}: {}",
-            result.status.code().unwrap_or(-1),
-            String::from_utf8_lossy(&result.stderr).trim()
-        ));
-    }
-    Ok(String::from_utf8_lossy(&result.stdout).trim().to_string())
+    .map_err(|e| format!("join: {e}"))??;
+    Ok(result
+        .get("seq")
+        .map(|v| v.to_string())
+        .unwrap_or_default())
 }
 
 #[tauri::command]
