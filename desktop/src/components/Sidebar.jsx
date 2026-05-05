@@ -1,7 +1,41 @@
-import { useMemo } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Button from "../primitives/Button.jsx";
+import NavRow, { Dot } from "../primitives/NavRow.jsx";
 import Tooltip from "../primitives/Tooltip.jsx";
 import { relativeTime } from "../lib/time.js";
 import styles from "./Sidebar.module.css";
+
+const MIN_VISIBLE_ALPIS = 3;
+// Single fallback used until the first row is measured. Real row height is
+// read from the DOM, so this only matters for the initial paint.
+const ROW_HEIGHT_FALLBACK = 34;
+
+// Returns [callbackRef, blockSize]. blockSize = offsetHeight + margin-bottom.
+// Re-measures via ResizeObserver while attached; resets to 0 on detach.
+function useMeasuredHeight() {
+  const [size, setSize] = useState(0);
+  const observerRef = useRef(null);
+  const ref = useCallback((el) => {
+    if (observerRef.current) {
+      observerRef.current.disconnect();
+      observerRef.current = null;
+    }
+    if (!el) {
+      setSize(0);
+      return;
+    }
+    const measure = () => {
+      const cs = window.getComputedStyle(el);
+      setSize(el.offsetHeight + (parseFloat(cs.marginBottom) || 0));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    observerRef.current = ro;
+  }, []);
+  useEffect(() => () => observerRef.current?.disconnect(), []);
+  return [ref, size];
+}
 
 export default function Sidebar({
   collapsed,
@@ -11,9 +45,11 @@ export default function Sidebar({
   activityByWorkgroup = {},
   pendingProfile = null,
   view,
+  pinned = { profiles: [], workgroups: [] },
   onNewChat,
   onOpenProfile,
   onOpenWorkgroup,
+  onTogglePin,
 }) {
   const activeProfileName =
     view.kind === "profile" ? view.profile : null;
@@ -21,8 +57,11 @@ export default function Sidebar({
     view.kind === "workgroup" ? `${view.profile}/${view.id}` : null;
   const inEmpty = view.kind === "empty";
 
+  const pinnedProfileNames = pinned.profiles ?? [];
+  const pinnedWorkgroupKeys = pinned.workgroups ?? [];
+
   const sortedProfiles = useMemo(() => {
-    const arr = [...profiles];
+    const arr = profiles.filter((p) => !pinnedProfileNames.includes(p.name));
     arr.sort((a, b) => {
       const aIncomplete = !a.model ? 1 : 0;
       const bIncomplete = !b.model ? 1 : 0;
@@ -30,10 +69,12 @@ export default function Sidebar({
       return recencyOf(b) - recencyOf(a);
     });
     return arr;
-  }, [profiles]);
+  }, [profiles, pinnedProfileNames]);
 
   const sortedWorkgroups = useMemo(() => {
-    const arr = [...workgroups];
+    const arr = workgroups.filter(
+      (w) => !pinnedWorkgroupKeys.includes(`${w.profile}/${w.id}`),
+    );
     arr.sort((a, b) => {
       const aPaused = a.paused ? 1 : 0;
       const bPaused = b.paused ? 1 : 0;
@@ -41,7 +82,106 @@ export default function Sidebar({
       return (b.mtime ?? 0) - (a.mtime ?? 0);
     });
     return arr;
-  }, [workgroups]);
+  }, [workgroups, pinnedWorkgroupKeys]);
+
+  const pinnedProfiles = useMemo(
+    () =>
+      pinnedProfileNames
+        .map((name) => profiles.find((p) => p.name === name))
+        .filter(Boolean),
+    [pinnedProfileNames, profiles],
+  );
+
+  const pinnedWorkgroups = useMemo(
+    () =>
+      pinnedWorkgroupKeys
+        .map((key) => workgroups.find((w) => `${w.profile}/${w.id}` === key))
+        .filter(Boolean),
+    [pinnedWorkgroupKeys, workgroups],
+  );
+
+  // Lookup table: profile name → accent. Stable per `profiles` reference,
+  // so memoized WorkgroupRow only re-renders when its hub accent actually changes.
+  const hubAccentByProfile = useMemo(() => {
+    const map = {};
+    for (const p of profiles) map[p.name] = p.accent ?? null;
+    return map;
+  }, [profiles]);
+
+  const hasPinned = pinnedProfiles.length > 0 || pinnedWorkgroups.length > 0;
+
+  // Measure the actual rendered chrome around the alpis list. We do not
+  // hard-code paddings or label heights — they come from the live DOM, so the
+  // cap auto-adjusts if NavRow / Section CSS changes.
+  const navRef = useRef(null);
+  const [navHeight, setNavHeight] = useState(0);
+  useEffect(() => {
+    const el = navRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([entry]) => {
+      setNavHeight(entry.contentRect.height);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const [pinnedSectionRef, pinnedSectionH] = useMeasuredHeight();
+  const [workgroupsSectionRef, workgroupsSectionH] = useMeasuredHeight();
+  const [alpisLabelRef, alpisLabelH] = useMeasuredHeight();
+  const [showMoreRef, showMoreH] = useMeasuredHeight();
+  const [firstRowRef, firstRowH] = useMeasuredHeight();
+  const rowHeight = firstRowH || ROW_HEIGHT_FALLBACK;
+
+  const maxAlpisVisible = useMemo(() => {
+    if (!navHeight) return sortedProfiles.length;
+    const available =
+      navHeight - pinnedSectionH - workgroupsSectionH - alpisLabelH - showMoreH;
+    return Math.max(MIN_VISIBLE_ALPIS, Math.floor(available / rowHeight));
+  }, [
+    navHeight,
+    pinnedSectionH,
+    workgroupsSectionH,
+    alpisLabelH,
+    showMoreH,
+    rowHeight,
+  ]);
+
+  const [showAllAlpis, setShowAllAlpis] = useState(false);
+  const alpisOverflow =
+    sortedProfiles.length > maxAlpisVisible && !showAllAlpis;
+  const visibleAlpis = alpisOverflow
+    ? sortedProfiles.slice(0, maxAlpisVisible)
+    : sortedProfiles;
+  const hiddenAlpisCount = sortedProfiles.length - maxAlpisVisible;
+
+  const renderProfileRow = (p, keyPrefix = "") => (
+    <ProfileRow
+      key={keyPrefix + p.name}
+      profile={p}
+      active={activeProfileName === p.name}
+      pending={pendingProfile === p.name}
+      isPinned={pinnedProfileNames.includes(p.name)}
+      onOpen={onOpenProfile}
+      onTogglePin={onTogglePin}
+    />
+  );
+
+  const renderWorkgroupRow = (w, keyPrefix = "") => {
+    const key = `${w.profile}/${w.id}`;
+    return (
+      <WorkgroupRow
+        key={keyPrefix + key}
+        workgroup={w}
+        hubAccent={hubAccentByProfile[w.hub_id ?? w.profile] ?? null}
+        task={taskByWorkgroup[key] ?? null}
+        busy={!!activityByWorkgroup[key]}
+        active={activeWorkgroupId === key}
+        isPinned={pinnedWorkgroupKeys.includes(key)}
+        onOpen={onOpenWorkgroup}
+        onTogglePin={onTogglePin}
+      />
+    );
+  };
 
   return (
     <aside
@@ -61,40 +201,43 @@ export default function Sidebar({
           </button>
         </div>
 
-        <nav className={styles.nav}>
+        <nav ref={navRef} className={styles.nav}>
+          {hasPinned && (
+            <Section label="Pinned" containerRef={pinnedSectionRef}>
+              {pinnedProfiles.map((p) => renderProfileRow(p, "pin:"))}
+              {pinnedWorkgroups.map((w) => renderWorkgroupRow(w, "pin:"))}
+            </Section>
+          )}
+
           {sortedProfiles.length > 0 && (
-            <Section label="Alpis">
-              {sortedProfiles.map((p) => (
-                <ProfileRow
-                  key={p.name}
-                  profile={p}
-                  active={activeProfileName === p.name}
-                  pending={pendingProfile === p.name}
-                  onClick={() => onOpenProfile(p)}
-                />
-              ))}
+            <Section label="Alpis" labelRef={alpisLabelRef}>
+              {visibleAlpis.map((p, i) =>
+                i === 0 ? (
+                  <div key={`measure:${p.name}`} ref={firstRowRef}>
+                    {renderProfileRow(p)}
+                  </div>
+                ) : (
+                  renderProfileRow(p)
+                ),
+              )}
+              {(alpisOverflow || showAllAlpis) && (
+                <div ref={showMoreRef} className={styles.showMoreWrap}>
+                  <Button
+                    size="sm"
+                    onClick={() => setShowAllAlpis((v) => !v)}
+                  >
+                    {showAllAlpis
+                      ? "Show less"
+                      : `Show ${hiddenAlpisCount} more`}
+                  </Button>
+                </div>
+              )}
             </Section>
           )}
 
           {sortedWorkgroups.length > 0 && (
-            <Section label="Workgroups">
-              {sortedWorkgroups.map((w) => {
-                const key = `${w.profile}/${w.id}`;
-                const hub = profiles.find(
-                  (p) => p.name === (w.hub_id ?? w.profile),
-                );
-                return (
-                  <WorkgroupRow
-                    key={key}
-                    workgroup={w}
-                    hubAccent={hub?.accent ?? null}
-                    task={taskByWorkgroup[key] ?? null}
-                    busy={!!activityByWorkgroup[key]}
-                    active={activeWorkgroupId === key}
-                    onClick={() => onOpenWorkgroup(w)}
-                  />
-                );
-              })}
+            <Section label="Workgroups" containerRef={workgroupsSectionRef}>
+              {sortedWorkgroups.map((w) => renderWorkgroupRow(w))}
             </Section>
           )}
         </nav>
@@ -107,16 +250,43 @@ function recencyOf(profile) {
   return profile.latest_session?.mtime ?? 0;
 }
 
-function Section({ label, children }) {
+function Section({ label, children, containerRef = null, labelRef = null }) {
   return (
-    <div className={styles.section}>
-      <div className={styles.sectionLabel}>{label}</div>
+    <div ref={containerRef} className={styles.section}>
+      <div ref={labelRef} className={styles.sectionLabel}>{label}</div>
       {children}
     </div>
   );
 }
 
-function ProfileRow({ profile, active, pending, onClick }) {
+function PinAction({ isPinned, onClick }) {
+  return (
+    <span className={`${styles.pinWrap} ${isPinned ? styles.pinWrapPinned : ""}`}>
+      <Button
+        size="xs"
+        icon={<PinIcon filled={isPinned} />}
+        onClick={onClick}
+        title={isPinned ? "Unpin" : "Pin"}
+        tooltipDirection="up"
+      />
+    </span>
+  );
+}
+
+const ProfileRow = memo(function ProfileRow({
+  profile,
+  active,
+  pending,
+  isPinned,
+  onOpen,
+  onTogglePin,
+}) {
+  const handleClick = useCallback(() => onOpen(profile), [onOpen, profile]);
+  const handleTogglePin = useCallback(
+    () => onTogglePin?.("profiles", profile.name),
+    [onTogglePin, profile.name],
+  );
+
   const recency = profile.latest_session?.mtime ?? 0;
   const incomplete = !profile.model;
   const trailing = pending ? (
@@ -126,38 +296,53 @@ function ProfileRow({ profile, active, pending, onClick }) {
   ) : recency > 0 ? (
     <span className={styles.rowTime}>{relativeTime(recency)}</span>
   ) : null;
-  const accent = profile.accent || "var(--color-accent)";
-  const activeStyle = active
-    ? { backgroundColor: `color-mix(in srgb, ${accent} 14%, transparent)` }
-    : undefined;
-  return (
-    <button
-      className={`${styles.row} ${active ? styles.rowActive : ""}`}
-      onClick={onClick}
-      style={activeStyle}
-      data-incomplete={incomplete ? "1" : "0"}
-    >
-      <span className={styles.iconCell}>
-        <span
-          className={styles.dot}
-          style={
-            profile.accent ? { backgroundColor: profile.accent } : undefined
-          }
-        />
-      </span>
-      <span className={styles.rowName}>{profile.name}</span>
-      {trailing}
-    </button>
-  );
-}
 
-function WorkgroupRow({ workgroup, hubAccent, task, busy, active, onClick }) {
+  const dot = <Dot color={profile.accent} />;
+  const leading = profile.bio ? (
+    <Tooltip text={profile.bio} direction="right">
+      {dot}
+    </Tooltip>
+  ) : (
+    dot
+  );
+
+  return (
+    <div className={styles.rowWrap}>
+      <NavRow
+        active={active}
+        accent={profile.accent || "var(--color-accent)"}
+        muted={incomplete}
+        leading={leading}
+        trailing={trailing}
+        onClick={handleClick}
+      >
+        {profile.name}
+      </NavRow>
+      <PinAction isPinned={isPinned} onClick={handleTogglePin} />
+    </div>
+  );
+});
+
+const WorkgroupRow = memo(function WorkgroupRow({
+  workgroup,
+  hubAccent,
+  task,
+  busy,
+  active,
+  isPinned,
+  onOpen,
+  onTogglePin,
+}) {
+  const handleClick = useCallback(() => onOpen(workgroup), [onOpen, workgroup]);
+  const handleTogglePin = useCallback(
+    () => onTogglePin?.("workgroups", `${workgroup.profile}/${workgroup.id}`),
+    [onTogglePin, workgroup.profile, workgroup.id],
+  );
+
   const label = workgroup.name ?? workgroup.id;
   const mtime = workgroup.mtime ?? 0;
   const paused = !!workgroup.paused;
-  const accent = hubAccent || "var(--color-accent)";
 
-  // Status indicator with an accent dot fallback.
   let leading;
   if (busy) {
     leading = <StatusIcon kind="working" tooltip="Working…" />;
@@ -177,24 +362,26 @@ function WorkgroupRow({ workgroup, hubAccent, task, busy, active, onClick }) {
     );
   }
 
-  const activeStyle = active
-    ? { backgroundColor: `color-mix(in srgb, ${accent} 14%, transparent)` }
-    : undefined;
+  const trailing = mtime > 0 ? (
+    <span className={styles.rowTime}>{relativeTime(mtime)}</span>
+  ) : null;
+
   return (
-    <button
-      className={`${styles.row} ${active ? styles.rowActive : ""}`}
-      onClick={onClick}
-      style={activeStyle}
-      data-paused={paused ? "1" : "0"}
-    >
-      <span className={styles.iconCell}>{leading}</span>
-      <span className={styles.rowName}>#{label}</span>
-      {mtime > 0 && (
-        <span className={styles.rowTime}>{relativeTime(mtime)}</span>
-      )}
-    </button>
+    <div className={styles.rowWrap}>
+      <NavRow
+        active={active}
+        accent={hubAccent || "var(--color-accent)"}
+        muted={paused}
+        leading={leading}
+        trailing={trailing}
+        onClick={handleClick}
+      >
+        #{label}
+      </NavRow>
+      <PinAction isPinned={isPinned} onClick={handleTogglePin} />
+    </div>
   );
-}
+});
 
 function PlusIcon() {
   return (
@@ -209,6 +396,24 @@ function PlusIcon() {
   );
 }
 
+function PinIcon({ filled }) {
+  return (
+    <svg
+      width="13"
+      height="13"
+      viewBox="0 0 24 24"
+      fill={filled ? "currentColor" : "none"}
+      stroke="currentColor"
+      strokeWidth="2.2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M12 17v5" fill="none" />
+      <path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V17a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 8.24V6a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v2.24A2 2 0 0 1 9 10.76Z" />
+    </svg>
+  );
+}
+
 function StatusIcon({ kind, tooltip }) {
   return (
     <Tooltip text={tooltip} direction="right">
@@ -218,17 +423,17 @@ function StatusIcon({ kind, tooltip }) {
         aria-label={tooltip}
       >
         {kind === "done" && (
-        <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-          <path
-            d="M2 5.2l1.9 1.9L8 3"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
-      )}
-      {kind === "working" && <span className={styles.statusPulse} />}
+          <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+            <path
+              d="M2 5.2l1.9 1.9L8 3"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        )}
+        {kind === "working" && <span className={styles.statusPulse} />}
         {kind === "error" && (
           <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
             <circle cx="5" cy="5" r="4" fill="currentColor" />

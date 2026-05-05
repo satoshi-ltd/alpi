@@ -1,7 +1,8 @@
+import { memo } from "react";
 import { renderMarkdown } from "../lib/markdown.js";
 import styles from "./Message.module.css";
 
-export default function Message({
+function MessageImpl({
   align = "left",
   bubble = false,
   accent = null,
@@ -77,6 +78,9 @@ export default function Message({
     </div>
   );
 }
+
+const Message = memo(MessageImpl);
+export default Message;
 
 // Fallback accent if CSS variables are unavailable.
 const DEFAULT_ACCENT_FALLBACK = "#c8a24e";

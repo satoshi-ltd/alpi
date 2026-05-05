@@ -22,6 +22,7 @@ export default function Button({
     styles.button,
     styles[variant],
     size === "sm" ? styles.sm : null,
+    size === "xs" ? styles.xs : null,
     isIconOnly ? styles.iconOnly : styles.withLabel,
     active ? styles.active : null,
     loading ? styles.loading : null,

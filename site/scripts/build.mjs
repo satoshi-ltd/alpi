@@ -27,6 +27,13 @@ const TWITTER     = '@soyjavi';
 const pyproject = readFileSync(join(REPO, 'pyproject.toml'), 'utf8');
 const VERSION = (pyproject.match(/^version\s*=\s*"([^"]+)"/m) || [null, '0.0.0'])[1];
 
+// Desktop version travels separately (released on its own cadence as
+// `desktop-vX.Y.Z`). Source of truth: tauri.conf.json — package.json
+// and src-tauri/Cargo.toml track the same value but the workflow's
+// gate verifies they're aligned.
+const tauriConf = readFileSync(join(REPO, 'desktop/src-tauri/tauri.conf.json'), 'utf8');
+const DESKTOP_VERSION = JSON.parse(tauriConf).version;
+
 // ── doc metadata ─────────────────────────────────────────────────────────────
 // Order drives prev/next pager and the docs index.
 const DOCS = [
@@ -477,7 +484,10 @@ const landing = readFileSync(join(TPL, 'landing.html'), 'utf8')
   // Match any v<semver> in the landing template so the hero, terminal
   // chrome, and footer all track pyproject.toml regardless of which
   // version the template was last saved with.
-  .replace(/\bv\d+\.\d+\.\d+\b/g, `v${VERSION}`);
+  .replace(/\bv\d+\.\d+\.\d+\b/g, `v${VERSION}`)
+  // Desktop version goes AFTER the alpi-version sweep so the regex
+  // above doesn't clobber it (desktop ships on its own track).
+  .replace('<!-- DESKTOP_VERSION -->', `v${DESKTOP_VERSION}`);
 write(join(DIST, 'index.html'), landing);
 
 // Docs index

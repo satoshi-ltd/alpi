@@ -93,3 +93,16 @@
 .sm.iconOnly {
   width: var(--control-height-sm);
 }
+
+.xs {
+  height: var(--control-height-xs);
+  font-size: var(--font-size-tiny);
+}
+
+.xs.withLabel {
+  padding: 0 var(--space-2);
+}
+
+.xs.iconOnly {
+  width: var(--control-height-xs);
+}
