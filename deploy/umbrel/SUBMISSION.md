@@ -4,7 +4,7 @@ This file tracks the official Umbrel App Store submission for Alpi.
 
 ## Release checklist
 
-- [ ] Build and publish `satoshiltd/alpi-umbrel:0.5.0` for
+- [ ] Build and publish `satoshiltd/alpi-umbrel:0.4.2` for
   `linux/amd64` and `linux/arm64`.
 - [ ] Verify the Docker Hub image digest and keep the tag immutable
   after submission.
@@ -23,7 +23,7 @@ Manual publish:
 ```bash
 docker buildx build \
   --platform linux/amd64,linux/arm64 \
-  -t satoshiltd/alpi-umbrel:0.5.0 \
+  -t satoshiltd/alpi-umbrel:0.4.2 \
   -f deploy/umbrel/alpi/Dockerfile \
   --push .
 ```
@@ -33,8 +33,8 @@ GitHub Actions publish:
 1. Add repository secrets:
    - `DOCKERHUB_USERNAME`
    - `DOCKERHUB_TOKEN`
-2. Run the `Umbrel image` workflow with tag `0.5.0`, or push tag
-   `umbrel-v0.5.0`.
+2. Run the `Umbrel image` workflow with tag `0.4.2`, or push tag
+   `umbrel-v0.4.2`.
 
 ## Files for `getumbrel/umbrel-apps`
 
@@ -47,6 +47,17 @@ Copy these files into a new `alpi/` directory in a fork of
 
 Keep `deploy/umbrel/alpi/Dockerfile` in the Alpi repository; the
 official app-store repo only needs to pull the published image.
+
+Before opening the PR in `getumbrel/umbrel-apps`, update two fields in
+the copied files:
+
+- In `alpi/docker-compose.yml`, pin the image by digest:
+  `satoshiltd/alpi-umbrel:0.4.2@sha256:<digest>`
+- In `alpi/umbrel-app.yml`, set `submission:` to the URL of that PR.
+
+Umbrel app versions should track the Alpi release version exactly.
+For example, Alpi `0.4.2` ships as Umbrel image tag `0.4.2` and
+manifest version `0.4.2`.
 
 ## Pull request
 

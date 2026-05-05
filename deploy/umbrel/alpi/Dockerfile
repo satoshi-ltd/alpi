@@ -32,10 +32,15 @@ COPY . /app
 
 RUN pip install .
 
+RUN groupadd --gid 1000 alpi \
+    && useradd --uid 1000 --gid 1000 --home-dir /data --create-home --shell /bin/sh alpi \
+    && chown -R 1000:1000 /app /data
+
 COPY deploy/umbrel/alpi/entrypoint.sh /usr/local/bin/alpi-umbrel
 RUN chmod +x /usr/local/bin/alpi-umbrel
 
 VOLUME ["/data"]
 EXPOSE 8080
+USER 1000:1000
 
 ENTRYPOINT ["alpi-umbrel"]

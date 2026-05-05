@@ -10,6 +10,10 @@ browser surface, so the package serves the existing Alpi TUI through
 
 - `/data` is the container home directory.
 - `/data/.alpi` is the persistent Alpi root.
+- Umbrel binds `${APP_DATA_DIR}/data` from the app's host-side data
+  directory to `/data` in the container. Container updates recreate the
+  container, but they do not replace `${APP_DATA_DIR}/data`, so the
+  profile survives normal app updates and restarts.
 - `alpi daemon start` runs in the background for gateways, schedules,
   ALP, workgroups, and host verbs.
 - `ttyd` listens on port `8080`, launches `alpi` first, and drops to a
@@ -27,7 +31,7 @@ The Docker image downloads the official `ttyd` release binary for
 From the repository root:
 
 ```bash
-docker build -t satoshiltd/alpi-umbrel:0.5.0 -f deploy/umbrel/alpi/Dockerfile .
+docker build -t satoshiltd/alpi-umbrel:0.4.2 -f deploy/umbrel/alpi/Dockerfile .
 ```
 
 ## Run locally
@@ -36,7 +40,7 @@ docker build -t satoshiltd/alpi-umbrel:0.5.0 -f deploy/umbrel/alpi/Dockerfile .
 docker run --rm -it \
   -p 8080:8080 \
   -v alpi-umbrel-data:/data \
-  satoshiltd/alpi-umbrel:0.5.0
+  satoshiltd/alpi-umbrel:0.4.2
 ```
 
 Open `http://localhost:8080` to use the TUI.
