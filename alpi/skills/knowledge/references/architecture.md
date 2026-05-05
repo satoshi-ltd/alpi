@@ -70,12 +70,14 @@ profile files directly.
 
 ## Host/API boundary
 
-Desktop/mobile clients talk to the daemon through `host.*` verbs served
-from `alpi/host/` over `~/.alpi/host/host.sock`. They should not read
-`~/.alpi/` directly and should not spawn `alpi` as a subprocess.
+Desktop/mobile clients use `host.*` verbs in `alpi/host/`. Two
+transports: Unix socket (`~/.alpi/host/host.sock`, local, no token)
+and WebSocket on Tailscale or RFC1918 LAN (per-device token in
+`params.auth_token`). Bind never goes to `0.0.0.0`/public. Tokens at
+`~/.alpi/host/devices.yaml`, generated from `alpi setup → Devices`.
 
-ALP (`alpi/alp/`) is separate: it is for peer-to-peer alpi links, not
-the local desktop host API.
+Clients must not read `~/.alpi/` directly or spawn `alpi` as a
+subprocess. ALP (`alpi/alp/`) is separate (peer-to-peer).
 
 ## Security boundary
 

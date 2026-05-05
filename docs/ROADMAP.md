@@ -32,7 +32,7 @@ personal agent.
 
 | ID | Item | Status |
 |---|---|---|
-| AX-mobile | Mobile companion (iOS / Android) — chat, status, peers, and workgroups from the user's own profile over ALP.2 | 🔵 |
+| AX-mobile | Mobile companion (iOS / Android) — chat, status, peers, and workgroups from the user's own profile. Daemon side shipped in v0.4.1 (host plane on WebSocket + per-device pairing tokens, see CHANGELOG). Mobile app itself still pending. | 🟡 |
 | ALP.4 | Streaming `link.ask` — incremental remote replies for peer calls, mobile, and workgroups | 🔵 |
 
 ### Server distribution

@@ -442,6 +442,27 @@ socket (the desktop / mobile client always targets default's
 socket and reaches sibling profiles via the ``profile`` parameter
 on each verb).
 
+### Host (control plane)
+
+The host plane serves `host.*` verbs over a Unix socket (always)
+and a WebSocket on a Tailscale or RFC1918 LAN address (when one is
+detected; mobile / remote desktop use this path).
+
+| Key | Default | Effect |
+|---|---|---|
+| `host.tcp_port` | `49200` | WebSocket port for the remote transport. Bind address is auto-detected (Tailscale CGNAT first, else first private LAN). The listener never binds to `0.0.0.0` or a public IP — pairing tokens would leak in plaintext. |
+
+```yaml
+host:
+  tcp_port: 49200
+```
+
+Pairing tokens for the WS transport live at
+``~/.alpi/host/devices.yaml`` (mode 0600). Manage them through
+``alpi setup → Devices`` — generate, label, revoke. The full token
+appears once inside the pairing QR; the listing redacts to a
+`token_id` (last 8 chars).
+
 ## Takes-effect cheat sheet
 
 - **next turn** — change is live on the agent's next response.

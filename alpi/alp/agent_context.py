@@ -164,9 +164,8 @@ The hub's identity is shown in your context block as
 "hosting · you are the hub" (you ARE) or "hub @<id>" (someone
 else is). Read it before picking an action.
 
-LANGUAGE. Default to English for every workgroup post. The hub
-may override this in the briefing ("Reply in <language>") — in
-that case match it.
+LANGUAGE. Match the language of the active `#task` in every
+workgroup post.
 
 DEFAULT POSTURE depends on whether you've already posted in
 this active task:

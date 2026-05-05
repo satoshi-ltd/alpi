@@ -141,6 +141,7 @@ class Config:
     tui: dict[str, Any] = field(default_factory=dict)
     gateway: dict[str, Any] = field(default_factory=dict)
     alp: dict[str, Any] = field(default_factory=dict)
+    host: dict[str, Any] = field(default_factory=dict)
     budget: dict[str, Any] = field(default_factory=dict)
     service: dict[str, Any] = field(default_factory=dict)
     workspace: str = ""  # "" → fall back to cwd
@@ -247,6 +248,7 @@ def load(home: Path) -> Config:
         tui=data.get("tui", DEFAULT_CONFIG["tui"]),
         gateway=data.get("gateway", DEFAULT_CONFIG["gateway"]),
         alp=dict(data.get("alp") or {}),
+        host=dict(data.get("host") or {}),
         budget=dict(data.get("budget") or {}),
         service=dict(data.get("service") or {}),
         workspace=str(data.get("workspace", "") or ""),
@@ -280,6 +282,9 @@ def save(cfg: Config) -> None:
 
     if cfg.alp:
         data["alp"] = cfg.alp
+
+    if cfg.host:
+        data["host"] = cfg.host
 
     if cfg.budget:
         data["budget"] = cfg.budget

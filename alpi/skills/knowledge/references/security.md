@@ -55,6 +55,13 @@ Not fully solved:
 - all possible prompt-injection variants,
 - bugs in third-party wrappers.
 
+## Host plane device pairing
+
+WS transport requires a per-device token in `params.auth_token`.
+Tokens at `~/.alpi/host/devices.yaml`, managed via `alpi setup →
+Devices`. Listener binds Tailscale or RFC1918 only (never public).
+Remote access for VPS = install Tailscale on the VPS, not public IP.
+
 ## Skills and secrets
 
 - Static secrets live in profile `.env` and are named in

@@ -1010,17 +1010,27 @@ don't burn tokens on stale reactions.
 
 Mechanics:
 
-- Each profile's service maintains an `_INFLIGHT` table
-  (`wg_id → {proc, started_against_task_seq, hub_pubkey, …}`).
-  An entry exists only while a dispatch subprocess is running
-  for that workgroup.
-- A separate **preempt watcher** task runs alongside the main
-  poller and ticks at 5 s (vs 30 s for the main poller). On
-  each tick, for every `wg_id` in `_INFLIGHT`, it reads the
-  latest hub-`#task` seq from local state (decrypted hub
-  transcript or subscription cache) and compares against the
-  seq the subprocess started against. If a newer hub `#task`
-  has landed, the watcher SIGTERMs the subprocess.
+- The daemon's service maintains an `_INFLIGHT` table keyed
+  by `(wg_id, profile) → {proc, started_against_task_seq,
+  hub_pubkey, …}`. An entry exists only while a dispatch
+  subprocess is running for that workgroup, for that profile.
+  The key includes the profile because the daemon hosts every
+  profile on a machine in a single process — keying by
+  `wg_id` alone would let one profile's dispatch block another
+  profile's dispatch for the same workgroup, which violates
+  the "single-flight per profile" invariant below.
+- A separate **preempt watcher** task runs per profile
+  alongside the main poller and ticks at 5 s (vs 30 s for the
+  main poller). On each tick, for every entry in `_INFLIGHT`
+  whose `profile` matches the watcher, it reads the latest
+  hub-`#task` seq from local state (decrypted hub transcript
+  or subscription cache) and compares against the seq the
+  subprocess started against. If a newer hub `#task` has
+  landed, the watcher SIGTERMs the subprocess. Each watcher
+  scopes to its own profile because resolving workgroup state
+  needs that profile's home — checking another profile's
+  dispatch with the wrong home would read empty state and
+  incorrectly conclude the task is closed.
 - The aborted dispatch writes a `preempted` event to
   `turns.jsonl` (with `preempted_by_seq` recording the new
   task's seq) instead of `end` / `timeout`. The next poller
@@ -1032,10 +1042,11 @@ Mechanics:
 
 The dispatch sites (`_maybe_dispatch_for_sub` /
 `_maybe_dispatch_for_hub` / the watchdog) gate on
-`wg_id in _INFLIGHT` before spawning, so a workgroup is
-single-flight per profile — preventing two concurrent dispatches
-that would both consume the same round slot. Different
-workgroups can dispatch concurrently.
+`(wg_id, profile) in _INFLIGHT` before spawning, so a workgroup
+is single-flight per profile — preventing two concurrent
+dispatches from the same profile that would both consume the
+same round slot. Different profiles inside the same workgroup,
+and different workgroups, can dispatch concurrently.
 
 **Model tier expectations.** The protocol invariants — rotation,
 closure quorum, preemption, watchdog, hub-only `#task`/`#done` —

@@ -1276,7 +1276,10 @@ def setup_cmd(ctx: click.Context) -> None:
         items += [
             ("Subsystems", "subsystems", _subsystems_summary(h)),
             ("Gateways", "gateways", _gateways_status(h)),
-
+        ]
+        if profile_name == "default":
+            items.append(("Devices", "devices", _devices_status(h)))
+        items += [
             ui.Heading("Maintenance"),
             ("Health check", "doctor", _doctor_status(h, profile_name)),
             ("Cleanup", "cleanup", _cleanup_status(h)),
@@ -1330,6 +1333,8 @@ def setup_cmd(ctx: click.Context) -> None:
             from alpi.alp.workgroup_setup import run as wg_setup_run
 
             wg_setup_run(h)
+        elif choice == "devices":
+            _devices_setup(h)
         elif choice == "doctor":
             _doctor_wizard(h, profile_name)
         elif choice == "delete-profile":
@@ -1817,6 +1822,205 @@ def _alp_tcp_port_setup(h: Path) -> None:
     cfg_mod.save(cfg)
     msg = _restart_daemon_for_apply(home._ROOT)
     ui.ok_and_wait(f"TCP bound to {host}:{port}{msg}")
+
+
+def _devices_status(h: Path) -> str:
+    from alpi.host import devices as devices_mod
+    from alpi.host.network import detect_bind_ip
+
+    if detect_bind_ip() is None:
+        return "no network"
+    n = len(devices_mod.load())
+    return f"{n} paired" if n else "ready"
+
+
+def _devices_setup(h: Path) -> None:
+    from alpi import ui
+    from alpi.host import devices as devices_mod
+    from alpi.host.network import detect_bind_ip
+
+    while True:
+        bind = detect_bind_ip()
+        items: list = [
+            ui.Heading("Paired devices"),
+        ]
+        rows = devices_mod.load()
+        if not rows:
+            items.append(("(no devices yet)", "noop", ""))
+        else:
+            for d in rows:
+                tid = (d["token"] or "")[-8:]
+                last = _format_last_seen(d.get("last_seen"))
+                items.append((d["label"] or tid, ("device", tid), last))
+
+        items.append(None)
+        items.append(("+ Add device", "add",
+                      "generate a new pairing QR"))
+        if bind is None:
+            items.append(("Network", "noop",
+                          "neither Tailscale nor LAN detected"))
+
+        choice = ui.menu(
+            ui.crumb("setup", "devices"),
+            items,
+            subtitle=_devices_subtitle(bind),
+            home=h,
+            close="Done",
+        )
+        if choice is None or choice == "noop":
+            return
+        if choice == "add":
+            _device_add(h, bind)
+            continue
+        if isinstance(choice, tuple) and choice[0] == "device":
+            _device_detail(choice[1])
+            continue
+
+
+def _devices_subtitle(bind) -> str:
+    if bind is None:
+        return "no network — install Tailscale or connect to a LAN"
+    ip, scope = bind
+    return f"{scope} · {ip}"
+
+
+def _format_last_seen(epoch) -> str:
+    if not epoch:
+        return "never"
+    import time as _time
+    delta = int(_time.time()) - int(epoch)
+    if delta < 60:
+        return "just now"
+    if delta < 3600:
+        return f"{delta // 60}m ago"
+    if delta < 86400:
+        return f"{delta // 3600}h ago"
+    return f"{delta // 86400}d ago"
+
+
+def _device_add(h: Path, bind) -> None:
+    from alpi import ui
+    from alpi.host import devices as devices_mod
+    from alpi.host.server import DEFAULT_TCP_PORT
+
+    if bind is None:
+        ui.banner(
+            ui.crumb("setup", "devices", "add"),
+            subtitle="cannot pair — no network",
+            home=h,
+        )
+        ui.fail(
+            "Neither Tailscale nor a LAN address detected.\n"
+            "Install Tailscale (https://tailscale.com/download) or connect to Wi-Fi."
+        )
+        ui.press_enter()
+        return
+
+    ip, scope = bind
+    cfg = config.load(h)
+    port = int((cfg.host or {}).get("tcp_port") or DEFAULT_TCP_PORT)
+
+    # Banner before the prompt so the input doesn't look glued to the
+    # previous menu — visual reset of the screen.
+    ui.banner(
+        ui.crumb("setup", "devices", "add"),
+        subtitle=f"pair a new client · {scope} · {ip}:{port}",
+        home=h,
+    )
+    ui._console.print("")
+    label = ui.text("Label (e.g. iPhone, MacBook):", default="")
+    if label is None:
+        return ui.cancelled()
+
+    row = devices_mod.add(label=label or "device")
+
+    # Heavy imports deferred until after the label prompt so the
+    # "next screen" appears instantly. The QR step shows a spinner so
+    # the import + render cost is hidden.
+    import io
+    import json
+    import socket
+
+    import qrcode
+
+    payload = {
+        "v": 2,
+        "i": ip,
+        "p": port,
+        "n": socket.gethostname(),
+        "t": row["token"],
+    }
+
+    ui.banner(
+        ui.crumb("setup", "devices", "add", row["label"]),
+        subtitle=f"scan once · {scope} · {ip}:{port}",
+        home=h,
+    )
+    ui._console.print("")
+    with ui.activity("generating pairing QR…"):
+        qr = qrcode.QRCode(
+            error_correction=qrcode.constants.ERROR_CORRECT_L,
+            border=1,
+        )
+        qr.add_data(json.dumps(payload, separators=(",", ":")))
+        qr.make(fit=True)
+        buf = io.StringIO()
+        qr.print_ascii(out=buf, invert=True)
+    ui._console.print(buf.getvalue())
+    ui._console.print(f"[dim]label:    [/dim] {row['label']}")
+    ui._console.print(f"[dim]token id:[/dim] …{row['token'][-8:]}")
+    ui._console.print("")
+    ui.dim(
+        "The token is one-shot — only this device will be paired with it.\n"
+        "If the QR is exposed to anyone else, revoke and generate a new one."
+    )
+    ui.press_enter()
+
+
+def _device_detail(token_id: str) -> None:
+    from alpi import ui
+    from alpi.host import devices as devices_mod
+
+    while True:
+        rows = devices_mod.load()
+        target = next((d for d in rows if (d["token"] or "")[-8:] == token_id), None)
+        if target is None:
+            return
+
+        choice = ui.menu(
+            ui.crumb("setup", "devices", target["label"] or token_id),
+            [
+                ("Label", "label", target["label"] or "(none)"),
+                ("Token id", "noop", f"…{token_id}"),
+                ("Last seen", "noop", _format_last_seen(target.get("last_seen"))),
+                None,
+                ("Rename", "rename", ""),
+                ("Revoke", "revoke", "the device will lose access immediately"),
+            ],
+            subtitle="device detail",
+            home=None,
+            close="Back",
+        )
+        if choice is None or choice == "noop":
+            return
+        if choice == "label":
+            continue
+        if choice == "rename":
+            new_label = ui.text("New label:", default=target["label"] or "")
+            if new_label is None:
+                continue
+            devices_mod.rename(target["token"], new_label)
+            continue
+        if choice == "revoke":
+            if not ui.confirm(
+                f"Revoke {target['label'] or token_id}? "
+                "The paired device will fail next request.",
+                default=False,
+            ):
+                continue
+            devices_mod.revoke(target["token"])
+            ui.ok_and_wait("revoked")
+            return
 
 
 def _workgroups_status(h: Path) -> str:
