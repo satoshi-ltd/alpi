@@ -258,7 +258,7 @@ async def _maybe_dispatch_for_sub(
             sub.wg_id, trigger,
         )
         return
-    if sub.wg_id in _INFLIGHT:
+    if (sub.wg_id, profile) in _INFLIGHT:
         log.info(
             "wg poller: %s skipped (in-flight dispatch, reason=%s)",
             sub.wg_id, trigger,
@@ -297,8 +297,7 @@ async def _maybe_dispatch_for_sub(
 _HUB_FOLLOWUP_STALE_SECONDS = 60
 
 
-# In-flight workgroup dispatches keyed by ``wg_id``.
-_INFLIGHT: dict[str, dict] = {}
+_INFLIGHT: dict[tuple[str, str], dict] = {}
 
 
 # Strong refs for fire-and-forget dispatch tasks.
@@ -373,7 +372,7 @@ async def _maybe_dispatch_for_hub(
             wg.meta.id, trigger,
         )
         return
-    if wg.meta.id in _INFLIGHT:
+    if (wg.meta.id, profile) in _INFLIGHT:
         log.info(
             "wg poller: %s skipped (in-flight dispatch, reason=%s)",
             wg.meta.id, trigger,
@@ -456,7 +455,7 @@ async def _maybe_watchdog_close(
 
     if _in_cooldown_str(last_dispatch_str):
         return
-    if wg.meta.id in _INFLIGHT:
+    if (wg.meta.id, profile) in _INFLIGHT:
         return
     last_author_is_hub = str(
         last_post.get("from") or ""
@@ -723,8 +722,13 @@ def _should_dispatch(
         if is_self and not has_task:
             continue
         if not is_self and profile in mentions:
+            # `@` inside `#done` is synthesis, not handoff.
+            if any(e.kind == "done" for e in events):
+                continue
             return f"@{profile} mentioned (seq #{seq})", high_seq
         if has_task and not mentions:
+            if active is None or active.opened_seq != seq:
+                continue
             return f"collective #task opened (seq #{seq})", high_seq
         if not is_self and active is not None:
             # The hub of the active task always stays in the loop.
@@ -891,6 +895,11 @@ async def _dispatch_workgroup_turn(
             "  6. Otherwise, end the turn without posting "
             "(genuine silence — not your turn, no slot left, or "
             "still working from a prior `#working`)."
+            "\n\nLANGUAGE: write every post — your contribution, "
+            "`#working` reasons, `#skip` reasons, `#done` results — "
+            "in the same language as the active `#task`. If the "
+            "task is in Spanish, post in Spanish. If French, French. "
+            "Match the user, do not default to English."
         )
         env_extra = {}
     env = dict(os.environ)
@@ -928,7 +937,7 @@ async def _dispatch_workgroup_turn(
     })
 
     # Register in-flight state so the preempt watcher can SIGTERM us.
-    _INFLIGHT[wg_id] = {
+    _INFLIGHT[(wg_id, profile)] = {
         "proc": proc,
         "profile": profile,
         "wg_name": wg_name,
@@ -990,7 +999,7 @@ async def _dispatch_workgroup_turn(
                     rc = -9
             raise
     finally:
-        info = _INFLIGHT.pop(wg_id, {})
+        info = _INFLIGHT.pop((wg_id, profile), {})
     preempted = bool(info.get("preempted"))
     preempted_by_seq = int(info.get("preempted_by_seq", 0))
 
@@ -1039,9 +1048,12 @@ async def _run_preempt_watcher(home: Path, profile: str) -> None:
     log.info("workgroup preempt watcher running (tick=%ss)", _PREEMPT_TICK_SECONDS)
     while True:
         try:
-            for wg_id in list(_INFLIGHT.keys()):
-                info = _INFLIGHT.get(wg_id)
+            for key in list(_INFLIGHT.keys()):
+                info = _INFLIGHT.get(key)
                 if info is None or info.get("preempted"):
+                    continue
+                # Cross-profile reads use the wrong home → false closure.
+                if info.get("profile") != profile:
                     continue
                 proc = info.get("proc")
                 if proc is None or proc.returncode is not None:
@@ -1049,11 +1061,13 @@ async def _run_preempt_watcher(home: Path, profile: str) -> None:
                 hub_pubkey = str(info.get("hub_pubkey") or "")
                 if not hub_pubkey:
                     continue
+                wg_id = key[0] if isinstance(key, tuple) else key
                 started_against = int(info.get("started_against_task_seq", 0))
                 latest = _latest_hub_task_seq_for(home, wg_id, hub_pubkey)
                 if latest <= started_against:
                     continue
-                # New task landed; preempt this dispatch.
+                # ALP.md: only fresh `#task` preempts; `#done` is caught by
+                # `_check_member_round_fresh` (SDK `stale-round`).
                 info["preempted"] = True
                 info["preempted_by_seq"] = latest
                 try:

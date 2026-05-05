@@ -318,3 +318,98 @@ async def test_dispatch_timeout_kills_and_records(
     assert events[1]["event"] == "timeout"
     assert events[1]["killed"] is True
     assert events[1]["duration_s"] >= 0.5
+
+
+def test_collective_task_silent_after_hub_done() -> None:
+    """A `#task` already closed by the hub does not re-trigger dispatch."""
+    posts = [
+        {"seq": 1, "text": "#task analyze the architecture", "from": "hub_pk"},
+        {"seq": 2, "text": "#done synthesis: pick option A", "from": "hub_pk"},
+    ]
+    reason, _ = service._should_dispatch("alice", "alice_pk", posts, 0)
+    assert reason is None
+
+
+def test_mention_silent_when_inside_done_post() -> None:
+    """A `@<peer>` mention buried in a `#done` body is not a handoff —
+    the task is closed; the mention is just part of the synthesis."""
+    posts = [
+        {"seq": 1, "text": "#task analyze", "from": "hub_pk"},
+        {"seq": 2, "text": "#done @alice owns the writeup", "from": "hub_pk"},
+    ]
+    reason, _ = service._should_dispatch("alice", "alice_pk", posts, 0)
+    assert reason is None
+
+
+def test_collective_task_still_wakes_when_open_after_substantive() -> None:
+    """Regression guard: a `#task` that's still open (no `#done`) must
+    keep waking peers even when there are intermediate substantive
+    posts. The closed-task gate must not over-shoot."""
+    posts = [
+        {"seq": 1, "text": "#task analyze the architecture", "from": "hub_pk"},
+        {"seq": 2, "text": "first thoughts on the stack", "from": "bob_pk"},
+    ]
+    reason, _ = service._should_dispatch("alice", "alice_pk", posts, 0)
+    assert reason is not None
+    assert "task" in reason.lower()
+
+
+def test_inflight_keyed_by_wg_id_and_profile() -> None:
+    """Two profiles can hold independent in-flight locks for the same wg."""
+    service._INFLIGHT[("wg_test", "alice")] = {"profile": "alice"}
+    service._INFLIGHT[("wg_test", "bob")] = {"profile": "bob"}
+    try:
+        assert ("wg_test", "alice") in service._INFLIGHT
+        assert ("wg_test", "bob") in service._INFLIGHT
+        # A profile not currently dispatching is unlocked.
+        assert ("wg_test", "carol") not in service._INFLIGHT
+    finally:
+        service._INFLIGHT.pop(("wg_test", "alice"), None)
+        service._INFLIGHT.pop(("wg_test", "bob"), None)
+
+
+@pytest.mark.asyncio
+async def test_dispatch_installs_and_pops_inflight_under_tuple_key(
+    short_tmp: Path,
+) -> None:
+    """The dispatcher installs the lock under `(wg_id, profile)` and
+    pops the same key on exit. Captured during the subprocess wait,
+    when the lock is live."""
+    import asyncio as _asyncio
+    import sys as _sys
+    home = short_tmp / "alice"; home.mkdir()
+    (home / "alp").mkdir()
+
+    captured: dict = {}
+    real_create = service.asyncio.create_subprocess_exec
+
+    async def fake_create(*argv, **kw):
+        # Sleep briefly so the lock is observable from outside the
+        # dispatch coroutine.
+        return await real_create(
+            _sys.executable, "-c", "import time; time.sleep(0.3)",
+            stdout=service.asyncio.subprocess.DEVNULL,
+            stderr=service.asyncio.subprocess.PIPE,
+        )
+
+    service.asyncio.create_subprocess_exec = fake_create
+    try:
+        async def watch():
+            # Snapshot _INFLIGHT keys mid-flight.
+            await _asyncio.sleep(0.1)
+            captured["keys"] = list(service._INFLIGHT.keys())
+
+        await _asyncio.gather(
+            service._dispatch_workgroup_turn(
+                home, profile="alice", wg_id="wg_x",
+                wg_name="design", reason="test trigger",
+            ),
+            watch(),
+        )
+    finally:
+        service.asyncio.create_subprocess_exec = real_create
+
+    # During dispatch, the key was installed as a tuple.
+    assert ("wg_x", "alice") in captured["keys"]
+    # On exit, the same key was popped.
+    assert ("wg_x", "alice") not in service._INFLIGHT
