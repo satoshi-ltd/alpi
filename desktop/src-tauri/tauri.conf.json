@@ -42,7 +42,7 @@
       "endpoints": [
         "https://github.com/satoshi-ltd/alpi/releases/download/desktop-latest/latest.json"
       ],
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEIwQkFFNkY2MTVDQTI5REMKUldUY0tjb1Y5dWE2c0Z3L3hzSFNKVUp1aHQremhnNDlHY1o2dE5iZEtQUE51U1ZUWFVuZlVtTW0K",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDE5MTVEQjQ5MUZCMDEyRjQKUldUMEVyQWZTZHNWR1E2RXd1VHRiSXZPRVFyRXdVczJSYzBZN25YaGhldjB6bGVRd0lJTGlGajAK",
       "dialog": false
     }
   }
