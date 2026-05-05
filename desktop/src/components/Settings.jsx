@@ -5,6 +5,8 @@ import { check } from "@tauri-apps/plugin-updater";
 import Button from "../primitives/Button.jsx";
 import Chip from "../primitives/Chip.jsx";
 import Dropdown from "../primitives/Dropdown.jsx";
+import NavRow, { Dot, Hash } from "../primitives/NavRow.jsx";
+import Textarea from "../primitives/Textarea.jsx";
 import Tooltip from "../primitives/Tooltip.jsx";
 import useAutoPosition from "../primitives/useAutoPosition.js";
 import { useNotify } from "../primitives/Notification.jsx";
@@ -123,47 +125,35 @@ export default function Settings({
           const active =
             target?.kind === "profile" && target.id === p.name;
           return (
-            <button
+            <NavRow
               key={p.name}
-              className={`${styles.asideItem} ${
-                active ? styles.asideItemActive : ""
-              }`}
-              onClick={() => setTarget({ kind: "profile", id: p.name })}
-              style={
-                active
-                  ? {
-                      backgroundColor: `color-mix(in srgb, ${
-                        p.accent || "var(--color-accent)"
-                      } 14%, transparent)`,
-                    }
-                  : undefined
+              active={active}
+              accent={p.accent || "var(--color-accent)"}
+              muted={!p.model}
+              leading={<Dot color={p.accent} />}
+              trailing={
+                !p.model && (
+                  <span
+                    className={styles.asideTag}
+                    title="No model configured"
+                  >
+                    !
+                  </span>
+                )
               }
+              onClick={() => setTarget({ kind: "profile", id: p.name })}
             >
-              <span
-                className={styles.asideDot}
-                style={p.accent ? { backgroundColor: p.accent } : undefined}
-              />
-              <span className={styles.asideName}>{p.name}</span>
-              {!p.model && (
-                <span
-                  className={styles.asideTag}
-                  title="No model configured"
-                >
-                  !
-                </span>
-              )}
-            </button>
+              {p.name}
+            </NavRow>
           );
         })}
-        <button
-          className={`${styles.asideItem} ${
-            target?.kind === "create-profile" ? styles.asideItemActive : ""
-          }`}
+        <NavRow
+          active={target?.kind === "create-profile"}
+          leading={<Hash>+</Hash>}
           onClick={() => setTarget({ kind: "create-profile" })}
         >
-          <span className={styles.asideHash}>+</span>
-          <span className={styles.asideName}>New profile</span>
-        </button>
+          New profile
+        </NavRow>
 
         <div className={styles.asideTitle} style={{ marginTop: "var(--space-3)" }}>
           Workgroups
@@ -176,34 +166,24 @@ export default function Settings({
           );
           const accent = hub?.accent || "var(--color-accent)";
           return (
-            <button
+            <NavRow
               key={w.id}
-              className={`${styles.asideItem} ${
-                active ? styles.asideItemActive : ""
-              }`}
+              active={active}
+              accent={accent}
+              leading={<Hash />}
               onClick={() => setTarget({ kind: "workgroup", id: w.id })}
-              style={
-                active
-                  ? {
-                      backgroundColor: `color-mix(in srgb, ${accent} 14%, transparent)`,
-                    }
-                  : undefined
-              }
             >
-              <span className={styles.asideHash}>#</span>
-              <span className={styles.asideName}>{w.name || w.id}</span>
-            </button>
+              {w.name || w.id}
+            </NavRow>
           );
         })}
-        <button
-          className={`${styles.asideItem} ${
-            target?.kind === "create-workgroup" ? styles.asideItemActive : ""
-          }`}
+        <NavRow
+          active={target?.kind === "create-workgroup"}
+          leading={<Hash>+</Hash>}
           onClick={() => setTarget({ kind: "create-workgroup" })}
         >
-          <span className={styles.asideHash}>+</span>
-          <span className={styles.asideName}>New workgroup</span>
-        </button>
+          New workgroup
+        </NavRow>
         <VersionFooter />
       </aside>
 
@@ -384,7 +364,7 @@ function ProfileDetail({ profile, profiles, onSaved, onNavigate }) {
             </Row>
           )}
           <Row label="identity">
-            <textarea
+            <Textarea
               className={styles.textarea}
               rows={3}
               value={draft.bio}
@@ -772,7 +752,7 @@ function CreateWorkgroupForm({ profiles, onCreated, onCancel }) {
             </span>
           </Row>
           <Row label="briefing" alignTop>
-            <textarea
+            <Textarea
               className={styles.textarea}
               rows={3}
               value={briefing}
@@ -1064,7 +1044,7 @@ function WorkgroupDetail({ workgroup, profiles, onSaved }) {
           </Row>
           <Row label="briefing" alignTop>
             {workgroup.is_hub ? (
-              <textarea
+              <Textarea
                 className={styles.textarea}
                 rows={3}
                 value={briefing}
@@ -1730,7 +1710,7 @@ function McpAddModal({ profile, existingNames, onClose, onSaved }) {
         </div>
         <div className={styles.tcpField}>
           <label className={styles.tcpLabel}>env (KEY=VALUE per line)</label>
-          <textarea
+          <Textarea
             className={styles.textarea}
             style={{ maxWidth: "none" }}
             rows={3}
@@ -4131,7 +4111,7 @@ function AddPeerPopover({
       </div>
       <div className={styles.tcpField}>
         <label className={styles.tcpLabel}>pubkey</label>
-        <textarea
+        <Textarea
           className={styles.textarea}
           rows={2}
           value={pubkey}

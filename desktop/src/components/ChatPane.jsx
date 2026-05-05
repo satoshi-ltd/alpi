@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { memo, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import AlpiPicker from "./AlpiPicker.jsx";
 import ModelPicker from "./ModelPicker.jsx";
@@ -133,14 +133,14 @@ function SessionView({ data, pendingTurn, accent, showEmptyHint, profileName }) 
   return (
     <div ref={scrollRef} className={styles.transcript}>
       {turns.map((t, i) => (
-        <Turn key={i} turn={t} accent={accent} />
+        <Turn key={t.at ?? i} turn={t} accent={accent} />
       ))}
       {pendingTurn && <PendingTurn turn={pendingTurn} accent={accent} />}
     </div>
   );
 }
 
-function Turn({ turn, accent }) {
+const Turn = memo(function Turn({ turn, accent }) {
   const tools = turn.tools ?? [];
   return (
     <div className={styles.turn}>
@@ -155,7 +155,7 @@ function Turn({ turn, accent }) {
       )}
       {tools.map((t, i) => (
         <ToolCard
-          key={i}
+          key={t.tool_id ?? `${t.name}:${i}`}
           name={t.name}
           preview={previewForArgs(t.args)}
           ok={t.ok ?? true}
@@ -167,7 +167,7 @@ function Turn({ turn, accent }) {
       )}
     </div>
   );
-}
+});
 
 function previewForArgs(args) {
   if (!args || typeof args !== "object") return "";
@@ -228,7 +228,7 @@ function PendingTurn({ turn, accent }) {
   );
 }
 
-function ToolCard({ name, preview, ok, accent, states = [], output = "" }) {
+const ToolCard = memo(function ToolCard({ name, preview, ok, accent, states = [], output = "" }) {
   const status = ok === null ? "running" : ok ? "ok" : "fail";
   const iconStyle = status === "ok" && accent ? { color: accent } : undefined;
   const [expanded, setExpanded] = useState(false);
@@ -270,7 +270,7 @@ function ToolCard({ name, preview, ok, accent, states = [], output = "" }) {
       )}
     </div>
   );
-}
+});
 
 function Spinner() {
   return (

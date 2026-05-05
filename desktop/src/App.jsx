@@ -20,10 +20,22 @@ import {
 } from "./lib/workgroup-task-cache.js";
 import styles from "./App.module.css";
 
+const PINNED_KEY = "alf:pinned:v1";
+
+function loadPinned() {
+  try {
+    const raw = localStorage.getItem(PINNED_KEY);
+    return raw ? JSON.parse(raw) : { profiles: [], workgroups: [] };
+  } catch {
+    return { profiles: [], workgroups: [] };
+  }
+}
+
 export default function App() {
   const [collapsed, setCollapsed] = useState(false);
   const [profiles, setProfiles] = useState([]);
   const [workgroups, setWorkgroups] = useState([]);
+  const [pinned, setPinned] = useState(loadPinned);
   const [view, setView] = useState({ kind: "empty" });
   const [pickerAlpi, setPickerAlpi] = useState(null);
   const [settingsTarget, setSettingsTarget] = useState({
@@ -270,6 +282,18 @@ export default function App() {
     });
   }, []);
 
+  const onTogglePin = useCallback((kind, key) => {
+    setPinned((prev) => {
+      const list = prev[kind] ?? [];
+      const next = list.includes(key)
+        ? list.filter((k) => k !== key)
+        : [...list, key];
+      const updated = { ...prev, [kind]: next };
+      localStorage.setItem(PINNED_KEY, JSON.stringify(updated));
+      return updated;
+    });
+  }, []);
+
   const activeProfile = useMemo(() => {
     if (view.kind === "profile") {
       return profiles.find((p) => p.name === view.profile) ?? null;
@@ -400,6 +424,31 @@ export default function App() {
     };
   }, []);
 
+  // Buffer streaming deltas and flush on the next animation frame.
+  // Without this, ~30-100 chunks/sec each trigger an App re-render.
+  const deltaBufferRef = useRef({ assistant: "", reasoning: "" });
+  const deltaFlushScheduledRef = useRef(false);
+  const flushDeltas = useCallback(() => {
+    deltaFlushScheduledRef.current = false;
+    const { assistant, reasoning } = deltaBufferRef.current;
+    if (!assistant && !reasoning) return;
+    deltaBufferRef.current = { assistant: "", reasoning: "" };
+    setPendingTurn((prev) => {
+      if (!prev) return prev;
+      const next = { ...prev };
+      if (assistant)
+        next.assistantPreview = (prev.assistantPreview ?? "") + assistant;
+      if (reasoning)
+        next.reasoningPreview = (prev.reasoningPreview ?? "") + reasoning;
+      return next;
+    });
+  }, []);
+  const scheduleDeltaFlush = useCallback(() => {
+    if (deltaFlushScheduledRef.current) return;
+    deltaFlushScheduledRef.current = true;
+    requestAnimationFrame(flushDeltas);
+  }, [flushDeltas]);
+
   useEffect(() => {
     const off = listen("chat-event", (event) => {
       const p = event.payload;
@@ -481,17 +530,11 @@ export default function App() {
           return prev;
         });
       } else if (p.kind === "assistant_delta") {
-        setPendingTurn((prev) =>
-          prev
-            ? { ...prev, assistantPreview: (prev.assistantPreview ?? "") + p.text }
-            : prev,
-        );
+        deltaBufferRef.current.assistant += p.text;
+        scheduleDeltaFlush();
       } else if (p.kind === "reasoning_delta") {
-        setPendingTurn((prev) =>
-          prev
-            ? { ...prev, reasoningPreview: (prev.reasoningPreview ?? "") + p.text }
-            : prev,
-        );
+        deltaBufferRef.current.reasoning += p.text;
+        scheduleDeltaFlush();
       } else if (p.kind === "error") {
         setPendingTurn((prev) =>
           prev ? { ...prev, error: p.text } : prev,
@@ -517,6 +560,8 @@ export default function App() {
           return prev;
         });
       } else if (p.kind === "done") {
+        // Drop any buffered deltas — the persisted session already has them.
+        deltaBufferRef.current = { assistant: "", reasoning: "" };
         setPendingTurn((prev) => (prev?.error ? prev : null));
       }
     });
@@ -605,9 +650,11 @@ export default function App() {
             activityByWorkgroup={activityByWorkgroup}
             pendingProfile={pendingTurn?.profile ?? null}
             view={view}
+            pinned={pinned}
             onNewChat={onNewChat}
             onOpenProfile={onOpenProfile}
             onOpenWorkgroup={onOpenWorkgroup}
+            onTogglePin={onTogglePin}
           />
         )}
         <main className={styles.main}>

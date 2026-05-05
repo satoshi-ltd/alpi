@@ -37,10 +37,11 @@ on:
 permissions: {}
 
 jobs:
-  # 1. Sanity gate: the git tag and ``tauri.conf.json`` must agree
-  #    on the version. Mismatch = bail before burning matrix minutes.
+  # 1. Sanity gate: tag, ``tauri.conf.json`` version, and signing
+  #    secrets all agree before burning matrix minutes. Failing here
+  #    is cheap; failing inside ``tauri-action`` 8 minutes in is not.
   check-version:
-    name: tag matches tauri.conf.json
+    name: gate
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.gate.outputs.version }}
@@ -59,6 +60,20 @@ jobs:
           fi
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "version=$version" >> "$GITHUB_OUTPUT"
+      - name: secrets present
+        env:
+          KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          PWD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          if [ -z "$KEY" ]; then
+            echo "::error::TAURI_SIGNING_PRIVATE_KEY secret is missing — see desktop/RELEASING.md"
+            exit 1
+          fi
+          if [ -z "$PWD" ]; then
+            echo "::error::TAURI_SIGNING_PRIVATE_KEY_PASSWORD secret is missing — see desktop/RELEASING.md"
+            exit 1
+          fi
+          echo "signing secrets present"
 
   # 2. Cross-platform bundle build. ``tauri-action`` invokes
   #    ``pnpm tauri build`` per OS, signs with the minisign key,
@@ -164,6 +179,13 @@ jobs:
         run: |
           mkdir -p latest-assets
           gh release download "$TAG" --dir latest-assets
+          # The Tauri updater is meaningless without latest.json. Bail
+          # before re-publishing if the build matrix didn't produce it.
+          if [ ! -f latest-assets/latest.json ]; then
+            echo "::error::latest.json missing in $TAG release — updater endpoint will 404. Build matrix likely failed silently."
+            ls -la latest-assets/
+            exit 1
+          fi
 
       - name: (re)publish desktop-latest with same assets
         env:

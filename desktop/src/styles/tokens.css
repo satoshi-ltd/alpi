@@ -49,6 +49,7 @@
 
   --control-height: 36px;
   --control-height-sm: 26px;
+  --control-height-xs: 22px;
 }
 
 @media (prefers-color-scheme: dark) {
