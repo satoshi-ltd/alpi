@@ -1123,22 +1123,20 @@ async def _run_host(home: Path, profile: str) -> None:
     from alpi.host import probes as host_probes
     from alpi.host import schedule as host_schedule
     from alpi.host import workgroup_admin as host_wg_admin
-    from alpi.host.network import detect_bind_ip
+    from alpi.host.network import resolve_host_tcp_bind
     from alpi.host.server import DEFAULT_TCP_PORT, Server as HostServer
 
     cfg = cfg_mod.load(home)
-    tcp_bind: tuple[str, int] | None = None
-    detected = detect_bind_ip()
-    if detected is not None:
-        ip, scope = detected
-        port = int((cfg.host or {}).get("tcp_port") or DEFAULT_TCP_PORT)
-        tcp_bind = (ip, port)
-        log.info("host TCP bind chosen: %s:%d (%s)", ip, port, scope)
-    else:
+    tcp_bind = resolve_host_tcp_bind(home)
+    if tcp_bind is None:
         log.info(
             "no Tailscale or LAN address found; "
             "host TCP listener disabled (Unix socket still up)",
         )
+    else:
+        host, port = tcp_bind
+        detail = "umbrel" if os.environ.get("ALPI_PLATFORM") == "umbrel" else "auto"
+        log.info("host TCP bind chosen: %s:%d (%s)", host, port, detail)
 
     server = HostServer(home=home, tcp_bind=tcp_bind)
     host_handlers.register(server)

@@ -20,8 +20,8 @@ foundation: desktop is a host-plane client, profile state sits behind
 should make the remote-access story obvious: a mobile companion reaches
 the user's own profile over ALP, brings the existing desktop workgroup
 experience to the phone, and ALP streaming makes remote turns feel
-live. Umbrel support gives that mobile client an easy always-on
-home-server target without turning alpi into a hosted service.
+live. Umbrel shipped in v0.4.3 as the first easy always-on home-server
+target; v0.5 should make the mobile side of that story feel native.
 
 This is the cycle where gateways stop being the main mobile story.
 Telegram, IMAP, Gmail, and Matrix stay useful, but the project should
@@ -34,12 +34,6 @@ personal agent.
 |---|---|---|
 | AX-mobile | Mobile companion (iOS / Android) — chat, status, peers, and workgroups from the user's own profile. Daemon side shipped in v0.4.1 (host plane on WebSocket + per-device pairing tokens, see CHANGELOG). Mobile app itself still pending. | 🟡 |
 | ALP.4 | Streaming `link.ask` — incremental remote replies for peer calls, mobile, and workgroups | 🔵 |
-
-### Server distribution
-
-| ID | Item | Status |
-|---|---|---|
-| Umbrel | Umbrel app MVP — one-click home-server deployment for an always-on alpi profile through the existing TUI | 🟡 |
 
 ### ALP depth
 
@@ -115,40 +109,6 @@ desktop.
   connections to the user's profile rather than accepting them.
 - Distribution — TestFlight + Play Store internal track at
   first.
-
-### Umbrel. Home-server app MVP
-
-Umbrel is not another client surface. It is the easiest way to put an
-alpi profile on a machine that is already meant to run 24/7 at home.
-That makes it a natural companion to mobile: the phone talks to the
-user's own always-on profile instead of relying on chat gateways as
-the remote-access story.
-
-**MVP scope.**
-
-- Docker image for `alpi-agent` with persistent profile storage.
-- Umbrel app package (`umbrel-app.yml`, `docker-compose.yml`,
-  `exports.sh` when useful).
-- `alpi daemon start` as the long-running service.
-- Existing Alpi TUI served through Umbrel's app proxy with a browser
-  terminal. The app should feel like opening Alpi on the home server,
-  not like a second web product.
-- Volume layout documented so backup/restore works cleanly with
-  the encrypted profile archive.
-
-**Non-goals for the MVP.**
-
-- No full desktop-app port to web.
-- No separate web dashboard unless the terminal TUI proves insufficient.
-- No browser access to raw profile files.
-- No direct exposure of the host Unix socket to the browser.
-- No broad settings dashboard until the minimal server install proves
-  useful.
-
-**Why v0.5.** Mobile needs a credible always-on host. Umbrel users
-already understand local servers, app proxies, backups, and Tailscale.
-The app gives alpi a home-server install path without requiring the
-user to SSH into a box and run CLI setup by hand.
 
 ### ALP.4. Streaming `link.ask`
 

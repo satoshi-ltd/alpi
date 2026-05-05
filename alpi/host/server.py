@@ -4,6 +4,7 @@ import asyncio
 import ipaddress
 import json
 import logging
+import os
 from pathlib import Path
 from typing import Any, Awaitable, Callable
 
@@ -255,6 +256,8 @@ _PRIVATE_RANGES = (
 
 
 def _is_safe_bind(addr: str) -> bool:
+    if addr == "0.0.0.0" and os.environ.get("ALPI_PLATFORM") == "umbrel":
+        return True
     if is_tailscale_ip(addr):
         return True
     try:

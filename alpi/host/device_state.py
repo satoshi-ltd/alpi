@@ -358,7 +358,7 @@ def _unset_dotted(data: dict[str, Any], key: str) -> None:
 
 
 def _coerce_config_value(key: str, value: Any) -> Any:
-    if key in {"alp.tcp_port"}:
+    if key in {"alp.tcp_port", "host.tcp_port"}:
         return int(value)
     if key in {"budget.daily_tokens"}:
         return int(value)

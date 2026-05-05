@@ -120,6 +120,14 @@ async def test_device_config_field_mutations_go_through_host(
     assert unset_resp["result"]["ok"] is True
     assert "tcp_port" not in cfg_mod.load(home).alp
 
+    host_set = await srv._dispatch({
+        "id": "host-set",
+        "method": "host.config.set_field",
+        "params": {"profile": "default", "key": "host.tcp_port", "value": "49200"},
+    })
+    assert host_set["result"]["ok"] is True
+    assert cfg_mod.load(home).host["tcp_port"] == 49200
+
 
 @pytest.mark.asyncio
 async def test_device_gateway_and_skills_views(

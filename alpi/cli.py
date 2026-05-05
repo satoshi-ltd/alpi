@@ -1270,8 +1270,9 @@ def setup_cmd(ctx: click.Context) -> None:
 
             ui.Heading("Services"),
         ]
-        # Only default exposes the daemon row.
-        if profile_name == "default":
+        # Only default exposes the daemon row. Umbrel manages daemon
+        # lifecycle through the container, not setup.
+        if profile_name == "default" and not _is_umbrel():
             items.append(("Daemon", "daemon", _daemon_lifecycle_status()))
         items += [
             ("Subsystems", "subsystems", _subsystems_summary(h)),
@@ -1347,6 +1348,10 @@ def _setup_farewell(profile: str, h: Path) -> None:
 
     prefix = f"alpi -p {profile}" if profile != "default" else "alpi"
     ui_mod._console.print(f"\n[dim]next:[/dim] {prefix}\n")
+
+
+def _is_umbrel() -> bool:
+    return os.environ.get("ALPI_PLATFORM") == "umbrel"
 
 
 _GATEWAY_ENV_KEYS = {
@@ -1513,6 +1518,16 @@ def _daemon_lifecycle_wizard(h: Path) -> None:
     from alpi import service as svc
     from alpi import ui
 
+    if _is_umbrel():
+        ui.banner(ui.crumb("setup", "daemon"), subtitle="managed by Umbrel", home=h)
+        ui.dim(
+            "On Umbrel the container entrypoint starts and supervises the "
+            "daemon. Use the Umbrel app restart or update flow instead of "
+            "systemd or launchd controls here.",
+        )
+        ui.ok_and_wait("daemon lifecycle is managed by Umbrel")
+        return
+
     root = home._ROOT
     while True:
         installed = svc.daemon_installed()
@@ -1648,6 +1663,8 @@ def _service_status(h: Path, profile: str) -> str:
 
     root = home._ROOT
     pid = svc.daemon_running_pid(root)
+    if _is_umbrel():
+        return f"managed by Umbrel · pid {pid}" if pid is not None else "managed by Umbrel"
     installed = svc.daemon_installed()
     running = f"running (pid {pid})" if pid is not None else "stopped"
     return (
@@ -1663,6 +1680,12 @@ _SERVICES_WIZARD_COPY = (
     "picks up changes: `alpi daemon restart`."
 )
 
+_SERVICES_WIZARD_COPY_UMBREL = (
+    "Which services the Alpi daemon runs for THIS profile.\n"
+    "On Umbrel the container entrypoint manages the daemon itself;\n"
+    "these flags only decide what it activates here."
+)
+
 
 def _subsystems_wizard(h: Path, profile: str) -> None:
     """Per-profile subsystem toggles; daemon lifecycle lives in ``alpi daemon``."""
@@ -1673,13 +1696,21 @@ def _subsystems_wizard(h: Path, profile: str) -> None:
     while True:
         on_subsystems = svc.enabled_subsystems(h)
         running_pid = svc.daemon_running_pid(home._ROOT)
-        head = (
-            f"daemon: running · pid {running_pid}" if running_pid
-            else "daemon: stopped"
-        )
+        if _is_umbrel():
+            head = (
+                f"daemon: managed by Umbrel · pid {running_pid}" if running_pid
+                else "daemon: managed by Umbrel"
+            )
+            copy = _SERVICES_WIZARD_COPY_UMBREL
+        else:
+            head = (
+                f"daemon: running · pid {running_pid}" if running_pid
+                else "daemon: stopped"
+            )
+            copy = _SERVICES_WIZARD_COPY
 
         ui.banner(ui.crumb("setup", "services"), subtitle=head, home=h)
-        ui.dim(_SERVICES_WIZARD_COPY)
+        ui.dim(copy)
         ui._console.print("")
 
         items: list = [
@@ -1700,7 +1731,7 @@ def _subsystems_wizard(h: Path, profile: str) -> None:
                 "control plane for desktop / mobile clients",
             ))
         items.append(ui.Heading("ALP"))
-        items.append(("TCP port (inter-machine)", "tcp",
+        items.append(("Peer TCP listener", "tcp",
                       _alp_tcp_label(h)))
 
         choice = ui.menu("", items, home=h, close="Back")
@@ -1750,7 +1781,7 @@ def _alp_tcp_label(h: Path) -> str:
 
 
 def _alp_tcp_port_setup(h: Path) -> None:
-    """Configure the optional TCP listener for inter-machine ALP links."""
+    """Configure the optional TCP listener used by remote ALP peers."""
     from alpi import config as cfg_mod
     from alpi import ui
 
@@ -1760,11 +1791,11 @@ def _alp_tcp_port_setup(h: Path) -> None:
 
     ui.banner(
         ui.crumb("setup", "alp-tcp", "tcp"),
-        subtitle="Noise_XK over TCP — inter-machine peers",
+        subtitle="Noise_XK over TCP — remote Alpi peers",
         home=h,
     )
     ui.dim(
-        "Sets a TCP port so other machines can dial this profile (Noise_XK,\n"
+        "Sets the TCP listener used by remote Alpi peers (Noise_XK,\n"
         "peers.yaml-pinned only). Host 127.0.0.1 = loopback; set a Tailscale\n"
         "/ VPN IP for remote peers. Avoid 0.0.0.0 without a VPN in front.\n"
         "Empty port = disable TCP, keep the Unix socket only."
@@ -1826,9 +1857,9 @@ def _alp_tcp_port_setup(h: Path) -> None:
 
 def _devices_status(h: Path) -> str:
     from alpi.host import devices as devices_mod
-    from alpi.host.network import detect_bind_ip
+    from alpi.host.network import resolve_host_endpoint
 
-    if detect_bind_ip() is None:
+    if resolve_host_endpoint(h) is None:
         return "no network"
     n = len(devices_mod.load())
     return f"{n} paired" if n else "ready"
@@ -1837,10 +1868,10 @@ def _devices_status(h: Path) -> str:
 def _devices_setup(h: Path) -> None:
     from alpi import ui
     from alpi.host import devices as devices_mod
-    from alpi.host.network import detect_bind_ip
+    from alpi.host.network import resolve_host_endpoint
 
     while True:
-        bind = detect_bind_ip()
+        endpoint = resolve_host_endpoint(h)
         items: list = [
             ui.Heading("Paired devices"),
         ]
@@ -1856,32 +1887,49 @@ def _devices_setup(h: Path) -> None:
         items.append(None)
         items.append(("+ Add device", "add",
                       "generate a new pairing QR"))
-        if bind is None:
-            items.append(("Network", "noop",
-                          "neither Tailscale nor LAN detected"))
+        items.append(("Network", "network",
+                      _network_row_status(h, endpoint)))
 
         choice = ui.menu(
             ui.crumb("setup", "devices"),
             items,
-            subtitle=_devices_subtitle(bind),
+            subtitle=_devices_subtitle(h, endpoint),
             home=h,
             close="Done",
         )
         if choice is None or choice == "noop":
             return
         if choice == "add":
-            _device_add(h, bind)
+            _device_add(h, endpoint)
+            continue
+        if choice == "network":
+            _devices_network_setup(h)
             continue
         if isinstance(choice, tuple) and choice[0] == "device":
             _device_detail(choice[1])
             continue
 
 
-def _devices_subtitle(bind) -> str:
-    if bind is None:
+def _devices_subtitle(h: Path, endpoint) -> str:
+    from alpi.host.network import resolve_host_tcp_port
+
+    if endpoint is None:
+        if _is_umbrel():
+            return "remote access not configured — set a LAN or Tailscale address"
         return "no network — install Tailscale or connect to a LAN"
-    ip, scope = bind
-    return f"{scope} · {ip}"
+    host, scope = endpoint
+    return f"{scope} · {host}:{resolve_host_tcp_port(h)}"
+
+
+def _network_row_status(h: Path, endpoint) -> str:
+    from alpi.host.network import resolve_host_tcp_port
+
+    if endpoint is None:
+        if _is_umbrel():
+            return "set a LAN hostname or Tailscale address"
+        return "auto-detect Tailscale or LAN"
+    host, _scope = endpoint
+    return f"{host}:{resolve_host_tcp_port(h)}"
 
 
 def _format_last_seen(epoch) -> str:
@@ -1898,33 +1946,39 @@ def _format_last_seen(epoch) -> str:
     return f"{delta // 86400}d ago"
 
 
-def _device_add(h: Path, bind) -> None:
+def _device_add(h: Path, endpoint) -> None:
     from alpi import ui
     from alpi.host import devices as devices_mod
-    from alpi.host.server import DEFAULT_TCP_PORT
+    from alpi.host.network import resolve_host_tcp_port
 
-    if bind is None:
+    if endpoint is None:
         ui.banner(
             ui.crumb("setup", "devices", "add"),
             subtitle="cannot pair — no network",
             home=h,
         )
-        ui.fail(
-            "Neither Tailscale nor a LAN address detected.\n"
-            "Install Tailscale (https://tailscale.com/download) or connect to Wi-Fi."
-        )
+        if _is_umbrel():
+            ui.fail(
+                "Set the advertised host first.\n"
+                "Use Umbrel's `.local` hostname for LAN access, or enter a\n"
+                "Tailscale IP / MagicDNS name for remote pairing."
+            )
+        else:
+            ui.fail(
+                "Neither Tailscale nor a LAN address detected.\n"
+                "Install Tailscale (https://tailscale.com/download) or connect to Wi-Fi."
+            )
         ui.press_enter()
         return
 
-    ip, scope = bind
-    cfg = config.load(h)
-    port = int((cfg.host or {}).get("tcp_port") or DEFAULT_TCP_PORT)
+    host, scope = endpoint
+    port = resolve_host_tcp_port(h)
 
     # Banner before the prompt so the input doesn't look glued to the
     # previous menu — visual reset of the screen.
     ui.banner(
         ui.crumb("setup", "devices", "add"),
-        subtitle=f"pair a new client · {scope} · {ip}:{port}",
+        subtitle=f"pair a new client · {scope} · {host}:{port}",
         home=h,
     )
     ui._console.print("")
@@ -1945,7 +1999,7 @@ def _device_add(h: Path, bind) -> None:
 
     payload = {
         "v": 2,
-        "i": ip,
+        "i": host,
         "p": port,
         "n": socket.gethostname(),
         "t": row["token"],
@@ -1953,7 +2007,7 @@ def _device_add(h: Path, bind) -> None:
 
     ui.banner(
         ui.crumb("setup", "devices", "add", row["label"]),
-        subtitle=f"scan once · {scope} · {ip}:{port}",
+        subtitle=f"scan once · {scope} · {host}:{port}",
         home=h,
     )
     ui._console.print("")
@@ -1975,6 +2029,69 @@ def _device_add(h: Path, bind) -> None:
         "If the QR is exposed to anyone else, revoke and generate a new one."
     )
     ui.press_enter()
+
+
+def _devices_network_setup(h: Path) -> None:
+    from alpi import config as cfg_mod
+    from alpi import ui
+    from alpi.host.network import detect_bind_ip
+
+    cfg = cfg_mod.load(h)
+    host_cfg = dict(cfg.host or {})
+    current = str(host_cfg.get("tcp_host") or "").strip()
+    detected = detect_bind_ip()
+    auto_host = (
+        str(os.environ.get("DEVICE_DOMAIN_NAME") or "").strip()
+        if _is_umbrel()
+        else (detected[0] if detected else "")
+    )
+    default = current or auto_host
+    port = int(host_cfg.get("tcp_port") or 49200)
+
+    subtitle = (
+        "how mobile clients reach this Umbrel"
+        if _is_umbrel()
+        else "how mobile and desktop clients reach this machine"
+    )
+    ui.banner(
+        ui.crumb("setup", "devices", "network"),
+        subtitle=subtitle,
+        home=h,
+    )
+    if _is_umbrel():
+        ui.dim(
+            "The mobile companion talks to the host API on TCP/WS.\n"
+            "Inside Umbrel, Alpi cannot see the host Tailscale interface directly,\n"
+            "so you set the address clients should dial here.\n"
+            "Use `umbrel.local` for LAN access, or a 100.x Tailscale IP / MagicDNS name\n"
+            f"for remote pairing. Port {port} is published by the Umbrel package."
+        )
+    else:
+        ui.dim(
+            "Clients talk to the host API on TCP/WS.\n"
+            "Leave this blank to auto-detect Tailscale first, then LAN.\n"
+            "Set a specific host only if you want to advertise a stable hostname,\n"
+            "MagicDNS name, VPN IP, or other explicit endpoint."
+        )
+    ui._console.print("")
+
+    host = ui.text(
+        "Advertised host [blank = auto]:",
+        default=default,
+    )
+    if host is None:
+        return ui.cancelled()
+    host = (host or "").strip()
+
+    if host:
+        host_cfg["tcp_host"] = host
+    else:
+        host_cfg.pop("tcp_host", None)
+    cfg.host = host_cfg
+    cfg_mod.save(cfg)
+    msg = _restart_daemon_for_apply(home._ROOT)
+    target = host or auto_host or "auto-detect"
+    ui.ok_and_wait(f"remote access target: {target}:{port}{msg}")
 
 
 def _device_detail(token_id: str) -> None:

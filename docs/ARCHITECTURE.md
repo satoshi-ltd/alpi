@@ -438,6 +438,14 @@ Two transports, one dispatcher:
    token over plaintext on any sniffed path. **Per-device pairing
    token required** in every request's `params.auth_token`.
 
+Bind and advertised endpoint are intentionally separate concerns.
+The daemon chooses where the host-plane server listens; `Devices →
+Network` chooses what the paired client should dial. On a normal Mac or
+Linux install those often collapse to the same Tailscale or LAN address.
+On Umbrel they do not: the daemon can bind inside Docker while the QR
+advertises `umbrel.local`, a Tailscale `100.x` address, or a MagicDNS
+hostname that resolves to the host machine outside the container.
+
 Wire shape (both transports):
 
 ```
@@ -451,6 +459,11 @@ migration window for setups that predate v0.5.
 The daemon writes either a single response line or, for streaming
 verbs (`host.chat.send`, `host.events.subscribe`), multiple frames
 followed by a `done` frame and connection close.
+
+This is distinct from ALP peer transport. `Devices` / host-plane remote
+access configures how paired desktop and mobile clients reach their own
+daemon (`host.*`). `Peer TCP listener` configures the optional ALP TCP
+listener other alpis use for `link.*` and `workgroup.*`.
 
 #### Pairing tokens (`alpi/host/devices.py`)
 

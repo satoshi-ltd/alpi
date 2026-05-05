@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.4.3 — 2026-05-06 — Umbrel app + companion endpoint cleanup
+
+Closes the first Umbrel-ready deployment of alpi and tightens the
+device-access story around the host plane. Umbrel now ships as a real
+app package running the existing TUI behind Umbrel's app proxy, the
+daemon/setup UX stops pretending systemd or launchd exist inside the
+container, and `Devices` gains an explicit network override so mobile
+and desktop companions can advertise a stable endpoint instead of
+depending entirely on autodetection.
+
+- `deploy/umbrel/alpi/` — new Umbrel app package: Docker image, app manifest, compose file, entrypoint, and store-facing docs. The package persists the profile under `/data/.alpi`, serves the Textual TUI via `ttyd` on port `8080`, and publishes the host-plane WebSocket on `49200` for paired clients.
+- `alpi/cli.py` — `alpi setup` is Umbrel-aware. The daemon lifecycle screen is hidden there, services read as `managed by Umbrel`, `Devices -> Network` lets the user pin an advertised host, and the old ambiguous ALP label `TCP port (inter-machine)` becomes `Peer TCP listener`.
+- `alpi/host/network.py`, `alpi/service.py`, `alpi/host/server.py` — host-plane remote access now separates the address the server binds from the address the client QR advertises. Umbrel binds the host API inside the container and can advertise `umbrel.local`, a Tailscale IP, or a MagicDNS hostname without relying on container-local network detection.
+- `alpi/doctor.py` — daemon health checks report Umbrel-managed state instead of implying a missing system service.
+- `alpi/host/device_state.py` — host config coercion now accepts `host.tcp_port` edits through the same device-facing config surface as `alp.tcp_port`.
+- Docs — Umbrel operations, persistence, and submission flow land under `deploy/umbrel/`; deployments docs now spell out the split between the host-plane companion endpoint (`host.*`) and the ALP peer listener (`link.*`, `workgroup.*`).
+
 ## v0.4.2 — 2026-05-05 — workgroup poller correctness + protocol-aligned language
 
 Tightens workgroup dispatch so peers in the same daemon stop blocking

@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import ipaddress
+import os
 import shutil
 import subprocess
+from pathlib import Path
 
 from alpi.host.tailscale import detect_tailscale_ip
+from alpi.host.server import DEFAULT_TCP_PORT
 
 
 _PRIVATE_RANGES = (
@@ -22,6 +25,52 @@ def detect_bind_ip() -> tuple[str, str] | None:
     lan = _detect_lan_ip()
     if lan:
         return (lan, "lan")
+    return None
+
+
+def resolve_host_endpoint(home: Path) -> tuple[str, str] | None:
+    configured = _configured_host(home)
+    if configured:
+        return (configured, "configured")
+    if os.environ.get("ALPI_PLATFORM") == "umbrel":
+        hinted = _umbrel_host_hint()
+        if hinted:
+            return (hinted, "umbrel")
+        return None
+    return detect_bind_ip()
+
+
+def resolve_host_tcp_bind(home: Path) -> tuple[str, int] | None:
+    port = resolve_host_tcp_port(home)
+    if os.environ.get("ALPI_PLATFORM") == "umbrel":
+        return ("0.0.0.0", port)
+    detected = detect_bind_ip()
+    if detected is None:
+        return None
+    ip, _scope = detected
+    return (ip, port)
+
+
+def resolve_host_tcp_port(home: Path) -> int:
+    from alpi import config as cfg_mod
+
+    cfg = cfg_mod.load(home)
+    return int((cfg.host or {}).get("tcp_port") or DEFAULT_TCP_PORT)
+
+
+def _configured_host(home: Path) -> str | None:
+    from alpi import config as cfg_mod
+
+    cfg = cfg_mod.load(home)
+    host = str((cfg.host or {}).get("tcp_host") or "").strip()
+    return host or None
+
+
+def _umbrel_host_hint() -> str | None:
+    for key in ("ALPI_HOST_ADVERTISE_HOST", "DEVICE_DOMAIN_NAME", "DEVICE_HOSTNAME"):
+        value = str(os.environ.get(key) or "").strip()
+        if value:
+            return value
     return None
 
 
@@ -58,4 +107,9 @@ def _is_private_lan(addr: str) -> bool:
     return any(ip in net for net in _PRIVATE_RANGES)
 
 
-__all__ = ["detect_bind_ip"]
+__all__ = [
+    "detect_bind_ip",
+    "resolve_host_endpoint",
+    "resolve_host_tcp_bind",
+    "resolve_host_tcp_port",
+]

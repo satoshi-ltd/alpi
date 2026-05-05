@@ -23,7 +23,7 @@ gateway, budget, service, and "when does a setting take effect?"
 | `schedule` | Scheduler/service settings. |
 | `service` | Local daemon toggles and host options. |
 | `alp` | ALP peer/workgroup configuration. |
-| `host` | Host-plane TCP/WS port (`host.tcp_port`, default 49200). Bind auto-detected (Tailscale → LAN). |
+| `host` | Host-plane companion endpoint (`host.tcp_port`, `host.tcp_host`). Empty `host.tcp_host` = auto-detect Tailscale then LAN; explicit value advertises a stable host to paired desktop/mobile clients. |
 
 ## Model examples
 
@@ -89,3 +89,4 @@ Do not store secret values inside `SKILL.md`, docs, or scripts.
 - "Why does service ignore my config edit?" -> restart the profile's
   service.
 - "Can work and personal use different models?" -> yes, use profiles.
+- "What's the difference between `Devices -> Network` and `Peer TCP listener`?" -> `Devices` configures the host-plane companion endpoint (`host.*`); `Peer TCP listener` configures ALP peer traffic (`link.*`, `workgroup.*`).

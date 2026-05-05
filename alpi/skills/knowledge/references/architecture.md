@@ -73,11 +73,17 @@ profile files directly.
 Desktop/mobile clients use `host.*` verbs in `alpi/host/`. Two
 transports: Unix socket (`~/.alpi/host/host.sock`, local, no token)
 and WebSocket on Tailscale or RFC1918 LAN (per-device token in
-`params.auth_token`). Bind never goes to `0.0.0.0`/public. Tokens at
-`~/.alpi/host/devices.yaml`, generated from `alpi setup → Devices`.
+`params.auth_token`). Bind never goes to `0.0.0.0`/public on normal
+hosts. `Devices -> Network` controls the advertised companion endpoint;
+it can differ from the bind address (notably on Umbrel, where the
+daemon binds inside Docker but the QR advertises the host's external
+name or Tailscale IP). Tokens at `~/.alpi/host/devices.yaml`,
+generated from `alpi setup → Devices`.
 
 Clients must not read `~/.alpi/` directly or spawn `alpi` as a
-subprocess. ALP (`alpi/alp/`) is separate (peer-to-peer).
+subprocess. ALP (`alpi/alp/`) is separate (peer-to-peer). `Peer TCP
+listener` configures ALP's optional TCP listener; it is not the same
+as the host-plane companion endpoint.
 
 ## Security boundary
 

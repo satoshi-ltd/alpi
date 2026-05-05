@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from unittest.mock import patch
 
+from alpi import config as cfg_mod
 from alpi.host import network
 
 
@@ -27,6 +29,42 @@ def test_falls_back_to_lan() -> None:
         ip, scope = network.detect_bind_ip()
         assert ip == "192.168.1.10"
         assert scope == "lan"
+
+
+def test_resolve_host_endpoint_prefers_configured_host(tmp_path: Path) -> None:
+    home = tmp_path / "h"
+    home.mkdir()
+    cfg = cfg_mod.Config(home=home, model="")
+    cfg.host = {"tcp_host": "100.123.17.103"}
+    cfg_mod.save(cfg)
+
+    with patch("alpi.host.network.detect_bind_ip", return_value=("192.168.1.10", "lan")):
+        endpoint = network.resolve_host_endpoint(home)
+
+    assert endpoint == ("100.123.17.103", "configured")
+
+
+def test_resolve_host_endpoint_uses_umbrel_domain_hint(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    home = tmp_path / "h"
+    home.mkdir()
+    cfg_mod.save(cfg_mod.Config(home=home, model=""))
+    monkeypatch.setenv("ALPI_PLATFORM", "umbrel")
+    monkeypatch.setenv("DEVICE_DOMAIN_NAME", "umbrel.local")
+
+    assert network.resolve_host_endpoint(home) == ("umbrel.local", "umbrel")
+
+
+def test_resolve_host_tcp_bind_uses_unspecified_inside_umbrel(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    home = tmp_path / "h"
+    home.mkdir()
+    cfg_mod.save(cfg_mod.Config(home=home, model=""))
+    monkeypatch.setenv("ALPI_PLATFORM", "umbrel")
+
+    assert network.resolve_host_tcp_bind(home) == ("0.0.0.0", 49200)
 
 
 def test_lan_parser_extracts_private_address() -> None:

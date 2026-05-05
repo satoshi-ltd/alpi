@@ -112,6 +112,10 @@ opens the existing TUI through Umbrel's authenticated app proxy.
 - **Security boundary:** Umbrel authentication protects the terminal
   surface. The host Unix socket and raw profile files are not exposed
   to the browser.
+- **Remote access split:** `Devices` configures the host-plane endpoint
+  used by paired desktop / mobile clients (`host.*`, TCP/WS, default
+  `49200`). `Peer TCP listener` is separate: it enables ALP peer
+  traffic between alpis (`link.*`, `workgroup.*`, Noise_XK).
 - **Backup:** use the normal encrypted archive flow (`alpi backup
   create` / `alpi backup restore`) for portable profile moves; Umbrel
   can also back up the app volume.

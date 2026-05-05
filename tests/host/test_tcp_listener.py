@@ -133,6 +133,16 @@ def test_server_refuses_unsafe_bind(tmp_path: Path, addr: str) -> None:
         host_server.Server(home=home, tcp_bind=(addr, 49200))
 
 
+def test_server_allows_unspecified_bind_on_umbrel(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    monkeypatch.setenv("ALPI_PLATFORM", "umbrel")
+    home = tmp_path / "h"
+    home.mkdir()
+    srv = host_server.Server(home=home, tcp_bind=("0.0.0.0", 49200))
+    assert srv._tcp_bind == ("0.0.0.0", 49200)
+
+
 @pytest.mark.parametrize(
     "addr",
     ["100.64.0.1", "100.114.140.25", "192.168.1.10", "10.0.0.5", "172.16.5.5"],

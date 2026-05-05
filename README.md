@@ -30,8 +30,9 @@ The design goal is sovereignty:
   Web and email content is treated as hostile data. Skills and MCPs
   are scanned before install.
 - **Operational UX.** One setup wizard, a live `doctor`, a single
-  per-profile `alpi service` orchestrator (gateway + scheduler + ALP
-  listener on one asyncio loop), merged logs, and cleanup.
+  per-machine `alpi daemon` supervisor for every profile (gateway +
+  scheduler + ALP + workgroups + host plane), merged logs, backup,
+  and cleanup.
 - **Private coordination.** ALP.1 links local profiles, ALP.2 links
   machines over Noise_XK, and ALP.3 adds shared workgroups. Peers are
   pinned by Ed25519 identity and governed by fail-closed capabilities.
@@ -48,8 +49,10 @@ The current release ships the full local-to-network shape:
 
 - Textual TUI with streaming replies, slash commands, live tool cards,
   interrupt, session resume, model switching, and cost/token display.
+- Umbrel app package for an always-on home-server deployment through
+  the existing TUI, with persistent profile storage under `/data/.alpi`.
 - Telegram, IMAP, and Gmail gateways hosted by the unified per-profile
-  service.
+  daemon.
 - Inline-learning memory: `USER.md`, `MEMORY.md`, and `AGENT.md`.
 - Live skills under `~/.alpi/skills/<category>/<name>/`, scanner-gated
   and auto-injected into the system prompt.
@@ -65,8 +68,11 @@ The current release ships the full local-to-network shape:
   and rate-limit enforcement.
 - ALP.3: hub-anchored shared workgroups for multiple alpis and optional
   human participants.
-- `alpi doctor`, `alpi logs`, one launchd / systemd unit per profile,
-  backup-friendly file layout, and security audit logs.
+- Host-plane access for paired desktop / mobile clients over Unix
+  socket locally and WebSocket remotely, with per-device pairing
+  tokens.
+- `alpi doctor`, `alpi logs`, one launchd / systemd user unit per
+  machine, backup-friendly file layout, and security audit logs.
 
 ## Quickstart
 
@@ -92,7 +98,7 @@ alpi -c                      # resume last session
 alpi -p work                 # use named profile
 alpi chat --once "status?"   # one-shot stdout turn
 
-alpi setup                   # model, gateways, MCPs, sandbox, service
+alpi setup                   # model, gateways, MCPs, sandbox, daemon
 alpi doctor                  # live health checks
 alpi update                  # check PyPI and upgrade alpi-agent
 alpi logs                    # merged profile logs
@@ -101,7 +107,7 @@ alpi profile list
 alpi profile create work
 alpi profile remove work
 
-alpi service start|stop|restart|status   # unified per-profile orchestrator
+alpi daemon start|stop|restart|status    # unified per-machine supervisor
 alpi schedule run-once|fire <job-id>     # operational scheduler verbs
 
 alpi peers key
@@ -145,6 +151,12 @@ Peers pin pubkeys out of band and grant explicit capabilities such as
 profiles over Unix sockets. ALP.2 handles inter-machine links with
 Noise_XK over TCP plus budgets and rate limits. ALP.3 adds
 hub-anchored workgroups.
+
+**Host plane** is separate from ALP. It is the device-facing control
+surface used by paired desktop and mobile clients to talk to their own
+daemon (`host.*` over a local Unix socket or remote WebSocket). `Devices`
+configures that companion endpoint; `Peer TCP listener` configures ALP
+peer traffic.
 
 ## Security posture
 

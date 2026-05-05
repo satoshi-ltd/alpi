@@ -450,12 +450,25 @@ detected; mobile / remote desktop use this path).
 
 | Key | Default | Effect |
 |---|---|---|
-| `host.tcp_port` | `49200` | WebSocket port for the remote transport. Bind address is auto-detected (Tailscale CGNAT first, else first private LAN). The listener never binds to `0.0.0.0` or a public IP — pairing tokens would leak in plaintext. |
+| `host.tcp_port` | `49200` | WebSocket port for the remote transport. |
+| `host.tcp_host` | `""` | Optional advertised host for `Devices`. Empty = auto-detect Tailscale CGNAT first, then first private LAN address. Set explicitly when clients should dial a stable hostname, MagicDNS name, VPN IP, or Umbrel hostname. |
 
 ```yaml
 host:
   tcp_port: 49200
+  tcp_host: ""
 ```
+
+`host.tcp_host` controls the **companion endpoint** shown in `alpi setup
+→ Devices → Network` and embedded in pairing QRs. It does not configure
+ALP peer transport. `Peer TCP listener` under `alpi setup → Services`
+controls the separate `alp.tcp_host` / `alp.tcp_port` listener used by
+other alpis (`link.*`, `workgroup.*`).
+
+On regular macOS/Linux installs, leaving `host.tcp_host` empty keeps the
+old auto mode: Tailscale first, then LAN. On Umbrel the daemon may bind
+inside Docker while advertising a different host externally, such as
+`umbrel.local`, a `100.x` Tailscale IP, or a MagicDNS hostname.
 
 Pairing tokens for the WS transport live at
 ``~/.alpi/host/devices.yaml`` (mode 0600). Manage them through

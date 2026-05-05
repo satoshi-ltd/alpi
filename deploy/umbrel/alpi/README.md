@@ -21,6 +21,11 @@ browser surface, so the package serves the existing Alpi TUI through
   available.
 - `ALPI_PLATFORM=umbrel` tells interactive commands that the daemon is
   already managed by the container entrypoint, not by systemd.
+- Host API WebSocket traffic for paired desktop / mobile clients is
+  published on TCP port `49200`.
+- By default the pairing QR advertises Umbrel's `.local` hostname. For
+  Tailscale or MagicDNS access, open `alpi setup` → `Devices` →
+  `Network` and set the advertised host explicitly.
 - The host Unix socket is not exposed to the browser or to Umbrel.
 
 The Docker image downloads the official `ttyd` release binary for
@@ -31,7 +36,7 @@ The Docker image downloads the official `ttyd` release binary for
 From the repository root:
 
 ```bash
-docker build -t satoshiltd/alpi-umbrel:0.4.2 -f deploy/umbrel/alpi/Dockerfile .
+docker build -t satoshiltd/alpi-umbrel:0.4.3 -f deploy/umbrel/alpi/Dockerfile .
 ```
 
 ## Run locally
@@ -39,8 +44,9 @@ docker build -t satoshiltd/alpi-umbrel:0.4.2 -f deploy/umbrel/alpi/Dockerfile .
 ```bash
 docker run --rm -it \
   -p 8080:8080 \
+  -p 49200:49200 \
   -v alpi-umbrel-data:/data \
-  satoshiltd/alpi-umbrel:0.4.2
+  satoshiltd/alpi-umbrel:0.4.3
 ```
 
 Open `http://localhost:8080` to use the TUI.

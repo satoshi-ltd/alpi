@@ -400,8 +400,20 @@ def _check_services(home: Path, profile: str) -> list[Check]:
     installed = svc.daemon_installed()
     pid = svc.daemon_running_pid(home_mod._ROOT)
     bin_mtime = _alpi_binary_mtime()
+    is_umbrel = os.environ.get("ALPI_PLATFORM") == "umbrel"
 
-    if installed and pid:
+    if is_umbrel:
+        if pid:
+            out.append(Check(
+                "Services", "Daemon", "ok",
+                f"managed by Umbrel (pid {pid})",
+            ))
+        else:
+            out.append(Check(
+                "Services", "Daemon", "warn",
+                "managed by Umbrel but no live pid",
+            ))
+    elif installed and pid:
         if _is_binary_newer_than_process(bin_mtime, pid):
             out.append(Check(
                 "Services", "Daemon", "warn",
