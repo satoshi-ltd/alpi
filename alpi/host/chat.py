@@ -32,6 +32,7 @@ async def _data_chat_send(
     text = str(params.get("text") or "").strip()
     request_id = str(params.get("request_id") or "")
     session_id = params.get("session_id")
+    rewrite_from_turn = params.get("rewrite_from_turn")
     model_override = params.get("model")
     if not text or not request_id:
         await send_frame({
@@ -62,6 +63,8 @@ async def _data_chat_send(
         from alpi.host.handlers import _check_id
         _check_id(session_id, "session_id")
         _continue_specific_session(engine, home, session_id)
+        if rewrite_from_turn is not None:
+            _truncate_hydrated_session(engine, rewrite_from_turn)
 
     with _active_lock:
         _active[request_id] = engine
@@ -213,6 +216,36 @@ def _truncate(text: str, cap: int) -> str:
     if len(text) <= cap:
         return text
     return text[: cap - 1] + "…"
+
+
+def _truncate_hydrated_session(engine, keep_turns: Any) -> None:  # noqa: ANN401
+    try:
+        keep = int(keep_turns)
+    except (TypeError, ValueError):
+        return
+    keep = max(0, keep)
+    turns = list(getattr(engine.session, "turns", []) or [])
+    kept = turns[:keep]
+    engine.session.turns = kept
+
+    messages: list[dict[str, Any]] = [{
+        "role": "system",
+        "content": (
+            "NOTE: the conversation below is a previous session that was "
+            "resumed. You already have this context — do not call "
+            "`session_search` to recover it. Refer to the messages directly."
+        ),
+    }]
+    for turn in kept:
+        if getattr(turn, "user", ""):
+            messages.append({"role": "user", "content": turn.user})
+        if getattr(turn, "assistant", ""):
+            messages.append({"role": "assistant", "content": turn.assistant})
+    engine.session.messages = messages
+    engine.session.input_tokens = 0
+    engine.session.output_tokens = 0
+    engine.session.cost_usd = 0.0
+    engine.session.last_ctx_tokens = 0
 
 
 __all__ = ["register"]

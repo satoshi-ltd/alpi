@@ -66,6 +66,107 @@ def _patch_engine(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
+async def test_data_chat_send_rewrite_truncates_hydrated_session(
+    monkeypatch, short_tmp: Path,
+) -> None:
+    home = short_tmp / "h"
+    home.mkdir()
+    load_or_generate(home)
+
+    seen = {}
+
+    class _RewriteEngine:
+        def __init__(self, *, home: Path, cfg) -> None:  # noqa: ANN001
+            self.home = home
+            self.session = SimpleNamespace(
+                id="rewrite-session",
+                subdir="sessions",
+                turns=[],
+                messages=[],
+                input_tokens=12,
+                output_tokens=8,
+                cost_usd=0.5,
+                last_ctx_tokens=77,
+            )
+
+        def run_turn(self, text: str, emit) -> None:  # noqa: ANN001
+            from alpi.engine import AgentEvent
+
+            seen["text"] = text
+            seen["turn_count"] = len(self.session.turns)
+            seen["users"] = [getattr(t, "user", "") for t in self.session.turns]
+            seen["messages"] = list(self.session.messages)
+            seen["input_tokens"] = self.session.input_tokens
+            emit(AgentEvent(kind="assistant_done", text=f"echo: {text}"))
+
+        def request_interrupt(self) -> None:
+            return None
+
+        def save_session(self) -> None:
+            return None
+
+    from alpi import config as cfg_mod
+    monkeypatch.setattr(cfg_mod, "load", lambda h: SimpleNamespace(model="x"))
+    import alpi.engine
+    monkeypatch.setattr(alpi.engine, "Engine", _RewriteEngine)
+    from alpi.host import chat as dc
+    monkeypatch.setattr(dc, "_resolve_home", lambda profile: home)
+
+    def _fake_continue(engine, _home, _session_id):  # noqa: ANN001
+        engine.session.turns = [
+            SimpleNamespace(user="first", assistant="one"),
+            SimpleNamespace(user="second", assistant="two"),
+            SimpleNamespace(user="third", assistant="three"),
+        ]
+        engine.session.messages = [
+            {"role": "system", "content": "note"},
+            {"role": "user", "content": "first"},
+            {"role": "assistant", "content": "one"},
+            {"role": "user", "content": "second"},
+            {"role": "assistant", "content": "two"},
+            {"role": "user", "content": "third"},
+            {"role": "assistant", "content": "three"},
+        ]
+        return True
+
+    import alpi.cli as cli_mod
+    monkeypatch.setattr(cli_mod, "_continue_specific_session", _fake_continue)
+
+    srv = host_server.Server(home=home)
+    data_handlers.register(srv)
+    dc.register(srv)
+    await srv.start()
+
+    try:
+        reader, writer = await asyncio.open_unix_connection(str(srv.socket_path()))
+        writer.write((json.dumps({
+            "id": "req-rw",
+            "method": "host.chat.send",
+            "params": {
+                "profile": "default",
+                "text": "rewrite me",
+                "request_id": "req-rw",
+                "session_id": "rewrite-session",
+                "rewrite_from_turn": 1,
+            },
+        }) + "\n").encode("utf-8"))
+        await writer.drain()
+
+        while await reader.readline():
+            pass
+        writer.close()
+        await writer.wait_closed()
+    finally:
+        await srv.stop()
+
+    assert seen["text"] == "rewrite me"
+    assert seen["turn_count"] == 1
+    assert seen["users"] == ["first"]
+    assert [m["role"] for m in seen["messages"]] == ["system", "user", "assistant"]
+    assert seen["input_tokens"] == 0
+
+
+@pytest.mark.asyncio
 async def test_data_chat_send_streams_events_in_order(
     monkeypatch, short_tmp: Path,
 ) -> None:

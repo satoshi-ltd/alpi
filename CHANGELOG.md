@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## v0.4.6 — 2026-05-06 — chat rewrite truncation over host plane
+
+- `alpi host` — `host.chat.send` accepts `rewrite_from_turn` when resuming an existing session. The hydrated session is truncated before the new turn runs, so desktop "rewrite from here" continues from the kept prefix instead of carrying discarded turns in memory/context.
+- `tests/host/test_chat.py` covers the resumed-session truncation path: kept turns/messages are trimmed to the requested prefix and usage counters are reset before the new turn runs.
+
 ## v0.4.5 — 2026-05-06 — schedule no-save + desktop hot-path cleanup
 
 - `alpi scheduler` — scheduled jobs now invoke `alpi chat --once --emit-events --no-save`. A schedule run still streams events to the scheduler for delivery, budget, and logs, but it no longer writes a local chat session. This keeps cron output out of TUI / desktop profile history.
