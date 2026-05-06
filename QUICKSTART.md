@@ -7,8 +7,8 @@ background service.
 
 For concepts behind any step, see [ARCHITECTURE.md](docs/ARCHITECTURE.md).
 For the security posture, see [SECURITY.md](docs/SECURITY.md).
-Why alpi is built the way it is: see the
-[Why section](README.md#why-alpi-is-built-like-this) in the README.
+Why alpi is built the way it is: see
+[README.md](README.md).
 
 <!-- alpi-demo -->
 
@@ -92,28 +92,26 @@ default behaviour without typing `-c` every time, enable
 
 ## 6. Connect a gateway (optional)
 
-If you want alpi to answer you on Telegram / IMAP / Gmail, run the
+If you want alpi to answer you on Telegram / IMAP / Gmail / Matrix, run the
 wizard again:
 
 ```bash
 alpi setup → Gateways
 ```
 
-Pick the channel, follow the prompts (the wizard knows where to
-point you for tokens and credentials), then install the unified
-background service so alpi answers 24/7:
+Pick the channel, follow the prompts, then make sure the unified
+daemon is running so alpi answers 24/7:
 
 ```bash
-alpi setup → Service → Install
+alpi daemon status
+alpi daemon start
 ```
 
-The single `alpi service` orchestrator hosts the gateway, the
-scheduler, and the ALP listener on one event loop — one PID, one
-log file, one launchd / systemd unit per profile. From now on
-alpi answers you over the channel 24/7 — on boot, on crash-
-restart, on every inbound. Messages from the gateway share per-
-chat session threads with your TUI, so a conversation started on
-Telegram can continue in the terminal.
+The single `alpi daemon` process supervises every profile on the
+machine. It hosts gateways, scheduler ticks, ALP listeners,
+workgroup pollers, and the host plane. Messages from the gateway
+share per-chat session threads with your TUI, so a conversation
+started on Telegram can continue in the terminal.
 
 ## 7. Add a second profile (optional)
 
@@ -133,12 +131,12 @@ the full model.
 ## 8. Link to other alpis (optional)
 
 If you plan to link profiles or machines with other alpis, the
-unified service already exposes the [Alpi Link Protocol](docs/ALP.md)
-listener — no separate install. Run the service if you haven't
-already, then exchange pubkeys with peers:
+daemon already exposes the [Alpi Link Protocol](docs/ALP.md)
+listener when the profile's ALP subsystem is enabled. Then exchange
+pubkeys with peers:
 
 ```bash
-alpi setup → Service → Install      # if not already running
+alpi daemon status
 alpi setup → ALP → Peers
 ```
 

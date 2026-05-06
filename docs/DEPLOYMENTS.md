@@ -116,8 +116,8 @@ opens the existing TUI through Umbrel's authenticated app proxy.
   used by paired desktop / mobile clients (`host.*`, TCP/WS, default
   `49200`). `Peer TCP listener` is separate: it enables ALP peer
   traffic between alpis (`link.*`, `workgroup.*`, Noise_XK).
-- **Backup:** use the normal encrypted archive flow (`alpi backup
-  create` / `alpi backup restore`) for portable profile moves; Umbrel
+- **Backup:** use the normal encrypted archive flow (`alpi backup`
+  / `alpi restore`) for portable profile moves; Umbrel
   can also back up the app volume.
 
 ## 3. One machine, many profiles

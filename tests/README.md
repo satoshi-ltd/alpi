@@ -1,6 +1,6 @@
 # alpi - tests
 
-Pytest-based. One command to run everything.
+Pytest-based. Fast, integration, and real-LLM layers.
 
 ## Layout
 
@@ -48,7 +48,8 @@ $PY -m pytest tests/core/test_memory.py::test_add_rejects_exact_duplicate -v
 
 ## Fixtures
 
-- **`tmp_home_no_env`** - fresh temp alpi home, no `.env` copied. Use for unit tests that must not talk to any LLM.
+- **`tmp_home`** - fresh temp alpi home, no `.env` copied. Default for unit tests.
+- **`tmp_home_no_env`** - alias of `tmp_home`, kept for older tests.
 - **`tmp_home_with_real_env`** - fresh temp alpi home with `~/.alpi/.env` copied and loaded. Use only for `--llm` tests.
 - **`llm_engine`** - real Engine fixture for `tests/llm`, parametrized across the manual LLM model matrix.
 - `_reset_session_search_state` runs automatically before each test to avoid state leaking.

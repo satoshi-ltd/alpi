@@ -57,8 +57,8 @@ Umbrel persists the profile under `${APP_DATA_DIR}/data/.alpi`.
 Inside the TUI or a container shell, use Alpi's encrypted archive flow:
 
 ```bash
-alpi backup create
-alpi backup restore <archive>
+alpi backup
+alpi restore <archive>
 ```
 
 The volume can also be backed up by Umbrel, but the encrypted archive is

@@ -13,7 +13,7 @@ local desktop/mobile host API.
 
 | Plane | Purpose |
 |---|---|
-| `host.*` | Local client-to-daemon API over `~/.alpi/host/host.sock`. Desktop/mobile should use this. |
+| `host.*` | Device client-to-daemon API over local Unix socket or paired WebSocket. Desktop/mobile should use this. |
 | `link.*`, `workgroup.*` | ALP peer-to-peer methods for trusted alpi instances. |
 
 ## Identity
@@ -76,7 +76,8 @@ bounded result rather than silently retrying expensive work.
 
 ## Common questions
 
-- "Should desktop use ALP?" -> no, use `host.*`.
+- "Should desktop/mobile use ALP?" -> no, use `host.*`; ALP is for
+  alpi-to-alpi peers.
 - "Can two profiles on one machine be separate peers?" -> yes, each
   profile has its own identity.
 - "How do I debug a peer?" -> check identity, peer list, transport

@@ -11,7 +11,8 @@ alpi is a local agent runtime:
 2. Run an LLM turn with tool schemas.
 3. Execute approved tools.
 4. Persist session/log/budget state.
-5. Optionally run as a service for gateways and schedules.
+5. Optionally run under the daemon for gateways, schedules, workgroups,
+   and host verbs.
 
 ## Important directories
 
@@ -25,7 +26,7 @@ alpi is a local agent runtime:
 | `alpi/skills/` | Bundled skills packaged with alpi. |
 | `alpi/memory.py` | Memory file management. |
 | `alpi/tui/` | Terminal UI. |
-| `alpi/gateway/` | Telegram/email inbound gateways. |
+| `alpi/gateway/` | Telegram/IMAP/Gmail/Matrix inbound gateways. |
 | `alpi/scheduler/` | Scheduled jobs. |
 | `alpi/service.py` | Background daemon/service management. |
 | `alpi/alp/` | Alpi Link Protocol. |
@@ -63,22 +64,25 @@ profile files directly.
 
 ## Daemon and gateways
 
-- `alpi service start` runs the profile service.
+- `alpi daemon ...` manages the per-machine daemon.
 - Gateways receive inbound messages and hand them to the engine.
 - Scheduler jobs also run through the agent loop.
-- Run one service per profile.
+- One daemon supervises every profile on the machine.
 
 ## Host/API boundary
 
 Desktop/mobile clients use `host.*` verbs in `alpi/host/`. Two
 transports: Unix socket (`~/.alpi/host/host.sock`, local, no token)
 and WebSocket on Tailscale or RFC1918 LAN (per-device token in
-`params.auth_token`). Bind never goes to `0.0.0.0`/public on normal
-hosts. `Devices -> Network` controls the advertised companion endpoint;
-it can differ from the bind address (notably on Umbrel, where the
-daemon binds inside Docker but the QR advertises the host's external
-name or Tailscale IP). Tokens at `~/.alpi/host/devices.yaml`,
-generated from `alpi setup → Devices`.
+`params.auth_token`). Desktop should support multiple host-plane
+connections: local socket plus paired remote daemons. Bind never goes
+to `0.0.0.0`/public on normal hosts. `Devices -> Network` controls the
+advertised companion endpoint; it can differ from the bind address
+(notably on Umbrel, where the daemon binds inside Docker but the QR
+advertises the host's external name or Tailscale IP). Tokens at
+`~/.alpi/host/devices.yaml`, generated from `alpi setup → Devices`.
+The host surface includes chat, sessions, workgroups, pairing-token
+management, probes, schedule verbs, and daemon restart.
 
 Clients must not read `~/.alpi/` directly or spawn `alpi` as a
 subprocess. ALP (`alpi/alp/`) is separate (peer-to-peer). `Peer TCP

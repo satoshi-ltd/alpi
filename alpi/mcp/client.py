@@ -237,12 +237,67 @@ _SAFE_ENV_KEYS = (
 )
 
 
+def _augmented_path() -> str:
+    """PATH the daemon should pass to MCP subprocesses.
+
+    launchd / systemd give the daemon a minimal PATH (``/usr/bin:/bin:…``)
+    that misses where users install Node / Python / Rust toolchains. MCP
+    servers are typically spawned via ``npx``, ``uvx``, ``python`` —
+    so without this augmentation, ``mcp: <name> failed to start: command
+    not found`` is the common failure when alpi runs as a launchd-started
+    daemon (desktop client path) but works fine when alpi runs from the
+    user's shell (TUI path).
+
+    Prepends user-tool locations that actually exist on disk; preserves
+    the inherited PATH after them so existing entries still win on
+    duplicate names.
+    """
+    import glob
+    extras: list[str] = []
+
+    # Node version managers — nvm publishes per-version bins; volta a single one.
+    for nvm_bin in sorted(
+        glob.glob(os.path.expanduser("~/.nvm/versions/node/*/bin")),
+        reverse=True,
+    ):
+        if os.path.isdir(nvm_bin):
+            extras.append(nvm_bin)
+    volta = os.path.expanduser("~/.volta/bin")
+    if os.path.isdir(volta):
+        extras.append(volta)
+
+    # System package managers.
+    for path in (
+        "/opt/homebrew/bin",   # mac arm
+        "/opt/homebrew/sbin",
+        "/usr/local/bin",      # mac intel + generic
+        "/usr/local/sbin",
+        "/snap/bin",           # linux snap
+    ):
+        if os.path.isdir(path):
+            extras.append(path)
+
+    # User-local tool stores (uv, pipx, cargo, bun, deno).
+    for path in ("~/.local/bin", "~/.cargo/bin", "~/.bun/bin", "~/.deno/bin"):
+        expanded = os.path.expanduser(path)
+        if os.path.isdir(expanded):
+            extras.append(expanded)
+
+    inherited = os.environ.get("PATH", "")
+    if not extras:
+        return inherited
+    return ":".join([*extras, inherited]) if inherited else ":".join(extras)
+
+
 def _build_env(spec: dict[str, str]) -> dict[str, str]:
     parent = os.environ
     out: dict[str, str] = {}
     for key in _SAFE_ENV_KEYS:
         if key in parent:
             out[key] = parent[key]
+    # PATH gets augmented separately so launchd-started daemons can find
+    # `npx` / `uvx` / etc that MCP servers need to spawn.
+    out["PATH"] = _augmented_path()
     for key in parent:
         if key.startswith("LC_") and key not in out:
             out[key] = parent[key]

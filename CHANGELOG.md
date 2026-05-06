@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.4.4 — 2026-05-06 — daemon PATH for MCP spawns + docs alignment
+
+Fixes MCP servers crashing silently when reached through the daemon
+(desktop client path): the daemon's launchd / systemd PATH did not see
+user-installed Node / Python tools, so `npx`-based servers (e.g.
+`bitbucket-mcp`) failed with `command not found`. The TUI was unaffected
+— it inherits the user's shell PATH. Plus a docs sweep to match the
+per-machine daemon reality and a v0.5 roadmap pivot to "owned device
+access".
+
+- `alpi/mcp/client.py` — `_augmented_path()` prepends user-tool dirs (nvm, volta, homebrew, `/usr/local/bin`, snap, `~/.local/bin`, `~/.cargo/bin`, `~/.bun/bin`, `~/.deno/bin`) ahead of the inherited PATH; `_build_env` writes it into every MCP subprocess env. Tests in `tests/mcp/test_mcp.py` cover preservation, ordering, and skip-when-absent.
+- Docs — `alpi daemon status/start` replaces `alpi setup → Service → Install`, Matrix joins the gateway list, `alpi backup` / `alpi restore` are top-level. Knowledge skill mirrors re-synced.
+- `docs/ROADMAP.md` — v0.5 theme renamed to "owned device access"; new `AX-desktop-remote` work item for desktop multi-host host-plane connections (local Unix socket vs paired remote daemon over WebSocket).
+
 ## v0.4.3 — 2026-05-06 — Umbrel app + companion endpoint cleanup
 
 Closes the first Umbrel-ready deployment of alpi and tightens the

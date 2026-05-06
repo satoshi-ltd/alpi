@@ -7,16 +7,16 @@ different from a generic assistant?"
 
 alpi is a profile-based personal AI agent for the terminal, messaging
 gateways, and private peer-to-peer agent networks. It keeps persistent
-memory, can use tools, can build reusable skills, and can run as a
-local service for Telegram/IMAP/Gmail-style inbound messages.
+memory, can use tools, can build reusable skills, and can run through
+a per-machine daemon for Telegram/IMAP/Gmail/Matrix inbound messages.
 
 ## Positioning
 
 - Package: `alpi-agent`.
 - Import path, binary, and home directory: `alpi`, `alpi`, `~/.alpi`.
 - Goal: a lighter, tighter personal-agent system.
-- Main surfaces: TUI/CLI, gateway service, scheduler, ALP peer links,
-  tools, memory, and skills.
+- Main surfaces: TUI/CLI, daemon-hosted gateways/scheduler/host plane,
+  ALP peer links, tools, memory, and skills.
 
 ## Common commands
 
@@ -25,8 +25,8 @@ alpi setup
 alpi
 alpi -p work
 alpi doctor
-alpi service start
-alpi service stop
+alpi daemon status
+alpi daemon restart
 alpi update --check
 alpi --version
 ```
@@ -41,8 +41,8 @@ alpi --version
   `memory` tool.
 - **Skills**: reusable workflows stored under `~/.alpi/skills/...`;
   bundled skills use `@alpi/<name>`.
-- **Gateway**: background service that lets messages enter from
-  platforms such as Telegram or email.
+- **Gateway**: daemon-hosted inbound surface for Telegram, IMAP,
+  Gmail, and Matrix.
 - **Schedule**: recurring jobs that run through the same agent loop.
 - **ALP**: Alpi Link Protocol for trusted alpi-to-alpi communication.
 
@@ -55,8 +55,9 @@ alpi --version
   delegate tools.
 - Bundled `@alpi/knowledge` skill.
 - Optional OS sandbox for terminal/file isolation.
-- Gateway and scheduler service.
+- Gateway, scheduler, and host-plane daemon.
 - ALP identity and peer/workgroup features.
+- Desktop/mobile companion state behind `host.*`.
 
 ## Boundaries
 

@@ -1,6 +1,6 @@
 # Operations answer pack
 
-Use this for logs, services, upgrades, backup/restore, diagnostics,
+Use this for logs, daemon lifecycle, upgrades, backup/restore, diagnostics,
 monitoring, and failure modes.
 
 ## First diagnostic command
@@ -10,22 +10,18 @@ alpi doctor
 ```
 
 Use `doctor` before guessing. It checks common config, provider,
-workspace, service, and environment problems.
+workspace, daemon-backed features, and environment problems.
 
-## Service commands
-
-```bash
-alpi service start
-alpi service status
-alpi service restart
-alpi service stop
-```
-
-Run one service per profile. For named profiles:
+## Daemon commands
 
 ```bash
-alpi -p work service status
+alpi daemon start
+alpi daemon status
+alpi daemon restart
+alpi daemon stop
 ```
+
+One daemon supervises every profile on the machine.
 
 ## Logs
 
@@ -43,8 +39,8 @@ logs, not the global default by assumption.
 |---|---|
 | Wrong model | Active profile and `config.yaml` `model`. |
 | Tool sees wrong files | Configured workspace. |
-| Gateway silent | Service status, gateway config, logs. |
-| Scheduled job missing | Service/scheduler running for the right profile. |
+| Gateway silent | Daemon status, gateway config, logs. |
+| Scheduled job missing | Daemon/scheduler running for the right profile. |
 | Env var missing in script | Skill declares `requires_env`, `.env` has value, skill was opened. |
 | ALP peer fails | Peer identity, socket/TCP reachability, logs. |
 
@@ -53,6 +49,7 @@ logs, not the global default by assumption.
 ```bash
 alpi update --check
 uv tool upgrade alpi-agent
+alpi daemon restart
 alpi --version
 alpi doctor
 ```
@@ -92,11 +89,11 @@ alpi -p work restore work.alpi-backup --force      # into the `work` profile
 alpi restore X.alpi-backup --passphrase-stdin      # for scripts
 ```
 
-Stop the service for the target profile first, restore, then:
+Stop the daemon first, restore, then:
 
 ```bash
 alpi doctor
-alpi service restart
+alpi daemon restart
 ```
 
 Do not merge profiles blindly. ALP identity and gateway state are
@@ -104,6 +101,5 @@ profile-specific.
 
 ## When stop does not stop
 
-Check status/logs for the profile, then use OS process tooling only if
-the service manager cannot stop it cleanly. Avoid killing unrelated
-profiles.
+Check daemon status/logs first, then use OS process tooling only if
+the service manager cannot stop it cleanly.

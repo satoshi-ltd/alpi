@@ -51,8 +51,8 @@ The current release ships the full local-to-network shape:
   interrupt, session resume, model switching, and cost/token display.
 - Umbrel app package for an always-on home-server deployment through
   the existing TUI, with persistent profile storage under `/data/.alpi`.
-- Telegram, IMAP, and Gmail gateways hosted by the unified per-profile
-  daemon.
+- Telegram, IMAP, Gmail, and Matrix gateways hosted by the unified
+  per-machine daemon.
 - Inline-learning memory: `USER.md`, `MEMORY.md`, and `AGENT.md`.
 - Live skills under `~/.alpi/skills/<category>/<name>/`, scanner-gated
   and auto-injected into the system prompt.
@@ -203,6 +203,7 @@ See [docs/SECURITY.md](docs/SECURITY.md) for the full model.
 
 ```bash
 uv run --with pytest pytest -q
+uv run --with pytest pytest --integration -q
 uv run --with pytest pytest --llm
 ```
 

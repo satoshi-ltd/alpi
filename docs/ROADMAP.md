@@ -14,25 +14,27 @@ Legend: 🔵 backlog · 🟡 next up · ⏸ blocked · 🔴 gate.
 
 ## v0.5 cycle (active)
 
-**Theme: owned mobile access.** v0.4 shipped the secure local-device
+**Theme: owned device access.** v0.4 shipped the secure local-device
 foundation: desktop is a host-plane client, profile state sits behind
 `host.*`, and encrypted backup/restore makes a profile portable. v0.5
-should make the remote-access story obvious: a mobile companion reaches
-the user's own profile over ALP, brings the existing desktop workgroup
-experience to the phone, and ALP streaming makes remote turns feel
-live. Umbrel shipped in v0.4.3 as the first easy always-on home-server
-target; v0.5 should make the mobile side of that story feel native.
+should make the remote-access story obvious: desktop can switch between
+the local daemon and paired remote hosts, mobile uses the same host-plane
+pairing contract, and ALP streaming later makes peer/workgroup turns
+feel live. Umbrel shipped in v0.4.3 as the first easy always-on
+home-server target; v0.5 should make using that remote profile from
+desktop and mobile feel native.
 
 This is the cycle where gateways stop being the main mobile story.
 Telegram, IMAP, Gmail, and Matrix stay useful, but the project should
 not depend on third-party chat apps as the primary way to reach a
 personal agent.
 
-### Mobile + live access
+### Device + live access
 
 | ID | Item | Status |
 |---|---|---|
-| AX-mobile | Mobile companion (iOS / Android) — chat, status, peers, and workgroups from the user's own profile. Daemon side shipped in v0.4.1 (host plane on WebSocket + per-device pairing tokens, see CHANGELOG). Mobile app itself still pending. | 🟡 |
+| AX-desktop-remote | Desktop multi-host host-plane connections — switch between local Unix socket and paired remote daemons over WebSocket/Tailscale using per-device tokens. | 🟡 |
+| AX-mobile | Mobile companion (iOS / Android) — chat, status, peers, and workgroups from the user's own profile. Daemon side shipped in v0.4.1 (host plane on WebSocket + per-device pairing tokens, see CHANGELOG). Mobile preview exists; desktop remains the reference surface. | 🟡 |
 | ALP.4 | Streaming `link.ask` — incremental remote replies for peer calls, mobile, and workgroups | 🔵 |
 
 ### ALP depth
@@ -63,18 +65,59 @@ personal agent.
 |---|---|---|
 | BB | Enhanced rich text in UI — extend baseline link renderer to lists, code blocks, tables, headings | 🔵 |
 
+### AX-desktop-remote. Desktop multi-host host-plane connections
+
+Current desktop talks to the local daemon through
+`~/.alpi/host/host.sock`. That is correct for same-machine use, but it
+does not cover the real companion topology: laptop desktop app pointed
+at an Umbrel/home-server profile over Tailscale, or switching between
+several owned daemons without reconfiguring the app.
+
+**Target shape.** Desktop stores a list of host-plane connections:
+
+- **Local** — Unix socket at `~/.alpi/host/host.sock`, no token.
+- **Remote** — WebSocket endpoint (`host`, `port`) plus the
+  per-device `auth_token` returned by `host.devices.generate`.
+
+The active connection becomes the source for every `host.*` call. The
+UI exposes connection status, switch, add remote, forget remote, and
+auth-failed recovery. A remote desktop is not an ALP peer and does not
+write `peers.yaml`; it is a paired device client, same trust class as
+mobile.
+
+**Implementation slices:**
+
+1. Connection store in desktop app data: `kind`, `name`, endpoint,
+   token for remote, active/default marker, last status. Token storage
+   starts as a mode-0600 app-data file unless a small keychain
+   integration earns its dependency cost.
+2. `desktop/src-tauri/src/host_client.rs` gains a transport abstraction
+   for Unix socket vs WebSocket. `call` and `call_stream` keep the same
+   JSON-RPC semantics.
+3. Desktop settings/header gains a compact connection switcher and an
+   "Add remote" flow that accepts the QR JSON payload manually. Camera
+   scanning is unnecessary for the first desktop slice.
+4. `auth-failed` (`-32000`) marks the remote connection revoked/invalid
+   and asks for re-pair instead of retrying forever.
+
+**Why before ALP.4.** Mobile preview already uses `host.*` over a paired
+WebSocket, not ALP. Desktop is the more important product surface, so
+the host-plane connection model should be shared and stable before
+optimising peer-to-peer streaming.
+
 ### AX-mobile. Mobile companion (iOS / Android)
 
 After **desktop-v0.1.0** validated the visual UI, mobile is the
-next surface. Same architecture (ALP client to a remote
-alpi profile), more friction (App Store signing, iOS
-background restrictions, distribution).
+next surface. Same product contract as desktop remote mode: a
+host-plane client paired to a user's own daemon over WebSocket with a
+per-device token. More friction lives in App Store signing, iOS
+background restrictions, and distribution.
 
 **Why a companion, not a full port.** A mobile alpi running its
 own LLM + tools doubles the security surface and the
-maintenance cost without adding capability. ALP is already the
-protocol for "another machine talks to my profile" — the
-companion is just another peer.
+maintenance cost without adding capability. The companion controls an
+owned daemon through `host.*`; ALP remains the peer-to-peer plane for
+alpi-to-alpi links and workgroups.
 
 **Surfaces this could replace or extend:**
 - Telegram / Matrix gateways — keep working, but optional once the
@@ -104,9 +147,9 @@ desktop.
 - Tauri vs. native (SwiftUI / Kotlin) — Tauri wins on desktop
   but mobile is more contested; native may be better for iOS
   background + push notifications.
-- iOS background restrictions — running an ALP TCP listener on
-  iOS is non-trivial; the companion likely *initiates*
-  connections to the user's profile rather than accepting them.
+- iOS background restrictions — mobile should initiate host-plane
+  connections to the user's daemon rather than accepting inbound
+  connections.
 - Distribution — TestFlight + Play Store internal track at
   first.
 

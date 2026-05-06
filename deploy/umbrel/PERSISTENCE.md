@@ -82,8 +82,8 @@ For that reason, the encrypted archive flow is still part of the
 operational story:
 
 ```bash
-alpi backup create
-alpi backup restore <archive>
+alpi backup
+alpi restore <archive>
 ```
 
 ## Why the repo includes `data/`

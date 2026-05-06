@@ -24,7 +24,7 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 - model/provider,
 - API key or local endpoint,
 - workspace path,
-- optional gateway/service settings.
+- optional gateway/daemon settings.
 
 The setup writes profile config under `~/.alpi/` for the default
 profile, or under `~/.alpi/profiles/<name>/` for named profiles.
@@ -46,15 +46,16 @@ to the intended directory.
 alpi persists sessions per profile. Reopen with:
 
 ```bash
-alpi
+alpi -c
 alpi -p work
 ```
 
-Use the TUI/session commands to continue or inspect previous turns.
+Use `tui.auto_resume` if bare `alpi` should reopen the latest session.
 
 ## Add another profile
 
 ```bash
+alpi profile create work
 alpi -p work setup
 alpi -p work
 ```
@@ -71,14 +72,15 @@ alpi doctor
 Use `doctor` when setup works but messages, tools, service, or provider
 auth behave strangely.
 
-## Optional service
+## Optional daemon
 
-Start a background service when using gateways or scheduled jobs:
+Use the per-machine daemon when using gateways, schedules, desktop, or
+mobile:
 
 ```bash
-alpi service start
-alpi service status
-alpi service stop
+alpi daemon status
+alpi daemon start
+alpi daemon restart
 ```
 
-Use one service process per profile.
+One daemon supervises every profile on the machine.

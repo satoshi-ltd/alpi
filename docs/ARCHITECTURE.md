@@ -10,8 +10,9 @@ Audience: any developer (or LLM) reading this codebase from cold.
 
 alpi is a local-first personal AI agent. It has a Textual TUI in the
 terminal, a Tauri desktop app (and a planned mobile client) that
-talk to the daemon over a local Unix socket (the host plane),
-Telegram/IMAP/Gmail gateways hosted by the alpi daemon,
+talk to the daemon over the host plane (Unix socket locally,
+WebSocket remotely), Telegram/IMAP/Gmail/Matrix gateways hosted by
+the alpi daemon,
 inline-learning memory, scanner-gated live skills, multi-provider LLM
 support via LiteLLM, read-only research, write-capable delegation,
 scheduling, MCP integration, and ALP for private agent-to-agent links.
@@ -160,6 +161,10 @@ alpi/
 │   ├── handlers.py        read verbs (host.workgroup.transcript, host.sessions.*)
 │   ├── chat.py            host.chat.send (streaming) + host.chat.cancel
 │   ├── config.py          mutation verbs (host.providers.*, host.peers.*, host.profile.*, host.mcp.*, host.gateway.*, host.sandbox.*, host.voice.*)
+│   ├── devices.py         host.devices.* pairing-token lifecycle
+│   ├── probes.py          host.gateway.probe, host.peers.ping, host.model.ctx_window
+│   ├── schedule.py        host.schedule.{list,remove,set_paused,fire}
+│   ├── daemon.py          host.daemon.restart
 │   ├── device_state.py    device-facing profile state (profiles, summaries, storage, gateways, skills, workgroups)
 │   ├── events.py          host.events.subscribe + thread-safe emit() for daemon-pushed updates
 │   ├── workgroup.py       transcript decryption (hub + member shapes)
@@ -200,7 +205,8 @@ that live at `{home}/skills/<category>/<name>/`.
 │   └── secrets/alp_key.{pem,pub}   Ed25519 identity (private 0600, public 0644)
 ├── host/                   control-plane state (default profile only)
 │   └── host.sock          Unix socket the desktop / mobile client connects to
-└── logs/                   gateway.log, schedule.log, alp.log (rotated at 1MB)
+└── logs/                   service.log, agent.log, approval.log, ledger.json,
+                            plus subsystem logs such as gateway.log / schedule.log / alp.log
 
 ~/.alpi/profiles/<name>/     same layout, isolated per profile
 ```
@@ -240,7 +246,7 @@ Denylist: `/etc/`, `/boot/`, `/sys/`, `/proc/`, `/usr/lib/systemd/`, `/System/`,
 
 ### Tool registry (`alpi/tools/__init__.py`)
 
-`register(cls)` adds a `Tool` subclass to the dict, `schemas()` emits the OpenAI function-calling shape, `execute(name, args)` runs by name with full error capture. Currently 17 tools registered; `browser` exists as a stub but is not registered (Playwright work pending).
+`register(cls)` adds a `Tool` subclass to the dict, `schemas()` emits the OpenAI function-calling shape, `execute(name, args)` runs by name with full error capture. The registry is assembled from the sibling tool modules in `alpi/tools/__init__.py`, including the Playwright-backed `browser` tool.
 
 ### Skills
 

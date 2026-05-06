@@ -266,7 +266,9 @@ def test_undeclared_secrets_do_not_leak(monkeypatch) -> None:
     env = mcp_client._build_env({"FOO": "literal"})
     assert "OPENAI_API_KEY" not in env
     assert "TELEGRAM_BOT_TOKEN" not in env
-    assert env.get("PATH") == "/usr/bin:/bin"
+    # PATH is augmented (see _augmented_path); inherited PATH must still be
+    # present somewhere in the result so original entries keep resolving.
+    assert "/usr/bin:/bin" in env.get("PATH", "")
 
 
 def test_safelist_keys_pass_through(monkeypatch) -> None:
@@ -275,6 +277,68 @@ def test_safelist_keys_pass_through(monkeypatch) -> None:
     env = mcp_client._build_env({})
     assert env.get("HOME") == "/tmp/h"
     assert env.get("LANG") == "en_US.UTF-8"
+
+
+# --------------------------------------------------------------------
+# PATH augmentation — daemons spawned by launchd / systemd inherit a
+# minimal PATH that misses where users install Node / Python / Rust
+# tools. _augmented_path() prepends user-tool locations that exist on
+# disk so MCP servers (npx / uvx / …) can spawn from the daemon path.
+# --------------------------------------------------------------------
+
+
+def test_augmented_path_preserves_inherited(monkeypatch) -> None:
+    """The daemon's PATH still appears in the augmented result."""
+    monkeypatch.setenv("PATH", "/usr/bin:/bin")
+    out = mcp_client._augmented_path()
+    assert "/usr/bin:/bin" in out
+
+
+def test_augmented_path_handles_empty_inherited(monkeypatch) -> None:
+    """No inherited PATH still yields a non-empty augmented value if any
+    user-tool dir exists on the host (otherwise empty string is fine)."""
+    monkeypatch.delenv("PATH", raising=False)
+    out = mcp_client._augmented_path()
+    assert isinstance(out, str)
+
+
+def test_augmented_path_only_includes_existing_dirs(monkeypatch, tmp_path) -> None:
+    """Non-existent dirs are skipped; existing user-tool dirs land first."""
+    fake_home = tmp_path
+    real_local = fake_home / ".local" / "bin"; real_local.mkdir(parents=True)
+    real_cargo = fake_home / ".cargo" / "bin"; real_cargo.mkdir(parents=True)
+
+    real_expanduser = os.path.expanduser
+
+    def fake_expanduser(p):
+        if p.startswith("~/"):
+            return str(fake_home / p[2:])
+        return real_expanduser(p)
+
+    monkeypatch.setattr(os.path, "expanduser", fake_expanduser)
+    monkeypatch.setenv("PATH", "/usr/bin")
+
+    out = mcp_client._augmented_path()
+    parts = out.split(":")
+
+    # Existing user dirs are present.
+    assert str(real_local) in parts
+    assert str(real_cargo) in parts
+    # Non-existent paths are NOT.
+    assert str(fake_home / ".bun" / "bin") not in parts
+    assert str(fake_home / ".deno" / "bin") not in parts
+    # User dirs precede inherited PATH so they win on duplicate names.
+    assert parts.index(str(real_local)) < parts.index("/usr/bin")
+
+
+def test_build_env_uses_augmented_path(monkeypatch) -> None:
+    """_build_env replaces inherited PATH with the augmented one so MCP
+    subprocesses spawned by a launchd-started daemon can find user tools."""
+    monkeypatch.setenv("PATH", "/usr/bin:/bin")
+    env = mcp_client._build_env({})
+    # _augmented_path always returns at least the inherited PATH.
+    assert env["PATH"] != ""
+    assert "/usr/bin:/bin" in env["PATH"]
 
 
 # --------------------------------------------------------------------

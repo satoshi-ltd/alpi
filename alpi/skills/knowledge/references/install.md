@@ -31,6 +31,7 @@ only when the user already uses pipx or cannot use uv.
 
 ```bash
 uv tool upgrade alpi-agent
+alpi daemon restart
 alpi --version
 ```
 
@@ -74,7 +75,7 @@ pytest --llm
 - Provider auth fails: rerun `alpi setup` or inspect the profile
   `.env`/config.
 - Tools fail in a project: check the configured workspace.
-- Service does not respond: run `alpi doctor` and `alpi service status`.
+- Daemon-backed features do not respond: run `alpi doctor` and `alpi daemon status`.
 
 ## Not supported as primary paths
 
