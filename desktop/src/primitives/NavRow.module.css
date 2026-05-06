@@ -1,15 +1,15 @@
 .row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-5);
   width: 100%;
-  padding: 7px 10px;
+  padding: var(--space-4) var(--space-5);
   border-radius: var(--radius-md);
   background: transparent;
   text-align: left;
   font-size: var(--font-size-ui);
   color: var(--color-fg);
-  transition: background 80ms ease;
+  transition: background var(--motion-fast) var(--motion-easing);
   min-width: 0;
 }
 
@@ -26,7 +26,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 16px;
+  width: var(--space-5);
   flex-shrink: 0;
 }
 
@@ -40,10 +40,14 @@
 }
 
 .dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--color-accent);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--space-5);
+  height: var(--space-5);
+  color: var(--color-accent);
+  font-size: var(--space-5);
+  line-height: 1;
   flex-shrink: 0;
 }
 
@@ -54,7 +58,7 @@
   flex-shrink: 0;
   line-height: 1;
   text-align: center;
-  width: 8px;
+  width: var(--space-4);
 }
 
 .row[data-muted="1"] .name {

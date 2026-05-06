@@ -1,4 +1,5 @@
 import { memo } from "react";
+import { AlpiIcon } from "./icons.jsx";
 import styles from "./NavRow.module.css";
 
 // Shared sidebar row primitive used by both the chat sidebar and Settings aside.
@@ -36,10 +37,7 @@ export default NavRow;
 
 export const Dot = memo(function Dot({ color }) {
   return (
-    <span
-      className={styles.dot}
-      style={color ? { backgroundColor: color } : undefined}
-    />
+    <AlpiIcon className={styles.dot} color={color ?? undefined} />
   );
 });
 

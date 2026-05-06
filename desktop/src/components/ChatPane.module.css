@@ -11,7 +11,7 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: var(--space-3);
+  gap: var(--space-5);
   color: var(--color-fg-muted);
 }
 
@@ -20,7 +20,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: var(--space-5) var(--space-4);
+  padding: var(--space-7) var(--space-6);
   min-height: 0;
 }
 
@@ -28,7 +28,7 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--space-4);
+  gap: var(--space-6);
   width: 100%;
   max-width: var(--chat-max-width);
 }
@@ -80,7 +80,7 @@
   font-size: var(--font-size-small);
   color: var(--color-fg);
   background: var(--color-hover);
-  padding: 1px 6px;
+  padding: var(--space-1) var(--space-3);
   border-radius: var(--radius-sm);
 }
 
@@ -88,23 +88,40 @@
 .transcript {
   flex: 1;
   overflow: auto;
-  padding: var(--space-5) var(--space-4);
+  padding: var(--space-7) var(--space-6);
   display: flex;
   flex-direction: column;
-  gap: var(--space-5);
 }
 
-.transcript > * {
+.turn {
+  display: contents;
+}
+
+.timeline {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-7);
   width: 100%;
   max-width: var(--chat-max-width);
   margin-left: auto;
   margin-right: auto;
 }
 
-.turn {
+.messageTime {
+  font-size: var(--font-size-tiny);
+  color: var(--color-fg-subtle);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.toolGroup {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: var(--space-2);
+  width: 100%;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .loading {
@@ -119,21 +136,22 @@
 .tool {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 6px 12px;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-5);
   border-radius: var(--radius-md);
   background: var(--color-bg);
   font-family: var(--font-mono);
-  font-size: var(--font-size-small);
+  font-size: var(--font-size-tiny);
   color: var(--color-fg);
   align-self: flex-start;
+  width: fit-content;
   max-width: 100%;
 }
 
 .toolHeader {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-3);
   background: none;
   border: none;
   padding: 0;
@@ -157,8 +175,8 @@
 .toolStates {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  padding-left: 22px;
+  gap: var(--space-1);
+  padding-left: var(--space-6);
   font-size: var(--font-size-tiny);
   color: var(--color-fg-muted);
 }
@@ -173,8 +191,8 @@
 }
 
 .toolOutput {
-  margin: 4px 0 0 22px;
-  padding: 6px 8px;
+  margin: var(--space-2) 0 0 var(--space-6);
+  padding: var(--space-3) var(--space-4);
   background: rgba(0, 0, 0, 0.2);
   border-radius: var(--radius-sm);
   font-size: var(--font-size-tiny);
@@ -189,8 +207,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 12px;
-  height: 12px;
+  width: var(--space-5);
+  height: var(--space-5);
   font-size: var(--font-size-tiny);
   flex-shrink: 0;
   color: var(--color-accent);
@@ -206,6 +224,7 @@
 
 .toolName {
   font-family: var(--font-mono);
+  font-size: var(--font-size-small);
   font-weight: var(--font-weight-medium);
   color: var(--color-fg);
   flex-shrink: 0;
@@ -213,7 +232,7 @@
 
 .toolPreview {
   font-family: var(--font-mono);
-  font-size: var(--font-size-small);
+  font-size: inherit;
   color: var(--color-fg-subtle);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -222,7 +241,7 @@
 }
 
 .toolError {
-  padding: 8px 12px;
+  padding: var(--space-4) var(--space-5);
   border-radius: var(--radius-md);
   background: rgba(255, 69, 58, 0.08);
   border: 1px solid rgba(255, 69, 58, 0.2);
@@ -246,14 +265,14 @@
 .thinking {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 6px 0;
+  gap: var(--space-2);
+  padding: var(--space-3) 0;
   align-self: flex-start;
 }
 
 .thinkingDot {
-  width: 6px;
-  height: 6px;
+  width: var(--space-3);
+  height: var(--space-3);
   border-radius: 50%;
   background: var(--color-fg-muted);
   opacity: 0.4;
@@ -284,4 +303,3 @@
  * override below is the only ChatPane-specific rule still needed —
  * ``Composer`` exposes ``embedded`` to switch into the centered
  * zero-state layout. */
-

@@ -64,6 +64,21 @@ export default function WorkgroupView({ workgroup, profiles, onActiveTask }) {
     () => findLatestTask(messages, hubPubkey),
     [messages, hubPubkey],
   );
+  const resolvedWorking = useMemo(() => {
+    if (!messages || messages.length === 0) return new Map();
+    const map = new Map();
+    const seenFrom = new Set();
+    let seenDone = false;
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const m = messages[i];
+      if (parseWorking(m.body)) {
+        map.set(m.seq, seenDone || seenFrom.has(m.from));
+      }
+      seenFrom.add(m.from);
+      if (isDoneBody(m.body)) seenDone = true;
+    }
+    return map;
+  }, [messages]);
 
   useEffect(() => {
     onActiveTask?.(activeTask);
@@ -178,15 +193,9 @@ export default function WorkgroupView({ workgroup, profiles, onActiveTask }) {
                   const working = parseWorking(m.body);
                   const skip = parseSkip(m.body);
                   const done = parseDone(m.body);
-                  const workingResolved =
-                    working &&
-                    messages
-                      .slice(idx + 1)
-                      .some(
-                        (later) =>
-                          later.from === m.from ||
-                          isDoneBody(later.body),
-                      );
+                  const workingResolved = working
+                    ? resolvedWorking.get(m.seq) ?? false
+                    : false;
                   let body;
                   let markdown = false;
                   if (working) {

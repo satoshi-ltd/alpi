@@ -20,8 +20,11 @@ Two GitHub releases are produced from one run:
 
 1. ``desktop-vX.Y.Z`` — immutable, version-stamped.
 2. ``desktop-latest`` — rolling alias the Tauri updater points to.
-   Same assets; the tag moves on every publish so the URL stays
-   stable: ``releases/download/desktop-latest/latest.json``.
+   Same assets plus stable aliases for the public site. The tag moves
+   on every publish so these URLs stay stable:
+   ``releases/download/desktop-latest/latest.json``
+   ``releases/download/desktop-latest/alpi-latest.dmg``
+   ``releases/download/desktop-latest/desktop-release.json``.
 
 Builds are signed with **minisign** so the installed app verifies the
 update before applying it. Pubkey lives in ``tauri.conf.json``;
@@ -158,6 +161,10 @@ A green run produces:
 - ``releases/tag/desktop-latest`` (rolling) with the same assets
 - ``releases/download/desktop-latest/latest.json`` reachable for the
   Tauri updater plugin
+- ``releases/download/desktop-latest/alpi-latest.dmg`` reachable for
+  the landing page's direct macOS download button
+- ``releases/download/desktop-latest/desktop-release.json`` with the
+  current desktop version + stable download URLs for any external site
 
 ### 7. Verify "Check for updates" works
 
@@ -218,3 +225,19 @@ Two cases:
 - Tag exists but assets are missing → the
   ``promote-latest`` step failed silently (no assets attached to the
   rolling release). Re-run ``promote-latest`` from the Actions UI.
+
+### Landing page shows the wrong desktop version / bad download link
+
+The public site build reads desktop version directly from
+``desktop/src-tauri/tauri.conf.json`` and points its macOS button at
+``releases/download/desktop-latest/alpi-latest.dmg``. So the release
+contract is:
+
+- bump desktop version in the repo
+- merge to ``main``
+- let ``desktop-release`` publish ``desktop-latest``
+- rebuild / redeploy the site from the same commit
+
+If the site shows the right version but the button 404s, the release
+pipeline is broken. If the button works but the site shows the old
+version, the site was not rebuilt from the version-bump commit.

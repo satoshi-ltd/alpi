@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import Button from "./Button.jsx";
+import { SendIcon } from "./icons.jsx";
 import styles from "./Composer.module.css";
 
 // Shared composer for chat and workgroup posts.
@@ -240,18 +241,4 @@ function getMentionContext(text, caret) {
     if (/\s/.test(ch)) return null;
   }
   return null;
-}
-
-function SendIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-      <path
-        d="M7 11.5V2.5M3 6.5l4-4 4 4"
-        stroke="currentColor"
-        strokeWidth="1.6"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
 }

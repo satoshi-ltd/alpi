@@ -14,9 +14,16 @@
 .col {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-2);
   min-width: 0;
   max-width: 80%;
+  position: relative;
+  overflow: visible;
+}
+
+.colFooter {
+  padding-top: 0;
+  padding-bottom: 0;
 }
 
 .right .col {
@@ -27,14 +34,18 @@
 .header {
   display: flex;
   align-items: baseline;
-  gap: var(--space-2);
+  gap: var(--space-4);
 }
 
 .dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--color-fg-subtle);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--space-4);
+  height: var(--space-4);
+  color: var(--color-fg-subtle);
+  font-size: var(--space-4);
+  line-height: 1;
   flex-shrink: 0;
   align-self: center;
 }
@@ -65,10 +76,9 @@
 }
 
 .bubble {
-  padding: 10px 14px;
+  padding: var(--space-5) var(--space-6);
   border-radius: var(--radius-xl);
   background: var(--color-selected);
-  font-weight: var(--font-weight-medium);
 }
 
 .left .bubble {
@@ -77,6 +87,44 @@
 
 .right .bubble {
   border-top-right-radius: 0;
+}
+
+.footer {
+  position: absolute;
+  top: calc(100% + var(--space-1));
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  opacity: 0;
+  transform: translateY(calc(-1 * var(--space-2)));
+  pointer-events: none;
+  transition: opacity var(--motion-slow) var(--motion-easing), transform var(--motion-slow) var(--motion-easing);
+  z-index: 2;
+}
+
+.footerLeft {
+  left: 0;
+  justify-content: flex-start;
+}
+
+.footerRight {
+  right: 0;
+  justify-content: flex-end;
+}
+
+.footerVisible {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+.timestamp {
+  font-size: var(--font-size-tiny);
+  color: var(--color-fg-subtle);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  user-select: none;
+  margin-inline-start: var(--space-1);
 }
 
 .md > :first-child {
@@ -88,14 +136,14 @@
 }
 
 .md p {
-  margin: 0 0 var(--space-3);
+  margin: 0 0 var(--space-5);
 }
 
 .md h1,
 .md h2,
 .md h3,
 .md h4 {
-  margin: var(--space-3) 0 var(--space-2);
+  margin: var(--space-5) 0 var(--space-4);
   font-weight: var(--font-weight-semibold);
   line-height: 1.25;
 }
@@ -118,12 +166,12 @@
 
 .md ul,
 .md ol {
-  margin: 0 0 var(--space-3) var(--space-4);
+  margin: 0 0 var(--space-5) var(--space-6);
   padding: 0;
 }
 
 .md li {
-  margin-bottom: 4px;
+  margin-bottom: var(--space-2);
 }
 
 .md li > p {
@@ -134,8 +182,8 @@
   font-family: var(--font-mono);
   font-size: 0.9em;
   background: var(--color-hover);
-  padding: 1px 5px;
-  border-radius: 4px;
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-sm);
 }
 
 .md pre {
@@ -144,8 +192,8 @@
   background: var(--color-bg);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
-  padding: var(--space-3);
-  margin: 0 0 var(--space-3);
+  padding: var(--space-5);
+  margin: 0 0 var(--space-5);
   overflow-x: auto;
   line-height: 1.45;
 }
@@ -160,32 +208,32 @@
   color: var(--color-accent);
   font-weight: var(--font-weight-semibold);
   text-decoration: underline;
-  text-underline-offset: 2px;
+  text-underline-offset: var(--space-1);
 }
 
 .md blockquote {
-  margin: 0 0 var(--space-3);
-  padding-left: var(--space-3);
+  margin: 0 0 var(--space-5);
+  padding-left: var(--space-5);
   border-left: 3px solid var(--color-border-strong);
   color: var(--color-fg-muted);
 }
 
 .md hr {
-  margin: var(--space-4) 0;
+  margin: var(--space-6) 0;
   border: 0;
   border-top: 1px solid var(--color-border);
 }
 
 .md table {
   border-collapse: collapse;
-  margin: 0 0 var(--space-3);
+  margin: 0 0 var(--space-5);
   font-size: 0.93em;
 }
 
 .md th,
 .md td {
   border: 1px solid var(--color-border);
-  padding: 4px 8px;
+  padding: var(--space-2) var(--space-4);
   text-align: left;
 }
 

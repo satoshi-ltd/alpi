@@ -33,6 +33,7 @@ const VERSION = (pyproject.match(/^version\s*=\s*"([^"]+)"/m) || [null, '0.0.0']
 // gate verifies they're aligned.
 const tauriConf = readFileSync(join(REPO, 'desktop/src-tauri/tauri.conf.json'), 'utf8');
 const DESKTOP_VERSION = JSON.parse(tauriConf).version;
+const DESKTOP_DOWNLOAD_URL = 'https://github.com/satoshi-ltd/alpi/releases/download/desktop-latest/alpi-latest.dmg';
 
 // ── doc metadata ─────────────────────────────────────────────────────────────
 // Order drives prev/next pager and the docs index.
@@ -487,6 +488,7 @@ const landing = readFileSync(join(TPL, 'landing.html'), 'utf8')
   .replace(/\bv\d+\.\d+\.\d+\b/g, `v${VERSION}`)
   // Desktop version goes AFTER the alpi-version sweep so the regex
   // above doesn't clobber it (desktop ships on its own track).
+  .replace('<!-- DESKTOP_DOWNLOAD_URL -->', DESKTOP_DOWNLOAD_URL)
   .replace('<!-- DESKTOP_VERSION -->', `v${DESKTOP_VERSION}`);
 write(join(DIST, 'index.html'), landing);
 

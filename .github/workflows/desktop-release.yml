@@ -18,8 +18,11 @@ name: desktop-release
 # Two GitHub releases produced from one run:
 #   1. ``desktop-vX.Y.Z`` — immutable, version-stamped.
 #   2. ``desktop-latest`` — rolling alias the Tauri updater points to.
-#      Same assets; the tag moves on every publish so the URL stays
-#      stable: ``releases/download/desktop-latest/latest.json``.
+#      Same assets plus stable aliases the site can link to directly.
+#      The tag moves on every publish so these URLs stay stable:
+#      ``releases/download/desktop-latest/latest.json``
+#      ``releases/download/desktop-latest/alpi-latest.dmg``
+#      ``releases/download/desktop-latest/desktop-release.json``
 #
 # Signing: minisign keypair via ``TAURI_SIGNING_PRIVATE_KEY`` +
 # ``TAURI_SIGNING_PRIVATE_KEY_PASSWORD`` repo secrets. Public key
@@ -193,8 +196,9 @@ jobs:
 
   # 3. Roll the ``desktop-latest`` tag onto the same commit and
   #    re-publish the same assets there. The Tauri updater hits
-  #    ``releases/download/desktop-latest/latest.json`` — that URL
-  #    must always serve the most recent release's manifest.
+  #    ``releases/download/desktop-latest/latest.json`` and the site
+  #    links to ``alpi-latest.dmg`` / ``desktop-release.json`` —
+  #    these URLs must always resolve to the most recent release.
   promote-latest:
     name: promote to desktop-latest
     needs: [check-version, build]
@@ -220,6 +224,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ needs.check-version.outputs.tag }}
+          VERSION: ${{ needs.check-version.outputs.version }}
         run: |
           mkdir -p latest-assets
           gh release download "$TAG" --dir latest-assets
@@ -230,6 +235,34 @@ jobs:
             ls -la latest-assets/
             exit 1
           fi
+
+          dmg=$(find latest-assets -maxdepth 1 -type f -name '*.dmg' | head -1)
+          if [ -z "$dmg" ]; then
+            echo "::error::no .dmg found in $TAG release — landing download would 404."
+            ls -la latest-assets/
+            exit 1
+          fi
+          cp "$dmg" latest-assets/alpi-latest.dmg
+
+          python3 - <<'PY'
+          import json, os
+
+          version = os.environ["VERSION"]
+          base = "https://github.com/satoshi-ltd/alpi/releases/download/desktop-latest"
+          payload = {
+              "version": version,
+              "tag": f"desktop-v{version}",
+              "notes_url": "https://github.com/satoshi-ltd/alpi/blob/main/desktop/CHANGELOG.md",
+              "release_url": "https://github.com/satoshi-ltd/alpi/releases/tag/desktop-latest",
+              "updater_manifest_url": f"{base}/latest.json",
+              "downloads": {
+                  "macos_dmg": f"{base}/alpi-latest.dmg",
+              },
+          }
+          with open("latest-assets/desktop-release.json", "w", encoding="utf-8") as fh:
+              json.dump(payload, fh, indent=2)
+              fh.write("\n")
+          PY
 
       - name: (re)publish desktop-latest with same assets
         env:

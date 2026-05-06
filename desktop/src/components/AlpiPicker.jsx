@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import Chip from "../primitives/Chip.jsx";
 import Dropdown from "../primitives/Dropdown.jsx";
+import { AlpiIcon } from "../primitives/icons.jsx";
 
 const SEARCH_THRESHOLD = 8;
 
@@ -66,15 +67,6 @@ export default function AlpiPicker({ profiles, activeAlpi, onChange }) {
 
 function Dot({ accent }) {
   return (
-    <span
-      style={{
-        width: 8,
-        height: 8,
-        borderRadius: "50%",
-        background: accent || "var(--color-accent)",
-        display: "inline-block",
-        flexShrink: 0,
-      }}
-    />
+    <AlpiIcon color={accent || "var(--color-accent)"} />
   );
 }

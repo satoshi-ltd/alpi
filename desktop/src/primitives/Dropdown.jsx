@@ -1,4 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { CaretIcon } from "./icons.jsx";
 import styles from "./Dropdown.module.css";
 
 export default function Dropdown({
@@ -12,6 +14,7 @@ export default function Dropdown({
   query = "",
   onQueryChange,
   onOpenChange,
+  portal = false,
   children,
 }) {
   const [open, setOpen] = useState(false);
@@ -22,7 +25,9 @@ export default function Dropdown({
 
   useEffect(() => {
     function onClick(e) {
-      if (ref.current && !ref.current.contains(e.target)) {
+      const inTrigger = ref.current && ref.current.contains(e.target);
+      const inMenu = menuRef.current && menuRef.current.contains(e.target);
+      if (!inTrigger && !inMenu) {
         setOpen(false);
       }
     }
@@ -55,54 +60,70 @@ export default function Dropdown({
     if (al === "left" && !fitsRight && fitsLeft) al = "right";
     if (al === "right" && !fitsLeft && fitsRight) al = "left";
 
-    setResolved({ direction: dir, align: al, ready: true });
-  }, [open, direction, align]);
+    const top = dir === "up" ? t.top - m.height - 6 : t.bottom + 6;
+    const left = al === "left" ? t.left : t.right - m.width;
+
+    setResolved({ direction: dir, align: al, ready: true, top, left });
+  }, [open, direction, align, portal]);
 
   const close = () => setOpen(false);
   const dir = resolved.ready ? resolved.direction : direction;
   const al = resolved.ready ? resolved.align : align;
 
+  const menu =
+    open && (
+      <div
+        ref={menuRef}
+        className={`${styles.menu} ${portal ? styles.menuPortal : ""}`}
+        style={
+          portal
+            ? {
+                width,
+                top: resolved.top ?? 0,
+                left: resolved.left ?? 0,
+                visibility: resolved.ready ? "visible" : "hidden",
+              }
+            : {
+                width,
+                [dir === "up" ? "bottom" : "top"]: "calc(100% + 6px)",
+                [al]: 0,
+                visibility: resolved.ready ? "visible" : "hidden",
+              }
+        }
+      >
+        {searchable && (
+          <div className={styles.searchWrap}>
+            <input
+              className={styles.search}
+              placeholder={searchPlaceholder}
+              value={query}
+              onChange={(e) => onQueryChange?.(e.target.value)}
+              autoFocus
+            />
+          </div>
+        )}
+        <div className={styles.list}>
+          {typeof children === "function" ? children({ close }) : children}
+        </div>
+      </div>
+    );
+
   return (
     <div className={styles.wrap} ref={ref}>
       <button
         ref={triggerRef}
-        className={`${styles.trigger} ${
-          variant === "outlined" ? styles.triggerOutlined : ""
-        }`}
+        className={`${styles.trigger} ${variantClass(variant)} ${open ? styles.triggerOpen : ""}`}
+        aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
       >
-        {trigger.leading}
+        {trigger.leading && (
+          <span className={styles.leading}>{trigger.leading}</span>
+        )}
         <span className={styles.label}>{trigger.label}</span>
-        <Caret />
+        <CaretIcon className={styles.caret} />
       </button>
 
-      {open && (
-        <div
-          ref={menuRef}
-          className={styles.menu}
-          style={{
-            width,
-            [dir === "up" ? "bottom" : "top"]: "calc(100% + 6px)",
-            [al]: 0,
-            visibility: resolved.ready ? "visible" : "hidden",
-          }}
-        >
-          {searchable && (
-            <div className={styles.searchWrap}>
-              <input
-                className={styles.search}
-                placeholder={searchPlaceholder}
-                value={query}
-                onChange={(e) => onQueryChange?.(e.target.value)}
-                autoFocus
-              />
-            </div>
-          )}
-          <div className={styles.list}>
-            {typeof children === "function" ? children({ close }) : children}
-          </div>
-        </div>
-      )}
+      {portal ? createPortal(menu, document.body) : menu}
     </div>
   );
 }
@@ -145,20 +166,12 @@ function Empty({ children }) {
   return <div className={styles.emptyRow}>{children}</div>;
 }
 
+function variantClass(variant) {
+  if (variant === "outlined") return styles.triggerOutlined;
+  if (variant === "list") return styles.triggerList;
+  return "";
+}
+
 Dropdown.Group = Group;
 Dropdown.Row = Row;
 Dropdown.Empty = Empty;
-
-function Caret() {
-  return (
-    <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-      <path
-        d="M2 4l3 3 3-3"
-        stroke="currentColor"
-        strokeWidth="1.4"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}

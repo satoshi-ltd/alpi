@@ -1,7 +1,9 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Button from "../primitives/Button.jsx";
+import ConnectionSwitcher from "./ConnectionSwitcher.jsx";
 import NavRow, { Dot } from "../primitives/NavRow.jsx";
 import Tooltip from "../primitives/Tooltip.jsx";
+import { CheckIcon, PinIcon, PinOffIcon, PlusIcon, StatusIcon } from "../primitives/icons.jsx";
 import { relativeTime } from "../lib/time.js";
 import styles from "./Sidebar.module.css";
 
@@ -37,7 +39,7 @@ function useMeasuredHeight() {
   return [ref, size];
 }
 
-export default function Sidebar({
+function Sidebar({
   collapsed,
   profiles,
   workgroups,
@@ -46,10 +48,15 @@ export default function Sidebar({
   pendingProfile = null,
   view,
   pinned = { profiles: [], workgroups: [] },
+  hostConnections,
   onNewChat,
   onOpenProfile,
   onOpenWorkgroup,
   onTogglePin,
+  onSetHostConnection,
+  onAddHostConnection,
+  onForgetHostConnection,
+  onRefreshHostConnectionStatus,
 }) {
   const activeProfileName =
     view.kind === "profile" ? view.profile : null;
@@ -190,15 +197,24 @@ export default function Sidebar({
     >
       <div className={styles.inner}>
         <div className={styles.actions}>
-          <button
-            className={`${styles.newChatBtn} ${
-              inEmpty ? styles.newChatBtnActive : ""
-            }`}
+          <div className={styles.actionSection}>
+            <div className={styles.sectionLabel}>Connection</div>
+            <ConnectionSwitcher
+              className={styles.connectionSlot}
+              state={hostConnections}
+              onSetActive={onSetHostConnection}
+              onAddRemote={onAddHostConnection}
+              onForget={onForgetHostConnection}
+              onOpen={onRefreshHostConnectionStatus}
+            />
+          </div>
+          <NavRow
+            active={inEmpty}
+            leading={<PlusIcon />}
             onClick={onNewChat}
           >
-            <PlusIcon />
-            <span>New Chat</span>
-          </button>
+            New Chat
+          </NavRow>
         </div>
 
         <nav ref={navRef} className={styles.nav}>
@@ -246,6 +262,8 @@ export default function Sidebar({
   );
 }
 
+export default memo(Sidebar);
+
 function recencyOf(profile) {
   return profile.latest_session?.mtime ?? 0;
 }
@@ -264,7 +282,7 @@ function PinAction({ isPinned, onClick }) {
     <span className={`${styles.pinWrap} ${isPinned ? styles.pinWrapPinned : ""}`}>
       <Button
         size="xs"
-        icon={<PinIcon filled={isPinned} />}
+        icon={isPinned ? <PinOffIcon /> : <PinIcon />}
         onClick={onClick}
         title={isPinned ? "Unpin" : "Pin"}
         tooltipDirection="up"
@@ -290,7 +308,9 @@ const ProfileRow = memo(function ProfileRow({
   const recency = profile.latest_session?.mtime ?? 0;
   const incomplete = !profile.model;
   const trailing = pending ? (
-    <StatusIcon kind="working" tooltip="thinking…" />
+    <Tooltip text="thinking…" direction="right">
+      <StatusIcon kind="working" />
+    </Tooltip>
   ) : incomplete ? (
     <span className={styles.rowTag}>!</span>
   ) : recency > 0 ? (
@@ -345,15 +365,15 @@ const WorkgroupRow = memo(function WorkgroupRow({
 
   let leading;
   if (busy) {
-    leading = <StatusIcon kind="working" tooltip="Working…" />;
+    leading = <Tooltip text="Working…" direction="right"><StatusIcon kind="working" /></Tooltip>;
   } else if (paused) {
-    leading = <StatusIcon kind="paused" tooltip="Paused" />;
+    leading = <Tooltip text="Paused" direction="right"><StatusIcon kind="paused" /></Tooltip>;
   } else if (task?.state === "error") {
-    leading = <StatusIcon kind="error" tooltip="Error" />;
+    leading = <Tooltip text="Error" direction="right"><StatusIcon kind="error" /></Tooltip>;
   } else if (task?.state === "open") {
-    leading = <StatusIcon kind="working" tooltip="Working…" />;
+    leading = <Tooltip text="Working…" direction="right"><StatusIcon kind="working" /></Tooltip>;
   } else if (task?.state === "done") {
-    leading = <StatusIcon kind="done" tooltip="Task done" />;
+    leading = <Tooltip text="Task done" direction="right"><CheckIcon /></Tooltip>;
   } else {
     leading = (
       <Tooltip text="Idle" direction="right">
@@ -382,72 +402,3 @@ const WorkgroupRow = memo(function WorkgroupRow({
     </div>
   );
 });
-
-function PlusIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-      <path
-        d="M7 2.5v9M2.5 7h9"
-        stroke="currentColor"
-        strokeWidth="1.4"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
-}
-
-function PinIcon({ filled }) {
-  return (
-    <svg
-      width="13"
-      height="13"
-      viewBox="0 0 24 24"
-      fill={filled ? "currentColor" : "none"}
-      stroke="currentColor"
-      strokeWidth="2.2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M12 17v5" fill="none" />
-      <path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V17a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 8.24V6a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v2.24A2 2 0 0 1 9 10.76Z" />
-    </svg>
-  );
-}
-
-function StatusIcon({ kind, tooltip }) {
-  return (
-    <Tooltip text={tooltip} direction="right">
-      <span
-        className={styles.statusIcon}
-        data-kind={kind}
-        aria-label={tooltip}
-      >
-        {kind === "done" && (
-          <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-            <path
-              d="M2 5.2l1.9 1.9L8 3"
-              stroke="currentColor"
-              strokeWidth="1.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-        )}
-        {kind === "working" && <span className={styles.statusPulse} />}
-        {kind === "error" && (
-          <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-            <circle cx="5" cy="5" r="4" fill="currentColor" />
-            <rect x="4.4" y="2.4" width="1.2" height="3.4" rx="0.4" fill="var(--color-bg-solid)" />
-            <rect x="4.4" y="6.6" width="1.2" height="1.2" rx="0.4" fill="var(--color-bg-solid)" />
-          </svg>
-        )}
-        {kind === "paused" && (
-          <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-            <rect x="2.5" y="2" width="1.6" height="6" rx="0.4" fill="currentColor" />
-            <rect x="5.9" y="2" width="1.6" height="6" rx="0.4" fill="currentColor" />
-          </svg>
-        )}
-      </span>
-    </Tooltip>
-  );
-}

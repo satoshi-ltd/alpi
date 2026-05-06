@@ -70,6 +70,36 @@ fn profile_summaries() -> serde_json::Value {
 }
 
 #[tauri::command]
+fn host_connections() -> serde_json::Value {
+    host_client::connections_for_ui()
+}
+
+#[tauri::command]
+fn host_connection_set_active(id: String) -> Result<(), String> {
+    host_client::set_active_connection(id)
+}
+
+#[tauri::command]
+fn host_connection_forget(id: String) -> Result<(), String> {
+    host_client::forget_connection(id)
+}
+
+#[tauri::command]
+fn host_connection_add_remote(
+    name: String,
+    host: String,
+    port: u16,
+    token: String,
+) -> Result<String, String> {
+    host_client::add_remote_connection(name, host, port, token)
+}
+
+#[tauri::command]
+fn host_connection_refresh_active() {
+    let _ = host_client::call("host.profiles.list", serde_json::json!({}));
+}
+
+#[tauri::command]
 fn sessions(profile: Option<String>) -> Vec<SessionEntry> {
     match profile {
         Some(p) => sessions_via_alp(&p),
@@ -990,16 +1020,20 @@ fn chat_send_stream(
     app: AppHandle,
     profile: String,
     session_id: Option<String>,
+    rewrite_from_turn: Option<usize>,
     text: String,
     model: Option<String>,
 ) {
-    thread::spawn(move || stream_chat(app, profile, session_id, text, model));
+    thread::spawn(move || {
+        stream_chat(app, profile, session_id, rewrite_from_turn, text, model)
+    });
 }
 
 fn stream_chat(
     app: AppHandle,
     profile: String,
     session_id: Option<String>,
+    rewrite_from_turn: Option<usize>,
     text: String,
     model: Option<String>,
 ) {
@@ -1023,6 +1057,9 @@ fn stream_chat(
     });
     if let Some(id) = session_id {
         params["session_id"] = serde_json::Value::String(id);
+    }
+    if let Some(turn) = rewrite_from_turn {
+        params["rewrite_from_turn"] = serde_json::Value::Number(turn.into());
     }
     if let Some(m) = model {
         params["model"] = serde_json::Value::String(m);
@@ -1270,6 +1307,11 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             profiles,
             profile_summaries,
+            host_connections,
+            host_connection_set_active,
+            host_connection_forget,
+            host_connection_add_remote,
+            host_connection_refresh_active,
             sessions,
             session_detail,
             workgroups,

@@ -1,10 +1,14 @@
-import { memo, useEffect, useState } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import AlpiPicker from "./AlpiPicker.jsx";
 import ModelPicker from "./ModelPicker.jsx";
+import Button from "../primitives/Button.jsx";
 import Composer from "../primitives/Composer.jsx";
+import { AlpiIcon, CopyIcon, SpinnerIcon, UndoIcon } from "../primitives/icons.jsx";
 import Message from "../primitives/Message.jsx";
 import { useStickyScroll } from "../lib/useStickyScroll.js";
+import { relativeTime } from "../lib/time.js";
+import { useNotify } from "../primitives/Notification.jsx";
 import alpiHeadUrl from "../assets/alpi-head.svg?url";
 import styles from "./ChatPane.module.css";
 
@@ -16,6 +20,9 @@ export default function ChatPane({
   pendingTurn,
   onSend,
   onSelectProfile,
+  onRewriteMessage,
+  rewriteDraft,
+  onRewriteDraftApplied,
 }) {
   const inProfile = view.kind === "profile";
   const inEmpty = view.kind === "empty" && !pendingTurn;
@@ -76,6 +83,8 @@ export default function ChatPane({
             disabled={!!pendingTurn}
             showPicker
             embedded
+            rewriteDraft={rewriteDraft}
+            onRewriteDraftApplied={onRewriteDraftApplied}
           />
         </div>
       </div>
@@ -91,6 +100,9 @@ export default function ChatPane({
           accent={activeProfile?.accent ?? null}
           showEmptyHint={inProfile && view.sessionId == null && !pendingTurn}
           profileName={activeProfile?.name ?? null}
+          onRewriteMessage={onRewriteMessage}
+          sessionId={view.sessionId ?? null}
+          rewriteDraft={rewriteDraft}
         />
       </div>
       <ChatComposer
@@ -102,16 +114,58 @@ export default function ChatPane({
         showPicker={false}
         modelOverride={modelOverride}
         onModelChange={setModelOverride}
+        rewriteDraft={rewriteDraft}
+        onRewriteDraftApplied={onRewriteDraftApplied}
       />
     </>
   );
 }
 
-function SessionView({ data, pendingTurn, accent, showEmptyHint, profileName }) {
-  const scrollRef = useStickyScroll([data, pendingTurn]);
+function SessionView({
+  data,
+  pendingTurn,
+  accent,
+  showEmptyHint,
+  profileName,
+  onRewriteMessage,
+  sessionId,
+  rewriteDraft,
+}) {
+  return (
+    <>
+      <Transcript
+        data={data}
+        pendingTurn={pendingTurn}
+        accent={accent}
+        showEmptyHint={showEmptyHint}
+        profileName={profileName}
+        onRewriteMessage={onRewriteMessage}
+        sessionId={sessionId}
+        rewriteDraft={rewriteDraft}
+      />
+    </>
+  );
+}
 
-  const turns = data?.turns ?? [];
-  const hasContent = turns.length > 0 || pendingTurn;
+const Transcript = memo(function Transcript({
+  data,
+  pendingTurn,
+  accent,
+  showEmptyHint,
+  profileName,
+  onRewriteMessage,
+  sessionId,
+  rewriteDraft,
+}) {
+  const scrollRef = useStickyScroll([data, pendingTurn]);
+  const allTurns = data?.turns ?? [];
+  const turns =
+    rewriteDraft &&
+    rewriteDraft.profile === profileName &&
+    rewriteDraft.sessionId === sessionId &&
+    Number.isInteger(rewriteDraft.turnIndex)
+      ? allTurns.slice(0, rewriteDraft.turnIndex)
+      : allTurns;
 
   if (showEmptyHint) {
     return (
@@ -126,22 +180,68 @@ function SessionView({ data, pendingTurn, accent, showEmptyHint, profileName }) 
     );
   }
 
-  if (!hasContent && !data) {
+  if (turns.length === 0 && !data) {
     return <div className={styles.loading}>loading…</div>;
   }
 
   return (
     <div ref={scrollRef} className={styles.transcript}>
-      {turns.map((t, i) => (
-        <Turn key={t.at ?? i} turn={t} accent={accent} />
-      ))}
-      {pendingTurn && <PendingTurn turn={pendingTurn} accent={accent} />}
+      <div className={styles.timeline}>
+        <HistoryTurns
+          turns={turns}
+          accent={accent}
+          profileName={profileName}
+          onRewriteMessage={onRewriteMessage}
+          sessionId={sessionId}
+        />
+        {pendingTurn && <PendingTurn turn={pendingTurn} accent={accent} />}
+      </div>
     </div>
   );
-}
+});
 
-const Turn = memo(function Turn({ turn, accent }) {
+const HistoryTurns = memo(function HistoryTurns({
+  turns,
+  accent,
+  profileName,
+  onRewriteMessage,
+  sessionId,
+}) {
+  return (
+    <>
+      {turns.map((t, i) => (
+        <Turn
+          key={t.at ?? i}
+          turn={t}
+          accent={accent}
+          profileName={profileName}
+          sessionId={sessionId}
+          turnIndex={i}
+          onRewriteMessage={onRewriteMessage}
+        />
+      ))}
+    </>
+  );
+});
+
+const Turn = memo(function Turn({
+  turn,
+  accent,
+  profileName,
+  sessionId,
+  turnIndex,
+  onRewriteMessage,
+}) {
+  const notify = useNotify();
   const tools = turn.tools ?? [];
+  const copyMessage = async (text) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      notify({ message: "Message copied", variant: "success" });
+    } catch (e) {
+      notify({ message: `Copy failed: ${e}`, variant: "error" });
+    }
+  };
   return (
     <div className={styles.turn}>
       {turn.user && (
@@ -151,19 +251,62 @@ const Turn = memo(function Turn({ turn, accent }) {
           accent={accent ?? "#c8a24e"}
           body={turn.user}
           markdown={false}
+          footer={
+            <>
+              <span className={styles.messageTime}>{relativeTime(turn.at)}</span>
+              {onRewriteMessage && (
+                <Button
+                  icon={<UndoIcon />}
+                  size="xs"
+                  title="Rewrite from here"
+                  onClick={() => onRewriteMessage(
+                    profileName,
+                    sessionId,
+                    turnIndex,
+                    turn.user,
+                  )}
+                />
+              )}
+              <Button
+                icon={<CopyIcon />}
+                size="xs"
+                title="Copy message"
+                onClick={() => copyMessage(turn.user)}
+              />
+            </>
+          }
         />
       )}
-      {tools.map((t, i) => (
-        <ToolCard
-          key={t.tool_id ?? `${t.name}:${i}`}
-          name={t.name}
-          preview={previewForArgs(t.args)}
-          ok={t.ok ?? true}
-          accent={accent}
-        />
-      ))}
+      {tools.length > 0 && (
+        <div className={styles.toolGroup}>
+          {tools.map((t, i) => (
+            <ToolCard
+              key={t.tool_id ?? `${t.name}:${i}`}
+              name={t.name}
+              preview={previewForArgs(t.args)}
+              ok={t.ok ?? true}
+              accent={accent}
+            />
+          ))}
+        </div>
+      )}
       {turn.assistant && (
-        <Message align="left" body={turn.assistant} markdown />
+        <Message
+          align="left"
+          body={turn.assistant}
+          markdown
+          footer={
+            <>
+              <Button
+                icon={<CopyIcon />}
+                size="xs"
+                title="Copy message"
+                onClick={() => copyMessage(turn.assistant)}
+              />
+              <span className={styles.messageTime}>{relativeTime(turn.at)}</span>
+            </>
+          }
+        />
       )}
     </div>
   );
@@ -196,17 +339,21 @@ function PendingTurn({ turn, accent }) {
           markdown={false}
         />
       )}
-      {tools.map((t, i) => (
-        <ToolCard
-          key={t.tool_id || i}
-          name={t.name}
-          preview={t.preview}
-          ok={t.ok}
-          accent={accent}
-          states={t.states}
-          output={t.output}
-        />
-      ))}
+      {tools.length > 0 && (
+        <div className={styles.toolGroup}>
+          {tools.map((t, i) => (
+            <ToolCard
+              key={t.tool_id || i}
+              name={t.name}
+              preview={t.preview}
+              ok={t.ok}
+              accent={accent}
+              states={t.states}
+              output={t.output}
+            />
+          ))}
+        </div>
+      )}
       {turn.assistantPreview && (
         <Message
           align="left"
@@ -243,7 +390,7 @@ const ToolCard = memo(function ToolCard({ name, preview, ok, accent, states = []
         disabled={!headerClickable}
       >
         <span className={styles.toolIcon} style={iconStyle}>
-          {status === "running" ? <Spinner /> : "◆"}
+          {status === "running" ? <SpinnerIcon className={styles.spinner} /> : <AlpiIcon size={8} color="currentColor" />}
         </span>
         <span className={styles.toolName}>{name}</span>
         {preview && <span className={styles.toolPreview}>{preview}</span>}
@@ -272,22 +419,6 @@ const ToolCard = memo(function ToolCard({ name, preview, ok, accent, states = []
   );
 });
 
-function Spinner() {
-  return (
-    <svg className={styles.spinner} width="12" height="12" viewBox="0 0 12 12">
-      <circle
-        cx="6"
-        cy="6"
-        r="4.5"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeDasharray="20 30"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
-}
 
 function ChatComposer({
   profiles,
@@ -299,12 +430,19 @@ function ChatComposer({
   disabled,
   modelOverride,
   onModelChange,
+  rewriteDraft,
+  onRewriteDraftApplied,
 }) {
   const [text, setText] = useState("");
-  const [mentions, setMentions] = useState([]);
+  const [baseMentions, setBaseMentions] = useState([]);
+  useEffect(() => {
+    if (!rewriteDraft?.text || rewriteDraft.consumed) return;
+    setText(rewriteDraft.text);
+    onRewriteDraftApplied?.();
+  }, [rewriteDraft, onRewriteDraftApplied]);
   useEffect(() => {
     if (!activeProfile?.name) {
-      setMentions([]);
+      setBaseMentions([]);
       return;
     }
     let cancelled = false;
@@ -316,7 +454,7 @@ function ChatComposer({
         if (cancelled) return;
         const parsed = parsePeerMentions(text);
         if (parsed.length === 0) {
-          setMentions([]);
+          setBaseMentions([]);
           return;
         }
         let probes = [];
@@ -331,21 +469,25 @@ function ChatComposer({
         if (cancelled) return;
         const statusById = {};
         for (const r of probes ?? []) statusById[r.id] = r.status;
-        const enriched = parsed.map((m) => {
-          const profile = profiles.find((p) => p.name === m.id);
-          return {
-            ...m,
-            accent: profile?.accent ?? null,
-            status: statusById[m.id] ?? "?",
-          };
-        });
-        setMentions(enriched);
+        setBaseMentions(parsed.map((m) => ({
+          ...m,
+          status: statusById[m.id] ?? "?",
+        })));
       })
-      .catch(() => !cancelled && setMentions([]));
+      .catch(() => !cancelled && setBaseMentions([]));
     return () => {
       cancelled = true;
     };
-  }, [activeProfile?.name, profiles]);
+  }, [activeProfile?.name]);
+
+  const mentions = useMemo(
+    () =>
+      baseMentions.map((m) => {
+        const profile = profiles.find((p) => p.name === m.id);
+        return { ...m, accent: profile?.accent ?? null };
+      }),
+    [baseMentions, profiles],
+  );
 
   const hasText = text.trim().length > 0;
   // Send can interrupt the in-flight turn from App.jsx.

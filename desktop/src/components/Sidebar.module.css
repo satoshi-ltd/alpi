@@ -1,12 +1,14 @@
 .sidebar {
+  position: relative;
+  z-index: 20;
   display: flex;
   flex-direction: column;
   width: var(--sidebar-width);
   background: var(--color-bg-solid);
   user-select: none;
-  overflow: hidden;
+  overflow: visible;
   flex-shrink: 0;
-  transition: width 220ms cubic-bezier(0.4, 0, 0.2, 1);
+  transition: width var(--motion-slow) var(--motion-easing);
 }
 
 .sidebar.collapsed {
@@ -19,7 +21,7 @@
   flex-direction: column;
   height: 100%;
   opacity: 1;
-  transition: opacity 160ms ease;
+  transition: opacity var(--motion-slow) var(--motion-easing);
 }
 
 .sidebar.collapsed .inner {
@@ -28,22 +30,38 @@
 }
 
 .actions {
-  padding: var(--space-2) var(--space-3);
+  padding: var(--space-4) var(--space-4) var(--space-4);
+}
+
+.actionSection {
+  margin-bottom: var(--space-4);
+}
+
+.connectionSlot {
+  padding: 0;
 }
 
 .newChatBtn {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--space-5);
   width: 100%;
-  padding: 7px 10px;
+  padding: var(--space-4) var(--space-5);
   border-radius: var(--radius-md);
   background: transparent;
   font-size: var(--font-size-ui);
   font-weight: var(--font-weight-medium);
   color: var(--color-fg);
   text-align: left;
-  transition: background 80ms ease;
+  transition: background var(--motion-fast) var(--motion-easing);
+}
+
+.newChatBtnLeading {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--space-5);
+  flex-shrink: 0;
 }
 
 .newChatBtn:hover {
@@ -57,15 +75,15 @@
 .nav {
   flex: 1;
   overflow: auto;
-  padding: var(--space-2) var(--space-2) var(--space-2);
+  padding: var(--space-4) var(--space-4) var(--space-4);
 }
 
 .section {
-  margin-bottom: var(--space-3);
+  margin-bottom: var(--space-5);
 }
 
 .sectionLabel {
-  padding: var(--space-2) var(--space-3) 4px;
+  padding: var(--space-4) var(--space-5) var(--space-2);
   font-size: var(--font-size-tiny);
   font-weight: var(--font-weight-semibold);
   letter-spacing: 0.06em;
@@ -75,7 +93,7 @@
 
 .showMoreWrap {
   display: flex;
-  padding: var(--space-1) var(--space-2) 0;
+  padding: var(--space-2) var(--space-4) 0;
 }
 
 .rowWrap {
@@ -83,8 +101,8 @@
 }
 
 .idleDot {
-  width: 8px;
-  height: 8px;
+  width: var(--space-4);
+  height: var(--space-4);
   border-radius: 50%;
   background: var(--color-fg-subtle);
   opacity: 0.5;
@@ -97,24 +115,24 @@
   font-variant-numeric: tabular-nums;
   flex-shrink: 0;
   transition:
-    opacity 160ms cubic-bezier(0.2, 0, 0, 1),
-    transform 200ms cubic-bezier(0.2, 0, 0, 1);
+    opacity var(--motion-slow) var(--motion-easing),
+    transform var(--motion-slow) var(--motion-easing);
 }
 
 .rowWrap:hover .rowTime,
 .rowWrap:hover .rowTag {
   opacity: 0;
-  transform: translateX(-12px);
+  transform: translateX(calc(-1 * var(--space-6)));
 }
 
 .rowTag {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 16px;
-  height: 16px;
-  padding: 0 6px;
-  border-radius: 999px;
+  min-width: var(--space-6);
+  height: var(--space-6);
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-pill);
   background: var(--color-hover);
   color: var(--color-fg-subtle);
   font-size: var(--font-size-tiny);
@@ -123,58 +141,21 @@
   letter-spacing: 0.04em;
   flex-shrink: 0;
   transition:
-    opacity 160ms cubic-bezier(0.2, 0, 0, 1),
-    transform 200ms cubic-bezier(0.2, 0, 0, 1);
-}
-
-.statusIcon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  color: var(--color-fg-subtle);
-}
-
-.statusIcon[data-kind="done"] {
-  color: var(--color-success, #30d158);
-}
-
-.statusIcon[data-kind="paused"] {
-  color: var(--color-fg-subtle);
-}
-
-.statusIcon[data-kind="error"] {
-  color: var(--color-danger, #ff453a);
-}
-
-.statusPulse {
-  display: inline-block;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--color-success, #30d158);
-  animation: statusPulse 1.4s ease-in-out infinite;
-}
-
-@keyframes statusPulse {
-  0%, 100% { opacity: 0.4; }
-  50% { opacity: 1; }
+    opacity var(--motion-slow) var(--motion-easing),
+    transform var(--motion-slow) var(--motion-easing);
 }
 
 /* Floating pin overlay — zero layout impact, slides in right→left */
 .pinWrap {
   position: absolute;
-  right: 4px;
+  right: var(--space-2);
   top: 50%;
-  transform: translateY(-50%) translateX(18px);
+  transform: translateY(-50%) translateX(var(--space-6));
   opacity: 0;
   pointer-events: none;
   transition:
-    opacity 180ms cubic-bezier(0.2, 0, 0, 1),
-    transform 220ms cubic-bezier(0.2, 0, 0, 1);
+    opacity var(--motion-slow) var(--motion-easing),
+    transform var(--motion-slow) var(--motion-easing);
 }
 
 .rowWrap:hover .pinWrap {

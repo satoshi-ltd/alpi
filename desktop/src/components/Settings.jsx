@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { getVersion } from "@tauri-apps/api/app";
-import { check } from "@tauri-apps/plugin-updater";
+import ConnectionSwitcher from "./ConnectionSwitcher.jsx";
 import Button from "../primitives/Button.jsx";
 import Chip from "../primitives/Chip.jsx";
 import Dropdown from "../primitives/Dropdown.jsx";
@@ -10,6 +10,11 @@ import Textarea from "../primitives/Textarea.jsx";
 import Tooltip from "../primitives/Tooltip.jsx";
 import useAutoPosition from "../primitives/useAutoPosition.js";
 import { useNotify } from "../primitives/Notification.jsx";
+import {
+  applyPendingUpdate,
+  checkForUpdates,
+  subscribeUpdater,
+} from "../lib/updater.js";
 import styles from "./Settings.module.css";
 
 const ACCENT_PALETTE = [
@@ -31,29 +36,32 @@ const HEX_RE = /^#([0-9a-fA-F]{6}|[0-9a-fA-F]{3})$/;
 
 function VersionFooter() {
   const [version, setVersion] = useState("");
-  const [status, setStatus] = useState("idle");
+  const [updater, setUpdater] = useState({
+    checking: false,
+    available: false,
+    version: null,
+    error: null,
+    installing: false,
+  });
   const notify = useNotify();
 
   useEffect(() => {
     getVersion().then(setVersion).catch(() => setVersion("?"));
   }, []);
 
+  useEffect(() => subscribeUpdater(setUpdater), []);
+
   async function checkNow() {
-    if (status === "checking") return;
-    setStatus("checking");
+    if (updater.checking || updater.installing) return;
     try {
-      const update = await check();
-      if (update?.available) {
+      const next = await checkForUpdates();
+      if (next.available && next.version) {
         notify({
-          message: `Update available: ${update.version}. Open the tray menu to install.`,
+          message: `Update available: ${next.version}`,
           variant: "success",
-          duration: 5000,
+          duration: 3500,
         });
-        await invoke("tray_announce_update", {
-          available: true,
-          version: update.version,
-        });
-      } else {
+      } else if (!next.error) {
         notify({ message: "You're on the latest version.", variant: "success" });
       }
     } catch (e) {
@@ -62,8 +70,24 @@ function VersionFooter() {
         variant: "error",
         duration: 4000,
       });
-    } finally {
-      setStatus("idle");
+    }
+  }
+
+  async function installNow() {
+    if (!updater.available || updater.installing) return;
+    try {
+      notify({
+        message: `Installing ${updater.version}… app will restart when ready.`,
+        variant: "success",
+        duration: 4000,
+      });
+      await applyPendingUpdate();
+    } catch (e) {
+      notify({
+        message: `Update install failed: ${String(e)}`,
+        variant: "error",
+        duration: 4000,
+      });
     }
   }
 
@@ -76,10 +100,25 @@ function VersionFooter() {
         type="button"
         className={styles.asideFooterButton}
         onClick={checkNow}
-        disabled={status === "checking"}
+        disabled={updater.checking || updater.installing}
       >
-        {status === "checking" ? "checking…" : "check for updates"}
+        {updater.checking ? "checking…" : "check for updates"}
       </button>
+      {updater.available && updater.version && (
+        <>
+          <span>·</span>
+          <button
+            type="button"
+            className={styles.asideFooterButton}
+            onClick={installNow}
+            disabled={updater.installing}
+          >
+            {updater.installing
+              ? "installing…"
+              : `install ${updater.version}`}
+          </button>
+        </>
+      )}
     </div>
   );
 }
@@ -95,8 +134,13 @@ export default function Settings({
   profiles,
   workgroups = [],
   target,
+  hostConnections,
   onSelectTarget,
   onRefresh,
+  onSetHostConnection,
+  onAddHostConnection,
+  onForgetHostConnection,
+  onRefreshHostConnectionStatus,
 }) {
   const setTarget = onSelectTarget ?? (() => {});
 
@@ -120,6 +164,16 @@ export default function Settings({
   return (
     <div className={styles.wrap}>
       <aside className={styles.aside}>
+        <div className={styles.asideTitle}>Connection</div>
+        <ConnectionSwitcher
+          className={styles.connectionSwitcher}
+          state={hostConnections}
+          onSetActive={onSetHostConnection}
+          onAddRemote={onAddHostConnection}
+          onForget={onForgetHostConnection}
+          onOpen={onRefreshHostConnectionStatus}
+        />
+
         <div className={styles.asideTitle}>Profiles</div>
         {profiles.map((p) => {
           const active =
@@ -1378,17 +1432,11 @@ function ConfirmButton({
   return (
     <Button
       size={size}
+      variant={armed && !loading ? "danger" : "ghost"}
+      active={armed && !loading}
       disabled={disabled}
       loading={loading}
       onClick={click}
-      style={
-        armed && !loading
-          ? {
-              backgroundColor: `color-mix(in srgb, var(--color-danger) 18%, transparent)`,
-              color: "var(--color-danger)",
-            }
-          : undefined
-      }
     >
       {armed ? confirmLabel : label}
     </Button>

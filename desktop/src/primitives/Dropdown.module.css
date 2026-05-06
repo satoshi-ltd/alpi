@@ -5,17 +5,17 @@
 .trigger {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--space-4);
   height: var(--control-height);
-  padding: 0 14px;
-  border-radius: 999px;
+  padding: 0 var(--space-5);
+  border-radius: var(--radius-pill);
   background: var(--color-surface);
   color: var(--color-fg);
   font: inherit;
   font-size: var(--font-size-ui);
   font-weight: var(--font-weight-medium);
   line-height: 1;
-  transition: background 80ms ease;
+  transition: background var(--motion-fast) var(--motion-easing);
   max-width: 320px;
 }
 
@@ -27,7 +27,12 @@
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   height: var(--control-height);
-  padding: 0 12px;
+  padding: 0 var(--space-5);
+  background: var(--color-surface);
+  transition:
+    border-color var(--motion-fast) var(--motion-easing),
+    box-shadow var(--motion-fast) var(--motion-easing),
+    background var(--motion-fast) var(--motion-easing);
 }
 
 .triggerOutlined:hover {
@@ -35,11 +40,62 @@
   border-color: var(--color-border-strong);
 }
 
+.triggerOutlined:focus,
+.triggerOutlined:focus-visible {
+  background: var(--color-surface);
+  border-color: var(--color-border-strong);
+  box-shadow: var(--control-focus-ring);
+}
+
+.triggerOpen {
+  border-color: var(--color-border-strong);
+  box-shadow: var(--control-focus-ring);
+}
+
+.trigger.triggerOpen:hover {
+  background: var(--color-surface);
+}
+
+.triggerList {
+  gap: var(--space-4);
+  height: auto;
+  min-height: var(--space-8);
+  padding: var(--space-4) var(--space-5);
+  border-radius: var(--radius-md);
+  max-width: none;
+  line-height: 1.2;
+}
+
+.triggerList .label {
+  flex: 1;
+  max-width: none;
+  text-align: left;
+}
+
 .label {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   max-width: 240px;
+}
+
+.leading {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.triggerList .leading {
+  width: var(--space-6);
+}
+
+.caret {
+  flex-shrink: 0;
+}
+
+.triggerList .caret {
+  margin-left: auto;
 }
 
 .menu {
@@ -55,14 +111,19 @@
   z-index: 30;
 }
 
+.menuPortal {
+  position: fixed;
+  z-index: 1000;
+}
+
 .searchWrap {
-  padding: var(--space-2);
+  padding: var(--space-4);
   border-bottom: 1px solid var(--color-border);
 }
 
 .search {
   width: 100%;
-  padding: 7px 10px;
+  padding: var(--space-4) var(--space-5);
   border-radius: var(--radius-sm);
   border: 1px solid transparent;
   background: var(--color-bg);
@@ -70,27 +131,37 @@
   font-size: var(--font-size-small);
   color: var(--color-fg);
   outline: none;
+  transition:
+    border-color var(--motion-fast) var(--motion-easing),
+    box-shadow var(--motion-fast) var(--motion-easing),
+    background var(--motion-fast) var(--motion-easing);
 }
 
-.search:focus {
+.search:hover {
   border-color: var(--color-border-strong);
+}
+
+.search:focus,
+.search:focus-visible {
+  border-color: var(--color-border-strong);
+  box-shadow: var(--control-focus-ring);
 }
 
 .list {
   flex: 1;
   overflow: auto;
-  padding: 4px;
+  padding: var(--space-2);
 }
 
 .emptyRow {
-  padding: var(--space-3);
+  padding: var(--space-5);
   font-size: var(--font-size-small);
   color: var(--color-fg-subtle);
   text-align: center;
 }
 
 .group {
-  margin-bottom: var(--space-2);
+  margin-bottom: var(--space-4);
 }
 
 .group:last-child {
@@ -98,7 +169,7 @@
 }
 
 .groupLabel {
-  padding: 8px 10px 4px;
+  padding: var(--space-4) var(--space-5) var(--space-2);
   font-size: var(--font-size-tiny);
   font-weight: var(--font-weight-semibold);
   text-transform: uppercase;
@@ -109,14 +180,14 @@
 .row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-5);
   width: 100%;
-  padding: 8px 10px;
+  padding: var(--space-4) var(--space-5);
   border-radius: var(--radius-sm);
   text-align: left;
   font: inherit;
   color: var(--color-fg);
-  transition: background 80ms ease;
+  transition: background var(--motion-fast) var(--motion-easing);
 }
 
 .row:not(:disabled):hover {
@@ -142,7 +213,7 @@
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-1);
   min-width: 0;
 }
 

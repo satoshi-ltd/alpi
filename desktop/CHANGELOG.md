@@ -11,6 +11,53 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.2.2 — 2026-05-06 — remote host switching, rewrite-in-place, release path cleanup
+
+Requires alpi ``v0.4.6`` or newer.
+
+This release turns the desktop into a real multi-host client instead
+of a local-socket-only shell, finishes the "rewrite from here" chat
+flow, and closes the release/update path so the app and the public
+site can both point at a stable desktop artifact.
+
+**Connections**
+
+- Desktop can now keep multiple host-plane connections and switch
+  between the local Unix socket and paired remote daemons. The new
+  ``ConnectionSwitcher`` lives in the sidebar and in Settings instead
+  of the header, so connection state no longer competes with session /
+  model controls.
+- Pairing UX is desktop-first: remote connections are stored in the
+  Tauri layer and can be forgotten explicitly. Revoked devices are no
+  longer treated as healthy/selectable forever.
+
+**Chat + workgroups**
+
+- ``Rewrite from here`` no longer opens a fresh session. Desktop now
+  hides the selected turn and everything after it, seeds the composer,
+  and only truncates the real session when the rewritten message is
+  actually sent.
+- Requires ``alpi v0.4.6`` because the host plane now accepts
+  ``rewrite_from_turn`` when resuming a chat session.
+- Message action footers, tool rows, and workgroup markers were
+  tightened so the layout behaves like one system: shared icon
+  primitive, shared row primitive, shared spacing/radius/motion
+  tokens, consistent hover/focus rules, and smaller hot-path render
+  cost in the message stream.
+
+**Updates + distribution**
+
+- Settings now exposes update state directly: ``check for updates``
+  and, when a release exists, ``install X.Y.Z``. The tray remains a
+  secondary surface instead of the only install path.
+- Desktop release pipeline now republishes stable aliases under
+  ``desktop-latest`` for both the updater and the site:
+  ``latest.json``, ``alpi-latest.dmg``, and
+  ``desktop-release.json``.
+- The site landing page reads desktop version from
+  ``desktop/src-tauri/tauri.conf.json`` and links its macOS button to
+  the stable ``alpi-latest.dmg`` URL instead of a tag page.
+
 ## v0.2.1 — 2026-05-05 — pin / show-more sidebar, auto-grow textarea, streaming perf
 
 Requires alpi ``v0.4.0`` or newer (unchanged from v0.2.0 — no new

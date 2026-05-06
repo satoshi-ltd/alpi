@@ -1,10 +1,10 @@
 .body {
   flex: 1;
   overflow: auto;
-  padding: var(--space-5) var(--space-4);
+  padding: var(--space-7) var(--space-6);
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
+  gap: var(--space-6);
   min-height: 0;
 }
 
@@ -16,7 +16,7 @@
 }
 
 .error {
-  padding: var(--space-3);
+  padding: var(--space-5);
   border-radius: var(--radius-md);
   background: rgba(255, 69, 58, 0.08);
   color: var(--color-danger);
@@ -31,20 +31,20 @@
   color: var(--color-fg-muted);
   font-style: italic;
   text-align: center;
-  padding: var(--space-2) 0;
+  padding: var(--space-4) 0;
 }
 
 .empty {
   text-align: center;
   font-size: var(--font-size-ui);
   color: var(--color-fg-subtle);
-  padding: var(--space-6) 0;
+  padding: var(--space-8) 0;
 }
 
 .timeline {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
+  gap: var(--space-6);
   width: 100%;
 }
 
@@ -54,13 +54,13 @@
 .working {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-2);
 }
 
 .workingLabel {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-3);
   font-size: var(--font-size-tiny);
   font-weight: var(--font-weight-semibold);
   letter-spacing: 0.06em;
@@ -70,8 +70,8 @@
 
 .workingPulse {
   display: inline-block;
-  width: 6px;
-  height: 6px;
+  width: var(--space-3);
+  height: var(--space-3);
   border-radius: 50%;
   background: var(--color-success, #30d158);
   animation: workingPulse 1.4s ease-in-out infinite;
@@ -98,7 +98,7 @@
 .skip {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-2);
 }
 
 .skipLabel {
@@ -119,7 +119,7 @@
 .done {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-2);
 }
 
 .doneLabel {

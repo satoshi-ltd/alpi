@@ -1,7 +1,16 @@
-import { useEffect, useState } from "react";
+import { memo, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import SessionsDropdown from "./SessionsDropdown.jsx";
 import Button from "../primitives/Button.jsx";
+import {
+  BackIcon,
+  CheckIcon,
+  AlpiIcon,
+  PlusIcon,
+  QuestionIcon,
+  SidebarCloseIcon,
+  SidebarOpenIcon,
+} from "../primitives/icons.jsx";
 import ProgressBar from "../primitives/ProgressBar.jsx";
 import styles from "./AppHeader.module.css";
 
@@ -38,7 +47,7 @@ function useCtxWindow(profileName, model) {
   return win ?? 200_000;
 }
 
-export default function AppHeader({
+function AppHeader({
   view,
   collapsed,
   profiles = [],
@@ -74,7 +83,7 @@ export default function AppHeader({
           </>
         ) : (
           <Button
-            icon={<SidebarIcon />}
+            icon={collapsed ? <SidebarOpenIcon /> : <SidebarCloseIcon />}
             onClick={onToggleSidebar}
             title={
               <>
@@ -148,11 +157,7 @@ export default function AppHeader({
               )}
               {activeTask && activeTask.state === "done" && (
                 <Button
-                  icon={
-                    <span style={{ color: "var(--color-success, #30d158)" }}>
-                      <CheckIcon />
-                    </span>
-                  }
+                  icon={<CheckIcon />}
                   title={<TaskTooltip task={activeTask} />}
                   tooltipAlign="end"
                 />
@@ -164,6 +169,8 @@ export default function AppHeader({
     </header>
   );
 }
+
+export default memo(AppHeader);
 
 function ProfileTitle({ profile, sessionData }) {
   const ctxTokens = sessionData?.last_ctx_tokens ?? 0;
@@ -197,10 +204,7 @@ function ProfileTitle({ profile, sessionData }) {
 
   return (
     <div className={styles.profileTitle}>
-      <span
-        className={styles.dot}
-        style={profile.accent ? { backgroundColor: profile.accent } : undefined}
-      />
+      <AlpiIcon className={styles.dot} color={profile.accent} />
       <div className={styles.profileText}>
         <div className={styles.title}>{profile.name}</div>
         {sessionData ? (
@@ -250,10 +254,7 @@ function ProfileTitle({ profile, sessionData }) {
 function SettingsTitle({ profile }) {
   return (
     <div className={styles.profileTitle}>
-      <span
-        className={styles.dot}
-        style={profile.accent ? { backgroundColor: profile.accent } : undefined}
-      />
+      <AlpiIcon className={styles.dot} color={profile.accent} />
       <div className={styles.profileText}>
         <div className={styles.title}>{profile.name}</div>
       </div>
@@ -266,10 +267,7 @@ function WorkgroupTitle({ workgroup, hub }) {
   const budget = workgroup.budget_usd ?? 0;
   return (
     <div className={styles.profileTitle}>
-      <span
-        className={styles.dot}
-        style={hub?.accent ? { backgroundColor: hub.accent } : undefined}
-      />
+      <AlpiIcon className={styles.dot} color={hub?.accent} />
       <div className={styles.profileText}>
         <div className={styles.title}>{workgroup.name ?? workgroup.id}</div>
         <div className={styles.meta}>
@@ -295,53 +293,6 @@ function WorkgroupTitle({ workgroup, hub }) {
   );
 }
 
-function BackIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-      <path
-        d="M10 3.5 5.5 8l4.5 4.5"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-function SidebarIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-      <rect x="2" y="3" width="12" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.3" />
-      <line x1="6" y1="3.5" x2="6" y2="12.5" stroke="currentColor" strokeWidth="1.3" />
-    </svg>
-  );
-}
-
-function PlusIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-      <path d="M7 2.5v9M2.5 7h9" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function QuestionIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-      <circle cx="7" cy="7" r="5.5" stroke="currentColor" strokeWidth="1.3" />
-      <path
-        d="M5.4 5.5c0-.9.7-1.6 1.6-1.6s1.6.7 1.6 1.6c0 .8-.6 1.1-1.1 1.4-.4.3-.5.6-.5 1v.3"
-        stroke="currentColor"
-        strokeWidth="1.2"
-        strokeLinecap="round"
-        fill="none"
-      />
-      <circle cx="7" cy="9.9" r="0.55" fill="currentColor" />
-    </svg>
-  );
-}
-
 function PulseDot() {
   return (
     <span className={styles.pulseDot} aria-hidden />
@@ -357,20 +308,6 @@ function TaskTooltip({ task }) {
         <span className={styles.tooltipBlock}>{task.result}</span>
       )}
     </>
-  );
-}
-
-function CheckIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-      <path
-        d="M3 7.4l2.8 2.6L11 4.6"
-        stroke="currentColor"
-        strokeWidth="1.6"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
   );
 }
 

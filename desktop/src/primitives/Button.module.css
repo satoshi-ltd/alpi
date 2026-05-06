@@ -2,18 +2,18 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: var(--space-2);
+  gap: var(--space-4);
   height: var(--control-height);
   padding: 0;
   border: 0;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: transparent;
   color: var(--color-fg-muted);
   font: inherit;
   font-size: var(--font-size-ui);
   line-height: 1;
   cursor: pointer;
-  transition: background 80ms ease, color 80ms ease, opacity 80ms ease;
+  transition: background var(--motion-fast) var(--motion-easing), color var(--motion-fast) var(--motion-easing), opacity var(--motion-fast) var(--motion-easing);
 }
 
 .button:disabled {
@@ -33,7 +33,7 @@
 }
 
 .withLabel {
-  padding: 0 14px;
+  padding: 0 var(--space-5);
 }
 
 .iconOnly {
@@ -60,14 +60,24 @@
   background: var(--color-fg);
 }
 
+.danger {
+  color: var(--color-danger);
+}
+
+.danger.active,
+.danger:not(:disabled):hover {
+  background: color-mix(in srgb, var(--color-danger) 18%, transparent);
+  color: var(--color-danger);
+}
+
 .sm {
   height: var(--control-height-sm);
   font-size: var(--font-size-small);
 }
 
 .spinner {
-  width: 12px;
-  height: 12px;
+  width: var(--space-5);
+  height: var(--space-5);
   border-radius: 50%;
   border: 1.5px solid currentColor;
   border-right-color: transparent;
@@ -87,7 +97,7 @@
 }
 
 .sm.withLabel {
-  padding: 0 var(--space-3);
+  padding: 0 var(--space-5);
 }
 
 .sm.iconOnly {
@@ -100,7 +110,7 @@
 }
 
 .xs.withLabel {
-  padding: 0 var(--space-2);
+  padding: 0 var(--space-4);
 }
 
 .xs.iconOnly {
