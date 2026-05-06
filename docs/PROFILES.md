@@ -36,13 +36,13 @@ Everything that represents state, identity, or cost:
 | `config.yaml` | ✓ | Model, fallbacks, tool limits, gateway config, MCP servers. |
 | `.env` | ✓ | API keys. A leak in one profile doesn't touch the other. |
 | `memories/` (USER.md, MEMORY.md, AGENT.md) | ✓ | Your identity and what alpi remembers. |
-| `sessions/<id>.json` | ✓ | Turn-by-turn chat log (TUI / desktop / `--once`). |
+| `sessions/<id>.json` | ✓ | Local human chat log (TUI / desktop / manual `chat --once`). |
 | `mentions/<sender>.json` | ✓ | Per-sender `@`-mention threads (capped at 20 turns). Receiving side only. |
 | `gateway/sessions/<id>.json` | ✓ | Telegram / email / webhook chat logs. Hidden from TUI/desktop listings on purpose. |
 | `gateway/sessions/_map.json` | ✓ | `chat_id → session_id` pointer for per-chat threading. |
 | `skills/` | ✓ | Installed skills (live under this profile's allowlist). |
 | `alp/` (peers.yaml, socket, keypair) | ✓ | ALP identity + pinned peers. Two profiles on the same machine are two distinct peers. |
-| `schedule/jobs.json` | ✓ | Cron + one-shot jobs. |
+| `schedule/jobs.json` | ✓ | Cron + one-shot jobs. Scheduled runs use `chat --once --no-save` and do not create chat sessions. |
 | `logs/` | ✓ | `gateway.log`, `schedule.log`, `alp.log`, `agent.log`, `approval.log`. |
 | `logs/ledger.json` | ✓ | Daily spending ledger — the profile's USD / token cap is enforced from here across every turn (interactive, gateway, scheduled, sub-agent, inbound ALP). Resets at UTC midnight. |
 | `cache/` (tts, stt, inbound voice) | ✓ | Audio cache. |

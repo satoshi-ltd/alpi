@@ -402,20 +402,21 @@ def _installed_via() -> str | None:
 
 
 def _latest_chat_for(home: Path) -> dict[str, Any] | None:
-    """Return the most recent session of ANY kind. The conversations
-    list on mobile / sidebar on desktop need a single recency signal —
-    a profile that only handled scheduled jobs or inbound gateway turns
-    must still surface as 'recent'."""
-    rows = host_sessions.list_sessions(home)
-    if not rows:
-        return None
-    r = rows[0]
-    return {
-        "id": r["id"],
-        "mtime": r["mtime"],
-        "first_user": r["first_user"],
-        "kind": r.get("kind"),
-    }
+    """Return the most recent chat session only.
+
+    The desktop profile view should never reopen a workgroup / gateway
+    session as if it were the user's normal chat history.
+    """
+    for row in host_sessions.list_sessions(home):
+        if row.get("kind") != "chat":
+            continue
+        return {
+            "id": row["id"],
+            "mtime": row["mtime"],
+            "first_user": row["first_user"],
+            "kind": row.get("kind"),
+        }
+    return None
 
 
 def _today_ledger(home: Path) -> tuple[float, int]:

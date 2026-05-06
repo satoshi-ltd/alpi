@@ -59,6 +59,7 @@ alpi -p <name>                 profile flag, combinable with any command
 alpi chat                      alias for `alpi`
 alpi chat --once "<text>"      one-shot turn to stdout (pipe-friendly)
 alpi chat --once ... --emit-events     INTERNAL — gateway subprocess contract
+alpi chat --once ... --no-save         INTERNAL — do not write a session file
 
 alpi setup                     interactive menu: model / gateways / voice / MCPs /
                                peers / workgroups / sandbox / service /
@@ -573,6 +574,12 @@ the agent calls `schedule(action='add', kind='once',
 after_hours=N)`, the engine resolves `now` from a single source so
 the agent doesn't drift.
 
+Scheduled jobs execute through `alpi chat --once --emit-events
+--no-save` with `ALPI_PLATFORM=cron`. The scheduler consumes stdout
+events to detect tool traces, final reply text, delivery, and failure.
+It does not write `sessions/<id>.json`: cron output belongs to
+schedule delivery/logging, not to local TUI / desktop chat history.
+
 **Timezone.** Cron expressions evaluate against the **machine's system timezone** (`datetime.now().astimezone()` in `scheduler/run.py`). Jobs are stored with UTC `last_run_at` but fire according to local wall-clock time. Practical consequence: if you specify `10 12 * * *` because you want a 12:10 reminder in Bangkok, the Mac must be set to `Asia/Bangkok`. Move the machine to a different timezone and the cron fires at 12:10 there, not in Bangkok. No in-job timezone override today — add it via `TZ=…` in the launchd plist / systemd unit if cross-timezone stability is required.
 
 ### MCP client (`alpi/mcp/`)
@@ -622,11 +629,24 @@ Exit codes: `1` if any check returns `fail`, `0` for warn/info/ok. Warnings don'
 
 Turn-based JSON: `turns: [{at, user, tools[], assistant}]` plus cumulative metrics. `ToolLog` carries `at, name, args, result (truncated hint), ok, duration_s, reasoning (non-empty only on first tool of a batch)`. Empty sessions (no user message) are NOT saved.
 
+`sessions/` is local human chat history: TUI, desktop, and manual
+`alpi chat --once` runs that should be resumable. `--continue`,
+`tui.auto_resume`, host `latest_session`, and desktop profile opening
+all treat only `kind == "chat"` as resumable local history. Historical
+files whose first user message starts with `[SCHEDULED:]`, `[INBOUND
+...]`, `[workgroup-poller]`, or another system bracket are ignored by
+resume/profile history.
+
 **TUI resume.** Bare `alpi` resumes the most recent session when `tui.auto_resume: true`; `-c` / `--continue` is the manual override.
 
 **Gateway per-chat threading.** Each inbound message carries `external_chat_id` (a Telegram chat id, or the sender email for IMAP/Gmail). `alpi/session_map.py` holds a pointer map at `~/.alpi/<profile>/gateway/sessions/_map.json`: `{chat_id: session_id}`. When the gateway spawns `alpi chat --once --resume-chat <chat_id>`, the CLI sets `engine.session.subdir = "gateway/sessions"` and consults the map — if there's a pointer, that session is loaded and continued; otherwise a fresh session starts and the pointer gets bound after save. Same mechanism across every platform; the natural semantics fall out of what each puts in `chat_id`: per-chat threading for Telegram, per-sender threading for IMAP / Gmail.
 
 Gateway sessions live in their own subdir (`gateway/sessions/`) so they don't pollute the local TUI/desktop session list (which scans `sessions/` only) and so the `Cleanup → Gateway` category never collides with transport state files in `gateway/` itself (Telegram offsets, IMAP last-uid, …).
+
+Scheduled jobs do not persist session files. The scheduler uses
+`--no-save` because it only needs emitted final reply/tool events for
+delivery and audit; keeping a resumable transcript would make
+background jobs appear as user chats.
 
 `/new` (wired up in AK) calls `session_map.forget(chat_id)` — the pointer drops but the underlying session file stays on disk. Historical threads remain searchable via `session_search` against the local `sessions/` dir; gateway transcripts are intentionally excluded from local search.
 
@@ -700,6 +720,7 @@ Key fixtures (`tests/conftest.py`):
 - `call_from_thread` + Python built-in methods (e.g. `dict.pop`) crashes Textual; always wrap in a regular function.
 - `cfg` must be loaded BEFORE `super().__init__()` on `AlpiApp`. The theme is then registered immediately after, in `__init__` rather than `on_mount`, because child widgets read `self.app.theme_variables` during their own mount (which fires first). `self.get_css_variables()` is called explicitly to rebuild the var dict synchronously — setting `self.theme` alone schedules the refresh for the next event-loop tick.
 - `browser.py` exists but is intentionally NOT in the registry. Reactivate when Playwright lands (ROADMAP §B).
-- Gateway subprocess uses `alpi chat --once --emit-events` — separate codepath from the TUI, simpler, non-streaming. Changes to TUI feel don't affect gateway.
+- Gateway subprocess uses `alpi chat --once --emit-events --resume-chat <chat_id>` — separate codepath from the TUI, simpler, non-streaming, and persisted under `gateway/sessions`.
+- Schedule subprocess uses `alpi chat --once --emit-events --no-save` — same event stream, no resumable session file.
 - `ALPI_HOME` env var routes daemons + tests to a specific profile root.
 - `ALPI_SKIP_UPDATE_CHECK=1` short-circuits the background PyPI version check (`alpi/updater.py`); the autouse fixture in `tests/conftest.py` sets it so the unit suite never reaches PyPI. `ALPI_UPDATE_INDEX` overrides the JSON URL the updater hits — used to point at TestPyPI for release rehearsals.

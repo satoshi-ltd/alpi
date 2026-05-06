@@ -171,7 +171,16 @@ def run_job(job: dict, home: Path) -> tuple[bool, str]:
     env["ALPI_PLATFORM"] = "cron"
     try:
         proc = subprocess.run(
-            [sys.executable, "-m", "alpi", "chat", "--once", wrapped, "--emit-events"],
+            [
+                sys.executable,
+                "-m",
+                "alpi",
+                "chat",
+                "--once",
+                wrapped,
+                "--emit-events",
+                "--no-save",
+            ],
             env=env, capture_output=True, text=True, timeout=600,
         )
     except subprocess.TimeoutExpired:

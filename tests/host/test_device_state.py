@@ -36,6 +36,11 @@ def _bootstrap(home: Path) -> Path:
         "output_tokens": 20,
         "cost_usd": 0.03,
     }))
+    (home / "sessions" / "zzz.json").write_text(json.dumps({
+        "started_at": 2.0,
+        "model": "openai/gpt-5.4-mini",
+        "turns": [{"user": "[workgroup-poller] keep going"}],
+    }))
     (home / "skills" / "demo").mkdir(parents=True)
     (home / "skills" / "demo" / "SKILL.md").write_text(
         "---\ndescription: Demo skill\n---\n",
@@ -65,7 +70,8 @@ async def test_device_profile_summaries_are_served_by_host(
     assert profile["model"] == "openai/gpt-5.4-mini"
     assert profile["workspace"] == "/tmp/work"
     assert profile["latest_session"]["id"] == "abc"
-    assert profile["counts"]["sessions"] == 1
+    assert profile["latest_session"]["kind"] == "chat"
+    assert profile["counts"]["sessions"] == 2
     assert profile["counts"]["skills"] == 1
     assert profile["provider_keys"][0]["env"] == "OPENAI_API_KEY"
     assert profile["pubkey_b64"]

@@ -16,6 +16,24 @@ from alpi.alp import client as alp_client
 from alpi.engine import AgentEvent, Engine
 
 
+def _is_local_chat_session_payload(data: dict[str, Any]) -> bool:
+    turns = data.get("turns") or []
+    first = ""
+    if turns:
+        first = str((turns[0] or {}).get("user") or "").lstrip()
+    if not first:
+        return True
+    if first.startswith("[workgroup-poller]") or first.startswith("[workgroup "):
+        return False
+    if first.startswith("[SCHEDULED:") or first.startswith("[CRON"):
+        return False
+    if first.startswith("[INBOUND "):
+        return False
+    if first.startswith("["):
+        return False
+    return True
+
+
 def _suggest(name: str, candidates: list[str]) -> str:
     import difflib
 
@@ -72,13 +90,25 @@ def _continue_last_session(engine: Engine, h: Path, console=None) -> bool:
     if not sessions_dir.exists():
         return False
     candidates = sorted(
-        (p for p in sessions_dir.glob("*.json") if not p.name.startswith("_")),
+        (
+            p for p in sessions_dir.glob("*.json")
+            if not p.name.startswith("_") and _is_local_chat_session_path(p)
+        ),
         key=lambda p: p.stat().st_mtime,
         reverse=True,
     )
     if not candidates:
         return False
     return _hydrate_from_path(engine, candidates[0], console=console)
+
+
+def _is_local_chat_session_path(path: Path) -> bool:
+    import json
+    try:
+        data = json.loads(path.read_text())
+    except Exception:
+        return False
+    return _is_local_chat_session_payload(data)
 
 
 def _continue_specific_session(
@@ -149,6 +179,7 @@ def _run_once(
     user_text: str,
     emit_events: bool = False,
     resume_chat_id: str | None = None,
+    persist: bool = True,
 ) -> None:
     import json
     from alpi import session_map
@@ -199,11 +230,12 @@ def _run_once(
             )],
             started_at=started,
         )
-        try:
-            engine.save_session()
-        except Exception:  # noqa: BLE001
-            pass
-        if resume_chat_id:
+        if persist:
+            try:
+                engine.save_session()
+            except Exception:  # noqa: BLE001
+                pass
+        if persist and resume_chat_id:
             try:
                 session_map.set(h, resume_chat_id, engine.session.id)
             except Exception:  # noqa: BLE001
@@ -256,14 +288,15 @@ def _run_once(
         engine.run_turn(user_text, emit=sink)
     finally:
         _signal.signal(_signal.SIGINT, prev_handler)
-    try:
-        engine.save_session()
-    except Exception:  # noqa: BLE001
-        pass
+    if persist:
+        try:
+            engine.save_session()
+        except Exception:  # noqa: BLE001
+            pass
 
     # Bind (or refresh) the chat-id → session-id pointer after save, so a
     # follow-up inbound from the same chat picks up the same session.
-    if resume_chat_id:
+    if persist and resume_chat_id:
         try:
             session_map.set(h, resume_chat_id, engine.session.id)
         except Exception:  # noqa: BLE001
@@ -379,6 +412,7 @@ def cmd_ctx(ctx: click.Context, model: str) -> None:
 )
 # Hidden gateway contract for stdout event streaming.
 @click.option("--emit-events", is_flag=True, default=False, hidden=True)
+@click.option("--no-save", is_flag=True, default=False, hidden=True)
 @click.option(
     "--resume-chat",
     "resume_chat",
@@ -394,6 +428,7 @@ def chat(
     ctx: click.Context,
     input_text: str | None,
     emit_events: bool,
+    no_save: bool,
     resume_chat: str | None,
     continue_last: bool,
 ) -> None:
@@ -405,6 +440,7 @@ def chat(
             input_text,
             emit_events=emit_events,
             resume_chat_id=resume_chat,
+            persist=not no_save,
         )
     else:
         _run_chat(h, continue_last=continue_last)
@@ -1994,6 +2030,7 @@ def _device_add(h: Path, endpoint) -> None:
     import io
     import json
     import socket
+    from urllib.parse import urlencode
 
     import qrcode
 
@@ -2004,6 +2041,13 @@ def _device_add(h: Path, endpoint) -> None:
         "n": socket.gethostname(),
         "t": row["token"],
     }
+    link = "alpi://device?" + urlencode({
+        "v": payload["v"],
+        "host": payload["i"],
+        "port": payload["p"],
+        "name": payload["n"],
+        "token": payload["t"],
+    })
 
     ui.banner(
         ui.crumb("setup", "devices", "add", row["label"]),
@@ -2023,10 +2067,12 @@ def _device_add(h: Path, endpoint) -> None:
     ui._console.print(buf.getvalue())
     ui._console.print(f"[dim]label:    [/dim] {row['label']}")
     ui._console.print(f"[dim]token id:[/dim] …{row['token'][-8:]}")
+    ui._console.print(f"[dim]desktop:  [/dim] {link}")
     ui._console.print("")
     ui.dim(
+        "Scan the QR from mobile or paste the desktop link into the desktop app.\n"
         "The token is one-shot — only this device will be paired with it.\n"
-        "If the QR is exposed to anyone else, revoke and generate a new one."
+        "If the QR or link is exposed to anyone else, revoke and generate a new one."
     )
     ui.press_enter()
 

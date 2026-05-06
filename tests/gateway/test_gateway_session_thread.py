@@ -142,3 +142,12 @@ def test_no_resume_chat_id_behaves_as_before(
     files = list((tmp_path / "sessions").glob("*.json"))
     assert len(files) == 2
     assert session_map.all_pointers(tmp_path) == {}
+
+
+def test_no_save_writes_no_session_files(
+    tmp_path: Path, fake_engine,
+) -> None:
+    cli._run_once(tmp_path, "scheduled run", persist=False)
+    assert not list((tmp_path / "sessions").glob("*.json"))
+    assert not list((tmp_path / "gateway" / "sessions").glob("*.json"))
+    assert not list((tmp_path / "schedule" / "sessions").glob("*.json"))

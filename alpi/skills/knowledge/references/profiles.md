@@ -21,7 +21,7 @@ Important files/directories:
 | `config.yaml` | Model, tools, gateway, scheduler, workspace, budget. |
 | `.env` | Provider keys and static secrets. |
 | `memory/` | Persistent user/project memory. |
-| `sessions/` | Conversation history. |
+| `sessions/` | Local human chat history only. Gateway, schedule, workgroup, and system-prefixed turns stay out of normal profile resume/history. |
 | `skills/` | User-created skills. |
 | `logs/` | Service and runtime logs. |
 | `alp/` | ALP identity, peers, workgroups. |
@@ -45,7 +45,7 @@ Profiles isolate:
 - API keys in `.env`,
 - memory,
 - skills,
-- sessions,
+- local chat sessions,
 - gateway and scheduler state,
 - logs,
 - ALP identity and peer list,

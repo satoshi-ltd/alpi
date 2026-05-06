@@ -243,16 +243,18 @@ def _events_stdout(events: list[dict]) -> str:
 def test_run_job_delivers_reply(monkeypatch, tmp_home_no_env: Path) -> None:
     monkeypatch.setenv("TELEGRAM_ALLOWED_CHAT_IDS", "1")
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "x")
+    captured = {}
 
     class _FakeCompletedProcess:
         returncode = 0
         stdout = _events_stdout([{"kind": "reply", "text": "hello world"}])
         stderr = ""
 
-    monkeypatch.setattr(
-        scheduler.subprocess, "run",
-        lambda *a, **kw: _FakeCompletedProcess(),
-    )
+    def fake_run(*a, **kw):
+        captured["args"] = a[0]
+        return _FakeCompletedProcess()
+
+    monkeypatch.setattr(scheduler.subprocess, "run", fake_run)
 
     sent = []
     monkeypatch.setattr(delivery, "send_to",
@@ -262,6 +264,7 @@ def test_run_job_delivers_reply(monkeypatch, tmp_home_no_env: Path) -> None:
            "platform": "telegram", "chat_id": "1"}
     ok, msg = scheduler.run_job(job, tmp_home_no_env)
     assert ok
+    assert "--no-save" in captured["args"]
     assert sent == [("telegram", "1", "hello world")]
     assert "telegram:1" in msg
 

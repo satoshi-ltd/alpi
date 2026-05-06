@@ -39,6 +39,15 @@ alpi is a local agent runtime:
 checks budget, injects transient context, appends user input, streams
 LLM output, executes tool calls, records usage, and saves the session.
 
+`sessions/` is local human chat history. TUI resume, desktop profile
+history, and host `latest_session` use only sessions classified as
+`chat`; scheduled, gateway, workgroup, and system-prefixed turns must
+not appear as normal profile chats.
+
+Scheduled jobs run through `alpi chat --once --emit-events --no-save`
+with `ALPI_PLATFORM=cron`. The scheduler reads stdout events and
+delivers the final reply, but no session file is saved.
+
 Skills are exposed through a compact index in the system prompt.
 Keyword hints can add a one-turn system message nudging toward matching
 skills.

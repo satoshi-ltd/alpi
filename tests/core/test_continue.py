@@ -45,6 +45,12 @@ def _save_session(home_: Path, sid: str, user: str, assistant: str,
     }))
 
 
+def _touch_session(home_: Path, sid: str, mtime: int) -> None:
+    path = home_ / "sessions" / f"{sid}.json"
+    import os
+    os.utime(path, (mtime, mtime))
+
+
 def test_no_sessions_returns_false(bootstrapped_home: Path) -> None:
     cfg = config.load(bootstrapped_home)
     engine = Engine(home=bootstrapped_home, cfg=cfg)
@@ -79,6 +85,26 @@ def test_resume_carries_context_and_adopts_id(bootstrapped_home: Path) -> None:
     # The turns log is also loaded onto the engine for later save().
     assert len(engine.session.turns) == 1
     assert engine.session.turns[0].user == "mi color favorito es el turquesa"
+
+
+def test_continue_skips_scheduled_sessions(bootstrapped_home: Path) -> None:
+    _save_session(
+        bootstrapped_home, "chat-123",
+        user="normal chat",
+        assistant="ok",
+    )
+    _save_session(
+        bootstrapped_home, "scheduled-123",
+        user="[SCHEDULED: running from cron]\n\nsend a joke",
+        assistant="sent",
+    )
+    _touch_session(bootstrapped_home, "chat-123", 1_700_000_000)
+    _touch_session(bootstrapped_home, "scheduled-123", 1_700_000_100)
+
+    cfg = config.load(bootstrapped_home)
+    engine = Engine(home=bootstrapped_home, cfg=cfg)
+    assert _continue_last_session(engine, bootstrapped_home, Console())
+    assert engine.session.id == "chat-123"
 
 
 def test_save_after_resume_overwrites_same_file(bootstrapped_home: Path) -> None:
