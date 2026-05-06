@@ -33,8 +33,7 @@ GitHub Actions publish:
 1. Add repository secrets:
    - `DOCKERHUB_USERNAME`
    - `DOCKERHUB_TOKEN`
-2. Run the `Umbrel image` workflow with tag `0.4.3`, or push tag
-   `umbrel-v0.4.3`.
+2. Run the `Umbrel image` workflow manually with tag `0.4.3`.
 
 ## Files for `getumbrel/umbrel-apps`
 

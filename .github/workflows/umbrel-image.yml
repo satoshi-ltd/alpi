@@ -7,9 +7,6 @@ on:
         description: Docker image tag
         required: true
         default: "0.4.3"
-  push:
-    tags:
-      - "umbrel-v*"
 
 permissions:
   contents: read
@@ -33,11 +30,7 @@ jobs:
         id: image
         shell: bash
         run: |
-          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
-            tag="${GITHUB_REF_NAME#umbrel-v}"
-          else
-            tag="${{ inputs.tag }}"
-          fi
+          tag="${{ inputs.tag }}"
           echo "tag=${tag}" >> "$GITHUB_OUTPUT"
 
       - uses: docker/build-push-action@v7

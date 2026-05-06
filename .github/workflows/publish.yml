@@ -25,6 +25,13 @@ name: publish
 on:
   push:
     branches: [main]
+    paths:
+      - "alpi/**"
+      - "tests/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - "CHANGELOG.md"
+      - ".github/workflows/publish.yml"
   workflow_dispatch:
     inputs:
       target:
