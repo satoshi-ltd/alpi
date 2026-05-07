@@ -23,6 +23,7 @@ export default function ChatPane({
   onRewriteMessage,
   rewriteDraft,
   onRewriteDraftApplied,
+  daemonOffline = false,
 }) {
   const inProfile = view.kind === "profile";
   const inEmpty = view.kind === "empty" && !pendingTurn;
@@ -80,7 +81,8 @@ export default function ChatPane({
             activeProfile={activeProfile}
             onSelectProfile={onSelectProfile}
             onSend={onSend}
-            disabled={!!pendingTurn}
+            disabled={!!pendingTurn || daemonOffline}
+            daemonOffline={daemonOffline}
             showPicker
             embedded
             rewriteDraft={rewriteDraft}
@@ -110,7 +112,8 @@ export default function ChatPane({
         activeProfile={activeProfile}
         onSelectProfile={onSelectProfile}
         onSend={onSend}
-        disabled={!!pendingTurn}
+        disabled={!!pendingTurn || daemonOffline}
+        daemonOffline={daemonOffline}
         showPicker={false}
         modelOverride={modelOverride}
         onModelChange={setModelOverride}
@@ -428,6 +431,7 @@ function ChatComposer({
   showPicker,
   embedded,
   disabled,
+  daemonOffline = false,
   modelOverride,
   onModelChange,
   rewriteDraft,
@@ -491,7 +495,7 @@ function ChatComposer({
 
   const hasText = text.trim().length > 0;
   // Send can interrupt the in-flight turn from App.jsx.
-  const canSend = hasText && !!activeProfile;
+  const canSend = hasText && !!activeProfile && !daemonOffline;
 
   function trySend() {
     if (!canSend) return;
@@ -500,6 +504,17 @@ function ChatComposer({
     onSend?.(payload, modelOverride ?? null);
   }
 
+  const placeholder = daemonOffline
+    ? "daemon offline — sending paused"
+    : disabled
+      ? "thinking… (type your next message)"
+      : "Send a message…";
+  const sendTitle = daemonOffline
+    ? "Daemon offline"
+    : disabled
+      ? "Waiting for reply"
+      : "Send (Enter)";
+
   return (
     <Composer
       value={text}
@@ -507,10 +522,8 @@ function ChatComposer({
       onSubmit={trySend}
       canSend={canSend}
       embedded={embedded}
-      placeholder={
-        disabled ? "thinking… (type your next message)" : "Send a message…"
-      }
-      sendTitle={disabled ? "Waiting for reply" : "Send (Enter)"}
+      placeholder={placeholder}
+      sendTitle={sendTitle}
       disabledTitle="Type a message"
       mentions={mentions}
       leftActions={
@@ -566,11 +579,6 @@ function parsePeerMentions(text) {
 
 function Logo() {
   return (
-    <span
-      className={styles.logoMask}
-      style={{ "--mask-image": `url(${alpiHeadUrl})` }}
-      role="img"
-      aria-label="alpi"
-    />
+    <img className={styles.logoImage} src={alpiHeadUrl} alt="alpi" />
   );
 }

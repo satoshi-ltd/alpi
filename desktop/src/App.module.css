@@ -21,15 +21,3 @@
   min-width: 0;
   background: var(--color-bg-solid);
 }
-
-.error {
-  margin: var(--space-5) var(--space-6);
-  padding: var(--space-4) var(--space-5);
-  border-radius: var(--radius-md);
-  background: rgba(255, 69, 58, 0.08);
-  color: var(--color-danger);
-  font-size: var(--font-size-small);
-  font-family: var(--font-mono);
-  -webkit-user-select: text;
-  user-select: text;
-}

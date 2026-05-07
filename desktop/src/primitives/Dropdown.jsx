@@ -22,6 +22,11 @@ export default function Dropdown({
   const ref = useRef(null);
   const triggerRef = useRef(null);
   const menuRef = useRef(null);
+  const onOpenChangeRef = useRef(onOpenChange);
+
+  useEffect(() => {
+    onOpenChangeRef.current = onOpenChange;
+  }, [onOpenChange]);
 
   useEffect(() => {
     function onClick(e) {
@@ -36,9 +41,9 @@ export default function Dropdown({
   }, []);
 
   useEffect(() => {
-    onOpenChange?.(open);
+    onOpenChangeRef.current?.(open);
     if (!open) setResolved((r) => ({ ...r, ready: false }));
-  }, [open, onOpenChange]);
+  }, [open]);
 
   useLayoutEffect(() => {
     if (!open || !triggerRef.current || !menuRef.current) return;

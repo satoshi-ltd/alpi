@@ -48,6 +48,13 @@
   mask: var(--mask-image) no-repeat center / contain;
 }
 
+.logoImage {
+  display: block;
+  width: 64px;
+  height: 101px;
+  object-fit: contain;
+}
+
 
 .emptyHeading {
   font-size: var(--font-size-display);

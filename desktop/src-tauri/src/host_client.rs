@@ -1,9 +1,11 @@
+use std::collections::HashMap;
 use std::fs;
 use std::io::{BufRead, BufReader, Read, Write};
-use std::net::TcpStream;
+use std::net::{IpAddr, SocketAddr, TcpStream};
 use std::os::unix::net::UnixStream;
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::PathBuf;
+use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
@@ -11,10 +13,123 @@ use serde_json::{json, Value};
 
 use crate::home::resolve_root;
 
-const READ_TIMEOUT_SECS: u64 = 30;
+const READ_TIMEOUT_SECS: u64 = 8;
 const STREAM_READ_TIMEOUT_SECS: u64 = 600;
+const PROBE_LOCAL_TIMEOUT_MS: u64 = 400;
+const PROBE_REMOTE_TIMEOUT_MS: u64 = 3500;
 const CONNECTIONS_FILE: &str = "connections.json";
-const LOCAL_ID: &str = "local";
+pub const LOCAL_ID: &str = "local";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConnectionStatus {
+    Unknown,
+    Probing,
+    Online,
+    Offline,
+    AuthFailed,
+}
+
+impl ConnectionStatus {
+    fn as_str(&self) -> &'static str {
+        match self {
+            ConnectionStatus::Unknown => "unknown",
+            ConnectionStatus::Probing => "probing",
+            ConnectionStatus::Online => "online",
+            ConnectionStatus::Offline => "offline",
+            ConnectionStatus::AuthFailed => "auth-failed",
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+struct StatusEntry {
+    status: ConnectionStatus,
+    error: Option<String>,
+}
+
+impl Default for StatusEntry {
+    fn default() -> Self {
+        Self {
+            status: ConnectionStatus::Unknown,
+            error: None,
+        }
+    }
+}
+
+fn status_map() -> &'static Mutex<HashMap<String, StatusEntry>> {
+    static MAP: OnceLock<Mutex<HashMap<String, StatusEntry>>> = OnceLock::new();
+    MAP.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+type StatusListener = Box<dyn Fn(&str, ConnectionStatus, Option<&str>) + Send + Sync>;
+
+fn listeners() -> &'static Mutex<Vec<StatusListener>> {
+    static LISTENERS: OnceLock<Mutex<Vec<StatusListener>>> = OnceLock::new();
+    LISTENERS.get_or_init(|| Mutex::new(Vec::new()))
+}
+
+pub fn on_status_change<F>(f: F)
+where
+    F: Fn(&str, ConnectionStatus, Option<&str>) + Send + Sync + 'static,
+{
+    if let Ok(mut guard) = listeners().lock() {
+        guard.push(Box::new(f));
+    }
+}
+
+pub fn status_for(id: &str) -> (ConnectionStatus, Option<String>) {
+    if let Ok(map) = status_map().lock() {
+        if let Some(entry) = map.get(id) {
+            return (entry.status, entry.error.clone());
+        }
+    }
+    (ConnectionStatus::Unknown, None)
+}
+
+fn set_status(id: &str, status: ConnectionStatus, error: Option<String>) {
+    let mut transitioned = false;
+    if let Ok(mut map) = status_map().lock() {
+        let entry = map.entry(id.to_string()).or_default();
+        if entry.status != status || entry.error != error {
+            entry.status = status;
+            entry.error = error.clone();
+            transitioned = true;
+        }
+    }
+    if !transitioned {
+        return;
+    }
+    if let Ok(guard) = listeners().lock() {
+        for listener in guard.iter() {
+            listener(id, status, error.as_deref());
+        }
+    }
+}
+
+fn classify_remote_error(err: &str) -> ConnectionStatus {
+    if err.contains("auth-failed") {
+        ConnectionStatus::AuthFailed
+    } else if err.starts_with("alp ") {
+        ConnectionStatus::Online
+    } else {
+        ConnectionStatus::Offline
+    }
+}
+
+fn classify_local_error(err: &str) -> ConnectionStatus {
+    if err.starts_with("alp ") {
+        ConnectionStatus::Online
+    } else {
+        ConnectionStatus::Offline
+    }
+}
+
+fn probe_timeout_for(conn: &HostConnection) -> Duration {
+    match conn {
+        HostConnection::Local { .. } => Duration::from_millis(PROBE_LOCAL_TIMEOUT_MS),
+        HostConnection::Remote { .. } => Duration::from_millis(PROBE_REMOTE_TIMEOUT_MS),
+    }
+}
 
 #[derive(Debug, Deserialize)]
 struct ControlResponse {
@@ -69,7 +184,7 @@ impl Default for ConnectionsState {
 }
 
 impl HostConnection {
-    fn id(&self) -> &str {
+    pub fn id(&self) -> &str {
         match self {
             HostConnection::Local { id, .. } => id,
             HostConnection::Remote { id, .. } => id,
@@ -77,9 +192,16 @@ impl HostConnection {
     }
 
     fn with_token_redacted(&self) -> Value {
+        let (status, error) = status_for(self.id());
         match self {
             HostConnection::Local { id, name } => {
-                json!({"id": id, "name": name, "kind": "local"})
+                json!({
+                    "id": id,
+                    "name": name,
+                    "kind": "local",
+                    "status": status.as_str(),
+                    "error": error,
+                })
             }
             HostConnection::Remote {
                 id,
@@ -96,6 +218,8 @@ impl HostConnection {
                 "port": port,
                 "token_id": token.chars().rev().take(8).collect::<String>().chars().rev().collect::<String>(),
                 "revoked": revoked,
+                "status": status.as_str(),
+                "error": error,
             }),
         }
     }
@@ -190,7 +314,11 @@ pub fn forget_connection(id: String) -> Result<(), String> {
     if state.active_id == id {
         state.active_id = LOCAL_ID.to_string();
     }
-    save_connections(&state)
+    save_connections(&state)?;
+    if let Ok(mut map) = status_map().lock() {
+        map.remove(&id);
+    }
+    Ok(())
 }
 
 pub fn add_remote_connection(
@@ -201,6 +329,9 @@ pub fn add_remote_connection(
 ) -> Result<String, String> {
     if host.trim().is_empty() {
         return Err("host is required".to_string());
+    }
+    if host.trim().parse::<IpAddr>().is_err() {
+        return Err("remote host must be an IP address".to_string());
     }
     if token.trim().is_empty() {
         return Err("token is required".to_string());
@@ -267,16 +398,43 @@ fn socket_path() -> Result<PathBuf, String> {
 }
 
 pub fn call(method: &str, params: Value) -> Result<Value, String> {
-    match active_connection() {
-        HostConnection::Local { .. } => call_local(method, params),
+    let conn = active_connection();
+    let id = conn.id().to_string();
+    let result = match &conn {
+        HostConnection::Local { .. } => {
+            call_local_inner(method, params, Duration::from_secs(READ_TIMEOUT_SECS))
+        }
         HostConnection::Remote {
-            id,
             host, port, token, ..
-        } => call_remote(&id, &host, port, &token, method, params),
+        } => call_remote_inner(
+            host,
+            *port,
+            token,
+            method,
+            params,
+            Duration::from_secs(READ_TIMEOUT_SECS),
+        ),
+    };
+    match &result {
+        Ok(_) => set_status(&id, ConnectionStatus::Online, None),
+        Err(e) => {
+            let next = match &conn {
+                HostConnection::Local { .. } => classify_local_error(e),
+                HostConnection::Remote { .. } => {
+                    let cls = classify_remote_error(e);
+                    if cls == ConnectionStatus::AuthFailed {
+                        mark_connection_revoked(&id);
+                    }
+                    cls
+                }
+            };
+            set_status(&id, next, Some(e.clone()));
+        }
     }
+    result
 }
 
-fn call_local(method: &str, params: Value) -> Result<Value, String> {
+fn call_local_inner(method: &str, params: Value, timeout: Duration) -> Result<Value, String> {
     let path = socket_path()?;
     if !path.exists() {
         return Err(format!(
@@ -287,7 +445,7 @@ fn call_local(method: &str, params: Value) -> Result<Value, String> {
     let mut stream = UnixStream::connect(&path)
         .map_err(|e| format!("connect {}: {e}", path.display()))?;
     stream
-        .set_read_timeout(Some(Duration::from_secs(READ_TIMEOUT_SECS)))
+        .set_read_timeout(Some(timeout))
         .map_err(|e| format!("set timeout: {e}"))?;
 
     let body = json!({
@@ -328,16 +486,33 @@ pub fn call_stream<F>(
 where
     F: FnMut(Value),
 {
-    match active_connection() {
-        HostConnection::Local { .. } => call_stream_local(method, params, on_frame),
+    let conn = active_connection();
+    let id = conn.id().to_string();
+    let result = match &conn {
+        HostConnection::Local { .. } => call_stream_local(&id, method, params, on_frame),
         HostConnection::Remote {
-            id,
-            host, port, token, ..
-        } => call_stream_remote(&id, &host, port, &token, method, params, on_frame),
+            id: _,
+            host,
+            port,
+            token,
+            ..
+        } => call_stream_remote(&id, host, *port, token, method, params, on_frame),
+    };
+    match &result {
+        Ok(()) => set_status(&id, ConnectionStatus::Online, None),
+        Err(e) => {
+            let next = match &conn {
+                HostConnection::Local { .. } => classify_local_error(e),
+                HostConnection::Remote { .. } => classify_remote_error(e),
+            };
+            set_status(&id, next, Some(e.clone()));
+        }
     }
+    result
 }
 
 fn call_stream_local<F>(
+    id: &str,
     method: &str,
     params: Value,
     mut on_frame: F,
@@ -370,6 +545,8 @@ where
         .map_err(|e| format!("write: {e}"))?;
     stream.flush().ok();
 
+    set_status(id, ConnectionStatus::Online, None);
+
     let reader = BufReader::new(stream);
     for line in reader.lines() {
         let line = match line {
@@ -388,15 +565,15 @@ where
     Ok(())
 }
 
-fn call_remote(
-    connection_id: &str,
+fn call_remote_inner(
     host: &str,
     port: u16,
     token: &str,
     method: &str,
     params: Value,
+    timeout: Duration,
 ) -> Result<Value, String> {
-    let mut ws = WsClient::connect(host, port, READ_TIMEOUT_SECS)?;
+    let mut ws = WsClient::connect(host, port, timeout)?;
     let id = "tauri-1";
     ws.send_json(&json!({
         "id": id,
@@ -411,9 +588,6 @@ fn call_remote(
             continue;
         }
         if let Some(err) = response.error {
-            if err.code == -32000 && err.message == "auth-failed" {
-                mark_connection_revoked(connection_id);
-            }
             return Err(format!("alp {}: {}", err.code, err.message));
         }
         return response
@@ -434,7 +608,8 @@ fn call_stream_remote<F>(
 where
     F: FnMut(Value),
 {
-    let mut ws = WsClient::connect(host, port, STREAM_READ_TIMEOUT_SECS)?;
+    let mut ws = WsClient::connect(host, port, Duration::from_secs(STREAM_READ_TIMEOUT_SECS))?;
+    set_status(connection_id, ConnectionStatus::Online, None);
     let id = "tauri-stream";
     ws.send_json(&json!({
         "id": id,
@@ -456,7 +631,7 @@ where
             .map(|ev| matches!(ev, "done" | "error" | "interrupted"))
             .unwrap_or(false)
             || frame.get("error").is_some();
-        if frame
+        let auth_failed = frame
             .get("error")
             .and_then(|err| {
                 Some((
@@ -465,9 +640,10 @@ where
                 ))
             })
             .map(|(code, message)| code == -32000 && message == "auth-failed")
-            .unwrap_or(false)
-        {
+            .unwrap_or(false);
+        if auth_failed {
             mark_connection_revoked(connection_id);
+            return Err("alp -32000: auth-failed".to_string());
         }
         on_frame(frame);
         if done {
@@ -494,19 +670,27 @@ fn frame_matches_id(text: &str, id: &str) -> bool {
         .unwrap_or(false)
 }
 
+fn socket_addr(host: &str, port: u16) -> Result<SocketAddr, String> {
+    let ip = host
+        .parse::<IpAddr>()
+        .map_err(|_| "remote host must be an IP address".to_string())?;
+    Ok(SocketAddr::new(ip, port))
+}
+
 struct WsClient {
     stream: TcpStream,
 }
 
 impl WsClient {
-    fn connect(host: &str, port: u16, timeout_secs: u64) -> Result<Self, String> {
-        let mut stream = TcpStream::connect((host, port))
+    fn connect(host: &str, port: u16, timeout: Duration) -> Result<Self, String> {
+        let addr = socket_addr(host, port)?;
+        let mut stream = TcpStream::connect_timeout(&addr, timeout)
             .map_err(|e| format!("connect ws://{host}:{port}: {e}"))?;
         stream
-            .set_read_timeout(Some(Duration::from_secs(timeout_secs)))
+            .set_read_timeout(Some(timeout))
             .map_err(|e| format!("set read timeout: {e}"))?;
         stream
-            .set_write_timeout(Some(Duration::from_secs(READ_TIMEOUT_SECS)))
+            .set_write_timeout(Some(timeout))
             .map_err(|e| format!("set write timeout: {e}"))?;
         let key = "dGhlIHNhbXBsZSBub25jZQ==";
         let req = format!(
@@ -626,5 +810,131 @@ impl WsClient {
         self.stream
             .write_all(&frame)
             .map_err(|e| format!("websocket pong write: {e}"))
+    }
+}
+
+pub fn probe_connection(conn: &HostConnection) {
+    let id = conn.id().to_string();
+    set_status(&id, ConnectionStatus::Probing, None);
+    let timeout = probe_timeout_for(conn);
+    let result = match conn {
+        HostConnection::Local { .. } => {
+            call_local_inner("host.profiles.list", json!({}), timeout)
+        }
+        HostConnection::Remote {
+            host, port, token, ..
+        } => call_remote_inner(
+            host,
+            *port,
+            token,
+            "host.profiles.list",
+            json!({}),
+            timeout,
+        ),
+    };
+    match result {
+        Ok(_) => set_status(&id, ConnectionStatus::Online, None),
+        Err(e) => {
+            let next = match conn {
+                HostConnection::Local { .. } => ConnectionStatus::Offline,
+                HostConnection::Remote { .. } => {
+                    let cls = classify_remote_error(&e);
+                    if cls == ConnectionStatus::AuthFailed {
+                        mark_connection_revoked(&id);
+                    }
+                    cls
+                }
+            };
+            set_status(&id, next, Some(e));
+        }
+    }
+}
+
+pub fn probe_active() {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    static RUNNING: AtomicBool = AtomicBool::new(false);
+    if RUNNING.compare_exchange(false, true, Ordering::AcqRel, Ordering::Relaxed).is_err() {
+        return;
+    }
+    let state = load_connections();
+    if let Some(conn) = state.connections.iter().find(|c| c.id() == state.active_id) {
+        probe_connection(conn);
+    }
+    RUNNING.store(false, Ordering::Release);
+}
+
+pub fn probe_all() {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    static RUNNING: AtomicBool = AtomicBool::new(false);
+    if RUNNING.compare_exchange(false, true, Ordering::AcqRel, Ordering::Relaxed).is_err() {
+        return;
+    }
+    let state = load_connections();
+    for conn in state.connections {
+        probe_connection(&conn);
+    }
+    RUNNING.store(false, Ordering::Release);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn probe_timeout_is_shorter_for_local_connections() {
+        let local = HostConnection::Local {
+            id: LOCAL_ID.to_string(),
+            name: "Local daemon".to_string(),
+        };
+        let remote = HostConnection::Remote {
+            id: "remote-1".to_string(),
+            name: "Remote".to_string(),
+            host: "10.0.0.2".to_string(),
+            port: 49200,
+            token: "secret".to_string(),
+            revoked: false,
+        };
+        assert_eq!(
+            probe_timeout_for(&local),
+            Duration::from_millis(PROBE_LOCAL_TIMEOUT_MS)
+        );
+        assert_eq!(
+            probe_timeout_for(&remote),
+            Duration::from_millis(PROBE_REMOTE_TIMEOUT_MS)
+        );
+    }
+
+    #[test]
+    fn classify_remote_errors() {
+        assert_eq!(
+            classify_remote_error("alp -32000: auth-failed"),
+            ConnectionStatus::AuthFailed
+        );
+        assert_eq!(
+            classify_remote_error("alp -32004: not-found"),
+            ConnectionStatus::Online
+        );
+        assert_eq!(
+            classify_remote_error("connect ws://10.0.0.2:49200: refused"),
+            ConnectionStatus::Offline
+        );
+    }
+
+    #[test]
+    fn classify_local_rpc_errors_as_online() {
+        assert_eq!(
+            classify_local_error("alp -32004: not-found"),
+            ConnectionStatus::Online
+        );
+        assert_eq!(
+            classify_local_error("connect /tmp/host.sock: refused"),
+            ConnectionStatus::Offline
+        );
+    }
+
+    #[test]
+    fn remote_socket_addr_rejects_hostnames() {
+        assert!(socket_addr("100.64.0.1", 49200).is_ok());
+        assert!(socket_addr("MacBook-Pro.local", 49200).is_err());
     }
 }

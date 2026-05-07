@@ -49,6 +49,7 @@ function Sidebar({
   view,
   pinned = { profiles: [], workgroups: [] },
   hostConnections,
+  daemonOffline = false,
   onNewChat,
   onOpenProfile,
   onOpenWorkgroup,
@@ -208,13 +209,15 @@ function Sidebar({
               onOpen={onRefreshHostConnectionStatus}
             />
           </div>
-          <NavRow
-            active={inEmpty}
-            leading={<PlusIcon />}
-            onClick={onNewChat}
-          >
-            New Chat
-          </NavRow>
+          {!daemonOffline && (
+            <NavRow
+              active={inEmpty}
+              leading={<PlusIcon />}
+              onClick={onNewChat}
+            >
+              New Chat
+            </NavRow>
+          )}
         </div>
 
         <nav ref={navRef} className={styles.nav}>

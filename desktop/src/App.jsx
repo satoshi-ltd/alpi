@@ -5,6 +5,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import AppHeader from "./components/AppHeader.jsx";
 import Sidebar from "./components/Sidebar.jsx";
 import ChatPane from "./components/ChatPane.jsx";
+import OfflineBanner from "./components/OfflineBanner.jsx";
 import WorkgroupView from "./components/WorkgroupView.jsx";
 import Settings from "./components/Settings.jsx";
 import { useNotify } from "./primitives/Notification.jsx";
@@ -21,6 +22,8 @@ import {
 import styles from "./App.module.css";
 
 const PINNED_KEY = "alf:pinned:v1";
+const PROFILES_CACHE_PREFIX = "alf:profiles:v1:";
+const WORKGROUPS_CACHE_PREFIX = "alf:workgroups:v1:";
 
 function isChatSessionSummary(session) {
   return session?.kind === "chat";
@@ -96,73 +99,215 @@ export default function App() {
   // Track the mtime used for each cached task.
   const seenMtimesRef = useRef(persistedCache.mtimes);
   const [activityByWorkgroup, setActivityByWorkgroup] = useState({});
-  const [error, setError] = useState(null);
   const notify = useNotify();
   const hostConnectionsRef = useRef(hostConnections);
+  const connectionSwitchRef = useRef(0);
 
   const reloadConnections = useCallback(async () => {
     try {
       const value = await invoke("host_connections");
-      const prevById = new Map(
-        (hostConnectionsRef.current?.connections ?? []).map((c) => [c.id, c]),
-      );
-      const revoked = (value?.connections ?? []).filter((c) => {
-        const before = prevById.get(c.id);
-        return c.kind === "remote" && c.revoked && before && !before.revoked;
-      });
-      if (revoked.length > 0) {
-        notify({
-          message: `${revoked[0].name} was revoked on the host`,
-          variant: "error",
-        });
-      }
       hostConnectionsRef.current = value;
       setHostConnections(value);
     } catch (e) {
-      notify({ message: String(e), variant: "error" });
+      console.error(e);
     }
-  }, [notify]);
+  }, []);
+
+  const applyProfilesAndWorkgroups = useCallback((ps, ws) => {
+    setProfiles(ps);
+    setWorkgroups(ws);
+    setPickerAlpi((prev) => {
+      if (prev && ps.some((p) => p.name === prev)) return prev;
+      const def = ps.find((p) => p.is_default && p.model);
+      if (def) return def.name;
+      const firstWithModel = ps.find((p) => p.model);
+      if (firstWithModel) return firstWithModel.name;
+      return ps[0]?.name ?? null;
+    });
+  }, []);
+
+  const clearConnectionContent = useCallback(() => {
+    applyProfilesAndWorkgroups([], []);
+    setSessionData(null);
+    setPendingTurn(null);
+    setRewriteDraft(null);
+    setActiveTask(null);
+    setView((v) => (v.kind === "settings" ? v : { kind: "empty" }));
+  }, [applyProfilesAndWorkgroups]);
+
+  const loadFromCache = useCallback((connectionId = null) => {
+    const activeId = connectionId ?? hostConnectionsRef.current?.active_id ?? "local";
+    try {
+      const cachedPs = JSON.parse(
+        localStorage.getItem(`${PROFILES_CACHE_PREFIX}${activeId}`) ?? "[]",
+      );
+      const cachedWs = JSON.parse(
+        localStorage.getItem(`${WORKGROUPS_CACHE_PREFIX}${activeId}`) ?? "[]",
+      );
+      const ps = Array.isArray(cachedPs) ? cachedPs : [];
+      const ws = Array.isArray(cachedWs) ? cachedWs : [];
+      applyProfilesAndWorkgroups(ps, ws);
+    } catch {}
+  }, [applyProfilesAndWorkgroups]);
+
+  const saveToCache = useCallback((connectionId, ps, ws) => {
+    try {
+      localStorage.setItem(
+        `${PROFILES_CACHE_PREFIX}${connectionId}`,
+        JSON.stringify(ps),
+      );
+      localStorage.setItem(
+        `${WORKGROUPS_CACHE_PREFIX}${connectionId}`,
+        JSON.stringify(ws),
+      );
+    } catch {}
+  }, []);
+
+  const showCachedOrClear = useCallback((connectionId, status) => {
+    if (status === "offline" || status === "auth-failed") {
+      clearConnectionContent();
+    } else {
+      loadFromCache(connectionId);
+    }
+  }, [clearConnectionContent, loadFromCache]);
 
   const reload = useCallback(async () => {
+    const cur = hostConnectionsRef.current;
+    const activeId = cur?.active_id ?? "local";
+    const active = cur?.connections?.find((c) => c.id === cur.active_id);
+    const status = active?.status;
+    if (status !== "online") {
+      showCachedOrClear(activeId, status);
+      reloadConnections();
+      return;
+    }
     try {
-      const [ps, ws] = await Promise.all([
+      let [ps, ws] = await Promise.all([
         invoke("profile_summaries"),
         invoke("workgroups", { profile: null }),
       ]);
-      setProfiles(ps);
-      setWorkgroups(ws);
-      setError(null);
-      setPickerAlpi((prev) => {
-        if (prev && ps.some((p) => p.name === prev)) return prev;
-        const def = ps.find((p) => p.is_default && p.model);
-        if (def) return def.name;
-        const firstWithModel = ps.find((p) => p.model);
-        if (firstWithModel) return firstWithModel.name;
-        return ps[0]?.name ?? null;
-      });
-    } catch (e) {
-      setError(String(e));
+      if (Array.isArray(ps) && ps.length === 0) {
+        const fallbackProfiles = await invoke("profiles");
+        if (Array.isArray(fallbackProfiles) && fallbackProfiles.length > 0) {
+          ps = fallbackProfiles;
+        }
+      }
+      if (hostConnectionsRef.current?.active_id !== activeId) return;
+      const looksLikeFailure =
+        Array.isArray(ps) && Array.isArray(ws) && ps.length === 0 && ws.length === 0;
+      const refreshed = hostConnectionsRef.current?.connections?.find(
+        (c) => c.id === hostConnectionsRef.current?.active_id,
+      );
+      if (looksLikeFailure && refreshed?.status && refreshed.status !== "online") {
+        showCachedOrClear(activeId, refreshed.status);
+      } else {
+        applyProfilesAndWorkgroups(ps, ws);
+        saveToCache(activeId, ps, ws);
+      }
+    } catch {
+      if (hostConnectionsRef.current?.active_id === activeId) {
+        showCachedOrClear(activeId, hostConnectionsRef.current?.connections?.find(
+          (c) => c.id === activeId,
+        )?.status);
+      }
     } finally {
       reloadConnections();
     }
-  }, [reloadConnections]);
+  }, [applyProfilesAndWorkgroups, reloadConnections, saveToCache, showCachedOrClear]);
 
   useEffect(() => {
-    reloadConnections();
+    const off = listen("connection-status", (event) => {
+      const { id, status, error } = event.payload ?? {};
+      if (!id || !status) return;
+      setHostConnections((prev) => {
+        const before = prev.connections.find((c) => c.id === id);
+        if (before && before.status === status && before.error === error) return prev;
+        const next = {
+          ...prev,
+          connections: prev.connections.map((c) =>
+            c.id === id ? { ...c, status, error: error ?? null } : c,
+          ),
+        };
+        hostConnectionsRef.current = next;
+        return next;
+      });
+    });
+    return () => {
+      off.then((fn) => fn());
+    };
+  }, []);
+
+  const activeConnectionForSync = hostConnections.connections.find(
+    (c) => c.id === hostConnections.active_id,
+  );
+  const activeStatusKey = `${hostConnections.active_id}:${activeConnectionForSync?.status ?? "unknown"}:${activeConnectionForSync?.error ?? ""}`;
+  const syncedStatusRef = useRef("");
+
+  useEffect(() => {
+    const active = hostConnectionsRef.current.connections.find(
+      (c) => c.id === hostConnectionsRef.current.active_id,
+    );
+    const status = active?.status;
+    if (syncedStatusRef.current === activeStatusKey) return;
+    syncedStatusRef.current = activeStatusKey;
+    if (status === "online") {
+      reloadConnections().finally(() => reload());
+    } else if (status === "offline" || status === "auth-failed") {
+      reloadConnections().finally(() => clearConnectionContent());
+    }
+  }, [activeStatusKey, clearConnectionContent, reload, reloadConnections]);
+
+  useEffect(() => {
     reload();
+    invoke("host_connections_probe_active").catch(() => {});
   }, [reload, reloadConnections]);
 
   const onSetHostConnection = useCallback(
-    async (id) => {
-      try {
-        await invoke("host_connection_set_active", { id });
-        await reloadConnections();
-        await reload();
-      } catch (e) {
-        notify({ message: String(e), variant: "error" });
+    (id) => {
+      const current = hostConnectionsRef.current;
+      if (current.active_id === id) return;
+      const previousState = current;
+      const switchId = ++connectionSwitchRef.current;
+      const pending = pendingTurnRef.current;
+      if (pending?.profile) {
+        invoke("chat_cancel", { profile: pending.profile }).catch(() => {});
       }
+      setRewriteDraft(null);
+      setSessionData(null);
+      setPendingTurn(null);
+      setActiveTask(null);
+      setView((v) => (v.kind === "settings" ? v : { kind: "empty" }));
+      loadFromCache(id);
+      setHostConnections((prev) => {
+        if (prev.active_id === id) return prev;
+        const next = {
+          ...prev,
+          active_id: id,
+          connections: prev.connections.map((c) =>
+            c.id === id ? { ...c, status: "probing", error: null } : c,
+          ),
+        };
+        hostConnectionsRef.current = next;
+        return next;
+      });
+      invoke("host_connection_set_active", { id })
+        .then(() => reloadConnections())
+        .then(() => {
+          if (connectionSwitchRef.current !== switchId) return;
+          invoke("host_connections_probe_active").catch(() => {});
+          loadFromCache(id);
+        })
+        .catch((e) => {
+          console.error(e);
+          if (connectionSwitchRef.current === switchId) {
+            hostConnectionsRef.current = previousState;
+            setHostConnections(previousState);
+            loadFromCache(previousState.active_id);
+          }
+          reloadConnections();
+        });
     },
-    [notify, reload, reloadConnections],
+    [loadFromCache, reloadConnections],
   );
 
   const onAddHostConnection = useCallback(
@@ -172,19 +317,20 @@ export default function App() {
         if (!host || !port || !token) {
           throw new Error("pairing payload needs host, port, and token");
         }
-        await invoke("host_connection_add_remote", {
+        const id = await invoke("host_connection_add_remote", {
           name: name ?? host,
           host,
           port,
           token,
         });
         await reloadConnections();
-        await reload();
+        invoke("host_connections_probe_active").catch(() => {});
+        loadFromCache(id);
       } catch (e) {
-        notify({ message: String(e), variant: "error" });
+        console.error(e);
       }
     },
-    [notify, reload, reloadConnections],
+    [loadFromCache, reloadConnections],
   );
 
   const onForgetHostConnection = useCallback(
@@ -194,16 +340,15 @@ export default function App() {
         await reloadConnections();
         await reload();
       } catch (e) {
-        notify({ message: String(e), variant: "error" });
+        console.error(e);
       }
     },
-    [notify, reload, reloadConnections],
+    [reload, reloadConnections],
   );
 
   const onRefreshHostConnectionStatus = useCallback(async () => {
-    await invoke("host_connection_refresh_active");
-    await reloadConnections();
-  }, [reloadConnections]);
+    await invoke("host_connections_probe_all");
+  }, []);
 
   const hubPubkeyOf = useCallback(
     (profileName) =>
@@ -756,7 +901,7 @@ export default function App() {
               });
               reloadRef.current?.();
             })
-            .catch((e) => setError(String(e)));
+            .catch((e) => notify({ message: String(e), variant: "error" }));
           return prev;
         });
       } else if (p.kind === "done") {
@@ -810,7 +955,7 @@ export default function App() {
             model: model ?? null,
           });
         } catch (e) {
-          setError(String(e));
+          notify({ message: String(e), variant: "error" });
           setPendingTurn(null);
         }
       } finally {
@@ -830,6 +975,13 @@ export default function App() {
     }
     return null;
   }, [view, workgroups]);
+
+  const activeConnection = hostConnections.connections.find(
+    (c) => c.id === hostConnections.active_id,
+  );
+  const daemonOffline =
+    !!activeConnection &&
+    (activeConnection.status === "offline" || activeConnection.status === "auth-failed");
 
   return (
     <div className={styles.app} data-sidebar-collapsed={collapsed ? "1" : "0"}>
@@ -859,6 +1011,7 @@ export default function App() {
             view={view}
             pinned={pinned}
             hostConnections={hostConnections}
+            daemonOffline={daemonOffline}
             onNewChat={onNewChat}
             onOpenProfile={onOpenProfile}
             onOpenWorkgroup={onOpenWorkgroup}
@@ -870,8 +1023,7 @@ export default function App() {
           />
         )}
         <main className={styles.main}>
-          {error && <div className={styles.error}>{error}</div>}
-          {view.kind === "settings" && (
+          {view.kind === "settings" ? (
             <Settings
               profiles={profiles}
               workgroups={workgroups}
@@ -884,47 +1036,61 @@ export default function App() {
               onForgetHostConnection={onForgetHostConnection}
               onRefreshHostConnectionStatus={onRefreshHostConnectionStatus}
             />
-          )}
-          {view.kind === "workgroup" && activeWorkgroup && (
-            <WorkgroupView
-              key={`${activeWorkgroup.profile}/${activeWorkgroup.id}`}
-              workgroup={activeWorkgroup}
-              profiles={profiles}
-              onActiveTask={(task) => {
-                setActiveTask(task);
-                if (task == null) return;
-                const key = `${activeWorkgroup.profile}/${activeWorkgroup.id}`;
-                setTaskByWorkgroup((prev) =>
-                  prev[key] === task ? prev : { ...prev, [key]: task },
-                );
-              }}
-            />
-          )}
-          {(view.kind === "empty" || view.kind === "profile") && (
-          <ChatPane
-              view={view}
-              profiles={profiles}
-              activeProfile={activeProfile}
-              sessionData={sessionData}
-              pendingTurn={
-                pendingTurn && pendingTurn.profile === activeProfile?.name
-                  ? pendingTurn
-                  : null
+          ) : daemonOffline ? (
+            <OfflineBanner
+              connectionName={activeConnection?.name}
+              connectionDetail={
+                activeConnection?.kind === "remote"
+                  ? `${activeConnection.host}:${activeConnection.port}`
+                  : activeConnection ? "host.sock" : undefined
               }
-              onSend={onSend}
-              onSelectProfile={(name) => {
-                setPickerAlpi(name);
-                if (view.kind === "profile") {
-                  const p = profiles.find((x) => x.name === name);
-                  if (p) onOpenProfile(p);
-                }
-              }}
-              onRewriteMessage={onRewriteMessage}
-              rewriteDraft={rewriteDraft}
-              onRewriteDraftApplied={() => {
-                setRewriteDraft((prev) => (prev ? { ...prev, consumed: true } : prev));
-              }}
+              onRetry={onRefreshHostConnectionStatus}
             />
+          ) : (
+            <>
+              {view.kind === "workgroup" && activeWorkgroup && (
+                <WorkgroupView
+                  key={`${activeWorkgroup.profile}/${activeWorkgroup.id}`}
+                  workgroup={activeWorkgroup}
+                  profiles={profiles}
+                  onActiveTask={(task) => {
+                    setActiveTask(task);
+                    if (task == null) return;
+                    const key = `${activeWorkgroup.profile}/${activeWorkgroup.id}`;
+                    setTaskByWorkgroup((prev) =>
+                      prev[key] === task ? prev : { ...prev, [key]: task },
+                    );
+                  }}
+                />
+              )}
+              {(view.kind === "empty" || view.kind === "profile") && (
+                <ChatPane
+                  view={view}
+                  profiles={profiles}
+                  activeProfile={activeProfile}
+                  sessionData={sessionData}
+
+                  pendingTurn={
+                    pendingTurn && pendingTurn.profile === activeProfile?.name
+                      ? pendingTurn
+                      : null
+                  }
+                  onSend={onSend}
+                  onSelectProfile={(name) => {
+                    setPickerAlpi(name);
+                    if (view.kind === "profile") {
+                      const p = profiles.find((x) => x.name === name);
+                      if (p) onOpenProfile(p);
+                    }
+                  }}
+                  onRewriteMessage={onRewriteMessage}
+                  rewriteDraft={rewriteDraft}
+                  onRewriteDraftApplied={() => {
+                    setRewriteDraft((prev) => (prev ? { ...prev, consumed: true } : prev));
+                  }}
+                />
+              )}
+            </>
           )}
         </main>
       </div>

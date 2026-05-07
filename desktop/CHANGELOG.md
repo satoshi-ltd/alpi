@@ -11,6 +11,34 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.2.3 — 2026-05-07 — connection health and offline handling
+
+Requires alpi ``v0.4.10`` or newer.
+
+**Connections**
+
+- Connection state is tracked per host with explicit online, probing,
+  offline, and auth-failed states. Opening the connection dropdown no
+  longer blocks on checks; inactive connections are probed in the
+  background and offline connections remain visible but are not
+  selectable.
+- Switching hosts clears the active chat state immediately and does
+  not leak cached sidebar content from the previous connection when
+  the selected host is offline.
+- Remote endpoints use stored IP addresses directly, avoiding
+  hostname / mDNS resolution stalls in the desktop transport.
+
+**Offline UX**
+
+- The main pane shows an offline banner for unreachable active
+  connections while keeping Settings reachable.
+- Connection status changes no longer emit desktop notifications.
+
+**Performance**
+
+- The sessions dropdown loads recent sessions first and only requests
+  the full session list when the user searches.
+
 ## v0.2.2 — 2026-05-06 — remote host switching, rewrite-in-place, release path cleanup
 
 Requires alpi ``v0.4.6`` or newer.

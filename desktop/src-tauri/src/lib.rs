@@ -94,18 +94,29 @@ fn host_connection_add_remote(
     host_client::add_remote_connection(name, host, port, token)
 }
 
-#[tauri::command]
-fn host_connection_refresh_active() {
-    let _ = host_client::call("host.profiles.list", serde_json::json!({}));
+fn spawn_background(name: &str, f: impl FnOnce() + Send + 'static) {
+    if let Err(e) = thread::Builder::new().name(name.to_string()).spawn(f) {
+        eprintln!("background task {name} not started: {e}");
+    }
 }
 
 #[tauri::command]
-fn sessions(profile: Option<String>) -> Vec<SessionEntry> {
+fn host_connections_probe_active() {
+    spawn_background("probe-active", host_client::probe_active);
+}
+
+#[tauri::command]
+fn host_connections_probe_all() {
+    spawn_background("probe-all", host_client::probe_all);
+}
+
+#[tauri::command]
+fn sessions(profile: Option<String>, limit: Option<usize>) -> Vec<SessionEntry> {
     match profile {
-        Some(p) => sessions_via_alp(&p),
+        Some(p) => sessions_via_alp(&p, limit),
         None => host_profile_names()
             .into_iter()
-            .flat_map(|p| sessions_via_alp(&p))
+            .flat_map(|p| sessions_via_alp(&p, limit))
             .collect(),
     }
 }
@@ -128,10 +139,14 @@ fn host_array_value(method: &str, params: serde_json::Value, key: &str) -> serde
         .unwrap_or_else(|| serde_json::Value::Array(vec![]))
 }
 
-fn sessions_via_alp(profile: &str) -> Vec<SessionEntry> {
+fn sessions_via_alp(profile: &str, limit: Option<usize>) -> Vec<SessionEntry> {
+    let mut params = serde_json::json!({"profile": profile});
+    if let Some(limit) = limit {
+        params["limit"] = serde_json::json!(limit);
+    }
     let result = match host_client::call(
         "host.sessions.list",
-        serde_json::json!({"profile": profile}),
+        params,
     ) {
         Ok(v) => v,
         Err(_) => return vec![],
@@ -1270,16 +1285,13 @@ fn tray_announce_update(app: AppHandle, available: bool, version: Option<String>
 fn subscribe_daemon_events(app: AppHandle) {
     loop {
         let app_for_frames = app.clone();
-        let result = host_client::call_stream(
+        let _ = host_client::call_stream(
             "host.events.subscribe",
             serde_json::json!({}),
             move |frame| {
                 let _ = app_for_frames.emit("daemon-event", frame);
             },
         );
-        if let Err(e) = result {
-            eprintln!("daemon-event subscribe disconnected: {e}");
-        }
         std::thread::sleep(std::time::Duration::from_secs(2));
     }
 }
@@ -1295,7 +1307,29 @@ pub fn run() {
                 eprintln!("watcher install failed: {e}");
             }
             let app_handle = app.handle().clone();
-            thread::spawn(move || subscribe_daemon_events(app_handle));
+            let app_for_status = app_handle.clone();
+            host_client::on_status_change(move |id, status, error| {
+                let _ = app_for_status.emit(
+                    "connection-status",
+                    serde_json::json!({
+                        "id": id,
+                        "status": match status {
+                            host_client::ConnectionStatus::Online => "online",
+                            host_client::ConnectionStatus::Probing => "probing",
+                            host_client::ConnectionStatus::Offline => "offline",
+                            host_client::ConnectionStatus::AuthFailed => "auth-failed",
+                            host_client::ConnectionStatus::Unknown => "unknown",
+                        },
+                        "error": error,
+                    }),
+                );
+            });
+            spawn_background("probe-active-startup", host_client::probe_active);
+            spawn_background("probe-active-loop", || loop {
+                std::thread::sleep(std::time::Duration::from_secs(30));
+                host_client::probe_active();
+            });
+            spawn_background("daemon-events", move || subscribe_daemon_events(app_handle));
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -1311,7 +1345,8 @@ pub fn run() {
             host_connection_set_active,
             host_connection_forget,
             host_connection_add_remote,
-            host_connection_refresh_active,
+            host_connections_probe_active,
+            host_connections_probe_all,
             sessions,
             session_detail,
             workgroups,

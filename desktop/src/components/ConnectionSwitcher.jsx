@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Button from "../primitives/Button.jsx";
 import Dropdown from "../primitives/Dropdown.jsx";
 import {
@@ -16,12 +16,14 @@ export default function ConnectionSwitcher({
   onOpen,
 }) {
   const [payload, setPayload] = useState("");
+  const probeTimerRef = useRef(null);
   const connections = state?.connections ?? [];
   const activeId = state?.active_id ?? "local";
   const active =
     connections.find((c) => c.id === activeId) ??
     connections.find((c) => c.kind === "local");
   const label = active?.kind === "remote" ? active.name : "Local";
+  const activeStatus = active?.status ?? "unknown";
 
   const addRemote = (close) => {
     const text = payload.trim();
@@ -31,6 +33,15 @@ export default function ConnectionSwitcher({
     close();
   };
 
+  useEffect(
+    () => () => {
+      if (probeTimerRef.current != null) {
+        cancelAnimationFrame(probeTimerRef.current);
+      }
+    },
+    [],
+  );
+
   return (
     <div className={`${styles.root} ${className}`}>
       <Dropdown
@@ -39,15 +50,26 @@ export default function ConnectionSwitcher({
         variant="list"
         portal
         onOpenChange={(open) => {
-          if (open) onOpen?.().catch(() => {});
+          if (!open) return;
+          if (activeStatus === "offline" || activeStatus === "auth-failed") return;
+          if (probeTimerRef.current != null) {
+            cancelAnimationFrame(probeTimerRef.current);
+          }
+          probeTimerRef.current = requestAnimationFrame(() => {
+            probeTimerRef.current = null;
+            onOpen?.().catch(() => {});
+          });
         }}
         trigger={{
-          leading:
-            active?.kind === "remote" ? (
-              <RemoteConnectionIcon />
-            ) : (
-              <LocalConnectionIcon />
-            ),
+          leading: (
+            <IconBadge status={activeStatus}>
+              {active?.kind === "remote" ? (
+                <RemoteConnectionIcon />
+              ) : (
+                <LocalConnectionIcon />
+              )}
+            </IconBadge>
+          ),
           label,
         }}
       >
@@ -59,7 +81,7 @@ export default function ConnectionSwitcher({
                 connection={c}
                 active={c.id === activeId}
                 onSelect={() => {
-                  if (c.revoked) return;
+                  if (isConnectionDisabled(c)) return;
                   onSetActive?.(c.id);
                   close();
                 }}
@@ -92,20 +114,45 @@ export default function ConnectionSwitcher({
   );
 }
 
+function IconBadge({ status, children }) {
+  return (
+    <span className={styles.iconWrap}>
+      {children}
+      <span className={styles.statusBadge} data-status={status} aria-hidden />
+    </span>
+  );
+}
+
+function isConnectionDisabled(connection) {
+  return (
+    !!connection.revoked ||
+    connection.status === "offline" ||
+    connection.status === "auth-failed"
+  );
+}
+
 function ConnectionRow({ connection, active, onSelect, onForget }) {
-  const caption =
+  const status = connection.status ?? "unknown";
+  const disabled = isConnectionDisabled(connection);
+  const baseCaption =
     connection.kind === "remote"
       ? connection.revoked
         ? `revoked · ${connection.host}:${connection.port}`
         : `${connection.host}:${connection.port}`
       : "host.sock";
+  const caption = baseCaption;
 
   if (connection.kind !== "remote") {
     return (
       <Dropdown.Row
         active={active}
         caption={caption}
-        leading={<LocalConnectionIcon />}
+        leading={
+          <IconBadge status={status}>
+            <LocalConnectionIcon />
+          </IconBadge>
+        }
+        disabled={disabled}
         onClick={onSelect}
       >
         {connection.name}
@@ -114,13 +161,19 @@ function ConnectionRow({ connection, active, onSelect, onForget }) {
   }
 
   return (
-    <div className={`${styles.row} ${active ? styles.rowActive : ""}`}>
+    <div
+      className={`${styles.row} ${active ? styles.rowActive : ""} ${disabled ? styles.rowDisabled : ""}`}
+      aria-disabled={disabled}
+    >
       <span className={styles.rowLead}>
-        <RemoteConnectionIcon />
+        <IconBadge status={status}>
+          <RemoteConnectionIcon />
+        </IconBadge>
       </span>
       <button
         className={styles.rowMain}
-        disabled={!!connection.revoked}
+        disabled={disabled}
+        aria-disabled={disabled}
         onClick={onSelect}
       >
         <span className={styles.rowName}>{connection.name}</span>

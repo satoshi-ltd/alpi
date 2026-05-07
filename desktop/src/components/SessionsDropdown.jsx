@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import Chip from "../primitives/Chip.jsx";
 import Dropdown from "../primitives/Dropdown.jsx";
 
 const DAY_MS = 86400000;
 const SEARCH_THRESHOLD = 8;
+const RECENT_SESSION_LIMIT = 30;
 
 function startOfDay(d) {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
@@ -22,13 +23,30 @@ export default function SessionsDropdown({ profile, activeSessionId, onChange })
   const [sessions, setSessions] = useState([]);
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
+  const [allLoaded, setAllLoaded] = useState(false);
+  const fetchSeqRef = useRef(0);
 
   useEffect(() => {
     if (!open) return;
-    invoke("sessions", { profile }).then((all) => {
+    const q = query.trim();
+    if (q) return;
+    const seq = ++fetchSeqRef.current;
+    setAllLoaded(false);
+    invoke("sessions", { profile, limit: RECENT_SESSION_LIMIT }).then((all) => {
+      if (fetchSeqRef.current !== seq) return;
       setSessions(all.filter((s) => s.kind === "chat"));
     });
-  }, [open, profile]);
+  }, [open, profile, query]);
+
+  useEffect(() => {
+    if (!open || allLoaded || !query.trim()) return;
+    const seq = ++fetchSeqRef.current;
+    invoke("sessions", { profile }).then((all) => {
+      if (fetchSeqRef.current !== seq) return;
+      setSessions(all.filter((s) => s.kind === "chat"));
+      setAllLoaded(true);
+    });
+  }, [allLoaded, open, profile, query]);
 
   const filtered = useMemo(() => {
     const q = query.toLowerCase().trim();

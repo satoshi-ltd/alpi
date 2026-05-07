@@ -69,12 +69,64 @@
   flex-shrink: 0;
 }
 
-.row:hover {
+.iconWrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.statusBadge {
+  position: absolute;
+  bottom: -2px;
+  right: -2px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 2px solid var(--color-bg);
+  background: var(--color-fg-subtle);
+}
+
+.statusBadge[data-status="online"] {
+  background: var(--color-success, #4ade80);
+}
+
+.statusBadge[data-status="probing"] {
+  background: var(--color-fg-subtle);
+  animation: pulse 1s ease-in-out infinite;
+}
+
+.statusBadge[data-status="offline"] {
+  background: var(--color-error, #f87171);
+}
+
+.statusBadge[data-status="auth-failed"] {
+  background: var(--color-warning, #fbbf24);
+}
+
+.row:not(.rowDisabled):hover {
   background: var(--color-hover);
 }
 
 .rowActive {
   background: var(--color-selected);
+}
+
+.rowDisabled {
+  color: var(--color-fg-subtle);
+}
+
+.rowDisabled .rowMain {
+  cursor: not-allowed;
+}
+
+.rowDisabled .rowMain {
+  pointer-events: none;
+}
+
+.rowDisabled .rowName,
+.rowDisabled .rowCaption {
+  opacity: 0.5;
 }
 
 .rowMain {
@@ -87,7 +139,6 @@
 }
 
 .rowMain:disabled {
-  opacity: 0.55;
   cursor: not-allowed;
 }
 
@@ -107,4 +158,17 @@
   margin-top: var(--space-1);
   color: var(--color-fg-subtle);
   font-size: var(--font-size-small);
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    transform: scale(0.88);
+    opacity: 0.7;
+  }
+
+  50% {
+    transform: scale(1);
+    opacity: 1;
+  }
 }
