@@ -132,12 +132,21 @@ class ToolsConfig:
 
 
 @dataclass
+class MemoryConfig:
+    # Post-turn reviewer cadence. 0 disables the reviewer entirely (default;
+    # opt-in). N > 0 fires a daemon-thread reviewer every N user turns that
+    # snapshots the conversation and writes durable facts via the memory tool.
+    review_interval: int = 0
+
+
+@dataclass
 class Config:
     home: Path
     model: str
     fallback_models: list[str] = field(default_factory=list)
     providers: dict[str, Any] = field(default_factory=dict)
     tools: ToolsConfig = field(default_factory=ToolsConfig)
+    memory: MemoryConfig = field(default_factory=MemoryConfig)
     tui: dict[str, Any] = field(default_factory=dict)
     gateway: dict[str, Any] = field(default_factory=dict)
     alp: dict[str, Any] = field(default_factory=dict)
@@ -239,12 +248,18 @@ def load(home: Path) -> Config:
         ),
     )
 
+    mem_raw = data.get("memory") or {}
+    memory_cfg = MemoryConfig(
+        review_interval=int(mem_raw.get("review_interval", 0) or 0),
+    )
+
     return Config(
         home=home,
         model=data.get("model", DEFAULT_CONFIG["model"]),
         fallback_models=data.get("fallback_models", []),
         providers=data.get("providers", DEFAULT_CONFIG["providers"]),
         tools=tools_cfg,
+        memory=memory_cfg,
         tui=data.get("tui", DEFAULT_CONFIG["tui"]),
         gateway=data.get("gateway", DEFAULT_CONFIG["gateway"]),
         alp=dict(data.get("alp") or {}),

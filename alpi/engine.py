@@ -130,6 +130,8 @@ class Engine:
         self.interrupt_requested: bool = False
         # Serialize turns so concurrent runs do not race on session state.
         self._turn_lock = threading.Lock()
+        # Post-turn memory reviewer: counter resets when the daemon fires.
+        self._turns_since_review: int = 0
 
     def request_interrupt(self) -> None:
         """Ask the current turn to stop at the next checkpoint."""
@@ -178,6 +180,11 @@ class Engine:
         turn_started = time.time()
         turn_tools: list[ToolLog] = []
         final_assistant = ""
+        # Only natural completion (LLM produced a final reply with no further
+        # tool calls) flips this. Interrupts, max-step aborts, provider
+        # errors, and budget exhaustion leave it False so the post-turn
+        # reviewer never fires on partial / abandoned context.
+        turn_completed = False
 
         # Inject transient workgroup context before user input.
         try:
@@ -295,6 +302,7 @@ class Engine:
                 if not tool_calls:
                     # Last assistant-only message wins as the final reply.
                     final_assistant = content
+                    turn_completed = True
                     emit(AgentEvent(kind="done"))
                     return
 
@@ -413,6 +421,26 @@ class Engine:
                 user_text, final_assistant, turn_tools,
                 elapsed=time.time() - turn_started,
             )
+            if turn_completed:
+                self._maybe_spawn_review()
+
+    def _maybe_spawn_review(self) -> None:
+        """Fire the post-turn memory reviewer if the cadence threshold is hit.
+
+        Snapshots the live messages list so the daemon thread is decoupled
+        from any subsequent mutation by the parent loop."""
+        interval = int(getattr(self.cfg.memory, "review_interval", 0) or 0)
+        if interval <= 0:
+            return
+        self._turns_since_review += 1
+        if self._turns_since_review < interval:
+            return
+        self._turns_since_review = 0
+        try:
+            from alpi.review import spawn_review
+            spawn_review(self.home, self.cfg, self.session.messages)
+        except Exception:  # noqa: BLE001
+            pass
 
     def _log_agent_turn(
         self, user_text: str, assistant: str,

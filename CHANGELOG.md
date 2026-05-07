@@ -1,5 +1,50 @@
 # Changelog
 
+## v0.4.14 — 2026-05-07 — post-turn memory reviewer (AI(1).b)
+
+A narrow forked agent that watches the conversation in retrospect and
+persists facts the main loop missed. Today the agent only writes
+memory when it decides to mid-turn — which often misses signals that
+are obvious once the turn is done. The reviewer fills that gap
+without disturbing the active session.
+
+- `alpi/config.py` — new `MemoryConfig.review_interval: int = 0`. The
+  reviewer is opt-in: 0 disables it (default), N > 0 fires after every
+  N user turns. Set per profile via `memory.review_interval` in
+  `config.yaml`.
+
+- `alpi/review.py` — single round-trip LLM call with a narrow prompt
+  and the `memory` schema only. Snapshots the conversation, asks
+  "did the user reveal something durable? if so, save it. else say
+  nothing." Runs in a daemon thread; provider errors and unexpected
+  exceptions are swallowed so the parent session is never disturbed.
+
+- **Append-only contract.** The reviewer can only execute
+  `memory(action="add", ...)`. `replace` / `remove` are silently
+  rejected even if the LLM emits them — the reviewer has no read of
+  current memory state, so a guessed `match` could rewrite or delete
+  unrelated entries. Any consolidation belongs to the v0.6 curator,
+  not the post-turn pass.
+
+- **Cadence gating.** The hook fires only when the turn completed
+  naturally (LLM returned a final reply with no further tool calls).
+  Interrupts, provider errors, max-step aborts, and budget-exhausted
+  turns leave the counter untouched, so abandoned context never
+  triggers a review while the user is correcting course.
+
+- **Frozen system prompt.** The reviewer writes to disk; the parent
+  session's system prompt (built once at engine init) is unchanged
+  for the rest of the session. Next session picks up the refreshed
+  memory through the normal load path. Anthropic prefix-cache stays
+  intact.
+
+Tests: `tests/core/test_memory_review.py` (15) covers the empty-
+conversation no-op, memory-add persistence, non-memory-tool rejection,
+LLM-error swallowing, safety-scanner integration, append-only contract
+(replace and remove rejected), cadence gating (interval=0 disables,
+N triggers, error/interrupt do not increment), and the
+parent-prompt-not-mutated invariant.
+
 ## v0.4.13 — 2026-05-07 — memory write safety scan (AI(1).a)
 
 Memory entries reload into the system prompt every session — the same

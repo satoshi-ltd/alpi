@@ -44,7 +44,7 @@ personal agent.
 
 | ID | Item | Status |
 |---|---|---|
-| AI (1) | Memory v2 — quality + post-turn background review. Dedup threshold calibration, confidence field with auto-expiry, type routing, and a lightweight background agent that reviews the conversation after every N turns and writes memory without blocking the active session. Also lands per-tool conditional guidance (the surface that needs an enabled-tools concept). | 🟡 |
+| AI (1) | Memory v2 — quality pass remaining: dedup threshold calibration on real session data, `confidence: low/normal/high` field with auto-expiry for low-confidence writes, and tighter type-routing guidance (USER vs MEMORY vs AGENT). Also lands per-tool conditional guidance (the surface that needs an enabled-tools concept, partially seeded by the post-turn reviewer's narrow toolset). | 🟡 |
 
 ### UX polish
 
