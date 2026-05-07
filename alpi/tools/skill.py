@@ -98,8 +98,14 @@ _DANGER_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"/bin/(?:ba)?sh\s+-i[^|]*>/dev/tcp/"), "bash reverse shell via /dev/tcp"),
     (re.compile(r"python[23]?\s+-c\s+[\"']import\s+socket"),
                                                          "python socket one-liner"),
-    (re.compile(r"\bngrok\b|\bcloudflared\b|\blocaltunnel\b|\bserveo\b"),
-                                                         "tunneling service"),
+    (re.compile(
+        r"\bngrok\s+(?:http|tcp|tls|start)\b|"
+        r"\bcloudflared\s+tunnel\b|"
+        r"\blocaltunnel\s+--port\b|"
+        r"\blt\s+--port\b|"
+        r"\bssh\s+-R\s+\d+:[^\s]+\s+serveo\.net\b",
+        re.I,
+    ),                                                   "tunneling service"),
     (re.compile(r"webhook\.site|requestbin\.com|pipedream\.net|hookbin\.com"),
                                                          "exfiltration webhook service"),
     (re.compile(r"0\.0\.0\.0:\d+|\bINADDR_ANY\b"),      "binds to all interfaces"),

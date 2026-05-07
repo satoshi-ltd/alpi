@@ -44,7 +44,7 @@ personal agent.
 
 | ID | Item | Status |
 |---|---|---|
-| AI (1) | Memory v2 — quality, injection scanning, and post-turn background review. Dedup threshold, confidence field, prompt-injection scan on writes, and a lightweight background agent that reviews the conversation after every N turns and writes memory without blocking the active session. Also lands per-tool conditional guidance (the surface that needs an enabled-tools concept). | 🟡 |
+| AI (1) | Memory v2 — quality + post-turn background review. Dedup threshold calibration, confidence field with auto-expiry, type routing, and a lightweight background agent that reviews the conversation after every N turns and writes memory without blocking the active session. Also lands per-tool conditional guidance (the surface that needs an enabled-tools concept). | 🟡 |
 
 ### UX polish
 

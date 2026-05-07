@@ -1,5 +1,33 @@
 # Changelog
 
+## v0.4.13 — 2026-05-07 — memory write safety scan (AI(1).a)
+
+Memory entries reload into the system prompt every session — the same
+injection vector skill bodies use. Until now memory writes accepted
+anything; web-extracted content with hidden instructions, copy-pasted
+keys, or Trojan-Source unicode could land in `MEMORY.md` / `USER.md` /
+`AGENT.md` and bias the agent every session afterward.
+
+- `alpi/tools/memory.py` — every memory write (`add` single, `add` batch,
+  `replace`) now runs through a safety scanner before persisting. The
+  scanner reuses `_DANGER_PATTERNS` from `alpi/tools/skill.py` (prompt
+  injection, exfil patterns, hardcoded secrets, reverse shells, etc.)
+  and adds a check for invisible / bidi-override unicode (Trojan-Source
+  attack vector). Single writes return a hard error; batch writes skip
+  the poisoned entry with a warning and keep the clean ones.
+- `alpi/tools/skill.py` — tightened the `tunneling service` pattern so
+  it only matches active command invocations (`ngrok http`,
+  `cloudflared tunnel`, `localtunnel --port`, `lt --port`,
+  `ssh -R … serveo.net`). Descriptive prose like "user uses ngrok for
+  development" no longer triggers a false positive.
+- `AGENT.md` writes (single, batch, replace) are scanned the same way —
+  it's also injected into the system prompt every turn.
+
+Tests: `tests/tools/test_memory_safety_scan.py` (20) covers prompt-
+injection variants, hardcoded-credential variants, tunneling commands
+both blocked and allowed, Trojan-Source unicode, replace, batch, and
+the AGENT.md paths.
+
 ## v0.4.12 — 2026-05-07 — skill safety primitives (AT)
 
 Two changes that make the skill library safe enough to grow more

@@ -15,6 +15,34 @@ from alpi.memory import (
     is_duplicate_stanza,
 )
 from alpi.tools.base import Tool, ToolResult
+from alpi.tools.skill import scan_skill_body
+
+
+# Memory loads into the system prompt every session — same injection vector
+# as skill bodies. Reuse the skill scanner's pattern library, plus a check
+# for invisible / bidi-override unicode (Trojan-Source style payloads that
+# can carry hidden instructions through ``web_extract`` → memory → next-session
+# system prompt).
+# Zero-width / LTR-RTL marks (200B-200F), bidi overrides (202A-202E,
+# the Trojan-Source vector), word joiner (2060), bidi isolates (2066-2069),
+# zero-width no-break / BOM (FEFF).
+_INVISIBLE_CHARS_RE = re.compile(
+    "[\u200B-\u200F\u202A-\u202E\u2060\u2066-\u2069\uFEFF]"
+)
+
+
+def _scan_memory_content(text: str) -> list[str]:
+    findings = scan_skill_body(text)
+    if _INVISIBLE_CHARS_RE.search(text):
+        findings.append("invisible / bidi-override unicode characters")
+    return findings
+
+
+def _safety_error(text: str) -> str | None:
+    flags = _scan_memory_content(text)
+    if not flags:
+        return None
+    return f"memory write blocked by safety scan: {', '.join(flags)}"
 
 
 _OPERATIONAL_PATTERNS = (
@@ -203,6 +231,9 @@ class Memory(Tool):
                     item = item.strip()
                     if not item:
                         continue
+                    blocked = _safety_error(item)
+                    if blocked is not None:
+                        return ToolResult(ok=False, output="", error=blocked)
                     other = _cross_file_duplicate(store, target, item)
                     if other is not None:
                         if len(items) == 1:
@@ -238,6 +269,9 @@ class Memory(Tool):
             if action == "replace":
                 if not match or not content:
                     return ToolResult(ok=False, output="", error="'match' and 'content' required for replace")
+                blocked = _safety_error(content)
+                if blocked is not None:
+                    return ToolResult(ok=False, output="", error=blocked)
                 new_entries = _modify(store, target, match, replacement=content)
                 _write(store, target, new_entries)
                 return ToolResult(ok=True, output=self._state_snapshot(store, target))
@@ -296,6 +330,10 @@ def _add_memory_batch(tool: Memory, store: MemoryStore, target: str,
     for raw in entries:
         item = _clean_entry(raw)
         if not item:
+            continue
+        blocked = _safety_error(item)
+        if blocked is not None:
+            warnings.append(f"skipped ({blocked}): {item[:60]!r}")
             continue
         other = _cross_file_duplicate(store, target, item)
         if other is not None:
@@ -357,6 +395,12 @@ def _handle_agent(home, action: str, content: str, match: str,
             item = item.strip()
             if not item:
                 continue
+            blocked = _safety_error(item)
+            if blocked is not None:
+                if len(items) == 1:
+                    return ToolResult(ok=False, output="", error=blocked)
+                skipped.append(f"skipped ({blocked}): {item[:60]!r}")
+                continue
             if is_duplicate_stanza(new_text, item):
                 if len(items) == 1:
                     return ToolResult(
@@ -387,6 +431,9 @@ def _handle_agent(home, action: str, content: str, match: str,
     if action == "replace":
         if not match or not content:
             return ToolResult(ok=False, output="", error="'match' and 'content' required for replace")
+        blocked = _safety_error(content)
+        if blocked is not None:
+            return ToolResult(ok=False, output="", error=blocked)
         literal = _locate_literal(text, match)
         if literal is None:
             return ToolResult(ok=False, output="", error=f"no match for {match!r}")
