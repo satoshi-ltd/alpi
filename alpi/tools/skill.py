@@ -524,6 +524,22 @@ class Skill(Tool):
         "  reset_state — wipe everything under <skill>/state/ (e.g. db.sqlite, "
         "                .jsonl logs) without touching scripts/secrets/SKILL.md. "
         "                Use after a schema change leaves the DB inconsistent.\n"
+        "  run         — execute a skill end-to-end. If the skill has "
+        "                ``scripts/run.py``, runs it via terminal under the "
+        "                skill's declared env and returns stdout. Otherwise "
+        "                returns SKILL.md so you follow it step-by-step. "
+        "                Use this instead of `view` + manual `terminal` — "
+        "                it handles cwd, env, and timeouts. Optional ``args`` "
+        "                pass extra CLI arguments to the script.\n"
+        "\n"
+        "**When to create scripts/run.py.** Do it only for deterministic "
+        "local code: parsing files, transforming data, calling normal "
+        "Python libraries, or maintaining skill-local state. Do NOT create "
+        "a script for skills that depend on agent tools or MCP methods "
+        "(`memory`, `schedule`, `send_message`, `bitbucket__…`, etc.). "
+        "Those are agent-run skills: keep the instructions in SKILL.md and "
+        "let `skill(action='run')` return them so the agent calls the real "
+        "tools. Tools and MCP methods are not importable Python APIs.\n"
         "\n"
         "**Persistent SQLite.** Skills that need structured state (more "
         "than a single JSON blob) use the ``db`` tool: "
@@ -549,7 +565,7 @@ class Skill(Tool):
                 "enum": [
                     "create", "edit", "patch", "add_file", "remove_file",
                     "delete", "list", "view", "validate", "reset_state",
-                    "set_meta",
+                    "set_meta", "run",
                 ],
             },
             "name": {"type": "string", "description": "Skill name (kebab-case)."},
@@ -644,6 +660,15 @@ class Skill(Tool):
                 ),
                 "additionalProperties": True,
             },
+            "args": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": (
+                    "Extra CLI arguments forwarded to scripts/run.py "
+                    "(run only). Empty list = no extra args."
+                ),
+                "default": [],
+            },
         },
         "required": ["action"],
     }
@@ -666,6 +691,7 @@ class Skill(Tool):
         new_string: str = "",
         file: str = "",
         confirm_user_skill: bool = False,
+        args: list[str] | None = None,
     ) -> ToolResult:
         home = get_home()
 
@@ -705,6 +731,8 @@ class Skill(Tool):
             return _validate(home, name)
         if action == "reset_state":
             return _reset_state(home, name, confirm_user_skill)
+        if action == "run":
+            return _run(home, name, args or [])
         if action == "set_meta":
             meta_fields = dict(fields or {})
             if description:
@@ -1185,6 +1213,102 @@ def _validate(home: Path, name: str) -> ToolResult:
         return ToolResult(ok=True, output="(no issues)")
     has_errors = any(f.startswith("✗") for f in findings)
     return ToolResult(ok=not has_errors, output="\n".join(findings))
+
+
+_RUN_TIMEOUT_SECONDS = 600
+
+
+def _run(home: Path, name: str, args: list[str]) -> ToolResult:
+    """Execute a skill end-to-end. Skill execution model:
+
+    1. ``scripts/run.py`` exists → spawn it with the skill's declared env,
+       cwd = skill dir, capture stdout/stderr, return combined output.
+    2. No script → return SKILL.md prefixed with a directive so the agent
+       knows to follow the prose itself instead of ``view``-then-improvise.
+    """
+    import subprocess
+    import sys
+
+    if not name:
+        return ToolResult(ok=False, output="", error="'name' is required")
+    skill_dir = _find_skill(home, name)
+    if skill_dir is None:
+        return ToolResult(ok=False, output="", error=f"skill not found: {name}")
+
+    script = skill_dir / "scripts" / "run.py"
+    skill_md = skill_dir / "SKILL.md"
+
+    if not script.is_file():
+        if not skill_md.is_file():
+            return ToolResult(
+                ok=False, output="",
+                error=f"skill {name!r} has neither scripts/run.py nor SKILL.md",
+            )
+        body = skill_md.read_text()
+        return ToolResult(
+            ok=True,
+            output=(
+                f"[skill {name!r} has no scripts/run.py — follow these "
+                f"instructions to execute it manually]\n\n{body}"
+            ),
+        )
+
+    meta = _frontmatter(skill_md) if skill_md.is_file() else {}
+    declared_env = _parse_env_list(meta.get("requires_env", ""))
+    declared_env += _parse_env_list(meta.get("env", ""))
+
+    from alpi.tools._skill_validate import validate_skill
+    blockers = [f for f in validate_skill(skill_dir) if f.startswith("✗")]
+    if blockers:
+        return ToolResult(
+            ok=False, output="\n".join(blockers),
+            error=f"skill {name!r} failed validation",
+        )
+
+    env = dict(os.environ)
+    env["ALPI_HOME"] = str(home)
+    env["ALPI_SKILL_NAME"] = name
+    env["ALPI_SKILL_DIR"] = str(skill_dir)
+
+    missing = [v for v in declared_env if v and not env.get(v)]
+    if missing:
+        return ToolResult(
+            ok=False, output="",
+            error=(
+                f"skill {name!r} requires env vars not set: "
+                f"{', '.join(missing)}. Populate ~/.alpi/.env first."
+            ),
+        )
+
+    try:
+        proc = subprocess.run(
+            [sys.executable, str(script), *args],
+            cwd=str(skill_dir),
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=_RUN_TIMEOUT_SECONDS,
+        )
+    except subprocess.TimeoutExpired:
+        return ToolResult(
+            ok=False, output="",
+            error=f"skill {name!r} timed out after {_RUN_TIMEOUT_SECONDS}s",
+        )
+    except OSError as e:
+        return ToolResult(ok=False, output="", error=f"failed to spawn: {e}")
+
+    out = (proc.stdout or "").rstrip()
+    err = (proc.stderr or "").rstrip()
+    combined = out
+    if err:
+        combined = f"{out}\n[stderr]\n{err}" if out else err
+
+    if proc.returncode != 0:
+        return ToolResult(
+            ok=False, output=combined,
+            error=f"script exited rc={proc.returncode}",
+        )
+    return ToolResult(ok=True, output=combined or "(no output)")
 
 
 def _reset_state(

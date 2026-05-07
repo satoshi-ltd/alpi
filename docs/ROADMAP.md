@@ -48,8 +48,7 @@ personal agent.
 
 | ID | Item | Status |
 |---|---|---|
-| BF (4, 6-8) | Skills v2 — output schemas, composition, test harness, versioning (triggers shipped as keyword hint in v0.3.11) | 🔵 |
-| BJ | Skills capability stress test — author one non-trivial real skill end-to-end (web a11y reviewer with Playwright) and let the gaps drive the BF backlog | 🔵 |
+| BF (4, 6-8) | Skills v2 remaining — output schemas, composition, CLI test harness, versioning (execution runner + script/prose split shipped) | 🟡 |
 | `@alpi/home` | Second bundled skill (after `@alpi/knowledge` in v0.3). Orchestrates Home Assistant + optional connectors (Hue, Xiaomi, Alexa / Google Home) behind a single voice/text interface | 🔵 |
 
 ### Knowledge + memory
@@ -223,13 +222,16 @@ to the same RAG backend that ALP.6 uses, so one embedding
 stack covers two surfaces (knowledge over docs, search over
 transcripts).
 
-### BF (items 4, 6-8). Skills v2 — schemas, composition, tests, versioning
+### BF (items 4, 6-8). Skills v2 remaining — schemas, composition, tests, versioning
 
 Layers on the v0.3.11 foundation (declared `requires_env`,
 per-skill SQLite via the `db` tool, schema-validated frontmatter,
 `set_meta` for surgical updates). Item 5 (triggers) shipped as
 the `keywords` hint in v0.3.11; the schedule/workgroup flavors
-were dropped as redundant with the existing `schedule` tool.
+were dropped as redundant with the existing `schedule` tool. The
+real-world skill stress test that produced `skill(action="run")`,
+batch memory writes, and schedule in-place updates has shipped; the
+remaining backlog is below.
 
 4. **Output schemas.** Optional
    `output: { schema: json, fields: [...] }` in frontmatter.
@@ -249,37 +251,6 @@ were dropped as redundant with the existing `schedule` tool.
 Each item shippable independently. Composition and output
 schemas pair: schemas have most of their value when consumed by
 a calling skill.
-
-### BJ. Skills capability stress test
-
-v0.3.11 shipped the foundation (eligibility, schema, db, set_meta,
-keyword hint). The honest question is: is it enough to author a
-**non-trivial real skill** end-to-end? The hypothetical canary:
-
-> *"web accessibility reviewer — open the landing + a docs page in
-> headless Playwright, on desktop and mobile viewports, run an
-> axe-core or lighthouse pass, persist findings in
-> ``state/db.sqlite``, regress against the previous run."*
-
-The skill needs to: declare `requires_env` for any auth, declare
-optional Playwright/axe-core deps and degrade gracefully when
-absent, run scripts that capture screenshots into `assets/`, store
-structured findings in SQLite, present a diff against the previous
-run.
-
-What we'll likely find missing (driving BF backlog):
-
-- **Output schemas** so the parent agent gets a structured report, not free-form prose.
-- **Composition** if we factor "open page" / "axe pass" / "diff vs previous" into separate sub-skills.
-- **Test harness** to validate the skill keeps working as Playwright versions move.
-- **Version pinning** so a Playwright API change doesn't silently break the skill.
-- A way to declare "needs Playwright; degrade if absent" (currently `requires_env` covers env vars only — no analogous `requires_python_pkg`).
-
-Author the skill, ship it as `@alpi/web-a11y` if it earns its way
-to bundled (or as a documented user skill if not). Whatever the
-authoring surfaces complains about loudest becomes the next BF
-sub-item to attack. Scope of the work is intentionally
-**capability-driven**, not feature-driven.
 
 ### `@alpi/home`. Second bundled skill — home orchestration
 

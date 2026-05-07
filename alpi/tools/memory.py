@@ -8,6 +8,7 @@ from alpi.home import get_home
 from alpi.memory import (
     ENTRY_DELIMITER,
     MemoryStore,
+    _clean_entry,
     _is_duplicate,
     fuzzy_contains,
     fuzzy_find_unique_entry,
@@ -139,6 +140,17 @@ class Memory(Tool):
                     "name (the name lives in USER.md)."
                 ),
             },
+            "entries": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": (
+                    "Batch ``add`` only. List of entries to append in one "
+                    "call to the same target. Use this when the user gives "
+                    "you several facts at once — calling ``add`` 5+ times "
+                    "in one turn wastes tokens and round-trips. Each entry "
+                    "is checked for cross-file duplicates independently."
+                ),
+            },
             "match": {
                 "type": "string",
                 "description": (
@@ -152,11 +164,12 @@ class Memory(Tool):
     }
 
     def run(self, action: str, target: str, content: str = "",
-            match: str = "") -> ToolResult:
+            match: str = "",
+            entries: list[str] | None = None) -> ToolResult:
         h = get_home()
 
         if target.upper() == "AGENT.MD":
-            return _handle_agent(h, action, content, match)
+            return _handle_agent(h, action, content, match, entries)
 
         store = MemoryStore(home=h)
         store.seed_defaults()
@@ -171,23 +184,55 @@ class Memory(Tool):
                 return ToolResult(ok=True, output=f"[{target}: {pct}% — {used:,}/{limit:,} chars]\n{body}")
 
             if action == "add":
-                if not content.strip():
-                    return ToolResult(ok=False, output="", error="'content' required for add")
-                other = _cross_file_duplicate(store, target, content)
-                if other is not None:
+                batch = [e for e in (entries or []) if e and e.strip()]
+                if not content.strip() and not batch:
+                    return ToolResult(ok=False, output="", error="'content' or 'entries' required for add")
+                if content.strip() and batch:
                     return ToolResult(
                         ok=False, output="",
-                        error=(
-                            f"looks like a near-duplicate of an entry "
-                            f"already in {other}. Use `replace` there or "
-                            f"confirm this is a genuinely distinct fact."
-                        ),
+                        error="pass either 'content' (single entry) or 'entries' (batch), not both",
                     )
-                store.add(target, content)
+
+                if batch:
+                    return _add_memory_batch(self, store, target, batch)
+
+                items = [content]
+                added = 0
+                warnings: list[str] = []
+                for item in items:
+                    item = item.strip()
+                    if not item:
+                        continue
+                    other = _cross_file_duplicate(store, target, item)
+                    if other is not None:
+                        if len(items) == 1:
+                            return ToolResult(
+                                ok=False, output="",
+                                error=(
+                                    f"looks like a near-duplicate of an entry "
+                                    f"already in {other}. Use `replace` there or "
+                                    f"confirm this is a genuinely distinct fact."
+                                ),
+                            )
+                        warnings.append(f"skipped (duplicate of {other}): {item[:60]!r}")
+                        continue
+                    store.add(target, item)
+                    added += 1
+                    warn = _operational_warning(item)
+                    if warn:
+                        warnings.append(warn)
+
+                if added == 0:
+                    return ToolResult(
+                        ok=False, output="",
+                        error="no entries added; all were duplicates: " + " | ".join(warnings),
+                    )
+
                 output = self._state_snapshot(store, target)
-                warn = _operational_warning(content)
-                if warn:
-                    output = f"{output}\n\n{warn}"
+                if added > 1:
+                    output = f"Added {added} entries to {target}.\n\n{output}"
+                if warnings:
+                    output = f"{output}\n\n" + "\n".join(warnings)
                 return ToolResult(ok=True, output=output)
 
             if action == "replace":
@@ -241,7 +286,52 @@ def _agent_state(text: str) -> str:
     return f"AGENT.md: {len(text):,} chars\n\nCurrent contents:\n{body}"
 
 
-def _handle_agent(home, action: str, content: str, match: str) -> ToolResult:
+def _add_memory_batch(tool: Memory, store: MemoryStore, target: str,
+                      entries: list[str]) -> ToolResult:
+    current = _entries(store, target)
+    working = ENTRY_DELIMITER.join(current)
+    kept: list[str] = []
+    warnings: list[str] = []
+
+    for raw in entries:
+        item = _clean_entry(raw)
+        if not item:
+            continue
+        other = _cross_file_duplicate(store, target, item)
+        if other is not None:
+            warnings.append(f"skipped (duplicate of {other}): {item[:60]!r}")
+            continue
+        if _is_duplicate(working, item):
+            warnings.append(f"skipped (duplicate of {target}): {item[:60]!r}")
+            continue
+        kept.append(item)
+        working = (
+            working.rstrip() + ENTRY_DELIMITER + item
+            if working.strip() else item
+        )
+        warn = _operational_warning(item)
+        if warn:
+            warnings.append(warn)
+
+    if not kept:
+        return ToolResult(
+            ok=False, output="",
+            error="no entries added; all were duplicates: " + " | ".join(warnings),
+        )
+
+    try:
+        _write(store, target, current + kept)
+    except ValueError as e:
+        return ToolResult(ok=False, output="", error=str(e))
+
+    out = f"Added {len(kept)} entries to {target}.\n\n{tool._state_snapshot(store, target)}"
+    if warnings:
+        out = f"{out}\n\n" + "\n".join(warnings)
+    return ToolResult(ok=True, output=out)
+
+
+def _handle_agent(home, action: str, content: str, match: str,
+                  entries: list[str] | None = None) -> ToolResult:
     from alpi.home import agent_path
     path = agent_path(home)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -251,20 +341,48 @@ def _handle_agent(home, action: str, content: str, match: str) -> ToolResult:
         return ToolResult(ok=True, output=f"[AGENT.md]\n{text or '(empty)'}")
 
     if action == "add":
-        if not content.strip():
-            return ToolResult(ok=False, output="", error="'content' required for add")
-        if is_duplicate_stanza(text, content):
+        batch = [e for e in (entries or []) if e and e.strip()]
+        if not content.strip() and not batch:
+            return ToolResult(ok=False, output="", error="'content' or 'entries' required for add")
+        if content.strip() and batch:
             return ToolResult(
                 ok=False, output="",
-                error=(
-                    "near-duplicate of an existing paragraph in AGENT.md. "
-                    "For voice / identity changes, use `replace` with the "
-                    "literal line you want to change."
-                ),
+                error="pass either 'content' or 'entries', not both",
             )
-        new = (text.rstrip() + "\n\n" + content.strip() + "\n") if text.strip() else content.strip() + "\n"
-        path.write_text(new)
-        return ToolResult(ok=True, output=_agent_state(new))
+        items = batch if batch else [content]
+        added = 0
+        skipped: list[str] = []
+        new_text = text
+        for item in items:
+            item = item.strip()
+            if not item:
+                continue
+            if is_duplicate_stanza(new_text, item):
+                if len(items) == 1:
+                    return ToolResult(
+                        ok=False, output="",
+                        error=(
+                            "near-duplicate of an existing paragraph in AGENT.md. "
+                            "For voice / identity changes, use `replace` with the "
+                            "literal line you want to change."
+                        ),
+                    )
+                skipped.append(f"skipped (duplicate): {item[:60]!r}")
+                continue
+            new_text = (
+                new_text.rstrip() + "\n\n" + item + "\n"
+            ) if new_text.strip() else item + "\n"
+            added += 1
+        if added == 0:
+            return ToolResult(ok=False, output="",
+                              error="no entries added; all duplicates: " + " | ".join(skipped))
+        path.write_text(new_text)
+        out = _agent_state(new_text)
+        if added > 1:
+            out = f"Added {added} paragraphs to AGENT.md.\n\n{out}"
+        if skipped:
+            out = f"{out}\n\n" + "\n".join(skipped)
+        return ToolResult(ok=True, output=out)
 
     if action == "replace":
         if not match or not content:

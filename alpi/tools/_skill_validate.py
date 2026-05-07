@@ -22,6 +22,7 @@ def validate_skill(skill_dir: Path) -> list[str]:
     py_files = sorted(skill_dir.rglob("scripts/*.py"))
     findings.extend(_check_syntax(py_files, skill_dir))
     findings.extend(_check_imports(py_files, skill_dir))
+    findings.extend(_check_alpi_tool_imports(py_files, skill_dir))
     findings.extend(_check_oauth_race(py_files, skill_dir))
     findings.extend(_check_port_coherence(py_files, skill_dir))
     return findings
@@ -72,6 +73,28 @@ def _check_imports(files: Iterable[Path], root: Path) -> list[str]:
                     out.append(
                         f"✗ {_rel(p, root)} imports `{mod}` — not installed"
                     )
+    return out
+
+
+def _check_alpi_tool_imports(files: Iterable[Path], root: Path) -> list[str]:
+    out: list[str] = []
+    for p in files:
+        try:
+            tree = ast.parse(p.read_text(encoding="utf-8", errors="replace"))
+        except Exception:  # noqa: BLE001
+            continue
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.ImportFrom) or node.module != "alpi":
+                continue
+            bad = [
+                alias.name for alias in node.names
+                if alias.name not in {"__version__"}
+            ]
+            if bad:
+                out.append(
+                    f"✗ {_rel(p, root)} imports `{', '.join(bad)}` from alpi "
+                    "— tools and MCP methods are not Python APIs"
+                )
     return out
 
 

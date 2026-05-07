@@ -166,7 +166,10 @@ category: personal
 version: 0.1.0
 origin: agent                   # "agent" (proposed) or "user" (hand-written)
 requires_env: []                # env vars the skill needs; missing ones hide it
-tools: [read_file, terminal]    # tools the skill is allowed to call
+tools: [read_file, terminal]    # tools the skill is allowed to call;
+                                # built-ins are snake_case; MCP tools
+                                # use the server's native form
+                                # (e.g. ``bitbucket__getPullRequests``)
 keywords: [whoop, workout]      # optional lowercase tokens for keyword boost
 created_at: 2026-04-20
 ---
@@ -322,6 +325,7 @@ skill(action="remove_file", name=..., subdir=..., filename=...,
                              [confirm_user_skill])
 skill(action="delete", name=..., [confirm_user_skill])
 skill(action="list")
+skill(action="run", name=..., [args])
 ```
 
 ### Creating a skill
@@ -357,6 +361,34 @@ skill(action="add_file",
 file content prefixed with `absolute_path: ...`. Use that absolute
 path when executing a script. Do not run `scripts/foo.py` relative to
 the current workspace; skill files live under the active profile home.
+
+### Running a skill end-to-end
+
+`skill(action="run", name=...)` is the canonical way to execute a
+skill from the agent. Two paths:
+
+- **`scripts/run.py` exists** — alpi spawns it with `cwd` = the skill
+  directory and an env enriched with `ALPI_HOME`, `ALPI_SKILL_NAME`,
+  `ALPI_SKILL_DIR`. Stdout (and stderr, if any) is returned as the
+  tool result. Timeout: 600 s. If the skill declares `requires_env:`
+  fields and any of those vars are missing from the process env, the
+  call fails up-front instead of half-running the script. Scripts are
+  normal Python; built-in tools and MCP methods are not importable
+  Python APIs. MCP-backed skills should stay prose-only until there is
+  an explicit runtime bridge.
+- **No script** — alpi returns SKILL.md prefixed with a directive so
+  the agent follows the prose and calls the tools it names instead of
+  improvising.
+
+Pass `args=["--foo", "bar"]` to forward extra CLI arguments to
+`scripts/run.py`. Scheduled jobs should invoke this action from their
+prompt when they need a skill result; the scheduler itself still runs
+through `alpi chat --once --emit-events --no-save`.
+
+The agent should prefer `skill(action="run")` over manually chaining
+`view` + `terminal` calls. For scripted skills, `run` owns the script
+execution. For prose-only skills, `run` loads the instructions and the
+agent executes them with the real tools.
 
 ### Origin gate
 

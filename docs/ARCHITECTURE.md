@@ -232,6 +232,8 @@ Thin wrapper over `litellm.completion`. `stream()` is an async generator yieldin
 
 Three files: `USER.md` (facts about the user), `MEMORY.md` (env quirks, commands, incidents), `AGENT.md` (the agent's own profile — tone, style, identity, language). `§` entry delimiter, char limits (1375 / 2200), accent+case+punctuation-insensitive dedup, plus token-Jaccard dedup at 70% max-containment to catch paraphrases. `.bak` snapshot before every mutating write. Approach C: every mutating call returns the full current state of the target file so the agent sees its own write in the same turn.
 
+**Batch writes.** `memory(action="add", entries=[...])` accepts a list of entries for the same target in a single call. Each entry runs through cross-file and same-target dup checks independently; entries that collide are skipped with a per-line note, the rest land in one write. Replaces the pathological pattern of one `add` call per fact (16 calls in a single turn observed in real sessions).
+
 ### Path resolution (`alpi/tools/_paths.py`)
 
 Single entry point `resolve_path(path)`:
@@ -264,6 +266,8 @@ Frontmatter (auto-populated on `create`): `name`, `description`, `category`, `ve
 **Auto-injected into the system prompt** (`skills_index_block(home)`): every session start, all installed skills are listed by category as `name: description` entries, prefixed by a directive that says "check this list before reaching for general tools". Without this nudge, mimo-class models routinely went straight to `web_search`/`terminal` even when a perfect skill existed.
 
 **TUI integration**: when a `terminal` command's path matches `.alpi/(profiles/<p>/)?skills/<cat>/<name>/...`, `arg_hint` rewrites the ToolCard label as `skill: <name>` (or `skill: <name> · <script>` when the script is the full path). Tool name stays `terminal`; the rewrite is display-only.
+
+**Execution: `skill(action="run", name=...)`**. Single canonical ad-hoc path. If `scripts/run.py` exists the action validates the skill, then spawns the script via `subprocess.run` with `cwd` = skill dir, `env += {ALPI_HOME, ALPI_SKILL_NAME, ALPI_SKILL_DIR}`, 600s timeout, and the skill's `requires_env` checked up-front. Scripts are normal Python; built-in tools and MCP methods are not importable Python APIs. No script → SKILL.md is returned with a `[skill X has no scripts/run.py — follow these instructions]` prefix so the agent follows the prose and calls the real tools. Scheduled prompts should call this action instead of reimplementing the skill by hand; the scheduler still enters through `alpi chat --once --emit-events --no-save`.
 
 ### Research (read-only sub-agent, `alpi/tools/research.py`)
 
@@ -573,6 +577,8 @@ schedules a job (`kind: cron|once`, expression or `after_hours`).
 the agent calls `schedule(action='add', kind='once',
 after_hours=N)`, the engine resolves `now` from a single source so
 the agent doesn't drift.
+
+**Duplicate guard + in-place edits.** `add` rejects a job whose (`kind` + cron / `run_at` / `after_hours`) matches an existing one AND whose prompt fingerprint (lowercase + whitespace-collapsed first 80 chars) collides. Pass `force=true` to bypass when the second job is genuinely intentional. Use `update` to change prompt, cron, target, or pause state without remove/recreate churn. Schedule prompts must not tell the agent to send/post to Telegram when `platform=telegram`; delivery is automatic after the scheduled reply is produced.
 
 Scheduled jobs execute through `alpi chat --once --emit-events
 --no-save` with `ALPI_PLATFORM=cron`. The scheduler consumes stdout

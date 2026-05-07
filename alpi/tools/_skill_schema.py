@@ -188,11 +188,11 @@ def _check_tools(meta: dict[str, str]) -> list[Issue]:
         item = part.strip().strip("'\"")
         if not item:
             continue
-        if not re.match(r"^[a-z][a-z0-9_]*$", item):
+        if not re.match(r"^[a-z][a-zA-Z0-9_]*(__[a-zA-Z][a-zA-Z0-9_]*)?$", item):
             out.append(Issue(
                 "tools", "warning",
                 f"{item!r} doesn't match alpi tool naming "
-                "(snake_case, lowercase) — typo?",
+                "(snake_case for built-ins, name__method for MCP) — typo?",
             ))
     return out
 

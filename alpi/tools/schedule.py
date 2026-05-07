@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import uuid
 from typing import Any
 
@@ -17,7 +18,7 @@ class Schedule(Tool):
         "\"done, you'll get X at Y\" in the reply; nothing is "
         "scheduled unless this tool is invoked.\n"
         "\n"
-        "Actions: list, add, remove, fire.\n"
+        "Actions: list, add, update, remove, fire.\n"
         "\n"
         "`fire` runs a specific job ad-hoc — same threat-scan + "
         "dispatch path as the scheduler daemon. Useful right after "
@@ -55,7 +56,21 @@ class Schedule(Tool):
     parameters = {
         "type": "object",
         "properties": {
-            "action": {"type": "string", "enum": ["list", "add", "remove", "fire"]},
+            "action": {
+                "type": "string",
+                "enum": ["list", "add", "update", "remove", "fire"],
+            },
+            "force": {
+                "type": "boolean",
+                "description": (
+                    "Bypass the duplicate-detection guard on `add`. Default "
+                    "false: a job whose (kind + cron + first 80 chars of "
+                    "prompt) matches an existing job is rejected so you "
+                    "don't end up with two copies of the same daily summary. "
+                    "Set true only when you genuinely want a near-duplicate."
+                ),
+                "default": False,
+            },
             "kind": {
                 "type": "string",
                 "enum": ["once", "cron", "inactivity"],
@@ -87,7 +102,11 @@ class Schedule(Tool):
                 "type": "string",
                 "description": "Target chat id. Default: first allowlisted chat.",
             },
-            "id": {"type": "string", "description": "Job id (for remove / fire)."},
+            "id": {"type": "string", "description": "Job id (for update / remove / fire)."},
+            "paused": {
+                "type": "boolean",
+                "description": "Pause/resume an existing job (update only).",
+            },
         },
         "required": ["action"],
     }
@@ -108,10 +127,12 @@ class Schedule(Tool):
         base["function"]["description"] = preamble + base["function"]["description"]
         return base
 
-    def run(self, action: str, kind: str = "cron", expression: str = "",
+    def run(self, action: str, kind: str = "", expression: str = "",
             after_hours: float | None = None, prompt: str = "",
-            platform: str = "telegram", chat_id: str = "",
-            run_at: str = "", id: str | None = None) -> ToolResult:
+            platform: str = "", chat_id: str = "",
+            run_at: str = "", id: str | None = None,
+            force: bool = False,
+            paused: bool | None = None) -> ToolResult:
         home = get_home()
         jobs_path = home / "schedule" / "jobs.json"
         jobs_path.parent.mkdir(parents=True, exist_ok=True)
@@ -123,16 +144,23 @@ class Schedule(Tool):
         if action == "add":
             if not prompt:
                 return ToolResult(ok=False, output="", error="'prompt' is required")
-            from alpi.tools.skill import scan_skill_body
-            flags = scan_skill_body(prompt)
-            if flags:
-                return ToolResult(
-                    ok=False, output="",
-                    error=(
-                        "threat scan blocked scheduled prompt "
-                        f"(runs unattended with full tool access): {', '.join(flags)}"
-                    ),
-                )
+            err = _validate_prompt(prompt, platform or "telegram")
+            if err:
+                return ToolResult(ok=False, output="", error=err)
+            if not force:
+                dup = _find_duplicate(jobs, kind or "cron", expression,
+                                       run_at, after_hours, prompt)
+                if dup is not None:
+                    return ToolResult(
+                        ok=False, output="",
+                        error=(
+                            f"a similar job already exists (id={dup['id']}, "
+                            f"kind={dup.get('kind')}). Run "
+                            f"schedule(action='list') to inspect, then "
+                            f"either remove the old one or pass force=true "
+                            f"to add this one anyway."
+                        ),
+                    )
             from datetime import datetime, timezone
             now_iso = datetime.now(timezone.utc).isoformat()
             job: dict = {
@@ -193,6 +221,72 @@ class Schedule(Tool):
                 output=f"Added {job['kind']} job {job['id']} — {hint}",
             )
 
+        if action == "update":
+            if not id:
+                return ToolResult(ok=False, output="", error="'id' required")
+            job = next((j for j in jobs if j.get("id") == id), None)
+            if job is None:
+                return ToolResult(ok=False, output="", error=f"job {id} not found")
+
+            changes: list[str] = []
+            next_platform = (platform or job.get("platform") or "telegram").lower()
+            if prompt:
+                err = _validate_prompt(prompt, next_platform)
+                if err:
+                    return ToolResult(ok=False, output="", error=err)
+                job["prompt"] = prompt
+                changes.append("prompt")
+            elif platform:
+                err = _validate_prompt(job.get("prompt", ""), next_platform)
+                if err:
+                    return ToolResult(ok=False, output="", error=err)
+            if platform:
+                job["platform"] = next_platform
+                changes.append("platform")
+            if chat_id:
+                job["chat_id"] = chat_id
+                changes.append("chat_id")
+            if paused is not None:
+                job["paused"] = bool(paused)
+                changes.append("paused")
+
+            if kind:
+                job["kind"] = kind
+                changes.append("kind")
+            job_kind = job.get("kind") or "cron"
+            if expression:
+                job["expression"] = expression
+                changes.append("expression")
+            if run_at:
+                from datetime import datetime
+                try:
+                    datetime.fromisoformat(run_at)
+                except ValueError:
+                    return ToolResult(
+                        ok=False, output="",
+                        error=f"'run_at' is not a valid ISO 8601 datetime: {run_at!r}",
+                    )
+                job["run_at"] = run_at
+                changes.append("run_at")
+            if after_hours is not None:
+                if after_hours <= 0:
+                    return ToolResult(
+                        ok=False, output="",
+                        error="'after_hours' must be > 0 for kind=inactivity",
+                    )
+                job["after_hours"] = float(after_hours)
+                changes.append("after_hours")
+
+            err = _validate_job_shape(job)
+            if err:
+                return ToolResult(ok=False, output="", error=err)
+            if job_kind == "cron" and "last_run_at" not in job:
+                from datetime import datetime, timezone
+                job["last_run_at"] = datetime.now(timezone.utc).isoformat()
+            jobs_path.write_text(json.dumps(jobs, indent=2))
+            changed = ", ".join(dict.fromkeys(changes)) or "nothing"
+            return ToolResult(ok=True, output=f"Updated job {id}: {changed}")
+
         if action == "remove":
             if not id:
                 return ToolResult(ok=False, output="", error="'id' required")
@@ -210,6 +304,75 @@ class Schedule(Tool):
             return ToolResult(ok=ok, output=msg, error=None if ok else msg)
 
         return ToolResult(ok=False, output="", error=f"unknown action: {action}")
+
+
+def _prompt_fingerprint(text: str) -> str:
+    """Normalise to detect near-duplicate prompts: lowercase, collapse
+    whitespace, take the first 80 chars. Two daily-summary prompts that
+    differ only in trailing wording (e.g. one says 'send to Telegram')
+    fingerprint to the same prefix and trip the duplicate guard."""
+    norm = " ".join((text or "").lower().split())
+    return norm[:80]
+
+
+_AUTO_DELIVERY_RE = re.compile(
+    r"\b(?:send|post|deliver|forward)\b.{0,80}\b(?:to|via)\s+"
+    r"(?:telegram|matrix|email|mail|webhook)\b",
+    re.I | re.S,
+)
+
+
+def _validate_prompt(prompt: str, platform: str) -> str | None:
+    from alpi.tools.skill import scan_skill_body
+    flags = scan_skill_body(prompt)
+    if flags:
+        return (
+            "threat scan blocked scheduled prompt "
+            f"(runs unattended with full tool access): {', '.join(flags)}"
+        )
+    if _AUTO_DELIVERY_RE.search(prompt or ""):
+        return (
+            "scheduled job replies are auto-delivered to "
+            f"{(platform or 'telegram').lower()}; remove explicit delivery "
+            "instructions like 'send/post to Telegram' from the prompt"
+        )
+    return None
+
+
+def _validate_job_shape(job: dict) -> str | None:
+    kind = job.get("kind") or "cron"
+    if not job.get("prompt"):
+        return "'prompt' is required"
+    if kind == "cron" and not job.get("expression"):
+        return "'expression' is required for kind=cron"
+    if kind == "once" and not job.get("run_at"):
+        return "'run_at' (ISO 8601) is required for kind=once"
+    if kind == "inactivity" and float(job.get("after_hours") or 0) <= 0:
+        return "'after_hours' must be > 0 for kind=inactivity"
+    if kind not in {"cron", "once", "inactivity"}:
+        return f"unknown kind: {kind}"
+    return None
+
+
+def _find_duplicate(
+    jobs: list[dict], kind: str, expression: str, run_at: str,
+    after_hours: float | None, prompt: str,
+) -> dict | None:
+    fp = _prompt_fingerprint(prompt)
+    for j in jobs:
+        if (j.get("kind") or "cron") != (kind or "cron"):
+            continue
+        if _prompt_fingerprint(j.get("prompt", "")) != fp:
+            continue
+        if kind == "cron" and j.get("expression") != expression:
+            continue
+        if kind == "once" and j.get("run_at") != run_at:
+            continue
+        if (kind == "inactivity"
+                and float(j.get("after_hours") or 0) != float(after_hours or 0)):
+            continue
+        return j
+    return None
 
 
 TOOL = Schedule

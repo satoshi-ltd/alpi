@@ -1,0 +1,136 @@
+"""Tests for ``skill(action="run", name=...)``.
+
+Why this exists: before this action, the only way for the agent to
+"execute" a skill was to view SKILL.md and improvise terminal calls.
+That broke reproducibility — chat output drifted from scheduled
+output. ``run`` collapses both paths into one well-defined call.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+from alpi.tools.skill import Skill
+
+
+@pytest.fixture
+def isolated_home(tmp_home_no_env: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    monkeypatch.setenv("ALPI_HOME", str(tmp_home_no_env))
+    return tmp_home_no_env
+
+
+def _create(**kw) -> object:
+    kw.setdefault("category", "personal")
+    kw.setdefault("description", "test skill")
+    return Skill().run(action="create", **kw)
+
+
+def test_run_unknown_skill_fails(isolated_home: Path) -> None:
+    r = Skill().run(action="run", name="does-not-exist")
+    assert not r.ok
+    assert "not found" in r.error.lower()
+
+
+def test_run_requires_name(isolated_home: Path) -> None:
+    r = Skill().run(action="run")
+    assert not r.ok
+    assert "name" in r.error.lower()
+
+
+def test_run_without_script_returns_skill_md(isolated_home: Path) -> None:
+    """No scripts/run.py → return SKILL.md prefixed with a directive."""
+    body = "Step 1: do thing.\nStep 2: do other thing."
+    _create(name="prose-only", body=body)
+    r = Skill().run(action="run", name="prose-only")
+    assert r.ok
+    assert "no scripts/run.py" in r.output.lower()
+    assert "Step 1: do thing" in r.output
+
+
+def test_run_executes_script_and_returns_stdout(isolated_home: Path) -> None:
+    """scripts/run.py exists → spawn it, return its stdout."""
+    _create(name="echoer", body="prints a marker")
+    Skill().run(
+        action="add_file", name="echoer", subdir="scripts", filename="run.py",
+        content="print('marker-out')\n",
+    )
+    r = Skill().run(action="run", name="echoer")
+    assert r.ok, r.error
+    assert "marker-out" in r.output
+
+
+def test_run_propagates_nonzero_exit_as_failure(isolated_home: Path) -> None:
+    _create(name="failer", body="exits 1")
+    Skill().run(
+        action="add_file", name="failer", subdir="scripts", filename="run.py",
+        content="import sys; print('partial'); sys.exit(2)\n",
+    )
+    r = Skill().run(action="run", name="failer")
+    assert not r.ok
+    assert "rc=2" in r.error
+    assert "partial" in r.output
+
+
+def test_run_forwards_args(isolated_home: Path) -> None:
+    _create(name="argprinter", body="echoes argv")
+    Skill().run(
+        action="add_file", name="argprinter", subdir="scripts", filename="run.py",
+        content="import sys; print('|'.join(sys.argv[1:]))\n",
+    )
+    r = Skill().run(action="run", name="argprinter", args=["--foo", "bar"])
+    assert r.ok
+    assert "--foo|bar" in r.output
+
+
+def test_run_blocks_when_required_env_missing(
+    isolated_home: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Skills declaring ``requires_env`` should not spawn if the env is
+    absent — same gate as the one used at system-prompt build time, so
+    behaviour is consistent between "available to agent" and "actually
+    runnable now"."""
+    monkeypatch.delenv("ZZZ_TEST_KEY", raising=False)
+    _create(name="needsenv", body="needs ZZZ_TEST_KEY",
+            requires_env=["ZZZ_TEST_KEY"])
+    Skill().run(
+        action="add_file", name="needsenv", subdir="scripts", filename="run.py",
+        content="print('should not run')\n",
+    )
+    r = Skill().run(action="run", name="needsenv")
+    assert not r.ok
+    assert "ZZZ_TEST_KEY" in r.error
+    assert "should not run" not in r.output
+
+
+def test_run_exposes_skill_dir_via_env(isolated_home: Path) -> None:
+    """Scripts get ``ALPI_SKILL_DIR`` so they can resolve secrets/state
+    without hardcoding the user's profile path."""
+    _create(name="introspect", body="prints ALPI_SKILL_DIR")
+    Skill().run(
+        action="add_file", name="introspect", subdir="scripts", filename="run.py",
+        content="import os; print(os.environ.get('ALPI_SKILL_DIR', 'MISSING'))\n",
+    )
+    r = Skill().run(action="run", name="introspect")
+    assert r.ok
+    assert "introspect" in r.output
+    assert "MISSING" not in r.output
+
+
+def test_run_blocks_scripts_that_import_tools_from_alpi(
+    isolated_home: Path,
+) -> None:
+    _create(name="bad-mcp-script", body="tries to import a tool")
+    Skill().run(
+        action="add_file", name="bad-mcp-script", subdir="scripts",
+        filename="run.py",
+        content="from alpi import bitbucket_get_pull_requests\nprint('bad')\n",
+    )
+
+    r = Skill().run(action="run", name="bad-mcp-script")
+
+    assert not r.ok
+    assert "failed validation" in r.error
+    assert "tools and MCP methods are not Python APIs" in r.output
+    assert "bad" not in r.output
