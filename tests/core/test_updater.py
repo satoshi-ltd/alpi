@@ -257,8 +257,7 @@ def test_fetch_pypi_returns_none_on_http_error() -> None:
 
 def test_fetch_pypi_uses_alpi_update_index_env(
         monkeypatch: pytest.MonkeyPatch) -> None:
-    """ALPI_UPDATE_INDEX overrides the URL — used to point the
-    updater at TestPyPI for rehearsals."""
+    """ALPI_UPDATE_INDEX overrides the updater URL."""
     monkeypatch.setenv(
         "ALPI_UPDATE_INDEX",
         "https://test.pypi.org/pypi/alpi-agent/json",

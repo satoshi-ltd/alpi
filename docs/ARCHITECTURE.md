@@ -733,4 +733,4 @@ Key fixtures (`tests/conftest.py`):
 - Gateway subprocess uses `alpi chat --once --emit-events --resume-chat <chat_id>` — separate codepath from the TUI, simpler, non-streaming, and persisted under `gateway/sessions`.
 - Schedule subprocess uses `alpi chat --once --emit-events --no-save` — same event stream, no resumable session file.
 - `ALPI_HOME` env var routes daemons + tests to a specific profile root.
-- `ALPI_SKIP_UPDATE_CHECK=1` short-circuits the background PyPI version check (`alpi/updater.py`); the autouse fixture in `tests/conftest.py` sets it so the unit suite never reaches PyPI. `ALPI_UPDATE_INDEX` overrides the JSON URL the updater hits — used to point at TestPyPI for release rehearsals.
+- `ALPI_SKIP_UPDATE_CHECK=1` short-circuits the background PyPI version check (`alpi/updater.py`); the autouse fixture in `tests/conftest.py` sets it so the unit suite never reaches PyPI. `ALPI_UPDATE_INDEX` overrides the JSON URL the updater hits when you need a staging or local mirror.

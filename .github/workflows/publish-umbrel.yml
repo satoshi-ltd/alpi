@@ -1,4 +1,4 @@
-name: Umbrel image
+name: publish-umbrel
 
 on:
   workflow_dispatch:

@@ -9,15 +9,12 @@ name: publish
 # reaches users. The "merge → deploy" convention from Cloudflare,
 # constrained by PyPI's immutability via the version delta gate.
 #
-# Why tests live here, not in ``test.yml``: ``test.yml`` is the
+# Why tests live here, not in ``pull-request.yml``: that workflow is the
 # PR-feedback workflow. The push-to-main path needs the same
 # tests as the gate of the release chain — duplicating them in
-# both files would mean a green ``test.yml`` PR run could still
+# both files would mean a green PR run could still
 # slip a red main-branch run into PyPI if they raced. Single
 # source of truth on main = this workflow.
-#
-# Manual ``workflow_dispatch`` still runs the tests: rehearsing
-# on TestPyPI without testing defeats the rehearsal.
 #
 # Trusted Publisher (OIDC) is configured on PyPI; no API tokens
 # live in this repo.
@@ -34,14 +31,11 @@ on:
       - ".github/workflows/publish.yml"
   workflow_dispatch:
     inputs:
-      target:
-        description: "publish target"
+      force:
+        description: "publish even if the version already exists on PyPI"
         required: true
-        default: "testpypi"
-        type: choice
-        options:
-          - testpypi
-          - pypi
+        default: false
+        type: boolean
 
 permissions: {}
 
@@ -51,7 +45,7 @@ jobs:
   #     / bwrap and are not part of the dev loop). If a test
   #     fails here the chain stops — no version probe, no build,
   #     no smoke, no publish. Integration tests live in
-  #     ``test.yml`` for PRs + manual dispatch, deliberately not
+  #     ``pull-request.yml`` for PRs + manual dispatch, deliberately not
   #     in the release gate so the publish path matches what the
   #     dev validates locally.
   tests:
@@ -88,10 +82,10 @@ jobs:
           version=$(python3 -c "import tomllib, pathlib; print(tomllib.loads(pathlib.Path('pyproject.toml').read_text())['project']['version'])")
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
-          # Manual dispatch: always proceed (the operator decided).
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          # Manual dispatch: only force if explicitly asked to.
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.force }}" = "true" ]; then
             echo "should_publish=true" >> "$GITHUB_OUTPUT"
-            echo "manual dispatch — proceeding with version $version"
+            echo "manual force=true — proceeding with version $version"
             exit 0
           fi
 
@@ -192,38 +186,16 @@ jobs:
           export PATH="$HOME/.local/bin:$PATH"
           alpi --help > /dev/null
 
-  # 4a. TestPyPI dry-run path. Triggered only by manual dispatch
-  #     with target=testpypi. Useful before a real release to catch
-  #     classifier / metadata issues without burning a real version.
-  publish-testpypi:
-    name: publish to TestPyPI
-    needs: [check-version, smoke]
-    if: github.event_name == 'workflow_dispatch' && inputs.target == 'testpypi'
-    runs-on: ubuntu-latest
-    environment:
-      name: testpypi
-      url: https://test.pypi.org/project/alpi-agent/
-    permissions:
-      id-token: write
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: dist
-          path: dist/
-      - uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          repository-url: https://test.pypi.org/legacy/
-
-  # 4b. Real publish — auto on push to main when version changed,
-  #     or manual dispatch with target=pypi. No environment gate
-  #     (Cloudflare-style: merge = deploy). Tag + GitHub release
-  #     are created post-publish from the same commit.
+  # 4. Real publish — auto on push to main when version changed,
+  #    or manual dispatch with force=true. No environment gate
+  #    (Cloudflare-style: merge = deploy). Tag + GitHub release
+  #    are created post-publish from the same commit.
   publish-pypi:
     name: publish to PyPI
     needs: [check-version, smoke]
     if: |
       (github.event_name == 'push' && needs.check-version.outputs.should_publish == 'true')
-      || (github.event_name == 'workflow_dispatch' && inputs.target == 'pypi')
+      || (github.event_name == 'workflow_dispatch' && inputs.force == 'true')
     runs-on: ubuntu-latest
     permissions:
       id-token: write   # OIDC for trusted publishing

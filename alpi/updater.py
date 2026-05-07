@@ -32,7 +32,7 @@ def _cache_path() -> Path:
 
 
 def _pypi_url() -> str:
-    # ``ALPI_UPDATE_INDEX`` overrides for TestPyPI rehearsals.
+    # ``ALPI_UPDATE_INDEX`` overrides the updater URL for staging or local mirrors.
     return os.environ.get("ALPI_UPDATE_INDEX") or _PYPI_URL_DEFAULT
 
 

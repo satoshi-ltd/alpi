@@ -1,4 +1,4 @@
-name: desktop-release
+name: publish-desktop
 
 # Release pipeline for the Tauri desktop app. Mirrors the alpi (CLI)
 # ``publish.yml`` shape — every push to main is a candidate release;
@@ -34,7 +34,7 @@ on:
     branches: [main]
     paths:
       - "desktop/**"
-      - ".github/workflows/desktop-release.yml"
+      - ".github/workflows/publish-desktop.yml"
   workflow_dispatch:
     inputs:
       force:

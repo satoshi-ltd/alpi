@@ -1,4 +1,4 @@
-name: tests
+name: pull-request
 
 # PR feedback + on-demand integration. The push-to-main path runs
 # the unit suite as the first stage of ``publish.yml`` (release
@@ -14,7 +14,7 @@ on:
 permissions: {}
 
 concurrency:
-  group: tests-${{ github.ref }}
+  group: pull-request-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:

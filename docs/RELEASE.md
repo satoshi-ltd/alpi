@@ -42,10 +42,6 @@ Done once at the start of v0.3:
   - Repository: `alpi`
   - Workflow filename: `publish.yml`
   - (No environment — we run without manual gates.)
-- (Optional but recommended) **TestPyPI** Trusted Publisher with
-  the same shape, so the manual `workflow_dispatch → testpypi`
-  rehearsal path works.
-
 Pending publishers can be added at
 <https://pypi.org/manage/account/publishing/> before the project
 exists; PyPI claims the name on the first successful publish.
@@ -70,14 +66,12 @@ For a minor release (e.g. `v0.2.x → v0.3.0`):
 1. Same steps. The CHANGELOG section header becomes
    `## v0.3.0 — <date>` and the body summarizes the cycle's
    highlights.
-2. Optional: rehearse on TestPyPI first via
-   `workflow_dispatch → testpypi` to catch metadata regressions.
 
 For a re-publish (e.g. after a CI outage interrupted the auto-run):
 
-1. `workflow_dispatch → pypi` from the GitHub Actions UI. Same
-   commit, same version, runs idempotently — the version-gate
-   short-circuits if PyPI already has it.
+1. `workflow_dispatch` with `force=true` from the GitHub Actions UI.
+   Same commit, same version, runs idempotently — the version-gate
+   short-circuits unless you explicitly force the publish.
 
 ## What you cannot do
 
@@ -108,9 +102,6 @@ removed for v0.3 because:
 - Cloudflare-style merge-to-deploy is the same model the alpi
   site uses. Consistency with how the project ships its other
   surfaces.
-
-If a future incident proves we want a gate back, the change is a
-two-line YAML edit (`environment: { name: pypi }`).
 
 ## Troubleshooting
 
