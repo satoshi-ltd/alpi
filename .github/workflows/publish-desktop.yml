@@ -117,8 +117,8 @@ jobs:
             exit 1
           fi
 
-  # 2. Cross-platform bundle build. ``tauri-action`` invokes
-  #    ``pnpm tauri build`` per OS, signs with the minisign key,
+  # 2. Bundle build for the supported desktop platforms. ``tauri-action``
+  #    invokes ``pnpm tauri build`` per OS, signs with the minisign key,
   #    emits ``latest.json`` (the updater manifest), creates the
   #    ``desktop-vX.Y.Z`` GitHub release with the implied tag, and
   #    uploads every artefact to it.
@@ -141,9 +141,6 @@ jobs:
           - os: ubuntu-22.04
             rust_targets: "x86_64-unknown-linux-gnu"
             args: "--bundles appimage,deb"
-          - os: windows-latest
-            rust_targets: "x86_64-pc-windows-msvc"
-            args: "--bundles nsis"
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
