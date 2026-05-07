@@ -46,8 +46,10 @@ async def _sessions_list(
     params: dict[str, Any], _server: host_server.Server,
 ) -> dict[str, Any]:
     profile = str((params or {}).get("profile") or "")
+    limit_raw = (params or {}).get("limit")
+    limit = int(limit_raw) if limit_raw is not None else None
     home = _resolve_home(profile)
-    return {"sessions": host_sessions.list_sessions(home)}
+    return {"sessions": host_sessions.list_sessions(home, limit=limit)}
 
 
 async def _session_read(

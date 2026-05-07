@@ -7,10 +7,15 @@ export ALPI_TTYD_PORT="${ALPI_TTYD_PORT:-8080}"
 
 mkdir -p "$HOME/.alpi"
 
+ttyd_pid=""
 alpi daemon start &
 daemon_pid="$!"
 
 shutdown() {
+  if [ -n "$ttyd_pid" ]; then
+    kill "$ttyd_pid" 2>/dev/null || true
+    wait "$ttyd_pid" 2>/dev/null || true
+  fi
   kill "$daemon_pid" 2>/dev/null || true
   wait "$daemon_pid" 2>/dev/null || true
 }
@@ -23,6 +28,18 @@ ttyd \
   --writable \
   --client-option titleFixed=Alpi \
   --client-option fontSize=14 \
-  sh -lc 'cd "$HOME"; alpi; exec sh'
+  sh -lc 'cd "$HOME"; alpi; exec sh' &
+ttyd_pid="$!"
 
-shutdown
+while true; do
+  if ! kill -0 "$daemon_pid" 2>/dev/null; then
+    kill "$ttyd_pid" 2>/dev/null || true
+    wait "$ttyd_pid" 2>/dev/null || true
+    exit 1
+  fi
+  if ! kill -0 "$ttyd_pid" 2>/dev/null; then
+    shutdown
+    exit 0
+  fi
+  sleep 2
+done

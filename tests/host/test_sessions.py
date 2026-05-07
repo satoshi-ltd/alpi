@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import os
 
 import pytest
 
@@ -46,6 +47,36 @@ def test_list_sessions_classifies_kinds(tmp_path: Path) -> None:
     assert by_id["a"]["kind"] == "telegram"
     assert by_id["b"]["kind"] == "scheduled"
     assert by_id["c"]["kind"] == "chat"
+
+
+def test_list_sessions_limit_reads_recent_first(tmp_path: Path) -> None:
+    old = _seed_session(tmp_path, "old", "old chat")
+    new = _seed_session(tmp_path, "new", "new chat")
+    os.utime(old, ns=(1_714_000_000_000_000_000, 1_714_000_000_000_000_000))
+    os.utime(new, ns=(1_714_000_001_000_000_000, 1_714_000_001_000_000_000))
+    rows = data_sessions.list_sessions(tmp_path, limit=1)
+    assert [r["id"] for r in rows] == ["new"]
+
+
+@pytest.mark.asyncio
+async def test_sessions_list_accepts_limit_param(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    _seed_session(home, "a", "older")
+    _seed_session(home, "b", "newer")
+    srv = host_server.Server(home=home)
+    data_handlers.register(srv)
+    monkeypatch.setattr(data_handlers, "_resolve_home", lambda p: home)
+
+    response = await srv._dispatch({
+        "id": "r",
+        "method": "host.sessions.list",
+        "params": {"profile": "default", "limit": 1},
+    })
+
+    assert len(response["result"]["sessions"]) == 1
 
 
 def test_read_session_returns_full_payload(tmp_path: Path) -> None:

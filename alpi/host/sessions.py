@@ -8,16 +8,29 @@ from typing import Any
 _FIRST_USER_MAX = 140
 
 
-def list_sessions(home: Path) -> list[dict[str, Any]]:
+def list_sessions(home: Path, limit: int | None = None) -> list[dict[str, Any]]:
     d = home / "sessions"
     if not d.exists():
         return []
-    rows: list[dict[str, Any]] = []
+    candidates: list[tuple[int, int, Path]] = []
     for p in d.iterdir():
         if not p.is_file() or p.suffix != ".json":
             continue
         if p.stem.startswith("_"):
             continue
+        try:
+            stat = p.stat()
+            mtime = int(stat.st_mtime)
+            mtime_ns = stat.st_mtime_ns
+        except OSError:
+            mtime = 0
+            mtime_ns = 0
+        candidates.append((mtime_ns, mtime, p))
+    candidates.sort(key=lambda item: item[0], reverse=True)
+    if limit is not None and limit > 0:
+        candidates = candidates[:limit]
+    rows: list[dict[str, Any]] = []
+    for _, mtime, p in candidates:
         try:
             data = json.loads(p.read_text(encoding="utf-8"))
         except Exception:  # noqa: BLE001
@@ -26,10 +39,6 @@ def list_sessions(home: Path) -> list[dict[str, Any]]:
         first_user = ""
         if turns:
             first_user = _truncate(str(turns[0].get("user") or ""), _FIRST_USER_MAX)
-        try:
-            mtime = int(p.stat().st_mtime)
-        except OSError:
-            mtime = 0
         rows.append({
             "id": p.stem,
             "mtime": mtime,
@@ -43,7 +52,6 @@ def list_sessions(home: Path) -> list[dict[str, Any]]:
             "cost_usd": float(data.get("cost_usd") or 0.0),
             "last_ctx_tokens": int(data.get("last_ctx_tokens") or 0),
         })
-    rows.sort(key=lambda r: r["mtime"], reverse=True)
     return rows
 
 
