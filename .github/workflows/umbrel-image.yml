@@ -6,7 +6,7 @@ on:
       tag:
         description: Docker image tag
         required: true
-        default: "0.4.3"
+        default: "0.4.8"
 
 permissions:
   contents: read

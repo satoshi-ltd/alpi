@@ -14,12 +14,12 @@ def test_umbrel_package_runs_tui_behind_app_proxy() -> None:
 
     assert "APP_HOST: alpi_server_1" in compose
     assert "APP_PORT: 8080" in compose
-    assert "satoshiltd/alpi-umbrel:0.4.3" in compose
+    assert "satoshiltd/alpi-umbrel:0.4.8" in compose
     assert 'user: "1000:1000"' in compose
     assert "- 49200:49200" in compose
     assert "DEVICE_DOMAIN_NAME: $DEVICE_DOMAIN_NAME" in compose
     assert "0.5.0-dev" not in compose
-    assert 'version: "0.4.3"' in manifest
+    assert 'version: "0.4.8"' in manifest
     assert 'releaseNotes: ""' in manifest
     assert "category: ai" in manifest
     assert 'submission: https://github.com/getumbrel/umbrel-apps/pull/5533' in manifest

@@ -20,7 +20,7 @@ foundation: desktop is a host-plane client, profile state sits behind
 should make the remote-access story obvious: desktop can switch between
 the local daemon and paired remote hosts, mobile uses the same host-plane
 pairing contract, and ALP streaming later makes peer/workgroup turns
-feel live. Umbrel shipped in v0.4.3 as the first easy always-on
+feel live. Umbrel shipped in v0.4.8 as the first easy always-on
 home-server target; v0.5 should make using that remote profile from
 desktop and mobile feel native.
 
