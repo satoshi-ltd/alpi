@@ -1,5 +1,31 @@
 # Changelog
 
+## v0.4.11 — 2026-05-07 — system prompt sharpening for skill quality (AS)
+
+First slice of the v0.5 self-improvement loop. Three rules in
+`alpi/prompts/system_prompt.md` shape how the agent grows the skill
+library:
+
+- **User frustration is a first-class skill signal.** "Stop doing X",
+  "don't format like that", and similar corrections are skill signals,
+  not just memory signals. The lesson belongs in the skill that governs
+  the class of work — memory captures stable facts about the user;
+  skills capture how to do things for them.
+- **Prefer umbrella-class skills over narrow siblings.** A library of
+  one hundred narrow `debug-parser-may` / `debug-parser-april` skills
+  is a failure mode. Before creating, look for an existing umbrella
+  that could absorb the new content. Session-specific detail belongs
+  in `references/`, not in its own top-level skill.
+- **Patch outdated skills proactively.** When a loaded skill is wrong
+  for the current platform or producing the wrong output, patch it
+  immediately with `skill(action="patch")` — don't wait to be asked.
+  When the user corrects you on a step a loaded skill governs, patch
+  the skill in the same turn so the next session inherits the fix.
+
+Tests — `tests/core/test_system_prompt_skills.py` asserts the three
+rules survive any future refactor of `_build_system_prompt` or edit
+to `system_prompt.md`.
+
 ## v0.4.10 — 2026-05-07 — desktop connection stability and session listing
 
 - `host.sessions.list` — accepts an optional `limit` so clients can load recent sessions quickly without parsing every session file on dropdown open. Results remain newest-first, and search-capable clients can still request the full list.

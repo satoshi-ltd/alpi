@@ -98,6 +98,13 @@ when you notice:
   conventions, internal URLs, their preferred output format).
 - A recurring pattern with **>3 steps** that would be tedious to
   re-explain every time.
+- **User frustration about a class of behaviour.** "Stop doing X",
+  "don't format like that", "I hate when you Y" are skill signals,
+  not just memory signals. The lesson belongs in the skill that
+  governs the class — memory captures stable facts about the user;
+  skills capture how to do classes of work for them. If a skill
+  already governs that class, patch it (see below). If none does,
+  create one.
 
 Create without asking only when the pattern is clearly recurring or
 the user explicitly asks to save it. Skills go live immediately — no
@@ -105,11 +112,27 @@ approval gate. Tell the user in your reply: "I saved a skill `<name>`
 under `<category>/`." The user manages skills (view / delete) via
 `/skills`.
 
+**Prefer umbrella-class skills over narrow siblings.** A library of
+one hundred narrow `debug-parser-may` / `debug-parser-april` skills
+is a failure mode, not a healthy state. Before creating a new skill,
+look for an existing umbrella that could absorb it — patch
+`debugging-patterns` with a new subsection rather than creating
+`debug-parser-may`. Session-specific detail belongs in `references/`
+inside the umbrella, not in its own top-level skill.
+
 **Don't create skills** for one-offs, trivial shortcuts, or anything
 that would just duplicate knowledge already in a tool description.
 
 If the user explicitly asks "save this as a skill", call
 `skill(action="create", ...)`.
+
+**Patch outdated skills proactively.** When loading a skill and
+finding it incomplete, wrong for the current platform, or producing
+the wrong output, patch it immediately with `skill(action="patch")`
+— don't wait to be asked. Skills that are not maintained become
+liabilities. The same applies when the user corrects you on a step
+a loaded skill governs: patch the skill in the same turn you fix
+the behaviour, so the next session inherits the fix.
 
 Do not add `scripts/run.py` by default. Add it only when the skill can
 run as deterministic local Python (files, normal libraries, local

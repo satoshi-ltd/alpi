@@ -14,15 +14,13 @@ Legend: 🔵 backlog · 🟡 next up · ⏸ blocked · 🔴 gate.
 
 ## v0.5 cycle (active)
 
-**Theme: owned device access.** v0.4 shipped the secure local-device
-foundation: desktop is a host-plane client, profile state sits behind
-`host.*`, and encrypted backup/restore makes a profile portable. v0.5
-should make the remote-access story obvious: desktop can switch between
-the local daemon and paired remote hosts, mobile uses the same host-plane
-pairing contract, and ALP streaming later makes peer/workgroup turns
-feel live. Umbrel shipped in v0.4.8 as the first easy always-on
-home-server target; v0.5 should make using that remote profile from
-desktop and mobile feel native.
+**Theme: owned device access — closing the loop.** v0.4 shipped the
+secure local-device foundation and v0.5 completes the remote-access
+story: desktop multi-host connections shipped (desktop-v0.2.2/v0.2.3),
+mobile uses the same host-plane pairing contract, and the agent's
+self-improvement primitives (memory quality, rich text) reach a usable
+baseline. v0.6 builds on that base with a self-improving skill library
+and the live-access infrastructure the product can now justify.
 
 This is the cycle where gateways stop being the main mobile story.
 Telegram, IMAP, Gmail, and Matrix stay useful, but the project should
@@ -33,29 +31,21 @@ personal agent.
 
 | ID | Item | Status |
 |---|---|---|
-| AX-desktop-remote | Desktop multi-host host-plane connections — switch between local Unix socket and paired remote daemons over WebSocket/Tailscale using per-device tokens. | 🟡 |
-| AX-mobile | Mobile companion (iOS / Android) — chat, status, peers, and workgroups from the user's own profile. Daemon side shipped in v0.4.1 (host plane on WebSocket + per-device pairing tokens, see CHANGELOG). Mobile preview exists; desktop remains the reference surface. | 🟡 |
-| ALP.4 | Streaming `link.ask` — incremental remote replies for peer calls, mobile, and workgroups | 🔵 |
-
-### ALP depth
-
-| ID | Item | Status |
-|---|---|---|
-| ALP.5 | Blob transfer — `link.put_blob` / `link.get_blob`, content-addressed, chunked AEAD | 🔵 |
-| ALP.6 | Workgroup search — semantic search over a workgroup transcript via local RAG (pairs with **BA**) | 🔵 |
+| AX-desktop-remote | Desktop multi-host host-plane connections — switch between local Unix socket and paired remote daemons over WebSocket/Tailscale using per-device tokens. | ✅ desktop-v0.2.2 / v0.2.3 |
+| AX-mobile | Mobile companion (iOS / Android) — full chat, status, peers, and workgroups surface from the user's own profile. Daemon side shipped in v0.4.1 (host plane on WebSocket + per-device pairing tokens, see CHANGELOG). Mobile preview exists; desktop remains the reference surface. | 🟡 |
 
 ### Skills + bundled
 
 | ID | Item | Status |
 |---|---|---|
-| `@alpi/home` | Second bundled skill (after `@alpi/knowledge` in v0.3). Orchestrates Home Assistant + optional connectors (Hue, Xiaomi, Alexa / Google Home) behind a single voice/text interface | 🔵 |
+| `@alpi/home` | Second bundled skill (after `@alpi/knowledge` in v0.3). Full home orchestration behind a single voice/text interface: Home Assistant first, with optional Hue, Xiaomi, Alexa / Google Home integrations layered in. | 🔵 |
 
-### Knowledge + memory
+### Self-improvement loop
 
 | ID | Item | Status |
 |---|---|---|
-| BA | Local RAG over `workspace/` — local-only embeddings, semantic search tools | 🔵 |
-| AI (1) | Memory v2 — generation quality (tool description, dedup threshold, confidence field). Server-side only; the TUI panel waits for user evidence | 🔵 |
+| AI (1) | Memory v2 — quality, injection scanning, and post-turn background review. Dedup threshold, confidence field, prompt-injection scan on writes, and a lightweight background agent that reviews the conversation after every N turns and writes memory without blocking the active session. Also lands per-tool conditional guidance (the surface that needs an enabled-tools concept). | 🟡 |
+| AT | Skill safety primitives — auto-archive instead of destructive delete (skills move to `skills/.archive/`, recoverable), `.bak` snapshot before every `edit`/`patch` (mirrors the memory `.bak` pattern), `pinned: true` frontmatter flag that protects a skill from auto-archive and any future curator pass, `absorbed_into:` metadata recorded on consolidating deletes. Memory entries get the same `pinned` flag. | 🟡 |
 
 ### UX polish
 
@@ -63,45 +53,12 @@ personal agent.
 |---|---|---|
 | BB | Enhanced rich text in UI — extend baseline link renderer to lists, code blocks, tables, headings | 🔵 |
 
-### AX-desktop-remote. Desktop multi-host host-plane connections
+### AX-desktop-remote. Desktop multi-host host-plane connections — ✅ shipped
 
-Current desktop talks to the local daemon through
-`~/.alpi/host/host.sock`. That is correct for same-machine use, but it
-does not cover the real companion topology: laptop desktop app pointed
-at an Umbrel/home-server profile over Tailscale, or switching between
-several owned daemons without reconfiguring the app.
-
-**Target shape.** Desktop stores a list of host-plane connections:
-
-- **Local** — Unix socket at `~/.alpi/host/host.sock`, no token.
-- **Remote** — WebSocket endpoint (`host`, `port`) plus the
-  per-device `auth_token` returned by `host.devices.generate`.
-
-The active connection becomes the source for every `host.*` call. The
-UI exposes connection status, switch, add remote, forget remote, and
-auth-failed recovery. A remote desktop is not an ALP peer and does not
-write `peers.yaml`; it is a paired device client, same trust class as
-mobile.
-
-**Implementation slices:**
-
-1. Connection store in desktop app data: `kind`, `name`, endpoint,
-   token for remote, active/default marker, last status. Token storage
-   starts as a mode-0600 app-data file unless a small keychain
-   integration earns its dependency cost.
-2. `desktop/src-tauri/src/host_client.rs` gains a transport abstraction
-   for Unix socket vs WebSocket. `call` and `call_stream` keep the same
-   JSON-RPC semantics.
-3. Desktop settings/header gains a compact connection switcher and an
-   "Add remote" flow that accepts the QR JSON payload manually. Camera
-   scanning is unnecessary for the first desktop slice.
-4. `auth-failed` (`-32000`) marks the remote connection revoked/invalid
-   and asks for re-pair instead of retrying forever.
-
-**Why before ALP.4.** Mobile preview already uses `host.*` over a paired
-WebSocket, not ALP. Desktop is the more important product surface, so
-the host-plane connection model should be shared and stable before
-optimising peer-to-peer streaming.
+Shipped in desktop-v0.2.2 (connection store, transport abstraction, switcher UI,
+auth-failed revocation) and desktop-v0.2.3 (per-connection status tracking,
+offline banner, probe architecture, thread exhaustion guard). See
+[desktop/CHANGELOG.md](../desktop/CHANGELOG.md) for details.
 
 ### AX-mobile. Mobile companion (iOS / Android)
 
@@ -137,9 +94,9 @@ surface into the companion:
 - post composer for active members;
 - notifications for mentions, new `#task`, and task completion.
 
-The mobile surface can start read-only if pairing, posting, or key
-handling need more hardening, but the target is the same capability as
-desktop.
+Mobile ships full parity with desktop. Read-only fallbacks are only
+acceptable as last-mile implementation cuts (e.g., a specific iOS
+background limitation that blocks one verb), never as the v0.5 target.
 
 **Open questions before scope locks:**
 - Tauri vs. native (SwiftUI / Kotlin) — Tauri wins on desktop
@@ -151,102 +108,239 @@ desktop.
 - Distribution — TestFlight + Play Store internal track at
   first.
 
+### `@alpi/home`. Second bundled skill — full home orchestration
+
+After `@alpi/knowledge` (v0.3) validated the bundled-skills pattern,
+`@alpi/home` is the second one. One coherent voice/text interface to the
+user's home, regardless of which underlying ecosystem(s) they run. This is
+the full surface, not a thin slice.
+
+**Surface.** A skill that orchestrates one or more of:
+- **Home Assistant** (primary) — sensors, lights, scenes, occupancy, switches.
+- **Philips Hue** — directly via the Hue Bridge HTTP API.
+- **Xiaomi Mi Home** — via `python-miio`.
+- **Google Home / Alexa** — read-only "is anyone home" queries via their
+  official device APIs.
+
+The user enables only the integrations they have. Each is an optional
+`requires:` in the frontmatter; the skill degrades gracefully when an
+integration isn't configured.
+
+**Per-skill SQLite.** Caches device state + last-seen timestamps so the agent
+doesn't re-poll every turn ("is the kitchen light on?" answers from cache;
+"turn it on" pushes through).
+
+**Configuration.** Per-profile `.env` for tokens (`HA_URL`, `HA_TOKEN`,
+`HUE_BRIDGE_IP`, `XIAOMI_TOKEN`, …); allowlist of entity domains in
+`config.yaml` so the skill can only touch what the user explicitly opted in.
+
+LOC estimate: ~400 (HA covers ~250, Hue + Xiaomi ~50 each, Google/Alexa ~50 stub).
+
+### AI (1). Memory v2 — quality + injection scanning + background review
+
+Three complementary improvements to the memory system.
+
+**Quality pass.** Server-side only; the TUI panel waits for user evidence.
+- Dedup threshold calibration: is 70% Jaccard too loose / too tight in
+  practice? Measure on real session memory files before tuning.
+- Confidence field: low-confidence writes (`confidence: low`) auto-expire
+  after N sessions without reinforcement rather than living forever.
+- Type routing: ensure USER.md vs MEMORY.md vs AGENT.md signals are
+  described precisely enough that the agent routes correctly on the first write.
+
+**Injection scanning on write.** Memory is injected into the system prompt
+on every session, exactly the same vector that skill bodies use. Skill bodies
+already pass through `_DANGER_PATTERNS` in `alpi/tools/skill.py` (74 patterns:
+`ignore previous instructions`, exfil-via-curl, ssh backdoors, invisible
+unicode, base64-pipe-to-bash, etc.). Memory writes accept anything today.
+Wire the same scanner into `Memory.run` for `add`, `replace`, and batch `entries`,
+returning a `Blocked: …` error on match. Reuses existing infrastructure; no new
+dependencies.
+
+**Post-turn background review.** After every N turns (configurable, default
+off / opt-in) the daemon forks a lightweight reviewer agent with a snapshot
+of the conversation. The reviewer has access only to `memory(add/replace/remove)`
+and `skill(create/patch)`. Its prompt is narrow: "did the user reveal a preference
+or correct a behaviour? If yes, save it. If nothing qualifies, say nothing."
+The reviewer thread installs an auto-deny approval callback so any dangerous
+tool call inside the fork resolves without blocking on a TUI prompt that does
+not exist. The active session's system prompt stays frozen throughout (prefix
+cache intact); writes land on the shared memory store and are picked up next
+session.
+
+This fixes the main gap in the current model: the agent only writes memory when
+it decides to mid-turn — it often misses signals that are obvious in retrospect.
+The background reviewer has the full conversation in view and a single job.
+The reviewer prompt borrows the Hermes insight that **user frustration is a
+first-class skill signal**, not just a memory signal — corrections like "stop
+doing X" or "don't format like that" should patch the responsible skill, not
+just leave a memory note.
+
+Outcome: measurable on memory file size, duplicate rate, "was this actually
+recalled next session", and skill patch rate on real sessions.
+
+### AT. Skill safety primitives
+
+Three small changes that make the skill library safe enough to grow
+aggressively in v0.6 (when the curator and telemetry land).
+
+**Auto-archive instead of destructive delete.** Today `skill(action="delete")`
+removes the skill directory permanently. Change it to move the directory to
+`skills/.archive/<name>-<timestamp>/`. The behaviour for the agent is the same
+(skill no longer loadable); recovery is `mv` away. Bundled `@alpi/*` skills
+remain delete-protected as today.
+
+**`.bak` snapshot before every `edit` / `patch` / `set_meta`.** Alpi already
+takes a `.bak` snapshot before every memory write (`alpi/memory.py:194-200`).
+Apply the same pattern to skill mutations: write the previous SKILL.md content
+to `<skill>/.bak/<timestamp>.md` before persisting the change. Bounded ring of
+the last N snapshots per skill (configurable, default 10).
+
+**`pinned: true` frontmatter flag.** New optional boolean in skill frontmatter
+and in memory entries. Pinned items are protected from auto-archive (AT) and
+from any future curator consolidation pass (AC, v0.6). Pinning is user-facing
+in the TUI / desktop UI and agent-facing through `skill(action="set_meta",
+pinned=true)` / `memory(action="pin", entry=...)`.
+
+**`absorbed_into` metadata.** When a skill is deleted as part of a merge into
+an umbrella, the delete records `absorbed_into: <umbrella-name>` in the
+archived skill's metadata. Agent-facing only today; foundational for the
+v0.6 curator audit trail.
+
+### BB. Enhanced rich text in TUI
+
+The link renderer (the original v0.3 BB) shipped a baseline. v0.5 extends it
+across the rest of the rich-text surface:
+
+- Lists (ordered + unordered) — consistent indent, marker style.
+- Inline code + fenced blocks — monospace font, accent-aware background,
+  per-language syntax highlight where it pays off.
+- Tables — column alignment, header style, fits to terminal width.
+- Headings inside chat replies — sized hierarchy, not just bold.
+
+**Why now.** With the desktop app shipped, the heavy rich-text surface lives
+there — Markdown rendering in WebView is a solved problem. The TUI rich-text
+work is "polish for users who stay on the terminal".
+
+---
+
+## v0.6 cycle (planned)
+
+**Theme: self-improving agent + live access.** v0.5 closes the device
+access story and gets memory to a reliable baseline. v0.6 turns the
+skill library into something that improves itself over time, and
+ships the streaming and search infrastructure that makes the live
+multi-device experience feel real.
+
+### Self-improving skills
+
+| ID | Item | Status |
+|---|---|---|
+| AC | Skill telemetry + curator — usage tracking per skill (`view_count`, `use_count`, `last_used`, `state: active/stale/archived`) and a periodic background consolidation pass that promotes narrow session-specific skills into broad class-level umbrellas. Builds on the AT auto-archive + pin + `absorbed_into` primitives that ship in v0.5. | 🔵 |
+| BD | Model-family conditional prompt guidance — the tool-use enforcement block + GPT/Gemini-specific operational guidance only injected for model families that need it (per `TOOL_USE_ENFORCEMENT_MODELS`). Claude / Opus / Sonnet / Qwen / MiMo run on the shorter prompt. Promoted from Future once v0.5 generates enough multi-model session evidence. | 🔵 |
+
+### Live access + search
+
+| ID | Item | Status |
+|---|---|---|
+| ALP.4 | Streaming `link.ask` — incremental remote replies for peer calls, mobile, and workgroups | 🔵 |
+| BA | Local RAG over `workspace/` — local-only embeddings (`search_workspace`, `index_workspace`), no cloud roundtrip. Trade-off to settle: sentence-transformers (~80 MB) vs lighter GGUF alternative. | 🔵 |
+
+### AC. Skill telemetry + curator
+
+**Telemetry.** A sidecar `.usage.json` inside `skills/` tracks per-skill
+activity: view count, use count, patch count, created/last-used timestamps,
+and state (`active` / `stale` / `archived`). The `skill` tool updates this on
+every `load`, `run`, and `patch` call. No external service — local JSON only.
+Pinned skills (AT, v0.5) appear in telemetry but the state machine never
+auto-transitions them.
+
+**Curator.** A background pass (triggered by inactivity, default every 7 days)
+that reviews the agent-created skill library and consolidates it. The curator's
+job is not to delete — it is to **promote**: a narrow skill like
+`debug-parser-may` should become a subsection of a broader
+`debugging-patterns` umbrella, with the session detail demoted to
+`references/`. Skills unused for 30+ days are flagged `stale`; 90+ days move
+to `skills/.archive/` via the AT auto-archive primitive (recoverable). Each
+consolidating delete carries the `absorbed_into:` metadata from AT so the
+audit trail is intact. Bundled `@alpi/*` skills and pinned skills are never
+touched.
+
+**Algorithmic + LLM signals.** Two consolidation triggers run together: an
+algorithmic pass detects prefix clusters (`debug-parser-*`, `research-bug-*`)
+as candidates regardless of LLM judgment, and an LLM pass runs the umbrella-
+building review on the candidate set. Cheap candidates first means the LLM
+spends tokens only on real ambiguity.
+
+**Reconciliation paranoia.** When the LLM declares a consolidation in its
+structured output ("absorbed `debug-parser-may` into `debugging-patterns`"),
+the curator reconciles that against the actual tool-call audit log of the
+review thread. Mismatches surface as warnings in the per-run report rather
+than silently trusting the model. Same pattern is applicable to any place
+alpi asks the LLM to summarise what it just did.
+
+**Per-run reports.** Each curator run writes a report under
+`~/.alpi/<profile>/logs/curator/<timestamp>/` (`run.json` + `REPORT.md`)
+covering classification, consolidations attempted, mismatches, and skills
+moved. Audit trail for any future "what happened to skill X" question.
+
+**What this fixes.** Skills today accumulate as flat narrow entries because
+the agent writes them turn-by-turn without a global view. The curator adds
+that global view without requiring the agent to reason about the whole library
+on every turn.
+
+**Design constraint vs Hermes.** Hermes nudges the agent to create a skill
+after every 15 tool calls — deliberately aggressive. alpi's curator is
+post-hoc and read-only during the session: it never creates skills, only
+consolidates what already exists. Skill creation remains agent-driven,
+guided by the AS system-prompt rules that ship in v0.5.
+
+### BD. Model-family conditional prompt guidance
+
+Hermes routes parts of the system prompt through a `TOOL_USE_ENFORCEMENT_MODELS`
+table: the long "Actually CALL the tool…" enforcement block is injected only
+for Gemini, GPT, Codex, Grok, Gemma — model families that empirically need it.
+Claude / Sonnet / Opus / MiMo / Qwen run on the shorter prompt with no
+regression on tool-call rate.
+
+Hermes additionally ships `OPENAI_MODEL_EXECUTION_GUIDANCE` (tagged blocks for
+`<tool_persistence>`, `<mandatory_tool_use>`, `<act_dont_ask>`,
+`<verification>`, `<missing_context>`) and `GOOGLE_MODEL_OPERATIONAL_GUIDANCE`
+targeting known failure modes of those families.
+
+**Why v0.6 not v0.5.** This was already in alpi's Future versions table as BD,
+gated on session evidence. v0.5's mobile work + post-turn reviewer should
+generate enough cross-model session data to calibrate the routing decisions.
+Promote to v0.6 once `agent.log` has a clear signal.
+
 ### ALP.4. Streaming `link.ask`
 
-Today `link.ask` is request/response: a peer asks "research X"
-and waits until the full answer lands. Streaming chunks turns
-that into *watching the other agent think* — reasoning tokens,
-tool traces, partial answers all flow as they happen.
+Today `link.ask` is request/response: a peer asks "research X" and waits
+until the full answer lands. Streaming turns that into watching the other
+agent think — reasoning tokens, tool traces, partial answers flow as they
+happen.
 
-**Wire shape.** Same envelope as today; the response carries a
-`stream: true` flag and the body becomes a sequence of
-`{kind: "chunk"|"final"|"error", payload: …}` frames. Over Unix
-socket: line-delimited JSON. Over TCP/Noise: each frame is its
-own encrypted record. No new crypto, no new auth — the
-existing envelope signature covers the stream as a whole
-(signed at the final frame); intermediate chunks are
-AEAD-protected by the Noise session for inter-machine, by the
-Unix-socket trust boundary intra-machine.
+**Wire shape.** Same envelope as today; the response carries a `stream: true`
+flag and the body becomes a sequence of `{kind: "chunk"|"final"|"error",
+payload: …}` frames. No new crypto, no new auth — existing envelope
+signature covers the stream; intermediate chunks are AEAD-protected by the
+Noise session.
 
-**Why it matters.** Two payoffs. (1) Demos: "two alpis
-collaborating" looks like one watching the other type, the
-single most legible visualisation of agent-to-agent work we
-can ship. (2) Inside workgroups (ALP.3), a long
-`workgroup.post` appears live for every member — the workgroup
-transcript becomes a real-time surface, not a polling one. The
-same primitive lets **AX-mobile** stream a remote profile's
-reply incrementally instead of waiting for the full turn.
+**Why v0.6 not v0.5.** The protocol change touches every ALP transport path.
+Without a base of real peer/workgroup sessions to validate against, the scope
+cannot close cleanly. v0.5's mobile work generates that base.
 
-### ALP.5. Blob transfer
+### BA. Local RAG over `workspace/`
 
-Two new verbs — `link.put_blob(bytes, hash)` and
-`link.get_blob(hash)` — for sharing artefacts that have no
-business inline in a JSON envelope: a PDF, a dataset, the
-output of a skill, a screenshot.
+Two new tools — `index_workspace(path?)` and `search_workspace(query, k=5)`.
+Embeddings and the vector store live in `~/.alpi/<profile>/index/`; nothing
+leaves the machine. The agent reads matched snippets with the existing
+`read_file` tool.
 
-**Wire shape.** Content-addressed by SHA-256; the recipient
-stores under `~/.alpi/<profile>/alp/blobs/<hash>` and dedups
-across calls. Chunked transfer (default 64 KiB) with per-chunk
-AEAD; the final frame carries the full-blob signature so the
-receiver can verify the artefact end-to-end. Caps: per-call
-max blob size (config knob, 100 MiB default), per-day inbound
-budget per peer (separate from the spending ledger — this
-gates *bytes*, not LLM cost).
-
-**Pairs naturally with workgroups.** A workgroup post can
-reference a blob (`{text: "see attached", blob: "<hash>"}`);
-the hub fans out the post and members `link.get_blob` from the
-hub on demand. No need to upload to the cloud, no third-party
-intermediary.
-
-### ALP.6. Workgroup search
-
-Once a workgroup runs for weeks, scrolling becomes useless.
-`workgroup.search(workgroup_id, query)` returns the top-K posts
-matching a query, ranked by semantic similarity using the local RAG
-index (**BA**). The hub indexes its own
-transcript on disk; members search remotely via the existing ALP
-transport.
-
-**Why it pairs with BA.** Reuses the same embedding model and
-vector store; no separate ML surface to maintain. The hub embeds
-each post when it lands and answers `workgroup.search` from the
-local index — no roundtrip to a third party, no plaintext leaks
-beyond the workgroup membership.
-
-**Pairing with `@alpi/knowledge`.** v0.3 ships `@alpi/knowledge`
-v1 (keyword grep) as the first bundled skill. **BA** and
-**ALP.6** ship together in v0.5 — `@alpi/knowledge` v2 swaps
-to the same RAG backend that ALP.6 uses, so one embedding
-stack covers two surfaces (knowledge over docs, search over
-transcripts).
-
-### BF. Skills v2 execution/runtime follow-through
-
-Layers on the v0.3.11 foundation (declared `requires_env`,
-per-skill SQLite via the `db` tool, schema-validated frontmatter,
-`set_meta` for surgical updates). Item 5 (triggers) shipped as
-the `keywords` hint in v0.3.11; the schedule/workgroup flavors
-were dropped as redundant with the existing `schedule` tool. The
-real-world skill stress test that produced `skill(action="run")`,
-batch memory writes, and schedule in-place updates has shipped. The
-runtime follow-through is now in place too:
-
-4. **Output schemas.** Optional `output_schema:` one-line JSON in
-   frontmatter. `skill(run)` / `skill(test)` validate scripted stdout
-   against a small JSON Schema subset and surface precise mismatch
-   paths instead of vague free text.
-6. **Composition.** `skill(action="invoke", name=..., args=[...])`
-   as a strict tool surface. Reuses the scripted runtime; only
-   skills with `scripts/run.py` + `output_schema:` qualify.
-7. **Test harness.** `skill(action="test", name=...)` runs the
-   scripted runtime through the same path as `run` and verifies the
-   declared `output_schema`. If a CLI wrapper ever lands, it should be
-   a thin shell over this action rather than a parallel runtime.
-
-The remaining BF backlog is now just **BF-8**: versioning and
-distribution flows for portable skills. It is intentionally moved out
-of the active cycle and tracked under **Future releases** below.
+**Prerequisite to resolve before scoping.** Sentence-transformers brings ~80 MB
+of PyTorch weights. A GGUF/llama.cpp CPU alternative is lighter but slower
+to index. Decide based on install-size feedback from real v0.5 users before
+committing.
 
 ## Future releases
 
@@ -255,108 +349,40 @@ Items worth doing, but not part of the current cycle.
 | ID | Item | Status |
 |---|---|---|
 | BF-8 | Skill versioning / install-update flows — pinned install source, update preview/diff, revision metadata | 🔵 |
+| ALP.5 | Blob transfer — `link.put_blob` / `link.get_blob`, content-addressed, chunked AEAD. Depends on real workgroup usage to justify the protocol complexity. | 🔵 |
+| ALP.6 | Workgroup search — semantic search over workgroup transcripts via local RAG (pairs with **BA**). Depends on BA landing and workgroups being heavily used. | 🔵 |
 
-### `@alpi/home`. Second bundled skill — home orchestration
+### ALP.5. Blob transfer
 
-After `@alpi/knowledge` (v0.3) validated the bundled-skills
-pattern, `@alpi/home` is the second one — and demonstrates the
-Skills v2 primitives in real use. One coherent voice/text
-interface to the user's home, regardless of which underlying
-ecosystem(s) they run.
+Two new verbs — `link.put_blob(bytes, hash)` and `link.get_blob(hash)` — for
+sharing artefacts that have no business inline in a JSON envelope: a PDF, a
+dataset, the output of a skill, a screenshot.
 
-**Surface.** A skill that orchestrates one or more of:
-- **Home Assistant** (primary) — sensors, lights, scenes,
-  occupancy, switches.
-- **Philips Hue** — directly via the Hue Bridge HTTP API.
-- **Xiaomi Mi Home** — via `python-miio`.
-- **Google Home / Alexa** — via their official assistant
-  device APIs (read-only "is anyone home" queries; speak via
-  the device).
+**Wire shape.** Content-addressed by SHA-256; the recipient stores under
+`~/.alpi/<profile>/alp/blobs/<hash>` and dedups across calls. Chunked
+transfer (default 64 KiB) with per-chunk AEAD; the final frame carries the
+full-blob signature so the receiver can verify end-to-end. Caps: per-call max
+blob size (config knob, 100 MiB default), per-day inbound budget per peer
+(separate from the spending ledger — this gates *bytes*, not LLM cost).
 
-The user enables only the integrations they have. The skill
-declares each as an optional `requires:` and degrades
-gracefully when an integration isn't configured.
+**Pairs naturally with workgroups.** A workgroup post can reference a blob
+(`{text: "see attached", blob: "<hash>"}`); the hub fans it out and members
+`link.get_blob` from the hub on demand. No cloud upload, no third-party
+intermediary.
 
-**Per-skill SQLite.** Caches device state +
-last-seen timestamps so the agent doesn't re-poll every
-turn ("is the kitchen light on?" answers from cache; "turn it
-on" pushes through).
+**Why it waits.** ALP.5 is only worth the protocol complexity if workgroups
+are heavily used and blobs are a real bottleneck. That evidence doesn't exist
+yet. Promote when a workgroup user reports "I can't share a file".
 
-**Configuration.** Per-profile `.env` for tokens (`HA_URL`,
-`HA_TOKEN`, `HUE_BRIDGE_IP`, `XIAOMI_TOKEN`, …); allowlist of
-entity domains in `config.yaml` so the skill can only touch
-what the user explicitly opted in.
+### ALP.6. Workgroup search
 
-**Why a bundled skill, not a tool family.** A tool family
-("home_assistant" as a top-level tool) hardcodes our taste
-into every profile. A bundled skill is opt-in (load on
-demand), sandboxed by Skills v2 quotas, and demonstrates that
-**alpi ships skills the way Linux distros ship packages** —
-curated, opinionated, optional. The marketplace (deferred to
-Future versions) extends this to community-published skills
-later.
+`workgroup.search(workgroup_id, query)` returns the top-K posts matching a
+query, ranked by semantic similarity using the local RAG index (**BA**). The
+hub indexes its own transcript on disk; members search remotely via the
+existing ALP transport.
 
-LOC estimate: ~400 (HA covers ~250, Hue + Xiaomi ~50 each,
-Google/Alexa ~50 stub).
-
-### BA. Local RAG over `workspace/`
-
-Semantic search over the user's project files without sending
-a byte to a third party. Two new tools:
-
-- `index_workspace(path?)` — embeds the workspace into a local
-  vector store (`~/.alpi/<profile>/index/`). Default model is a
-  small sentence-transformer (`all-MiniLM-L6-v2` or similar);
-  optionally swappable.
-- `search_workspace(query, k=5)` — returns top-K snippets with
-  filepath + line range. The agent then reads the matching
-  ranges with the existing `read_file` tool.
-
-**Why not piggy-back on a cloud RAG.** The whole point is that
-the workspace contents never leave the machine. Embedding
-model + index both live locally; no API roundtrips during
-search.
-
-**Trade-offs to settle.** Sentence-transformers ships ~80 MB of
-PyTorch weights — significant install weight. A pure-CPU
-alternative (e.g., GGUF + llama.cpp) keeps the install lighter
-at the cost of slower indexing. Decide during scope.
-
-### AI (item 1). Memory v2 — generation quality
-
-Server-side improvements to the `memory` tool. The TUI panel
-(item 2) waits for user evidence in Future versions.
-
-Open questions to settle:
-- Are we writing the right memory type per signal?
-- Is the 70% Jaccard dedup threshold too loose / too tight?
-- Should the tool take a "confidence" field so low-confidence
-  writes auto-expire?
-- Compare against comparable agents + the latest public
-  memory patterns (Mem0, Letta) and pick what fits our scope.
-
-Small surface, measurable outcomes (memory file size,
-duplicate rate, "useful at recall" judgement on real
-sessions).
-
-### BB. Enhanced rich text in TUI
-
-The link renderer (the original v0.3 BB) shipped a baseline.
-v0.5 extends it across the rest of the rich-text surface:
-
-- Lists (ordered + unordered) — consistent indent, marker
-  style.
-- Inline code + fenced blocks — monospace font, accent-aware
-  background, per-language syntax highlight where it pays off.
-- Tables — column alignment, header style, fits to terminal
-  width.
-- Headings inside chat replies — sized hierarchy, not just
-  bold.
-
-**Why now.** With the desktop app shipped, the heavy rich-text
-surface lives there — Markdown rendering in WebView is a solved
-problem. The TUI rich-text work is "polish for users who stay on
-the terminal", not "the place we render structured replies".
+**Why it waits.** Depends on BA landing first, and on workgroups being heavily
+used enough that scrolling becomes a real friction. Neither condition holds yet.
 
 ---
 
@@ -376,7 +402,6 @@ already analysed; the "why now?" question is the open one.
 | AI (2) | Memory v2 — TUI panel (collapsible, edit-in-place, "forget this") | UI weight for niche audience (power users with much memory); item 1 covers the substantive part |
 | AJ | Browser realism — Cloudflare / captcha / fingerprint depth | Cat-and-mouse perpetuo; without concrete failing use case, scope can't close |
 | AQ | Continuous voice mode (push-to-talk, hotword loops) | Niche unless voice becomes a real surface for users |
-| BD | Model-aware tool-use-enforcement guidance | Small change, but value unproven; needs `agent.log` evidence first |
 | Webhook | Inbound HTTP triggers (HMAC-signed) | "Swiss-army-knife trap" — needs real demand, not speculation |
 | Cost telemetry | Cost split per-skill / per-tool | Only pays off with many skills + notably different costs; today neither holds |
 | BG re-audit | LiteLLM quarterly review — bump pin, run LLM probe, swap if better alternative emerges | Standing maintenance task; cadence + procedure documented in `OPERATIONS.md → Dependencies` |
@@ -427,7 +452,7 @@ get a clean conflict response, not a clobber.
 roles). Only justified once workgroups are heavily used and
 users start putting durable shared state into the transcript
 where it doesn't belong. Until that happens, ALP.5 (blob
-transfer, v0.5) covers the file case.
+transfer, Future releases) covers the file case.
 
 ### AY. Skills marketplace
 
@@ -450,12 +475,11 @@ reuses the same trust pattern as ALP peers (pubkey-pinned, no
 discovery service).
 
 **Why it waits.** Presupposes an active author community + a
-catalog big enough that discovery matters. v0.3 ships the
-first bundled skill (`@alpi/knowledge`); v0.5 ships the second
-(`@alpi/home`) and the BF (4-8) primitives that make
-third-party skills shippable (signing, versioning, test
-harness). Marketplace promotes only when there's evidence that
-real authors want to publish for real users.
+catalog big enough that discovery matters. Bundled skills ship
+under `@alpi/*` (`@alpi/knowledge` in v0.3, `@alpi/home` in v0.5)
+and BF skills v2 primitives make third-party skills shippable.
+Marketplace promotes only when there's evidence that real authors
+want to publish for real users.
 
 ### AI item 2. Memory v2 — TUI panel
 
@@ -500,21 +524,6 @@ occasional, the engineering cost (VAD, hotword detection,
 continuous-mode UX) outweighs the benefit. STT + TTS quality
 fixes can land incrementally on `main` without committing to
 this larger redesign.
-
-### BD. Model-aware tool-use-enforcement guidance
-
-Gate the "Actually CALL the tool…" paragraph in
-`alpi/prompts/system_prompt.md` on model family. Claude /
-MiMo / Qwen / Sonnet / Opus follow tool instructions well
-without the long enforcement block; GPT / Codex / Gemini /
-Gemma / Grok appear to need it.
-
-**Why it waits.** Small change, but value unproven. Needs
-`agent.log` evidence: tool-call rate on a Claude session with
-vs without the block (same prompts). Apply the split only if
-no regression on the shorter variant. The data isn't there
-yet; once the desktop/mobile surfaces generate enough real sessions, the
-decision becomes calibrated rather than guessed.
 
 ### Webhook. Inbound HTTP triggers (HMAC-signed)
 
