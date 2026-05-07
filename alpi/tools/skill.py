@@ -6,7 +6,7 @@ import os
 import re
 import shutil
 import json
-from datetime import date
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 from alpi.home import get_home
@@ -212,7 +212,8 @@ def all_skills(home: Path) -> list[Path]:
         return []
     out: list[Path] = []
     for cat in sorted(root.iterdir()):
-        if not cat.is_dir() or cat.name.startswith("_") or cat.name.startswith("@"):
+        if (not cat.is_dir()
+                or cat.name.startswith(("_", "@", "."))):
             continue
         for skill in sorted(cat.iterdir()):
             if skill.is_dir():
@@ -317,6 +318,11 @@ def _frontmatter(md_path: Path) -> dict[str, str]:
     if not md_path.exists():
         return {}
     return _frontmatter_from_text(md_path.read_text())
+
+
+def _is_pinned(skill_dir: Path) -> bool:
+    meta = _frontmatter(skill_dir / "SKILL.md")
+    return (meta.get("pinned") or "").strip().lower() == "true"
 
 
 def _frontmatter_from_text(text: str) -> dict[str, str]:
@@ -509,7 +515,11 @@ class Skill(Tool):
         "                to secrets/ creates it mode 0700; secret files "
         "                are mode 0600. Atomic.\n"
         "  remove_file — remove one file from a subdirectory.\n"
-        "  delete      — remove the whole skill directory.\n"
+        "  delete      — archive the skill (move to "
+        "                ``skills/.archive/<category>/<name>__<UTC>/``). "
+        "                Recoverable: ``mv`` it back. Pinned skills "
+        "                (``pinned: True`` in frontmatter) refuse to "
+        "                archive — unpin via ``set_meta`` first.\n"
         "  list        — show every skill grouped by category.\n"
         "  view        — return SKILL.md (no file= arg) or a specific "
         "                skill file. With file=, output starts with "
@@ -798,8 +808,7 @@ def _list(home: Path) -> ToolResult:
     if root.exists():
         for cat in sorted(root.iterdir()):
             if (not cat.is_dir()
-                    or cat.name.startswith("_")
-                    or cat.name.startswith("@")):
+                    or cat.name.startswith(("_", "@", "."))):
                 continue
             skill_dirs = sorted(s for s in cat.iterdir() if s.is_dir())
             if not skill_dirs:
@@ -1210,8 +1219,30 @@ def _delete(
     err = _require_confirmation(skill_dir, confirm_user_skill)
     if err:
         return ToolResult(ok=False, output="", error=err)
-    shutil.rmtree(skill_dir, ignore_errors=True)
-    return ToolResult(ok=True, output=f"deleted {skill_dir}")
+    if _is_pinned(skill_dir):
+        return ToolResult(
+            ok=False, output="",
+            error=(
+                f"{name!r} is pinned and protected from deletion. Unpin "
+                f"first with skill(action='set_meta', name={name!r}, "
+                f"fields={{'pinned': False}})."
+            ),
+        )
+    # Auto-archive: move to skills/.archive/<category>/<name>__<UTC>/ rather
+    # than destroy. Recoverable via `mv` back to skills/<category>/<name>/.
+    category = skill_dir.parent.name
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    archive_dir = home / "skills" / ".archive" / category
+    archive_dir.mkdir(parents=True, exist_ok=True)
+    dest = archive_dir / f"{name}__{timestamp}"
+    shutil.move(str(skill_dir), str(dest))
+    return ToolResult(
+        ok=True,
+        output=(
+            f"archived {skill_dir} → {dest}\n"
+            f"(recover with: mv {dest} {skill_dir})"
+        ),
+    )
 
 
 def _osv_scan_python(source: str) -> str | None:
@@ -1453,7 +1484,8 @@ def _keyword_tokens(text: str) -> set[str]:
 
 _META_KEY_ORDER = (
     "name", "description", "category", "version", "origin",
-    "requires_env", "tools", "keywords", "output_schema", "created_at",
+    "requires_env", "tools", "keywords", "output_schema",
+    "pinned", "created_at",
     "env",  # legacy alias
 )
 

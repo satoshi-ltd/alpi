@@ -45,7 +45,6 @@ personal agent.
 | ID | Item | Status |
 |---|---|---|
 | AI (1) | Memory v2 — quality, injection scanning, and post-turn background review. Dedup threshold, confidence field, prompt-injection scan on writes, and a lightweight background agent that reviews the conversation after every N turns and writes memory without blocking the active session. Also lands per-tool conditional guidance (the surface that needs an enabled-tools concept). | 🟡 |
-| AT | Skill safety primitives — auto-archive instead of destructive delete (skills move to `skills/.archive/`, recoverable), `.bak` snapshot before every `edit`/`patch` (mirrors the memory `.bak` pattern), `pinned: true` frontmatter flag that protects a skill from auto-archive and any future curator pass, `absorbed_into:` metadata recorded on consolidating deletes. Memory entries get the same `pinned` flag. | 🟡 |
 
 ### UX polish
 
@@ -179,34 +178,6 @@ just leave a memory note.
 Outcome: measurable on memory file size, duplicate rate, "was this actually
 recalled next session", and skill patch rate on real sessions.
 
-### AT. Skill safety primitives
-
-Three small changes that make the skill library safe enough to grow
-aggressively in v0.6 (when the curator and telemetry land).
-
-**Auto-archive instead of destructive delete.** Today `skill(action="delete")`
-removes the skill directory permanently. Change it to move the directory to
-`skills/.archive/<name>-<timestamp>/`. The behaviour for the agent is the same
-(skill no longer loadable); recovery is `mv` away. Bundled `@alpi/*` skills
-remain delete-protected as today.
-
-**`.bak` snapshot before every `edit` / `patch` / `set_meta`.** Alpi already
-takes a `.bak` snapshot before every memory write (`alpi/memory.py:194-200`).
-Apply the same pattern to skill mutations: write the previous SKILL.md content
-to `<skill>/.bak/<timestamp>.md` before persisting the change. Bounded ring of
-the last N snapshots per skill (configurable, default 10).
-
-**`pinned: true` frontmatter flag.** New optional boolean in skill frontmatter
-and in memory entries. Pinned items are protected from auto-archive (AT) and
-from any future curator consolidation pass (AC, v0.6). Pinning is user-facing
-in the TUI / desktop UI and agent-facing through `skill(action="set_meta",
-pinned=true)` / `memory(action="pin", entry=...)`.
-
-**`absorbed_into` metadata.** When a skill is deleted as part of a merge into
-an umbrella, the delete records `absorbed_into: <umbrella-name>` in the
-archived skill's metadata. Agent-facing only today; foundational for the
-v0.6 curator audit trail.
-
 ### BB. Enhanced rich text in TUI
 
 The link renderer (the original v0.3 BB) shipped a baseline. v0.5 extends it
@@ -236,7 +207,7 @@ multi-device experience feel real.
 
 | ID | Item | Status |
 |---|---|---|
-| AC | Skill telemetry + curator — usage tracking per skill (`view_count`, `use_count`, `last_used`, `state: active/stale/archived`) and a periodic background consolidation pass that promotes narrow session-specific skills into broad class-level umbrellas. Builds on the AT auto-archive + pin + `absorbed_into` primitives that ship in v0.5. | 🔵 |
+| AC | Skill telemetry + curator — usage tracking per skill (`view_count`, `use_count`, `last_used`, `state: active/stale/archived`) and a periodic background consolidation pass that promotes narrow session-specific skills into broad class-level umbrellas. Builds on the v0.5 AT primitives (auto-archive + `pinned` flag); adds the curator-specific pieces: `absorbed_into:` metadata on consolidating deletes, memory `pinned` flag (memory entries are also reviewer-mutable in v0.6), and a `.bak` ring per skill if single-snapshot proves insufficient under aggressive curation. | 🔵 |
 | BD | Model-family conditional prompt guidance — the tool-use enforcement block + GPT/Gemini-specific operational guidance only injected for model families that need it (per `TOOL_USE_ENFORCEMENT_MODELS`). Claude / Opus / Sonnet / Qwen / MiMo run on the shorter prompt. Promoted from Future once v0.5 generates enough multi-model session evidence. | 🔵 |
 
 ### Live access + search
@@ -262,9 +233,9 @@ job is not to delete — it is to **promote**: a narrow skill like
 `debugging-patterns` umbrella, with the session detail demoted to
 `references/`. Skills unused for 30+ days are flagged `stale`; 90+ days move
 to `skills/.archive/` via the AT auto-archive primitive (recoverable). Each
-consolidating delete carries the `absorbed_into:` metadata from AT so the
-audit trail is intact. Bundled `@alpi/*` skills and pinned skills are never
-touched.
+consolidating delete records `absorbed_into: <umbrella>` on the archived
+skill's frontmatter so the audit trail is intact. Bundled `@alpi/*` skills
+and pinned skills (AT) are never touched.
 
 **Algorithmic + LLM signals.** Two consolidation triggers run together: an
 algorithmic pass detects prefix clusters (`debug-parser-*`, `research-bug-*`)

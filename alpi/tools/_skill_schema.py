@@ -47,6 +47,7 @@ def validate_frontmatter(
     issues.extend(_check_keywords(meta))
     issues.extend(_check_created_at(meta))
     issues.extend(_check_output_schema(meta))
+    issues.extend(_check_pinned(meta))
 
     return issues
 
@@ -207,6 +208,18 @@ def _check_created_at(meta: dict[str, str]) -> list[Issue]:
         return [Issue(
             "created_at", "warning",
             f"expected YYYY-MM-DD (got {raw!r})",
+        )]
+    return []
+
+
+def _check_pinned(meta: dict[str, str]) -> list[Issue]:
+    raw = (meta.get("pinned") or "").strip()
+    if not raw:
+        return []
+    if raw.lower() not in {"true", "false"}:
+        return [Issue(
+            "pinned", "error",
+            f"must be True or False (got {raw!r})",
         )]
     return []
 

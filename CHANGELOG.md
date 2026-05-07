@@ -1,5 +1,28 @@
 # Changelog
 
+## v0.4.12 — 2026-05-07 — skill safety primitives (AT)
+
+Two changes that make the skill library safe enough to grow more
+aggressively in v0.6 (when the curator + telemetry land):
+
+- `alpi/tools/skill.py` — `skill(action="delete")` now archives instead
+  of destructively removing. The directory moves to
+  `~/.alpi/skills/.archive/<category>/<name>__<UTC>/` and is
+  recoverable with a single `mv`. Bundled `@alpi/*` skills remain
+  read-only as before.
+- `alpi/tools/_skill_schema.py` — new `pinned: True | False` frontmatter
+  field (validated, optional). A pinned skill refuses to archive — the
+  user must unpin via `skill(action="set_meta", fields={"pinned": False})`
+  first. Foundation for the v0.6 curator: pinned skills are protected
+  from auto-archive and any consolidation pass.
+- `alpi/tools/skill.py` — skill enumeration (`all_skills`, `_list`)
+  excludes any directory whose name starts with `.`, so `.archive/`
+  never re-appears as a live skill candidate.
+
+Tests — `tests/tools/test_skill_archive_pinned.py` covers the archive
+move, pinned-blocks-delete, unpin-allows-delete, archive-excluded-from-
+listing, and `pinned` schema validation paths.
+
 ## v0.4.11 — 2026-05-07 — system prompt sharpening for skill quality (AS)
 
 First slice of the v0.5 self-improvement loop. Three rules in
