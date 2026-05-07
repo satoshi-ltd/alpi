@@ -2,7 +2,7 @@ name: publish
 
 # Release pipeline. Strict chain — every stage gates the next:
 #
-#   tests → check-version → build → smoke → publish PyPI → tag + GH release
+#   check-version → tests → build → smoke → publish PyPI → tag + GH release
 #
 # A failing test never produces a wheel. A no-op version (same as
 # PyPI's) never builds. A wheel that breaks smoke install never
@@ -40,37 +40,11 @@ on:
 permissions: {}
 
 jobs:
-  # 1a. Test gate. Same suite the dev runs locally (``pytest -q``,
-  #     no integration markers — those need real sockets / sandbox
-  #     / bwrap and are not part of the dev loop). If a test
-  #     fails here the chain stops — no version probe, no build,
-  #     no smoke, no publish. Integration tests live in
-  #     ``pull-request.yml`` for PRs + manual dispatch, deliberately not
-  #     in the release gate so the publish path matches what the
-  #     dev validates locally.
-  tests:
-    name: tests
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          # ``test_changelog.py`` walks ``git log`` for version
-          # bumps. Default shallow checkout sees one commit, asserts
-          # >1 versions, fails. Full history fixes it.
-          fetch-depth: 0
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-          cache: pip
-      - run: pip install -e ".[dev]"
-      - run: pytest -q
-
-  # 1b. Cheap probe: is the version different from what's on PyPI?
-  #     If not, exit early — no build, no smoke, no publish, no spam.
+  # 1. Cheap probe: is the version different from what's on PyPI?
+  #    If not, exit early — no tests, no build, no smoke, no publish,
+  #    no spam.
   check-version:
     name: should we publish?
-    needs: tests
     runs-on: ubuntu-latest
     outputs:
       should_publish: ${{ steps.gate.outputs.should_publish }}
@@ -100,10 +74,37 @@ jobs:
             echo "version changed ($live → $version) — will publish"
           fi
 
-  # 2. Build sdist + wheel and validate twine-readability.
+  # 2. Test gate. Same suite the dev runs locally (``pytest -q``,
+  #    no integration markers — those need real sockets / sandbox
+  #    / bwrap and are not part of the dev loop). If a test fails
+  #    here the chain stops — no build, no smoke, no publish.
+  #    Integration tests live in ``pull-request.yml`` for PRs +
+  #    manual dispatch, deliberately not in the release gate so the
+  #    publish path matches what the dev validates locally.
+  tests:
+    name: tests
+    needs: check-version
+    if: needs.check-version.outputs.should_publish == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # ``test_changelog.py`` walks ``git log`` for version
+          # bumps. Default shallow checkout sees one commit, asserts
+          # >1 versions, fails. Full history fixes it.
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -e ".[dev]"
+      - run: pytest -q
+
+  # 3. Build sdist + wheel and validate twine-readability.
   build:
     name: build
-    needs: check-version
+    needs: [check-version, tests]
     if: needs.check-version.outputs.should_publish == 'true'
     runs-on: ubuntu-latest
     permissions:
@@ -124,7 +125,7 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-  # 3. Smoke-install in clean containers BEFORE publishing. If a
+  # 4. Smoke-install in clean containers BEFORE publishing. If a
   #    runtime dep is missing or the entry point breaks, we want to
   #    fail here, not on a user's machine after the wheel is live.
   smoke:
@@ -186,7 +187,7 @@ jobs:
           export PATH="$HOME/.local/bin:$PATH"
           alpi --help > /dev/null
 
-  # 4. Real publish — auto on push to main when version changed,
+  # 5. Real publish — auto on push to main when version changed,
   #    or manual dispatch with force=true. No environment gate
   #    (Cloudflare-style: merge = deploy). Tag + GitHub release
   #    are created post-publish from the same commit.

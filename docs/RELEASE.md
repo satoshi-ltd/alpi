@@ -16,6 +16,7 @@ The flow:
 2. `.github/workflows/publish.yml` runs:
    - **check-version** — compares `pyproject.toml` version against
      PyPI's latest. Skips silently if unchanged.
+   - **tests** — the unit suite only (`pytest -q`).
    - **build** — `uv build` + `twine check`.
    - **smoke** — installs the freshly-built wheel under
      `uv tool install` inside five clean container images
