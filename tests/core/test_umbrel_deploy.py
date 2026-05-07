@@ -14,12 +14,12 @@ def test_umbrel_package_runs_tui_behind_app_proxy() -> None:
 
     assert "APP_HOST: alpi_server_1" in compose
     assert "APP_PORT: 8080" in compose
-    assert "satoshiltd/alpi-umbrel:0.4.8" in compose
+    assert "satoshiltd/alpi-umbrel:0.4.9" in compose
     assert 'user: "1000:1000"' in compose
     assert "- 49200:49200" in compose
     assert "DEVICE_DOMAIN_NAME: $DEVICE_DOMAIN_NAME" in compose
     assert "0.5.0-dev" not in compose
-    assert 'version: "0.4.8"' in manifest
+    assert 'version: "0.4.9"' in manifest
     assert 'releaseNotes: ""' in manifest
     assert "category: ai" in manifest
     assert 'submission: https://github.com/getumbrel/umbrel-apps/pull/5533' in manifest
@@ -141,6 +141,63 @@ def test_devices_network_row_uses_auto_wording_outside_umbrel(
 ) -> None:
     monkeypatch.delenv("ALPI_PLATFORM", raising=False)
     assert cli._network_row_status(tmp_path, None) == "auto-detect Tailscale or LAN"
+
+
+def test_devices_network_setup_saves_pairing_name(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    from alpi import config as cfg_mod
+
+    cfg_mod.save(cfg_mod.Config(home=tmp_path, model=""))
+    monkeypatch.setenv("ALPI_PLATFORM", "umbrel")
+    monkeypatch.setenv("DEVICE_DOMAIN_NAME", "umbrel.local")
+
+    prompts = iter(["umbrel.local", "Umbrel Home"])
+
+    class FakeUi:
+        @staticmethod
+        def crumb(*_parts):
+            return "crumb"
+
+        @staticmethod
+        def banner(*_args, **_kwargs):
+            return None
+
+        @staticmethod
+        def dim(*_args, **_kwargs):
+            return None
+
+        class _console:
+            @staticmethod
+            def print(*_args, **_kwargs):
+                return None
+
+        @staticmethod
+        def text(*_args, **_kwargs):
+            return next(prompts)
+
+        @staticmethod
+        def ok_and_wait(*_args, **_kwargs):
+            return None
+
+        @staticmethod
+        def cancelled():
+            return None
+
+    monkeypatch.setattr("alpi.ui.crumb", FakeUi.crumb)
+    monkeypatch.setattr("alpi.ui.banner", FakeUi.banner)
+    monkeypatch.setattr("alpi.ui.dim", FakeUi.dim)
+    monkeypatch.setattr("alpi.ui._console", FakeUi._console)
+    monkeypatch.setattr("alpi.ui.text", FakeUi.text)
+    monkeypatch.setattr("alpi.ui.ok_and_wait", FakeUi.ok_and_wait)
+    monkeypatch.setattr("alpi.ui.cancelled", FakeUi.cancelled)
+    monkeypatch.setattr("alpi.cli._restart_daemon_for_apply", lambda _root: "")
+
+    cli._devices_network_setup(tmp_path)
+
+    cfg = cfg_mod.load(tmp_path)
+    assert cfg.host["tcp_host"] == "umbrel.local"
+    assert cfg.host["device_name"] == "Umbrel Home"
 
 
 def test_alp_peer_tcp_label_uses_clear_wording(

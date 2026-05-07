@@ -1985,7 +1985,7 @@ def _format_last_seen(epoch) -> str:
 def _device_add(h: Path, endpoint) -> None:
     from alpi import ui
     from alpi.host import devices as devices_mod
-    from alpi.host.network import resolve_host_tcp_port
+    from alpi.host.network import resolve_host_pairing_name, resolve_host_tcp_port
 
     if endpoint is None:
         ui.banner(
@@ -2029,16 +2029,17 @@ def _device_add(h: Path, endpoint) -> None:
     # the import + render cost is hidden.
     import io
     import json
-    import socket
     from urllib.parse import urlencode
 
     import qrcode
+
+    pairing_name = resolve_host_pairing_name(h)
 
     payload = {
         "v": 2,
         "i": host,
         "p": port,
-        "n": socket.gethostname(),
+        "n": pairing_name,
         "t": row["token"],
     }
     link = "alpi://device?" + urlencode({
@@ -2085,6 +2086,7 @@ def _devices_network_setup(h: Path) -> None:
     cfg = cfg_mod.load(h)
     host_cfg = dict(cfg.host or {})
     current = str(host_cfg.get("tcp_host") or "").strip()
+    current_name = str(host_cfg.get("device_name") or "").strip()
     detected = detect_bind_ip()
     auto_host = (
         str(os.environ.get("DEVICE_DOMAIN_NAME") or "").strip()
@@ -2133,11 +2135,26 @@ def _devices_network_setup(h: Path) -> None:
         host_cfg["tcp_host"] = host
     else:
         host_cfg.pop("tcp_host", None)
+
+    pairing_name = ui.text(
+        "Pairing name [blank = auto]:",
+        default=current_name,
+    )
+    if pairing_name is None:
+        return ui.cancelled()
+    pairing_name = pairing_name.strip()
+
+    if pairing_name:
+        host_cfg["device_name"] = pairing_name
+    else:
+        host_cfg.pop("device_name", None)
+
     cfg.host = host_cfg
     cfg_mod.save(cfg)
     msg = _restart_daemon_for_apply(home._ROOT)
     target = host or auto_host or "auto-detect"
-    ui.ok_and_wait(f"remote access target: {target}:{port}{msg}")
+    name_target = pairing_name or "auto"
+    ui.ok_and_wait(f"remote access target: {target}:{port}, pairing name: {name_target}{msg}")
 
 
 def _device_detail(token_id: str) -> None:

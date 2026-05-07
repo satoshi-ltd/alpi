@@ -67,6 +67,43 @@ def test_resolve_host_tcp_bind_uses_unspecified_inside_umbrel(
     assert network.resolve_host_tcp_bind(home) == ("0.0.0.0", 49200)
 
 
+def test_resolve_host_pairing_name_prefers_configured_value(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    home = tmp_path / "h"
+    home.mkdir()
+    cfg = cfg_mod.Config(home=home, model="")
+    cfg.host = {"device_name": "Umbrel"}
+    cfg_mod.save(cfg)
+    monkeypatch.setenv("DEVICE_HOSTNAME", "ignored-host")
+    monkeypatch.setattr("alpi.host.network.socket.gethostname", lambda: "cded386e8d10")
+
+    assert network.resolve_host_pairing_name(home) == "Umbrel"
+
+
+def test_resolve_host_pairing_name_falls_back_to_device_hostname(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    home = tmp_path / "h"
+    home.mkdir()
+    cfg_mod.save(cfg_mod.Config(home=home, model=""))
+    monkeypatch.setenv("DEVICE_HOSTNAME", "Umbrel Home")
+
+    assert network.resolve_host_pairing_name(home) == "Umbrel Home"
+
+
+def test_resolve_host_pairing_name_falls_back_to_system_hostname(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    home = tmp_path / "h"
+    home.mkdir()
+    cfg_mod.save(cfg_mod.Config(home=home, model=""))
+    monkeypatch.delenv("DEVICE_HOSTNAME", raising=False)
+    monkeypatch.setattr("alpi.host.network.socket.gethostname", lambda: "MacBook-Pro-M4.local")
+
+    assert network.resolve_host_pairing_name(home) == "MacBook-Pro-M4.local"
+
+
 def test_lan_parser_extracts_private_address() -> None:
     fake_out = type("O", (), {
         "returncode": 0,

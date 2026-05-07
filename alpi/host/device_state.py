@@ -383,13 +383,13 @@ def _daemon_running() -> bool:
     pid = _daemon_pid()
     if not pid:
         return False
-    return subprocess.run(
-        ["kill", "-0", str(pid)],
-        stdin=subprocess.DEVNULL,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        check=False,
-    ).returncode == 0
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
 
 
 def _installed_via() -> str | None:

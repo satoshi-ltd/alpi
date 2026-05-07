@@ -36,7 +36,7 @@ The Docker image downloads the official `ttyd` release binary for
 From the repository root:
 
 ```bash
-docker build -t satoshiltd/alpi-umbrel:0.4.8 -f deploy/umbrel/alpi/Dockerfile .
+docker build -t satoshiltd/alpi-umbrel:0.4.9 -f deploy/umbrel/alpi/Dockerfile .
 ```
 
 ## Run locally
@@ -46,7 +46,7 @@ docker run --rm -it \
   -p 8080:8080 \
   -p 49200:49200 \
   -v alpi-umbrel-data:/data \
-  satoshiltd/alpi-umbrel:0.4.8
+  satoshiltd/alpi-umbrel:0.4.9
 ```
 
 Open `http://localhost:8080` to use the TUI.

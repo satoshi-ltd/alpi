@@ -77,6 +77,29 @@ async def test_device_profile_summaries_are_served_by_host(
     assert profile["pubkey_b64"]
 
 
+def test_daemon_running_uses_os_signal_not_external_kill(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home = tmp_path / "h"
+    home.mkdir()
+    (home / "service.pid").write_text("123\n")
+    monkeypatch.setattr(host_device_state.home_mod, "_ROOT", home)
+    calls = []
+
+    def fake_kill(pid: int, sig: int) -> None:
+        calls.append((pid, sig))
+
+    monkeypatch.setattr(host_device_state.os, "kill", fake_kill)
+    monkeypatch.setattr(
+        host_device_state.subprocess,
+        "run",
+        lambda *_args, **_kwargs: pytest.fail("subprocess.run should not be used"),
+    )
+
+    assert host_device_state._daemon_running() is True
+    assert calls == [(123, 0)]
+
+
 @pytest.mark.asyncio
 async def test_device_read_file_rejects_escape(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,

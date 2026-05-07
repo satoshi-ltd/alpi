@@ -4,6 +4,7 @@ import ipaddress
 import os
 import shutil
 import subprocess
+import socket
 from pathlib import Path
 
 from alpi.host.tailscale import detect_tailscale_ip
@@ -58,6 +59,19 @@ def resolve_host_tcp_port(home: Path) -> int:
     return int((cfg.host or {}).get("tcp_port") or DEFAULT_TCP_PORT)
 
 
+def resolve_host_pairing_name(home: Path) -> str:
+    from alpi import config as cfg_mod
+
+    cfg = cfg_mod.load(home)
+    name = str((cfg.host or {}).get("device_name") or "").strip()
+    if name:
+        return name
+    env_name = str(os.environ.get("DEVICE_HOSTNAME") or "").strip()
+    if env_name:
+        return env_name
+    return socket.gethostname() or "Alpi"
+
+
 def _configured_host(home: Path) -> str | None:
     from alpi import config as cfg_mod
 
@@ -110,6 +124,7 @@ def _is_private_lan(addr: str) -> bool:
 __all__ = [
     "detect_bind_ip",
     "resolve_host_endpoint",
+    "resolve_host_pairing_name",
     "resolve_host_tcp_bind",
     "resolve_host_tcp_port",
 ]

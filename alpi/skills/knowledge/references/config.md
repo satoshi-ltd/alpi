@@ -23,7 +23,7 @@ gateway, budget, service, and "when does a setting take effect?"
 | `schedule` | Scheduler/service settings. |
 | `service` | Local daemon toggles and host options. |
 | `alp` | ALP peer/workgroup configuration. |
-| `host` | Host-plane companion endpoint (`host.tcp_port`, `host.tcp_host`). Empty `host.tcp_host` = auto-detect Tailscale then LAN; explicit value advertises a stable host to paired desktop/mobile clients. |
+| `host` | Host-plane companion endpoint (`host.tcp_port`, `host.tcp_host`, `host.device_name`). Empty `host.tcp_host` = auto-detect Tailscale then LAN; explicit value advertises a stable host to paired desktop/mobile clients. `host.device_name` sets the pairing label shown in `Devices`. |
 
 ## Model examples
 

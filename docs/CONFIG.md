@@ -452,11 +452,13 @@ detected; mobile / remote desktop use this path).
 |---|---|---|
 | `host.tcp_port` | `49200` | WebSocket port for the remote transport. |
 | `host.tcp_host` | `""` | Optional advertised host for `Devices`. Empty = auto-detect Tailscale CGNAT first, then first private LAN address. Set explicitly when clients should dial a stable hostname, MagicDNS name, VPN IP, or Umbrel hostname. |
+| `host.device_name` | `""` | Optional pairing name shown in `Devices`. Empty = auto, otherwise this value is embedded in the pairing QR and device list. |
 
 ```yaml
 host:
   tcp_port: 49200
   tcp_host: ""
+  device_name: ""
 ```
 
 `host.tcp_host` controls the **companion endpoint** shown in `alpi setup
@@ -464,6 +466,9 @@ host:
 ALP peer transport. `Peer TCP listener` under `alpi setup → Services`
 controls the separate `alp.tcp_host` / `alp.tcp_port` listener used by
 other alpis (`link.*`, `workgroup.*`).
+
+`host.device_name` controls the visible pairing label for new devices.
+It is optional; when empty, alpi falls back to the platform hostname.
 
 On regular macOS/Linux installs, leaving `host.tcp_host` empty keeps the
 old auto mode: Tailscale first, then LAN. On Umbrel the daemon may bind
