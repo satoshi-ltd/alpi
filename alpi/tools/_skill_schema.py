@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass
 
@@ -45,6 +46,7 @@ def validate_frontmatter(
     issues.extend(_check_tools(meta))
     issues.extend(_check_keywords(meta))
     issues.extend(_check_created_at(meta))
+    issues.extend(_check_output_schema(meta))
 
     return issues
 
@@ -207,3 +209,111 @@ def _check_created_at(meta: dict[str, str]) -> list[Issue]:
             f"expected YYYY-MM-DD (got {raw!r})",
         )]
     return []
+
+
+def _check_output_schema(meta: dict[str, str]) -> list[Issue]:
+    raw = (meta.get("output_schema") or "").strip()
+    if not raw:
+        return []
+    schema, err = parse_output_schema(raw)
+    if err:
+        return [Issue("output_schema", "error", err)]
+    warnings: list[Issue] = []
+    if schema is not None and "type" not in schema:
+        warnings.append(Issue(
+            "output_schema", "warning",
+            "missing top-level `type` — validation still runs, but the contract is vague",
+        ))
+    return warnings
+
+
+def parse_output_schema(raw: str) -> tuple[dict | None, str | None]:
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError as e:
+        return None, f"must be valid one-line JSON ({e.msg})"
+    if not isinstance(data, dict):
+        return None, "must be a JSON object"
+    err = _validate_schema_node(data, path="output_schema")
+    if err:
+        return None, err
+    return data, None
+
+
+def _validate_schema_node(node: dict, *, path: str) -> str | None:
+    node_type = node.get("type")
+    if node_type is not None and node_type not in {
+        "object", "array", "string", "number", "integer", "boolean", "null",
+    }:
+        return f"{path}.type must be one of object/array/string/number/integer/boolean/null"
+
+    enum = node.get("enum")
+    if enum is not None and not isinstance(enum, list):
+        return f"{path}.enum must be a list"
+
+    if node_type == "object" or "properties" in node or "required" in node:
+        props = node.get("properties", {})
+        if not isinstance(props, dict):
+            return f"{path}.properties must be an object"
+        for key, value in props.items():
+            if not isinstance(value, dict):
+                return f"{path}.properties.{key} must be an object"
+            err = _validate_schema_node(value, path=f"{path}.properties.{key}")
+            if err:
+                return err
+        required = node.get("required", [])
+        if not isinstance(required, list) or not all(isinstance(x, str) for x in required):
+            return f"{path}.required must be a list of strings"
+
+    if node_type == "array" or "items" in node:
+        items = node.get("items")
+        if items is None:
+            return None
+        if not isinstance(items, dict):
+            return f"{path}.items must be an object"
+        return _validate_schema_node(items, path=f"{path}.items")
+    return None
+
+
+def validate_output_data(schema: dict, data: object, *, path: str = "$") -> list[str]:
+    out: list[str] = []
+    expected = schema.get("type")
+    if expected and not _matches_type(expected, data):
+        out.append(f"{path}: expected {expected}, got {type(data).__name__}")
+        return out
+
+    if "enum" in schema and data not in schema["enum"]:
+        out.append(f"{path}: value {data!r} is not in enum {schema['enum']!r}")
+        return out
+
+    if isinstance(data, dict):
+        required = schema.get("required", [])
+        for key in required:
+            if key not in data:
+                out.append(f"{path}.{key}: required field missing")
+        props = schema.get("properties", {})
+        for key, child_schema in props.items():
+            if key in data:
+                out.extend(validate_output_data(child_schema, data[key], path=f"{path}.{key}"))
+    elif isinstance(data, list) and "items" in schema:
+        for idx, item in enumerate(data):
+            out.extend(validate_output_data(schema["items"], item, path=f"{path}[{idx}]"))
+    return out
+
+
+def _matches_type(expected: str, data: object) -> bool:
+    if expected == "object":
+        return isinstance(data, dict)
+    if expected == "array":
+        return isinstance(data, list)
+    if expected == "string":
+        return isinstance(data, str)
+    if expected == "number":
+        return isinstance(data, (int, float)) and not isinstance(data, bool)
+    if expected == "integer":
+        return isinstance(data, int) and not isinstance(data, bool)
+    if expected == "boolean":
+        return isinstance(data, bool)
+    if expected == "null":
+        return data is None
+    return True

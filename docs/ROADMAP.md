@@ -48,7 +48,6 @@ personal agent.
 
 | ID | Item | Status |
 |---|---|---|
-| BF (4, 6-8) | Skills v2 remaining — output schemas, composition, CLI test harness, versioning (execution runner + script/prose split shipped) | 🟡 |
 | `@alpi/home` | Second bundled skill (after `@alpi/knowledge` in v0.3). Orchestrates Home Assistant + optional connectors (Hue, Xiaomi, Alexa / Google Home) behind a single voice/text interface | 🔵 |
 
 ### Knowledge + memory
@@ -222,7 +221,7 @@ to the same RAG backend that ALP.6 uses, so one embedding
 stack covers two surfaces (knowledge over docs, search over
 transcripts).
 
-### BF (items 4, 6-8). Skills v2 remaining — schemas, composition, tests, versioning
+### BF. Skills v2 execution/runtime follow-through
 
 Layers on the v0.3.11 foundation (declared `requires_env`,
 per-skill SQLite via the `db` tool, schema-validated frontmatter,
@@ -230,27 +229,32 @@ per-skill SQLite via the `db` tool, schema-validated frontmatter,
 the `keywords` hint in v0.3.11; the schedule/workgroup flavors
 were dropped as redundant with the existing `schedule` tool. The
 real-world skill stress test that produced `skill(action="run")`,
-batch memory writes, and schedule in-place updates has shipped; the
-remaining backlog is below.
+batch memory writes, and schedule in-place updates has shipped. The
+runtime follow-through is now in place too:
 
-4. **Output schemas.** Optional
-   `output: { schema: json, fields: [...] }` in frontmatter.
-   Runner validates and surfaces structured findings to the
-   user instead of free text.
-6. **Composition.** `skill.invoke(name, args)` as a tool. A
-   skill can call another skill; reuses the existing surface;
-   no new wire format.
-7. **Test harness.** `alpi skill test <name>` runs prompt
-   fixtures and verifies (a) the LLM dispatched, (b) tool
-   calls match expected pattern, (c) output validates against
-   the schema.
-8. **Versioning.** `alpi skill install <url>` pins to a commit
-   hash. `alpi skill update <name>` shows the diff before
-   applying.
+4. **Output schemas.** Optional `output_schema:` one-line JSON in
+   frontmatter. `skill(run)` / `skill(test)` validate scripted stdout
+   against a small JSON Schema subset and surface precise mismatch
+   paths instead of vague free text.
+6. **Composition.** `skill(action="invoke", name=..., args=[...])`
+   as a strict tool surface. Reuses the scripted runtime; only
+   skills with `scripts/run.py` + `output_schema:` qualify.
+7. **Test harness.** `skill(action="test", name=...)` runs the
+   scripted runtime through the same path as `run` and verifies the
+   declared `output_schema`. If a CLI wrapper ever lands, it should be
+   a thin shell over this action rather than a parallel runtime.
 
-Each item shippable independently. Composition and output
-schemas pair: schemas have most of their value when consumed by
-a calling skill.
+The remaining BF backlog is now just **BF-8**: versioning and
+distribution flows for portable skills. It is intentionally moved out
+of the active cycle and tracked under **Future releases** below.
+
+## Future releases
+
+Items worth doing, but not part of the current cycle.
+
+| ID | Item | Status |
+|---|---|---|
+| BF-8 | Skill versioning / install-update flows — pinned install source, update preview/diff, revision metadata | 🔵 |
 
 ### `@alpi/home`. Second bundled skill — home orchestration
 

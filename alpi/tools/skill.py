@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import re
 import shutil
+import json
 from datetime import date
 from pathlib import Path
 
@@ -531,6 +532,15 @@ class Skill(Tool):
         "                Use this instead of `view` + manual `terminal` — "
         "                it handles cwd, env, and timeouts. Optional ``args`` "
         "                pass extra CLI arguments to the script.\n"
+        "  test        — exercise the scripted runtime (`scripts/run.py`) "
+        "                using the same path as `run`, then validate stdout "
+        "                against `output_schema` when the skill declares one. "
+        "                This is only for scripted skills; prose-only skills "
+        "                should be tested by running the real tools in chat.\n"
+        "  invoke      — structured skill-to-skill composition. Same runtime "
+        "                as `run`, but stricter: only scripted skills with "
+        "                `output_schema` are allowed. Stdout must be JSON "
+        "                matching that schema.\n"
         "\n"
         "**When to create scripts/run.py.** Do it only for deterministic "
         "local code: parsing files, transforming data, calling normal "
@@ -565,7 +575,7 @@ class Skill(Tool):
                 "enum": [
                     "create", "edit", "patch", "add_file", "remove_file",
                     "delete", "list", "view", "validate", "reset_state",
-                    "set_meta", "run",
+                    "set_meta", "run", "test", "invoke",
                 ],
             },
             "name": {"type": "string", "description": "Skill name (kebab-case)."},
@@ -616,6 +626,15 @@ class Skill(Tool):
                     "— common verbs (do, run, fetch) match too often."
                 ),
                 "default": [],
+            },
+            "output_schema": {
+                "type": "string",
+                "description": (
+                    "Optional one-line JSON schema for stdout produced by "
+                    "scripts/run.py. Use a small JSON Schema subset: "
+                    "`type`, `properties`, `required`, `items`, `enum`."
+                ),
+                "default": "",
             },
             "subdir": {
                 "type": "string",
@@ -683,6 +702,7 @@ class Skill(Tool):
         requires_env: list[str] | None = None,
         tools: list[str] | None = None,
         keywords: list[str] | None = None,
+        output_schema: str = "",
         fields: dict | None = None,
         subdir: str = "",
         filename: str = "",
@@ -713,7 +733,7 @@ class Skill(Tool):
         if action == "create":
             return _create(home, name, category, description, body,
                            requires_env or [], tools or [],
-                           keywords or [])
+                           keywords or [], output_schema)
         if action == "edit":
             return _edit(home, name, body, confirm_user_skill)
         if action == "patch":
@@ -733,6 +753,10 @@ class Skill(Tool):
             return _reset_state(home, name, confirm_user_skill)
         if action == "run":
             return _run(home, name, args or [])
+        if action == "test":
+            return _test(home, name, args or [])
+        if action == "invoke":
+            return _invoke(home, name, args or [])
         if action == "set_meta":
             meta_fields = dict(fields or {})
             if description:
@@ -745,6 +769,8 @@ class Skill(Tool):
                 meta_fields["tools"] = tools
             if keywords is not None:
                 meta_fields["keywords"] = keywords
+            if output_schema:
+                meta_fields["output_schema"] = output_schema
             return _set_meta(home, name, meta_fields, confirm_user_skill)
         return ToolResult(ok=False, output="", error=f"unknown action: {action}")
 
@@ -840,6 +866,7 @@ def _create(
     requires_env: list[str],
     tools: list[str],
     keywords: list[str],
+    output_schema: str,
 ) -> ToolResult:
     from alpi.tools import _skill_schema as _schema
 
@@ -856,6 +883,7 @@ def _create(
         "requires_env": str(list(requires_env)),
         "tools": str(list(tools)),
         "keywords": str(list(keywords)),
+        "output_schema": output_schema,
     }
     issues = _schema.validate_frontmatter(pseudo_meta, categories=CATEGORIES)
     blocking = _schema.errors(issues)
@@ -896,9 +924,10 @@ def _create(
         f"tools: {list(tools)}",
         f"keywords: {[k.lower() for k in keywords]}",
         f"created_at: {date.today().isoformat()}",
-        "---",
-        "",
     ]
+    if output_schema:
+        frontmatter.append(f"output_schema: {output_schema}")
+    frontmatter.extend(["---", ""])
     _atomic_write(skill_dir / "SKILL.md", "\n".join(frontmatter) + body.strip() + "\n")
     _ensure_gitignore(skill_dir)
 
@@ -1226,6 +1255,18 @@ def _run(home: Path, name: str, args: list[str]) -> ToolResult:
     2. No script → return SKILL.md prefixed with a directive so the agent
        knows to follow the prose itself instead of ``view``-then-improvise.
     """
+    return _run_or_test(home, name, args, mode="run")
+
+
+def _test(home: Path, name: str, args: list[str]) -> ToolResult:
+    return _run_or_test(home, name, args, mode="test")
+
+
+def _invoke(home: Path, name: str, args: list[str]) -> ToolResult:
+    return _run_or_test(home, name, args, mode="invoke")
+
+
+def _run_or_test(home: Path, name: str, args: list[str], *, mode: str) -> ToolResult:
     import subprocess
     import sys
 
@@ -1239,6 +1280,14 @@ def _run(home: Path, name: str, args: list[str]) -> ToolResult:
     skill_md = skill_dir / "SKILL.md"
 
     if not script.is_file():
+        if mode in {"test", "invoke"}:
+            return ToolResult(
+                ok=False, output="",
+                error=(
+                    f"skill {name!r} has no scripts/run.py; only scripted skills "
+                    f"support {mode}"
+                ),
+            )
         if not skill_md.is_file():
             return ToolResult(
                 ok=False, output="",
@@ -1257,12 +1306,29 @@ def _run(home: Path, name: str, args: list[str]) -> ToolResult:
     declared_env = _parse_env_list(meta.get("requires_env", ""))
     declared_env += _parse_env_list(meta.get("env", ""))
 
+    from alpi.tools import _skill_schema as _schema
     from alpi.tools._skill_validate import validate_skill
+
     blockers = [f for f in validate_skill(skill_dir) if f.startswith("✗")]
     if blockers:
         return ToolResult(
             ok=False, output="\n".join(blockers),
             error=f"skill {name!r} failed validation",
+        )
+
+    output_schema = None
+    raw_schema = (meta.get("output_schema") or "").strip()
+    if raw_schema:
+        output_schema, schema_error = _schema.parse_output_schema(raw_schema)
+        if schema_error:
+            return ToolResult(
+                ok=False, output="",
+                error=f"skill {name!r} has invalid output_schema: {schema_error}",
+            )
+    elif mode == "invoke":
+        return ToolResult(
+            ok=False, output="",
+            error=f"skill {name!r} has no output_schema; invoke requires a structured contract",
         )
 
     env = dict(os.environ)
@@ -1308,6 +1374,34 @@ def _run(home: Path, name: str, args: list[str]) -> ToolResult:
             ok=False, output=combined,
             error=f"script exited rc={proc.returncode}",
         )
+
+    if output_schema is not None:
+        try:
+            payload = json.loads(out or "null")
+        except json.JSONDecodeError as e:
+            return ToolResult(
+                ok=False, output=combined,
+                error=(
+                    f"skill {name!r} declared output_schema but stdout was not JSON "
+                    f"({e.msg})"
+                ),
+            )
+        findings = _schema.validate_output_data(output_schema, payload)
+        if findings:
+            return ToolResult(
+                ok=False,
+                output=combined,
+                error="output_schema mismatch:\n" + "\n".join(findings),
+            )
+
+    if mode == "test":
+        if output_schema is not None:
+            header = f"[test ok] {name}: scripts/run.py output matches output_schema"
+        else:
+            header = f"[test ok] {name}: scripts/run.py exited successfully (no output_schema declared)"
+        return ToolResult(ok=True, output=f"{header}\n\n{combined or '(no output)'}")
+    if mode == "invoke":
+        return ToolResult(ok=True, output=combined or "null")
     return ToolResult(ok=True, output=combined or "(no output)")
 
 
@@ -1359,7 +1453,7 @@ def _keyword_tokens(text: str) -> set[str]:
 
 _META_KEY_ORDER = (
     "name", "description", "category", "version", "origin",
-    "requires_env", "tools", "keywords", "created_at",
+    "requires_env", "tools", "keywords", "output_schema", "created_at",
     "env",  # legacy alias
 )
 

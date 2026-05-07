@@ -257,7 +257,7 @@ Live under `<home>/skills/<category>/<name>/`. Required `SKILL.md` plus optional
 
 **Live by default** — no `_pending/` approval stage (was tried in v0.1, removed in v0.2 as friction-without-benefit).
 
-Frontmatter (auto-populated on `create`): `name`, `description`, `category`, `version`, `origin: agent|user`, `created_at`, `requires_env`, `tools`, `keywords`. 13 fixed categories including `miscellaneous` as the fallback. `secrets/` is filesystem state, not frontmatter: it is created lazily when a skill writes a secret file.
+Frontmatter (auto-populated on `create`): `name`, `description`, `category`, `version`, `origin: agent|user`, `created_at`, `requires_env`, `tools`, `keywords`, optional `output_schema`. 13 fixed categories including `miscellaneous` as the fallback. `secrets/` is filesystem state, not frontmatter: it is created lazily when a skill writes a secret file. `output_schema` is one-line JSON and uses a deliberately small subset (`type`, `properties`, `required`, `items`, `enum`) so the runtime stays dependency-light.
 
 **Security scanner** (~50 patterns, `_DANGER_PATTERNS` in `skill.py`): destructive shell, credential exfiltration, prompt injection, persistence (cron/launchd/systemd/authorized_keys/sudoers/shell rc), reverse shells, tunneling, obfuscation (base64/eval/exec/compile), process exec, hardcoded credentials (API keys, OpenAI sk-, GitHub ghp_, AWS AKIA), system-password-file paths, deep traversal. Runs on every `create`/`add_file`/`patch` for files NOT in `secrets/` or `state/`.
 
@@ -267,7 +267,11 @@ Frontmatter (auto-populated on `create`): `name`, `description`, `category`, `ve
 
 **TUI integration**: when a `terminal` command's path matches `.alpi/(profiles/<p>/)?skills/<cat>/<name>/...`, `arg_hint` rewrites the ToolCard label as `skill: <name>` (or `skill: <name> · <script>` when the script is the full path). Tool name stays `terminal`; the rewrite is display-only.
 
-**Execution: `skill(action="run", name=...)`**. Single canonical ad-hoc path. If `scripts/run.py` exists the action validates the skill, then spawns the script via `subprocess.run` with `cwd` = skill dir, `env += {ALPI_HOME, ALPI_SKILL_NAME, ALPI_SKILL_DIR}`, 600s timeout, and the skill's `requires_env` checked up-front. Scripts are normal Python; built-in tools and MCP methods are not importable Python APIs. No script → SKILL.md is returned with a `[skill X has no scripts/run.py — follow these instructions]` prefix so the agent follows the prose and calls the real tools. Scheduled prompts should call this action instead of reimplementing the skill by hand; the scheduler still enters through `alpi chat --once --emit-events --no-save`.
+**Execution: `skill(action="run", name=...)`**. Single canonical ad-hoc path. If `scripts/run.py` exists the action validates the skill, then spawns the script via `subprocess.run` with `cwd` = skill dir, `env += {ALPI_HOME, ALPI_SKILL_NAME, ALPI_SKILL_DIR}`, 600s timeout, and the skill's `requires_env` checked up-front. If the skill declares `output_schema`, stdout must be JSON and is validated before the call succeeds. Scripts are normal Python; built-in tools and MCP methods are not importable Python APIs. No script → SKILL.md is returned with a `[skill X has no scripts/run.py — follow these instructions]` prefix so the agent follows the prose and calls the real tools. Scheduled prompts should call this action instead of reimplementing the skill by hand; the scheduler still enters through `alpi chat --once --emit-events --no-save`.
+
+**Structured composition: `skill(action="invoke", name=...)`**. Same subprocess/runtime path as `run`, but stricter: the callee must ship `scripts/run.py`, must declare `output_schema`, and stdout must satisfy it. This keeps skill-to-skill composition machine-readable and prevents prose-only skills from pretending to be callable subroutines.
+
+**Scripted harness: `skill(action="test", name=...)`**. Thin validation layer over the same runtime path. It exists so chat/scheduler/desktop can exercise a scripted skill and verify its declared `output_schema` without inventing a second testing runtime. If a CLI wrapper lands later, it should call this action instead of duplicating logic.
 
 ### Research (read-only sub-agent, `alpi/tools/research.py`)
 

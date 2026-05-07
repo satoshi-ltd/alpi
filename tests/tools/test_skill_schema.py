@@ -41,6 +41,7 @@ def test_full_valid_frontmatter_passes() -> None:
         "origin": "user",
         "requires_env": "['TOKEN']",
         "tools": "['terminal', 'web_fetch']",
+        "output_schema": '{"type":"object","properties":{"ok":{"type":"boolean"}},"required":["ok"]}',
         "created_at": "2026-05-02",
     })
     assert issues == []
@@ -184,6 +185,25 @@ def test_created_at_non_iso_warns() -> None:
 
 def test_created_at_iso_passes() -> None:
     assert _validate(created_at="2026-05-02") == []
+
+
+# output_schema
+
+def test_output_schema_invalid_json_is_error() -> None:
+    issues = _validate(output_schema="{bad json")
+    assert any(i.field == "output_schema" and i.severity == "error" for i in issues)
+
+
+def test_output_schema_must_be_object() -> None:
+    issues = _validate(output_schema='["not", "an", "object"]')
+    assert any(i.field == "output_schema" and i.severity == "error" for i in issues)
+
+
+def test_output_schema_valid_subset_passes() -> None:
+    issues = _validate(
+        output_schema='{"type":"array","items":{"type":"object","properties":{"id":{"type":"integer"}}}}'
+    )
+    assert issues == []
 
 
 # helpers

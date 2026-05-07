@@ -134,3 +134,121 @@ def test_run_blocks_scripts_that_import_tools_from_alpi(
     assert "failed validation" in r.error
     assert "tools and MCP methods are not Python APIs" in r.output
     assert "bad" not in r.output
+
+
+def test_run_validates_stdout_against_output_schema(isolated_home: Path) -> None:
+    _create(
+        name="json-ok",
+        body="returns structured JSON",
+        output_schema='{"type":"object","properties":{"ok":{"type":"boolean"}},"required":["ok"]}',
+    )
+    Skill().run(
+        action="add_file", name="json-ok", subdir="scripts", filename="run.py",
+        content="print('{\"ok\": true}')\n",
+    )
+
+    r = Skill().run(action="run", name="json-ok")
+
+    assert r.ok, r.error
+    assert '"ok": true' in r.output
+
+
+def test_run_fails_when_output_schema_stdout_is_not_json(isolated_home: Path) -> None:
+    _create(
+        name="json-bad",
+        body="returns invalid JSON",
+        output_schema='{"type":"object","properties":{"ok":{"type":"boolean"}},"required":["ok"]}',
+    )
+    Skill().run(
+        action="add_file", name="json-bad", subdir="scripts", filename="run.py",
+        content="print('not-json')\n",
+    )
+
+    r = Skill().run(action="run", name="json-bad")
+
+    assert not r.ok
+    assert "declared output_schema" in r.error
+
+
+def test_run_fails_when_output_schema_does_not_match(isolated_home: Path) -> None:
+    _create(
+        name="json-mismatch",
+        body="returns the wrong shape",
+        output_schema='{"type":"object","properties":{"ok":{"type":"boolean"}},"required":["ok"]}',
+    )
+    Skill().run(
+        action="add_file", name="json-mismatch", subdir="scripts", filename="run.py",
+        content="print('{\"ok\": \"yes\"}')\n",
+    )
+
+    r = Skill().run(action="run", name="json-mismatch")
+
+    assert not r.ok
+    assert "output_schema mismatch" in r.error
+    assert "$.ok: expected boolean" in r.error
+
+
+def test_test_runs_script_and_validates_output_schema(isolated_home: Path) -> None:
+    _create(
+        name="json-test",
+        body="returns JSON",
+        output_schema='{"type":"object","properties":{"count":{"type":"integer"}},"required":["count"]}',
+    )
+    Skill().run(
+        action="add_file", name="json-test", subdir="scripts", filename="run.py",
+        content="print('{\"count\": 3}')\n",
+    )
+
+    r = Skill().run(action="test", name="json-test")
+
+    assert r.ok, r.error
+    assert "[test ok]" in r.output
+    assert "matches output_schema" in r.output
+
+
+def test_test_rejects_prose_only_skills(isolated_home: Path) -> None:
+    _create(name="prose-test", body="just prose")
+
+    r = Skill().run(action="test", name="prose-test")
+
+    assert not r.ok
+    assert "only scripted skills support test" in r.error
+
+
+def test_invoke_requires_scripted_skill(isolated_home: Path) -> None:
+    _create(name="invoke-prose", body="just prose")
+
+    r = Skill().run(action="invoke", name="invoke-prose")
+
+    assert not r.ok
+    assert "only scripted skills support invoke" in r.error
+
+
+def test_invoke_requires_output_schema(isolated_home: Path) -> None:
+    _create(name="invoke-no-schema", body="script but no schema")
+    Skill().run(
+        action="add_file", name="invoke-no-schema", subdir="scripts", filename="run.py",
+        content="print('{\"ok\": true}')\n",
+    )
+
+    r = Skill().run(action="invoke", name="invoke-no-schema")
+
+    assert not r.ok
+    assert "invoke requires a structured contract" in r.error
+
+
+def test_invoke_returns_structured_json_for_scripted_skill(isolated_home: Path) -> None:
+    _create(
+        name="invoke-json",
+        body="returns JSON",
+        output_schema='{"type":"object","properties":{"items":{"type":"array","items":{"type":"integer"}}},"required":["items"]}',
+    )
+    Skill().run(
+        action="add_file", name="invoke-json", subdir="scripts", filename="run.py",
+        content="print('{\"items\": [1, 2, 3]}')\n",
+    )
+
+    r = Skill().run(action="invoke", name="invoke-json")
+
+    assert r.ok, r.error
+    assert r.output == '{"items": [1, 2, 3]}'

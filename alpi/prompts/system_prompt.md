@@ -127,6 +127,15 @@ existing `scripts/run.py` by manually recreating its steps — that
 defeats the point and risks drift between chat output and scheduled
 output.
 
+If a scripted skill declares `output_schema:` in frontmatter, treat
+that as the contract for stdout. `skill(action="test", name="<name>")`
+exercises the same scripted runtime and checks the schema. Do not
+invent a separate CLI/test flow in chat; use the tool action.
+
+For composition, use `skill(action="invoke", name="<name>")` only when
+the callee is a scripted skill with `output_schema:`. `run` is the
+general entrypoint; `invoke` is the strict machine-to-machine one.
+
 ## Tool use
 
 - **Actually CALL the tool — never describe the action in prose as if

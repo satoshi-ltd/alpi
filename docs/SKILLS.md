@@ -385,10 +385,32 @@ Pass `args=["--foo", "bar"]` to forward extra CLI arguments to
 prompt when they need a skill result; the scheduler itself still runs
 through `alpi chat --once --emit-events --no-save`.
 
+If the skill declares `output_schema:` in frontmatter, it must be a
+one-line JSON object using a small JSON Schema subset
+(`type`/`properties`/`required`/`items`/`enum`). `skill(run)` validates
+**stdout** against that schema; invalid JSON or a shape mismatch fails
+the call.
+
 The agent should prefer `skill(action="run")` over manually chaining
 `view` + `terminal` calls. For scripted skills, `run` owns the script
 execution. For prose-only skills, `run` loads the instructions and the
 agent executes them with the real tools.
+
+### Testing a scripted skill
+
+`skill(action="test", name=...)` is the minimal harness for scripted
+skills. It runs `scripts/run.py` through the same runtime path as
+`skill(run)` and, when `output_schema:` is declared, checks that stdout
+matches it. Prose-only skills do not support `test`; exercise those in
+chat by running the real tools they mention.
+
+### Invoking one skill from another flow
+
+`skill(action="invoke", name=...)` is the strict composition surface.
+Use it when another skill or agent step needs a machine-readable result
+from a sub-skill. Unlike `run`, `invoke` only accepts scripted skills
+that declare `output_schema:`. That keeps composition explicit: the
+callee must return JSON and the caller can trust the contract.
 
 ### Origin gate
 

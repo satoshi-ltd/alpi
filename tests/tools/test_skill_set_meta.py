@@ -183,6 +183,22 @@ def test_set_meta_multiple_fields_in_one_call(
     assert "keywords: ['delta']" in md
 
 
+def test_set_meta_can_add_output_schema(
+    isolated_home: Path, base_skill: str,
+) -> None:
+    r = Skill().run(
+        action="set_meta",
+        name=base_skill,
+        fields={
+            "output_schema": '{"type":"object","properties":{"ok":{"type":"boolean"}},"required":["ok"]}',
+        },
+        confirm_user_skill=True,
+    )
+    assert r.ok, r.error
+    md = (isolated_home / "skills" / "personal" / "meta-target" / "SKILL.md").read_text()
+    assert 'output_schema: {"type":"object","properties":{"ok":{"type":"boolean"}},"required":["ok"]}' in md
+
+
 def test_set_meta_accepts_top_level_fields(
     isolated_home: Path, base_skill: str,
 ) -> None:
