@@ -262,6 +262,8 @@ export default function App() {
     invoke("host_connections_probe_active").catch(() => {});
   }, [reload, reloadConnections]);
 
+  // Probe runs fire-and-forget; awaiting it locks the UI for 8-16s on slow remotes.
+  // No reloadConnections() before probe — it returns stale "online" and wakes the effect.
   const onSetHostConnection = useCallback(
     (id) => {
       const current = hostConnectionsRef.current;
@@ -290,12 +292,12 @@ export default function App() {
         hostConnectionsRef.current = next;
         return next;
       });
+      syncedStatusRef.current = `${id}:probing:`;
+
       invoke("host_connection_set_active", { id })
-        .then(() => reloadConnections())
         .then(() => {
           if (connectionSwitchRef.current !== switchId) return;
-          invoke("host_connections_probe_active").catch(() => {});
-          loadFromCache(id);
+          invoke("host_connection_probe", { id }).catch(() => {});
         })
         .catch((e) => {
           console.error(e);

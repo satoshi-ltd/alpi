@@ -2,10 +2,11 @@ use std::collections::HashMap;
 use std::fs;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{IpAddr, SocketAddr, TcpStream};
-use std::os::unix::net::UnixStream;
 use std::os::unix::fs::OpenOptionsExt;
+use std::os::unix::net::UnixStream;
 use std::path::PathBuf;
-use std::sync::{Mutex, OnceLock};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
@@ -13,10 +14,17 @@ use serde_json::{json, Value};
 
 use crate::home::resolve_root;
 
-const READ_TIMEOUT_SECS: u64 = 8;
+const READ_TIMEOUT_LOCAL_SECS: u64 = 8;
+const READ_TIMEOUT_REMOTE_SECS: u64 = 20;
 const STREAM_READ_TIMEOUT_SECS: u64 = 600;
+const WS_CONNECT_TIMEOUT_SECS: u64 = 4;
+const WS_KEEPALIVE_IDLE_SECS: u64 = 30;
+const WS_KEEPALIVE_INTERVAL_SECS: u64 = 10;
 const PROBE_LOCAL_TIMEOUT_MS: u64 = 400;
-const PROBE_REMOTE_TIMEOUT_MS: u64 = 3500;
+const PROBE_REMOTE_TIMEOUT_MS: u64 = 8000;
+const PROBE_RETRY_DELAY_MS: u64 = 350;
+// Sticky offline: tolerate transient blips on noisy Tailscale links.
+const STICKY_OFFLINE_THRESHOLD: u32 = 2;
 const CONNECTIONS_FILE: &str = "connections.json";
 pub const LOCAL_ID: &str = "local";
 
@@ -45,6 +53,7 @@ impl ConnectionStatus {
 struct StatusEntry {
     status: ConnectionStatus,
     error: Option<String>,
+    consecutive_failures: u32,
 }
 
 impl Default for StatusEntry {
@@ -52,6 +61,7 @@ impl Default for StatusEntry {
         Self {
             status: ConnectionStatus::Unknown,
             error: None,
+            consecutive_failures: 0,
         }
     }
 }
@@ -66,6 +76,27 @@ type StatusListener = Box<dyn Fn(&str, ConnectionStatus, Option<&str>) + Send + 
 fn listeners() -> &'static Mutex<Vec<StatusListener>> {
     static LISTENERS: OnceLock<Mutex<Vec<StatusListener>>> = OnceLock::new();
     LISTENERS.get_or_init(|| Mutex::new(Vec::new()))
+}
+
+fn remote_ws_pool() -> &'static Mutex<HashMap<String, Arc<Mutex<WsClient>>>> {
+    static POOL: OnceLock<Mutex<HashMap<String, Arc<Mutex<WsClient>>>>> = OnceLock::new();
+    POOL.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn remote_pool_key(connection_id: &str, host: &str, port: u16, token: &str) -> String {
+    format!("{connection_id}|{host}:{port}|{token}")
+}
+
+fn drop_remote_connections_for(connection_id: &str) {
+    let prefix = format!("{connection_id}|");
+    if let Ok(mut pool) = remote_ws_pool().lock() {
+        pool.retain(|key, _| !key.starts_with(&prefix));
+    }
+}
+
+fn next_request_id() -> String {
+    static NEXT_ID: AtomicU64 = AtomicU64::new(1);
+    format!("tauri-{}", NEXT_ID.fetch_add(1, Ordering::Relaxed))
 }
 
 pub fn on_status_change<F>(f: F)
@@ -86,10 +117,23 @@ pub fn status_for(id: &str) -> (ConnectionStatus, Option<String>) {
     (ConnectionStatus::Unknown, None)
 }
 
+// Online → Offline only flips after STICKY_OFFLINE_THRESHOLD consecutive failures.
 fn set_status(id: &str, status: ConnectionStatus, error: Option<String>) {
     let mut transitioned = false;
     if let Ok(mut map) = status_map().lock() {
         let entry = map.entry(id.to_string()).or_default();
+        match status {
+            ConnectionStatus::Offline if entry.status == ConnectionStatus::Online => {
+                entry.consecutive_failures = entry.consecutive_failures.saturating_add(1);
+                if entry.consecutive_failures < STICKY_OFFLINE_THRESHOLD {
+                    return;
+                }
+            }
+            ConnectionStatus::Online => {
+                entry.consecutive_failures = 0;
+            }
+            _ => {}
+        }
         if entry.status != status || entry.error != error {
             entry.status = status;
             entry.error = error.clone();
@@ -318,6 +362,7 @@ pub fn forget_connection(id: String) -> Result<(), String> {
     if let Ok(mut map) = status_map().lock() {
         map.remove(&id);
     }
+    drop_remote_connections_for(&id);
     Ok(())
 }
 
@@ -357,6 +402,7 @@ pub fn add_remote_connection(
     });
     state.active_id = id.clone();
     save_connections(&state)?;
+    drop_remote_connections_for(&id);
     Ok(id)
 }
 
@@ -372,6 +418,7 @@ pub fn mark_connection_revoked(id: &str) {
         }
     }
     if changed {
+        drop_remote_connections_for(id);
         if state.active_id == id {
             state.active_id = LOCAL_ID.to_string();
         }
@@ -401,18 +448,21 @@ pub fn call(method: &str, params: Value) -> Result<Value, String> {
     let conn = active_connection();
     let id = conn.id().to_string();
     let result = match &conn {
-        HostConnection::Local { .. } => {
-            call_local_inner(method, params, Duration::from_secs(READ_TIMEOUT_SECS))
-        }
+        HostConnection::Local { .. } => call_local_inner(
+            method,
+            params,
+            Duration::from_secs(READ_TIMEOUT_LOCAL_SECS),
+        ),
         HostConnection::Remote {
             host, port, token, ..
         } => call_remote_inner(
+            &id,
             host,
             *port,
             token,
             method,
             params,
-            Duration::from_secs(READ_TIMEOUT_SECS),
+            Duration::from_secs(READ_TIMEOUT_REMOTE_SECS),
         ),
     };
     match &result {
@@ -566,6 +616,7 @@ where
 }
 
 fn call_remote_inner(
+    connection_id: &str,
     host: &str,
     port: u16,
     token: &str,
@@ -573,27 +624,105 @@ fn call_remote_inner(
     params: Value,
     timeout: Duration,
 ) -> Result<Value, String> {
-    let mut ws = WsClient::connect(host, port, timeout)?;
-    let id = "tauri-1";
-    ws.send_json(&json!({
-        "id": id,
-        "method": method,
-        "params": with_auth(params, token),
-    }))?;
-    loop {
-        let frame = ws.read_text()?;
-        let response: ControlResponse =
-            serde_json::from_str(&frame).map_err(|e| format!("decode: {e}"))?;
-        if !frame_matches_id(&frame, id) {
-            continue;
+    let key = remote_pool_key(connection_id, host, port, token);
+    for attempt in 0..2 {
+        let ws = pooled_remote_ws(&key, host, port, timeout)?;
+        let id = next_request_id();
+        let request = json!({
+            "id": id,
+            "method": method,
+            "params": with_auth(params.clone(), token),
+        });
+        let result = {
+            let mut guard = ws
+                .lock()
+                .map_err(|_| "remote websocket pool poisoned".to_string())?;
+            guard.set_timeout(timeout)?;
+            guard.request(&id, &request)
+        };
+        match result {
+            Ok(value) => return Ok(value),
+            Err(e) if attempt == 0 && should_retry_remote_ws(&e) => {
+                drop_pooled_remote_ws(&key);
+                continue;
+            }
+            Err(e) => {
+                // App-level RPC errors leave the WS intact — keep pool entry.
+                if !is_app_error(&e) {
+                    drop_pooled_remote_ws(&key);
+                }
+                return Err(e);
+            }
         }
-        if let Some(err) = response.error {
-            return Err(format!("alp {}: {}", err.code, err.message));
-        }
-        return response
-            .result
-            .ok_or_else(|| "daemon returned neither result nor error".to_string());
     }
+    Err("remote websocket retry exhausted".to_string())
+}
+
+fn pooled_remote_ws(
+    key: &str,
+    host: &str,
+    port: u16,
+    timeout: Duration,
+) -> Result<Arc<Mutex<WsClient>>, String> {
+    if let Ok(pool) = remote_ws_pool().lock() {
+        if let Some(ws) = pool.get(key) {
+            return Ok(Arc::clone(ws));
+        }
+    }
+    let ws = Arc::new(Mutex::new(WsClient::connect(
+        host,
+        port,
+        Duration::from_secs(WS_CONNECT_TIMEOUT_SECS),
+        timeout,
+    )?));
+    let mut pool = remote_ws_pool()
+        .lock()
+        .map_err(|_| "remote websocket pool poisoned".to_string())?;
+    Ok(Arc::clone(pool.entry(key.to_string()).or_insert(ws)))
+}
+
+fn drop_pooled_remote_ws(key: &str) {
+    if let Ok(mut pool) = remote_ws_pool().lock() {
+        pool.remove(key);
+    }
+}
+
+fn should_retry_remote_ws(err: &str) -> bool {
+    !err.contains("auth-failed")
+        && (err.starts_with("websocket ")
+            || err.starts_with("connect ")
+            || err.starts_with("set read timeout")
+            || err.starts_with("set write timeout"))
+}
+
+// "alp -3200X: ..." = JSON-RPC error from the daemon. The WS is fine; keep pool.
+fn is_app_error(err: &str) -> bool {
+    err.starts_with("alp ")
+}
+
+fn call_remote_once(
+    host: &str,
+    port: u16,
+    token: &str,
+    method: &str,
+    params: Value,
+    timeout: Duration,
+) -> Result<Value, String> {
+    let mut ws = WsClient::connect(
+        host,
+        port,
+        Duration::from_secs(WS_CONNECT_TIMEOUT_SECS),
+        timeout,
+    )?;
+    let id = next_request_id();
+    ws.request(
+        &id,
+        &json!({
+            "id": id,
+            "method": method,
+            "params": with_auth(params, token),
+        }),
+    )
 }
 
 fn call_stream_remote<F>(
@@ -608,7 +737,12 @@ fn call_stream_remote<F>(
 where
     F: FnMut(Value),
 {
-    let mut ws = WsClient::connect(host, port, Duration::from_secs(STREAM_READ_TIMEOUT_SECS))?;
+    let mut ws = WsClient::connect(
+        host,
+        port,
+        Duration::from_secs(WS_CONNECT_TIMEOUT_SECS),
+        Duration::from_secs(STREAM_READ_TIMEOUT_SECS),
+    )?;
     set_status(connection_id, ConnectionStatus::Online, None);
     let id = "tauri-stream";
     ws.send_json(&json!({
@@ -682,15 +816,29 @@ struct WsClient {
 }
 
 impl WsClient {
-    fn connect(host: &str, port: u16, timeout: Duration) -> Result<Self, String> {
+    fn connect(
+        host: &str,
+        port: u16,
+        connect_timeout: Duration,
+        read_timeout: Duration,
+    ) -> Result<Self, String> {
         let addr = socket_addr(host, port)?;
-        let mut stream = TcpStream::connect_timeout(&addr, timeout)
+        let stream = TcpStream::connect_timeout(&addr, connect_timeout)
             .map_err(|e| format!("connect ws://{host}:{port}: {e}"))?;
+        // Disable Nagle: chatty JSON-RPC frames suffer 40ms/RTT penalty otherwise.
+        stream.set_nodelay(true).ok();
+        // TCP keepalive: catch silently-broken Tailscale tunnels in ~60s.
+        let socket = socket2::SockRef::from(&stream);
+        let ka = socket2::TcpKeepalive::new()
+            .with_time(Duration::from_secs(WS_KEEPALIVE_IDLE_SECS))
+            .with_interval(Duration::from_secs(WS_KEEPALIVE_INTERVAL_SECS));
+        socket.set_tcp_keepalive(&ka).ok();
+        let mut stream = stream;
         stream
-            .set_read_timeout(Some(timeout))
+            .set_read_timeout(Some(read_timeout))
             .map_err(|e| format!("set read timeout: {e}"))?;
         stream
-            .set_write_timeout(Some(timeout))
+            .set_write_timeout(Some(read_timeout))
             .map_err(|e| format!("set write timeout: {e}"))?;
         let key = "dGhlIHNhbXBsZSBub25jZQ==";
         let req = format!(
@@ -712,9 +860,46 @@ impl WsClient {
         }
         let head = String::from_utf8_lossy(&response);
         if !head.starts_with("HTTP/1.1 101") && !head.starts_with("HTTP/1.0 101") {
-            return Err(format!("websocket handshake failed: {}", head.lines().next().unwrap_or("")));
+            return Err(format!(
+                "websocket handshake failed: {}",
+                head.lines().next().unwrap_or("")
+            ));
         }
         Ok(Self { stream })
+    }
+
+    fn set_timeout(&mut self, timeout: Duration) -> Result<(), String> {
+        self.stream
+            .set_read_timeout(Some(timeout))
+            .map_err(|e| format!("set read timeout: {e}"))?;
+        self.stream
+            .set_write_timeout(Some(timeout))
+            .map_err(|e| format!("set write timeout: {e}"))
+    }
+
+    fn request(&mut self, id: &str, value: &Value) -> Result<Value, String> {
+        self.send_json(value)?;
+        loop {
+            let frame = self.read_text()?;
+            let payload: Value =
+                serde_json::from_str(&frame).map_err(|e| format!("decode: {e}"))?;
+            if payload
+                .get("id")
+                .and_then(|x| x.as_str())
+                .map(|frame_id| frame_id != id)
+                .unwrap_or(true)
+            {
+                continue;
+            }
+            let response: ControlResponse =
+                serde_json::from_value(payload).map_err(|e| format!("decode: {e}"))?;
+            if let Some(err) = response.error {
+                return Err(format!("alp {}: {}", err.code, err.message));
+            }
+            return response
+                .result
+                .ok_or_else(|| "daemon returned neither result nor error".to_string());
+        }
     }
 
     fn send_json(&mut self, value: &Value) -> Result<(), String> {
@@ -813,17 +998,18 @@ impl WsClient {
     }
 }
 
+// Remote probes retry once after PROBE_RETRY_DELAY_MS; auth failures and local probes don't.
 pub fn probe_connection(conn: &HostConnection) {
     let id = conn.id().to_string();
     set_status(&id, ConnectionStatus::Probing, None);
     let timeout = probe_timeout_for(conn);
-    let result = match conn {
+    let probe_once = || match conn {
         HostConnection::Local { .. } => {
             call_local_inner("host.profiles.list", json!({}), timeout)
         }
         HostConnection::Remote {
             host, port, token, ..
-        } => call_remote_inner(
+        } => call_remote_once(
             host,
             *port,
             token,
@@ -832,6 +1018,15 @@ pub fn probe_connection(conn: &HostConnection) {
             timeout,
         ),
     };
+    let mut result = probe_once();
+    if let Err(e) = &result {
+        if matches!(conn, HostConnection::Remote { .. })
+            && classify_remote_error(e) != ConnectionStatus::AuthFailed
+        {
+            std::thread::sleep(Duration::from_millis(PROBE_RETRY_DELAY_MS));
+            result = probe_once();
+        }
+    }
     match result {
         Ok(_) => set_status(&id, ConnectionStatus::Online, None),
         Err(e) => {
@@ -936,5 +1131,108 @@ mod tests {
     fn remote_socket_addr_rejects_hostnames() {
         assert!(socket_addr("100.64.0.1", 49200).is_ok());
         assert!(socket_addr("MacBook-Pro.local", 49200).is_err());
+    }
+
+    #[test]
+    fn sticky_offline_holds_until_threshold() {
+        let id = "sticky-1";
+        // Start from a clean entry, push it Online.
+        set_status(id, ConnectionStatus::Online, None);
+        assert_eq!(status_for(id).0, ConnectionStatus::Online);
+
+        // First Offline observation must be absorbed (counter=1, below threshold).
+        set_status(id, ConnectionStatus::Offline, Some("transient".into()));
+        assert_eq!(
+            status_for(id).0,
+            ConnectionStatus::Online,
+            "single Offline observation must not flip a previously-Online entry",
+        );
+
+        // Second Offline crosses the threshold and flips publicly.
+        set_status(id, ConnectionStatus::Offline, Some("real".into()));
+        assert_eq!(status_for(id).0, ConnectionStatus::Offline);
+    }
+
+    #[test]
+    fn sticky_offline_resets_on_recovery() {
+        let id = "sticky-2";
+        set_status(id, ConnectionStatus::Online, None);
+        // Burn one failure (still Online publicly).
+        set_status(id, ConnectionStatus::Offline, Some("blip".into()));
+        // Recovery clears the counter.
+        set_status(id, ConnectionStatus::Online, None);
+        // A subsequent failure must again be absorbed, not flip.
+        set_status(id, ConnectionStatus::Offline, Some("blip 2".into()));
+        assert_eq!(status_for(id).0, ConnectionStatus::Online);
+    }
+
+    #[test]
+    fn auth_failed_is_not_subject_to_sticky_threshold() {
+        let id = "sticky-3";
+        set_status(id, ConnectionStatus::Online, None);
+        set_status(id, ConnectionStatus::AuthFailed, Some("revoked".into()));
+        assert_eq!(status_for(id).0, ConnectionStatus::AuthFailed);
+    }
+
+    #[test]
+    fn should_retry_remote_ws_distinguishes_transport_from_app_errors() {
+        // Transport-level: retry, the WS is dead.
+        assert!(should_retry_remote_ws("websocket closed by daemon"));
+        assert!(should_retry_remote_ws("websocket read: timed out"));
+        assert!(should_retry_remote_ws("connect ws://1.2.3.4:80: refused"));
+        assert!(should_retry_remote_ws("set read timeout: bad"));
+        assert!(should_retry_remote_ws("set write timeout: bad"));
+        // App-level RPC error: WS still alive, no retry.
+        assert!(!should_retry_remote_ws("alp -32004: not-found"));
+        // Auth failure: token bad, retrying won't help.
+        assert!(!should_retry_remote_ws("alp -32000: auth-failed"));
+    }
+
+    #[test]
+    fn is_app_error_only_matches_alp_rpc_errors() {
+        assert!(is_app_error("alp -32000: auth-failed"));
+        assert!(is_app_error("alp -32004: not-found"));
+        assert!(is_app_error("alp -1: anything"));
+        assert!(!is_app_error("websocket closed by daemon"));
+        assert!(!is_app_error("connect ws://1.2.3.4:80: refused"));
+        assert!(!is_app_error("set read timeout: foo"));
+        assert!(!is_app_error("remote websocket pool poisoned"));
+    }
+
+    // The pool entry must survive an app-level error so the next call
+    // doesn't pay the WS handshake again. Manipulate the pool directly
+    // and apply the same eviction rule call_remote_inner uses.
+    #[test]
+    fn pool_survives_app_error_but_drops_on_transport_error() {
+        let key_app = "test-app-error";
+        let key_transport = "test-transport-error";
+
+        // Seed both pool entries with placeholder TcpStreams pointing at a
+        // local TcpListener so the inner WsClient construction is valid.
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        for key in [key_app, key_transport] {
+            let stream = std::net::TcpStream::connect(addr).unwrap();
+            let ws = std::sync::Arc::new(std::sync::Mutex::new(WsClient { stream }));
+            remote_ws_pool().lock().unwrap().insert(key.to_string(), ws);
+        }
+        // Simulate the eviction decision call_remote_inner makes.
+        let app_err = "alp -32004: not-found";
+        let transport_err = "websocket closed by daemon";
+        if !is_app_error(app_err) {
+            drop_pooled_remote_ws(key_app);
+        }
+        if !is_app_error(transport_err) {
+            drop_pooled_remote_ws(key_transport);
+        }
+        let pool = remote_ws_pool().lock().unwrap();
+        assert!(
+            pool.contains_key(key_app),
+            "app-level error must NOT evict the pool entry",
+        );
+        assert!(
+            !pool.contains_key(key_transport),
+            "transport error must evict the pool entry",
+        );
     }
 }

@@ -110,6 +110,27 @@ fn host_connections_probe_all() {
     spawn_background("probe-all", host_client::probe_all);
 }
 
+// Synchronous probe of one connection — used by onSetHostConnection to avoid racing the loop.
+#[tauri::command]
+async fn host_connection_probe(id: String) -> String {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = host_client::load_connections();
+        if let Some(conn) = state.connections.iter().find(|c| c.id() == id) {
+            host_client::probe_connection(conn);
+        }
+        match host_client::status_for(&id).0 {
+            host_client::ConnectionStatus::Online => "online",
+            host_client::ConnectionStatus::Probing => "probing",
+            host_client::ConnectionStatus::Offline => "offline",
+            host_client::ConnectionStatus::AuthFailed => "auth-failed",
+            host_client::ConnectionStatus::Unknown => "unknown",
+        }
+        .to_string()
+    })
+    .await
+    .unwrap_or_else(|_| "unknown".to_string())
+}
+
 #[tauri::command]
 fn sessions(profile: Option<String>, limit: Option<usize>) -> Vec<SessionEntry> {
     match profile {
@@ -1347,6 +1368,7 @@ pub fn run() {
             host_connection_add_remote,
             host_connections_probe_active,
             host_connections_probe_all,
+            host_connection_probe,
             sessions,
             session_detail,
             workgroups,

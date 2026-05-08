@@ -11,6 +11,79 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.2.4 — 2026-05-08 — pooled remote WebSocket + high-latency stability
+
+Requires alpi ``v0.4.16`` or newer (server multi-message support).
+Recommended ``v0.4.17`` for short peer-ping timeout.
+
+The motivating bug: a peer running on Tailscale Hua Hin → Chiang Mai
+(~414 ms RTT measured, jittery) made the desktop feel unusable —
+clicking that connection lagged for seconds and the status would
+mark it offline despite the daemon being reachable. Root-cause audit
+found four converging issues; this release fixes all of them.
+
+**Pooled WebSocket per remote.** Every ``host.*`` call used to open a
+fresh WebSocket — TCP connect + HTTP/1.1 Upgrade + auth handshake on
+every IPC, ~3.5 RTTs of overhead per call. ``call_remote_inner`` now
+keeps a single ``Arc<Mutex<WsClient>>`` per remote in
+``remote_ws_pool()`` and reuses it for subsequent calls. Each request
+carries a unique id (``next_request_id()``) and ``WsClient::request``
+filters incoming frames by that id so concurrent callers can serialise
+on the same WebSocket without confusing responses. App-level RPC
+errors (``alp -3200X``) leave the WS intact and keep the pool entry;
+transport errors (``websocket closed``, ``connect ws://...``,
+``set read/write timeout``) drop the entry and trigger one retry on a
+fresh WebSocket. Auth failures revoke the connection at the higher
+level (``mark_connection_revoked``) which evicts all pool entries for
+that id. Streams (``call_stream_remote``) and probes
+(``call_remote_once``) keep dedicated WebSockets — the server
+processes one message at a time per WS, and a long stream or slow
+probe must not block normal RPCs that share the pool.
+
+**Per-stage timeouts in ``WsClient::connect``.** A single timeout used
+to cover TCP connect + WS handshake + first read. ``connect`` now
+takes separate ``connect_timeout`` (4 s) and ``read_timeout`` so the
+budget is realistic for each phase.
+
+**Bumped budgets for remote calls.** ``READ_TIMEOUT_REMOTE_SECS``
+8 → 20; ``PROBE_REMOTE_TIMEOUT_MS`` 3500 → 8000. Local UnixStream
+calls keep the tight 8 s budget.
+
+**TCP keepalive + ``TCP_NODELAY``.** Every remote socket sets
+``set_nodelay(true)`` (Nagle was eating ~40 ms/RTT on chatty WS
+handshake) and ``TCP_KEEPALIVE`` (idle 30 s + interval 10 s), so
+silently-broken Tailscale tunnels are caught in ~60 s instead of
+waiting for the 600 s stream read deadline. Added ``socket2`` as a
+direct dependency (already transitive of Tauri).
+
+**Sticky offline status.** ``STICKY_OFFLINE_THRESHOLD = 2`` —
+``set_status`` only publishes Online → Offline after two consecutive
+failure observations. Online resets the counter; AuthFailed and
+Probing transitions stay immediate. Absorbs routine packet loss
+without delaying real outage detection.
+
+**One retry on probe failure.** ``probe_connection`` retries once
+after a 350 ms delay for remote connections (skipped on auth-failed
+and on local probes).
+
+**Synchronous probe command for connection switches.** New Tauri
+command ``host_connection_probe(id) → string``. The React-side
+``onSetHostConnection`` flow now: optimistic ``probing`` flip + cache
+load → ``set_active`` → fire-and-forget ``host_connection_probe`` →
+the ``connection-status`` event listener and ``activeStatusKey``
+effect take over. The intermediate ``reloadConnections()`` between
+``set_active`` and the probe is dropped — it returned the stale
+in-memory status and woke the effect into firing ``reload()`` against
+a potentially-offline remote.
+
+Tests: ``host_client.rs`` adds six new tests covering the sticky
+threshold (``sticky_offline_holds_until_threshold``,
+``sticky_offline_resets_on_recovery``,
+``auth_failed_is_not_subject_to_sticky_threshold``), the eviction
+decision logic (``should_retry_remote_ws_distinguishes_transport_from_app_errors``,
+``is_app_error_only_matches_alp_rpc_errors``), and the pool eviction
+policy (``pool_survives_app_error_but_drops_on_transport_error``).
+
 ## v0.2.3 — 2026-05-07 — connection health and offline handling
 
 Requires alpi ``v0.4.10`` or newer.
