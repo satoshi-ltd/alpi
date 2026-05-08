@@ -39,6 +39,29 @@ Then open http://localhost:8000/.
 
 ## Cloudflare Pages
 
+Production deploys are GitHub Actions direct uploads. Disable
+Cloudflare's automatic production branch deploys; otherwise Cloudflare
+can publish a commit before the repo checks and release workflows finish.
+
+GitHub configuration:
+
+- Secret: `CLOUDFLARE_ACCOUNT_ID`
+- Secret: `CLOUDFLARE_API_TOKEN` with `Account / Cloudflare Pages / Edit`
+- Variable or secret: `CLOUDFLARE_PAGES_PROJECT_NAME`
+
+Workflow: `.github/workflows/deploy-site.yml`
+
+The workflow runs unit tests, integration tests, package build checks,
+the site build, and a release-contract gate before the Wrangler direct
+upload. The release-contract gate waits until the CLI version from
+`pyproject.toml` exists on PyPI, the matching `vX.Y.Z` GitHub release
+exists, and the desktop version from `desktop/src-tauri/tauri.conf.json`
+exists in the rolling `desktop-latest` GitHub release. That keeps the
+landing page from advertising a version or download that did not publish.
+
+Cloudflare Pages build settings are only used if you intentionally run a
+Cloudflare-side build:
+
 - Build command: `node site/scripts/build.mjs`
 - Build output:  `site/dist`
 - Root:          repo root
