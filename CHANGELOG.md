@@ -1,5 +1,28 @@
 # Changelog
 
+## v0.4.17 — 2026-05-08 — short timeout on peer-ping probes
+
+`host.peers.ping` is a UI-driven liveness check; the desktop fires it
+on profile open and the result is just a green/red dot. But the
+underlying ALP transport (`alp.client.call_tcp` / `call`) defaults to
+``timeout=30.0``, and when a peer lives in another Tailscale network
+or behind a flaky link, the unreachable case drains the full 30 s
+before returning ``status: off``. The desktop dropdown freezes for
+that long; with `desktop-v0.2.4`'s pooled WebSocket, the freeze
+extends to every other call serialised on the same connection.
+
+- `alpi/host/probes.py::_peers_ping` — passes ``timeout=5.0`` to both
+  ``alp_client.call_tcp`` (TCP/Tailscale peers) and ``alp_client.call``
+  (Unix-socket peers). Reachable peers respond well under that on any
+  normal Tailscale RTT (typically 50–500 ms); unreachable peers fail
+  fast and the UI keeps moving.
+
+Tests — `tests/host/test_probes.py` adds
+`test_peers_ping_uses_short_tcp_timeout` and
+`test_peers_ping_unix_socket_uses_short_timeout` which capture the
+timeout argument and assert it is ≤10 s, guarding against any future
+refactor that drops it.
+
 ## v0.4.16 — 2026-05-08 — host plane keeps WebSocket open for multiple RPCs
 
 The remote (TCP/WS) host-plane handler used to accept exactly one

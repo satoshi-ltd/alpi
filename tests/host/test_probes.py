@@ -96,6 +96,95 @@ async def test_peers_ping_requires_id(short_tmp: Path, monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
+async def test_peers_ping_uses_short_tcp_timeout(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    home = short_tmp / "h"
+    home.mkdir()
+    from alpi import home as home_mod
+    monkeypatch.setattr(home_mod, "_ROOT", short_tmp)
+    monkeypatch.setattr(home_mod, "home_for", lambda profile: home)
+
+    from alpi.alp import client as alp_client
+    from alpi.alp import peers as peers_mod
+
+    captured: dict = {}
+
+    async def fake_call_tcp(**kwargs):
+        captured.update(kwargs)
+        return {"agent_name": "x", "version": "x", "nonce": "n"}
+
+    monkeypatch.setattr(alp_client, "call_tcp", fake_call_tcp)
+
+    class FakePeer:
+        address = "100.64.0.1:49000"
+        pubkey = "x" * 44
+
+    monkeypatch.setattr(peers_mod, "get_by_id", lambda *_a, **_k: FakePeer())
+
+    srv = host_server.Server(home=home)
+    probes.register(srv)
+    resp = await srv._dispatch({
+        "id": "r",
+        "method": "host.peers.ping",
+        "params": {"profile": "default", "peer_id": "anything"},
+    })
+    assert resp["result"]["status"] == "on"
+    assert "timeout" in captured
+    assert captured["timeout"] <= 10.0
+
+
+@pytest.mark.asyncio
+async def test_peers_ping_unix_socket_uses_short_timeout(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    home = short_tmp / "h"
+    home.mkdir()
+    from alpi import home as home_mod
+    monkeypatch.setattr(home_mod, "_ROOT", short_tmp)
+    monkeypatch.setattr(home_mod, "home_for", lambda profile: home)
+
+    from alpi.alp import client as alp_client
+    from alpi.alp import peers as peers_mod
+
+    captured: dict = {}
+
+    async def fake_call(**kwargs):
+        captured.update(kwargs)
+        return {"agent_name": "x", "version": "x", "nonce": "n"}
+
+    monkeypatch.setattr(alp_client, "call", fake_call)
+
+    class FakePeer:
+        address = ""  # empty address forces the Unix-socket branch
+        pubkey = "x" * 44
+
+    monkeypatch.setattr(peers_mod, "get_by_id", lambda *_a, **_k: FakePeer())
+
+    profiles_dir = Path.home() / ".alpi" / "profiles" / "_probe_test_peer"
+    sock = profiles_dir / "alp" / "alp.sock"
+    sock.parent.mkdir(parents=True, exist_ok=True)
+    sock.touch()
+    try:
+        srv = host_server.Server(home=home)
+        probes.register(srv)
+        resp = await srv._dispatch({
+            "id": "r",
+            "method": "host.peers.ping",
+            "params": {"profile": "default", "peer_id": "_probe_test_peer"},
+        })
+        assert resp["result"]["status"] == "on"
+        assert captured.get("timeout", 30.0) <= 10.0
+    finally:
+        try:
+            sock.unlink()
+            sock.parent.rmdir()
+            profiles_dir.rmdir()
+        except OSError:
+            pass
+
+
+@pytest.mark.asyncio
 async def test_model_ctx_window_returns_int(short_tmp: Path, monkeypatch) -> None:
     home = short_tmp / "h"
     home.mkdir()

@@ -151,6 +151,7 @@ async def _peers_ping(
         return {"status": "off", "reason": f"no peer {peer_id!r}"}
 
     sender = load_or_generate(home)
+    # UI liveness check — default 30s freezes the dropdown on unreachable peers.
     try:
         if peer.address:
             host_, _, port_s = peer.address.rpartition(":")
@@ -160,6 +161,7 @@ async def _peers_ping(
                 host=host_, port=int(port_s),
                 sender=sender, recipient_pubkey_b64=peer.pubkey,
                 method="link.ping", params={"nonce": "host-probe"},
+                timeout=5.0,
             )
         else:
             target_home = (
@@ -173,6 +175,7 @@ async def _peers_ping(
                 socket_path=socket_path,
                 sender=sender, recipient_pubkey_b64=peer.pubkey,
                 method="link.ping", params={"nonce": "host-probe"},
+                timeout=5.0,
             )
     except alp_client.TargetOffline as e:
         return {"status": "off", "reason": f"target-offline: {e}"[:120]}
