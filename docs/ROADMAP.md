@@ -46,12 +46,6 @@ personal agent.
 |---|---|---|
 | AI (1) | Memory v2 — quality pass remaining: dedup threshold calibration on real session data, `confidence: low/normal/high` field with auto-expiry for low-confidence writes, and tighter type-routing guidance (USER vs MEMORY vs AGENT). Also lands per-tool conditional guidance (the surface that needs an enabled-tools concept, partially seeded by the post-turn reviewer's narrow toolset). | 🟡 |
 
-### UX polish
-
-| ID | Item | Status |
-|---|---|---|
-| BB | Enhanced rich text in UI — extend baseline link renderer to lists, code blocks, tables, headings | 🔵 |
-
 ### AX-desktop-remote. Desktop multi-host host-plane connections — ✅ shipped
 
 Shipped in desktop-v0.2.2 (connection store, transport abstraction, switcher UI,
@@ -177,21 +171,6 @@ just leave a memory note.
 
 Outcome: measurable on memory file size, duplicate rate, "was this actually
 recalled next session", and skill patch rate on real sessions.
-
-### BB. Enhanced rich text in TUI
-
-The link renderer (the original v0.3 BB) shipped a baseline. v0.5 extends it
-across the rest of the rich-text surface:
-
-- Lists (ordered + unordered) — consistent indent, marker style.
-- Inline code + fenced blocks — monospace font, accent-aware background,
-  per-language syntax highlight where it pays off.
-- Tables — column alignment, header style, fits to terminal width.
-- Headings inside chat replies — sized hierarchy, not just bold.
-
-**Why now.** With the desktop app shipped, the heavy rich-text surface lives
-there — Markdown rendering in WebView is a solved problem. The TUI rich-text
-work is "polish for users who stay on the terminal".
 
 ---
 

@@ -1,5 +1,35 @@
 # Changelog
 
+## v0.4.15 — 2026-05-08 — TUI rich-text polish (BB)
+
+The Textual ``Markdown`` widget already rendered the structural
+pieces — fences, headings, tables, blockquotes, hr — but the chat
+surface had only three TCSS rules covering markdown, so everything
+else fell back to default Textual styling and looked raw next to
+the desktop's GFM output.
+
+- ``alpi/tui/theme.tcss`` — added rules for the markdown widgets
+  the assistant message actually emits:
+  - ``MarkdownH1`` / ``MarkdownH2`` accent + bold; ``MarkdownH3``
+    foreground bold; ``MarkdownH4`` muted bold. Textual can't size
+    text, so the hierarchy uses weight + colour instead.
+  - ``MarkdownFence`` (fenced code blocks): surface background, left
+    accent rule, padding — fences now read as code, not prose.
+  - ``MarkdownBlockQuote``: muted text with a left muted rule.
+  - ``MarkdownTable`` / ``MarkdownTH``: header row bold on surface
+    background; cells use the standard foreground.
+  - ``MarkdownHorizontalRule``: muted divider.
+  - ``MarkdownOrderedListItem`` / ``MarkdownUnorderedListItem``:
+    explicit foreground colour so the markers stay legible.
+- Desktop already covers all of this via ``marked`` (GFM) +
+  ``Message.module.css`` (h1-h4, ul/ol/li, code, pre, blockquote,
+  hr, table). No desktop changes in this slice.
+
+Tests — ``tests/core/test_tui_markdown_styles.py`` (5) guards the
+selectors against regression: heading hierarchy, fence with visible
+background or border, blockquote, table + table-header, horizontal
+rule.
+
 ## v0.4.14 — 2026-05-07 — post-turn memory reviewer (AI(1).b)
 
 A narrow forked agent that watches the conversation in retrospect and

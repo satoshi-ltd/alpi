@@ -28,6 +28,65 @@ AssistantMessage MarkdownBlock > .code_inline {
 AssistantMessage MarkdownHeader {
     background: transparent;
     border: none;
+    margin: 1 0 0 0;
+}
+
+/* Textual can't size text — heading hierarchy uses weight + color. */
+AssistantMessage MarkdownH1 {
+    color: $accent;
+    text-style: bold;
+}
+AssistantMessage MarkdownH2 {
+    color: $accent;
+    text-style: bold;
+}
+AssistantMessage MarkdownH3 {
+    color: $foreground;
+    text-style: bold;
+}
+AssistantMessage MarkdownH4 {
+    color: $text-muted;
+    text-style: bold;
+}
+
+AssistantMessage MarkdownFence {
+    background: $surface;
+    color: $foreground;
+    padding: 1 2;
+    margin: 1 0;
+    border-left: thick $accent-darken-1;
+}
+
+AssistantMessage MarkdownBlockQuote {
+    background: transparent;
+    color: $text-muted;
+    padding: 0 0 0 1;
+    margin: 1 0;
+    border-left: thick $text-muted;
+}
+
+AssistantMessage MarkdownTable {
+    margin: 1 0;
+}
+AssistantMessage MarkdownTH {
+    background: $surface;
+    color: $foreground;
+    text-style: bold;
+}
+AssistantMessage MarkdownTD {
+    color: $foreground;
+}
+
+AssistantMessage MarkdownHorizontalRule {
+    color: $text-muted;
+    margin: 1 0;
+}
+
+AssistantMessage MarkdownOrderedListItem {
+    color: $foreground;
+}
+AssistantMessage MarkdownUnorderedListItem {
+    color: $foreground;
 }
 
 #chat {
