@@ -190,6 +190,49 @@ def test_linux_allow_network_drops_unshare_net(ws: Path, ah: Path) -> None:
     assert "--unshare-net" not in args
 
 
+def test_linux_tmpfs_does_not_hide_tmp_backed_workspace() -> None:
+    workspace = Path("/tmp/alpi-pytest/workspace")
+    alpi_home = Path("/tmp/alpi-pytest/alpi_home")
+    with patch.object(_sandbox, "sys") as sysmod, \
+         patch.object(_sandbox.shutil, "which", return_value="/usr/bin/bwrap"):
+        sysmod.platform = "linux"
+        args = _sandbox.wrap_command(
+            "echo ok", workspace=workspace, alpi_home=alpi_home, allow_network=False,
+        )
+
+    tmpfs = next(i for i in range(len(args) - 1) if args[i:i + 2] == ["--tmpfs", "/tmp"])
+    workspace_dir = next(
+        i for i in range(len(args) - 1) if args[i:i + 2] == ["--dir", str(workspace)]
+    )
+    workspace_bind = next(
+        i for i in range(len(args) - 2)
+        if args[i:i + 3] == ["--bind", str(workspace), str(workspace)]
+    )
+
+    assert tmpfs < workspace_dir < workspace_bind
+
+
+def test_linux_root_is_read_only_after_writable_binds(ws: Path, ah: Path) -> None:
+    with patch.object(_sandbox, "sys") as sysmod, \
+         patch.object(_sandbox.shutil, "which", return_value="/usr/bin/bwrap"):
+        sysmod.platform = "linux"
+        args = _sandbox.wrap_command("echo ok", workspace=ws, alpi_home=ah, allow_network=False)
+
+    workspace_bind = next(
+        i for i in range(len(args) - 2) if args[i:i + 3] == ["--bind", str(ws), str(ws)]
+    )
+    alpi_home_bind = next(
+        i for i in range(len(args) - 2) if args[i:i + 3] == ["--bind", str(ah), str(ah)]
+    )
+    remount_ro = next(
+        i for i in range(len(args) - 1) if args[i:i + 2] == ["--remount-ro", "/"]
+    )
+    chdir = args.index("--chdir")
+
+    assert workspace_bind < remount_ro < chdir
+    assert alpi_home_bind < remount_ro < chdir
+
+
 @pytest.mark.integration
 @pytest.mark.skipif(not sys.platform.startswith("linux") or shutil.which("bwrap") is None,
                     reason="Linux-only, requires bwrap")

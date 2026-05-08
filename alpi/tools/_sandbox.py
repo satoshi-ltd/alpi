@@ -152,12 +152,33 @@ def _wrap_linux(
         "/usr", "/bin", "/sbin", "/lib", "/lib64", "/etc/alternatives",
         "/etc/ssl", "/etc/ca-certificates", "/etc/resolv.conf",
     ])
+    args += ["--proc", "/proc", "--dev", "/dev", "--tmpfs", "/tmp"]
+    args += _linux_dir_mounts([workspace, alpi_home])
     args += ["--bind", str(workspace), str(workspace)]
     args += ["--bind", str(alpi_home), str(alpi_home)]
-    args += ["--proc", "/proc", "--dev", "/dev", "--tmpfs", "/tmp"]
+    args += ["--remount-ro", "/"]
     args += ["--chdir", str(workspace)]
     args += ["--", "/bin/sh", "-c", cmd]
     return args
+
+
+def _linux_dir_mounts(paths: Iterable[Path]) -> list[str]:
+    mountpoints = {
+        "/tmp", "/proc", "/dev",
+        "/usr", "/bin", "/sbin", "/lib", "/lib64", "/etc",
+    }
+    out: list[str] = []
+    seen: set[str] = set()
+    for path in paths:
+        cur = Path("/")
+        for part in path.parts[1:]:
+            cur /= part
+            s = str(cur)
+            if s in mountpoints or s in seen:
+                continue
+            out += ["--dir", s]
+            seen.add(s)
+    return out
 
 
 def _ro_binds(paths: Iterable[str]) -> list[str]:
