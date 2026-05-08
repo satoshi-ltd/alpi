@@ -1,5 +1,30 @@
 # Changelog
 
+## v0.4.16 — 2026-05-08 — host plane keeps WebSocket open for multiple RPCs
+
+The remote (TCP/WS) host-plane handler used to accept exactly one
+JSON-RPC request per WebSocket and then close. Every host.* call from
+a paired client therefore paid a fresh TCP + Upgrade + auth handshake
+— ~3.5 RTTs of overhead per call, painful on high-latency Tailscale
+links (Hua Hin ↔ Chiang Mai measured ~200-400ms RTT with jitter).
+
+- `alpi/host/server.py` — paired-WebSocket request loop reads with
+  `async for message in ws:` instead of a single `await ws.recv()`,
+  so the connection stays open and serves arbitrarily many requests
+  until the peer closes it. Per-message token validation is
+  unchanged (`require_token=True`); the close path on
+  `ConnectionClosed` is unchanged. Streams are unaffected — they
+  already use a separate WebSocket and process responses
+  asynchronously.
+
+Tests — `tests/host/test_tcp_listener.py::test_server_accepts_multiple_calls_on_one_websocket`
+covers the contract: two consecutive `host.ping` calls over a single
+WebSocket each return the matching id and a correct result.
+
+Pairs with `desktop-v0.2.4` which adds a pooled WebSocket per remote
+on the client side. The desktop change is required to actually realise
+the latency win; this server-side change unlocks it.
+
 ## v0.4.15 — 2026-05-08 — TUI rich-text polish (BB)
 
 The Textual ``Markdown`` widget already rendered the structural

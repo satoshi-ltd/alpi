@@ -158,10 +158,10 @@ class Server:
             )
 
         try:
-            message = await ws.recv()
-            line = message if isinstance(message, str) else message.decode("utf-8")
-            # Remote (TCP/WS) = require a paired-device token.
-            await self._handle_request(line, send, require_token=True)
+            async for message in ws:
+                line = message if isinstance(message, str) else message.decode("utf-8")
+                # Remote (TCP/WS) = require a paired-device token.
+                await self._handle_request(line, send, require_token=True)
         except websockets.ConnectionClosed:
             return
         except Exception:  # noqa: BLE001

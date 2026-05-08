@@ -213,6 +213,44 @@ async def test_server_accepts_calls_over_websocket_when_bound(
 
 
 @pytest.mark.asyncio
+async def test_server_accepts_multiple_calls_on_one_websocket(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    home = short_tmp / "h"
+    home.mkdir()
+    from alpi import home as home_mod
+    monkeypatch.setattr(home_mod, "_ROOT", short_tmp)
+
+    with patch.object(
+        host_server.Server, "_validate_tcp_bind",
+        staticmethod(lambda b: b),
+    ):
+        srv = host_server.Server(home=home, tcp_bind=("127.0.0.1", 0))
+
+        async def handler(params, _server):
+            return {"pong": params["n"]}
+
+        srv.register("host.ping", handler)
+        await srv.start()
+        try:
+            assert srv._ws_server is not None
+            port = srv._ws_server.sockets[0].getsockname()[1]
+            async with websockets.connect(f"ws://127.0.0.1:{port}") as ws:
+                await ws.send(json.dumps({
+                    "id": "1", "method": "host.ping", "params": {"n": 1},
+                }))
+                first = json.loads(await ws.recv())
+                await ws.send(json.dumps({
+                    "id": "2", "method": "host.ping", "params": {"n": 2},
+                }))
+                second = json.loads(await ws.recv())
+            assert first["result"] == {"pong": 1}
+            assert second["result"] == {"pong": 2}
+        finally:
+            await srv.stop()
+
+
+@pytest.mark.asyncio
 async def test_ws_rejects_request_without_token_once_paired(
     short_tmp: Path, monkeypatch,
 ) -> None:
