@@ -69,3 +69,11 @@
 .row[data-muted="1"] .hash {
   opacity: 0.4;
 }
+
+.accentDot {
+  width: var(--space-4);
+  height: var(--space-4);
+  border-radius: 50%;
+  background: var(--color-accent);
+  flex-shrink: 0;
+}

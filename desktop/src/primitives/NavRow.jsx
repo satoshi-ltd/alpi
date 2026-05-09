@@ -44,3 +44,12 @@ export const Dot = memo(function Dot({ color }) {
 export const Hash = memo(function Hash({ children = "#" }) {
   return <span className={styles.hash}>{children}</span>;
 });
+
+export const AccentDot = memo(function AccentDot({ color }) {
+  return (
+    <span
+      className={styles.accentDot}
+      style={{ backgroundColor: color || "var(--color-accent)" }}
+    />
+  );
+});

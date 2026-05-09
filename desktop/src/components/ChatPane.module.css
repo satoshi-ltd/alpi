@@ -39,15 +39,6 @@
   opacity: 0.85;
 }
 
-.logoMask {
-  display: inline-block;
-  width: 64px;
-  height: 101px;
-  background: currentColor;
-  -webkit-mask: var(--mask-image) no-repeat center / contain;
-  mask: var(--mask-image) no-repeat center / contain;
-}
-
 .logoImage {
   display: block;
   width: 64px;

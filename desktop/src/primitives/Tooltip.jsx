@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import styles from "./Tooltip.module.css";
 
-const SHOW_DELAY_MS = 400;
+const SHOW_DELAY_MS = 200;
 
 export default function Tooltip({
   text,

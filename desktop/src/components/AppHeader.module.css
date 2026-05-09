@@ -109,13 +109,6 @@
   flex-shrink: 0;
 }
 
-.hash {
-  font-size: var(--font-size-ui);
-  color: var(--color-fg-subtle);
-  width: var(--space-5);
-  text-align: center;
-  flex-shrink: 0;
-}
 
 .pulseDot {
   display: inline-block;

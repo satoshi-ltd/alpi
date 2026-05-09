@@ -189,6 +189,23 @@ struct ControlError {
     code: i32,
     #[serde(default)]
     message: String,
+    #[serde(default)]
+    data: Option<Value>,
+}
+
+fn format_rpc_error(err: &ControlError) -> String {
+    let detail = err
+        .data
+        .as_ref()
+        .and_then(|d| d.get("summary").or_else(|| d.get("detail")))
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .trim();
+    if detail.is_empty() {
+        format!("alp {}: {}", err.code, err.message)
+    } else {
+        format!("alp {}: {} — {}", err.code, err.message, detail)
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -521,7 +538,7 @@ fn call_local_inner(method: &str, params: Value, timeout: Duration) -> Result<Va
     let response: ControlResponse = serde_json::from_str(response_line.trim_end())
         .map_err(|e| format!("decode: {e}"))?;
     if let Some(err) = response.error {
-        return Err(format!("alp {}: {}", err.code, err.message));
+        return Err(format_rpc_error(&err));
     }
     response
         .result
@@ -894,7 +911,7 @@ impl WsClient {
             let response: ControlResponse =
                 serde_json::from_value(payload).map_err(|e| format!("decode: {e}"))?;
             if let Some(err) = response.error {
-                return Err(format!("alp {}: {}", err.code, err.message));
+                return Err(format_rpc_error(&err));
             }
             return response
                 .result

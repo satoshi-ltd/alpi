@@ -65,9 +65,7 @@ export async function checkForUpdates() {
       return next;
     }
   } catch (e) {
-    // Network errors, missing manifest, signature mismatch — all silent.
-    // The user retries by relaunching or clicking a future "Check now".
-    console.warn("updater check failed:", e);
+    // Network errors, missing manifest, signature mismatch — surface via state.
     pending = null;
     return setState({
       checking: false,
@@ -86,7 +84,6 @@ export async function applyPendingUpdate() {
     await relaunch();
     return true;
   } catch (e) {
-    console.error("update install failed:", e);
     setState({ installing: false, error: String(e) });
     throw e;
   }

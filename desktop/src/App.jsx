@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { getCurrentWindow } from "@tauri-apps/api/window";
 import AppHeader from "./components/AppHeader.jsx";
 import Sidebar from "./components/Sidebar.jsx";
 import ChatPane from "./components/ChatPane.jsx";
@@ -11,19 +10,14 @@ import Settings from "./components/Settings.jsx";
 import { useNotify } from "./primitives/Notification.jsx";
 import { installUpdater } from "./lib/updater.js";
 import { findLatestTask } from "./lib/workgroup-tasks.js";
-import {
-  loadCachedMessages,
-  saveCachedMessages,
-} from "./lib/workgroup-cache.js";
-import {
-  loadTaskCache,
-  saveTaskCache,
-} from "./lib/workgroup-task-cache.js";
+import { saveCachedMessages } from "./lib/workgroup-cache.js";
+import { useChatStream } from "./hooks/useChatStream.js";
+import { useHostConnections } from "./hooks/useHostConnections.js";
+import { useNavListener } from "./hooks/useNavListener.js";
+import { usePinned } from "./hooks/usePinned.js";
+import { useWindowChrome } from "./hooks/useWindowChrome.js";
+import { useWorkgroupTasks } from "./hooks/useWorkgroupTasks.js";
 import styles from "./App.module.css";
-
-const PINNED_KEY = "alf:pinned:v1";
-const PROFILES_CACHE_PREFIX = "alf:profiles:v1:";
-const WORKGROUPS_CACHE_PREFIX = "alf:workgroups:v1:";
 
 function isChatSessionSummary(session) {
   return session?.kind === "chat";
@@ -43,177 +37,88 @@ function isChatSessionData(data) {
   return true;
 }
 
-function parsePairingPayload(payload) {
-  const text = payload.trim();
-  if (text.startsWith("alpi://device?")) {
-    const url = new URL(text);
-    return {
-      host: url.searchParams.get("host"),
-      port: Number(url.searchParams.get("port")),
-      name: url.searchParams.get("name"),
-      token: url.searchParams.get("token"),
-    };
-  }
-  const parsed = JSON.parse(text);
-  return {
-    host: parsed.i ?? parsed.ip,
-    port: Number(parsed.p ?? parsed.port),
-    name: parsed.n ?? parsed.name,
-    token: parsed.t ?? parsed.token,
-  };
-}
-
-function loadPinned() {
-  try {
-    const raw = localStorage.getItem(PINNED_KEY);
-    return raw ? JSON.parse(raw) : { profiles: [], workgroups: [] };
-  } catch {
-    return { profiles: [], workgroups: [] };
-  }
-}
-
 export default function App() {
-  const [collapsed, setCollapsed] = useState(false);
-  const [profiles, setProfiles] = useState([]);
-  const [workgroups, setWorkgroups] = useState([]);
-  const [hostConnections, setHostConnections] = useState({
-    active_id: "local",
-    connections: [],
-  });
-  const [pinned, setPinned] = useState(loadPinned);
+  const notify = useNotify();
   const [view, setView] = useState({ kind: "empty" });
-  const [pickerAlpi, setPickerAlpi] = useState(null);
   const [settingsTarget, setSettingsTarget] = useState({
     kind: "profile",
     id: null,
   });
   const [sessionData, setSessionData] = useState(null);
-  const [pendingTurn, setPendingTurn] = useState(null);
   const [rewriteDraft, setRewriteDraft] = useState(null);
   const [activeTask, setActiveTask] = useState(null);
-  // Restore cached workgroup state on first paint.
-  const persistedCache = useMemo(() => loadTaskCache(), []);
-  const [taskByWorkgroup, setTaskByWorkgroup] = useState(
-    () => persistedCache.tasks,
+
+  const viewRef = useRef(view);
+  const prevViewRef = useRef(view);
+  useEffect(() => {
+    if (view.kind !== "settings") prevViewRef.current = view;
+    viewRef.current = view;
+  }, [view]);
+
+  const reloadRef = useRef(null);
+  const pendingTurnRef = useRef(null);
+
+  const { collapsed, setCollapsed, toggleSidebar } = useWindowChrome({
+    viewRef,
+    setView,
+  });
+  useNavListener(setView);
+  const { pinned, onTogglePin } = usePinned();
+
+  const { pendingTurn, setPendingTurn } = useChatStream({
+    setSessionData,
+    setView,
+    setRewriteDraft,
+    reloadRef,
+    notify,
+  });
+  useEffect(() => {
+    pendingTurnRef.current = pendingTurn;
+  }, [pendingTurn]);
+
+  const {
+    hostConnections,
+    hostConnectionsRef,
+    profiles,
+    workgroups,
+    pickerAlpi,
+    setPickerAlpi,
+    reload,
+    onSetHostConnection,
+    onAddHostConnection,
+    onForgetHostConnection,
+    onRefreshHostConnectionStatus,
+  } = useHostConnections({
+    setSessionData,
+    setPendingTurn,
+    setRewriteDraft,
+    setActiveTask,
+    setView,
+    pendingTurnRef,
+  });
+
+  useEffect(() => {
+    reloadRef.current = reload;
+  }, [reload]);
+
+  const profilesRef = useRef(profiles);
+  useEffect(() => {
+    profilesRef.current = profiles;
+  }, [profiles]);
+
+  const hubPubkeyOf = useCallback(
+    (profileName) =>
+      profiles.find((p) => p.name === profileName)?.pubkey_b64 ?? null,
+    [profiles],
   );
-  // Track the mtime used for each cached task.
-  const seenMtimesRef = useRef(persistedCache.mtimes);
-  const [activityByWorkgroup, setActivityByWorkgroup] = useState({});
-  const notify = useNotify();
-  const hostConnectionsRef = useRef(hostConnections);
-  const connectionSwitchRef = useRef(0);
 
-  const reloadConnections = useCallback(async () => {
-    try {
-      const value = await invoke("host_connections");
-      hostConnectionsRef.current = value;
-      setHostConnections(value);
-    } catch (e) {
-      console.error(e);
-    }
-  }, []);
-
-  const applyProfilesAndWorkgroups = useCallback((ps, ws) => {
-    setProfiles(ps);
-    setWorkgroups(ws);
-    setPickerAlpi((prev) => {
-      if (prev && ps.some((p) => p.name === prev)) return prev;
-      const def = ps.find((p) => p.is_default && p.model);
-      if (def) return def.name;
-      const firstWithModel = ps.find((p) => p.model);
-      if (firstWithModel) return firstWithModel.name;
-      return ps[0]?.name ?? null;
-    });
-  }, []);
-
-  const clearConnectionContent = useCallback(() => {
-    applyProfilesAndWorkgroups([], []);
-    setSessionData(null);
-    setPendingTurn(null);
-    setRewriteDraft(null);
-    setActiveTask(null);
-    setView((v) => (v.kind === "settings" ? v : { kind: "empty" }));
-  }, [applyProfilesAndWorkgroups]);
-
-  const loadFromCache = useCallback((connectionId = null) => {
-    const activeId = connectionId ?? hostConnectionsRef.current?.active_id ?? "local";
-    try {
-      const cachedPs = JSON.parse(
-        localStorage.getItem(`${PROFILES_CACHE_PREFIX}${activeId}`) ?? "[]",
-      );
-      const cachedWs = JSON.parse(
-        localStorage.getItem(`${WORKGROUPS_CACHE_PREFIX}${activeId}`) ?? "[]",
-      );
-      const ps = Array.isArray(cachedPs) ? cachedPs : [];
-      const ws = Array.isArray(cachedWs) ? cachedWs : [];
-      applyProfilesAndWorkgroups(ps, ws);
-    } catch {}
-  }, [applyProfilesAndWorkgroups]);
-
-  const saveToCache = useCallback((connectionId, ps, ws) => {
-    try {
-      localStorage.setItem(
-        `${PROFILES_CACHE_PREFIX}${connectionId}`,
-        JSON.stringify(ps),
-      );
-      localStorage.setItem(
-        `${WORKGROUPS_CACHE_PREFIX}${connectionId}`,
-        JSON.stringify(ws),
-      );
-    } catch {}
-  }, []);
-
-  const showCachedOrClear = useCallback((connectionId, status) => {
-    if (status === "offline" || status === "auth-failed") {
-      clearConnectionContent();
-    } else {
-      loadFromCache(connectionId);
-    }
-  }, [clearConnectionContent, loadFromCache]);
-
-  const reload = useCallback(async () => {
-    const cur = hostConnectionsRef.current;
-    const activeId = cur?.active_id ?? "local";
-    const active = cur?.connections?.find((c) => c.id === cur.active_id);
-    const status = active?.status;
-    if (status !== "online") {
-      showCachedOrClear(activeId, status);
-      reloadConnections();
-      return;
-    }
-    try {
-      let [ps, ws] = await Promise.all([
-        invoke("profile_summaries"),
-        invoke("workgroups", { profile: null }),
-      ]);
-      if (Array.isArray(ps) && ps.length === 0) {
-        const fallbackProfiles = await invoke("profiles");
-        if (Array.isArray(fallbackProfiles) && fallbackProfiles.length > 0) {
-          ps = fallbackProfiles;
-        }
-      }
-      if (hostConnectionsRef.current?.active_id !== activeId) return;
-      const looksLikeFailure =
-        Array.isArray(ps) && Array.isArray(ws) && ps.length === 0 && ws.length === 0;
-      const refreshed = hostConnectionsRef.current?.connections?.find(
-        (c) => c.id === hostConnectionsRef.current?.active_id,
-      );
-      if (looksLikeFailure && refreshed?.status && refreshed.status !== "online") {
-        showCachedOrClear(activeId, refreshed.status);
-      } else {
-        applyProfilesAndWorkgroups(ps, ws);
-        saveToCache(activeId, ps, ws);
-      }
-    } catch {
-      if (hostConnectionsRef.current?.active_id === activeId) {
-        showCachedOrClear(activeId, hostConnectionsRef.current?.connections?.find(
-          (c) => c.id === activeId,
-        )?.status);
-      }
-    } finally {
-      reloadConnections();
-    }
-  }, [applyProfilesAndWorkgroups, reloadConnections, saveToCache, showCachedOrClear]);
+  const {
+    taskByWorkgroup,
+    setTaskByWorkgroup,
+    activityByWorkgroup,
+    setActivityByWorkgroup,
+    seenMtimesRef,
+  } = useWorkgroupTasks({ workgroups, hubPubkeyOf });
 
   const [settingsRefreshTick, setSettingsRefreshTick] = useState(0);
   const [settingsRefreshing, setSettingsRefreshing] = useState(false);
@@ -227,296 +132,9 @@ export default function App() {
     }
   }, [reload]);
 
-  useEffect(() => {
-    const off = listen("connection-status", (event) => {
-      const { id, status, error } = event.payload ?? {};
-      if (!id || !status) return;
-      setHostConnections((prev) => {
-        const before = prev.connections.find((c) => c.id === id);
-        if (before && before.status === status && before.error === error) return prev;
-        const next = {
-          ...prev,
-          connections: prev.connections.map((c) =>
-            c.id === id ? { ...c, status, error: error ?? null } : c,
-          ),
-        };
-        hostConnectionsRef.current = next;
-        return next;
-      });
-    });
-    return () => {
-      off.then((fn) => fn());
-    };
-  }, []);
+  useEffect(() => installUpdater(), []);
 
-  const activeConnectionForSync = hostConnections.connections.find(
-    (c) => c.id === hostConnections.active_id,
-  );
-  const activeStatusKey = `${hostConnections.active_id}:${activeConnectionForSync?.status ?? "unknown"}:${activeConnectionForSync?.error ?? ""}`;
-  const syncedStatusRef = useRef("");
-
-  useEffect(() => {
-    const active = hostConnectionsRef.current.connections.find(
-      (c) => c.id === hostConnectionsRef.current.active_id,
-    );
-    const status = active?.status;
-    if (syncedStatusRef.current === activeStatusKey) return;
-    syncedStatusRef.current = activeStatusKey;
-    if (status === "online") {
-      reloadConnections().finally(() => reload());
-    } else if (status === "offline" || status === "auth-failed") {
-      reloadConnections().finally(() => clearConnectionContent());
-    }
-  }, [activeStatusKey, clearConnectionContent, reload, reloadConnections]);
-
-  useEffect(() => {
-    reload();
-    invoke("host_connections_probe_active").catch(() => {});
-  }, [reload, reloadConnections]);
-
-  // Probe runs fire-and-forget; awaiting it locks the UI for 8-16s on slow remotes.
-  // No reloadConnections() before probe — it returns stale "online" and wakes the effect.
-  const onSetHostConnection = useCallback(
-    (id) => {
-      const current = hostConnectionsRef.current;
-      if (current.active_id === id) return;
-      const previousState = current;
-      const switchId = ++connectionSwitchRef.current;
-      const pending = pendingTurnRef.current;
-      if (pending?.profile) {
-        invoke("chat_cancel", { profile: pending.profile }).catch(() => {});
-      }
-      setRewriteDraft(null);
-      setSessionData(null);
-      setPendingTurn(null);
-      setActiveTask(null);
-      setView((v) => (v.kind === "settings" ? v : { kind: "empty" }));
-      loadFromCache(id);
-      setHostConnections((prev) => {
-        if (prev.active_id === id) return prev;
-        const next = {
-          ...prev,
-          active_id: id,
-          connections: prev.connections.map((c) =>
-            c.id === id ? { ...c, status: "probing", error: null } : c,
-          ),
-        };
-        hostConnectionsRef.current = next;
-        return next;
-      });
-      syncedStatusRef.current = `${id}:probing:`;
-
-      invoke("host_connection_set_active", { id })
-        .then(() => {
-          if (connectionSwitchRef.current !== switchId) return;
-          invoke("host_connection_probe", { id }).catch(() => {});
-        })
-        .catch((e) => {
-          console.error(e);
-          if (connectionSwitchRef.current === switchId) {
-            hostConnectionsRef.current = previousState;
-            setHostConnections(previousState);
-            loadFromCache(previousState.active_id);
-          }
-          reloadConnections();
-        });
-    },
-    [loadFromCache, reloadConnections],
-  );
-
-  const onAddHostConnection = useCallback(
-    async (payload) => {
-      try {
-        const { host, port, name, token } = parsePairingPayload(payload);
-        if (!host || !port || !token) {
-          throw new Error("pairing payload needs host, port, and token");
-        }
-        const id = await invoke("host_connection_add_remote", {
-          name: name ?? host,
-          host,
-          port,
-          token,
-        });
-        await reloadConnections();
-        invoke("host_connections_probe_active").catch(() => {});
-        loadFromCache(id);
-      } catch (e) {
-        console.error(e);
-      }
-    },
-    [loadFromCache, reloadConnections],
-  );
-
-  const onForgetHostConnection = useCallback(
-    async (id) => {
-      try {
-        await invoke("host_connection_forget", { id });
-        await reloadConnections();
-        await reload();
-      } catch (e) {
-        console.error(e);
-      }
-    },
-    [reload, reloadConnections],
-  );
-
-  const onRefreshHostConnectionStatus = useCallback(async () => {
-    await invoke("host_connections_probe_all");
-  }, []);
-
-  const hubPubkeyOf = useCallback(
-    (profileName) =>
-      profiles.find((p) => p.name === profileName)?.pubkey_b64 ?? null,
-    [profiles],
-  );
-
-  // Backfill missing or stale cached tasks from disk.
-  useEffect(() => {
-    if (workgroups.length === 0) return;
-    setTaskByWorkgroup((prev) => {
-      let changed = false;
-      const next = { ...prev };
-      for (const w of workgroups) {
-        const key = `${w.profile}/${w.id}`;
-        if (next[key]) continue;
-        const cached = loadCachedMessages(w.profile, w.id);
-        if (cached.length === 0) continue;
-        const hubName = w.hub_id ?? w.profile;
-        const task = findLatestTask(cached, hubPubkeyOf(hubName));
-        if (task == null) continue;
-        next[key] = task;
-        changed = true;
-      }
-      return changed ? next : prev;
-    });
-  }, [workgroups, hubPubkeyOf]);
-
-  // Refresh changed workgroups sequentially to avoid IPC saturation.
-  const hubPubkeyOfRef = useRef(hubPubkeyOf);
-  useEffect(() => {
-    hubPubkeyOfRef.current = hubPubkeyOf;
-  }, [hubPubkeyOf]);
-
-  useEffect(() => {
-    if (workgroups.length === 0) return;
-    let cancelled = false;
-    const seen = seenMtimesRef.current;
-    const queue = workgroups.filter((w) => {
-      const key = `${w.profile}/${w.id}`;
-      const last = seen[key] ?? 0;
-      const cur = w.mtime ?? 0;
-      return cur > last;
-    });
-    if (queue.length === 0) return;
-    async function drain() {
-      await new Promise((r) => setTimeout(r, 200));
-      for (const w of queue) {
-        if (cancelled) return;
-        const key = `${w.profile}/${w.id}`;
-        const hubName = w.hub_id ?? w.profile;
-        try {
-          const msgs = await invoke("workgroup_transcript", {
-            profile: w.profile,
-            wgId: w.id,
-          });
-          if (cancelled) return;
-          if (!Array.isArray(msgs)) continue;
-          const hub = hubPubkeyOfRef.current(hubName);
-          const task = findLatestTask(msgs, hub);
-          setTaskByWorkgroup((prev) =>
-            prev[key] === task ? prev : { ...prev, [key]: task },
-          );
-          seenMtimesRef.current = {
-            ...seenMtimesRef.current,
-            [key]: w.mtime ?? 0,
-          };
-          saveCachedMessages(w.profile, w.id, msgs);
-        } catch {}
-        await new Promise((r) => setTimeout(r, 250));
-      }
-    }
-    drain();
-    return () => {
-      cancelled = true;
-    };
-  }, [workgroups]);
-
-  // Persist task cache and mtimes after each update.
-  useEffect(() => {
-    saveTaskCache({ tasks: taskByWorkgroup, mtimes: seenMtimesRef.current });
-  }, [taskByWorkgroup]);
-
-  useEffect(() => {
-    return installUpdater();
-  }, []);
-
-  useEffect(() => {
-    const off = listen("nav", (event) => {
-      if (event.payload === "settings") setView({ kind: "settings" });
-      else if (event.payload === "home") {
-        setView((v) => (v.kind === "settings" ? { kind: "empty" } : v));
-      }
-    });
-    return () => {
-      off.then((fn) => fn());
-    };
-  }, []);
-
-  useEffect(() => {
-    function onDown(e) {
-      if (e.button !== 0) return;
-      const t = e.target;
-      if (!(t instanceof Element)) return;
-      if (
-        t.closest(
-          "button, input, textarea, select, a, [contenteditable], [data-no-drag]",
-        )
-      ) {
-        return;
-      }
-      if (!t.closest("[data-drag]")) return;
-      e.preventDefault();
-      const win = getCurrentWindow();
-      if (e.detail === 2) {
-        win.toggleMaximize().catch(() => {});
-      } else {
-        win.startDragging().catch(() => {});
-      }
-    }
-    document.addEventListener("mousedown", onDown);
-    return () => document.removeEventListener("mousedown", onDown);
-  }, []);
-
-  useEffect(() => {
-    function onKey(e) {
-      const cmd = e.metaKey || e.ctrlKey;
-      if (!cmd) return;
-      const key = e.key.toLowerCase();
-      if (key === "b") {
-        if (viewRef.current?.kind === "settings") return;
-        e.preventDefault();
-        e.stopPropagation();
-        setCollapsed((c) => !c);
-        return;
-      }
-      if (key === "n") {
-        if (viewRef.current?.kind === "profile") {
-          e.preventDefault();
-          e.stopPropagation();
-          setView((v) => (v.kind === "profile" ? { ...v, sessionId: null } : v));
-        }
-        return;
-      }
-      if (key === ",") {
-        e.preventDefault();
-        e.stopPropagation();
-        setView({ kind: "settings" });
-      }
-    }
-    window.addEventListener("keydown", onKey, true);
-    return () => window.removeEventListener("keydown", onKey, true);
-  }, []);
-
+  // Load session detail when the active session changes.
   useEffect(() => {
     setSessionData(null);
     if (view.kind !== "profile" || !view.sessionId) return;
@@ -534,131 +152,6 @@ export default function App() {
       })
       .catch(() => {});
   }, [view]);
-
-  useEffect(() => {
-    const COLLAPSE_BELOW = 600;
-    const EXPAND_ABOVE = 720;
-    function onResize() {
-      const w = window.innerWidth;
-      if (w < COLLAPSE_BELOW) setCollapsed(true);
-      else if (w > EXPAND_ABOVE) setCollapsed(false);
-    }
-    window.addEventListener("resize", onResize);
-    onResize();
-    return () => window.removeEventListener("resize", onResize);
-  }, []);
-
-  const onNewChat = useCallback(() => {
-    setRewriteDraft(null);
-    setView({ kind: "empty" });
-  }, []);
-
-  const onOpenProfile = useCallback((profile) => {
-    setRewriteDraft(null);
-    setView({
-      kind: "profile",
-      profile: profile.name,
-      sessionId: isChatSessionSummary(profile.latest_session)
-        ? profile.latest_session.id
-        : null,
-    });
-  }, []);
-
-  const onChangeSession = useCallback((sessionId) => {
-    setRewriteDraft(null);
-    setView((v) => (v.kind === "profile" ? { ...v, sessionId } : v));
-  }, []);
-
-  const onNewSessionForCurrentProfile = useCallback(() => {
-    setRewriteDraft(null);
-    setView((v) => (v.kind === "profile" ? { ...v, sessionId: null } : v));
-  }, []);
-
-  const onRewriteMessage = useCallback((profileName, sessionId, turnIndex, text) => {
-    if (!profileName || !sessionId || !text) return;
-    setRewriteDraft({
-      profile: profileName,
-      sessionId,
-      turnIndex,
-      text,
-      nonce: Date.now(),
-    });
-  }, []);
-
-  const onOpenWorkgroup = useCallback((workgroup) => {
-    setView({
-      kind: "workgroup",
-      profile: workgroup.profile,
-      id: workgroup.id,
-    });
-  }, []);
-
-  const onTogglePin = useCallback((kind, key) => {
-    setPinned((prev) => {
-      const list = prev[kind] ?? [];
-      const next = list.includes(key)
-        ? list.filter((k) => k !== key)
-        : [...list, key];
-      const updated = { ...prev, [kind]: next };
-      localStorage.setItem(PINNED_KEY, JSON.stringify(updated));
-      return updated;
-    });
-  }, []);
-
-  const activeProfile = useMemo(() => {
-    if (view.kind === "profile") {
-      return profiles.find((p) => p.name === view.profile) ?? null;
-    }
-    if (view.kind === "settings" && settingsTarget.kind === "profile") {
-      return (
-        profiles.find((p) => p.name === settingsTarget.id) ?? profiles[0] ?? null
-      );
-    }
-    if (view.kind === "empty" && pickerAlpi) {
-      return profiles.find((p) => p.name === pickerAlpi) ?? null;
-    }
-    return null;
-  }, [view, profiles, pickerAlpi, settingsTarget]);
-
-  const activeSettingsWorkgroup = useMemo(() => {
-    if (view.kind !== "settings" || settingsTarget.kind !== "workgroup") {
-      return null;
-    }
-    return workgroups.find((w) => w.id === settingsTarget.id) ?? null;
-  }, [view, settingsTarget, workgroups]);
-
-  const reloadRef = useRef(reload);
-  useEffect(() => {
-    reloadRef.current = reload;
-  }, [reload]);
-
-  const viewRef = useRef(view);
-  const prevViewRef = useRef(view);
-  useEffect(() => {
-    if (view.kind !== "settings") prevViewRef.current = view;
-    viewRef.current = view;
-  }, [view]);
-
-  const closeSettings = useCallback(() => {
-    setView(
-      prevViewRef.current && prevViewRef.current.kind !== "settings"
-        ? prevViewRef.current
-        : { kind: "empty" },
-    );
-  }, []);
-  const toggleSidebar = useCallback(() => {
-    setCollapsed((c) => !c);
-  }, []);
-
-  const profilesRef = useRef(profiles);
-  useEffect(() => {
-    profilesRef.current = profiles;
-  }, [profiles]);
-
-  const pendingTurnRef = useRef(pendingTurn);
-  useEffect(() => {
-    pendingTurnRef.current = pendingTurn;
-  }, [pendingTurn]);
 
   const reloadTimerRef = useRef(null);
   const scheduleReload = useCallback((delay = 500) => {
@@ -694,28 +187,7 @@ export default function App() {
     [],
   );
 
-  useEffect(() => {
-    const id = setInterval(() => {
-      const cutoff = Date.now() - 10000;
-      setActivityByWorkgroup((prev) => {
-        let stale = false;
-        for (const ts of Object.values(prev)) {
-          if (ts < cutoff) {
-            stale = true;
-            break;
-          }
-        }
-        if (!stale) return prev;
-        const next = {};
-        for (const [k, ts] of Object.entries(prev)) {
-          if (ts >= cutoff) next[k] = ts;
-        }
-        return next;
-      });
-    }, 3000);
-    return () => clearInterval(id);
-  }, []);
-
+  // React to filesystem-level changes the daemon broadcasts.
   useEffect(() => {
     const off = listen("fs-change", (event) => {
       const ev = event.payload;
@@ -774,162 +246,30 @@ export default function App() {
     return () => {
       off.then((fn) => fn());
     };
-  }, [scheduleReload, scheduleSessionRefresh]);
-
-  // Buffer streaming deltas so token chunks do not render markdown on every frame.
-  const deltaBufferRef = useRef({ assistant: "", reasoning: "" });
-  const deltaFlushScheduledRef = useRef(false);
-  const flushDeltas = useCallback(() => {
-    deltaFlushScheduledRef.current = false;
-    const { assistant, reasoning } = deltaBufferRef.current;
-    if (!assistant && !reasoning) return;
-    deltaBufferRef.current = { assistant: "", reasoning: "" };
-    setPendingTurn((prev) => {
-      if (!prev) return prev;
-      const next = { ...prev };
-      if (assistant)
-        next.assistantPreview = (prev.assistantPreview ?? "") + assistant;
-      if (reasoning)
-        next.reasoningPreview = (prev.reasoningPreview ?? "") + reasoning;
-      return next;
-    });
-  }, []);
-  const deltaFlushTimerRef = useRef(null);
-  const scheduleDeltaFlush = useCallback(() => {
-    if (deltaFlushScheduledRef.current) return;
-    deltaFlushScheduledRef.current = true;
-    deltaFlushTimerRef.current = setTimeout(flushDeltas, 50);
-  }, [flushDeltas]);
-
-  useEffect(() => {
-    return () => {
-      if (deltaFlushTimerRef.current) clearTimeout(deltaFlushTimerRef.current);
-    };
-  }, []);
-
-  useEffect(() => {
-    const off = listen("chat-event", (event) => {
-      const p = event.payload;
-      if (p.kind === "tool_start") {
-        setPendingTurn((prev) =>
-          prev
-            ? {
-                ...prev,
-                tools: [
-                  ...prev.tools,
-                  {
-                    tool_id: p.tool_id,
-                    name: p.name,
-                    preview: p.preview,
-                    args: p.args,
-                    states: [],
-                    output: "",
-                    ok: null,
-                    startedAt: Date.now(),
-                  },
-                ],
-              }
-            : prev,
-        );
-      } else if (p.kind === "tool_state") {
-        setPendingTurn((prev) => {
-          if (!prev) return prev;
-          const tools = prev.tools.map((t) =>
-            t.tool_id === p.tool_id && t.ok === null
-              ? { ...t, states: [...t.states, { text: p.text, ok: p.ok }] }
-              : t,
-          );
-          return { ...prev, tools };
-        });
-      } else if (p.kind === "tool_end") {
-        const MIN_RUNNING_MS = 280;
-        const matchTool = (t) =>
-          (p.tool_id && t.tool_id === p.tool_id) ||
-          (!p.tool_id && t.name === p.name && t.ok === null);
-        function applyEnd() {
-          setPendingTurn((prev) => {
-            if (!prev) return prev;
-            const tools = [...prev.tools];
-            for (let i = tools.length - 1; i >= 0; i--) {
-              if (matchTool(tools[i])) {
-                tools[i] = {
-                  ...tools[i],
-                  ok: p.ok,
-                  output: p.output ?? "",
-                };
-                break;
-              }
-            }
-            return { ...prev, tools };
-          });
-        }
-        setPendingTurn((prev) => {
-          if (!prev) return prev;
-          let idx = -1;
-          for (let i = prev.tools.length - 1; i >= 0; i--) {
-            if (matchTool(prev.tools[i])) {
-              idx = i;
-              break;
-            }
-          }
-          if (idx === -1) return prev;
-          const startedAt = prev.tools[idx].startedAt ?? Date.now();
-          const elapsed = Date.now() - startedAt;
-          if (elapsed >= MIN_RUNNING_MS) {
-            const tools = [...prev.tools];
-            tools[idx] = {
-              ...tools[idx],
-              ok: p.ok,
-              output: p.output ?? "",
-            };
-            return { ...prev, tools };
-          }
-          setTimeout(applyEnd, MIN_RUNNING_MS - elapsed);
-          return prev;
-        });
-      } else if (p.kind === "assistant_delta") {
-        deltaBufferRef.current.assistant += p.text;
-        scheduleDeltaFlush();
-      } else if (p.kind === "reasoning_delta") {
-        deltaBufferRef.current.reasoning += p.text;
-        scheduleDeltaFlush();
-      } else if (p.kind === "error") {
-        setPendingTurn((prev) =>
-          prev ? { ...prev, error: p.text } : prev,
-        );
-      } else if (p.kind === "reply") {
-        setPendingTurn((prev) => {
-          if (!prev || !p.session_id) return prev;
-          const profileName = prev.profile;
-          invoke("session_detail", {
-            profile: profileName,
-            id: p.session_id,
-          })
-            .then((newData) => {
-              setSessionData(newData);
-              setRewriteDraft(null);
-              setView({
-                kind: "profile",
-                profile: profileName,
-                sessionId: p.session_id,
-              });
-              reloadRef.current?.();
-            })
-            .catch((e) => notify({ message: String(e), variant: "error" }));
-          return prev;
-        });
-      } else if (p.kind === "done") {
-        // Drop any buffered deltas — the persisted session already has them.
-        deltaBufferRef.current = { assistant: "", reasoning: "" };
-        setPendingTurn((prev) => (prev?.error ? prev : null));
-      }
-    });
-    return () => {
-      off.then((fn) => fn());
-    };
-  }, []);
+  }, [
+    scheduleReload,
+    scheduleSessionRefresh,
+    setActivityByWorkgroup,
+    setTaskByWorkgroup,
+    seenMtimesRef,
+  ]);
 
   const sendingRef = useRef(false);
+  const activeProfile = useMemo(() => {
+    if (view.kind === "profile") {
+      return profiles.find((p) => p.name === view.profile) ?? null;
+    }
+    if (view.kind === "settings" && settingsTarget.kind === "profile") {
+      return (
+        profiles.find((p) => p.name === settingsTarget.id) ?? profiles[0] ?? null
+      );
+    }
+    if (view.kind === "empty" && pickerAlpi) {
+      return profiles.find((p) => p.name === pickerAlpi) ?? null;
+    }
+    return null;
+  }, [view, profiles, pickerAlpi, settingsTarget]);
+
   const onSend = useCallback(
     async (text, model) => {
       if (!text.trim() || !activeProfile) return;
@@ -976,8 +316,68 @@ export default function App() {
         sendingRef.current = false;
       }
     },
-    [activeProfile, view, pendingTurn, rewriteDraft],
+    [activeProfile, view, pendingTurn, rewriteDraft, notify, setPendingTurn],
   );
+
+  const onNewChat = useCallback(() => {
+    setRewriteDraft(null);
+    setView({ kind: "empty" });
+  }, []);
+
+  const onOpenProfile = useCallback((profile) => {
+    setRewriteDraft(null);
+    setView({
+      kind: "profile",
+      profile: profile.name,
+      sessionId: isChatSessionSummary(profile.latest_session)
+        ? profile.latest_session.id
+        : null,
+    });
+  }, []);
+
+  const onChangeSession = useCallback((sessionId) => {
+    setRewriteDraft(null);
+    setView((v) => (v.kind === "profile" ? { ...v, sessionId } : v));
+  }, []);
+
+  const onNewSessionForCurrentProfile = useCallback(() => {
+    setRewriteDraft(null);
+    setView((v) => (v.kind === "profile" ? { ...v, sessionId: null } : v));
+  }, []);
+
+  const onRewriteMessage = useCallback((profileName, sessionId, turnIndex, text) => {
+    if (!profileName || !sessionId || !text) return;
+    setRewriteDraft({
+      profile: profileName,
+      sessionId,
+      turnIndex,
+      text,
+      nonce: Date.now(),
+    });
+  }, []);
+
+  const onOpenWorkgroup = useCallback((workgroup) => {
+    setView({
+      kind: "workgroup",
+      profile: workgroup.profile,
+      id: workgroup.id,
+    });
+  }, []);
+
+  const closeSettings = useCallback(() => {
+    setView(
+      prevViewRef.current && prevViewRef.current.kind !== "settings"
+        ? prevViewRef.current
+        : { kind: "empty" },
+    );
+  }, []);
+
+  const activeSettingsWorkgroup = useMemo(() => {
+    if (view.kind !== "settings" || settingsTarget.kind !== "workgroup") {
+      return null;
+    }
+    return workgroups.find((w) => w.id === settingsTarget.id) ?? null;
+  }, [view, settingsTarget, workgroups]);
 
   const activeWorkgroup = useMemo(() => {
     if (view.kind === "workgroup") {
@@ -995,7 +395,8 @@ export default function App() {
   );
   const daemonOffline =
     !!activeConnection &&
-    (activeConnection.status === "offline" || activeConnection.status === "auth-failed");
+    (activeConnection.status === "offline" ||
+      activeConnection.status === "auth-failed");
 
   return (
     <div className={styles.app} data-sidebar-collapsed={collapsed ? "1" : "0"}>
@@ -1087,7 +488,6 @@ export default function App() {
                   profiles={profiles}
                   activeProfile={activeProfile}
                   sessionData={sessionData}
-
                   pendingTurn={
                     pendingTurn && pendingTurn.profile === activeProfile?.name
                       ? pendingTurn
@@ -1104,7 +504,9 @@ export default function App() {
                   onRewriteMessage={onRewriteMessage}
                   rewriteDraft={rewriteDraft}
                   onRewriteDraftApplied={() => {
-                    setRewriteDraft((prev) => (prev ? { ...prev, consumed: true } : prev));
+                    setRewriteDraft((prev) =>
+                      prev ? { ...prev, consumed: true } : prev,
+                    );
                   }}
                 />
               )}

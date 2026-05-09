@@ -26,14 +26,6 @@
   user-select: text;
 }
 
-.briefing {
-  font-size: var(--font-size-small);
-  color: var(--color-fg-muted);
-  font-style: italic;
-  text-align: center;
-  padding: var(--space-4) 0;
-}
-
 .empty {
   text-align: center;
   font-size: var(--font-size-ui);

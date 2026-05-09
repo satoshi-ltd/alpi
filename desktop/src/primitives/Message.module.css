@@ -118,15 +118,6 @@
   pointer-events: auto;
 }
 
-.timestamp {
-  font-size: var(--font-size-tiny);
-  color: var(--color-fg-subtle);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-  user-select: none;
-  margin-inline-start: var(--space-1);
-}
-
 .md > :first-child {
   margin-top: 0;
 }

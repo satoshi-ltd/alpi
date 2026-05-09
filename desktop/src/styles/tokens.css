@@ -51,6 +51,7 @@
   --font-weight-bold: 700;
 
   --shadow-md: 0 14px 36px rgba(0, 0, 0, 0.18);
+  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.18);
 
   --control-height: 36px;
   --control-height-sm: 26px;
@@ -83,5 +84,6 @@
     --control-focus-ring: 0 0 0 1px color-mix(in srgb, var(--color-fg) 14%, transparent);
 
     --shadow-md: 0 14px 36px rgba(0, 0, 0, 0.5);
+    --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.5);
   }
 }

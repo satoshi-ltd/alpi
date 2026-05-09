@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import Chip from "../primitives/Chip.jsx";
 import Dropdown from "../primitives/Dropdown.jsx";
-import { AlpiIcon } from "../primitives/icons.jsx";
+import { Dot } from "../primitives/NavRow.jsx";
 
 const SEARCH_THRESHOLD = 8;
 
@@ -28,7 +28,7 @@ export default function AlpiPicker({ profiles, activeAlpi, onChange }) {
       trigger={{
         label: active?.name ?? "—",
         title: active?.model ?? "",
-        leading: active ? <Dot accent={active.accent} /> : null,
+        leading: active ? <Dot color={active.accent} /> : null,
       }}
       searchable={profiles.length > SEARCH_THRESHOLD}
       searchPlaceholder="Find alpi…"
@@ -43,7 +43,7 @@ export default function AlpiPicker({ profiles, activeAlpi, onChange }) {
               key={p.name}
               active={p.name === activeAlpi}
               caption={p.model ?? null}
-              leading={<Dot accent={p.accent} />}
+              leading={<Dot color={p.accent} />}
               trailing={
                 !p.model ? (
                   <Chip size="sm" state="off">
@@ -65,8 +65,3 @@ export default function AlpiPicker({ profiles, activeAlpi, onChange }) {
   );
 }
 
-function Dot({ accent }) {
-  return (
-    <AlpiIcon color={accent || "var(--color-accent)"} />
-  );
-}

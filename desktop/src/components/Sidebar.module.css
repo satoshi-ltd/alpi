@@ -41,37 +41,6 @@
   padding: 0;
 }
 
-.newChatBtn {
-  display: flex;
-  align-items: center;
-  gap: var(--space-5);
-  width: 100%;
-  padding: var(--space-4) var(--space-5);
-  border-radius: var(--radius-md);
-  background: transparent;
-  font-size: var(--font-size-ui);
-  font-weight: var(--font-weight-medium);
-  color: var(--color-fg);
-  text-align: left;
-  transition: background var(--motion-fast) var(--motion-easing);
-}
-
-.newChatBtnLeading {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: var(--space-5);
-  flex-shrink: 0;
-}
-
-.newChatBtn:hover {
-  background: var(--color-hover);
-}
-
-.newChatBtnActive {
-  background: var(--color-selected);
-}
-
 .nav {
   flex: 1;
   overflow: auto;
