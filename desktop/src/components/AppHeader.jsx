@@ -8,6 +8,7 @@ import {
   AlpiIcon,
   PlusIcon,
   QuestionIcon,
+  RefreshIcon,
   SidebarCloseIcon,
   SidebarOpenIcon,
 } from "../primitives/icons.jsx";
@@ -56,10 +57,12 @@ function AppHeader({
   settingsWorkgroup,
   activeTask,
   sessionData,
+  settingsRefreshing,
   onToggleSidebar,
   onChangeSession,
   onNewSession,
   onCloseSettings,
+  onSettingsRefresh,
 }) {
   const hubProfile =
     activeWorkgroup &&
@@ -163,6 +166,19 @@ function AppHeader({
                 />
               )}
             </>
+          )}
+          {view.kind === "settings" && onSettingsRefresh && (
+            <Button
+              icon={
+                <RefreshIcon
+                  className={settingsRefreshing ? styles.spin : ""}
+                />
+              }
+              onClick={onSettingsRefresh}
+              disabled={settingsRefreshing}
+              title="Refresh — reload settings data"
+              tooltipAlign="end"
+            />
           )}
         </div>
       </div>

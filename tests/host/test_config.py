@@ -226,3 +226,146 @@ async def test_gateway_remove_drops_env(tmp_path: Path, monkeypatch) -> None:
     text = (home / ".env").read_text()
     assert "TELEGRAM_BOT_TOKEN" not in text
     assert "OTHER=keep" in text
+
+
+@pytest.mark.asyncio
+async def test_gmail_authorize_writes_env_and_streams_authorized(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    home = _bootstrap(tmp_path)
+    monkeypatch.setattr(data_handlers, "_resolve_home", lambda p: home)
+    # Strip env vars that might have leaked in from the developer's shell.
+    for key in ("GMAIL_CLIENT_ID", "GMAIL_CLIENT_SECRET", "GMAIL_ALLOWED_SENDERS"):
+        monkeypatch.delenv(key, raising=False)
+
+    fake_token = type(
+        "FakeToken", (), {"email": "alice@example.com"},
+    )()
+    from alpi.mail import gmail_auth as ga
+
+    monkeypatch.setattr(ga, "first_run", lambda h: fake_token)
+
+    frames: list[dict] = []
+
+    async def collect(frame):
+        frames.append(frame)
+
+    await data_config._gmail_authorize(
+        {
+            "profile": "default",
+            "client_id": "cid-123",
+            "client_secret": "sec-456",
+            "allowed_senders": " Bob@Example.com , carol@x.com ",
+        },
+        None,
+        collect,
+    )
+
+    env_text = (home / ".env").read_text()
+    assert "GMAIL_CLIENT_ID=cid-123" in env_text
+    assert "GMAIL_CLIENT_SECRET=sec-456" in env_text
+    assert "GMAIL_ALLOWED_SENDERS=bob@example.com,carol@x.com" in env_text
+    # os.environ must be set so first_run can read the credentials.
+    import os
+    assert os.environ["GMAIL_CLIENT_ID"] == "cid-123"
+    assert os.environ["GMAIL_CLIENT_SECRET"] == "sec-456"
+    assert frames == [
+        {"event": "browser_opened"},
+        {"event": "authorized", "email": "alice@example.com"},
+    ]
+
+
+@pytest.mark.asyncio
+async def test_gmail_authorize_missing_creds_emits_error(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    home = _bootstrap(tmp_path)
+    monkeypatch.setattr(data_handlers, "_resolve_home", lambda p: home)
+    for key in ("GMAIL_CLIENT_ID", "GMAIL_CLIENT_SECRET", "GMAIL_ALLOWED_SENDERS"):
+        monkeypatch.delenv(key, raising=False)
+
+    frames: list[dict] = []
+
+    async def collect(frame):
+        frames.append(frame)
+
+    await data_config._gmail_authorize(
+        {"profile": "default", "client_id": "", "client_secret": ""},
+        None,
+        collect,
+    )
+
+    assert len(frames) == 1
+    assert frames[0]["event"] == "error"
+    assert "required" in frames[0]["text"]
+    # No .env file should have been written.
+    assert not (home / ".env").exists() or "GMAIL_CLIENT_ID" not in (home / ".env").read_text()
+
+
+@pytest.mark.asyncio
+async def test_gmail_authorize_reuses_stored_creds_on_blank_input(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    """Re-authorize without re-typing the secret falls back to .env."""
+    home = _bootstrap(tmp_path)
+    (home / ".env").write_text(
+        "GMAIL_CLIENT_ID=stored-id\nGMAIL_CLIENT_SECRET=stored-sec\n"
+        "GMAIL_ALLOWED_SENDERS=existing@x.com\n"
+    )
+    monkeypatch.setattr(data_handlers, "_resolve_home", lambda p: home)
+    for key in ("GMAIL_CLIENT_ID", "GMAIL_CLIENT_SECRET", "GMAIL_ALLOWED_SENDERS"):
+        monkeypatch.delenv(key, raising=False)
+
+    fake_token = type("FakeToken", (), {"email": "bob@example.com"})()
+    from alpi.mail import gmail_auth as ga
+
+    monkeypatch.setattr(ga, "first_run", lambda h: fake_token)
+
+    frames: list[dict] = []
+
+    async def collect(frame):
+        frames.append(frame)
+
+    # All inputs blank — should reuse stored values.
+    await data_config._gmail_authorize(
+        {"profile": "default", "client_id": "", "client_secret": ""},
+        None,
+        collect,
+    )
+
+    assert frames[-1] == {"event": "authorized", "email": "bob@example.com"}
+    import os
+    assert os.environ["GMAIL_CLIENT_ID"] == "stored-id"
+    assert os.environ["GMAIL_CLIENT_SECRET"] == "stored-sec"
+
+
+@pytest.mark.asyncio
+async def test_gmail_authorize_propagates_oauth_error(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    home = _bootstrap(tmp_path)
+    monkeypatch.setattr(data_handlers, "_resolve_home", lambda p: home)
+    for key in ("GMAIL_CLIENT_ID", "GMAIL_CLIENT_SECRET", "GMAIL_ALLOWED_SENDERS"):
+        monkeypatch.delenv(key, raising=False)
+
+    from alpi.mail import gmail_auth as ga
+
+    def boom(_h):
+        raise ga.GmailAuthError("OAuth denied: access_denied")
+
+    monkeypatch.setattr(ga, "first_run", boom)
+
+    frames: list[dict] = []
+
+    async def collect(frame):
+        frames.append(frame)
+
+    await data_config._gmail_authorize(
+        {"profile": "default", "client_id": "x", "client_secret": "y"},
+        None,
+        collect,
+    )
+
+    assert frames[0] == {"event": "browser_opened"}
+    assert frames[1]["event"] == "error"
+    assert "access_denied" in frames[1]["text"]

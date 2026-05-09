@@ -11,6 +11,52 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.2.5 — 2026-05-09 — Gmail OAuth in Settings, refresh button, gateway validation
+
+Requires alpi ``v0.4.18`` or newer (new ``host.gateway.gmail_authorize``
+stream verb).
+
+**Gmail OAuth flow lives in the desktop now.** The Gmail row in
+``Settings → Services → gateways`` previously dead-ended on a "run
+``alpi -p <name> setup`` from the shell" message — Gmail was the one
+gateway that couldn't be configured from the app because it needs an
+interactive browser handshake. The new ``GmailAuthModal`` drives the
+full flow: Client ID + Secret + Allowed senders inputs (hydrated from
+``host.gateway.config``, secret shown as ``current: … (paste to
+replace)`` mirroring Telegram/IMAP), an Authorize button that streams
+``host.gateway.gmail_authorize``, and a status line that updates as
+events arrive (``Browser opened — complete the Google consent flow…``
+→ ``Authorized as <email>``). Re-authorize without re-typing the
+secret works because the host verb falls back to the stored value
+when the input is blank.
+
+The Authorize button is disabled while the OAuth is in flight and
+the Close button becomes ``Cancel`` so the modal is never trapped in
+a busy state — closing the browser tab without completing consent
+no longer leaves the modal spinning forever (closes the modal; the
+daemon-side ``first_run`` thread eventually times out at its 5-min
+budget).
+
+**Refresh button in the header.** New ``RefreshIcon`` primitive plus
+a ``Button`` in ``AppHeader``'s right cluster, only visible while
+``view.kind === "settings"``. Click reloads ``profile_summaries`` /
+``workgroups`` and bumps a tick that re-keys the ``ProfileDetail`` /
+``WorkgroupDetail`` subtree, forcing every child that fetches its own
+data via ``invoke`` (gateways, skills, schedules, storage…) to
+re-fetch. The Lucide refresh-ccw glyph spins while in flight via the
+``AppHeader.module.css`` ``spin`` class.
+
+**Required-field validation in the gateway editor.** The IMAP /
+Telegram / Matrix modal previously called the ``provider_set_key``
+chain even when half the required fields were empty, declared
+``saved · daemon restarting``, and the gateway then sat dead in the
+chip strip with no error. ``GATEWAY_FIELDS`` now carries a
+``required`` flag per field; ``save()`` short-circuits with
+``Missing required: …`` when the resulting state would leave any of
+them blank (a stored secret counts as filled, so editing one
+non-secret field doesn't force the user to retype the secret). Each
+required field gets a ``*`` next to its label in the modal.
+
 ## v0.2.4 — 2026-05-08 — pooled remote WebSocket + high-latency stability
 
 Requires alpi ``v0.4.16`` or newer (server multi-message support).

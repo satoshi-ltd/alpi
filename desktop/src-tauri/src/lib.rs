@@ -642,6 +642,30 @@ fn gateway_config(profile: String, name: String) -> std::collections::HashMap<St
 }
 
 #[tauri::command]
+async fn gateway_gmail_authorize(
+    app: AppHandle,
+    profile: String,
+    client_id: String,
+    client_secret: String,
+    allowed_senders: String,
+) -> Result<(), String> {
+    let params = serde_json::json!({
+        "profile": profile,
+        "client_id": client_id,
+        "client_secret": client_secret,
+        "allowed_senders": allowed_senders,
+    });
+    tauri::async_runtime::spawn_blocking(move || {
+        host_client::call_stream("host.gateway.gmail_authorize", params, move |frame| {
+            let _ = app.emit("gmail-auth-event", frame);
+        })
+    })
+    .await
+    .map_err(|e| format!("join: {e}"))??;
+    Ok(())
+}
+
+#[tauri::command]
 async fn gateway_remove(profile: String, name: String) -> Result<(), String> {
     alp_call_async(
         "host.gateway.remove",
@@ -1410,6 +1434,7 @@ pub fn run() {
             voice_autoplay,
             voice_test,
             gateway_config,
+            gateway_gmail_authorize,
             gateway_remove,
             mcp_add,
             mcp_remove,

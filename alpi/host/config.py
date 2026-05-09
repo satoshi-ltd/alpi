@@ -53,6 +53,7 @@ def register(server: host_server.Server) -> None:
     server.register("host.mcp.add", _mcp_add)
     server.register("host.mcp.remove", _mcp_remove)
     server.register("host.gateway.remove", _gateway_remove)
+    server.register_stream("host.gateway.gmail_authorize", _gmail_authorize)
     server.register("host.sandbox.set", _sandbox_set)
     server.register("host.sandbox.network", _sandbox_network)
     server.register("host.voice.set_voice", _voice_set_voice)
@@ -446,6 +447,72 @@ _GATEWAY_ENV_KEYS = {
         "MATRIX_DEVICE_ID", "MATRIX_ALLOWED_ROOMS", "MATRIX_ALLOWED_SENDERS",
     ),
 }
+
+
+async def _gmail_authorize(
+    params: dict[str, Any],
+    _server: host_server.Server,
+    send_frame,
+) -> None:
+    import asyncio
+    from alpi.mail import gmail_auth
+    from alpi.model_selector import _append_env
+
+    home = _resolve_home(str(params.get("profile") or ""))
+    cfg = cfg_mod.load(home)
+    existing = _read_env_file(cfg.env_path)
+
+    client_id = str(params.get("client_id") or "").strip() or existing.get("GMAIL_CLIENT_ID", "")
+    client_secret = (
+        str(params.get("client_secret") or "").strip()
+        or existing.get("GMAIL_CLIENT_SECRET", "")
+    )
+    senders_raw = params.get("allowed_senders")
+    if senders_raw is None:
+        senders = existing.get("GMAIL_ALLOWED_SENDERS", "")
+    else:
+        senders = ",".join(
+            s.strip().lower() for s in str(senders_raw).split(",") if s.strip()
+        )
+
+    if not client_id or not client_secret:
+        await send_frame({
+            "event": "error",
+            "text": "client_id and client_secret are required",
+        })
+        return
+
+    for key, val in (
+        ("GMAIL_CLIENT_ID", client_id),
+        ("GMAIL_CLIENT_SECRET", client_secret),
+        ("GMAIL_ALLOWED_SENDERS", senders),
+    ):
+        _append_env(cfg.env_path, key, val)
+        os.environ[key] = val
+
+    await send_frame({"event": "browser_opened"})
+
+    loop = asyncio.get_running_loop()
+    try:
+        token = await loop.run_in_executor(None, lambda: gmail_auth.first_run(home))
+        await send_frame({"event": "authorized", "email": token.email})
+    except gmail_auth.GmailAuthError as exc:
+        await send_frame({"event": "error", "text": str(exc)})
+    except Exception as exc:  # noqa: BLE001
+        await send_frame({"event": "error", "text": f"unexpected: {exc!r}"})
+
+
+def _read_env_file(env_path: Path) -> dict[str, str]:
+    if not env_path.exists():
+        return {}
+    out: dict[str, str] = {}
+    for line in env_path.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        out[key.strip()] = value.strip()
+    return out
 
 
 async def _gateway_remove(

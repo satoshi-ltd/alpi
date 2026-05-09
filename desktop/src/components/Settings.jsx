@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { getVersion } from "@tauri-apps/api/app";
 import ConnectionSwitcher from "./ConnectionSwitcher.jsx";
 import Button from "../primitives/Button.jsx";
@@ -135,6 +136,7 @@ export default function Settings({
   workgroups = [],
   target,
   hostConnections,
+  refreshTick = 0,
   onSelectTarget,
   onRefresh,
   onSetHostConnection,
@@ -243,7 +245,7 @@ export default function Settings({
 
       {selectedProfile && (
         <ProfileDetail
-          key={selectedProfile.name}
+          key={`${selectedProfile.name}:${refreshTick}`}
           profile={selectedProfile}
           profiles={profiles}
           onSaved={onRefresh}
@@ -252,7 +254,7 @@ export default function Settings({
       )}
       {selectedWorkgroup && (
         <WorkgroupDetail
-          key={selectedWorkgroup.id}
+          key={`${selectedWorkgroup.id}:${refreshTick}`}
           workgroup={selectedWorkgroup}
           profiles={profiles}
           onSaved={onRefresh}
@@ -347,7 +349,7 @@ function ProfileDetail({ profile, profiles, onSaved, onNavigate }) {
 
   return (
     <main className={styles.detail}>
-      <div className={styles.body}>
+<div className={styles.body}>
         <Section title="Overview">
           <Row label="home">
             <span className={styles.inlineRow}>
@@ -994,7 +996,7 @@ function WorkgroupDetail({ workgroup, profiles, onSaved }) {
 
   return (
     <main className={styles.detail}>
-      <div className={styles.body}>
+<div className={styles.body}>
         <Section title="Overview">
           <Row label="name">
             <span className={styles.mono}>#{workgroup.name || workgroup.id}</span>
@@ -2731,6 +2733,7 @@ const GATEWAY_FIELDS = {
       env: "TELEGRAM_BOT_TOKEN",
       label: "Bot token",
       secret: true,
+      required: true,
       hint: "from @BotFather",
     },
     {
@@ -2745,24 +2748,28 @@ const GATEWAY_FIELDS = {
       env: "IMAP_ADDRESS",
       label: "Email address",
       secret: false,
+      required: true,
       hint: "you@domain.com",
     },
     {
       env: "IMAP_PASSWORD",
       label: "Password",
       secret: true,
+      required: true,
       hint: "app password if 2FA",
     },
     {
       env: "IMAP_HOST",
       label: "Host",
       secret: false,
+      required: true,
       hint: "imap.gmail.com · imap.fastmail.com · …",
     },
     {
       env: "IMAP_PORT",
       label: "Port",
       secret: false,
+      required: true,
       hint: "993 (SSL) · 143 (STARTTLS)",
     },
     {
@@ -2777,18 +2784,21 @@ const GATEWAY_FIELDS = {
       env: "MATRIX_HOMESERVER_URL",
       label: "Homeserver URL",
       secret: false,
+      required: true,
       hint: "http://umbrel.local:8008 · https://matrix.example.com",
     },
     {
       env: "MATRIX_USER_ID",
       label: "Bot user id",
       secret: false,
+      required: true,
       hint: "@alpi-bot:server",
     },
     {
       env: "MATRIX_ACCESS_TOKEN",
       label: "Access token",
       secret: true,
+      required: true,
       hint: "from /_matrix/client/r0/login",
     },
     {
@@ -2801,6 +2811,7 @@ const GATEWAY_FIELDS = {
       env: "MATRIX_ALLOWED_ROOMS",
       label: "Allowed rooms",
       secret: false,
+      required: true,
       hint: "comma-separated room IDs (!abc:server) · fail-closed",
     },
     {
@@ -2811,6 +2822,181 @@ const GATEWAY_FIELDS = {
     },
   ],
 };
+
+function GmailAuthModal({ profile, config, wrapRef, onClose, onSaved }) {
+  const notify = useNotify();
+  const [clientId, setClientId] = useState("");
+  const [clientSecret, setClientSecret] = useState("");
+  const [senders, setSenders] = useState("");
+  const [phase, setPhase] = useState("idle"); // idle | waiting | done | error
+  const [statusText, setStatusText] = useState("");
+  const [busy, setBusy] = useState(false);
+  const hydrated = useRef(false);
+  const mounted = useRef(true);
+
+  useEffect(() => {
+    if (!hydrated.current && config !== null) {
+      hydrated.current = true;
+      setClientId(config.GMAIL_CLIENT_ID ?? "");
+      setSenders(config.GMAIL_ALLOWED_SENDERS ?? "");
+    }
+  }, [config]);
+
+  useEffect(() => {
+    mounted.current = true;
+    const unlistenPromise = listen("gmail-auth-event", (ev) => {
+      if (!mounted.current) return;
+      const frame = ev.payload;
+      if (frame.event === "browser_opened") {
+        setPhase("waiting");
+        setStatusText("Browser opened — complete the Google consent flow…");
+      } else if (frame.event === "authorized") {
+        setPhase("done");
+        setStatusText(`Authorized as ${frame.email}`);
+        setBusy(false);
+        notify({ message: `Gmail authorized as ${frame.email}`, variant: "success" });
+        onSaved();
+      } else if (frame.event === "error") {
+        setPhase("error");
+        setStatusText(frame.text || "authorization failed");
+        setBusy(false);
+        notify({ message: frame.text || "Gmail auth failed", variant: "error", duration: 5000 });
+      }
+    });
+    return () => {
+      mounted.current = false;
+      unlistenPromise.then((f) => f()).catch(() => {});
+    };
+  }, [notify, onSaved]);
+
+  async function authorize() {
+    const hasStoredId = !!config?.GMAIL_CLIENT_ID;
+    const hasStoredSecret = !!config?.GMAIL_CLIENT_SECRET;
+    if (!clientId.trim() && !hasStoredId) {
+      notify({ message: "Client ID is required", variant: "error" });
+      return;
+    }
+    if (!clientSecret.trim() && !hasStoredSecret) {
+      notify({ message: "Client Secret is required", variant: "error" });
+      return;
+    }
+    setBusy(true);
+    setPhase("waiting");
+    setStatusText("Opening browser…");
+    try {
+      await invoke("gateway_gmail_authorize", {
+        profile: profile.name,
+        clientId: clientId.trim(),
+        clientSecret: clientSecret.trim(),
+        allowedSenders: senders.trim(),
+      });
+    } catch (e) {
+      setPhase("error");
+      setStatusText(String(e));
+      setBusy(false);
+    }
+  }
+
+  async function remove() {
+    setBusy(true);
+    try {
+      await invoke("gateway_remove", { profile: profile.name, name: "gmail" });
+      notify({ message: "Gmail gateway removed", variant: "success" });
+      onSaved();
+    } catch (e) {
+      notify({ message: `remove: ${String(e)}`, variant: "error", duration: 4000 });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className={styles.gatewayBackdrop}>
+      <div ref={wrapRef} className={styles.gatewayModal}>
+        <div className={styles.gatewayModalTitle}>Gmail gateway</div>
+
+        <div className={styles.tcpField}>
+          <label className={styles.tcpLabel}>Client ID</label>
+          <input
+            className={styles.input}
+            style={{ maxWidth: "none" }}
+            type="text"
+            value={clientId}
+            onChange={(e) => setClientId(e.target.value)}
+            placeholder="OAuth Desktop client ID from Google Cloud"
+            spellCheck={false}
+            disabled={busy}
+          />
+        </div>
+        <div className={styles.tcpField}>
+          <label className={styles.tcpLabel}>Client Secret</label>
+          <input
+            className={styles.input}
+            style={{ maxWidth: "none" }}
+            type="password"
+            value={clientSecret}
+            onChange={(e) => setClientSecret(e.target.value)}
+            placeholder={
+              config?.GMAIL_CLIENT_SECRET
+                ? `current: ${config.GMAIL_CLIENT_SECRET} (paste to replace)`
+                : "OAuth client secret"
+            }
+            spellCheck={false}
+            disabled={busy}
+          />
+        </div>
+        <div className={styles.tcpField}>
+          <label className={styles.tcpLabel}>Allowed senders</label>
+          <input
+            className={styles.input}
+            style={{ maxWidth: "none" }}
+            type="text"
+            value={senders}
+            onChange={(e) => setSenders(e.target.value)}
+            placeholder="comma-separated emails (empty = no inbound)"
+            spellCheck={false}
+            disabled={busy}
+          />
+        </div>
+
+        {statusText && (
+          <div
+            className={phase === "error" ? styles.muted : styles.muted}
+            style={{
+              marginTop: "var(--space-2)",
+              color: phase === "error" ? "var(--color-error, #f87171)" : phase === "done" ? "var(--color-ok, #4ade80)" : undefined,
+            }}
+          >
+            {statusText}
+          </div>
+        )}
+
+        <div className={styles.tcpActions}>
+          {config?.GMAIL_CLIENT_ID && !busy && (
+            <ConfirmButton
+              size="sm"
+              label="Remove"
+              confirmLabel="Confirm"
+              onConfirm={remove}
+            />
+          )}
+          <Button size="sm" onClick={onClose}>
+            {busy ? "Cancel" : "Close"}
+          </Button>
+          {!busy && (
+            <Button
+              size="sm"
+              variant="primary"
+              onClick={authorize}
+            >
+              {config?.GMAIL_CLIENT_ID ? "Re-authorize" : "Authorize"}
+            </Button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function GatewayEditorModal({ profile, gateway, onClose, onSaved }) {
   const notify = useNotify();
@@ -2857,65 +3043,13 @@ function GatewayEditorModal({ profile, gateway, onClose, onSaved }) {
 
   if (gateway === "gmail") {
     return (
-      <div className={styles.gatewayBackdrop}>
-        <div ref={wrapRef} className={styles.gatewayModal}>
-          <div className={styles.gatewayModalTitle}>Gmail gateway</div>
-          <div className={styles.muted}>
-            {config?.GMAIL_CLIENT_ID
-              ? "Configured · OAuth completed"
-              : "Not configured"}
-          </div>
-          <div
-            className={styles.muted}
-            style={{ marginTop: "var(--space-2)" }}
-          >
-            Gmail uses OAuth and needs an interactive browser flow. Run:
-          </div>
-          <code className={styles.mono} style={{ display: "block", marginTop: 4 }}>
-            alpi -p {profile.name} setup
-          </code>
-          <div
-            className={styles.muted}
-            style={{ marginTop: 4, fontSize: "var(--font-size-tiny)" }}
-          >
-            Settings → Services → gateways → Gmail
-          </div>
-          <div className={styles.tcpActions}>
-            {config?.GMAIL_CLIENT_ID && (
-              <ConfirmButton
-                size="sm"
-                label="Remove"
-                confirmLabel="Confirm"
-                onConfirm={async () => {
-                  setBusy(true);
-                  try {
-                    await invoke("gateway_remove", {
-                      profile: profile.name,
-                      name: "gmail",
-                    });
-                    notify({
-                      message: "Gmail gateway removed",
-                      variant: "success",
-                    });
-                    onSaved();
-                  } catch (e) {
-                    notify({
-                      message: `remove: ${String(e)}`,
-                      variant: "error",
-                      duration: 4000,
-                    });
-                  } finally {
-                    setBusy(false);
-                  }
-                }}
-              />
-            )}
-            <Button size="sm" onClick={onClose}>
-              Close
-            </Button>
-          </div>
-        </div>
-      </div>
+      <GmailAuthModal
+        profile={profile}
+        config={config}
+        wrapRef={wrapRef}
+        onClose={onClose}
+        onSaved={onSaved}
+      />
     );
   }
 
@@ -2923,6 +3057,24 @@ function GatewayEditorModal({ profile, gateway, onClose, onSaved }) {
   const isConfigured = !!config && Object.keys(config).length > 0;
 
   async function save() {
+    const missing = fields.filter((f) => {
+      if (!f.required) return false;
+      const next = (values[f.env] ?? "").trim();
+      if (next) return false;
+      // Secrets that already have a stored value can be reused.
+      if (f.secret && config?.[f.env]) return false;
+      // Non-secret stored values are pre-filled into `values` already, so
+      // an empty input here means the user explicitly cleared it.
+      return true;
+    });
+    if (missing.length > 0) {
+      notify({
+        message: `Missing required: ${missing.map((f) => f.label).join(", ")}`,
+        variant: "error",
+        duration: 4000,
+      });
+      return;
+    }
     setBusy(true);
     try {
       for (const f of fields) {
@@ -3006,7 +3158,10 @@ function GatewayEditorModal({ profile, gateway, onClose, onSaved }) {
           const preview = f.secret ? config?.[f.env] : null;
           return (
             <div key={f.env} className={styles.tcpField}>
-              <label className={styles.tcpLabel}>{f.label}</label>
+              <label className={styles.tcpLabel}>
+                {f.label}
+                {f.required && <span aria-hidden="true"> *</span>}
+              </label>
               <input
                 className={styles.input}
                 style={{ maxWidth: "none" }}

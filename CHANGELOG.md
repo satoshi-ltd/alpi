@@ -1,5 +1,37 @@
 # Changelog
 
+## v0.4.18 — 2026-05-09 — Gmail OAuth from the host plane
+
+Adds `host.gateway.gmail_authorize`, a stream verb that lets a paired
+client (the desktop app, eventually the mobile companion) drive the
+full Gmail OAuth flow without the user dropping into a TUI — same
+PKCE handshake, same loopback callback, same token storage.
+
+- `alpi/host/config.py::_gmail_authorize` — registered with
+  `register_stream`. Accepts `client_id`, `client_secret`,
+  `allowed_senders`. Writes them to the profile's `.env` and
+  `os.environ` (same write path the CLI wizard uses), then runs
+  `gmail_auth.first_run()` in an executor so the WebSocket stays
+  responsive while the user completes consent. Emits
+  `{"event": "browser_opened"}` immediately and either
+  `{"event": "authorized", "email": "…"}` on success or
+  `{"event": "error", "text": "…"}` on `GmailAuthError` /
+  unexpected exceptions.
+- Re-authorize without re-typing the secret: when an input field is
+  blank but the value already lives in `.env`, the handler reuses the
+  stored credential instead of failing — matches the desktop UX
+  where the Client Secret is masked and the user only re-enters it
+  to rotate it.
+
+Tests — `tests/host/test_config.py` adds four cases:
+`test_gmail_authorize_writes_env_and_streams_authorized` (happy path,
+verifies `.env` + `os.environ` writes and frame order),
+`test_gmail_authorize_missing_creds_emits_error` (no credentials → no
+`.env` write, single error frame), `test_gmail_authorize_reuses_stored_creds_on_blank_input`
+(re-authorize without typing → falls back to stored values), and
+`test_gmail_authorize_propagates_oauth_error` (denied consent →
+`error` frame after `browser_opened`).
+
 ## v0.4.17 — 2026-05-08 — short timeout on peer-ping probes
 
 `host.peers.ping` is a UI-driven liveness check; the desktop fires it

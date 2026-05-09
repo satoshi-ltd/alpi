@@ -215,6 +215,18 @@ export default function App() {
     }
   }, [applyProfilesAndWorkgroups, reloadConnections, saveToCache, showCachedOrClear]);
 
+  const [settingsRefreshTick, setSettingsRefreshTick] = useState(0);
+  const [settingsRefreshing, setSettingsRefreshing] = useState(false);
+  const onSettingsRefresh = useCallback(async () => {
+    setSettingsRefreshing(true);
+    try {
+      await reload();
+    } finally {
+      setSettingsRefreshTick((t) => t + 1);
+      setSettingsRefreshing(false);
+    }
+  }, [reload]);
+
   useEffect(() => {
     const off = listen("connection-status", (event) => {
       const { id, status, error } = event.payload ?? {};
@@ -996,10 +1008,12 @@ export default function App() {
         settingsWorkgroup={activeSettingsWorkgroup}
         activeTask={activeTask}
         sessionData={sessionData}
+        settingsRefreshing={settingsRefreshing}
         onToggleSidebar={toggleSidebar}
         onChangeSession={onChangeSession}
         onNewSession={onNewSessionForCurrentProfile}
         onCloseSettings={closeSettings}
+        onSettingsRefresh={onSettingsRefresh}
       />
       <div className={styles.shell}>
         {view.kind !== "settings" && (
@@ -1031,6 +1045,7 @@ export default function App() {
               workgroups={workgroups}
               target={settingsTarget}
               hostConnections={hostConnections}
+              refreshTick={settingsRefreshTick}
               onSelectTarget={setSettingsTarget}
               onRefresh={reload}
               onSetHostConnection={onSetHostConnection}
