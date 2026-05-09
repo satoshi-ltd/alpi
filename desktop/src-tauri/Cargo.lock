@@ -34,7 +34,7 @@ dependencies = [
 
 [[package]]
 name = "alpi-desktop"
-version = "0.2.5"
+version = "0.2.6"
 dependencies = [
  "dirs 5.0.1",
  "notify",

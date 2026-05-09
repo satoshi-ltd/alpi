@@ -1,5 +1,32 @@
 # Changelog
 
+## v0.4.19 — 2026-05-09 — pairing admin is local-only at the transport layer
+
+Pairing admin (`host.devices.list/generate/revoke/rename`) used to be
+dispatched on whichever transport the call arrived on — Unix socket
+(local, no token) or WebSocket (remote, paired-device token). A peer
+holding a valid pairing token could therefore enumerate, mint, kick,
+or rename other devices on the host machine. The desktop UI knows
+better, but the protocol didn't.
+
+- `alpi/host/server.py` — new `_LOCAL_ONLY_METHODS` set; the dispatcher
+  rejects any method in the set whenever `require_token=True`
+  (i.e. WebSocket transport) with `-32001 forbidden`. Unix socket
+  callers are unaffected. Logs the block at WARNING with the method
+  name so the daemon owner sees attempts.
+- `alpi/host/devices.py::_generate` — response now includes
+  `host`, `port`, `scope`, and `pairing_name` when an endpoint is
+  available, so a desktop client builds the QR/`alpi://` link in one
+  call instead of stitching multiple verbs.
+
+Tests — `tests/host/test_devices.py` adds five cases: parametrized
+`test_devices_verbs_blocked_over_remote_transport` covering all four
+verbs returning `-32001`, `test_devices_verbs_allowed_over_local_unix_transport`
+proving the block is transport-scoped, plus
+`test_generate_verb_includes_network_info_when_available` and
+`test_generate_verb_omits_network_info_without_endpoint` for the
+extended payload.
+
 ## v0.4.18 — 2026-05-09 — Gmail OAuth from the host plane
 
 Adds `host.gateway.gmail_authorize`, a stream verb that lets a paired

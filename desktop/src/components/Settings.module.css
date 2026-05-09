@@ -614,3 +614,26 @@
   text-transform: uppercase;
   letter-spacing: 0.06em;
 }
+
+.deviceQr {
+  display: flex;
+  justify-content: center;
+  margin: var(--space-3) auto;
+  padding: var(--space-3);
+  background: #fff;
+  border-radius: var(--radius-md);
+  width: 240px;
+  height: 240px;
+}
+
+.deviceQr svg {
+  width: 100%;
+  height: 100%;
+}
+
+.deviceMeta {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}

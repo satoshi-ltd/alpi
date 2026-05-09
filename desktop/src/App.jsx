@@ -1045,6 +1045,7 @@ export default function App() {
               workgroups={workgroups}
               target={settingsTarget}
               hostConnections={hostConnections}
+              activeConnection={activeConnection}
               refreshTick={settingsRefreshTick}
               onSelectTarget={setSettingsTarget}
               onRefresh={reload}

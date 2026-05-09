@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import shutil
 import tempfile
 from pathlib import Path
@@ -93,6 +94,51 @@ async def test_generate_verb_returns_full_token(short_tmp: Path) -> None:
 
 
 @pytest.mark.asyncio
+async def test_generate_verb_includes_network_info_when_available(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    from alpi.host import network as net
+
+    monkeypatch.setattr(net, "resolve_host_endpoint", lambda h: ("100.64.0.1", "tailscale"))
+    monkeypatch.setattr(net, "resolve_host_tcp_port", lambda h: 49200)
+    monkeypatch.setattr(net, "resolve_host_pairing_name", lambda h: "alpi-mac")
+
+    srv = host_server.Server(home=short_tmp)
+    devices.register(srv)
+    resp = await srv._dispatch({
+        "id": "r",
+        "method": "host.devices.generate",
+        "params": {"label": "Phone"},
+    })
+    result = resp["result"]
+    assert result["host"] == "100.64.0.1"
+    assert result["scope"] == "tailscale"
+    assert result["port"] == 49200
+    assert result["pairing_name"] == "alpi-mac"
+
+
+@pytest.mark.asyncio
+async def test_generate_verb_omits_network_info_without_endpoint(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    from alpi.host import network as net
+
+    monkeypatch.setattr(net, "resolve_host_endpoint", lambda h: None)
+
+    srv = host_server.Server(home=short_tmp)
+    devices.register(srv)
+    resp = await srv._dispatch({
+        "id": "r",
+        "method": "host.devices.generate",
+        "params": {"label": "Phone"},
+    })
+    result = resp["result"]
+    assert result["token"]
+    assert "host" not in result
+    assert "port" not in result
+
+
+@pytest.mark.asyncio
 async def test_revoke_verb(short_tmp: Path) -> None:
     row = devices.add(label="x")
     srv = host_server.Server(home=short_tmp)
@@ -143,3 +189,60 @@ def test_check_token_touches_last_seen_on_match(short_tmp: Path) -> None:
     assert devices.load()[0]["last_seen"] is None
     _check_token({"params": {"auth_token": row["token"]}})
     assert devices.load()[0]["last_seen"] is not None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("method", [
+    "host.devices.list",
+    "host.devices.generate",
+    "host.devices.revoke",
+    "host.devices.rename",
+])
+async def test_devices_verbs_blocked_over_remote_transport(
+    short_tmp: Path, method: str,
+) -> None:
+    """Pairing admin must never traverse a paired remote — a peer with
+    a token must not be able to enumerate, mint, or kick devices on
+    the host machine. The Unix socket is the only legitimate caller."""
+    row = devices.add(label="seed")  # so token check is enforced
+    srv = host_server.Server(home=short_tmp)
+    devices.register(srv)
+
+    sent: list[dict] = []
+
+    async def send(payload):
+        sent.append(payload)
+
+    body = {
+        "id": "r",
+        "method": method,
+        "params": {"auth_token": row["token"], "token_id": row["token"][-8:], "label": "x"},
+    }
+    await srv._handle_request(json.dumps(body), send, require_token=True)
+
+    assert len(sent) == 1
+    assert sent[0]["error"]["code"] == -32001
+    assert sent[0]["error"]["message"] == "forbidden"
+
+
+@pytest.mark.asyncio
+async def test_devices_verbs_allowed_over_local_unix_transport(
+    short_tmp: Path,
+) -> None:
+    """Same verb, but called locally (no token gate) succeeds — the
+    block is transport-scoped, not method-scoped."""
+    devices.add(label="seed")
+    srv = host_server.Server(home=short_tmp)
+    devices.register(srv)
+
+    sent: list[dict] = []
+
+    async def send(payload):
+        sent.append(payload)
+
+    body = {"id": "r", "method": "host.devices.list", "params": {}}
+    await srv._handle_request(json.dumps(body), send, require_token=False)
+
+    assert len(sent) == 1
+    assert "result" in sent[0]
+    assert "devices" in sent[0]["result"]

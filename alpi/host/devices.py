@@ -138,7 +138,36 @@ async def _generate(
 ) -> dict[str, Any]:
     label = str((params or {}).get("label") or "")
     row = add(label)
-    return {"token": row["token"], "label": row["label"], "created": row["created"]}
+    payload = {
+        "token": row["token"],
+        "label": row["label"],
+        "created": row["created"],
+    }
+    # Best-effort network info inlined so the client builds the QR in one call.
+    from alpi.host.network import (
+        resolve_host_endpoint,
+        resolve_host_pairing_name,
+        resolve_host_tcp_port,
+    )
+    from alpi.home import _ROOT
+
+    try:
+        endpoint = resolve_host_endpoint(_ROOT)
+    except Exception:  # noqa: BLE001
+        endpoint = None
+    if endpoint is not None:
+        host, scope = endpoint
+        payload["host"] = host
+        payload["scope"] = scope
+        try:
+            payload["port"] = resolve_host_tcp_port(_ROOT)
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            payload["pairing_name"] = resolve_host_pairing_name(_ROOT)
+        except Exception:  # noqa: BLE001
+            pass
+    return payload
 
 
 async def _revoke(

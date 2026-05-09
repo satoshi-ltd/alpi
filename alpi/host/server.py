@@ -18,6 +18,14 @@ log = logging.getLogger("alpi.host.server")
 
 DEFAULT_TCP_PORT = 49200
 
+# Pairing admin — rejected over WS, allowed over Unix socket.
+_LOCAL_ONLY_METHODS = frozenset({
+    "host.devices.list",
+    "host.devices.generate",
+    "host.devices.revoke",
+    "host.devices.rename",
+})
+
 
 HandlerResult = dict[str, Any]
 Handler = Callable[
@@ -182,6 +190,17 @@ class Server:
             })
             return
         method = str(body.get("method") or "")
+        if require_token and method in _LOCAL_ONLY_METHODS:
+            log.warning("host forbidden: %s blocked over remote transport", method)
+            await send({
+                "id": body.get("id"),
+                "error": {
+                    "code": -32001,
+                    "message": "forbidden",
+                    "data": {"detail": "method is local-only"},
+                },
+            })
+            return
         if method in self.stream_handlers:
             await self._dispatch_stream(body, send)
             return

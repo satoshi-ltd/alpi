@@ -11,6 +11,31 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.2.6 — 2026-05-09 — Devices section closes alpi setup parity
+
+Requires alpi ``v0.4.19`` or newer (transport-level enforcement of
+local-only pairing admin).
+
+**Devices section in Settings.** The last gap from ``alpi setup``.
+Single-row UX matching ``Peers``: a ``Dropdown`` lists paired clients
+with last-seen chip, click a row to open a detail popover (rename
+inline + revoke with confirm), and ``+ Add device`` opens a modal
+with the generated QR + ``alpi://device?…`` link. Powered by the
+existing ``host.devices.*`` verbs plus an extended
+``host.devices.generate`` that returns the network coordinates
+inline.
+
+Visibility is double-gated: section only renders when
+``profile.name === "default"`` AND
+``activeConnection?.kind === "local"`` — pairing admin is a property
+of the machine, not the profile, and a remote viewer has no business
+managing the host's pairings. The daemon enforces the same rule at
+the transport layer in alpi v0.4.19.
+
+QR rendering uses ``qrcode`` (1.5.4) loaded lazily so it doesn't
+weigh down the main bundle. The same JSON payload schema as the CLI
+(``v/i/p/n/t``) so existing scanners keep working.
+
 ## v0.2.5 — 2026-05-09 — Gmail OAuth in Settings, refresh button, gateway validation
 
 Requires alpi ``v0.4.18`` or newer (new ``host.gateway.gmail_authorize``

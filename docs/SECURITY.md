@@ -126,6 +126,16 @@ doesn't reach:
   the device. Public IPs would break the first invariant — that's why
   the bind validator refuses them.
 
+  **Pairing admin is local-only at the transport.** A paired remote
+  client cannot enumerate, mint, revoke, or rename devices on the host
+  machine. `host.devices.list/generate/revoke/rename` are gated by
+  `_LOCAL_ONLY_METHODS` in `alpi/host/server.py`; any call carrying a
+  paired-device token over the WebSocket is rejected with
+  `-32001 forbidden`. Unix socket callers (the local CLI / desktop)
+  pass through unchanged. The desktop UI hides the Devices section
+  whenever the active connection is remote — but the daemon
+  enforces the rule regardless of client.
+
 - **Sensitive-shape redaction** on persisted sessions (v0.3.8). Before
   `~/.alpi/<profile>/sessions/<id>.json` is written, every string in
   user/assistant text and tool args/results is scanned for known

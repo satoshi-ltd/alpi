@@ -136,6 +136,7 @@ export default function Settings({
   workgroups = [],
   target,
   hostConnections,
+  activeConnection,
   refreshTick = 0,
   onSelectTarget,
   onRefresh,
@@ -248,6 +249,7 @@ export default function Settings({
           key={`${selectedProfile.name}:${refreshTick}`}
           profile={selectedProfile}
           profiles={profiles}
+          activeConnection={activeConnection}
           onSaved={onRefresh}
           onNavigate={setTarget}
         />
@@ -305,7 +307,7 @@ function initialDraft(profile) {
   };
 }
 
-function ProfileDetail({ profile, profiles, onSaved, onNavigate }) {
+function ProfileDetail({ profile, profiles, activeConnection, onSaved, onNavigate }) {
   const baseline = useMemo(() => initialDraft(profile), [profile]);
   const [draft, setDraft] = useState(baseline);
   const notify = useNotify();
@@ -463,6 +465,12 @@ function ProfileDetail({ profile, profiles, onSaved, onNavigate }) {
             />
           </Row>
         </Section>
+
+        {profile.name === "default" && activeConnection?.kind === "local" && (
+          <Section title="Devices">
+            <DevicesField />
+          </Section>
+        )}
 
         <SchedulesSection profile={profile} />
 
@@ -4552,6 +4560,377 @@ function SkillsField({ profile }) {
       ))}
     </>
   );
+}
+
+function DevicesField() {
+  const notify = useNotify();
+  const [devices, setDevices] = useState(null);
+  const [adding, setAdding] = useState(false);
+  const [selectedTokenId, setSelectedTokenId] = useState(null);
+  const [pairing, setPairing] = useState(null);
+  const detailAnchorRef = useRef(null);
+
+  const reload = useCallback(async () => {
+    try {
+      const list = await invoke("devices_list");
+      setDevices(Array.isArray(list) ? list : []);
+    } catch (e) {
+      setDevices([]);
+      notify({ message: `devices: ${String(e)}`, variant: "error" });
+    }
+  }, [notify]);
+
+  useEffect(() => { reload(); }, [reload]);
+
+  async function revoke(tokenId) {
+    try {
+      await invoke("devices_revoke", { tokenId });
+      notify({ message: "Device revoked", variant: "success" });
+      setSelectedTokenId(null);
+      await reload();
+    } catch (e) {
+      notify({ message: `revoke: ${String(e)}`, variant: "error", duration: 4000 });
+    }
+  }
+
+  async function rename(tokenId, label) {
+    try {
+      await invoke("devices_rename", { tokenId, label });
+      await reload();
+    } catch (e) {
+      notify({ message: `rename: ${String(e)}`, variant: "error", duration: 4000 });
+    }
+  }
+
+  if (devices === null) {
+    return <Row label="paired"><span className={styles.muted}>loading…</span></Row>;
+  }
+
+  const selected = selectedTokenId
+    ? devices.find((d) => d.token_id === selectedTokenId)
+    : null;
+  const activeCount = devices.filter((d) => {
+    if (!d.last_seen) return false;
+    return Date.now() / 1000 - d.last_seen < 86400;
+  }).length;
+
+  return (
+    <Row label="paired">
+      <span className={styles.inlineRow}>
+        {devices.length === 0 ? (
+          <span className={styles.muted}>none</span>
+        ) : (
+          <span ref={detailAnchorRef} className={styles.tcpWrap}>
+            <Dropdown
+              trigger={{
+                label:
+                  devices.length === 1
+                    ? `1 device · ${activeCount} active`
+                    : `${devices.length} devices · ${activeCount} active`,
+              }}
+              direction="down"
+              align="left"
+              width={320}
+              variant="outlined"
+            >
+              {({ close }) => (
+                <>
+                  {devices.map((d) => (
+                    <Dropdown.Row
+                      key={d.token_id}
+                      onClick={() => { close?.(); setSelectedTokenId(d.token_id); }}
+                      caption={`…${d.token_id}`}
+                      trailing={
+                        <Chip size="sm">{formatLastSeen(d.last_seen)}</Chip>
+                      }
+                    >
+                      {d.label || "(unnamed)"}
+                    </Dropdown.Row>
+                  ))}
+                </>
+              )}
+            </Dropdown>
+            {selected && (
+              <DeviceDetailPopover
+                device={selected}
+                anchorRef={detailAnchorRef}
+                onClose={() => setSelectedTokenId(null)}
+                onRename={(label) => rename(selected.token_id, label)}
+                onRevoke={() => revoke(selected.token_id)}
+              />
+            )}
+          </span>
+        )}
+        <Button size="sm" onClick={() => setAdding(true)}>+ Add device</Button>
+      </span>
+      {adding && (
+        <AddDeviceModal
+          onClose={() => setAdding(false)}
+          onPaired={(payload) => { setAdding(false); setPairing(payload); reload(); }}
+        />
+      )}
+      {pairing && (
+        <DevicePairingModal
+          payload={pairing}
+          onClose={() => setPairing(null)}
+        />
+      )}
+    </Row>
+  );
+}
+
+function DeviceDetailPopover({ device, anchorRef, onClose, onRename, onRevoke }) {
+  const popoverRef = useRef(null);
+  const [label, setLabel] = useState(device.label ?? "");
+  const [busy, setBusy] = useState(false);
+  const pos = useAutoPosition({
+    open: true,
+    anchorRef,
+    popoverRef,
+    direction: "down",
+    align: "left",
+  });
+
+  const dirty = label.trim() !== (device.label ?? "").trim();
+
+  return (
+    <div
+      ref={popoverRef}
+      className={styles.tcpPopover}
+      style={{
+        minWidth: 320,
+        maxWidth: pos.maxWidth ?? undefined,
+        position: "fixed",
+        top: pos.top,
+        left: pos.left,
+        right: "auto",
+        bottom: "auto",
+        visibility: pos.ready ? "visible" : "hidden",
+      }}
+    >
+      <div className={styles.tcpField}>
+        <label className={styles.tcpLabel}>label</label>
+        <input
+          className={styles.input}
+          style={{ maxWidth: "none" }}
+          type="text"
+          value={label}
+          onChange={(e) => setLabel(e.target.value)}
+          spellCheck={false}
+          disabled={busy}
+        />
+      </div>
+      <div className={styles.tcpField}>
+        <label className={styles.tcpLabel}>token id</label>
+        <span className={styles.mono}>…{device.token_id}</span>
+      </div>
+      <div className={styles.tcpField}>
+        <label className={styles.tcpLabel}>last seen</label>
+        <span>{formatLastSeen(device.last_seen)}</span>
+      </div>
+      <div className={styles.tcpActions}>
+        <Button size="sm" onClick={onClose} disabled={busy}>Close</Button>
+        {dirty && (
+          <Button
+            size="sm"
+            variant="primary"
+            loading={busy}
+            onClick={async () => {
+              setBusy(true);
+              try { await onRename(label.trim()); onClose(); }
+              finally { setBusy(false); }
+            }}
+          >
+            Save
+          </Button>
+        )}
+        <ConfirmButton
+          size="sm"
+          label="Revoke"
+          confirmLabel="Confirm revoke"
+          loading={busy}
+          onConfirm={async () => {
+            setBusy(true);
+            try { await onRevoke(); }
+            finally { setBusy(false); }
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function AddDeviceModal({ onClose, onPaired }) {
+  const notify = useNotify();
+  const [label, setLabel] = useState("");
+  const [busy, setBusy] = useState(false);
+  const wrapRef = useRef(null);
+
+  useEffect(() => {
+    function onClick(e) {
+      if (wrapRef.current && !wrapRef.current.contains(e.target)) onClose();
+    }
+    document.addEventListener("mousedown", onClick);
+    return () => document.removeEventListener("mousedown", onClick);
+  }, [onClose]);
+
+  async function generate() {
+    if (!label.trim()) {
+      notify({ message: "Label is required", variant: "error" });
+      return;
+    }
+    setBusy(true);
+    try {
+      const payload = await invoke("devices_generate", { label: label.trim() });
+      onPaired(payload);
+    } catch (e) {
+      notify({ message: `generate: ${String(e)}`, variant: "error", duration: 4000 });
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className={styles.gatewayBackdrop}>
+      <div ref={wrapRef} className={styles.gatewayModal}>
+        <div className={styles.gatewayModalTitle}>Pair a new device</div>
+        <div className={styles.tcpField}>
+          <label className={styles.tcpLabel}>Label</label>
+          <input
+            className={styles.input}
+            style={{ maxWidth: "none" }}
+            type="text"
+            value={label}
+            autoFocus
+            onChange={(e) => setLabel(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") generate(); }}
+            placeholder="iPhone, MacBook, …"
+            spellCheck={false}
+            disabled={busy}
+          />
+        </div>
+        <div className={styles.tcpActions}>
+          <Button size="sm" onClick={onClose} disabled={busy}>Close</Button>
+          <Button size="sm" variant="primary" onClick={generate} loading={busy}>
+            Generate QR
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DevicePairingModal({ payload, onClose }) {
+  const notify = useNotify();
+  const wrapRef = useRef(null);
+  const [qrSvg, setQrSvg] = useState("");
+
+  useEffect(() => {
+    function onClick(e) {
+      if (wrapRef.current && !wrapRef.current.contains(e.target)) onClose();
+    }
+    document.addEventListener("mousedown", onClick);
+    return () => document.removeEventListener("mousedown", onClick);
+  }, [onClose]);
+
+  const qrPayload = useMemo(() => {
+    if (!payload.host || !payload.port) return null;
+    return JSON.stringify({
+      v: 2,
+      i: payload.host,
+      p: payload.port,
+      n: payload.pairing_name || "",
+      t: payload.token,
+    });
+  }, [payload]);
+
+  const desktopLink = useMemo(() => {
+    if (!payload.host || !payload.port) return null;
+    const params = new URLSearchParams({
+      v: "2",
+      host: payload.host,
+      port: String(payload.port),
+      name: payload.pairing_name || "",
+      token: payload.token,
+    });
+    return `alpi://device?${params.toString()}`;
+  }, [payload]);
+
+  useEffect(() => {
+    if (!qrPayload) return;
+    let cancelled = false;
+    import("qrcode").then(({ default: QRCode }) =>
+      QRCode.toString(qrPayload, { type: "svg", margin: 1, errorCorrectionLevel: "L" })
+    ).then((svg) => { if (!cancelled) setQrSvg(svg); })
+     .catch((e) => notify({ message: `QR: ${String(e)}`, variant: "error" }));
+    return () => { cancelled = true; };
+  }, [qrPayload, notify]);
+
+  if (!payload.host || !payload.port) {
+    return (
+      <div className={styles.gatewayBackdrop}>
+        <div ref={wrapRef} className={styles.gatewayModal}>
+          <div className={styles.gatewayModalTitle}>{payload.label}</div>
+          <div className={styles.muted}>
+            Cannot pair — no advertised host. Set up Tailscale or a LAN
+            address first, then run "Add device" again.
+          </div>
+          <div className={styles.muted} style={{ marginTop: "var(--space-2)" }}>
+            Token saved as <span className={styles.mono}>…{payload.token.slice(-8)}</span>
+          </div>
+          <div className={styles.tcpActions}>
+            <Button size="sm" onClick={onClose}>Close</Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className={styles.gatewayBackdrop}>
+      <div ref={wrapRef} className={styles.gatewayModal}>
+        <div className={styles.gatewayModalTitle}>{payload.label}</div>
+        <div className={styles.muted}>
+          Scan from mobile, or paste the link into the desktop app.
+        </div>
+        <div className={styles.deviceQr} dangerouslySetInnerHTML={{ __html: qrSvg }} />
+        <div className={styles.deviceMeta}>
+          <Row label="scope">
+            <Chip size="sm">{payload.scope || "?"}</Chip>
+          </Row>
+          <Row label="host">
+            <span className={styles.mono}>{payload.host}:{payload.port}</span>
+          </Row>
+          <Row label="token">
+            <span className={styles.mono}>…{payload.token.slice(-8)}</span>
+          </Row>
+          <Row label="link">
+            <span className={styles.inlineRow}>
+              <span className={`${styles.mono} ${styles.truncate}`}>{desktopLink}</span>
+              <CopyButton value={desktopLink} message="Pairing link copied" />
+            </span>
+          </Row>
+        </div>
+        <div className={styles.tcpActions}>
+          <Button size="sm" onClick={onClose}>Done</Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function formatLastSeen(ts) {
+  if (!ts) return "never";
+  const d = new Date(ts * 1000);
+  const now = Date.now();
+  const diff = now - d.getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days}d ago`;
+  return d.toISOString().slice(0, 10);
 }
 
 function Stat({ label, value }) {

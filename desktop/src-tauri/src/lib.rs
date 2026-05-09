@@ -391,6 +391,50 @@ fn skills(profile: String) -> serde_json::Value {
 }
 
 #[tauri::command]
+fn devices_list() -> serde_json::Value {
+    host_array_value("host.devices.list", serde_json::json!({}), "devices")
+}
+
+#[tauri::command]
+async fn devices_generate(label: String) -> Result<serde_json::Value, String> {
+    let value = tauri::async_runtime::spawn_blocking(move || {
+        host_client::call(
+            "host.devices.generate",
+            serde_json::json!({"label": label}),
+        )
+    })
+    .await
+    .map_err(|e| format!("join: {e}"))??;
+    Ok(value)
+}
+
+#[tauri::command]
+async fn devices_revoke(token_id: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        host_client::call(
+            "host.devices.revoke",
+            serde_json::json!({"token_id": token_id}),
+        )
+    })
+    .await
+    .map_err(|e| format!("join: {e}"))??;
+    Ok(())
+}
+
+#[tauri::command]
+async fn devices_rename(token_id: String, label: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        host_client::call(
+            "host.devices.rename",
+            serde_json::json!({"token_id": token_id, "label": label}),
+        )
+    })
+    .await
+    .map_err(|e| format!("join: {e}"))??;
+    Ok(())
+}
+
+#[tauri::command]
 fn profile_storage(profile: String) -> serde_json::Value {
     host_array_value(
         "host.profile.storage",
@@ -1441,6 +1485,10 @@ pub fn run() {
             resolve_ctx_window,
             probe_gateways,
             skills,
+            devices_list,
+            devices_generate,
+            devices_revoke,
+            devices_rename,
             profile_storage,
             workgroup_members,
             workgroup_action,
