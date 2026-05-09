@@ -51,8 +51,9 @@ const DOCS = [
   { slug: 'DEPLOYMENTS',  src: 'docs/DEPLOYMENTS.md',   ix: '11', category: 'ops',       sub: 'launchd on macOS, systemd on Linux. Gateway daemon, schedule daemon, keep-alive, logs.' },
   { slug: 'OPERATIONS',   src: 'docs/OPERATIONS.md',    ix: '12', category: 'ops',       sub: 'Day-2 runbook. Doctor, diagnostics, log rotation, backup, recovery, upgrade.' },
   { slug: 'LICENSE',      src: 'LICENSE',               ix: '13', category: 'legal',     sub: 'Legal terms for the source-available agent core and Apache-2.0 Alpi Link Protocol.', raw: true },
-  { slug: 'ROADMAP',      src: 'docs/ROADMAP.md',       ix: '14', category: 'planning',  sub: 'Open release gates, ALP launch work, long-term bets, and discarded decisions.' },
-  { slug: 'CHANGELOG',    src: 'CHANGELOG.md',          ix: '15', category: 'log',       sub: 'Version-by-version log of user-visible changes since v0.1.' },
+  { slug: 'ORGANIZATION', src: 'docs/ORGANIZATION.md',  ix: '14', category: 'guide',     sub: '17-agent company scaffold built on ALP: roles, workgroups, 51 skills, and a one-command bootstrap.' },
+  { slug: 'ROADMAP',      src: 'docs/ROADMAP.md',       ix: '15', category: 'planning',  sub: 'Open release gates, ALP launch work, long-term bets, and discarded decisions.' },
+  { slug: 'CHANGELOG',    src: 'CHANGELOG.md',          ix: '16', category: 'log',       sub: 'Version-by-version log of user-visible changes since v0.1.' },
 ];
 const TOTAL = DOCS.length;
 

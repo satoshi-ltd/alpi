@@ -254,3 +254,56 @@ jobs:
           files: dist/*
           fail_on_unmatched_files: true
           prerelease: false
+
+  # 6. Build site in parallel with the publish chain so it's ready
+  #    to deploy the moment publish-pypi completes.
+  site-build:
+    name: site build
+    needs: check-version
+    if: needs.check-version.outputs.should_publish == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: node site/scripts/build.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: site-dist
+          path: site/dist/
+          if-no-files-found: error
+          retention-days: 7
+
+  # 7. Deploy site — runs only after publish-pypi so the site always
+  #    reflects a version that is live on PyPI and GitHub.
+  deploy-site:
+    name: deploy site
+    needs: [check-version, publish-pypi, site-build]
+    if: needs.check-version.outputs.should_publish == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      deployments: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: site-dist
+          path: site-dist
+      - name: verify Cloudflare config
+        env:
+          ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          PROJECT_NAME: ${{ vars.CLOUDFLARE_PAGES_PROJECT_NAME || secrets.CLOUDFLARE_PAGES_PROJECT_NAME }}
+        run: |
+          test -n "$ACCOUNT_ID" || { echo "::error::CLOUDFLARE_ACCOUNT_ID is missing"; exit 1; }
+          test -n "$API_TOKEN"   || { echo "::error::CLOUDFLARE_API_TOKEN is missing"; exit 1; }
+          test -n "$PROJECT_NAME" || { echo "::error::CLOUDFLARE_PAGES_PROJECT_NAME is missing"; exit 1; }
+      - name: deploy to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy site-dist --project-name=${{ vars.CLOUDFLARE_PAGES_PROJECT_NAME || secrets.CLOUDFLARE_PAGES_PROJECT_NAME }} --branch=main
+          gitHubToken: ${{ secrets.GITHUB_TOKEN }}
