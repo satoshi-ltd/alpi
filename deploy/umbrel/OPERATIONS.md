@@ -7,8 +7,8 @@ Umbrel package versions should match Alpi versions exactly.
 
 Examples:
 
-- Alpi `0.4.10` -> publish-umbrel tag `0.4.10`
-- Alpi `0.4.10` -> `umbrel-app.yml` version `0.4.10`
+- Alpi `0.4.20` -> publish-umbrel tag `0.4.20`
+- Alpi `0.4.20` -> `umbrel-app.yml` version `0.4.20`
 
 ## 1. Bump the Umbrel package version
 
@@ -31,7 +31,7 @@ From the Alpi repository root:
 ```bash
 docker buildx build \
   --platform linux/amd64,linux/arm64 \
-  -t satoshiltd/alpi-umbrel:0.4.10 \
+  -t satoshiltd/alpi-umbrel:0.4.20 \
   -f deploy/umbrel/alpi/Dockerfile \
   --push .
 ```
@@ -39,8 +39,8 @@ docker buildx build \
 If you only need a local smoke test first:
 
 ```bash
-docker build -t satoshiltd/alpi-umbrel:0.4.10 -f deploy/umbrel/alpi/Dockerfile .
-docker run --rm -it -p 8080:8080 -v alpi-umbrel-data:/data satoshiltd/alpi-umbrel:0.4.10
+docker build -t satoshiltd/alpi-umbrel:0.4.20 -f deploy/umbrel/alpi/Dockerfile .
+docker run --rm -it -p 8080:8080 -v alpi-umbrel-data:/data satoshiltd/alpi-umbrel:0.4.20
 ```
 
 ## 3. Resolve the image digest
@@ -50,13 +50,13 @@ Umbrel requires the app-store compose file to pin the image by digest.
 After publishing:
 
 ```bash
-docker buildx imagetools inspect satoshiltd/alpi-umbrel:0.4.10
+docker buildx imagetools inspect satoshiltd/alpi-umbrel:0.4.20
 ```
 
 Copy the manifest list digest and use:
 
 ```yaml
-image: satoshiltd/alpi-umbrel:0.4.10@sha256:<digest>
+image: satoshiltd/alpi-umbrel:0.4.20@sha256:<digest>
 ```
 
 ## 4. Update the `umbrel-apps` fork
