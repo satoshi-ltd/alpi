@@ -136,14 +136,6 @@ async def _list(_params: dict[str, Any], _server: host_server.Server) -> dict[st
 async def _generate(
     params: dict[str, Any], _server: host_server.Server,
 ) -> dict[str, Any]:
-    label = str((params or {}).get("label") or "")
-    row = add(label)
-    payload = {
-        "token": row["token"],
-        "label": row["label"],
-        "created": row["created"],
-    }
-    # Best-effort network info inlined so the client builds the QR in one call.
     from alpi.host.network import (
         resolve_host_endpoint,
         resolve_host_pairing_name,
@@ -155,19 +147,33 @@ async def _generate(
         endpoint = resolve_host_endpoint(_ROOT)
     except Exception:  # noqa: BLE001
         endpoint = None
-    if endpoint is not None:
-        host, scope = endpoint
-        payload["host"] = host
-        payload["scope"] = scope
-        try:
-            payload["port"] = resolve_host_tcp_port(_ROOT)
-        except Exception:  # noqa: BLE001
-            pass
-        try:
-            payload["pairing_name"] = resolve_host_pairing_name(_ROOT)
-        except Exception:  # noqa: BLE001
-            pass
-    return payload
+    if endpoint is None:
+        from alpi.host.network import diagnose_bind_ip
+
+        diag = diagnose_bind_ip()
+        bits = [f"{k}={v}" for k, v in diag.items() if v is not None]
+        raise host_server.HandlerError(
+            -32010,
+            "no-advertised-host",
+            data={
+                "detail": "Cannot pair — no Tailscale or LAN address detected.",
+                "diagnosis": diag,
+                "summary": " · ".join(bits) or "nothing detected",
+            },
+        )
+
+    label = str((params or {}).get("label") or "")
+    row = add(label)
+    host, scope = endpoint
+    return {
+        "token": row["token"],
+        "label": row["label"],
+        "created": row["created"],
+        "host": host,
+        "scope": scope,
+        "port": resolve_host_tcp_port(_ROOT),
+        "pairing_name": resolve_host_pairing_name(_ROOT),
+    }
 
 
 async def _revoke(

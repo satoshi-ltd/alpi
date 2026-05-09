@@ -116,7 +116,7 @@ def test_lan_parser_extracts_private_address() -> None:
     })()
     with patch("alpi.host.network.shutil.which", return_value="/sbin/ifconfig"), \
          patch("alpi.host.network.subprocess.run", return_value=fake_out):
-        assert network._detect_lan_ip() == "192.168.1.42"
+        assert network._detect_lan_ip_via_ifconfig() == "192.168.1.42"
 
 
 def test_lan_parser_skips_loopback() -> None:
@@ -129,7 +129,7 @@ def test_lan_parser_skips_loopback() -> None:
     })()
     with patch("alpi.host.network.shutil.which", return_value="/sbin/ifconfig"), \
          patch("alpi.host.network.subprocess.run", return_value=fake_out):
-        assert network._detect_lan_ip() is None
+        assert network._detect_lan_ip_via_ifconfig() is None
 
 
 def test_lan_parser_skips_public_address() -> None:
@@ -142,7 +142,7 @@ def test_lan_parser_skips_public_address() -> None:
     })()
     with patch("alpi.host.network.shutil.which", return_value="/sbin/ifconfig"), \
          patch("alpi.host.network.subprocess.run", return_value=fake_out):
-        assert network._detect_lan_ip() is None
+        assert network._detect_lan_ip_via_ifconfig() is None
 
 
 def test_lan_parser_recognises_10_8() -> None:
@@ -152,7 +152,7 @@ def test_lan_parser_recognises_10_8() -> None:
     })()
     with patch("alpi.host.network.shutil.which", return_value="/sbin/ifconfig"), \
          patch("alpi.host.network.subprocess.run", return_value=fake_out):
-        assert network._detect_lan_ip() == "10.8.0.5"
+        assert network._detect_lan_ip_via_ifconfig() == "10.8.0.5"
 
 
 def test_lan_parser_recognises_172_16_12() -> None:
@@ -162,4 +162,4 @@ def test_lan_parser_recognises_172_16_12() -> None:
     })()
     with patch("alpi.host.network.shutil.which", return_value="/sbin/ifconfig"), \
          patch("alpi.host.network.subprocess.run", return_value=fake_out):
-        assert network._detect_lan_ip() == "172.20.5.5"
+        assert network._detect_lan_ip_via_ifconfig() == "172.20.5.5"

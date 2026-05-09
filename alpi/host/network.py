@@ -29,6 +29,29 @@ def detect_bind_ip() -> tuple[str, str] | None:
     return None
 
 
+# What did detection actually see? Used to surface a diagnostic error
+# instead of a bare "no advertised host". Never raises.
+def diagnose_bind_ip() -> dict[str, str | None]:
+    udp_ip = None
+    udp_err = None
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            s.connect(("8.8.8.8", 53))
+            udp_ip = s.getsockname()[0]
+        finally:
+            s.close()
+    except OSError as exc:
+        udp_err = str(exc)
+    return {
+        "tailscale": detect_tailscale_ip(),
+        "udp_probe_ip": udp_ip,
+        "udp_probe_error": udp_err,
+        "udp_probe_is_private": str(_is_private_lan(udp_ip)) if udp_ip else None,
+        "ifconfig_lan": _detect_lan_ip_via_ifconfig(),
+    }
+
+
 def resolve_host_endpoint(home: Path) -> tuple[str, str] | None:
     configured = _configured_host(home)
     if configured:
@@ -89,6 +112,28 @@ def _umbrel_host_hint() -> str | None:
 
 
 def _detect_lan_ip() -> str | None:
+    udp = _detect_lan_ip_via_udp()
+    if udp:
+        return udp
+    return _detect_lan_ip_via_ifconfig()
+
+
+# Connect a UDP socket to a public IP — no packets sent, but the kernel
+# picks the outbound interface so getsockname returns its IP. Works on
+# any platform, no shelling out, captures the *active* default route.
+def _detect_lan_ip_via_udp() -> str | None:
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(("8.8.8.8", 53))
+        addr = s.getsockname()[0]
+    except OSError:
+        return None
+    finally:
+        s.close()
+    return addr if _is_private_lan(addr) else None
+
+
+def _detect_lan_ip_via_ifconfig() -> str | None:
     binary = shutil.which("ifconfig") or "/sbin/ifconfig"
     try:
         out = subprocess.run(

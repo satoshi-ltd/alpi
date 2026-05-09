@@ -1,5 +1,31 @@
 # Changelog
 
+## v0.4.20 — 2026-05-09 — robust endpoint detection + diagnostic pairing errors
+
+Two paired changes that make device pairing fail informatively instead of
+silently when the host can't be reached.
+
+- `alpi/host/network.py::_detect_lan_ip` now tries a UDP-socket trick first
+  (connect a `SOCK_DGRAM` to `8.8.8.8:53`, read `getsockname()`) and falls
+  back to the legacy `ifconfig` parse only if that fails. The UDP probe
+  works on any platform without shelling out and captures whichever
+  interface the kernel routes through — caught a real bug where the
+  `ifconfig` parser would miss valid LAN IPs that the OS reports through
+  a non-`inet` line shape. New `diagnose_bind_ip()` helper returns what
+  was tried (Tailscale CLI, UDP probe, ifconfig parse) so callers can
+  surface a structured failure.
+- `alpi/host/devices.py::_generate` now emits the diagnosis in the error
+  payload when no advertised host is found. Errors look like
+  `-32010 no-advertised-host` with a `data.summary` of
+  `udp_probe_ip=… · udp_probe_is_private=False · …` so the user sees what
+  the daemon actually saw, not just a generic "cannot pair" message.
+
+Tests — `tests/host/test_network.py` re-targets the parser unit tests at
+`_detect_lan_ip_via_ifconfig` (the legacy code path) since the combined
+`_detect_lan_ip` now also probes UDP. `tests/host/test_devices.py`
+updates the no-endpoint case to assert the structured error code rather
+than the loose token persistence behaviour from before.
+
 ## v0.4.19 — 2026-05-09 — pairing admin is local-only at the transport layer
 
 Pairing admin (`host.devices.list/generate/revoke/rename`) used to be

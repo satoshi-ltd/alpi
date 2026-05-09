@@ -80,21 +80,7 @@ async def test_list_verb_redacts_token(short_tmp: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_generate_verb_returns_full_token(short_tmp: Path) -> None:
-    srv = host_server.Server(home=short_tmp)
-    devices.register(srv)
-    resp = await srv._dispatch({
-        "id": "r",
-        "method": "host.devices.generate",
-        "params": {"label": "iPad"},
-    })
-    assert resp["result"]["token"]
-    assert resp["result"]["label"] == "iPad"
-    assert len(devices.load()) == 1
-
-
-@pytest.mark.asyncio
-async def test_generate_verb_includes_network_info_when_available(
+async def test_generate_verb_returns_full_token_with_network(
     short_tmp: Path, monkeypatch,
 ) -> None:
     from alpi.host import network as net
@@ -108,19 +94,25 @@ async def test_generate_verb_includes_network_info_when_available(
     resp = await srv._dispatch({
         "id": "r",
         "method": "host.devices.generate",
-        "params": {"label": "Phone"},
+        "params": {"label": "iPad"},
     })
     result = resp["result"]
+    assert result["token"]
+    assert result["label"] == "iPad"
     assert result["host"] == "100.64.0.1"
     assert result["scope"] == "tailscale"
     assert result["port"] == 49200
     assert result["pairing_name"] == "alpi-mac"
+    assert len(devices.load()) == 1
 
 
 @pytest.mark.asyncio
-async def test_generate_verb_omits_network_info_without_endpoint(
+async def test_generate_verb_refuses_when_no_endpoint(
     short_tmp: Path, monkeypatch,
 ) -> None:
+    """Without an advertised host the verb must NOT save a token —
+    a token without a way to reach the daemon is a UX trap (orphan
+    devices in the list, no QR, user can't recover without revoking)."""
     from alpi.host import network as net
 
     monkeypatch.setattr(net, "resolve_host_endpoint", lambda h: None)
@@ -132,10 +124,10 @@ async def test_generate_verb_omits_network_info_without_endpoint(
         "method": "host.devices.generate",
         "params": {"label": "Phone"},
     })
-    result = resp["result"]
-    assert result["token"]
-    assert "host" not in result
-    assert "port" not in result
+    assert "error" in resp
+    assert resp["error"]["code"] == -32010
+    assert resp["error"]["message"] == "no-advertised-host"
+    assert len(devices.load()) == 0
 
 
 @pytest.mark.asyncio
