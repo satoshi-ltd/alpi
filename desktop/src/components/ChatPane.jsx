@@ -8,6 +8,8 @@ import { AlpiIcon, CopyIcon, SpinnerIcon, UndoIcon } from "../primitives/icons.j
 import Message from "../primitives/Message.jsx";
 import { useStickyScroll } from "../lib/useStickyScroll.js";
 import { relativeTime } from "../lib/time.js";
+import { profileLabel } from "../lib/profile-display.js";
+import Skeleton from "../primitives/Skeleton.jsx";
 import { useNotify } from "../primitives/Notification.jsx";
 import alpiHeadUrl from "../assets/alpi-head.svg?url";
 import styles from "./ChatPane.module.css";
@@ -19,14 +21,21 @@ export default function ChatPane({
   sessionData,
   pendingTurn,
   onSend,
+  onCancel,
   onSelectProfile,
+  onConfigureProfile,
   onRewriteMessage,
   rewriteDraft,
   onRewriteDraftApplied,
   daemonOffline = false,
 }) {
   const inProfile = view.kind === "profile";
-  const inEmpty = view.kind === "empty" && !pendingTurn;
+  // "empty view" covers both `+ New Chat` and `select a profile with no
+  // existing session yet` — same UX (centered picker + composer).
+  const inEmpty =
+    !pendingTurn &&
+    (view.kind === "empty" ||
+      (view.kind === "profile" && view.sessionId == null));
   const sessionKey = inProfile ? `${view.profile}:${view.sessionId ?? "new"}` : "empty";
   const [modelOverride, setModelOverride] = useState(null);
 
@@ -35,6 +44,10 @@ export default function ChatPane({
   }, [sessionKey]);
 
   const noModel = !!activeProfile && !activeProfile.model;
+  const hasProviders =
+    !!activeProfile &&
+    ((activeProfile.models?.length ?? 0) > 0 ||
+      (activeProfile.provider_ollama?.length ?? 0) > 0);
 
   // Hide the chat until the active profile has a model.
   if (noModel) {
@@ -44,12 +57,24 @@ export default function ChatPane({
           <div className={styles.emptyMark}>
             <Logo />
           </div>
-          <h1 className={styles.emptyHeading}>No model configured</h1>
-          <div className={styles.emptyHint}>
-            <strong>@{activeProfile.name}</strong> has no model set. Pick
-            one in <strong>Settings → Overview → model</strong> or run{" "}
-            <code>alpi -p {activeProfile.name} setup</code>.
+          <div className={styles.titleGroup}>
+            <h1 className={styles.emptyHeading}>
+              {hasProviders
+                ? `@${profileLabel(activeProfile.name)} needs a model`
+                : `@${profileLabel(activeProfile.name)} needs a provider`}
+            </h1>
+            <p className={styles.emptyHint}>
+              {hasProviders
+                ? "Pick from one of the providers you've already connected."
+                : "Connect Anthropic, OpenAI, OpenRouter, Gemini or Ollama to start chatting."}
+            </p>
           </div>
+          <Button
+            variant="primary"
+            onClick={() => onConfigureProfile?.(activeProfile)}
+          >
+            {hasProviders ? "Pick a model" : "Set up provider"}
+          </Button>
         </div>
       </div>
     );
@@ -81,7 +106,8 @@ export default function ChatPane({
             activeProfile={activeProfile}
             onSelectProfile={onSelectProfile}
             onSend={onSend}
-            disabled={!!pendingTurn || daemonOffline}
+            onCancel={pendingTurn ? onCancel : null}
+            disabled={daemonOffline}
             daemonOffline={daemonOffline}
             showPicker
             embedded
@@ -112,7 +138,8 @@ export default function ChatPane({
         activeProfile={activeProfile}
         onSelectProfile={onSelectProfile}
         onSend={onSend}
-        disabled={!!pendingTurn || daemonOffline}
+        onCancel={pendingTurn ? onCancel : null}
+        disabled={daemonOffline}
         daemonOffline={daemonOffline}
         showPicker={false}
         modelOverride={modelOverride}
@@ -184,7 +211,13 @@ const Transcript = memo(function Transcript({
   }
 
   if (turns.length === 0 && !data) {
-    return <div className={styles.loading}>loading…</div>;
+    return (
+      <div className={styles.loading}>
+        <Skeleton width="60%" height="1.2em" />
+        <Skeleton width="80%" height="1.2em" />
+        <Skeleton width="45%" height="1.2em" />
+      </div>
+    );
   }
 
   return (
@@ -428,6 +461,7 @@ function ChatComposer({
   activeProfile,
   onSelectProfile,
   onSend,
+  onCancel,
   showPicker,
   embedded,
   disabled,
@@ -520,6 +554,7 @@ function ChatComposer({
       value={text}
       onChange={setText}
       onSubmit={trySend}
+      onCancel={onCancel}
       canSend={canSend}
       embedded={embedded}
       placeholder={placeholder}
@@ -579,6 +614,10 @@ function parsePeerMentions(text) {
 
 function Logo() {
   return (
-    <img className={styles.logoImage} src={alpiHeadUrl} alt="alpi" />
+    <span
+      className={styles.logoImage}
+      style={{ "--mask-image": `url(${alpiHeadUrl})` }}
+      aria-label="alpi"
+    />
   );
 }

@@ -8,6 +8,7 @@ import OfflineBanner from "./components/OfflineBanner.jsx";
 import WorkgroupView from "./components/WorkgroupView.jsx";
 import Settings from "./components/Settings.jsx";
 import { useNotify } from "./primitives/Notification.jsx";
+import { orderedJumpTargets } from "./lib/profile-order.js";
 import { installUpdater } from "./lib/updater.js";
 import { findLatestTask } from "./lib/workgroup-tasks.js";
 import { saveCachedMessages } from "./lib/workgroup-cache.js";
@@ -58,12 +59,36 @@ export default function App() {
   const reloadRef = useRef(null);
   const pendingTurnRef = useRef(null);
 
+  // Mirrors sidebar order — pinned profiles + pinned workgroups first,
+  // then unpinned profiles by recency — so ⌘N matches the visible row.
+  const jumpTargetsRef = useRef([]);
+  const onJumpToProfile = useCallback((index) => {
+    const item = jumpTargetsRef.current[index];
+    if (!item) return;
+    if (item.kind === "profile") {
+      setRewriteDraft(null);
+      setView({
+        kind: "profile",
+        profile: item.target.name,
+        sessionId:
+          item.target.latest_session && item.target.latest_session.kind === "chat"
+            ? item.target.latest_session.id
+            : null,
+      });
+    } else if (item.kind === "workgroup") {
+      setView({
+        kind: "workgroup",
+        profile: item.target.profile,
+        id: item.target.id,
+      });
+    }
+  }, []);
   const { collapsed, setCollapsed, toggleSidebar } = useWindowChrome({
     viewRef,
     setView,
+    onJumpToProfile,
   });
   useNavListener(setView);
-  const { pinned, onTogglePin } = usePinned();
 
   const { pendingTurn, setPendingTurn } = useChatStream({
     setSessionData,
@@ -100,6 +125,8 @@ export default function App() {
   useEffect(() => {
     reloadRef.current = reload;
   }, [reload]);
+
+  const { pinned, onTogglePin } = usePinned(hostConnections.active_id);
 
   const profilesRef = useRef(profiles);
   useEffect(() => {
@@ -319,6 +346,12 @@ export default function App() {
     [activeProfile, view, pendingTurn, rewriteDraft, notify, setPendingTurn],
   );
 
+  const onCancelTurn = useCallback(() => {
+    const pending = pendingTurnRef.current;
+    if (!pending?.profile) return;
+    invoke("chat_cancel", { profile: pending.profile }).catch(() => {});
+  }, []);
+
   const onNewChat = useCallback(() => {
     setRewriteDraft(null);
     setView({ kind: "empty" });
@@ -397,6 +430,15 @@ export default function App() {
     !!activeConnection &&
     (activeConnection.status === "offline" ||
       activeConnection.status === "auth-failed");
+
+  useEffect(() => {
+    jumpTargetsRef.current = orderedJumpTargets({
+      profiles,
+      workgroups,
+      pinnedProfiles: pinned.profiles ?? [],
+      pinnedWorkgroups: pinned.workgroups ?? [],
+    });
+  }, [profiles, workgroups, pinned]);
 
   return (
     <div className={styles.app} data-sidebar-collapsed={collapsed ? "1" : "0"}>
@@ -494,6 +536,11 @@ export default function App() {
                       : null
                   }
                   onSend={onSend}
+                  onCancel={onCancelTurn}
+                  onConfigureProfile={(p) => {
+                    setSettingsTarget({ kind: "profile", id: p.name });
+                    setView({ kind: "settings" });
+                  }}
                   onSelectProfile={(name) => {
                     setPickerAlpi(name);
                     if (view.kind === "profile") {

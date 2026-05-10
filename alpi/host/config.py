@@ -16,6 +16,10 @@ _PROTECTED_ENV_KEYS = frozenset({
     "PYTHONPATH", "TMPDIR", "LANG", "LC_ALL",
 })
 
+# "default" is the physical root profile (~/.alpi/); "alpi" is the desktop
+# display label for it — both must be unavailable as user-created names.
+RESERVED_PROFILE_NAMES = frozenset({"default", "alpi"})
+
 
 def _check_env_key(key: str) -> str:
     key = (key or "").strip()
@@ -333,10 +337,15 @@ async def _profile_create(
     from alpi.cli import _bootstrap
 
     name = str(params.get("name") or "").strip()
-    if not name or name == "default":
+    if not name:
         raise host_server.HandlerError(
             -32602, "invalid-params",
-            data={"detail": "name required and cannot be 'default'"},
+            data={"detail": "name required"},
+        )
+    if name in RESERVED_PROFILE_NAMES:
+        raise host_server.HandlerError(
+            -32602, "invalid-params",
+            data={"detail": f"{name!r} is reserved"},
         )
     if "/" in name or name.startswith(".") or not name.replace("-", "").replace("_", "").isalnum():
         raise host_server.HandlerError(

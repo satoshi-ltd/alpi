@@ -2,7 +2,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: var(--space-4);
+  gap: var(--space-3);
   height: var(--control-height);
   padding: 0;
   border: 0;
@@ -11,6 +11,7 @@
   color: var(--color-fg-muted);
   font: inherit;
   font-size: var(--font-size-ui);
+  font-weight: var(--font-weight-medium);
   line-height: 1;
   cursor: pointer;
   transition: background var(--motion-fast) var(--motion-easing), color var(--motion-fast) var(--motion-easing), opacity var(--motion-fast) var(--motion-easing);
@@ -19,6 +20,11 @@
 .button:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+}
+
+.button:focus-visible {
+  outline: none;
+  box-shadow: var(--control-focus-ring);
 }
 
 .icon {
@@ -53,6 +59,7 @@
 .primary {
   background: var(--color-fg-muted);
   color: var(--color-bg-solid);
+  font-weight: var(--font-weight-semibold);
 }
 
 .primary:not(:disabled).active,
@@ -96,17 +103,13 @@
   }
 }
 
-.sm.withLabel {
-  padding: 0 var(--space-5);
-}
-
 .sm.iconOnly {
   width: var(--control-height-sm);
 }
 
 .xs {
   height: var(--control-height-xs);
-  font-size: var(--font-size-tiny);
+  font-size: var(--font-size-small);
 }
 
 .xs.withLabel {
@@ -115,4 +118,15 @@
 
 .xs.iconOnly {
   width: var(--control-height-xs);
+}
+
+.accent {
+  background: var(--color-accent);
+  color: var(--color-bg-solid);
+  font-weight: var(--font-weight-semibold);
+}
+
+.accent:not(:disabled).active,
+.accent:not(:disabled):hover {
+  background: color-mix(in srgb, var(--color-accent) 88%, var(--color-fg));
 }

@@ -7,6 +7,7 @@ import Modal from "../../../primitives/Modal.jsx";
 import Textarea from "../../../primitives/Textarea.jsx";
 import useAutoPosition from "../../../primitives/useAutoPosition.js";
 import { useNotify } from "../../../primitives/Notification.jsx";
+import { useDismissOnOutside } from "../../../hooks/useDismissOnOutside.js";
 import { Row, ConfirmButton } from "../primitives.jsx";
 import { PAID_PROVIDERS, VOICE_SHORTLIST } from "../util.js";
 import styles from "../../Settings.module.css";
@@ -100,14 +101,7 @@ export function AddProviderField({ profile, onSaved }) {
     align: "right",
   });
 
-  useEffect(() => {
-    if (!open) return;
-    function onClick(e) {
-      if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false);
-    }
-    document.addEventListener("mousedown", onClick);
-    return () => document.removeEventListener("mousedown", onClick);
-  }, [open]);
+  useDismissOnOutside({ open, onClose: () => setOpen(false), wrapRef });
 
   return (
     <span ref={wrapRef} className={styles.popoverAnchor}>

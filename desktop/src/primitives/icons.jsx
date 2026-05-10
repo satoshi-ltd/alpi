@@ -1,4 +1,5 @@
 import Icon from "./Icon.jsx";
+import iconStyles from "./Icon.module.css";
 
 export function BackIcon({ size = 16, className = "" }) {
   return (
@@ -128,6 +129,16 @@ export function SendIcon({ size = 14, className = "" }) {
   );
 }
 
+export function StopIcon({ size = 14, className = "" }) {
+  return (
+    <Icon size={size} className={className}>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect width="18" height="18" x="3" y="3" rx="2" />
+      </svg>
+    </Icon>
+  );
+}
+
 export function CaretIcon({ size = 10, className = "" }) {
   return (
     <Icon size={size} className={className}>
@@ -201,8 +212,17 @@ export function PinOffIcon({ size = 14, className = "" }) {
 }
 
 export function StatusIcon({ kind, size = 10, className = "" }) {
+  const color =
+    kind === "working"
+      ? "var(--color-success)"
+      : kind === "error"
+        ? "var(--color-danger)"
+        : null;
+  const cls = kind === "working"
+    ? `${className} ${iconStyles.pulse}`.trim()
+    : className;
   return (
-    <Icon size={size} className={className}>
+    <Icon size={size} color={color} className={cls}>
       <svg viewBox="0 0 10 10" fill="none">
         {kind === "done" && (
           <path
@@ -213,7 +233,7 @@ export function StatusIcon({ kind, size = 10, className = "" }) {
             strokeLinejoin="round"
           />
         )}
-        {kind === "working" && <circle cx="5" cy="5" r="2.5" fill="currentColor" opacity="0.9" />}
+        {kind === "working" && <circle cx="5" cy="5" r="2.5" fill="currentColor" />}
         {kind === "error" && (
           <>
             <circle cx="5" cy="5" r="4" fill="currentColor" />

@@ -1,11 +1,29 @@
 import { useEffect, useRef, useState } from "react";
 import Button from "../primitives/Button.jsx";
 import Dropdown from "../primitives/Dropdown.jsx";
+import Tooltip from "../primitives/Tooltip.jsx";
 import {
   LocalConnectionIcon,
   RemoteConnectionIcon,
 } from "../primitives/icons.jsx";
 import styles from "./ConnectionSwitcher.module.css";
+
+const STATUS_LABEL = {
+  online: "Online",
+  offline: "Offline",
+  probing: "Probing…",
+  "auth-failed": "Auth failed",
+  unverified: "Unverified",
+  unknown: "Unknown",
+};
+
+function tooltipFor(connection, status) {
+  const label = STATUS_LABEL[status] ?? status;
+  if (connection?.error && status !== "online") {
+    return `${label} · ${connection.error}`;
+  }
+  return label;
+}
 
 export default function ConnectionSwitcher({
   className = "",
@@ -62,7 +80,7 @@ export default function ConnectionSwitcher({
         }}
         trigger={{
           leading: (
-            <IconBadge status={activeStatus}>
+            <IconBadge status={activeStatus} connection={active}>
               {active?.kind === "remote" ? (
                 <RemoteConnectionIcon />
               ) : (
@@ -114,12 +132,18 @@ export default function ConnectionSwitcher({
   );
 }
 
-function IconBadge({ status, children }) {
-  return (
+function IconBadge({ status, connection, children }) {
+  const badge = (
     <span className={styles.iconWrap}>
       {children}
       <span className={styles.statusBadge} data-status={status} aria-hidden />
     </span>
+  );
+  if (!connection) return badge;
+  return (
+    <Tooltip text={tooltipFor(connection, status)} direction="right">
+      {badge}
+    </Tooltip>
   );
 }
 
@@ -148,7 +172,7 @@ function ConnectionRow({ connection, active, onSelect, onForget }) {
         active={active}
         caption={caption}
         leading={
-          <IconBadge status={status}>
+          <IconBadge status={status} connection={connection}>
             <LocalConnectionIcon />
           </IconBadge>
         }
@@ -166,7 +190,7 @@ function ConnectionRow({ connection, active, onSelect, onForget }) {
       aria-disabled={disabled}
     >
       <span className={styles.rowLead}>
-        <IconBadge status={status}>
+        <IconBadge status={status} connection={connection}>
           <RemoteConnectionIcon />
         </IconBadge>
       </span>

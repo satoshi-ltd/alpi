@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import Button from "./Button.jsx";
-import { SendIcon } from "./icons.jsx";
+import { SendIcon, StopIcon } from "./icons.jsx";
 import styles from "./Composer.module.css";
 
 // Shared composer for chat and workgroup posts.
@@ -9,6 +9,7 @@ export default function Composer({
   value,
   onChange,
   onSubmit,
+  onCancel = null,
   disabled = false,
   canSend = true,
   placeholder = "Send a message…",
@@ -212,15 +213,26 @@ export default function Composer({
         <div className={styles.row}>
           <span className={styles.spacer} />
           {leftActions}
-          <Button
-            variant="primary"
-            icon={<SendIcon />}
-            disabled={!canSend}
-            active={canSend}
-            onClick={() => onSubmit?.()}
-            tooltipDirection="up"
-            title={canSend ? sendTitle : disabledTitle}
-          />
+          {onCancel ? (
+            <Button
+              variant="primary"
+              icon={<StopIcon />}
+              active
+              onClick={onCancel}
+              tooltipDirection="up"
+              title="Stop generating"
+            />
+          ) : (
+            <Button
+              variant="primary"
+              icon={<SendIcon />}
+              disabled={!canSend}
+              active={canSend}
+              onClick={() => onSubmit?.()}
+              tooltipDirection="up"
+              title={canSend ? sendTitle : disabledTitle}
+            />
+          )}
         </div>
       </div>
     </div>

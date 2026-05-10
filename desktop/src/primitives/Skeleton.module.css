@@ -1,0 +1,24 @@
+.skeleton {
+  display: inline-block;
+  background: linear-gradient(
+    90deg,
+    var(--color-hover) 0%,
+    var(--color-selected) 50%,
+    var(--color-hover) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+  border-radius: var(--radius-sm);
+  vertical-align: middle;
+}
+
+.row {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+@keyframes shimmer {
+  0% { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
+}

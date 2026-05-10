@@ -62,6 +62,15 @@ def test_profile_create_rejects_default(monkeypatch, tmp_path: Path) -> None:
     assert "reserved" in result.output
 
 
+def test_profile_create_rejects_alpi(monkeypatch, tmp_path: Path) -> None:
+    """`alpi` is the desktop display label for the default profile —
+    allowing a user-created `alpi` would collide with the rename in the UI."""
+    monkeypatch.setattr(home, "_ROOT", tmp_path)
+    result = CliRunner().invoke(cli.main, ["profile", "create", "alpi"])
+    assert result.exit_code != 0
+    assert "reserved" in result.output
+
+
 def test_profile_create_rejects_bad_names(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setattr(home, "_ROOT", tmp_path)
     for bad in ("a/b", ".hidden", ""):

@@ -5,6 +5,8 @@ import NavRow, { Dot } from "../primitives/NavRow.jsx";
 import Tooltip from "../primitives/Tooltip.jsx";
 import { CheckIcon, PinIcon, PinOffIcon, PlusIcon, StatusIcon } from "../primitives/icons.jsx";
 import { relativeTime } from "../lib/time.js";
+import { profileLabel } from "../lib/profile-display.js";
+import { orderedSidebarProfiles } from "../lib/profile-order.js";
 import styles from "./Sidebar.module.css";
 
 const MIN_VISIBLE_ALPIS = 3;
@@ -68,16 +70,13 @@ function Sidebar({
   const pinnedProfileNames = pinned.profiles ?? [];
   const pinnedWorkgroupKeys = pinned.workgroups ?? [];
 
-  const sortedProfiles = useMemo(() => {
-    const arr = profiles.filter((p) => !pinnedProfileNames.includes(p.name));
-    arr.sort((a, b) => {
-      const aIncomplete = !a.model ? 1 : 0;
-      const bIncomplete = !b.model ? 1 : 0;
-      if (aIncomplete !== bIncomplete) return aIncomplete - bIncomplete;
-      return recencyOf(b) - recencyOf(a);
-    });
-    return arr;
-  }, [profiles, pinnedProfileNames]);
+  const sortedProfiles = useMemo(
+    () =>
+      orderedSidebarProfiles(profiles, pinnedProfileNames).filter(
+        (p) => !pinnedProfileNames.includes(p.name),
+      ),
+    [profiles, pinnedProfileNames],
+  );
 
   const sortedWorkgroups = useMemo(() => {
     const arr = workgroups.filter(
@@ -267,10 +266,6 @@ function Sidebar({
 
 export default memo(Sidebar);
 
-function recencyOf(profile) {
-  return profile.latest_session?.mtime ?? 0;
-}
-
 function Section({ label, children, containerRef = null, labelRef = null }) {
   return (
     <div ref={containerRef} className={styles.section}>
@@ -339,7 +334,7 @@ const ProfileRow = memo(function ProfileRow({
         trailing={trailing}
         onClick={handleClick}
       >
-        {profile.name}
+        {profileLabel(profile.name)}
       </NavRow>
       <PinAction isPinned={isPinned} onClick={handleTogglePin} />
     </div>

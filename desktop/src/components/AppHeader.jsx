@@ -12,6 +12,7 @@ import {
   SidebarCloseIcon,
   SidebarOpenIcon,
 } from "../primitives/icons.jsx";
+import { profileLabel } from "../lib/profile-display.js";
 import ProgressBar from "../primitives/ProgressBar.jsx";
 import styles from "./AppHeader.module.css";
 
@@ -222,7 +223,7 @@ function ProfileTitle({ profile, sessionData }) {
     <div className={styles.profileTitle}>
       <AlpiIcon className={styles.dot} color={profile.accent} />
       <div className={styles.profileText}>
-        <div className={styles.title}>{profile.name}</div>
+        <div className={styles.title}>{profileLabel(profile.name)}</div>
         {sessionData ? (
           <div className={styles.meta}>
             {profile.model && (
@@ -272,7 +273,7 @@ function SettingsTitle({ profile }) {
     <div className={styles.profileTitle}>
       <AlpiIcon className={styles.dot} color={profile.accent} />
       <div className={styles.profileText}>
-        <div className={styles.title}>{profile.name}</div>
+        <div className={styles.title}>{profileLabel(profile.name)}</div>
       </div>
     </div>
   );

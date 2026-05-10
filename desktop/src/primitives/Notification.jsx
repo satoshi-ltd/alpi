@@ -10,10 +10,16 @@ import styles from "./Notification.module.css";
 
 const NotifyContext = createContext(() => {});
 
+const DEDUP_WINDOW_MS = 2000;
+
 export function NotificationProvider({ children }) {
   const [items, setItems] = useState([]);
   const idRef = useRef(0);
   const timersRef = useRef(new Map());
+  // key (message|variant) → last-shown timestamp. Drops repeat toasts
+  // within DEDUP_WINDOW_MS so transient failure spam (peer probe ×3,
+  // gateway probe ×N) collapses to one visible notification.
+  const recentRef = useRef(new Map());
 
   const dismiss = useCallback((id) => {
     setItems((prev) =>
@@ -32,6 +38,18 @@ export function NotificationProvider({ children }) {
 
   const notify = useCallback(
     (opts) => {
+      const variant = opts.variant ?? "default";
+      const key = `${variant}|${opts.message}`;
+      const now = Date.now();
+      const recent = recentRef.current;
+      const last = recent.get(key) ?? 0;
+      if (now - last < DEDUP_WINDOW_MS) return null;
+      // Cheap GC of stale entries (any older than the window).
+      for (const [k, ts] of recent) {
+        if (now - ts >= DEDUP_WINDOW_MS) recent.delete(k);
+      }
+      recent.set(key, now);
+
       const id = ++idRef.current;
       const duration = opts.duration ?? 2400;
       setItems((prev) => [
@@ -39,7 +57,7 @@ export function NotificationProvider({ children }) {
         {
           id,
           message: opts.message,
-          variant: opts.variant ?? "default",
+          variant,
           status: "entering",
         },
       ]);

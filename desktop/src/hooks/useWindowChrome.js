@@ -4,7 +4,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 const COLLAPSE_BELOW = 600;
 const EXPAND_ABOVE = 720;
 
-export function useWindowChrome({ viewRef, setView } = {}) {
+export function useWindowChrome({ viewRef, setView, onJumpToProfile } = {}) {
   const [collapsed, setCollapsed] = useState(false);
   const toggleSidebar = useCallback(() => setCollapsed((c) => !c), []);
 
@@ -53,6 +53,12 @@ export function useWindowChrome({ viewRef, setView } = {}) {
       const cmd = e.metaKey || e.ctrlKey;
       if (!cmd) return;
       const key = e.key.toLowerCase();
+      if (/^[1-9]$/.test(key)) {
+        e.preventDefault();
+        e.stopPropagation();
+        onJumpToProfile?.(Number(key) - 1);
+        return;
+      }
       if (key === "b") {
         if (viewRef.current?.kind === "settings") return;
         e.preventDefault();
@@ -76,7 +82,7 @@ export function useWindowChrome({ viewRef, setView } = {}) {
     }
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [viewRef, setView]);
+  }, [viewRef, setView, onJumpToProfile]);
 
   return { collapsed, setCollapsed, toggleSidebar };
 }

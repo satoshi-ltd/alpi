@@ -11,6 +11,75 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.2.7 — 2026-05-10 — UX polish pass + design system tightening
+
+Requires alpi ``v0.4.21`` or newer (``alpi`` reserved profile name).
+
+A coherent UX-quality pass across the whole app, plus the underlying
+primitives that make the polish stick.
+
+**Streaming control.** Composer swaps Send for a Stop button while a
+turn is generating; ``Composer.onCancel`` wires through ``ChatPane``
+so the user can cancel without waiting for the model to finish.
+
+**Keyboard navigation.** ``⌘1``..``⌘9`` jump to the Nth profile in
+the sidebar (pinned workgroups counted first, matching what the user
+sees). New ``orderedJumpTargets`` in ``lib/profile-order.js`` is the
+single source of truth for both the sidebar render and the shortcuts.
+Pinned profiles are now scoped per connection (``alf:pinned:v2:<id>``)
+— pinning ``@home`` on the local host no longer pins another ``@home``
+on a remote daemon. ``Esc`` closes any open popover via the new
+``hooks/useDismissOnOutside.js`` hook (applied to every dismissable
+field in Settings).
+
+**First-run + offline parity.** When a profile has no model
+configured, the chat surface mirrors the existing ``OfflineBanner``
+(shared ``ChatPane.module.css`` titleGroup) and offers a primary CTA
+(``@<name> needs a model`` / ``needs a provider``) that opens the
+profile editor. No more dead ``model not set`` state.
+
+**Cosmetic ``default`` → ``alpi``.** The bundled profile renders as
+``@alpi`` everywhere user-visible (``lib/profile-display.js`` —
+``profileLabel``), backed by the daemon-side reserved name in alpi
+``v0.4.21`` so the label is enforceable end-to-end.
+
+**Loading + notification quality.** New ``Skeleton`` primitive with
+shimmer + 150 ms delay (no flicker on fast loads). ``Notification``
+deduplicates within a 2 s window keyed by ``variant|message`` so
+spammy hooks no longer stack. ``StatusIcon`` gets a green pulse for
+``working`` (was rendering as a static gray dot in workgroups).
+Connection status badges have a tooltip with status + error.
+
+**Theme + logo.** Light/dark logo fix — alpi mark uses CSS
+``mask-image`` with ``currentColor`` background so it inverts cleanly
+in dark mode (was hardcoded ``#141618``).
+
+**Composer redesign.** Body padded ``var(--space-5)`` symmetric on
+``--color-bg``, with a transparent border that lights to
+``--color-border-strong`` on hover and on textarea focus
+(``:has(.input:focus)``, not ``:focus-within``, so clicking
+Send/ModelPicker doesn't ring the whole composer). ``mention``
+popover sizes converted to ``rem`` units, mention row gap reduced.
+``prefers-reduced-motion`` guard on the transition.
+
+**Design system.**
+
+- Tokens — ``--shadow-md`` and ``--shadow-lg`` were inverted
+  (``md`` was visually larger than ``lg``); reordered. New
+  ``--motion-base: 120ms`` between fast (80) and slow (160).
+  ``--color-bg-solid`` (popovers, menus) and ``--color-surface``
+  (inputs, cards) now have docstrings clarifying intent.
+- Button — ``font-weight: medium`` base + ``semibold`` for
+  ``primary``/``accent`` (was 400 inherit, too light).
+  ``:focus-visible`` ring for keyboard navigation. ``gap`` between
+  icon and label tightened to ``--space-3``. ``xs`` font bumped
+  ``tiny → small`` (10 → 12 px) — labels were unreadable.
+  ``--control-height-sm: 26 → 28`` to even the xs/sm/md scale.
+  New ``variant="accent"`` for gold CTAs (uses ``--color-accent``
+  with ``color-mix`` hover instead of the gray→white jump
+  ``primary`` does today). Redundant ``.sm.withLabel`` rule
+  removed.
+
 ## v0.2.6 — 2026-05-09 — Devices section closes alpi setup parity
 
 Requires alpi ``v0.4.19`` or newer (transport-level enforcement of

@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.4.21 — 2026-05-10 — `alpi` reserved as a profile name
+
+``alpi profile create alpi`` now fails fast with ``ProfileNameError``
+instead of silently creating a second profile that would shadow the
+bundled identity. Same protection that ``default`` already had — the
+desktop client now labels profiles as ``@alpi`` and that label needs
+to stay unambiguous.
+
+- ``alpi/host/config.py`` — ``RESERVED_PROFILE_NAMES`` frozenset
+  (``"default"``, ``"alpi"``) enforced inside ``_profile_create`` so
+  the host-plane RPC, the CLI, and any future client share one rule.
+- ``alpi/cli.py::profile_create`` imports the same set.
+
+Tests — ``tests/core/test_profile_cli.py::test_profile_create_rejects_alpi``.
+
 ## v0.4.20 — 2026-05-09 — robust endpoint detection + diagnostic pairing errors
 
 Two paired changes that make device pairing fail informatively instead of

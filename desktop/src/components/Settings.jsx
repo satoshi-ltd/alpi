@@ -6,6 +6,7 @@ import ProfileDetail from "./settings/ProfileDetail.jsx";
 import WorkgroupDetail from "./settings/WorkgroupDetail.jsx";
 import CreateProfileForm from "./settings/CreateProfileForm.jsx";
 import CreateWorkgroupForm from "./settings/CreateWorkgroupForm.jsx";
+import { profileLabel } from "../lib/profile-display.js";
 import styles from "./Settings.module.css";
 
 export default function Settings({
@@ -76,7 +77,7 @@ export default function Settings({
               }
               onClick={() => setTarget({ kind: "profile", id: p.name })}
             >
-              {p.name}
+              {profileLabel(p.name)}
             </NavRow>
           );
         })}

@@ -4,9 +4,11 @@ import Button from "../../../primitives/Button.jsx";
 import Chip from "../../../primitives/Chip.jsx";
 import Dropdown from "../../../primitives/Dropdown.jsx";
 import Modal from "../../../primitives/Modal.jsx";
+import Skeleton from "../../../primitives/Skeleton.jsx";
 import { CopyIcon } from "../../../primitives/icons.jsx";
 import useAutoPosition from "../../../primitives/useAutoPosition.js";
 import { useNotify } from "../../../primitives/Notification.jsx";
+import { useDismissOnOutside } from "../../../hooks/useDismissOnOutside.js";
 import { Row, ConfirmButton } from "../primitives.jsx";
 import { formatLastSeen } from "../util.js";
 import styles from "../../Settings.module.css";
@@ -52,7 +54,11 @@ export function DevicesField() {
   }
 
   if (devices === null) {
-    return <Row label="paired"><span className={styles.muted}>loading…</span></Row>;
+    return (
+      <Row label="paired">
+        <Skeleton width="180px" />
+      </Row>
+    );
   }
 
   const selected = selectedTokenId
@@ -139,6 +145,7 @@ function DeviceDetailPopover({ device, anchorRef, onClose, onRename, onRevoke })
     direction: "down",
     align: "left",
   });
+  useDismissOnOutside({ open: true, onClose, wrapRef: popoverRef });
 
   const dirty = label.trim() !== (device.label ?? "").trim();
 

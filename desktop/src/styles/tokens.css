@@ -4,7 +4,9 @@
   --font-mono: "SF Mono", Menlo, ui-monospace, Consolas, monospace;
 
   --color-bg: #f8f8f8;
+  /* Floating surfaces (popovers, menus, tooltips). */
   --color-bg-solid: #ffffff;
+  /* Embedded controls (inputs, textareas, cards). */
   --color-surface: #ffffff;
 
   --color-fg: #1d1d1f;
@@ -50,15 +52,16 @@
   --font-weight-semibold: 600;
   --font-weight-bold: 700;
 
-  --shadow-md: 0 14px 36px rgba(0, 0, 0, 0.18);
-  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.18);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.14);
+  --shadow-lg: 0 14px 36px rgba(0, 0, 0, 0.20);
 
   --control-height: 36px;
-  --control-height-sm: 26px;
+  --control-height-sm: 28px;
   --control-height-xs: 22px;
   --control-focus-ring: 0 0 0 1px color-mix(in srgb, var(--color-fg) 10%, transparent);
 
   --motion-fast: 80ms;
+  --motion-base: 120ms;
   --motion-slow: 160ms;
 
   --motion-easing: cubic-bezier(0.2, 0, 0, 1);
@@ -83,7 +86,7 @@
     --color-accent: #d4af5b;
     --control-focus-ring: 0 0 0 1px color-mix(in srgb, var(--color-fg) 14%, transparent);
 
-    --shadow-md: 0 14px 36px rgba(0, 0, 0, 0.5);
-    --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.5);
+    --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.4);
+    --shadow-lg: 0 14px 36px rgba(0, 0, 0, 0.55);
   }
 }

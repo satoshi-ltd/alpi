@@ -5,6 +5,7 @@ import Chip from "../../../primitives/Chip.jsx";
 import Dropdown from "../../../primitives/Dropdown.jsx";
 import useAutoPosition from "../../../primitives/useAutoPosition.js";
 import { useNotify } from "../../../primitives/Notification.jsx";
+import { useDismissOnOutside } from "../../../hooks/useDismissOnOutside.js";
 import { Row } from "../primitives.jsx";
 import {
   ACCENT_PALETTE,
@@ -96,14 +97,7 @@ function ProfileBudgetEditor({ currentUsd, currentTokens, onSave }) {
     }
   }, [open, currentUsd, currentTokens]);
 
-  useEffect(() => {
-    if (!open) return;
-    function onClick(e) {
-      if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false);
-    }
-    document.addEventListener("mousedown", onClick);
-    return () => document.removeEventListener("mousedown", onClick);
-  }, [open]);
+  useDismissOnOutside({ open, onClose: () => setOpen(false), wrapRef });
 
   const trimmed = value.trim();
   let parsed = null;

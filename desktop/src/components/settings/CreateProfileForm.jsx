@@ -2,6 +2,7 @@ import { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import Button from "../../primitives/Button.jsx";
 import { useNotify } from "../../primitives/Notification.jsx";
+import { RESERVED_PROFILE_NAMES } from "../../lib/profile-display.js";
 import { Section, Row } from "./primitives.jsx";
 import styles from "../Settings.module.css";
 
@@ -11,7 +12,7 @@ export default function CreateProfileForm({ existingNames, onCreated, onCancel }
   const notify = useNotify();
 
   const trimmed = name.trim();
-  const reserved = trimmed === "default";
+  const reserved = RESERVED_PROFILE_NAMES.includes(trimmed);
   const formatValid = trimmed !== "" && /^[a-z0-9_-]+$/.test(trimmed);
   const duplicate = existingNames.includes(trimmed);
   const canSubmit = !busy && formatValid && !duplicate && !reserved;
@@ -62,7 +63,7 @@ export default function CreateProfileForm({ existingNames, onCreated, onCancel }
           )}
           {reserved && (
             <Row label=" ">
-              <span className={styles.error}>'default' is reserved</span>
+              <span className={styles.error}>'{trimmed}' is reserved</span>
             </Row>
           )}
           {duplicate && (

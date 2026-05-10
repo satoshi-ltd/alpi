@@ -6,6 +6,7 @@ import Dropdown from "../../primitives/Dropdown.jsx";
 import Textarea from "../../primitives/Textarea.jsx";
 import { AccentDot } from "../../primitives/NavRow.jsx";
 import { useNotify } from "../../primitives/Notification.jsx";
+import { profileLabel } from "../../lib/profile-display.js";
 import { Section, Row } from "./primitives.jsx";
 import styles from "../Settings.module.css";
 
@@ -78,7 +79,7 @@ export default function CreateWorkgroupForm({ profiles, onCreated, onCancel }) {
                     color={profiles.find((p) => p.name === hubProfile)?.accent}
                   />
                 ),
-                label: hubProfile || "Pick profile…",
+                label: hubProfile ? profileLabel(hubProfile) : "Pick profile…",
               }}
               direction="down"
               align="left"
@@ -96,7 +97,7 @@ export default function CreateWorkgroupForm({ profiles, onCreated, onCancel }) {
                       close();
                     }}
                   >
-                    @{p.name}
+                    @{profileLabel(p.name)}
                   </Dropdown.Row>
                 ))
               }
@@ -114,7 +115,7 @@ export default function CreateWorkgroupForm({ profiles, onCreated, onCancel }) {
           <Row label="members" alignTop>
             {peers.length === 0 ? (
               <span className={styles.muted}>
-                @{hubProfile} has no pinned peers
+                @{profileLabel(hubProfile)} has no pinned peers
               </span>
             ) : (
               <span className={styles.gatewayChips}>

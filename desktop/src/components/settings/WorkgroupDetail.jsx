@@ -5,7 +5,9 @@ import Chip from "../../primitives/Chip.jsx";
 import Dropdown from "../../primitives/Dropdown.jsx";
 import Textarea from "../../primitives/Textarea.jsx";
 import { AccentDot } from "../../primitives/NavRow.jsx";
+import Skeleton from "../../primitives/Skeleton.jsx";
 import { useNotify } from "../../primitives/Notification.jsx";
+import { profileLabel } from "../../lib/profile-display.js";
 import { Section, Row, ConfirmButton, CopyButton } from "./primitives.jsx";
 import { BudgetEditor } from "./fields/alp.jsx";
 import styles from "../Settings.module.css";
@@ -13,7 +15,7 @@ import styles from "../Settings.module.css";
 function renderMemberRow(m, profiles) {
   const local = profiles.find((p) => p.pubkey_b64 === m.pubkey);
   const label = local
-    ? `@${local.name}`
+    ? `@${profileLabel(local.name)}`
     : `${(m.pubkey || "").slice(0, 8)}…`;
   const memberLabel = (
     <span className={styles.memberLabel}>
@@ -167,7 +169,7 @@ export default function WorkgroupDetail({ workgroup, profiles, onSaved }) {
           <Row label="hub">
             <span className={styles.inlineRow}>
               <AccentDot color={hub?.accent} />
-              <span className={styles.mono}>@{hubName}</span>
+              <span className={styles.mono}>@{profileLabel(hubName)}</span>
             </span>
           </Row>
           <Row label="status">
@@ -257,9 +259,14 @@ export default function WorkgroupDetail({ workgroup, profiles, onSaved }) {
 
         <Section title="Members" alignTop>
           {members === null ? (
-            <Row label="loading">
-              <span className={styles.muted}>…</span>
-            </Row>
+            <>
+              <Row label={<Skeleton width="60px" height="0.7em" />}>
+                <Skeleton width="220px" />
+              </Row>
+              <Row label={<Skeleton width="60px" height="0.7em" />}>
+                <Skeleton width="180px" />
+              </Row>
+            </>
           ) : members.filter((m) => m.joined).length === 0 ? (
             <Row label="list">
               <span className={styles.muted}>none</span>
@@ -331,7 +338,7 @@ export default function WorkgroupDetail({ workgroup, profiles, onSaved }) {
                             (p) => p.pubkey_b64 === m.pubkey,
                           );
                           const label = local
-                            ? `@${local.name}`
+                            ? `@${profileLabel(local.name)}`
                             : `${(m.pubkey || "").slice(0, 8)}…`;
                           return (
                             <Dropdown.Row

@@ -3031,8 +3031,12 @@ def profile_list(ctx: click.Context) -> None:
 @click.argument("name")
 def profile_create(name: str) -> None:
     """Bootstrap a new profile directory with default config."""
-    if name in {"default", ""}:
-        raise click.ClickException("use a real name — 'default' is reserved")
+    from alpi.host.config import RESERVED_PROFILE_NAMES
+
+    if not name:
+        raise click.ClickException("name required")
+    if name in RESERVED_PROFILE_NAMES:
+        raise click.ClickException(f"use a real name — {name!r} is reserved")
     if "/" in name or name.startswith("."):
         raise click.ClickException(f"invalid profile name: {name!r}")
 

@@ -7,6 +7,7 @@ import Textarea from "../../../primitives/Textarea.jsx";
 import useAutoPosition from "../../../primitives/useAutoPosition.js";
 import { AccentDot } from "../../../primitives/NavRow.jsx";
 import { useNotify } from "../../../primitives/Notification.jsx";
+import { useDismissOnOutside } from "../../../hooks/useDismissOnOutside.js";
 import { ConfirmButton } from "../primitives.jsx";
 import {
   ALLOW_METHODS,
@@ -30,14 +31,7 @@ export function TcpPortField({ profile, onSaved }) {
     setPort(profile.tcp_port ? String(profile.tcp_port) : "");
   }, [profile.tcp_host, profile.tcp_port]);
 
-  useEffect(() => {
-    if (!open) return;
-    function onClick(e) {
-      if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false);
-    }
-    document.addEventListener("mousedown", onClick);
-    return () => document.removeEventListener("mousedown", onClick);
-  }, [open]);
+  useDismissOnOutside({ open, onClose: () => setOpen(false), wrapRef });
 
   const portTrim = port.trim();
   const portValid = portTrim === "" || /^[0-9]+$/.test(portTrim);
@@ -299,17 +293,14 @@ export function PeersField({ profile, profiles, onSaved }) {
     return () => { cancelled = true; };
   }, [profile.name, peers.length]);
 
-  useEffect(() => {
-    if (!addOpen && !selectedPeerId) return;
-    function onClick(e) {
-      if (wrapRef.current && !wrapRef.current.contains(e.target)) {
-        setAddOpen(false);
-        setSelectedPeerId(null);
-      }
-    }
-    document.addEventListener("mousedown", onClick);
-    return () => document.removeEventListener("mousedown", onClick);
-  }, [addOpen, selectedPeerId]);
+  useDismissOnOutside({
+    open: addOpen || !!selectedPeerId,
+    onClose: () => {
+      setAddOpen(false);
+      setSelectedPeerId(null);
+    },
+    wrapRef,
+  });
 
   const onlineCount = Object.values(statusById).filter((s) => s === "on").length;
 
@@ -765,14 +756,7 @@ export function BudgetEditor({ current, onSave }) {
     if (open) setValue(current != null ? String(current) : "");
   }, [open, current]);
 
-  useEffect(() => {
-    if (!open) return;
-    function onClick(e) {
-      if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false);
-    }
-    document.addEventListener("mousedown", onClick);
-    return () => document.removeEventListener("mousedown", onClick);
-  }, [open]);
+  useDismissOnOutside({ open, onClose: () => setOpen(false), wrapRef });
 
   const trimmed = value.trim();
   const parsed = trimmed === "" ? null : Number(trimmed);
