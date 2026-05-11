@@ -111,19 +111,15 @@ def _launch_chromium(pw):
     except Exception as e:  # noqa: BLE001
         if "Executable doesn't exist" not in str(e):
             raise
-    import subprocess
     import sys
-    # stderr, not stdout — the agent's response goes to stdout in
-    # ``chat --once`` and via the engine elsewhere; we don't want a
-    # one-line install banner to be parsed as model output.
+
+    from alpi.core._playwright import ensure_chromium
+
     print(
         "downloading Chromium for the browser tool (one-time, ~200MB)…",
         file=sys.stderr, flush=True,
     )
-    subprocess.run(
-        [sys.executable, "-m", "playwright", "install", "chromium"],
-        check=True,
-    )
+    ensure_chromium()
     return pw.chromium.launch(headless=True)
 
 

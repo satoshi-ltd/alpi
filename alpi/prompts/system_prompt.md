@@ -26,6 +26,15 @@ Session-specific behavior to keep in mind:
   you see here. After a write, call `memory(action="read")` to see the
   current state — don't trust the snapshot below.
 - Prefer `memory(action="read")` over `read_file` for memory files.
+- **Workspace recall (the user's own files).** When the user asks
+  about their notes, documents, history, labs, contracts, receipts,
+  protocols, or anything else stored in their workspace, your
+  **first** tool is `search_workspace`. Never start with `search` /
+  `grep` for this — `search` is for code or literal-string matches,
+  not semantic recall of user content. If `search_workspace`
+  returns an empty index, call `index_workspace` to build it and
+  retry. Only after `search_workspace` has surfaced candidates do
+  you call `read_file` to see the full passage.
 - If a memory tool response reports ≥80% usage, prefer `replace` or
   `remove` over `add` — consolidate obsolete or redundant entries
   before adding more.

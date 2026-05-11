@@ -22,9 +22,11 @@ alpi is a local agent runtime:
 | `alpi/llm.py` | LiteLLM transport. |
 | `alpi/config.py` | Config loading and model resolution. |
 | `alpi/tools/` | Tool registry and tool implementations. |
+| `alpi/tools/workspace.py` | `search_workspace` + `index_workspace` (BA local RAG). |
 | `alpi/tools/skill.py` | User/bundled skill management. |
 | `alpi/skills/` | Bundled skills packaged with alpi. |
 | `alpi/memory.py` | Memory file management. |
+| `alpi/core/` | Shared primitives: sqlite-vec store, embedder, locked Chromium installer. |
 | `alpi/tui/` | Terminal UI. |
 | `alpi/gateway/` | Telegram/IMAP/Gmail/Matrix inbound gateways. |
 | `alpi/scheduler/` | Scheduled jobs. |
@@ -63,6 +65,26 @@ Tools live under `alpi/tools/` and register through
 - `run(...) -> ToolResult`.
 
 Use existing tool patterns before adding abstractions.
+
+### Local RAG (BA)
+
+`search_workspace` (semantic search over the user's local files) and
+`index_workspace` (build/refresh the index). Per-profile index at
+`<profile>/rag/store.sqlite` using `sqlite-vec`. Embeddings via
+`fastembed` running the ONNX export of
+`sentence-transformers/all-MiniLM-L6-v2` (384-dim, no torch).
+Supports markdown, text, source, configs, HTML, PDF (`pypdf` for
+text-layer), DOCX, EPUB, and images. OCR uses `rapidocr-onnxruntime`
++ `pypdfium2`; opt-in via `ocr=true`, scanned PDFs without it land
+in `failed_files`. The daemon pre-loads the fastembed ONNX model
+into runtime cache in a background thread 5 s into the event loop
+(after socket bind). RapidOCR is downloaded lazily on first
+`ocr=true` use. Concurrent loaders are serialized by per-asset
+locks.
+
+For workspace-content questions ("what does my file say about X"),
+the agent reaches `search_workspace` first; `search` (grep) stays
+for code / literal-string matches.
 
 ## Skills
 

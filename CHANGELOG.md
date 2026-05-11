@@ -1,5 +1,58 @@
 # Changelog
 
+## v0.4.22 — 2026-05-11 — BA local RAG over `workspace/`
+
+Two new agent tools — ``search_workspace`` and ``index_workspace`` —
+turn the user's local files into a searchable knowledge surface.
+Per-profile SQLite + ``sqlite-vec`` index at
+``~/.alpi/<profile>/rag/store.sqlite``; embeddings stay on the
+machine.
+
+- ``alpi/core/`` — new module. ``store.py`` opens the per-profile
+  sqlite-vec store (reusable later by ALP.6 workgroup search and any
+  future entity-memory promotion). ``embed.py`` wraps ``fastembed``
+  running the ONNX export of ``sentence-transformers/all-MiniLM-L6-v2``
+  (384-dim, ~90 MB, no torch). ``_playwright.py`` is a shared locked
+  installer for the Chromium binary so two concurrent
+  ``_launch_chromium`` calls don't race the same ``playwright install``.
+- ``alpi/tools/workspace.py`` — the two tools. Walks the workspace,
+  chunks at 30 lines (stride 25), embeds, upserts. Incremental via
+  ``mtime``. Files deleted from disk under the indexed root are
+  purged from the store on the next ``index_workspace`` run
+  (``removed_files`` in the summary). Switching embedder model/dim
+  is recoverable via ``force=true`` — the schema is dropped and
+  rebuilt. Coverage: markdown / text / source / configs (stdlib),
+  HTML (``html2text``), PDF (``pypdf``), DOCX (``python-docx``),
+  EPUB (``ebooklib``), and images. OCR uses
+  ``rapidocr-onnxruntime`` (ONNX port of PaddleOCR, no torch); opt-in
+  via ``ocr=true``. Scanned PDFs without it land in ``failed_files``
+  with a clear reason so the agent escalates when needed.
+- ``alpi/prompts/system_prompt.md`` + ``search`` description —
+  workspace recall is now ``search_workspace`` first; ``search``
+  (grep) is for code / literal-string matches only.
+- Thread-safety — ``_load`` (embedder), ``_ocr_reader``, and
+  ``ensure_chromium`` use double-checked locking so concurrent
+  first-touch doesn't duplicate downloads.
+- Asset prefetch — ``service.py::_prefetch_assets`` runs in a daemon
+  thread 5 s into the event loop (after socket bind). Pre-loads the
+  fastembed model into the ONNX runtime cache (~100 MB resident, vs
+  ~600 MB the torch path would consume) and ensures the Chromium
+  binary via ``ensure_chromium``. RapidOCR is skipped at startup
+  because its constructor downloads-and-loads in one step; that cost
+  lands on the first ``ocr=true`` call. Idempotent (~100 ms when
+  caches are populated).
+- Dependencies are mandatory and ONNX-based: ``sqlite-vec``,
+  ``fastembed``, ``pypdf``, ``python-docx``, ``ebooklib``,
+  ``rapidocr-onnxruntime``, ``pypdfium2``. Install grows ~150 MB
+  (~250 MB total alpi env). Earlier iterations tried ``[rag]`` opt-in
+  and ``auto-pip-install`` on first use — both dropped because they
+  fragment the install story or fail inside sealed ``uv tool``
+  envs. Single ``uv tool install alpi-agent`` ships everything.
+
+Tests — 24 new (index/search happy path, mtime skip + force, OCR
+dispatcher, ``EmbedderMismatch`` guard, oversized-binary skip,
+concurrent-load locks for embedder / OCR / Chromium installer).
+
 ## v0.4.21 — 2026-05-10 — `alpi` reserved as a profile name
 
 ``alpi profile create alpi`` now fails fast with ``ProfileNameError``

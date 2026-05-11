@@ -2,10 +2,10 @@
 # PyPI distribution name. The CLI binary, the import path, and
 # ``~/.alpi/`` all remain ``alpi`` (see ``[project.scripts]`` below).
 name = "alpi-agent"
-version = "0.4.21"
+version = "0.4.22"
 description = "A profile-based personal AI agent for terminal, messengers, and private ALP networks"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.10,<3.14"
 # PEP 639 SPDX license expression. The full text lives in LICENSE.
 license = "BUSL-1.1"
 license-files = ["LICENSE"]
@@ -50,6 +50,13 @@ dependencies = [
     "python-gnupg>=0.5",
     "qrcode>=7.4",
     "websockets>=13.0",
+    "sqlite-vec>=0.1.6",
+    "fastembed>=0.3,<1.0",
+    "pypdf>=4.0",
+    "python-docx>=1.1",
+    "ebooklib>=0.18",
+    "rapidocr-onnxruntime>=1.3",
+    "pypdfium2>=4.0",
 ]
 
 [project.urls]

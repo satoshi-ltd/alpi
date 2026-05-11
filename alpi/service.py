@@ -103,6 +103,31 @@ def serve_all(root: Path) -> None:
         log.info("central service stopped")
 
 
+def _prefetch_assets() -> None:
+    """Spawn a daemon thread that pre-warms heavy assets.
+
+    Pre-loads the fastembed ONNX session and ensures the Chromium
+    binary so the first user-visible RAG/browser call doesn't pay the
+    cold-cache lag. Each step has its own try/except so one failure
+    doesn't take down the other.
+    """
+    import threading
+
+    def _run() -> None:
+        from alpi.core import embed
+        from alpi.core._playwright import ensure_chromium
+
+        for label, fn in (("embedder", embed.ensure_weights_cached),
+                           ("chromium", ensure_chromium)):
+            try:
+                fn()
+            except Exception:
+                log.exception("prefetch %s failed (non-fatal)", label)
+        log.info("prefetch: done")
+
+    threading.Thread(target=_run, name="alpi-prefetch", daemon=True).start()
+
+
 async def _main_all(root: Path, profiles: list[str]) -> None:
     from alpi import home as home_mod
 
@@ -113,6 +138,7 @@ async def _main_all(root: Path, profiles: list[str]) -> None:
             loop.add_signal_handler(sig, stop.set)
         except NotImplementedError:
             pass
+    loop.call_later(5.0, _prefetch_assets)
 
     tasks: list[asyncio.Task] = []
     for profile in profiles:

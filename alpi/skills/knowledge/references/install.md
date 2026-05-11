@@ -60,6 +60,13 @@ uv sync
 uv run alpi
 ```
 
+Or install the editable build into the user's tool env (matches how
+end users run the daemon):
+
+```bash
+uv tool install -e . --reinstall
+```
+
 Run tests with:
 
 ```bash

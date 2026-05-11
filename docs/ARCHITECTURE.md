@@ -193,6 +193,8 @@ that live at `{home}/skills/<category>/<name>/`.
 │                                 assets/ + secrets/ (0700) + state/ +
 │                                 .gitignore
 ├── sessions/<id>.json      turn-based session log (TUI / desktop / `--once`)
+├── rag/                    local RAG over the workspace (BA)
+│   └── store.sqlite        sqlite-vec index — workspace_files / _chunks / _vec
 ├── mentions/<sender>.json  per-sender @-mention threads (cap 20 turns), receiving side
 ├── gateway/                inbound transport state + chat sessions
 │   ├── telegram-state.json, imap-state.json, …   per-platform offsets, last-uid, etc.
@@ -249,7 +251,22 @@ Denylist: `/etc/`, `/boot/`, `/sys/`, `/proc/`, `/usr/lib/systemd/`, `/System/`,
 
 ### Tool registry (`alpi/tools/__init__.py`)
 
-`register(cls)` adds a `Tool` subclass to the dict, `schemas()` emits the OpenAI function-calling shape, `execute(name, args)` runs by name with full error capture. The registry is assembled from the sibling tool modules in `alpi/tools/__init__.py`, including the Playwright-backed `browser` tool.
+`register(cls)` adds a `Tool` subclass to the dict, `schemas()` emits the OpenAI function-calling shape, `execute(name, args)` runs by name with full error capture. The registry is assembled from the sibling tool modules in `alpi/tools/__init__.py`, including the Playwright-backed `browser` tool. `search_workspace` and `index_workspace` register first so they appear at the top of the schema list (semantic recall is the right default for "what does my file say about X" questions).
+
+### Local recall (`alpi/core/` + `alpi/tools/workspace.py`)
+
+Per-profile semantic search over the user's local files (BA). Two agent tools:
+
+- `index_workspace(path?, glob?, force?, ocr?)` — walks the workspace root, chunks supported files (30 lines / stride 25), embeds, upserts into a sqlite-vec virtual table. Incremental: mtime-skip avoids re-embedding unchanged files.
+- `search_workspace(query, k=5)` — cosine similarity via sqlite-vec MATCH, returns `[{path, snippet, line_start, line_end, score}]` ordered ascending.
+
+Supported formats: markdown / text / source / configs (stdlib read), HTML (`html2text`), PDF (`pypdf` for text-layer, RapidOCR fallback when `ocr=true` and pypdf extracts < 50 chars), DOCX (`python-docx`), EPUB (`ebooklib`), images (`PIL` + RapidOCR — only with `ocr=true`). OCR backend is `rapidocr-onnxruntime` (ONNX port of PaddleOCR, no torch dependency).
+
+**Shared store primitive (`alpi/core/store.py`)**. `open_store(home)` returns a `sqlite3.Connection` with the sqlite-vec extension loaded. Designed to host other shapes later (ALP.6 workgroup search, future entity memory) — they bring their own table schemas.
+
+**Embedder (`alpi/core/embed.py`)**. `Embedder` Protocol; default `FastembedEmbedder` wraps the ONNX export of `sentence-transformers/all-MiniLM-L6-v2` (384-dim, ~90 MB, no torch). Numerically equivalent to the original sentence-transformers checkpoint but ~10× lighter at runtime. Lazy-loaded under a `threading.Lock` so concurrent first-touch calls serialize on a single model instance instead of racing.
+
+**Asset prefetch (`service.py::_prefetch_assets`)**. A daemon thread, scheduled 5 s into the event loop (after socket bind) by `_main_all`. Pre-loads the fastembed model into the ONNX runtime cache via `embed.ensure_weights_cached()` (~100 MB resident — vs ~600 MB the torch path would cost) and ensures the Chromium binary via `ensure_chromium()`. RapidOCR is skipped at startup because its constructor downloads-and-loads in one step; that cost lands on the first `ocr=true` call. Concurrent loaders use double-checked locking (`_load`, `_ocr_reader`, `ensure_chromium`) so a user-triggered call mid-prefetch waits on the same lock instead of racing the same network fetch.
 
 ### Skills
 

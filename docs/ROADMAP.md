@@ -14,13 +14,13 @@ Legend: 🔵 backlog · 🟡 next up · ⏸ blocked · 🔴 gate.
 
 ## v0.5 cycle (active)
 
-**Theme: owned device access — closing the loop.** v0.4 shipped the
-secure local-device foundation and v0.5 completes the remote-access
-story: desktop multi-host connections shipped (desktop-v0.2.2/v0.2.3),
-mobile uses the same host-plane pairing contract, and the agent's
-self-improvement primitives (memory quality, rich text) reach a usable
-baseline. v0.6 builds on that base with a self-improving skill library
-and the live-access infrastructure the product can now justify.
+**Theme: owned device access + local recall — closing the loop.** v0.4
+shipped the secure local-device foundation. v0.5 completes the
+remote-access story, brings mobile onto the same host-plane pairing
+contract, and pushes the agent's self-improvement primitives (memory
+quality + local recall over the user's files) to a usable baseline.
+v0.6 builds on that base with a self-improving skill library and live
+streaming infrastructure.
 
 This is the cycle where gateways stop being the main mobile story.
 Telegram, IMAP, Gmail, and Matrix stay useful, but the project should
@@ -176,11 +176,11 @@ recalled next session", and skill patch rate on real sessions.
 
 ## v0.6 cycle (planned)
 
-**Theme: self-improving agent + live access.** v0.5 closes the device
-access story and gets memory to a reliable baseline. v0.6 turns the
-skill library into something that improves itself over time, and
-ships the streaming and search infrastructure that makes the live
-multi-device experience feel real.
+**Theme: self-improving agent + live streaming.** v0.5 closes the device
+access story, gets memory to a reliable baseline, and lands the local
+recall layer (BA). v0.6 turns the skill library into something that
+improves itself over time and ships the streaming infrastructure that
+makes the live multi-device experience feel real.
 
 ### Self-improving skills
 
@@ -189,12 +189,11 @@ multi-device experience feel real.
 | AC | Skill telemetry + curator — usage tracking per skill (`view_count`, `use_count`, `last_used`, `state: active/stale/archived`) and a periodic background consolidation pass that promotes narrow session-specific skills into broad class-level umbrellas. Builds on the v0.5 AT primitives (auto-archive + `pinned` flag); adds the curator-specific pieces: `absorbed_into:` metadata on consolidating deletes, memory `pinned` flag (memory entries are also reviewer-mutable in v0.6), and a `.bak` ring per skill if single-snapshot proves insufficient under aggressive curation. | 🔵 |
 | BD | Model-family conditional prompt guidance — the tool-use enforcement block + GPT/Gemini-specific operational guidance only injected for model families that need it (per `TOOL_USE_ENFORCEMENT_MODELS`). Claude / Opus / Sonnet / Qwen / MiMo run on the shorter prompt. Promoted from Future once v0.5 generates enough multi-model session evidence. | 🔵 |
 
-### Live access + search
+### Live access
 
 | ID | Item | Status |
 |---|---|---|
 | ALP.4 | Streaming `link.ask` — incremental remote replies for peer calls, mobile, and workgroups | 🔵 |
-| BA | Local RAG over `workspace/` — local-only embeddings (`search_workspace`, `index_workspace`), no cloud roundtrip. Trade-off to settle: sentence-transformers (~80 MB) vs lighter GGUF alternative. | 🔵 |
 
 ### AC. Skill telemetry + curator
 
@@ -280,18 +279,6 @@ Noise session.
 Without a base of real peer/workgroup sessions to validate against, the scope
 cannot close cleanly. v0.5's mobile work generates that base.
 
-### BA. Local RAG over `workspace/`
-
-Two new tools — `index_workspace(path?)` and `search_workspace(query, k=5)`.
-Embeddings and the vector store live in `~/.alpi/<profile>/index/`; nothing
-leaves the machine. The agent reads matched snippets with the existing
-`read_file` tool.
-
-**Prerequisite to resolve before scoping.** Sentence-transformers brings ~80 MB
-of PyTorch weights. A GGUF/llama.cpp CPU alternative is lighter but slower
-to index. Decide based on install-size feedback from real v0.5 users before
-committing.
-
 ## Future releases
 
 Items worth doing, but not part of the current cycle.
@@ -331,8 +318,9 @@ query, ranked by semantic similarity using the local RAG index (**BA**). The
 hub indexes its own transcript on disk; members search remotely via the
 existing ALP transport.
 
-**Why it waits.** Depends on BA landing first, and on workgroups being heavily
-used enough that scrolling becomes a real friction. Neither condition holds yet.
+**Why it waits.** BA (v0.5) provides the RAG primitive, but workgroups
+also need to be heavily used enough that scrolling becomes a real
+friction. That second condition doesn't hold yet.
 
 ---
 
@@ -350,6 +338,7 @@ already analysed; the "why now?" question is the open one.
 | Signal | Signal gateway via signal-cli | Strong privacy fit, but phone-number/SIM setup and daemon dependency make it less important once mobile is planned |
 | AY | Skills marketplace — federated, signed, never centralised | Presupposes an active author community + adoption for discovery to matter |
 | AI (2) | Memory v2 — TUI panel (collapsible, edit-in-place, "forget this") | UI weight for niche audience (power users with much memory); item 1 covers the substantive part |
+| AI (3) | Entity memory — structured SQLite store (`entities`/`relations`/`observations`) replacing the markdown memory model, with selective injection per turn instead of full-blob system prompt | Markdown memory hasn't demonstrably broken yet for real users; AI(1) is a quality pass on the existing model. Promote when a user reports `MEMORY.md` is large enough that prompt size / cost becomes a real bottleneck. BA's shared `store` primitive (v0.5) is designed so the migration is incremental when promoted. |
 | AJ | Browser realism — Cloudflare / captcha / fingerprint depth | Cat-and-mouse perpetuo; without concrete failing use case, scope can't close |
 | AQ | Continuous voice mode (push-to-talk, hotword loops) | Niche unless voice becomes a real surface for users |
 | Webhook | Inbound HTTP triggers (HMAC-signed) | "Swiss-army-knife trap" — needs real demand, not speculation |

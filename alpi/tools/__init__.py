@@ -27,6 +27,7 @@ from alpi.tools import (
     web_fetch,
     web_search,
     workgroup as workgroup_tool,
+    workspace as workspace_tool,
     write_file,
 )
 
@@ -69,6 +70,11 @@ def execute(name: str, arguments: dict) -> ToolResult:
 
 
 # Register every tool exposed by the sibling modules.
+# Order matters: tools that should be preferred for common intents
+# (semantic recall over user files) come first so they appear earlier
+# in the schema list the LLM sees.
+register(workspace_tool.TOOL_SEARCH)
+register(workspace_tool.TOOL_INDEX)
 for _mod in (
     read_file,
     read_image,

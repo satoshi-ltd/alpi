@@ -23,6 +23,7 @@ Important files/directories:
 | `memory/` | Persistent user/project memory. |
 | `sessions/` | Local human chat history only. Gateway, schedule, workgroup, and system-prefixed turns stay out of normal profile resume/history. |
 | `skills/` | User-created skills. |
+| `rag/` | Local RAG index over the workspace (`store.sqlite` with sqlite-vec). |
 | `logs/` | Service and runtime logs. |
 | `alp/` | ALP identity, peers, workgroups. |
 | `run/` | Runtime state such as sockets/PIDs. |
