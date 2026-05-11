@@ -8,6 +8,8 @@ import OfflineBanner from "./components/OfflineBanner.jsx";
 import WorkgroupView from "./components/WorkgroupView.jsx";
 import Settings from "./components/Settings.jsx";
 import { useNotify } from "./primitives/Notification.jsx";
+import CommandPalette from "./primitives/CommandPalette.jsx";
+import { useCommands } from "./hooks/useCommands.js";
 import { orderedJumpTargets } from "./lib/profile-order.js";
 import { installUpdater } from "./lib/updater.js";
 import { findLatestTask } from "./lib/workgroup-tasks.js";
@@ -106,6 +108,15 @@ export default function App() {
   useEffect(() => {
     searchOpenRef.current = searchOpen;
   }, [searchOpen]);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const paletteOpenRef = useRef(false);
+  useEffect(() => {
+    paletteOpenRef.current = paletteOpen;
+  }, [paletteOpen]);
+  const onTogglePalette = useCallback(() => {
+    setPaletteOpen((v) => !v);
+  }, []);
+  const onClosePalette = useCallback(() => setPaletteOpen(false), []);
   const onToggleSearch = useCallback(() => {
     if (searchOpenRef.current) {
       setSearchOpen(false);
@@ -162,6 +173,9 @@ export default function App() {
     onNewProfile,
     onOpenSettings,
     onToggleSearch,
+    onTogglePalette,
+    paletteOpenRef,
+    onClosePalette,
   });
   useNavListener(setView);
 
@@ -430,9 +444,30 @@ export default function App() {
     invoke("chat_cancel", { profile: pending.profile }).catch(() => {});
   }, []);
 
+  useEffect(() => {
+    function onKey(e) {
+      if (e.key !== "Escape") return;
+      if (e.defaultPrevented) return;
+      if (!pendingTurnRef.current?.profile) return;
+      e.preventDefault();
+      onCancelTurn();
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onCancelTurn]);
+
   const onNewChat = useCallback(() => {
     setRewriteDraft(null);
     setView({ kind: "empty" });
+  }, []);
+
+  const onNewWorkgroup = useCallback(() => {
+    setSettingsTarget({ kind: "create-workgroup" });
+    setView({ kind: "settings" });
+  }, []);
+
+  const onSelectWorkgroup = useCallback((wg) => {
+    setView({ kind: "workgroup", profile: wg.profile, id: wg.id });
   }, []);
 
   const onOpenProfile = useCallback((profile) => {
@@ -553,6 +588,24 @@ export default function App() {
     });
     return out;
   }, [jumpTargets]);
+
+  const paletteCommands = useCommands({
+    view,
+    profiles,
+    workgroups,
+    pinned,
+    searchOpen,
+    collapsed,
+    onSelectProfile: onOpenProfile,
+    onSelectWorkgroup,
+    onOpenSettings,
+    onCloseSettings: closeSettings,
+    onToggleSidebar: toggleSidebar,
+    onToggleSearch,
+    onNewProfile,
+    onNewWorkgroup,
+    onNewChat,
+  });
 
   return (
     <div className={styles.app} data-sidebar-collapsed={collapsed ? "1" : "0"}>
@@ -683,6 +736,11 @@ export default function App() {
           )}
         </main>
       </div>
+      <CommandPalette
+        open={paletteOpen}
+        onClose={onClosePalette}
+        commands={paletteCommands}
+      />
     </div>
   );
 }

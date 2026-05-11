@@ -39,6 +39,24 @@ export function useTranscriptSearch(scrollRef, open) {
   }, [open]);
 
   useEffect(() => {
+    if (!open) return;
+    function onKey(e) {
+      if (!(e.metaKey || e.ctrlKey)) return;
+      if (e.key.toLowerCase() !== "g") return;
+      e.preventDefault();
+      e.stopPropagation();
+      setCurrentIndex((i) => {
+        const total = ranges.length;
+        if (total === 0) return 0;
+        const delta = e.shiftKey ? -1 : 1;
+        return (i + delta + total) % total;
+      });
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, ranges.length]);
+
+  useEffect(() => {
     const root = scrollRef.current;
     if (!root || !open || !query.trim()) {
       setRanges([]);

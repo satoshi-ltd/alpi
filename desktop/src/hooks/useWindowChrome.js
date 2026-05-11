@@ -11,6 +11,9 @@ export function useWindowChrome({
   onNewProfile,
   onOpenSettings,
   onToggleSearch,
+  onTogglePalette,
+  paletteOpenRef,
+  onClosePalette,
 } = {}) {
   const [collapsed, setCollapsed] = useState(false);
   const toggleSidebar = useCallback(() => setCollapsed((c) => !c), []);
@@ -60,6 +63,16 @@ export function useWindowChrome({
       const cmd = e.metaKey || e.ctrlKey;
       if (!cmd) return;
       const key = e.key.toLowerCase();
+      const isShortcut =
+        /^[1-9]$/.test(key) ||
+        key === "b" ||
+        key === "n" ||
+        key === "," ||
+        key === "f" ||
+        key === "k";
+      if (paletteOpenRef?.current && isShortcut && key !== "k") {
+        onClosePalette?.();
+      }
       if (/^[1-9]$/.test(key)) {
         e.preventDefault();
         e.stopPropagation();
@@ -109,11 +122,17 @@ export function useWindowChrome({
           e.stopPropagation();
           onToggleSearch?.();
         }
+        return;
+      }
+      if (key === "k") {
+        e.preventDefault();
+        e.stopPropagation();
+        onTogglePalette?.();
       }
     }
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [viewRef, setView, onJumpToProfile, onNewProfile, onOpenSettings, onToggleSearch]);
+  }, [viewRef, setView, onJumpToProfile, onNewProfile, onOpenSettings, onToggleSearch, onTogglePalette, paletteOpenRef, onClosePalette]);
 
   return { collapsed, setCollapsed, toggleSidebar };
 }

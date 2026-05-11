@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Docker image tag
-        required: true
-        default: "0.4.20"
+        description: Docker image tag (leave empty to use pyproject.toml version)
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -31,7 +31,15 @@ jobs:
         shell: bash
         run: |
           tag="${{ inputs.tag }}"
+          if [ -z "$tag" ]; then
+            tag=$(grep '^version = ' pyproject.toml | head -1 | cut -d'"' -f2)
+          fi
+          if [ -z "$tag" ]; then
+            echo "::error::could not resolve image tag"
+            exit 1
+          fi
           echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          echo "Resolved tag: ${tag}"
 
       - uses: docker/build-push-action@v7
         with:

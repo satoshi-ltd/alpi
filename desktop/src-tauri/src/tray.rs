@@ -8,27 +8,40 @@ use tauri::{
 };
 
 const TRAY_ICON: &[u8] = include_bytes!("../icons/tray-template.png");
+const TOGGLE_ACCELERATOR: &str = "CmdOrCtrl+Shift+A";
 
 #[derive(Default)]
-struct UpdateState {
-    available: bool,
-    version: Option<String>,
+struct TrayState {
+    update_available: bool,
+    update_version: Option<String>,
+    window_visible: bool,
 }
 
-fn state() -> &'static Mutex<UpdateState> {
-    static SLOT: OnceLock<Mutex<UpdateState>> = OnceLock::new();
-    SLOT.get_or_init(|| Mutex::new(UpdateState::default()))
+fn state() -> &'static Mutex<TrayState> {
+    static SLOT: OnceLock<Mutex<TrayState>> = OnceLock::new();
+    SLOT.get_or_init(|| Mutex::new(TrayState::default()))
 }
 
-fn build_menu(app: &AppHandle, update: &UpdateState) -> tauri::Result<Menu<tauri::Wry>> {
-    let open_item = MenuItem::with_id(app, "open", "Open Alpi", true, None::<&str>)?;
+fn build_menu(app: &AppHandle, s: &TrayState) -> tauri::Result<Menu<tauri::Wry>> {
+    let open_label = if s.window_visible {
+        "Hide Alpi"
+    } else {
+        "Open Alpi"
+    };
+    let open_item = MenuItem::with_id(
+        app,
+        "open",
+        open_label,
+        true,
+        Some(TOGGLE_ACCELERATOR),
+    )?;
     let settings_item =
         MenuItem::with_id(app, "settings", "Settings…", true, Some("CmdOrCtrl+,"))?;
     let separator = PredefinedMenuItem::separator(app)?;
     let quit_item = PredefinedMenuItem::quit(app, Some("Quit Alpi"))?;
 
-    if update.available {
-        let header_label = match update.version.as_deref() {
+    if s.update_available {
+        let header_label = match s.update_version.as_deref() {
             Some(v) => format!("An update is available ({v})"),
             None => "An update is available".to_string(),
         };
@@ -54,7 +67,24 @@ fn build_menu(app: &AppHandle, update: &UpdateState) -> tauri::Result<Menu<tauri
     }
 }
 
+fn rebuild_menu(app: &AppHandle) {
+    let snapshot = state().lock().unwrap();
+    if let Ok(menu) = build_menu(app, &snapshot) {
+        if let Some(tray) = app.tray_by_id("main") {
+            let _ = tray.set_menu(Some(menu));
+        }
+    }
+}
+
 pub fn install(app: &mut App) -> tauri::Result<()> {
+    {
+        let mut s = state().lock().unwrap();
+        s.window_visible = app
+            .get_webview_window("main")
+            .and_then(|w| w.is_visible().ok())
+            .unwrap_or(true);
+    }
+
     let menu = build_menu(&app.handle().clone(), &state().lock().unwrap())?;
     let icon = Image::from_bytes(TRAY_ICON)?;
 
@@ -66,10 +96,17 @@ pub fn install(app: &mut App) -> tauri::Result<()> {
         .on_menu_event(|app, event| match event.id.as_ref() {
             "open" => {
                 if let Some(window) = app.get_webview_window("main") {
-                    let _ = window.show();
-                    let _ = window.unminimize();
-                    let _ = window.set_focus();
-                    let _ = window.emit("nav", "home");
+                    let visible = window.is_visible().unwrap_or(false);
+                    if visible {
+                        let _ = window.hide();
+                        set_window_visible(app, false);
+                    } else {
+                        let _ = window.show();
+                        let _ = window.unminimize();
+                        let _ = window.set_focus();
+                        let _ = window.emit("nav", "home");
+                        set_window_visible(app, true);
+                    }
                 }
             }
             "settings" => {
@@ -78,6 +115,7 @@ pub fn install(app: &mut App) -> tauri::Result<()> {
                     let _ = window.unminimize();
                     let _ = window.set_focus();
                     let _ = window.emit("nav", "settings");
+                    set_window_visible(app, true);
                 }
             }
             "update" => {
@@ -93,20 +131,24 @@ pub fn install(app: &mut App) -> tauri::Result<()> {
 pub fn announce_update(app: &AppHandle, available: bool, version: Option<&str>) {
     {
         let mut s = state().lock().unwrap();
-        // Skip the menu rebuild when nothing actually changed — the JS
-        // poll fires periodically and we don't want to flicker the tray
-        // every 6 hours.
-        let unchanged = s.available == available && s.version.as_deref() == version;
+        let unchanged =
+            s.update_available == available && s.update_version.as_deref() == version;
         if unchanged {
             return;
         }
-        s.available = available;
-        s.version = version.map(str::to_string);
+        s.update_available = available;
+        s.update_version = version.map(str::to_string);
     }
+    rebuild_menu(app);
+}
 
-    if let Ok(menu) = build_menu(app, &state().lock().unwrap()) {
-        if let Some(tray) = app.tray_by_id("main") {
-            let _ = tray.set_menu(Some(menu));
+pub fn set_window_visible(app: &AppHandle, visible: bool) {
+    {
+        let mut s = state().lock().unwrap();
+        if s.window_visible == visible {
+            return;
         }
+        s.window_visible = visible;
     }
+    rebuild_menu(app);
 }

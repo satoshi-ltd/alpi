@@ -9,6 +9,9 @@ use std::process::{Command, Stdio};
 use std::sync::{Mutex, OnceLock};
 use std::thread;
 
+use tauri::Manager;
+use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
+
 fn active_chats() -> &'static Mutex<HashMap<String, String>> {
     static SLOT: OnceLock<Mutex<HashMap<String, String>>> = OnceLock::new();
     SLOT.get_or_init(|| Mutex::new(HashMap::new()))
@@ -1403,11 +1406,37 @@ fn subscribe_daemon_events(app: AppHandle) {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let toggle_shortcut = Shortcut::new(Some(Modifiers::SUPER | Modifiers::SHIFT), Code::KeyA);
+
     tauri::Builder::default()
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
-        .setup(|app| {
+        .plugin(
+            tauri_plugin_global_shortcut::Builder::new()
+                .with_handler(move |app, shortcut, event| {
+                    if event.state() == ShortcutState::Pressed && shortcut == &toggle_shortcut {
+                        if let Some(window) = app.get_webview_window("main") {
+                            match window.is_visible() {
+                                Ok(true) => {
+                                    let _ = window.hide();
+                                    tray::set_window_visible(app, false);
+                                }
+                                _ => {
+                                    let _ = window.show();
+                                    let _ = window.set_focus();
+                                    tray::set_window_visible(app, true);
+                                }
+                            }
+                        }
+                    }
+                })
+                .build(),
+        )
+        .setup(move |app| {
             tray::install(app)?;
+            if let Err(e) = app.global_shortcut().register(toggle_shortcut) {
+                eprintln!("global shortcut register failed: {e}");
+            }
             if let Err(e) = watcher::install(app.handle()) {
                 eprintln!("watcher install failed: {e}");
             }
@@ -1441,6 +1470,7 @@ pub fn run() {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 let _ = window.hide();
                 api.prevent_close();
+                tray::set_window_visible(window.app_handle(), false);
             }
         })
         .invoke_handler(tauri::generate_handler![

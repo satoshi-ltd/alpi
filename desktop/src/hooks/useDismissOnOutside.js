@@ -7,7 +7,10 @@ export function useDismissOnOutside({ open, onClose, wrapRef }) {
   useEffect(() => {
     if (!open) return;
     function onKey(e) {
-      if (e.key === "Escape") onClose?.();
+      if (e.key === "Escape") {
+        e.preventDefault();
+        onClose?.();
+      }
     }
     function onClick(e) {
       if (wrapRef.current && !wrapRef.current.contains(e.target)) onClose?.();

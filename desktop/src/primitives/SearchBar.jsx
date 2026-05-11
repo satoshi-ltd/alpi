@@ -1,4 +1,6 @@
 import { useEffect, useRef } from "react";
+import Kbd from "./Kbd.jsx";
+import Tooltip from "./Tooltip.jsx";
 import styles from "./SearchBar.module.css";
 
 export default function SearchBar({
@@ -46,35 +48,56 @@ export default function SearchBar({
         autoCapitalize="off"
       />
       <span className={styles.counter}>{counter}</span>
-      <button
-        type="button"
-        className={styles.btn}
-        onClick={onPrev}
-        disabled={disabled}
-        title="Previous"
-        aria-label="Previous match"
+      <Tooltip
+        text={
+          <>
+            Previous <Kbd>⇧⌘G</Kbd>
+          </>
+        }
       >
-        ↑
-      </button>
-      <button
-        type="button"
-        className={styles.btn}
-        onClick={onNext}
-        disabled={disabled}
-        title="Next"
-        aria-label="Next match"
+        <button
+          type="button"
+          className={styles.btn}
+          onClick={onPrev}
+          disabled={disabled}
+          aria-label="Previous match"
+        >
+          ↑
+        </button>
+      </Tooltip>
+      <Tooltip
+        text={
+          <>
+            Next <Kbd>⌘G</Kbd>
+          </>
+        }
       >
-        ↓
-      </button>
-      <button
-        type="button"
-        className={styles.btn}
-        onClick={onClose}
-        title="Close"
-        aria-label="Close search"
+        <button
+          type="button"
+          className={styles.btn}
+          onClick={onNext}
+          disabled={disabled}
+          aria-label="Next match"
+        >
+          ↓
+        </button>
+      </Tooltip>
+      <Tooltip
+        text={
+          <>
+            Close <Kbd>Esc</Kbd>
+          </>
+        }
       >
-        ✕
-      </button>
+        <button
+          type="button"
+          className={styles.btn}
+          onClick={onClose}
+          aria-label="Close search"
+        >
+          ✕
+        </button>
+      </Tooltip>
     </div>
   );
 }

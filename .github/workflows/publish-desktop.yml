@@ -54,10 +54,13 @@ jobs:
   check-version:
     name: should we publish?
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     outputs:
       should_publish: ${{ steps.gate.outputs.should_publish }}
       version: ${{ steps.gate.outputs.version }}
       tag: ${{ steps.gate.outputs.tag }}
+      release_id: ${{ steps.draft.outputs.release_id }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -116,6 +119,30 @@ jobs:
             echo "::error::version mismatch across desktop manifests — bump all three"
             exit 1
           fi
+
+      - name: create draft release
+        id: draft
+        if: steps.gate.outputs.should_publish == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.gate.outputs.tag }}
+        run: |
+          existing=$(gh release view "$TAG" --json id --jq .id 2>/dev/null || true)
+          if [ -n "$existing" ]; then
+            echo "release $TAG already exists (id=$existing) — reusing"
+            release_id=$existing
+          else
+            response=$(gh api -X POST repos/${{ github.repository }}/releases \
+              -f tag_name="$TAG" \
+              -f name="$TAG" \
+              -f target_commitish="${{ github.sha }}" \
+              -f body="See [desktop/CHANGELOG.md](https://github.com/satoshi-ltd/alpi/blob/main/desktop/CHANGELOG.md) for the full changelog." \
+              -F draft=true \
+              -F prerelease=false)
+            release_id=$(echo "$response" | python3 -c "import sys, json; print(json.load(sys.stdin)['id'])")
+            echo "created draft release $TAG (id=$release_id)"
+          fi
+          echo "release_id=$release_id" >> "$GITHUB_OUTPUT"
 
   # 2. Bundle build for the supported desktop platforms. ``tauri-action``
   #    invokes ``pnpm tauri build`` per OS, signs with the minisign key,
@@ -183,22 +210,36 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           projectPath: desktop
-          tagName: ${{ needs.check-version.outputs.tag }}
-          releaseName: ${{ needs.check-version.outputs.tag }}
-          releaseBody: "See [desktop/CHANGELOG.md](https://github.com/satoshi-ltd/alpi/blob/main/desktop/CHANGELOG.md) for the full changelog."
-          releaseDraft: false
-          prerelease: false
-          uploadUpdaterJson: true
+          releaseId: ${{ needs.check-version.outputs.release_id }}
+          includeUpdaterJson: true
           args: ${{ matrix.args }}
 
-  # 3. Roll the ``desktop-latest`` tag onto the same commit and
+  # 3. Publish the draft release that the matrix uploaded assets to.
+  publish-release:
+    name: publish release
+    needs: [check-version, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: publish draft
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.check-version.outputs.tag }}
+        run: |
+          gh api -X PATCH repos/${{ github.repository }}/releases/${{ needs.check-version.outputs.release_id }} \
+            -F draft=false \
+            -F prerelease=false >/dev/null
+          echo "published $TAG"
+
+  # 4. Roll the ``desktop-latest`` tag onto the same commit and
   #    re-publish the same assets there. The Tauri updater hits
   #    ``releases/download/desktop-latest/latest.json`` and the site
   #    links to ``alpi-latest.dmg`` / ``desktop-release.json`` —
   #    these URLs must always resolve to the most recent release.
   promote-latest:
     name: promote to desktop-latest
-    needs: [check-version, build]
+    needs: [check-version, build, publish-release]
     runs-on: ubuntu-latest
     permissions:
       contents: write

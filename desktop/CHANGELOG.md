@@ -11,6 +11,73 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.2.9 — 2026-05-11 — Command palette + global summon + Esc cascade
+
+Requires alpi ``v0.4.24`` or newer.
+
+A round on keyboard-first navigation: a proper command palette, a
+system-wide hotkey to summon the window, find-bar shortcuts, and a
+coherent Esc cascade that stops the half-handled mess we had before.
+
+**Command palette (⌘K).** ``primitives/CommandPalette.jsx`` +
+``hooks/useCommands.js`` — modal overlay, autofocus input, substring
+filter (case-insensitive), grouped results (``Navigate`` / ``View``
+/ ``Create``), `↑``/``↓`` to move, ``Enter`` to execute, ``Esc`` or
+backdrop-click to close. Commands carry an optional ``hint`` rendered
+as a ``<Kbd>`` chip so the palette doubles as a shortcut reference.
+Navigate only surfaces the first 9 jump targets (those with
+``⌘1``..``⌘9``); the long tail stays in the sidebar to avoid
+turning the palette into a phone book. Pin/unpin commands not
+included — friction-to-value didn't justify the noise.
+
+**Global ⌘⇧A — summon / hide the window.** New
+``tauri-plugin-global-shortcut`` dependency. Registered at startup,
+toggle: hidden→show+focus, visible→hide. Replaces the previous
+flow of "click tray → Open Alpi" with a one-key gesture from any
+app. Tray menu's open item now shows ``⌘⇧A`` next to its label
+and flips between ``Open Alpi`` and ``Hide Alpi`` reflecting actual
+window state (``tray::set_window_visible`` is called from every
+visibility transition: close-button, ⌘W, shortcut, tray click).
+
+**Find shortcuts inside the find-bar.** ``⌘G`` next match,
+``⌘⇧G`` previous — standard macOS find convention. Listener
+mounts only while ``searchOpen=true``, unmounts on close (no global
+noise). ``SearchBar`` nav buttons (↑ / ↓ / ✕) now use the
+``Tooltip`` primitive instead of native ``title``, showing the
+shortcut as a ``<Kbd>`` chip — discovery without docs.
+
+**Esc cascade.** ``Modal`` and ``useDismissOnOutside`` now call
+``preventDefault()`` when they handle Escape. ``Dropdown``
+primitive learns Escape (it only had outside-click before).
+App-level handler at bubble phase cancels the in-flight
+``pendingTurn`` only when ``e.defaultPrevented === false`` — i.e.,
+when no overlay closer to the focus consumed the key. Stable
+priority: SearchBar → Dropdown/Modal/popover → cancel turn. No
+double-handling.
+
+**Auto-close palette on shortcut.** Pressing any known shortcut
+(``⌘B``, ``⌘N``, ``⌘,``, ``⌘F``, ``⌘1``..``⌘9``) with the
+palette open closes it first, then executes the shortcut.
+Whitelist-based — modifier-only keydowns (just ``⌘``) no longer
+trigger spurious closes.
+
+**Build pipeline fixes.**
+
+- ``publish-desktop.yml`` race condition: the build matrix was each
+  job racing to create the same release with ``releaseDraft: false``;
+  whoever lost got a 422 "Published releases must have a valid tag"
+  from GitHub. v0.2.7 was lucky, v0.2.8 wasn't. Refactored to
+  *create one draft release in the gate job* (via ``gh api`` POST,
+  idempotent if reusing), pass ``release_id`` to the matrix so
+  ``tauri-action`` uploads to a known existing release instead of
+  trying to create, then a follow-up ``publish-release`` job flips
+  ``draft=false``. Deterministic.
+- ``includeUpdaterJson`` replaces the invalid ``uploadUpdaterJson``
+  input that tauri-action@v0.6.2 silently ignored.
+- ``publish-umbrel.yml`` auto-detects image tag from
+  ``pyproject.toml`` when the workflow_dispatch input is left empty
+  — was getting stale (``0.4.20`` while alpi shipped ``0.4.24``).
+
 ## v0.2.8 — 2026-05-11 — Find-in-transcript + shortcut system + flat focus
 
 Requires alpi ``v0.4.24`` or newer (host ``identity.draft`` verb).

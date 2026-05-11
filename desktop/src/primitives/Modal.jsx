@@ -9,7 +9,10 @@ export default function Modal({ onClose, title, children }) {
       if (wrapRef.current && !wrapRef.current.contains(e.target)) onClose?.();
     }
     function onKey(e) {
-      if (e.key === "Escape") onClose?.();
+      if (e.key === "Escape") {
+        e.preventDefault();
+        onClose?.();
+      }
     }
     document.addEventListener("mousedown", onClick);
     document.addEventListener("keydown", onKey);
