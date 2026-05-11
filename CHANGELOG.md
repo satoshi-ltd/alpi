@@ -1,5 +1,35 @@
 # Changelog
 
+## v0.4.24 — 2026-05-11 — identity drafting as a primitive
+
+Pulls the public-bio synthesis out of ``cli.py`` so the desktop (and
+any future client) can drive it without dragging the TUI in.
+User-initiated only — no auto-fire on profile creation or any other
+implicit trigger.
+
+- ``alpi/identity.py`` — new module. ``draft_bio_from_agent(home, cfg)``
+  is the pure primitive: reads ``AGENT.md``, one ``litellm`` call, returns
+  a single-line bio capped at 200 chars. Raises ``ValueError`` on empty
+  ``AGENT.md`` / missing model / empty LLM output. Zero side effects.
+- ``alpi/host/config.py`` — new verb ``host.identity.draft(profile)``.
+  Wraps the primitive in ``asyncio.to_thread`` so the LLM call doesn't
+  block the event loop, maps ``ValueError`` / other exceptions to
+  ``-32010 draft-failed``.
+- ``alpi/cli.py`` — ``_draft_bio_from_agent`` becomes a thin TUI
+  wrapper that imports from ``alpi.identity``. ``alpi setup → Identity``
+  with ``draft`` continues to work unchanged.
+- Bug fix while moving the code: the previous chain
+  ``content.strip('"').strip("'").splitlines()`` stripped a leading
+  quote but left the trailing quote glued to the newline. Quotes are
+  now stripped after ``splitlines()``, on the first line.
+
+Tests — 13 new across ``tests/core/test_identity.py`` (pure-primitive
+happy / empty / no-model / LLM-empty / 200-char truncation /
+quote+whitespace strip) and ``tests/host/test_identity.py`` (verb
+dispatch, missing param, unknown profile, value-error mapping, LLM
+failure wrapped as ``HandlerError``). One of those tests caught the
+quote-strip bug above before it shipped.
+
 ## v0.4.23 — 2026-05-11 — memory v2 quality pass (AI(1).c)
 
 Confidence, reinforcement, auto-expiry, sharpened type-routing — the

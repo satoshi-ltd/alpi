@@ -51,6 +51,8 @@ def _bootstrap(h: Path) -> None:
         agent.write_text(default)
 
 
+
+
 def _run_chat(h: Path, continue_last: bool = False) -> None:
     _bootstrap(h)
     from alpi.tui import AlpiApp
@@ -2524,45 +2526,21 @@ def _identity_setup(h: Path) -> None:
 
 
 def _draft_bio_from_agent(h: Path, cfg: config.Config) -> str | None:
-    """Ask the configured LLM to synthesize a one-line public bio
-    from the profile's AGENT.md. One-shot call, no streaming, no
-    tools. Returns the drafted string or None on failure / cancel."""
-    from alpi import home as _home, llm as _llm, ui
+    """TUI wrapper around ``alpi.identity.draft_bio_from_agent``."""
+    from alpi import identity, ui
 
-    agent_md = _home.agent_path(h)
-    text = agent_md.read_text() if agent_md.exists() else ""
-    if not text.strip():
-        ui.fail_and_wait("AGENT.md is empty — nothing to summarise")
-        return None
     if not cfg.model:
         ui.fail_and_wait("no model configured — set one in setup → Model")
         return None
-
     ui.dim("synthesizing one-line bio from AGENT.md…")
-    messages = [
-        {
-            "role": "system",
-            "content": (
-                "You write one-line public bios for AI agents. "
-                "Read the agent's private AGENT.md and produce a single "
-                "tag-line under 100 chars (no quotes, no period at end) "
-                "that another agent could read in a workgroup roster to "
-                "understand this agent's role and bias. Output only the "
-                "tag-line, nothing else."
-            ),
-        },
-        {"role": "user", "content": text[:8000]},
-    ]
     try:
-        result = _llm.complete(model=cfg.model, messages=messages)
+        return identity.draft_bio_from_agent(h, cfg)
+    except ValueError as e:
+        ui.fail_and_wait(str(e))
+        return None
     except Exception as e:  # noqa: BLE001
         ui.fail_and_wait(f"draft failed: {e}")
         return None
-    out = (result.content or "").strip().strip('"').strip("'").splitlines()
-    if not out:
-        ui.fail_and_wait("LLM returned an empty draft")
-        return None
-    return out[0].strip()[:200]
 
 
 def _workspace_status(cfg: config.Config) -> str:

@@ -54,6 +54,7 @@ def register(server: host_server.Server) -> None:
     server.register("host.peers.pending_discard", _peers_pending_discard)
     server.register("host.profile.create", _profile_create)
     server.register("host.profile.delete", _profile_delete)
+    server.register("host.identity.draft", _identity_draft)
     server.register("host.mcp.add", _mcp_add)
     server.register("host.mcp.remove", _mcp_remove)
     server.register("host.gateway.remove", _gateway_remove)
@@ -359,6 +360,39 @@ async def _profile_create(
         )
     _bootstrap(h)
     return {"ok": True, "home": str(h)}
+
+
+async def _identity_draft(
+    params: dict[str, Any], _server: host_server.Server,
+) -> dict[str, Any]:
+    import asyncio
+
+    from alpi import config as config_mod
+    from alpi import home as home_mod
+    from alpi import identity
+
+    name = str(params.get("profile") or "").strip()
+    if not name:
+        raise host_server.HandlerError(
+            -32602, "invalid-params", data={"detail": "profile required"},
+        )
+    h = home_mod.home_for(name)
+    if not h.exists():
+        raise host_server.HandlerError(
+            -32004, "not-found", data={"detail": f"no profile {name!r}"},
+        )
+    cfg = config_mod.load(h)
+    try:
+        bio = await asyncio.to_thread(identity.draft_bio_from_agent, h, cfg)
+    except ValueError as e:
+        raise host_server.HandlerError(
+            -32010, "draft-failed", data={"detail": str(e)},
+        )
+    except Exception as e:  # noqa: BLE001
+        raise host_server.HandlerError(
+            -32010, "draft-failed", data={"detail": f"draft failed: {e}"},
+        )
+    return {"bio": bio}
 
 
 async def _profile_delete(
