@@ -14,13 +14,12 @@ Legend: 🔵 backlog · 🟡 next up · ⏸ blocked · 🔴 gate.
 
 ## v0.5 cycle (active)
 
-**Theme: owned device access + local recall — closing the loop.** v0.4
-shipped the secure local-device foundation. v0.5 completes the
-remote-access story, brings mobile onto the same host-plane pairing
-contract, and pushes the agent's self-improvement primitives (memory
-quality + local recall over the user's files) to a usable baseline.
-v0.6 builds on that base with a self-improving skill library and live
-streaming infrastructure.
+**Theme: closing the device-access loop on mobile.** Remote desktop,
+local recall over the workspace (BA), and the memory v2 quality pass
+all shipped during the v0.4 line. What remains for v0.5 is the second
+real client surface — the mobile companion — and the second bundled
+skill, `@alpi/home`. v0.6 builds on that base with a self-improving
+skill library and live streaming infrastructure.
 
 This is the cycle where gateways stop being the main mobile story.
 Telegram, IMAP, Gmail, and Matrix stay useful, but the project should
@@ -31,7 +30,6 @@ personal agent.
 
 | ID | Item | Status |
 |---|---|---|
-| AX-desktop-remote | Desktop multi-host host-plane connections — switch between local Unix socket and paired remote daemons over WebSocket/Tailscale using per-device tokens. | ✅ desktop-v0.2.2 / v0.2.3 |
 | AX-mobile | Mobile companion (iOS / Android) — full chat, status, peers, and workgroups surface from the user's own profile. Daemon side shipped in v0.4.1 (host plane on WebSocket + per-device pairing tokens, see CHANGELOG). Mobile preview exists; desktop remains the reference surface. | 🟡 |
 
 ### Skills + bundled
@@ -39,19 +37,6 @@ personal agent.
 | ID | Item | Status |
 |---|---|---|
 | `@alpi/home` | Second bundled skill (after `@alpi/knowledge` in v0.3). Full home orchestration behind a single voice/text interface: Home Assistant first, with optional Hue, Xiaomi, Alexa / Google Home integrations layered in. | 🔵 |
-
-### Self-improvement loop
-
-| ID | Item | Status |
-|---|---|---|
-| AI (1) | Memory v2 — quality pass remaining: dedup threshold calibration on real session data, `confidence: low/normal/high` field with auto-expiry for low-confidence writes, and tighter type-routing guidance (USER vs MEMORY vs AGENT). Also lands per-tool conditional guidance (the surface that needs an enabled-tools concept, partially seeded by the post-turn reviewer's narrow toolset). | 🟡 |
-
-### AX-desktop-remote. Desktop multi-host host-plane connections — ✅ shipped
-
-Shipped in desktop-v0.2.2 (connection store, transport abstraction, switcher UI,
-auth-failed revocation) and desktop-v0.2.3 (per-connection status tracking,
-offline banner, probe architecture, thread exhaustion guard). See
-[desktop/CHANGELOG.md](../desktop/CHANGELOG.md) for details.
 
 ### AX-mobile. Mobile companion (iOS / Android)
 
@@ -129,58 +114,16 @@ doesn't re-poll every turn ("is the kitchen light on?" answers from cache;
 
 LOC estimate: ~400 (HA covers ~250, Hue + Xiaomi ~50 each, Google/Alexa ~50 stub).
 
-### AI (1). Memory v2 — quality + injection scanning + background review
-
-Three complementary improvements to the memory system.
-
-**Quality pass.** Server-side only; the TUI panel waits for user evidence.
-- Dedup threshold calibration: is 70% Jaccard too loose / too tight in
-  practice? Measure on real session memory files before tuning.
-- Confidence field: low-confidence writes (`confidence: low`) auto-expire
-  after N sessions without reinforcement rather than living forever.
-- Type routing: ensure USER.md vs MEMORY.md vs AGENT.md signals are
-  described precisely enough that the agent routes correctly on the first write.
-
-**Injection scanning on write.** Memory is injected into the system prompt
-on every session, exactly the same vector that skill bodies use. Skill bodies
-already pass through `_DANGER_PATTERNS` in `alpi/tools/skill.py` (74 patterns:
-`ignore previous instructions`, exfil-via-curl, ssh backdoors, invisible
-unicode, base64-pipe-to-bash, etc.). Memory writes accept anything today.
-Wire the same scanner into `Memory.run` for `add`, `replace`, and batch `entries`,
-returning a `Blocked: …` error on match. Reuses existing infrastructure; no new
-dependencies.
-
-**Post-turn background review.** After every N turns (configurable, default
-off / opt-in) the daemon forks a lightweight reviewer agent with a snapshot
-of the conversation. The reviewer has access only to `memory(add/replace/remove)`
-and `skill(create/patch)`. Its prompt is narrow: "did the user reveal a preference
-or correct a behaviour? If yes, save it. If nothing qualifies, say nothing."
-The reviewer thread installs an auto-deny approval callback so any dangerous
-tool call inside the fork resolves without blocking on a TUI prompt that does
-not exist. The active session's system prompt stays frozen throughout (prefix
-cache intact); writes land on the shared memory store and are picked up next
-session.
-
-This fixes the main gap in the current model: the agent only writes memory when
-it decides to mid-turn — it often misses signals that are obvious in retrospect.
-The background reviewer has the full conversation in view and a single job.
-The reviewer prompt borrows the Hermes insight that **user frustration is a
-first-class skill signal**, not just a memory signal — corrections like "stop
-doing X" or "don't format like that" should patch the responsible skill, not
-just leave a memory note.
-
-Outcome: measurable on memory file size, duplicate rate, "was this actually
-recalled next session", and skill patch rate on real sessions.
-
 ---
 
 ## v0.6 cycle (planned)
 
-**Theme: self-improving agent + live streaming.** v0.5 closes the device
-access story, gets memory to a reliable baseline, and lands the local
-recall layer (BA). v0.6 turns the skill library into something that
-improves itself over time and ships the streaming infrastructure that
-makes the live multi-device experience feel real.
+**Theme: self-improving agent + live streaming.** With the device-access
+and local-recall layers landed during the v0.4 line, v0.6 turns the
+skill library into something that improves itself over time, ships the
+streaming infrastructure that makes the live multi-device experience
+feel real, and recalibrates the memory dedup threshold now that there's
+real session-memory data to measure against.
 
 ### Self-improving skills
 
@@ -194,6 +137,20 @@ makes the live multi-device experience feel real.
 | ID | Item | Status |
 |---|---|---|
 | ALP.4 | Streaming `link.ask` — incremental remote replies for peer calls, mobile, and workgroups | 🔵 |
+
+### Memory quality (evidence-gated)
+
+| ID | Item | Status |
+|---|---|---|
+| AI (1.c) | Dedup threshold recalibration — the 70% Jaccard cutoff in `alpi/memory.py::_find_duplicate_index` was an initial guess. Measure near-duplicate density on real session-memory accumulation across multiple profiles, then tighten or loosen. Pure data exercise; the audit produces a single number change. | 🔵 |
+
+### AI (1.c). Dedup threshold recalibration
+
+The 70% Jaccard containment cutoff that decides whether a new memory entry is a near-duplicate of an existing one was chosen as a starting point in v0.4 with no production data to calibrate against. By v0.6 users will have weeks/months of accumulated memory across multiple profiles — enough signal to ask the right question: of the writes that today trigger reinforcement, how many are genuine paraphrases vs. false-positive collisions? And of the writes that pass dedup as distinct, how many are actually paraphrases the agent should have reinforced?
+
+**Method.** A small audit pass across real `USER.md` / `MEMORY.md` files at a handful of thresholds (0.5 / 0.6 / 0.7 / 0.8 Jaccard containment), surfacing the near-duplicate pairs at each. Inspect the borderline cases by hand. Adjust the constant.
+
+**Why it waits.** Calibration without data is just renaming the guess. v0.5 (with confidence + reinforcement + sharpened type-routing shipped in v0.4.23) gives the agent the right writes; v0.6 measures whether the dedup machinery around those writes is correctly tuned.
 
 ### AC. Skill telemetry + curator
 

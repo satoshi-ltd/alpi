@@ -97,14 +97,31 @@ class Memory(Tool):
         "NOTHING; the fact is lost at end of turn.\n"
         "\n"
         "Three targets, pick exactly one per fact — never duplicate across "
-        "targets:\n"
+        "targets. The single deciding question is **who is the fact "
+        "about**:\n"
         "\n"
-        "  USER.md   — stable facts about the user (name, location, "
-        "role, long-term preferences). True regardless of assistant.\n"
-        "  MEMORY.md — your notes about env/tools (paths, commands, "
-        "API quirks, workarounds).\n"
-        "  AGENT.md  — how YOU behave (tone, style, length, language, "
-        "identity).\n"
+        "  USER.md   — the USER. Stable facts about the human you're "
+        "    talking to: name, location, role, employer, family, "
+        "    long-term preferences and dislikes, languages they speak. "
+        "    True regardless of which assistant they're using. Test: "
+        "    \"would this still be true if they switched to a different "
+        "    AI tool?\" If yes → USER.md.\n"
+        "  MEMORY.md — the WORLD the user operates in. Project paths, "
+        "    tool quirks, API workarounds, team members, internal "
+        "    domain knowledge, environment specifics. NOT about the "
+        "    user themselves; about what the user works on or with. "
+        "    Test: \"would this make sense to a teammate of the user?\" "
+        "    If yes → MEMORY.md.\n"
+        "  AGENT.md  — YOU. How the assistant behaves: tone, register, "
+        "    response length, output formatting, what to skip, what "
+        "    voice to use. NEVER facts about the user or the world. "
+        "    Test: \"is this a directive about MY behavior?\" If yes → "
+        "    AGENT.md.\n"
+        "\n"
+        "Disambiguation: \"user prefers concise replies\" → AGENT.md "
+        "(it's about the assistant's output style). \"user is Spanish\" "
+        "→ USER.md (stable fact about the human). \"the repo uses "
+        "pytest with xdist\" → MEMORY.md (world the user operates in).\n"
         "\n"
         "Voice: use neutral third-person \"user\" in MEMORY.md entries, "
         "never the user's name. The name lives in USER.md; hardcoding it "
@@ -187,13 +204,31 @@ class Memory(Tool):
                     "read — do not invent."
                 ),
             },
+            "confidence": {
+                "type": "string",
+                "enum": ["low", "normal", "high"],
+                "default": "normal",
+                "description": (
+                    "How sure you are this fact is durable. ``normal`` is "
+                    "the default: explicit user statements or things you "
+                    "verified this turn. ``high``: invariants the user "
+                    "stated more than once or marked as core. ``low``: "
+                    "inferences you made that the user did not confirm "
+                    "directly. Applies to USER.md and MEMORY.md only — "
+                    "AGENT.md is persona/behaviour and never auto-expires. "
+                    "Low entries auto-expire after ~30 days unless "
+                    "reinforced (a second add of the same fact bumps the "
+                    "counter and upgrades low → normal)."
+                ),
+            },
         },
         "required": ["action", "target"],
     }
 
     def run(self, action: str, target: str, content: str = "",
             match: str = "",
-            entries: list[str] | None = None) -> ToolResult:
+            entries: list[str] | None = None,
+            confidence: str = "normal") -> ToolResult:
         h = get_home()
 
         if target.upper() == "AGENT.MD":
@@ -222,10 +257,11 @@ class Memory(Tool):
                     )
 
                 if batch:
-                    return _add_memory_batch(self, store, target, batch)
+                    return _add_memory_batch(self, store, target, batch, confidence)
 
                 items = [content]
                 added = 0
+                reinforced = 0
                 warnings: list[str] = []
                 for item in items:
                     item = item.strip()
@@ -247,21 +283,32 @@ class Memory(Tool):
                             )
                         warnings.append(f"skipped (duplicate of {other}): {item[:60]!r}")
                         continue
-                    store.add(target, item)
-                    added += 1
+                    outcome = store.add(target, item, confidence=confidence)
+                    if outcome == "reinforced":
+                        reinforced += 1
+                    else:
+                        added += 1
                     warn = _operational_warning(item)
                     if warn:
                         warnings.append(warn)
 
-                if added == 0:
+                if added == 0 and reinforced == 0:
                     return ToolResult(
                         ok=False, output="",
-                        error="no entries added; all were duplicates: " + " | ".join(warnings),
+                        error="no entries added: " + " | ".join(warnings),
                     )
 
                 output = self._state_snapshot(store, target)
-                if added > 1:
-                    output = f"Added {added} entries to {target}.\n\n{output}"
+                header_parts = []
+                if added:
+                    header_parts.append(f"Added {added} entr{'ies' if added != 1 else 'y'}")
+                if reinforced:
+                    header_parts.append(
+                        f"reinforced {reinforced} existing entr{'ies' if reinforced != 1 else 'y'} "
+                        "(duplicate detected, counter bumped)"
+                    )
+                if header_parts:
+                    output = f"{' · '.join(header_parts)} in {target}.\n\n{output}"
                 if warnings:
                     output = f"{output}\n\n" + "\n".join(warnings)
                 return ToolResult(ok=True, output=output)
@@ -320,11 +367,15 @@ def _agent_state(text: str) -> str:
     return f"AGENT.md: {len(text):,} chars\n\nCurrent contents:\n{body}"
 
 
-def _add_memory_batch(tool: Memory, store: MemoryStore, target: str,
-                      entries: list[str]) -> ToolResult:
-    current = _entries(store, target)
-    working = ENTRY_DELIMITER.join(current)
-    kept: list[str] = []
+def _add_memory_batch(
+    tool: Memory,
+    store: MemoryStore,
+    target: str,
+    entries: list[str],
+    confidence: str = "normal",
+) -> ToolResult:
+    added = 0
+    reinforced = 0
     warnings: list[str] = []
 
     for raw in entries:
@@ -339,30 +390,36 @@ def _add_memory_batch(tool: Memory, store: MemoryStore, target: str,
         if other is not None:
             warnings.append(f"skipped (duplicate of {other}): {item[:60]!r}")
             continue
-        if _is_duplicate(working, item):
-            warnings.append(f"skipped (duplicate of {target}): {item[:60]!r}")
+        try:
+            outcome = store.add(target, item, confidence=confidence)
+        except ValueError as e:
+            warnings.append(f"skipped ({e}): {item[:60]!r}")
             continue
-        kept.append(item)
-        working = (
-            working.rstrip() + ENTRY_DELIMITER + item
-            if working.strip() else item
-        )
+        if outcome == "reinforced":
+            reinforced += 1
+        else:
+            added += 1
         warn = _operational_warning(item)
         if warn:
             warnings.append(warn)
 
-    if not kept:
+    if added == 0 and reinforced == 0:
         return ToolResult(
             ok=False, output="",
-            error="no entries added; all were duplicates: " + " | ".join(warnings),
+            error="no entries added: " + " | ".join(warnings),
         )
 
-    try:
-        _write(store, target, current + kept)
-    except ValueError as e:
-        return ToolResult(ok=False, output="", error=str(e))
-
-    out = f"Added {len(kept)} entries to {target}.\n\n{tool._state_snapshot(store, target)}"
+    header_parts = []
+    if added:
+        header_parts.append(f"Added {added} entr{'ies' if added != 1 else 'y'}")
+    if reinforced:
+        header_parts.append(
+            f"reinforced {reinforced} existing entr{'ies' if reinforced != 1 else 'y'}"
+        )
+    out = (
+        f"{' · '.join(header_parts)} in {target}.\n\n"
+        f"{tool._state_snapshot(store, target)}"
+    )
     if warnings:
         out = f"{out}\n\n" + "\n".join(warnings)
     return ToolResult(ok=True, output=out)

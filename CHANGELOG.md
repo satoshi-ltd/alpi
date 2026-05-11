@@ -1,5 +1,48 @@
 # Changelog
 
+## v0.4.23 — 2026-05-11 — memory v2 quality pass (AI(1).c)
+
+Confidence, reinforcement, auto-expiry, sharpened type-routing — the
+last server-side pieces of AI(1) modulo the dedup-threshold
+recalibration, which moves to v0.6 because it needs real
+session-memory accumulation to measure against.
+
+- ``alpi/memory.py`` — new ``<!-- alpi-meta conf=… captured=…
+  reinforced=… -->`` marker per entry. Markdown-safe, regex-parseable,
+  stripped from ``snapshot()`` so the LLM never sees it. ``add()``
+  now accepts ``confidence: low|normal|high`` (default ``normal``).
+  On near-duplicate detection the entry is reinforced instead of
+  rejected: the counter bumps and a ``low`` entry upgrades to
+  ``normal`` once it reaches two reinforcements. ``add()`` returns
+  ``"added"`` or ``"reinforced"`` so the tool can report which
+  happened.
+- ``alpi/memory.py::prune_low_confidence`` — drops entries that are
+  ``conf=low`` AND ``reinforced=0`` AND older than
+  ``low_confidence_max_age_days`` (default 30). Legacy entries
+  without metadata are never auto-expired. Runs at session start
+  via ``engine.py::_build_system_prompt`` and is wrapped in a guard
+  so a prune failure never blocks the session.
+- ``alpi/config.py`` — new ``MemoryConfig.low_confidence_max_age_days:
+  int = 30``. Set to ``0`` in ``config.yaml`` to disable auto-expiry.
+- ``alpi/tools/memory.py`` — ``add`` schema gains a ``confidence``
+  enum; tool description rewritten with a single deciding question
+  ("who is the fact about") and explicit tests for routing USER /
+  MEMORY / AGENT (e.g. "user prefers concise replies" → AGENT.md
+  because it directs the assistant's behaviour; "user is Spanish"
+  → USER.md). Batch ``add`` now reports both added and reinforced
+  counts independently.
+- Batch ``add`` is now per-item rather than transactional: an
+  over-limit entry in the middle of a batch no longer rolls back the
+  earlier successful entries. Surfacing the failure as a per-entry
+  warning is more useful than dropping a whole batch on one bad row.
+
+Tests — 11 new in ``tests/tools/test_memory.py`` covering meta
+write/strip, reinforcement counter bump, low→normal upgrade after
+two reinforcements, invalid-confidence rejection, prune semantics
+(drops old low, keeps reinforced, keeps normal/high, skips legacy,
+disables on max_age=0), plus updated batch tests for the new
+per-item semantics.
+
 ## v0.4.22 — 2026-05-11 — BA local RAG over `workspace/`
 
 Two new agent tools — ``search_workspace`` and ``index_workspace`` —

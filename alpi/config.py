@@ -138,6 +138,8 @@ class MemoryConfig:
     # snapshots the conversation and writes durable facts via the memory tool.
     review_interval: int = 0
 
+    low_confidence_max_age_days: int = 30
+
 
 @dataclass
 class Config:

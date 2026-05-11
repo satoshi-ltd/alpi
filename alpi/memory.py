@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import contextlib
+import re
 from dataclasses import dataclass
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Iterator
 
@@ -19,6 +21,14 @@ MEMORY_CHAR_LIMIT = 5000
 
 SEED_USER = ""
 SEED_MEMORY = ""
+
+CONFIDENCE_LEVELS = ("low", "normal", "high")
+DEFAULT_CONFIDENCE = "normal"
+
+_META_RE = re.compile(
+    r"\n?<!--\s*alpi-meta\s+(?P<kv>[^>]*?)\s*-->", re.IGNORECASE
+)
+_META_TOKEN = re.compile(r"(\w+)=([^\s]+)")
 
 
 @dataclass
@@ -41,42 +51,112 @@ class MemoryStore:
             self.memory_path.write_text(SEED_MEMORY)
 
     def snapshot(self) -> dict[str, str]:
-        """Return current content of both memories (for system prompt injection)."""
+        """Return current memories with metadata comments stripped.
+
+        Used to inject memory into the system prompt — the LLM never
+        sees ``<!-- alpi-meta … -->`` markers.
+        """
         return {
-            "USER.md": _read(self.user_path),
-            "MEMORY.md": _read(self.memory_path),
+            "USER.md": strip_meta(_read(self.user_path)),
+            "MEMORY.md": strip_meta(_read(self.memory_path)),
         }
 
     def usage(self) -> dict[str, tuple[int, int]]:
-        """Return (used_chars, limit) per file."""
+        """Return (used_chars, limit) per file. Counts what the LLM
+        actually sees: metadata comments are stripped first so the
+        budget reflects system-prompt impact, not on-disk bytes."""
         return {
-            "USER.md": (len(_read(self.user_path)), USER_CHAR_LIMIT),
-            "MEMORY.md": (len(_read(self.memory_path)), MEMORY_CHAR_LIMIT),
+            "USER.md": (len(strip_meta(_read(self.user_path))), USER_CHAR_LIMIT),
+            "MEMORY.md": (len(strip_meta(_read(self.memory_path))), MEMORY_CHAR_LIMIT),
         }
 
-    def add(self, target: str, content: str) -> None:
-        """Append a new entry. Raises ValueError if over char limit or duplicate."""
+    def add(
+        self,
+        target: str,
+        content: str,
+        confidence: str = DEFAULT_CONFIDENCE,
+    ) -> str:
+        """Append a new entry and return its action: 'added' or 'reinforced'.
+
+        Near-duplicates reinforce the matching existing entry (bumping
+        its counter and upgrading low→normal) instead of raising.
+        Raises ValueError only for empty content, over-limit writes, or
+        unknown target.
+        """
         cleaned = _clean_entry(content)
         if not cleaned:
             raise ValueError("empty entry after cleanup")
+        if confidence not in CONFIDENCE_LEVELS:
+            raise ValueError(
+                f"confidence must be one of {CONFIDENCE_LEVELS}, got {confidence!r}"
+            )
 
         path, limit = self._resolve(target)
         with _locked(path, "a+") as f:
             f.seek(0)
             current = f.read()
-            if _is_duplicate(current, cleaned):
-                raise ValueError("entry already present (or very similar) — skipping duplicate")
-            new_content = (current.rstrip() + ENTRY_DELIMITER + cleaned + "\n"
-                           if current.strip() else cleaned + "\n")
-            if len(new_content) > limit:
+            dup_idx = _find_duplicate_index(current, cleaned)
+            if dup_idx is not None:
+                rewritten = _reinforce_at(current, dup_idx)
+                if rewritten != current:
+                    backup_file(path)
+                    f.seek(0)
+                    f.truncate()
+                    f.write(rewritten)
+                return "reinforced"
+            meta = _build_meta(confidence=confidence, captured=_today(), reinforced=0)
+            entry_block = cleaned + meta
+            new_content = (
+                current.rstrip() + ENTRY_DELIMITER + entry_block + "\n"
+                if current.strip()
+                else entry_block + "\n"
+            )
+            visible = len(strip_meta(new_content))
+            if visible > limit:
                 raise ValueError(
-                    f"Memory {target} would be {len(new_content):,}/{limit:,} chars. "
+                    f"Memory {target} would be {visible:,}/{limit:,} chars. "
                     "Consolidate existing entries before adding."
                 )
             backup_file(path)
             f.seek(0)
             f.truncate()
             f.write(new_content)
+            return "added"
+
+    def prune_low_confidence(self, max_age_days: int, today: date | None = None) -> int:
+        """Drop low-confidence entries older than ``max_age_days`` with zero
+        reinforcements. Returns the number of entries removed across
+        USER.md + MEMORY.md. ``max_age_days <= 0`` disables the prune.
+        """
+        if max_age_days <= 0:
+            return 0
+        today = today or _today()
+        removed = 0
+        for path in (self.user_path, self.memory_path):
+            if not path.exists():
+                continue
+            with _locked(path, "r+") as f:
+                content = f.read()
+                if not content.strip():
+                    continue
+                kept_entries: list[str] = []
+                dropped = 0
+                for entry in content.split(ENTRY_DELIMITER):
+                    if _should_prune(entry, today, max_age_days):
+                        dropped += 1
+                        continue
+                    kept_entries.append(entry)
+                if dropped == 0:
+                    continue
+                backup_file(path)
+                new_text = ENTRY_DELIMITER.join(kept_entries).strip()
+                if new_text:
+                    new_text += "\n"
+                f.seek(0)
+                f.truncate()
+                f.write(new_text)
+                removed += dropped
+        return removed
 
     def _resolve(self, target: str) -> tuple[Path, int]:
         key = target.upper()  # accept variants; the canonical form is uppercase
@@ -119,28 +199,31 @@ def is_duplicate_stanza(existing_text: str, new_stanza: str) -> bool:
 
 
 def _is_duplicate(existing: str, new_entry: str) -> bool:
-    needle_norm = _normalize_for_dedup(new_entry)
+    return _find_duplicate_index(existing, new_entry) is not None
+
+
+def _find_duplicate_index(existing: str, new_entry: str) -> int | None:
+    needle_norm = _normalize_for_dedup(strip_meta(new_entry))
     if not needle_norm:
-        return True
-    needle_tokens = _content_tokens(new_entry)
-    for entry in existing.split(ENTRY_DELIMITER):
-        existing_norm = _normalize_for_dedup(entry)
+        return 0
+    needle_tokens = _content_tokens(strip_meta(new_entry))
+    for i, entry in enumerate(existing.split(ENTRY_DELIMITER)):
+        body = strip_meta(entry)
+        existing_norm = _normalize_for_dedup(body)
         if not existing_norm:
             continue
         if (needle_norm == existing_norm
                 or needle_norm in existing_norm
                 or existing_norm in needle_norm):
-            return True
+            return i
         if needle_tokens:
-            existing_tokens = _content_tokens(entry)
+            existing_tokens = _content_tokens(body)
             if existing_tokens:
                 overlap = len(needle_tokens & existing_tokens)
-                # Max containment: if ≥70% of the shorter entry's content
-                # tokens are in the longer one, it's a paraphrase/superset.
                 smaller = min(len(needle_tokens), len(existing_tokens))
                 if smaller >= 2 and overlap / smaller >= 0.7:
-                    return True
-    return False
+                    return i
+    return None
 
 
 # Minimal stopword set — Spanish + English function words. Kept deliberately
@@ -212,3 +295,83 @@ def _locked(path: Path, mode: str) -> Iterator:
         if fcntl is not None:
             fcntl.flock(f.fileno(), fcntl.LOCK_UN)
         f.close()
+
+
+def strip_meta(text: str) -> str:
+    """Remove every ``<!-- alpi-meta … -->`` marker from ``text``.
+
+    Used in two paths: snapshot() before injecting into the system
+    prompt, and dedup comparisons (so meta on one side doesn't fake
+    a content difference).
+    """
+    return _META_RE.sub("", text)
+
+
+def parse_meta(entry: str) -> dict[str, str]:
+    """Return the parsed key/value pairs from the last alpi-meta marker
+    in ``entry``. Empty dict when none is present."""
+    matches = list(_META_RE.finditer(entry))
+    if not matches:
+        return {}
+    return dict(_META_TOKEN.findall(matches[-1].group("kv")))
+
+
+def _build_meta(*, confidence: str, captured: date, reinforced: int) -> str:
+    return (
+        f"\n<!-- alpi-meta conf={confidence} "
+        f"captured={captured.isoformat()} reinforced={reinforced} -->"
+    )
+
+
+def _reinforce_at(text: str, idx: int) -> str:
+    """Return ``text`` with the entry at index ``idx`` bumped: reinforced+1,
+    and confidence upgraded low→normal once reinforced ≥ 2."""
+    entries = text.split(ENTRY_DELIMITER)
+    if idx < 0 or idx >= len(entries):
+        return text
+    entries[idx] = _bump_entry(entries[idx])
+    return ENTRY_DELIMITER.join(entries)
+
+
+def _bump_entry(entry: str) -> str:
+    meta = parse_meta(entry)
+    body = strip_meta(entry).rstrip("\n")
+    reinforced = int(meta.get("reinforced", "0")) + 1
+    conf = meta.get("conf", DEFAULT_CONFIDENCE)
+    if conf == "low" and reinforced >= 2:
+        conf = "normal"
+    captured_raw = meta.get("captured")
+    captured = _parse_date(captured_raw) if captured_raw else _today()
+    return body + _build_meta(
+        confidence=conf, captured=captured, reinforced=reinforced
+    )
+
+
+def _should_prune(entry: str, today: date, max_age_days: int) -> bool:
+    meta = parse_meta(entry)
+    if not meta:
+        return False  # legacy entries without meta never auto-expire
+    if meta.get("conf") != "low":
+        return False
+    if int(meta.get("reinforced", "0")) > 0:
+        return False
+    captured_raw = meta.get("captured")
+    if not captured_raw:
+        return False
+    captured = _parse_date(captured_raw)
+    if captured is None:
+        return False
+    return (today - captured).days >= max_age_days
+
+
+def _today() -> date:
+    return datetime.now(timezone.utc).date()
+
+
+def _parse_date(value: str | None) -> date | None:
+    if not value:
+        return None
+    try:
+        return date.fromisoformat(value)
+    except (TypeError, ValueError):
+        return None

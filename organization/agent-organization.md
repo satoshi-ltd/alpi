@@ -14,11 +14,12 @@ A complete scaffold for an agentic company built on the ALP protocol. Designed t
    - [Council](#council) · [Execution](#execution) · [On-demand](#on-demand)
 6. [Workgroups](#workgroups)
 7. [How the System Works](#how-the-system-works)
-8. [Workgroup Creation Permissions](#workgroup-creation-permissions)
-9. [Bringing in a New Peer](#bringing-in-a-new-peer)
-10. [Adapting the Scaffold](#adapting-the-scaffold)
+8. [How Knowledge Flows](#how-knowledge-flows)
+9. [Workgroup Creation Permissions](#workgroup-creation-permissions)
+10. [Bringing in a New Peer](#bringing-in-a-new-peer)
+11. [Adapting the Scaffold](#adapting-the-scaffold)
 
-> **Quick skill lookup:** the [Skills table](#skills) in Quick Reference lists all 51 skills across 17 agents with one-line descriptions.
+> **Quick skill lookup:** the [Skills table](#skills) in Quick Reference lists every skill across the 17 agents with one-line descriptions.
 
 ---
 
@@ -108,6 +109,7 @@ The structure is intentionally minimal. Four workgroups cover the recurring deci
 | Atlas | Primary Source | — | Research a question using primary sources — filings, transcripts, papers, original data |
 | Atlas | Competitor Analysis | db | Deep-dive analysis of a single competitor — strategy, product trajectory, financial health |
 | Atlas | Trend Triangulation | — | Identify and validate an emerging trend by triangulating across multiple independent source types |
+| Archive | Knowledge Recall | — | Answer a question about org knowledge by consulting workspace + decisions DB + memory + past sessions, synthesizing with citations and surfacing conflicts |
 | Archive | Decision Capture | db | Record a decision with context, options, rationale, and dissent — so it is never relitigated from scratch |
 | Archive | Post-Mortem | db | Write a blameless post-mortem identifying root causes, systemic factors, and follow-up actions |
 | Archive | Doc Curator | db | Audit a documentation set for accuracy, gaps, and staleness — and produce a curation plan |
@@ -116,10 +118,13 @@ The structure is intentionally minimal. Four workgroups cover the recurring deci
 
 | Workgroup | Hub | Fixed peers |
 |---|---|---|
-| **Roadmap** | Prism | Vera, Zeta, Echo |
-| **Architecture** | Zeta | Forge, Sentinel |
-| **Growth** | Echo | Quill, Rex |
-| **Customers** | Fern | Hub |
+| **Roadmap** | Prism | Vera, Zeta, Echo, Archive |
+| **Architecture** | Zeta | Forge, Sentinel, Archive |
+| **Growth** | Echo | Quill, Rex, Archive |
+| **Customers** | Fern | Hub, Archive |
+
+Archive is silent during discussion and auto-captures on `#done`. See
+[Archive · Knowledge Management](#archive--knowledge-management).
 
 ---
 
@@ -1031,51 +1036,21 @@ Your job is to surface signal before everyone else has it.
 
 #### Archive · Knowledge Management
 
-**When to invoke.** Documenting decisions, capturing post-mortems, retiring stale docs, querying past rationale, building runbooks.
+**When to invoke.** Querying past rationale, documenting decisions, capturing post-mortems, retiring stale docs, building runbooks. Archive is the single entry point for org knowledge — other agents do not read its store directly, they ask Archive.
 
 **Bio.**
 The librarian of the org. Captures what works, what doesn't, and what was tried. Knowledge in heads doesn't scale. Documentation is infrastructure — invisible when working, painful when missing.
 
-**soul.md**
-
-```markdown
-# Archive
-
-You are Archive, the knowledge keeper of the organization.
-What is not written down does not scale.
-
-## Worldview
-- Knowledge that lives only in heads is a liability
-- A decision without rationale will be relitigated forever
-- Documentation is infrastructure — invisible until missing
-- The cost of writing it down is always less than the cost of not
-
-## Voice
-- Capture the "why" as carefully as the "what"
-- Distinguish: decided / debated / deferred
-- Prefer searchable plain text over polished prose
-- Reference primary sources, not memories of meetings
-
-## Posture
-- Update docs alongside decisions, not after
-- Retire stale documents — wrong information is worse than missing
-- Surface contradictions between sources rather than hide them
-- Make the archive easy to query, not impressive to read
-
-## What to avoid
-- Documentation as theater (polished but unread)
-- Hoarding without curation
-- Treating institutional knowledge as fixed instead of evolving
-- Letting tribal knowledge become single-points-of-failure
-```
+**soul.md** — see [`agents/archive/agent.md`](agents/archive/agent.md) for the canonical content (Worldview, Voice, Posture, How I answer questions, When I auto-capture, What to avoid).
 
 **Skills.**
-- **Decision Capture** — Record a decision with its context, options considered, rationale, and dissent — so it can be understood and challenged later without re-litigating it from scratch
-- **Post-Mortem** — Write a blameless post-mortem that identifies root causes, systemic factors, and follow-up actions — not individuals to fault
-- **Doc Curator** — Audit a documentation set for accuracy, gaps, and staleness — and produce a curation plan with clear ownership
+- **Knowledge Recall** — Answer a question about org knowledge by consulting workspace + decisions DB + memory + past sessions, synthesizing with citations and surfacing conflicts. The read-path canon.
+- **Decision Capture** — Record a decision with its context, options considered, rationale, and dissent — so it can be understood and challenged later without re-litigating it from scratch.
+- **Post-Mortem** — Write a blameless post-mortem that identifies root causes, systemic factors, and follow-up actions — not individuals to fault.
+- **Doc Curator** — Audit a documentation set for accuracy, gaps, and staleness — and produce a curation plan with clear ownership.
 
 **Workgroup roles.**
-- Invited to any workgroup at `#done` time to capture the decision
+- Permanent peer in the four fixed workgroups (Roadmap, Architecture, Growth, Customers). Silent during discussion; auto-captures on `#done`.
 - Invited proactively for post-mortems and retrospectives
 
 ---
@@ -1099,7 +1074,7 @@ Four persistent workgroups cover the recurring decision domains of the company. 
 
 **Hub.** Prism
 
-**Fixed peers.** Vera, Zeta, Echo
+**Fixed peers.** Vera, Zeta, Echo, Archive
 
 **Often invited.** Canvas (when design is involved), Lumen (when data shapes the call), Ledger (when financial weight matters), Fern (when retention is at stake), Atlas (when "why now" needs validation)
 
@@ -1143,7 +1118,7 @@ A task is ready for `#done` when:
 
 **Hub.** Zeta
 
-**Fixed peers.** Forge, Sentinel
+**Fixed peers.** Forge, Sentinel, Archive
 
 **Often invited.** Prism (when product roadmap is affected), Lumen (when data architecture is the topic), Flux (when operational reality is at stake)
 
@@ -1186,7 +1161,7 @@ A task is ready for `#done` when:
 
 **Hub.** Echo
 
-**Fixed peers.** Quill, Rex
+**Fixed peers.** Quill, Rex, Archive
 
 **Often invited.** Lumen (always, for data), Atlas (for market context), Prism (for product positioning), Ledger (for unit economics), Fern (for retention impact)
 
@@ -1230,7 +1205,7 @@ A task is ready for `#done` when:
 
 **Hub.** Fern
 
-**Fixed peers.** Hub
+**Fixed peers.** Hub, Archive
 
 **Often invited.** Prism (when feedback shapes product), Lumen (for cohort and churn data), Rex (when revenue is at risk), Zeta (when escalations involve technical issues), Quill (for help-content review)
 
@@ -1289,7 +1264,66 @@ This four-part context (briefing + rules + bios + task history) means a peer can
 
 **4. The hub decides `#done`.** When the closing criteria are met (or clearly cannot be met), the hub closes the task with the required decision artifacts. Disagreement is documented, not buried.
 
-**5. Archive captures the decision.** When invoked, Archive ensures the rationale is searchable. Future tasks in the same workgroup can reference past decisions without relitigating them.
+**5. Archive captures the decision.** Archive is a permanent peer in the four fixed workgroups and silent during discussion. On `#done` it auto-invokes `decision-capture` (or `post-mortem` if the closure reveals a process failure) and indexes the outcome. Future tasks reference past decisions without relitigating them. Ad-hoc workgroups should invite Archive at creation if they expect to produce a binding decision — convention, not enforcement.
+
+---
+
+## How Knowledge Flows
+
+This is a scaffold decision, not an alpi rule. alpi gives every profile the same primitives (workspace + RAG via `search_workspace`/`index_workspace`, per-skill SQLite via `db`, memory files, ALP `link.ask`); the agent's `agent.md` decides when to use them. This scaffold chooses **one keeper** — Archive — as the canonical entry point, because a single source of truth scales better than N profiles each maintaining parallel notes. A different scaffold could fan the same primitives differently (e.g., every Council member curates its own domain workspace).
+
+In this scaffold: Archive is the canonical entry point for org knowledge. Other agents do not duplicate the workspace, do not query Archive's SQLite directly, and do not maintain parallel notes. They ask Archive.
+
+### Sources Archive owns
+
+Archive maintains four complementary layers, consulted in this order on every query:
+
+1. **Workspace** — semantic search (`search_workspace`) over the directory the org has given Archive: PDFs, markdowns, contracts, meeting notes, scanned docs. This is the bulk of what Archive knows.
+2. **Decisions DB** — Archive's own per-skill SQLite tables (`decisions`, `post_mortems`, `doc_audits`) populated by the capture skills. Structured, queryable, the binding record.
+3. **Memory** — invariants the org has explicitly taught Archive (e.g. "Vera has final vote on strategy"). Short, hand-curated, in Archive's `USER.md` / `MEMORY.md` / `AGENT.md`.
+4. **Sessions** — Archive's past conversations. Fallback when 1-3 miss.
+
+### Read path
+
+```
+any agent  →  link.ask(archive, "what do we know about X?")
+                                │
+                                ▼
+                  archive consults its 4 layers
+                                │
+                                ▼
+              archive synthesizes ONE paragraph with citations
+                                │
+                                ▼
+                       returns to caller
+```
+
+Archive synthesizes — it does not return raw snippets — so callers pay one round of tokens (Archive's), not N (each consumer re-synthesizing). When sources disagree, Archive surfaces the conflict by quoting both; the caller decides what to trust.
+
+### Write path
+
+Three independent vectors, all converging in Archive:
+
+- **Workgroup closures** — Archive sees `#done` (as a permanent peer in the four fixed workgroups, or by explicit invite in ad-hoc ones) and auto-invokes `decision-capture` or `post-mortem`.
+- **Document drops** — Humans place files in the directory Archive watches. Archive re-indexes them periodically or on demand.
+- **Direct memory writes** — During a conversation Archive learns an invariant worth pinning; it calls `memory(action="add")`.
+
+### Local vs remote
+
+Architecturally Archive is just another ALP peer. It can run in three shapes:
+
+- **Same machine** as the asker — `link.ask` resolves over the local ALP socket. Lowest setup cost; right for solo operators and the first phase of any org.
+- **Different machine on the same network** — Archive's daemon listens on Tailscale or LAN; other agents pair once via per-device token and call it from their laptops. Right when several humans share the org and the document set is heavy.
+- **Hosted on always-on infra** — Umbrel / NAS / dedicated server. Indexes large workspaces, stays available when laptops sleep, never duplicates the corpus.
+
+Switching between shapes does not change the agent's `agent.md`, skills, or how peers consult it. Only the network coordinates of Archive change — pairing once via `alpi setup → Peers → Add` is the entire migration. The same pattern applies to any specialist who benefits from dedicated infra (Atlas, Lex, Lumen) without changing the agent contract.
+
+### What Archive does not do
+
+- Speak in workgroups uninvited (silent peer; auto-captures on `#done`)
+- Hand back raw snippets — always synthesizes
+- Hide conflicts between sources — quotes both, lets the caller decide
+- Guess when it doesn't know — says so plainly and suggests where to look
 
 ---
 

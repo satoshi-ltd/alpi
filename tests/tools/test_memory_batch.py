@@ -45,7 +45,7 @@ def test_add_batch_skips_duplicates_within_one_file(tmp_home_no_env: Path) -> No
     assert "skipped" in r.output.lower()
 
 
-def test_add_batch_skips_duplicate_inside_same_batch(tmp_home_no_env: Path) -> None:
+def test_add_batch_reinforces_duplicate_inside_same_batch(tmp_home_no_env: Path) -> None:
     r = Memory().run(
         action="add", target="USER.md",
         entries=[
@@ -59,10 +59,14 @@ def test_add_batch_skips_duplicate_inside_same_batch(tmp_home_no_env: Path) -> N
     text = (tmp_home_no_env / "memories" / "USER.md").read_text()
     assert text.count("User prefers terse replies.") == 1
     assert "User optimizes for clarity." in text
-    assert "duplicate of USER.md" in r.output
+    assert "reinforced" in r.output
 
 
-def test_add_batch_limit_failure_writes_nothing(tmp_home_no_env: Path) -> None:
+def test_add_batch_partial_write_when_one_entry_oversized(
+    tmp_home_no_env: Path,
+) -> None:
+    """Batch is per-item: an over-limit entry is rejected with a warning
+    but does not roll back earlier successful entries in the same batch."""
     Memory().run(action="add", target="USER.md", content="Existing fact.")
     too_large = "x" * 4000
 
@@ -71,10 +75,12 @@ def test_add_batch_limit_failure_writes_nothing(tmp_home_no_env: Path) -> None:
         entries=["New fact before overflow.", too_large],
     )
 
-    assert not r.ok
+    assert r.ok  # at least one entry succeeded
     text = (tmp_home_no_env / "memories" / "USER.md").read_text()
     assert "Existing fact." in text
-    assert "New fact before overflow." not in text
+    assert "New fact before overflow." in text
+    assert too_large[:100] not in text
+    assert "skipped" in r.output.lower()
 
 
 def test_add_batch_rejects_when_all_entries_are_duplicates(
