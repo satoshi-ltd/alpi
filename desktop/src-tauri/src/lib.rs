@@ -292,6 +292,22 @@ async fn unset_config_field(profile: String, key: String) -> Result<(), String> 
 }
 
 #[tauri::command]
+async fn draft_identity(profile: String) -> Result<String, String> {
+    let resp = tauri::async_runtime::spawn_blocking(move || {
+        host_client::call(
+            "host.identity.draft",
+            serde_json::json!({"profile": profile}),
+        )
+    })
+    .await
+    .map_err(|e| format!("host.identity.draft: {e}"))??;
+    resp.get("bio")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
+        .ok_or_else(|| "missing bio in response".to_string())
+}
+
+#[tauri::command]
 async fn port_available(host: String, port: u16) -> bool {
     tauri::async_runtime::spawn_blocking(move || {
         let bind_host = if host.is_empty() { "127.0.0.1" } else { &host };
@@ -1448,6 +1464,7 @@ pub fn run() {
             ollama_models,
             set_config_field,
             unset_config_field,
+            draft_identity,
             port_available,
             service_action,
             reveal_in_finder,

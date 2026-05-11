@@ -20,4 +20,5 @@
   flex-direction: column;
   min-width: 0;
   background: var(--color-bg-solid);
+  position: relative;
 }

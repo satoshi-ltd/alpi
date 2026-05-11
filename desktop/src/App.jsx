@@ -56,6 +56,12 @@ export default function App() {
     viewRef.current = view;
   }, [view]);
 
+  const settingsTargetRef = useRef(settingsTarget);
+  useEffect(() => {
+    settingsTargetRef.current = settingsTarget;
+  }, [settingsTarget]);
+  const workgroupsRef = useRef([]);
+
   const reloadRef = useRef(null);
   const pendingTurnRef = useRef(null);
 
@@ -65,6 +71,14 @@ export default function App() {
   const onJumpToProfile = useCallback((index) => {
     const item = jumpTargetsRef.current[index];
     if (!item) return;
+    if (viewRef.current?.kind === "settings") {
+      if (item.kind === "profile") {
+        setSettingsTarget({ kind: "profile", id: item.target.name });
+      } else if (item.kind === "workgroup") {
+        setSettingsTarget({ kind: "workgroup", id: item.target.id });
+      }
+      return;
+    }
     if (item.kind === "profile") {
       setRewriteDraft(null);
       setView({
@@ -83,10 +97,71 @@ export default function App() {
       });
     }
   }, []);
+  const onNewProfile = useCallback(() => {
+    setView({ kind: "settings" });
+    setSettingsTarget({ kind: "create-profile" });
+  }, []);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const searchOpenRef = useRef(false);
+  useEffect(() => {
+    searchOpenRef.current = searchOpen;
+  }, [searchOpen]);
+  const onToggleSearch = useCallback(() => {
+    if (searchOpenRef.current) {
+      setSearchOpen(false);
+      return;
+    }
+    const v = viewRef.current;
+    if (v?.kind === "profile" || v?.kind === "workgroup") {
+      setSearchOpen(true);
+    }
+  }, []);
+  const onCloseSearch = useCallback(() => setSearchOpen(false), []);
+  useEffect(() => {
+    setSearchOpen(false);
+  }, [view.kind, view.profile, view.sessionId, view.id]);
+  const onOpenSettings = useCallback(() => {
+    const v = viewRef.current;
+    if (v?.kind === "settings") {
+      const t = settingsTargetRef.current;
+      if (t?.kind === "profile" && t.id) {
+        const profile = profilesRef.current.find((p) => p.name === t.id);
+        const latest = profile?.latest_session;
+        setView({
+          kind: "profile",
+          profile: t.id,
+          sessionId: latest?.kind === "chat" ? latest.id : null,
+        });
+        return;
+      }
+      if (t?.kind === "workgroup" && t.id) {
+        const wg = workgroupsRef.current.find((w) => w.id === t.id);
+        if (wg) {
+          setView({ kind: "workgroup", profile: wg.profile, id: wg.id });
+          return;
+        }
+      }
+      setView(
+        prevViewRef.current && prevViewRef.current.kind !== "settings"
+          ? prevViewRef.current
+          : { kind: "empty" },
+      );
+      return;
+    }
+    if (v?.kind === "profile") {
+      setSettingsTarget({ kind: "profile", id: v.profile });
+    } else if (v?.kind === "workgroup") {
+      setSettingsTarget({ kind: "workgroup", id: v.id });
+    }
+    setView({ kind: "settings" });
+  }, []);
   const { collapsed, setCollapsed, toggleSidebar } = useWindowChrome({
     viewRef,
     setView,
     onJumpToProfile,
+    onNewProfile,
+    onOpenSettings,
+    onToggleSearch,
   });
   useNavListener(setView);
 
@@ -132,6 +207,9 @@ export default function App() {
   useEffect(() => {
     profilesRef.current = profiles;
   }, [profiles]);
+  useEffect(() => {
+    workgroupsRef.current = workgroups;
+  }, [workgroups]);
 
   const hubPubkeyOf = useCallback(
     (profileName) =>
@@ -398,6 +476,24 @@ export default function App() {
   }, []);
 
   const closeSettings = useCallback(() => {
+    const t = settingsTargetRef.current;
+    if (t?.kind === "profile" && t.id) {
+      const profile = profilesRef.current.find((p) => p.name === t.id);
+      const latest = profile?.latest_session;
+      setView({
+        kind: "profile",
+        profile: t.id,
+        sessionId: latest?.kind === "chat" ? latest.id : null,
+      });
+      return;
+    }
+    if (t?.kind === "workgroup" && t.id) {
+      const wg = workgroupsRef.current.find((w) => w.id === t.id);
+      if (wg) {
+        setView({ kind: "workgroup", profile: wg.profile, id: wg.id });
+        return;
+      }
+    }
     setView(
       prevViewRef.current && prevViewRef.current.kind !== "settings"
         ? prevViewRef.current
@@ -431,14 +527,32 @@ export default function App() {
     (activeConnection.status === "offline" ||
       activeConnection.status === "auth-failed");
 
+  const jumpTargets = useMemo(
+    () =>
+      orderedJumpTargets({
+        profiles,
+        workgroups,
+        pinnedProfiles: pinned.profiles ?? [],
+        pinnedWorkgroups: pinned.workgroups ?? [],
+      }),
+    [profiles, workgroups, pinned],
+  );
+
   useEffect(() => {
-    jumpTargetsRef.current = orderedJumpTargets({
-      profiles,
-      workgroups,
-      pinnedProfiles: pinned.profiles ?? [],
-      pinnedWorkgroups: pinned.workgroups ?? [],
+    jumpTargetsRef.current = jumpTargets;
+  }, [jumpTargets]);
+
+  const jumpHints = useMemo(() => {
+    const out = {};
+    jumpTargets.slice(0, 9).forEach((item, i) => {
+      const k =
+        item.kind === "profile"
+          ? `profile:${item.target.name}`
+          : `workgroup:${item.target.profile}/${item.target.id}`;
+      out[k] = i + 1;
     });
-  }, [profiles, workgroups, pinned]);
+    return out;
+  }, [jumpTargets]);
 
   return (
     <div className={styles.app} data-sidebar-collapsed={collapsed ? "1" : "0"}>
@@ -469,6 +583,7 @@ export default function App() {
             pendingProfile={pendingTurn?.profile ?? null}
             view={view}
             pinned={pinned}
+            jumpHints={jumpHints}
             hostConnections={hostConnections}
             daemonOffline={daemonOffline}
             onNewChat={onNewChat}
@@ -490,6 +605,9 @@ export default function App() {
               hostConnections={hostConnections}
               activeConnection={activeConnection}
               refreshTick={settingsRefreshTick}
+              pinned={pinned}
+              jumpHints={jumpHints}
+              onTogglePin={onTogglePin}
               onSelectTarget={setSettingsTarget}
               onRefresh={reload}
               onSetHostConnection={onSetHostConnection}
@@ -522,6 +640,8 @@ export default function App() {
                       prev[key] === task ? prev : { ...prev, [key]: task },
                     );
                   }}
+                  searchOpen={searchOpen}
+                  onCloseSearch={onCloseSearch}
                 />
               )}
               {(view.kind === "empty" || view.kind === "profile") && (
@@ -555,6 +675,8 @@ export default function App() {
                       prev ? { ...prev, consumed: true } : prev,
                     );
                   }}
+                  searchOpen={searchOpen}
+                  onCloseSearch={onCloseSearch}
                 />
               )}
             </>

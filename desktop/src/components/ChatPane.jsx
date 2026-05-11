@@ -10,6 +10,8 @@ import { useStickyScroll } from "../lib/useStickyScroll.js";
 import { relativeTime } from "../lib/time.js";
 import { profileLabel } from "../lib/profile-display.js";
 import Skeleton from "../primitives/Skeleton.jsx";
+import SearchBar from "../primitives/SearchBar.jsx";
+import { useTranscriptSearch } from "../hooks/useTranscriptSearch.js";
 import { useNotify } from "../primitives/Notification.jsx";
 import alpiHeadUrl from "../assets/alpi-head.svg?url";
 import styles from "./ChatPane.module.css";
@@ -28,6 +30,8 @@ export default function ChatPane({
   rewriteDraft,
   onRewriteDraftApplied,
   daemonOffline = false,
+  searchOpen = false,
+  onCloseSearch,
 }) {
   const inProfile = view.kind === "profile";
   // "empty view" covers both `+ New Chat` and `select a profile with no
@@ -109,7 +113,9 @@ export default function ChatPane({
             onCancel={pendingTurn ? onCancel : null}
             disabled={daemonOffline}
             daemonOffline={daemonOffline}
-            showPicker
+            showPicker={view.kind === "empty"}
+            modelOverride={modelOverride}
+            onModelChange={setModelOverride}
             embedded
             rewriteDraft={rewriteDraft}
             onRewriteDraftApplied={onRewriteDraftApplied}
@@ -131,6 +137,8 @@ export default function ChatPane({
           onRewriteMessage={onRewriteMessage}
           sessionId={view.sessionId ?? null}
           rewriteDraft={rewriteDraft}
+          searchOpen={searchOpen}
+          onCloseSearch={onCloseSearch}
         />
       </div>
       <ChatComposer
@@ -160,6 +168,8 @@ function SessionView({
   onRewriteMessage,
   sessionId,
   rewriteDraft,
+  searchOpen,
+  onCloseSearch,
 }) {
   return (
     <>
@@ -172,6 +182,8 @@ function SessionView({
         onRewriteMessage={onRewriteMessage}
         sessionId={sessionId}
         rewriteDraft={rewriteDraft}
+        searchOpen={searchOpen}
+        onCloseSearch={onCloseSearch}
       />
     </>
   );
@@ -186,8 +198,15 @@ const Transcript = memo(function Transcript({
   onRewriteMessage,
   sessionId,
   rewriteDraft,
+  searchOpen,
+  onCloseSearch,
 }) {
   const scrollRef = useStickyScroll([data, pendingTurn]);
+  const search = useTranscriptSearch(scrollRef, searchOpen);
+  const closeSearch = () => {
+    search.reset();
+    onCloseSearch?.();
+  };
   const allTurns = data?.turns ?? [];
   const turns =
     rewriteDraft &&
@@ -196,6 +215,13 @@ const Transcript = memo(function Transcript({
     Number.isInteger(rewriteDraft.turnIndex)
       ? allTurns.slice(0, rewriteDraft.turnIndex)
       : allTurns;
+
+  const [showSkeleton, setShowSkeleton] = useState(false);
+  useEffect(() => {
+    setShowSkeleton(false);
+    const t = setTimeout(() => setShowSkeleton(true), 150);
+    return () => clearTimeout(t);
+  }, [profileName, sessionId]);
 
   if (showEmptyHint) {
     return (
@@ -210,7 +236,8 @@ const Transcript = memo(function Transcript({
     );
   }
 
-  if (turns.length === 0 && !data) {
+  if (turns.length === 0 && !data && !pendingTurn) {
+    if (!showSkeleton) return <div className={styles.loading} />;
     return (
       <div className={styles.loading}>
         <Skeleton width="60%" height="1.2em" />
@@ -221,18 +248,31 @@ const Transcript = memo(function Transcript({
   }
 
   return (
-    <div ref={scrollRef} className={styles.transcript}>
-      <div className={styles.timeline}>
-        <HistoryTurns
-          turns={turns}
-          accent={accent}
-          profileName={profileName}
-          onRewriteMessage={onRewriteMessage}
-          sessionId={sessionId}
+    <>
+      {searchOpen && (
+        <SearchBar
+          query={search.query}
+          setQuery={search.setQuery}
+          total={search.total}
+          currentIndex={search.currentIndex}
+          onNext={search.next}
+          onPrev={search.prev}
+          onClose={closeSearch}
         />
-        {pendingTurn && <PendingTurn turn={pendingTurn} accent={accent} />}
+      )}
+      <div ref={scrollRef} className={styles.transcript}>
+        <div className={styles.timeline}>
+          <HistoryTurns
+            turns={turns}
+            accent={accent}
+            profileName={profileName}
+            onRewriteMessage={onRewriteMessage}
+            sessionId={sessionId}
+          />
+          {pendingTurn && <PendingTurn turn={pendingTurn} accent={accent} />}
+        </div>
       </div>
-    </div>
+    </>
   );
 });
 

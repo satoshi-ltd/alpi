@@ -63,6 +63,60 @@
   color: var(--color-fg-muted);
 }
 
+.trailingCluster {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+
+.rowWrap {
+  position: relative;
+  display: block;
+}
+
+.jumpHintWrap {
+  display: inline-flex;
+  align-items: center;
+  opacity: 0;
+  transition: opacity var(--motion-base) var(--motion-easing);
+  pointer-events: none;
+}
+
+.rowWrap:hover .jumpHintWrap,
+.rowWrap:focus-within .jumpHintWrap {
+  opacity: 1;
+}
+
+.pinToggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-fg-subtle);
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity var(--motion-base) var(--motion-easing),
+    color var(--motion-base) var(--motion-easing),
+    background var(--motion-base) var(--motion-easing);
+}
+
+.rowWrap:hover .pinToggle,
+.rowWrap:focus-within .pinToggle {
+  opacity: 1;
+  color: var(--color-fg);
+}
+
+.pinToggle:hover,
+.pinToggle:focus-visible {
+  background: var(--color-hover);
+}
+
 .detail {
   flex: 1;
   display: flex;
@@ -238,10 +292,6 @@
   border-radius: var(--radius-md);
   padding: var(--space-4) var(--space-5);
   outline: none;
-  transition:
-    border-color var(--motion-fast) var(--motion-easing),
-    box-shadow var(--motion-fast) var(--motion-easing),
-    background var(--motion-fast) var(--motion-easing);
 }
 
 .textarea {
@@ -259,7 +309,6 @@
 .textarea:focus-visible,
 .input:focus-visible {
   border-color: var(--color-border-strong);
-  box-shadow: var(--control-focus-ring);
 }
 
 .accentTriggerDot {
@@ -290,8 +339,7 @@
   border: 0;
   cursor: pointer;
   padding: 0;
-  opacity: 1;
-  transition: opacity var(--motion-fast) var(--motion-easing), transform var(--motion-fast) var(--motion-easing);
+  transition: transform var(--motion-fast) var(--motion-easing);
 }
 
 .swatch:focus-visible {
@@ -299,17 +347,8 @@
   box-shadow: var(--control-focus-ring);
 }
 
-.accentGrid.hasSelection .swatch:not(.swatchActive) {
-  opacity: 0.4;
-}
-
-.accentGrid.hasSelection .swatch:not(.swatchActive):hover {
-  opacity: 1;
-}
-
 .swatchActive,
 .swatchActive:hover {
-  opacity: 1;
   transform: scale(1.2);
 }
 
@@ -323,10 +362,6 @@
   padding: var(--space-3) var(--space-4);
   outline: none;
   text-transform: lowercase;
-  transition:
-    border-color var(--motion-fast) var(--motion-easing),
-    box-shadow var(--motion-fast) var(--motion-easing),
-    background var(--motion-fast) var(--motion-easing);
 }
 
 .accentHex:hover {
@@ -336,7 +371,6 @@
 .accentHex:focus,
 .accentHex:focus-visible {
   border-color: var(--color-border-strong);
-  box-shadow: var(--control-focus-ring);
 }
 
 .accentHex::placeholder {

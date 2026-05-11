@@ -89,6 +89,20 @@ export default function ProfileDetail({
     timers[field] = setTimeout(() => persist(field, value), 600);
   }
 
+  const [drafting, setDrafting] = useState(false);
+  async function draftIdentity() {
+    setDrafting(true);
+    try {
+      const bio = await invoke("draft_identity", { profile: profile.name });
+      update("bio", bio);
+      notify({ message: "Identity drafted from AGENT.md", variant: "success", duration: 2500 });
+    } catch (e) {
+      notify({ message: String(e), variant: "error", duration: 4000 });
+    } finally {
+      setDrafting(false);
+    }
+  }
+
   return (
     <main className={styles.detail}>
       <div className={styles.body}>
@@ -156,14 +170,32 @@ export default function ProfileDetail({
               </span>
             </Row>
           )}
-          <Row label="identity">
-            <Textarea
-              className={styles.textarea}
-              rows={3}
-              value={draft.bio}
-              onChange={(e) => update("bio", e.target.value)}
-              placeholder="public identity — visible to peers"
-            />
+          <Row label="identity" alignTop>
+            <span
+              className={styles.inlineRow}
+              style={{ flex: 1, width: "100%", maxWidth: 520, alignItems: "flex-start" }}
+            >
+              <Textarea
+                className={`${styles.textarea} ${styles.flexFill}`}
+                rows={3}
+                value={draft.bio}
+                onChange={(e) => update("bio", e.target.value)}
+                placeholder="public identity — visible to peers"
+              />
+              <Button
+                size="sm"
+                onClick={draftIdentity}
+                loading={drafting}
+                disabled={drafting || !profile.model}
+                title={
+                  !profile.model
+                    ? "Set a model first to draft"
+                    : "Synthesize a one-liner from AGENT.md (one LLM call)"
+                }
+              >
+                Draft
+              </Button>
+            </span>
           </Row>
           <Row label="port">
             <span className={styles.inlineRow}>

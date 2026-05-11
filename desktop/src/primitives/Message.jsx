@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef, useState } from "react";
+import { memo } from "react";
 import { renderMarkdown } from "../lib/markdown.js";
 import styles from "./Message.module.css";
 
@@ -13,12 +13,8 @@ function MessageImpl({
   footer = null,
 }) {
   const isRight = align === "right";
-  const [footerVisible, setFooterVisible] = useState(false);
-  const hideTimerRef = useRef(null);
-  // Resolve the accent, falling back to the theme default.
   const effectiveAccent = accent || readDefaultAccent();
 
-  // Bubble background: tinted, neutral, or plain.
   let bubbleStyle;
   if (bubble && tintBubble) {
     bubbleStyle = {
@@ -35,44 +31,11 @@ function MessageImpl({
   const bodyClass = `${styles.body} ${bubble ? styles.bubble : ""} ${
     markdown ? styles.md : styles.plain
   }`;
-
   const colClass = `${styles.col} ${footer ? styles.colFooter : ""}`;
-
-  useEffect(
-    () => () => {
-      if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
-    },
-    [],
-  );
-
-  function showFooterNow() {
-    if (hideTimerRef.current) {
-      clearTimeout(hideTimerRef.current);
-      hideTimerRef.current = null;
-    }
-    setFooterVisible(true);
-  }
-
-  function hideFooterSoon() {
-    if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
-    hideTimerRef.current = setTimeout(() => {
-      hideTimerRef.current = null;
-      setFooterVisible(false);
-    }, 180);
-  }
 
   return (
     <div className={rowClass}>
-      <div
-        className={colClass}
-        onMouseEnter={showFooterNow}
-        onMouseLeave={hideFooterSoon}
-        onFocusCapture={showFooterNow}
-        onBlurCapture={(e) => {
-          if (e.currentTarget.contains(e.relatedTarget)) return;
-          hideFooterSoon();
-        }}
-      >
+      <div className={colClass}>
         {header && (
           <div className={styles.header}>
             {isRight && header.time && (
@@ -104,23 +67,21 @@ function MessageImpl({
               style={bubbleStyle}
               dangerouslySetInnerHTML={{ __html: renderMarkdown(body) }}
             />
+          ) : (
+            <div className={bodyClass} style={bubbleStyle}>
+              {body}
+            </div>
+          )
         ) : (
           <div className={bodyClass} style={bubbleStyle}>
             {body}
           </div>
-        )
-      ) : (
-        <div className={bodyClass} style={bubbleStyle}>
-          {body}
-        </div>
-      )}
-        {footer && footerVisible && (
+        )}
+        {footer && (
           <div
-            className={`${styles.footer} ${styles.footerVisible} ${
+            className={`${styles.footer} ${
               isRight ? styles.footerRight : styles.footerLeft
             }`}
-            onMouseEnter={showFooterNow}
-            onMouseLeave={hideFooterSoon}
           >
             {footer}
           </div>
@@ -133,10 +94,8 @@ function MessageImpl({
 const Message = memo(MessageImpl);
 export default Message;
 
-// Fallback accent if CSS variables are unavailable.
 const DEFAULT_ACCENT_FALLBACK = "#c8a24e";
 
-// Read the theme accent so tinted bubbles match the active theme.
 function readDefaultAccent() {
   if (typeof window === "undefined" || !document?.documentElement) {
     return DEFAULT_ACCENT_FALLBACK;

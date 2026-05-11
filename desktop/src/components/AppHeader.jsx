@@ -2,6 +2,7 @@ import { memo, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import SessionsDropdown from "./SessionsDropdown.jsx";
 import Button from "../primitives/Button.jsx";
+import Kbd from "../primitives/Kbd.jsx";
 import {
   BackIcon,
   CheckIcon,
@@ -81,7 +82,11 @@ function AppHeader({
             <Button
               icon={<BackIcon />}
               onClick={onCloseSettings}
-              title="Back"
+              title={
+                <>
+                  Back <Kbd>⌘,</Kbd>
+                </>
+              }
             />
             <span className={styles.title}>Settings</span>
           </>
@@ -92,7 +97,7 @@ function AppHeader({
             title={
               <>
                 {collapsed ? "Show sidebar" : "Hide sidebar"}{" "}
-                <kbd>⌘B</kbd>
+                <Kbd>⌘B</Kbd>
               </>
             }
           />
@@ -136,7 +141,7 @@ function AppHeader({
                 onClick={onNewSession}
                 title={
                   <>
-                    New session <kbd>⌘N</kbd>
+                    New session <Kbd>⌘N</Kbd>
                   </>
                 }
                 tooltipAlign="end"

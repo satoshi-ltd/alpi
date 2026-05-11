@@ -132,3 +132,17 @@
   transform: translateY(-50%) translateX(0);
   pointer-events: all;
 }
+
+.jumpHintWrap {
+  position: absolute;
+  right: calc(var(--space-7) + var(--space-3));
+  top: 50%;
+  transform: translateY(-50%);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--motion-slow) var(--motion-easing);
+}
+
+.rowWrap:hover .jumpHintWrap {
+  opacity: 1;
+}

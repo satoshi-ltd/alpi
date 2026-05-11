@@ -4,7 +4,14 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 const COLLAPSE_BELOW = 600;
 const EXPAND_ABOVE = 720;
 
-export function useWindowChrome({ viewRef, setView, onJumpToProfile } = {}) {
+export function useWindowChrome({
+  viewRef,
+  setView,
+  onJumpToProfile,
+  onNewProfile,
+  onOpenSettings,
+  onToggleSearch,
+} = {}) {
   const [collapsed, setCollapsed] = useState(false);
   const toggleSidebar = useCallback(() => setCollapsed((c) => !c), []);
 
@@ -67,22 +74,46 @@ export function useWindowChrome({ viewRef, setView, onJumpToProfile } = {}) {
         return;
       }
       if (key === "n") {
-        if (viewRef.current?.kind === "profile") {
+        const kind = viewRef.current?.kind;
+        if (kind === "profile") {
           e.preventDefault();
           e.stopPropagation();
           setView((v) => (v.kind === "profile" ? { ...v, sessionId: null } : v));
+          return;
+        }
+        if (kind === "settings") {
+          e.preventDefault();
+          e.stopPropagation();
+          onNewProfile?.();
+          return;
+        }
+        if (kind === "empty" || kind === "workgroup") {
+          e.preventDefault();
+          e.stopPropagation();
+          setView({ kind: "empty" });
+          return;
         }
         return;
       }
       if (key === ",") {
         e.preventDefault();
         e.stopPropagation();
-        setView({ kind: "settings" });
+        if (onOpenSettings) onOpenSettings();
+        else setView({ kind: "settings" });
+        return;
+      }
+      if (key === "f") {
+        const kind = viewRef.current?.kind;
+        if (kind === "profile" || kind === "workgroup") {
+          e.preventDefault();
+          e.stopPropagation();
+          onToggleSearch?.();
+        }
       }
     }
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [viewRef, setView, onJumpToProfile]);
+  }, [viewRef, setView, onJumpToProfile, onNewProfile, onOpenSettings, onToggleSearch]);
 
   return { collapsed, setCollapsed, toggleSidebar };
 }

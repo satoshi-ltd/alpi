@@ -98,7 +98,9 @@
   opacity: 0;
   transform: translateY(calc(-1 * var(--space-2)));
   pointer-events: none;
-  transition: opacity var(--motion-slow) var(--motion-easing), transform var(--motion-slow) var(--motion-easing);
+  transition:
+    opacity var(--motion-slow) var(--motion-easing) 180ms,
+    transform var(--motion-slow) var(--motion-easing) 180ms;
   z-index: 2;
 }
 
@@ -112,10 +114,12 @@
   justify-content: flex-end;
 }
 
-.footerVisible {
+.col:hover .footer,
+.col:focus-within .footer {
   opacity: 1;
   transform: translateY(0);
   pointer-events: auto;
+  transition-delay: 0ms;
 }
 
 .md > :first-child {

@@ -22,3 +22,8 @@ export function renderMarkdown(text) {
   cache.set(key, html);
   return html;
 }
+
+export function renderMarkdownInline(text) {
+  if (!text) return "";
+  return DOMPurify.sanitize(marked.parseInline(String(text)));
+}

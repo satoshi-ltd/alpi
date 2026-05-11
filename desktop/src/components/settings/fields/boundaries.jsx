@@ -254,11 +254,7 @@ export function AccentField({ value, onChange }) {
     >
       {({ close }) => (
         <div className={styles.accentMenu}>
-          <div
-            className={`${styles.accentGrid} ${
-              current ? styles.hasSelection : ""
-            }`}
-          >
+          <div className={styles.accentGrid}>
             {ACCENT_PALETTE.map((hex) => (
               <button
                 key={hex}

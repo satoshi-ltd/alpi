@@ -23,9 +23,6 @@
   margin: 0 auto;
   cursor: text;
   position: relative;
-  transition:
-    border-color var(--motion-slow) var(--motion-easing),
-    box-shadow var(--motion-slow) var(--motion-easing);
 }
 
 .body:hover {
@@ -34,13 +31,6 @@
 
 .body:has(.input:focus) {
   border-color: var(--color-border-strong);
-  box-shadow: var(--control-focus-ring);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .body {
-    transition: none;
-  }
 }
 
 .body button,

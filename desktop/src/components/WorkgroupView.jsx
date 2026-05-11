@@ -4,6 +4,9 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import Composer from "../primitives/Composer.jsx";
 import Message from "../primitives/Message.jsx";
+import SearchBar from "../primitives/SearchBar.jsx";
+import { renderMarkdownInline } from "../lib/markdown.js";
+import { useTranscriptSearch } from "../hooks/useTranscriptSearch.js";
 import { findLatestTask } from "../lib/workgroup-tasks.js";
 import {
   loadCachedMessages,
@@ -33,7 +36,13 @@ function saveMySeqs(profile, wgId, set) {
   } catch {}
 }
 
-export default function WorkgroupView({ workgroup, profiles, onActiveTask }) {
+export default function WorkgroupView({
+  workgroup,
+  profiles,
+  onActiveTask,
+  searchOpen = false,
+  onCloseSearch,
+}) {
   const initialCached = useMemo(
     () => loadCachedMessages(workgroup.profile, workgroup.id),
     [],
@@ -49,6 +58,11 @@ export default function WorkgroupView({ workgroup, profiles, onActiveTask }) {
   const [error, setError] = useState(null);
   const [costs, setCosts] = useState({});
   const scrollRef = useStickyScroll([messages]);
+  const search = useTranscriptSearch(scrollRef, searchOpen);
+  const closeSearch = () => {
+    search.reset();
+    onCloseSearch?.();
+  };
 
   const hubName = workgroup.hub_id ?? workgroup.profile;
   const hubPubkey = useMemo(
@@ -174,6 +188,17 @@ export default function WorkgroupView({ workgroup, profiles, onActiveTask }) {
 
   return (
     <>
+      {searchOpen && (
+        <SearchBar
+          query={search.query}
+          setQuery={search.setQuery}
+          total={search.total}
+          currentIndex={search.currentIndex}
+          onNext={search.next}
+          onPrev={search.prev}
+          onClose={closeSearch}
+        />
+      )}
       <div ref={scrollRef} className={styles.body}>
         {error && <div className={styles.error}>{error}</div>}
 
@@ -345,7 +370,10 @@ function DoneBody({ result }) {
       <div className={styles.doneLabel}>
         <span>done</span>
       </div>
-      <div className={styles.doneResult}>{result}</div>
+      <div
+        className={styles.doneResult}
+        dangerouslySetInnerHTML={{ __html: renderMarkdownInline(result) }}
+      />
     </div>
   );
 }

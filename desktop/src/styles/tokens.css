@@ -83,10 +83,46 @@
     --color-hover: rgba(255, 255, 255, 0.06);
     --color-selected: rgba(255, 255, 255, 0.10);
 
-    --color-accent: #d4af5b;
     --control-focus-ring: 0 0 0 1px color-mix(in srgb, var(--color-fg) 14%, transparent);
 
     --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.4);
     --shadow-lg: 0 14px 36px rgba(0, 0, 0, 0.55);
   }
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--color-fg) 18%, transparent) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--color-fg) 18%, transparent);
+  border-radius: 4px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: color-mix(in srgb, var(--color-fg) 30%, transparent);
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+::highlight(alpi-search) {
+  background-color: color-mix(in srgb, var(--color-accent) 25%, transparent);
+}
+
+::highlight(alpi-search-current) {
+  background-color: color-mix(in srgb, var(--color-accent) 55%, transparent);
 }

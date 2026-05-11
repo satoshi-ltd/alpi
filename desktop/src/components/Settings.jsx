@@ -1,12 +1,15 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import ConnectionSwitcher from "./ConnectionSwitcher.jsx";
 import NavRow, { Dot, Hash } from "../primitives/NavRow.jsx";
+import Kbd from "../primitives/Kbd.jsx";
 import VersionFooter from "./settings/VersionFooter.jsx";
 import ProfileDetail from "./settings/ProfileDetail.jsx";
 import WorkgroupDetail from "./settings/WorkgroupDetail.jsx";
 import CreateProfileForm from "./settings/CreateProfileForm.jsx";
 import CreateWorkgroupForm from "./settings/CreateWorkgroupForm.jsx";
+import { PinIcon, PinOffIcon } from "../primitives/icons.jsx";
 import { profileLabel } from "../lib/profile-display.js";
+import { orderedSidebarProfiles } from "../lib/profile-order.js";
 import styles from "./Settings.module.css";
 
 export default function Settings({
@@ -16,6 +19,9 @@ export default function Settings({
   hostConnections,
   activeConnection,
   refreshTick = 0,
+  pinned = { profiles: [], workgroups: [] },
+  jumpHints = {},
+  onTogglePin,
   onSelectTarget,
   onRefresh,
   onSetHostConnection,
@@ -24,6 +30,40 @@ export default function Settings({
   onRefreshHostConnectionStatus,
 }) {
   const setTarget = onSelectTarget ?? (() => {});
+  const pinnedProfileNames = pinned?.profiles ?? [];
+  const pinnedWorkgroupKeys = pinned?.workgroups ?? [];
+
+  const pinnedProfiles = useMemo(
+    () =>
+      pinnedProfileNames
+        .map((name) => profiles.find((p) => p.name === name))
+        .filter(Boolean),
+    [pinnedProfileNames, profiles],
+  );
+
+  const pinnedWorkgroups = useMemo(
+    () =>
+      pinnedWorkgroupKeys
+        .map((k) => workgroups.find((w) => `${w.profile}/${w.id}` === k))
+        .filter(Boolean),
+    [pinnedWorkgroupKeys, workgroups],
+  );
+
+  const unpinnedProfiles = useMemo(() => {
+    const pinnedSet = new Set(pinnedProfileNames);
+    return orderedSidebarProfiles(profiles, pinnedProfileNames).filter(
+      (p) => !pinnedSet.has(p.name),
+    );
+  }, [profiles, pinnedProfileNames]);
+
+  const unpinnedWorkgroups = useMemo(() => {
+    const pinnedSet = new Set(pinnedWorkgroupKeys);
+    return workgroups.filter(
+      (w) => !pinnedSet.has(`${w.profile}/${w.id}`),
+    );
+  }, [workgroups, pinnedWorkgroupKeys]);
+
+  const hasPinned = pinnedProfiles.length > 0 || pinnedWorkgroups.length > 0;
 
   const selectedProfile = useMemo(() => {
     if (target?.kind !== "profile") return null;
@@ -42,9 +82,15 @@ export default function Settings({
     }
   }, [profiles, target, setTarget]);
 
+  const asideRef = useRef(null);
+  useEffect(() => {
+    const active = asideRef.current?.querySelector("[data-active='true']");
+    active?.scrollIntoView({ block: "nearest" });
+  }, [target?.kind, target?.id]);
+
   return (
     <div className={styles.wrap}>
-      <aside className={styles.aside}>
+      <aside ref={asideRef} className={styles.aside}>
         <div className={styles.asideTitle}>Connection</div>
         <ConnectionSwitcher
           className={styles.connectionSwitcher}
@@ -55,32 +101,48 @@ export default function Settings({
           onOpen={onRefreshHostConnectionStatus}
         />
 
-        <div className={styles.asideTitle}>Profiles</div>
-        {profiles.map((p) => {
-          const active = target?.kind === "profile" && target.id === p.name;
-          return (
-            <NavRow
-              key={p.name}
-              active={active}
-              accent={p.accent || "var(--color-accent)"}
-              muted={!p.model}
-              leading={<Dot color={p.accent} />}
-              trailing={
-                !p.model && (
-                  <span
-                    className={styles.asideTag}
-                    title="No model configured"
-                  >
-                    !
-                  </span>
-                )
-              }
-              onClick={() => setTarget({ kind: "profile", id: p.name })}
-            >
-              {profileLabel(p.name)}
-            </NavRow>
-          );
-        })}
+        {hasPinned && (
+          <>
+            <div className={styles.asideTitle}>Pinned</div>
+            {pinnedProfiles.map((p) =>
+              renderProfileRow(p, {
+                target,
+                setTarget,
+                pinnedProfileNames,
+                jumpHints,
+                onTogglePin,
+                keyPrefix: "pin:",
+              }),
+            )}
+            {pinnedWorkgroups.map((w) =>
+              renderWorkgroupRow(w, {
+                target,
+                setTarget,
+                profiles,
+                pinnedWorkgroupKeys,
+                jumpHints,
+                onTogglePin,
+                keyPrefix: "pin:",
+              }),
+            )}
+          </>
+        )}
+
+        <div
+          className={styles.asideTitle}
+          style={hasPinned ? { marginTop: "var(--space-3)" } : undefined}
+        >
+          Profiles
+        </div>
+        {unpinnedProfiles.map((p) =>
+          renderProfileRow(p, {
+            target,
+            setTarget,
+            pinnedProfileNames,
+            jumpHints,
+            onTogglePin,
+          }),
+        )}
         <NavRow
           active={target?.kind === "create-profile"}
           leading={<Hash>+</Hash>}
@@ -92,24 +154,16 @@ export default function Settings({
         <div className={styles.asideTitle} style={{ marginTop: "var(--space-3)" }}>
           Workgroups
         </div>
-        {workgroups.map((w) => {
-          const active = target?.kind === "workgroup" && target.id === w.id;
-          const hub = profiles.find(
-            (p) => p.name === (w.hub_id ?? w.profile),
-          );
-          const accent = hub?.accent || "var(--color-accent)";
-          return (
-            <NavRow
-              key={w.id}
-              active={active}
-              accent={accent}
-              leading={<Hash />}
-              onClick={() => setTarget({ kind: "workgroup", id: w.id })}
-            >
-              {w.name || w.id}
-            </NavRow>
-          );
-        })}
+        {unpinnedWorkgroups.map((w) =>
+          renderWorkgroupRow(w, {
+            target,
+            setTarget,
+            profiles,
+            pinnedWorkgroupKeys,
+            jumpHints,
+            onTogglePin,
+          }),
+        )}
         <NavRow
           active={target?.kind === "create-workgroup"}
           leading={<Hash>+</Hash>}
@@ -171,5 +225,115 @@ export default function Settings({
           <div className={styles.empty}>No selection</div>
         )}
     </div>
+  );
+}
+
+function renderProfileRow(
+  p,
+  { target, setTarget, pinnedProfileNames, jumpHints, onTogglePin, keyPrefix = "" },
+) {
+  const active = target?.kind === "profile" && target.id === p.name;
+  const isPinned = pinnedProfileNames.includes(p.name);
+  const hint = jumpHints?.[`profile:${p.name}`];
+  return (
+    <div
+      key={`${keyPrefix}${p.name}`}
+      className={styles.rowWrap}
+      data-active={active ? "true" : undefined}
+    >
+      <NavRow
+        active={active}
+        accent={p.accent || "var(--color-accent)"}
+        muted={!p.model}
+        leading={<Dot color={p.accent} />}
+        trailing={
+          <span className={styles.trailingCluster}>
+            {!p.model && (
+              <span className={styles.asideTag} title="No model configured">
+                !
+              </span>
+            )}
+            {hint && <JumpHint n={hint} />}
+            <PinToggle
+              isPinned={isPinned}
+              onToggle={() => onTogglePin?.("profiles", p.name)}
+            />
+          </span>
+        }
+        onClick={() => setTarget({ kind: "profile", id: p.name })}
+      >
+        {profileLabel(p.name)}
+      </NavRow>
+    </div>
+  );
+}
+
+function renderWorkgroupRow(
+  w,
+  {
+    target,
+    setTarget,
+    profiles,
+    pinnedWorkgroupKeys,
+    jumpHints,
+    onTogglePin,
+    keyPrefix = "",
+  },
+) {
+  const active = target?.kind === "workgroup" && target.id === w.id;
+  const hub = profiles.find((p) => p.name === (w.hub_id ?? w.profile));
+  const accent = hub?.accent || "var(--color-accent)";
+  const key = `${w.profile}/${w.id}`;
+  const isPinned = pinnedWorkgroupKeys.includes(key);
+  const hint = jumpHints?.[`workgroup:${key}`];
+  return (
+    <div
+      key={`${keyPrefix}${w.id}`}
+      className={styles.rowWrap}
+      data-active={active ? "true" : undefined}
+    >
+      <NavRow
+        active={active}
+        accent={accent}
+        leading={<Hash />}
+        trailing={
+          <span className={styles.trailingCluster}>
+            {hint && <JumpHint n={hint} />}
+            <PinToggle
+              isPinned={isPinned}
+              onToggle={() => onTogglePin?.("workgroups", key)}
+            />
+          </span>
+        }
+        onClick={() => setTarget({ kind: "workgroup", id: w.id })}
+      >
+        {w.name || w.id}
+      </NavRow>
+    </div>
+  );
+}
+
+function JumpHint({ n }) {
+  return (
+    <span className={styles.jumpHintWrap} aria-hidden>
+      <Kbd>⌘{n}</Kbd>
+    </span>
+  );
+}
+
+function PinToggle({ isPinned, onToggle }) {
+  return (
+    <button
+      type="button"
+      className={styles.pinToggle}
+      onClick={(e) => {
+        e.stopPropagation();
+        onToggle?.();
+      }}
+      title={isPinned ? "Unpin" : "Pin"}
+      aria-label={isPinned ? "Unpin" : "Pin"}
+    >
+      {isPinned ? <PinOffIcon size={12} /> : <PinIcon size={12} />}
+    </button>
   );
 }

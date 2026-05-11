@@ -11,6 +11,121 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.2.8 — 2026-05-11 — Find-in-transcript + shortcut system + flat focus
+
+Requires alpi ``v0.4.24`` or newer (host ``identity.draft`` verb).
+
+A round focused on keyboard navigation, in-app find, and a stricter
+flat aesthetic across inputs and controls. Pulls a few primitives
+out of one-off CSS and turns previously raw HTML into design-system
+components.
+
+**Find in transcript (⌘F).** New ``primitives/SearchBar.jsx`` +
+``hooks/useTranscriptSearch.js`` add Safari-style find to chat and
+workgroup views: floating panel top-right, type-as-you-search,
+``↑``/``↓``/``Enter``/``Shift+Enter`` to navigate matches, ``Esc``
+to close, ``n/total`` counter, current match auto-scrolled into
+view. Highlights use the **CSS Custom Highlight API**
+(``CSS.highlights`` + ``Highlight`` + ``::highlight()``) so they
+sit in a separate paint layer that survives any React re-render of
+the underlying message body — no DOM mutation, no ``<mark>``
+wrapping, no conflict with ``dangerouslySetInnerHTML``. ⌘F toggles
+(re-press closes and clears the query); query auto-clears on every
+close path and on view change.
+
+**Smart ⌘, toggle.** ``⌘,`` from chat/workgroup opens Settings with
+the current target preselected (``profile:X``/``workgroup:Y``);
+``⌘,`` again returns to the chat/workgroup for whatever entry was
+last selected in Settings — symmetric toggle, not just "back to
+previous". Settings sidebar auto-scrolls the active row into view
+on entry. Back button tooltip now shows ``⌘,`` chip.
+
+**Context-sensitive ⌘N.** In chat → new session. In Settings → new
+profile (jumps to the ``create-profile`` target). Stays as new chat
+in empty/workgroup views. ``⌘1``..``⌘9`` in Settings now select
+the Nth entry in the settings sidebar instead of jumping to that
+profile's chat — same key, two semantics depending on where you
+are.
+
+**Pinned section in Settings.** Pinned profiles and workgroups now
+appear at the top of the Settings sidebar (matching the chat
+sidebar pattern), with the same hover-revealed pin button. Pin
+button visibility is ``:hover``/``:focus-within`` only — was
+showing always on pinned rows.
+
+**``<Kbd>`` primitive.** ``primitives/Kbd.jsx`` +
+``Kbd.module.css`` — single-responsibility component for keyboard
+shortcut badges. Replaces three duplicated implementations: raw
+``<kbd>`` in ``AppHeader`` tooltips (browser default, unstyled in
+dark), span-based ``.jumpHint`` in ``Sidebar``, and a third
+``.jumpHint`` in ``Settings``. Background uses ``currentColor``
+with ``color-mix`` so it contrasts both on normal surfaces and
+inside the inverted tooltip surface. Tokens-only — no raw pixels,
+no letter-spacing, no font-family override.
+
+**Identity Draft button in Settings.** ``ProfileDetail`` Identity
+row gets a ``Draft`` button next to the textarea that calls the new
+``draft_identity`` Tauri command → ``host.identity.draft`` verb
+(alpi ``v0.4.24+``). Synthesizes a public bio from the profile's
+``AGENT.md`` in one model call. User-initiated only — no
+auto-fire, no background calls.
+
+**Flat focus aesthetic.** Removed outer ``box-shadow``
+``--control-focus-ring`` from text inputs, textareas,
+``accentHex``, Composer body, Dropdown ``triggerOutlined`` /
+``triggerOpen`` / ``search``. Hover and focus now express as a
+single border-color intensity bump (``border`` →
+``border-strong``), no halo. Zero transition — instant snap, not
+80 ms easing — because focus is user-initiated and the gray-to-gray
+transition adds latency without legibility benefit.
+
+**Theme-invariant accent palette.** ``ACCENT_PALETTE`` (12 hex
+swatches) renders identically in light and dark. Removed
+``opacity: 0.4`` dimming on non-selected swatches — opacity
+composites with the surface, so the same hex looked different
+between themes. Active swatch is marked solely by
+``transform: scale(1.2)`` now. Removed dark-mode
+``--color-accent`` override (was ``#d4af5b`` vs light's
+``#c8a24e``) — accent is identity, not theme. Removed dead
+``hasSelection`` class.
+
+**Global thin scrollbar.** Unified scrollbar style across all
+surfaces in ``tokens.css``: ``scrollbar-width: thin`` +
+``::-webkit-scrollbar`` rules with semi-transparent thumb
+(``color-mix`` with ``--color-fg``, adapts L/D automatically) and
+no track. Replaces inconsistent native rendering between
+``Sidebar``, ``ChatPane`` and ``Settings`` (different surface
+backgrounds caused macOS to tint the overlay thumb differently per
+view).
+
+**DoneBody markdown rendering.** Workgroup ``#done`` messages
+render their ``result`` through ``renderMarkdownInline`` (new
+export in ``lib/markdown.js``) instead of plain text — fixes
+literal ``**bold**`` asterisks appearing in agent deliverables.
+Inline-only parse means no wrapping ``<p>`` margin to fight.
+
+**Message footer goes CSS-only.** ``primitives/Message.jsx`` no
+longer holds ``useState(footerVisible)`` / ``useRef`` / setTimeout
+machinery for the hover-revealed footer. Pure CSS
+``:hover``/``:focus-within`` with ``transition-delay: 180 ms`` on
+hide preserves the grace period. Side effect: Message stops
+re-rendering on hover, which means the search ``Range`` objects
+anchored to its text nodes stay valid across hovers — the find
+highlights no longer vanish when you mouse over a matched message.
+
+**Loading skeleton delay.** ``ChatPane`` ``Transcript`` waits 150 ms
+before rendering the shimmer placeholder. Local sessions load in
+under that window so the skeleton never appears (no flash);
+remote/slow connections still get the indicator.
+
+**Smaller fixes.** ``ChatPane`` ``showPicker`` only when
+``view.kind === "empty"`` (was always-on in the empty branch,
+showing the model picker inside a specific profile's new-chat
+state). ``Tooltip.module.css`` legacy ``.tooltip kbd`` block
+removed (dead code now that ``<Kbd>`` is the source of truth).
+Sidebar/Settings ``.jumpHint`` CSS reduced to overlay positioning
+only — typography lives in ``Kbd``.
+
 ## v0.2.7 — 2026-05-10 — UX polish pass + design system tightening
 
 Requires alpi ``v0.4.21`` or newer (``alpi`` reserved profile name).

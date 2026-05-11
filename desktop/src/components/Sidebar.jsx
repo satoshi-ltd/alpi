@@ -3,6 +3,7 @@ import Button from "../primitives/Button.jsx";
 import ConnectionSwitcher from "./ConnectionSwitcher.jsx";
 import NavRow, { Dot } from "../primitives/NavRow.jsx";
 import Tooltip from "../primitives/Tooltip.jsx";
+import Kbd from "../primitives/Kbd.jsx";
 import { CheckIcon, PinIcon, PinOffIcon, PlusIcon, StatusIcon } from "../primitives/icons.jsx";
 import { relativeTime } from "../lib/time.js";
 import { profileLabel } from "../lib/profile-display.js";
@@ -50,6 +51,7 @@ function Sidebar({
   pendingProfile = null,
   view,
   pinned = { profiles: [], workgroups: [] },
+  jumpHints = {},
   hostConnections,
   daemonOffline = false,
   onNewChat,
@@ -168,6 +170,7 @@ function Sidebar({
       active={activeProfileName === p.name}
       pending={pendingProfile === p.name}
       isPinned={pinnedProfileNames.includes(p.name)}
+      jumpHint={jumpHints?.[`profile:${p.name}`]}
       onOpen={onOpenProfile}
       onTogglePin={onTogglePin}
     />
@@ -184,6 +187,7 @@ function Sidebar({
         busy={!!activityByWorkgroup[key]}
         active={activeWorkgroupId === key}
         isPinned={pinnedWorkgroupKeys.includes(key)}
+        jumpHint={jumpHints?.[`workgroup:${key}`]}
         onOpen={onOpenWorkgroup}
         onTogglePin={onTogglePin}
       />
@@ -294,6 +298,7 @@ const ProfileRow = memo(function ProfileRow({
   active,
   pending,
   isPinned,
+  jumpHint,
   onOpen,
   onTogglePin,
 }) {
@@ -336,6 +341,11 @@ const ProfileRow = memo(function ProfileRow({
       >
         {profileLabel(profile.name)}
       </NavRow>
+      {jumpHint && (
+        <span className={styles.jumpHintWrap} aria-hidden>
+          <Kbd>⌘{jumpHint}</Kbd>
+        </span>
+      )}
       <PinAction isPinned={isPinned} onClick={handleTogglePin} />
     </div>
   );
@@ -348,6 +358,7 @@ const WorkgroupRow = memo(function WorkgroupRow({
   busy,
   active,
   isPinned,
+  jumpHint,
   onOpen,
   onTogglePin,
 }) {
@@ -396,6 +407,11 @@ const WorkgroupRow = memo(function WorkgroupRow({
       >
         #{label}
       </NavRow>
+      {jumpHint && (
+        <span className={styles.jumpHintWrap} aria-hidden>
+          <Kbd>⌘{jumpHint}</Kbd>
+        </span>
+      )}
       <PinAction isPinned={isPinned} onClick={handleTogglePin} />
     </div>
   );

@@ -29,10 +29,6 @@
   height: var(--control-height);
   padding: 0 var(--space-5);
   background: var(--color-surface);
-  transition:
-    border-color var(--motion-fast) var(--motion-easing),
-    box-shadow var(--motion-fast) var(--motion-easing),
-    background var(--motion-fast) var(--motion-easing);
 }
 
 .triggerOutlined:hover {
@@ -44,12 +40,10 @@
 .triggerOutlined:focus-visible {
   background: var(--color-surface);
   border-color: var(--color-border-strong);
-  box-shadow: var(--control-focus-ring);
 }
 
 .triggerOpen {
   border-color: var(--color-border-strong);
-  box-shadow: var(--control-focus-ring);
 }
 
 .trigger.triggerOpen:hover {
@@ -131,10 +125,6 @@
   font-size: var(--font-size-small);
   color: var(--color-fg);
   outline: none;
-  transition:
-    border-color var(--motion-fast) var(--motion-easing),
-    box-shadow var(--motion-fast) var(--motion-easing),
-    background var(--motion-fast) var(--motion-easing);
 }
 
 .search:hover {
@@ -144,7 +134,6 @@
 .search:focus,
 .search:focus-visible {
   border-color: var(--color-border-strong);
-  box-shadow: var(--control-focus-ring);
 }
 
 .list {
