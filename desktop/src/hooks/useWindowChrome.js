@@ -9,11 +9,15 @@ export function useWindowChrome({
   setView,
   onJumpToProfile,
   onNewProfile,
+  onNewWorkgroup,
   onOpenSettings,
   onToggleSearch,
   onTogglePalette,
   paletteOpenRef,
   onClosePalette,
+  onBrowseTools,
+  onBrowseSkills,
+  onBrowseMemory,
 } = {}) {
   const [collapsed, setCollapsed] = useState(false);
   const toggleSidebar = useCallback(() => setCollapsed((c) => !c), []);
@@ -69,7 +73,8 @@ export function useWindowChrome({
         key === "n" ||
         key === "," ||
         key === "f" ||
-        key === "k";
+        key === "k" ||
+        (e.shiftKey && (key === "t" || key === "s" || key === "m" || key === "n" || key === "w"));
       if (paletteOpenRef?.current && isShortcut && key !== "k") {
         onClosePalette?.();
       }
@@ -84,6 +89,18 @@ export function useWindowChrome({
         e.preventDefault();
         e.stopPropagation();
         setCollapsed((c) => !c);
+        return;
+      }
+      if (e.shiftKey && key === "n") {
+        e.preventDefault();
+        e.stopPropagation();
+        onNewProfile?.();
+        return;
+      }
+      if (e.shiftKey && key === "w") {
+        e.preventDefault();
+        e.stopPropagation();
+        onNewWorkgroup?.();
         return;
       }
       if (key === "n") {
@@ -128,11 +145,21 @@ export function useWindowChrome({
         e.preventDefault();
         e.stopPropagation();
         onTogglePalette?.();
+        return;
+      }
+      if (e.shiftKey && (key === "t" || key === "s" || key === "m")) {
+        if (viewRef.current?.kind === "profile") {
+          e.preventDefault();
+          e.stopPropagation();
+          if (key === "t") onBrowseTools?.();
+          else if (key === "s") onBrowseSkills?.();
+          else onBrowseMemory?.();
+        }
       }
     }
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [viewRef, setView, onJumpToProfile, onNewProfile, onOpenSettings, onToggleSearch, onTogglePalette, paletteOpenRef, onClosePalette]);
+  }, [viewRef, setView, onJumpToProfile, onNewProfile, onNewWorkgroup, onOpenSettings, onToggleSearch, onTogglePalette, paletteOpenRef, onClosePalette, onBrowseTools, onBrowseSkills, onBrowseMemory]);
 
   return { collapsed, setCollapsed, toggleSidebar };
 }

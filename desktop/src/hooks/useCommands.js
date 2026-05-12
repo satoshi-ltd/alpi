@@ -18,6 +18,9 @@ export function useCommands({
   onNewProfile,
   onNewWorkgroup,
   onNewChat,
+  onBrowseTools,
+  onBrowseSkills,
+  onBrowseMemory,
 }) {
   return useMemo(() => {
     const cmds = [];
@@ -79,19 +82,29 @@ export function useCommands({
       });
     }
 
-    cmds.push({
-      id: "create:profile",
-      group: "Create",
-      label: "New profile",
-      action: () => onNewProfile?.(),
-    });
-
-    cmds.push({
-      id: "create:workgroup",
-      group: "Create",
-      label: "New workgroup",
-      action: () => onNewWorkgroup?.(),
-    });
+    if (view.kind === "profile" && view.profile) {
+      cmds.push({
+        id: "browse:tools",
+        group: "Browse",
+        label: "Tools",
+        hint: "⇧⌘T",
+        action: () => onBrowseTools?.(),
+      });
+      cmds.push({
+        id: "browse:skills",
+        group: "Browse",
+        label: "Skills",
+        hint: "⇧⌘S",
+        action: () => onBrowseSkills?.(),
+      });
+      cmds.push({
+        id: "browse:memory",
+        group: "Browse",
+        label: "Memory",
+        hint: "⇧⌘M",
+        action: () => onBrowseMemory?.(),
+      });
+    }
 
     if (view.kind === "profile") {
       cmds.push({
@@ -102,6 +115,22 @@ export function useCommands({
         action: () => onNewChat?.(),
       });
     }
+
+    cmds.push({
+      id: "create:profile",
+      group: "Create",
+      label: "New profile",
+      hint: "⇧⌘N",
+      action: () => onNewProfile?.(),
+    });
+
+    cmds.push({
+      id: "create:workgroup",
+      group: "Create",
+      label: "New workgroup",
+      hint: "⇧⌘W",
+      action: () => onNewWorkgroup?.(),
+    });
 
     return cmds;
   }, [
@@ -120,5 +149,8 @@ export function useCommands({
     onNewProfile,
     onNewWorkgroup,
     onNewChat,
+    onBrowseTools,
+    onBrowseSkills,
+    onBrowseMemory,
   ]);
 }

@@ -9,6 +9,9 @@ import WorkgroupView from "./components/WorkgroupView.jsx";
 import Settings from "./components/Settings.jsx";
 import { useNotify } from "./primitives/Notification.jsx";
 import CommandPalette from "./primitives/CommandPalette.jsx";
+import ToolsPanel from "./components/ToolsPanel.jsx";
+import SkillsPanel from "./components/SkillsPanel.jsx";
+import MemoryPanel from "./components/MemoryPanel.jsx";
 import { useCommands } from "./hooks/useCommands.js";
 import { orderedJumpTargets } from "./lib/profile-order.js";
 import { installUpdater } from "./lib/updater.js";
@@ -18,6 +21,7 @@ import { useChatStream } from "./hooks/useChatStream.js";
 import { useHostConnections } from "./hooks/useHostConnections.js";
 import { useNavListener } from "./hooks/useNavListener.js";
 import { usePinned } from "./hooks/usePinned.js";
+import { useLastView } from "./hooks/useLastView.js";
 import { useWindowChrome } from "./hooks/useWindowChrome.js";
 import { useWorkgroupTasks } from "./hooks/useWorkgroupTasks.js";
 import styles from "./App.module.css";
@@ -103,6 +107,10 @@ export default function App() {
     setView({ kind: "settings" });
     setSettingsTarget({ kind: "create-profile" });
   }, []);
+  const onNewWorkgroup = useCallback(() => {
+    setSettingsTarget({ kind: "create-workgroup" });
+    setView({ kind: "settings" });
+  }, []);
   const [searchOpen, setSearchOpen] = useState(false);
   const searchOpenRef = useRef(false);
   useEffect(() => {
@@ -117,6 +125,12 @@ export default function App() {
     setPaletteOpen((v) => !v);
   }, []);
   const onClosePalette = useCallback(() => setPaletteOpen(false), []);
+
+  const [browse, setBrowse] = useState(null);
+  const onCloseBrowse = useCallback(() => setBrowse(null), []);
+  const onBrowseTools = useCallback(() => setBrowse("tools"), []);
+  const onBrowseSkills = useCallback(() => setBrowse("skills"), []);
+  const onBrowseMemory = useCallback(() => setBrowse("memory"), []);
   const onToggleSearch = useCallback(() => {
     if (searchOpenRef.current) {
       setSearchOpen(false);
@@ -171,11 +185,15 @@ export default function App() {
     setView,
     onJumpToProfile,
     onNewProfile,
+    onNewWorkgroup,
     onOpenSettings,
     onToggleSearch,
     onTogglePalette,
     paletteOpenRef,
     onClosePalette,
+    onBrowseTools,
+    onBrowseSkills,
+    onBrowseMemory,
   });
   useNavListener(setView);
 
@@ -216,6 +234,13 @@ export default function App() {
   }, [reload]);
 
   const { pinned, onTogglePin } = usePinned(hostConnections.active_id);
+  useLastView({
+    connectionId: hostConnections.active_id,
+    view,
+    setView,
+    profiles,
+    workgroups,
+  });
 
   const profilesRef = useRef(profiles);
   useEffect(() => {
@@ -461,11 +486,6 @@ export default function App() {
     setView({ kind: "empty" });
   }, []);
 
-  const onNewWorkgroup = useCallback(() => {
-    setSettingsTarget({ kind: "create-workgroup" });
-    setView({ kind: "settings" });
-  }, []);
-
   const onSelectWorkgroup = useCallback((wg) => {
     setView({ kind: "workgroup", profile: wg.profile, id: wg.id });
   }, []);
@@ -605,6 +625,9 @@ export default function App() {
     onNewProfile,
     onNewWorkgroup,
     onNewChat,
+    onBrowseTools,
+    onBrowseSkills,
+    onBrowseMemory,
   });
 
   return (
@@ -740,6 +763,21 @@ export default function App() {
         open={paletteOpen}
         onClose={onClosePalette}
         commands={paletteCommands}
+      />
+      <ToolsPanel
+        open={browse === "tools"}
+        onClose={onCloseBrowse}
+        profile={view.kind === "profile" ? view.profile : null}
+      />
+      <SkillsPanel
+        open={browse === "skills"}
+        onClose={onCloseBrowse}
+        profile={view.kind === "profile" ? view.profile : null}
+      />
+      <MemoryPanel
+        open={browse === "memory"}
+        onClose={onCloseBrowse}
+        profile={view.kind === "profile" ? view.profile : null}
       />
     </div>
   );

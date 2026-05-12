@@ -68,6 +68,41 @@ fn profiles() -> serde_json::Value {
 }
 
 #[tauri::command]
+fn profile_tools(profile: String) -> serde_json::Value {
+    host_array_value(
+        "host.tools.list",
+        serde_json::json!({ "profile": profile }),
+        "tools",
+    )
+}
+
+#[tauri::command]
+fn profile_skills(profile: String) -> serde_json::Value {
+    host_array_value(
+        "host.skills.list",
+        serde_json::json!({ "profile": profile }),
+        "skills",
+    )
+}
+
+#[tauri::command]
+fn profile_memory(profile: String) -> Result<serde_json::Value, String> {
+    let mut out = serde_json::Map::new();
+    for name in ["USER.md", "MEMORY.md", "AGENT.md"] {
+        let rel = format!("memories/{name}");
+        let text = host_client::call(
+            "host.profile.read_file",
+            serde_json::json!({ "profile": profile, "rel_path": rel }),
+        )
+        .ok()
+        .and_then(|v| v.get("text").and_then(|t| t.as_str()).map(String::from))
+        .unwrap_or_default();
+        out.insert(name.to_string(), serde_json::Value::String(text));
+    }
+    Ok(serde_json::Value::Object(out))
+}
+
+#[tauri::command]
 fn profile_summaries() -> serde_json::Value {
     host_array_value("host.profile.summaries", serde_json::json!({}), "profiles")
 }
@@ -1476,6 +1511,9 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             profiles,
             profile_summaries,
+            profile_tools,
+            profile_skills,
+            profile_memory,
             host_connections,
             host_connection_set_active,
             host_connection_forget,

@@ -11,6 +11,67 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.2.10 — 2026-05-12 — browse panels (tools / skills / memory) + palette org
+
+Requires alpi ``v0.4.27`` or newer (new host ``tools.list`` verb +
+extended ``skills.list`` response).
+
+Closes the parity gap with the TUI: the TUI lets you ``/tools``,
+``/skills``, ``/memory`` to see what the active profile has at a
+glance. Desktop now exposes the same content through three browse
+panels, each with its own keyboard shortcut and a slot in the command
+palette.
+
+**Three new browse panels.** ``primitives/BrowsePanel.jsx`` is the
+shared chrome: split view (38% list + 62% detail), search input that
+filters across name/description/category, items grouped by category
+with sticky uppercase headers (collapsed to a flat list when only one
+group exists — Memory's case), keyboard nav (``↑``/``↓``, ``Esc``)
+and an auto-selected first item so the detail surface is never blank
+on open. Counter rendered as a pill chip next to the title.
+
+- ``components/ToolsPanel.jsx`` — calls ``profile_tools`` Tauri
+  command which delegates to ``host.tools.list``. Detail renders the
+  description + a parameters table (parameter / type / required /
+  description) instead of the raw JSON schema dump. Category order
+  fixed: Filesystem → Workspace → Web → Memory → Comms → Agent →
+  Media → System → Collab → Other.
+- ``components/SkillsPanel.jsx`` — calls ``profile_skills``. Detail
+  renders the SKILL.md ``body`` (the part after the frontmatter)
+  through the same ``renderMarkdown`` pipeline the chat uses, with
+  full markdown styling for headings, lists, code blocks, blockquotes
+  and links. Skills are grouped by their filesystem category
+  (``skills/<category>/<name>``).
+- ``components/MemoryPanel.jsx`` — calls ``profile_memory``, a
+  thin wrapper around three ``host.profile.read_file`` calls
+  (``memories/USER.md``, ``MEMORY.md``, ``AGENT.md``). Strips the
+  ``§`` entry delimiters that alpi's v2 memory format inserts
+  (``alpi/memory.py:ENTRY_DELIMITER``) so the renderer doesn't render
+  literal section signs between paragraphs. Each file gets a
+  semantic label ("Things alpi knows about you" / "has learned" /
+  "is") instead of the first content line.
+
+**Shortcuts.** ``⇧⌘T``/``⇧⌘S``/``⇧⌘M`` open Tools / Skills /
+Memory respectively. Same modifier set across the triad. ``⇧⌘N``
+adds a universal "new profile" shortcut (the existing ``⌘N`` stays
+context-sensitive: new chat in profile view, new profile when in
+settings). ``⇧⌘W`` adds "new workgroup". Whitelist for "close palette
+on shortcut" updated so these keys still close the palette when it's
+open.
+
+**Command palette reorganised.** Group order is now by descending
+frequency:
+
+1. **Navigate** — jump to profile/workgroup (most common).
+2. **View** — settings, sidebar, find (daily ops).
+3. **Browse** — Tools, Skills, Memory (read-only inspection).
+4. **Create** — chat, profile, workgroup (rare).
+
+Each browse and create entry carries its keyboard hint as a ``<Kbd>``
+chip so the palette doubles as a shortcut catalogue. ``onNewWorkgroup``
+hoisted to the top of ``App.jsx`` so ``useWindowChrome`` doesn't
+TDZ-fail referencing it before declaration.
+
 ## v0.2.9 — 2026-05-11 — Command palette + global summon + Esc cascade
 
 Requires alpi ``v0.4.24`` or newer.

@@ -97,3 +97,20 @@
 .hint {
   flex-shrink: 0;
 }
+
+.detail {
+  border-top: 1px solid var(--color-border);
+  padding: var(--space-5) var(--space-6);
+  max-height: 40vh;
+  overflow: auto;
+  font-size: var(--font-size-small);
+  color: var(--color-fg);
+}
+
+.detail pre {
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-tiny);
+  margin: 0;
+}
