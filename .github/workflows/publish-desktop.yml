@@ -25,9 +25,9 @@ name: publish-desktop
 #      ``releases/download/desktop-latest/desktop-release.json``
 #
 # Signing: minisign keypair via ``TAURI_SIGNING_PRIVATE_KEY`` +
-# ``TAURI_SIGNING_PRIVATE_KEY_PASSWORD`` repo secrets. Public key
-# lives in ``tauri.conf.json`` so the installed app verifies updates
-# against it.
+# ``TAURI_SIGNING_PRIVATE_KEY_PASSWORD`` repo secrets for updater
+# artifacts, plus Apple Developer ID secrets for macOS code signing and
+# notarization.
 
 on:
   push:
@@ -92,18 +92,35 @@ jobs:
       - name: secrets present
         if: steps.gate.outputs.should_publish == 'true'
         env:
-          KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          PWD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
-          if [ -z "$KEY" ]; then
-            echo "::error::TAURI_SIGNING_PRIVATE_KEY missing — see desktop/RELEASING.md"
+          missing=0
+          for name in \
+            TAURI_SIGNING_PRIVATE_KEY \
+            TAURI_SIGNING_PRIVATE_KEY_PASSWORD \
+            APPLE_CERTIFICATE \
+            APPLE_CERTIFICATE_PASSWORD \
+            APPLE_SIGNING_IDENTITY \
+            APPLE_ID \
+            APPLE_PASSWORD \
+            APPLE_TEAM_ID
+          do
+            if [ -z "${!name}" ]; then
+              echo "::error::$name missing — see desktop/RELEASING.md"
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
             exit 1
           fi
-          if [ -z "$PWD" ]; then
-            echo "::error::TAURI_SIGNING_PRIVATE_KEY_PASSWORD missing — see desktop/RELEASING.md"
-            exit 1
-          fi
-          echo "signing secrets present"
+          echo "release signing secrets present"
 
       - name: package.json + Cargo.toml in sync with tauri.conf.json
         if: steps.gate.outputs.should_publish == 'true'
@@ -203,7 +220,28 @@ jobs:
       - run: pnpm install --frozen-lockfile
         working-directory: desktop
 
-      - uses: tauri-apps/tauri-action@v0.6.2
+      - name: build signed macOS bundle
+        if: matrix.os == 'macos-latest'
+        uses: tauri-apps/tauri-action@v0.6.2
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: desktop
+          releaseId: ${{ needs.check-version.outputs.release_id }}
+          includeUpdaterJson: true
+          args: ${{ matrix.args }}
+
+      - name: build Linux bundles
+        if: matrix.os == 'ubuntu-22.04'
+        uses: tauri-apps/tauri-action@v0.6.2
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}

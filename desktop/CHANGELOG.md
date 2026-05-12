@@ -11,6 +11,25 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.2.11 — 2026-05-12 — Apple Developer ID signing
+
+Requires alpi ``v0.4.27`` or newer.
+
+This release ships the Apple distribution path for desktop builds:
+the macOS release job now signs with a Developer ID Application
+certificate, runs with hardened runtime settings, and has the
+notarization credentials Tauri needs to produce a Gatekeeper-friendly
+DMG. No host-plane API changes.
+
+- ``desktop/src-tauri/tauri.conf.json`` declares the macOS hardened
+  runtime settings used by signed Tauri builds.
+- ``.github/workflows/publish-desktop.yml`` gates releases on both
+  updater-signing and Apple notarization secrets, then scopes the
+  Apple credentials to the macOS matrix job only.
+- ``desktop/RELEASING.md`` documents the Developer ID certificate,
+  app-specific password, signing identity, and Team ID setup so future
+  desktop releases remain reproducible.
+
 ## v0.2.10 — 2026-05-12 — browse panels (tools / skills / memory) + palette org
 
 Requires alpi ``v0.4.27`` or newer (new host ``tools.list`` verb +

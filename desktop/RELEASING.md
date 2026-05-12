@@ -11,7 +11,7 @@ new release.
 
 Pushing a commit to ``main`` that bumps
 ``desktop/src-tauri/tauri.conf.json``'s ``version`` field triggers
-[`.github/workflows/desktop-release.yml`](../.github/workflows/desktop-release.yml).
+[`.github/workflows/publish-desktop.yml`](../.github/workflows/publish-desktop.yml).
 The workflow detects the new version, creates the
 ``desktop-vX.Y.Z`` tag, and publishes. No manual ``git tag`` step.
 This mirrors the alpi CLI's ``publish.yml`` flow.
@@ -26,9 +26,11 @@ Two GitHub releases are produced from one run:
    ``releases/download/desktop-latest/alpi-latest.dmg``
    ``releases/download/desktop-latest/desktop-release.json``.
 
-Builds are signed with **minisign** so the installed app verifies the
-update before applying it. Pubkey lives in ``tauri.conf.json``;
-private key + password live in GitHub Actions secrets.
+Updater artifacts are signed with **minisign** so the installed app
+verifies the update before applying it. Pubkey lives in
+``tauri.conf.json``; private key + password live in GitHub Actions
+secrets. macOS bundles are additionally signed and notarized with an
+Apple Developer ID Application certificate.
 
 ## Pre-requisites (one-time)
 
@@ -40,11 +42,30 @@ Repo → Settings → Secrets and variables → Actions:
 |---|---|
 | ``TAURI_SIGNING_PRIVATE_KEY`` | full contents of ``~/.tauri/alpi-updater.key`` |
 | ``TAURI_SIGNING_PRIVATE_KEY_PASSWORD`` | password set when the key was generated |
+| ``APPLE_CERTIFICATE`` | base64 encoded Developer ID Application ``.p12`` |
+| ``APPLE_CERTIFICATE_PASSWORD`` | password set when exporting the ``.p12`` |
+| ``APPLE_SIGNING_IDENTITY`` | exact Keychain identity, e.g. ``Developer ID Application: Example Ltd (TEAMID)`` |
+| ``APPLE_ID`` | Apple ID email used for notarization |
+| ``APPLE_PASSWORD`` | app-specific password for ``APPLE_ID`` |
+| ``APPLE_TEAM_ID`` | Apple Developer Team ID |
 
 Verify locally before pushing the secret:
 
 ```bash
 pbcopy < ~/.tauri/alpi-updater.key
+```
+
+The Apple certificate must be exported from Keychain Access as a
+password-protected ``.p12`` and encoded with:
+
+```bash
+openssl base64 -A -in developer-id-application.p12 -out developer-id-application.p12.base64.txt
+```
+
+The ``APPLE_SIGNING_IDENTITY`` value is the exact identity printed by:
+
+```bash
+security find-identity -v -p codesigning
 ```
 
 The pubkey in ``tauri.conf.json`` (``plugins.updater.pubkey``) must
@@ -128,7 +149,7 @@ faster to debug.
 ### 5. Commit and push
 
 ```bash
-git add desktop/ .github/workflows/desktop-release.yml
+git add desktop/ .github/workflows/publish-desktop.yml
 git commit -m "desktop-vX.Y.Z — short tagline
 
 [body matching CHANGELOG.md entry]"
@@ -145,13 +166,13 @@ To re-publish a version that already shipped (rare — usually only
 needed if a release was botched and you want to rebuild from the
 same commit), use the workflow's manual dispatch:
 
-- Actions → ``desktop-release`` → Run workflow → ``force=true``
+- Actions → ``publish-desktop`` → Run workflow → ``force=true``
 
 ### 6. Watch the build
 
 `https://github.com/satoshi-ltd/alpi/actions` — pick the
-``desktop-release`` run. Three matrix jobs run in parallel
-(macos / ubuntu / windows), then ``promote-latest`` rolls the
+``publish-desktop`` run. Two matrix jobs run in parallel
+(macos / ubuntu), then ``promote-latest`` rolls the
 ``desktop-latest`` tag.
 
 Total wall-clock time: ~10–15 min.
@@ -210,9 +231,11 @@ Common modes:
 - ``check-version`` job fails: tag and ``tauri.conf.json`` disagree.
   Fix the file, amend the commit, force-push the tag (only safe
   before the release is live).
-- ``build`` matrix job fails on macOS: usually missing Apple Developer
-  signing (separate from minisign — only needed for App Store / hard
-  notarisation). Tauri builds the unsigned ``.dmg`` fine without it.
+- ``secrets present`` fails: a required updater or Apple signing secret
+  is missing from GitHub Actions.
+- ``build`` matrix job fails on macOS: usually an invalid Apple
+  certificate, signing identity, app-specific password, or team ID.
+  Developer ID Application builds must be signed and notarized.
 - ``promote-latest`` fails: the version-stamped release is fine, only
   the rolling tag move broke. Re-run the job from the Actions UI.
 
