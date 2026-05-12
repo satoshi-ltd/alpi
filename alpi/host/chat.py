@@ -10,6 +10,16 @@ from alpi.host import server as host_server
 
 _active_lock = threading.Lock()
 _active: dict[str, Any] = {}  # request_id -> Engine
+_session_active: dict[str, Any] = {}  # session_id -> Engine
+_session_locks: dict[str, asyncio.Lock] = {}
+
+
+def _get_session_lock(session_id: str) -> asyncio.Lock:
+    lock = _session_locks.get(session_id)
+    if lock is None:
+        lock = asyncio.Lock()
+        _session_locks[session_id] = lock
+    return lock
 
 
 def register(server: host_server.Server) -> None:
@@ -68,6 +78,17 @@ async def _data_chat_send(
 
     with _active_lock:
         _active[request_id] = engine
+
+    sid_for_lock = session_id if isinstance(session_id, str) and session_id else None
+    session_lock: asyncio.Lock | None = None
+    if sid_for_lock:
+        # Concurrent send on the same session: interrupt the previous engine and wait for it to release the lock.
+        prev = _session_active.get(sid_for_lock)
+        if prev is not None and prev is not engine:
+            prev.request_interrupt()
+        session_lock = _get_session_lock(sid_for_lock)
+        await session_lock.acquire()
+        _session_active[sid_for_lock] = engine
 
     loop = asyncio.get_running_loop()
     queue: asyncio.Queue = asyncio.Queue()
@@ -141,6 +162,10 @@ async def _data_chat_send(
         await task
         with _active_lock:
             _active.pop(request_id, None)
+        if sid_for_lock and session_lock is not None:
+            if _session_active.get(sid_for_lock) is engine:
+                _session_active.pop(sid_for_lock, None)
+            session_lock.release()
 
 
 async def _send_mention(

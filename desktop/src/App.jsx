@@ -197,7 +197,7 @@ export default function App() {
   });
   useNavListener(setView);
 
-  const { pendingTurn, setPendingTurn } = useChatStream({
+  const { pendingTurn, setPendingTurn, activeRequestIdRef } = useChatStream({
     setSessionData,
     setView,
     setRewriteDraft,
@@ -436,12 +436,16 @@ export default function App() {
           } catch {}
         }
 
+        const requestId = `desktop-${profileName}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        activeRequestIdRef.current = requestId;
+
         setPendingTurn({
           user: text,
           tools: [],
           error: null,
           profile: profileName,
           sessionId: startSessionId,
+          requestId,
         });
 
         try {
@@ -451,6 +455,7 @@ export default function App() {
             rewriteFromTurn,
             text,
             model: model ?? null,
+            requestId,
           });
         } catch (e) {
           notify({ message: String(e), variant: "error" });
@@ -460,7 +465,7 @@ export default function App() {
         sendingRef.current = false;
       }
     },
-    [activeProfile, view, pendingTurn, rewriteDraft, notify, setPendingTurn],
+    [activeProfile, view, pendingTurn, rewriteDraft, notify, setPendingTurn, activeRequestIdRef],
   );
 
   const onCancelTurn = useCallback(() => {

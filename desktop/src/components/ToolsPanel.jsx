@@ -3,6 +3,8 @@ import { invoke } from "@tauri-apps/api/core";
 import BrowsePanel from "../primitives/BrowsePanel.jsx";
 import styles from "./ToolsPanel.module.css";
 
+// MCP categories (``MCP · <server>``) and ``Other`` fall through to the
+// end of the panel in registration order, after the static ones below.
 const CATEGORY_ORDER = [
   "Filesystem",
   "Workspace",
@@ -13,7 +15,6 @@ const CATEGORY_ORDER = [
   "Media",
   "System",
   "Collab",
-  "Other",
 ];
 
 export default function ToolsPanel({ open, onClose, profile }) {

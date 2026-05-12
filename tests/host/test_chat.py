@@ -306,3 +306,98 @@ async def test_data_chat_cancel_interrupts_active_turn(
     assert cancel_response["result"]["cancelled"] is True
     kinds = [e.get("event") for e in events]
     assert "interrupted" in kinds
+
+
+@pytest.mark.asyncio
+async def test_data_chat_send_concurrent_same_session_interrupts_previous(
+    monkeypatch, short_tmp: Path,
+) -> None:
+    home = short_tmp / "h"
+    home.mkdir()
+    load_or_generate(home)
+
+    from types import SimpleNamespace as NS
+
+    started = {"count": 0}
+
+    class _SlowEngine:
+        def __init__(self, *, home: Path, cfg) -> None:  # noqa: ANN001
+            self.session = NS(id="shared-sid", subdir="sessions")
+            self._stop = False
+            self._idx = 0
+
+        def run_turn(self, text, emit) -> None:  # noqa: ANN001
+            from alpi.engine import AgentEvent
+            import time as _t
+
+            started["count"] += 1
+            self._idx = started["count"]
+            for _ in range(80):
+                if self._stop:
+                    emit(AgentEvent(kind="interrupted"))
+                    return
+                _t.sleep(0.025)
+            emit(AgentEvent(kind="assistant_done", text=f"turn-{self._idx}:{text}"))
+
+        def request_interrupt(self) -> None:
+            self._stop = True
+
+        def save_session(self) -> None:
+            return None
+
+    from alpi import config as cfg_mod
+    monkeypatch.setattr(cfg_mod, "load", lambda h: NS(model="x"))
+    import alpi.engine
+    monkeypatch.setattr(alpi.engine, "Engine", _SlowEngine)
+    from alpi.host import chat as dc
+    monkeypatch.setattr(dc, "_resolve_home", lambda profile: home)
+    import alpi.cli as cli_mod
+    monkeypatch.setattr(
+        cli_mod, "_continue_specific_session",
+        lambda *a, **kw: True,
+    )
+
+    srv = host_server.Server(home=home)
+    data_handlers.register(srv)
+    dc.register(srv)
+    await srv.start()
+
+    async def _send_and_collect(request_id: str, text: str) -> list[dict]:
+        reader, writer = await asyncio.open_unix_connection(str(srv.socket_path()))
+        writer.write((json.dumps({
+            "id": request_id,
+            "method": "host.chat.send",
+            "params": {
+                "profile": "default",
+                "text": text,
+                "request_id": request_id,
+                "session_id": "shared-sid",
+            },
+        }) + "\n").encode())
+        await writer.drain()
+        events: list[dict] = []
+        while True:
+            line = await reader.readline()
+            if not line:
+                break
+            events.append(json.loads(line))
+        writer.close()
+        await writer.wait_closed()
+        return events
+
+    try:
+        task_a = asyncio.create_task(_send_and_collect("rA", "first"))
+        # let A start running before B arrives
+        await asyncio.sleep(0.15)
+        task_b = asyncio.create_task(_send_and_collect("rB", "second"))
+        events_a, events_b = await asyncio.gather(task_a, task_b)
+    finally:
+        await srv.stop()
+
+    kinds_a = [e.get("event") for e in events_a]
+    kinds_b = [e.get("event") for e in events_b]
+    assert "interrupted" in kinds_a, kinds_a
+    # B should run cleanly to completion
+    assert "reply" in kinds_b and "done" in kinds_b, kinds_b
+    reply_b = next(e for e in events_b if e["event"] == "reply")
+    assert reply_b["text"].endswith("second")

@@ -26,38 +26,48 @@ use crate::state::{DecryptedMessage, SessionEntry};
 #[serde(tag = "kind", rename_all = "snake_case")]
 enum ChatEvent {
     ToolStart {
+        request_id: String,
         tool_id: String,
         name: String,
         preview: String,
         args: serde_json::Value,
     },
     ToolState {
+        request_id: String,
         tool_id: String,
         name: String,
         text: String,
         ok: bool,
     },
     ToolEnd {
+        request_id: String,
         tool_id: String,
         name: String,
         ok: bool,
         output: String,
     },
     ReasoningDelta {
+        request_id: String,
         text: String,
     },
     AssistantDelta {
+        request_id: String,
         text: String,
     },
     Error {
+        request_id: String,
         text: String,
     },
-    Interrupted,
+    Interrupted {
+        request_id: String,
+    },
     Reply {
+        request_id: String,
         text: String,
         session_id: String,
     },
     Done {
+        request_id: String,
         session_id: String,
     },
 }
@@ -1181,9 +1191,10 @@ fn chat_send_stream(
     rewrite_from_turn: Option<usize>,
     text: String,
     model: Option<String>,
+    request_id: Option<String>,
 ) {
     thread::spawn(move || {
-        stream_chat(app, profile, session_id, rewrite_from_turn, text, model)
+        stream_chat(app, profile, session_id, rewrite_from_turn, text, model, request_id)
     });
 }
 
@@ -1194,15 +1205,16 @@ fn stream_chat(
     rewrite_from_turn: Option<usize>,
     text: String,
     model: Option<String>,
+    request_id_opt: Option<String>,
 ) {
-    let request_id = format!(
+    let request_id = request_id_opt.unwrap_or_else(|| format!(
         "tauri-{}-{}",
         profile,
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_micros())
             .unwrap_or(0)
-    );
+    ));
     active_chats()
         .lock()
         .unwrap()
@@ -1228,6 +1240,7 @@ fn stream_chat(
     let mut resolved_id = String::new();
     let mut final_reply = String::new();
     let app_for_frames = app.clone();
+    let rid_for_frames = request_id.clone();
 
     let result = host_client::call_stream("host.chat.send", params, |frame| {
         if let Some(err) = frame.get("error") {
@@ -1235,6 +1248,7 @@ fn stream_chat(
             let _ = app_for_frames.emit(
                 "chat-event",
                 ChatEvent::Error {
+                    request_id: rid_for_frames.clone(),
                     text: err
                         .get("message")
                         .and_then(|v| v.as_str())
@@ -1253,6 +1267,7 @@ fn stream_chat(
                 let _ = app_for_frames.emit(
                     "chat-event",
                     ChatEvent::ToolStart {
+                        request_id: rid_for_frames.clone(),
                         tool_id: frame["tool_id"].as_str().unwrap_or("").to_string(),
                         name: frame["name"].as_str().unwrap_or("").to_string(),
                         preview: frame["preview"]
@@ -1270,6 +1285,7 @@ fn stream_chat(
                 let _ = app_for_frames.emit(
                     "chat-event",
                     ChatEvent::ToolState {
+                        request_id: rid_for_frames.clone(),
                         tool_id: frame["tool_id"].as_str().unwrap_or("").to_string(),
                         name: frame["name"].as_str().unwrap_or("").to_string(),
                         text: frame["text"].as_str().unwrap_or("").to_string(),
@@ -1281,6 +1297,7 @@ fn stream_chat(
                 let _ = app_for_frames.emit(
                     "chat-event",
                     ChatEvent::ToolEnd {
+                        request_id: rid_for_frames.clone(),
                         tool_id: frame["tool_id"].as_str().unwrap_or("").to_string(),
                         name: frame["name"].as_str().unwrap_or("").to_string(),
                         ok: frame["ok"].as_bool().unwrap_or(false),
@@ -1295,6 +1312,7 @@ fn stream_chat(
                 let _ = app_for_frames.emit(
                     "chat-event",
                     ChatEvent::ReasoningDelta {
+                        request_id: rid_for_frames.clone(),
                         text: frame["text"].as_str().unwrap_or("").to_string(),
                     },
                 );
@@ -1303,6 +1321,7 @@ fn stream_chat(
                 let _ = app_for_frames.emit(
                     "chat-event",
                     ChatEvent::AssistantDelta {
+                        request_id: rid_for_frames.clone(),
                         text: frame["text"].as_str().unwrap_or("").to_string(),
                     },
                 );
@@ -1312,13 +1331,19 @@ fn stream_chat(
                 let _ = app_for_frames.emit(
                     "chat-event",
                     ChatEvent::Error {
+                        request_id: rid_for_frames.clone(),
                         text: frame["text"].as_str().unwrap_or("").to_string(),
                     },
                 );
             }
             "interrupted" => {
                 got_interrupted = true;
-                let _ = app_for_frames.emit("chat-event", ChatEvent::Interrupted);
+                let _ = app_for_frames.emit(
+                    "chat-event",
+                    ChatEvent::Interrupted {
+                        request_id: rid_for_frames.clone(),
+                    },
+                );
             }
             "reply" => {
                 final_reply = frame["text"].as_str().unwrap_or("").to_string();
@@ -1337,7 +1362,13 @@ fn stream_chat(
 
     if let Err(e) = result {
         if !got_error && !got_interrupted {
-            let _ = app.emit("chat-event", ChatEvent::Error { text: e });
+            let _ = app.emit(
+                "chat-event",
+                ChatEvent::Error {
+                    request_id: request_id.clone(),
+                    text: e,
+                },
+            );
         }
     }
 
@@ -1351,6 +1382,7 @@ fn stream_chat(
     let _ = app.emit(
         "chat-event",
         ChatEvent::Reply {
+            request_id: request_id.clone(),
             text: final_reply,
             session_id: resolved_id.clone(),
         },
@@ -1358,6 +1390,7 @@ fn stream_chat(
     let _ = app.emit(
         "chat-event",
         ChatEvent::Done {
+            request_id,
             session_id: resolved_id,
         },
     );

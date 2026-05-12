@@ -1,5 +1,42 @@
 # Changelog
 
+## v0.4.29 — 2026-05-12 — chat concurrency: interrupt-and-replace on the same session (+ desktop-v0.2.11)
+
+The desktop chat surface mixed responses when the user sent a new message
+before the previous turn finished streaming. Root cause spanned three
+layers; this release fixes all of them.
+
+**Backend — session-id serialization with interrupt.** ``alpi/host/chat.py``
+now tracks an active ``Engine`` per ``session_id`` and holds an
+``asyncio.Lock`` on that session. When a new ``host.chat.send`` arrives
+for a session that already has a running engine, the previous engine is
+asked to interrupt (``engine.request_interrupt()``) and the new handler
+awaits the lock. The previous handler unwinds at the next LLM-stream
+checkpoint (``alpi/engine.py:230``), emits ``interrupted``→``reply``→
+``done``, and releases the lock; the new turn then runs cleanly. This
+mirrors the TUI's ``@work(exclusive=True)`` + ``_interrupt_current_turn``
+pattern, which is why the TUI never exhibited the bug.
+
+**Frontend / Rust — request_id propagation and filtering.** Every
+``ChatEvent`` variant in ``desktop/src-tauri/src/lib.rs`` now carries the
+``request_id`` of the originating turn; the JS side
+(``useChatStream.js``) tracks ``activeRequestIdRef`` and drops any frame
+whose ``request_id`` does not match. Without this, the trailing
+``interrupted``/``reply``/``done`` frames of the cancelled turn would
+hit the listener after the new ``pendingTurn`` had been set and nuke it
+on ``done`` (which calls ``setPendingTurn(null)``). The shared
+``chat-event`` channel had no way to disambiguate turns before.
+
+**End-to-end behavior.** "Tell me a story" → mid-stream "now tell me a
+joke": the story stops within a chunk boundary (sub-second on the LLM
+stream loop), the partial assistant text is persisted so the joke has
+context, and the joke begins immediately on the same session.
+
+Tests: ``test_data_chat_send_concurrent_same_session_interrupts_previous``
+covers the backend serialization+interrupt path end-to-end over a real
+Unix-socket host server with two concurrent requests on the same
+``session_id``.
+
 ## v0.4.28 — 2026-05-12 — per-profile env isolation + silent scheduled jobs + MCP grouping
 
 Three independent fixes that surfaced while debugging real multi-profile

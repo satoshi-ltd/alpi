@@ -15,7 +15,9 @@ export function useChatStream({
 }) {
   const [pendingTurn, setPendingTurn] = useState(null);
 
-  // Buffer streaming deltas — token chunks would re-render markdown every frame.
+  // Drop late frames from an interrupted turn so they don't mutate the new pendingTurn.
+  const activeRequestIdRef = useRef(null);
+
   const deltaBufferRef = useRef({ assistant: "", reasoning: "" });
   const deltaFlushScheduledRef = useRef(false);
   const deltaFlushTimerRef = useRef(null);
@@ -51,6 +53,7 @@ export function useChatStream({
   useEffect(() => {
     const off = listen("chat-event", (event) => {
       const p = event.payload;
+      if (p.request_id && p.request_id !== activeRequestIdRef.current) return;
       if (p.kind === "tool_start") {
         setPendingTurn((prev) =>
           prev
@@ -167,5 +170,5 @@ export function useChatStream({
     };
   }, [scheduleDeltaFlush, setSessionData, setView, setRewriteDraft, reloadRef, notify]);
 
-  return { pendingTurn, setPendingTurn };
+  return { pendingTurn, setPendingTurn, activeRequestIdRef };
 }
