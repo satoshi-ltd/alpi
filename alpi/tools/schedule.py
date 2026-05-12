@@ -95,8 +95,13 @@ class Schedule(Tool):
             },
             "platform": {
                 "type": "string",
-                "description": "Delivery platform. Default: telegram.",
-                "default": "telegram",
+                "description": (
+                    "Delivery platform for the agent's reply. Leave empty "
+                    "for silent maintenance jobs (no gateway dispatch). "
+                    "Set to 'telegram' / 'matrix' / 'imap' / 'gmail' for "
+                    "user-facing scheduled messages."
+                ),
+                "default": "",
             },
             "chat_id": {
                 "type": "string",
@@ -144,7 +149,7 @@ class Schedule(Tool):
         if action == "add":
             if not prompt:
                 return ToolResult(ok=False, output="", error="'prompt' is required")
-            err = _validate_prompt(prompt, platform or "telegram")
+            err = _validate_prompt(prompt, platform)
             if err:
                 return ToolResult(ok=False, output="", error=err)
             if not force:
@@ -167,7 +172,7 @@ class Schedule(Tool):
                 "id": uuid.uuid4().hex[:8],
                 "kind": kind or "cron",
                 "prompt": prompt,
-                "platform": (platform or "telegram").lower(),
+                "platform": (platform or "").lower(),
                 "chat_id": chat_id or "",
                 "last_run_at": now_iso if (kind or "cron") == "cron" else None,
             }
@@ -229,7 +234,7 @@ class Schedule(Tool):
                 return ToolResult(ok=False, output="", error=f"job {id} not found")
 
             changes: list[str] = []
-            next_platform = (platform or job.get("platform") or "telegram").lower()
+            next_platform = (platform or job.get("platform") or "").lower()
             if prompt:
                 err = _validate_prompt(prompt, next_platform)
                 if err:

@@ -23,7 +23,7 @@ from alpi.tools.schedule import Schedule
 def test_cron_tool_add_cron_job_writes_jobs_json(tmp_home_no_env: Path) -> None:
     out = Schedule().run(action="add", kind="cron",
                      expression="*/5 * * * *", prompt="morning summary",
-                     chat_id="12345")
+                     platform="telegram", chat_id="12345")
     assert out.ok
     data = json.loads((tmp_home_no_env / "schedule" / "jobs.json").read_text())
     assert len(data) == 1
@@ -32,11 +32,18 @@ def test_cron_tool_add_cron_job_writes_jobs_json(tmp_home_no_env: Path) -> None:
     assert job["expression"] == "*/5 * * * *"
     assert job["chat_id"] == "12345"
     assert job["platform"] == "telegram"
-    # Seeded with "now" so the first fire is the next real cron slot,
-    # not the next 30s tick. ``None`` used to mean "fire immediately",
-    # which broke user intent for weekday-noon jobs scheduled mid-day.
     assert job["last_run_at"] is not None
-    datetime.fromisoformat(job["last_run_at"])  # must parse clean
+    datetime.fromisoformat(job["last_run_at"])
+
+
+def test_cron_tool_add_cron_job_silent_when_no_platform(tmp_home_no_env: Path) -> None:
+    """Jobs without ``platform`` are silent maintenance jobs — no
+    gateway dispatch. Reflects the v0.4.28 inversion of the default."""
+    out = Schedule().run(action="add", kind="cron",
+                     expression="0 3 * * *", prompt="reindex workspace")
+    assert out.ok
+    data = json.loads((tmp_home_no_env / "schedule" / "jobs.json").read_text())
+    assert data[0]["platform"] == ""
 
 
 def test_cron_tool_add_inactivity_job(tmp_home_no_env: Path) -> None:
@@ -267,6 +274,34 @@ def test_run_job_delivers_reply(monkeypatch, tmp_home_no_env: Path) -> None:
     assert "--no-save" in captured["args"]
     assert sent == [("telegram", "1", "hello world")]
     assert "telegram:1" in msg
+
+
+def test_run_job_silent_when_no_platform(monkeypatch, tmp_home_no_env: Path) -> None:
+    """Jobs without ``platform`` run silently — work happens, no
+    gateway dispatch, empty reply is success."""
+    class _FakeCompletedProcess:
+        returncode = 0
+        stdout = _events_stdout([])
+        stderr = ""
+
+    captured_args = {}
+
+    def fake_run(*a, **kw):
+        captured_args["cmd"] = a[0]
+        return _FakeCompletedProcess()
+
+    monkeypatch.setattr(scheduler.subprocess, "run", fake_run)
+    sent = []
+    monkeypatch.setattr(delivery, "send_to",
+                        lambda p, c, t: sent.append((p, c, t)))
+
+    job = {"id": "j", "kind": "cron", "prompt": "reindex", "platform": ""}
+    ok, msg = scheduler.run_job(job, tmp_home_no_env)
+    assert ok
+    assert sent == []
+    assert "silent" in msg
+    joined = " ".join(captured_args["cmd"])
+    assert "silent maintenance task" in joined
 
 
 def test_run_job_uses_default_chat_id(monkeypatch, tmp_home_no_env: Path) -> None:

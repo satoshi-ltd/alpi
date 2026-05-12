@@ -202,8 +202,9 @@ def load(home: Path) -> Config:
     cfg_path = home / "config.yaml"
     env_path = home / ".env"
 
+    # override=True so per-profile loads win — the daemon supervises many profiles in one process.
     if env_path.exists():
-        load_dotenv(env_path, override=False)
+        load_dotenv(env_path, override=True)
 
     user_data: dict[str, Any] = {}
     if cfg_path.exists():

@@ -31,6 +31,12 @@ _CATEGORIES: list[tuple[str, tuple[str, ...]]] = [
 
 
 def _category_for(name: str) -> str:
+    # MCP tools are registered as `<server>__<tool>` (see
+    # alpi/mcp/registry.py); group them by server so each MCP gets its
+    # own section instead of falling into "Other".
+    if "__" in name:
+        server = name.split("__", 1)[0]
+        return f"MCP · {server}"
     for label, members in _CATEGORIES:
         if name in members:
             return label

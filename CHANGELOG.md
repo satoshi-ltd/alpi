@@ -1,5 +1,45 @@
 # Changelog
 
+## v0.4.28 — 2026-05-12 — per-profile env isolation + silent scheduled jobs + MCP grouping
+
+Three independent fixes that surfaced while debugging real multi-profile
+use on the daemon-supervised setup.
+
+**Per-profile ``.env`` isolation in the daemon.** ``alpi/config.py``
+``load_dotenv(..., override=False)`` was poisoning multi-profile
+process state: the first profile loaded into ``os.environ`` won every
+key (e.g. ``OPENROUTER_API_KEY``), so any later profile with a
+different credential silently inherited the wrong one. The desktop
+(which routes through the long-running daemon) hit 401s on profiles
+whose key wasn't the first loaded; the TUI never saw the bug because
+each ``alpi -p X chat`` is a fresh process. Flipping to
+``override=True`` makes per-profile loads always win. Test in
+``tests/core/test_config_helpers.py`` updated to assert the new
+semantics with a regression-grade name.
+
+**Silent scheduled jobs.** Default behaviour of the scheduler was
+"agent reply auto-delivered to telegram", inherited from the original
+"daily summary" use case. For mechanical maintenance jobs (reindex,
+cleanup) that's the wrong default — a nightly Telegram ping for
+"indexed 89 files" is noise. ``alpi/scheduler/run.py::run_job`` now
+treats jobs without ``platform`` as silent runs: empty reply is
+success, no gateway dispatch. Jobs that explicitly set ``platform``
+keep the auto-deliver path for daily summaries and similar. The
+``[SCHEDULED: ...]`` wrap is tailored per-mode so the agent knows
+whether to emit a reply for delivery. The schedule tool no longer
+defaults ``platform`` to ``"telegram"`` — opt-in delivery instead of
+opt-out. Two tests cover both paths in
+``tests/core/test_schedule.py``.
+
+**MCP tools grouped by server.** ``alpi/host/tools.py::_category_for``
+now detects MCP-registered tools (named ``<server>__<tool>``, see
+``alpi/mcp/registry.py``) and groups them as ``MCP · <server>``
+instead of dumping them into ``Other``. The desktop Tools panel
+picks this up automatically because the host verb shape didn't
+change — only the ``category`` field value did. A Bitbucket MCP
+server with five tools now renders as its own section labelled
+``MCP · bitbucket`` between the native categories and ``Other``.
+
 ## v0.4.27 — 2026-05-12 — host introspection verbs (tools + skills body)
 
 Exposes the agent's tool registry and the full skill body over the

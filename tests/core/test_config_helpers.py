@@ -46,14 +46,17 @@ def test_workspace_path_returns_none_for_blank() -> None:
     assert cfg.workspace_path is None
 
 
-def test_load_reads_env_file_without_overriding_existing_values(
+def test_load_reads_env_file_and_overrides_existing_values(
     tmp_home_no_env: Path, monkeypatch
 ) -> None:
+    """The daemon supervises many profiles in one process; per-profile
+    ``.env`` loads MUST win over inherited values so a profile's
+    credentials aren't poisoned by whoever loaded first."""
     env_path = tmp_home_no_env / ".env"
     env_path.write_text("ALPI_TEST_CONFIG_HELPER=from-env\nALPI_EXISTING=from-env\n")
-    monkeypatch.setenv("ALPI_EXISTING", "keep")
+    monkeypatch.setenv("ALPI_EXISTING", "stale")
 
     config.load(tmp_home_no_env)
 
     assert os.environ["ALPI_TEST_CONFIG_HELPER"] == "from-env"
-    assert os.environ["ALPI_EXISTING"] == "keep"
+    assert os.environ["ALPI_EXISTING"] == "from-env"

@@ -147,7 +147,13 @@ def _last_user_activity(home: Path) -> datetime | None:
 
 
 def run_job(job: dict, home: Path) -> tuple[bool, str]:
-    """Invoke the prompt through ``alpi chat --once`` and deliver the reply."""
+    """Run the scheduled prompt via ``alpi chat --once``.
+
+    Delivery is opt-in: a job with no ``platform`` set runs silently
+    (work done, no gateway dispatch). Jobs that DO set ``platform``
+    keep the original "auto-deliver the agent's reply" behaviour for
+    daily-summary-style use cases. The agent can also self-deliver
+    via ``send_message`` regardless of ``platform``."""
     prompt = job.get("prompt", "").strip()
     if not prompt:
         return False, "empty prompt"
@@ -157,14 +163,23 @@ def run_job(job: dict, home: Path) -> tuple[bool, str]:
     if flags:
         return False, f"threat scan blocked fire: {', '.join(flags)}"
 
-    wrapped = (
-        "[SCHEDULED: running from cron; user is not watching live. "
-        "Answer concisely; the reply is auto-delivered to their chat. "
-        "If the job is purely to deliver text, just write the text as "
-        "the reply — do NOT also call `send_message`; that would "
-        "send it twice.]\n\n"
-        + prompt
-    )
+    has_platform = bool(job.get("platform"))
+    if has_platform:
+        wrap_header = (
+            "[SCHEDULED: running from cron; user is not watching live. "
+            "Answer concisely; the reply is auto-delivered to their chat. "
+            "If the job is purely to deliver text, just write the text as "
+            "the reply — do NOT also call `send_message`; that would "
+            "send it twice.]"
+        )
+    else:
+        wrap_header = (
+            "[SCHEDULED: running from cron as a silent maintenance task. "
+            "No reply is delivered anywhere. Do the work, then end with "
+            "an empty reply (a short summary is fine but discarded — it "
+            "only ends up in the daemon log).]"
+        )
+    wrapped = wrap_header + "\n\n" + prompt
 
     env = dict(os.environ)
     env["ALPI_HOME"] = str(home)
@@ -193,10 +208,15 @@ def run_job(job: dict, home: Path) -> tuple[bool, str]:
     if already_delivered:
         return True, "agent delivered via send_message; no duplicate reply pushed"
 
+    if not has_platform:
+        # Silent maintenance job — log a short summary if the agent provided one.
+        summary = (reply[:120] + "…") if len(reply) > 120 else reply
+        return True, f"silent run ok{(': ' + summary) if summary else ''}"
+
     if not reply:
         return False, "agent produced no reply"
 
-    platform = (job.get("platform") or "telegram").lower()
+    platform = job["platform"].lower()
     chat_id = job.get("chat_id") or delivery.default_chat_id(platform)
     if not chat_id:
         return False, f"no chat_id and no default for {platform}"
