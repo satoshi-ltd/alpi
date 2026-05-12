@@ -1148,6 +1148,7 @@ async def _run_host(home: Path, profile: str) -> None:
     from alpi.host import devices as host_devices
     from alpi.host import probes as host_probes
     from alpi.host import schedule as host_schedule
+    from alpi.host import tools as host_tools
     from alpi.host import workgroup_admin as host_wg_admin
     from alpi.host.network import resolve_host_tcp_bind
     from alpi.host.server import DEFAULT_TCP_PORT, Server as HostServer
@@ -1175,6 +1176,7 @@ async def _run_host(home: Path, profile: str) -> None:
     host_wg_admin.register(server)
     host_probes.register(server)
     host_devices.register(server)
+    host_tools.register(server)
     await server.start()
     try:
         await server.serve_forever()

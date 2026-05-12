@@ -1,5 +1,33 @@
 # Changelog
 
+## v0.4.27 — 2026-05-12 — host introspection verbs (tools + skills body)
+
+Exposes the agent's tool registry and the full skill body over the
+host plane so the desktop (and any future client) can render the same
+"what does this agent have?" surface the TUI gets through
+``/tools`` and ``/skills``. Reflects the principle that TUI and
+desktop are alternative UIs over the same backend: same data, two
+presentation idioms.
+
+- ``alpi/host/tools.py`` — new module. Registers ``host.tools.list``.
+  Returns ``{tools: [{name, category, description, parameters}]}``
+  filtering out colon-suffixed sub-action variants
+  (``memory:add``…) that the LLM never sees as separate tools. UI
+  category is derived from a prefix table in the module — keeps the
+  Tool base class clean of UI-only metadata.
+- ``alpi/host/device_state.py`` — ``host.skills.list`` now ships
+  ``body`` (the SKILL.md content after the frontmatter, capped at
+  32 KiB) and ``path`` per row. Frontmatter parsing extracted into
+  ``_skill_body_from_text`` / ``_skill_description_from_text``
+  helpers so the body returned to the UI matches what the agent
+  loads from disk.
+- ``alpi/service.py`` — wires the new module's ``register(server)``
+  into the host plane bootstrap.
+- ``tests/host/test_tools.py`` — 2 tests. List returns expected
+  shape with category populated for well-known tools (read_file →
+  Filesystem, web_fetch → Web, memory → Memory, terminal → System);
+  sub-action variants are filtered out.
+
 ## v0.4.26 — 2026-05-12 — peer status probes + TUI session sync + log rotation
 
 A bug-bash pass that surfaced while testing v0.4.25 streaming: peer

@@ -186,8 +186,11 @@ async def test_device_gateway_and_skills_views(
         "method": "host.skills.list",
         "params": {"profile": "default"},
     })
-    assert skills["result"]["skills"] == [{
-        "category": None,
-        "name": "demo",
-        "description": "Demo skill",
-    }]
+    rows = skills["result"]["skills"]
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["category"] is None
+    assert row["name"] == "demo"
+    assert row["description"] == "Demo skill"
+    assert "body" in row
+    assert "path" in row

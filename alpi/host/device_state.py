@@ -590,27 +590,37 @@ def _skills(home: Path) -> list[dict[str, Any]]:
         if not top.is_dir() or top.name.startswith("."):
             continue
         if (top / "SKILL.md").exists():
-            rows.append({
-                "category": None,
-                "name": top.name,
-                "description": _skill_description(top / "SKILL.md"),
-            })
+            rows.append(_skill_row(top / "SKILL.md", category=None, name=top.name))
             continue
         for child in sorted(top.iterdir()):
             if child.is_dir() and not child.name.startswith(".") and (child / "SKILL.md").exists():
-                rows.append({
-                    "category": top.name,
-                    "name": child.name,
-                    "description": _skill_description(child / "SKILL.md"),
-                })
+                rows.append(_skill_row(child / "SKILL.md", category=top.name, name=child.name))
     return rows
 
 
-def _skill_description(path: Path) -> str | None:
+# Cap on the body we ship to the UI per skill; most skills are well below.
+_SKILL_BODY_MAX = 32_000
+
+
+def _skill_row(skill_md: Path, *, category: str | None, name: str) -> dict[str, Any]:
     try:
-        text = path.read_text(encoding="utf-8")
+        text = skill_md.read_text(encoding="utf-8")
     except OSError:
-        return None
+        text = ""
+    description = _skill_description_from_text(text)
+    body = _skill_body_from_text(text)
+    if len(body) > _SKILL_BODY_MAX:
+        body = body[:_SKILL_BODY_MAX] + "\n\n…(truncated)"
+    return {
+        "category": category,
+        "name": name,
+        "description": description,
+        "body": body,
+        "path": str(skill_md),
+    }
+
+
+def _skill_description_from_text(text: str) -> str | None:
     if not text.startswith("---"):
         return None
     for line in text.splitlines()[1:]:
@@ -621,6 +631,18 @@ def _skill_description(path: Path) -> str | None:
             value = line.split(":", 1)[1].strip().strip('"').strip("'")
             return value or None
     return None
+
+
+def _skill_body_from_text(text: str) -> str:
+    if not text.startswith("---"):
+        return text
+    lines = text.splitlines()
+    for i, line in enumerate(lines[1:], start=1):
+        if line.strip() == "---":
+            return "\n".join(lines[i + 1:]).lstrip("\n")
+    return text
+
+
 
 
 def _workgroups_for(profile: str) -> list[dict[str, Any]]:

@@ -1,0 +1,70 @@
+"""``host.tools.list`` verb — introspect the agent tool registry."""
+
+from __future__ import annotations
+
+import shutil
+import tempfile
+from pathlib import Path
+
+import pytest
+
+from alpi.host import server as host_server
+from alpi.host import tools as host_tools_mod
+
+
+@pytest.fixture
+def short_tmp():
+    d = Path(tempfile.mkdtemp(prefix="alp-host-tools-", dir="/tmp"))
+    try:
+        yield d
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
+
+
+@pytest.mark.asyncio
+async def test_tools_list_returns_registered_tools(short_tmp: Path) -> None:
+    home = short_tmp / "h"
+    home.mkdir()
+    srv = host_server.Server(home=home)
+    host_tools_mod.register(srv)
+    resp = await srv._dispatch({
+        "id": "r",
+        "method": "host.tools.list",
+        "params": {"profile": "default"},
+    })
+    tools = resp["result"]["tools"]
+    assert isinstance(tools, list)
+    assert len(tools) > 0
+
+    by_name = {t["name"]: t for t in tools}
+    for expected in ("read_file", "write_file", "terminal", "memory", "skill"):
+        assert expected in by_name, f"missing tool {expected}"
+        entry = by_name[expected]
+        assert entry["description"]
+        assert "parameters" in entry
+        assert entry["parameters"]["type"] == "object"
+        assert entry["category"], f"missing category for {expected}"
+
+    assert by_name["read_file"]["category"] == "Filesystem"
+    assert by_name["web_fetch"]["category"] == "Web"
+    assert by_name["memory"]["category"] == "Memory"
+    assert by_name["terminal"]["category"] == "System"
+
+
+@pytest.mark.asyncio
+async def test_tools_list_filters_subaction_variants(short_tmp: Path) -> None:
+    """Tool variants with a colon in the name (e.g. ``memory:add``) are
+    sub-action shorthands the LLM never sees as separate tools; the UI
+    should only list the parent."""
+    home = short_tmp / "h"
+    home.mkdir()
+    srv = host_server.Server(home=home)
+    host_tools_mod.register(srv)
+    resp = await srv._dispatch({
+        "id": "r",
+        "method": "host.tools.list",
+        "params": {},
+    })
+    names = [t["name"] for t in resp["result"]["tools"]]
+    for name in names:
+        assert ":" not in name, f"sub-action variant leaked into list: {name}"
