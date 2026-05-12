@@ -149,6 +149,13 @@ async def _data_chat_send(
                 await send_frame({"event": "error", "text": ev.text})
             elif ev.kind == "interrupted":
                 await send_frame({"event": "interrupted"})
+            elif ev.kind == "auto_compact":
+                await send_frame({
+                    "event": "auto_compact",
+                    "text": ev.text,
+                    "tokens_before": ev.tokens_in,
+                    "tokens_after": ev.tokens_out,
+                })
             elif ev.kind == "assistant_done" and ev.text.strip():
                 parts.append(ev.text)
         final = "\n\n".join(parts).strip()

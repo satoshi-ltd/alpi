@@ -136,6 +136,30 @@ export function useChatStream({
       } else if (p.kind === "reasoning_delta") {
         deltaBufferRef.current.reasoning += p.text;
         scheduleDeltaFlush();
+      } else if (p.kind === "auto_compact") {
+        setPendingTurn((prev) =>
+          prev
+            ? {
+                ...prev,
+                tools: [
+                  ...prev.tools,
+                  {
+                    tool_id: `auto-compact-${Date.now()}`,
+                    name: "auto-compact",
+                    preview: p.text,
+                    args: {
+                      tokens_before: p.tokens_before,
+                      tokens_after: p.tokens_after,
+                    },
+                    states: [],
+                    output: p.text,
+                    ok: true,
+                    startedAt: Date.now(),
+                  },
+                ],
+              }
+            : prev,
+        );
       } else if (p.kind === "error") {
         setPendingTurn((prev) => (prev ? { ...prev, error: p.text } : prev));
       } else if (p.kind === "reply") {

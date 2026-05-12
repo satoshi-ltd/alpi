@@ -375,6 +375,9 @@ class AlpiApp(App):
             self._mount_message(ErrorLine(ev.text))
         elif ev.kind == "usage":
             self._update_header()
+        elif ev.kind == "auto_compact":
+            self._mount_message(DimLine(f"↺ {ev.text}"))
+            self._update_header()
 
     def _on_assistant_delta(self, delta: str) -> None:
         if not delta:
@@ -560,60 +563,22 @@ class AlpiApp(App):
         self._update_header()
 
     def _cmd_compact(self) -> None:
-        import uuid
-        tid = f"compact-{uuid.uuid4().hex[:8]}"
-        convo_len = sum(
-            1 for m in self.engine.session.messages if m.get("role") != "system"
-        )
-        card = ToolCard(
-            tool_id=tid,
-            name="compact",
-            args={"messages": convo_len},
-        )
-        self._active_tools[tid] = card
-        self._mount_message(card)
-        self._do_compact(tid)
-
-    @work(thread=True)
-    def _do_compact(self, tool_id: str) -> None:
-        from alpi import llm
-
-        card = self._active_tools.get(tool_id)
-        convo = [m for m in self.engine.session.messages if m.get("role") != "system"]
-        if not convo:
-            if card is not None:
-                self.call_from_thread(card.finish, "nothing to compact", False)
-                self.call_from_thread(self._drop_active_tool, tool_id)
+        """Force the auto-compact pipeline NOW (manual recovery)."""
+        if self._turn_in_progress():
+            self._mount_message(DimLine("(turn in progress — wait for it to finish)"))
             return
+        self._mount_message(DimLine("↺ compacting…"))
+        self._run_compact_worker()
 
-        if card is not None:
-            self.call_from_thread(card.set_state, "summarizing history…")
-
-        prompt = (
-            "Summarize the conversation so far as a concise bulleted briefing that "
-            "preserves decisions, facts, open questions and any still-relevant tool "
-            "outputs. Keep under 600 chars."
-        )
-        messages = list(self.engine.session.messages) + [{"role": "user", "content": prompt}]
+    @work(thread=True, exclusive=True, name="_run_compact")
+    def _run_compact_worker(self) -> None:
+        def sink(ev: AgentEvent) -> None:
+            self.post_message(EngineEvent(ev))
         try:
-            out = llm.complete(messages=messages, **config.resolve_model(self.cfg))
+            self.engine.compact_now(emit=sink)
+            self.engine.save_session()
         except Exception as e:  # noqa: BLE001
-            if card is not None:
-                self.call_from_thread(card.finish, f"compact failed: {e}", False)
-                self.call_from_thread(self._drop_active_tool, tool_id)
-            return
-
-        summary = (out.content or "").strip() or "(empty summary)"
-        new_msgs = [m for m in self.engine.session.messages if m.get("role") == "system"]
-        new_msgs.append({"role": "assistant", "content": f"[compacted summary]\n{summary}"})
-        self.engine.session.messages = new_msgs
-        total_chars = sum(len(m.get("content", "") or "") for m in new_msgs)
-        self.engine.session.last_ctx_tokens = max(1, total_chars // 4)
-
-        if card is not None:
-            self.call_from_thread(card.finish, f"{len(summary)} char summary", True)
-            self.call_from_thread(self._drop_active_tool, tool_id)
-        self.call_from_thread(self._after_compact, summary)
+            self.post_message(EngineEvent(AgentEvent(kind="error", text=f"compact failed: {e}")))
         self.call_from_thread(self._update_header)
 
     def _stop_thinking(self) -> None:
@@ -623,11 +588,6 @@ class AlpiApp(App):
 
     def _drop_active_tool(self, tool_id: str) -> None:
         self._active_tools.pop(tool_id, None)
-
-    def _after_compact(self, summary: str) -> None:
-        msg = AssistantMessage()
-        self._mount_message(msg)
-        msg.replace(f"**Compacted summary**\n\n{summary}")
 
     def _cmd_skills(self) -> None:
         self._show_panel(SkillsPanel(self.home))

@@ -102,7 +102,7 @@ def _profile_name(home: Path) -> str:
 
 @dataclass
 class AgentEvent:
-    kind: str                      # 'user' | 'reasoning_delta' | 'assistant_delta' | 'assistant_done' | 'tool_start' | 'tool_state' | 'tool_end' | 'usage' | 'error' | 'done' | 'interrupted'
+    kind: str                      # 'user' | 'reasoning_delta' | 'assistant_delta' | 'assistant_done' | 'tool_start' | 'tool_state' | 'tool_end' | 'usage' | 'error' | 'done' | 'interrupted' | 'auto_compact'
     text: str = ""
     name: str = ""                 # tool name for tool_* events
     args: dict = field(default_factory=dict)
@@ -215,6 +215,8 @@ class Engine:
         schemas = tools.schemas()
         call_kwargs = cfg_mod.resolve_model(self.cfg)
         max_steps = self.cfg.tools.max_steps_per_turn
+
+        self._maybe_auto_compact(emit, call_kwargs)
 
         try:
             for _ in range(max_steps):
@@ -471,6 +473,82 @@ class Engine:
         emit(AgentEvent(kind="interrupted",
                         text="Turn interrupted by new user input."))
         self.interrupt_requested = False
+
+    def compact_now(self, emit: EventSink) -> None:
+        """Manually drive the same auto-compact pipeline (used by ``/compact``).
+
+        Forces summarization even when below ``trigger_ratio``, but
+        otherwise behaves identically to the automatic path: same
+        preservation rules, same proportional budget, same safety guard
+        against destroying history on a summarizer failure.
+        """
+        self._run_compaction(emit, cfg_mod.resolve_model(self.cfg), force=True)
+
+    def _maybe_auto_compact(self, emit: EventSink, call_kwargs: dict) -> None:
+        """Compact ``session.messages`` if the next prompt would overflow."""
+        self._run_compaction(emit, call_kwargs, force=False)
+
+    def _run_compaction(self, emit: EventSink, call_kwargs: dict, *, force: bool) -> None:
+        from alpi import compaction, ctx_window as ctx_window_mod
+
+        ctx_window = ctx_window_mod.resolve(
+            self.home, self.cfg, self.session.model or self.cfg.model,
+        )
+        policy = compaction.CompactionPolicy()
+
+        if not force and not compaction.should_compact(
+            self.session.messages, "", ctx_window, policy,
+        ):
+            return
+
+        def _summarize(transcript: str, max_tokens: int) -> str:
+            # We pass a flat transcript (not raw OpenAI messages) so the
+            # summarizer never sees orphan tool replies or partial tool_calls.
+            prompt_messages = [
+                {"role": "system", "content": compaction.COMPACT_PROMPT},
+                {
+                    "role": "user",
+                    "content": (
+                        "Summarize the conversation transcript below into a "
+                        "single dense briefing that will replace it in the "
+                        "running context. Stay within the policy above.\n\n"
+                        "--- transcript ---\n"
+                        f"{transcript}"
+                    ),
+                },
+            ]
+            summarize_kwargs = dict(call_kwargs)
+            summarize_kwargs["max_tokens"] = int(max_tokens)
+            try:
+                out = llm.complete(messages=prompt_messages, **summarize_kwargs)
+                return (out.content or "").strip()
+            except Exception:  # noqa: BLE001
+                return ""
+
+        new_messages, result = compaction.compact(
+            messages=self.session.messages,
+            user_text="",
+            ctx_window=ctx_window,
+            summarize=_summarize,
+            policy=policy,
+            force=force,
+        )
+        if not result.fired and result.tool_truncated == 0:
+            return
+
+        self.session.messages = new_messages
+        self.session.last_ctx_tokens = result.tokens_after
+        emit(AgentEvent(
+            kind="auto_compact",
+            text=(
+                f"context compacted: {result.tokens_before} → "
+                f"{result.tokens_after} tokens "
+                f"({result.summarized_messages} messages summarized, "
+                f"{result.tool_truncated} tool outputs truncated)"
+            ),
+            tokens_in=result.tokens_before,
+            tokens_out=result.tokens_after,
+        ))
 
     def save_session(self) -> Path:
         path = self.session.save()

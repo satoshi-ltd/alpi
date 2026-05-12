@@ -1,6 +1,8 @@
 openai:
-  - id: gpt-5.4
+  - id: gpt-5.5
     note: flagship
+  - id: gpt-5.5-pro
+    note: pro · extended reasoning
   - id: gpt-5.4-mini
     note: balanced
   - id: gpt-5.4-nano
@@ -12,8 +14,6 @@ openai:
 anthropic:
   - id: claude-opus-4-7
     note: flagship
-  - id: claude-opus-4-6
-    note: flagship · 1M ctx
   - id: claude-sonnet-4-6
     note: balanced
   - id: claude-haiku-4-5

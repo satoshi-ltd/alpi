@@ -61,6 +61,12 @@ enum ChatEvent {
     Interrupted {
         request_id: String,
     },
+    AutoCompact {
+        request_id: String,
+        text: String,
+        tokens_before: u64,
+        tokens_after: u64,
+    },
     Reply {
         request_id: String,
         text: String,
@@ -1342,6 +1348,17 @@ fn stream_chat(
                     "chat-event",
                     ChatEvent::Interrupted {
                         request_id: rid_for_frames.clone(),
+                    },
+                );
+            }
+            "auto_compact" => {
+                let _ = app_for_frames.emit(
+                    "chat-event",
+                    ChatEvent::AutoCompact {
+                        request_id: rid_for_frames.clone(),
+                        text: frame["text"].as_str().unwrap_or("").to_string(),
+                        tokens_before: frame["tokens_before"].as_u64().unwrap_or(0),
+                        tokens_after: frame["tokens_after"].as_u64().unwrap_or(0),
                     },
                 );
             }

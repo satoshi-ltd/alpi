@@ -97,6 +97,13 @@
   opacity: 0.6;
 }
 
+.ctxGroup {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+  cursor: help;
+}
+
 .dot {
   display: inline-flex;
   align-items: center;

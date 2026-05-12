@@ -11,461 +11,101 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.2.12 — 2026-05-12 — auto-compact surfacing in the context bar
+
+Requires alpi ``v0.4.30`` or newer.
+
+Surfaces the new auto-compact pipeline in the desktop chat. The context bar in the header gets a tooltip explaining that Alpi auto-compacts when the window fills up, and ``auto_compact`` events stream into the active turn as a discrete tool card.
+
+- Adds the ``auto_compact`` variant to ``ChatEvent`` (Rust + JS) with ``tokens_before`` / ``tokens_after``.
+- Tooltip primitive used in the header context bar with a single-line note (the percentage and token counts stay inline).
+- ``useChatStream`` renders incoming compaction events as an ``auto-compact`` tool card inside the running turn.
+
+## v0.2.11 — 2026-05-12 — chat concurrency: interrupt-and-replace on the same session
+
+Requires alpi ``v0.4.29`` or newer.
+
+Fixes the case where sending a new prompt while the previous response
+was still streaming could mix frames from both turns on the desktop
+chat surface.
+
+- Chat events now carry ``request_id`` so stale ``interrupted``, ``reply``, and ``done`` frames from the cancelled turn are ignored.
+- Re-sending on the same session now cleanly interrupts and replaces the previous turn instead of letting both streams update the same pending message.
+- Pending-turn cleanup is scoped to the active request, so sidebar and tool-panel refreshes no longer clear the wrong in-flight reply.
+
 ## v0.2.10 — 2026-05-12 — browse panels (tools / skills / memory) + palette org
 
-Requires alpi ``v0.4.27`` or newer (new host ``tools.list`` verb +
-extended ``skills.list`` response).
+Requires alpi ``v0.4.27`` or newer.
 
-Closes the parity gap with the TUI: the TUI lets you ``/tools``,
-``/skills``, ``/memory`` to see what the active profile has at a
-glance. Desktop now exposes the same content through three browse
-panels, each with its own keyboard shortcut and a slot in the command
-palette.
+- Adds browse panels for Tools, Skills, and Memory using host-plane data only.
+- Adds shortcuts for browse and create actions and folds them into the command palette.
+- Reorganises palette groups so navigation and read-only inspection are easier to reach.
 
-**Three new browse panels.** ``primitives/BrowsePanel.jsx`` is the
-shared chrome: split view (38% list + 62% detail), search input that
-filters across name/description/category, items grouped by category
-with sticky uppercase headers (collapsed to a flat list when only one
-group exists — Memory's case), keyboard nav (``↑``/``↓``, ``Esc``)
-and an auto-selected first item so the detail surface is never blank
-on open. Counter rendered as a pill chip next to the title.
-
-- ``components/ToolsPanel.jsx`` — calls ``profile_tools`` Tauri
-  command which delegates to ``host.tools.list``. Detail renders the
-  description + a parameters table (parameter / type / required /
-  description) instead of the raw JSON schema dump. Category order
-  fixed: Filesystem → Workspace → Web → Memory → Comms → Agent →
-  Media → System → Collab → Other.
-- ``components/SkillsPanel.jsx`` — calls ``profile_skills``. Detail
-  renders the SKILL.md ``body`` (the part after the frontmatter)
-  through the same ``renderMarkdown`` pipeline the chat uses, with
-  full markdown styling for headings, lists, code blocks, blockquotes
-  and links. Skills are grouped by their filesystem category
-  (``skills/<category>/<name>``).
-- ``components/MemoryPanel.jsx`` — calls ``profile_memory``, a
-  thin wrapper around three ``host.profile.read_file`` calls
-  (``memories/USER.md``, ``MEMORY.md``, ``AGENT.md``). Strips the
-  ``§`` entry delimiters that alpi's v2 memory format inserts
-  (``alpi/memory.py:ENTRY_DELIMITER``) so the renderer doesn't render
-  literal section signs between paragraphs. Each file gets a
-  semantic label ("Things alpi knows about you" / "has learned" /
-  "is") instead of the first content line.
-
-**Shortcuts.** ``⇧⌘T``/``⇧⌘S``/``⇧⌘M`` open Tools / Skills /
-Memory respectively. Same modifier set across the triad. ``⇧⌘N``
-adds a universal "new profile" shortcut (the existing ``⌘N`` stays
-context-sensitive: new chat in profile view, new profile when in
-settings). ``⇧⌘W`` adds "new workgroup". Whitelist for "close palette
-on shortcut" updated so these keys still close the palette when it's
-open.
-
-**Command palette reorganised.** Group order is now by descending
-frequency:
-
-1. **Navigate** — jump to profile/workgroup (most common).
-2. **View** — settings, sidebar, find (daily ops).
-3. **Browse** — Tools, Skills, Memory (read-only inspection).
-4. **Create** — chat, profile, workgroup (rare).
-
-Each browse and create entry carries its keyboard hint as a ``<Kbd>``
-chip so the palette doubles as a shortcut catalogue. ``onNewWorkgroup``
-hoisted to the top of ``App.jsx`` so ``useWindowChrome`` doesn't
-TDZ-fail referencing it before declaration.
-
-## v0.2.9 — 2026-05-11 — Command palette + global summon + Esc cascade
+## v0.2.9 — 2026-05-11 — command palette + global summon + Esc cascade
 
 Requires alpi ``v0.4.24`` or newer.
 
-A round on keyboard-first navigation: a proper command palette, a
-system-wide hotkey to summon the window, find-bar shortcuts, and a
-coherent Esc cascade that stops the half-handled mess we had before.
+A keyboard-navigation pass: desktop gets a real command surface, a
+global summon shortcut, and predictable Escape handling across
+search, dropdowns, modals, and the chat stream.
 
-**Command palette (⌘K).** ``primitives/CommandPalette.jsx`` +
-``hooks/useCommands.js`` — modal overlay, autofocus input, substring
-filter (case-insensitive), grouped results (``Navigate`` / ``View``
-/ ``Create``), `↑``/``↓`` to move, ``Enter`` to execute, ``Esc`` or
-backdrop-click to close. Commands carry an optional ``hint`` rendered
-as a ``<Kbd>`` chip so the palette doubles as a shortcut reference.
-Navigate only surfaces the first 9 jump targets (those with
-``⌘1``..``⌘9``); the long tail stays in the sidebar to avoid
-turning the palette into a phone book. Pin/unpin commands not
-included — friction-to-value didn't justify the noise.
+- Adds a command palette with grouped actions, keyboard hints, and jump shortcuts for the first visible profiles and workgroups.
+- Adds global ``⌘⇧A`` to show or hide the app window from anywhere on macOS.
+- Normalises Escape handling so overlays close first and only then fall through to turn cancellation.
+- Adds find-bar ``⌘G`` / ``⌘⇧G`` navigation and makes shortcut hints consistent through the shared ``<Kbd>`` primitive.
+- Cleans up desktop release workflow races around release creation and updater metadata.
 
-**Global ⌘⇧A — summon / hide the window.** New
-``tauri-plugin-global-shortcut`` dependency. Registered at startup,
-toggle: hidden→show+focus, visible→hide. Replaces the previous
-flow of "click tray → Open Alpi" with a one-key gesture from any
-app. Tray menu's open item now shows ``⌘⇧A`` next to its label
-and flips between ``Open Alpi`` and ``Hide Alpi`` reflecting actual
-window state (``tray::set_window_visible`` is called from every
-visibility transition: close-button, ⌘W, shortcut, tray click).
+## v0.2.8 — 2026-05-11 — find-in-transcript + shortcut system + flat focus
 
-**Find shortcuts inside the find-bar.** ``⌘G`` next match,
-``⌘⇧G`` previous — standard macOS find convention. Listener
-mounts only while ``searchOpen=true``, unmounts on close (no global
-noise). ``SearchBar`` nav buttons (↑ / ↓ / ✕) now use the
-``Tooltip`` primitive instead of native ``title``, showing the
-shortcut as a ``<Kbd>`` chip — discovery without docs.
+Requires alpi ``v0.4.24`` or newer.
 
-**Esc cascade.** ``Modal`` and ``useDismissOnOutside`` now call
-``preventDefault()`` when they handle Escape. ``Dropdown``
-primitive learns Escape (it only had outside-click before).
-App-level handler at bubble phase cancels the in-flight
-``pendingTurn`` only when ``e.defaultPrevented === false`` — i.e.,
-when no overlay closer to the focus consumed the key. Stable
-priority: SearchBar → Dropdown/Modal/popover → cancel turn. No
-double-handling.
+Focuses on making the app faster to drive from the keyboard and less
+visually noisy while reading long transcripts.
 
-**Auto-close palette on shortcut.** Pressing any known shortcut
-(``⌘B``, ``⌘N``, ``⌘,``, ``⌘F``, ``⌘1``..``⌘9``) with the
-palette open closes it first, then executes the shortcut.
-Whitelist-based — modifier-only keydowns (just ``⌘``) no longer
-trigger spurious closes.
-
-**Build pipeline fixes.**
-
-- ``publish-desktop.yml`` race condition: the build matrix was each
-  job racing to create the same release with ``releaseDraft: false``;
-  whoever lost got a 422 "Published releases must have a valid tag"
-  from GitHub. v0.2.7 was lucky, v0.2.8 wasn't. Refactored to
-  *create one draft release in the gate job* (via ``gh api`` POST,
-  idempotent if reusing), pass ``release_id`` to the matrix so
-  ``tauri-action`` uploads to a known existing release instead of
-  trying to create, then a follow-up ``publish-release`` job flips
-  ``draft=false``. Deterministic.
-- ``includeUpdaterJson`` replaces the invalid ``uploadUpdaterJson``
-  input that tauri-action@v0.6.2 silently ignored.
-- ``publish-umbrel.yml`` auto-detects image tag from
-  ``pyproject.toml`` when the workflow_dispatch input is left empty
-  — was getting stale (``0.4.20`` while alpi shipped ``0.4.24``).
-
-## v0.2.8 — 2026-05-11 — Find-in-transcript + shortcut system + flat focus
-
-Requires alpi ``v0.4.24`` or newer (host ``identity.draft`` verb).
-
-A round focused on keyboard navigation, in-app find, and a stricter
-flat aesthetic across inputs and controls. Pulls a few primitives
-out of one-off CSS and turns previously raw HTML into design-system
-components.
-
-**Find in transcript (⌘F).** New ``primitives/SearchBar.jsx`` +
-``hooks/useTranscriptSearch.js`` add Safari-style find to chat and
-workgroup views: floating panel top-right, type-as-you-search,
-``↑``/``↓``/``Enter``/``Shift+Enter`` to navigate matches, ``Esc``
-to close, ``n/total`` counter, current match auto-scrolled into
-view. Highlights use the **CSS Custom Highlight API**
-(``CSS.highlights`` + ``Highlight`` + ``::highlight()``) so they
-sit in a separate paint layer that survives any React re-render of
-the underlying message body — no DOM mutation, no ``<mark>``
-wrapping, no conflict with ``dangerouslySetInnerHTML``. ⌘F toggles
-(re-press closes and clears the query); query auto-clears on every
-close path and on view change.
-
-**Smart ⌘, toggle.** ``⌘,`` from chat/workgroup opens Settings with
-the current target preselected (``profile:X``/``workgroup:Y``);
-``⌘,`` again returns to the chat/workgroup for whatever entry was
-last selected in Settings — symmetric toggle, not just "back to
-previous". Settings sidebar auto-scrolls the active row into view
-on entry. Back button tooltip now shows ``⌘,`` chip.
-
-**Context-sensitive ⌘N.** In chat → new session. In Settings → new
-profile (jumps to the ``create-profile`` target). Stays as new chat
-in empty/workgroup views. ``⌘1``..``⌘9`` in Settings now select
-the Nth entry in the settings sidebar instead of jumping to that
-profile's chat — same key, two semantics depending on where you
-are.
-
-**Pinned section in Settings.** Pinned profiles and workgroups now
-appear at the top of the Settings sidebar (matching the chat
-sidebar pattern), with the same hover-revealed pin button. Pin
-button visibility is ``:hover``/``:focus-within`` only — was
-showing always on pinned rows.
-
-**``<Kbd>`` primitive.** ``primitives/Kbd.jsx`` +
-``Kbd.module.css`` — single-responsibility component for keyboard
-shortcut badges. Replaces three duplicated implementations: raw
-``<kbd>`` in ``AppHeader`` tooltips (browser default, unstyled in
-dark), span-based ``.jumpHint`` in ``Sidebar``, and a third
-``.jumpHint`` in ``Settings``. Background uses ``currentColor``
-with ``color-mix`` so it contrasts both on normal surfaces and
-inside the inverted tooltip surface. Tokens-only — no raw pixels,
-no letter-spacing, no font-family override.
-
-**Identity Draft button in Settings.** ``ProfileDetail`` Identity
-row gets a ``Draft`` button next to the textarea that calls the new
-``draft_identity`` Tauri command → ``host.identity.draft`` verb
-(alpi ``v0.4.24+``). Synthesizes a public bio from the profile's
-``AGENT.md`` in one model call. User-initiated only — no
-auto-fire, no background calls.
-
-**Flat focus aesthetic.** Removed outer ``box-shadow``
-``--control-focus-ring`` from text inputs, textareas,
-``accentHex``, Composer body, Dropdown ``triggerOutlined`` /
-``triggerOpen`` / ``search``. Hover and focus now express as a
-single border-color intensity bump (``border`` →
-``border-strong``), no halo. Zero transition — instant snap, not
-80 ms easing — because focus is user-initiated and the gray-to-gray
-transition adds latency without legibility benefit.
-
-**Theme-invariant accent palette.** ``ACCENT_PALETTE`` (12 hex
-swatches) renders identically in light and dark. Removed
-``opacity: 0.4`` dimming on non-selected swatches — opacity
-composites with the surface, so the same hex looked different
-between themes. Active swatch is marked solely by
-``transform: scale(1.2)`` now. Removed dark-mode
-``--color-accent`` override (was ``#d4af5b`` vs light's
-``#c8a24e``) — accent is identity, not theme. Removed dead
-``hasSelection`` class.
-
-**Global thin scrollbar.** Unified scrollbar style across all
-surfaces in ``tokens.css``: ``scrollbar-width: thin`` +
-``::-webkit-scrollbar`` rules with semi-transparent thumb
-(``color-mix`` with ``--color-fg``, adapts L/D automatically) and
-no track. Replaces inconsistent native rendering between
-``Sidebar``, ``ChatPane`` and ``Settings`` (different surface
-backgrounds caused macOS to tint the overlay thumb differently per
-view).
-
-**DoneBody markdown rendering.** Workgroup ``#done`` messages
-render their ``result`` through ``renderMarkdownInline`` (new
-export in ``lib/markdown.js``) instead of plain text — fixes
-literal ``**bold**`` asterisks appearing in agent deliverables.
-Inline-only parse means no wrapping ``<p>`` margin to fight.
-
-**Message footer goes CSS-only.** ``primitives/Message.jsx`` no
-longer holds ``useState(footerVisible)`` / ``useRef`` / setTimeout
-machinery for the hover-revealed footer. Pure CSS
-``:hover``/``:focus-within`` with ``transition-delay: 180 ms`` on
-hide preserves the grace period. Side effect: Message stops
-re-rendering on hover, which means the search ``Range`` objects
-anchored to its text nodes stay valid across hovers — the find
-highlights no longer vanish when you mouse over a matched message.
-
-**Loading skeleton delay.** ``ChatPane`` ``Transcript`` waits 150 ms
-before rendering the shimmer placeholder. Local sessions load in
-under that window so the skeleton never appears (no flash);
-remote/slow connections still get the indicator.
-
-**Smaller fixes.** ``ChatPane`` ``showPicker`` only when
-``view.kind === "empty"`` (was always-on in the empty branch,
-showing the model picker inside a specific profile's new-chat
-state). ``Tooltip.module.css`` legacy ``.tooltip kbd`` block
-removed (dead code now that ``<Kbd>`` is the source of truth).
-Sidebar/Settings ``.jumpHint`` CSS reduced to overlay positioning
-only — typography lives in ``Kbd``.
+- Adds in-chat transcript search with keyboard navigation, match counters, auto-scroll, and highlight ranges that survive message re-renders.
+- Expands the shortcut system with smarter ``⌘,`` / ``⌘N`` behavior, Settings-aware jump targets, and shared ``<Kbd>`` rendering.
+- Adds identity drafting in Settings through ``host.identity.draft``.
+- Moves message hover controls and loading skeletons toward CSS-driven behavior to reduce chat-surface churn.
+- Tightens the visual system toward flatter focus states and more consistent scrollbars, accents, and message chrome.
 
 ## v0.2.7 — 2026-05-10 — UX polish pass + design system tightening
 
-Requires alpi ``v0.4.21`` or newer (``alpi`` reserved profile name).
+Requires alpi ``v0.4.21`` or newer.
 
-A coherent UX-quality pass across the whole app, plus the underlying
-primitives that make the polish stick.
+- Adds stop-during-streaming, keyboard navigation, and stronger first-run / offline states.
+- Renames the bundled profile to render as ``@alpi`` in the UI.
+- Improves skeletons, notification dedupe, and status affordances.
+- Tightens the design system around tokens, buttons, and composer behaviour.
 
-**Streaming control.** Composer swaps Send for a Stop button while a
-turn is generating; ``Composer.onCancel`` wires through ``ChatPane``
-so the user can cancel without waiting for the model to finish.
+## v0.2.6 — 2026-05-09 — Devices section closes `alpi setup` parity
 
-**Keyboard navigation.** ``⌘1``..``⌘9`` jump to the Nth profile in
-the sidebar (pinned workgroups counted first, matching what the user
-sees). New ``orderedJumpTargets`` in ``lib/profile-order.js`` is the
-single source of truth for both the sidebar render and the shortcuts.
-Pinned profiles are now scoped per connection (``alf:pinned:v2:<id>``)
-— pinning ``@home`` on the local host no longer pins another ``@home``
-on a remote daemon. ``Esc`` closes any open popover via the new
-``hooks/useDismissOnOutside.js`` hook (applied to every dismissable
-field in Settings).
+Requires alpi ``v0.4.19`` or newer.
 
-**First-run + offline parity.** When a profile has no model
-configured, the chat surface mirrors the existing ``OfflineBanner``
-(shared ``ChatPane.module.css`` titleGroup) and offers a primary CTA
-(``@<name> needs a model`` / ``needs a provider``) that opens the
-profile editor. No more dead ``model not set`` state.
-
-**Cosmetic ``default`` → ``alpi``.** The bundled profile renders as
-``@alpi`` everywhere user-visible (``lib/profile-display.js`` —
-``profileLabel``), backed by the daemon-side reserved name in alpi
-``v0.4.21`` so the label is enforceable end-to-end.
-
-**Loading + notification quality.** New ``Skeleton`` primitive with
-shimmer + 150 ms delay (no flicker on fast loads). ``Notification``
-deduplicates within a 2 s window keyed by ``variant|message`` so
-spammy hooks no longer stack. ``StatusIcon`` gets a green pulse for
-``working`` (was rendering as a static gray dot in workgroups).
-Connection status badges have a tooltip with status + error.
-
-**Theme + logo.** Light/dark logo fix — alpi mark uses CSS
-``mask-image`` with ``currentColor`` background so it inverts cleanly
-in dark mode (was hardcoded ``#141618``).
-
-**Composer redesign.** Body padded ``var(--space-5)`` symmetric on
-``--color-bg``, with a transparent border that lights to
-``--color-border-strong`` on hover and on textarea focus
-(``:has(.input:focus)``, not ``:focus-within``, so clicking
-Send/ModelPicker doesn't ring the whole composer). ``mention``
-popover sizes converted to ``rem`` units, mention row gap reduced.
-``prefers-reduced-motion`` guard on the transition.
-
-**Design system.**
-
-- Tokens — ``--shadow-md`` and ``--shadow-lg`` were inverted
-  (``md`` was visually larger than ``lg``); reordered. New
-  ``--motion-base: 120ms`` between fast (80) and slow (160).
-  ``--color-bg-solid`` (popovers, menus) and ``--color-surface``
-  (inputs, cards) now have docstrings clarifying intent.
-- Button — ``font-weight: medium`` base + ``semibold`` for
-  ``primary``/``accent`` (was 400 inherit, too light).
-  ``:focus-visible`` ring for keyboard navigation. ``gap`` between
-  icon and label tightened to ``--space-3``. ``xs`` font bumped
-  ``tiny → small`` (10 → 12 px) — labels were unreadable.
-  ``--control-height-sm: 26 → 28`` to even the xs/sm/md scale.
-  New ``variant="accent"`` for gold CTAs (uses ``--color-accent``
-  with ``color-mix`` hover instead of the gray→white jump
-  ``primary`` does today). Redundant ``.sm.withLabel`` rule
-  removed.
-
-## v0.2.6 — 2026-05-09 — Devices section closes alpi setup parity
-
-Requires alpi ``v0.4.19`` or newer (transport-level enforcement of
-local-only pairing admin).
-
-**Devices section in Settings.** The last gap from ``alpi setup``.
-Single-row UX matching ``Peers``: a ``Dropdown`` lists paired clients
-with last-seen chip, click a row to open a detail popover (rename
-inline + revoke with confirm), and ``+ Add device`` opens a modal
-with the generated QR + ``alpi://device?…`` link. Powered by the
-existing ``host.devices.*`` verbs plus an extended
-``host.devices.generate`` that returns the network coordinates
-inline.
-
-Visibility is double-gated: section only renders when
-``profile.name === "default"`` AND
-``activeConnection?.kind === "local"`` — pairing admin is a property
-of the machine, not the profile, and a remote viewer has no business
-managing the host's pairings. The daemon enforces the same rule at
-the transport layer in alpi v0.4.19.
-
-QR rendering uses ``qrcode`` (1.5.4) loaded lazily so it doesn't
-weigh down the main bundle. The same JSON payload schema as the CLI
-(``v/i/p/n/t``) so existing scanners keep working.
+- Adds a Devices section in Settings for local-only pairing administration.
+- Supports listing, revoking, and generating device links or QR codes from the desktop UI.
+- Keeps remote connections out of the pairing-admin path by design.
 
 ## v0.2.5 — 2026-05-09 — Gmail OAuth in Settings, refresh button, gateway validation
 
-Requires alpi ``v0.4.18`` or newer (new ``host.gateway.gmail_authorize``
-stream verb).
+Requires alpi ``v0.4.18`` or newer.
 
-**Gmail OAuth flow lives in the desktop now.** The Gmail row in
-``Settings → Services → gateways`` previously dead-ended on a "run
-``alpi -p <name> setup`` from the shell" message — Gmail was the one
-gateway that couldn't be configured from the app because it needs an
-interactive browser handshake. The new ``GmailAuthModal`` drives the
-full flow: Client ID + Secret + Allowed senders inputs (hydrated from
-``host.gateway.config``, secret shown as ``current: … (paste to
-replace)`` mirroring Telegram/IMAP), an Authorize button that streams
-``host.gateway.gmail_authorize``, and a status line that updates as
-events arrive (``Browser opened — complete the Google consent flow…``
-→ ``Authorized as <email>``). Re-authorize without re-typing the
-secret works because the host verb falls back to the stored value
-when the input is blank.
-
-The Authorize button is disabled while the OAuth is in flight and
-the Close button becomes ``Cancel`` so the modal is never trapped in
-a busy state — closing the browser tab without completing consent
-no longer leaves the modal spinning forever (closes the modal; the
-daemon-side ``first_run`` thread eventually times out at its 5-min
-budget).
-
-**Refresh button in the header.** New ``RefreshIcon`` primitive plus
-a ``Button`` in ``AppHeader``'s right cluster, only visible while
-``view.kind === "settings"``. Click reloads ``profile_summaries`` /
-``workgroups`` and bumps a tick that re-keys the ``ProfileDetail`` /
-``WorkgroupDetail`` subtree, forcing every child that fetches its own
-data via ``invoke`` (gateways, skills, schedules, storage…) to
-re-fetch. The Lucide refresh-ccw glyph spins while in flight via the
-``AppHeader.module.css`` ``spin`` class.
-
-**Required-field validation in the gateway editor.** The IMAP /
-Telegram / Matrix modal previously called the ``provider_set_key``
-chain even when half the required fields were empty, declared
-``saved · daemon restarting``, and the gateway then sat dead in the
-chip strip with no error. ``GATEWAY_FIELDS`` now carries a
-``required`` flag per field; ``save()`` short-circuits with
-``Missing required: …`` when the resulting state would leave any of
-them blank (a stored secret counts as filled, so editing one
-non-secret field doesn't force the user to retype the secret). Each
-required field gets a ``*`` next to its label in the modal.
+- Adds Gmail OAuth from Settings through the host plane.
+- Adds a manual refresh action for the current profile or workgroup.
+- Tightens gateway validation and fixes a few settings-editing UX issues.
 
 ## v0.2.4 — 2026-05-08 — pooled remote WebSocket + high-latency stability
 
-Requires alpi ``v0.4.16`` or newer (server multi-message support).
-Recommended ``v0.4.17`` for short peer-ping timeout.
+Requires alpi ``v0.4.16`` or newer. ``v0.4.17`` is recommended.
 
-The motivating bug: a peer running on Tailscale Hua Hin → Chiang Mai
-(~414 ms RTT measured, jittery) made the desktop feel unusable —
-clicking that connection lagged for seconds and the status would
-mark it offline despite the daemon being reachable. Root-cause audit
-found four converging issues; this release fixes all of them.
+Targets the remote-connection lag seen on high-latency Tailscale links,
+where every ``host.*`` call was paying a fresh TCP + WebSocket + auth
+handshake.
 
-**Pooled WebSocket per remote.** Every ``host.*`` call used to open a
-fresh WebSocket — TCP connect + HTTP/1.1 Upgrade + auth handshake on
-every IPC, ~3.5 RTTs of overhead per call. ``call_remote_inner`` now
-keeps a single ``Arc<Mutex<WsClient>>`` per remote in
-``remote_ws_pool()`` and reuses it for subsequent calls. Each request
-carries a unique id (``next_request_id()``) and ``WsClient::request``
-filters incoming frames by that id so concurrent callers can serialise
-on the same WebSocket without confusing responses. App-level RPC
-errors (``alp -3200X``) leave the WS intact and keep the pool entry;
-transport errors (``websocket closed``, ``connect ws://...``,
-``set read/write timeout``) drop the entry and trigger one retry on a
-fresh WebSocket. Auth failures revoke the connection at the higher
-level (``mark_connection_revoked``) which evicts all pool entries for
-that id. Streams (``call_stream_remote``) and probes
-(``call_remote_once``) keep dedicated WebSockets — the server
-processes one message at a time per WS, and a long stream or slow
-probe must not block normal RPCs that share the pool.
-
-**Per-stage timeouts in ``WsClient::connect``.** A single timeout used
-to cover TCP connect + WS handshake + first read. ``connect`` now
-takes separate ``connect_timeout`` (4 s) and ``read_timeout`` so the
-budget is realistic for each phase.
-
-**Bumped budgets for remote calls.** ``READ_TIMEOUT_REMOTE_SECS``
-8 → 20; ``PROBE_REMOTE_TIMEOUT_MS`` 3500 → 8000. Local UnixStream
-calls keep the tight 8 s budget.
-
-**TCP keepalive + ``TCP_NODELAY``.** Every remote socket sets
-``set_nodelay(true)`` (Nagle was eating ~40 ms/RTT on chatty WS
-handshake) and ``TCP_KEEPALIVE`` (idle 30 s + interval 10 s), so
-silently-broken Tailscale tunnels are caught in ~60 s instead of
-waiting for the 600 s stream read deadline. Added ``socket2`` as a
-direct dependency (already transitive of Tauri).
-
-**Sticky offline status.** ``STICKY_OFFLINE_THRESHOLD = 2`` —
-``set_status`` only publishes Online → Offline after two consecutive
-failure observations. Online resets the counter; AuthFailed and
-Probing transitions stay immediate. Absorbs routine packet loss
-without delaying real outage detection.
-
-**One retry on probe failure.** ``probe_connection`` retries once
-after a 350 ms delay for remote connections (skipped on auth-failed
-and on local probes).
-
-**Synchronous probe command for connection switches.** New Tauri
-command ``host_connection_probe(id) → string``. The React-side
-``onSetHostConnection`` flow now: optimistic ``probing`` flip + cache
-load → ``set_active`` → fire-and-forget ``host_connection_probe`` →
-the ``connection-status`` event listener and ``activeStatusKey``
-effect take over. The intermediate ``reloadConnections()`` between
-``set_active`` and the probe is dropped — it returned the stale
-in-memory status and woke the effect into firing ``reload()`` against
-a potentially-offline remote.
-
-Tests: ``host_client.rs`` adds six new tests covering the sticky
-threshold (``sticky_offline_holds_until_threshold``,
-``sticky_offline_resets_on_recovery``,
-``auth_failed_is_not_subject_to_sticky_threshold``), the eviction
-decision logic (``should_retry_remote_ws_distinguishes_transport_from_app_errors``,
-``is_app_error_only_matches_alp_rpc_errors``), and the pool eviction
-policy (``pool_survives_app_error_but_drops_on_transport_error``).
+- Reuses one authenticated WebSocket per remote connection for normal request/response RPCs.
+- Keeps chat streams and liveness probes on dedicated sockets so a long stream or slow probe cannot block ordinary UI calls.
+- Adds more realistic remote read/probe budgets, TCP keepalive, and a small retry path for transient probe failures.
+- Makes cold start and dropdown checks incremental instead of probing every stored connection before the UI can move.
+- Clears stale chat state when switching into an offline remote connection.
 
 ## v0.2.3 — 2026-05-07 — connection health and offline handling
 

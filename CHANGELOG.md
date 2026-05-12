@@ -1,678 +1,115 @@
 # Changelog
 
+## v0.4.30 — 2026-05-12 — auto-compact: preemptive context compaction before LLM overflow
+
+- New ``alpi.compaction`` module: cheap tool-output truncation first, then proportional summarization that preserves system + head + tail; never destroys history on a failed summarizer.
+- Engine fires ``auto_compact`` events when projected prompt exceeds ``trigger_ratio`` of the model's context window; ctx window resolved via the existing ``alpi.ctx_window`` (litellm + Ollama runtime).
+- ``/compact`` is now a manual "force auto-compact now" shortcut routed through the same pipeline — no second code path.
+
 ## v0.4.29 — 2026-05-12 — chat concurrency: interrupt-and-replace on the same session (+ desktop-v0.2.11)
 
-The desktop chat surface mixed responses when the user sent a new message
-before the previous turn finished streaming. Root cause spanned three
-layers; this release fixes all of them.
-
-**Backend — session-id serialization with interrupt.** ``alpi/host/chat.py``
-now tracks an active ``Engine`` per ``session_id`` and holds an
-``asyncio.Lock`` on that session. When a new ``host.chat.send`` arrives
-for a session that already has a running engine, the previous engine is
-asked to interrupt (``engine.request_interrupt()``) and the new handler
-awaits the lock. The previous handler unwinds at the next LLM-stream
-checkpoint (``alpi/engine.py:230``), emits ``interrupted``→``reply``→
-``done``, and releases the lock; the new turn then runs cleanly. This
-mirrors the TUI's ``@work(exclusive=True)`` + ``_interrupt_current_turn``
-pattern, which is why the TUI never exhibited the bug.
-
-**Frontend / Rust — request_id propagation and filtering.** Every
-``ChatEvent`` variant in ``desktop/src-tauri/src/lib.rs`` now carries the
-``request_id`` of the originating turn; the JS side
-(``useChatStream.js``) tracks ``activeRequestIdRef`` and drops any frame
-whose ``request_id`` does not match. Without this, the trailing
-``interrupted``/``reply``/``done`` frames of the cancelled turn would
-hit the listener after the new ``pendingTurn`` had been set and nuke it
-on ``done`` (which calls ``setPendingTurn(null)``). The shared
-``chat-event`` channel had no way to disambiguate turns before.
-
-**End-to-end behavior.** "Tell me a story" → mid-stream "now tell me a
-joke": the story stops within a chunk boundary (sub-second on the LLM
-stream loop), the partial assistant text is persisted so the joke has
-context, and the joke begins immediately on the same session.
-
-Tests: ``test_data_chat_send_concurrent_same_session_interrupts_previous``
-covers the backend serialization+interrupt path end-to-end over a real
-Unix-socket host server with two concurrent requests on the same
-``session_id``.
+- ``host.chat.send`` now serializes by ``session_id`` and interrupts the previous turn when the user sends a replacement prompt on the same session.
+- Desktop chat events now carry ``request_id`` so stale ``interrupted`` / ``reply`` / ``done`` frames from the cancelled turn are ignored.
+- Fixes the "mixed replies / pending turn cleared by the wrong stream" bug on the desktop chat surface.
 
 ## v0.4.28 — 2026-05-12 — per-profile env isolation + silent scheduled jobs + MCP grouping
 
-Three independent fixes that surfaced while debugging real multi-profile
-use on the daemon-supervised setup.
-
-**Per-profile ``.env`` isolation in the daemon.** ``alpi/config.py``
-``load_dotenv(..., override=False)`` was poisoning multi-profile
-process state: the first profile loaded into ``os.environ`` won every
-key (e.g. ``OPENROUTER_API_KEY``), so any later profile with a
-different credential silently inherited the wrong one. The desktop
-(which routes through the long-running daemon) hit 401s on profiles
-whose key wasn't the first loaded; the TUI never saw the bug because
-each ``alpi -p X chat`` is a fresh process. Flipping to
-``override=True`` makes per-profile loads always win. Test in
-``tests/core/test_config_helpers.py`` updated to assert the new
-semantics with a regression-grade name.
-
-**Silent scheduled jobs.** Default behaviour of the scheduler was
-"agent reply auto-delivered to telegram", inherited from the original
-"daily summary" use case. For mechanical maintenance jobs (reindex,
-cleanup) that's the wrong default — a nightly Telegram ping for
-"indexed 89 files" is noise. ``alpi/scheduler/run.py::run_job`` now
-treats jobs without ``platform`` as silent runs: empty reply is
-success, no gateway dispatch. Jobs that explicitly set ``platform``
-keep the auto-deliver path for daily summaries and similar. The
-``[SCHEDULED: ...]`` wrap is tailored per-mode so the agent knows
-whether to emit a reply for delivery. The schedule tool no longer
-defaults ``platform`` to ``"telegram"`` — opt-in delivery instead of
-opt-out. Two tests cover both paths in
-``tests/core/test_schedule.py``.
-
-**MCP tools grouped by server.** ``alpi/host/tools.py::_category_for``
-now detects MCP-registered tools (named ``<server>__<tool>``, see
-``alpi/mcp/registry.py``) and groups them as ``MCP · <server>``
-instead of dumping them into ``Other``. The desktop Tools panel
-picks this up automatically because the host verb shape didn't
-change — only the ``category`` field value did. A Bitbucket MCP
-server with five tools now renders as its own section labelled
-``MCP · bitbucket`` between the native categories and ``Other``.
+- Per-profile ``.env`` loads in the daemon now use ``override=True`` so later profiles do not inherit the first profile's provider keys.
+- Scheduled jobs without ``platform`` are now silent by default; auto-delivery stays opt-in for explicit gateway jobs.
+- ``host.tools.list`` groups MCP tools as ``MCP · <server>`` instead of dumping them into ``Other``.
 
 ## v0.4.27 — 2026-05-12 — host introspection verbs (tools + skills body)
 
-Exposes the agent's tool registry and the full skill body over the
-host plane so the desktop (and any future client) can render the same
-"what does this agent have?" surface the TUI gets through
-``/tools`` and ``/skills``. Reflects the principle that TUI and
-desktop are alternative UIs over the same backend: same data, two
-presentation idioms.
-
-- ``alpi/host/tools.py`` — new module. Registers ``host.tools.list``.
-  Returns ``{tools: [{name, category, description, parameters}]}``
-  filtering out colon-suffixed sub-action variants
-  (``memory:add``…) that the LLM never sees as separate tools. UI
-  category is derived from a prefix table in the module — keeps the
-  Tool base class clean of UI-only metadata.
-- ``alpi/host/device_state.py`` — ``host.skills.list`` now ships
-  ``body`` (the SKILL.md content after the frontmatter, capped at
-  32 KiB) and ``path`` per row. Frontmatter parsing extracted into
-  ``_skill_body_from_text`` / ``_skill_description_from_text``
-  helpers so the body returned to the UI matches what the agent
-  loads from disk.
-- ``alpi/service.py`` — wires the new module's ``register(server)``
-  into the host plane bootstrap.
-- ``tests/host/test_tools.py`` — 2 tests. List returns expected
-  shape with category populated for well-known tools (read_file →
-  Filesystem, web_fetch → Web, memory → Memory, terminal → System);
-  sub-action variants are filtered out.
+- New ``host.tools.list`` verb exposes the live tool registry to the host plane, with UI-facing category metadata.
+- ``host.skills.list`` now returns the skill ``body`` and ``path`` so clients can render the full SKILL.md content.
+- Unblocks desktop browse panels for tools and skills without special-case filesystem access.
 
 ## v0.4.26 — 2026-05-12 — peer status probes + TUI session sync + log rotation
 
-A bug-bash pass that surfaced while testing v0.4.25 streaming: peer
-status reporting was inconsistent across surfaces, TUI mentions
-weren't visible from the desktop reading the same session, the
-daemon's ``service.log`` was growing without bound, the IMAP
-gateway's SMTP fields were missing from desktop + tracked under the
-wrong env keys, and the Telegram poller was spamming the log on
-unrecoverable 409 conflicts.
-
-**Same-session sync TUI ↔ desktop.** TUI ``@peer`` mentions now
-persist to the local session like CLI does (``cli.py:224-239``
-already followed this pattern — TUI was the outlier). After the
-stream finishes, ``on_mention_done`` appends the
-user-prompt/assistant-reply pair to ``engine.session.messages``,
-calls ``log_turn`` with the ``peer`` ``ToolLog``, and saves the
-session. The desktop's filesystem watcher then emits ``fs-change``
-and the open session view refreshes. Persistence runs on the
-Textual main thread (via the message handler) so there's no race
-on ``engine.session`` with the worker that ran the stream.
-
-**Peer-status probes consolidated.** ``alpi doctor`` was reporting
-``0/N reachable`` for peers that ``alpi setup`` and the desktop saw
-as online. Two bugs were stacked:
-
-- ``alpi/doctor.py:520-521`` compared the dict values from
-  ``_probe_all`` (which returns ``{peer_id: (status, reason)}``
-  tuples) to the bare string ``"on"`` — ``("on", None) == "on"``
-  is always ``False``, so the count was always zero regardless of
-  actual reachability. Fixed by indexing the tuple
-  (``v[0] == "on"``).
-- ``alpi/alp/setup.py:_PING_TIMEOUT = 0.5`` was too aggressive — a
-  daemon still warming its Engine on the first call, or a Tailscale
-  peer with normal WAN latency, would not answer in 500 ms and got
-  marked offline. Now ``alp_client.PING_TIMEOUT_SECONDS = 5.0`` is
-  the single source of truth shared by ``alpi/alp/setup.py`` and
-  ``alpi/host/probes.py``. Probes run concurrently so the wall-clock
-  cost stays bounded regardless of peer count.
-
-**Log rotation actually rotates.** ``alpi/_log.py`` set
-``backupCount=0`` on every ``RotatingFileHandler``, and the same in
-``alpi/service.py``'s daemon-wide handler. The Python stdlib treats
-``backupCount=0`` as "no rollover" — the file is closed/reopened on
-overflow but never truncated, so it grows without bound. A 273 MB
-``service.log`` had accumulated on the dev machine before this was
-caught. New constant ``alpi/_log.py::BACKUP_COUNT = 3`` plumbed
-through both call sites caps every subsystem's footprint at
-``MAX_BYTES * 4`` (~4 MB).
-
-**Telegram 409 spam contained.** ``alpi/gateway/platforms/telegram.py``
-was logging a WARNING + sleeping 5 s on every ``getUpdates`` failure,
-including the unrecoverable 409 Conflict ("another instance is
-polling this bot"). With multiple profiles in the daemon sharing one
-``TELEGRAM_BOT_TOKEN`` (a separate architectural issue not addressed
-here — only one polling loop per token should exist; tracked
-separately), the loop produced one warning every ~5 ms across the
-daemon and was the primary source of the ``service.log`` blow-up.
-Fix: dedup the warning by error class — log once on first occurrence,
-then a summary every 60 s if the same class keeps firing, reset on a
-successful poll. Plus an explicit 60 s backoff on 409 specifically
-(retrying every 5 s changes nothing while the other instance owns
-the bot).
-
-**IMAP gateway env keys.** ``SMTP_HOST`` and ``SMTP_PORT`` were
-written by ``alpi setup`` but missing from the meta lists used by
-the desktop UI form, the host's gateway-remove verb, and the
-``alpi`` CLI's gateway-remove path. Result: the desktop user could
-configure IMAP fields but not SMTP, and ``host.gateway.remove`` /
-``alpi`` cleanup paths left ``SMTP_HOST`` orphaned in ``.env`` after
-removing the IMAP gateway. ``alpi/host/config.py`` additionally
-carried a typo (``IMAP_SMTP_HOST`` instead of ``SMTP_HOST``) — a
-key that nothing in the codebase actually writes or reads. Fixed
-across all four sources (``alpi/cli.py``, ``alpi/host/config.py``,
-``alpi/host/device_state.py``, ``desktop/src/components/settings/util.js``).
-
-**Roadmap.** New v0.6 item ``ORG.1`` — organization workspace, with
-three escalating designs (convention → overlay → first-class entity)
-gated on real demand. See ``docs/ROADMAP.md``.
+- Fixes peer-status reporting in ``alpi doctor`` and consolidates probe timeout handling around the shared ALP ping constant.
+- TUI ``@peer`` mentions now persist into the local session log, so desktop and TUI stay in sync on the same session file.
+- Rotating logs now actually rotate; Telegram 409 polling spam is deduplicated and backed off.
+- IMAP gateway metadata now includes the SMTP keys consistently across CLI, host-plane config, and desktop settings.
 
 ## v0.4.25 — 2026-05-12 — streaming `link.ask` (ALP.4)
 
-Peer mentions are no longer atomic. When the caller passes
-``stream: true``, ``link.ask`` delivers the remote agent's reply as a
-sequence of signed response envelopes — one per token batch — and the
-client renders them as they arrive. Same verb, same wire shape, opt-in
-per call.
-
-This unblocks the most visible UX gap in peer mentions: the
-"empty-then-thump" landing where the remote agent worked for 8 seconds
-and dumped the entire answer in one frame. The TUI and desktop chat
-now render mentions exactly like a local turn — the assistant message
-bubble fills incrementally as the remote model generates.
-
-- ``alpi/alp/envelope.py`` — response envelope gets an optional
-  ``stream`` field (``"chunk"`` for intermediate frames, ``"final"`` for
-  the last). Signed with the rest of the body so chunks can't be
-  re-ordered or dropped without invalidating the signature. Absent on
-  non-streaming responses — wire is identical to today.
-- ``alpi/alp/server.py`` — ``_dispatch`` is now ``_dispatch_envelopes``
-  async generator. Handlers may return a coroutine (single envelope,
-  current behaviour) or an async generator of dicts (one envelope per
-  yielded dict). The connection handler iterates frames over the same
-  Unix socket / Noise TCP connection — N response lines/envelopes per
-  request, all sharing the request ``id``. A thin ``_dispatch`` wrapper
-  remains for the pending-invite test path and any single-shot
-  consumer.
-- ``alpi/alp/client.py`` — ``call_stream`` / ``call_tcp_stream`` /
-  ``call_peer_stream`` are async generators yielding ``(result,
-  stream_marker)`` per frame. Existing ``call`` / ``call_tcp`` /
-  ``call_peer`` unchanged for non-streaming callers.
-- ``alpi/alp/handlers.py`` — ``link_ask`` reads ``stream`` from params.
-  When false (default) the existing thread-pool path runs and returns a
-  single dict. When true, ``_run_turn_stream`` runs the engine in a
-  thread, queues ``assistant_delta`` events via
-  ``loop.call_soon_threadsafe``, and yields ``{kind: "chunk", text}``
-  per delta plus a closing ``{kind: "final", text, tokens_in,
-  tokens_out, cost, session_id, interrupted}``.
-- ``alpi/alp/mention.py`` — ``execute_stream`` is the new async
-  generator. ``execute`` (the synchronous-shape aggregator) stays for
-  the CLI ``alp ask``, the agent's ``peer`` tool, and the gateway path
-  — none of which can render incrementally and prefer the atomic
-  result.
-- ``alpi/host/chat.py`` — desktop/mobile host now consumes
-  ``execute_stream`` for ``@peer`` mentions and emits one
-  ``assistant_delta`` frame per chunk. The frontend's existing
-  ``useChatStream`` accumulates them with the same throttle it uses for
-  local LLM responses, so no client-side change was needed.
-- ``alpi/tui/app.py`` — ``_handle_mention`` mounts an empty
-  ``AssistantMessage`` widget upfront, the worker thread iterates the
-  stream, and a new ``MentionChunk`` Textual message routes each delta
-  to ``widget.append`` on the UI thread. ``MentionDone`` keeps its role
-  for the trailing tool-card finish.
-
-**Caller policy** (documented in ``docs/ALP.md``): interactive
-surfaces (TUI, desktop, mobile companion) pass ``stream: true``;
-gateways and the agent-internal ``peer`` tool keep ``stream: false``
-because they need a single atomic message body to forward.
-
-Note: this replaces what the roadmap had as v0.6 ALP.4. Landed early
-because the protocol change turned out cleaner than expected — the
-existing envelope signature covers chunks, and the Noise session AEAD
-already protects per-frame integrity on TCP. No new crypto.
+- ``link.ask`` can now stream signed response chunks over the existing ALP transport when callers pass ``stream: true``.
+- TUI and desktop ``@peer`` mentions render incrementally instead of waiting for a single atomic reply.
+- ``peer`` tool and gateway paths keep the non-streaming shape, so interactive and delivery surfaces can diverge cleanly.
 
 ## v0.4.24 — 2026-05-11 — identity drafting as a primitive
 
-Pulls the public-bio synthesis out of ``cli.py`` so the desktop (and
-any future client) can drive it without dragging the TUI in.
-User-initiated only — no auto-fire on profile creation or any other
-implicit trigger.
-
-- ``alpi/identity.py`` — new module. ``draft_bio_from_agent(home, cfg)``
-  is the pure primitive: reads ``AGENT.md``, one ``litellm`` call, returns
-  a single-line bio capped at 200 chars. Raises ``ValueError`` on empty
-  ``AGENT.md`` / missing model / empty LLM output. Zero side effects.
-- ``alpi/host/config.py`` — new verb ``host.identity.draft(profile)``.
-  Wraps the primitive in ``asyncio.to_thread`` so the LLM call doesn't
-  block the event loop, maps ``ValueError`` / other exceptions to
-  ``-32010 draft-failed``.
-- ``alpi/cli.py`` — ``_draft_bio_from_agent`` becomes a thin TUI
-  wrapper that imports from ``alpi.identity``. ``alpi setup → Identity``
-  with ``draft`` continues to work unchanged.
-- Bug fix while moving the code: the previous chain
-  ``content.strip('"').strip("'").splitlines()`` stripped a leading
-  quote but left the trailing quote glued to the newline. Quotes are
-  now stripped after ``splitlines()``, on the first line.
-
-Tests — 13 new across ``tests/core/test_identity.py`` (pure-primitive
-happy / empty / no-model / LLM-empty / 200-char truncation /
-quote+whitespace strip) and ``tests/host/test_identity.py`` (verb
-dispatch, missing param, unknown profile, value-error mapping, LLM
-failure wrapped as ``HandlerError``). One of those tests caught the
-quote-strip bug above before it shipped.
+- New ``alpi.identity`` module extracts public-bio drafting from the CLI into a reusable primitive.
+- New host verb ``host.identity.draft`` lets desktop and future clients request a drafted bio without TUI coupling.
+- Fixes the previous quote-stripping bug in drafted bios.
 
 ## v0.4.23 — 2026-05-11 — memory v2 quality pass (AI(1).c)
 
-Confidence, reinforcement, auto-expiry, sharpened type-routing — the
-last server-side pieces of AI(1) modulo the dedup-threshold
-recalibration, which moves to v0.6 because it needs real
-session-memory accumulation to measure against.
-
-- ``alpi/memory.py`` — new ``<!-- alpi-meta conf=… captured=…
-  reinforced=… -->`` marker per entry. Markdown-safe, regex-parseable,
-  stripped from ``snapshot()`` so the LLM never sees it. ``add()``
-  now accepts ``confidence: low|normal|high`` (default ``normal``).
-  On near-duplicate detection the entry is reinforced instead of
-  rejected: the counter bumps and a ``low`` entry upgrades to
-  ``normal`` once it reaches two reinforcements. ``add()`` returns
-  ``"added"`` or ``"reinforced"`` so the tool can report which
-  happened.
-- ``alpi/memory.py::prune_low_confidence`` — drops entries that are
-  ``conf=low`` AND ``reinforced=0`` AND older than
-  ``low_confidence_max_age_days`` (default 30). Legacy entries
-  without metadata are never auto-expired. Runs at session start
-  via ``engine.py::_build_system_prompt`` and is wrapped in a guard
-  so a prune failure never blocks the session.
-- ``alpi/config.py`` — new ``MemoryConfig.low_confidence_max_age_days:
-  int = 30``. Set to ``0`` in ``config.yaml`` to disable auto-expiry.
-- ``alpi/tools/memory.py`` — ``add`` schema gains a ``confidence``
-  enum; tool description rewritten with a single deciding question
-  ("who is the fact about") and explicit tests for routing USER /
-  MEMORY / AGENT (e.g. "user prefers concise replies" → AGENT.md
-  because it directs the assistant's behaviour; "user is Spanish"
-  → USER.md). Batch ``add`` now reports both added and reinforced
-  counts independently.
-- Batch ``add`` is now per-item rather than transactional: an
-  over-limit entry in the middle of a batch no longer rolls back the
-  earlier successful entries. Surfacing the failure as a per-entry
-  warning is more useful than dropping a whole batch on one bad row.
-
-Tests — 11 new in ``tests/tools/test_memory.py`` covering meta
-write/strip, reinforcement counter bump, low→normal upgrade after
-two reinforcements, invalid-confidence rejection, prune semantics
-(drops old low, keeps reinforced, keeps normal/high, skips legacy,
-disables on max_age=0), plus updated batch tests for the new
-per-item semantics.
+- Memory entries now carry confidence / capture / reinforcement metadata and support reinforcement on near-duplicate writes.
+- Low-confidence, never-reinforced entries can auto-expire after a configurable age.
+- ``memory(add=...)`` accepts ``confidence`` and batch-add now behaves per-item instead of all-or-nothing.
 
 ## v0.4.22 — 2026-05-11 — BA local RAG over `workspace/`
 
-Two new agent tools — ``search_workspace`` and ``index_workspace`` —
-turn the user's local files into a searchable knowledge surface.
-Per-profile SQLite + ``sqlite-vec`` index at
-``~/.alpi/<profile>/rag/store.sqlite``; embeddings stay on the
-machine.
-
-- ``alpi/core/`` — new module. ``store.py`` opens the per-profile
-  sqlite-vec store (reusable later by ALP.6 workgroup search and any
-  future entity-memory promotion). ``embed.py`` wraps ``fastembed``
-  running the ONNX export of ``sentence-transformers/all-MiniLM-L6-v2``
-  (384-dim, ~90 MB, no torch). ``_playwright.py`` is a shared locked
-  installer for the Chromium binary so two concurrent
-  ``_launch_chromium`` calls don't race the same ``playwright install``.
-- ``alpi/tools/workspace.py`` — the two tools. Walks the workspace,
-  chunks at 30 lines (stride 25), embeds, upserts. Incremental via
-  ``mtime``. Files deleted from disk under the indexed root are
-  purged from the store on the next ``index_workspace`` run
-  (``removed_files`` in the summary). Switching embedder model/dim
-  is recoverable via ``force=true`` — the schema is dropped and
-  rebuilt. Coverage: markdown / text / source / configs (stdlib),
-  HTML (``html2text``), PDF (``pypdf``), DOCX (``python-docx``),
-  EPUB (``ebooklib``), and images. OCR uses
-  ``rapidocr-onnxruntime`` (ONNX port of PaddleOCR, no torch); opt-in
-  via ``ocr=true``. Scanned PDFs without it land in ``failed_files``
-  with a clear reason so the agent escalates when needed.
-- ``alpi/prompts/system_prompt.md`` + ``search`` description —
-  workspace recall is now ``search_workspace`` first; ``search``
-  (grep) is for code / literal-string matches only.
-- Thread-safety — ``_load`` (embedder), ``_ocr_reader``, and
-  ``ensure_chromium`` use double-checked locking so concurrent
-  first-touch doesn't duplicate downloads.
-- Asset prefetch — ``service.py::_prefetch_assets`` runs in a daemon
-  thread 5 s into the event loop (after socket bind). Pre-loads the
-  fastembed model into the ONNX runtime cache (~100 MB resident, vs
-  ~600 MB the torch path would consume) and ensures the Chromium
-  binary via ``ensure_chromium``. RapidOCR is skipped at startup
-  because its constructor downloads-and-loads in one step; that cost
-  lands on the first ``ocr=true`` call. Idempotent (~100 ms when
-  caches are populated).
-- Dependencies are mandatory and ONNX-based: ``sqlite-vec``,
-  ``fastembed``, ``pypdf``, ``python-docx``, ``ebooklib``,
-  ``rapidocr-onnxruntime``, ``pypdfium2``. Install grows ~150 MB
-  (~250 MB total alpi env). Earlier iterations tried ``[rag]`` opt-in
-  and ``auto-pip-install`` on first use — both dropped because they
-  fragment the install story or fail inside sealed ``uv tool``
-  envs. Single ``uv tool install alpi-agent`` ships everything.
-
-Tests — 24 new (index/search happy path, mtime skip + force, OCR
-dispatcher, ``EmbedderMismatch`` guard, oversized-binary skip,
-concurrent-load locks for embedder / OCR / Chromium installer).
+- Adds ``search_workspace`` and ``index_workspace`` for per-profile semantic recall over the user's workspace.
+- Uses a local ``sqlite-vec`` store, ``fastembed`` for embeddings, and opt-in OCR with ``rapidocr-onnxruntime`` for scans/images.
+- Supports incremental reindex, deleted-file purge, force rebuild on embedder mismatch, and daemon-side asset prefetch.
+- Prompt/search guidance now routes "what do my files say about X?" queries to workspace recall before regex search.
 
 ## v0.4.21 — 2026-05-10 — `alpi` reserved as a profile name
 
-``alpi profile create alpi`` now fails fast with ``ProfileNameError``
-instead of silently creating a second profile that would shadow the
-bundled identity. Same protection that ``default`` already had — the
-desktop client now labels profiles as ``@alpi`` and that label needs
-to stay unambiguous.
-
-- ``alpi/host/config.py`` — ``RESERVED_PROFILE_NAMES`` frozenset
-  (``"default"``, ``"alpi"``) enforced inside ``_profile_create`` so
-  the host-plane RPC, the CLI, and any future client share one rule.
-- ``alpi/cli.py::profile_create`` imports the same set.
-
-Tests — ``tests/core/test_profile_cli.py::test_profile_create_rejects_alpi``.
+- ``alpi`` is now reserved alongside ``default`` so the bundled identity cannot be shadowed by a user-created profile.
+- The same rule is enforced across CLI and host-plane profile creation.
 
 ## v0.4.20 — 2026-05-09 — robust endpoint detection + diagnostic pairing errors
 
-Two paired changes that make device pairing fail informatively instead of
-silently when the host can't be reached.
-
-- `alpi/host/network.py::_detect_lan_ip` now tries a UDP-socket trick first
-  (connect a `SOCK_DGRAM` to `8.8.8.8:53`, read `getsockname()`) and falls
-  back to the legacy `ifconfig` parse only if that fails. The UDP probe
-  works on any platform without shelling out and captures whichever
-  interface the kernel routes through — caught a real bug where the
-  `ifconfig` parser would miss valid LAN IPs that the OS reports through
-  a non-`inet` line shape. New `diagnose_bind_ip()` helper returns what
-  was tried (Tailscale CLI, UDP probe, ifconfig parse) so callers can
-  surface a structured failure.
-- `alpi/host/devices.py::_generate` now emits the diagnosis in the error
-  payload when no advertised host is found. Errors look like
-  `-32010 no-advertised-host` with a `data.summary` of
-  `udp_probe_ip=… · udp_probe_is_private=False · …` so the user sees what
-  the daemon actually saw, not just a generic "cannot pair" message.
-
-Tests — `tests/host/test_network.py` re-targets the parser unit tests at
-`_detect_lan_ip_via_ifconfig` (the legacy code path) since the combined
-`_detect_lan_ip` now also probes UDP. `tests/host/test_devices.py`
-updates the no-endpoint case to assert the structured error code rather
-than the loose token persistence behaviour from before.
+- Host advertised-address detection now prefers a platform-neutral UDP routing probe before falling back to shell parsing.
+- Pairing failures now surface structured endpoint diagnostics instead of a generic "cannot pair" error.
 
 ## v0.4.19 — 2026-05-09 — pairing admin is local-only at the transport layer
 
-Pairing admin (`host.devices.list/generate/revoke/rename`) used to be
-dispatched on whichever transport the call arrived on — Unix socket
-(local, no token) or WebSocket (remote, paired-device token). A peer
-holding a valid pairing token could therefore enumerate, mint, kick,
-or rename other devices on the host machine. The desktop UI knows
-better, but the protocol didn't.
-
-- `alpi/host/server.py` — new `_LOCAL_ONLY_METHODS` set; the dispatcher
-  rejects any method in the set whenever `require_token=True`
-  (i.e. WebSocket transport) with `-32001 forbidden`. Unix socket
-  callers are unaffected. Logs the block at WARNING with the method
-  name so the daemon owner sees attempts.
-- `alpi/host/devices.py::_generate` — response now includes
-  `host`, `port`, `scope`, and `pairing_name` when an endpoint is
-  available, so a desktop client builds the QR/`alpi://` link in one
-  call instead of stitching multiple verbs.
-
-Tests — `tests/host/test_devices.py` adds five cases: parametrized
-`test_devices_verbs_blocked_over_remote_transport` covering all four
-verbs returning `-32001`, `test_devices_verbs_allowed_over_local_unix_transport`
-proving the block is transport-scoped, plus
-`test_generate_verb_includes_network_info_when_available` and
-`test_generate_verb_omits_network_info_without_endpoint` for the
-extended payload.
+- Pairing-admin verbs are now blocked on remote WebSocket transport and remain local-only over the Unix socket.
+- Closes a protocol hole where a paired device token could manage other devices on the host.
 
 ## v0.4.18 — 2026-05-09 — Gmail OAuth from the host plane
 
-Adds `host.gateway.gmail_authorize`, a stream verb that lets a paired
-client (the desktop app, eventually the mobile companion) drive the
-full Gmail OAuth flow without the user dropping into a TUI — same
-PKCE handshake, same loopback callback, same token storage.
-
-- `alpi/host/config.py::_gmail_authorize` — registered with
-  `register_stream`. Accepts `client_id`, `client_secret`,
-  `allowed_senders`. Writes them to the profile's `.env` and
-  `os.environ` (same write path the CLI wizard uses), then runs
-  `gmail_auth.first_run()` in an executor so the WebSocket stays
-  responsive while the user completes consent. Emits
-  `{"event": "browser_opened"}` immediately and either
-  `{"event": "authorized", "email": "…"}` on success or
-  `{"event": "error", "text": "…"}` on `GmailAuthError` /
-  unexpected exceptions.
-- Re-authorize without re-typing the secret: when an input field is
-  blank but the value already lives in `.env`, the handler reuses the
-  stored credential instead of failing — matches the desktop UX
-  where the Client Secret is masked and the user only re-enters it
-  to rotate it.
-
-Tests — `tests/host/test_config.py` adds four cases:
-`test_gmail_authorize_writes_env_and_streams_authorized` (happy path,
-verifies `.env` + `os.environ` writes and frame order),
-`test_gmail_authorize_missing_creds_emits_error` (no credentials → no
-`.env` write, single error frame), `test_gmail_authorize_reuses_stored_creds_on_blank_input`
-(re-authorize without typing → falls back to stored values), and
-`test_gmail_authorize_propagates_oauth_error` (denied consent →
-`error` frame after `browser_opened`).
+- Adds host-plane support for interactive Gmail OAuth so desktop can configure the gateway without shelling out to ``alpi setup``.
+- Includes validation and host-side config plumbing for the desktop flow.
 
 ## v0.4.17 — 2026-05-08 — short timeout on peer-ping probes
 
-`host.peers.ping` is a UI-driven liveness check; the desktop fires it
-on profile open and the result is just a green/red dot. But the
-underlying ALP transport (`alp.client.call_tcp` / `call`) defaults to
-``timeout=30.0``, and when a peer lives in another Tailscale network
-or behind a flaky link, the unreachable case drains the full 30 s
-before returning ``status: off``. The desktop dropdown freezes for
-that long; with `desktop-v0.2.4`'s pooled WebSocket, the freeze
-extends to every other call serialised on the same connection.
-
-- `alpi/host/probes.py::_peers_ping` — passes ``timeout=5.0`` to both
-  ``alp_client.call_tcp`` (TCP/Tailscale peers) and ``alp_client.call``
-  (Unix-socket peers). Reachable peers respond well under that on any
-  normal Tailscale RTT (typically 50–500 ms); unreachable peers fail
-  fast and the UI keeps moving.
-
-Tests — `tests/host/test_probes.py` adds
-`test_peers_ping_uses_short_tcp_timeout` and
-`test_peers_ping_unix_socket_uses_short_timeout` which capture the
-timeout argument and assert it is ≤10 s, guarding against any future
-refactor that drops it.
+- Tightens the host peer-probe path so noisy or slow peers stop holding status refreshes open for too long.
+- Keeps the dedicated regression coverage in ``tests/host/test_probes.py``.
 
 ## v0.4.16 — 2026-05-08 — host plane keeps WebSocket open for multiple RPCs
 
-The remote (TCP/WS) host-plane handler used to accept exactly one
-JSON-RPC request per WebSocket and then close. Every host.* call from
-a paired client therefore paid a fresh TCP + Upgrade + auth handshake
-— ~3.5 RTTs of overhead per call, painful on high-latency Tailscale
-links (Hua Hin ↔ Chiang Mai measured ~200-400ms RTT with jitter).
-
-- `alpi/host/server.py` — paired-WebSocket request loop reads with
-  `async for message in ws:` instead of a single `await ws.recv()`,
-  so the connection stays open and serves arbitrarily many requests
-  until the peer closes it. Per-message token validation is
-  unchanged (`require_token=True`); the close path on
-  `ConnectionClosed` is unchanged. Streams are unaffected — they
-  already use a separate WebSocket and process responses
-  asynchronously.
-
-Tests — `tests/host/test_tcp_listener.py::test_server_accepts_multiple_calls_on_one_websocket`
-covers the contract: two consecutive `host.ping` calls over a single
-WebSocket each return the matching id and a correct result.
-
-Pairs with `desktop-v0.2.4` which adds a pooled WebSocket per remote
-on the client side. The desktop change is required to actually realise
-the latency win; this server-side change unlocks it.
+- Host WebSocket connections now accept multiple RPCs on the same socket instead of one message per connection.
+- This is the server-side prerequisite for the desktop pooled remote WebSocket hot path.
 
 ## v0.4.15 — 2026-05-08 — TUI rich-text polish (BB)
 
-The Textual ``Markdown`` widget already rendered the structural
-pieces — fences, headings, tables, blockquotes, hr — but the chat
-surface had only three TCSS rules covering markdown, so everything
-else fell back to default Textual styling and looked raw next to
-the desktop's GFM output.
-
-- ``alpi/tui/theme.tcss`` — added rules for the markdown widgets
-  the assistant message actually emits:
-  - ``MarkdownH1`` / ``MarkdownH2`` accent + bold; ``MarkdownH3``
-    foreground bold; ``MarkdownH4`` muted bold. Textual can't size
-    text, so the hierarchy uses weight + colour instead.
-  - ``MarkdownFence`` (fenced code blocks): surface background, left
-    accent rule, padding — fences now read as code, not prose.
-  - ``MarkdownBlockQuote``: muted text with a left muted rule.
-  - ``MarkdownTable`` / ``MarkdownTH``: header row bold on surface
-    background; cells use the standard foreground.
-  - ``MarkdownHorizontalRule``: muted divider.
-  - ``MarkdownOrderedListItem`` / ``MarkdownUnorderedListItem``:
-    explicit foreground colour so the markers stay legible.
-- Desktop already covers all of this via ``marked`` (GFM) +
-  ``Message.module.css`` (h1-h4, ul/ol/li, code, pre, blockquote,
-  hr, table). No desktop changes in this slice.
-
-Tests — ``tests/core/test_tui_markdown_styles.py`` (5) guards the
-selectors against regression: heading hierarchy, fence with visible
-background or border, blockquote, table + table-header, horizontal
-rule.
+- Improves TUI markdown / rich-text presentation and adds regression coverage for the new styling path.
+- Removes the shipped BB item from the roadmap now that it is live.
 
 ## v0.4.14 — 2026-05-07 — post-turn memory reviewer (AI(1).b)
 
-A narrow forked agent that watches the conversation in retrospect and
-persists facts the main loop missed. Today the agent only writes
-memory when it decides to mid-turn — which often misses signals that
-are obvious once the turn is done. The reviewer fills that gap
-without disturbing the active session.
-
-- `alpi/config.py` — new `MemoryConfig.review_interval: int = 0`. The
-  reviewer is opt-in: 0 disables it (default), N > 0 fires after every
-  N user turns. Set per profile via `memory.review_interval` in
-  `config.yaml`.
-
-- `alpi/review.py` — single round-trip LLM call with a narrow prompt
-  and the `memory` schema only. Snapshots the conversation, asks
-  "did the user reveal something durable? if so, save it. else say
-  nothing." Runs in a daemon thread; provider errors and unexpected
-  exceptions are swallowed so the parent session is never disturbed.
-
-- **Append-only contract.** The reviewer can only execute
-  `memory(action="add", ...)`. `replace` / `remove` are silently
-  rejected even if the LLM emits them — the reviewer has no read of
-  current memory state, so a guessed `match` could rewrite or delete
-  unrelated entries. Any consolidation belongs to the v0.6 curator,
-  not the post-turn pass.
-
-- **Cadence gating.** The hook fires only when the turn completed
-  naturally (LLM returned a final reply with no further tool calls).
-  Interrupts, provider errors, max-step aborts, and budget-exhausted
-  turns leave the counter untouched, so abandoned context never
-  triggers a review while the user is correcting course.
-
-- **Frozen system prompt.** The reviewer writes to disk; the parent
-  session's system prompt (built once at engine init) is unchanged
-  for the rest of the session. Next session picks up the refreshed
-  memory through the normal load path. Anthropic prefix-cache stays
-  intact.
-
-Tests: `tests/core/test_memory_review.py` (15) covers the empty-
-conversation no-op, memory-add persistence, non-memory-tool rejection,
-LLM-error swallowing, safety-scanner integration, append-only contract
-(replace and remove rejected), cadence gating (interval=0 disables,
-N triggers, error/interrupt do not increment), and the
-parent-prompt-not-mutated invariant.
+- Adds the post-turn memory reviewer pass plus the related config wiring.
+- Includes dedicated regression coverage for the reviewer behavior.
 
 ## v0.4.13 — 2026-05-07 — memory write safety scan (AI(1).a)
 
-Memory entries reload into the system prompt every session — the same
-injection vector skill bodies use. Until now memory writes accepted
-anything; web-extracted content with hidden instructions, copy-pasted
-keys, or Trojan-Source unicode could land in `MEMORY.md` / `USER.md` /
-`AGENT.md` and bias the agent every session afterward.
-
-- `alpi/tools/memory.py` — every memory write (`add` single, `add` batch,
-  `replace`) now runs through a safety scanner before persisting. The
-  scanner reuses `_DANGER_PATTERNS` from `alpi/tools/skill.py` (prompt
-  injection, exfil patterns, hardcoded secrets, reverse shells, etc.)
-  and adds a check for invisible / bidi-override unicode (Trojan-Source
-  attack vector). Single writes return a hard error; batch writes skip
-  the poisoned entry with a warning and keep the clean ones.
-- `alpi/tools/skill.py` — tightened the `tunneling service` pattern so
-  it only matches active command invocations (`ngrok http`,
-  `cloudflared tunnel`, `localtunnel --port`, `lt --port`,
-  `ssh -R … serveo.net`). Descriptive prose like "user uses ngrok for
-  development" no longer triggers a false positive.
-- `AGENT.md` writes (single, batch, replace) are scanned the same way —
-  it's also injected into the system prompt every turn.
-
-Tests: `tests/tools/test_memory_safety_scan.py` (20) covers prompt-
-injection variants, hardcoded-credential variants, tunneling commands
-both blocked and allowed, Trojan-Source unicode, replace, batch, and
-the AGENT.md paths.
+- Memory writes now go through the same safety scanner used for skill content.
+- Blocks prompt-injection, secret leakage, invisible Unicode, and other dangerous payload classes before persistence.
 
 ## v0.4.12 — 2026-05-07 — skill safety primitives (AT)
 
-Two changes that make the skill library safe enough to grow more
-aggressively in v0.6 (when the curator + telemetry land):
-
-- `alpi/tools/skill.py` — `skill(action="delete")` now archives instead
-  of destructively removing. The directory moves to
-  `~/.alpi/skills/.archive/<category>/<name>__<UTC>/` and is
-  recoverable with a single `mv`. Bundled `@alpi/*` skills remain
-  read-only as before.
-- `alpi/tools/_skill_schema.py` — new `pinned: True | False` frontmatter
-  field (validated, optional). A pinned skill refuses to archive — the
-  user must unpin via `skill(action="set_meta", fields={"pinned": False})`
-  first. Foundation for the v0.6 curator: pinned skills are protected
-  from auto-archive and any consolidation pass.
-- `alpi/tools/skill.py` — skill enumeration (`all_skills`, `_list`)
-  excludes any directory whose name starts with `.`, so `.archive/`
-  never re-appears as a live skill candidate.
-
-Tests — `tests/tools/test_skill_archive_pinned.py` covers the archive
-move, pinned-blocks-delete, unpin-allows-delete, archive-excluded-from-
-listing, and `pinned` schema validation paths.
+- Skill deletion is now recoverable through archive-on-delete plus a pinned flag for protected skills.
+- Adds the schema/runtime support needed for safer future curation passes.
 
 ## v0.4.11 — 2026-05-07 — system prompt sharpening for skill quality (AS)
 
-First slice of the v0.5 self-improvement loop. Three rules in
-`alpi/prompts/system_prompt.md` shape how the agent grows the skill
-library:
-
-- **User frustration is a first-class skill signal.** "Stop doing X",
-  "don't format like that", and similar corrections are skill signals,
-  not just memory signals. The lesson belongs in the skill that governs
-  the class of work — memory captures stable facts about the user;
-  skills capture how to do things for them.
-- **Prefer umbrella-class skills over narrow siblings.** A library of
-  one hundred narrow `debug-parser-may` / `debug-parser-april` skills
-  is a failure mode. Before creating, look for an existing umbrella
-  that could absorb the new content. Session-specific detail belongs
-  in `references/`, not in its own top-level skill.
-- **Patch outdated skills proactively.** When a loaded skill is wrong
-  for the current platform or producing the wrong output, patch it
-  immediately with `skill(action="patch")` — don't wait to be asked.
-  When the user corrects you on a step a loaded skill governs, patch
-  the skill in the same turn so the next session inherits the fix.
-
-Tests — `tests/core/test_system_prompt_skills.py` asserts the three
-rules survive any future refactor of `_build_system_prompt` or edit
-to `system_prompt.md`.
+- Tightens system-prompt guidance so the agent reaches for relevant skills more reliably before generic tools.
+- Ships with focused prompt-behavior regression tests.
 
 ## v0.4.10 — 2026-05-07 — desktop connection stability and session listing
 

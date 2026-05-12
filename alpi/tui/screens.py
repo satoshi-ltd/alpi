@@ -152,7 +152,7 @@ class HelpPanel(FloatingPanel):
         ("diff",      "what changed in this profile in the last 24h"),
         ("clear",     "clear chat history (keeps session)"),
         ("new",       "start a fresh session (new id, history wiped)"),
-        ("compact",   "summarize history to save tokens"),
+        ("compact",   "force auto-compact now (recovery)"),
         ("model",     "change model / provider"),
         ("exit",      "quit"),
     ]

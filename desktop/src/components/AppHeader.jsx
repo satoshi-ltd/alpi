@@ -15,6 +15,7 @@ import {
 } from "../primitives/icons.jsx";
 import { profileLabel } from "../lib/profile-display.js";
 import ProgressBar from "../primitives/ProgressBar.jsx";
+import Tooltip from "../primitives/Tooltip.jsx";
 import styles from "./AppHeader.module.css";
 
 const CTX_CACHE = new Map();
@@ -237,14 +238,22 @@ function ProfileTitle({ profile, sessionData }) {
                 <span className={styles.sep}>·</span>
               </>
             )}
-            <span>{fmtCount(ctxTokens)}/{fmtCount(win)}</span>
-            <ProgressBar
-              value={ctxTokens}
-              max={win}
-              cells={8}
-              accent={profile.accent}
-            />
-            <span>{pct}%</span>
+            <Tooltip
+              direction="down"
+              align="center"
+              text="Alpi auto-compacts when context fills up"
+            >
+              <span className={styles.ctxGroup}>
+                <span>{fmtCount(ctxTokens)}/{fmtCount(win)}</span>
+                <ProgressBar
+                  value={ctxTokens}
+                  max={win}
+                  cells={8}
+                  accent={profile.accent}
+                />
+                <span>{pct}%</span>
+              </span>
+            </Tooltip>
             {cost > 0 && (
               <>
                 <span className={styles.sep}>·</span>
