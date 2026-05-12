@@ -10,7 +10,7 @@ inflates surface area.
 
 ## Directory contract
 
-Every skill lives in a directory with one required file and up to four
+Every skill lives in a directory with one required file and up to five
 optional subdirectories:
 
 ```
@@ -20,6 +20,9 @@ optional subdirectories:
   references/           # OPTIONAL — markdown docs the skill consults
   assets/               # OPTIONAL — templates and data (non-executable)
   secrets/              # OPTIONAL — credentials, mode 0700, gitignored
+  state/                # OPTIONAL — runtime persistence (db.sqlite,
+                        #            counters, caches). Gitignored.
+                        #            Wiped by `skill(action='reset_state')`.
 ```
 
 **No other structure is allowed.** Each subdirectory is flat — no
@@ -27,6 +30,12 @@ nested folders like `templates/colm2025/` or `scripts/subfolder/foo.py`.
 Filenames must match `[a-zA-Z0-9][a-zA-Z0-9._-]{0,100}`. No hidden
 files (`.foo`). No `DESCRIPTION.md` at the category level. No
 `tools/`, `output/`, `_backup/`, or other invented subdirectories.
+
+`scripts/`, `references/`, and `assets/` are scanned for dangerous
+patterns at write time. `secrets/` and `state/` skip the scanner by
+design — `secrets/` holds credentials whose entropy looks like the
+patterns the scanner catches, and `state/` holds opaque runtime data
+(SQLite blobs, JSONL logs) the agent itself manages.
 
 This rigidity is intentional: it makes skills **portable** (copy the
 directory), **auditable** (`ls` shows you everything in one glance),
@@ -315,18 +324,52 @@ fixed.
 
 ## Actions on the `skill` tool
 
+Inspection / listing:
+
+```
+skill(action="list")
+skill(action="view",     name=..., [file="scripts/foo.py"])
+skill(action="validate", name=...)
+```
+
+Mutating (user skills require `confirm_user_skill=true`; bundled
+`@alpi/*` rejects every mutation):
+
 ```
 skill(action="create", name=..., category=..., description=..., body=...,
-      [requires_env], [tools])
-skill(action="edit",   name=..., body=..., [confirm_user_skill])
+      [requires_env], [tools], [keywords], [output_schema])
+skill(action="edit",        name=..., body=..., [confirm_user_skill])
+skill(action="patch",       name=..., subdir=..., filename=...,
+                             old_string=..., new_string=...,
+                             [confirm_user_skill])
+skill(action="set_meta",    name=..., fields={...}, [confirm_user_skill])
 skill(action="add_file",    name=..., subdir=..., filename=..., content=...,
                              [confirm_user_skill])
 skill(action="remove_file", name=..., subdir=..., filename=...,
                              [confirm_user_skill])
-skill(action="delete", name=..., [confirm_user_skill])
-skill(action="list")
-skill(action="run", name=..., [args])
+skill(action="delete",      name=..., [confirm_user_skill])
+skill(action="reset_state", name=..., [confirm_user_skill])
 ```
+
+Execution:
+
+```
+skill(action="run",    name=..., [args])
+skill(action="test",   name=..., [args])
+skill(action="invoke", name=..., [args])
+```
+
+`delete` archives to `skills/.archive/<category>/<name>__<UTC>/`
+(recoverable) instead of removing. Skills with `pinned: true` in
+their frontmatter refuse `delete` until unpinned via `set_meta`.
+`reset_state` wipes everything under `<skill>/state/` (db.sqlite,
+JSONL logs, anything else) but preserves `SKILL.md`, `scripts/`,
+`references/`, `assets/`, and `secrets/`. `set_meta` surgically
+updates frontmatter (description, category, requires_env, tools,
+keywords, output_schema, or `pinned`) without touching the prose
+body. `patch` does the inverse: small edits to a file under
+`scripts/` / `references/` / `assets/` without rewriting the whole
+file.
 
 ### Creating a skill
 
@@ -345,7 +388,7 @@ to prune with `/skills` first.
 ```
 skill(action="add_file",
       name="whoop-integration",
-      subdir="scripts",          # scripts | references | assets | secrets
+      subdir="scripts",          # scripts | references | assets | secrets | state
       filename="fetch.py",       # flat, no '/' or '..'
       content="<full file text>")
 ```
@@ -354,6 +397,9 @@ skill(action="add_file",
   dangerous patterns (rm -rf, curl|sh, eval(), hardcoded keys, etc).
 - `secrets/` content is not scanned (by design). Files written there
   create the directory mode 0700 and are `chmod 0600`.
+- `state/` content is not scanned either — runtime data (SQLite
+  blobs, JSONL caches) is the skill's own working memory. Use
+  `skill(action="reset_state")` to wipe it.
 
 ### Viewing and running skill files
 
@@ -493,9 +539,10 @@ residue left behind.
   noise.
 - Nested subdirectories (`scripts/subfolder/foo.py`,
   `assets/templates/variant1/template.md`). Flat subdirs only.
-- Extensions outside the allowed 4 (`tools/`, `data/`, `cache/`,
-  `output/`, `logs/`). Ephemeral output is the workspace's job, not
-  the skill's.
+- Extensions outside the allowed 5 (`tools/`, `data/`, `cache/`,
+  `output/`, `logs/`, `templates/` at the skill root). Ephemeral
+  output is the workspace's job, not the skill's — and persistent
+  runtime data already has its home in `state/`.
 - Credentials anywhere outside `secrets/` (or `~/.alpi/.env` for
   pre-provisioned ones).
 - Files in `scripts/` / `references/` / `assets/` that contain
@@ -514,6 +561,7 @@ Skills from other agents usually map cleanly for the simple case
 | `skills/<cat>/<name>/references/*.md` | `references/*.md` (flat) |
 | `skills/<cat>/<name>/templates/<subfolder>/*` | `assets/*` (flatten, prefix filenames if needed) |
 | Credentials in random `whoop.json` at skill root | Move to `secrets/` |
+| Caches, counters, runtime SQLite at skill root | Move to `state/` |
 | `DESCRIPTION.md` at category level | Drop; redundant |
 
 The frontmatter also needs adapting: alpi uses flat fields (`name`,

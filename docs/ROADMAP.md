@@ -14,12 +14,14 @@ Legend: 🔵 backlog · 🟡 next up · ⏸ blocked · 🔴 gate.
 
 ## v0.5 cycle (active)
 
-**Theme: closing the device-access loop on mobile.** Remote desktop,
-local recall over the workspace (BA), and the memory v2 quality pass
-all shipped during the v0.4 line. What remains for v0.5 is the second
-real client surface — the mobile companion — and the second bundled
-skill, `@alpi/home`. v0.6 builds on that base with a self-improving
-skill library and live streaming infrastructure.
+**Theme: closing the device-access loop on mobile + tightening the
+capability core.** Remote desktop, local recall over the workspace
+(BA), and the memory v2 quality pass all shipped during the v0.4
+line. What remains for v0.5 is the second real client surface — the
+mobile companion — the second bundled skill, `@alpi/home`, and a
+small hardening pass over skills, tools, and memory. v0.6 builds on
+that base with a self-improving skill library and capability
+maintenance.
 
 This is the cycle where gateways stop being the main mobile story.
 Telegram, IMAP, Gmail, and Matrix stay useful, but the project should
@@ -37,6 +39,14 @@ personal agent.
 | ID | Item | Status |
 |---|---|---|
 | `@alpi/home` | Second bundled skill (after `@alpi/knowledge` in v0.3). Full home orchestration behind a single voice/text interface: Home Assistant first, with optional Hue, Xiaomi, Alexa / Google Home integrations layered in. | 🔵 |
+
+### Capability hardening
+
+| ID | Item | Status |
+|---|---|---|
+| CH.1 | Skill eligibility fields — add `requires_bins`, `requires_config`, and `platforms` frontmatter, then filter prompt injection, `skill list`, and validation from the same eligibility result. | 🟡 |
+| CH.2 | Granular terminal approval allowlist — extend the existing profile config allowlist into command/pattern-level approvals for common safe commands without adding a second storage file. | 🔵 |
+| CH.3 | Memory promotion queue — collect durable facts from compaction/session summaries into a review queue with preview/apply; never write directly to `MEMORY.md` from compaction. | 🔵 |
 
 ### AX-mobile. Mobile companion (iOS / Android)
 
@@ -114,16 +124,103 @@ doesn't re-poll every turn ("is the kitchen light on?" answers from cache;
 
 LOC estimate: ~400 (HA covers ~250, Hue + Xiaomi ~50 each, Google/Alexa ~50 stub).
 
+### CH.1. Skill eligibility fields
+
+Today skills can hide themselves when required environment variables are
+missing. v0.5 extends that same local-first pattern with:
+
+- `requires_bins`: required executables on `PATH` (`gh`, `ffmpeg`,
+  `sqlite3`, etc.);
+- `requires_config`: required profile config keys;
+- `platforms`: supported operating systems (`macos`, `linux`, `windows`).
+
+Eligibility is computed once and reused everywhere: system-prompt skill index,
+`skill(action="list")`, validation output, and scheduled or gateway runs.
+Missing requirements do not delete or mutate skills; they make the skill
+inactive with a clear reason.
+
+**Scheduled and gateway behavior.** Eligibility blocks only explicit
+invocations of an inactive skill. A scheduled job or webhook configured to
+target a specific skill fails fast at boot with a clear error instead of
+silently failing mid-turn. General Telegram/IMAP/Matrix gateway boot is
+unaffected: the inactive skill is hidden from the skill index for those
+sessions, but the gateway itself starts and other skills remain available.
+The rule is "explicit target → hard error; implicit availability → silent
+filter".
+
+**What this avoids.** The model should not see a skill that is doomed to fail
+in the current profile. This keeps the prompt smaller and makes minimal
+installs less noisy without introducing marketplace or plugin machinery.
+
+### CH.2. Granular terminal approval allowlist
+
+alpi already has terminal approval severity and a persistent
+`tools.terminal.approval.allowlist` config path. v0.5 makes that allowlist
+practical at the command level: profiles can persist safe patterns such as
+read-only Git/GitHub inspection, while destructive or ambiguous commands still
+go through the existing approval flow.
+
+The storage remains `config.yaml`. No `exec-approvals.json`, no second policy
+database. The implementation is an extension of `_approval.py` plus tests for
+precedence between safe, caution, dangerous, session allow, and persistent
+allow.
+
+**Success condition.** A user can make repetitive safe development commands
+frictionless for a profile without weakening the dangerous command blocklist.
+
+### CH.3. Memory promotion queue
+
+Compaction and session summaries can contain facts worth preserving, but
+automatic writes to `MEMORY.md` are too risky: summaries can compress away
+uncertainty, overfit to a single session, or turn stale task state into
+long-term memory. v0.5 introduces a queue of promotion candidates instead.
+
+Flow:
+
+1. Compaction/session review emits candidate facts with source, confidence, and
+   target suggestion (`USER.md` / `MEMORY.md` / `AGENT.md`).
+2. The same safety scan, duplicate detection, and operational-state warnings
+   used by the memory tool run before a candidate is shown.
+3. The user or agent can preview pending candidates and apply selected ones
+   through the normal memory write path.
+
+**Review surfaces.** The queue is human-in-the-loop by design; the tool API
+is split so the agent can never apply on its own:
+
+- `alpi memory promote` — interactive CLI, the operator-facing review path.
+  Lists pending candidates with source session, suggested target file,
+  confidence, and the scan/dedup/operational-state warnings already attached.
+  Applies or discards each candidate explicitly.
+- `memory(action="promotion_list")` — read-only tool action so the agent can
+  surface candidates to the user inline during a turn.
+- `memory(action="promotion_discard", id=…)` — tool action lets the agent
+  drop clearly-wrong candidates (e.g. operational state that slipped through)
+  without ever writing to a memory file.
+- `memory(action="promotion_apply", id=…, confirm=true)` — explicit-confirm
+  write path. `confirm=true` is required; the action surfaces an approval
+  prompt and routes through the standard `memory(action="add")` safety
+  pipeline. The agent cannot bypass the approval, even with a valid id.
+- Desktop panel — explicit non-goal for v0.5; CLI plus the split tool actions
+  cover the loop. Add it once real usage justifies the surface.
+
+**Queue boundedness.** The queue is capped to 200 candidates per profile and
+unreviewed entries auto-expire after 30 days. CM.1's audit surfaces the cap as
+a "review backlog growing" signal; without that, the staging file silently
+grows into a graveyard nobody reads.
+
+**Design constraint.** The queue is a staging area, not a second memory store.
+Nothing in it is injected into the system prompt until it is explicitly applied
+to a memory file.
+
 ---
 
 ## v0.6 cycle (planned)
 
-**Theme: self-improving agent + live streaming.** With the device-access
-and local-recall layers landed during the v0.4 line, v0.6 turns the
-skill library into something that improves itself over time, ships the
-streaming infrastructure that makes the live multi-device experience
-feel real, and recalibrates the memory dedup threshold now that there's
-real session-memory data to measure against.
+**Theme: self-improving agent + capability maintenance.** With the
+device-access, local-recall, and v0.5 hardening layers in place, v0.6
+turns the skill library into something that improves itself over time,
+adds operator-facing memory diagnostics, and introduces safe local
+skill import without adopting a marketplace or plugin runtime.
 
 ### Self-improving skills
 
@@ -131,6 +228,14 @@ real session-memory data to measure against.
 |---|---|---|
 | AC | Skill telemetry + curator — usage tracking per skill (`view_count`, `use_count`, `last_used`, `state: active/stale/archived`) and a periodic background consolidation pass that promotes narrow session-specific skills into broad class-level umbrellas. Builds on the v0.5 AT primitives (auto-archive + `pinned` flag); adds the curator-specific pieces: `absorbed_into:` metadata on consolidating deletes, memory `pinned` flag (memory entries are also reviewer-mutable in v0.6), and a `.bak` ring per skill if single-snapshot proves insufficient under aggressive curation. | 🔵 |
 | BD | Model-family conditional prompt guidance — the tool-use enforcement block + GPT/Gemini-specific operational guidance only injected for model families that need it (per `TOOL_USE_ENFORCEMENT_MODELS`). Claude / Opus / Sonnet / Qwen / MiMo run on the shorter prompt. Promoted from Future once v0.5 generates enough multi-model session evidence. | 🔵 |
+
+### Capability maintenance
+
+| ID | Item | Status |
+|---|---|---|
+| CM.1 | Memory audit CLI — `alpi memory audit` reports docs/code drift signals, low-confidence expiry candidates, duplicate clusters, promotion candidates, and memory usage pressure. | 🔵 |
+| CM.2 | Safe skill import — `alpi skill import <dir|zip>` previews, normalizes, scans, and installs a local skill into the alpi contract; no marketplace, no remote registry. | 🔵 |
+| CM.3 | Tool availability checks — add optional `check_fn` probes so unavailable tools can be hidden or flagged consistently when real profiles show broken visible tools. | 🔵 |
 
 ### Memory quality (evidence-gated)
 
@@ -262,6 +367,69 @@ gated on session evidence. v0.5's mobile work + post-turn reviewer should
 generate enough cross-model session data to calibrate the routing decisions.
 Promote to v0.6 once `agent.log` has a clear signal.
 
+### CM.1. Memory audit CLI
+
+`alpi memory audit` is the operator-facing view over the memory quality
+machinery. It does not mutate memory by default. It reports:
+
+- current `USER.md` / `MEMORY.md` usage and pressure;
+- low-confidence entries eligible for expiry;
+- near-duplicate clusters at multiple thresholds;
+- operational-state-looking entries that should probably live in sessions,
+  not memory;
+- queued promotion candidates awaiting preview/apply;
+- compaction frequency and ratio distribution, read from
+  `logs/compaction.jsonl` — evidence for promoting compaction policy to
+  config (or keeping it as constants).
+
+The command is also the natural home for the v0.6 dedup calibration work: run
+the audit at 0.5 / 0.6 / 0.7 / 0.8 containment, inspect borderline clusters,
+then adjust the cutoff if the data supports it.
+
+**Why v0.6.** v0.5 creates the promotion queue and tightens skill/tool
+eligibility. v0.6 adds the review surface once there is enough real memory data
+to make audit output meaningful.
+
+### CM.2. Safe skill import
+
+alpi should be able to reuse local skill material from Hermes, OpenClaw, Codex,
+or a checked-out Git repository without adopting a marketplace. `alpi skill
+import <dir|zip>` is a local, explicit import path:
+
+1. inspect the source and show a preview;
+2. reject path traversal, hidden files, symlinks escaping the root, and
+   unsupported nested layouts;
+3. map compatible files into alpi's flat `scripts/`, `references/`, `assets/`,
+   `secrets/`, and `state/` contract;
+4. run the same scanner and schema validation as `skill(add_file)` /
+   `skill(create)`;
+5. install only after explicit confirmation.
+
+**Non-goals.** No remote registry, no automatic dependency install, no silent
+update flow, and no external trust database. A user can still `git clone` a
+skill repository, inspect it, and import from disk.
+
+### CM.3. Tool availability checks
+
+Some tools depend on runtime capabilities that may be missing in a minimal
+profile: browser automation needs Playwright/Chromium, STT needs its speech
+stack, TTS may need audio/conversion helpers, and MCP tools depend on
+configured servers. v0.6 adds an optional per-tool availability probe once
+broken visible tools show up in real use.
+
+The design is deliberately narrower than Hermes/OpenClaw's toolset policy
+machinery:
+
+- probes are fast and cached briefly;
+- unavailable tools are either hidden from the model or shown in diagnostics
+  with a clear reason;
+- checks never install dependencies automatically;
+- the normal tool implementation remains the source of truth for final runtime
+  errors.
+
+**Promotion condition.** Keep this as v0.6 work, not v0.5, unless v0.5 profiles
+repeatedly expose tools that fail before doing useful work.
+
 ## Future releases
 
 Items worth doing, but not part of the current cycle.
@@ -269,8 +437,61 @@ Items worth doing, but not part of the current cycle.
 | ID | Item | Status |
 |---|---|---|
 | BF-8 | Skill versioning / install-update flows — pinned install source, update preview/diff, revision metadata | 🔵 |
+| CM.4 | Semantic recall over past sessions — vector/semantic retrieval over session history when `session_search` stops being good enough. | 🔵 |
+| TERM.2 | Docker / SSH terminal backends — isolated or remote command execution for unattended profiles once local sandboxing is no longer enough. | 🔵 |
+| OPS.1 | Evidence digest — periodic synthetic report that surfaces the signals every evidence-gated roadmap item depends on (approval-prompt frequency, compaction rate, inactive skills, broken tools, promotion-queue backlog). | 🔵 |
 | ALP.5 | Blob transfer — `link.put_blob` / `link.get_blob`, content-addressed, chunked AEAD. Depends on real workgroup usage to justify the protocol complexity. | 🔵 |
 | ALP.6 | Workgroup search — semantic search over workgroup transcripts via local RAG (pairs with **BA**). Depends on BA landing and workgroups being heavily used. | 🔵 |
+
+### CM.4. Semantic recall over past sessions
+
+Session search is the right first layer: cheap, explicit, and easy to reason
+about. Semantic recall over sessions waits until lexical search starts missing
+real queries or session volume becomes large enough that users regularly ask
+"when did we discuss X?" and cannot find it.
+
+When promoted, reuse the existing local embedding/store primitives instead of
+introducing an external memory provider. The first shape is an opt-in session
+index plus an explicit recall/search tool; automatic injection only comes later
+if manual retrieval proves valuable.
+
+### TERM.2. Docker / SSH terminal backends
+
+Local terminal execution plus optional OS sandboxing is enough for the current
+product. Docker and SSH become worthwhile when unattended profiles need
+stronger isolation, reproducibility, or a remote machine that the agent can
+damage without touching its own code or the user's main workstation.
+
+The first implementation should be conservative: one configured backend per
+profile, no provider zoo, no cloud sandbox abstraction, and no automatic
+migration of local files. Promote only when a real unattended workflow is
+blocked by the current local sandbox.
+
+### OPS.1. Evidence digest
+
+Most of the items in this roadmap promote on evidence — CM.3 ("if broken
+visible tools show up"), CM.4 ("when lexical search stops being good enough"),
+TERM.2 ("when a real unattended workflow is blocked"), AI(1.c) ("when there is
+enough memory data to recalibrate dedup"), BD ("once `agent.log` has a clear
+signal"). Today that evidence lives in raw logs and only surfaces when the
+creator happens to notice it.
+
+`alpi ops digest [--since 7d]` synthesises the signals into a single report:
+
+- approval-prompt frequency and the top patterns that triggered them (input
+  for CH.2 allowlist expansion);
+- auto-compact rate, mean before/after ratio per model (read from
+  `logs/compaction.jsonl`);
+- inactive skills count and reasons (input for `@alpi/home`-style bundling and
+  CH.1 fields);
+- tools that failed before doing useful work (the gate condition for CM.3);
+- memory promotion-queue backlog and CM.1 audit highlights;
+- session-search misses or unanswered "when did we discuss X" queries (the
+  gate condition for CM.4).
+
+**Non-goal.** Not a dashboard, not a metrics service, not always-on
+telemetry — a stateless `alpi ops digest` command the creator runs every few
+weeks to decide which gates have flipped.
 
 ### ALP.5. Blob transfer
 

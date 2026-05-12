@@ -232,9 +232,13 @@ Thin wrapper over `litellm.completion`. `stream()` is an async generator yieldin
 
 ### Memory (`alpi/memory.py`)
 
-Three files: `USER.md` (facts about the user), `MEMORY.md` (env quirks, commands, incidents), `AGENT.md` (the agent's own profile — tone, style, identity, language). `§` entry delimiter, char limits (1375 / 2200), accent+case+punctuation-insensitive dedup, plus token-Jaccard dedup at 70% max-containment to catch paraphrases. `.bak` snapshot before every mutating write. Approach C: every mutating call returns the full current state of the target file so the agent sees its own write in the same turn.
+Three files: `USER.md` (facts about the user), `MEMORY.md` (env quirks, commands, incidents), `AGENT.md` (the agent's own profile — tone, style, identity, language). `§` entry delimiter, char limits `USER_CHAR_LIMIT = 3000` / `MEMORY_CHAR_LIMIT = 5000` (see `alpi/memory.py`; `AGENT.md` is free-form prose with no cap). Accent+case+punctuation-insensitive dedup, plus token-Jaccard dedup at 70% max-containment to catch paraphrases. `.bak` snapshot before every mutating write. Approach C: every mutating call returns the full current state of the target file so the agent sees its own write in the same turn.
+
+**v2 quality metadata.** Each entry carries a trailing `<!-- alpi-meta conf=... captured=... reinforced=... -->` comment that is stripped before the entry reaches the system prompt. `conf` is `low` / `normal` / `high` (default `normal`). Near-duplicate writes reinforce the existing entry (bump `reinforced`, upgrade `low → normal` at ≥ 2) instead of appending a paraphrase. Low-confidence entries with zero reinforcements expire after `memory.low_confidence_max_age_days` (default 30). The memory tool's safety scanner reuses the skill scanner patterns and adds invisible/bidi unicode detection (U+200B–200F, 202A–202E, 2060, 2066–2069, FEFF) to block Trojan-Source vectors; `_operational_warning` surfaces non-blocking warnings when a write looks like session state (`chat_id`, `session_id`, ISO timestamps).
 
 **Batch writes.** `memory(action="add", entries=[...])` accepts a list of entries for the same target in a single call. Each entry runs through cross-file and same-target dup checks independently; entries that collide are skipped with a per-line note, the rest land in one write. Replaces the pathological pattern of one `add` call per fact (16 calls in a single turn observed in real sessions).
+
+**Post-turn reviewer.** When `memory.review_interval > 0` (default 0 = off), `alpi/review.py` spawns a daemon thread after each turn that snapshots the user/assistant text and asks the LLM whether anything durable should be added. The reviewer is constrained to `memory(action="add", ...)` — never `replace`/`remove` — to prevent it from deleting unrelated entries on a bad pass.
 
 ### Path resolution (`alpi/tools/_paths.py`)
 

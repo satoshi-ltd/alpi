@@ -549,6 +549,14 @@ class Engine:
             tokens_in=result.tokens_before,
             tokens_out=result.tokens_after,
         ))
+        compaction.record_event(
+            self.home,
+            result=result,
+            trigger="manual" if force else "auto",
+            session_id=self.session.id,
+            model=self.session.model or self.cfg.model,
+            ctx_window=ctx_window,
+        )
 
     def save_session(self) -> Path:
         path = self.session.save()

@@ -8,7 +8,10 @@ middle, and as a cheaper first pass truncates oversized tool outputs.
 
 from __future__ import annotations
 
+import json
+import time
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Callable
 
 
@@ -362,6 +365,42 @@ def compact(
     )
 
 
+def event_log_path(home: Path) -> Path:
+    """Where ``record_event`` appends. Same logs/ dir as agent.log / service.log."""
+    return home / "logs" / "compaction.jsonl"
+
+
+def record_event(
+    home: Path,
+    *,
+    result: CompactionResult,
+    trigger: str,
+    session_id: str,
+    model: str,
+    ctx_window: int,
+) -> None:
+    """Append one JSONL line per compaction. Best-effort; never raises."""
+    path = event_log_path(home)
+    record = {
+        "ts": time.time(),
+        "trigger": trigger,                       # "auto" | "manual"
+        "session_id": session_id,
+        "model": model,
+        "ctx_window": ctx_window,
+        "fired": bool(result.fired),
+        "tokens_before": int(result.tokens_before),
+        "tokens_after": int(result.tokens_after),
+        "summarized_messages": int(result.summarized_messages),
+        "tool_truncated": int(result.tool_truncated),
+    }
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps(record, separators=(",", ":")) + "\n")
+    except OSError:
+        return  # never let telemetry break a turn — CM.1 will surface the gap
+
+
 __all__ = [
     "CHARS_PER_TOKEN",
     "COMPACT_PROMPT",
@@ -371,5 +410,7 @@ __all__ = [
     "estimate_message_tokens",
     "estimate_messages_tokens",
     "estimate_tokens",
+    "event_log_path",
+    "record_event",
     "should_compact",
 ]
