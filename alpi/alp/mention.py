@@ -153,3 +153,66 @@ async def execute(home: Path, peer_id: str, prompt: str, *, timeout: float = 300
         tokens_out=int(reply.get("tokens_out") or 0),
         cost=float(reply.get("cost") or 0.0),
     )
+
+
+async def execute_stream(
+    home: Path, peer_id: str, prompt: str, *, timeout: float = 300.0,
+):
+    """Streaming variant of ``execute``. Async generator that yields:
+
+    - ``{"kind": "chunk", "text": "..."}`` for incremental tokens
+    - ``{"kind": "final", "text": "...", "tokens_in": …, …}`` once at end
+    - ``{"kind": "error", "text": "..."}`` on failure
+
+    Callers (TUI, desktop host, mobile) consume chunks for live rendering
+    and use the final frame for bookkeeping (cost, session_id, …).
+    """
+    peer = peers_mod.get_by_id(home, peer_id)
+    if peer is None:
+        yield {"kind": "error", "text": f"no peer @{peer_id} pinned"}
+        return
+
+    sender = load_or_generate(home)
+    params = {"prompt": prompt, "stream": True}
+    try:
+        if peer.address is not None:
+            host, _, port_s = peer.address.rpartition(":")
+            if not host or not port_s.isdigit():
+                yield {"kind": "error", "text": f"invalid peer address {peer.address!r}"}
+                return
+            agen = alp_client.call_tcp_stream(
+                host=host,
+                port=int(port_s),
+                sender=sender,
+                recipient_pubkey_b64=peer.pubkey,
+                method="link.ask",
+                params=params,
+                timeout=timeout,
+            )
+        else:
+            socket_path = _target_home(peer_id) / "alp" / "alp.sock"
+            if not socket_path.exists():
+                yield {
+                    "kind": "error",
+                    "text": f"listener not running (`alpi -p {peer_id} alp start`)",
+                }
+                return
+            agen = alp_client.call_stream(
+                socket_path=socket_path,
+                sender=sender,
+                recipient_pubkey_b64=peer.pubkey,
+                method="link.ask",
+                params=params,
+                timeout=timeout,
+            )
+        async for result, stream in agen:
+            kind = "final" if stream != "chunk" else "chunk"
+            payload = dict(result or {})
+            payload["kind"] = kind
+            yield payload
+    except alp_client.TargetOffline as e:
+        yield {"kind": "error", "text": f"target-offline: {e}"}
+    except alp_client.RemoteError as e:
+        yield {"kind": "error", "text": str(e)}
+    except Exception as e:  # noqa: BLE001
+        yield {"kind": "error", "text": str(e)}

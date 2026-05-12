@@ -333,10 +333,11 @@ the human alias the responder advertises for itself.
 ```
 params:
   prompt: string
+  stream?: bool
   budget?:
     tokens?: int
     usd?: float
-result:
+result:                         # when stream is false (default)
   text: string
   session_id: string
   tokens: { input: int, output: int }
@@ -348,6 +349,30 @@ as the user input. The target invokes its complete tool loop,
 approval gate, memory subsystem, and cost accounting — exactly
 as if the prompt had arrived through a conventional gateway
 inbound (Telegram, email, and so on).
+
+When `stream: true` the response is delivered as a sequence of
+signed response envelopes for the same `id`, each carrying a
+`stream` marker:
+
+- `stream: "chunk"` — intermediate frame, `result: { text: <delta> }`
+  for one streaming token batch from the target's model.
+- `stream: "final"` — last frame, `result` carries the same shape as
+  the non-streaming reply: aggregated `text`, `session_id`,
+  `tokens_in`, `tokens_out`, `cost`, `interrupted`.
+
+Caller policy: interactive surfaces (TUI, desktop, mobile companion)
+pass `stream: true` so the user sees the remote agent's reply as it
+generates. Gateways (Telegram, IMAP, Gmail, Matrix) and the agent-
+internal `peer` tool keep `stream: false` — they need a single atomic
+message body to forward. The protocol supports both modes; the choice
+lives with the caller, not with the user.
+
+Wire shape unchanged: same envelope, same signature, same Noise
+session if applicable. Each streamed chunk is its own signed envelope
+with the request `id` repeated and `stream` indicating chunk vs final.
+The TCP/Noise transport AEAD-protects each chunk independently; Unix
+socket framing is one JSON object per line, same as the existing
+single-response shape, just N lines instead of one.
 
 This choice is deliberate. A reduced `link.ask` that skipped the
 tool loop would effectively proxy a single LLM call, which the

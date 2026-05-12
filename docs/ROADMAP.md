@@ -132,12 +132,6 @@ real session-memory data to measure against.
 | AC | Skill telemetry + curator — usage tracking per skill (`view_count`, `use_count`, `last_used`, `state: active/stale/archived`) and a periodic background consolidation pass that promotes narrow session-specific skills into broad class-level umbrellas. Builds on the v0.5 AT primitives (auto-archive + `pinned` flag); adds the curator-specific pieces: `absorbed_into:` metadata on consolidating deletes, memory `pinned` flag (memory entries are also reviewer-mutable in v0.6), and a `.bak` ring per skill if single-snapshot proves insufficient under aggressive curation. | 🔵 |
 | BD | Model-family conditional prompt guidance — the tool-use enforcement block + GPT/Gemini-specific operational guidance only injected for model families that need it (per `TOOL_USE_ENFORCEMENT_MODELS`). Claude / Opus / Sonnet / Qwen / MiMo run on the shorter prompt. Promoted from Future once v0.5 generates enough multi-model session evidence. | 🔵 |
 
-### Live access
-
-| ID | Item | Status |
-|---|---|---|
-| ALP.4 | Streaming `link.ask` — incremental remote replies for peer calls, mobile, and workgroups | 🔵 |
-
 ### Memory quality (evidence-gated)
 
 | ID | Item | Status |
@@ -218,23 +212,6 @@ targeting known failure modes of those families.
 gated on session evidence. v0.5's mobile work + post-turn reviewer should
 generate enough cross-model session data to calibrate the routing decisions.
 Promote to v0.6 once `agent.log` has a clear signal.
-
-### ALP.4. Streaming `link.ask`
-
-Today `link.ask` is request/response: a peer asks "research X" and waits
-until the full answer lands. Streaming turns that into watching the other
-agent think — reasoning tokens, tool traces, partial answers flow as they
-happen.
-
-**Wire shape.** Same envelope as today; the response carries a `stream: true`
-flag and the body becomes a sequence of `{kind: "chunk"|"final"|"error",
-payload: …}` frames. No new crypto, no new auth — existing envelope
-signature covers the stream; intermediate chunks are AEAD-protected by the
-Noise session.
-
-**Why v0.6 not v0.5.** The protocol change touches every ALP transport path.
-Without a base of real peer/workgroup sessions to validate against, the scope
-cannot close cleanly. v0.5's mobile work generates that base.
 
 ## Future releases
 

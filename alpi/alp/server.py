@@ -174,19 +174,17 @@ class Server:
             except json.JSONDecodeError:
                 log.debug("malformed JSON on alp socket; dropping")
                 return
-            response = await self._dispatch(body)
-            if response is None:
-                return
-            payload = (
-                json.dumps(
-                    response,
-                    separators=(",", ":"),
-                    ensure_ascii=False,
-                ).encode("utf-8")
-                + b"\n"
-            )
-            writer.write(payload)
-            await writer.drain()
+            async for response in self._dispatch_envelopes(body):
+                payload = (
+                    json.dumps(
+                        response,
+                        separators=(",", ":"),
+                        ensure_ascii=False,
+                    ).encode("utf-8")
+                    + b"\n"
+                )
+                writer.write(payload)
+                await writer.drain()
         except Exception:  # noqa: BLE001
             log.exception("alp unix connection crashed")
         finally:
@@ -230,18 +228,17 @@ class Server:
             # the dispatcher which extracts the Ed25519 from the envelope
             # and records a pending invite before silent-dropping.
             expected_peer = tcp.find_peer_by_x25519(self.home, remote_x)
-            response = await self._dispatch(body, pinned_peer=expected_peer)
-            if response is None:
-                return
-            payload = json.dumps(
-                response,
-                separators=(",", ":"),
-                ensure_ascii=False,
-            ).encode("utf-8")
-            try:
-                await tcp.send_envelope(writer, cs_send, payload)
-            except tcp.TransportError as e:
-                log.debug("alp tcp: send failed: %s", e)
+            async for response in self._dispatch_envelopes(body, pinned_peer=expected_peer):
+                payload = json.dumps(
+                    response,
+                    separators=(",", ":"),
+                    ensure_ascii=False,
+                ).encode("utf-8")
+                try:
+                    await tcp.send_envelope(writer, cs_send, payload)
+                except tcp.TransportError as e:
+                    log.debug("alp tcp: send failed: %s", e)
+                    break
         except Exception:  # noqa: BLE001
             log.exception("alp tcp connection crashed")
         finally:
@@ -257,12 +254,33 @@ class Server:
         *,
         pinned_peer: peers_mod.Peer | None = None,
     ) -> dict[str, Any] | None:
+        """Thin wrapper that drains the streaming dispatcher into the
+        first envelope. Used by tests and any caller that doesn't want
+        to iterate frames (single-response handlers always yield one)."""
+        async for envelope in self._dispatch_envelopes(body, pinned_peer=pinned_peer):
+            return envelope
+        return None
+
+    async def _dispatch_envelopes(
+        self,
+        body: dict[str, Any],
+        *,
+        pinned_peer: peers_mod.Peer | None = None,
+    ):
         """Envelope verify → peer lookup → capability → invoke → reply.
+
+        Yields one or more signed response envelopes for the request.
+        Non-streaming handlers (return dict or coroutine of dict) yield
+        exactly one envelope. Streaming handlers (return async generator
+        of dicts) yield one envelope per chunk, with the last marked
+        ``stream="final"`` and the intermediates ``stream="chunk"``.
 
         ``pinned_peer`` is set by the TCP path once the Noise handshake
         authenticated the sender's static key; we still verify the
         envelope's Ed25519 signature and insist the envelope's
         ``alp.from`` matches the Noise-authenticated identity."""
+        import inspect
+
         try:
             parsed = env.verify(
                 body,
@@ -271,7 +289,7 @@ class Server:
             )
         except env.EnvelopeError as e:
             log.debug("envelope rejected: %s", e)
-            return None
+            return
 
         sender_pk = parsed.alp["from"]
 
@@ -280,58 +298,40 @@ class Server:
             log.info("alp drop: unpinned sender %s...", sender_pk[:12])
             from alpi.alp import pending as _pending
             _pending.record(self.home, sender_pk)
-            return None
+            return
 
-        # A peer that passes Noise as A but signs the envelope as B is
-        # silently dropped — the TCP path has already authenticated a
-        # specific pinned peer via the handshake.
         if pinned_peer is not None and pinned_peer.pubkey != peer.pubkey:
             log.info(
                 "alp tcp drop: noise=%s... envelope=%s...",
                 pinned_peer.pubkey[:12],
                 peer.pubkey[:12],
             )
-            return None
+            return
 
         method = parsed.method
         request_id = parsed.id
 
-        # Check rate limit before capability so unauthorised calls still
-        # surface as capability-denied in the operator log instead of
-        # getting swallowed by a 429.
-        if not self.rate_limiter.admit(peer.pubkey, peer.rate_limit):
-            log.info("alp: rate-limit %s pubkey=%s...", peer.id, peer.pubkey[:12])
+        def _err(code: int, message: str, data: dict | None = None) -> dict:
             return env.build_response(
                 sender=self.kp,
                 recipient_pubkey_b64=sender_pk,
                 request_id=request_id,
-                error={
-                    "code": -32005,
-                    "message": "rate-limited",
-                    "data": {"window_seconds": int(rl.WINDOW_SECONDS)},
-                },
+                error={"code": code, "message": message, "data": data},
             )
 
+        if not self.rate_limiter.admit(peer.pubkey, peer.rate_limit):
+            log.info("alp: rate-limit %s pubkey=%s...", peer.id, peer.pubkey[:12])
+            yield _err(-32005, "rate-limited", {"window_seconds": int(rl.WINDOW_SECONDS)})
+            return
+
         if method is None or not peer.may_call(method):
-            return env.build_response(
-                sender=self.kp,
-                recipient_pubkey_b64=sender_pk,
-                request_id=request_id,
-                error={
-                    "code": -32001,
-                    "message": "capability-denied",
-                    "data": {"method": method},
-                },
-            )
+            yield _err(-32001, "capability-denied", {"method": method})
+            return
 
         handler = self.handlers.get(method)
         if handler is None:
-            return env.build_response(
-                sender=self.kp,
-                recipient_pubkey_b64=sender_pk,
-                request_id=request_id,
-                error={"code": -32601, "message": "method-not-found"},
-            )
+            yield _err(-32601, "method-not-found", None)
+            return
 
         from alpi import config as _cfg_mod
         from alpi import ledger as _ledger
@@ -340,16 +340,11 @@ class Server:
             _ledger.check(self.home, _cfg_mod.load(self.home).budget)
         except _ledger.BudgetExceeded as e:
             log.info("alp: budget-exceeded %s (%s)", peer.id, e)
-            return env.build_response(
-                sender=self.kp,
-                recipient_pubkey_b64=sender_pk,
-                request_id=request_id,
-                error={
-                    "code": -32005,
-                    "message": "budget-exceeded",
-                    "data": {"cap_kind": e.cap_kind, "cap": e.cap, "used": e.used},
-                },
+            yield _err(
+                -32005, "budget-exceeded",
+                {"cap_kind": e.cap_kind, "cap": e.cap, "used": e.used},
             )
+            return
 
         import time as _time
 
@@ -358,40 +353,50 @@ class Server:
             out = handler(parsed.params or {}, peer, self)
             if asyncio.iscoroutine(out):
                 out = await out
-            log.info(
-                "alp: %s from %s · %.2fs",
-                method,
-                peer.id,
-                _time.monotonic() - t0,
-            )
         except HandlerError as e:
             log.info(
                 "alp: %s from %s · rejected %d %s",
-                method,
-                peer.id,
-                e.code,
-                e.message,
+                method, peer.id, e.code, e.message,
             )
-            return env.build_response(
-                sender=self.kp,
-                recipient_pubkey_b64=sender_pk,
-                request_id=request_id,
-                error={"code": e.code, "message": e.message, "data": e.data},
-            )
+            yield _err(e.code, e.message, e.data)
+            return
         except Exception as e:  # noqa: BLE001
             log.exception("handler %s crashed", method)
-            return env.build_response(
-                sender=self.kp,
-                recipient_pubkey_b64=sender_pk,
-                request_id=request_id,
-                error={
-                    "code": -32603,
-                    "message": "internal-error",
-                    "data": {"detail": str(e)},
-                },
-            )
+            yield _err(-32603, "internal-error", {"detail": str(e)})
+            return
 
-        return env.build_response(
+        if inspect.isasyncgen(out):
+            # Streaming handler. Convention: each yielded dict carries a
+            # ``"kind"`` key, ``"chunk"`` for intermediate frames or
+            # ``"final"`` for the last. Server strips ``kind`` and sets
+            # the envelope ``stream`` marker so clients can correlate
+            # frames to the same request without inspecting the payload.
+            try:
+                n = 0
+                async for chunk in out:
+                    n += 1
+                    kind = chunk.pop("kind", "chunk") if isinstance(chunk, dict) else "chunk"
+                    yield env.build_response(
+                        sender=self.kp,
+                        recipient_pubkey_b64=sender_pk,
+                        request_id=request_id,
+                        result=chunk,
+                        stream=kind,
+                    )
+                log.info(
+                    "alp: %s from %s · stream %d frames · %.2fs",
+                    method, peer.id, n, _time.monotonic() - t0,
+                )
+            except Exception as e:  # noqa: BLE001
+                log.exception("handler %s stream crashed", method)
+                yield _err(-32603, "internal-error", {"detail": str(e)})
+            return
+
+        log.info(
+            "alp: %s from %s · %.2fs",
+            method, peer.id, _time.monotonic() - t0,
+        )
+        yield env.build_response(
             sender=self.kp,
             recipient_pubkey_b64=sender_pk,
             request_id=request_id,

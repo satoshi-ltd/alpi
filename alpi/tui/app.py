@@ -47,6 +47,15 @@ class EngineEvent(Message):
         self.event = event
 
 
+class MentionChunk(Message):
+    """One streamed delta from ``link.ask`` — posted from the worker."""
+
+    def __init__(self, widget: "AssistantMessage", text: str) -> None:
+        super().__init__()
+        self.widget = widget
+        self.text = text
+
+
 class MentionDone(Message):
     """ALP ``link.ask`` finished — posted from the worker to the UI."""
 
@@ -412,26 +421,50 @@ class AlpiApp(App):
             args={"peer_id": parsed.peer_id, "prompt": parsed.prompt},
         )
         self._mount_message(card)
-        self._run_mention(parsed.peer_id, parsed.prompt, card)
+        asst = AssistantMessage()
+        self._mount_message(asst)
+        self._run_mention(parsed.peer_id, parsed.prompt, card, asst)
 
     @work(thread=True, name="_run_mention")
-    def _run_mention(self, peer_id: str, prompt: str, card: ToolCard) -> None:
+    def _run_mention(
+        self, peer_id: str, prompt: str, card: ToolCard, asst: "AssistantMessage",
+    ) -> None:
         import asyncio
         from alpi.alp import mention as alp_mention
 
-        result = asyncio.run(alp_mention.execute(self.home, peer_id, prompt))
-        if not result.ok:
-            self.post_message(MentionDone(card, ok=False, output=result.error, reply=""))
-            return
+        async def consume() -> tuple[bool, str, str]:
+            parts: list[str] = []
+            ok = True
+            error_text = ""
+            final_text = ""
+            async for frame in alp_mention.execute_stream(self.home, peer_id, prompt):
+                kind = frame.get("kind")
+                if kind == "chunk":
+                    delta = str(frame.get("text") or "")
+                    if delta:
+                        parts.append(delta)
+                        self.post_message(MentionChunk(asst, delta))
+                elif kind == "final":
+                    final_text = str(frame.get("text") or "")
+                elif kind == "error":
+                    ok = False
+                    error_text = str(frame.get("text") or "unknown")
+                    break
+            reply = final_text.strip() or "".join(parts).strip()
+            return ok, reply, error_text
 
-        reply = result.reply
+        ok, reply, error_text = asyncio.run(consume())
+        if not ok:
+            self.post_message(MentionDone(card, ok=False, output=error_text, reply=""))
+            return
         summary = (f"{reply[:60]}…" if len(reply) > 60 else reply) or "(empty reply)"
         self.post_message(MentionDone(card, ok=True, output=summary, reply=reply))
 
+    def on_mention_chunk(self, message: MentionChunk) -> None:
+        message.widget.append(message.text)
+
     def on_mention_done(self, message: MentionDone) -> None:
         message.card.finish(message.output, ok=message.ok)
-        if message.ok and message.reply:
-            self._mount_message(AssistantMessage(initial=message.reply))
 
     def _handle_slash(self, text: str) -> None:
         parts = text[1:].split(maxsplit=1)

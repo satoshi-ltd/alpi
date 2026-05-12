@@ -129,9 +129,12 @@ def build_response(
     request_id: str,
     result: Any = None,
     error: dict[str, Any] | None = None,
+    stream: str | None = None,
 ) -> dict[str, Any]:
     """Assemble + sign a response envelope. Exactly one of ``result``
-    or ``error`` must be set."""
+    or ``error`` must be set. ``stream`` is an optional marker for
+    streaming handlers — ``"chunk"`` for intermediate frames,
+    ``"final"`` for the last one. Absent = single non-streaming reply."""
     if (result is None) == (error is None):
         raise ValueError("response must carry exactly one of result / error")
     body: dict[str, Any] = {
@@ -149,6 +152,8 @@ def build_response(
         body["result"] = result
     else:
         body["error"] = error
+    if stream is not None:
+        body["stream"] = stream
     body["alp"]["sig"] = _sign(body, sender)
     return body
 

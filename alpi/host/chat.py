@@ -167,21 +167,44 @@ async def _send_mention(
         "event": "tool_start", "tool_id": tool_id, "name": "peer",
         "preview": f"peer_id={parsed.peer_id}", "args": args,
     })
-    result = await alp_mention.execute(home, parsed.peer_id, parsed.prompt)
-    reply = result.reply if result.ok else f"error: {result.error}"
+
+    parts: list[str] = []
+    final_payload: dict = {}
+    ok = True
+    error_text = ""
+    async for frame in alp_mention.execute_stream(home, parsed.peer_id, parsed.prompt):
+        kind = frame.get("kind")
+        if kind == "chunk":
+            delta = str(frame.get("text") or "")
+            if delta:
+                parts.append(delta)
+                await send_frame({"event": "assistant_delta", "text": delta})
+        elif kind == "final":
+            final_payload = frame
+        elif kind == "error":
+            ok = False
+            error_text = str(frame.get("text") or "unknown")
+            break
+
+    if ok:
+        reply = str(final_payload.get("text") or "").strip() or "".join(parts).strip()
+    else:
+        reply = f"error: {error_text}"
+    result_tokens_in = int(final_payload.get("tokens_in") or 0)
+    result_tokens_out = int(final_payload.get("tokens_out") or 0)
+    result_cost = float(final_payload.get("cost") or 0.0)
+
     await send_frame({
         "event": "tool_end", "tool_id": tool_id, "name": "peer",
-        "ok": result.ok, "output": _truncate(reply, 4000),
+        "ok": ok, "output": _truncate(reply, 4000),
     })
-    if reply:
-        await send_frame({"event": "assistant_delta", "text": reply})
 
     engine.session.log_turn(
         user=f"@{parsed.peer_id} {parsed.prompt}",
         assistant=reply,
         tools=[sess.ToolLog(
             at=started, name="peer", args=args,
-            result=reply[:sess.TOOL_RESULT_CAP], ok=result.ok,
+            result=reply[:sess.TOOL_RESULT_CAP], ok=ok,
             duration_s=_time.time() - started,
         )],
         started_at=started,

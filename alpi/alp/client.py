@@ -222,12 +222,199 @@ async def call_peer(
             timeout=timeout,
             replay_cache=replay_cache,
         )
-    # Intra-profile — reach the peer's own Unix socket under its home.
-    # Convention: ``home/../<peer.id>/alp/alp.sock`` is NOT reliable
-    # (peer id is human, not filesystem). Callers of the intra-profile
-    # flow today pass ``socket_path`` explicitly to ``call()``; expose
-    # that as the sole intra path here too.
     raise ClientError(
         f"peer {peer_id!r} has no address; use call() with an explicit "
+        "socket_path for intra-profile dispatch"
+    )
+
+
+def _verify_response(
+    response: dict[str, Any],
+    *,
+    sender: Keypair,
+    recipient_pubkey_b64: str,
+    request_id: str,
+    replay_cache: env.ReplayCache | None,
+) -> tuple[dict[str, Any], str | None]:
+    """Verify a response envelope and return (result, stream_marker).
+    Raises ``RemoteError`` if the body contains an error."""
+    parsed = env.verify(
+        response,
+        replay_cache=replay_cache,
+        expected_to=sender.pubkey_b64(),
+        expected_from=recipient_pubkey_b64,
+        expected_id=request_id,
+    )
+    if parsed.error is not None:
+        err = parsed.error
+        raise RemoteError(
+            code=int(err.get("code", -32603)),
+            message=str(err.get("message", "unknown")),
+            data=err.get("data"),
+        )
+    stream = response.get("stream") if isinstance(response, dict) else None
+    return parsed.result or {}, stream
+
+
+async def call_stream(
+    *,
+    socket_path: Path,
+    sender: Keypair,
+    recipient_pubkey_b64: str,
+    method: str,
+    params: dict[str, Any] | None = None,
+    timeout: float = 30.0,
+    replay_cache: env.ReplayCache | None = None,
+):
+    """Async generator over a streaming ALP request via Unix socket.
+    Yields ``(result, stream)`` per frame — ``stream`` is one of
+    ``"chunk"``, ``"final"``, or ``None`` (non-streaming reply)."""
+    body = env.build_request(
+        sender=sender,
+        recipient_pubkey_b64=recipient_pubkey_b64,
+        method=method,
+        params=params or {},
+    )
+    try:
+        reader, writer = await asyncio.wait_for(
+            asyncio.open_unix_connection(str(socket_path)),
+            timeout=timeout,
+        )
+    except (FileNotFoundError, ConnectionRefusedError) as e:
+        raise TargetOffline(f"{socket_path}: {e}") from e
+    try:
+        payload = (
+            json.dumps(body, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+            + b"\n"
+        )
+        writer.write(payload)
+        await writer.drain()
+        while True:
+            line = await asyncio.wait_for(reader.readline(), timeout=timeout)
+            if not line:
+                return
+            try:
+                response = json.loads(line)
+            except json.JSONDecodeError as e:
+                raise ClientError(f"malformed response: {e}") from e
+            result, stream = _verify_response(
+                response,
+                sender=sender,
+                recipient_pubkey_b64=recipient_pubkey_b64,
+                request_id=body.get("id"),
+                replay_cache=replay_cache,
+            )
+            yield result, stream
+            if stream != "chunk":
+                return
+    finally:
+        try:
+            writer.close()
+            await writer.wait_closed()
+        except Exception:  # noqa: BLE001
+            pass
+
+
+async def call_tcp_stream(
+    *,
+    host: str,
+    port: int,
+    sender: Keypair,
+    recipient_pubkey_b64: str,
+    method: str,
+    params: dict[str, Any] | None = None,
+    timeout: float = 30.0,
+    replay_cache: env.ReplayCache | None = None,
+):
+    """Async generator over a streaming ALP request via Noise/TCP.
+    Same yield contract as ``call_stream``."""
+    recipient_x = ed25519_to_x25519_public(decode_pubkey(recipient_pubkey_b64))
+    sender_x = ed25519_to_x25519_private(sender.private)
+    body = env.build_request(
+        sender=sender,
+        recipient_pubkey_b64=recipient_pubkey_b64,
+        method=method,
+        params=params or {},
+    )
+    plaintext = json.dumps(body, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    try:
+        reader, writer = await asyncio.wait_for(
+            asyncio.open_connection(host, port),
+            timeout=timeout,
+        )
+    except (OSError, ConnectionRefusedError) as e:
+        raise TargetOffline(f"{host}:{port}: {e}") from e
+    try:
+        try:
+            cs_send, cs_recv, _ = await tcp.perform_handshake_initiator(
+                reader, writer, sender_x, recipient_x,
+            )
+        except tcp.TransportError as e:
+            raise ClientError(f"handshake failed: {e}") from e
+        await tcp.send_envelope(writer, cs_send, plaintext)
+        while True:
+            try:
+                response_bytes = await asyncio.wait_for(
+                    tcp.recv_envelope(reader, cs_recv),
+                    timeout=timeout,
+                )
+            except tcp.TransportError:
+                return
+            if not response_bytes:
+                return
+            try:
+                response = json.loads(response_bytes)
+            except json.JSONDecodeError as e:
+                raise ClientError(f"malformed response: {e}") from e
+            result, stream = _verify_response(
+                response,
+                sender=sender,
+                recipient_pubkey_b64=recipient_pubkey_b64,
+                request_id=body.get("id"),
+                replay_cache=replay_cache,
+            )
+            yield result, stream
+            if stream != "chunk":
+                return
+    finally:
+        try:
+            writer.close()
+            await writer.wait_closed()
+        except Exception:  # noqa: BLE001
+            pass
+
+
+async def call_peer_stream(
+    *,
+    home: Path,
+    peer_id: str,
+    sender: Keypair,
+    method: str,
+    params: dict[str, Any] | None = None,
+    timeout: float = 30.0,
+    replay_cache: env.ReplayCache | None = None,
+):
+    """Same as ``call_peer`` but yields ``(result, stream)`` per frame."""
+    peer = peers_mod.get_by_id(home, peer_id)
+    if peer is None:
+        raise ClientError(f"peer {peer_id!r} not in peers.yaml")
+    if peer.address:
+        host, _, port_s = peer.address.rpartition(":")
+        if not host or not port_s.isdigit():
+            raise ClientError(f"peer {peer_id!r} has invalid address {peer.address!r}")
+        async for frame in call_tcp_stream(
+            host=host,
+            port=int(port_s),
+            sender=sender,
+            recipient_pubkey_b64=peer.pubkey,
+            method=method,
+            params=params,
+            timeout=timeout,
+            replay_cache=replay_cache,
+        ):
+            yield frame
+        return
+    raise ClientError(
+        f"peer {peer_id!r} has no address; use call_stream() with an explicit "
         "socket_path for intra-profile dispatch"
     )

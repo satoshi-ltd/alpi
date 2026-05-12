@@ -1,5 +1,69 @@
 # Changelog
 
+## v0.4.25 — 2026-05-12 — streaming `link.ask` (ALP.4)
+
+Peer mentions are no longer atomic. When the caller passes
+``stream: true``, ``link.ask`` delivers the remote agent's reply as a
+sequence of signed response envelopes — one per token batch — and the
+client renders them as they arrive. Same verb, same wire shape, opt-in
+per call.
+
+This unblocks the most visible UX gap in peer mentions: the
+"empty-then-thump" landing where the remote agent worked for 8 seconds
+and dumped the entire answer in one frame. The TUI and desktop chat
+now render mentions exactly like a local turn — the assistant message
+bubble fills incrementally as the remote model generates.
+
+- ``alpi/alp/envelope.py`` — response envelope gets an optional
+  ``stream`` field (``"chunk"`` for intermediate frames, ``"final"`` for
+  the last). Signed with the rest of the body so chunks can't be
+  re-ordered or dropped without invalidating the signature. Absent on
+  non-streaming responses — wire is identical to today.
+- ``alpi/alp/server.py`` — ``_dispatch`` is now ``_dispatch_envelopes``
+  async generator. Handlers may return a coroutine (single envelope,
+  current behaviour) or an async generator of dicts (one envelope per
+  yielded dict). The connection handler iterates frames over the same
+  Unix socket / Noise TCP connection — N response lines/envelopes per
+  request, all sharing the request ``id``. A thin ``_dispatch`` wrapper
+  remains for the pending-invite test path and any single-shot
+  consumer.
+- ``alpi/alp/client.py`` — ``call_stream`` / ``call_tcp_stream`` /
+  ``call_peer_stream`` are async generators yielding ``(result,
+  stream_marker)`` per frame. Existing ``call`` / ``call_tcp`` /
+  ``call_peer`` unchanged for non-streaming callers.
+- ``alpi/alp/handlers.py`` — ``link_ask`` reads ``stream`` from params.
+  When false (default) the existing thread-pool path runs and returns a
+  single dict. When true, ``_run_turn_stream`` runs the engine in a
+  thread, queues ``assistant_delta`` events via
+  ``loop.call_soon_threadsafe``, and yields ``{kind: "chunk", text}``
+  per delta plus a closing ``{kind: "final", text, tokens_in,
+  tokens_out, cost, session_id, interrupted}``.
+- ``alpi/alp/mention.py`` — ``execute_stream`` is the new async
+  generator. ``execute`` (the synchronous-shape aggregator) stays for
+  the CLI ``alp ask``, the agent's ``peer`` tool, and the gateway path
+  — none of which can render incrementally and prefer the atomic
+  result.
+- ``alpi/host/chat.py`` — desktop/mobile host now consumes
+  ``execute_stream`` for ``@peer`` mentions and emits one
+  ``assistant_delta`` frame per chunk. The frontend's existing
+  ``useChatStream`` accumulates them with the same throttle it uses for
+  local LLM responses, so no client-side change was needed.
+- ``alpi/tui/app.py`` — ``_handle_mention`` mounts an empty
+  ``AssistantMessage`` widget upfront, the worker thread iterates the
+  stream, and a new ``MentionChunk`` Textual message routes each delta
+  to ``widget.append`` on the UI thread. ``MentionDone`` keeps its role
+  for the trailing tool-card finish.
+
+**Caller policy** (documented in ``docs/ALP.md``): interactive
+surfaces (TUI, desktop, mobile companion) pass ``stream: true``;
+gateways and the agent-internal ``peer`` tool keep ``stream: false``
+because they need a single atomic message body to forward.
+
+Note: this replaces what the roadmap had as v0.6 ALP.4. Landed early
+because the protocol change turned out cleaner than expected — the
+existing envelope signature covers chunks, and the Noise session AEAD
+already protects per-frame integrity on TCP. No new crypto.
+
 ## v0.4.24 — 2026-05-11 — identity drafting as a primitive
 
 Pulls the public-bio synthesis out of ``cli.py`` so the desktop (and
