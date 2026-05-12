@@ -20,6 +20,14 @@ from alpi.alp.noise import (
 )
 
 
+PING_TIMEOUT_SECONDS = 5.0
+"""Default ``link.ping`` timeout shared by every liveness probe.
+Set high enough to ride out a daemon that's still warming up its
+Engine on first call and to tolerate real WAN latency on Tailscale
+peers. ALP probes run concurrently so wall-clock with N peers is
+still bounded by this value, not N×."""
+
+
 class ClientError(Exception):
     """Generic client-side failure (transport + response errors)."""
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 
 from textual import events, work
@@ -60,12 +61,22 @@ class MentionDone(Message):
     """ALP ``link.ask`` finished — posted from the worker to the UI."""
 
     def __init__(
-        self, card: "ToolCard", ok: bool, output: str, reply: str,
+        self,
+        card: "ToolCard",
+        ok: bool,
+        output: str,
+        reply: str,
+        peer_id: str = "",
+        prompt: str = "",
+        started: float = 0.0,
     ) -> None:
         super().__init__()
         self.card = card
         self.ok = ok
         self.output = output
+        self.peer_id = peer_id
+        self.prompt = prompt
+        self.started = started
         self.reply = reply
 
 
@@ -430,7 +441,10 @@ class AlpiApp(App):
         self, peer_id: str, prompt: str, card: ToolCard, asst: "AssistantMessage",
     ) -> None:
         import asyncio
+        import time
         from alpi.alp import mention as alp_mention
+
+        started = time.time()
 
         async def consume() -> tuple[bool, str, str]:
             parts: list[str] = []
@@ -455,16 +469,46 @@ class AlpiApp(App):
 
         ok, reply, error_text = asyncio.run(consume())
         if not ok:
-            self.post_message(MentionDone(card, ok=False, output=error_text, reply=""))
+            self.post_message(MentionDone(
+                card, ok=False, output=error_text, reply="",
+                peer_id=peer_id, prompt=prompt, started=started,
+            ))
             return
         summary = (f"{reply[:60]}…" if len(reply) > 60 else reply) or "(empty reply)"
-        self.post_message(MentionDone(card, ok=True, output=summary, reply=reply))
+        self.post_message(MentionDone(
+            card, ok=True, output=summary, reply=reply,
+            peer_id=peer_id, prompt=prompt, started=started,
+        ))
 
     def on_mention_chunk(self, message: MentionChunk) -> None:
         message.widget.append(message.text)
 
     def on_mention_done(self, message: MentionDone) -> None:
         message.card.finish(message.output, ok=message.ok)
+        if not message.ok or not message.reply or not message.peer_id:
+            return
+        # Mirror cli.py:224-239 — session write makes the host watcher fire.
+        from alpi.session import ToolLog
+        user_text = f"@{message.peer_id} {message.prompt}"
+        self.engine.session.messages.append({"role": "user", "content": user_text})
+        self.engine.session.messages.append({"role": "assistant", "content": message.reply})
+        try:
+            self.engine.session.log_turn(
+                user=user_text,
+                assistant=message.reply,
+                tools=[ToolLog(
+                    at=message.started,
+                    name="peer",
+                    args={"peer_id": message.peer_id, "prompt": message.prompt},
+                    result=message.reply,
+                    ok=True,
+                    duration_s=time.time() - message.started,
+                )],
+                started_at=message.started,
+            )
+            self.engine.save_session()
+        except Exception:  # noqa: BLE001
+            pass
 
     def _handle_slash(self, text: str) -> None:
         parts = text[1:].split(maxsplit=1)

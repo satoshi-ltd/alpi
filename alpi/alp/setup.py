@@ -19,7 +19,7 @@ from alpi.alp.keys import load_or_generate
 from alpi.alp.peers import Peer
 
 
-_PING_TIMEOUT = 0.5
+_PING_TIMEOUT = alp_client.PING_TIMEOUT_SECONDS
 
 
 def run(home: Path) -> None:

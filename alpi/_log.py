@@ -15,6 +15,8 @@ from pathlib import Path
 
 FORMAT = "%(asctime)s %(levelname)s %(name)s %(message)s"
 MAX_BYTES = 1_000_000
+# RotatingFileHandler with backupCount=0 silently no-ops rollover (stdlib quirk).
+BACKUP_COUNT = 3
 
 
 def log_dir(home: Path) -> Path:
@@ -37,7 +39,7 @@ def get_subsystem_logger(home: Path, subsystem: str) -> logging.Logger:
         d = log_dir(home)
         d.mkdir(parents=True, exist_ok=True)
         handler = RotatingFileHandler(
-            d / f"{subsystem}.log", maxBytes=MAX_BYTES, backupCount=0,
+            d / f"{subsystem}.log", maxBytes=MAX_BYTES, backupCount=BACKUP_COUNT,
         )
         handler.setFormatter(logging.Formatter(FORMAT))
         logger.addHandler(handler)

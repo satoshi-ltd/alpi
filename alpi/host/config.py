@@ -479,7 +479,9 @@ async def _mcp_remove(
 _GATEWAY_ENV_KEYS = {
     "telegram": ("TELEGRAM_BOT_TOKEN", "TELEGRAM_ALLOWED_CHAT_IDS"),
     "imap": (
-        "IMAP_ADDRESS", "IMAP_PASSWORD", "IMAP_HOST", "IMAP_SMTP_HOST",
+        "IMAP_ADDRESS", "IMAP_PASSWORD",
+        "IMAP_HOST", "IMAP_PORT",
+        "SMTP_HOST", "SMTP_PORT",
         "IMAP_ALLOWED_SENDERS",
     ),
     "gmail": (

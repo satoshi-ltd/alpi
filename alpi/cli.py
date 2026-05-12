@@ -1395,7 +1395,9 @@ def _is_umbrel() -> bool:
 _GATEWAY_ENV_KEYS = {
     "telegram": ("TELEGRAM_BOT_TOKEN", "TELEGRAM_ALLOWED_CHAT_IDS"),
     "imap": (
-        "IMAP_ADDRESS", "IMAP_PASSWORD", "IMAP_HOST", "IMAP_PORT",
+        "IMAP_ADDRESS", "IMAP_PASSWORD",
+        "IMAP_HOST", "IMAP_PORT",
+        "SMTP_HOST", "SMTP_PORT",
         "IMAP_ALLOWED_SENDERS",
     ),
     "gmail": (

@@ -1194,12 +1194,12 @@ def _set_proctitle_daemon(n_profiles: int) -> None:
 
 
 def _configure_logging_daemon(root: Path) -> None:
-    from alpi._log import FORMAT, MAX_BYTES
+    from alpi._log import BACKUP_COUNT, FORMAT, MAX_BYTES
 
     p = daemon_log_path(root)
     p.parent.mkdir(parents=True, exist_ok=True)
     handlers: list[logging.Handler] = [
-        RotatingFileHandler(p, maxBytes=MAX_BYTES, backupCount=0),
+        RotatingFileHandler(p, maxBytes=MAX_BYTES, backupCount=BACKUP_COUNT),
     ]
     if sys.stderr.isatty():
         handlers.append(logging.StreamHandler())

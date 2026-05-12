@@ -64,6 +64,10 @@ class Telegram(Platform):
         await _register_bot_commands(url_base)
 
         first_poll = True
+        last_error_class: str | None = None
+        error_streak = 0
+        last_streak_log = 0.0
+        SUMMARY_INTERVAL_SEC = 60.0
         async with httpx.AsyncClient(timeout=60) as client:
             while True:
                 try:
@@ -74,9 +78,28 @@ class Telegram(Platform):
                     resp.raise_for_status()
                     data = resp.json()
                 except Exception as e:  # noqa: BLE001
-                    log.warning("getUpdates failed: %s", e)
-                    await asyncio.sleep(5)
+                    error_class = type(e).__name__
+                    is_conflict = "409" in str(e)
+                    now = asyncio.get_running_loop().time()
+                    if error_class != last_error_class:
+                        log.warning("getUpdates failed: %s", e)
+                        last_error_class = error_class
+                        error_streak = 1
+                        last_streak_log = now
+                    else:
+                        error_streak += 1
+                        if now - last_streak_log >= SUMMARY_INTERVAL_SEC:
+                            log.warning(
+                                "getUpdates still failing (%s, %d repeats in last %.0fs)",
+                                error_class, error_streak, now - last_streak_log,
+                            )
+                            error_streak = 0
+                            last_streak_log = now
+                    # 409 = another polling instance owns this bot — back off long.
+                    await asyncio.sleep(60 if is_conflict else 5)
                     continue
+                last_error_class = None
+                error_streak = 0
 
                 results = data.get("result", [])
                 if first_poll and results:

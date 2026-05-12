@@ -1,5 +1,84 @@
 # Changelog
 
+## v0.4.26 — 2026-05-12 — peer status probes + TUI session sync + log rotation
+
+A bug-bash pass that surfaced while testing v0.4.25 streaming: peer
+status reporting was inconsistent across surfaces, TUI mentions
+weren't visible from the desktop reading the same session, the
+daemon's ``service.log`` was growing without bound, the IMAP
+gateway's SMTP fields were missing from desktop + tracked under the
+wrong env keys, and the Telegram poller was spamming the log on
+unrecoverable 409 conflicts.
+
+**Same-session sync TUI ↔ desktop.** TUI ``@peer`` mentions now
+persist to the local session like CLI does (``cli.py:224-239``
+already followed this pattern — TUI was the outlier). After the
+stream finishes, ``on_mention_done`` appends the
+user-prompt/assistant-reply pair to ``engine.session.messages``,
+calls ``log_turn`` with the ``peer`` ``ToolLog``, and saves the
+session. The desktop's filesystem watcher then emits ``fs-change``
+and the open session view refreshes. Persistence runs on the
+Textual main thread (via the message handler) so there's no race
+on ``engine.session`` with the worker that ran the stream.
+
+**Peer-status probes consolidated.** ``alpi doctor`` was reporting
+``0/N reachable`` for peers that ``alpi setup`` and the desktop saw
+as online. Two bugs were stacked:
+
+- ``alpi/doctor.py:520-521`` compared the dict values from
+  ``_probe_all`` (which returns ``{peer_id: (status, reason)}``
+  tuples) to the bare string ``"on"`` — ``("on", None) == "on"``
+  is always ``False``, so the count was always zero regardless of
+  actual reachability. Fixed by indexing the tuple
+  (``v[0] == "on"``).
+- ``alpi/alp/setup.py:_PING_TIMEOUT = 0.5`` was too aggressive — a
+  daemon still warming its Engine on the first call, or a Tailscale
+  peer with normal WAN latency, would not answer in 500 ms and got
+  marked offline. Now ``alp_client.PING_TIMEOUT_SECONDS = 5.0`` is
+  the single source of truth shared by ``alpi/alp/setup.py`` and
+  ``alpi/host/probes.py``. Probes run concurrently so the wall-clock
+  cost stays bounded regardless of peer count.
+
+**Log rotation actually rotates.** ``alpi/_log.py`` set
+``backupCount=0`` on every ``RotatingFileHandler``, and the same in
+``alpi/service.py``'s daemon-wide handler. The Python stdlib treats
+``backupCount=0`` as "no rollover" — the file is closed/reopened on
+overflow but never truncated, so it grows without bound. A 273 MB
+``service.log`` had accumulated on the dev machine before this was
+caught. New constant ``alpi/_log.py::BACKUP_COUNT = 3`` plumbed
+through both call sites caps every subsystem's footprint at
+``MAX_BYTES * 4`` (~4 MB).
+
+**Telegram 409 spam contained.** ``alpi/gateway/platforms/telegram.py``
+was logging a WARNING + sleeping 5 s on every ``getUpdates`` failure,
+including the unrecoverable 409 Conflict ("another instance is
+polling this bot"). With multiple profiles in the daemon sharing one
+``TELEGRAM_BOT_TOKEN`` (a separate architectural issue not addressed
+here — only one polling loop per token should exist; tracked
+separately), the loop produced one warning every ~5 ms across the
+daemon and was the primary source of the ``service.log`` blow-up.
+Fix: dedup the warning by error class — log once on first occurrence,
+then a summary every 60 s if the same class keeps firing, reset on a
+successful poll. Plus an explicit 60 s backoff on 409 specifically
+(retrying every 5 s changes nothing while the other instance owns
+the bot).
+
+**IMAP gateway env keys.** ``SMTP_HOST`` and ``SMTP_PORT`` were
+written by ``alpi setup`` but missing from the meta lists used by
+the desktop UI form, the host's gateway-remove verb, and the
+``alpi`` CLI's gateway-remove path. Result: the desktop user could
+configure IMAP fields but not SMTP, and ``host.gateway.remove`` /
+``alpi`` cleanup paths left ``SMTP_HOST`` orphaned in ``.env`` after
+removing the IMAP gateway. ``alpi/host/config.py`` additionally
+carried a typo (``IMAP_SMTP_HOST`` instead of ``SMTP_HOST``) — a
+key that nothing in the codebase actually writes or reads. Fixed
+across all four sources (``alpi/cli.py``, ``alpi/host/config.py``,
+``alpi/host/device_state.py``, ``desktop/src/components/settings/util.js``).
+
+**Roadmap.** New v0.6 item ``ORG.1`` — organization workspace, with
+three escalating designs (convention → overlay → first-class entity)
+gated on real demand. See ``docs/ROADMAP.md``.
+
 ## v0.4.25 — 2026-05-12 — streaming `link.ask` (ALP.4)
 
 Peer mentions are no longer atomic. When the caller passes

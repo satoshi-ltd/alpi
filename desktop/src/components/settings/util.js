@@ -53,8 +53,10 @@ export const GATEWAY_FIELDS = {
   imap: [
     { env: "IMAP_ADDRESS", label: "Email address", secret: false, required: true, hint: "you@domain.com" },
     { env: "IMAP_PASSWORD", label: "Password", secret: true, required: true, hint: "app password if 2FA" },
-    { env: "IMAP_HOST", label: "Host", secret: false, required: true, hint: "imap.gmail.com · imap.fastmail.com · …" },
-    { env: "IMAP_PORT", label: "Port", secret: false, required: true, hint: "993 (SSL) · 143 (STARTTLS)" },
+    { env: "IMAP_HOST", label: "IMAP host", secret: false, required: true, hint: "imap.gmail.com · imap.fastmail.com · …" },
+    { env: "IMAP_PORT", label: "IMAP port", secret: false, required: true, hint: "993 (SSL) · 143 (STARTTLS)" },
+    { env: "SMTP_HOST", label: "SMTP host", secret: false, required: true, hint: "smtp.gmail.com · smtp.fastmail.com · …" },
+    { env: "SMTP_PORT", label: "SMTP port", secret: false, hint: "587 (STARTTLS) · 465 (SSL)" },
     { env: "IMAP_ALLOWED_SENDERS", label: "Allowed senders", secret: false, hint: "comma-separated emails · empty = anyone" },
   ],
   matrix: [

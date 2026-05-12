@@ -29,6 +29,8 @@ GATEWAY_ENV_KEYS = {
         ("IMAP_PASSWORD", True),
         ("IMAP_HOST", False),
         ("IMAP_PORT", False),
+        ("SMTP_HOST", False),
+        ("SMTP_PORT", False),
         ("IMAP_ALLOWED_SENDERS", False),
     ),
     "gmail": (

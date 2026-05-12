@@ -517,8 +517,8 @@ def _check_alp(home: Path) -> list[Check]:
         return out
 
     total = len(pinned)
-    reachable = sum(1 for v in results.values() if v == "on")
-    unreachable = [pid for pid, v in results.items() if v != "on"]
+    reachable = sum(1 for v in results.values() if v[0] == "on")
+    unreachable = [pid for pid, v in results.items() if v[0] != "on"]
     detail = f"{reachable}/{total} reachable"
     if unreachable:
         detail += f" · offline: {', '.join(unreachable)}"

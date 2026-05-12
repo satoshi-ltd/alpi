@@ -138,6 +138,55 @@ real session-memory data to measure against.
 |---|---|---|
 | AI (1.c) | Dedup threshold recalibration — the 70% Jaccard cutoff in `alpi/memory.py::_find_duplicate_index` was an initial guess. Measure near-duplicate density on real session-memory accumulation across multiple profiles, then tighten or loosen. Pure data exercise; the audit produces a single number change. | 🔵 |
 
+### Org-level shared surfaces
+
+| ID | Item | Status |
+|---|---|---|
+| ORG.1 | Organization workspace — a shared filesystem root visible to every profile in an organization (`organization/agent-organization.md`), so workgroup outputs, brand guides, shared templates, and cross-agent reference docs have a canonical landing zone instead of being trapped inside transcripts or duplicated across profile workspaces. | 🔵 |
+
+### ORG.1. Organization workspace
+
+Today each profile has its own ``cfg.workspace_path`` and the
+``organization/`` scaffold is purely a bootstrap concept — there's no
+runtime entity per organization, no shared filesystem. Information
+that should be team-wide (Vera drafts strategy → Prism + Echo read it,
+a workgroup ``#done`` produces an artefact that needs a home, brand
+guides / CSVs / templates shared across roles) leaks into workgroup
+transcripts as strings or gets duplicated across profile workspaces.
+
+**Three levels of ambition, listed cheapest to most expensive. We
+promote based on real demand, not speculative scope.**
+
+1. **Convention only (no code).** Designate one profile as the
+   "hub/secretary" of the org; its personal workspace *is* the org
+   workspace. Other agents reach it via ``@hub`` (existing
+   ``link.ask`` peer model). Zero new infrastructure, zero new trust
+   model, zero new protocol. Documented in ``ORGANIZATION.md`` as a
+   pattern. Covers the 70% case where the hub naturally orchestrates
+   workgroups and is the canonical funnel for their outputs.
+
+2. **Workspace overlay.** ``cfg.workspace_path`` becomes a list:
+   ``[profile_workspace, org_workspace]``. File tools (``file_read``,
+   ``file_write``, ``search``) read from both, write to the first by
+   default, with an explicit ``scope: "org"`` argument for the shared
+   root. New config, no new protocol, no new daemon entity. Promote
+   when the convention-only pattern starts to feel hacky (e.g. agents
+   confused about "is this my doc or the hub's?").
+
+3. **First-class org entity.** ``~/.alpi/orgs/<id>/workspace/`` with
+   member profiles, roles (reader / writer / admin), event fan-out on
+   change, and shared BA RAG index across profiles. New trust model,
+   new permissions UI, new protocol verbs. Significant scope —
+   probably its own minor release. Only worth it when a real user
+   reports "the overlay can't model what I need".
+
+**Why it waits.** No documented demand from real org users yet.
+v0.5 (mobile) and v0.6 (skill curator, ALP.4 already in v0.4.25)
+are higher-leverage. Promote the convention into ``ORGANIZATION.md``
+opportunistically when someone asks how to share a doc across the
+17 agents; the overlay/first-class designs wait for that question to
+become frequent.
+
 ### AI (1.c). Dedup threshold recalibration
 
 The 70% Jaccard containment cutoff that decides whether a new memory entry is a near-duplicate of an existing one was chosen as a starting point in v0.4 with no production data to calibrate against. By v0.6 users will have weeks/months of accumulated memory across multiple profiles — enough signal to ask the right question: of the writes that today trigger reinforcement, how many are genuine paraphrases vs. false-positive collisions? And of the writes that pass dedup as distinct, how many are actually paraphrases the agent should have reinforced?

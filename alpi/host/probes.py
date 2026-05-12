@@ -161,7 +161,7 @@ async def _peers_ping(
                 host=host_, port=int(port_s),
                 sender=sender, recipient_pubkey_b64=peer.pubkey,
                 method="link.ping", params={"nonce": "host-probe"},
-                timeout=5.0,
+                timeout=alp_client.PING_TIMEOUT_SECONDS,
             )
         else:
             target_home = (
@@ -175,7 +175,7 @@ async def _peers_ping(
                 socket_path=socket_path,
                 sender=sender, recipient_pubkey_b64=peer.pubkey,
                 method="link.ping", params={"nonce": "host-probe"},
-                timeout=5.0,
+                timeout=alp_client.PING_TIMEOUT_SECONDS,
             )
     except alp_client.TargetOffline as e:
         return {"status": "off", "reason": f"target-offline: {e}"[:120]}
