@@ -81,7 +81,7 @@ Three options:
 | `tools.read_image.max_edge` | `1568` | int (pixels; `0` disables) | next turn |
 | `tools.terminal.sandbox` | `false` | bool | next turn |
 | `tools.terminal.allow_network` | `false` | bool | next turn |
-| `tools.terminal.approval.allowlist` | `[]` | list of pattern descriptions | next turn |
+| `tools.terminal.approval.allowlist` | `[]` | list of pattern descriptions and/or command globs (see below) | next turn |
 | `tools.browser.vision` | `false` | bool | next turn |
 | `tools.research.quick_steps` | `8` | int | next turn |
 | `tools.research.normal_steps` | `15` | int | next turn |
@@ -154,23 +154,39 @@ severities:
   one of these, do it directly from your shell, not through the
   agent.
 
-The allowlist is a list of **pattern descriptions** (the human label
-attached to each regex) rather than raw regex strings — so the config
-file is readable and forward-compatible if the regex is tightened
-later. Example:
+Allowlist entries come in two shapes, sharing the same list:
+
+**Pattern descriptions** — the human label attached to one of the
+built-in caution regexes (`recursive rm`, `sudo`, `git force-push`,
+`git hard reset`, `chmod 777 / a+w`, `sql drop / truncate`,
+`process kill -9`). A pattern-desc entry allows **every** command of
+that severity-category. This is what the `Always` button writes.
+
+**Command globs** — any other string is treated as an `fnmatch`
+pattern matched against the literal command (whitespace-trimmed).
+Use this for per-command exceptions when the category-level bypass
+is too broad. Globs only override **caution** classification;
+dangerous commands stay blocked. Globs also do **not** apply to
+**compound** commands (containing `&&`, `||`, `;`, `|`, newline,
+backticks, or `$(…)`) — otherwise `"sudo apt *"` would also approve
+`sudo apt update && rm -rf build`. Compound commands fall back to
+the prompt unless a category-desc bypass covers them.
 
 ```yaml
 tools:
   terminal:
     approval:
       allowlist:
-        - recursive rm        # I routinely rm -rf node_modules
-        - git force-push      # OK, I know what I'm doing
+        - recursive rm                       # category: every rm -rf passes
+        - sudo apt *                         # glob: any sudo apt subcommand
+        - git reset --hard origin/main       # glob: this exact command only
+        - git push --force origin my-branch  # glob: only this branch's force-push
 ```
 
 Session approvals live in memory (a module-level set) and die with
 the TUI process. Permanent approvals persist to `config.yaml` via the
-`Always` button. Dangerous commands never get an allowlist entry.
+`Always` button (which writes a pattern-desc) or by hand-editing the
+list with globs. Dangerous commands never get an allowlist entry.
 
 This layer composes with the sandbox (`tools.terminal.sandbox`): the
 sandbox is an OS-level boundary (network, filesystem writes outside

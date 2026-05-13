@@ -44,8 +44,7 @@ personal agent.
 
 | ID | Item | Status |
 |---|---|---|
-| CH.2 | Granular terminal approval allowlist — extend the existing profile config allowlist into command/pattern-level approvals for common safe commands without adding a second storage file. | 🟡 |
-| CH.3 | Memory promotion queue — collect durable facts from compaction/session summaries into a review queue with preview/apply; never write directly to `MEMORY.md` from compaction. | 🔵 |
+| CH.3 | Memory promotion queue — collect durable facts from compaction/session summaries into a review queue with preview/apply; never write directly to `MEMORY.md` from compaction. | 🟡 |
 
 ### AX-mobile. Mobile companion (iOS / Android)
 
@@ -122,22 +121,6 @@ doesn't re-poll every turn ("is the kitchen light on?" answers from cache;
 `config.yaml` so the skill can only touch what the user explicitly opted in.
 
 LOC estimate: ~400 (HA covers ~250, Hue + Xiaomi ~50 each, Google/Alexa ~50 stub).
-
-### CH.2. Granular terminal approval allowlist
-
-alpi already has terminal approval severity and a persistent
-`tools.terminal.approval.allowlist` config path. v0.5 makes that allowlist
-practical at the command level: profiles can persist safe patterns such as
-read-only Git/GitHub inspection, while destructive or ambiguous commands still
-go through the existing approval flow.
-
-The storage remains `config.yaml`. No `exec-approvals.json`, no second policy
-database. The implementation is an extension of `_approval.py` plus tests for
-precedence between safe, caution, dangerous, session allow, and persistent
-allow.
-
-**Success condition.** A user can make repetitive safe development commands
-frictionless for a profile without weakening the dangerous command blocklist.
 
 ### CH.3. Memory promotion queue
 
@@ -450,7 +433,7 @@ creator happens to notice it.
 `alpi ops digest [--since 7d]` synthesises the signals into a single report:
 
 - approval-prompt frequency and the top patterns that triggered them (input
-  for CH.2 allowlist expansion);
+  for further `tools.terminal.approval.allowlist` glob entries);
 - auto-compact rate, mean before/after ratio per model (read from
   `logs/compaction.jsonl`);
 - inactive skills count and reasons (input for `@alpi/home`-style bundling

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import fnmatch
 import re
 import threading
 from dataclasses import dataclass
@@ -170,12 +171,75 @@ def _persist_always(pattern_desc: str) -> None:
 
 
 def classify(cmd: str) -> tuple[Severity, str]:
+    """Return ``(worst_severity, desc_of_that_match)``.
+
+    Scans every pattern: if any matches with ``DANGEROUS``, that one wins
+    immediately (the dangerous desc is what the gate must surface). Else
+    the first ``CAUTION`` match wins. This matters for compound commands
+    like ``rm -rf build && mkfs.ext4 /dev/sda`` where an earlier caution
+    pattern could otherwise hide a later dangerous one and let an
+    ``allowlist`` desc-bypass approve the whole line.
+    """
     if not cmd:
         return Severity.SAFE, ""
+    caution_match: tuple[Severity, str] | None = None
     for p in _PATTERNS:
-        if p.regex.search(cmd):
+        if not p.regex.search(cmd):
+            continue
+        if p.severity == Severity.DANGEROUS:
             return p.severity, p.desc
-    return Severity.SAFE, ""
+        if caution_match is None:
+            caution_match = (p.severity, p.desc)
+    return caution_match if caution_match else (Severity.SAFE, "")
+
+
+_PATTERN_DESCS = frozenset(p.desc for p in _PATTERNS)
+
+# A command that chains via &&, ||, ;, |, newline, backtick, or $( subshell
+# is considered "compound" and is not eligible for glob bypass — the glob
+# would match the head while a later segment hides destructive operations.
+# Pattern-desc (category) bypass still applies, because the regex
+# classifier already picked the worst-severity segment.
+_COMPOUND_OP_RE = re.compile(
+    r"&&|\|\||;|\n|`|\$\(|(?<!\|)\|(?!\|)"
+)
+
+
+def _is_compound(cmd: str) -> bool:
+    return bool(_COMPOUND_OP_RE.search(cmd))
+
+
+def _allowlist_match(cmd: str, allowlist: list[str], desc: str) -> tuple[str, str] | None:
+    """Return ``(entry, kind)`` if ``cmd`` is allowed by any entry; else ``None``.
+
+    Two entry shapes share one config key:
+      - **Pattern-desc** (legacy): exact match against a known pattern's
+        ``desc`` (e.g. ``"recursive rm"``) — allows every command of that
+        severity-category. Kind = ``"category"``.
+      - **Command glob** (CH.2): any other string is treated as an
+        ``fnmatch`` pattern matched against the literal command
+        (whitespace-trimmed). Kind = ``"glob"``. Examples:
+        ``"sudo apt update"`` (exact), ``"sudo apt *"`` (wildcard),
+        ``"git push --force origin my-branch"`` (exact per-branch).
+        Globs never override ``DANGEROUS`` (caller short-circuits) and
+        never apply to **compound** commands (``&&``, ``||``, ``;``, ``|``,
+        newline, backtick, ``$( … )``) — otherwise ``"sudo apt *"`` would
+        also approve ``sudo apt update && rm -rf build``.
+    """
+    needle = cmd.strip()
+    compound = _is_compound(needle)
+    for entry in allowlist:
+        if not entry:
+            continue
+        if entry in _PATTERN_DESCS:
+            if entry == desc:
+                return entry, "category"
+            continue
+        if compound:
+            continue
+        if fnmatch.fnmatchcase(needle, entry):
+            return entry, "glob"
+    return None
 
 
 def _log_decision(cmd: str, decision: Decision) -> None:
@@ -220,10 +284,17 @@ def _check_inner(cmd: str) -> Decision:
                 allowed=True, severity=severity, pattern=desc,
                 reason="session allowlist",
             )
-    if desc in _persistent_allowlist():
+    match = _allowlist_match(cmd, _persistent_allowlist(), desc)
+    if match is not None:
+        entry, kind = match
+        reason = (
+            "config allowlist"
+            if kind == "category"
+            else f"config allowlist (glob: {entry!r})"
+        )
         return Decision(
             allowed=True, severity=severity, pattern=desc,
-            reason="config allowlist",
+            reason=reason,
         )
 
     fn = _prompt_callback
