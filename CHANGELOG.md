@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.4.36 — 2026-05-13 — daemon loop isolation + chat event replay sidecar
+
+A scheduled job in one profile could freeze a live chat stream in another because the scheduler tick ran inline on the daemon's asyncio loop. Fixes the cause and adds a client-side recovery path.
+
+- Scheduler `tick()` and ad-hoc `host.schedule.fire` now run in `run_in_executor` so a long `subprocess.run` can't block gateway listeners, ALP, or `host.chat.send` in sibling profiles.
+- New per-turn JSONL sidecar (`sessions/_events_<session_id>.jsonl`) + `host.chat.events_since` RPC: a desktop whose stream socket dies mid-turn replays missed frames from disk instead of losing the reply.
+- `host.chat.send` keeps draining and persisting events even after the client socket dies, so the sidecar always ends with `reply` + `done`.
+- 5s `heartbeat` keepalive on `host.chat.send` so long tool calls don't trip the client's stall watchdog.
+
 ## v0.4.35 — 2026-05-13 — config surface trim + two save-time bug fixes
 
 - Fixed silent data loss: `config.save()` was dropping `tools.terminal.approval.allowlist` because `TerminalToolConfig` lacked an `approval` field and `_tools_delta()` never serialized it. New `ApprovalConfig` dataclass closes the round-trip; regression test added.

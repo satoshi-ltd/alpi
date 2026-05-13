@@ -100,6 +100,8 @@ async def _schedule_set_paused(
 async def _schedule_fire(
     params: dict[str, Any], _server: host_server.Server,
 ) -> dict[str, Any]:
+    import asyncio
+
     from alpi.host.handlers import _check_id
     from alpi.scheduler.run import fire_by_id
 
@@ -107,7 +109,9 @@ async def _schedule_fire(
     job_id = str((params or {}).get("id") or "").strip()
     _check_id(job_id, "id")
     home = _resolve_home(profile)
-    ok, msg = fire_by_id(home, job_id)
+    # fire_by_id spawns a child via subprocess.run with a 10-min timeout — off-loop or it freezes every other coroutine (same root cause as alpi/scheduler/run.py:serve).
+    loop = asyncio.get_running_loop()
+    ok, msg = await loop.run_in_executor(None, fire_by_id, home, job_id)
     if not ok:
         raise host_server.HandlerError(
             -32004, "fire-failed", data={"detail": msg},

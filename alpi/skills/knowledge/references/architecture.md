@@ -50,7 +50,17 @@ not appear as normal profile chats.
 
 Scheduled jobs run through `alpi chat --once --emit-events --no-save`
 with `ALPI_PLATFORM=cron`. The scheduler reads stdout events and
-delivers the final reply, but no session file is saved.
+delivers the final reply, but no session file is saved. `serve()`
+runs each `tick()` in a dedicated `ThreadPoolExecutor`, and
+`host.schedule.fire` wraps `fire_by_id` in `run_in_executor`, so a
+long `subprocess.run` job can't starve sibling-profile coroutines on
+the daemon loop.
+
+`host.chat.send` persists every emitted frame to a per-turn JSONL
+sidecar (`sessions/_events_<session_id>.jsonl`); the desktop calls
+`host.chat.events_since(after_seq)` to replay missed frames when the
+stream socket dies mid-turn. A 5s `heartbeat` frame keeps the
+client's stall watchdog alive on long tool calls.
 
 Skills are exposed through a compact index in the system prompt.
 Keyword hints can add a one-turn system message nudging toward matching

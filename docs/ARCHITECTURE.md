@@ -536,10 +536,20 @@ Verb namespaces in current shape:
 
 - **`host.sessions.list`**, **`host.session.read`**,
   **`host.workgroup.transcript`** — read-only.
-- **`host.chat.send`** (stream), **`host.chat.cancel`** — run an
-  engine turn for a profile, stream tool / reasoning / assistant
-  events back; cancel via a separate connection that targets the
-  in-flight `request_id`.
+- **`host.chat.send`** (stream), **`host.chat.cancel`**,
+  **`host.chat.events_since`** — run an engine turn for a profile,
+  stream tool / reasoning / assistant events back; cancel via a
+  separate connection that targets the in-flight `request_id`. Every
+  emitted frame is also appended to a per-turn JSONL sidecar under
+  `sessions/_events_<session_id>.jsonl`; `events_since(profile,
+  session_id, after_seq)` lets a desktop client whose stream socket
+  died mid-turn replay the missed frames and reconstruct the turn
+  without losing the model's reply. A 5-second `heartbeat` frame is
+  woven into the same stream so a long-running tool with no deltas
+  doesn't fool the client's stall watchdog. The daemon-side emit
+  path catches `send_frame` failures and switches to "drain + persist
+  only" so the sidecar still captures `reply` + `done` after the
+  socket dies.
 - **`host.providers.*`** (set_key, unset_key, add_ollama,
   remove_ollama, add_openrouter_model, remove_openrouter_model),
   **`host.peers.{add,remove,pending_list,pending_accept,pending_discard}`**,
@@ -617,6 +627,18 @@ Scheduled jobs execute through `alpi chat --once --emit-events
 events to detect tool traces, final reply text, delivery, and failure.
 It does not write `sessions/<id>.json`: cron output belongs to
 schedule delivery/logging, not to local TUI / desktop chat history.
+
+**Loop isolation.** `serve()` runs `tick()` in a dedicated
+`ThreadPoolExecutor(max_workers=2)`, and `host.schedule.fire` wraps
+`fire_by_id` in `run_in_executor` before awaiting. Both paths
+ultimately call `subprocess.run(timeout=600)`; running them inline
+would block every other coroutine on the daemon's asyncio loop —
+gateway listeners, ALP responders, and `host.chat.send` streams in
+sibling profiles all stall for the duration of the scheduled job.
+The dedicated executor also means the scheduler can't starve chat's
+default-executor turns. A regression test in
+`tests/core/test_schedule.py::test_serve_runs_tick_off_loop_so_chat_can_progress`
+pins the contract.
 
 **Timezone.** Cron expressions evaluate against the **machine's system timezone** (`datetime.now().astimezone()` in `scheduler/run.py`). Jobs are stored with UTC `last_run_at` but fire according to local wall-clock time. Practical consequence: if you specify `10 12 * * *` because you want a 12:10 reminder in Bangkok, the Mac must be set to `Asia/Bangkok`. Move the machine to a different timezone and the cron fires at 12:10 there, not in Bangkok. No in-job timezone override today — add it via `TZ=…` in the launchd plist / systemd unit if cross-timezone stability is required.
 

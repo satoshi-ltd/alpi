@@ -503,3 +503,70 @@ def test_schedule_tool_fire_requires_id(tmp_home_no_env: Path,
     r = Schedule().run(action="fire")
     assert not r.ok
     assert "id" in (r.error or "").lower()
+
+
+# --------------------------------------------------------------------
+# Profile isolation: scheduler.serve() must not block the event loop
+# --------------------------------------------------------------------
+
+
+def test_serve_runs_tick_off_loop_so_chat_can_progress(
+    tmp_home_no_env: Path, monkeypatch,
+) -> None:
+    """The freeze reported with the doc profile happened because tick()
+    was running inline on the loop and a 30s subprocess.run blocked every
+    coroutine. serve() must offload tick to an executor."""
+    import asyncio
+    import time as _time
+
+    tick_block_s = 0.5
+    tick_started = asyncio.Event()
+    tick_done = asyncio.Event()
+
+    def slow_tick(home, now=None):  # noqa: ANN001
+        # Set the event from inside a thread — schedule it on the loop.
+        loop.call_soon_threadsafe(tick_started.set)
+        _time.sleep(tick_block_s)
+        loop.call_soon_threadsafe(tick_done.set)
+
+    monkeypatch.setattr(scheduler, "tick", slow_tick)
+    monkeypatch.setattr(scheduler, "TICK_SECONDS", 0.05)
+
+    async def _run() -> dict:
+        nonlocal loop
+        loop = asyncio.get_running_loop()
+        # Concurrent coroutine that wakes every 50ms — counts whether the loop is responsive.
+        counter = {"wakes": 0}
+
+        async def heartbeat() -> None:
+            while not tick_done.is_set():
+                await asyncio.sleep(0.05)
+                counter["wakes"] += 1
+
+        serve_task = asyncio.create_task(scheduler.serve(tmp_home_no_env))
+        hb_task = asyncio.create_task(heartbeat())
+
+        try:
+            await asyncio.wait_for(tick_started.wait(), timeout=2.0)
+            t0 = _time.monotonic()
+            await asyncio.wait_for(tick_done.wait(), timeout=tick_block_s + 1.0)
+            elapsed = _time.monotonic() - t0
+        finally:
+            serve_task.cancel()
+            hb_task.cancel()
+            for t in (serve_task, hb_task):
+                try:
+                    await t
+                except (asyncio.CancelledError, Exception):  # noqa: BLE001
+                    pass
+
+        return {"elapsed_during_tick": elapsed, "heartbeats": counter["wakes"]}
+
+    loop: asyncio.AbstractEventLoop | None = None  # set inside _run
+    result = asyncio.run(_run())
+
+    # During the 0.5s blocking tick the heartbeat must keep firing — without isolation it'd be stuck and elapsed would jump.
+    assert result["heartbeats"] >= 3, (
+        f"loop starved during tick — only {result['heartbeats']} heartbeats fired "
+        "while tick blocked for 500ms; serve() must run tick in an executor"
+    )

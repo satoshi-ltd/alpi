@@ -5,6 +5,7 @@ import threading
 from pathlib import Path
 from typing import Any
 
+from alpi.host import _chat_events
 from alpi.host import server as host_server
 
 
@@ -12,6 +13,7 @@ _active_lock = threading.Lock()
 _active: dict[str, Any] = {}  # request_id -> Engine
 _session_active: dict[str, Any] = {}  # session_id -> Engine
 _session_locks: dict[str, asyncio.Lock] = {}
+_HEARTBEAT_PERIOD_S = 5.0
 
 
 def _get_session_lock(session_id: str) -> asyncio.Lock:
@@ -25,6 +27,7 @@ def _get_session_lock(session_id: str) -> asyncio.Lock:
 def register(server: host_server.Server) -> None:
     server.register_stream("host.chat.send", _data_chat_send)
     server.register("host.chat.cancel", _data_chat_cancel)
+    server.register("host.chat.events_since", _data_chat_events_since)
 
 
 def _resolve_home(profile: str) -> Path:
@@ -90,6 +93,29 @@ async def _data_chat_send(
         await session_lock.acquire()
         _session_active[sid_for_lock] = engine
 
+    # Sidecar so a desktop client whose stream socket dies mid-turn can replay via host.chat.events_since.
+    persisted_sid = sid_for_lock
+    if persisted_sid:
+        _chat_events.reset_for_turn(home, persisted_sid, request_id)
+
+    stream_alive = True
+
+    async def emit(frame: dict[str, Any]) -> None:
+        nonlocal stream_alive
+        # Persist FIRST: replay depends on the sidecar staying complete even after the wire is gone.
+        if persisted_sid:
+            try:
+                _chat_events.append(home, persisted_sid, request_id, frame)
+            except Exception:  # noqa: BLE001
+                pass
+        if not stream_alive:
+            return
+        try:
+            await send_frame(frame)
+        except Exception:  # noqa: BLE001
+            # Client gone. Stop trying to push frames but keep draining + persisting so the sidecar has reply/done.
+            stream_alive = False
+
     loop = asyncio.get_running_loop()
     queue: asyncio.Queue = asyncio.Queue()
     SENTINEL = object()
@@ -98,6 +124,14 @@ async def _data_chat_send(
         loop.call_soon_threadsafe(queue.put_nowait, ev)
 
     parts: list[str] = []
+    heartbeat_task: asyncio.Task | None = None
+
+    async def _heartbeat_loop() -> None:
+        while stream_alive:
+            await asyncio.sleep(_HEARTBEAT_PERIOD_S)
+            if not stream_alive:
+                return
+            await emit({"event": "heartbeat"})
 
     def run_engine() -> None:
         try:
@@ -110,6 +144,7 @@ async def _data_chat_send(
             loop.call_soon_threadsafe(queue.put_nowait, SENTINEL)
 
     task = loop.run_in_executor(None, run_engine)
+    heartbeat_task = loop.create_task(_heartbeat_loop())
 
     try:
         while True:
@@ -118,7 +153,7 @@ async def _data_chat_send(
                 break
             ev: AgentEvent = item
             if ev.kind == "tool_start":
-                await send_frame({
+                await emit({
                     "event": "tool_start",
                     "tool_id": ev.tool_id,
                     "name": ev.name,
@@ -126,7 +161,7 @@ async def _data_chat_send(
                     "args": ev.args or {},
                 })
             elif ev.kind == "tool_state":
-                await send_frame({
+                await emit({
                     "event": "tool_state",
                     "tool_id": ev.tool_id,
                     "name": ev.name,
@@ -134,7 +169,7 @@ async def _data_chat_send(
                     "ok": ev.ok,
                 })
             elif ev.kind == "tool_end":
-                await send_frame({
+                await emit({
                     "event": "tool_end",
                     "tool_id": ev.tool_id,
                     "name": ev.name,
@@ -142,15 +177,15 @@ async def _data_chat_send(
                     "output": _truncate(ev.output, 4000),
                 })
             elif ev.kind == "reasoning_delta":
-                await send_frame({"event": "reasoning_delta", "text": ev.text})
+                await emit({"event": "reasoning_delta", "text": ev.text})
             elif ev.kind == "assistant_delta":
-                await send_frame({"event": "assistant_delta", "text": ev.text})
+                await emit({"event": "assistant_delta", "text": ev.text})
             elif ev.kind == "error":
-                await send_frame({"event": "error", "text": ev.text})
+                await emit({"event": "error", "text": ev.text})
             elif ev.kind == "interrupted":
-                await send_frame({"event": "interrupted"})
+                await emit({"event": "interrupted"})
             elif ev.kind == "auto_compact":
-                await send_frame({
+                await emit({
                     "event": "auto_compact",
                     "text": ev.text,
                     "tokens_before": ev.tokens_in,
@@ -159,13 +194,24 @@ async def _data_chat_send(
             elif ev.kind == "assistant_done" and ev.text.strip():
                 parts.append(ev.text)
         final = "\n\n".join(parts).strip()
-        await send_frame({
+        # Once we know the final session_id we can also persist the late session frames against it (covers new sessions whose id wasn't known at entry).
+        late_sid = engine.session.id
+        if not persisted_sid and isinstance(late_sid, str) and late_sid:
+            _chat_events.reset_for_turn(home, late_sid, request_id)
+            persisted_sid = late_sid
+        await emit({
             "event": "reply",
             "text": final,
             "session_id": engine.session.id,
         })
-        await send_frame({"event": "done", "session_id": engine.session.id})
+        await emit({"event": "done", "session_id": engine.session.id})
     finally:
+        if heartbeat_task is not None:
+            heartbeat_task.cancel()
+            try:
+                await heartbeat_task
+            except (asyncio.CancelledError, Exception):  # noqa: BLE001
+                pass
         await task
         with _active_lock:
             _active.pop(request_id, None)
@@ -249,6 +295,38 @@ async def _send_mention(
     sid = engine.session.id
     await send_frame({"event": "reply", "text": reply, "session_id": sid})
     await send_frame({"event": "done", "session_id": sid})
+
+
+async def _data_chat_events_since(
+    params: dict[str, Any], _server: host_server.Server,
+) -> dict[str, Any]:
+    profile = str((params or {}).get("profile") or "")
+    session_id = str((params or {}).get("session_id") or "").strip()
+    after_seq_raw = (params or {}).get("after_seq")
+    try:
+        after_seq = int(after_seq_raw) if after_seq_raw is not None else 0
+    except (TypeError, ValueError):
+        after_seq = 0
+    limit_raw = (params or {}).get("limit")
+    try:
+        limit = int(limit_raw) if limit_raw is not None else 1000
+    except (TypeError, ValueError):
+        limit = 1000
+    if not session_id:
+        raise host_server.HandlerError(
+            -32602, "invalid-params",
+            data={"detail": "session_id required"},
+        )
+    from alpi.host.handlers import _check_id
+    _check_id(session_id, "session_id")
+    home = _resolve_home(profile)
+    in_flight = False
+    if session_id in _session_active:
+        in_flight = True
+    return {
+        **_chat_events.read_since(home, session_id, after_seq=after_seq, limit=limit),
+        "in_flight": in_flight,
+    }
 
 
 async def _data_chat_cancel(

@@ -306,15 +306,29 @@ def tick(home: Path, now: datetime | None = None) -> list[tuple[str, bool, str]]
 
 async def serve(home: Path) -> None:
     """Async entry point for the orchestrator. Sleeps between ticks
-    using ``asyncio.sleep`` so other subsystems share the same loop."""
+    using ``asyncio.sleep`` so other subsystems share the same loop.
+
+    ``tick`` runs in a dedicated thread executor so a long-running
+    ``subprocess.run`` (up to 10 min via run_job's timeout) can't
+    starve host.chat streaming or other coroutines.
+    """
     import asyncio
+    import concurrent.futures
+
     log.info("Scheduler started (tick=%ss).", TICK_SECONDS)
-    while True:
-        try:
-            tick(home)
-        except Exception as e:  # noqa: BLE001
-            log.exception("tick crashed: %s", e)
-        await asyncio.sleep(TICK_SECONDS)
+    loop = asyncio.get_running_loop()
+    executor = concurrent.futures.ThreadPoolExecutor(
+        max_workers=2, thread_name_prefix="alpi-sched",
+    )
+    try:
+        while True:
+            try:
+                await loop.run_in_executor(executor, tick, home)
+            except Exception as e:  # noqa: BLE001
+                log.exception("tick crashed: %s", e)
+            await asyncio.sleep(TICK_SECONDS)
+    finally:
+        executor.shutdown(wait=False)
 
 
 # Process control (used by CLI start/stop/status)

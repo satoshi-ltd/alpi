@@ -193,6 +193,67 @@ async def test_fire_runs_job_via_scheduler(tmp_path: Path, monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
+async def test_fire_runs_off_loop_so_chat_can_progress(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    """fire_by_id wraps subprocess.run(timeout=600). If the host handler
+    awaits it inline, the host loop freezes — same root cause as
+    scheduler.serve()'s old inline tick()."""
+    import asyncio
+    import time as _time
+
+    home = tmp_path / "h"
+    home.mkdir()
+    monkeypatch.setattr(data_handlers, "_resolve_home", lambda p: home)
+    _seed_jobs(home, {"id": "blkr1234", "kind": "cron",
+                       "expression": "* * * * *", "prompt": "x"})
+    srv = host_server.Server(home=home)
+    data_schedule.register(srv)
+
+    fire_started = asyncio.Event()
+    fire_done = asyncio.Event()
+    block_s = 0.4
+
+    def slow_fire(h, jid):  # noqa: ANN001
+        loop.call_soon_threadsafe(fire_started.set)
+        _time.sleep(block_s)
+        loop.call_soon_threadsafe(fire_done.set)
+        return True, "fired"
+
+    monkeypatch.setattr("alpi.scheduler.run.fire_by_id", slow_fire)
+
+    loop = asyncio.get_running_loop()
+    counter = {"wakes": 0}
+
+    async def heartbeat() -> None:
+        while not fire_done.is_set():
+            await asyncio.sleep(0.05)
+            counter["wakes"] += 1
+
+    dispatch_task = asyncio.create_task(srv._dispatch({
+        "id": "r", "method": "host.schedule.fire",
+        "params": {"profile": "default", "id": "blkr1234"},
+    }))
+    hb_task = asyncio.create_task(heartbeat())
+
+    try:
+        await asyncio.wait_for(fire_started.wait(), timeout=2.0)
+        resp = await asyncio.wait_for(dispatch_task, timeout=block_s + 2.0)
+    finally:
+        hb_task.cancel()
+        try:
+            await hb_task
+        except (asyncio.CancelledError, Exception):  # noqa: BLE001
+            pass
+
+    assert resp["result"] == {"ok": True, "detail": "fired"}
+    assert counter["wakes"] >= 3, (
+        f"host loop starved during host.schedule.fire — only {counter['wakes']} "
+        "heartbeats fired while fire_by_id blocked; handler must run it in an executor"
+    )
+
+
+@pytest.mark.asyncio
 async def test_fire_unknown_returns_404(tmp_path: Path, monkeypatch) -> None:
     home = tmp_path / "h"
     home.mkdir()
