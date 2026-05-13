@@ -8,7 +8,7 @@ import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable
+from typing import Callable
 
 from alpi import config as cfg_mod
 from alpi import llm, memory, session, tools
@@ -218,8 +218,12 @@ class Engine:
 
         self._maybe_auto_compact(emit, call_kwargs)
 
+        # Bind session todos for this turn; reset in finally.
+        from alpi.tools import todo as todo_mod
+        todo_token = todo_mod.bind_store(self.session.todos)
+
         try:
-            for _ in range(max_steps):
+            for step_idx in range(max_steps):
                 if self.interrupt_requested:
                     self._finalize_interrupt(emit)
                     return
@@ -298,15 +302,40 @@ class Engine:
                     ]
                 self.session.messages.append(assistant_msg)
 
-                if content:
-                    emit(AgentEvent(kind="assistant_done", text=content))
-
                 if not tool_calls:
+                    # Re-prompt if the model closes while todos are still open; costs one step from max_steps.
+                    open_items = todo_mod.open_todos(self.session.todos)
+                    if open_items:
+                        remaining = max_steps - step_idx - 1
+                        summary = ", ".join(
+                            f"#{self.session.todos.index(t)} {t['content']!r} "
+                            f"({t['status']})"
+                            for t in open_items
+                        )
+                        self.session.messages.append({
+                            "role": "user",
+                            "content": (
+                                "[engine] You returned without tool_calls but "
+                                f"these todos are still open ({len(open_items)}): "
+                                f"{summary}. Either continue with the next "
+                                "tool_call, or `todo(action='complete')` each "
+                                "outstanding item (or `todo(action='clear')` "
+                                "the whole list) before your final reply. This "
+                                f"continuation consumed one of your remaining "
+                                f"{remaining} steps."
+                            ),
+                        })
+                        continue
+                    if content:
+                        emit(AgentEvent(kind="assistant_done", text=content))
                     # Last assistant-only message wins as the final reply.
                     final_assistant = content
                     turn_completed = True
                     emit(AgentEvent(kind="done"))
                     return
+
+                if content:
+                    emit(AgentEvent(kind="assistant_done", text=content))
 
                 from alpi.tools import _state as tool_state_mod
                 tool_state_mod.set_interrupt_getter(lambda: self.interrupt_requested)
@@ -411,6 +440,7 @@ class Engine:
 
             emit(AgentEvent(kind="error", text="Reached max tool steps; stopping."))
         finally:
+            todo_mod.reset_store(todo_token)
             # Always log a turn when one was started — even on interrupt,
             # error or max_steps. This keeps /search and resume accurate.
             self.session.log_turn(

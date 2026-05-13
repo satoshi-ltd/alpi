@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.4.38 — 2026-05-13 — todo as binding contract: engine re-prompts when the model closes early
+
+The `todo` tool used to be advisory: a model could `add` + `start` a task list and then close the turn with a final text-only message, leaving work unfinished. Cheap models did this routinely ("Hecho" with a 22-byte scaffold). This release turns open todos into a contract the engine enforces.
+
+- `Session.todos` (runtime-only) replaces the module-level `_TODOS` in `alpi/tools/todo.py`. Parallel sessions (desktop / gateway / scheduler) no longer share state.
+- `alpi/tools/todo.py` is wired via a `ContextVar`; the engine binds the current session's store before invoking tools and resets in `finally`.
+- New guard in `alpi/engine.py`: when the model returns without `tool_calls` and any todo is `pending` or `in_progress`, the engine appends a synthetic `role: user` continuation listing the open items + remaining steps, and re-loops. Bounded by `max_steps_per_turn` (default 40), so a model that refuses to advance cuts off naturally.
+- Premature `assistant_done` suppression: when the guard fires the text the model emitted to close early is no longer emitted as a final `assistant_done` event — only legitimate closes surface as final.
+- `todo` tool description now states the contract explicitly so well-behaved models avoid tripping the guard at all.
+- Tests cover per-session isolation, guard firing with open todos, no-guard when todos are completed or never opened, persistent-refusal bounded by `max_steps`, store-binding correctness, and cross-session non-leakage.
+- Skill docs (`docs/SKILLS.md`, `alpi/skills/knowledge/references/skills.md`, `alpi/prompts/create_skill_guide.md`) clarify the secrets split: shared/static profile secrets go in `~/.alpi/.env` via `requires_env`; per-skill credential files and runtime auth state (OAuth client files, access/refresh tokens, cookies, sessions) live under `<skill>/secrets/` with mode `0700` and credential files `0600`. Codifies the lesson from real OAuth skill integrations where `.env` is the wrong store.
+- v0.6 roadmap: new `CL.1` item parks prompt caching across providers (OpenAI/Gemini automatic, Anthropic explicit markers) with the stable-prefix invariant as the cross-cutting precondition.
+
 ## v0.4.37 — 2026-05-13 — FD leak fix for skill DB calls
 
 Long tool-heavy turns could exhaust the daemon's open-file limit after repeated `db` tool calls, then surface as unrelated save failures such as `ledger.json.tmp`.

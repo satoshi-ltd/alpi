@@ -11,7 +11,7 @@ from alpi.tools.terminal import Terminal
 from alpi.tools.edit_file import EditFile
 from alpi.tools.read_file import ReadFile
 from alpi.tools.search import Search
-from alpi.tools.todo import Todo, _TODOS
+from alpi.tools.todo import Todo, bind_store, reset_store
 from alpi.tools.write_file import WriteFile
 
 
@@ -139,28 +139,36 @@ def test_search_target_aliases(tmp_home_no_env: Path) -> None:
 
 
 def test_todo_lifecycle() -> None:
-    _TODOS.clear()
-    t = Todo()
-    assert t.run(action="add", content="paso 1").ok
-    assert t.run(action="add", content="paso 2").ok
-    assert "paso 1" in t.run(action="list").output
-    assert t.run(action="start", index=0).ok
-    assert "[·]" in t.run(action="list").output
-    assert t.run(action="complete", index=0).ok
-    assert "[x]" in t.run(action="list").output
-    t.run(action="clear")
-    assert "no todos" in t.run(action="list").output
+    store: list[dict] = []
+    token = bind_store(store)
+    try:
+        t = Todo()
+        assert t.run(action="add", content="paso 1").ok
+        assert t.run(action="add", content="paso 2").ok
+        assert "paso 1" in t.run(action="list").output
+        assert t.run(action="start", index=0).ok
+        assert "[·]" in t.run(action="list").output
+        assert t.run(action="complete", index=0).ok
+        assert "[x]" in t.run(action="list").output
+        t.run(action="clear")
+        assert "no todos" in t.run(action="list").output
+    finally:
+        reset_store(token)
 
 
 def test_todo_single_in_progress() -> None:
-    _TODOS.clear()
-    t = Todo()
-    t.run(action="add", content="a")
-    t.run(action="add", content="b")
-    assert t.run(action="start", index=0).ok
-    r = t.run(action="start", index=1)
-    assert not r.ok
-    assert "in_progress" in r.error
+    store: list[dict] = []
+    token = bind_store(store)
+    try:
+        t = Todo()
+        t.run(action="add", content="a")
+        t.run(action="add", content="b")
+        assert t.run(action="start", index=0).ok
+        r = t.run(action="start", index=1)
+        assert not r.ok
+        assert "in_progress" in r.error
+    finally:
+        reset_store(token)
 
 
 def test_write_file_atomic_overwrite(tmp_home_no_env: Path) -> None:

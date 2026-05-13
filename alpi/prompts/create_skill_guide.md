@@ -24,9 +24,16 @@ skill. Never create one proactively.
 3. **Description**: one line, ≤150 chars, starts with a verb ("Send…",
    "Fetch…", "Generate…"). This is the line used to match future tasks to
    this skill, so be specific.
-4. **Secrets**: never write API keys, tokens, or passwords into `SKILL.md`.
-   Declare them via `requires_env: [VAR_A, VAR_B]`. The user sets the
-   values in `~/.alpi/.env`.
+4. **Secrets**: never write API keys, tokens, or passwords into
+   `SKILL.md`, `scripts/`, `references/`, `assets/`, or the skill root.
+   Use the right store:
+   - shared/static profile secrets → `requires_env: [VAR_A, VAR_B]`;
+     the user sets values in `~/.alpi/.env`;
+   - per-skill credential files or runtime auth state (OAuth client
+     files, access/refresh tokens, cookies, sessions) →
+     `<skill>/secrets/`.
+   `secrets/` must be mode `0700`; files containing credentials should
+   be mode `0600`.
 5. **Tools**: list the tools the skill is allowed to call. Keep it minimal.
 
 ## Before creating
@@ -88,6 +95,10 @@ When a skill includes scripts under `scripts/`:
 - **Reading skill-owned files.** Use `Path(__file__).parent.parent`
   to resolve `secrets/`, `state/`, `references/`, `assets/` relative
   to the script. Never hardcode `~/.alpi/...`.
+- **Writing secrets.** Create `secrets/` with `mkdir(mode=0o700,
+  exist_ok=True)` and then call `chmod(0o700)` because `mkdir` does not
+  fix an existing directory's mode. After writing token or credential
+  files, call `chmod(0o600)`.
 - Include a dry-run / smoke-test path (e.g. `--dry-run` flag, or a
   `--help` branch that works without side effects). Mention the exact
   command in SKILL.md so the user (or a future agent) can verify the
@@ -104,7 +115,8 @@ output contains `validation:` lines, fix them in the same turn with
 another `patch` / `add_file` before telling the user you are done.
 
 - Report the final path and the frontmatter. Tell the user which env vars
-  they need to add to `~/.alpi/.env` before the skill can run.
+  they need to add to `~/.alpi/.env`, and which per-skill credential
+  files they need to create under `secrets/`, before the skill can run.
 
 ## External services (MCPs)
 

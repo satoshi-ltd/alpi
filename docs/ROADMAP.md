@@ -142,6 +142,12 @@ skill import without adopting a marketplace or plugin runtime.
 | CM.2 | Safe skill import — `alpi skill import <dir\|zip>` previews, normalizes, scans, and installs a local skill into the alpi contract; no marketplace, no remote registry. | 🔵 |
 | CM.3 | Tool availability checks — add optional `check_fn` probes so unavailable tools can be hidden or flagged consistently when real profiles show broken visible tools. | 🔵 |
 
+### Cost / latency
+
+| ID | Item | Status |
+|---|---|---|
+| CL.1 | Prompt caching across providers — cached input is ~90% cheaper everywhere; this is the single highest-leverage cost optimization for tool-heavy turns. Provider matrix: **OpenAI** (gpt-4o+/gpt-5.x) caches automatically at ≥1024 tokens, no marker; optional `prompt_cache_key` improves shard hit rate. **Gemini 2.5+** caches implicitly by default. **Anthropic** (`anthropic/*` and `openrouter/anthropic/*`) requires explicit `cache_control: {"type": "ephemeral"}` markers on message content blocks. **OpenRouter** passes through to upstream; same code as the upstream provider. **Ollama / local**: N/A. Work breakdown: (1) cross-cutting — audit `Engine` + `engine._maybe_auto_compact` for any reordering or non-deterministic mutation of the early messages, since stable prefix is the precondition for ALL three caches. (2) Anthropic — add the marker on the system message (biggest win); optionally a second breakpoint on the last tool result. (3) OpenAI — add `prompt_cache_key` derived from `session.id` for better routing. (4) Gemini explicit cache — only if we ever hit a workload where the implicit cache miss rate is measurable; not worth the API complexity otherwise. Measured impact in one of the WHOOP-debug Sonnet turns: ~$0.40-0.50 of the $3.67 was the system prompt re-billed across 26 iterations. Bigger savings on longer / multi-turn sessions. | 🔵 |
+
 ### Memory quality (evidence-gated)
 
 | ID | Item | Status |

@@ -58,14 +58,16 @@ Eligibility (any unmet requirement → hidden from prompt + hint; `list` shows c
 
 | Store | Purpose |
 |---|---|
-| `~/.alpi/.env` | Static secrets named in `requires_env`. |
-| `<skill>/secrets/` | Runtime credentials such as OAuth tokens; created lazily when written. |
+| `~/.alpi/.env` | Shared/static profile secrets named in `requires_env`. |
+| `<skill>/secrets/` | Per-skill credential files and runtime auth state such as OAuth access/refresh tokens, cookies, or sessions. |
 | `<skill>/state/` | Non-secret state such as caches, JSONL, SQLite. |
 
 When `skill(action="view")` opens a skill, vars declared in
 `requires_env` are registered for terminal subprocess passthrough.
 
-Never hardcode secrets in `SKILL.md`, scripts, references, or assets.
+Never hardcode secrets in `SKILL.md`, scripts, references, assets, or
+the skill root. `secrets/` should be mode `0700`; files containing
+credentials should be mode `0600`.
 
 ## Actions
 

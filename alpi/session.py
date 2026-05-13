@@ -47,6 +47,8 @@ class Session:
     # Runtime-only: the OpenAI message thread the engine feeds to the LLM.
     # Contains system + user/assistant/tool messages. NOT saved to disk.
     messages: list[dict[str, Any]] = field(default_factory=list)
+    # Runtime-only: per-session todo store; engine binds it for the `todo` tool. Not persisted.
+    todos: list[dict[str, Any]] = field(default_factory=list)
     # Persisted log of completed user turns.
     turns: list[Turn] = field(default_factory=list)
     input_tokens: int = 0       # cumulative across all turns in this session

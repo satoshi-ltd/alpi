@@ -298,15 +298,16 @@ Two separate stores, two clear purposes:
 
 | Store | Purpose | Lifecycle |
 |---|---|---|
-| `~/.alpi/.env` | Pre-provisioned static secrets declared in `requires_env`. User pastes the value in once. | Edited by hand. Shared across skills if they reference the same var. |
-| `~/.alpi/skills/<cat>/<name>/secrets/` | Runtime-generated credentials (OAuth access+refresh, session blobs). Per-skill, never shared. | Created lazily when the skill writes a secret. Wiped when the skill is deleted. |
+| `~/.alpi/.env` | Pre-provisioned shared/static secrets declared in `requires_env`. User pastes the value in once. | Edited by hand. Shared across skills if they reference the same var. |
+| `~/.alpi/skills/<cat>/<name>/secrets/` | Per-skill credential files and runtime auth state (OAuth client files, access+refresh tokens, cookies, session blobs). Per-skill, never shared. | Created lazily when the skill writes a secret. Wiped when the skill is deleted. |
 
 **Never** hardcode secrets inside `SKILL.md`, `scripts/`, `references/`,
-or `assets/`. The security scanner rejects the most obvious patterns
+`assets/`, or the skill root. The security scanner rejects the most obvious patterns
 (`api_key = "sk-..."`, `password = "..."`). It runs on SKILL.md body
 and on every file added via `add_file` to `scripts`, `references`, or
 `assets`. The `secrets/` subdir skips the scanner by design (the
-whole point is that it holds keys).
+whole point is that it holds keys). `secrets/` should be mode `0700`;
+files containing credentials should be mode `0600`.
 
 ## Model quality matters
 
