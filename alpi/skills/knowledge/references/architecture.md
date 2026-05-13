@@ -87,6 +87,14 @@ Tools live under `alpi/tools/` and register through
 
 Use existing tool patterns before adding abstractions.
 
+`alpi/tools/_lint.py::lint_content(path, content)` runs a parser-based
+syntax check before every `write_file` / `edit_file` lands on disk
+(`.py` → `ast.parse`, `.json` → `json.loads`, `.yaml`/`.yml` →
+`yaml.safe_load`, `.toml` → `tomllib` on 3.11+ / `tomli` conditional
+dep on 3.10). On failure the write is refused and the original file
+(if any) is untouched — malformed configs never reach downstream
+consumers.
+
 ### Local RAG (BA)
 
 `search_workspace` (semantic search over the user's local files) and

@@ -65,7 +65,15 @@ class EditFile(Tool):
         if count > 1:
             return ToolResult(ok=False, output="",
                               error=f"old_string matches {count} times; make it unique")
-        p.write_text(text.replace(old_string, new_string, 1))
+        new_content = text.replace(old_string, new_string, 1)
+        from alpi.tools._lint import lint_content
+        lint_err = lint_content(p, new_content)
+        if lint_err:
+            return ToolResult(
+                ok=False, output="",
+                error=f"refused — edit would make {p.name} unparseable: {lint_err}",
+            )
+        p.write_text(new_content)
         return ToolResult(ok=True, output=f"Edited {p}")
 
 

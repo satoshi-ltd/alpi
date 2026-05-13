@@ -182,6 +182,40 @@ def test_write_file_atomic_overwrite(tmp_home_no_env: Path) -> None:
     assert not (tmp_home_no_env / "data.txt.bak").exists()
 
 
+def test_write_file_rejects_malformed_json(tmp_home_no_env: Path) -> None:
+    target = tmp_home_no_env / "jobs.json"
+    r = WriteFile().run(path=str(target), content='{"id": "x",}')
+    assert not r.ok
+    assert "JSON parse error" in r.error
+    assert not target.exists(), "malformed file must NOT hit disk"
+
+
+def test_write_file_rejects_malformed_python(tmp_home_no_env: Path) -> None:
+    target = tmp_home_no_env / "script.py"
+    r = WriteFile().run(path=str(target), content="def f(:\n")
+    assert not r.ok
+    assert "Python syntax error" in r.error
+    assert not target.exists()
+
+
+def test_write_file_allows_unknown_suffix(tmp_home_no_env: Path) -> None:
+    # .md has no linter — content lands as-is.
+    target = tmp_home_no_env / "notes.md"
+    r = WriteFile().run(path=str(target), content="# anything ! @ # $")
+    assert r.ok
+    assert target.read_text() == "# anything ! @ # $"
+
+
+def test_edit_file_rejects_when_result_unparseable(tmp_home_no_env: Path) -> None:
+    target = tmp_home_no_env / "config.json"
+    WriteFile().run(path=str(target), content='{"a": 1}')
+    r = EditFile().run(path=str(target), old_string='"a": 1', new_string='"a": 1,')
+    assert not r.ok
+    assert "unparseable" in r.error
+    # Existing content untouched.
+    assert target.read_text() == '{"a": 1}'
+
+
 def test_terminal_strips_ansi() -> None:
     r = Terminal().run(
         command="printf '\\033[31mRED\\033[0m normal\\n'",

@@ -259,6 +259,8 @@ Denylist: `/etc/`, `/boot/`, `/sys/`, `/proc/`, `/usr/lib/systemd/`, `/System/`,
 
 `suggest_similar_paths(target)` lists the parent directory and fuzzy-matches siblings by basename substring/prefix. Used by `read_file`, `edit_file`, and `search` to turn dead-end errors into actionable suggestions.
 
+`alpi/tools/_lint.py::lint_content(path, content)` runs a parser-based syntax check before every `write_file` / `edit_file` lands on disk. Parsers by suffix: `.py` → `ast.parse` (stdlib), `.json` → `json.loads` (stdlib), `.yaml`/`.yml` → `yaml.safe_load` (PyYAML, already a dep), `.toml` → `tomllib.loads` (stdlib on 3.11+, with `tomli` declared as a conditional dep for 3.10). Other suffixes pass through. Failures return a one-line error with the source line/col and the write is refused — the original file (if any) is untouched. Catches the class of bug where a malformed `jobs.json`, `config.yaml`, or skill script silently breaks a downstream consumer.
+
 ### Tool registry (`alpi/tools/__init__.py`)
 
 `register(cls)` adds a `Tool` subclass to the dict, `schemas()` emits the OpenAI function-calling shape, `execute(name, args)` runs by name with full error capture. The registry is assembled from the sibling tool modules in `alpi/tools/__init__.py`, including the Playwright-backed `browser` tool. `search_workspace` and `index_workspace` register first so they appear at the top of the schema list (semantic recall is the right default for "what does my file say about X" questions).

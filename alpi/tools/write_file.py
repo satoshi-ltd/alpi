@@ -45,6 +45,13 @@ class WriteFile(Tool):
                     "security scanner runs. Direct writes skip the scan."
                 ),
             )
+        from alpi.tools._lint import lint_content
+        lint_err = lint_content(p, content)
+        if lint_err:
+            return ToolResult(
+                ok=False, output="",
+                error=f"refused — content would be unparseable: {lint_err}",
+            )
         p.parent.mkdir(parents=True, exist_ok=True)
         # Atomic overwrite: write to a sibling tmp file and os.replace onto
         # the target. If we crash mid-write the original is untouched.
