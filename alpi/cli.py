@@ -1225,7 +1225,7 @@ def doctor_cmd(ctx: click.Context) -> None:
 @main.command("logs")
 @click.option(
     "--source",
-    type=click.Choice(["gateway", "schedule", "agent", "approval"]),
+    type=click.Choice(["service", "gateway", "schedule", "agent", "approval"]),
     default=None,
     help="Restrict to one subsystem.",
 )

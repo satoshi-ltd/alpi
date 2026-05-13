@@ -38,13 +38,23 @@ Apply routes through `memory(action="add")` (safety scan + dedup still gate). Ca
 
 ## Logs
 
-Logs live under the active profile home, usually:
+Per-profile under `{home}/logs/` (`~/.alpi/logs/` or `~/.alpi/profiles/<name>/logs/`):
 
-- `~/.alpi/logs/` for default profile,
-- `~/.alpi/profiles/<name>/logs/` for named profiles.
+| File | Format | Content |
+|---|---|---|
+| `service.log` | rotated text (1 MB) | daemon supervisor + per-profile services |
+| `agent.log` | rotated text (1 MB) | one line per turn: session, tools, cost, prompt preview |
+| `approval.log` | rotated text (1 MB) | non-safe shell command verdicts |
+| `compaction.jsonl` | append-only JSONL | one record when `auto_compact` fires OR when only tool outputs are truncated (no LLM summarize) |
 
-When debugging, ask which profile is active and inspect that profile's
-logs, not the global default by assumption.
+`alpi logs [--source service|gateway|schedule|agent|approval] [-n N] [-f]` merges/tails rotated logs. `compaction.jsonl` is read with `jq`:
+
+```bash
+jq -r '[.ts, .session_id[0:8], .trigger, .tokens_before, .tokens_after] | @tsv' \
+  ~/.alpi/logs/compaction.jsonl
+```
+
+Per-record fields: `ts`, `trigger` (`auto`|`manual`), `session_id`, `model`, `ctx_window`, `fired`, `tokens_before`, `tokens_after`, `summarized_messages`, `tool_truncated`.
 
 ## Common failure modes
 

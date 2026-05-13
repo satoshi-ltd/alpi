@@ -39,14 +39,7 @@ Constraints:
 
 
 def _resolve_depth(cfg: cfg_mod.Config, depth: str) -> int:
-    research_cfg = (cfg.raw.get("tools") or {}).get("research") or {}
-    key = f"{depth}_steps"
-    val = research_cfg.get(key, DEPTH_STEPS_DEFAULTS[depth])
-    try:
-        n = int(val)
-    except (TypeError, ValueError):
-        n = DEPTH_STEPS_DEFAULTS[depth]
-    return max(1, n)
+    return max(1, DEPTH_STEPS_DEFAULTS[depth])
 
 
 class Research(Tool):
@@ -71,10 +64,8 @@ class Research(Tool):
         "              \"survey state of the art for Y\", \"haz un estudio\n"
         "              profundo sobre Z\"). Most tokens, most wall time.\n"
         "\n"
-        "The exact iteration count per depth is a user knob in "
-        "~/.alpi/config.yaml under `tools.research.{quick,normal,deep}_steps` "
-        "(defaults: quick=8, normal=15, deep=30). Don't pass the step count "
-        "— pick the depth name.\n"
+        "Iteration ceilings per depth (quick=8, normal=15, deep=30) are "
+        "internal — pick the depth name, never a step count.\n"
         "\n"
         "For multiple independent investigations, pass `tasks: [{brief, depth}]` "
         "(up to 3) to run them in parallel. Use single-task mode otherwise."

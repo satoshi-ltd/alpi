@@ -31,6 +31,63 @@ def test_save_roundtrips(tmp_home_no_env: Path) -> None:
     assert reloaded.tools.web_extract.model.startswith("openrouter/google/gemini")
 
 
+def test_save_drops_suppressed_gateway_keys(tmp_home_no_env: Path) -> None:
+    """suppressed gateway.* keys carried over from old configs must not be re-persisted."""
+    import yaml
+    (tmp_home_no_env / "config.yaml").write_text(yaml.safe_dump({
+        "gateway": {
+            "telegram": {"show_tool_trace": True, "typing_indicator": True},
+            "matrix": {"show_tool_trace": False, "typing_indicator": True},
+            "imap": {
+                "poll_interval": 90, "mark_as_read": False,
+                "show_tool_trace": True, "typing_indicator": True,
+            },
+            "gmail": {
+                "poll_interval": 30, "mark_as_read": True,
+                "show_tool_trace": True, "typing_indicator": True,
+            },
+        },
+    }))
+
+    cfg = config.load(tmp_home_no_env)
+    config.save(cfg)
+
+    on_disk = yaml.safe_load((tmp_home_no_env / "config.yaml").read_text())
+    assert on_disk["gateway"]["telegram"] == {"show_tool_trace": True}
+    assert on_disk["gateway"]["matrix"] == {"show_tool_trace": False}
+    assert on_disk["gateway"]["imap"] == {"poll_interval": 90, "mark_as_read": False}
+    assert on_disk["gateway"]["gmail"] == {"poll_interval": 30, "mark_as_read": True}
+
+
+def test_save_preserves_approval_allowlist(tmp_home_no_env: Path) -> None:
+    """Regression: pre-v0.4.35 config.save() silently dropped approval.allowlist."""
+    import yaml
+    (tmp_home_no_env / "config.yaml").write_text(yaml.safe_dump({
+        "tools": {"terminal": {"approval": {"allowlist": [
+            "recursive rm", "sudo apt *", "git reset --hard origin/main",
+        ]}}},
+    }))
+
+    cfg = config.load(tmp_home_no_env)
+    assert cfg.tools.terminal.approval.allowlist == [
+        "recursive rm", "sudo apt *", "git reset --hard origin/main",
+    ]
+
+    cfg.model = "openai/gpt-4o"
+    config.save(cfg)
+
+    reloaded = config.load(tmp_home_no_env)
+    assert reloaded.model == "openai/gpt-4o"
+    assert reloaded.tools.terminal.approval.allowlist == [
+        "recursive rm", "sudo apt *", "git reset --hard origin/main",
+    ]
+
+    on_disk = yaml.safe_load((tmp_home_no_env / "config.yaml").read_text())
+    assert on_disk["tools"]["terminal"]["approval"]["allowlist"] == [
+        "recursive rm", "sudo apt *", "git reset --hard origin/main",
+    ]
+
+
 def test_tools_section_defaults(tmp_home_no_env: Path) -> None:
     config.seed_defaults(tmp_home_no_env)
     cfg = config.load(tmp_home_no_env)

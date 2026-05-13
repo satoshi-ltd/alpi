@@ -244,17 +244,12 @@ def _do_type(role: str, name: str, text: str) -> ToolResult:
     return ToolResult(ok=True, output=_snapshot(page))
 
 
+HUMAN_TYPING = True
+TYPING_DELAY_MS = (30, 80)
+
+
 def _browser_typing_cfg() -> tuple[bool, list]:
-    import yaml
-    try:
-        cfg_path = get_home() / "config.yaml"
-        if not cfg_path.exists():
-            return True, [30, 80]
-        data = yaml.safe_load(cfg_path.read_text()) or {}
-        b = ((data.get("tools") or {}).get("browser") or {})
-    except Exception:  # noqa: BLE001
-        return True, [30, 80]
-    return bool(b.get("human_typing", True)), list(b.get("typing_delay_ms", [30, 80]))
+    return HUMAN_TYPING, list(TYPING_DELAY_MS)
 
 
 def _sanitize_delay_range(raw) -> tuple[int, int]:

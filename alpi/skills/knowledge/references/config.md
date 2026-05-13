@@ -19,7 +19,7 @@ gateway, budget, service, and "when does a setting take effect?"
 | `budget` | Daily/monthly spend limits for paid providers. |
 | `providers` | Provider-specific saved choices/endpoints. |
 | `tools` | Tool-specific settings such as sandbox, vision model, TTS/STT. |
-| `gateway` | Telegram/IMAP/Gmail inbound settings. |
+| `gateway` | Telegram/Matrix/IMAP/Gmail inbound settings. Chat platforms expose `show_tool_trace`; email exposes `poll_interval` + `mark_as_read`. Typing indicators hardcoded per platform (chat on, email off). |
 | `schedule` | Scheduler/service settings. |
 | `service` | Local daemon toggles and host options. |
 | `alp` | ALP peer/workgroup configuration. |
@@ -72,6 +72,21 @@ Also valid:
 | `tools.terminal.sandbox` | Next terminal call. |
 | Gateway config | Service restart usually required. |
 | Scheduler config/jobs | Scheduler/service reload or restart depending on path. |
+
+## Memory
+
+| Key | Default | Effect |
+|---|---|---|
+| `memory.review_interval` | `0` (off) | `N > 0` → daemon-thread reviewer fires every N user turns; append-only via `memory(action="add")` |
+
+Internal constants (`alpi/memory.py`, `alpi/compaction.py`), not user knobs:
+
+- `USER_CHAR_LIMIT = 3000`, `MEMORY_CHAR_LIMIT = 5000`
+- `LOW_CONFIDENCE_MAX_AGE_DAYS = 30`
+- Jaccard `0.7` near-duplicate threshold
+- compaction policy: `trigger_ratio=0.75`, `target_ratio=0.40`, `keep_head=2`, `keep_tail=8`
+
+Calibration gated on v0.6 evidence (`CM.1` + `logs/compaction.jsonl`).
 
 ## `.env`
 

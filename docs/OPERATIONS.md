@@ -9,7 +9,7 @@ doc yet: [QUICKSTART.md](../QUICKSTART.md) covers everything. Come
 back here when things break, or when you need to move a profile,
 or when it's time to ship a new version.
 
-## Logs — the five files you'll actually read
+## Logs — the files you'll actually read
 
 Every profile writes to `{home}/logs/` with the same format so
 `alpi logs` can merge them:
@@ -19,14 +19,16 @@ Every profile writes to `{home}/logs/` with the same format so
 ~/.alpi/profiles/<name>/logs/     ← named profile
 ```
 
-Each file rotates at **1 MB**; `.log.1` holds the previous
-generation.
+Rotating text logs cap at **1 MB**; `.log.1` holds the previous
+generation. The JSONL telemetry feed does not rotate (small append-
+only records, expected to be read with `jq`).
 
-| File | What it answers | Who writes it |
-|---|---|---|
-| `service.log` | Did the daemon start? Which services came up for which profile? Did a gateway accept this inbound? Did a peer hit an ALP listener? Did a cron job fire? | the daemon supervisor + every per-profile service that logs through the root logger |
-| `agent.log` | What has the agent *been doing*? One line per turn: session id, elapsed, tools called, reply length, cost, user prompt preview. Cross-session grep index. | the engine (every turn on every surface) |
-| `approval.log` | Security audit of every non-safe shell command the LLM tried to run: caution (pending / once / session / always / deny) or dangerous (always denied). | the approval system |
+| File | Format | What it answers | Who writes it |
+|---|---|---|---|
+| `service.log` | rotated text | Did the daemon start? Which services came up for which profile? Did a gateway accept this inbound? Did a peer hit an ALP listener? Did a cron job fire? | the daemon supervisor + every per-profile service that logs through the root logger |
+| `agent.log` | rotated text | What has the agent *been doing*? One line per turn: session id, elapsed, tools called, reply length, cost, user prompt preview. Cross-session grep index. | the engine (every turn on every surface) |
+| `approval.log` | rotated text | Security audit of every non-safe shell command the LLM tried to run: caution (pending / once / session / always / deny) or dangerous (always denied). | the approval system |
+| `compaction.jsonl` | append-only JSONL | Did auto-compact run this turn? Tokens before/after, summarized-message count, tool-truncation count, manual vs auto, `fired` (true when the LLM summarized; false when only oversized tool outputs were truncated). Feeds the v0.6 audit baseline (`CM.1`). | the engine (one line whenever compaction *or* tool truncation ran) |
 
 **Tail one or all:**
 
@@ -37,10 +39,23 @@ alpi logs --source agent -n 500    # last 500 lines of agent.log
 alpi logs -f                       # follow mode (poll every 1s)
 ```
 
+`compaction.jsonl` is read with `jq`, not `alpi logs`:
+
+```bash
+jq -r '[.ts, .session_id[0:8], .trigger, .tokens_before, .tokens_after] | @tsv' \
+  ~/.alpi/logs/compaction.jsonl
+```
+
+Per-record fields: `ts`, `trigger` (`auto`|`manual`), `session_id`,
+`model`, `ctx_window`, `fired`, `tokens_before`, `tokens_after`,
+`summarized_messages`, `tool_truncated`.
+
 The `agent.log` + `approval.log` pair is your **audit trail**.
 Anyone who needs to answer "what did alpi do this week?" or "did
 the agent run anything risky?" should be grepping those two
-files.
+files. `compaction.jsonl` answers "did the context window pressure
+get tight this week?" and "are my trigger ratios right for this
+model?".
 
 ## Daemon — one process per machine, every profile inside
 

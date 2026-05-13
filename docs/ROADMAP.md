@@ -139,7 +139,7 @@ skill import without adopting a marketplace or plugin runtime.
 | ID | Item | Status |
 |---|---|---|
 | CM.1 | Memory audit CLI — `alpi memory audit` reports docs/code drift signals, low-confidence expiry candidates, duplicate clusters, promotion candidates, and memory usage pressure. | 🔵 |
-| CM.2 | Safe skill import — `alpi skill import <dir|zip>` previews, normalizes, scans, and installs a local skill into the alpi contract; no marketplace, no remote registry. | 🔵 |
+| CM.2 | Safe skill import — `alpi skill import <dir\|zip>` previews, normalizes, scans, and installs a local skill into the alpi contract; no marketplace, no remote registry. | 🔵 |
 | CM.3 | Tool availability checks — add optional `check_fn` probes so unavailable tools can be hidden or flagged consistently when real profiles show broken visible tools. | 🔵 |
 
 ### Memory quality (evidence-gated)

@@ -234,13 +234,13 @@ Thin wrapper over `litellm.completion`. `stream()` is an async generator yieldin
 
 Three files: `USER.md` (facts about the user), `MEMORY.md` (env quirks, commands, incidents), `AGENT.md` (the agent's own profile — tone, style, identity, language). `§` entry delimiter, char limits `USER_CHAR_LIMIT = 3000` / `MEMORY_CHAR_LIMIT = 5000` (see `alpi/memory.py`; `AGENT.md` is free-form prose with no cap). Accent+case+punctuation-insensitive dedup, plus token-Jaccard dedup at 70% max-containment to catch paraphrases. `.bak` snapshot before every mutating write. Approach C: every mutating call returns the full current state of the target file so the agent sees its own write in the same turn.
 
-**v2 quality metadata.** Each entry carries a trailing `<!-- alpi-meta conf=... captured=... reinforced=... -->` comment that is stripped before the entry reaches the system prompt. `conf` is `low` / `normal` / `high` (default `normal`). Near-duplicate writes reinforce the existing entry (bump `reinforced`, upgrade `low → normal` at ≥ 2) instead of appending a paraphrase. Low-confidence entries with zero reinforcements expire after `memory.low_confidence_max_age_days` (default 30). The memory tool's safety scanner reuses the skill scanner patterns and adds invisible/bidi unicode detection (U+200B–200F, 202A–202E, 2060, 2066–2069, FEFF) to block Trojan-Source vectors; `_operational_warning` surfaces non-blocking warnings when a write looks like session state (`chat_id`, `session_id`, ISO timestamps).
+**v2 quality metadata.** Each entry carries a trailing `<!-- alpi-meta conf=... captured=... reinforced=... -->` comment that is stripped before the entry reaches the system prompt. `conf` is `low` / `normal` / `high` (default `normal`). Near-duplicate writes reinforce the existing entry (bump `reinforced`, upgrade `low → normal` at ≥ 2) instead of appending a paraphrase. Low-confidence entries with zero reinforcements expire after `LOW_CONFIDENCE_MAX_AGE_DAYS = 30` (constant in `alpi/memory.py`; calibration is an evidence-gated v0.6 item, not a user knob). The memory tool's safety scanner reuses the skill scanner patterns and adds invisible/bidi unicode detection (U+200B–200F, 202A–202E, 2060, 2066–2069, FEFF) to block Trojan-Source vectors; `_operational_warning` surfaces non-blocking warnings when a write looks like session state (`chat_id`, `session_id`, ISO timestamps).
 
 **Batch writes.** `memory(action="add", entries=[...])` accepts a list of entries for the same target in a single call. Each entry runs through cross-file and same-target dup checks independently; entries that collide are skipped with a per-line note, the rest land in one write. Replaces the pathological pattern of one `add` call per fact (16 calls in a single turn observed in real sessions).
 
 **Post-turn reviewer.** When `memory.review_interval > 0` (default 0 = off), `alpi/review.py` spawns a daemon thread after each turn that snapshots the user/assistant text and asks the LLM whether anything durable should be added. The reviewer is constrained to `memory(action="add", ...)` — never `replace`/`remove` — to prevent it from deleting unrelated entries on a bad pass.
 
-**Promotion queue (`alpi/promotion.py`).** Auto-compaction never writes to `USER.md` / `MEMORY.md` / `AGENT.md` directly. After every fired compaction the engine runs a second short LLM call against the summary (system prompt `CANDIDATE_PROMPT`) and pushes any durable facts as **candidates** into `<home>/memories/promotion_queue.jsonl`. On enqueue, each candidate is annotated with the same preview warnings the memory tool computes at write time — operational-state heuristic, cross-file duplicate check, safety scan. The queue is bounded (`MAX_PENDING = 200` per profile) and pending entries expire after `MAX_AGE_DAYS = 30`.
+**Promotion queue (`alpi/promotion.py`).** Auto-compaction never writes to `USER.md` / `MEMORY.md` / `AGENT.md` directly. After every fired compaction the engine runs a second short LLM call against the summary (system prompt `CANDIDATE_PROMPT`) and pushes any durable facts as **candidates** into `<home>/memories/promotion_queue.jsonl`. On enqueue, each candidate is annotated with the same preview warnings the memory tool computes at write time — operational-state heuristic, cross-file duplicate check, safety scan. The queue is bounded (`MAX_PENDING = 200` per profile) and pending entries expire after `MAX_AGE_DAYS = 30`. Per-record fields in the JSONL: `id` (8-char hex), `created_at` (unix ts), `source` (`compaction` | `reviewer` | `manual`), `session_id`, `model`, `target` (`USER.md` | `MEMORY.md` | `AGENT.md`), `text`, `confidence` (`low` | `normal` | `high`), `warnings` (list of strings).
 
 Two memory tool actions surface the queue, both safe for the agent to call: `promotion_list` (read-only) and `promotion_discard(id)` (drops a candidate without writing). **There is no agent-callable apply.** The only path that writes to durable memory from the queue is the CLI `alpi memory promote` — interactive review with `[a]pply / [d]iscard / [s]kip / [q]uit` per candidate, plus `--apply-all` / `--discard-all` for unattended sweeps. This keeps the human-in-the-loop gate genuine: the agent cannot promote facts on its own regardless of how the prompt is framed. If the underlying memory add fails (safety scan, duplicate), the candidate stays in the queue so the operator can fix and retry.
 
@@ -591,9 +591,12 @@ streaming tool traces as `◆ {tool} · {arg_hint}` with the typing
 indicator on while the subprocess works.
 
 Allowlist: `TELEGRAM_ALLOWED_CHAT_IDS` and `IMAP_ALLOWED_SENDERS`
-in `.env`, fail-closed if unset. Per-platform config under
-`gateway.{telegram,imap,gmail}` in `config.yaml` (`show_tool_trace`,
-`typing_indicator`, `poll_interval`, etc.).
+in `.env`, fail-closed if unset. Per-platform user config under
+`gateway.*` in `config.yaml`: chat platforms (Telegram, Matrix)
+expose `show_tool_trace`, IMAP/Gmail expose `poll_interval` and
+`mark_as_read`. Typing indicators are hardcoded by platform (chat
+on, email off — email has no typing concept); email tool traces
+are hardcoded off because each trace would be its own message.
 
 Disable for a profile via `alpi setup → Services → Daemon →
 Gateway · off` (writes `service.gateway: false`).

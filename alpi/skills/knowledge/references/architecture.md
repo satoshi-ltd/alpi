@@ -105,11 +105,11 @@ Files at `<home>/memories/`:
 | `MEMORY.md` | 5000 | World the user operates in |
 | `AGENT.md` | — | Agent's own voice/style/persona |
 
-Entry shape: `<!-- alpi-meta conf={low\|normal\|high} captured=ISO reinforced=N -->` trailer, stripped before reaching the system prompt. Low-conf + 0 reinforcements expire at `memory.low_confidence_max_age_days` (default 30). Near-duplicate writes reinforce existing entry (Jaccard ≥ 0.7) instead of appending. Scanner blocks Trojan-Source unicode, prompt-injection patterns, secret leakage.
+Entry shape: `<!-- alpi-meta conf={low\|normal\|high} captured=ISO reinforced=N -->` trailer, stripped before reaching the system prompt. Low-conf + 0 reinforcements expire at `LOW_CONFIDENCE_MAX_AGE_DAYS = 30` (constant in `alpi/memory.py`, not user-configurable). Near-duplicate writes reinforce existing entry (Jaccard ≥ 0.7) instead of appending. Scanner blocks Trojan-Source unicode, prompt-injection patterns, secret leakage.
 
 **Compaction** (`alpi/compaction.py`): fires when projected prompt > 0.75 × `ctx_window`. Cheap pass truncates oversized tool outputs first. LLM summarizes the middle; preserves system + first 2 + last 8 non-system messages. Targets 0.4 × `ctx_window` post-compact. One JSONL line appended per fired compaction to `<home>/logs/compaction.jsonl`.
 
-**Promotion queue** (`alpi/promotion.py`): after each fired compaction the engine runs a second LLM call against the summary and pushes candidates to `<home>/memories/promotion_queue.jsonl`. Per-candidate fields: id, source, session_id, model, target, text, confidence, warnings (operational-state, cross-file duplicate, safety scan hits computed at enqueue). Cap 200 pending; entries expire 30d.
+**Promotion queue** (`alpi/promotion.py`): after each fired compaction the engine runs a second LLM call against the summary and pushes candidates to `<home>/memories/promotion_queue.jsonl`. Per-record shape: `id` (8-char hex), `created_at` (unix ts), `source` (`compaction`|`reviewer`|`manual`), `session_id`, `model`, `target` (`USER.md`|`MEMORY.md`|`AGENT.md`), `text`, `confidence` (`low`|`normal`|`high`), `warnings` (list of strings — operational-state, cross-file duplicate, safety scan hits computed at enqueue). Cap 200 pending; entries expire 30d.
 
 Tool actions: `memory(action="promotion_list")` read-only, `memory(action="promotion_discard", id=…)` drops without writing. **No agent apply path.** `promotion_apply` rejects with a pointer to the CLI. Only `alpi memory promote` writes — interactive `[a]pply/[d]iscard/[s]kip/[q]uit`, plus `--apply-all` / `--discard-all`. Apply routes through `memory(action="add")` so safety scan + dedup still gate. If add rejects, candidate stays in queue.
 

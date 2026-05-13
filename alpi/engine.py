@@ -610,12 +610,10 @@ class Engine:
         )
         base = resources.files("alpi.prompts").joinpath("system_prompt.md").read_text()
         mem = memory.MemoryStore(home=self.home)
-        max_age = getattr(self.cfg.memory, "low_confidence_max_age_days", 30)
-        if max_age and max_age > 0:
-            try:
-                mem.prune_low_confidence(max_age_days=max_age)
-            except Exception:
-                pass
+        try:
+            mem.prune_low_confidence(max_age_days=memory.LOW_CONFIDENCE_MAX_AGE_DAYS)
+        except Exception:
+            pass
         snap = mem.snapshot()
 
         # Environment context — the model only thinks in terms of the

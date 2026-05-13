@@ -17,21 +17,12 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "tools": {
         "max_steps_per_turn": 40,
         "web_extract": {"model": ""},
-        "read_image": {"model": "", "auto_resize": True, "max_edge": 1568},
-        "browser": {
-            "vision": False,
-            "human_typing": True,
-            "typing_delay_ms": [30, 80],
-        },
+        "read_image": {"model": ""},
+        "browser": {"vision": False},
         "terminal": {
             "sandbox": False,
             "allow_network": False,
             "approval": {"allowlist": []},
-        },
-        "research": {
-            "quick_steps": 8,
-            "normal_steps": 15,
-            "deep_steps": 30,
         },
         "tts": {
             "voice": "en-US-AriaNeural",
@@ -55,19 +46,17 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "gateway": {
         "telegram": {
             "show_tool_trace": True,
-            "typing_indicator": True,
+        },
+        "matrix": {
+            "show_tool_trace": True,
         },
         "imap": {
             "poll_interval": 60,
             "mark_as_read": True,
-            "show_tool_trace": False,
-            "typing_indicator": False,
         },
         "gmail": {
             "poll_interval": 60,
             "mark_as_read": True,
-            "show_tool_trace": False,
-            "typing_indicator": False,
         },
     },
 }
@@ -89,21 +78,23 @@ class WebExtractToolConfig:
 @dataclass
 class ReadImageToolConfig:
     model: str = ""  # empty = use main model
-    auto_resize: bool = True
-    max_edge: int = 1568  # pixels; Anthropic's recommended upper bound
+
+
+@dataclass
+class ApprovalConfig:
+    allowlist: list[str] = field(default_factory=list)
 
 
 @dataclass
 class TerminalToolConfig:
     sandbox: bool = False
     allow_network: bool = False
+    approval: ApprovalConfig = field(default_factory=ApprovalConfig)
 
 
 @dataclass
 class BrowserToolConfig:
     vision: bool = False
-    human_typing: bool = True
-    typing_delay_ms: list[int] = field(default_factory=lambda: [30, 80])
 
 
 @dataclass
@@ -137,8 +128,6 @@ class MemoryConfig:
     # opt-in). N > 0 fires a daemon-thread reviewer every N user turns that
     # snapshots the conversation and writes durable facts via the memory tool.
     review_interval: int = 0
-
-    low_confidence_max_age_days: int = 30
 
 
 @dataclass
@@ -227,17 +216,20 @@ def load(home: Path) -> Config:
         ),
         read_image=ReadImageToolConfig(
             model=str(read_image_raw.get("model", "") or ""),
-            auto_resize=bool(read_image_raw.get("auto_resize", True)),
-            max_edge=int(read_image_raw.get("max_edge", 1568)),
         ),
         terminal=TerminalToolConfig(
             sandbox=bool(terminal_raw.get("sandbox", False)),
             allow_network=bool(terminal_raw.get("allow_network", False)),
+            approval=ApprovalConfig(
+                allowlist=[
+                    str(x) for x in (
+                        (terminal_raw.get("approval") or {}).get("allowlist") or []
+                    )
+                ],
+            ),
         ),
         browser=BrowserToolConfig(
             vision=bool(browser_raw.get("vision", False)),
-            human_typing=bool(browser_raw.get("human_typing", True)),
-            typing_delay_ms=list(browser_raw.get("typing_delay_ms", [30, 80])),
         ),
         tts=TtsToolConfig(
             voice=str(tts_raw.get("voice", "en-US-AriaNeural") or "en-US-AriaNeural"),
@@ -281,7 +273,7 @@ def save(cfg: Config) -> None:
         "model": cfg.model,
         "providers": cfg.providers,
         "mcp": cfg.raw.get("mcp", {"servers": {}}),
-        "gateway": cfg.gateway,
+        "gateway": _sanitize_gateway(cfg.gateway),
     }
     if cfg.workspace:
         data["workspace"] = cfg.workspace
@@ -313,6 +305,22 @@ def save(cfg: Config) -> None:
     cfg.config_path.write_text(yaml.safe_dump(data, sort_keys=False, allow_unicode=True))
 
 
+_GATEWAY_ALLOWED_KEYS: dict[str, frozenset[str]] = {
+    "telegram": frozenset({"show_tool_trace"}),
+    "matrix": frozenset({"show_tool_trace"}),
+    "imap": frozenset({"poll_interval", "mark_as_read"}),
+    "gmail": frozenset({"poll_interval", "mark_as_read"}),
+}
+
+
+def _sanitize_gateway(gateway: dict) -> dict:
+    out: dict[str, Any] = {}
+    for platform, allowed in _GATEWAY_ALLOWED_KEYS.items():
+        section = dict((gateway or {}).get(platform) or {})
+        out[platform] = {k: v for k, v in section.items() if k in allowed}
+    return out
+
+
 def _tools_delta(cfg: Config) -> dict:
     out: dict[str, Any] = {}
     d = DEFAULT_CONFIG["tools"]
@@ -323,10 +331,6 @@ def _tools_delta(cfg: Config) -> dict:
     ri_out: dict[str, Any] = {}
     if cfg.tools.read_image.model != d["read_image"]["model"]:
         ri_out["model"] = cfg.tools.read_image.model
-    if cfg.tools.read_image.auto_resize != d["read_image"]["auto_resize"]:
-        ri_out["auto_resize"] = cfg.tools.read_image.auto_resize
-    if cfg.tools.read_image.max_edge != d["read_image"]["max_edge"]:
-        ri_out["max_edge"] = cfg.tools.read_image.max_edge
     if ri_out:
         out["read_image"] = ri_out
     term_d = d["terminal"]
@@ -335,15 +339,13 @@ def _tools_delta(cfg: Config) -> dict:
         term_out["sandbox"] = cfg.tools.terminal.sandbox
     if cfg.tools.terminal.allow_network != term_d["allow_network"]:
         term_out["allow_network"] = cfg.tools.terminal.allow_network
+    if cfg.tools.terminal.approval.allowlist:
+        term_out["approval"] = {"allowlist": list(cfg.tools.terminal.approval.allowlist)}
     if term_out:
         out["terminal"] = term_out
     browser_out: dict[str, Any] = {}
     if cfg.tools.browser.vision != d["browser"]["vision"]:
         browser_out["vision"] = cfg.tools.browser.vision
-    if cfg.tools.browser.human_typing != d["browser"]["human_typing"]:
-        browser_out["human_typing"] = cfg.tools.browser.human_typing
-    if cfg.tools.browser.typing_delay_ms != d["browser"]["typing_delay_ms"]:
-        browser_out["typing_delay_ms"] = cfg.tools.browser.typing_delay_ms
     if browser_out:
         out["browser"] = browser_out
     tts_out: dict[str, Any] = {}

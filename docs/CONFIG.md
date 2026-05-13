@@ -19,12 +19,11 @@ mcp:
 gateway:
   telegram:
     show_tool_trace: true
-    typing_indicator: true
+  matrix:
+    show_tool_trace: true
   imap:
     poll_interval: 60
     mark_as_read: true
-    show_tool_trace: false
-    typing_indicator: false
 ```
 
 Everything else (tool limits, TUI flags, fallback models, workspace)
@@ -54,7 +53,7 @@ Three options:
   `gateway.imap.poll_interval`, `fallback_models`) live here.
 - **Populate `.env` directly** (non-interactive, CI / devcontainers):
   alpi does not ship a `.env.example` — the Reference tables below
-  (Core, Gateway — Telegram / IMAP / Gmail) list every key with its
+  (Core, Gateway — Telegram / Matrix / IMAP / Gmail) list every key with its
   default. Create `~/.alpi/.env` yourself with just the keys you use
   and alpi picks them up on next launch.
 
@@ -77,15 +76,10 @@ Three options:
 | `tools.max_steps_per_turn` | `40` | int | next turn |
 | `tools.web_extract.model` | `""` (use main) | string | next turn |
 | `tools.read_image.model` | `""` (use main) | string | next turn |
-| `tools.read_image.auto_resize` | `true` | bool | next turn |
-| `tools.read_image.max_edge` | `1568` | int (pixels; `0` disables) | next turn |
 | `tools.terminal.sandbox` | `false` | bool | next turn |
 | `tools.terminal.allow_network` | `false` | bool | next turn |
 | `tools.terminal.approval.allowlist` | `[]` | list of pattern descriptions and/or command globs (see below) | next turn |
 | `tools.browser.vision` | `false` | bool | next turn |
-| `tools.research.quick_steps` | `8` | int | next turn |
-| `tools.research.normal_steps` | `15` | int | next turn |
-| `tools.research.deep_steps` | `30` | int | next turn |
 | `tools.budget.per_result_chars` | `100_000` | int (-1 = unlimited) | next turn |
 | `tools.tts.voice` | `"en-US-AriaNeural"` | Edge TTS voice id | next turn |
 | `tools.tts.autoplay` | `true` | bool (plays audio after synthesis) | next turn |
@@ -198,17 +192,9 @@ sandbox has a chance to refuse.
 
 `tools.browser.vision` lets the `browser(screenshot, question=…)` action auto-chain the screenshot into the vision model (`tools.read_image.model` or the active main model) and return the answer instead of the file path. When `false` (default), `screenshot` always returns the path and a hint pointing at `read_image` so the LLM can decide whether to pay for vision per call. Useful to turn on in an exploratory profile; keep off in watchdog/gateway profiles so the agent doesn't burn vision tokens silently.
 
-`tools.read_image.auto_resize` downscales any image whose longer edge exceeds `max_edge` (default 1568 px, matches Anthropic's recommendation) before base64-encoding to the model. Vision-model cost scales with resolution — a 4K screenshot costs ~9× more tokens than its 1568-px version for the same content. Aspect ratio is preserved, PNG-with-alpha stays PNG, everything else rounds-trips through JPEG q=85. SVG (vector) is skipped. Set `max_edge: 0` to disable entirely, or bump it if you work with detail-heavy images (charts, fine text) where the default is too aggressive.
+Image resizing is automatic: any image whose longer edge exceeds 1568 px (Anthropic's recommended bound) is downscaled before base64-encoding to the model. Vision-model cost scales with resolution — a 4K screenshot costs ~9× more tokens than its 1568-px version for the same content. Aspect ratio is preserved, PNG-with-alpha stays PNG, everything else rounds-trips through JPEG q=85. SVG (vector) is skipped. Not a knob — it is a fixed constant (`alpi.tools.read_image.MAX_EDGE`).
 
-`tools.research.{quick,normal,deep}_steps` control the iteration
-budget of the `research` sub-agent. The agent picks the depth tier
-based on the user's intent (`quick` for single-answer lookups,
-`normal` for comparative research, `deep` for exhaustive surveys);
-the integer per tier is your knob. Bumping `deep_steps` to 60 if
-you want even deeper investigations is fine; dropping `quick_steps`
-to 3 if you mainly use a tier-A model and want minimum latency on
-trivial questions is also fine. Default tiers are tuned for
-Tier 2 (cost / service) models on read-only research.
+The `research` sub-agent's depth tiers (`quick` = 8 steps, `normal` = 15, `deep` = 30) are product definition, not user config. The agent picks the depth name from intent (`quick` = single-answer lookups, `normal` = comparative research, `deep` = exhaustive surveys); the step ceilings live in `alpi.tools.research.DEPTH_STEPS_DEFAULTS`.
 
 `tools.tts.voice` selects the Edge TTS voice used by the `tts` tool. Any Microsoft Neural voice id is valid (`es-ES-AlvaroNeural`, `en-US-AriaNeural`, `fr-FR-DeniseNeural`, ...). Output is an MP3 cached under `~/.alpi/cache/tts/<hash>.mp3` — same text + voice reuses the cached file. Edge TTS runs against a free Microsoft endpoint (no API key), so there's no per-call cost. To use a different voice per call the agent can pass `voice=...` directly without touching config. `alpi setup → Voice` gives you a curated shortlist (10 common-language voices) plus a "custom" entry to type any voice id, and toggles autoplay in one place.
 
@@ -219,6 +205,21 @@ Tier 2 (cost / service) models on read-only research.
 `tools.stt.{model,language}` control the `stt` tool backed by faster-whisper running on CPU. First call downloads the model weights (~40 MB for `tiny`, ~150 MB for `base`, ~500 MB for `small`, ~1.5 GB for `medium`, ~3 GB for `large-v3`) into `~/.cache/huggingface/` and keeps them forever. Pick the smallest model that meets your accuracy bar — `base` is the sweet spot for spoken messages/voice notes; `small` or above for podcasts/meetings. `language` defaults to `""` (auto-detect); set to an ISO code (`en`, `es`, `fr`, ...) only when auto-detect fails on short clips.
 
 The Telegram gateway auto-transcribes inbound voice notes and audio files through the same `stt` pipeline: when a user sends a voice message, the gateway downloads it via `getFile`, caches under `~/.alpi/cache/inbound/`, runs `stt`, and feeds the transcript to the agent as text (`[voice note] <transcription>`). The agent sees a normal text turn — nothing surface-specific to handle.
+
+### Memory
+
+| Field | Default | Notes |
+|---|---|---|
+| `memory.review_interval` | `0` (off) | Post-turn reviewer cadence. `N > 0` fires a daemon-thread reviewer every `N` user turns that snapshots the conversation and writes durable facts via `memory(action="add")`. Append-only — the reviewer cannot `replace`/`remove`. Opt-in by design. |
+
+Internal-only constants (in `alpi/memory.py` and `alpi/compaction.py`, not user knobs):
+
+- `USER_CHAR_LIMIT = 3000`, `MEMORY_CHAR_LIMIT = 5000` — file-level caps.
+- Jaccard `0.7` max-containment — near-duplicate threshold.
+- `LOW_CONFIDENCE_MAX_AGE_DAYS = 30` — low-conf pruning age.
+- `trigger_ratio = 0.75`, `target_ratio = 0.40`, `keep_head = 2`, `keep_tail = 8` — auto-compaction policy.
+
+Calibration of these is an evidence-gated v0.6 item (`AI(1.c)` + `CM.1` reading `logs/compaction.jsonl`); they stay fixed until real session data justifies tuning.
 
 ### TUI
 
@@ -323,7 +324,12 @@ reasoning, so this flag has no effect there.
 | Key | Default | Why |
 |---|---|---|
 | `gateway.telegram.show_tool_trace` | `true` | Interactive chat; seeing tool calls in real time makes progress legible. |
-| `gateway.telegram.typing_indicator` | `true` | Shows "typing…" while alpi is working; reassures the user something's happening. |
+
+### Gateway — Matrix
+
+| Key | Default | Why |
+|---|---|---|
+| `gateway.matrix.show_tool_trace` | `true` | Same rationale as Telegram — Matrix is an interactive chat surface. |
 
 ### Gateway — IMAP
 
@@ -331,8 +337,6 @@ reasoning, so this flag has no effect there.
 |---|---|---|
 | `gateway.imap.poll_interval` | `60` (seconds) | IMAP polling cadence. Keeps CPU/network quiet for personal use. |
 | `gateway.imap.mark_as_read` | `true` | Processed messages marked `\Seen` so your mail client treats them as read. |
-| `gateway.imap.show_tool_trace` | `false` | Each trace would be its own email — spam if a turn touches many tools. Only the final reply goes out. |
-| `gateway.imap.typing_indicator` | `false` | No "typing…" concept over IMAP/SMTP. Kept explicit so the gateway loop doesn't spawn a no-op heartbeat. |
 
 ### Gateway — Gmail
 
@@ -342,8 +346,6 @@ Same knobs as IMAP, different backend. Polling uses Gmail's `users.history.list`
 |---|---|---|
 | `gateway.gmail.poll_interval` | `60` (seconds) | Same rationale as IMAP. |
 | `gateway.gmail.mark_as_read` | `true` | Removes the `UNREAD` label on processed messages. |
-| `gateway.gmail.show_tool_trace` | `false` | Same reason as IMAP. |
-| `gateway.gmail.typing_indicator` | `false` | Same reason as IMAP. |
 
 Configure both if you want: `imap` polls your primary mailbox via password, `gmail` polls another account via OAuth, each with its own allowlist (`IMAP_ALLOWED_SENDERS` vs `GMAIL_ALLOWED_SENDERS`).
 

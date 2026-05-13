@@ -52,7 +52,7 @@ async def _process(platform: Platform, msg: IncomingMessage, home: Path) -> None
     if parsed_mention is not None:
         # Mirror the LLM tool-trace UX.
         platform_cfg = _load_platform_cfg(home, platform.name)
-        if bool(platform_cfg.get("show_tool_trace", True)):
+        if _show_tool_trace(platform.name, platform_cfg):
             trace = _format_tool_trace({
                 "name": "peer",
                 "preview": f"peer_id={parsed_mention.peer_id}",
@@ -86,10 +86,10 @@ async def _process(platform: Platform, msg: IncomingMessage, home: Path) -> None
     # Per-platform UX config.
     platform_cfg = _load_platform_cfg(home, platform.name)
     typing_task: asyncio.Task | None = None
-    if platform_cfg.get("typing_indicator", True):
+    if _typing_indicator_enabled(platform.name):
         typing_task = asyncio.create_task(_typing_loop(platform, msg.external_chat_id))
 
-    show_trace = bool(platform_cfg.get("show_tool_trace", True))
+    show_trace = _show_tool_trace(platform.name, platform_cfg)
 
     try:
         reply = await _run_agent(msg, platform, home, show_trace=show_trace)
@@ -203,6 +203,19 @@ def _load_platform_cfg(home: Path, platform: str) -> dict[str, Any]:
     except Exception as e:  # noqa: BLE001
         log.warning("Could not load gateway config for %s: %s", platform, e)
         return {}
+
+
+_CHAT_PLATFORMS = frozenset({"telegram", "matrix"})
+
+
+def _typing_indicator_enabled(platform: str) -> bool:
+    return platform in _CHAT_PLATFORMS
+
+
+def _show_tool_trace(platform: str, platform_cfg: dict[str, Any]) -> bool:
+    if platform in _CHAT_PLATFORMS:
+        return bool(platform_cfg.get("show_tool_trace", True))
+    return False  # email → tool traces would each be a separate message
 
 
 def _is_allowed(msg: IncomingMessage) -> bool:

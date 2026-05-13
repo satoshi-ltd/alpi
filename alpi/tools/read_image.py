@@ -17,6 +17,8 @@ from alpi.tools.base import Tool, ToolResult
 
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg"}
 
+MAX_EDGE = 1568  # Anthropic's recommended upper bound (pixels)
+
 MAGIC_BYTES: dict[str, bytes] = {
     "image/png":  b"\x89PNG\r\n\x1a\n",
     "image/jpeg": b"\xff\xd8\xff",
@@ -210,13 +212,12 @@ class ReadImage(Tool):
         override = cfg.tools.read_image.model.strip()
         main_kwargs = cfg_mod.resolve_model(cfg)
 
-        if cfg.tools.read_image.auto_resize:
-            before = len(data)
-            data, mime = _maybe_resize(data, mime, cfg.tools.read_image.max_edge)
-            if len(data) < before:
-                tool_state_mod.emit_state(
-                    f"resized image ({before:,} → {len(data):,} bytes)"
-                )
+        before = len(data)
+        data, mime = _maybe_resize(data, mime, MAX_EDGE)
+        if len(data) < before:
+            tool_state_mod.emit_state(
+                f"resized image ({before:,} → {len(data):,} bytes)"
+            )
 
         tool_state_mod.emit_state("analyzing image…")
         b64 = base64.b64encode(data).decode("ascii")

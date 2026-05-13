@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.4.35 — 2026-05-13 — config surface trim + two save-time bug fixes
+
+- Fixed silent data loss: `config.save()` was dropping `tools.terminal.approval.allowlist` because `TerminalToolConfig` lacked an `approval` field and `_tools_delta()` never serialized it. New `ApprovalConfig` dataclass closes the round-trip; regression test added.
+- Fixed phantom config: `memory.low_confidence_max_age_days` was documented as configurable but never loaded from YAML. Now an honest constant (`alpi.memory.LOW_CONFIDENCE_MAX_AGE_DAYS = 30`); calibration is the v0.6 evidence-gated `AI(1.c)` item, not a user knob.
+- Suppressed 12 config keys that weren't real preferences (product definition or technical tuning). New homes: `tools.read_image.{auto_resize, max_edge}` → constants in `alpi/tools/read_image.py`; `tools.browser.{human_typing, typing_delay_ms}` → constants in `alpi/tools/browser.py`; `tools.research.{quick,normal,deep}_steps` → `DEPTH_STEPS_DEFAULTS`; `gateway.{telegram,imap,gmail}.typing_indicator` and `gateway.{imap,gmail}.show_tool_trace` → hardcoded per platform in `alpi/gateway/run.py` (Telegram on, email off for both).
+- `alpi logs --source` now accepts `service` (was missing despite `service.log` being a real file). `compaction.jsonl` description clarified to include `fired=false` cases (tool-truncation-only).
+
 ## v0.4.34 — 2026-05-13 — capability hardening v0.5 (CH.3): memory promotion queue
 
 Auto-compaction must never write to `USER.md` / `MEMORY.md` / `AGENT.md` directly — a single bad summary would otherwise pollute long-term memory. This release introduces a staging queue between compaction and durable memory, with a genuine human-in-the-loop gate.

@@ -25,6 +25,8 @@ SEED_MEMORY = ""
 CONFIDENCE_LEVELS = ("low", "normal", "high")
 DEFAULT_CONFIDENCE = "normal"
 
+LOW_CONFIDENCE_MAX_AGE_DAYS = 30  # AI(1.c) v0.6 calibration target, not a user knob
+
 _META_RE = re.compile(
     r"\n?<!--\s*alpi-meta\s+(?P<kv>[^>]*?)\s*-->", re.IGNORECASE
 )

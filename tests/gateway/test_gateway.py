@@ -111,35 +111,64 @@ async def test_run_agent_hides_traces_when_muted(monkeypatch, tmp_home_no_env: P
 
 
 @pytest.mark.asyncio
-async def test_process_starts_and_stops_typing(monkeypatch, tmp_home_no_env: Path) -> None:
+async def test_process_starts_and_stops_typing_on_telegram(
+    monkeypatch, tmp_home_no_env: Path,
+) -> None:
+    """telegram → typing on, hardcoded."""
     events = [{"kind": "reply", "text": "hi"}]
-    # Slow the subprocess so typing gets a tick.
     monkeypatch.setattr(gw_run, "_TYPING_REFRESH_SECONDS", 0.01)
+    monkeypatch.setattr(
+        gw_run.asyncio, "create_subprocess_exec",
+        _fake_subprocess(_event_lines(events), read_delay=0.05),
+    )
 
-    real_create = gw_run.asyncio.create_subprocess_exec
-    fake = _fake_subprocess(_event_lines(events), read_delay=0.05)
-    monkeypatch.setattr(gw_run.asyncio, "create_subprocess_exec", fake)
-
+    FakePlatform.name = "telegram"
     platform = FakePlatform(tmp_home_no_env)
-    msg = IncomingMessage(platform="fake", external_user_id="u", external_chat_id="c", text="hi")
-
-    await gw_run._process(platform, msg, tmp_home_no_env)
+    msg = IncomingMessage(platform="telegram", external_user_id="u", external_chat_id="c", text="hi")
+    try:
+        await gw_run._process(platform, msg, tmp_home_no_env)
+    finally:
+        FakePlatform.name = "fake"
 
     assert platform.sent[-1].text == "hi"
     assert len(platform.typing_pings) >= 1
 
 
 @pytest.mark.asyncio
-async def test_process_respects_typing_indicator_false(monkeypatch, tmp_home_no_env: Path) -> None:
-    # Disable the Telegram flags in config.yaml.
+async def test_process_never_starts_typing_on_email(
+    monkeypatch, tmp_home_no_env: Path,
+) -> None:
+    """imap/gmail → typing off, hardcoded; legacy YAML key ignored."""
     (tmp_home_no_env / "config.yaml").write_text(
-        "gateway:\n"
-        "  telegram:\n"
-        "    typing_indicator: false\n"
-        "    show_tool_trace: false\n"
+        "gateway:\n  imap:\n    typing_indicator: true\n"
     )
-    # Make FakePlatform look like telegram for config lookup.
-    FakePlatform.name = "telegram"
+    events = [{"kind": "reply", "text": "final"}]
+    monkeypatch.setattr(gw_run, "_TYPING_REFRESH_SECONDS", 0.01)
+    monkeypatch.setattr(
+        gw_run.asyncio, "create_subprocess_exec",
+        _fake_subprocess(_event_lines(events), read_delay=0.03),
+    )
+
+    FakePlatform.name = "imap"
+    platform = FakePlatform(tmp_home_no_env)
+    msg = IncomingMessage(platform="imap", external_user_id="u", external_chat_id="c", text="hi")
+    try:
+        await gw_run._process(platform, msg, tmp_home_no_env)
+    finally:
+        FakePlatform.name = "fake"
+
+    assert platform.typing_pings == []
+    assert [m.text for m in platform.sent] == ["final"]
+
+
+@pytest.mark.asyncio
+async def test_process_respects_telegram_show_tool_trace_false(
+    monkeypatch, tmp_home_no_env: Path,
+) -> None:
+    """gateway.telegram.show_tool_trace stays configurable per profile."""
+    (tmp_home_no_env / "config.yaml").write_text(
+        "gateway:\n  telegram:\n    show_tool_trace: false\n"
+    )
     events = [
         {"kind": "tool_start", "name": "memory", "preview": "x"},
         {"kind": "reply", "text": "final"},
@@ -150,6 +179,7 @@ async def test_process_respects_typing_indicator_false(monkeypatch, tmp_home_no_
         _fake_subprocess(_event_lines(events), read_delay=0.03),
     )
 
+    FakePlatform.name = "telegram"
     platform = FakePlatform(tmp_home_no_env)
     msg = IncomingMessage(platform="telegram", external_user_id="u", external_chat_id="c", text="hi")
     try:
@@ -157,24 +187,26 @@ async def test_process_respects_typing_indicator_false(monkeypatch, tmp_home_no_
     finally:
         FakePlatform.name = "fake"
 
-    # Only the final reply should remain.
-    assert platform.typing_pings == []
+    # No tool trace, just the final reply.
     assert [m.text for m in platform.sent] == ["final"]
 
 
 def test_gateway_config_defaults_nested(tmp_home_no_env: Path) -> None:
+    """post-suppression DEFAULT_CONFIG: chat platforms keep show_tool_trace only."""
     cfg = config.load(tmp_home_no_env)
     assert cfg.gateway["telegram"]["show_tool_trace"] is True
-    assert cfg.gateway["telegram"]["typing_indicator"] is True
+    assert cfg.gateway["matrix"]["show_tool_trace"] is True
     assert cfg.gateway["imap"]["poll_interval"] == 60
     assert cfg.gateway["imap"]["mark_as_read"] is True
-    # Email defaults keep traces and typing off.
-    assert cfg.gateway["imap"]["show_tool_trace"] is False
-    assert cfg.gateway["imap"]["typing_indicator"] is False
+    for chat in ("telegram", "matrix"):
+        assert "typing_indicator" not in cfg.gateway[chat]
+    for email in ("imap", "gmail"):
+        assert "typing_indicator" not in cfg.gateway[email]
+        assert "show_tool_trace" not in cfg.gateway[email]
 
 
 def test_gateway_config_deep_merge(tmp_home_no_env: Path) -> None:
-    # Override one flag and keep the rest by deep merge.
+    # Override one configurable flag and keep the rest by deep merge.
     (tmp_home_no_env / "config.yaml").write_text(
         "gateway:\n"
         "  telegram:\n"
@@ -184,8 +216,8 @@ def test_gateway_config_deep_merge(tmp_home_no_env: Path) -> None:
     )
     cfg = config.load(tmp_home_no_env)
     assert cfg.gateway["telegram"]["show_tool_trace"] is False
-    assert cfg.gateway["telegram"]["typing_indicator"] is True  # default kept
     assert cfg.gateway["imap"]["poll_interval"] == 30
+    assert cfg.gateway["imap"]["mark_as_read"] is True  # default kept
     assert cfg.gateway["imap"]["mark_as_read"] is True          # default kept
 
 
