@@ -25,9 +25,9 @@ name: publish-desktop
 #      ``releases/download/desktop-latest/desktop-release.json``
 #
 # Signing: minisign keypair via ``TAURI_SIGNING_PRIVATE_KEY`` +
-# ``TAURI_SIGNING_PRIVATE_KEY_PASSWORD`` repo secrets. Public key
-# lives in ``tauri.conf.json`` so the installed app verifies updates
-# against it.
+# ``TAURI_SIGNING_PRIVATE_KEY_PASSWORD`` repo secrets for updater
+# artifacts, plus Apple Developer ID secrets for macOS code signing and
+# notarization.
 
 on:
   push:
@@ -92,18 +92,35 @@ jobs:
       - name: secrets present
         if: steps.gate.outputs.should_publish == 'true'
         env:
-          KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          PWD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
-          if [ -z "$KEY" ]; then
-            echo "::error::TAURI_SIGNING_PRIVATE_KEY missing — see desktop/RELEASING.md"
+          missing=0
+          for name in \
+            TAURI_SIGNING_PRIVATE_KEY \
+            TAURI_SIGNING_PRIVATE_KEY_PASSWORD \
+            APPLE_CERTIFICATE \
+            APPLE_CERTIFICATE_PASSWORD \
+            APPLE_SIGNING_IDENTITY \
+            APPLE_ID \
+            APPLE_PASSWORD \
+            APPLE_TEAM_ID
+          do
+            if [ -z "${!name}" ]; then
+              echo "::error::$name missing — see desktop/RELEASING.md"
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
             exit 1
           fi
-          if [ -z "$PWD" ]; then
-            echo "::error::TAURI_SIGNING_PRIVATE_KEY_PASSWORD missing — see desktop/RELEASING.md"
-            exit 1
-          fi
-          echo "signing secrets present"
+          echo "release signing secrets present"
 
       - name: package.json + Cargo.toml in sync with tauri.conf.json
         if: steps.gate.outputs.should_publish == 'true'
@@ -192,18 +209,143 @@ jobs:
 
       - name: linux deps (webkit2gtk + appindicator)
         if: matrix.os == 'ubuntu-22.04'
+        timeout-minutes: 10
+        env:
+          DEBIAN_FRONTEND: noninteractive
+          NEEDRESTART_MODE: a
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq --no-install-recommends \
+          set -euo pipefail
+          # libayatana-appindicator3-dev is the maintained drop-in for libappindicator3-dev on 22.04 (the legacy package's postinst can hang in CI).
+          sudo -E apt-get update -qq
+          sudo -E apt-get install -y -qq --no-install-recommends \
             libwebkit2gtk-4.1-dev \
-            libappindicator3-dev \
+            libayatana-appindicator3-dev \
             librsvg2-dev \
             patchelf
 
       - run: pnpm install --frozen-lockfile
         working-directory: desktop
 
-      - uses: tauri-apps/tauri-action@v0.6.2
+      - name: verify Apple certificate secret
+        if: matrix.os == 'macos-latest'
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          cert="$RUNNER_TEMP/apple-certificate.p12"
+          keychain="$RUNNER_TEMP/apple-signing.keychain-db"
+          keychain_password="$(openssl rand -hex 24)"
+
+          printf '%s' "$APPLE_CERTIFICATE" | base64 --decode > "$cert"
+          echo "certificate bytes: $(wc -c < "$cert")"
+          echo "certificate sha256: $(shasum -a 256 "$cert" | awk '{print $1}')"
+
+          openssl pkcs12 -info -in "$cert" -noout -passin env:APPLE_CERTIFICATE_PASSWORD
+          security create-keychain -p "$keychain_password" "$keychain"
+          security unlock-keychain -p "$keychain_password" "$keychain"
+          security set-keychain-settings -t 3600 -u "$keychain"
+          security import "$cert" -k "$keychain" -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security find-identity -v -p codesigning "$keychain"
+
+      - name: verify Apple notarization credentials
+        if: matrix.os == 'macos-latest'
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          # tauri-action v0.6.2 produces an unnotarized DMG silently when these creds are missing/wrong.
+          xcrun notarytool history \
+            --apple-id "$APPLE_ID" \
+            --password "$APPLE_PASSWORD" \
+            --team-id "$APPLE_TEAM_ID" \
+            > "$RUNNER_TEMP/notary-history.txt"
+          echo "notarytool auth OK — last submissions:"
+          head -20 "$RUNNER_TEMP/notary-history.txt"
+
+      - name: build signed macOS bundle
+        if: matrix.os == 'macos-latest'
+        uses: tauri-apps/tauri-action@v0.6.2
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: desktop
+          releaseId: ${{ needs.check-version.outputs.release_id }}
+          includeUpdaterJson: true
+          args: ${{ matrix.args }}
+
+      - name: notarize + staple DMG
+        if: matrix.os == 'macos-latest'
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          # tauri-action v0.6.2 signs but does not auto-notarize; do it explicitly.
+          dmg=$(find desktop/src-tauri/target -path '*/release/bundle/dmg/*.dmg' -print -quit)
+          if [ -z "$dmg" ]; then
+            echo "::error::no DMG produced — Tauri build did not bundle macOS"
+            exit 1
+          fi
+          echo "submitting $dmg to Apple notary"
+          xcrun notarytool submit "$dmg" \
+            --apple-id "$APPLE_ID" \
+            --password "$APPLE_PASSWORD" \
+            --team-id "$APPLE_TEAM_ID" \
+            --wait \
+            --output-format json | tee "$RUNNER_TEMP/notary.json"
+          status=$(python3 -c "import json,pathlib; print(json.loads(pathlib.Path('$RUNNER_TEMP/notary.json').read_text())['status'])")
+          if [ "$status" != "Accepted" ]; then
+            echo "::error::notarization $status — fetching Apple log"
+            submission_id=$(python3 -c "import json,pathlib; print(json.loads(pathlib.Path('$RUNNER_TEMP/notary.json').read_text())['id'])")
+            xcrun notarytool log "$submission_id" \
+              --apple-id "$APPLE_ID" \
+              --password "$APPLE_PASSWORD" \
+              --team-id "$APPLE_TEAM_ID"
+            exit 1
+          fi
+          xcrun stapler staple "$dmg"
+          xcrun stapler validate "$dmg"
+
+      - name: re-upload stapled DMG to the release
+        if: matrix.os == 'macos-latest'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ needs.check-version.outputs.tag }}
+        run: |
+          set -euo pipefail
+          # tauri-action uploaded the pre-staple bytes; without --clobber here, users download a DMG whose hash Apple never registered.
+          dmg=$(find desktop/src-tauri/target -path '*/release/bundle/dmg/*.dmg' -print -quit)
+          gh release upload "$TAG" "$dmg" --repo "$REPO" --clobber
+
+      - name: verify Gatekeeper accepts the signed DMG
+        if: matrix.os == 'macos-latest'
+        run: |
+          set -euo pipefail
+          dmg=$(find desktop/src-tauri/target -path '*/release/bundle/dmg/*.dmg' -print -quit)
+          if [ -z "$dmg" ]; then
+            echo "::error::no DMG produced — Tauri build did not bundle macOS"
+            exit 1
+          fi
+          echo "asserting Gatekeeper on $dmg"
+          codesign -dvv "$dmg" 2>&1 | grep -E 'Authority|TeamIdentifier|hardened'
+          spctl --assess --type install --verbose "$dmg"
+
+      - name: build Linux bundles
+        if: matrix.os == 'ubuntu-22.04'
+        uses: tauri-apps/tauri-action@v0.6.2
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
@@ -225,11 +367,15 @@ jobs:
       - name: publish draft
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
           TAG: ${{ needs.check-version.outputs.tag }}
         run: |
-          gh api -X PATCH repos/${{ github.repository }}/releases/${{ needs.check-version.outputs.release_id }} \
-            -F draft=false \
-            -F prerelease=false >/dev/null
+          set -euo pipefail
+          # gh release edit --tag is idempotent: works on draft → public AND on already-public; survives re-runs whose check-version output is stale.
+          gh release edit "$TAG" \
+            --repo "$REPO" \
+            --draft=false \
+            --prerelease=false
           echo "published $TAG"
 
   # 4. Roll the ``desktop-latest`` tag onto the same commit and
@@ -253,6 +399,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ needs.check-version.outputs.tag }}
         run: |
+          set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git tag -f desktop-latest "$TAG"
@@ -264,6 +411,7 @@ jobs:
           TAG: ${{ needs.check-version.outputs.tag }}
           VERSION: ${{ needs.check-version.outputs.version }}
         run: |
+          set -euo pipefail
           mkdir -p latest-assets
           gh release download "$TAG" --dir latest-assets
           # The Tauri updater is meaningless without latest.json. Bail
@@ -306,6 +454,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          set -euo pipefail
           gh release delete desktop-latest --yes || true
           gh release create desktop-latest \
             latest-assets/* \

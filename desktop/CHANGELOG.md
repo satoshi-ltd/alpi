@@ -11,6 +11,19 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.2.15 — 2026-05-13 — Apple Developer ID signing + notarization
+
+Requires alpi ``v0.4.30`` or newer.
+
+First release built and shipped through the Apple Developer ID notarization path. No host-plane API or UX changes — purely the build/distribution side going live, so existing users on v0.2.12 will see the same app, just signed and notarized.
+
+- ``desktop/src-tauri/tauri.conf.json`` declares ``macOS.hardenedRuntime: true`` with ``entitlements: null`` — Tauri 2 signs with hardened runtime and ships a Gatekeeper-friendly DMG.
+- ``.github/workflows/publish-desktop.yml`` gates releases on every signing + notarization secret, scopes the Apple credentials to the macOS matrix job only, and owns notarization end-to-end with five defenses: (1) ``openssl pkcs12 -info`` + ``security import`` validate the cert before the expensive Tauri build; (2) ``xcrun notarytool history`` round-trips ``APPLE_ID`` / ``APPLE_PASSWORD`` (app-specific) / ``APPLE_TEAM_ID`` through Apple's notary so wrong creds fail fast; (3) explicit ``xcrun notarytool submit --wait`` + ``stapler staple`` after the build, because ``tauri-action`` v0.6.2 signs but does not auto-notarize; (4) ``gh release upload --clobber`` re-uploads the stapled DMG so users download the bytes that Apple actually registered (without it, ``tauri-action``'s pre-notarize upload is what lands on the release); (5) ``spctl --assess --type install`` runs against the published DMG and fails the workflow if Gatekeeper rejects.
+- Linux job hardened so ``apt-get install`` can't hang the matrix: ``DEBIAN_FRONTEND=noninteractive``, ``NEEDRESTART_MODE=a``, a 10-minute step timeout, and a swap to ``libayatana-appindicator3-dev`` (the maintained drop-in for the legacy ``libappindicator3-dev`` whose postinst can stall on 22.04).
+- ``publish-release`` step uses ``gh release edit --tag --draft=false`` (with ``set -euo pipefail``) instead of ``gh api -X PATCH .../releases/$id`` — the latter died in <1s on workflow re-runs because the stale ``check-version`` output left ``release_id`` empty.
+- ``desktop/RELEASING.md`` documents the Developer ID certificate, app-specific password, signing identity, and Team ID setup so future desktop releases stay reproducible.
+- ``tests/core/test_desktop_release_workflow.py`` locks the workflow shape: version sync, hardened-runtime config, every required secret present, Apple secrets scoped to macOS only, and the five notarization defenses (cert verify, notarytool credential round-trip, explicit notarize+staple ordered between build and Gatekeeper, stapled-DMG re-upload before Gatekeeper, Gatekeeper assess).
+
 ## v0.2.12 — 2026-05-12 — auto-compact surfacing in the context bar
 
 Requires alpi ``v0.4.30`` or newer.
