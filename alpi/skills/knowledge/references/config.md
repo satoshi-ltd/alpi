@@ -81,6 +81,29 @@ passed to subprocesses after the skill is opened.
 
 Do not store secret values inside `SKILL.md`, docs, or scripts.
 
+## Terminal approval allowlist
+
+`tools.terminal.approval.allowlist` skips the interactive prompt for entries that match. Two shapes share the list:
+
+- Pattern desc (e.g. `recursive rm`, `sudo`, `git force-push`) → bypass entire severity-category. Persisted by the TUI `Always` button.
+- Anything else → command glob, `fnmatch` against trimmed command.
+
+```yaml
+tools:
+  terminal:
+    approval:
+      allowlist:
+        - recursive rm                       # category
+        - sudo apt *                         # glob
+        - git reset --hard origin/main       # glob
+```
+
+Invariants:
+
+- DANGEROUS classifications (`mkfs`, `dd of=/dev/…`, pipe-to-interpreter, ssh-key reads, system-dir writes, fork bombs) are always blocked — allowlist has no effect.
+- Globs do not apply to compound commands (`&&`, `||`, `;`, `|`, newline, backtick, `$( … )`). Falls back to prompt. Category-desc bypass still applies on compound.
+- `classify()` returns the worst severity across the entire command, not the first match. `rm -rf build && mkfs.ext4 /dev/sda` → DANGEROUS even with `recursive rm` in allowlist.
+
 ## Common questions
 
 - "Where do I set the workspace?" -> `workspace` in config or setup.

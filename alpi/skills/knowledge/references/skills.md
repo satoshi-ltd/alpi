@@ -28,20 +28,31 @@ category: personal
 version: 0.1.0
 origin: agent
 requires_env: [WHOOP_CLIENT_ID, WHOOP_CLIENT_SECRET]
+requires_bins: [ffmpeg]              # optional — exec on PATH
+requires_config: [home_assistant.url] # optional — user-set keys in config.yaml
+platforms: [macos, linux]            # optional — empty/absent = portable
 tools: [terminal]
 keywords: [whoop, workout]
 created_at: 2026-04-20
 ---
 ```
 
-Important fields:
+Fields:
 
-- `description`: short headline for semantic discovery.
-- `requires_env`: env vars required before the skill is shown in the
-  system prompt.
-- `keywords`: whole-token boost for discovery; avoid generic words.
-- `origin`: `agent`, `user`, or `bundled`; user-origin mutations
-  require confirmation.
+- `description`: headline for semantic discovery.
+- `keywords`: whole-token boost; avoid generic words.
+- `origin`: `agent` | `user` | `bundled`. User-origin mutations need `confirm_user_skill=true`.
+
+Eligibility (any unmet requirement → hidden from prompt + hint; `list` shows compound `[inactive: missing …]`):
+
+| Field | Check |
+|---|---|
+| `requires_env` | `os.environ.get(var)` truthy after `~/.alpi/.env` is loaded |
+| `requires_bins` | `shutil.which(bin)` not None; bin name only, no path separators |
+| `requires_config` | dotted path resolves to non-empty value in user's `~/.alpi/config.yaml`; alpi defaults do not count |
+| `platforms` | current `sys.platform` (`darwin`→`macos`, `linux`, `win32`→`windows`) in the declared set; empty/absent = portable |
+
+`skill(action="run"|"test"|"invoke")` on an inactive skill rejects with `"skill X is inactive: missing …"` before spawning.
 
 ## Env and secrets
 
@@ -58,18 +69,27 @@ Never hardcode secrets in `SKILL.md`, scripts, references, or assets.
 
 ## Actions
 
+Inspection: `list`, `view(name, [file])`, `validate(name)`.
+
+Mutating (user skills need `confirm_user_skill=true`; bundled `@alpi/*` rejects every mutation):
+
 ```python
-skill(action="create", name=..., category=..., description=..., body=...)
-skill(action="view", name=...)
-skill(action="view", name=..., file="references/foo.md")
-skill(action="patch", name=..., old_string=..., new_string=...)
-skill(action="add_file", name=..., subdir=..., filename=..., content=...)
-skill(action="remove_file", name=..., subdir=..., filename=...)
-skill(action="validate", name=...)
-skill(action="reset_state", name=...)
-skill(action="delete", name=...)
-skill(action="list")
+skill(action="create",      name, category, description, body,
+      [requires_env], [requires_bins], [requires_config], [platforms],
+      [tools], [keywords], [output_schema])
+skill(action="edit",        name, body, [confirm_user_skill])
+skill(action="patch",       name, subdir, filename, old_string, new_string, [confirm_user_skill])
+skill(action="set_meta",    name, fields={…}, [confirm_user_skill])
+skill(action="add_file",    name, subdir, filename, content, [confirm_user_skill])
+skill(action="remove_file", name, subdir, filename, [confirm_user_skill])
+skill(action="delete",      name, [confirm_user_skill])
+skill(action="reset_state", name, [confirm_user_skill])
 ```
+
+Execution: `run(name, [args])`, `test(name, [args])`, `invoke(name, [args])`.
+
+- `delete` archives to `skills/.archive/<category>/<name>__<UTC>/`. Pinned skills (`pinned: true`) refuse `delete` until unpinned via `set_meta`.
+- `reset_state` wipes `<skill>/state/`; preserves SKILL.md / scripts / references / assets / secrets.
 
 Use the `skill` tool for all skill file changes. Do not use generic
 file-edit tools inside skill directories, because they bypass scanner
@@ -79,13 +99,11 @@ and validation behavior.
 Use that absolute path when executing a skill script; do not run
 `scripts/foo.py` relative to the workspace.
 
-## Validation and list states
+## list tags
 
-`skill(action="list")` shows:
-
-- active skills with no tag,
-- invalid skills with `[invalid: ...]`,
-- inactive skills with `[inactive: missing env var X]`.
+- active: no tag.
+- `[invalid: <field> (<message>)]` — schema errors. Skill is hidden from prompt entirely.
+- `[inactive: missing …]` — eligibility unmet. Multiple reasons compound, e.g. `[inactive: missing env var TOKEN, binary gh]`.
 
 `skill(action="validate")` runs frontmatter checks plus runtime checks
 for Python syntax/imports and common OAuth/port mistakes.

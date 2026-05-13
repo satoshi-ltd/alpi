@@ -558,6 +558,32 @@ class Engine:
             ctx_window=ctx_window,
         )
 
+        if result.fired:
+            summary_text = ""
+            for msg in new_messages:
+                content = (msg.get("content") or "")
+                if msg.get("role") == "system" and isinstance(content, str) \
+                        and content.startswith("[auto-compacted summary]"):
+                    summary_text = content.split("\n", 1)[1] if "\n" in content else ""
+                    break
+
+            def _candidate_call(messages: list[dict], max_tokens: int) -> str:
+                kwargs = dict(call_kwargs)
+                kwargs["max_tokens"] = int(max_tokens)
+                try:
+                    out = llm.complete(messages=messages, **kwargs)
+                    return (out.content or "").strip()
+                except Exception:  # noqa: BLE001
+                    return ""
+
+            compaction.emit_candidates_from_summary(
+                self.home,
+                summary_text,
+                call_llm=_candidate_call,
+                session_id=self.session.id,
+                model=self.session.model or self.cfg.model,
+            )
+
     def save_session(self) -> Path:
         path = self.session.save()
         if path is not None:

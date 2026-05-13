@@ -3852,6 +3852,96 @@ def workgroup_turns(
         click.echo("")
 
 
+@main.group("memory")
+def memory_group() -> None:
+    """Operator-facing memory tooling — review and promote durable facts."""
+
+
+@memory_group.command("promote")
+@click.option(
+    "--apply-all", is_flag=True, default=False,
+    help="Apply every pending candidate without prompting (CI use; risky).",
+)
+@click.option(
+    "--discard-all", is_flag=True, default=False,
+    help="Drop every pending candidate without prompting.",
+)
+@click.pass_context
+def cmd_memory_promote(ctx: click.Context, apply_all: bool, discard_all: bool) -> None:
+    """Interactively review the promotion queue.
+
+    Each candidate shows source session, suggested target file, confidence,
+    and any operational-state / duplicate warnings. For each you can apply
+    (writes via the standard memory add path with safety scan + dedup),
+    discard, skip (leave for later), or quit.
+    """
+    from alpi import promotion as _promotion
+    from alpi.tools.memory import Memory
+
+    h: Path = ctx.obj["home"]
+    pending = _promotion.list_pending(h)
+    if not pending:
+        click.echo("(no pending promotion candidates)")
+        return
+
+    if apply_all and discard_all:
+        raise click.ClickException("pass --apply-all OR --discard-all, not both")
+
+    click.echo(
+        f"{len(pending)} pending candidate(s) "
+        f"(cap={_promotion.MAX_PENDING}, expire after {_promotion.MAX_AGE_DAYS}d)"
+    )
+    applied = discarded = skipped = 0
+
+    for cand in pending:
+        click.echo("")
+        click.echo(f"  [{cand.id}] {cand.target}  conf={cand.confidence}  "
+                   f"source={cand.source}  session={cand.session_id[:8]}")
+        click.echo(f"    text: {cand.text}")
+        if cand.warnings:
+            click.echo(f"    warnings: {'; '.join(cand.warnings)}")
+
+        if apply_all:
+            choice = "a"
+        elif discard_all:
+            choice = "d"
+        else:
+            choice = click.prompt(
+                "  [a]pply / [d]iscard / [s]kip / [q]uit",
+                type=click.Choice(["a", "d", "s", "q"], case_sensitive=False),
+                default="s",
+                show_default=False,
+            ).lower()
+
+        if choice == "q":
+            click.echo("quit")
+            break
+        if choice == "s":
+            skipped += 1
+            continue
+        if choice == "d":
+            _promotion.discard(h, cand.id)
+            discarded += 1
+            click.echo(f"  discarded {cand.id}")
+            continue
+        if choice == "a":
+            r = Memory().run(
+                action="add",
+                target=cand.target,
+                content=cand.text,
+                confidence=cand.confidence,
+            )
+            if r.ok:
+                _promotion.remove_and_return(h, cand.id)
+                applied += 1
+                click.echo(f"  applied {cand.id} → {cand.target}")
+            else:
+                click.echo(f"  ERROR not applied: {r.error}")
+
+    click.echo("")
+    click.echo(f"applied={applied}  discarded={discarded}  skipped={skipped}")
+
+
 if __name__ == "__main__":
     main(obj={})
     sys.exit(0)

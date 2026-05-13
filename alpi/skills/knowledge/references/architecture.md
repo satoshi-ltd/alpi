@@ -25,7 +25,9 @@ alpi is a local agent runtime:
 | `alpi/tools/workspace.py` | `search_workspace` + `index_workspace` (BA local RAG). |
 | `alpi/tools/skill.py` | User/bundled skill management. |
 | `alpi/skills/` | Bundled skills packaged with alpi. |
-| `alpi/memory.py` | Memory file management. |
+| `alpi/memory.py` | Memory file management (USER.md, MEMORY.md, AGENT.md). |
+| `alpi/promotion.py` | Promotion queue — staging area between compaction and durable memory. |
+| `alpi/compaction.py` | Auto-compact pipeline + event log + candidate extraction. |
 | `alpi/core/` | Shared primitives: sqlite-vec store, embedder, locked Chromium installer. |
 | `alpi/tui/` | Terminal UI. |
 | `alpi/gateway/` | Telegram/IMAP/Gmail/Matrix inbound gateways. |
@@ -92,6 +94,24 @@ User skills live in profile home. Bundled skills live in
 `alpi/skills/` package resources and are addressed as `@alpi/<name>`.
 The desktop/mobile client should talk to daemon host verbs, not read
 profile files directly.
+
+## Memory + promotion queue
+
+Files at `<home>/memories/`:
+
+| File | Cap | Purpose |
+|---|---|---|
+| `USER.md` | 3000 | Stable facts about the human |
+| `MEMORY.md` | 5000 | World the user operates in |
+| `AGENT.md` | — | Agent's own voice/style/persona |
+
+Entry shape: `<!-- alpi-meta conf={low\|normal\|high} captured=ISO reinforced=N -->` trailer, stripped before reaching the system prompt. Low-conf + 0 reinforcements expire at `memory.low_confidence_max_age_days` (default 30). Near-duplicate writes reinforce existing entry (Jaccard ≥ 0.7) instead of appending. Scanner blocks Trojan-Source unicode, prompt-injection patterns, secret leakage.
+
+**Compaction** (`alpi/compaction.py`): fires when projected prompt > 0.75 × `ctx_window`. Cheap pass truncates oversized tool outputs first. LLM summarizes the middle; preserves system + first 2 + last 8 non-system messages. Targets 0.4 × `ctx_window` post-compact. One JSONL line appended per fired compaction to `<home>/logs/compaction.jsonl`.
+
+**Promotion queue** (`alpi/promotion.py`): after each fired compaction the engine runs a second LLM call against the summary and pushes candidates to `<home>/memories/promotion_queue.jsonl`. Per-candidate fields: id, source, session_id, model, target, text, confidence, warnings (operational-state, cross-file duplicate, safety scan hits computed at enqueue). Cap 200 pending; entries expire 30d.
+
+Tool actions: `memory(action="promotion_list")` read-only, `memory(action="promotion_discard", id=…)` drops without writing. **No agent apply path.** `promotion_apply` rejects with a pointer to the CLI. Only `alpi memory promote` writes — interactive `[a]pply/[d]iscard/[s]kip/[q]uit`, plus `--apply-all` / `--discard-all`. Apply routes through `memory(action="add")` so safety scan + dedup still gate. If add rejects, candidate stays in queue.
 
 ## Daemon and gateways
 

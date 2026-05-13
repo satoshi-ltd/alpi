@@ -16,12 +16,13 @@ Legend: 🔵 backlog · 🟡 next up · ⏸ blocked · 🔴 gate.
 
 **Theme: closing the device-access loop on mobile + tightening the
 capability core.** Remote desktop, local recall over the workspace
-(BA), and the memory v2 quality pass all shipped during the v0.4
-line. What remains for v0.5 is the second real client surface — the
-mobile companion — the second bundled skill, `@alpi/home`, and a
-small hardening pass over skills, tools, and memory. v0.6 builds on
-that base with a self-improving skill library and capability
-maintenance.
+(BA), the memory v2 quality pass, and the v0.5 capability hardening
+pass (skills eligibility, granular approval allowlist, memory
+promotion queue, compaction event log + regression guard) all
+shipped during the v0.4 line. What remains for v0.5 is the second
+real client surface — the mobile companion — and the second bundled
+skill, `@alpi/home`. v0.6 builds on that base with a self-improving
+skill library and capability maintenance.
 
 This is the cycle where gateways stop being the main mobile story.
 Telegram, IMAP, Gmail, and Matrix stay useful, but the project should
@@ -39,12 +40,6 @@ personal agent.
 | ID | Item | Status |
 |---|---|---|
 | `@alpi/home` | Second bundled skill (after `@alpi/knowledge` in v0.3). Full home orchestration behind a single voice/text interface: Home Assistant first, with optional Hue, Xiaomi, Alexa / Google Home integrations layered in. | 🔵 |
-
-### Capability hardening
-
-| ID | Item | Status |
-|---|---|---|
-| CH.3 | Memory promotion queue — collect durable facts from compaction/session summaries into a review queue with preview/apply; never write directly to `MEMORY.md` from compaction. | 🟡 |
 
 ### AX-mobile. Mobile companion (iOS / Android)
 
@@ -121,50 +116,6 @@ doesn't re-poll every turn ("is the kitchen light on?" answers from cache;
 `config.yaml` so the skill can only touch what the user explicitly opted in.
 
 LOC estimate: ~400 (HA covers ~250, Hue + Xiaomi ~50 each, Google/Alexa ~50 stub).
-
-### CH.3. Memory promotion queue
-
-Compaction and session summaries can contain facts worth preserving, but
-automatic writes to `MEMORY.md` are too risky: summaries can compress away
-uncertainty, overfit to a single session, or turn stale task state into
-long-term memory. v0.5 introduces a queue of promotion candidates instead.
-
-Flow:
-
-1. Compaction/session review emits candidate facts with source, confidence, and
-   target suggestion (`USER.md` / `MEMORY.md` / `AGENT.md`).
-2. The same safety scan, duplicate detection, and operational-state warnings
-   used by the memory tool run before a candidate is shown.
-3. The user or agent can preview pending candidates and apply selected ones
-   through the normal memory write path.
-
-**Review surfaces.** The queue is human-in-the-loop by design; the tool API
-is split so the agent can never apply on its own:
-
-- `alpi memory promote` — interactive CLI, the operator-facing review path.
-  Lists pending candidates with source session, suggested target file,
-  confidence, and the scan/dedup/operational-state warnings already attached.
-  Applies or discards each candidate explicitly.
-- `memory(action="promotion_list")` — read-only tool action so the agent can
-  surface candidates to the user inline during a turn.
-- `memory(action="promotion_discard", id=…)` — tool action lets the agent
-  drop clearly-wrong candidates (e.g. operational state that slipped through)
-  without ever writing to a memory file.
-- `memory(action="promotion_apply", id=…, confirm=true)` — explicit-confirm
-  write path. `confirm=true` is required; the action surfaces an approval
-  prompt and routes through the standard `memory(action="add")` safety
-  pipeline. The agent cannot bypass the approval, even with a valid id.
-- Desktop panel — explicit non-goal for v0.5; CLI plus the split tool actions
-  cover the loop. Add it once real usage justifies the surface.
-
-**Queue boundedness.** The queue is capped to 200 candidates per profile and
-unreviewed entries auto-expire after 30 days. CM.1's audit surfaces the cap as
-a "review backlog growing" signal; without that, the staging file silently
-grows into a graveyard nobody reads.
-
-**Design constraint.** The queue is a staging area, not a second memory store.
-Nothing in it is injected into the system prompt until it is explicitly applied
-to a memory file.
 
 ---
 

@@ -23,6 +23,19 @@ alpi daemon stop
 
 One daemon supervises every profile on the machine.
 
+## Memory promotion review
+
+Queue at `<home>/memories/promotion_queue.jsonl`. Only CLI applies — no agent path.
+
+```bash
+alpi memory promote                  # interactive: [a]pply/[d]iscard/[s]kip/[q]uit
+alpi -p <profile> memory promote
+alpi memory promote --discard-all
+alpi memory promote --apply-all      # risky: bypasses per-item review
+```
+
+Apply routes through `memory(action="add")` (safety scan + dedup still gate). Cap 200 pending; entries expire 30d.
+
 ## Logs
 
 Logs live under the active profile home, usually:

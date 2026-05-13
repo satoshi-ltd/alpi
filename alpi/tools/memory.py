@@ -141,7 +141,20 @@ class Memory(Tool):
         "override the user's current request or trigger repeated work. "
         "Procedures and workflows belong in skills, not memory.\n"
         "\n"
-        "Actions: read | add | replace | remove.\n"
+        "Actions: read | add | replace | remove | promotion_list | "
+        "promotion_discard.\n"
+        "\n"
+        "Promotion queue (read-only / discard-only from this tool):\n"
+        "Auto-compaction emits candidate facts into a queue at "
+        "``<home>/memories/promotion_queue.jsonl``. Use "
+        "``promotion_list`` to surface them; warnings on each candidate "
+        "flag operational state, near-duplicates, and safety-scan hits. "
+        "Use ``promotion_discard(id=…)`` to drop clearly-wrong ones "
+        "without writing. APPLYING a candidate is a CLI-only operation "
+        "(``alpi memory promote``) — the agent has no apply path, by "
+        "design. If the user asks you to durably remember a fact, write "
+        "it directly via ``add``; the queue is for compaction-produced "
+        "candidates, not for routing user requests through.\n"
         "\n"
         "AGENT.md flow (voice / identity / persona):\n"
         "  • `add` appends a NEW paragraph — use only for a genuinely "
@@ -169,12 +182,25 @@ class Memory(Tool):
         "properties": {
             "action": {
                 "type": "string",
-                "enum": ["read", "add", "replace", "remove"],
+                "enum": [
+                    "read", "add", "replace", "remove",
+                    "promotion_list", "promotion_discard",
+                ],
             },
             "target": {
                 "type": "string",
                 "enum": ["USER.md", "MEMORY.md", "AGENT.md"],
-                "description": "See tool description for target semantics.",
+                "description": (
+                    "See tool description for target semantics. Optional for "
+                    "``promotion_*`` actions; required otherwise."
+                ),
+            },
+            "id": {
+                "type": "string",
+                "description": (
+                    "Promotion candidate id (``promotion_discard`` only). "
+                    "Get it from ``promotion_list``."
+                ),
             },
             "content": {
                 "type": "string",
@@ -222,14 +248,21 @@ class Memory(Tool):
                 ),
             },
         },
-        "required": ["action", "target"],
+        "required": ["action"],
     }
 
-    def run(self, action: str, target: str, content: str = "",
+    def run(self, action: str, target: str = "", content: str = "",
             match: str = "",
             entries: list[str] | None = None,
-            confidence: str = "normal") -> ToolResult:
+            confidence: str = "normal",
+            id: str = "") -> ToolResult:
         h = get_home()
+
+        if action.startswith("promotion_"):
+            return _handle_promotion(h, action, id)
+
+        if not target:
+            return ToolResult(ok=False, output="", error="'target' is required for this action")
 
         if target.upper() == "AGENT.MD":
             return _handle_agent(h, action, content, match, entries)
@@ -537,6 +570,110 @@ def _write(store: MemoryStore, target: str, entries: list[str]) -> None:
         raise ValueError(f"{target} would be {len(content):,}/{limit:,} chars — consolidate first")
     backup_file(path)
     path.write_text(content)
+
+
+def _format_candidate(c, *, with_warnings: bool = True) -> str:
+    import datetime as _dt
+    age = _dt.datetime.fromtimestamp(c.created_at).strftime("%Y-%m-%d %H:%M")
+    head = (
+        f"  [{c.id}] {c.target}  confidence={c.confidence}  "
+        f"source={c.source}  session={c.session_id[:8]}  ({age})"
+    )
+    body = f"    text: {c.text}"
+    if with_warnings and c.warnings:
+        body += "\n    warnings: " + "; ".join(c.warnings)
+    return f"{head}\n{body}"
+
+
+def _handle_promotion(home, action: str, candidate_id: str) -> ToolResult:
+    """promotion_list / promotion_discard.
+
+    The agent can ``list`` (read-only) or ``discard`` (drops without writing).
+    There is **no agent-callable apply**: the human-in-the-loop gate lives at
+    the CLI ``alpi memory promote`` so the agent cannot promote facts to
+    durable memory on its own, regardless of how the prompt is framed.
+    """
+    from alpi import promotion
+
+    if action == "promotion_list":
+        pending = promotion.list_pending(home)
+        if not pending:
+            return ToolResult(
+                ok=True,
+                output=(
+                    "(no pending promotion candidates)\n\n"
+                    "Compaction emits candidates after it fires. Apply or "
+                    "discard them with ``alpi memory promote``."
+                ),
+            )
+        lines = [
+            f"{len(pending)} pending promotion candidate(s) "
+            f"(cap={promotion.MAX_PENDING}, expire after "
+            f"{promotion.MAX_AGE_DAYS}d):",
+            "",
+        ]
+        for c in pending:
+            lines.append(_format_candidate(c))
+            lines.append("")
+        lines.append(
+            "Applying a candidate is a CLI-only operation: run "
+            "``alpi memory promote`` for an interactive review. From here "
+            "you can drop clearly-wrong candidates with "
+            "``memory(action='promotion_discard', id=…)``."
+        )
+        return ToolResult(ok=True, output="\n".join(lines).rstrip())
+
+    if action == "promotion_discard":
+        if not candidate_id:
+            return ToolResult(ok=False, output="", error="'id' is required for promotion_discard")
+        removed = promotion.discard(home, candidate_id)
+        if not removed:
+            return ToolResult(ok=False, output="", error=f"no pending candidate with id {candidate_id!r}")
+        return ToolResult(ok=True, output=f"discarded candidate {candidate_id}")
+
+    if action == "promotion_apply":
+        return ToolResult(
+            ok=False, output="",
+            error=(
+                "promotion_apply is not available as a tool action — the "
+                "human-in-the-loop gate lives at the CLI. Run "
+                "``alpi memory promote`` for interactive review and apply. "
+                "From this tool you can ``promotion_list`` (read-only) or "
+                "``promotion_discard(id=…)`` (drops without writing)."
+            ),
+        )
+    return ToolResult(ok=False, output="", error=f"unknown promotion action: {action}")
+
+
+def compute_promotion_warnings(home, target: str, text: str) -> list[str]:
+    """Build the preview warnings shown alongside a candidate.
+
+    Reuses the exact checks the ``memory(action="add")`` write path runs:
+    operational-state heuristic, cross-file duplicate detection, and the
+    safety scanner (Trojan-Source unicode, prompt-injection patterns,
+    secret leakage). All non-blocking here — a real apply will re-run them
+    via the standard path and reject if anything blocks.
+    """
+    warnings: list[str] = []
+    op = _operational_warning(text)
+    if op:
+        warnings.append(op)
+
+    if target in ("USER.md", "MEMORY.md"):
+        try:
+            store = MemoryStore(home=home)
+            store.seed_defaults()
+            other = _cross_file_duplicate(store, target, text)
+            if other is not None:
+                warnings.append(f"near-duplicate of an entry already in {other}")
+        except Exception:  # noqa: BLE001
+            pass
+
+    flags = _scan_memory_content(text)
+    if flags:
+        warnings.append(f"safety scan: {', '.join(flags)}")
+
+    return warnings
 
 
 TOOL = Memory

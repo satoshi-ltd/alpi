@@ -47,6 +47,29 @@ TOOL_TRUNCATE_KEEP_TAIL_CHARS = 4_000
 MIN_SUMMARY_OUTPUT_TOKENS = 800
 
 
+CANDIDATE_PROMPT = (
+    "You are reading a dense briefing produced by an auto-compaction pass over "
+    "an agent conversation. Identify any DURABLE facts in the briefing that "
+    "deserve to be promoted to long-term memory — facts that will still matter "
+    "in future sessions, not session-specific state.\n\n"
+    "Targets:\n"
+    "- USER.md: stable facts about the human (name, location, role, family, "
+    "  long-term preferences). True regardless of which agent they use.\n"
+    "- MEMORY.md: the world the user operates in — project paths, tool quirks, "
+    "  team conventions, environment specifics.\n"
+    "- AGENT.md: behavioral directives for the agent (tone, response length, "
+    "  output format). NEVER facts about the user or world.\n\n"
+    "Output ONE JSON object, no prose, no fences:\n"
+    "{\"candidates\": [{\"target\": \"USER.md|MEMORY.md|AGENT.md\", "
+    "\"text\": \"the fact, one declarative English sentence\", "
+    "\"confidence\": \"low|normal|high\"}]}\n\n"
+    "Skip operational state (chat_id, session_id, ISO timestamps, today-only "
+    "context). Skip facts the agent merely speculated about. Empty list is "
+    "acceptable. At most 5 candidates per call — prefer fewer high-quality "
+    "facts over many shaky ones."
+)
+
+
 COMPACT_PROMPT = (
     "You are summarizing the middle of an agent conversation so the "
     "running session can stay within its context window. Your summary "
@@ -370,6 +393,105 @@ def event_log_path(home: Path) -> Path:
     return home / "logs" / "compaction.jsonl"
 
 
+def parse_candidates(raw: str) -> list[dict]:
+    """Parse the LLM's structured JSON output for promotion candidates.
+
+    Tolerates leading/trailing junk, code fences, and the LLM occasionally
+    wrapping the object in markdown. Returns the list of well-shaped
+    candidate dicts; rejects anything missing target/text or with a
+    target outside the allowed three files.
+    """
+    if not raw:
+        return []
+    text = raw.strip()
+    if text.startswith("```"):
+        text = text.strip("`")
+        if text.lower().startswith("json"):
+            text = text[4:]
+        text = text.strip()
+    start = text.find("{")
+    end = text.rfind("}")
+    if start < 0 or end <= start:
+        return []
+    try:
+        obj = json.loads(text[start:end + 1])
+    except json.JSONDecodeError:
+        return []
+    raw_candidates = obj.get("candidates") if isinstance(obj, dict) else None
+    if not isinstance(raw_candidates, list):
+        return []
+    valid: list[dict] = []
+    for c in raw_candidates[:5]:
+        if not isinstance(c, dict):
+            continue
+        target = str(c.get("target") or "").strip()
+        text_val = str(c.get("text") or "").strip()
+        if target not in ("USER.md", "MEMORY.md", "AGENT.md") or not text_val:
+            continue
+        confidence = str(c.get("confidence") or "normal").lower()
+        if confidence not in ("low", "normal", "high"):
+            confidence = "normal"
+        valid.append({
+            "target": target,
+            "text": text_val,
+            "confidence": confidence,
+        })
+    return valid
+
+
+CandidateLLM = Callable[[list[dict], int], str]
+"""``(messages, max_tokens) -> raw_text``. Engine wires this to ``llm.complete``."""
+
+
+def emit_candidates_from_summary(
+    home: Path,
+    summary_text: str,
+    *,
+    call_llm: CandidateLLM,
+    session_id: str,
+    model: str,
+) -> int:
+    """Run the candidate-extraction LLM call against ``summary_text`` and push
+    every well-formed result into the promotion queue.
+
+    Returns the number of candidates added. Best-effort: any exception is
+    swallowed so compaction does not break on a flaky LLM. The queue is
+    bounded (``promotion.MAX_PENDING``) and expires entries after
+    ``promotion.MAX_AGE_DAYS`` — over-emission cannot grow unbounded.
+    """
+    if not summary_text.strip():
+        return 0
+    try:
+        messages = [
+            {"role": "system", "content": CANDIDATE_PROMPT},
+            {"role": "user", "content": f"--- briefing ---\n{summary_text}"},
+        ]
+        raw = call_llm(messages, 800)
+        if not raw:
+            return 0
+        from alpi import promotion
+        from alpi.tools.memory import compute_promotion_warnings
+        parsed = parse_candidates(raw)
+        for c in parsed:
+            try:
+                warnings = compute_promotion_warnings(home, c["target"], c["text"])
+            except Exception:  # noqa: BLE001
+                warnings = []
+            promotion.add(
+                home,
+                source="compaction",
+                session_id=session_id,
+                model=model,
+                target=c["target"],
+                text=c["text"],
+                confidence=c["confidence"],
+                warnings=warnings,
+            )
+        return len(parsed)
+    except Exception:  # noqa: BLE001
+        return 0
+
+
 def record_event(
     home: Path,
     *,
@@ -402,15 +524,19 @@ def record_event(
 
 
 __all__ = [
+    "CANDIDATE_PROMPT",
     "CHARS_PER_TOKEN",
     "COMPACT_PROMPT",
+    "CandidateLLM",
     "CompactionPolicy",
     "CompactionResult",
     "compact",
+    "emit_candidates_from_summary",
     "estimate_message_tokens",
     "estimate_messages_tokens",
     "estimate_tokens",
     "event_log_path",
+    "parse_candidates",
     "record_event",
     "should_compact",
 ]
