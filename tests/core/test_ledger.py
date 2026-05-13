@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import shutil
 import tempfile
 import threading
@@ -150,6 +149,25 @@ def test_peer_context_unwinds_on_exception(home: Path) -> None:
     snap = ledger.snapshot(home)
     assert snap["by_peer"]["alice"]["tokens"] == 100
     assert snap["by_peer"]["__interactive__"]["tokens"] == 50
+
+
+def test_save_swallows_oserror_so_record_does_not_kill_the_turn(
+    home: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """If the daemon hits RLIMIT_NOFILE (FD exhaustion), the ledger temp-file
+    write raises OSError. record() must log + drop rather than propagate, or
+    a tool-heavy turn dies mid-stream and the desktop never gets reply/done."""
+    import alpi.ledger as ledger_mod
+
+    original_write_text = Path.write_text
+
+    def fail_on_tmp(self, *args, **kwargs):
+        if self.name.endswith(".json.tmp"):
+            raise OSError(24, "Too many open files")
+        return original_write_text(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "write_text", fail_on_tmp)
+    ledger_mod.record(home, usd=0.10, tokens=50)
 
 
 def test_budget_selects_pickone(home: Path) -> None:

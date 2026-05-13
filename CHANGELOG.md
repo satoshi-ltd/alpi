@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.4.37 — 2026-05-13 — FD leak fix for skill DB calls
+
+Long tool-heavy turns could exhaust the daemon's open-file limit after repeated `db` tool calls, then surface as unrelated save failures such as `ledger.json.tmp`.
+
+- Fixed the `db` tool SQLite leak: `sqlite3.Connection` context managers commit/rollback but do not close, so per-call skill DB connections are now explicitly closed.
+- Ledger saves now log and drop an `OSError` instead of crashing a live turn when the process is already under FD pressure.
+- `host.chat.send` now emits an `error` frame before `done` if the engine raises mid-turn, so desktop clients do not silently clear the pending turn before seeing the failure.
+- Added regressions for DB FD exhaustion, ledger `EMFILE` handling, and chat error-before-done ordering.
+
 ## v0.4.36 — 2026-05-13 — daemon loop isolation + chat event replay sidecar
 
 A scheduled job in one profile could freeze a live chat stream in another because the scheduler tick ran inline on the daemon's asyncio loop. Fixes the cause and adds a client-side recovery path.

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import sqlite3
 from pathlib import Path
@@ -116,7 +117,9 @@ class Db(Tool):
 
         param_tuple = tuple(params or [])
         try:
-            with sqlite3.connect(str(path), timeout=SQLITE_BUSY_TIMEOUT_S) as conn:
+            with contextlib.closing(
+                sqlite3.connect(str(path), timeout=SQLITE_BUSY_TIMEOUT_S),
+            ) as conn:
                 conn.row_factory = sqlite3.Row
                 if action == "query":
                     cur = conn.execute(sql, param_tuple)

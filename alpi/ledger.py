@@ -10,6 +10,7 @@ the ``day`` field — stale day wipes the counters on next load.
 from __future__ import annotations
 
 import json
+import logging
 import threading
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -18,6 +19,7 @@ from pathlib import Path
 from typing import Any
 
 
+log = logging.getLogger("alpi.ledger")
 INTERACTIVE_BUCKET = "__interactive__"
 
 
@@ -90,8 +92,16 @@ def save(home: Path, data: dict[str, Any]) -> None:
     p = _path(home)
     p.parent.mkdir(parents=True, exist_ok=True)
     tmp = p.with_suffix(".json.tmp")
-    tmp.write_text(json.dumps(data, separators=(",", ":"), sort_keys=True))
-    tmp.replace(p)
+    try:
+        tmp.write_text(json.dumps(data, separators=(",", ":"), sort_keys=True))
+        tmp.replace(p)
+    except OSError as e:
+        # Budget accounting must not crash a live turn under FD pressure.
+        log.warning("ledger save dropped: %s", e)
+        try:
+            tmp.unlink()
+        except OSError:
+            pass
 
 
 def _budget(cfg_budget: dict[str, Any] | None) -> tuple[str | None, float]:

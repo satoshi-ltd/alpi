@@ -13,7 +13,6 @@ import pytest
 
 from alpi.host import server as host_server
 from alpi.alp.keys import load_or_generate
-from alpi.host import chat as data_chat
 from alpi.host import handlers as data_handlers
 
 
@@ -306,6 +305,78 @@ async def test_data_chat_cancel_interrupts_active_turn(
     assert cancel_response["result"]["cancelled"] is True
     kinds = [e.get("event") for e in events]
     assert "interrupted" in kinds
+
+
+@pytest.mark.asyncio
+async def test_engine_exception_emits_error_frame_before_done(
+    monkeypatch, short_tmp: Path,
+) -> None:
+    """If engine.run_turn raises mid-turn (e.g. OSError(EMFILE) from a
+    leaking tool), the desktop must receive an `error` frame BEFORE `done`
+    or it clears pendingTurn and silently drops the error."""
+    home = short_tmp / "h"
+    home.mkdir()
+    load_or_generate(home)
+
+    class _CrashEngine:
+        def __init__(self, *, home: Path, cfg) -> None:  # noqa: ANN001
+            self.home = home
+            self.session = SimpleNamespace(id="crash-sid", subdir="sessions")
+
+        def run_turn(self, text: str, emit) -> None:  # noqa: ANN001
+            from alpi.engine import AgentEvent
+
+            emit(AgentEvent(kind="assistant_delta", text="partial"))
+            raise OSError(24, "Too many open files")
+
+        def request_interrupt(self) -> None:
+            return None
+
+        def save_session(self) -> None:
+            return None
+
+    from alpi import config as cfg_mod
+    monkeypatch.setattr(cfg_mod, "load", lambda h: SimpleNamespace(model="x"))
+    import alpi.engine
+    monkeypatch.setattr(alpi.engine, "Engine", _CrashEngine)
+    from alpi.host import chat as dc
+    monkeypatch.setattr(dc, "_resolve_home", lambda profile: home)
+
+    srv = host_server.Server(home=home)
+    data_handlers.register(srv)
+    dc.register(srv)
+    await srv.start()
+
+    try:
+        reader, writer = await asyncio.open_unix_connection(str(srv.socket_path()))
+        writer.write((json.dumps({
+            "id": "req-crash",
+            "method": "host.chat.send",
+            "params": {
+                "profile": "default",
+                "text": "boom",
+                "request_id": "req-crash",
+            },
+        }) + "\n").encode())
+        await writer.drain()
+        events: list[dict] = []
+        while True:
+            line = await reader.readline()
+            if not line:
+                break
+            events.append(json.loads(line))
+        writer.close()
+        await writer.wait_closed()
+    finally:
+        await srv.stop()
+
+    kinds = [e.get("event") for e in events]
+    assert "error" in kinds, kinds
+    error_idx = kinds.index("error")
+    done_idx = kinds.index("done") if "done" in kinds else len(kinds)
+    assert error_idx < done_idx, (
+        f"error must arrive before done so the desktop's pendingTurn captures it; got {kinds}"
+    )
 
 
 @pytest.mark.asyncio

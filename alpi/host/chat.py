@@ -140,6 +140,9 @@ async def _data_chat_send(
                 engine.save_session()
             except Exception:  # noqa: BLE001
                 pass
+        except Exception as exc:  # noqa: BLE001
+            # Surface engine failures before done so the client captures them.
+            sink(AgentEvent(kind="error", text=f"engine error: {exc}"))
         finally:
             loop.call_soon_threadsafe(queue.put_nowait, SENTINEL)
 
@@ -268,10 +271,6 @@ async def _send_mention(
         reply = str(final_payload.get("text") or "").strip() or "".join(parts).strip()
     else:
         reply = f"error: {error_text}"
-    result_tokens_in = int(final_payload.get("tokens_in") or 0)
-    result_tokens_out = int(final_payload.get("tokens_out") or 0)
-    result_cost = float(final_payload.get("cost") or 0.0)
-
     await send_frame({
         "event": "tool_end", "tool_id": tool_id, "name": "peer",
         "ok": ok, "output": _truncate(reply, 4000),

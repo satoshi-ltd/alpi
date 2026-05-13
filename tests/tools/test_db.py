@@ -8,7 +8,6 @@ bundled skill, malformed SQL).
 from __future__ import annotations
 
 import json
-import sqlite3
 from pathlib import Path
 
 import pytest
@@ -231,3 +230,30 @@ def test_constants_are_documented_values() -> None:
     # Guard against accidental relax of quotas in a refactor.
     assert MAX_DB_BYTES == 50 * 1024 * 1024
     assert MAX_ROWS_PER_QUERY == 10_000
+
+
+def test_db_does_not_leak_file_descriptors_across_many_calls(
+    isolated_home: Path, whoop_skill: str,
+) -> None:
+    """sqlite3.Connection's context manager only commits/rollbacks — it does
+    NOT close. Pre-fix, this test leaked one FD per call and would blow past
+    the soft RLIMIT_NOFILE in a tool-heavy turn (ledger.json.tmp EMFILE)."""
+    import resource
+
+    db = Db()
+    db.run(action="exec", skill=whoop_skill, sql="CREATE TABLE leak (n INTEGER)")
+    soft, _ = resource.getrlimit(resource.RLIMIT_NOFILE)
+
+    # Drop the soft limit to something the test can actually exhaust without
+    # touching the rest of the suite (raised back in finally).
+    test_limit = 96
+    try:
+        resource.setrlimit(resource.RLIMIT_NOFILE, (test_limit, _))
+        for i in range(test_limit * 2):
+            r = db.run(
+                action="exec", skill=whoop_skill,
+                sql="INSERT INTO leak VALUES (?)", params=[i],
+            )
+            assert r.ok, f"call {i} failed: {r.error}"
+    finally:
+        resource.setrlimit(resource.RLIMIT_NOFILE, (soft, _))
