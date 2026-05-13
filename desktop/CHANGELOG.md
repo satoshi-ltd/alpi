@@ -11,6 +11,17 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.2.16 — 2026-05-13 — chat reconnect-on-stall
+
+Requires alpi ``v0.4.36`` or newer.
+
+Fixes the freeze where a chat UI hangs forever after the host-plane stream socket dies mid-turn. The turn still completes on disk; v0.2.16 lets the desktop notice the silence and rebuild from the daemon's sidecar.
+
+- New `chat_events_since` Tauri command + watchdog in `useChatStream`: after 10s of silence on a pending turn, replay the sidecar and reconstruct tools / deltas / reply.
+- Two toasts mark the cycle: "Stream went silent — reconnecting…" → "Reconnected — turn recovered from disk".
+- New `ChatEvent::Heartbeat` variant carries the daemon's 5s keepalive through to React so long tool calls don't trip the watchdog falsely.
+- New sessions (no `session_id` at send time) are skipped — the failure mode is existing-session continues, which is fully covered.
+
 ## v0.2.15 — 2026-05-13 — Apple Developer ID signing + notarization
 
 Requires alpi ``v0.4.30`` or newer.

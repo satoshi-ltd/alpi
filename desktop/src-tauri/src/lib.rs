@@ -76,6 +76,9 @@ enum ChatEvent {
         request_id: String,
         session_id: String,
     },
+    Heartbeat {
+        request_id: String,
+    },
 }
 
 #[tauri::command]
@@ -1373,6 +1376,15 @@ fn stream_chat(
                     resolved_id = sid.to_string();
                 }
             }
+            "heartbeat" => {
+                // Forward so the React watchdog treats the daemon as alive even on long tool calls with no deltas.
+                let _ = app_for_frames.emit(
+                    "chat-event",
+                    ChatEvent::Heartbeat {
+                        request_id: rid_for_frames.clone(),
+                    },
+                );
+            }
             _ => {}
         }
     });
@@ -1411,6 +1423,27 @@ fn stream_chat(
             session_id: resolved_id,
         },
     );
+}
+
+#[tauri::command]
+fn chat_events_since(
+    profile: String,
+    session_id: String,
+    after_seq: Option<u64>,
+    limit: Option<u64>,
+) -> Result<serde_json::Value, String> {
+    // Replay sidecar for the freeze case: when host.chat.send's stream socket dies mid-turn, the desktop polls this to backfill missed frames.
+    let mut params = serde_json::json!({
+        "profile": profile,
+        "session_id": session_id,
+    });
+    if let Some(s) = after_seq {
+        params["after_seq"] = serde_json::Value::from(s);
+    }
+    if let Some(l) = limit {
+        params["limit"] = serde_json::Value::from(l);
+    }
+    host_client::call("host.chat.events_since", params)
 }
 
 #[tauri::command]
@@ -1579,6 +1612,7 @@ pub fn run() {
             read_file,
             chat_send_stream,
             chat_cancel,
+            chat_events_since,
             ollama_models,
             set_config_field,
             unset_config_field,
