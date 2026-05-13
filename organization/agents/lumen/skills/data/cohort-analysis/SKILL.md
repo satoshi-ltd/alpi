@@ -52,7 +52,7 @@ Load cohort data into the skill db for persistent analysis. Use `terminal` + `sq
 `scripts/cohort_table.py` pivots long-format cohort data (cohort, period_offset, value) into a cohort × period grid. It accepts CSV via `--input` or stdin and outputs either raw values (`--mode raw`) or retention % vs each cohort's M0 baseline (`--mode pct`).
 
 ```
-python <absolute_path> --input cohorts.csv --mode pct
+python3 <absolute_path> --input cohorts.csv --mode pct
 ```
 
 Use this when the data warehouse exports cohort events in long format — pivoting by hand introduces transcription errors. The script is schema-agnostic: any (cohort, period_offset, value) triples work, whether the metric is retention, revenue, sessions, or feature usage.

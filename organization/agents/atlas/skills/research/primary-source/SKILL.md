@@ -6,7 +6,7 @@ version: 0.1.0
 origin: user
 requires_env: []
 tools: [web_search, web_fetch, web_extract]
-keywords: [research, primary source, citation, evidence, analysis]
+keywords: ['research', 'primary-source', 'citation', 'evidence', 'analysis']
 created_at: 2026-05-05
 ---
 

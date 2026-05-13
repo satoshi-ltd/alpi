@@ -6,7 +6,7 @@ version: 0.1.0
 origin: user
 requires_env: []
 tools: []
-keywords: [unit economics, cac, ltv, payback, gross margin, churn]
+keywords: ['unit-economics', 'cac', 'ltv', 'payback', 'gross-margin', 'churn']
 created_at: 2026-05-05
 ---
 

@@ -6,7 +6,7 @@ version: 0.1.0
 origin: user
 requires_env: []
 tools: [terminal, db]
-keywords: [ab test, experiment, statistics, hypothesis, significance]
+keywords: ['ab-test', 'experiment', 'statistics', 'hypothesis', 'significance']
 created_at: 2026-05-05
 ---
 

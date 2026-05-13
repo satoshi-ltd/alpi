@@ -198,7 +198,7 @@ class Engine:
         # Per-turn skill boost; only fires when ``user_text`` matches a declared keyword.
         try:
             from alpi.tools.skill import keyword_match_hint as _kw_hint
-            hint = _kw_hint(self.home, user_text)
+            hint = _kw_hint(self.home, user_text, cfg_raw=self.cfg.raw)
         except Exception:  # noqa: BLE001
             hint = ""
         if hint:
@@ -628,7 +628,7 @@ class Engine:
         if hint:
             parts.append(hint)
         from alpi.tools.skill import skills_index_block
-        skills_block = skills_index_block(self.home)
+        skills_block = skills_index_block(self.home, cfg_raw=self.cfg.raw)
         if skills_block:
             parts.append(skills_block)
         if snap["USER.md"].strip():

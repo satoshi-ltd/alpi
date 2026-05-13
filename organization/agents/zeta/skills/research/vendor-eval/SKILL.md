@@ -6,7 +6,7 @@ version: 0.1.0
 origin: user
 requires_env: []
 tools: [read_file, write_file]
-keywords: [vendor, evaluation, technology, comparison, buy vs build]
+keywords: ['vendor', 'evaluation', 'technology', 'comparison', 'buy-vs-build']
 created_at: 2026-05-05
 ---
 

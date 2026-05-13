@@ -5,9 +5,11 @@ from __future__ import annotations
 import os
 import re
 import shutil
+import sys
 import json
 from datetime import date, datetime, timezone
 from pathlib import Path
+from typing import Any
 
 from alpi.home import get_home
 from alpi.tools.base import Tool, ToolResult
@@ -240,7 +242,7 @@ def agent_skill_count(home: Path) -> int:
     return n
 
 
-def skills_index_block(home: Path) -> str:
+def skills_index_block(home: Path, cfg_raw: dict[str, Any] | None = None) -> str:
     """Compact skills index for system-prompt injection.
 
     User skills first, bundled (`@alpi/*`) after with a `[bundled]`
@@ -250,6 +252,9 @@ def skills_index_block(home: Path) -> str:
     bundled = bundled_skills()
     if not user_skills and not bundled:
         return ""
+
+    if cfg_raw is None:
+        cfg_raw = _load_cfg_raw(home)
 
     lines = [
         "# AVAILABLE SKILLS",
@@ -264,11 +269,14 @@ def skills_index_block(home: Path) -> str:
         "",
     ]
 
+    from alpi.tools import _skill_schema as _schema
     by_cat: dict[str, list[tuple[str, str]]] = {}
     for p in user_skills:
         meta = _frontmatter(p / "SKILL.md")
-        # Hide skills whose ``requires_env`` is unset; ``list`` still surfaces them tagged.
-        eligible, _missing = skill_eligibility(meta)
+        # Schema-invalid skills stay out of the prompt regardless of eligibility — malformed frontmatter is unsafe to expose.
+        if _schema.errors(_schema.validate_frontmatter(meta, categories=CATEGORIES)):
+            continue
+        eligible, _missing = skill_eligibility(meta, cfg_raw=cfg_raw)
         if not eligible:
             continue
         name = meta.get("name") or p.name
@@ -281,7 +289,7 @@ def skills_index_block(home: Path) -> str:
             lines.append(f"    - {name}: {desc}" if desc else f"    - {name}")
 
     eligible_bundled = [
-        b for b in bundled if skill_eligibility(b.get("meta", {}))[0]
+        b for b in bundled if skill_eligibility(b.get("meta", {}), cfg_raw=cfg_raw)[0]
     ]
 
     if eligible_bundled:
@@ -375,8 +383,61 @@ def skill_keywords(meta: dict[str, str]) -> list[str]:
     return [k.lower() for k in _parse_str_list(meta.get("keywords", ""))]
 
 
+_VALID_PLATFORMS = frozenset({"macos", "linux", "windows"})
+
+# sys.platform → ALPI canonical platform identifier
+_SYS_PLATFORM_MAP = {
+    "darwin": "macos",
+    "linux": "linux",
+    "linux2": "linux",
+    "win32": "windows",
+    "cygwin": "windows",
+}
+
+
+def _current_platform() -> str:
+    return _SYS_PLATFORM_MAP.get(sys.platform, sys.platform)
+
+
+_BIN_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+-]*$")
+
+
+def _parse_bin_list(raw: str) -> list[str]:
+    return [b for b in _parse_str_list(raw) if _BIN_NAME_RE.match(b)]
+
+
+def _parse_config_path_list(raw: str) -> list[str]:
+    return [p for p in _parse_str_list(raw) if re.match(r"^[A-Za-z_][A-Za-z0-9_.]*$", p)]
+
+
+def _parse_platform_list(raw: str) -> list[str]:
+    return [p.lower() for p in _parse_str_list(raw) if p.lower() in _VALID_PLATFORMS]
+
+
+def _config_path_set(cfg_raw: dict[str, Any], dotted: str) -> bool:
+    cur: Any = cfg_raw
+    for part in dotted.split("."):
+        if not isinstance(cur, dict) or part not in cur:
+            return False
+        cur = cur[part]
+    return cur not in (None, "", [], {})
+
+
+def _load_cfg_raw(home: Path) -> dict[str, Any]:
+    try:
+        from alpi import config as _cfg_mod
+        return _cfg_mod.load(home).raw or {}
+    except Exception:  # noqa: BLE001
+        return {}
+
+
 def skill_requirements(meta: dict[str, str]) -> dict[str, list[str]]:
-    return {"env": _parse_env_list(meta.get("requires_env", ""))}
+    return {
+        "env": _parse_env_list(meta.get("requires_env", "")),
+        "bins": _parse_bin_list(meta.get("requires_bins", "")),
+        "config": _parse_config_path_list(meta.get("requires_config", "")),
+        "platforms": _parse_platform_list(meta.get("platforms", "")),
+    }
 
 
 def _declared_env_for_skill(skill_dir: Path) -> set[str]:
@@ -390,13 +451,39 @@ def skill_eligibility(
     meta: dict[str, str],
     *,
     env: dict[str, str] | None = None,
+    cfg_raw: dict[str, Any] | None = None,
 ) -> tuple[bool, list[str]]:
-    """``(ok, [missing, …])`` — eligible iff every ``requires_env`` resolves in ``env``."""
+    """``(ok, [reasons, …])`` — eligible iff every declared requires_* resolves now.
+
+    ``requires_env`` / ``requires_bins`` / ``platforms`` are always checked.
+    ``requires_config`` is checked only when ``cfg_raw`` is passed; legacy
+    callers that omit it skip the config check rather than silently hiding
+    skills that depend on profile config keys.
+    """
     env_map = env if env is not None else os.environ
+    reqs = skill_requirements(meta)
     missing: list[str] = []
-    for var in skill_requirements(meta)["env"]:
+
+    for var in reqs["env"]:
         if not env_map.get(var):
             missing.append(f"env var {var}")
+
+    for bin_name in reqs["bins"]:
+        if shutil.which(bin_name) is None:
+            missing.append(f"binary {bin_name}")
+
+    if reqs["platforms"]:
+        current = _current_platform()
+        if current not in reqs["platforms"]:
+            missing.append(
+                f"platform {'/'.join(reqs['platforms'])} (this is {current})"
+            )
+
+    if cfg_raw is not None and reqs["config"]:
+        for path in reqs["config"]:
+            if not _config_path_set(cfg_raw, path):
+                missing.append(f"config key {path}")
+
     return (not missing, missing)
 
 
@@ -616,6 +703,39 @@ class Skill(Tool):
                 ),
                 "default": [],
             },
+            "requires_bins": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": (
+                    "Executables the skill needs on PATH (e.g. 'gh', "
+                    "'ffmpeg', 'sqlite3'). Same enforcement as "
+                    "requires_env: missing bins hide the skill from "
+                    "the prompt; surfaced in list with [inactive: …]."
+                ),
+                "default": [],
+            },
+            "requires_config": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": (
+                    "Profile config keys (dotted paths, e.g. "
+                    "'home_assistant.url') the user must set explicitly "
+                    "in ``~/.alpi/config.yaml``. Only user-written keys "
+                    "count — alpi defaults do not satisfy this gate. "
+                    "Missing keys hide the skill from the prompt."
+                ),
+                "default": [],
+            },
+            "platforms": {
+                "type": "array",
+                "items": {"type": "string", "enum": ["macos", "linux", "windows"]},
+                "description": (
+                    "Operating systems where the skill works. Empty list "
+                    "= portable. Skills declaring platforms incompatible "
+                    "with the current OS are hidden from the prompt."
+                ),
+                "default": [],
+            },
             "tools": {
                 "type": "array",
                 "items": {"type": "string"},
@@ -716,6 +836,9 @@ class Skill(Tool):
         description: str = "",
         body: str = "",
         requires_env: list[str] | None = None,
+        requires_bins: list[str] | None = None,
+        requires_config: list[str] | None = None,
+        platforms: list[str] | None = None,
         tools: list[str] | None = None,
         keywords: list[str] | None = None,
         output_schema: str = "",
@@ -749,7 +872,10 @@ class Skill(Tool):
         if action == "create":
             return _create(home, name, category, description, body,
                            requires_env or [], tools or [],
-                           keywords or [], output_schema)
+                           keywords or [], output_schema,
+                           requires_bins=requires_bins or [],
+                           requires_config=requires_config or [],
+                           platforms=platforms or [])
         if action == "edit":
             return _edit(home, name, body, confirm_user_skill)
         if action == "patch":
@@ -781,6 +907,12 @@ class Skill(Tool):
                 meta_fields["category"] = category
             if requires_env is not None:
                 meta_fields["requires_env"] = requires_env
+            if requires_bins is not None:
+                meta_fields["requires_bins"] = requires_bins
+            if requires_config is not None:
+                meta_fields["requires_config"] = requires_config
+            if platforms is not None:
+                meta_fields["platforms"] = platforms
             if tools is not None:
                 meta_fields["tools"] = tools
             if keywords is not None:
@@ -791,7 +923,7 @@ class Skill(Tool):
         return ToolResult(ok=False, output="", error=f"unknown action: {action}")
 
 
-def _state_tag(meta: dict[str, str]) -> str:
+def _state_tag(meta: dict[str, str], *, cfg_raw: dict[str, Any] | None = None) -> str:
     """``""`` | ``[invalid: …]`` | ``[inactive: …]``; runtime ``broken`` lives in ``validate``."""
     from alpi.tools import _skill_schema as _schema
     schema_errors = _schema.errors(
@@ -801,7 +933,7 @@ def _state_tag(meta: dict[str, str]) -> str:
         first = schema_errors[0]
         more = f", +{len(schema_errors) - 1} more" if len(schema_errors) > 1 else ""
         return f"  [invalid: {first.field} ({first.message}){more}]"
-    ok, missing = skill_eligibility(meta)
+    ok, missing = skill_eligibility(meta, cfg_raw=cfg_raw)
     if not ok:
         return f"  [inactive: missing {', '.join(missing)}]"
     return ""
@@ -809,6 +941,7 @@ def _state_tag(meta: dict[str, str]) -> str:
 
 def _list(home: Path) -> ToolResult:
     """List every skill tagged via ``_state_tag``; ``validate`` runs the deeper checks."""
+    cfg_raw = _load_cfg_raw(home)
     lines: list[str] = []
     root = home / "skills"
     if root.exists():
@@ -822,14 +955,14 @@ def _list(home: Path) -> ToolResult:
             lines.append(f"{cat.name}:")
             for s in skill_dirs:
                 meta = _frontmatter(s / "SKILL.md")
-                lines.append(f"  - {s.name}{_state_tag(meta)}")
+                lines.append(f"  - {s.name}{_state_tag(meta, cfg_raw=cfg_raw)}")
     bundled = bundled_skills()
     if bundled:
         if lines:
             lines.append("")
         lines.append("@alpi/ [bundled]:")
         for b in bundled:
-            lines.append(f"  - {b['name']}{_state_tag(b.get('meta', {}))}")
+            lines.append(f"  - {b['name']}{_state_tag(b.get('meta', {}), cfg_raw=cfg_raw)}")
     if not lines:
         lines.append("(no skills)")
     return ToolResult(ok=True, output="\n".join(lines))
@@ -882,8 +1015,16 @@ def _create(
     tools: list[str],
     keywords: list[str],
     output_schema: str,
+    *,
+    requires_bins: list[str] | None = None,
+    requires_config: list[str] | None = None,
+    platforms: list[str] | None = None,
 ) -> ToolResult:
     from alpi.tools import _skill_schema as _schema
+
+    requires_bins = list(requires_bins or [])
+    requires_config = list(requires_config or [])
+    platforms = [p.lower() for p in (platforms or [])]
 
     if not body:
         return ToolResult(ok=False, output="", error="'body' is required")
@@ -896,6 +1037,9 @@ def _create(
         "description": description,
         "category": category,
         "requires_env": str(list(requires_env)),
+        "requires_bins": str(requires_bins),
+        "requires_config": str(requires_config),
+        "platforms": str(platforms),
         "tools": str(list(tools)),
         "keywords": str(list(keywords)),
         "output_schema": output_schema,
@@ -936,10 +1080,18 @@ def _create(
         "version: 0.1.0",
         "origin: agent",
         f"requires_env: {list(requires_env)}",
+    ]
+    if requires_bins:
+        frontmatter.append(f"requires_bins: {requires_bins}")
+    if requires_config:
+        frontmatter.append(f"requires_config: {requires_config}")
+    if platforms:
+        frontmatter.append(f"platforms: {platforms}")
+    frontmatter.extend([
         f"tools: {list(tools)}",
         f"keywords: {[k.lower() for k in keywords]}",
         f"created_at: {date.today().isoformat()}",
-    ]
+    ])
     if output_schema:
         frontmatter.append(f"output_schema: {output_schema}")
     frontmatter.extend(["---", ""])
@@ -1313,8 +1465,19 @@ def _run_or_test(home: Path, name: str, args: list[str], *, mode: str) -> ToolRe
     if skill_dir is None:
         return ToolResult(ok=False, output="", error=f"skill not found: {name}")
 
-    script = skill_dir / "scripts" / "run.py"
     skill_md = skill_dir / "SKILL.md"
+    eligibility_meta = _frontmatter(skill_md) if skill_md.is_file() else {}
+    ok, missing = skill_eligibility(eligibility_meta, cfg_raw=_load_cfg_raw(home))
+    if not ok:
+        return ToolResult(
+            ok=False, output="",
+            error=(
+                f"skill {name!r} is inactive: missing {', '.join(missing)}. "
+                f"Resolve the missing requirements before calling {mode}."
+            ),
+        )
+
+    script = skill_dir / "scripts" / "run.py"
 
     if not script.is_file():
         if mode in {"test", "invoke"}:
@@ -1339,7 +1502,7 @@ def _run_or_test(home: Path, name: str, args: list[str], *, mode: str) -> ToolRe
             ),
         )
 
-    meta = _frontmatter(skill_md) if skill_md.is_file() else {}
+    meta = eligibility_meta
     declared_env = _parse_env_list(meta.get("requires_env", ""))
     declared_env += _parse_env_list(meta.get("env", ""))
 
@@ -1490,7 +1653,8 @@ def _keyword_tokens(text: str) -> set[str]:
 
 _META_KEY_ORDER = (
     "name", "description", "category", "version", "origin",
-    "requires_env", "tools", "keywords", "output_schema",
+    "requires_env", "requires_bins", "requires_config", "platforms",
+    "tools", "keywords", "output_schema",
     "pinned", "created_at",
     "env",  # legacy alias
 )
@@ -1609,23 +1773,34 @@ def _set_meta(
     )
 
 
-def keyword_match_hint(home: Path, user_text: str) -> str:
+def keyword_match_hint(
+    home: Path,
+    user_text: str,
+    cfg_raw: dict[str, Any] | None = None,
+) -> str:
     """Per-turn skill boost; ``""`` when no eligible skill matches; cap ``_HINT_MAX_SKILLS``."""
     if not user_text or not user_text.strip():
         return ""
     tokens = _keyword_tokens(user_text)
     if not tokens:
         return ""
+    if cfg_raw is None:
+        cfg_raw = _load_cfg_raw(home)
+    from alpi.tools import _skill_schema as _schema
     hits: list[str] = []
     for path in all_skills(home):
         meta = _frontmatter(path / "SKILL.md")
-        if not skill_eligibility(meta)[0]:
+        if _schema.errors(_schema.validate_frontmatter(meta, categories=CATEGORIES)):
+            continue
+        if not skill_eligibility(meta, cfg_raw=cfg_raw)[0]:
             continue
         if _keyword_matches(tokens, skill_keywords(meta)):
             hits.append(meta.get("name") or path.name)
     for b in bundled_skills():
         meta = b.get("meta", {})
-        if not skill_eligibility(meta)[0]:
+        if _schema.errors(_schema.validate_frontmatter(meta, categories=CATEGORIES)):
+            continue
+        if not skill_eligibility(meta, cfg_raw=cfg_raw)[0]:
             continue
         if _keyword_matches(tokens, skill_keywords(meta)):
             hits.append(b["name"])

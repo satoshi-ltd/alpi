@@ -27,18 +27,17 @@ def isolated_home(tmp_home_no_env: Path, monkeypatch: pytest.MonkeyPatch) -> Pat
 # skill_requirements
 
 def test_requirements_empty_when_no_keys() -> None:
-    assert skill_requirements({}) == {"env": []}
+    assert skill_requirements({}) == {
+        "env": [], "bins": [], "config": [], "platforms": [],
+    }
 
 
 def test_requirements_parses_env_list() -> None:
     meta = {"requires_env": "['FOO', 'BAR']"}
-    assert skill_requirements(meta) == {"env": ["FOO", "BAR"]}
+    assert skill_requirements(meta)["env"] == ["FOO", "BAR"]
 
 
 def test_requirements_filters_bad_env_var_names() -> None:
-    # Env var names must be alnum + underscore. Junk is dropped silently
-    # (the create path enforces charset; this is defence in depth for
-    # a hand-edited frontmatter).
     meta = {"requires_env": "['FOO', 'with space', 'OK_VAR']"}
     assert skill_requirements(meta)["env"] == ["FOO", "OK_VAR"]
 

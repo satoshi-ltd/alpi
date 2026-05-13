@@ -6,7 +6,7 @@ version: 0.1.0
 origin: user
 requires_env: []
 tools: [terminal, db]
-keywords: [runway, burn rate, cash, forecast, scenario]
+keywords: ['runway', 'burn-rate', 'cash', 'forecast', 'scenario']
 created_at: 2026-05-05
 ---
 

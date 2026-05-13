@@ -11,8 +11,11 @@ _NAME_RE = re.compile(r"^[a-z][a-z0-9-]{1,60}$")
 _VERSION_RE = re.compile(r"^\d+\.\d+\.\d+(?:[+-][\w.+-]+)?$")
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _ENV_VAR_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+_BIN_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+-]*$")
+_CONFIG_PATH_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*$")
 
 _VALID_ORIGINS = frozenset({"agent", "user", "bundled"})
+_VALID_PLATFORMS = frozenset({"macos", "linux", "windows"})
 
 DESC_MAX = 150
 NAME_MIN = 2
@@ -43,6 +46,9 @@ def validate_frontmatter(
     issues.extend(_check_version(meta))
     issues.extend(_check_origin(meta))
     issues.extend(_check_requires_env(meta))
+    issues.extend(_check_requires_bins(meta))
+    issues.extend(_check_requires_config(meta))
+    issues.extend(_check_platforms(meta))
     issues.extend(_check_tools(meta))
     issues.extend(_check_keywords(meta))
     issues.extend(_check_created_at(meta))
@@ -151,6 +157,60 @@ def _check_requires_env(meta: dict[str, str]) -> list[Issue]:
                 "requires_env", "error",
                 f"{item!r} is not a valid env-var name (alnum + underscore, "
                 "must not start with a digit)",
+            ))
+    return out
+
+
+def _check_requires_bins(meta: dict[str, str]) -> list[Issue]:
+    raw = (meta.get("requires_bins") or "").strip().strip("[]")
+    if not raw:
+        return []
+    out: list[Issue] = []
+    for part in raw.split(","):
+        item = part.strip().strip("'\"")
+        if not item:
+            continue
+        if not _BIN_NAME_RE.match(item):
+            out.append(Issue(
+                "requires_bins", "error",
+                f"{item!r} is not a valid binary name (alnum and ``._+-``; "
+                "no path separators)",
+            ))
+    return out
+
+
+def _check_requires_config(meta: dict[str, str]) -> list[Issue]:
+    raw = (meta.get("requires_config") or "").strip().strip("[]")
+    if not raw:
+        return []
+    out: list[Issue] = []
+    for part in raw.split(","):
+        item = part.strip().strip("'\"")
+        if not item:
+            continue
+        if not _CONFIG_PATH_RE.match(item):
+            out.append(Issue(
+                "requires_config", "error",
+                f"{item!r} is not a valid dotted config path "
+                "(e.g. ``home_assistant.url``)",
+            ))
+    return out
+
+
+def _check_platforms(meta: dict[str, str]) -> list[Issue]:
+    raw = (meta.get("platforms") or "").strip().strip("[]")
+    if not raw:
+        return []
+    out: list[Issue] = []
+    for part in raw.split(","):
+        item = part.strip().strip("'\"").lower()
+        if not item:
+            continue
+        if item not in _VALID_PLATFORMS:
+            out.append(Issue(
+                "platforms", "error",
+                f"{item!r} is not a supported platform — pick from "
+                f"{sorted(_VALID_PLATFORMS)}",
             ))
     return out
 

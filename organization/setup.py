@@ -635,7 +635,16 @@ def main() -> int:
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.parse_args()
+    parser.add_argument(
+        "--skills-only",
+        action="store_true",
+        help=(
+            "Re-install skills into existing profiles without nuking them. "
+            "Safe targeted refresh — only touches each profile's skills/ "
+            "subdirectory; sessions, memory, keys, .env are preserved."
+        ),
+    )
+    args = parser.parse_args()
 
     agents = load_agents()
     workgroups = load_workgroups()
@@ -648,6 +657,15 @@ def main() -> int:
                 fail(f"workgroup '{spec['name']}': '{role}' not found in agents/")
 
     edges = derive_edges(agents, workgroups)
+
+    if args.skills_only:
+        print(
+            f"{BLUE}=== skills-only refresh  ·  {len(agents)} agents ==={RESET}"
+        )
+        print(f"{GREY}re-installs skills/ from organization/; profiles otherwise untouched{RESET}")
+        print()
+        install_skills(agents)
+        return 0
 
     print(
         f"{BLUE}=== org bootstrap  ·  {len(agents)} agents  ·  "

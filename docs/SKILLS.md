@@ -175,6 +175,9 @@ category: personal
 version: 0.1.0
 origin: agent                   # "agent" (proposed) or "user" (hand-written)
 requires_env: []                # env vars the skill needs; missing ones hide it
+requires_bins: [gh]             # executables on PATH; missing ones hide the skill
+requires_config: []             # profile config keys (dotted); missing ones hide it
+platforms: [macos, linux]       # supported OSes; empty/absent = portable
 tools: [read_file, terminal]    # tools the skill is allowed to call;
                                 # built-ins are snake_case; MCP tools
                                 # use the server's native form
@@ -196,25 +199,79 @@ One line, ≤150 chars. Headline — drop the trailing period (the
 schema warns if you forget). This is what the agent matches against
 the current task to decide whether to load the skill.
 
-### `requires_env` — conditional activation
+### Eligibility — four ways a skill can be inactive
 
-`requires_env` gates **whether the agent sees the skill at all**.
-At system-prompt build time, every entry is checked against
-`os.environ` (the profile's `.env` is loaded into the process
-env at engine bootstrap, so anything in `~/.alpi/.env` counts).
-Missing or empty value → the skill is hidden from the LLM.
+A skill is **active** only when every declared requirement resolves
+in the current profile. Four kinds of requirement can each gate a
+skill independently; missing requirements hide the skill from the
+system prompt and from `keyword_match_hint`, and surface in
+`skill(action='list')` with `[inactive: missing …]`.
+
+The rule across surfaces: **explicit target → hard error; implicit
+availability → silent filter**. Calling `skill(action='run' | 'test'
+| 'invoke', name=X)` on an inactive skill fails fast with a clear
+"missing …" reason. The agent never sees inactive skills in the
+prompt or the keyword hint, so it cannot pick them by accident.
+
+#### `requires_env`
+
+Env vars the skill needs. Checked against `os.environ` at
+system-prompt build time (the profile's `~/.alpi/.env` is loaded
+into the process env at engine bootstrap, so anything there counts).
+Missing or empty value → inactive.
 
 ```yaml
 requires_env: [WHOOP_CLIENT_ID, WHOOP_CLIENT_SECRET]
 ```
 
-Hidden skills do not disappear from `skill(action='list')` — they
-appear with `[inactive: missing env var X]` so the user knows the
-skill exists but lacks credentials. Populate `~/.alpi/.env` and
-the skill becomes available on the next session.
-
 Values never land in the skill directory. `~/.alpi/.env` is the
 single source of truth for pre-provisioned static secrets.
+
+#### `requires_bins`
+
+Executables the skill expects on `PATH`. Checked with `shutil.which`;
+missing binaries → inactive. Use the bin's command name only — no
+path separators.
+
+```yaml
+requires_bins: [gh, ffmpeg, sqlite3]
+```
+
+alpi does not auto-install anything. Declaring `requires_bins` is a
+contract with the user: install the bin, the skill becomes active
+on the next session.
+
+#### `requires_config`
+
+Profile config keys, dotted, checked against **the user's
+``~/.alpi/config.yaml`` only** — not against alpi's merged defaults.
+This is deliberate: skills using this gate are declaring that the
+user must opt in explicitly. A key counts as "set" when the user
+wrote a non-empty value (non-null, non-empty-string, non-empty-list,
+non-empty-dict); a key that resolves to its alpi default is treated
+as unset.
+
+```yaml
+requires_config: [home_assistant.url, home_assistant.token]
+```
+
+Use this for skills that depend on user-set profile config the
+agent cannot infer (an API base URL, a credential file path, a
+feature flag specific to the user's setup). Do not use it to check
+alpi's own defaults — those always look "set" to the user but
+intentionally do not count here.
+
+#### `platforms`
+
+Operating systems the skill supports. One or more of `macos`,
+`linux`, `windows`. Empty/absent = portable (no platform check).
+
+```yaml
+platforms: [macos, linux]
+```
+
+A skill declaring `platforms: [linux]` running on macOS shows up
+in `list` as `[inactive: missing platform linux (this is macos)]`.
 
 ### `keywords` — per-turn discovery boost
 
@@ -231,8 +288,9 @@ keywords: [whoop, workout, fitness]
 The matcher lower-cases the user's message and matches whole tokens.
 Use concrete domain terms — `whoop`, `notion`, `pomodoro` — never
 generic verbs (`do`, `run`, `fetch`) which hit too often. Inactive
-skills (failing `requires_env`) do not get boosted, even if a
-keyword matches.
+skills (failing any eligibility check — `requires_env`,
+`requires_bins`, `requires_config`, or `platforms`) do not get
+boosted, even if a keyword matches.
 
 ## Where credentials live
 

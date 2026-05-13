@@ -6,7 +6,7 @@ version: 0.1.0
 origin: user
 requires_env: []
 tools: [read_file, search, db]
-keywords: [tech debt, refactor, remediation, cost, risk]
+keywords: ['tech-debt', 'refactor', 'remediation', 'cost', 'risk']
 created_at: 2026-05-05
 ---
 

@@ -44,8 +44,7 @@ personal agent.
 
 | ID | Item | Status |
 |---|---|---|
-| CH.1 | Skill eligibility fields — add `requires_bins`, `requires_config`, and `platforms` frontmatter, then filter prompt injection, `skill list`, and validation from the same eligibility result. | 🟡 |
-| CH.2 | Granular terminal approval allowlist — extend the existing profile config allowlist into command/pattern-level approvals for common safe commands without adding a second storage file. | 🔵 |
+| CH.2 | Granular terminal approval allowlist — extend the existing profile config allowlist into command/pattern-level approvals for common safe commands without adding a second storage file. | 🟡 |
 | CH.3 | Memory promotion queue — collect durable facts from compaction/session summaries into a review queue with preview/apply; never write directly to `MEMORY.md` from compaction. | 🔵 |
 
 ### AX-mobile. Mobile companion (iOS / Android)
@@ -123,34 +122,6 @@ doesn't re-poll every turn ("is the kitchen light on?" answers from cache;
 `config.yaml` so the skill can only touch what the user explicitly opted in.
 
 LOC estimate: ~400 (HA covers ~250, Hue + Xiaomi ~50 each, Google/Alexa ~50 stub).
-
-### CH.1. Skill eligibility fields
-
-Today skills can hide themselves when required environment variables are
-missing. v0.5 extends that same local-first pattern with:
-
-- `requires_bins`: required executables on `PATH` (`gh`, `ffmpeg`,
-  `sqlite3`, etc.);
-- `requires_config`: required profile config keys;
-- `platforms`: supported operating systems (`macos`, `linux`, `windows`).
-
-Eligibility is computed once and reused everywhere: system-prompt skill index,
-`skill(action="list")`, validation output, and scheduled or gateway runs.
-Missing requirements do not delete or mutate skills; they make the skill
-inactive with a clear reason.
-
-**Scheduled and gateway behavior.** Eligibility blocks only explicit
-invocations of an inactive skill. A scheduled job or webhook configured to
-target a specific skill fails fast at boot with a clear error instead of
-silently failing mid-turn. General Telegram/IMAP/Matrix gateway boot is
-unaffected: the inactive skill is hidden from the skill index for those
-sessions, but the gateway itself starts and other skills remain available.
-The rule is "explicit target → hard error; implicit availability → silent
-filter".
-
-**What this avoids.** The model should not see a skill that is doomed to fail
-in the current profile. This keeps the prompt smaller and makes minimal
-installs less noisy without introducing marketplace or plugin machinery.
 
 ### CH.2. Granular terminal approval allowlist
 
@@ -482,8 +453,8 @@ creator happens to notice it.
   for CH.2 allowlist expansion);
 - auto-compact rate, mean before/after ratio per model (read from
   `logs/compaction.jsonl`);
-- inactive skills count and reasons (input for `@alpi/home`-style bundling and
-  CH.1 fields);
+- inactive skills count and reasons (input for `@alpi/home`-style bundling
+  and tuning the four eligibility fields);
 - tools that failed before doing useful work (the gate condition for CM.3);
 - memory promotion-queue backlog and CM.1 audit highlights;
 - session-search misses or unanswered "when did we discuss X" queries (the

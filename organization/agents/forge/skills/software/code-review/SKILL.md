@@ -6,7 +6,7 @@ version: 0.1.0
 origin: user
 requires_env: []
 tools: [read_file, search]
-keywords: [code review, pr, pull request, quality, feedback]
+keywords: ['code-review', 'pr', 'pull-request', 'quality', 'feedback']
 created_at: 2026-05-05
 ---
 

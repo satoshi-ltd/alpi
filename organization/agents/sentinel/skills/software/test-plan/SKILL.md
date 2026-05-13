@@ -6,7 +6,7 @@ version: 0.1.0
 origin: user
 requires_env: []
 tools: [write_file]
-keywords: [test plan, qa, acceptance, feature testing, regression]
+keywords: ['test-plan', 'qa', 'acceptance', 'feature-testing', 'regression']
 created_at: 2026-05-05
 ---
 

@@ -6,7 +6,7 @@ version: 0.1.0
 origin: user
 requires_env: []
 tools: [write_file, db]
-keywords: [bug report, defect, issue, reproduction, severity]
+keywords: ['bug-report', 'defect', 'issue', 'reproduction', 'severity']
 created_at: 2026-05-05
 ---
 
