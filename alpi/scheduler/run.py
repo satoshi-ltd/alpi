@@ -5,14 +5,12 @@ from __future__ import annotations
 import json
 import logging
 import os
+import shlex
 import signal
 import subprocess
 import sys
-import time
 from datetime import datetime, timedelta, timezone
-from logging.handlers import RotatingFileHandler
 from pathlib import Path
-from typing import Any
 
 from croniter import croniter
 
@@ -146,6 +144,132 @@ def _last_user_activity(home: Path) -> datetime | None:
 
 
 
+def _load_profile_env(home: Path, env: dict) -> None:
+    # Override, not setdefault: daemon supervises multiple profiles and a
+    # sibling's FOLDER in os.environ must not win over the firing profile.
+    env_file = home / ".env"
+    if not env_file.exists():
+        return
+    for ln in env_file.read_text().splitlines():
+        ln = ln.strip()
+        if not ln or ln.startswith("#") or "=" not in ln:
+            continue
+        k, _, v = ln.partition("=")
+        env[k.strip()] = v.strip()
+
+
+def validate_no_agent_command(prompt: str, home: Path) -> str | None:
+    # Form-based allowlist: only `python[3] [flags] <skill_script>` or a
+    # `<skill_script>` invoked directly. Blocks `-c`/`-m` (inline code/module
+    # bypass the script-on-disk check) and non-python executables (rm, bash,
+    # curl…) even when a skills/ path appears as an argument.
+    expanded = prompt.replace("${ALPI_HOME}", str(home)).replace(
+        "$ALPI_HOME", str(home),
+    )
+    try:
+        argv = shlex.split(expanded)
+    except ValueError as e:
+        return f"command parse error: {e}"
+    if not argv:
+        return "empty command"
+
+    skills_root = (home / "skills").resolve()
+
+    def _under_skills(tok: str) -> bool:
+        try:
+            rel = Path(tok).resolve().relative_to(skills_root)
+        except (OSError, ValueError, RuntimeError):
+            return False
+        parts = rel.parts
+        return len(parts) >= 4 and parts[2] == "scripts"
+
+    exe = argv[0]
+    rest = argv[1:]
+
+    if _under_skills(exe):
+        return None
+
+    exe_name = Path(exe).name
+    if not (exe_name in {"python", "python3"} or exe_name.startswith("python3.")):
+        return (
+            f"no_agent executable must be python or a script under "
+            f"{home}/skills/ — got: {exe!r}"
+        )
+
+    for tok in rest:
+        if tok.startswith(("-c", "-m", "--command", "--module")):
+            return f"forbidden python flag in no_agent: {tok!r}"
+        if tok.startswith("-"):
+            continue
+        if _under_skills(tok):
+            return None
+        return (
+            f"first non-flag python arg must be a script under "
+            f"{home}/skills/ — got: {tok!r}"
+        )
+    return f"no_agent python invocation needs a script under {home}/skills/"
+
+
+def _run_script_only(job: dict, home: Path) -> tuple[bool, str]:
+    # Threat scan is intentionally skipped: validator restricts the prompt
+    # to skill scripts, so prompt-injection heuristics don't apply.
+    cmd_str = (job.get("prompt") or "").strip()
+    if not cmd_str:
+        return False, "empty command (no_agent)"
+
+    err = validate_no_agent_command(cmd_str, home)
+    if err:
+        return False, f"no_agent rejected: {err}"
+
+    expanded = cmd_str.replace("${ALPI_HOME}", str(home)).replace(
+        "$ALPI_HOME", str(home),
+    )
+    try:
+        argv = shlex.split(expanded)
+    except ValueError as e:
+        return False, f"command parse error: {e}"
+    if not argv:
+        return False, "empty command after parsing"
+
+    env = dict(os.environ)
+    _load_profile_env(home, env)
+    env["ALPI_HOME"] = str(home)
+    env["ALPI_PLATFORM"] = "cron"
+
+    try:
+        proc = subprocess.run(
+            argv, env=env, capture_output=True, text=True, timeout=600,
+        )
+    except subprocess.TimeoutExpired:
+        return False, "script timed out"
+    except FileNotFoundError:
+        return False, f"executable not found: {argv[0]!r}"
+
+    if proc.returncode != 0:
+        err = (proc.stderr or "").strip()
+        return False, f"script rc={proc.returncode}: {err[:300]}"
+
+    reply = (proc.stdout or "").strip()
+    has_platform = bool(job.get("platform"))
+
+    if not reply:
+        return True, "silent run ok"
+
+    if not has_platform:
+        summary = (reply[:120] + "…") if len(reply) > 120 else reply
+        return True, f"silent run ok: {summary}"
+
+    platform = job["platform"].lower()
+    chat_id = job.get("chat_id") or delivery.default_chat_id(platform)
+    if not chat_id:
+        return False, f"no chat_id and no default for {platform}"
+    try:
+        delivery.send_to(platform, chat_id, reply)
+    except delivery.DeliveryError as e:
+        return False, f"delivery failed: {e}"
+    return True, f"delivered to {platform}:{chat_id}"
+
+
 def run_job(job: dict, home: Path) -> tuple[bool, str]:
     """Run the scheduled prompt via ``alpi chat --once``.
 
@@ -154,6 +278,9 @@ def run_job(job: dict, home: Path) -> tuple[bool, str]:
     keep the original "auto-deliver the agent's reply" behaviour for
     daily-summary-style use cases. The agent can also self-deliver
     via ``send_message`` regardless of ``platform``."""
+    if job.get("no_agent"):
+        return _run_script_only(job, home)
+
     prompt = job.get("prompt", "").strip()
     if not prompt:
         return False, "empty prompt"

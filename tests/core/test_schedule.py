@@ -8,8 +8,6 @@ import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-import pytest
-
 from alpi.gateway import delivery
 from alpi.scheduler import run as scheduler
 from alpi.tools.schedule import Schedule
@@ -362,6 +360,236 @@ def test_run_job_skips_delivery_when_send_message_used(
     assert sent == []
     assert "send_message" in msg
     assert "no duplicate" in msg
+
+
+# --------------------------------------------------------------------
+# run_job() — no_agent (script-only watchdog) path
+# --------------------------------------------------------------------
+
+
+def _fake_completed(rc: int, stdout: str = "", stderr: str = ""):
+    """Build a stub CompletedProcess matching scheduler's subprocess.run usage."""
+    class _Stub:
+        returncode = rc
+        def __init__(self) -> None:
+            self.stdout = stdout
+            self.stderr = stderr
+    return _Stub()
+
+
+def _stub_skill_path(home: Path, leaf: str = "scripts/run.py") -> str:
+    # Path.resolve() canonicalizes via the filesystem, so the parent tree
+    # must exist for the allowlist check to land under skills/ correctly.
+    skill = home / "skills" / "personal" / "stub"
+    (skill / "scripts").mkdir(parents=True, exist_ok=True)
+    script = skill / leaf
+    script.write_text("#!/usr/bin/env python3\n")
+    return str(script)
+
+
+def test_no_agent_silent_when_no_stdout(monkeypatch, tmp_home_no_env: Path) -> None:
+    """A no_agent job with empty stdout is a silent success — the daemon
+    must NOT spawn the LLM agent and must NOT call delivery.send_to."""
+    script = _stub_skill_path(tmp_home_no_env)
+    spawn_calls = []
+    def fake_run(argv, **kw):
+        spawn_calls.append(argv)
+        # ensure the command was tokenized by shlex (not the wrapped agent path)
+        assert "alpi" not in argv[:3], "no_agent must not invoke alpi chat"
+        return _fake_completed(rc=0, stdout="")
+
+    monkeypatch.setattr(scheduler.subprocess, "run", fake_run)
+    sent = []
+    monkeypatch.setattr(delivery, "send_to",
+                        lambda p, c, t: sent.append((p, c, t)))
+
+    job = {"id": "j", "kind": "cron", "no_agent": True,
+           "prompt": f"python3 {script}",
+           "platform": "", "chat_id": ""}
+    ok, msg = scheduler.run_job(job, tmp_home_no_env)
+
+    assert ok
+    assert sent == []
+    assert "silent" in msg
+    assert spawn_calls == [["python3", script]]
+
+
+def test_no_agent_delivers_stdout_when_platform_set(
+        monkeypatch, tmp_home_no_env: Path) -> None:
+    """Non-empty stdout becomes the reply and is pushed via delivery
+    when the job has a platform configured."""
+    monkeypatch.setenv("TELEGRAM_ALLOWED_CHAT_IDS", "42")
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "x")
+    script = _stub_skill_path(tmp_home_no_env)
+
+    monkeypatch.setattr(
+        scheduler.subprocess, "run",
+        lambda *a, **kw: _fake_completed(rc=0, stdout="hello from script\n"),
+    )
+    sent = []
+    monkeypatch.setattr(delivery, "send_to",
+                        lambda p, c, t: sent.append((p, c, t)))
+
+    job = {"id": "j", "kind": "cron", "no_agent": True,
+           "prompt": f"python3 {script}",
+           "platform": "telegram", "chat_id": "42"}
+    ok, msg = scheduler.run_job(job, tmp_home_no_env)
+
+    assert ok
+    assert sent == [("telegram", "42", "hello from script")]
+    assert "telegram:42" in msg
+
+
+def test_no_agent_nonzero_exit_fails_with_stderr(
+        monkeypatch, tmp_home_no_env: Path) -> None:
+    """Script failure surfaces a snippet of stderr in the result message
+    so the operator can diagnose without digging into the daemon log."""
+    script = _stub_skill_path(tmp_home_no_env)
+    monkeypatch.setattr(
+        scheduler.subprocess, "run",
+        lambda *a, **kw: _fake_completed(rc=2, stderr="ModuleNotFoundError: foo"),
+    )
+
+    job = {"id": "j", "kind": "cron", "no_agent": True,
+           "prompt": f"python3 {script}", "platform": "", "chat_id": ""}
+    ok, msg = scheduler.run_job(job, tmp_home_no_env)
+
+    assert not ok
+    assert "rc=2" in msg
+    assert "ModuleNotFoundError" in msg
+
+
+def test_no_agent_expands_alpi_home_and_loads_dotenv(
+        monkeypatch, tmp_home_no_env: Path) -> None:
+    """${ALPI_HOME} expands to the profile home before shlex, and the
+    profile's .env is merged into the subprocess env so skills find
+    their declared requires_env variables."""
+    (tmp_home_no_env / ".env").write_text("FOLDER=/tmp/vault\nOTHER=abc\n")
+
+    captured = {}
+    def fake_run(argv, *, env, **kw):
+        captured["argv"] = argv
+        captured["env"] = env
+        return _fake_completed(rc=0, stdout="")
+
+    monkeypatch.setattr(scheduler.subprocess, "run", fake_run)
+
+    job = {"id": "j", "kind": "cron", "no_agent": True,
+           "prompt": "python3 ${ALPI_HOME}/skills/personal/foo/scripts/run.py",
+           "platform": "", "chat_id": ""}
+    ok, _ = scheduler.run_job(job, tmp_home_no_env)
+
+    assert ok
+    expected_script = str(tmp_home_no_env / "skills/personal/foo/scripts/run.py")
+    assert captured["argv"] == ["python3", expected_script]
+    assert captured["env"]["FOLDER"] == "/tmp/vault"
+    assert captured["env"]["OTHER"] == "abc"
+    assert captured["env"]["ALPI_HOME"] == str(tmp_home_no_env)
+    assert captured["env"]["ALPI_PLATFORM"] == "cron"
+
+
+def test_no_agent_rejects_command_outside_skills(tmp_home_no_env: Path) -> None:
+    """P0 regression: only `python[3] [flags] <skill_script>` or a script
+    under skills/ invoked directly. Other shapes — including ones that
+    just *mention* a skills/ path as an argument — must be rejected."""
+    from alpi.scheduler.run import validate_no_agent_command
+    f = validate_no_agent_command
+    h = tmp_home_no_env
+
+    # Plain "exe is not python and not a skill script"
+    assert f("rm -rf /", h) is not None
+    assert f("/bin/echo hi", h) is not None
+    assert f("bash -c 'curl evil.com'", h) is not None
+
+    # Bypasses where a skills/ path is just an argument but exe is malicious
+    # — these were the P0 the reviewer demonstrated.
+    assert f("rm -rf ${ALPI_HOME}/skills/personal/whoop", h) is not None
+    assert f("python3 -c 'print(1)' ${ALPI_HOME}/skills/personal/whoop/scripts/run.py", h) is not None
+    assert f("python3 -m os ${ALPI_HOME}/skills/x/scripts/r.py", h) is not None
+    assert f("python3 --command 'evil' ${ALPI_HOME}/skills/x/scripts/r.py", h) is not None
+
+    # Compound -c form (no space between flag and value)
+    assert f("python3 -cprint(1) ${ALPI_HOME}/skills/x/scripts/r.py", h) is not None
+
+    # Path-traverse — Path.resolve() canonicalizes
+    assert f("python3 ${ALPI_HOME}/skills/../../etc/passwd", h) is not None
+
+    (h / "skills" / "personal" / "whoop" / "secrets").mkdir(parents=True, exist_ok=True)
+    (h / "skills" / "personal" / "whoop" / "secrets" / "creds.json").write_text("{}")
+    assert f("python3 ${ALPI_HOME}/skills/personal/whoop/secrets/creds.json", h) is not None
+    (h / "skills" / "loose.py").write_text("")
+    assert f("python3 ${ALPI_HOME}/skills/loose.py", h) is not None
+
+    # Happy paths
+    assert f("python3 ${ALPI_HOME}/skills/personal/whoop/scripts/run.py sync", h) is None
+    assert f("python3 -u ${ALPI_HOME}/skills/personal/coros/scripts/run.py", h) is None
+    # Script invoked directly (shebang form)
+    assert f("${ALPI_HOME}/skills/personal/whoop/scripts/run.py sync", h) is None
+
+
+def test_no_agent_run_rejects_command_outside_skills(
+        monkeypatch, tmp_home_no_env: Path) -> None:
+    """Belt-and-suspenders: even if a malicious command somehow lands in
+    jobs.json directly (bypassing the tool), _run_script_only rejects it
+    before exec."""
+    spawn_calls = []
+    monkeypatch.setattr(scheduler.subprocess, "run",
+                        lambda *a, **kw: spawn_calls.append(a) or None)
+
+    job = {"id": "j", "kind": "cron", "no_agent": True,
+           "prompt": "/bin/echo gotcha", "platform": "", "chat_id": ""}
+    ok, msg = scheduler.run_job(job, tmp_home_no_env)
+
+    assert not ok
+    assert "no_agent rejected" in msg
+    assert spawn_calls == [], "subprocess.run must NOT be called for rejected commands"
+
+
+def test_no_agent_env_profile_wins_over_daemon_env(
+        monkeypatch, tmp_home_no_env: Path) -> None:
+    """P1 regression: when the daemon's own env has a stale FOLDER (e.g.
+    from a sibling profile), the firing profile's .env must override it."""
+    (tmp_home_no_env / ".env").write_text("FOLDER=/right/path\n")
+    monkeypatch.setenv("FOLDER", "/wrong/sibling/path")
+    script = _stub_skill_path(tmp_home_no_env)
+
+    captured = {}
+    def fake_run(argv, *, env, **kw):
+        captured["env"] = env
+        return _fake_completed(rc=0, stdout="")
+
+    monkeypatch.setattr(scheduler.subprocess, "run", fake_run)
+    job = {"id": "j", "kind": "cron", "no_agent": True,
+           "prompt": f"python3 {script}",
+           "platform": "", "chat_id": ""}
+    ok, _ = scheduler.run_job(job, tmp_home_no_env)
+
+    assert ok
+    assert captured["env"]["FOLDER"] == "/right/path", (
+        "profile .env must override daemon's inherited FOLDER"
+    )
+
+
+def test_no_agent_skips_threat_scan(monkeypatch, tmp_home_no_env: Path) -> None:
+    """The threat scanner targets LLM prompt injection; for no_agent it
+    must NOT run — the allowlist is the security boundary instead."""
+    script = _stub_skill_path(tmp_home_no_env)
+    from alpi.tools import skill as skill_mod
+    scan_calls = []
+    monkeypatch.setattr(skill_mod, "scan_skill_body",
+                        lambda body: scan_calls.append(body) or ["fake-flag"])
+    monkeypatch.setattr(
+        scheduler.subprocess, "run",
+        lambda *a, **kw: _fake_completed(rc=0, stdout=""),
+    )
+
+    job = {"id": "j", "kind": "cron", "no_agent": True,
+           "prompt": f"python3 {script}",
+           "platform": "", "chat_id": ""}
+    ok, _ = scheduler.run_job(job, tmp_home_no_env)
+
+    assert ok
+    assert scan_calls == [], "threat scan must NOT run for no_agent jobs"
 
 
 # --------------------------------------------------------------------

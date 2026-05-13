@@ -112,6 +112,19 @@ class Schedule(Tool):
                 "type": "boolean",
                 "description": "Pause/resume an existing job (update only).",
             },
+            "no_agent": {
+                "type": "boolean",
+                "description": (
+                    "When true, `prompt` is executed as a shell command via "
+                    "shlex (no LLM, no token cost). `${ALPI_HOME}` expands "
+                    "to the profile home; the profile's .env is loaded. "
+                    "Use for deterministic skills (data sync, file "
+                    "processors) where an agent invocation adds nothing. "
+                    "Empty stdout = silent ok. Non-empty stdout is "
+                    "delivered if `platform` is set, otherwise logged."
+                ),
+                "default": False,
+            },
         },
         "required": ["action"],
     }
@@ -137,7 +150,8 @@ class Schedule(Tool):
             platform: str = "", chat_id: str = "",
             run_at: str = "", id: str | None = None,
             force: bool = False,
-            paused: bool | None = None) -> ToolResult:
+            paused: bool | None = None,
+            no_agent: bool | None = None) -> ToolResult:
         home = get_home()
         jobs_path = home / "schedule" / "jobs.json"
         jobs_path.parent.mkdir(parents=True, exist_ok=True)
@@ -149,9 +163,15 @@ class Schedule(Tool):
         if action == "add":
             if not prompt:
                 return ToolResult(ok=False, output="", error="'prompt' is required")
-            err = _validate_prompt(prompt, platform)
-            if err:
-                return ToolResult(ok=False, output="", error=err)
+            if no_agent:
+                from alpi.scheduler.run import validate_no_agent_command
+                err = validate_no_agent_command(prompt, home)
+                if err:
+                    return ToolResult(ok=False, output="", error=err)
+            else:
+                err = _validate_prompt(prompt, platform)
+                if err:
+                    return ToolResult(ok=False, output="", error=err)
             if not force:
                 dup = _find_duplicate(jobs, kind or "cron", expression,
                                        run_at, after_hours, prompt)
@@ -176,6 +196,8 @@ class Schedule(Tool):
                 "chat_id": chat_id or "",
                 "last_run_at": now_iso if (kind or "cron") == "cron" else None,
             }
+            if no_agent:
+                job["no_agent"] = True
             if job["kind"] == "cron":
                 if not expression:
                     return ToolResult(
@@ -235,13 +257,23 @@ class Schedule(Tool):
 
             changes: list[str] = []
             next_platform = (platform or job.get("platform") or "").lower()
+            # Snapshot before mutation: needed to detect on↔off transitions
+            # and re-validate the inherited prompt with the right rule set.
+            was_no_agent = bool(job.get("no_agent"))
+            effective_no_agent = no_agent if no_agent is not None else was_no_agent
             if prompt:
-                err = _validate_prompt(prompt, next_platform)
-                if err:
-                    return ToolResult(ok=False, output="", error=err)
+                if effective_no_agent:
+                    from alpi.scheduler.run import validate_no_agent_command
+                    err = validate_no_agent_command(prompt, home)
+                    if err:
+                        return ToolResult(ok=False, output="", error=err)
+                else:
+                    err = _validate_prompt(prompt, next_platform)
+                    if err:
+                        return ToolResult(ok=False, output="", error=err)
                 job["prompt"] = prompt
                 changes.append("prompt")
-            elif platform:
+            elif platform and not effective_no_agent:
                 err = _validate_prompt(job.get("prompt", ""), next_platform)
                 if err:
                     return ToolResult(ok=False, output="", error=err)
@@ -254,6 +286,23 @@ class Schedule(Tool):
             if paused is not None:
                 job["paused"] = bool(paused)
                 changes.append("paused")
+            if no_agent is not None:
+                if no_agent:
+                    if not was_no_agent:
+                        from alpi.scheduler.run import validate_no_agent_command
+                        err = validate_no_agent_command(job.get("prompt", ""), home)
+                        if err:
+                            return ToolResult(ok=False, output="", error=err)
+                    job["no_agent"] = True
+                else:
+                    # Off-transition: existing prompt was a shell command,
+                    # re-run LLM-prompt validators before the agent path consumes it.
+                    if was_no_agent:
+                        err = _validate_prompt(job.get("prompt", ""), next_platform)
+                        if err:
+                            return ToolResult(ok=False, output="", error=err)
+                    job.pop("no_agent", None)
+                changes.append("no_agent")
 
             if kind:
                 job["kind"] = kind

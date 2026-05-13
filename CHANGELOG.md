@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.4.39 — 2026-05-13 — `no_agent` cron mode: skip the LLM for deterministic scheduled scripts
+
+Scheduled jobs whose work is deterministic (data sync, file processors, watchdogs) had no reason to spawn a full agent turn — but did, costing ~$0.05–$0.13 and ~20–30s per fire to wrap a 1-second script in `alpi chat --once`. This release adds an opt-in `no_agent: true` flag to `cron` jobs that exec the prompt as a shell command directly.
+
+- `scheduler/run.py` — new `_run_script_only(job, home)` path. `prompt` is shlex-tokenized (`shell=False`); `${ALPI_HOME}` expands to the profile home before tokenization. Profile `.env` overrides inherited env keys so the firing profile's `FOLDER` always wins over a sibling profile's value left in `os.environ` by the daemon. Empty stdout = silent ok. Non-empty stdout + `platform` set = delivered. Non-zero exit code = failure with stderr snippet in the result message.
+- `validate_no_agent_command(prompt, home)` enforces a form-based allowlist: only `python[3] [flags] <script>` or a `<script>` invoked directly, where `<script>` resolves under `${HOME}/skills/`. Blocks `-c` / `-m` (inline code / module bypass the script-on-disk check) and non-python executables (rm, bash, curl…) even when a skills/ path appears as an argument. Defense in depth: the validator runs both at `schedule(action=add\|update)` time and inside `_run_script_only` before exec.
+- `run_job` branches on `job.get("no_agent")` before the existing agent path; the LLM threat scanner (`scan_skill_body`) is skipped because the allowlist is now the security boundary.
+- `tools/schedule.py` — `Schedule` tool gains a `no_agent` parameter for `action=add` and `action=update`. The on↔off transition is handled correctly: toggling `no_agent` off re-runs the LLM-prompt validators against the inherited shell-command prompt before the agent path consumes it.
+- Tests cover form-based rejection (rm/bash/curl with a skills/ path as argument, `-c`/`-m`/`-cprint(1)` bypass attempts, path-traverse), happy paths (python + script, python with safe flags, shebang-form direct invocation), profile-env-wins-over-daemon-env, on↔off transition validation, and the four runtime paths (silent, delivered, stderr surfacing, threat scan bypass).
+- Architecture reference documents the new flag alongside the existing agent path.
+- Inspired by Hermes Agent v0.13.0's `no_agent` cron mode (watchdog pattern). Adopted selectively per alpi's "no overengineering" filter — multi-agent kanban, plugin lifecycle hooks, and i18n message bundles from the same release were skipped as not aligned with the local-first single-user scope.
+
 ## v0.4.38 — 2026-05-13 — todo as binding contract: engine re-prompts when the model closes early
 
 The `todo` tool used to be advisory: a model could `add` + `start` a task list and then close the turn with a final text-only message, leaving work unfinished. Cheap models did this routinely ("Hecho" with a 22-byte scaffold). This release turns open todos into a contract the engine enforces.

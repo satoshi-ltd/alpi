@@ -56,6 +56,15 @@ runs each `tick()` in a dedicated `ThreadPoolExecutor`, and
 long `subprocess.run` job can't starve sibling-profile coroutines on
 the daemon loop.
 
+Jobs with `no_agent: true` skip the LLM entirely. The `prompt` is
+shlex-tokenized and exec'd directly (`shell=False`); `${ALPI_HOME}`
+expands to the profile home and the profile's `.env` is merged into
+the subprocess env so skills find their declared `requires_env`.
+Empty stdout = silent ok. Non-empty stdout = delivered if `platform`
+is set, otherwise summarized in the daemon log. Use this for
+deterministic skills (data sync, file processors) — saves both
+tokens and ~30s of agent boot latency per fire.
+
 `host.chat.send` persists every emitted frame to a per-turn JSONL
 sidecar (`sessions/_events_<session_id>.jsonl`); the desktop calls
 `host.chat.events_since(after_seq)` to replay missed frames when the
