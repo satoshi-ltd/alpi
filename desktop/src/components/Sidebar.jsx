@@ -202,7 +202,6 @@ function Sidebar({
       <div className={styles.inner}>
         <div className={styles.actions}>
           <div className={styles.actionSection}>
-            <div className={styles.sectionLabel}>Connection</div>
             <ConnectionSwitcher
               className={styles.connectionSlot}
               state={hostConnections}

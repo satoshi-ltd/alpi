@@ -8,6 +8,7 @@ use tauri::{
 };
 
 const TRAY_ICON: &[u8] = include_bytes!("../icons/tray-template.png");
+const TRAY_ICON_UPDATE: &[u8] = include_bytes!("../icons/tray-template-update.png");
 const TOGGLE_ACCELERATOR: &str = "CmdOrCtrl+Shift+A";
 
 #[derive(Default)]
@@ -76,6 +77,15 @@ fn rebuild_menu(app: &AppHandle) {
     }
 }
 
+fn refresh_icon(app: &AppHandle, update_available: bool) {
+    // Disable template mode for the update variant so the red badge keeps its color.
+    let bytes = if update_available { TRAY_ICON_UPDATE } else { TRAY_ICON };
+    if let (Ok(icon), Some(tray)) = (Image::from_bytes(bytes), app.tray_by_id("main")) {
+        let _ = tray.set_icon(Some(icon));
+        let _ = tray.set_icon_as_template(!update_available);
+    }
+}
+
 pub fn install(app: &mut App) -> tauri::Result<()> {
     {
         let mut s = state().lock().unwrap();
@@ -140,6 +150,7 @@ pub fn announce_update(app: &AppHandle, available: bool, version: Option<&str>) 
         s.update_version = version.map(str::to_string);
     }
     rebuild_menu(app);
+    refresh_icon(app, available);
 }
 
 pub fn set_window_visible(app: &AppHandle, visible: bool) {

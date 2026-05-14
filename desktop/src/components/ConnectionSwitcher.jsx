@@ -62,6 +62,7 @@ export default function ConnectionSwitcher({
 
   return (
     <div className={`${styles.root} ${className}`}>
+      <div className={styles.label}>Connection</div>
       <Dropdown
         width={340}
         align="left"

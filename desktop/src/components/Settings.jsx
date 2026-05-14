@@ -91,16 +91,18 @@ export default function Settings({
   return (
     <div className={styles.wrap}>
       <aside ref={asideRef} className={styles.aside}>
-        <div className={styles.asideTitle}>Connection</div>
-        <ConnectionSwitcher
-          className={styles.connectionSwitcher}
-          state={hostConnections}
-          onSetActive={onSetHostConnection}
-          onAddRemote={onAddHostConnection}
-          onForget={onForgetHostConnection}
-          onOpen={onRefreshHostConnectionStatus}
-        />
+        <div className={styles.asideTop}>
+          <ConnectionSwitcher
+            className={styles.connectionSwitcher}
+            state={hostConnections}
+            onSetActive={onSetHostConnection}
+            onAddRemote={onAddHostConnection}
+            onForget={onForgetHostConnection}
+            onOpen={onRefreshHostConnectionStatus}
+          />
+        </div>
 
+        <div className={styles.asideScroll}>
         {hasPinned && (
           <>
             <div className={styles.asideTitle}>Pinned</div>
@@ -171,6 +173,7 @@ export default function Settings({
         >
           New workgroup
         </NavRow>
+        </div>
         <VersionFooter />
       </aside>
 

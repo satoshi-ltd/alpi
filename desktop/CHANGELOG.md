@@ -11,6 +11,17 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.2.17 — 2026-05-14 — tray update badge + sticky settings sidebar + sharper empty-state logo
+
+Requires alpi ``v0.4.36`` or newer.
+
+- Tray gains a `tray-template-update.png` variant; `tray.rs::refresh_icon` swaps it in when `tray_announce_update` fires. The update variant runs in non-template mode (`set_icon_as_template(false)`) so its red badge dot keeps its color instead of being retinted by macOS.
+- Tray base icon now ships from `assets/alpi-trayicon.png` (alpaca head, 64×64 RGBA, transparent background) instead of the prior bespoke `tray-template.png`.
+- "Connection" label moved inside `ConnectionSwitcher` itself — both the chat sidebar and the settings sidebar now render an identical block (label + dropdown) without each parent providing its own duplicate label markup.
+- Settings sidebar refactored into a 3-zone flex column. Connection at top and `VersionFooter` at bottom stay pinned; only the profiles/workgroups list scrolls. Matches the chat sidebar's pinned-connection behavior. Footer padding bumped from `--space-4` to `--space-6` so it no longer hugs the bottom-left edge.
+- `.sectionLabel` / `.asideTitle` lose `letter-spacing` — used design tokens only, no bespoke spacing.
+- Empty-state logo loses its `opacity: 0.85` — the CSS-mask + `currentColor` combo already adapts per theme; the extra opacity washed the llama out in dark mode.
+
 ## v0.2.16 — 2026-05-13 — chat reconnect-on-stall
 
 Requires alpi ``v0.4.36`` or newer.
