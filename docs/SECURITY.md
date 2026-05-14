@@ -156,6 +156,18 @@ doesn't reach:
   `os.replace`, so a crash mid-write cannot leave the credentials
   file inconsistent or world-readable.
 
+- **TOCTOU-safe credential writes** (v0.4.41). All alpi-internal
+  credential persistence now routes through
+  `alpi/secrets_io.py::safe_write_secret`, which uses
+  `tempfile.mkstemp` (O_EXCL + `0o600` at creation, random unique
+  name in the target dir) + `os.replace` onto the target. Closes
+  both the window between `write_text` + `chmod` *and* the
+  attacker-planted-stale-tmp variant (a deterministic
+  `<target>.tmp` at `0o644` lingering from a prior crash would
+  otherwise be reused by `O_CREAT` and inherit its loose mode).
+  Applied at `.env` writes, gmail token, pending-peers yaml, and
+  ALP private key generation.
+
 ## Layer 2 — OS sandbox (opt-in, per profile)
 
 Wraps `terminal` subprocess calls in a native OS sandbox so the

@@ -97,8 +97,14 @@ When a skill includes scripts under `scripts/`:
   to the script. Never hardcode `~/.alpi/...`.
 - **Writing secrets.** Create `secrets/` with `mkdir(mode=0o700,
   exist_ok=True)` and then call `chmod(0o700)` because `mkdir` does not
-  fix an existing directory's mode. After writing token or credential
-  files, call `chmod(0o600)`.
+  fix an existing directory's mode. For the credential files themselves,
+  prefer `from alpi.secrets_io import safe_write_secret` (uses
+  `tempfile.mkstemp` + `os.replace` — no TOCTOU window, immune to a
+  stale `<target>.tmp` at looser perms). If the skill runs outside the
+  alpi venv (e.g. a `no_agent` cron under system python), inline-copy
+  the helper instead of `write_text(...)` + `chmod(0o600)`: the two-
+  syscall pattern leaves the file briefly at umask perms (typically
+  0o644) before being tightened.
 - Include a dry-run / smoke-test path (e.g. `--dry-run` flag, or a
   `--help` branch that works without side effects). Mention the exact
   command in SKILL.md so the user (or a future agent) can verify the

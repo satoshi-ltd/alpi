@@ -95,6 +95,14 @@ dep on 3.10). On failure the write is refused and the original file
 (if any) is untouched — malformed configs never reach downstream
 consumers.
 
+`alpi/secrets_io.py::safe_write_secret(path, content, mode=0o600)`
+is the canonical write path for credential files. Uses
+`tempfile.mkstemp` (O_EXCL + 0o600 at creation, random unique
+name) + `os.replace` — no TOCTOU window, and a stale
+`<target>.tmp` at looser perms cannot compromise the write.
+Used by `model_selector` (.env), `mail/gmail_auth` (gmail token),
+`alp/pending` (yaml), and `alp/keys` (ALP private key).
+
 ### Local RAG (BA)
 
 `search_workspace` (semantic search over the user's local files) and

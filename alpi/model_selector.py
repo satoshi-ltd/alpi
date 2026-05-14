@@ -9,7 +9,7 @@ from typing import Any
 from alpi import config as cfg_mod
 from alpi import providers as prov_mod
 from alpi import ui
-from alpi.providers.base import ModelInfo, Provider
+from alpi.providers.base import Provider
 
 
 _MANAGE_SAVED = "__manage_saved__"
@@ -229,12 +229,8 @@ def _add_ollama_connection(cfg: cfg_mod.Config):
 
 
 def _atomic_write_env(env_path: Path, content: str) -> None:
-    import os as _os
-    env_path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = env_path.with_suffix(env_path.suffix + ".tmp")
-    tmp.write_text(content)
-    _os.chmod(tmp, 0o600)
-    _os.replace(tmp, env_path)
+    from alpi.secrets_io import safe_write_secret
+    safe_write_secret(env_path, content)
 
 
 def _append_env(env_path: Path, key: str, value: str) -> None:

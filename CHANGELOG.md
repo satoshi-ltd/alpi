@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.4.41 — 2026-05-14 — `safe_write_secret`: atomic credential writes close the TOCTOU window
+
+`write_text` + `chmod 0o600` is two syscalls — between them the file briefly exists at umask perms (0o644) and a local attacker can read it. This release centralizes the pattern in one helper and uses it at every alpi credential write.
+
+- New `alpi/secrets_io.py::safe_write_secret(path, content, mode=0o600)`: writes via `tempfile.mkstemp` (O_EXCL + 0o600 at creation, random unique name in the target dir), then `os.replace` onto the target. Immune to a stale `<target>.tmp` sibling lingering at looser perms — the deterministic-tmp + O_CREAT approach from a draft of this release would have inherited that file's mode.
+- Refactored 4 callsites to use it: `model_selector._atomic_write_env` (.env writes), `mail/gmail_auth._save` (gmail token), `alp/pending.save` (pending peers yaml), and `alp/keys.create` (the worst case — was writing the private key directly to its final path and chmod'ing after).
+- Tests cover the helper directly (0o600 mode, no tmp left behind, custom mode, bytes input, parent-dir creation, umask resistance, tmp cleanup on write error); existing integration tests for the 4 callsites pass unchanged.
+- Inspired by Hermes Agent v0.13.0's TOCTOU-close work in credential writers (#21194, #21176).
+
 ## v0.4.40 — 2026-05-14 — pre-write lint refuses syntactically broken writes
 
 A malformed `jobs.json` silently disabled the scheduler in v0.4.39 testing; same class of bug for `config.yaml`, skill scripts, `pyproject.toml`. This release runs a parser-based syntax check before every `write_file` / `edit_file` lands on disk — on failure the write is refused and the original file (if any) is untouched.

@@ -30,7 +30,7 @@ import time
 import urllib.parse
 import webbrowser
 from contextlib import contextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 from urllib.parse import parse_qs, urlparse
@@ -114,17 +114,13 @@ def _load(home: Path) -> Optional[GmailToken]:
 
 
 def _save(home: Path, token: GmailToken) -> None:
-    p = token_path(home)
-    p.parent.mkdir(parents=True, exist_ok=True)
-    tmp = p.with_suffix(".tmp")
-    tmp.write_text(json.dumps({
+    from alpi.secrets_io import safe_write_secret
+    safe_write_secret(token_path(home), json.dumps({
         "email": token.email,
         "access_token": token.access_token,
         "refresh_token": token.refresh_token,
         "expires_at": token.expires_at,
     }, indent=2))
-    os.chmod(tmp, 0o600)
-    tmp.replace(p)
 
 
 def clear(home: Path) -> None:

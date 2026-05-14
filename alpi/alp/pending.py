@@ -60,11 +60,8 @@ def save(home: Path, entries: list[Pending]) -> None:
         }
         for e in entries
     ]
-    tmp = p.with_suffix(p.suffix + ".tmp")
-    tmp.write_text(yaml.safe_dump(payload, sort_keys=False, allow_unicode=True))
-    import os as _os
-    _os.chmod(tmp, 0o600)
-    _os.replace(tmp, p)
+    from alpi.secrets_io import safe_write_secret
+    safe_write_secret(p, yaml.safe_dump(payload, sort_keys=False, allow_unicode=True))
 
 
 def record(home: Path, pubkey: str, address: str | None = None) -> None:

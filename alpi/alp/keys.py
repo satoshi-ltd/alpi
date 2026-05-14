@@ -83,11 +83,9 @@ def generate(home: Path) -> Keypair:
         format=serialization.PublicFormat.SubjectPublicKeyInfo,
     )
 
-    private_path(home).write_bytes(priv_pem)
+    from alpi.secrets_io import safe_write_secret
+    safe_write_secret(private_path(home), priv_pem)
     public_path(home).write_bytes(pub_pem)
-
-    # Mode 0600 on the private half; 0644 on the public side is fine.
-    os.chmod(private_path(home), 0o600)
     os.chmod(public_path(home), 0o644)
 
     return Keypair(private=priv, public=pub)
