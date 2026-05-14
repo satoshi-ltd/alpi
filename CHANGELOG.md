@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.4.42 — 2026-05-14 — whole-machine backup with pre-encrypt preview + RAG bloat fix
+
+Per-profile backup was the wrong primitive: a typical user runs 2–3 profiles and forgetting one defeats the point. `alpi backup` now archives the entire `~/.alpi/` tree in one shot, shows a per-profile + largest-files preview *before* prompting for the passphrase, and `--force` restore is a clean replace instead of an overlay. Surfacing the preview also caught a long-standing bug: a 1.6GB `rag/store.sqlite` made of 99.997% dead SQLite pages, a force-reindex leak that's now fixed at the source and exposed in setup → Cleanup as a one-click VACUUM.
+
+- `alpi/backup.py` rewritten for whole-home semantics: `_iter_files` prunes `cache/`, `logs/`, `.trash/`, `*.sock`, `*.pid` + `.DS_Store`/`Thumbs.db` recursively; header carries `"scope": "machine"` (validated on `inspect` and `restore`); default filename is `alpi.<YYYY-MM-DD>.alpi-backup`. The `-p` flag is ignored by both commands.
+- `restore --force` now wipes the target's children AFTER the AEAD tag verifies (never on wrong passphrase or tampered archive), preserving the archive file itself if it lives inside the target. `_restore_entries` rejects tar roots other than `alpi-home`.
+- New `backup.preview(home)` returns a split breakdown (default section for global config + default-profile data, profiles section per named profile) plus the top 5 individual files ≥1MB. `cmd_backup` prints it before the passphrase prompt; Ctrl-C aborts before any Scrypt work.
+- RAG bloat fix — `alpi/tools/workspace.py::_index` runs `VACUUM` after a `force=True` rebuild commits (was leaving the old pages on the SQLite freelist forever). `alpi/core/store.py` gains `reclaimable_bytes()` + `compact()` helpers. `setup → Cleanup` gains a "RAG store bloat" entry with a special `vacuum` action — no unlink, just reclaim.
+- Docs (`docs/OPERATIONS.md` + the `references/operations.md` mirror) updated to whole-machine semantics. 26 backup + 7 cleanup + 24 workspace tests passing; full suite 1673 green.
+
 ## v0.4.41 — 2026-05-14 — `safe_write_secret`: atomic credential writes close the TOCTOU window
 
 `write_text` + `chmod 0o600` is two syscalls — between them the file briefly exists at umask perms (0o644) and a local attacker can read it. This release centralizes the pattern in one helper and uses it at every alpi credential write.

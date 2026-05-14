@@ -132,7 +132,8 @@ directory tree). After a few weeks of use, expect 5–50 MB
 depending on voice-cache and session-history retention. The TUI
 top bar surfaces the live size next to the profile name; the
 cleanup wizard (`alpi setup → Cleanup`) reclaims audio cache, old
-sessions, rotated logs, and schedule output on demand.
+sessions, rotated logs, schedule output, and RAG store freelist
+bloat on demand.
 
 On CPU / memory: a profile not in active use costs *nothing*.
 Active surfaces collapse into two processes: the TUI instance

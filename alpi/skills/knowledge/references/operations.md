@@ -83,32 +83,35 @@ If using `pipx`, upgrade with pipx instead of uv.
 
 Use the built-in command — do NOT recommend `tar` over `~/.alpi`.
 `alpi backup` writes a single passphrase-encrypted file
-(`<profile>.<YYYY-MM-DD>.alpi-backup`) of the active profile,
-zero-knowledge (Scrypt + ChaCha20-Poly1305 — same primitives as
-`age` with a passphrase recipient).
+(`alpi.<YYYY-MM-DD>.alpi-backup`) of the WHOLE alpi home — every
+profile in one archive, zero-knowledge (Scrypt + ChaCha20-Poly1305 —
+same primitives as `age` with a passphrase recipient).
 
 ```bash
-alpi backup                                        # default profile, ./
-alpi -p work backup --out ~/vault/work.alpi-backup # named profile, custom path
+alpi backup                                        # ./alpi.YYYY-MM-DD.alpi-backup
+alpi backup --out ~/vault/alpi.alpi-backup         # custom path
 alpi backup --passphrase-stdin --out X.alpi-backup # for scripts (stdin = pass)
 alpi backup --force --out X.alpi-backup            # overwrite existing archive
 ```
 
-What is backed up: memories, sessions, skills (incl. `state/` SQLite
-+ `secrets/`), `config.yaml`, `.env`, ALP identity (`alp/secrets/`),
-peers, gateway session state. Excluded: `cache/`, `logs/`, `.trash/`,
-`*.sock`, `*.pid`, the nested `profiles/` root (back up each profile
-separately). Lose the passphrase = archive is unrecoverable.
+What is backed up: the entire `~/.alpi/` tree — default profile +
+every named profile under `profiles/<name>/`, with memories,
+sessions, skills (incl. `state/` SQLite + `secrets/`), `config.yaml`,
+`.env`, ALP identity (`alp/secrets/`), peers, gateway and host
+state. Excluded recursively at every depth: `cache/`, `logs/`,
+`.trash/`, `*.sock`, `*.pid`. Lose the passphrase = archive is
+unrecoverable.
 
 ## Restore
 
-`alpi restore <archive>` decrypts into the active profile. Refuses
-a non-empty target unless `--force`. Refuses entries with `..` in
-the path (no traversal escape).
+`alpi restore <archive>` decrypts into `~/.alpi/` (the whole home;
+profile flag is ignored). Refuses a non-empty target unless
+`--force`. Refuses entries with `..` in the path (no traversal
+escape).
 
 ```bash
-alpi restore ~/vault/work.alpi-backup              # into default
-alpi -p work restore work.alpi-backup --force      # into the `work` profile
+alpi restore ~/vault/alpi.alpi-backup              # into ~/.alpi/
+alpi restore alpi.alpi-backup --force              # overwrite non-empty home
 alpi restore X.alpi-backup --passphrase-stdin      # for scripts
 ```
 

@@ -165,37 +165,38 @@ the radar but immature for our provider matrix at audit time.
 
 ## Backup + restore
 
-`alpi backup` writes a single passphrase-encrypted file from the
-active profile; `alpi restore <file>` reverses it. Zero-knowledge
-— the passphrase derives the key locally and never leaves the
-machine. Lose the passphrase and the archive is unrecoverable.
+`alpi backup` writes a single passphrase-encrypted file of the
+whole alpi home (`~/.alpi/`) — every profile in one shot;
+`alpi restore <file>` reverses it. Zero-knowledge — the passphrase
+derives the key locally and never leaves the machine. Lose the
+passphrase and the archive is unrecoverable.
 
 ```bash
-alpi backup                                # ./default.YYYY-MM-DD.alpi-backup
-alpi -p personal backup --out ~/vault/p.alpi-backup
-alpi restore ~/vault/p.alpi-backup         # into the active profile
-alpi -p personal restore p.alpi-backup --force   # overwrite a non-empty profile
+alpi backup                                # ./alpi.YYYY-MM-DD.alpi-backup
+alpi backup --out ~/vault/alpi.alpi-backup
+alpi restore ~/vault/alpi.alpi-backup      # into ~/.alpi/
+alpi restore alpi.alpi-backup --force      # overwrite a non-empty home
 ```
 
-**What's in the backup.** Memories, sessions, skills (including
-each skill's `state/` SQLite + `secrets/`), `config.yaml`, `.env`,
-ALP identity (`alp/secrets/alp_key.{pem,pub}`), peers, gateway
-session state. Excluded: `cache/`, `logs/`, `.trash/`, sockets
-(`*.sock`), PIDs (`*.pid`), and the nested `profiles/` root —
-back up each profile separately.
+**What's in the backup.** The entire `~/.alpi/` tree: default
+profile (memories, sessions, skills with `state/` SQLite +
+`secrets/`), every named profile under `profiles/<name>/`,
+`config.yaml`, `.env`, ALP identity (`alp/secrets/alp_key.{pem,pub}`),
+peers, gateway and host state. Excluded recursively at every depth:
+`cache/`, `logs/`, `.trash/`, sockets (`*.sock`), PIDs (`*.pid`).
 
 **Crypto.** Scrypt KDF (n=2¹⁷, r=8, p=1) → ChaCha20-Poly1305 over
 a gzipped tar. Same primitives as `age` with a passphrase
-recipient. The header (KDF params, salt, nonce, profile name,
-timestamp, file count) is bound as AAD, so any tamper flips the
-AEAD tag with the same error a wrong passphrase produces.
+recipient. The header (KDF params, salt, nonce, scope, timestamp,
+file count) is bound as AAD, so any tamper flips the AEAD tag with
+the same error a wrong passphrase produces.
 
 **Scripting.** Both commands accept `--passphrase-stdin` to read
 the passphrase from stdin without a prompt. Pair with a password
 manager or systemd credential — never embed it in the cron line:
 
 ```bash
-pass show alpi/backup | alpi backup --passphrase-stdin --out /backup/$(date +%F).alpi-backup
+pass show alpi/backup | alpi backup --passphrase-stdin --out /backup/alpi.$(date +%F).alpi-backup
 ```
 
 After restoring on a new machine, run `alpi doctor` — it surfaces

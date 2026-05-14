@@ -482,7 +482,7 @@ def cmd_diff(ctx: click.Context, since: str, as_json: bool) -> None:
 @main.command("backup")
 @click.option(
     "--out", "out_path", type=click.Path(dir_okay=False, path_type=Path), default=None,
-    help="Output file. Defaults to ``./<profile>.<YYYY-MM-DD>.alpi-backup``.",
+    help="Output file. Defaults to ``./alpi.<YYYY-MM-DD>.alpi-backup``.",
 )
 @click.option(
     "--passphrase-stdin", is_flag=True, default=False,
@@ -496,24 +496,60 @@ def cmd_diff(ctx: click.Context, since: str, as_json: bool) -> None:
 def cmd_backup(
     ctx: click.Context, out_path: Path | None, passphrase_stdin: bool, force: bool,
 ) -> None:
-    """Encrypt this profile into a single passphrase-protected file.
+    """Encrypt the whole alpi home into a single passphrase-protected file.
 
     Zero-knowledge: the passphrase derives the key (Scrypt) and never
     leaves the local machine. Lose it and the archive is unrecoverable.
-    Caches, logs, sockets and PIDs are excluded; nested profiles are not
-    recursed into."""
+    Walks every profile + global config (``.env``, ``config.yaml``,
+    ``alp/``, ``host/``, ``sessions/``…). Caches, logs, sockets and PIDs
+    are excluded at every depth. The ``-p`` flag is ignored — the
+    archive is always whole-home."""
     from alpi import backup as backup_mod
 
-    h: Path = ctx.obj["home"]
-    profile: str = ctx.obj["profile"]
+    root: Path = home.alpi_root()
     if out_path is None:
-        out_path = Path.cwd() / backup_mod.default_filename(profile)
+        out_path = Path.cwd() / backup_mod.default_filename()
     if out_path.exists():
         if not force:
             raise click.UsageError(
                 f"{out_path} already exists; pass --force to overwrite."
             )
         out_path.unlink()
+
+    # Preview before the passphrase prompt so the user sees what will be
+    # archived (and how large) — Ctrl-C aborts before any KDF work.
+    try:
+        pv = backup_mod.preview(root)
+    except backup_mod.BackupError as e:
+        raise click.ClickException(str(e)) from None
+    click.echo(f"preview:  {pv.home}")
+    click.echo(f"  files:    {pv.total_files}")
+    click.echo(f"  size:     {home.format_bytes(pv.total_size)}")
+    all_entries = pv.default_entries + pv.profile_entries
+    name_width = max((len(e.name) for e in all_entries), default=0)
+    if pv.default_entries:
+        click.echo("  default:")
+        for e in pv.default_entries:
+            click.echo(
+                f"    {e.name:<{name_width}}  "
+                f"{home.format_bytes(e.size):>9}  "
+                f"({e.file_count} files)"
+            )
+    if pv.profile_entries:
+        click.echo(f"  profiles ({len(pv.profile_entries)}):")
+        for e in pv.profile_entries:
+            click.echo(
+                f"    {e.name:<{name_width}}  "
+                f"{home.format_bytes(e.size):>9}  "
+                f"({e.file_count} files)"
+            )
+    if pv.largest_files:
+        click.echo("  largest files:")
+        fwidth = max(len(f.path) for f in pv.largest_files)
+        for f in pv.largest_files:
+            click.echo(
+                f"    {f.path:<{fwidth}}  {home.format_bytes(f.size):>9}"
+            )
 
     if passphrase_stdin:
         passphrase = sys.stdin.readline().rstrip("\n")
@@ -525,13 +561,12 @@ def cmd_backup(
         raise click.UsageError("passphrase must not be empty")
 
     try:
-        info = backup_mod.create_backup(h, out_path, passphrase, profile_name=profile)
+        info = backup_mod.create_backup(root, out_path, passphrase)
     except backup_mod.BackupError as e:
         raise click.ClickException(str(e)) from None
 
     click.echo(
         f"backup: {info.path}\n"
-        f"  profile:    {info.profile}\n"
         f"  files:      {info.file_count}\n"
         f"  plaintext:  {home.format_bytes(info.plaintext_bytes)}\n"
         f"  archive:    {home.format_bytes(info.archive_bytes)}"
@@ -546,20 +581,19 @@ def cmd_backup(
 )
 @click.option(
     "--force", is_flag=True, default=False,
-    help="Restore even if the target profile directory already has files.",
+    help="Wipe the target alpi home before extracting (only after the archive's AEAD tag verifies).",
 )
 @click.pass_context
 def cmd_restore(
     ctx: click.Context, archive: Path, passphrase_stdin: bool, force: bool,
 ) -> None:
-    """Decrypt an alpi backup into the active profile.
+    """Decrypt an alpi backup into ``~/.alpi/``.
 
-    The target profile is the one selected by ``-p`` (default
-    ``~/.alpi/``). Refuses to overwrite existing files unless
-    ``--force`` is passed."""
+    Restores every profile + global config from the archive. Refuses to
+    overwrite an existing non-empty home unless ``--force`` is passed."""
     from alpi import backup as backup_mod
 
-    h: Path = ctx.obj["home"]
+    root: Path = home.alpi_root()
     try:
         header = backup_mod.inspect(archive)
     except backup_mod.BackupError as e:
@@ -567,10 +601,9 @@ def cmd_restore(
 
     click.echo(
         f"archive:  {archive}\n"
-        f"  source profile: {header.get('profile', '?')}\n"
-        f"  created:        {header.get('created_at', '?')}\n"
-        f"  files:          {header.get('file_count', '?')}\n"
-        f"target:   {h}"
+        f"  created:  {header.get('created_at', '?')}\n"
+        f"  files:    {header.get('file_count', '?')}\n"
+        f"target:   {root}"
     )
 
     if passphrase_stdin:
@@ -581,14 +614,14 @@ def cmd_restore(
         raise click.UsageError("passphrase must not be empty")
 
     try:
-        info = backup_mod.restore_backup(archive, h, passphrase, force=force)
+        info = backup_mod.restore_backup(archive, root, passphrase, force=force)
     except backup_mod.BackupError as e:
         raise click.ClickException(str(e)) from None
 
     click.echo(
         f"restored: {info.target}\n"
-        f"  files:   {info.file_count}\n"
-        f"  source:  {info.profile} (backup created {info.created_at})"
+        f"  files:    {info.file_count}\n"
+        f"  created:  {info.created_at}"
     )
 
 
@@ -2788,6 +2821,8 @@ def _cleanup_categories(h: Path) -> list[dict]:
             return []
         return [p for p in d.iterdir() if p.is_file()]
 
+    from alpi.core import store as store_mod
+
     tts_files = _all(_dir("cache/tts"))
     inbound_files = _all(_dir("cache/inbound"))
     session_files = _all(_dir("sessions"))
@@ -2802,6 +2837,10 @@ def _cleanup_categories(h: Path) -> list[dict]:
     turns_path = _dir("alp/turns.jsonl")
     if turns_path.is_file():
         wg_files.append(turns_path)
+    rag_reclaimable = store_mod.reclaimable_bytes(h)
+    rag_files: list[Path] = (
+        [store_mod.store_path(h)] if rag_reclaimable > 0 else []
+    )
 
     return [
         {
@@ -2853,6 +2892,14 @@ def _cleanup_categories(h: Path) -> list[dict]:
             "files": wg_files,
             "size": _sum(wg_files),
         },
+        {
+            "key": "rag",
+            "label": "RAG store bloat",
+            "desc": "SQLite freelist pages in `rag/store.sqlite` from past force-reindexes",
+            "files": rag_files,
+            "size": rag_reclaimable,
+            "action": "vacuum",
+        },
     ]
 
 
@@ -2896,6 +2943,20 @@ def _cleanup_setup(h: Path) -> None:
         n = len(target["files"])
         size_label = home_mod.format_bytes(target["size"])
         ui._console.print("")
+        if target.get("action") == "vacuum":
+            if not ui.confirm(
+                f"  Compact RAG store and reclaim {size_label}?",
+                default=False,
+            ):
+                continue
+            from alpi.core import store as store_mod
+
+            before, after = store_mod.compact(h)
+            ui.ok_and_wait(
+                f"compacted {target['label']}: "
+                f"{home_mod.format_bytes(before)} → {home_mod.format_bytes(after)}"
+            )
+            continue
         if not ui.confirm(
             f"  Delete {n} file(s) · {size_label} from {target['label']}?",
             default=False,

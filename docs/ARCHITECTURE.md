@@ -271,7 +271,7 @@ Denylist: `/etc/`, `/boot/`, `/sys/`, `/proc/`, `/usr/lib/systemd/`, `/System/`,
 
 Per-profile semantic search over the user's local files (BA). Two agent tools:
 
-- `index_workspace(path?, glob?, force?, ocr?)` — walks the workspace root, chunks supported files (30 lines / stride 25), embeds, upserts into a sqlite-vec virtual table. Incremental: mtime-skip avoids re-embedding unchanged files.
+- `index_workspace(path?, glob?, force?, ocr?)` — walks the workspace root, chunks supported files (30 lines / stride 25), embeds, upserts into a sqlite-vec virtual table. Incremental: mtime-skip avoids re-embedding unchanged files. `force=True` drops + rebuilds the schema and `VACUUM`s after the rebuild commits so the SQLite freelist doesn't leave the file inflated past the new index's real size.
 - `search_workspace(query, k=5)` — cosine similarity via sqlite-vec MATCH, returns `[{path, snippet, line_start, line_end, score}]` ordered ascending.
 
 Supported formats: markdown / text / source / configs (stdlib read), HTML (`html2text`), PDF (`pypdf` for text-layer, RapidOCR fallback when `ocr=true` and pypdf extracts < 50 chars), DOCX (`python-docx`), EPUB (`ebooklib`), images (`PIL` + RapidOCR — only with `ocr=true`). OCR backend is `rapidocr-onnxruntime` (ONNX port of PaddleOCR, no torch dependency).

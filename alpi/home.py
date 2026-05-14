@@ -48,6 +48,14 @@ def home_for(name: str) -> Path:
     return _ROOT / "profiles" / name
 
 
+def alpi_root() -> Path:
+    """Return the alpi home root, honoring ``ALPI_HOME`` — ignores any profile selection."""
+    override = os.environ.get("ALPI_HOME")
+    if override:
+        return Path(override).expanduser()
+    return _ROOT
+
+
 def list_profiles(root: Path | None = None) -> list[str]:
     """Return ``default`` plus each profile directory under ``<root>``."""
     base = root or _ROOT

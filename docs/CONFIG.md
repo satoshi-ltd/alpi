@@ -38,8 +38,9 @@ Three options:
   credentials, MCP servers, sandbox posture, voice, peers,
   workgroups, disk cleanup, and the alpi daemon's lifecycle.
   `alpi setup → Cleanup` inspects the profile's heavy dirs (audio
-  cache, old sessions, schedule output) and deletes after one-shot
-  confirmation. `alpi setup → Services` exposes two rows:
+  cache, old sessions, schedule output) and the RAG store's SQLite
+  freelist (VACUUM-not-unlink), with one-shot confirmation per
+  category. `alpi setup → Services` exposes two rows:
   **Daemon** (default profile only — install / uninstall / start /
   stop / restart of the per-machine launchd plist or systemd-user
   unit) and **Subsystems** (per-profile toggles for gateway /

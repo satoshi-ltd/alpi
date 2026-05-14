@@ -107,7 +107,12 @@ Used by `model_selector` (.env), `mail/gmail_auth` (gmail token),
 
 `search_workspace` (semantic search over the user's local files) and
 `index_workspace` (build/refresh the index). Per-profile index at
-`<profile>/rag/store.sqlite` using `sqlite-vec`. Embeddings via
+`<profile>/rag/store.sqlite` using `sqlite-vec`. `index_workspace`
+with `force=true` drops + rebuilds the schema and `VACUUM`s after the
+rebuild commits — DROP TABLE leaves pages in the SQLite freelist
+and never shrinks the file otherwise, which bloated `store.sqlite`
+across past force reindexes. Manual repair lives in `setup → Cleanup
+→ RAG store bloat` (vacuum action, not unlink). Embeddings via
 `fastembed` running the ONNX export of
 `sentence-transformers/all-MiniLM-L6-v2` (384-dim, no torch).
 Supports markdown, text, source, configs, HTML, PDF (`pypdf` for

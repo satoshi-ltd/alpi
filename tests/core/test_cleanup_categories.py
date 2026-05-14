@@ -42,6 +42,88 @@ def test_gateway_category_only_lists_session_files_not_state(
     assert names == ["abc.json"]
 
 
+def test_rag_category_absent_when_store_has_no_freelist(tmp_path: Path) -> None:
+    """No `rag/store.sqlite` and no freelist → cleanup row appears with
+    size 0, empty files, and the vacuum action. Empty list makes the
+    cleanup loop skip it just like other empty categories."""
+    cats = _cleanup_categories(tmp_path)
+    rag = next(c for c in cats if c["key"] == "rag")
+    assert rag["size"] == 0
+    assert rag["files"] == []
+    assert rag["action"] == "vacuum"
+
+
+def test_rag_category_surfaces_freelist_bytes(tmp_path: Path) -> None:
+    """After artificial bloat the rag category must surface reclaimable
+    bytes and point at `rag/store.sqlite` for display."""
+    import sqlite3
+
+    from alpi.core import store as store_mod
+
+    sp = store_mod.store_path(tmp_path)
+    sp.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(sp)
+    try:
+        conn.execute("CREATE TABLE bloat(id INTEGER PRIMARY KEY, blob BLOB)")
+        conn.executemany(
+            "INSERT INTO bloat(blob) VALUES (?)",
+            [(b"\x00" * 4096,) for _ in range(200)],
+        )
+        conn.commit()
+        conn.execute("DROP TABLE bloat")
+        conn.commit()
+    finally:
+        conn.close()
+
+    cats = _cleanup_categories(tmp_path)
+    rag = next(c for c in cats if c["key"] == "rag")
+    assert rag["size"] > 0
+    assert rag["files"] == [sp]
+    assert rag["action"] == "vacuum"
+
+
+def test_compact_reclaims_freelist_without_deleting_store(tmp_path: Path) -> None:
+    """`compact()` runs VACUUM and shrinks the file but must NOT unlink
+    `rag/store.sqlite` — embeddings would be lost."""
+    import sqlite3
+
+    from alpi.core import store as store_mod
+
+    sp = store_mod.store_path(tmp_path)
+    sp.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(sp)
+    try:
+        conn.execute("CREATE TABLE keep(id INTEGER PRIMARY KEY, blob BLOB)")
+        conn.execute("INSERT INTO keep(blob) VALUES (?)", (b"survivor",))
+        conn.execute("CREATE TABLE bloat(id INTEGER PRIMARY KEY, blob BLOB)")
+        conn.executemany(
+            "INSERT INTO bloat(blob) VALUES (?)",
+            [(b"\x00" * 4096,) for _ in range(200)],
+        )
+        conn.commit()
+        conn.execute("DROP TABLE bloat")
+        conn.commit()
+    finally:
+        conn.close()
+
+    before, after = store_mod.compact(tmp_path)
+    assert before > after
+    assert sp.exists()
+    assert store_mod.reclaimable_bytes(tmp_path) == 0
+    conn = sqlite3.connect(sp)
+    try:
+        row = conn.execute("SELECT blob FROM keep").fetchone()
+    finally:
+        conn.close()
+    assert row[0] == b"survivor"
+
+
+def test_compact_returns_zero_when_no_store(tmp_path: Path) -> None:
+    from alpi.core import store as store_mod
+    assert store_mod.compact(tmp_path) == (0, 0)
+    assert store_mod.reclaimable_bytes(tmp_path) == 0
+
+
 def test_bootstrap_gitignore_covers_private_dirs(tmp_path: Path) -> None:
     """A profile's ``.gitignore`` must hide every dir that holds private
     history so users syncing ``~/.alpi`` via git don't leak chats."""

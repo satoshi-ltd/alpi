@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import time
 from pathlib import Path
 
 import pytest
@@ -104,6 +103,35 @@ def test_reindex_force_rebuilds(tmp_home, tmp_path, stub_embedder):
     )
     assert forced["indexed_files"] == 2
     assert forced["skipped_files"] == 0
+
+
+def test_force_reindex_vacuums_freelist(tmp_home, tmp_path, stub_embedder):
+    import sqlite3
+    from alpi.core import store as store_mod
+
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    _make_workspace(workspace)
+    ws.IndexWorkspace().run(path=str(workspace))
+    # Inflate the store with a junk table so DROP-during-force pushes a
+    # measurable number of pages onto the freelist — then force-reindex.
+    sp = store_path(tmp_home)
+    conn = sqlite3.connect(sp)
+    try:
+        conn.execute("CREATE TABLE bloat(id INTEGER PRIMARY KEY, blob BLOB)")
+        conn.executemany(
+            "INSERT INTO bloat(blob) VALUES (?)",
+            [(b"\x00" * 4096,) for _ in range(200)],
+        )
+        conn.commit()
+        conn.execute("DROP TABLE bloat")
+        conn.commit()
+    finally:
+        conn.close()
+    assert store_mod.reclaimable_bytes(tmp_home) > 0
+    ws.IndexWorkspace().run(path=str(workspace), force=True)
+    # After force rebuild, VACUUM should have drained the freelist.
+    assert store_mod.reclaimable_bytes(tmp_home) == 0
 
 
 def test_modified_file_is_reindexed(tmp_home, tmp_path, stub_embedder):

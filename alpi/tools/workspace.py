@@ -432,6 +432,17 @@ def _index(
                 _delete_file(conn, sp)
                 removed_files += 1
         conn.commit()
+        if force:
+            # _ensure_schema dropped the old tables, leaving every page in
+            # the SQLite freelist — the file never shrinks back. VACUUM
+            # after the rebuild commits compacts to the new index's real
+            # size. Must run outside any transaction.
+            prior_isolation = conn.isolation_level
+            conn.isolation_level = None
+            try:
+                conn.execute("VACUUM")
+            finally:
+                conn.isolation_level = prior_isolation
         total_files = conn.execute(
             "SELECT COUNT(*) AS n FROM workspace_files"
         ).fetchone()["n"]
