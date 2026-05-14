@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import BrowsePanel from "../primitives/BrowsePanel.jsx";
-import { renderMarkdown } from "../lib/markdown.js";
-import styles from "./MemoryPanel.module.css";
+import BrowseDetail from "../primitives/BrowseDetail.jsx";
+import MarkdownBody from "../primitives/MarkdownBody.jsx";
 
 const FILES = [
   { name: "USER.md", label: "Things alpi knows about you" },
@@ -47,17 +47,9 @@ export default function MemoryPanel({ open, onClose, profile }) {
       categoryOrder={["Files"]}
       emptyText="No memory files"
       renderDetail={(f) => (
-        <div className={styles.wrap}>
-          <h3 className={styles.name}>{f.name}</h3>
-          {f.content ? (
-            <div
-              className={styles.body}
-              dangerouslySetInnerHTML={{ __html: renderMarkdown(f.content) }}
-            />
-          ) : (
-            <div className={styles.empty}>(empty)</div>
-          )}
-        </div>
+        <BrowseDetail name={f.name} description={f.description}>
+          {f.content ? <MarkdownBody source={f.content} /> : <em>(empty)</em>}
+        </BrowseDetail>
       )}
     />
   );

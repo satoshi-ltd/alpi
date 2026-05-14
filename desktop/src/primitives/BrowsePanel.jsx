@@ -138,7 +138,6 @@ export default function BrowsePanel({
                           type="button"
                           data-key={k}
                           className={`${styles.row} ${active ? styles.rowActive : ""}`}
-                          onMouseEnter={() => setSelectedKey(k)}
                           onClick={() => setSelectedKey(k)}
                         >
                           <span className={styles.rowName}>{it.name}</span>

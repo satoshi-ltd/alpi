@@ -72,7 +72,6 @@
 .asideTag {
   font-size: var(--font-size-tiny);
   text-transform: uppercase;
-  letter-spacing: 0.06em;
   padding: var(--space-1) var(--space-3);
   border-radius: var(--radius-pill);
   background: var(--color-selected);
@@ -170,7 +169,6 @@
 .sectionTitle {
   font-size: var(--font-size-small);
   text-transform: uppercase;
-  letter-spacing: 0.08em;
   color: var(--color-fg-muted);
   font-weight: var(--font-weight-semibold);
   padding-bottom: var(--space-2);
@@ -194,7 +192,6 @@
   color: var(--color-fg-subtle);
   font-size: var(--font-size-tiny);
   font-weight: var(--font-weight-semibold);
-  letter-spacing: 0;
   line-height: 1;
 }
 
@@ -225,7 +222,6 @@
 .rowLabel {
   font-size: var(--font-size-tiny);
   text-transform: uppercase;
-  letter-spacing: 0.06em;
   color: var(--color-fg-subtle);
 }
 
@@ -454,7 +450,6 @@
   gap: var(--space-4);
   font-size: var(--font-size-small);
   text-transform: none;
-  letter-spacing: 0;
   color: var(--color-fg);
   font-weight: var(--font-weight-medium);
 }

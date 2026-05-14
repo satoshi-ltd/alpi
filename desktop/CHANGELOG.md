@@ -11,6 +11,16 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.2.18 — 2026-05-14 — shared scaffold for Skills/Tools/Memory + typography pass
+
+Requires alpi ``v0.4.36`` or newer.
+
+- Skills/Tools/Memory panels share a single scaffold via new `BrowseDetail` + `MarkdownBody` primitives. Their list rows match the chat + settings sidebar items.
+- Detail content uses monospace; sidebar and search input stay in the UI font. Inline code loses its grey pill background.
+- Tool descriptions render inline markdown (`**bold**`, `` `code` ``) without changing the source — keeps system-prompt tokens cheap.
+- Row selection only on click — no hover hijacking.
+- `letter-spacing` removed from every CSS module under `desktop/src/`.
+
 ## v0.2.17 — 2026-05-14 — tray update badge + sticky settings sidebar + sharper empty-state logo
 
 Requires alpi ``v0.4.36`` or newer.

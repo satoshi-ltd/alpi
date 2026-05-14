@@ -52,7 +52,6 @@
 .emptyHeading {
   font-size: var(--font-size-display);
   font-weight: var(--font-weight-medium);
-  letter-spacing: -0.02em;
   color: var(--color-fg);
   margin: 0;
   text-align: center;

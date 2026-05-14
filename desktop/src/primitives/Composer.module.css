@@ -123,7 +123,6 @@
   font-size: var(--font-size-tiny);
   color: var(--color-fg-subtle);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
 }
 
 .mentionDot {

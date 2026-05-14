@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import BrowsePanel from "../primitives/BrowsePanel.jsx";
-import { renderMarkdown } from "../lib/markdown.js";
-import styles from "./SkillsPanel.module.css";
+import BrowseDetail from "../primitives/BrowseDetail.jsx";
+import MarkdownBody from "../primitives/MarkdownBody.jsx";
 
 export default function SkillsPanel({ open, onClose, profile }) {
   const [skills, setSkills] = useState([]);
@@ -35,25 +35,11 @@ export default function SkillsPanel({ open, onClose, profile }) {
       title="Skills"
       items={skills}
       emptyText="No skills installed"
-      renderDetail={(s) => <SkillDetail skill={s} />}
+      renderDetail={(s) => (
+        <BrowseDetail name={s.name} description={s.description} path={s.path}>
+          <MarkdownBody source={s.body} />
+        </BrowseDetail>
+      )}
     />
-  );
-}
-
-function SkillDetail({ skill }) {
-  return (
-    <div className={styles.wrap}>
-      <h3 className={styles.name}>{skill.name}</h3>
-      {skill.description && (
-        <p className={styles.description}>{skill.description}</p>
-      )}
-      {skill.path && <div className={styles.path}>{skill.path}</div>}
-      {skill.body && (
-        <div
-          className={styles.body}
-          dangerouslySetInnerHTML={{ __html: renderMarkdown(skill.body) }}
-        />
-      )}
-    </div>
   );
 }

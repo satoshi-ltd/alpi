@@ -162,7 +162,6 @@
   font-size: var(--font-size-tiny);
   font-weight: var(--font-weight-semibold);
   text-transform: uppercase;
-  letter-spacing: 0.06em;
   color: var(--color-fg-subtle);
 }
 

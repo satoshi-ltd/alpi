@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import BrowsePanel from "../primitives/BrowsePanel.jsx";
+import BrowseDetail from "../primitives/BrowseDetail.jsx";
 import styles from "./ToolsPanel.module.css";
 
 // MCP categories (``MCP · <server>``) and ``Other`` fall through to the
@@ -54,11 +55,7 @@ function ToolDetail({ tool }) {
   const rows = Object.entries(props);
 
   return (
-    <div className={styles.wrap}>
-      <h3 className={styles.name}>{tool.name}</h3>
-      {tool.description && (
-        <p className={styles.description}>{tool.description}</p>
-      )}
+    <BrowseDetail name={tool.name} description={tool.description}>
       {rows.length > 0 ? (
         <table className={styles.params}>
           <thead>
@@ -83,7 +80,7 @@ function ToolDetail({ tool }) {
       ) : (
         <div className={styles.noParams}>No parameters</div>
       )}
-    </div>
+    </BrowseDetail>
   );
 }
 
