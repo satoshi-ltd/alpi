@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 from alpi.tools._paths import resolve_path, suggest_similar_paths
 from alpi.tools.base import Tool, ToolResult
 
@@ -44,7 +42,8 @@ class ReadFile(Tool):
             return ToolResult(ok=False, output="", error=msg)
         # Sniff the first bytes to reject binaries early.
         try:
-            head = p.open("rb").read(8192)
+            with p.open("rb") as fh:
+                head = fh.read(8192)
         except OSError as e:
             return ToolResult(ok=False, output="", error=f"Read failed: {e}")
         if _looks_binary(head):

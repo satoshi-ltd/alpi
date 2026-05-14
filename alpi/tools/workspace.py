@@ -241,9 +241,9 @@ def _read_image(path: Path, ocr: bool = False) -> str:
         raise OcrRequired("image file — re-run index_workspace with ocr=true")
     from PIL import Image, ImageOps
 
-    img = Image.open(path)
-    img = ImageOps.exif_transpose(img)
-    return _ocr_pil(img)
+    with Image.open(path) as img:
+        oriented = ImageOps.exif_transpose(img)
+        return _ocr_pil(oriented)
 
 
 def _ocr_pil(pil_image) -> str:

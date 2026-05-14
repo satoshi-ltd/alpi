@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from alpi import config as config_mod
+from alpi._proc_io import drain_tail
 from alpi.gateway import delivery
 from alpi.gateway.base import IncomingMessage, OutgoingMessage, Platform
 from alpi.gateway.platforms.gmail import Gmail
@@ -156,34 +157,66 @@ async def _run_agent(msg: IncomingMessage, platform: Platform, home: Path,
         stderr=asyncio.subprocess.PIPE,
     )
     assert proc.stdout is not None
+    # Bounded drain — full pipe + memory cap.
+    stderr_task = asyncio.create_task(drain_tail(proc.stderr))
 
     reply = ""
-    while True:
-        line = await proc.stdout.readline()
-        if not line:
-            break
+    rc: int | None = None
+    try:
+        while True:
+            line = await proc.stdout.readline()
+            if not line:
+                break
+            try:
+                event = json.loads(line.decode().strip())
+            except json.JSONDecodeError:
+                continue
+            kind = event.get("kind")
+            if kind == "reply":
+                reply = event.get("text", "")
+            elif kind == "tool_start" and show_trace:
+                trace = _format_tool_trace(event)
+                await platform.send(OutgoingMessage(
+                    external_chat_id=msg.external_chat_id, text=trace,
+                ))
+            elif kind == "error" and show_trace:
+                await platform.send(OutgoingMessage(
+                    external_chat_id=msg.external_chat_id,
+                    text=f"⚠︎ {event.get('text', 'error')}",
+                ))
+    except asyncio.CancelledError:
+        # Cancellation doesn't kill the child — terminate, give it 3s, then kill.
         try:
-            event = json.loads(line.decode().strip())
-        except json.JSONDecodeError:
-            continue
-        kind = event.get("kind")
-        if kind == "reply":
-            reply = event.get("text", "")
-        elif kind == "tool_start" and show_trace:
-            trace = _format_tool_trace(event)
-            await platform.send(OutgoingMessage(
-                external_chat_id=msg.external_chat_id, text=trace,
-            ))
-        elif kind == "error" and show_trace:
-            await platform.send(OutgoingMessage(
-                external_chat_id=msg.external_chat_id,
-                text=f"⚠︎ {event.get('text', 'error')}",
-            ))
+            proc.terminate()
+        except ProcessLookupError:
+            pass
+        try:
+            rc = await asyncio.shield(asyncio.wait_for(proc.wait(), timeout=3))
+        except (asyncio.TimeoutError, asyncio.CancelledError):
+            try:
+                proc.kill()
+            except ProcessLookupError:
+                pass
+            try:
+                rc = await asyncio.shield(proc.wait())
+            except Exception:  # noqa: BLE001
+                rc = -9
+        raise
+    finally:
+        # Reap on every exit (clean EOF, send raising) so zombies don't accumulate.
+        if rc is None:
+            try:
+                rc = await asyncio.wait_for(proc.wait(), timeout=10)
+            except asyncio.TimeoutError:
+                proc.kill()
+                rc = await proc.wait()
+        try:
+            stderr_tail = await stderr_task
+        except Exception:  # noqa: BLE001
+            stderr_tail = ""
 
-    rc = await proc.wait()
     if rc != 0:
-        stderr = (await proc.stderr.read()).decode()[:500] if proc.stderr else ""
-        log.error("agent subprocess failed (rc=%s): %s", rc, stderr)
+        log.error("agent subprocess failed (rc=%s): %s", rc, stderr_tail[-500:])
         return reply or f"(agent error, rc={rc})"
     return reply
 

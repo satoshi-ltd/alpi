@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.4.43 — 2026-05-14 — resource-leak hygiene pass after the RAG bloat hunt
+
+Audit triggered by the v0.4.42 RAG freelist bug. Read-only sweep across SQLite handles, file opens, subprocess pipes, and the live daemon's FD table found a handful of small leaks and one latent deadlock — none catastrophic, but the same shape of slow accumulation that bit us on `rag/store.sqlite`. Fixed the actionable ones.
+
+- **Pipe-buffer deadlock latent in two daemon paths.** `alpi/gateway/run.py` and `alpi/service.py` both spawned `alpi chat --once` subprocesses with `stderr=PIPE` and only read stderr *after* the child exited — a chatty turn fills the ~64KB pipe buffer and the child blocks waiting for us to drain it while we block on `proc.wait()`. Both now drain stderr concurrently from spawn via a new `alpi/_proc_io.py::drain_tail()` helper that uses a `deque(maxlen=…)` so memory stays bounded regardless of output volume. `gateway/run.py` also wraps the stdout-event loop in `try/finally` with a bounded `proc.wait()` (kill on 10s timeout) so a `platform.send()` raising mid-loop can no longer leak zombies.
+- **File-handle leaks.** `alpi/tools/workspace.py::_read_image` opened PIL images without `with` (real leak in `index_workspace(ocr=true)` over many images); `alpi/tools/read_file.py` sniffed binaries via `p.open("rb").read(8192)` relying on refcount; `alpi/tools/terminal.py` background spawns passed `stdout=open(log.name, "ab")` inline — Popen dups the fd at spawn so wrapping in `with` is safe and closes the leak window if Popen ever raises. All three now use context managers.
+- **Dead state in `service.py`'s workgroup poller** — `cancelled` flag set but never read; removed.
+- 3 new tests cover `drain_tail` (truncation, no-deadlock with 256KB of output ≫ pipe buffer, None-stream). Full suite 1676 green.
+
+What's clean already (per the audit): `alpi/tools/db.py` uses `contextlib.closing` on every connection; `open_store()` callers in `workspace._index/_search` and `core.store.compact/reclaimable_bytes` all close in `finally`; gmail/httpx/Telegram and IMAP/SMTP all use context managers. RAG stores on disk are healthy after v0.4.42 (~23MB / ~2.6MB with negligible reclaimable). No more freelist surprises lurking.
+
 ## v0.4.42 — 2026-05-14 — whole-machine backup with pre-encrypt preview + RAG bloat fix
 
 Per-profile backup was the wrong primitive: a typical user runs 2–3 profiles and forgetting one defeats the point. `alpi backup` now archives the entire `~/.alpi/` tree in one shot, shows a per-profile + largest-files preview *before* prompting for the passphrase, and `--force` restore is a clean replace instead of an overlay. Surfacing the preview also caught a long-standing bug: a 1.6GB `rag/store.sqlite` made of 99.997% dead SQLite pages, a force-reindex leak that's now fixed at the source and exposed in setup → Cleanup as a one-click VACUUM.

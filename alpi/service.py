@@ -15,6 +15,8 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Any
 
+from alpi._proc_io import drain_tail
+
 
 log = logging.getLogger("alpi.service")
 
@@ -955,6 +957,8 @@ async def _dispatch_workgroup_turn(
             "reason": reason, "error": str(e),
         })
         return
+    # Bounded drain — full pipe + memory cap.
+    stderr_task = asyncio.create_task(drain_tail(proc.stderr))
 
     _append_turn_event(home, {
         "ts": _utcnow_iso(), "event": "start",
@@ -973,7 +977,6 @@ async def _dispatch_workgroup_turn(
     }
 
     timed_out = False
-    cancelled = False
     try:
         try:
             rc = await asyncio.wait_for(
@@ -1003,8 +1006,7 @@ async def _dispatch_workgroup_turn(
                 wg_id, _TURN_TIMEOUT_SECONDS,
             )
         except asyncio.CancelledError:
-            # Shut down the child explicitly; cancellation does not kill it.
-            cancelled = True
+            # Cancellation doesn't kill the child — terminate explicitly to avoid orphan.
             try:
                 proc.terminate()
             except ProcessLookupError:
@@ -1033,13 +1035,12 @@ async def _dispatch_workgroup_turn(
     posts_after = _post_count_for_role(home, wg_id)
     posts_added = max(0, posts_after - posts_before)
     err_preview = ""
-    if rc != 0 and proc.stderr is not None:
-        try:
-            err_preview = (await proc.stderr.read()).decode(
-                errors="replace",
-            )[:300]
-        except Exception:  # noqa: BLE001
-            err_preview = ""
+    try:
+        stderr_tail = await stderr_task
+    except Exception:  # noqa: BLE001
+        stderr_tail = ""
+    if rc != 0:
+        err_preview = stderr_tail[-300:]
         if not (timed_out or preempted):
             log.warning(
                 "wg poller: turn for %s exited rc=%s: %s",
@@ -1138,7 +1139,6 @@ async def _run_host(home: Path, profile: str) -> None:
         log.warning("host subsystem requested for %r — only default can host", profile)
         return
 
-    from alpi import config as cfg_mod
     from alpi.host import chat as host_chat
     from alpi.host import config as host_config
     from alpi.host import daemon as host_daemon
@@ -1151,9 +1151,8 @@ async def _run_host(home: Path, profile: str) -> None:
     from alpi.host import tools as host_tools
     from alpi.host import workgroup_admin as host_wg_admin
     from alpi.host.network import resolve_host_tcp_bind
-    from alpi.host.server import DEFAULT_TCP_PORT, Server as HostServer
+    from alpi.host.server import Server as HostServer
 
-    cfg = cfg_mod.load(home)
     tcp_bind = resolve_host_tcp_bind(home)
     if tcp_bind is None:
         log.info(

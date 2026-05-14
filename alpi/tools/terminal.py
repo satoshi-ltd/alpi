@@ -9,16 +9,16 @@ import tempfile
 import time
 from pathlib import Path
 
+from alpi.home import get_home
+from alpi.tools._approval import check as approval_check
+from alpi.tools._sandbox import SandboxUnavailable, wrap_command
+from alpi.tools.base import Tool, ToolResult
+
 _ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[a-zA-Z]|\x1b\][^\x07]*\x07|\x1b[@-_]")
 
 
 def _strip_ansi(s: str) -> str:
     return _ANSI_RE.sub("", s)
-
-from alpi.home import get_home
-from alpi.tools._approval import Severity, check as approval_check
-from alpi.tools._sandbox import SandboxUnavailable, wrap_command
-from alpi.tools.base import Tool, ToolResult
 
 _SAFE_ENV_KEYS = (
     "PATH", "HOME", "USER", "LOGNAME", "SHELL",
@@ -208,11 +208,13 @@ class Terminal(Tool):
             prefix="alpi-bg-", suffix=".log", dir=_bg_dir(), delete=False,
         )
         log.close()
-        proc = subprocess.Popen(
-            popen_args, shell=use_shell, cwd=cwd or _default_cwd(),
-            stdout=open(log.name, "ab"), stderr=subprocess.STDOUT,
-            start_new_session=True, env=_build_subprocess_env(),
-        )
+        # Popen dups the fd at spawn — closing our handle after is safe.
+        with open(log.name, "ab") as out_fh:
+            proc = subprocess.Popen(
+                popen_args, shell=use_shell, cwd=cwd or _default_cwd(),
+                stdout=out_fh, stderr=subprocess.STDOUT,
+                start_new_session=True, env=_build_subprocess_env(),
+            )
         registry = _bg_dir() / f"{proc.pid}.meta"
         registry.write_text(
             f"command={command}\nlog={log.name}\nstarted={int(time.time())}\n"
