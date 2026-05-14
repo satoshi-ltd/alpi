@@ -20,9 +20,8 @@ capability core.** Remote desktop, local recall over the workspace
 pass (skills eligibility, granular approval allowlist, memory
 promotion queue, compaction event log + regression guard) all
 shipped during the v0.4 line. What remains for v0.5 is the second
-real client surface — the mobile companion — and the second bundled
-skill, `@alpi/home`. v0.6 builds on that base with a self-improving
-skill library and capability maintenance.
+real client surface: the mobile companion. v0.6 builds on that base
+with a self-improving skill library and capability maintenance.
 
 This is the cycle where gateways stop being the main mobile story.
 Telegram, IMAP, Gmail, and Matrix stay useful, but the project should
@@ -34,12 +33,6 @@ personal agent.
 | ID | Item | Status |
 |---|---|---|
 | AX-mobile | Mobile companion (iOS / Android) — full chat, status, peers, and workgroups surface from the user's own profile. Daemon side shipped in v0.4.1 (host plane on WebSocket + per-device pairing tokens, see CHANGELOG). Mobile preview exists; desktop remains the reference surface. | 🟡 |
-
-### Skills + bundled
-
-| ID | Item | Status |
-|---|---|---|
-| `@alpi/home` | Second bundled skill (after `@alpi/knowledge` in v0.3). Full home orchestration behind a single voice/text interface: Home Assistant first, with optional Hue, Xiaomi, Alexa / Google Home integrations layered in. | 🔵 |
 
 ### AX-mobile. Mobile companion (iOS / Android)
 
@@ -89,36 +82,6 @@ background limitation that blocks one verb), never as the v0.5 target.
 - Distribution — TestFlight + Play Store internal track at
   first.
 
-### `@alpi/home`. Second bundled skill — full home orchestration
-
-After `@alpi/knowledge` (v0.3) validated the bundled-skills pattern,
-`@alpi/home` is the second one. One coherent voice/text interface to the
-user's home, regardless of which underlying ecosystem(s) they run. This is
-the full surface, not a thin slice.
-
-**Surface.** A skill that orchestrates one or more of:
-- **Home Assistant** (primary) — sensors, lights, scenes, occupancy, switches.
-- **Philips Hue** — directly via the Hue Bridge HTTP API.
-- **Xiaomi Mi Home** — via `python-miio`.
-- **Google Home / Alexa** — read-only "is anyone home" queries via their
-  official device APIs.
-
-The user enables only the integrations they have. Each is an optional
-`requires:` in the frontmatter; the skill degrades gracefully when an
-integration isn't configured.
-
-**Per-skill SQLite.** Caches device state + last-seen timestamps so the agent
-doesn't re-poll every turn ("is the kitchen light on?" answers from cache;
-"turn it on" pushes through).
-
-**Configuration.** Per-profile `.env` for tokens (`HA_URL`, `HA_TOKEN`,
-`HUE_BRIDGE_IP`, `XIAOMI_TOKEN`, …); allowlist of entity domains in
-`config.yaml` so the skill can only touch what the user explicitly opted in.
-
-LOC estimate: ~400 (HA covers ~250, Hue + Xiaomi ~50 each, Google/Alexa ~50 stub).
-
----
-
 ## v0.6 cycle (planned)
 
 **Theme: self-improving agent + capability maintenance.** With the
@@ -132,7 +95,7 @@ skill import without adopting a marketplace or plugin runtime.
 | ID | Item | Status |
 |---|---|---|
 | AC | Skill telemetry + curator — usage tracking per skill (`view_count`, `use_count`, `last_used`, `state: active/stale/archived`) and a periodic background consolidation pass that promotes narrow session-specific skills into broad class-level umbrellas. Builds on the v0.5 AT primitives (auto-archive + `pinned` flag); adds the curator-specific pieces: `absorbed_into:` metadata on consolidating deletes, memory `pinned` flag (memory entries are also reviewer-mutable in v0.6), and a `.bak` ring per skill if single-snapshot proves insufficient under aggressive curation. | 🔵 |
-| BD | Model-family conditional prompt guidance — the tool-use enforcement block + GPT/Gemini-specific operational guidance only injected for model families that need it (per `TOOL_USE_ENFORCEMENT_MODELS`). Claude / Opus / Sonnet / Qwen / MiMo run on the shorter prompt. Promoted from Future once v0.5 generates enough multi-model session evidence. | 🔵 |
+| BD | Model-family conditional prompt guidance — tool-use enforcement and family-specific operational-guidance blocks injected only for the model families that empirically need them; other families run on the shorter baseline prompt. Promoted from Future once v0.5 generates enough multi-model session evidence. | 🔵 |
 
 ### Capability maintenance
 
@@ -146,7 +109,7 @@ skill import without adopting a marketplace or plugin runtime.
 
 | ID | Item | Status |
 |---|---|---|
-| CL.1 | Prompt caching across providers — cached input is ~90% cheaper everywhere; this is the single highest-leverage cost optimization for tool-heavy turns. Provider matrix: **OpenAI** (gpt-4o+/gpt-5.x) caches automatically at ≥1024 tokens, no marker; optional `prompt_cache_key` improves shard hit rate. **Gemini 2.5+** caches implicitly by default. **Anthropic** (`anthropic/*` and `openrouter/anthropic/*`) requires explicit `cache_control: {"type": "ephemeral"}` markers on message content blocks. **OpenRouter** passes through to upstream; same code as the upstream provider. **Ollama / local**: N/A. Work breakdown: (1) cross-cutting — audit `Engine` + `engine._maybe_auto_compact` for any reordering or non-deterministic mutation of the early messages, since stable prefix is the precondition for ALL three caches. (2) Anthropic — add the marker on the system message (biggest win); optionally a second breakpoint on the last tool result. (3) OpenAI — add `prompt_cache_key` derived from `session.id` for better routing. (4) Gemini explicit cache — only if we ever hit a workload where the implicit cache miss rate is measurable; not worth the API complexity otherwise. Measured impact in one of the WHOOP-debug Sonnet turns: ~$0.40-0.50 of the $3.67 was the system prompt re-billed across 26 iterations. Bigger savings on longer / multi-turn sessions. | 🔵 |
+| CL.1 | Prompt caching across providers — cached input is ~90% cheaper everywhere; this is the single highest-leverage cost optimization for tool-heavy turns. Provider matrix: **Auto-caching providers** cache implicitly above a threshold with no marker; some accept an optional cache-key hint that improves shard hit rate. **Marker-required providers** need explicit `cache_control: {"type": "ephemeral"}` annotations on message content blocks. **Aggregator routing** passes through to whichever upstream the model resolves to — same code path as that upstream. **Local / Ollama**: N/A. Work breakdown: (1) cross-cutting — audit `Engine` + `engine._maybe_auto_compact` for any reordering or non-deterministic mutation of the early messages, since stable prefix is the precondition for every cache mode. (2) Marker-required path — add the marker on the system message (biggest win); optionally a second breakpoint on the last tool result. (3) Auto-cache path — add the cache-key hint derived from `session.id` for better routing. (4) Explicit cache APIs — only adopt where implicit-cache miss rate is measurable; not worth the API complexity otherwise. Measured impact in one of the WHOOP-debug turns: ~$0.40-0.50 of the $3.67 was the system prompt re-billed across 26 iterations. Bigger savings on longer / multi-turn sessions. | 🔵 |
 
 ### Memory quality (evidence-gated)
 
@@ -254,29 +217,26 @@ the agent writes them turn-by-turn without a global view. The curator adds
 that global view without requiring the agent to reason about the whole library
 on every turn.
 
-**Design constraint vs Hermes.** Hermes nudges the agent to create a skill
-after every 15 tool calls — deliberately aggressive. alpi's curator is
-post-hoc and read-only during the session: it never creates skills, only
-consolidates what already exists. Skill creation remains agent-driven,
-guided by the AS system-prompt rules that ship in v0.5.
+**Design constraint.** The curator is post-hoc and read-only during the
+session: it never creates skills, only consolidates what already exists.
+Skill creation remains agent-driven mid-session, guided by the AS
+system-prompt rules that ship in v0.5. Keeping creation and curation on
+separate clocks avoids the failure mode where an aggressive in-loop creator
+fragments the library faster than any review pass can consolidate it.
 
 ### BD. Model-family conditional prompt guidance
 
-Hermes routes parts of the system prompt through a `TOOL_USE_ENFORCEMENT_MODELS`
-table: the long "Actually CALL the tool…" enforcement block is injected only
-for Gemini, GPT, Codex, Grok, Gemma — model families that empirically need it.
-Claude / Sonnet / Opus / MiMo / Qwen run on the shorter prompt with no
-regression on tool-call rate.
+Different model families empirically need different amounts of tool-use
+enforcement in the system prompt. Today alpi ships a single prompt tuned for
+one family; other families occasionally under-call tools or skip verification
+steps that the prompt assumes will happen by default. BD introduces a small
+per-family routing table so the heavy enforcement blocks (mandatory tool use,
+persistence, verification, missing-context handling) only ship to the families
+that need them, and the rest run on the shorter baseline prompt.
 
-Hermes additionally ships `OPENAI_MODEL_EXECUTION_GUIDANCE` (tagged blocks for
-`<tool_persistence>`, `<mandatory_tool_use>`, `<act_dont_ask>`,
-`<verification>`, `<missing_context>`) and `GOOGLE_MODEL_OPERATIONAL_GUIDANCE`
-targeting known failure modes of those families.
-
-**Why v0.6 not v0.5.** This was already in alpi's Future versions table as BD,
-gated on session evidence. v0.5's mobile work + post-turn reviewer should
-generate enough cross-model session data to calibrate the routing decisions.
-Promote to v0.6 once `agent.log` has a clear signal.
+**Why v0.6 not v0.5.** v0.5's mobile work + post-turn reviewer generate the
+cross-model session data needed to calibrate which blocks each family actually
+needs. Promote to v0.6 once `agent.log` has a clear signal.
 
 ### CM.1. Memory audit CLI
 
@@ -303,8 +263,8 @@ to make audit output meaningful.
 
 ### CM.2. Safe skill import
 
-alpi should be able to reuse local skill material from Hermes, OpenClaw, Codex,
-or a checked-out Git repository without adopting a marketplace. `alpi skill
+alpi should be able to reuse local skill material from other agent stacks or
+a checked-out Git repository without adopting a marketplace. `alpi skill
 import <dir|zip>` is a local, explicit import path:
 
 1. inspect the source and show a preview;
@@ -328,8 +288,8 @@ stack, TTS may need audio/conversion helpers, and MCP tools depend on
 configured servers. v0.6 adds an optional per-tool availability probe once
 broken visible tools show up in real use.
 
-The design is deliberately narrower than Hermes/OpenClaw's toolset policy
-machinery:
+The design is deliberately narrow — a runtime probe layer, not a policy
+engine:
 
 - probes are fast and cached briefly;
 - unavailable tools are either hidden from the model or shown in diagnostics
@@ -393,8 +353,8 @@ creator happens to notice it.
   for further `tools.terminal.approval.allowlist` glob entries);
 - auto-compact rate, mean before/after ratio per model (read from
   `logs/compaction.jsonl`);
-- inactive skills count and reasons (input for `@alpi/home`-style bundling
-  and tuning the four eligibility fields);
+- inactive skills count and reasons (input for any future bundled-skill
+  decision and tuning the four eligibility fields);
 - tools that failed before doing useful work (the gate condition for CM.3);
 - memory promotion-queue backlog and CM.1 audit highlights;
 - session-search misses or unanswered "when did we discuss X" queries (the
@@ -530,8 +490,13 @@ discovery service).
 
 **Why it waits.** Presupposes an active author community + a
 catalog big enough that discovery matters. Bundled skills ship
-under `@alpi/*` (`@alpi/knowledge` in v0.3, `@alpi/home` in v0.5)
-and BF skills v2 primitives make third-party skills shippable.
+under `@alpi/*` only when they reinforce the core workflow —
+memory, peer graph, host-plane, or operator tooling — rather
+than wrap a third-party domain. `@alpi/knowledge` in v0.3 is the
+reference example. BF skills v2 primitives make third-party
+skills shippable through user-controlled imports
+(see CM.2 above), so domain-specific work belongs in
+user-published skills, not in `@alpi/*`.
 Marketplace promotes only when there's evidence that real authors
 want to publish for real users.
 
@@ -611,11 +576,10 @@ emerges by v0.6.
 ## Principles
 
 alpi **respects the ToS of every provider it integrates with**. When
-an LLM vendor (OpenAI, Anthropic, …) offers a paid subscription for a
-first-party client (ChatGPT Plus/Pro, Claude Pro/Max, Claude Code),
-that subscription is for THAT client. Reverse-engineering the private
-OAuth flow of the official CLI to route a third-party agent against
-the same quota is:
+an LLM vendor offers a paid subscription tied to a specific first-party
+client (the vendor's own chat app, IDE, or CLI), that subscription is
+for THAT client. Reverse-engineering the private OAuth flow of the
+official CLI to route a third-party agent against the same quota is:
 
 - A clear ToS violation.
 - Disrespectful to the vendor's product boundaries.
@@ -670,10 +634,9 @@ Not planned. Research-grade, irrelevant for everyday personal use.
 
 **Rejected integrations / providers:**
 
-- **C. OpenAI Codex OAuth** (ChatGPT subscription auth). ToS
-  violation, see "Principles".
-- **V. Anthropic subscription OAuth** (Claude Pro/Code auth). ToS
-  violation, see "Principles".
+- **Vendor subscription OAuth** (reverse-engineering an official
+  first-party CLI's auth flow to bind a paid subscription to alpi).
+  ToS violation, see "Principles".
 - **J. camoufox** (+230 MB Firefox) for anti-bot. Humanised
   Playwright covers the real detection surface without the weight.
 - **WhatsApp gateway.** Meta Business API requires company
@@ -681,6 +644,15 @@ Not planned. Research-grade, irrelevant for everyday personal use.
   reverse-engineered with frequent bans, and the attack surface
   is catastrophic (a compromised bot leaks every chat). Not worth
   shipping for a personal agent.
+- **Smart-home / `@alpi/home`.** Home orchestration is out of
+  core scope. Owning device protocols (Hue, Xiaomi, Zigbee, Matter,
+  vendor APIs) would pull Alpi into hardware-specific maintenance
+  and physical-world safety policy, and the surface depends almost
+  entirely on which hardware each user happens to own. Users who
+  need it can expose Home Assistant through an MCP server or a
+  local profile skill — Alpi consumes that without owning a single
+  device protocol. Core Alpi stays focused on profiles, workgroups,
+  host-plane clients, memory, and operator tooling.
 - **Discord gateway.** Bot tokens grant full server access — same
   blast-radius profile as Telegram with no added value, since
   Telegram covers the "messaging gateway" role already.
@@ -734,8 +706,8 @@ Not planned. Research-grade, irrelevant for everyday personal use.
   form can't.
 - **Default skills bundle (AO, v0.3).** Resolved as "ship nothing
   by default". Curated bundled skills under the reserved
-  `@alpi/*` namespace (knowledge in v0.3, home in v0.5) are the
-  path; community marketplace ideas live in Future versions.
+  `@alpi/*` namespace remain possible only when they reinforce the
+  core workflow; community marketplace ideas live in Future versions.
 - **`alpi run "<prompt>"` as a separate command.** Already
   covered by `alpi chat --once "<prompt>"`. Adding a second
   alias is bloat without value.
