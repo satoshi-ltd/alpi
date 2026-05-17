@@ -61,10 +61,7 @@ def _run_chat(h: Path, continue_last: bool = False) -> None:
         AlpiApp(home_dir=h, continue_last=continue_last).run()
     finally:
         _restore_terminal()
-        # Force-exit: a worker thread may still be blocked on an LLM HTTP
-        # call. Python's atexit would try to .join() it and hang, forcing
-        # the user to Ctrl+C a second time. Session save already happened
-        # inside action_quit (and after every turn), so nothing is lost.
+        # os._exit, not return: atexit would .join() a worker still blocked on the LLM HTTP call.
         import os
 
         os._exit(0)
@@ -116,14 +113,7 @@ def _is_local_chat_session_path(path: Path) -> bool:
 def _continue_specific_session(
     engine: Engine, h: Path, session_id: str, subdir: str = "sessions",
 ) -> bool:
-    """Resume a session by its exact id. Used by gateway per-chat threading.
-
-    ``subdir`` selects ``sessions/`` (default, for desktop replays) or
-    ``gateway/sessions/`` (gateway inbound). The two live in separate
-    dirs so gateway traffic doesn't show up in the TUI/desktop session
-    list, and so the cleanup category for gateway sessions never
-    collides with transport state files in ``gateway/`` itself.
-    """
+    """Resume a session by id; subdir splits desktop ('sessions/') from gateway ('gateway/sessions/')."""
     path = h / subdir / f"{session_id}.json"
     if not path.exists():
         return False
@@ -279,7 +269,6 @@ def _run_once(
         elif ev.kind == "error" and not emit_events:
             parts.append(f"[error] {ev.text}")
 
-    # Cooperative SIGINT lets the engine save interrupted turns.
     import signal as _signal
 
     def _on_sigint(_signum, _frame):
@@ -296,8 +285,6 @@ def _run_once(
         except Exception:  # noqa: BLE001
             pass
 
-    # Bind (or refresh) the chat-id → session-id pointer after save, so a
-    # follow-up inbound from the same chat picks up the same session.
     if persist and resume_chat_id:
         try:
             session_map.set(h, resume_chat_id, engine.session.id)
@@ -314,17 +301,8 @@ def _run_once(
     sys.stdout.flush()
 
 
-# Click subcommands
-
-
 class _OrderedGroup(click.Group):
-    """Display subcommands by user-frequency, not alphabetically.
-
-    Click's default listing is alphabetical, which buries `setup` under
-    `gateway` / `schedule` even though the daemon groups are for rare
-    manual control. This keeps the first line of ``alpi --help`` the one
-    a new user actually wants.
-    """
+    """List subcommands in _ORDER (user-frequency) instead of Click's default alphabetical."""
 
     _ORDER = [
         "chat",
@@ -365,25 +343,14 @@ def main(ctx: click.Context, profile: str | None, continue_last: bool) -> None:
     ctx.obj["home"] = h
     ctx.obj["profile"] = profile or "default"
     ctx.obj["continue_last"] = continue_last
-    # Propagate the active profile to the environment so every downstream
-    # ``get_home()`` call (tools, providers, UI helpers) resolves to the
-    # SAME home as this CLI invocation. Without this, the tools bypass
-    # ``-p`` entirely and silently write to the default profile — e.g.
-    # the ``memory`` tool was editing ``~/.alpi/AGENT.md`` when the
-    # user had launched ``alpi -p personal``.
+    # ALPI_PROFILE env var is the source of truth for downstream get_home() calls; without it tools silently write to the default profile.
     if profile:
         os.environ["ALPI_PROFILE"] = profile
-    # ``alpi update`` does its own fresh fetch — skip the daemon there.
     if ctx.invoked_subcommand != "update":
         from alpi import updater
         updater.trigger_background_check_if_enabled()
     _bootstrap(h)
     if ctx.invoked_subcommand is None:
-        # Honour ``tui.auto_resume`` for bare ``alpi`` — if the user opted
-        # in via config, resume even without ``-c``. Explicit ``-c`` stays
-        # as a manual override. The chat subcommand does NOT auto-resume;
-        # it's used by the gateway and by anyone who wants explicit
-        # control, so the flag has to stay opt-in there.
         resume = continue_last
         if not resume:
             try:
@@ -398,9 +365,7 @@ def main(ctx: click.Context, profile: str | None, continue_last: bool) -> None:
 @click.argument("model")
 @click.pass_context
 def cmd_ctx(ctx: click.Context, model: str) -> None:
-    """Print the context window (tokens) for ``model`` under this
-    profile. Mirrors what the TUI status bar and desktop header
-    display."""
+    """Print the context window (tokens) for model under this profile."""
     from alpi import ctx_window
 
     h: Path = ctx.obj["home"]
@@ -412,7 +377,6 @@ def cmd_ctx(ctx: click.Context, model: str) -> None:
 @click.option(
     "--once", "input_text", default=None, help="Run one turn and print the reply to stdout."
 )
-# Hidden gateway contract for stdout event streaming.
 @click.option("--emit-events", is_flag=True, default=False, hidden=True)
 @click.option("--no-save", is_flag=True, default=False, hidden=True)
 @click.option(
@@ -458,11 +422,7 @@ def chat(
 @click.option("--json", "as_json", is_flag=True, help="Emit the raw report dict as JSON.")
 @click.pass_context
 def cmd_diff(ctx: click.Context, since: str, as_json: bool) -> None:
-    """List what changed in this profile since the cutoff.
-
-    Memory edits, sessions, mentions, skills, peer-list mutations,
-    fired schedules and today's budget. mtime-driven, side-effect
-    free."""
+    """List what changed in this profile since the cutoff (mtime-driven, side-effect free)."""
     from alpi import diff as diff_mod
 
     h: Path = ctx.obj["home"]
@@ -496,14 +456,7 @@ def cmd_diff(ctx: click.Context, since: str, as_json: bool) -> None:
 def cmd_backup(
     ctx: click.Context, out_path: Path | None, passphrase_stdin: bool, force: bool,
 ) -> None:
-    """Encrypt the whole alpi home into a single passphrase-protected file.
-
-    Zero-knowledge: the passphrase derives the key (Scrypt) and never
-    leaves the local machine. Lose it and the archive is unrecoverable.
-    Walks every profile + global config (``.env``, ``config.yaml``,
-    ``alp/``, ``host/``, ``sessions/``…). Caches, logs, sockets and PIDs
-    are excluded at every depth. The ``-p`` flag is ignored — the
-    archive is always whole-home."""
+    """Encrypt the whole alpi home into a single passphrase-protected file (Scrypt-derived key, whole-home)."""
     from alpi import backup as backup_mod
 
     root: Path = home.alpi_root()
@@ -516,8 +469,6 @@ def cmd_backup(
             )
         out_path.unlink()
 
-    # Preview before the passphrase prompt so the user sees what will be
-    # archived (and how large) — Ctrl-C aborts before any KDF work.
     try:
         pv = backup_mod.preview(root)
     except backup_mod.BackupError as e:
@@ -587,10 +538,7 @@ def cmd_backup(
 def cmd_restore(
     ctx: click.Context, archive: Path, passphrase_stdin: bool, force: bool,
 ) -> None:
-    """Decrypt an alpi backup into ``~/.alpi/``.
-
-    Restores every profile + global config from the archive. Refuses to
-    overwrite an existing non-empty home unless ``--force`` is passed."""
+    """Decrypt an alpi backup into ``~/.alpi/``; refuses to overwrite a non-empty home without --force."""
     from alpi import backup as backup_mod
 
     root: Path = home.alpi_root()
@@ -640,9 +588,6 @@ def _require_workspace(h: Path) -> None:
             "Create the directory or edit `workspace:` in "
             f"{cfg.config_path}."
         )
-
-
-# Daemon: single machine-wide supervisor; per-profile toggles live in config.
 
 
 @main.group()
@@ -750,9 +695,6 @@ def daemon_uninstall() -> None:
     click.echo(f"daemon uninstalled ({kind})")
 
 
-# Schedule keeps only run-once/fire.
-
-
 @main.group()
 def schedule() -> None:
     """Schedule operations."""
@@ -778,12 +720,7 @@ def schedule_run_once(ctx: click.Context) -> None:
 @click.argument("job_id")
 @click.pass_context
 def schedule_fire(ctx: click.Context, job_id: str) -> None:
-    """Fire one specific job ad-hoc — same path as the daemon tick.
-
-    Bypasses the schedule check (time / inactivity / once). Useful to
-    test a newly-added cron without waiting for its window to hit.
-    Does not delete ``once`` jobs — testing doesn't consume them.
-    """
+    """Fire one specific job ad-hoc; bypasses schedule checks but does not delete ``once`` jobs."""
     from alpi.scheduler.run import fire_by_id
 
     h: Path = ctx.obj["home"]
@@ -918,9 +855,6 @@ def gateway_remove(ctx: click.Context, name: str, yes: bool) -> None:
     click.echo(f"removed {name} gateway · restart daemon to apply")
 
 
-# Release — auto-generate CHANGELOG sections from git history
-
-
 @main.group()
 def mcp() -> None:
     """Manage MCP (Model Context Protocol) servers for this profile."""
@@ -1027,8 +961,7 @@ _VOICE_TEST_PHRASES = {
               help="Override the configured voice id for this preview.")
 @click.pass_context
 def voice_test(ctx: click.Context, voice_override: str | None) -> None:
-    """Synthesize a short greeting in the voice's locale and play it.
-    Uses the configured voice unless ``--voice`` is passed."""
+    """Synthesize a short greeting in the voice's locale and play it."""
     import asyncio
     import tempfile
     from alpi.tools.tts import _player_cmd, _synthesize
@@ -1170,8 +1103,7 @@ def providers_remove_ollama(ctx: click.Context, name: str) -> None:
 @click.argument("model")
 @click.pass_context
 def providers_add_openrouter_model(ctx: click.Context, model: str) -> None:
-    """Remember ``MODEL`` (suffix only, no ``openrouter/`` prefix) under
-    ``providers.openrouter.models``. Most-recent-first."""
+    """Add MODEL (suffix only) to providers.openrouter.models, most-recent-first."""
     h: Path = ctx.obj["home"]
     cfg = config.load(h)
     suffix = model.strip()
@@ -1237,9 +1169,6 @@ def release_notes(since: str | None, output: str | None) -> None:
         click.echo(rendered, nl=False)
 
 
-# Doctor — health check across model, workspace, gateways, services, MCPs, security
-
-
 @main.command("doctor")
 @click.pass_context
 def doctor_cmd(ctx: click.Context) -> None:
@@ -1250,9 +1179,6 @@ def doctor_cmd(ctx: click.Context) -> None:
     profile: str = ctx.obj.get("profile") or "default"
     checks = doctor.run_and_render(ui._console, h, profile, __version__)
     ctx.exit(doctor.exit_code(checks))
-
-
-# Logs — unified tail across every subsystem under ``{home}/*/logs/``
 
 
 @main.command("logs")
@@ -1287,9 +1213,6 @@ def logs_cmd(ctx: click.Context, source: str | None, tail_n: int, follow: bool) 
         logs_mod.follow(h, source, ui._console)
 
 
-# update
-
-
 @main.command("update")
 @click.option(
     "--check", "check_only", is_flag=True,
@@ -1307,7 +1230,6 @@ def update_cmd(ctx: click.Context, check_only: bool, assume_yes: bool) -> None:
     ctx.exit(rc)
 
 
-# setup / profile
 
 
 @main.command("setup")
@@ -1341,8 +1263,6 @@ def setup_cmd(ctx: click.Context) -> None:
 
             ui.Heading("Services"),
         ]
-        # Only default exposes the daemon row. Umbrel manages daemon
-        # lifecycle through the container, not setup.
         if profile_name == "default" and not _is_umbrel():
             items.append(("Daemon", "daemon", _daemon_lifecycle_status()))
         items += [
@@ -1360,7 +1280,6 @@ def setup_cmd(ctx: click.Context) -> None:
             items.append(
                 ("Delete profile", "delete-profile", _delete_profile_status(h, profile_name))
             )
-        # Keep the section label short; the profile stays in the subtitle.
         choice = ui.menu(
             ui.crumb("setup"),
             items,
@@ -1503,9 +1422,7 @@ def _configured_gateways(h: Path) -> list[str]:
 
 
 def _remove_gateway_flow(h: Path, configured: list[str]) -> None:
-    """Drop env vars (and the Gmail token file) for one configured
-    gateway. Confirmation gated; restart of the service is up to the
-    user since polling loops only stop reading on next start."""
+    """Drop env vars (and Gmail token) for one configured gateway."""
     from alpi import ui
     from alpi.model_selector import _remove_env_key
 
@@ -1660,7 +1577,6 @@ def _daemon_lifecycle_wizard(h: Path) -> None:
                     )
             elif choice == "stop":
                 svc.stop_daemon(root)
-                # KeepAlive may respawn it immediately.
                 if svc.daemon_running_pid(root) is None:
                     ui.ok_and_wait("stopped")
                 else:
@@ -1703,9 +1619,7 @@ def _kickstart_daemon() -> None:
 
 
 def _restart_daemon_for_apply(root: Path) -> str:
-    """SIGTERM the running daemon so the supervisor respawns it with
-    the freshly-saved config. Best-effort, returns the suffix to
-    append to the wizard's success line."""
+    """SIGTERM the running daemon so supervisor respawns it with fresh config; returns suffix for the success line."""
     from alpi import service as svc
 
     if svc.daemon_running_pid(root) is None:
@@ -1829,7 +1743,6 @@ def _subsystems_wizard(h: Path, profile: str) -> None:
             ui.fail_and_wait(str(e))
 
 
-# Back-compat alias for callers still using ``_service_wizard``.
 _service_wizard = _subsystems_wizard
 
 
@@ -2047,8 +1960,6 @@ def _device_add(h: Path, endpoint) -> None:
     host, scope = endpoint
     port = resolve_host_tcp_port(h)
 
-    # Banner before the prompt so the input doesn't look glued to the
-    # previous menu — visual reset of the screen.
     ui.banner(
         ui.crumb("setup", "devices", "add"),
         subtitle=f"pair a new client · {scope} · {host}:{port}",
@@ -2061,9 +1972,6 @@ def _device_add(h: Path, endpoint) -> None:
 
     row = devices_mod.add(label=label or "device")
 
-    # Heavy imports deferred until after the label prompt so the
-    # "next screen" appears instantly. The QR step shows a spinner so
-    # the import + render cost is hidden.
     import io
     import json
     from urllib.parse import urlencode
@@ -2270,10 +2178,6 @@ def _peers_status(h: Path) -> str:
 
 
 def _doctor_status(h: Path, profile: str) -> str:
-    """Menu row hint. The real checks are live network probes (Telegram /
-    IMAP / Gmail / MCPs) that take 5–10s — running them on every menu
-    render made the wizard feel slow. Run on-demand when the user opens
-    the page instead; the health-check screen already has spinners."""
     return "open to run checks"
 
 
@@ -2461,7 +2365,6 @@ def _budget_setup(h: Path) -> None:
         ui.ok_and_wait(f"cap: ${v:.2f}/day")
         return
 
-    # kind == "tokens"
     default_s = str(current_tokens) if current_tokens is not None else ""
     raw = ui.text(
         "Daily token cap (must be > 0):",
@@ -2487,8 +2390,6 @@ def _budget_setup(h: Path) -> None:
 
 
 def _identity_status(cfg: config.Config) -> str:
-    """Status string for the public-bio menu entry. Truncated preview
-    of the bio, or a hint when unset."""
     bio = (cfg.public_bio or "").strip()
     if not bio:
         return "not set · peers see handle only"
@@ -2498,13 +2399,7 @@ def _identity_status(cfg: config.Config) -> str:
 
 
 def _identity_setup(h: Path) -> None:
-    """Edit the profile's public bio — the one-line tag-line propagated
-    to every workgroup this profile joins. Source of truth for the
-    ``Member.bio`` shown in other peers' system-prompt rosters.
-
-    Sends nothing automatically; the next ``workgroup.join`` carries
-    the value (re-joining a workgroup refreshes the bio there too).
-    """
+    """Edit the public_bio; next workgroup.join carries the new value."""
     from alpi import ui
 
     cfg = config.load(h)
@@ -2543,8 +2438,7 @@ def _identity_setup(h: Path) -> None:
     if raw.lower() == "draft":
         drafted = _draft_bio_from_agent(h, cfg)
         if drafted is None:
-            return  # ui already showed the failure / cancel
-        # Round-trip the draft so the user can edit before saving.
+            return
         edited = ui.text("Edit the draft (Enter to accept):", default=drafted)
         if edited is None:
             return ui.cancelled()
@@ -2585,13 +2479,7 @@ def _workspace_status(cfg: config.Config) -> str:
 
 
 def _workspace_setup(h: Path) -> None:
-    """Pick the workspace directory for the current profile.
-
-    The workspace is the default root for relative paths in file tools
-    and the shell sandbox. Not a wall — absolute paths still reach
-    outside, with the sensitive-path denylist as the only hard stop.
-    Stored as ``workspace:`` in the profile's ``config.yaml``.
-    """
+    """Pick the workspace directory; default root for relative paths in file tools and the shell sandbox."""
     from alpi import ui
 
     cfg = config.load(h)
@@ -2714,11 +2602,16 @@ def _sandbox_setup(h: Path) -> None:
 _VOICE_SHORTLIST: list[tuple[str, str, str]] = [
     ("en-US-AriaNeural", "Aria", "English (US) · female"),
     ("en-US-GuyNeural", "Guy", "English (US) · male"),
+    ("en-US-JennyNeural", "Jenny", "English (US) · female"),
     ("en-GB-SoniaNeural", "Sonia", "English (UK) · female"),
-    ("es-ES-AlvaroNeural", "Alvaro", "Spanish (Spain) · male"),
+    ("en-GB-RyanNeural", "Ryan", "English (UK) · male"),
+    ("en-AU-NatashaNeural", "Natasha", "English (AU) · female"),
+    ("en-AU-WilliamNeural", "William", "English (AU) · male"),
     ("es-ES-ElviraNeural", "Elvira", "Spanish (Spain) · female"),
+    ("es-ES-AlvaroNeural", "Alvaro", "Spanish (Spain) · male"),
     ("es-MX-DaliaNeural", "Dalia", "Spanish (Mexico) · female"),
     ("fr-FR-DeniseNeural", "Denise", "French (France) · female"),
+    ("fr-FR-HenriNeural", "Henri", "French (France) · male"),
     ("de-DE-KatjaNeural", "Katja", "German · female"),
     ("it-IT-ElsaNeural", "Elsa", "Italian · female"),
     ("pt-BR-FranciscaNeural", "Francisca", "Portuguese (Brazil) · female"),
@@ -3052,8 +2945,6 @@ def profile_list(ctx: click.Context) -> None:
     ui.columns(rows)
 
     if not named:
-        # Fresh install: nudge the user toward creating one if they want
-        # to. Profiles are opt-in — most people never need more than one.
         click.echo("")
         click.echo("Only the default profile exists. Profiles are optional —")
         click.echo("useful if you want separate memories, bots, or schedules")
@@ -3129,7 +3020,6 @@ def profile_remove(name: str, yes: bool, force: bool) -> None:
         )
 
     if not yes:
-        # Summary — user wants to see what they're losing before saying yes.
         summary = _profile_summary(h)
         ui.banner(f"Remove profile · {name}", subtitle=str(h))
         for line in summary:
@@ -3141,11 +3031,7 @@ def profile_remove(name: str, yes: bool, force: bool) -> None:
             ui.cancelled()
             return
 
-    # The daemon picks up the change on its next restart — there's no
-    # per-profile service to uninstall, so deletion is just an archive.
-    _ = force  # legacy flag, kept for CLI surface stability.
-
-    # Archive — recoverable with ``mv`` until cleanup sweeps it.
+    _ = force
     import time as _time
     trash_root = home._ROOT / ".trash"
     trash_root.mkdir(parents=True, exist_ok=True)
@@ -3184,8 +3070,7 @@ def _delete_profile_status(h: Path, profile_name: str) -> str:
 
 
 def _delete_profile_wizard(h: Path, profile_name: str) -> bool:
-    """Return True if the profile was deleted — the caller must exit the
-    setup loop because there is nothing left to edit."""
+    """Return True if deleted; caller must exit the setup loop."""
     import shutil
     from alpi import ui
 
@@ -3231,8 +3116,7 @@ def peers() -> None:
 @peers.command("key")
 @click.pass_context
 def peers_key(ctx: click.Context) -> None:
-    """Print this profile's ALP public key. Paste the line into the
-    other peer's ``peers add`` to pin it."""
+    """Print this profile's ALP public key."""
     from alpi.alp.keys import load_or_generate
 
     h: Path = ctx.obj["home"]
@@ -3324,9 +3208,7 @@ def peers_add(
 @click.argument("peer_id")
 @click.pass_context
 def peers_remove(ctx: click.Context, peer_id: str) -> None:
-    """Remove a peer. Does not touch the pinned pubkey file on the
-    other side — the remote profile still has you in its list until
-    they drop you too."""
+    """Remove a peer; one-sided — the remote profile retains its pin until they drop you too."""
     from alpi.alp import peers as peers_mod
 
     h: Path = ctx.obj["home"]
@@ -3410,23 +3292,9 @@ def peers_ping(ctx: click.Context, peer_id: str) -> None:
     )
 
 
-# `alpi alp` lifecycle moved to `alpi daemon`.
-# All ALP listener bootstrap (Unix socket + optional TCP, link.* + workgroup
-# handler registration) lives in ``alpi.service._run_alp``.
-
-
-# Workgroups (ALP.3)
-
-
 @main.group()
 def workgroup() -> None:
-    """Manage ALP workgroups (multi-party shared transcripts).
-
-    Verbs split by role: as a hub you `create` / `kick` / inspect
-    locally-hosted workgroups; as a member you `join` / `post` /
-    `pull` / `pause` / `resume` / `leave` ones a peer is hosting.
-    Both flows share `list` and `show`.
-    """
+    """Manage ALP workgroups; hub verbs (create/kick) vs member verbs (join/post/pull/pause/resume/leave)."""
 
 
 @workgroup.command("list")
@@ -3474,7 +3342,6 @@ def workgroup_show(ctx: click.Context, wg_id: str) -> None:
         click.echo(f"  key v    {wg.meta.current_key_version}")
         if wg.meta.budget:
             click.echo(f"  budget   {wg.meta.budget}")
-        # Decrypt with hub's own key
         member = wg.member(kp.pubkey_b64())
         if member is None:
             return
@@ -3537,8 +3404,7 @@ def workgroup_create(
     members: tuple[str, ...], budget_usd: float | None,
     budget_tokens: int | None, briefing: str,
 ) -> None:
-    """Create a workgroup; you become the hub. Members are pubkeys or
-    pinned peer ids (the latter resolve via this profile's peers.yaml)."""
+    """Create a workgroup as hub; members are pubkeys or pinned peer ids."""
     from alpi.alp import peers as peers_mod
     from alpi.alp import workgroup as wg_mod
     from alpi.alp.keys import load_or_generate
@@ -3560,13 +3426,15 @@ def workgroup_create(
     if budget_tokens is not None:
         budget["max_tokens"] = budget_tokens
 
-    hub_bio = (config.load(h).public_bio or "").strip()
+    hub_cfg = config.load(h)
+    hub_bio = (hub_cfg.public_bio or "").strip()
+    hub_voice = (hub_cfg.tools.tts.voice or "").strip()
     try:
         wg = wg_mod.create(
             h, name=name, hub_kp=load_or_generate(h),
             member_pubkeys=pubkeys, budget=budget,
             briefing=(briefing or "").strip(),
-            hub_bio=hub_bio,
+            hub_bio=hub_bio, hub_voice=hub_voice,
         )
     except ValueError as e:
         raise click.ClickException(str(e))
@@ -3578,8 +3446,7 @@ def workgroup_create(
 @click.argument("wg_id")
 @click.pass_context
 def workgroup_join(ctx: click.Context, hub_peer_id: str, wg_id: str) -> None:
-    """Subscribe to a remote workgroup. ``hub_peer_id`` must be a
-    pinned peer in this profile's peers.yaml."""
+    """Subscribe to a remote workgroup; hub_peer_id must be a pinned peer."""
     from alpi.alp import workgroup_client as wc
 
     h: Path = ctx.obj["home"]
@@ -3654,8 +3521,7 @@ def workgroup_resume(ctx: click.Context, wg_id: str) -> None:
 @click.argument("wg_id")
 @click.pass_context
 def workgroup_leave(ctx: click.Context, wg_id: str) -> None:
-    """Leave a workgroup. The hub rotates the group key on remaining
-    members; we drop our subscription locally."""
+    """Leave a workgroup; hub rotates the group key on remaining members."""
     _wg_simple(ctx, wg_id, "leave", "left")
 
 
@@ -3683,7 +3549,6 @@ def workgroup_kick(ctx: click.Context, wg_id: str, member_pubkey: str) -> None:
     from alpi.alp import workgroup as wg_mod
 
     h: Path = ctx.obj["home"]
-    # Allow kicking by peer id too
     peer = peers_mod.get_by_id(h, member_pubkey)
     target = peer.pubkey if peer else member_pubkey
     try:
@@ -3699,10 +3564,7 @@ def workgroup_kick(ctx: click.Context, wg_id: str, member_pubkey: str) -> None:
 @click.argument("member")
 @click.pass_context
 def workgroup_add_member(ctx: click.Context, wg_id: str, member: str) -> None:
-    """Hub-side: invite a new member and rotate the group key. ``member``
-    can be a pubkey or a pinned peer id. The peer must already be
-    pinned in this profile's peers.yaml; workgroup verbs are granted
-    automatically."""
+    """Hub-side: invite a new member (pubkey or pinned peer id) and rotate the group key."""
     from alpi.alp import peers as peers_mod
     from alpi.alp import workgroup as wg_mod
     from alpi.alp import workgroup_setup as wg_setup
@@ -3725,8 +3587,7 @@ def workgroup_add_member(ctx: click.Context, wg_id: str, member: str) -> None:
               help="Skip the confirmation prompt.")
 @click.pass_context
 def workgroup_remove(ctx: click.Context, wg_id: str, yes: bool) -> None:
-    """Hub-only: delete a workgroup permanently (transcript + members
-    + any local-machine subscriptions to it)."""
+    """Hub-only: delete a workgroup permanently and purge local subscriptions."""
     import shutil
     from alpi.alp import subscription as sub_mod
     from alpi.alp import workgroup as wg_mod
@@ -3748,15 +3609,7 @@ def workgroup_remove(ctx: click.Context, wg_id: str, yes: bool) -> None:
         raise click.ClickException("aborted")
     shutil.rmtree(h / "alp" / "workgroups" / wg_id, ignore_errors=True)
 
-    # Cascading purge — any other profile on this same machine that
-    # has a subscription to this wg_id is now an orphan (the hub is
-    # gone, their `workgroup leave` would have nothing to talk to).
-    # Walk the profiles tree and drop matching subscriptions so the
-    # workgroup disappears uniformly across the operator's whole
-    # local install. Cross-machine peers (a member on a different
-    # box) we cannot reach from here — they keep the orphan until
-    # they `leave` themselves; the SDK's leave is best-effort and
-    # will purge locally even when the hub is gone.
+    # Hub removal orphans local subscriptions; cross-machine peers must `leave` themselves.
     profiles_root = _ROOT / "profiles"
     purged: list[str] = []
     if profiles_root.exists():
@@ -3769,8 +3622,6 @@ def workgroup_remove(ctx: click.Context, wg_id: str, yes: bool) -> None:
                     purged.append(prof_dir.name)
             except Exception:  # noqa: BLE001
                 pass
-    # Also check the default-profile root, which lives directly
-    # under ``~/.alpi/`` rather than under ``profiles/``.
     try:
         if sub_mod.get(_ROOT, wg_id) is not None:
             sub_mod.remove(_ROOT, wg_id)
@@ -3929,13 +3780,7 @@ def memory_group() -> None:
 )
 @click.pass_context
 def cmd_memory_promote(ctx: click.Context, apply_all: bool, discard_all: bool) -> None:
-    """Interactively review the promotion queue.
-
-    Each candidate shows source session, suggested target file, confidence,
-    and any operational-state / duplicate warnings. For each you can apply
-    (writes via the standard memory add path with safety scan + dedup),
-    discard, skip (leave for later), or quit.
-    """
+    """Interactively review the memory promotion queue."""
     from alpi import promotion as _promotion
     from alpi.tools.memory import Memory
 

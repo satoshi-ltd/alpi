@@ -415,6 +415,8 @@ def _latest_chat_for(home: Path) -> dict[str, Any] | None:
         return {
             "id": row["id"],
             "mtime": row["mtime"],
+            "updated_at": row.get("updated_at"),
+            "started_at": row.get("started_at"),
             "first_user": row["first_user"],
             "kind": row.get("kind"),
         }
@@ -598,7 +600,6 @@ def _skills(home: Path) -> list[dict[str, Any]]:
     return rows
 
 
-# Cap on the body we ship to the UI per skill; most skills are well below.
 _SKILL_BODY_MAX = 32_000
 
 
@@ -725,6 +726,7 @@ def _members_yaml(text: str) -> list[dict[str, Any]]:
         {
             "pubkey": str(row.get("pubkey") or ""),
             "bio": row.get("bio"),
+            "voice": row.get("voice"),
             "joined": bool(row.get("joined", False)),
         }
         for row in data
@@ -740,8 +742,17 @@ def _subscription_roster(text: str, wg_id: str) -> list[dict[str, Any]]:
         roster = row.get("roster") or {}
         if not isinstance(roster, dict):
             return []
+        voices_raw = row.get("roster_voices") or {}
+        voices = voices_raw if isinstance(voices_raw, dict) else {}
+        bios_raw = row.get("roster_bios") or {}
+        bios = bios_raw if isinstance(bios_raw, dict) else {}
         return [
-            {"pubkey": str(pubkey), "bio": None, "joined": True}
+            {
+                "pubkey": str(pubkey),
+                "bio": bios.get(pubkey),
+                "voice": voices.get(pubkey),
+                "joined": True,
+            }
             for pubkey in roster.keys()
         ]
     return []

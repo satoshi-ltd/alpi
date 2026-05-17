@@ -76,7 +76,9 @@ async def _create(
     from alpi.alp import workgroup as wg_mod
     from alpi.alp.keys import load_or_generate
 
-    hub_bio = (cfg_mod.load(home).public_bio or "").strip()
+    hub_cfg = cfg_mod.load(home)
+    hub_bio = (hub_cfg.public_bio or "").strip()
+    hub_voice = (hub_cfg.tools.tts.voice or "").strip()
     try:
         wg = wg_mod.create(
             home,
@@ -86,6 +88,7 @@ async def _create(
             budget=budget,
             briefing=briefing,
             hub_bio=hub_bio,
+            hub_voice=hub_voice,
         )
     except ValueError as e:
         raise host_server.HandlerError(-32602, "invalid-params", data={"detail": str(e)})

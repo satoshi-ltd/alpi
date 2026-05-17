@@ -15,9 +15,6 @@ from alpi.alp import workgroup as wg_mod
 from alpi.alp.keys import Keypair, load_or_generate
 
 
-# SDK turn-rotation guards: B1 + C2.
-
-
 def _last_hub_seq(posts: list[dict], hub_pubkey: str) -> int:
     """Highest hub-authored seq in `posts`, or 0."""
     best = 0
@@ -102,7 +99,6 @@ def _check_substantive(plaintext: str) -> None:
         )
 
 
-# Hard ceiling for waiting on missing member input.
 _FULL_QUORUM_TIMEOUT_SECONDS = 10 * 60
 
 
@@ -133,7 +129,6 @@ def _check_hub_rotation(
     """Reject hub back-to-back content or premature `#done`."""
     if not posts:
         return
-    # Ignore `#working`; the back-to-back rule is about content.
     last_contributing = None
     for p in reversed(posts):
         if not tasks_mod.is_working(str(p.get("text") or "")):
@@ -144,14 +139,12 @@ def _check_hub_rotation(
         and str(last_contributing.get("from") or "") == own_pubkey
     )
 
-    # `#task` always preempts the current round.
     if tasks_mod.is_task(plaintext):
         return
 
     if tasks_mod.is_done(plaintext):
         opener = _opener_post(posts, own_pubkey)
         if opener is None:
-            # No active task: let the no-op through.
             if not is_back_to_back:
                 return
             raise ValueError(
@@ -165,10 +158,8 @@ def _check_hub_rotation(
         ]
 
         def _is_marker_only(text: str) -> bool:
-            """`#skip` and `#working` are signals, not contributions."""
             return tasks_mod.is_skip(text) or tasks_mod.is_working(text)
 
-        # Require at least one substantive non-hub post.
         non_hub_substantive = any(
             str(p.get("from") or "") != own_pubkey
             and not _is_marker_only(str(p.get("text") or ""))
@@ -181,7 +172,6 @@ def _check_hub_rotation(
                 f"Wait for content or the {_FULL_QUORUM_TIMEOUT_SECONDS // 60}-minute timeout "
                 f"({int(age)}s elapsed)."
             )
-        # Every listed member must contribute or `#skip`.
         expected = [
             pk for pk in (member_pubkeys or [])
             if pk and pk != own_pubkey
@@ -277,18 +267,18 @@ async def _call(home: Path, kp: Keypair, peer_id: str, method: str,
     )
 
 
-# Public verbs
-
-
 async def join(home: Path, peer_id: str, wg_id: str) -> sub_mod.Subscription:
-    """Join the hub and persist the subscription locally."""
+    """Join the hub and persist the subscription locally; broadcasts public_bio + voice on the way in."""
     kp = load_or_generate(home)
-    # Publish the profile bio on join.
     from alpi import config as _cfg
-    bio = (_cfg.load(home).public_bio or "").strip()
+    cfg = _cfg.load(home)
+    bio = (cfg.public_bio or "").strip()
+    voice = (cfg.tools.tts.voice or "").strip()
     params: dict[str, Any] = {"workgroup_id": wg_id}
     if bio:
         params["bio"] = bio
+    if voice:
+        params["voice"] = voice
     result = await _call(home, kp, peer_id, "workgroup.join", params)
     res = _resolve_hub(home, peer_id)
     sub = sub_mod.get(home, wg_id) or sub_mod.Subscription(
@@ -304,7 +294,6 @@ async def join(home: Path, peer_id: str, wg_id: str) -> sub_mod.Subscription:
         )
     if not sub.name:
         sub.name = str(result.get("name") or "")
-    # Refresh the plaintext briefing from the hub.
     sub.briefing = str(result.get("briefing") or "")
     sub.upsert_key(int(result.get("key_version", 1)), str(result["sealed_key"]))
     _absorb_roster(sub, result.get("members"))
@@ -313,11 +302,12 @@ async def join(home: Path, peer_id: str, wg_id: str) -> sub_mod.Subscription:
 
 
 def _absorb_roster(sub: sub_mod.Subscription, raw) -> None:
-    """Normalize roster shapes into `roster` plus `roster_bios`."""
+    """Normalize roster shapes into `roster` plus `roster_bios`/`roster_voices`."""
     if not raw:
         return
     seen: dict[str, str] = {}
     bios: dict[str, str] = {}
+    voices: dict[str, str] = {}
     for entry in raw:
         if isinstance(entry, dict) and "pubkey" in entry:
             pk = str(entry["pubkey"])
@@ -325,12 +315,15 @@ def _absorb_roster(sub: sub_mod.Subscription, raw) -> None:
             bio = str(entry.get("bio") or "").strip()
             if bio:
                 bios[pk] = bio
+            voice = str(entry.get("voice") or "").strip()
+            if voice:
+                voices[pk] = voice
         elif isinstance(entry, str):
             seen[entry] = ""
     if seen:
         sub.roster = seen
-    # Replace the bios snapshot on every update.
     sub.roster_bios = bios
+    sub.roster_voices = voices
 
 
 async def post(
@@ -340,17 +333,28 @@ async def post(
     """Encrypt `text` under the latest key and send it to the hub."""
     kp = load_or_generate(home)
 
-    # Reject empty posts before choosing the hub/member path.
     try:
         _plaintext = text.decode("utf-8", errors="replace")
     except Exception:  # noqa: BLE001
         _plaintext = ""
     _check_substantive(_plaintext)
 
-    # Hub path short-circuits the network.
     wg = wg_mod.load(home, wg_id)
     if wg is not None and wg.meta.hub_pubkey == kp.pubkey_b64():
-        return _post_as_hub(home, wg, kp, text, cost)
+        result = _post_as_hub(home, wg, kp, text, cost)
+        if tasks_mod.is_done(_plaintext):
+            try:
+                from alpi.host import events as host_events
+                from alpi.home import profile_name
+                host_events.emit("wg.done", {
+                    "profile": profile_name(home),
+                    "wg_id": wg_id,
+                    "seq": result.get("seq") if isinstance(result, dict) else None,
+                    "summary": _plaintext[:200],
+                })
+            except Exception:  # noqa: BLE001
+                pass
+        return result
 
     sub = sub_mod.get(home, wg_id)
     if sub is None:
@@ -369,11 +373,9 @@ async def post(
             + " markers — non-hub members must stay silent."
         )
 
-    # Refresh state before rotation checks.
     try:
         await pull(home, wg_id)
     except Exception:  # noqa: BLE001
-        # Best effort: keep the cached state if pull fails.
         pass
     sub = sub_mod.get(home, wg_id) or sub
     posts_view = list(sub.recent_posts or [])
@@ -421,7 +423,6 @@ def _post_as_hub(
     d = _wg_dir(home, wg.meta.id)
     ledger = _load_ledger(d)
 
-    # Translate gate errors to ValueError for the caller.
     try:
         _gate_post(wg.meta, ledger, cost_dict)
     except Exception as e:  # noqa: BLE001
@@ -429,7 +430,6 @@ def _post_as_hub(
 
     existing_raw = _read_transcript(d)
 
-    # Decrypt existing posts so marker checks can see plaintext.
     try:
         group_key_for_check = wg_mod.open_sealed_group_key(
             own.sealed_key, kp,
@@ -462,7 +462,6 @@ def _post_as_hub(
     except Exception:  # noqa: BLE001
         plaintext = ""
 
-    # Hub only uses `#task`, `#done`, or plain prose.
     if tasks_mod.is_skip(plaintext):
         raise ValueError(
             "hub-cannot-skip: `#skip` is the member-side pass "
@@ -521,7 +520,6 @@ async def pull(
     raw = await _call(home, kp, sub.hub_id, "workgroup.pull",
                       {"workgroup_id": wg_id, "since": cursor})
 
-    # Refresh the sealed key if the hub rotated.
     server_version = int(raw.get("current_key_version", 1))
     new_sealed = str(raw.get("sealed_key") or "")
     if new_sealed and sub.sealed_for(server_version) != new_sealed:
@@ -538,9 +536,7 @@ async def pull(
     head = int(raw.get("head", cursor))
     if head > sub.last_seq:
         sub.last_seq = head
-    # Cache decrypted posts for the pre-turn hook.
     sub.append_recent(decrypted)
-    # Refresh the roster from the hub response.
     _absorb_roster(sub, raw.get("members"))
     sub_mod.upsert(home, sub)
     return decrypted, head
@@ -557,7 +553,6 @@ async def leave(home: Path, wg_id: str) -> dict[str, Any]:
         result = await _call(home, kp, sub.hub_id, "workgroup.leave",
                              {"workgroup_id": wg_id})
     except Exception as e:  # noqa: BLE001
-        # Keep local purge even if the hub call fails.
         result = {
             "workgroup_id": wg_id,
             "hub_unreachable": True,

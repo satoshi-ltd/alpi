@@ -385,7 +385,7 @@ def _check_gmail_live(home: Path, env: dict[str, str]) -> list[Check]:
         return [Check("Gateways", "Gmail", "info", "not configured")]
     try:
         from alpi.mail import gmail_auth
-        gmail_auth.get_access_token(home)  # refreshes if needed, raises on fail
+        gmail_auth.get_access_token(home)
         email = gmail_auth.get_email(home) or "?"
         return [Check("Gateways", "Gmail", "ok", f"authorized as {email}")]
     except Exception as e:  # noqa: BLE001

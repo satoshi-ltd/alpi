@@ -211,6 +211,7 @@ def test_trigger_spawns_daemon_thread_when_enabled(
 
 
 def test_fetch_pypi_returns_version_string(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(updater, "_has_outbound", lambda: True)
     fake_response = MagicMock()
     fake_response.json.return_value = {"info": {"version": "0.2.95"}}
     fake_response.raise_for_status.return_value = None
@@ -233,7 +234,8 @@ def test_fetch_pypi_returns_version_string(monkeypatch: pytest.MonkeyPatch) -> N
         assert updater._fetch_pypi_version() == "0.2.95"
 
 
-def test_fetch_pypi_returns_none_on_http_error() -> None:
+def test_fetch_pypi_returns_none_on_http_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(updater, "_has_outbound", lambda: True)
     fake_response = MagicMock()
     fake_response.raise_for_status.side_effect = RuntimeError("500")
 
@@ -255,9 +257,27 @@ def test_fetch_pypi_returns_none_on_http_error() -> None:
         assert updater._fetch_pypi_version() is None
 
 
+def test_fetch_pypi_returns_none_when_offline(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(updater, "_has_outbound", lambda: False)
+    called = {"httpx": False}
+
+    class _BoomClient:
+        def __init__(self, *a, **kw):
+            called["httpx"] = True
+            raise AssertionError("httpx must not be invoked when offline")
+
+    with patch.object(updater, "httpx") as fake_httpx:
+        fake_httpx.Client = _BoomClient
+        assert updater._fetch_pypi_version() is None
+    assert called["httpx"] is False
+
+
 def test_fetch_pypi_uses_alpi_update_index_env(
         monkeypatch: pytest.MonkeyPatch) -> None:
     """ALPI_UPDATE_INDEX overrides the updater URL."""
+    monkeypatch.setattr(updater, "_has_outbound", lambda: True)
     monkeypatch.setenv(
         "ALPI_UPDATE_INDEX",
         "https://test.pypi.org/pypi/alpi-agent/json",
@@ -286,6 +306,60 @@ def test_fetch_pypi_uses_alpi_update_index_env(
         updater._fetch_pypi_version()
 
     assert seen_url == ["https://test.pypi.org/pypi/alpi-agent/json"]
+
+
+def test_has_outbound_uses_host_from_pypi_url(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(
+        "ALPI_UPDATE_INDEX",
+        "https://my.mirror.local:8443/pypi/alpi-agent/json",
+    )
+    seen: list[tuple[str, int]] = []
+
+    class _OK:
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+
+    def fake_create_connection(addr, timeout):  # noqa: ARG001
+        seen.append(addr)
+        return _OK()
+
+    monkeypatch.setattr(
+        "alpi.updater.socket.create_connection", fake_create_connection,
+    )
+    assert updater._has_outbound() is True
+    assert seen == [("my.mirror.local", 8443)]
+
+
+def test_has_outbound_falls_back_to_443_for_https(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(
+        "ALPI_UPDATE_INDEX",
+        "https://test.pypi.org/pypi/alpi-agent/json",
+    )
+    seen: list[tuple[str, int]] = []
+
+    class _OK:
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+
+    monkeypatch.setattr(
+        "alpi.updater.socket.create_connection",
+        lambda addr, timeout: (seen.append(addr) or _OK()),
+    )
+    assert updater._has_outbound() is True
+    assert seen == [("test.pypi.org", 443)]
+
+
+def test_has_outbound_returns_false_when_connect_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def boom(addr, timeout):  # noqa: ARG001
+        raise OSError("offline")
+    monkeypatch.setattr("alpi.updater.socket.create_connection", boom)
+    assert updater._has_outbound() is False
 
 
 # _detect_installer

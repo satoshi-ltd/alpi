@@ -15,7 +15,8 @@ The file lives alongside the Ed25519 keypair under ``secrets/`` —
 both are sensitive enough to deserve the same posture. Sealed keys
 are stored as-is (they only open with this profile's private key, so
 disk exposure alone reveals nothing without the keypair) and the
-post cursor is per-workgroup.
+post cursor is per-workgroup. Old sealed keys are retained so
+transcript history past a rotation stays decryptable.
 """
 
 from __future__ import annotations
@@ -51,30 +52,18 @@ class Subscription:
     wg_id: str
     name: str
     hub_id: str            # peer.id from this profile's peers.yaml
-    hub_pubkey: str        # cross-check against peer entry
+    hub_pubkey: str        # cross-check against the peer entry
     sealed_keys: list[SealedKey] = field(default_factory=list)
     last_seq: int = 0      # cursor for pull(since=…)
     joined_at: str = ""
-    # Hub-side metadata cached locally so the engine pre-turn hook
-    # gives the member's agent the same anchor (briefing) the hub's
-    # own agent sees. Refreshed on every successful ``workgroup.join``.
+    # Hub-side anchor cached locally so the engine pre-turn hook gives the member's agent the same briefing the hub's agent sees. Refreshed on every successful ``workgroup.join``.
     briefing: str = ""
-    # Highest post seq we've already responded to. Bumped after each
-    # successful turn dispatch. Decouples "did I respond yet?" from
-    # the pull cursor — so a tick that pulls a new post but skips on
-    # cooldown doesn't lose the trigger; the next tick re-evaluates
-    # against the cache and dispatches when the cooldown expires.
+    # Decoupled from ``last_seq`` so a tick that pulls a new post but skips on cooldown doesn't lose the trigger — next tick re-evaluates against the cache.
     last_responded_seq: int = 0
-    # Roster snapshot from the hub — pubkey → last_seen_at iso. The
-    # hub stamps a fresh ``last_seen_at`` on every member's pull or
-    # post and returns the whole list on join + pull, so we always
-    # have a recent passive liveness signal without extra probing.
     roster: dict[str, str] = field(default_factory=dict)
-    # Parallel map pubkey → public bio string.
     roster_bios: dict[str, str] = field(default_factory=dict)
-    # Populated by the poller after dispatch.
+    roster_voices: dict[str, str] = field(default_factory=dict)
     last_dispatch_at: str = ""
-    # Cached decrypted posts for the engine hook and poller.
     recent_posts: list[dict] = field(default_factory=list)
 
     def latest_version(self) -> int:
@@ -138,6 +127,7 @@ def load(home: Path) -> list[Subscription]:
                 last_responded_seq=int(entry.get("last_responded_seq", 0)),
                 roster=dict(entry.get("roster") or {}),
                 roster_bios=dict(entry.get("roster_bios") or {}),
+                roster_voices=dict(entry.get("roster_voices") or {}),
             )
         except KeyError:
             continue
@@ -186,6 +176,8 @@ def save(home: Path, subs: list[Subscription]) -> None:
             entry["roster"] = s.roster
         if s.roster_bios:
             entry["roster_bios"] = s.roster_bios
+        if s.roster_voices:
+            entry["roster_voices"] = s.roster_voices
         if s.recent_posts:
             entry["recent_posts"] = s.recent_posts
         data.append(entry)
@@ -226,12 +218,7 @@ def remove(home: Path, wg_id: str) -> bool:
 def decrypt_post(
     sub: Subscription, kp: Keypair, post: dict[str, Any],
 ) -> bytes:
-    """Open a transcript entry. Picks the sealed key matching the
-    post's ``key_version``, opens it with our Ed25519 private key,
-    then decrypts the ChaCha20-Poly1305 ciphertext under the resulting
-    group key. Raises ``KeyError`` if we don't hold the matching
-    version (either we never joined that era, or rotation cleared it).
-    """
+    """Decrypt one post; raises KeyError if we don't hold the sealed key for its version."""
     version = int(post.get("key_version", 1))
     sealed = sub.sealed_for(version)
     if sealed is None:

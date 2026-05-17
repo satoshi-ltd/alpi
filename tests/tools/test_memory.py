@@ -101,13 +101,19 @@ def test_add_rejects_invalid_confidence(store: memory.MemoryStore) -> None:
         store.add("USER.md", "fact", confidence="medium")
 
 
+def _utc_today():
+    """memory._today() uses UTC; tests must match or the str-replace silently no-ops at UTC-day boundaries."""
+    from datetime import datetime, timezone
+    return datetime.now(timezone.utc).date()
+
+
 def test_prune_drops_old_low_confidence(store: memory.MemoryStore) -> None:
-    from datetime import date, timedelta
+    from datetime import timedelta
 
     store.add("USER.md", "ephemeral fact", confidence="low")
     raw = store.user_path.read_text()
-    old_date = (date.today() - timedelta(days=45)).isoformat()
-    store.user_path.write_text(raw.replace("captured=" + date.today().isoformat(),
+    old_date = (_utc_today() - timedelta(days=45)).isoformat()
+    store.user_path.write_text(raw.replace("captured=" + _utc_today().isoformat(),
                                             f"captured={old_date}"))
     removed = store.prune_low_confidence(max_age_days=30)
     assert removed == 1
@@ -115,13 +121,13 @@ def test_prune_drops_old_low_confidence(store: memory.MemoryStore) -> None:
 
 
 def test_prune_keeps_reinforced_low_confidence(store: memory.MemoryStore) -> None:
-    from datetime import date, timedelta
+    from datetime import timedelta
 
     store.add("USER.md", "durable fact", confidence="low")
     store.add("USER.md", "durable fact")
     raw = store.user_path.read_text()
-    old_date = (date.today() - timedelta(days=45)).isoformat()
-    store.user_path.write_text(raw.replace("captured=" + date.today().isoformat(),
+    old_date = (_utc_today() - timedelta(days=45)).isoformat()
+    store.user_path.write_text(raw.replace("captured=" + _utc_today().isoformat(),
                                             f"captured={old_date}"))
     removed = store.prune_low_confidence(max_age_days=30)
     assert removed == 0
@@ -129,13 +135,13 @@ def test_prune_keeps_reinforced_low_confidence(store: memory.MemoryStore) -> Non
 
 
 def test_prune_keeps_normal_and_high(store: memory.MemoryStore) -> None:
-    from datetime import date, timedelta
+    from datetime import timedelta
 
     store.add("USER.md", "normal fact", confidence="normal")
     store.add("USER.md", "core fact", confidence="high")
     raw = store.user_path.read_text()
-    old_date = (date.today() - timedelta(days=365)).isoformat()
-    store.user_path.write_text(raw.replace("captured=" + date.today().isoformat(),
+    old_date = (_utc_today() - timedelta(days=365)).isoformat()
+    store.user_path.write_text(raw.replace("captured=" + _utc_today().isoformat(),
                                             f"captured={old_date}"))
     removed = store.prune_low_confidence(max_age_days=30)
     assert removed == 0

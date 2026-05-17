@@ -416,6 +416,20 @@ def tick(home: Path, now: datetime | None = None) -> list[tuple[str, bool, str]]
         log.info("firing job %s (%s)", job_id, job.get("kind", "cron"))
         ok, msg = run_job(job, home)
         log.info("job %s %s — %s", job_id, "OK" if ok else "FAIL", msg)
+        try:
+            from alpi.home import profile_name
+            from alpi.host import events as host_events
+            host_events.emit(
+                "schedule.done" if ok else "schedule.failed",
+                {
+                    "profile": profile_name(home),
+                    "job_id": str(job_id),
+                    "kind": str(job.get("kind", "cron")),
+                    "message": msg,
+                },
+            )
+        except Exception:  # noqa: BLE001
+            pass
         # Update last_run_at even on failure to avoid a tight re-fire loop.
         job["last_run_at"] = now.isoformat()
         changed = True

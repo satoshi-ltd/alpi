@@ -92,12 +92,8 @@ def _maybe_load_mcps(cfg: cfg_mod.Config) -> list:
 
 
 def _profile_name(home: Path) -> str:
-    parts = home.parts
-    if "profiles" in parts:
-        i = parts.index("profiles")
-        if i + 1 < len(parts):
-            return parts[i + 1]
-    return "default"
+    from alpi.home import profile_name
+    return profile_name(home)
 
 
 @dataclass
@@ -281,6 +277,7 @@ class Engine:
                     usd=float(final.get("cost_usd", 0.0)),
                     tokens=int(final.get("input_tokens", 0))
                           + int(final.get("output_tokens", 0)),
+                    cfg_budget=fresh_budget,
                 )
                 self.session.last_ctx_tokens = int(final.get("input_tokens", 0))
                 emit(AgentEvent(
@@ -348,6 +345,7 @@ class Engine:
                     _ledger.record(
                         self.home, usd=float(cost),
                         tokens=int(in_tok) + int(out_tok),
+                        cfg_budget=fresh_budget,
                     )
                     emit(AgentEvent(
                         kind="usage", tokens_in=in_tok, tokens_out=out_tok,

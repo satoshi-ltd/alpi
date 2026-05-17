@@ -36,9 +36,6 @@ def _pin(home: Path, peer_id: str, pubkey: str, allow: list[str],
     ))
 
 
-# Subscription module
-
-
 def test_subscription_roundtrip_persists_with_0600_mode(short_tmp: Path) -> None:
     home = short_tmp / "alice"; home.mkdir()
     sub = sub_mod.Subscription(
@@ -107,9 +104,6 @@ def test_recent_posts_persist_through_load_save(short_tmp: Path) -> None:
 
 
 def test_briefing_persists_through_load_save(short_tmp: Path) -> None:
-    """Member-side briefing is fetched on join and cached in
-    subscriptions.yaml so the engine pre-turn hook surfaces it on
-    every turn without an extra network call."""
     home = short_tmp / "alice"; home.mkdir()
     sub = sub_mod.Subscription(
         wg_id="wg_x", name="x", hub_id="h", hub_pubkey="k",
@@ -131,15 +125,11 @@ def test_remove_returns_false_for_unknown(short_tmp: Path) -> None:
     assert sub_mod.load(home) == []
 
 
-# Member-side e2e via workgroup_client
-
-
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_join_persists_subscription_and_pull_decrypts(
     short_tmp: Path,
 ) -> None:
-    """Join stores the subscription and pull decrypts a post."""
     hub_home = short_tmp / "alice"; hub_home.mkdir()
     bob_home = short_tmp / "bob"; bob_home.mkdir()
     alice_kp = load_or_generate(hub_home)
@@ -147,7 +137,6 @@ async def test_join_persists_subscription_and_pull_decrypts(
     _pin(hub_home, "bob", bob_kp.pubkey_b64(),
          ["workgroup.join", "workgroup.post", "workgroup.pull",
           "workgroup.leave"])
-    # Bob pins alice using the unix-socket convention.
     _pin(bob_home, "alice", alice_kp.pubkey_b64(),
          ["link.ping"])
 
@@ -159,7 +148,6 @@ async def test_join_persists_subscription_and_pull_decrypts(
     server = alp_server.Server(home=hub_home, agent_name="alice")
     wg_mod.register(server, hub_home)
     await server.start()
-    # Monkey-patch the socket resolver to use the test home.
     import alpi.alp.workgroup_client as wc_mod
     original_resolver = wc_mod._intra_socket_path
     wc_mod._intra_socket_path = lambda peer_id: server.socket_path()
@@ -169,23 +157,18 @@ async def test_join_persists_subscription_and_pull_decrypts(
         assert sub.name == "design"
         assert sub.hub_id == "alice"
         assert sub.latest_version() == 1
-        assert sub.joined_at  # set on first join
-        # Persisted to bob's subscription file.
+        assert sub.joined_at
         assert sub_mod.path(bob_home).exists()
 
-        # Bob posts via wc.post
         await wc.post(bob_home, wg.meta.id, b"hi via wc")
 
-        # Bob pulls via wc.pull — gets decrypted text
         posts, head = await wc.pull(bob_home, wg.meta.id)
         assert head == 1
         assert len(posts) == 1
         assert posts[0]["text"] == "hi via wc"
-        # Cursor advanced
         sub_after = sub_mod.get(bob_home, wg.meta.id)
         assert sub_after.last_seq == 1
 
-        # A second pull returns nothing new
         posts2, _ = await wc.pull(bob_home, wg.meta.id)
         assert posts2 == []
     finally:
@@ -195,10 +178,8 @@ async def test_join_persists_subscription_and_pull_decrypts(
 
 @pytest.mark.asyncio
 async def test_post_rejects_non_hub_marker(short_tmp: Path) -> None:
-    """Only the hub may post protocol markers."""
     bob_home = short_tmp / "bob"; bob_home.mkdir()
     load_or_generate(bob_home)
-    # Bob is a remote member; alice is the hub.
     sub = sub_mod.Subscription(
         wg_id="wg_test", name="x", hub_id="alice",
         hub_pubkey="a" * 44,
@@ -206,15 +187,12 @@ async def test_post_rejects_non_hub_marker(short_tmp: Path) -> None:
     sub.upsert_key(1, "sealed-stub")
     sub_mod.upsert(bob_home, sub)
 
-    # `#done` from a member → rejected with a clear error.
     with pytest.raises(ValueError, match="only the workgroup hub"):
         await wc.post(bob_home, "wg_test", b"#done unilateral close")
 
-    # `#task` from a member → also rejected.
     with pytest.raises(ValueError, match="only the workgroup hub"):
         await wc.post(bob_home, "wg_test", b"#task spawn sub-task")
 
-    # Mentioning the token in prose must not trip the guard.
     try:
         await wc.post(bob_home, "wg_test", b"converge with #done eventually")
     except ValueError as e:
@@ -252,10 +230,8 @@ async def test_pull_picks_up_rotated_key(short_tmp: Path) -> None:
     wc_mod._intra_socket_path = lambda peer_id: server.socket_path()
     try:
         await wc.join(bob_home, "alice", wg.meta.id)
-        # Hub kicks carol → key rotates to v2
         wg_mod.kick(hub_home, wg.meta.id, carol_kp.pubkey_b64())
 
-        # Pull first so wc.post reads the rotated sealed key.
         await wc.pull(bob_home, wg.meta.id)
         sub = sub_mod.get(bob_home, wg.meta.id)
         assert sub.latest_version() == 2
@@ -315,11 +291,7 @@ def test_resolve_hub_rejects_unpinned_peer(short_tmp: Path) -> None:
         wc._resolve_hub(home, "ghost")
 
 
-# Public bio (self-published tag-line)
-
-
 def test_absorb_roster_captures_bios(short_tmp: Path) -> None:
-    """Roster bios populate both maps; empty bios are dropped."""
     sub = sub_mod.Subscription(
         wg_id="wg_x", name="x", hub_id="h", hub_pubkey="hk",
     )
@@ -355,7 +327,6 @@ def test_subscription_persists_roster_bios(short_tmp: Path) -> None:
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_join_propagates_public_bio_to_hub(short_tmp: Path) -> None:
-    """Join copies `public_bio` into the hub roster."""
     from alpi import config as cfg_mod
 
     hub_home = short_tmp / "alice"; hub_home.mkdir()
@@ -366,7 +337,6 @@ async def test_join_propagates_public_bio_to_hub(short_tmp: Path) -> None:
          ["workgroup.join", "workgroup.post", "workgroup.pull"])
     _pin(bob_home, "alice", alice_kp.pubkey_b64(), ["link.ping"])
 
-    # Bob declares a public bio.
     bob_cfg = cfg_mod.load(bob_home)
     bob_cfg.public_bio = "systems engineer — durability bias"
     cfg_mod.save(bob_cfg)
@@ -389,13 +359,11 @@ async def test_join_propagates_public_bio_to_hub(short_tmp: Path) -> None:
         wc_mod._intra_socket_path = original
         await server.stop()
 
-    # The join response persists both bios.
     assert sub.roster_bios.get(bob_kp.pubkey_b64()) == \
         "systems engineer — durability bias"
     assert sub.roster_bios.get(alice_kp.pubkey_b64()) == \
         "product engineer — velocity"
 
-    # The hub-side member record keeps Bob's bio.
     wg_after = wg_mod.load(hub_home, wg.meta.id)
     bob_member = wg_after.member(bob_kp.pubkey_b64())
     assert bob_member is not None
@@ -403,7 +371,6 @@ async def test_join_propagates_public_bio_to_hub(short_tmp: Path) -> None:
 
 
 def test_member_bio_persists_on_disk(short_tmp: Path) -> None:
-    """Member bios survive save/load and restart."""
     home = short_tmp / "alice"; home.mkdir()
     alice_kp = load_or_generate(home)
     wg = wg_mod.create(
@@ -416,7 +383,180 @@ def test_member_bio_persists_on_disk(short_tmp: Path) -> None:
     assert hub.bio == "product engineer — velocity"
 
 
-# SDK rotation guards.
+def test_absorb_roster_captures_voices(short_tmp: Path) -> None:
+    sub = sub_mod.Subscription(
+        wg_id="wg_x", name="x", hub_id="h", hub_pubkey="hk",
+    )
+    raw = [
+        {"pubkey": "PK_A", "last_seen_at": "2026-04-26T10:00:00Z",
+         "voice": "en-US-GuyNeural"},
+        {"pubkey": "PK_B", "last_seen_at": "2026-04-26T10:00:00Z",
+         "voice": ""},
+        {"pubkey": "PK_C", "last_seen_at": ""},
+    ]
+    wc._absorb_roster(sub, raw)
+    assert sub.roster_voices == {"PK_A": "en-US-GuyNeural"}
+
+
+def test_subscription_persists_roster_voices(short_tmp: Path) -> None:
+    home = short_tmp / "alice"; home.mkdir()
+    sub = sub_mod.Subscription(
+        wg_id="wg1", name="x", hub_id="h", hub_pubkey="hk",
+        roster={"PK_A": "stamp"},
+        roster_voices={"PK_A": "en-US-GuyNeural"},
+    )
+    sub_mod.upsert(home, sub)
+    reloaded = sub_mod.get(home, "wg1")
+    assert reloaded is not None
+    assert reloaded.roster_voices == {"PK_A": "en-US-GuyNeural"}
+
+
+def test_auto_join_local_propagates_voice_and_bio(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    """``wg_mod.create()`` calls ``_auto_join_local_members`` which is
+    supposed to pick up each local member's ``public_bio`` and
+    ``tools.tts.voice`` and (a) stamp them on the hub's Member record,
+    (b) seed the member's subscriptions.yaml with the *fresh* roster
+    bios/voices — not a snapshot taken before the update. Regression
+    guard for a two-pass-required ordering bug."""
+    from alpi import config as cfg_mod
+    from alpi import home as home_mod
+
+    profiles_root = short_tmp / "profiles"
+    profiles_root.mkdir()
+    monkeypatch.setattr(home_mod, "_ROOT", short_tmp)
+
+    alice_home = profiles_root / "alice"; alice_home.mkdir()
+    bob_home = profiles_root / "bob"; bob_home.mkdir()
+    alice_kp = load_or_generate(alice_home)
+    bob_kp = load_or_generate(bob_home)
+
+    cfg_a = cfg_mod.Config(home=alice_home, model="x")
+    cfg_a.public_bio = "hub bio"
+    cfg_a.tools.tts.voice = "en-US-AriaNeural"
+    cfg_mod.save(cfg_a)
+    cfg_b = cfg_mod.Config(home=bob_home, model="x")
+    cfg_b.public_bio = "member bio"
+    cfg_b.tools.tts.voice = "en-US-GuyNeural"
+    cfg_mod.save(cfg_b)
+
+    _pin(bob_home, "alice", alice_kp.pubkey_b64(),
+         ["workgroup.join", "workgroup.post", "workgroup.pull"])
+
+    wg = wg_mod.create(
+        alice_home, name="design", hub_kp=alice_kp,
+        member_pubkeys=[bob_kp.pubkey_b64()],
+        hub_bio="hub bio", hub_voice="en-US-AriaNeural",
+    )
+
+    reloaded = wg_mod.load(alice_home, wg.meta.id)
+    bob_member = reloaded.member(bob_kp.pubkey_b64())
+    assert bob_member is not None
+    assert bob_member.bio == "member bio"
+    assert bob_member.voice == "en-US-GuyNeural"
+
+    sub = sub_mod.get(bob_home, wg.meta.id)
+    assert sub is not None
+    assert sub.roster_voices.get(bob_kp.pubkey_b64()) == "en-US-GuyNeural"
+    assert sub.roster_voices.get(alice_kp.pubkey_b64()) == "en-US-AriaNeural"
+    assert sub.roster_bios.get(bob_kp.pubkey_b64()) == "member bio"
+
+
+def test_auto_join_local_persists_voice_change_on_rerun(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    """members_changed must flip on bio/voice deltas, not only on first-time join."""
+    from alpi import config as cfg_mod
+    from alpi import home as home_mod
+
+    profiles_root = short_tmp / "profiles"
+    profiles_root.mkdir()
+    monkeypatch.setattr(home_mod, "_ROOT", short_tmp)
+
+    alice_home = profiles_root / "alice"; alice_home.mkdir()
+    bob_home = profiles_root / "bob"; bob_home.mkdir()
+    alice_kp = load_or_generate(alice_home)
+    bob_kp = load_or_generate(bob_home)
+
+    cfg_a = cfg_mod.Config(home=alice_home, model="x")
+    cfg_mod.save(cfg_a)
+    cfg_b = cfg_mod.Config(home=bob_home, model="x")
+    cfg_b.tools.tts.voice = "en-US-GuyNeural"
+    cfg_mod.save(cfg_b)
+    _pin(bob_home, "alice", alice_kp.pubkey_b64(),
+         ["workgroup.join", "workgroup.post", "workgroup.pull"])
+
+    wg = wg_mod.create(
+        alice_home, name="design", hub_kp=alice_kp,
+        member_pubkeys=[bob_kp.pubkey_b64()],
+    )
+
+    cfg_b = cfg_mod.load(bob_home)
+    cfg_b.tools.tts.voice = "en-GB-RyanNeural"
+    cfg_mod.save(cfg_b)
+    wg_mod._auto_join_local_members(alice_home, wg_mod.load(alice_home, wg.meta.id))
+
+    reloaded = wg_mod.load(alice_home, wg.meta.id)
+    bob_member = reloaded.member(bob_kp.pubkey_b64())
+    assert bob_member.voice == "en-GB-RyanNeural"
+
+
+def test_member_voice_persists_on_disk(short_tmp: Path) -> None:
+    home = short_tmp / "alice"; home.mkdir()
+    alice_kp = load_or_generate(home)
+    wg = wg_mod.create(
+        home, name="design", hub_kp=alice_kp, member_pubkeys=[],
+        hub_voice="en-US-AriaNeural",
+    )
+    reloaded = wg_mod.load(home, wg.meta.id)
+    hub = reloaded.member(alice_kp.pubkey_b64())
+    assert hub is not None
+    assert hub.voice == "en-US-AriaNeural"
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_join_propagates_tts_voice_to_hub(short_tmp: Path) -> None:
+    from alpi import config as cfg_mod
+
+    hub_home = short_tmp / "alice"; hub_home.mkdir()
+    bob_home = short_tmp / "bob"; bob_home.mkdir()
+    alice_kp = load_or_generate(hub_home)
+    bob_kp = load_or_generate(bob_home)
+    _pin(hub_home, "bob", bob_kp.pubkey_b64(),
+         ["workgroup.join", "workgroup.post", "workgroup.pull"])
+    _pin(bob_home, "alice", alice_kp.pubkey_b64(), ["link.ping"])
+
+    bob_cfg = cfg_mod.load(bob_home)
+    bob_cfg.tools.tts.voice = "en-US-GuyNeural"
+    cfg_mod.save(bob_cfg)
+
+    wg = wg_mod.create(
+        hub_home, name="design", hub_kp=alice_kp,
+        member_pubkeys=[bob_kp.pubkey_b64()],
+        hub_voice="en-US-AriaNeural",
+    )
+
+    server = alp_server.Server(home=hub_home, agent_name="alice")
+    wg_mod.register(server, hub_home)
+    await server.start()
+    import alpi.alp.workgroup_client as wc_mod
+    original = wc_mod._intra_socket_path
+    wc_mod._intra_socket_path = lambda peer_id: server.socket_path()
+    try:
+        sub = await wc.join(bob_home, "alice", wg.meta.id)
+    finally:
+        wc_mod._intra_socket_path = original
+        await server.stop()
+
+    assert sub.roster_voices.get(bob_kp.pubkey_b64()) == "en-US-GuyNeural"
+    assert sub.roster_voices.get(alice_kp.pubkey_b64()) == "en-US-AriaNeural"
+
+    wg_after = wg_mod.load(hub_home, wg.meta.id)
+    bob_member = wg_after.member(bob_kp.pubkey_b64())
+    assert bob_member is not None
+    assert bob_member.voice == "en-US-GuyNeural"
 
 
 import datetime as _dt
@@ -432,9 +572,6 @@ def _post(seq: int, frm: str, text: str, ts: str | None = None) -> dict:
     return {"seq": seq, "from": frm, "text": text, "ts": ts or _now_iso()}
 
 
-# `_check_substantive` — empty rejected, content allowed
-
-
 def test_check_substantive_rejects_empty() -> None:
     with pytest.raises(ValueError, match="empty post"):
         wc._check_substantive("")
@@ -443,12 +580,8 @@ def test_check_substantive_rejects_empty() -> None:
 
 
 def test_check_substantive_allows_short_content() -> None:
-    """Short answers count; only empty bodies are rejected."""
     wc._check_substantive("Yes.")
     wc._check_substantive("Agreed — keep the kefir foam.")
-
-
-# `_last_hub_seq` / `_current_round_posts`
 
 
 def test_last_hub_seq_returns_zero_when_no_hub_post() -> None:
@@ -484,10 +617,7 @@ def test_current_round_resets_on_each_hub_post() -> None:
         _post(4, "CAROL", "r2"),
     ]
     cur = wc._current_round_posts(posts, "HUB")
-    assert [p["seq"] for p in cur] == [4]  # only after #3
-
-
-# `_check_member_rotation` keeps one CONTRIBUTING post per round.
+    assert [p["seq"] for p in cur] == [4]
 
 
 def test_member_rotation_first_post_allowed() -> None:
@@ -505,7 +635,6 @@ def test_member_rotation_blocks_second_substantive_in_same_round() -> None:
 
 
 def test_member_rotation_allows_substantive_after_own_working() -> None:
-    """`#working` does not consume the substantive slot."""
     posts = [
         _post(1, "HUB", "#task X"),
         _post(2, "BOB", "#working researching"),
@@ -514,7 +643,6 @@ def test_member_rotation_allows_substantive_after_own_working() -> None:
 
 
 def test_member_rotation_blocks_double_working_in_same_round() -> None:
-    """One `#working` heartbeat per round per peer."""
     posts = [
         _post(1, "HUB", "#task X"),
         _post(2, "BOB", "#working researching"),
@@ -529,18 +657,13 @@ def test_member_rotation_resets_after_hub_speaks() -> None:
         _post(2, "BOB", "first round answer"),
         _post(3, "HUB", "follow-up question"),
     ]
-    # New round: Bob can post again.
     wc._check_member_rotation(posts, "BOB", "HUB", "second round answer")
 
 
-# `_check_member_round_fresh` checks stale-round env state.
-
-
 def test_member_round_fresh_no_op_without_env_var(monkeypatch) -> None:
-    """Manual posts skip the stale-round guard."""
     monkeypatch.delenv("ALPI_WORKGROUP_ROUND_HUB_SEQ", raising=False)
     posts = [_post(1, "HUB", "#task X"), _post(2, "HUB", "follow")]
-    wc._check_member_round_fresh(posts, "HUB")  # no raise
+    wc._check_member_round_fresh(posts, "HUB")
 
 
 def test_member_round_fresh_passes_when_round_matches(monkeypatch) -> None:
@@ -550,7 +673,7 @@ def test_member_round_fresh_passes_when_round_matches(monkeypatch) -> None:
         _post(2, "BOB", "x"),
         _post(3, "HUB", "follow"),
     ]
-    wc._check_member_round_fresh(posts, "HUB")  # latest hub seq == 3, OK
+    wc._check_member_round_fresh(posts, "HUB")
 
 
 def test_member_round_fresh_aborts_when_hub_advanced(monkeypatch) -> None:
@@ -562,9 +685,6 @@ def test_member_round_fresh_aborts_when_hub_advanced(monkeypatch) -> None:
     ]
     with pytest.raises(ValueError, match="stale-round"):
         wc._check_member_round_fresh(posts, "HUB")
-
-
-# `_check_hub_rotation` enforces back-to-back and quorum rules.
 
 
 def test_hub_rotation_allows_speaking_after_member() -> None:
@@ -579,7 +699,6 @@ def test_hub_rotation_blocks_back_to_back_content() -> None:
 
 
 def test_hub_rotation_ignores_working_when_computing_last_poster() -> None:
-    """`#working` is a signal, not a contribution."""
     posts = [
         _post(1, "HUB", "#task X"),
         _post(2, "BOB", "#working researching"),
@@ -591,7 +710,6 @@ def test_hub_rotation_ignores_working_when_computing_last_poster() -> None:
 
 
 def test_hub_rotation_allows_done_after_member_substantive() -> None:
-    """`#done` is allowed once quorum is met."""
     posts = [
         _post(1, "HUB", "#task X"),
         _post(2, "BOB", "substantive answer"),
@@ -604,14 +722,12 @@ def test_hub_rotation_blocks_done_when_member_pending() -> None:
     posts = [
         _post(1, "HUB", "#task X"),
         _post(2, "BOB", "answer"),
-        # CAROL never posted
     ]
     with pytest.raises(ValueError, match="closure-quorum"):
         wc._check_hub_rotation(posts, "HUB", "#done foo", ["BOB", "CAROL"])
 
 
 def test_hub_rotation_blocks_done_when_only_working_from_member() -> None:
-    """`#working` alone does not satisfy quorum."""
     posts = [
         _post(1, "HUB", "#task X"),
         _post(2, "BOB", "answer"),
@@ -622,7 +738,6 @@ def test_hub_rotation_blocks_done_when_only_working_from_member() -> None:
 
 
 def test_hub_rotation_blocks_done_when_all_skip_no_substantive() -> None:
-    """All-skip stays open until timeout."""
     posts = [
         _post(1, "HUB", "#task X"),
         _post(2, "BOB", "#skip"),
@@ -633,14 +748,12 @@ def test_hub_rotation_blocks_done_when_all_skip_no_substantive() -> None:
 
 
 def test_hub_rotation_done_allowed_after_timeout_even_when_pending() -> None:
-    """Timeout lets the hub force-close a stuck round."""
     eleven_min_ago = (
         _dt.datetime.now(tz=_dt.timezone.utc) - _dt.timedelta(minutes=11)
     ).strftime("%Y-%m-%dT%H:%M:%SZ")
     posts = [
         _post(1, "HUB", "#task X", ts=eleven_min_ago),
         _post(2, "BOB", "answer", ts=eleven_min_ago),
-        # CAROL still pending
     ]
     wc._check_hub_rotation(
         posts, "HUB", "#done timeout escape", ["BOB", "CAROL"],
@@ -648,23 +761,17 @@ def test_hub_rotation_done_allowed_after_timeout_even_when_pending() -> None:
 
 
 def test_hub_rotation_task_always_allowed_even_back_to_back() -> None:
-    """`#task` may always preempt the round."""
     posts = [_post(1, "HUB", "#task original")]
     wc._check_hub_rotation(
         posts, "HUB", "#task new direction", ["BOB", "CAROL"],
     )
 
 
-# `leave` always purges locally.
-
-
 def test_leave_purges_local_subscription_when_hub_unreachable(
     short_tmp: Path,
 ) -> None:
-    """Local cleanup still happens when the hub is unreachable."""
     home = short_tmp / "bob"; home.mkdir()
     load_or_generate(home)
-    # No pin for `ghost_hub`; leave should still drop the sub.
     sub = sub_mod.Subscription(
         wg_id="wg_orphan", name="ghosted", hub_id="ghost_hub",
         hub_pubkey="ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZw=",

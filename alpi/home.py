@@ -56,6 +56,16 @@ def alpi_root() -> Path:
     return _ROOT
 
 
+def profile_name(home: Path) -> str:
+    """Inverse of ``home_for``: ``~/.alpi`` → ``default``; ``~/.alpi/profiles/<n>`` → ``<n>``."""
+    parts = home.parts
+    if "profiles" in parts:
+        i = parts.index("profiles")
+        if i + 1 < len(parts):
+            return parts[i + 1]
+    return "default"
+
+
 def list_profiles(root: Path | None = None) -> list[str]:
     """Return ``default`` plus each profile directory under ``<root>``."""
     base = root or _ROOT

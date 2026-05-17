@@ -8,29 +8,37 @@ from typing import Any
 _FIRST_USER_MAX = 140
 
 
+def _as_ts(v: Any) -> float:
+    """Coerce a session timestamp to float, tolerating garbage.
+
+    Old/corrupt session JSONs occasionally land on disk with non-numeric
+    ``started_at`` (a stray string, ``None``, the literal "bad"). One bad
+    file would otherwise nuke the whole ``host.sessions.list`` response —
+    so we treat anything non-coercible as 0.0 and fall back to file mtime.
+    """
+    if isinstance(v, (int, float)):
+        return float(v)
+    try:
+        return float(v) if v else 0.0
+    except (TypeError, ValueError):
+        return 0.0
+
+
 def list_sessions(home: Path, limit: int | None = None) -> list[dict[str, Any]]:
     d = home / "sessions"
     if not d.exists():
         return []
-    candidates: list[tuple[int, int, Path]] = []
+    # mtime is unreliable post-checkout/rsync; derive updated_at from content (max turn.at vs started_at).
+    rows: list[dict[str, Any]] = []
     for p in d.iterdir():
         if not p.is_file() or p.suffix != ".json":
             continue
         if p.stem.startswith("_"):
             continue
         try:
-            stat = p.stat()
-            mtime = int(stat.st_mtime)
-            mtime_ns = stat.st_mtime_ns
+            mtime = int(p.stat().st_mtime)
         except OSError:
             mtime = 0
-            mtime_ns = 0
-        candidates.append((mtime_ns, mtime, p))
-    candidates.sort(key=lambda item: item[0], reverse=True)
-    if limit is not None and limit > 0:
-        candidates = candidates[:limit]
-    rows: list[dict[str, Any]] = []
-    for _, mtime, p in candidates:
         try:
             data = json.loads(p.read_text(encoding="utf-8"))
         except Exception:  # noqa: BLE001
@@ -39,10 +47,22 @@ def list_sessions(home: Path, limit: int | None = None) -> list[dict[str, Any]]:
         first_user = ""
         if turns:
             first_user = _truncate(str(turns[0].get("user") or ""), _FIRST_USER_MAX)
+        started_at = data.get("started_at")
+        last_turn_at = 0.0
+        if turns:
+            for t in reversed(turns):
+                v = t.get("at") if isinstance(t, dict) else None
+                if isinstance(v, (int, float)) and v > last_turn_at:
+                    last_turn_at = float(v)
+                    break
+        updated_at = max(_as_ts(last_turn_at), _as_ts(started_at))
+        if updated_at <= 0.0:
+            updated_at = float(mtime)
         rows.append({
             "id": p.stem,
             "mtime": mtime,
-            "started_at": data.get("started_at"),
+            "started_at": started_at,
+            "updated_at": updated_at,
             "first_user": first_user,
             "model": data.get("model"),
             "turn_count": len(turns),
@@ -52,6 +72,9 @@ def list_sessions(home: Path, limit: int | None = None) -> list[dict[str, Any]]:
             "cost_usd": float(data.get("cost_usd") or 0.0),
             "last_ctx_tokens": int(data.get("last_ctx_tokens") or 0),
         })
+    rows.sort(key=lambda r: r["updated_at"], reverse=True)
+    if limit is not None and limit > 0:
+        rows = rows[:limit]
     return rows
 
 

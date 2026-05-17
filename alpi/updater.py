@@ -11,6 +11,7 @@ import datetime as _dt
 import json
 import os
 import shutil
+import socket
 import subprocess
 import threading
 from pathlib import Path
@@ -83,8 +84,24 @@ def _is_cache_fresh(cache: dict) -> bool:
     return elapsed < _CACHE_TTL_SECONDS
 
 
+def _has_outbound() -> bool:
+    from urllib.parse import urlparse
+    try:
+        u = urlparse(_pypi_url())
+    except ValueError:
+        return False
+    host = u.hostname or "pypi.org"
+    port = u.port or (443 if (u.scheme or "https") == "https" else 80)
+    try:
+        with socket.create_connection((host, port), timeout=0.8):
+            return True
+    except OSError:
+        return False
+
+
 def _fetch_pypi_version() -> str | None:
-    # Returns ``None`` on any failure — the daemon path stays silent.
+    if not _has_outbound():
+        return None
     try:
         with httpx.Client(timeout=_PYPI_TIMEOUT_SECONDS) as client:
             r = client.get(_pypi_url())

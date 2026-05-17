@@ -1,26 +1,19 @@
-"""ALP.3 — workgroups (PR 1 + PR 2: hub state, 4 core verbs, leave +
-rekey, lifetime budget).
+"""ALP.3 workgroups — multi-party shared transcript anchored at a single hub.
 
-A workgroup is a multi-party shared transcript anchored at a single
-hub (the creator). Members post ciphertext under a shared group key;
-the hub fans out the same ciphertext on `pull`. The hub holds sealed
-copies of the group key — one per member, sealed under the member's
-X25519 pubkey (derived from their Ed25519 ALP identity) — and never
-sees post plaintext on disk.
+Members post ciphertext under a shared group key; the hub fans out the same
+ciphertext on `pull`. The hub holds sealed copies of the group key (one per
+member, sealed under the member's X25519 pubkey derived from their Ed25519
+ALP identity) and never sees post plaintext on disk.
 
-Group keys are versioned: every successful `leave` (or hub-side
-``kick``) generates a fresh key, re-sealed for each remaining member.
-Members detect the new version on their next `pull` (the response
-carries `current_key_version` and the member's current sealed key)
-and update their local key map. Old keys stay valid for past
-ciphertext — forward secrecy applies to **new** traffic only, by
-design.
+Group keys are versioned: every successful `leave` / hub-side `kick`
+generates a fresh key, re-sealed for each remaining member. Members detect
+the new version on their next `pull` and update their local key map. Old
+keys stay valid for past ciphertext — forward secrecy applies to **new**
+traffic only, by design.
 
-Budget is **lifetime, not daily** — the workgroup is project-scoped.
-Either USD or tokens (pick one, mirroring the profile budget shape);
-authors declare the cost of producing each post and the hub gates
-cumulative spend against the cap. Hitting the cap freezes the
-workgroup; bumping it requires editing ``meta.yaml`` (TUI in PR 4).
+Budget is **lifetime, not daily** — the workgroup is project-scoped. USD
+xor tokens. Authors declare per-post cost; the hub gates cumulative spend
+against the cap. Hitting the cap freezes the workgroup.
 
 On-disk layout under ``~/.alpi/<profile>/alp/workgroups/<wg_id>/``:
 
@@ -28,9 +21,6 @@ On-disk layout under ``~/.alpi/<profile>/alp/workgroups/<wg_id>/``:
     members.yaml      # [{pubkey, sealed_key, key_version, joined, joined_at}]
     transcript.jsonl  # one ciphertext post per line, tagged with key_version + cost
     ledger.json       # {usd, tokens, posts} cumulative across the workgroup's life
-
-Out of scope here: ``pause`` / ``resume`` (PR 3), TUI / CLI surface,
-engine context integration (PR 4).
 """
 
 from __future__ import annotations
@@ -68,19 +58,13 @@ _MEMBERS = "members.yaml"
 _TRANSCRIPT = "transcript.jsonl"
 _LEDGER = "ledger.json"
 
-# Hard ceiling on the per-member ``bio`` tag-line. Keeps the
-# system-prompt block readable when many members are present and
-# prevents a malicious peer from blasting a multi-kilobyte string
-# into every other member's prompt budget.
 _BIO_MAX = 200
+_VOICE_MAX = 64
 
-GROUP_KEY_BYTES = 32  # ChaCha20-Poly1305 key size
+GROUP_KEY_BYTES = 32
 _HKDF_INFO = b"alp.workgroup.seal.v1"
 _PROTOCOL_KIND_SEAL = b"seal"
 _PROTOCOL_KIND_POST = b"post"
-
-
-# Crypto helpers
 
 
 def _hkdf(shared: bytes, salt: bytes) -> bytes:
@@ -96,12 +80,9 @@ def seal_group_key(group_key: bytes, recipient_ed_pubkey_b64: str) -> str:
     """ECIES-style seal: ephemeral X25519 + HKDF-SHA256 + ChaCha20-Poly1305.
 
     Output is a single base64 string ``ephemeral_pub(32) || nonce(12) ||
-    ciphertext+tag(GROUP_KEY_BYTES + 16)``. The recipient derives the
-    same shared secret with their X25519 private key (converted from
-    Ed25519 with the standard birational map, same as Noise) and opens
-    the AEAD. Anyone without the recipient's static private key can't
-    decrypt — that is the entire point.
-    """
+    ciphertext+tag(GROUP_KEY_BYTES + 16)``. The recipient derives the same
+    shared secret with their X25519 private key (converted from Ed25519 via
+    the standard birational map, same as Noise) and opens the AEAD."""
     if len(group_key) != GROUP_KEY_BYTES:
         raise ValueError(f"group_key must be {GROUP_KEY_BYTES} bytes")
     recipient_x = ed25519_to_x25519_public(decode_pubkey(recipient_ed_pubkey_b64))
@@ -141,10 +122,10 @@ def open_sealed_group_key(sealed_b64: str, my_kp: Keypair) -> bytes:
 
 
 def encrypt_post(group_key: bytes, plaintext: bytes) -> tuple[str, str]:
-    """ChaCha20-Poly1305 over the group key. Returns ``(nonce_b64,
-    ciphertext_b64)``. Random 12-byte nonce per post — collision risk is
-    2^-32 after ~2^48 posts in the same group, far beyond any realistic
-    workgroup lifetime."""
+    """ChaCha20-Poly1305 over the group key. Returns ``(nonce_b64, ciphertext_b64)``.
+
+    Random 12-byte nonce per post — collision risk is 2^-32 after ~2^48
+    posts in the same group, far beyond any realistic workgroup lifetime."""
     nonce = os.urandom(12)
     ct = ChaCha20Poly1305(group_key).encrypt(nonce, plaintext, _PROTOCOL_KIND_POST)
     return (
@@ -159,29 +140,18 @@ def decrypt_post(group_key: bytes, nonce_b64: str, ciphertext_b64: str) -> bytes
     return ChaCha20Poly1305(group_key).decrypt(nonce, ct, _PROTOCOL_KIND_POST)
 
 
-# Storage
-
-
 @dataclass
 class Member:
     pubkey: str            # base64 Ed25519 — stable identity
     sealed_key: str        # base64 of seal_group_key output for this pubkey
-    key_version: int = 1   # bumps every rekey; matches Meta.current_key_version
+    key_version: int = 1   # matches Meta.current_key_version at seal time
     joined: bool = False   # flips True on first successful workgroup.join
-    joined_at: str = ""    # ISO-8601, set when ``joined`` flips
-    # Passive liveness signal. Hub stamps this on every
-    # ``workgroup.pull`` / ``workgroup.post`` from this member, so the
-    # roster carries an implicit "online" indicator without any extra
-    # probe traffic. Members get the snapshot on ``join`` / ``pull``
-    # and surface it in the engine context block.
+    joined_at: str = ""
+    # Passive liveness signal — hub stamps this on every pull/post from the member, so the roster carries an implicit "online" indicator without probe traffic.
     last_seen_at: str = ""
-    # Self-published one-line tag-line ("product engineer — velocity").
-    # Members supply it as a parameter on ``workgroup.join`` and the
-    # hub stores it here so every member's pre-turn hook sees who's
-    # who without the workgroup creator having to type a role per
-    # invitee. Source of truth lives in the joiner's profile config
-    # (``public_bio``); AGENT.md stays private.
+    # Self-published one-liner; member supplies on ``workgroup.join``. Source of truth is the joiner's ``public_bio`` config; AGENT.md stays private.
     bio: str = ""
+    voice: str = ""
 
 
 @dataclass
@@ -191,28 +161,17 @@ class Meta:
     hub_pubkey: str
     created_at: str
     current_key_version: int = 1
-    # Optional lifetime budget. ``max_usd`` xor ``max_tokens`` (pick
-    # one). Empty / missing = no workgroup-level cap (profile cap still
-    # applies upstream).
+    # ``max_usd`` xor ``max_tokens`` (pick one). Empty/missing = no workgroup-level cap; profile cap still applies upstream.
     budget: dict[str, Any] = field(default_factory=dict)
-    # Pause is a soft circuit-breaker on ``workgroup.post`` only —
-    # ``pull`` / ``join`` / ``leave`` keep working so members can
-    # catch up on past traffic and exit cleanly. Idempotent verbs.
+    # Soft circuit-breaker on ``workgroup.post`` only — ``pull``/``join``/``leave`` keep working so members can catch up and exit cleanly.
     paused: bool = False
     paused_at: str = ""
     paused_by: str = ""
-    # PR 5: human-readable description of the workgroup's purpose,
-    # injected into every member agent's system prompt as the
-    # workgroup's stable anchor. Plaintext on the hub — it's metadata
-    # about *why this workgroup exists*, not the conversation content.
+    # Hub-injected anchor in every member agent's system prompt — plaintext on the hub since it describes purpose, not transcript content.
     briefing: str = ""
-    # PR 5: when True, member engines start engaging with the
-    # briefing as soon as their next turn fires after create — no
-    # waiting for a first human prompt.
+    # When True, member engines engage with the briefing on their next turn after create — no human prompt required.
     auto_kickoff: bool = True
-    # PR 5: where to push a notification when ``#done`` lands in the
-    # transcript. ``"none"`` (default) silences the push; ``"telegram"``
-    # uses the user's configured Telegram gateway DM.
+    # Push target on ``#done`` landing: ``"none"`` (silent), ``"telegram"`` (user's configured gateway DM).
     notify_on_close: str = "none"
 
 
@@ -287,10 +246,9 @@ def _save_meta(d: Path, meta: Meta) -> None:
             payload["paused_at"] = meta.paused_at
         if meta.paused_by:
             payload["paused_by"] = meta.paused_by
-    # PR 5 metadata — only persisted when non-default.
     if meta.briefing:
         payload["briefing"] = meta.briefing
-    if not meta.auto_kickoff:  # default True; persist only the override
+    if not meta.auto_kickoff:
         payload["auto_kickoff"] = False
     if meta.notify_on_close and meta.notify_on_close != "none":
         payload["notify_on_close"] = meta.notify_on_close
@@ -318,6 +276,7 @@ def _load_members(d: Path) -> list[Member]:
             joined_at=str(entry.get("joined_at") or ""),
             last_seen_at=str(entry.get("last_seen_at") or ""),
             bio=str(entry.get("bio") or ""),
+            voice=str(entry.get("voice") or ""),
         ))
     return out
 
@@ -339,6 +298,8 @@ def _save_members(d: Path, members: list[Member]) -> None:
             entry["last_seen_at"] = m.last_seen_at
         if m.bio:
             entry["bio"] = m.bio
+        if m.voice:
+            entry["voice"] = m.voice
         data.append(entry)
     (d / _MEMBERS).write_text(yaml.safe_dump(data, sort_keys=False, allow_unicode=True))
 
@@ -365,9 +326,6 @@ def list_workgroups(home: Path) -> list[Workgroup]:
     return out
 
 
-# Local primitive — create
-
-
 def create(
     home: Path,
     *,
@@ -379,21 +337,9 @@ def create(
     auto_kickoff: bool = True,
     notify_on_close: str = "none",
     hub_bio: str = "",
+    hub_voice: str = "",
 ) -> Workgroup:
-    """Create a workgroup on this profile (we are the hub).
-
-    ``member_pubkeys`` is the initial roster — base64 Ed25519 pubkeys
-    of every alpi we want to invite. The hub's own pubkey is added
-    automatically; passing it again is a no-op. The group key is
-    generated fresh, sealed once per member, and persisted alongside
-    the empty transcript.
-
-    ``budget`` is an optional ``{"max_usd": float}`` xor
-    ``{"max_tokens": int}``. Leave unset for no workgroup-level cap.
-
-    Returns the created ``Workgroup``. Raises ``ValueError`` on bad
-    inputs (empty name, malformed pubkey, ill-formed budget).
-    """
+    """Create a workgroup on this profile as hub; seals the fresh group key once per member."""
     name = (name or "").strip()
     if not name:
         raise ValueError("workgroup name required")
@@ -443,11 +389,11 @@ def create(
             m.last_seen_at = now
             if hub_bio:
                 m.bio = hub_bio[:_BIO_MAX]
+            if hub_voice:
+                m.voice = hub_voice[:_VOICE_MAX]
         members.append(m)
     _save_members(d, members)
 
-    # Empty transcript so ``pull`` works on a brand-new workgroup
-    # without an existence check.
     (d / _TRANSCRIPT).touch()
     (d / _LEDGER).write_text(json.dumps(
         {"usd": 0.0, "tokens": 0, "posts": 0}, separators=(",", ":"),
@@ -459,14 +405,7 @@ def create(
 
 
 def _auto_join_local_members(hub_home: Path, wg: "Workgroup") -> None:
-    """Join every member that lives on the same machine as the hub.
-
-    Cross-machine peers must run ``alpi workgroup join`` themselves
-    (no push transport). For peers whose `~/.alpi/profiles/<name>/`
-    is on this filesystem we have direct access to both sides — we
-    seed the subscription and stamp ``joined: true`` on the hub's
-    member record so the briefing + bio propagate without round-trip.
-    """
+    """Auto-join every member whose profile dir is on this filesystem; cross-machine peers must run workgroup.join."""
     from alpi import config as _cfg
     from alpi.alp import peers as peers_mod
     from alpi.alp import subscription as sub_mod
@@ -488,12 +427,10 @@ def _auto_join_local_members(hub_home: Path, wg: "Workgroup") -> None:
             continue
 
     now = _utcnow()
-    roster_payload = [
-        {"pubkey": m.pubkey, "last_seen_at": m.last_seen_at, "bio": m.bio}
-        for m in wg.members
-    ]
     hub_pinned = peers_mod.load(hub_home)
     members_changed = False
+
+    # Two-pass: pass 1 mutates Member.bio/voice BEFORE pass 2 snapshots roster_payload — do not merge.
     for m in wg.members:
         if m.pubkey == wg.meta.hub_pubkey:
             continue
@@ -501,14 +438,36 @@ def _auto_join_local_members(hub_home: Path, wg: "Workgroup") -> None:
         if member_home is None:
             continue
 
-        member_bio = (_cfg.load(member_home).public_bio or "").strip()
-        if member_bio:
-            m.bio = member_bio[:_BIO_MAX]
+        member_cfg = _cfg.load(member_home)
+        member_bio = (member_cfg.public_bio or "").strip()[:_BIO_MAX]
+        if member_bio and member_bio != m.bio:
+            m.bio = member_bio
+            members_changed = True
+        member_voice = (member_cfg.tools.tts.voice or "").strip()[:_VOICE_MAX]
+        if member_voice and member_voice != m.voice:
+            m.voice = member_voice
+            members_changed = True
         if not m.joined:
             m.joined = True
             m.joined_at = now
             m.last_seen_at = now
             members_changed = True
+
+    roster_payload = [
+        {
+            "pubkey": m.pubkey,
+            "last_seen_at": m.last_seen_at,
+            "bio": m.bio,
+            "voice": m.voice,
+        }
+        for m in wg.members
+    ]
+    for m in wg.members:
+        if m.pubkey == wg.meta.hub_pubkey:
+            continue
+        member_home = pubkey_to_home.get(m.pubkey)
+        if member_home is None:
+            continue
 
         hub_id = _resolve_hub_alias(member_home, wg.meta.hub_pubkey, hub_pinned)
         if hub_id is None:
@@ -532,6 +491,9 @@ def _auto_join_local_members(hub_home: Path, wg: "Workgroup") -> None:
         sub.roster_bios = {
             r["pubkey"]: r["bio"] for r in roster_payload if r.get("bio")
         }
+        sub.roster_voices = {
+            r["pubkey"]: r["voice"] for r in roster_payload if r.get("voice")
+        }
         sub_mod.upsert(member_home, sub)
 
     if members_changed:
@@ -543,12 +505,7 @@ def _resolve_hub_alias(
     hub_pubkey: str,
     hub_pinned: list,
 ) -> str | None:
-    """Find the alias the member has for the hub in their peers.yaml.
-
-    Falls back to the alias the hub uses for itself in *its own*
-    peers.yaml shape — but that's almost never useful; we just need
-    a string identifier for ``Subscription.hub_id``.
-    """
+    """Resolve the member's alias for the hub from peers.yaml."""
     from alpi.alp import peers as peers_mod
     pinned = peers_mod.load(member_home)
     for p in pinned:
@@ -560,15 +517,8 @@ def _resolve_hub_alias(
     return None
 
 
-# Rekey + remove (used by leave + kick)
-
-
 def _rekey(home: Path, wg_id: str, dropped_pubkey: str) -> Workgroup:
-    """Drop ``dropped_pubkey`` from the roster, mint a fresh group key,
-    seal it for every remaining member, bump versions and persist.
-    Returns the updated Workgroup. Raises ``ValueError`` if the dropped
-    pubkey is the hub's (the hub cannot leave its own workgroup; spec
-    is hub-anchored, no failover) or if the workgroup is unknown."""
+    """Drop pubkey, mint fresh group key, re-seal for remaining members, bump version. Hub cannot be dropped."""
     wg = load(home, wg_id)
     if wg is None:
         raise ValueError(f"workgroup {wg_id!r} not found")
@@ -594,20 +544,12 @@ def _rekey(home: Path, wg_id: str, dropped_pubkey: str) -> Workgroup:
 
 
 def kick(home: Path, wg_id: str, target_pubkey: str) -> Workgroup:
-    """Hub-side primitive — remove ``target_pubkey`` from the workgroup
-    and rotate the group key. Equivalent to the target calling
-    ``workgroup.leave`` themselves, but initiated locally. Raises
-    ``ValueError`` if the target is the hub or not in the roster."""
+    """Remove target from the workgroup and rotate the group key."""
     return _rekey(home, wg_id, target_pubkey)
 
 
 def add_member(home: Path, wg_id: str, target_pubkey: str) -> Workgroup:
-    """Hub-side primitive — invite a new member by pubkey. Mints a
-    fresh group key, re-seals it for every existing member plus the
-    new one, bumps the key version, persists, and auto-joins the new
-    member if it maps to a local profile. Raises ``ValueError`` if the
-    workgroup is unknown, the pubkey is malformed, or the pubkey is
-    already in the roster."""
+    """Add a new member by pubkey, mint a fresh group key, re-seal for all members, bump key version."""
     wg = load(home, wg_id)
     if wg is None:
         raise ValueError(f"workgroup {wg_id!r} not found")
@@ -642,9 +584,6 @@ def add_member(home: Path, wg_id: str, target_pubkey: str) -> Workgroup:
     return wg
 
 
-# Transcript
-
-
 def _read_transcript(d: Path) -> list[dict[str, Any]]:
     p = d / _TRANSCRIPT
     if not p.exists():
@@ -669,9 +608,6 @@ def _append_transcript(d: Path, entry: dict[str, Any]) -> None:
     line = json.dumps(entry, separators=(",", ":"), ensure_ascii=False)
     with p.open("a", encoding="utf-8") as f:
         f.write(line + "\n")
-
-
-# Ledger — workgroup lifetime spend
 
 
 def _load_ledger(d: Path) -> dict[str, Any]:
@@ -702,12 +638,7 @@ def _save_ledger(d: Path, ledger: dict[str, Any]) -> None:
 
 
 def _validate_budget(budget: dict[str, Any]) -> dict[str, Any]:
-    """Normalise + sanity-check the workgroup budget shape, mirroring
-    the profile-budget UX (``daily_usd`` / ``daily_tokens`` — both
-    optional, set what you care about). Empty dict = no cap.
-    Non-positive values raise ``ValueError`` so a typo fails fast.
-    When both are set, both gate independently — whichever trips
-    first wins."""
+    """Normalise the workgroup budget; empty dict = no cap, non-positive raises."""
     if not budget:
         return {}
     usd = budget.get("max_usd")
@@ -729,10 +660,7 @@ def _validate_budget(budget: dict[str, Any]) -> dict[str, Any]:
 
 
 def _gate_post(meta: Meta, ledger: dict[str, Any], cost: dict[str, Any]) -> None:
-    """Workgroup budget check: would admitting this post breach the
-    lifetime cap? Reuses error code ``-32005 budget-exceeded`` with
-    ``data.cap_kind`` set to ``workgroup_usd`` / ``workgroup_tokens`` so
-    callers can tell it apart from the profile-level cap."""
+    """Raise -32005 budget-exceeded if admitting this post breaches the workgroup cap."""
     if not meta.budget:
         return
     usd_cap = meta.budget.get("max_usd")
@@ -765,18 +693,8 @@ def _gate_post(meta: Meta, ledger: dict[str, Any], cost: dict[str, Any]) -> None
             )
 
 
-# Server-side handlers — registered against ``alpi.alp.server.Server``
-
-
 def register(server: alp_server.Server, home: Path) -> None:
-    """Register ``workgroup.join``, ``workgroup.post``, ``workgroup.pull``,
-    ``workgroup.leave``.
-
-    Capability is enforced upstream by ``peer.may_call``; the handlers
-    additionally check workgroup membership so a peer with the verb
-    allowed but not in this specific workgroup gets ``-32008
-    workgroup-not-member`` rather than silent success.
-    """
+    """Register workgroup.{join,post,pull,leave}; handlers verify roster and raise -32008 workgroup-not-member."""
 
     async def workgroup_join(
         params: dict[str, Any],
@@ -797,12 +715,12 @@ def register(server: alp_server.Server, home: Path) -> None:
             raise alp_server.HandlerError(-32008, "workgroup-not-member")
         now = _utcnow()
         member.last_seen_at = now
-        # Refresh the member's bio on every join — the joiner's
-        # profile owns the source of truth, so re-joining lets a
-        # bio edit propagate without a separate verb.
         bio = str((params or {}).get("bio") or "").strip()
         if bio:
             member.bio = bio[:_BIO_MAX]
+        voice = str((params or {}).get("voice") or "").strip()
+        if voice:
+            member.voice = voice[:_VOICE_MAX]
         if not member.joined:
             member.joined = True
             member.joined_at = now
@@ -815,7 +733,12 @@ def register(server: alp_server.Server, home: Path) -> None:
             "key_version": member.key_version,
             "current_key_version": wg.meta.current_key_version,
             "members": [
-                {"pubkey": m.pubkey, "last_seen_at": m.last_seen_at, "bio": m.bio}
+                {
+                    "pubkey": m.pubkey,
+                    "last_seen_at": m.last_seen_at,
+                    "bio": m.bio,
+                    "voice": m.voice,
+                }
                 for m in wg.members
             ],
         }
@@ -880,7 +803,6 @@ def register(server: alp_server.Server, home: Path) -> None:
         ledger["posts"] = int(ledger.get("posts", 0)) + 1
         _save_ledger(d, ledger)
 
-        # Liveness — posting is activity, stamp it.
         member = wg.member(peer.pubkey)
         if member is not None:
             member.last_seen_at = entry["ts"]
@@ -910,9 +832,6 @@ def register(server: alp_server.Server, home: Path) -> None:
         member = wg.member(peer.pubkey)
         if member is None:
             raise alp_server.HandlerError(-32008, "workgroup-not-member")
-        # Liveness signal — every pull stamps the caller as "just seen"
-        # so the hub maintains an implicit online roster without any
-        # extra probe traffic.
         member.last_seen_at = _utcnow()
         _save_members(_wg_dir(home, wg_id), wg.members)
         all_posts = _read_transcript(_wg_dir(home, wg_id))
@@ -920,19 +839,15 @@ def register(server: alp_server.Server, home: Path) -> None:
         return {
             "posts": fresh,
             "head": all_posts[-1]["seq"] if all_posts else 0,
-            # Always echo the caller's current sealed key + version so
-            # rekey detection is implicit in pull. Members compare
-            # ``current_key_version`` against the highest version they
-            # already hold; if behind, they ``open_sealed_group_key``
-            # the returned blob and store the new group_key under that
-            # version in their local map.
             "current_key_version": wg.meta.current_key_version,
             "sealed_key": member.sealed_key,
-            # Refreshed roster snapshot — members pick this up to
-            # display "@bob (last seen 8m ago, "<bio>")" in the engine
-            # context.
             "members": [
-                {"pubkey": m.pubkey, "last_seen_at": m.last_seen_at, "bio": m.bio}
+                {
+                    "pubkey": m.pubkey,
+                    "last_seen_at": m.last_seen_at,
+                    "bio": m.bio,
+                    "voice": m.voice,
+                }
                 for m in wg.members
             ],
         }

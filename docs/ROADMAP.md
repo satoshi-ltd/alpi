@@ -104,6 +104,7 @@ skill import without adopting a marketplace or plugin runtime.
 | CM.1 | Memory audit CLI — `alpi memory audit` reports docs/code drift signals, low-confidence expiry candidates, duplicate clusters, promotion candidates, and memory usage pressure. | 🔵 |
 | CM.2 | Safe skill import — `alpi skill import <dir\|zip>` previews, normalizes, scans, and installs a local skill into the alpi contract; no marketplace, no remote registry. | 🔵 |
 | CM.3 | Tool availability checks — add optional `check_fn` probes so unavailable tools can be hidden or flagged consistently when real profiles show broken visible tools. | 🔵 |
+| TTS.1 | Local TTS engine + daemon-served voice — replace Edge TTS (online-only Microsoft endpoint, currently called from both daemon and Tauri) with on-device synthesis served by the daemon, so the desktop app, gateway and TUI share one path and one voice catalog. | 🔵 |
 
 ### Cost / latency
 
@@ -300,6 +301,43 @@ engine:
 
 **Promotion condition.** Keep this as v0.6 work, not v0.5, unless v0.5 profiles
 repeatedly expose tools that fail before doing useful work.
+
+### TTS.1. Local TTS engine + daemon-served voice
+
+Today speech synthesis goes through Microsoft Edge TTS — free, no API key, but
+**online-only** and called from two different places: `edge_tts` in the daemon
+(`alpi/tools/tts.py`) and a direct WebSocket from Rust in the desktop
+(`desktop/src-tauri/src/tts.rs`). That split is the only remaining
+network-dependent piece of the speech path and has already produced three
+desynchronised voice shortlists (`VOICE_POOL`, `VOICE_SHORTLIST` in desktop,
+`_VOICE_SHORTLIST` in the daemon CLI), two cache layouts, and a duplicated
+synthesis pipeline that any future engine would have to port twice.
+
+**Phase 1 — research + benchmark.** Compare candidates on quality, on-disk
+size, cold/warm latency, license, and locale coverage: Piper (rhasspy/piper,
+MIT, ~25–60 MB/voice, ONNX/CPU), Kokoro-82M (Apache, ~330 MB single model
+covering many languages), Apple AVSpeechSynthesizer (macOS-only, native,
+zero install cost, FFI from Rust), espeak-ng as accessibility fallback. Pick
+one default engine plus optionally Apple on macOS.
+
+**Phase 2 — daemon-served synthesis.** Bundle the chosen engine in the daemon
+behind the existing `tts` tool, expose a host RPC for the desktop, and
+deprecate `src-tauri/src/tts.rs`. Edge TTS reduces to an opt-in "cloud"
+provider for users who want the larger catalog and accept the network call.
+The tray-without-daemon scenario that motivated the Rust path is no longer a
+real use case now that the desktop boots the embedded daemon.
+
+**Phase 3 — single voice catalog.** Collapse the three shortlists into one
+daemon-owned voice list (engine + locale + gender + cloud/local flag) that
+setup, settings and the per-peer deterministic hashing all consume. Surface a
+"browse all" expander against the full provider catalog when the active engine
+exposes one.
+
+**Why it waits.** Edge TTS works and is free, so this is not user-visible
+breakage today. The trigger to promote is either (a) a real offline-first
+deployment where the Microsoft endpoint is unreachable, or (b) AQ (continuous
+voice mode) being promoted from Future — continuous voice on a cloud endpoint
+is a latency and cost problem this item fixes upstream.
 
 ## Future releases
 

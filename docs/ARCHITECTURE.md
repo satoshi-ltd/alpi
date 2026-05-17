@@ -588,8 +588,21 @@ Verb namespaces in current shape:
   `alpi.host.events.emit(kind, data)`; loop is captured at first
   subscription and broadcasts via `call_soon_threadsafe` (safe to
   call from worker threads). Filter optional via `params.kinds`.
-  Currently wired source: `Engine.save_session` → `session_changed`.
-  Pending sources tracked in [ROADMAP.md](ROADMAP.md).
+  Wired kinds:
+  - `session_changed` — `Engine.save_session` (id + subdir).
+  - `wg.done` — `workgroup_client.post()` when a hub posts a
+    valid `#done` (detected by `tasks_mod.is_done`, so handle
+    prefixes + line-anchored grammar are honoured). Carries
+    `wg_id`, `seq`, and a 200-char summary. Hub-only.
+  - `schedule.done` / `schedule.failed` — `scheduler/run.py::tick`
+    after each job dispatch (job_id, kind, message).
+  - `budget.threshold` — `ledger.record()` when a USD spend
+    crosses 80% or 100% of the daily cap (highest threshold wins
+    when a single record vaults past both). Engine passes
+    `cfg_budget` into the record callsite.
+  Intended consumer: the Tauri desktop tray will bridge these to OS
+  notifications in a follow-up ``desktop-v0.2.19``; this release is
+  daemon-only.
 
 Adding a new verb: create the handler in the matching `host/*.py`
 module, register on `host_server.Server.register` (or

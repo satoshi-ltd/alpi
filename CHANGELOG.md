@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.4.44 — 2026-05-17 — daemon event bus: 4 new kinds for native desktop notifications
+
+The desktop tray needs daemon-side signals to surface OS-level banners for the moments worth interrupting the user. `alpi/host/events.py` previously published only `session_changed`; this release adds four new kinds at the right chokepoints. The desktop consumer ships with `desktop-v0.2.19`; this release is daemon-only.
+
+- **`wg.done`** — `alpi/alp/workgroup_client.py::post()` when a hub closes a task. Emitted at the SDK chokepoint so the host endpoint (`host.workgroup.post`) and the `workgroup_post` tool both fire consistently. Detection uses `tasks_mod.is_done()`, honouring the protocol grammar: line-anchored marker, optional `@handle` prefixes, non-empty payload. Hub-only.
+- **`schedule.done` / `schedule.failed`** — `alpi/scheduler/run.py::tick()` after every job dispatch (`job_id`, `kind`, `message`).
+- **`budget.threshold`** — `alpi/ledger.py::record()` on USD-cap crossing at 80% / 100%; highest threshold wins when a single record vaults past both. Engine now passes `cfg_budget` into the record callsite.
+- New `alpi/home.py::profile_name(home)` helper — single source for "`~/.alpi` → `default`" / "`~/.alpi/profiles/<n>` → `<n>`". `engine._profile_name` delegates; the ad-hoc `home.name` path (which returned `.alpi` for the root home) is gone from the bus emit sites.
+
+Tests in `tests/host/test_notification_events.py` cover all four kinds at unit level and via a real `wc.post()` integration that exercises substantive check, gating, encryption, transcript append, and ledger write. Regression test pins `profile_name("~/.alpi") == "default"`. Also fixed `test_prune_drops_old_low_confidence` which was UTC-vs-local-day flaky (memory writes `_today()` in UTC; the test used `date.today()` local).
+
+`docs/ARCHITECTURE.md` enumerates every wired event kind under the `host.events.subscribe` section.
+
 ## v0.4.43 — 2026-05-14 — resource-leak hygiene pass after the RAG bloat hunt
 
 Audit triggered by the v0.4.42 RAG freelist bug. Read-only sweep across SQLite handles, file opens, subprocess pipes, and the live daemon's FD table found a handful of small leaks and one latent deadlock — none catastrophic, but the same shape of slow accumulation that bit us on `rag/store.sqlite`. Fixed the actionable ones.

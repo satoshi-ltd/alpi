@@ -60,9 +60,6 @@ def run(home: Path) -> None:
             _join_flow(home)
 
 
-# Hub-of detail
-
-
 def _hub_detail(home: Path, wg) -> str:
     parts: list[str] = [f"{len(wg.members)} members"]
     if wg.meta.paused:
@@ -326,9 +323,6 @@ def _read_transcript(home: Path, wg_id: str) -> list[dict[str, Any]]:
     return out
 
 
-# Member-of detail
-
-
 def _sub_detail_view(home: Path, wg_id: str) -> None:
     while True:
         sub = sub_mod.get(home, wg_id)
@@ -345,11 +339,6 @@ def _sub_detail_view(home: Path, wg_id: str) -> None:
         ui._console.print(f"  cursor   seq {sub.last_seq}")
         ui._console.print(f"  keys     v{sub.latest_version()} (cached)")
         ui._console.print("")
-        # Member view — pause/resume are hub-only at the protocol
-        # layer (the SDK rejects with `-32008 workgroup-not-hub` and
-        # the workgroup_client SDK refuses to even dial). Don't
-        # offer those choices here; members can only post, pull,
-        # and leave.
         items = [
             ("Read new messages", "pull",  "fetch + decrypt anything new"),
             ("Send a message",    "post",  "encrypt + send to the hub"),
@@ -419,9 +408,6 @@ def _safe(fn, ok_msg: str, fail_label: str) -> None:
     ui.ok_and_wait(ok_msg)
 
 
-# Create flow (hub side)
-
-
 def _create_flow(home: Path) -> None:
     ui.banner(
         ui.crumb("setup", "workgroups", "create"),
@@ -448,7 +434,6 @@ def _create_flow(home: Path) -> None:
         return ui.cancelled()
     briefing = (briefing or "").strip()
 
-    # Pick members from peers.yaml
     pinned = peers_mod.load(home)
     if not pinned:
         ui.fail_and_wait("no peers pinned — add some in setup → Peers first")
@@ -457,7 +442,6 @@ def _create_flow(home: Path) -> None:
     if member_pks is None:
         return ui.cancelled()
 
-    # Optional budget
     budget = _pick_budget(home)
     if budget is False:
         return ui.cancelled()
@@ -469,18 +453,17 @@ def _create_flow(home: Path) -> None:
     )
 
     kp = load_or_generate(home)
-    # Carry the hub's profile-level public_bio onto its own member
-    # record at create time. Members joining later send their bios via
-    # ``workgroup.join``; the hub never calls join on itself, so we
-    # have to plumb it explicitly here.
+    # Hub never calls workgroup.join on itself; plumb hub_bio/voice into the create call directly.
     from alpi import config as _cfg
-    hub_bio = (_cfg.load(home).public_bio or "").strip()
+    hub_cfg = _cfg.load(home)
+    hub_bio = (hub_cfg.public_bio or "").strip()
+    hub_voice = (hub_cfg.tools.tts.voice or "").strip()
     try:
         wg = wg_mod.create(
             home, name=name, hub_kp=kp,
             member_pubkeys=member_pks, budget=budget or {},
             briefing=briefing, auto_kickoff=bool(auto_kickoff),
-            hub_bio=hub_bio,
+            hub_bio=hub_bio, hub_voice=hub_voice,
         )
     except ValueError as e:
         ui.fail_and_wait(str(e))
@@ -722,9 +705,6 @@ def _pick_budget(home: Path) -> dict[str, Any] | bool | None:
     return out or None
 
 
-# Join flow (member side)
-
-
 def _join_flow(home: Path) -> None:
     ui.banner(
         ui.crumb("setup", "workgroups", "join"),
@@ -765,9 +745,6 @@ def _join_flow(home: Path) -> None:
     ui.ok_and_wait(f"joined {sub.name or wg_id} via @{hub_id}")
 
 
-# Kick flow (hub)
-
-
 def _kick_flow(home: Path, wg) -> None:
     kp = load_or_generate(home)
     aliases = _alias_map(home)
@@ -796,9 +773,6 @@ def _kick_flow(home: Path, wg) -> None:
         ui.fail_and_wait(str(e))
         return
     ui.ok_and_wait("kicked + rekeyed")
-
-
-# Delete flow (hub-side, local destructive)
 
 
 def _delete_flow(home: Path, wg) -> bool:

@@ -128,22 +128,52 @@ def check(home: Path, cfg_budget: dict[str, Any] | None) -> None:
         raise BudgetExceeded(kind, cap, used)
 
 
-def record(home: Path, *, usd: float, tokens: int) -> None:
-    """Add today's spend to the profile total and the current peer bucket
-    (clamped to zero — a mis-signed report must not rewind the ledger)."""
+def record(
+    home: Path,
+    *,
+    usd: float,
+    tokens: int,
+    cfg_budget: dict[str, Any] | None = None,
+) -> None:
+    """Add today's spend; emits ``budget.threshold`` once per crossing (highest threshold wins if a single record vaults past both)."""
     if usd <= 0 and tokens <= 0:
         return
     peer_id = _peer_ctx.get() or INTERACTIVE_BUCKET
     with _lock:
         data = load(home)
         profile = data.setdefault("profile", {"usd": 0.0, "tokens": 0})
-        profile["usd"] = float(profile.get("usd", 0)) + max(0.0, float(usd))
+        before_usd = float(profile.get("usd", 0))
+        profile["usd"] = before_usd + max(0.0, float(usd))
         profile["tokens"] = int(profile.get("tokens", 0)) + max(0, int(tokens))
         buckets = data.setdefault("by_peer", {})
         bucket = buckets.setdefault(peer_id, {"usd": 0.0, "tokens": 0})
         bucket["usd"] = float(bucket.get("usd", 0)) + max(0.0, float(usd))
         bucket["tokens"] = int(bucket.get("tokens", 0)) + max(0, int(tokens))
         save(home, data)
+        after_usd = profile["usd"]
+    if cfg_budget is None:
+        return
+    kind, cap = _budget(cfg_budget)
+    if kind != "usd" or cap <= 0:
+        return
+    crossed = None
+    if before_usd < cap <= after_usd:
+        crossed = "100"
+    elif before_usd < cap * 0.8 <= after_usd:
+        crossed = "80"
+    if crossed is None:
+        return
+    try:
+        from alpi.home import profile_name
+        from alpi.host import events as host_events
+        host_events.emit("budget.threshold", {
+            "profile": profile_name(home),
+            "level": crossed,
+            "used_usd": round(after_usd, 4),
+            "cap_usd": cap,
+        })
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def snapshot(home: Path) -> dict[str, Any]:
