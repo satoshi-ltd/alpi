@@ -92,6 +92,19 @@ async def _providers_set_key(
             data={"detail": "value must not contain newlines"},
         )
     home = _resolve_home(str(profile or ""))
+    if key == "TELEGRAM_BOT_TOKEN":
+        from alpi.home import telegram_token_owner
+        owner = telegram_token_owner(value_str, exclude=home)
+        if owner is not None:
+            raise host_server.HandlerError(
+                -32602, "invalid-params",
+                data={"detail": (
+                    f"Telegram bot token already used by profile {owner!r}. "
+                    "Telegram allows one poller per bot — give this profile its "
+                    "own bot from @BotFather or remove the token from the other "
+                    "profile first."
+                )},
+            )
     cfg = cfg_mod.load(home)
     _append_env(cfg.env_path, key, value_str)
     return {"ok": True}

@@ -263,7 +263,7 @@ def test_run_job_delivers_reply(monkeypatch, tmp_home_no_env: Path) -> None:
 
     sent = []
     monkeypatch.setattr(delivery, "send_to",
-                        lambda p, c, t: sent.append((p, c, t)))
+                        lambda p, c, t, **_: sent.append((p, c, t)))
 
     job = {"id": "j", "kind": "cron", "prompt": "p",
            "platform": "telegram", "chat_id": "1"}
@@ -291,7 +291,7 @@ def test_run_job_silent_when_no_platform(monkeypatch, tmp_home_no_env: Path) -> 
     monkeypatch.setattr(scheduler.subprocess, "run", fake_run)
     sent = []
     monkeypatch.setattr(delivery, "send_to",
-                        lambda p, c, t: sent.append((p, c, t)))
+                        lambda p, c, t, **_: sent.append((p, c, t)))
 
     job = {"id": "j", "kind": "cron", "prompt": "reindex", "platform": ""}
     ok, msg = scheduler.run_job(job, tmp_home_no_env)
@@ -317,7 +317,7 @@ def test_run_job_uses_default_chat_id(monkeypatch, tmp_home_no_env: Path) -> Non
     )
     sent = []
     monkeypatch.setattr(delivery, "send_to",
-                        lambda p, c, t: sent.append((p, c, t)))
+                        lambda p, c, t, **_: sent.append((p, c, t)))
 
     job = {"id": "j", "kind": "cron", "prompt": "p",
            "platform": "telegram", "chat_id": ""}
@@ -351,7 +351,7 @@ def test_run_job_skips_delivery_when_send_message_used(
     )
     sent = []
     monkeypatch.setattr(delivery, "send_to",
-                        lambda p, c, t: sent.append((p, c, t)))
+                        lambda p, c, t, **_: sent.append((p, c, t)))
 
     job = {"id": "j", "kind": "cron", "prompt": "send 'x' via telegram",
            "platform": "telegram", "chat_id": "1"}
@@ -401,7 +401,7 @@ def test_no_agent_silent_when_no_stdout(monkeypatch, tmp_home_no_env: Path) -> N
     monkeypatch.setattr(scheduler.subprocess, "run", fake_run)
     sent = []
     monkeypatch.setattr(delivery, "send_to",
-                        lambda p, c, t: sent.append((p, c, t)))
+                        lambda p, c, t, **_: sent.append((p, c, t)))
 
     job = {"id": "j", "kind": "cron", "no_agent": True,
            "prompt": f"python3 {script}",
@@ -428,7 +428,7 @@ def test_no_agent_delivers_stdout_when_platform_set(
     )
     sent = []
     monkeypatch.setattr(delivery, "send_to",
-                        lambda p, c, t: sent.append((p, c, t)))
+                        lambda p, c, t, **_: sent.append((p, c, t)))
 
     job = {"id": "j", "kind": "cron", "no_agent": True,
            "prompt": f"python3 {script}",

@@ -43,6 +43,17 @@ def run(home: Path) -> None:
     if not token:
         return ui.cancelled()
 
+    if token != current_token:
+        from alpi.home import telegram_token_owner
+        owner = telegram_token_owner(token, exclude=home)
+        if owner is not None:
+            ui.dim(
+                f"\n  That bot is already wired to profile {owner!r}. "
+                "Telegram lets only one poller per bot, so each profile needs "
+                "its own bot. Create a new one with @BotFather and try again.\n"
+            )
+            return ui.cancelled()
+
     chat_ids_raw = ui.text(
         "Allowed chat IDs (comma-separated, e.g. 12345,67890):",
         default=current_chats,

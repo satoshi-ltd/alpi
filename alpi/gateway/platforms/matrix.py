@@ -19,8 +19,8 @@ def _state_path(home: Path) -> Path:
     return home / "gateway" / "matrix-state.json"
 
 
-def _allowed_senders() -> list[str]:
-    raw = os.environ.get("MATRIX_ALLOWED_SENDERS", "")
+def _allowed_senders(env: dict[str, str]) -> list[str]:
+    raw = env.get("MATRIX_ALLOWED_SENDERS", "")
     return [s.strip() for s in raw.split(",") if s.strip()]
 
 
@@ -84,8 +84,8 @@ class Matrix(Platform):
         self._client = self._build_client()
         log.info("Matrix listener starting (sync, since=%s).", self._next_batch or "<fresh>")
 
-        allowed_rooms = set(allowed_chat_ids("matrix"))
-        allowed_senders = set(_allowed_senders())
+        allowed_rooms = set(allowed_chat_ids("matrix", env=self.env))
+        allowed_senders = set(_allowed_senders(self.env))
         own_user = self._client.user_id
 
         first_sync = True

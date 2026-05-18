@@ -28,7 +28,8 @@ _TYPING_REFRESH_SECONDS = 4.0
 
 async def _handle_platform(platform: Platform, home: Path) -> None:
     async for msg in platform.listen():
-        if not _is_allowed(msg):
+        # Per-profile env: a sibling profile's allowlist must not authorize this profile's inbound.
+        if not delivery.is_allowed(msg.platform, msg.external_chat_id, env=platform.env):
             log.warning(
                 "Dropping message from disallowed chat: %s:%s",
                 msg.platform, msg.external_chat_id,
@@ -249,10 +250,6 @@ def _show_tool_trace(platform: str, platform_cfg: dict[str, Any]) -> bool:
     if platform in _CHAT_PLATFORMS:
         return bool(platform_cfg.get("show_tool_trace", True))
     return False  # email → tool traces would each be a separate message
-
-
-def _is_allowed(msg: IncomingMessage) -> bool:
-    return delivery.is_allowed(msg.platform, msg.external_chat_id)
 
 
 async def serve(home: Path) -> None:

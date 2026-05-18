@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import os
 from pathlib import Path
 from typing import Any, AsyncIterator
 
@@ -13,6 +12,7 @@ import httpx
 
 from alpi.gateway.base import IncomingMessage, OutgoingMessage, Platform
 from alpi.gateway.delivery import format_for_telegram
+
 
 log = logging.getLogger("alpi.gateway.telegram")
 
@@ -30,7 +30,7 @@ class Telegram(Platform):
     def __init__(self, home) -> None:
         super().__init__(home)
         self._offset = self._load_offset()
-        # Per-chat state for the transient `/model` picker.
+        self._token = self.env.get("TELEGRAM_BOT_TOKEN", "").strip() or None
         self._model_picker: dict[str, dict[str, Any]] = {}
 
     def _load_offset(self) -> int:
@@ -50,7 +50,7 @@ class Telegram(Platform):
         tmp.replace(p)
 
     async def listen(self) -> AsyncIterator[IncomingMessage]:
-        token = os.environ.get("TELEGRAM_BOT_TOKEN")
+        token = self._token
         if not token:
             log.info("TELEGRAM_BOT_TOKEN not set — telegram listener idle.")
             while True:
@@ -67,7 +67,8 @@ class Telegram(Platform):
         last_error_class: str | None = None
         error_streak = 0
         last_streak_log = 0.0
-        SUMMARY_INTERVAL_SEC = 60.0
+        conflict_announced = False
+        SUMMARY_INTERVAL_SEC = 300.0
         async with httpx.AsyncClient(timeout=60) as client:
             while True:
                 try:
@@ -81,6 +82,16 @@ class Telegram(Platform):
                     error_class = type(e).__name__
                     is_conflict = "409" in str(e)
                     now = asyncio.get_running_loop().time()
+                    if is_conflict:
+                        if not conflict_announced:
+                            log.warning(
+                                "Telegram bot already polled by another process (409 Conflict). "
+                                "Inbound paused; outbound still works. "
+                                "Stop the other instance (other machine / Umbrel) or rotate the bot token to recover."
+                            )
+                            conflict_announced = True
+                        await asyncio.sleep(60)
+                        continue
                     if error_class != last_error_class:
                         log.warning("getUpdates failed: %s", e)
                         last_error_class = error_class
@@ -95,11 +106,13 @@ class Telegram(Platform):
                             )
                             error_streak = 0
                             last_streak_log = now
-                    # 409 = another polling instance owns this bot — back off long.
-                    await asyncio.sleep(60 if is_conflict else 5)
+                    await asyncio.sleep(5)
                     continue
                 last_error_class = None
                 error_streak = 0
+                if conflict_announced:
+                    log.info("Telegram polling recovered (409 cleared).")
+                    conflict_announced = False
 
                 results = data.get("result", [])
                 if first_poll and results:
@@ -146,7 +159,7 @@ class Telegram(Platform):
                     )
 
     async def send_typing(self, chat_id: str) -> None:
-        token = os.environ.get("TELEGRAM_BOT_TOKEN")
+        token = self._token
         if not token:
             return
         url = API_BASE.format(token=token) + "/sendChatAction"
@@ -157,7 +170,7 @@ class Telegram(Platform):
             log.debug("sendChatAction failed: %s", e)
 
     async def send(self, message: OutgoingMessage) -> None:
-        token = os.environ.get("TELEGRAM_BOT_TOKEN")
+        token = self._token
         if not token:
             return
         base = API_BASE.format(token=token)
@@ -180,7 +193,7 @@ class Telegram(Platform):
 
     # Two-step inline /model picker.
     async def send_model_picker(self, chat_id: str) -> None:
-        token = os.environ.get("TELEGRAM_BOT_TOKEN")
+        token = self._token
         if not token:
             return
         base = API_BASE.format(token=token)
@@ -222,7 +235,7 @@ class Telegram(Platform):
             return
 
         state = self._model_picker.get(chat_id)
-        token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+        token = self._token or ""
         base = API_BASE.format(token=token)
 
         async def _ack(text: str = "") -> None:

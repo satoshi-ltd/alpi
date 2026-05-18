@@ -260,11 +260,11 @@ def _run_script_only(job: dict, home: Path) -> tuple[bool, str]:
         return True, f"silent run ok: {summary}"
 
     platform = job["platform"].lower()
-    chat_id = job.get("chat_id") or delivery.default_chat_id(platform)
+    chat_id = job.get("chat_id") or delivery.default_chat_id(platform, env=env)
     if not chat_id:
         return False, f"no chat_id and no default for {platform}"
     try:
-        delivery.send_to(platform, chat_id, reply)
+        delivery.send_to(platform, chat_id, reply, env=env)
     except delivery.DeliveryError as e:
         return False, f"delivery failed: {e}"
     return True, f"delivered to {platform}:{chat_id}"
@@ -309,6 +309,7 @@ def run_job(job: dict, home: Path) -> tuple[bool, str]:
     wrapped = wrap_header + "\n\n" + prompt
 
     env = dict(os.environ)
+    _load_profile_env(home, env)
     env["ALPI_HOME"] = str(home)
     env["ALPI_PLATFORM"] = "cron"
     try:
@@ -344,12 +345,12 @@ def run_job(job: dict, home: Path) -> tuple[bool, str]:
         return False, "agent produced no reply"
 
     platform = job["platform"].lower()
-    chat_id = job.get("chat_id") or delivery.default_chat_id(platform)
+    chat_id = job.get("chat_id") or delivery.default_chat_id(platform, env=env)
     if not chat_id:
         return False, f"no chat_id and no default for {platform}"
 
     try:
-        delivery.send_to(platform, chat_id, reply)
+        delivery.send_to(platform, chat_id, reply, env=env)
     except delivery.DeliveryError as e:
         return False, f"delivery failed: {e}"
     return True, f"delivered to {platform}:{chat_id}"

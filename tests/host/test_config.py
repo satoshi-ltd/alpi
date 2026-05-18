@@ -369,3 +369,44 @@ async def test_gmail_authorize_propagates_oauth_error(
     assert frames[0] == {"event": "browser_opened"}
     assert frames[1]["event"] == "error"
     assert "access_denied" in frames[1]["text"]
+
+
+@pytest.mark.asyncio
+async def test_providers_set_key_rejects_duplicate_telegram_token(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    from alpi import home as home_mod
+    root = tmp_path / "alpi-root"
+    (root / "profiles" / "doc").mkdir(parents=True)
+    (root / "profiles" / "teacher").mkdir(parents=True)
+    cfg = cfg_mod.Config(home=root / "profiles" / "doc", model="x")
+    cfg_mod.save(cfg)
+    cfg = cfg_mod.Config(home=root / "profiles" / "teacher", model="x")
+    cfg_mod.save(cfg)
+    (root / "profiles" / "doc" / ".env").write_text("TELEGRAM_BOT_TOKEN=bot-shared\n")
+
+    monkeypatch.setattr(
+        data_handlers, "_resolve_home",
+        lambda p: root / "profiles" / (p or "doc"),
+    )
+    monkeypatch.setattr(home_mod, "_ROOT", root)
+
+    srv = host_server.Server(home=root / "profiles" / "teacher")
+    data_config.register(srv)
+
+    body = {
+        "id": "r",
+        "method": "host.providers.set_key",
+        "params": {
+            "profile": "teacher",
+            "key": "TELEGRAM_BOT_TOKEN",
+            "value": "bot-shared",
+        },
+    }
+    resp = await srv._dispatch(body)
+    assert "error" in resp
+    assert "already used by profile 'doc'" in resp["error"]["data"]["detail"]
+
+    body["params"]["value"] = "bot-fresh"
+    resp = await srv._dispatch(body)
+    assert resp["result"]["ok"] is True

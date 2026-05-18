@@ -630,6 +630,38 @@ are hardcoded off because each trace would be its own message.
 Disable for a profile via `alpi setup → Services → Daemon →
 Gateway · off` (writes `service.gateway: false`).
 
+**One bot per profile (hard rule).** Telegram long-polling allows
+a single concurrent `getUpdates` per bot token; two profiles
+polling the same token deadlock each other on 409. The contract
+is enforced at write time: `alpi setup → telegram` and the host
+RPC `host.providers.set_key` reject a `TELEGRAM_BOT_TOKEN` that is
+already configured in another profile, with an error naming the
+owner. The daemon trusts the invariant and runs each profile's
+listener with its own `self._token` (read from `<home>/.env` at
+construction — no shared `os.environ`). Multi-profile inbound
+must use one bot per profile; single bot with internal routing
+is not supported (would force shared offsets / allowlists /
+session state).
+
+**Per-profile env snapshot.** Every `Platform` captures
+`{**os.environ, **<home>/.env}` at `__init__` into `self.env`
+(parsed via `alpi.home.read_profile_env`, which strips surrounding
+quotes). Today the snapshot is the source of truth for **Telegram
+credentials** (`self._token`) and **inbound allowlist checks across
+all platforms** via `delivery.is_allowed(msg.platform,
+msg.external_chat_id, env=platform.env)` — so a sibling profile's
+`TELEGRAM_ALLOWED_CHAT_IDS` / `IMAP_ALLOWED_SENDERS` /
+`GMAIL_ALLOWED_SENDERS` cannot authorize this profile's inbound.
+Matrix and IMAP still read several of their own credentials
+(`MATRIX_*`, `IMAP_*`) directly from `os.environ`; those paths are
+safe in practice because TUI/CLI sessions are single-profile and the
+daemon orchestrator loads each profile's `.env` before spawning its
+listener, but they have not been migrated to `self.env` yet. The
+snapshot is frozen at construction: credential or allowlist edits
+require a daemon/gateway restart to apply (the host RPC
+`host.providers.set_key` writes the file but does not hot-reload
+live listeners).
+
 ### Schedule (`alpi/scheduler/`)
 
 Tick loop (default 30s) hosted inside the alpi daemon. `add`

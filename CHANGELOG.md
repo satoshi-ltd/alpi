@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.4.45 — 2026-05-18 — Telegram profile isolation
+
+Multi-profile daemons now isolate Telegram gateway state per profile. Telegram long-polling allows only one active `getUpdates` consumer per bot token, so Alpi now treats one Telegram bot per profile as a hard contract and avoids using a sibling profile's env for inbound authorization.
+
+- `alpi setup → telegram` and `host.providers.set_key` reject a `TELEGRAM_BOT_TOKEN` already configured by another profile, naming the owner. `alpi.home.telegram_token_owner()` and `read_profile_env()` provide the shared implementation, including quoted-token handling.
+- `Platform` now captures a frozen per-profile env snapshot (`{**os.environ, **<home>/.env}`) at construction. Telegram reads its token from that snapshot, and inbound allowlist checks use `delivery.is_allowed(..., env=platform.env)` so another profile's allowlist cannot authorize this profile's chats.
+- Scheduler delivery now loads the firing profile's `.env` into a local env dict and passes it through `delivery.default_chat_id()` / `delivery.send_to()` instead of relying on process-global env.
+- Telegram 409 conflicts now log once with recovery instructions and back off for 60s, avoiding noisy repeated warnings when another machine still owns the bot token.
+
+Docs: `docs/ARCHITECTURE.md` and the bundled knowledge reference document the one-bot-per-profile rule, frozen gateway env snapshots, and the current caveat that Matrix / IMAP still read some credentials directly from `os.environ`.
+
 ## v0.4.44 — 2026-05-17 — daemon event bus: 4 new kinds for native desktop notifications
 
 The desktop tray needs daemon-side signals to surface OS-level banners for the moments worth interrupting the user. `alpi/host/events.py` previously published only `session_changed`; this release adds four new kinds at the right chokepoints. The desktop consumer ships with `desktop-v0.2.19`; this release is daemon-only.

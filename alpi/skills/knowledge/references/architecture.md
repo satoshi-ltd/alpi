@@ -159,6 +159,20 @@ Tool actions: `memory(action="promotion_list")` read-only, `memory(action="promo
 - Gateways receive inbound messages and hand them to the engine.
 - Scheduler jobs also run through the agent loop.
 - One daemon supervises every profile on the machine.
+- **One Telegram bot per profile** — Telegram allows only one poller
+  per token; two profiles sharing a token 409 each other forever. The
+  contract is enforced at write time (TUI setup + host RPC reject
+  duplicates) and listeners read their token from `<home>/.env`, not
+  the global env.
+- **Per-profile env snapshot** — every `Platform` captures
+  `{**os.environ, **<home>/.env}` at construction into `self.env`.
+  Used today for **Telegram credentials** (`self._token`) and the
+  **inbound allowlist check** for every platform
+  (`delivery.is_allowed(..., env=platform.env)`), so a sibling
+  profile's `.env` cannot authorize this profile's chats. Matrix /
+  IMAP still pull some of their own credentials from `os.environ`
+  directly — not migrated yet. Snapshot is frozen at construction;
+  credential edits require a daemon/gateway restart.
 
 ## Host/API boundary
 

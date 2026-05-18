@@ -56,6 +56,54 @@ def alpi_root() -> Path:
     return _ROOT
 
 
+def read_profile_env(home: Path) -> dict[str, str]:
+    """Parse ``<home>/.env`` → dict. Strips surrounding quotes. Single source for per-profile env snapshots — no global ``os.environ`` mutation."""
+    out: dict[str, str] = {}
+    env_path = home / ".env"
+    if not env_path.exists():
+        return out
+    try:
+        text = env_path.read_text()
+    except OSError:
+        return out
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        k, _, v = line.partition("=")
+        k = k.strip()
+        if not k:
+            continue
+        v = v.strip()
+        if len(v) >= 2 and v[0] == v[-1] and v[0] in ('"', "'"):
+            v = v[1:-1]
+        out[k] = v
+    return out
+
+
+def telegram_token_owner(
+    token: str,
+    *,
+    exclude: Path | None = None,
+    root: Path | None = None,
+) -> str | None:
+    """Profile name that already owns this Telegram bot token, or ``None``. One-profile-per-bot is hard-required by Telegram long-polling (409 on second poller)."""
+    if not token:
+        return None
+    base = root or alpi_root()
+    candidates: list[Path] = [base]
+    profiles_dir = base / "profiles"
+    if profiles_dir.is_dir():
+        candidates.extend(sorted(p for p in profiles_dir.iterdir() if p.is_dir()))
+    target = token.strip()
+    for home in candidates:
+        if exclude is not None and home.resolve() == exclude.resolve():
+            continue
+        if read_profile_env(home).get("TELEGRAM_BOT_TOKEN", "").strip() == target:
+            return profile_name(home)
+    return None
+
+
 def profile_name(home: Path) -> str:
     """Inverse of ``home_for``: ``~/.alpi`` → ``default``; ``~/.alpi/profiles/<n>`` → ``<n>``."""
     parts = home.parts

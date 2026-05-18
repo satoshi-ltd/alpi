@@ -221,27 +221,38 @@ def test_gateway_config_deep_merge(tmp_home_no_env: Path) -> None:
     assert cfg.gateway["imap"]["mark_as_read"] is True          # default kept
 
 
-def test_is_allowed_env_based(monkeypatch) -> None:
-    msg = IncomingMessage(
-        platform="telegram", external_user_id="u",
-        external_chat_id="12345", text="hi",
-    )
-    # Unset chat IDs are rejected.
-    monkeypatch.delenv("TELEGRAM_ALLOWED_CHAT_IDS", raising=False)
-    assert gw_run._is_allowed(msg) is False
+def test_is_allowed_uses_per_profile_env(tmp_path, monkeypatch) -> None:
+    from alpi.gateway import delivery
 
-    # Missing from the allowlist is rejected.
-    monkeypatch.setenv("TELEGRAM_ALLOWED_CHAT_IDS", "99999")
-    assert gw_run._is_allowed(msg) is False
+    # Global env grants chat 12345 — must NOT leak into a profile that hasn't.
+    monkeypatch.setenv("TELEGRAM_ALLOWED_CHAT_IDS", "12345")
 
-    # Present in the list is allowed.
-    monkeypatch.setenv("TELEGRAM_ALLOWED_CHAT_IDS", "99999, 12345 ,88888")
-    assert gw_run._is_allowed(msg) is True
+    home_doc = tmp_path / "doc"
+    home_doc.mkdir()
+    (home_doc / ".env").write_text("TELEGRAM_ALLOWED_CHAT_IDS=99999\n")
+    platform = FakePlatform(home_doc)
+    assert platform.env["TELEGRAM_ALLOWED_CHAT_IDS"] == "99999"
+
+    # 12345 is in process env but NOT in doc/.env — must be rejected.
+    assert delivery.is_allowed("telegram", "12345", env=platform.env) is False
+    # 99999 comes from the profile .env — must be allowed.
+    assert delivery.is_allowed("telegram", "99999", env=platform.env) is True
+
+    # Sibling profile with its own allowlist sees only its own.
+    home_mirai = tmp_path / "mirai"
+    home_mirai.mkdir()
+    (home_mirai / ".env").write_text("TELEGRAM_ALLOWED_CHAT_IDS=77777\n")
+    sibling = FakePlatform(home_mirai)
+    assert delivery.is_allowed("telegram", "99999", env=sibling.env) is False
+    assert delivery.is_allowed("telegram", "77777", env=sibling.env) is True
 
     # Webhook env must not bleed into Telegram.
     monkeypatch.setenv("WEBHOOK_ALLOWED_CHAT_IDS", "12345")
     monkeypatch.setenv("TELEGRAM_ALLOWED_CHAT_IDS", "")
-    assert gw_run._is_allowed(msg) is False
+    home_empty = tmp_path / "empty"
+    home_empty.mkdir()
+    bare = FakePlatform(home_empty)
+    assert delivery.is_allowed("telegram", "12345", env=bare.env) is False
 
 
 def test_arg_hint_handles_research_brief() -> None:
