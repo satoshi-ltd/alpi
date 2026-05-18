@@ -13,35 +13,15 @@ export function relativeTime(unixSeconds) {
   const minutes = Math.floor(diff / 60000);
   if (minutes < 1) return "now";
   if (minutes < 60) return `${minutes}m`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24 && sameDay(ms, now)) return `${hours}h`;
-  if (isYesterday(ms, now)) return "yesterday";
+  const hours = Math.floor(diff / 3600000);
+  if (hours < 24) return `${hours}h`;
   const days = Math.floor(diff / 86400000);
   if (days < 7) return `${days}d`;
+  const weeks = Math.floor(days / 7);
+  if (weeks < 4) return `${weeks}w`;
   const date = new Date(ms);
   if (date.getFullYear() === new Date(now).getFullYear()) {
     return SHORT.format(date);
   }
   return LONG.format(date);
-}
-
-function sameDay(a, b) {
-  const da = new Date(a);
-  const db = new Date(b);
-  return (
-    da.getFullYear() === db.getFullYear() &&
-    da.getMonth() === db.getMonth() &&
-    da.getDate() === db.getDate()
-  );
-}
-
-function isYesterday(a, now) {
-  const da = new Date(a);
-  const dn = new Date(now);
-  dn.setDate(dn.getDate() - 1);
-  return (
-    da.getFullYear() === dn.getFullYear() &&
-    da.getMonth() === dn.getMonth() &&
-    da.getDate() === dn.getDate()
-  );
 }

@@ -1,12 +1,15 @@
 .kbd {
   display: inline-flex;
   align-items: center;
-  padding: var(--space-1) var(--space-2);
-  border-radius: var(--radius-sm);
-  background: color-mix(in srgb, currentColor 15%, transparent);
-  font-size: var(--font-size-tiny);
-  font-weight: var(--font-weight-medium);
-  line-height: 1;
+  padding: 1px 5px;
+  border-radius: var(--r-xs);
+  background: var(--hover);
+  border: .5px solid var(--line);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  line-height: var(--lh-tight);
   white-space: nowrap;
-  opacity: 0.85;
+  color: var(--ink-2);
+  opacity: 0.9;
 }

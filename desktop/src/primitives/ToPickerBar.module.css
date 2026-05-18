@@ -1,0 +1,43 @@
+.bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  height: var(--space-11);
+  padding: 0 var(--space-7);
+  background: transparent;
+  border: 0;
+  border-radius: var(--r-3xl) var(--r-3xl) 0 0;
+  cursor: pointer;
+  font: inherit;
+  color: var(--ink);
+  transition: background var(--dur-1) var(--ease);
+}
+.bar:hover,
+.bar[aria-expanded="true"] {
+  background: var(--hover);
+}
+
+.label {
+  color: var(--ink-3);
+  margin-right: var(--space-2);
+}
+
+.handle {
+  font-size: var(--fs-base);
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.sep {
+  color: var(--ink-4);
+}
+
+.model {
+  color: var(--ink-3);
+  font-size: var(--fs-base);
+}
+
+.spacer {
+  flex: 1;
+}

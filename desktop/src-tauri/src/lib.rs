@@ -1,7 +1,9 @@
 mod host_client;
 mod home;
+mod notifications;
 mod state;
 mod tray;
+pub mod tts;
 mod watcher;
 
 use std::collections::HashMap;
@@ -245,6 +247,16 @@ fn sessions_via_alp(profile: &str, limit: Option<usize>) -> Vec<SessionEntry> {
             .get("started_at")
             .and_then(|v| v.as_f64())
             .unwrap_or(0.0);
+        let updated_at = row
+            .get("updated_at")
+            .and_then(|v| v.as_f64())
+            .unwrap_or_else(|| {
+                if started_at > 0.0 {
+                    started_at
+                } else {
+                    mtime as f64
+                }
+            });
         let model = row
             .get("model")
             .and_then(|v| v.as_str())
@@ -281,6 +293,7 @@ fn sessions_via_alp(profile: &str, limit: Option<usize>) -> Vec<SessionEntry> {
             profile: profile.to_string(),
             mtime,
             started_at,
+            updated_at,
             first_user,
             model,
             turn_count,
@@ -374,10 +387,7 @@ async fn port_available(host: String, port: u16) -> bool {
     .unwrap_or(false)
 }
 
-// Local subprocess: the daemon may not be running yet (start/install
-// case), so it cannot be reached via host JSON-RPC. This is the only
-// inherently-local invocation alongside ``voice_test`` (audio plays on
-// the client machine).
+// Local subprocess: daemon may not be running yet (start/install case).
 #[tauri::command]
 async fn service_action(profile: String, action: String) -> Result<String, String> {
     if !matches!(
@@ -451,15 +461,6 @@ fn gateway_status(profile: String) -> serde_json::Value {
         "host.gateway.status",
         serde_json::json!({"profile": profile}),
         "gateways",
-    )
-}
-
-#[tauri::command]
-fn skills(profile: String) -> serde_json::Value {
-    host_array_value(
-        "host.skills.list",
-        serde_json::json!({"profile": profile}),
-        "skills",
     )
 }
 
@@ -874,26 +875,6 @@ async fn voice_set_voice(profile: String, voice_id: String) -> Result<(), String
         serde_json::json!({"profile": profile, "voice_id": voice_id}),
     )
     .await
-}
-
-#[tauri::command]
-async fn voice_test(profile: String, voice_id: Option<String>) -> Result<(), String> {
-    // Stays subprocess: the audio player must run on the client machine.
-    let out = tauri::async_runtime::spawn_blocking(move || {
-        let mut cmd = Command::new("alpi");
-        cmd.args(["-p", &profile, "voice", "test"]);
-        if let Some(v) = voice_id.as_deref() {
-            cmd.args(["--voice", v]);
-        }
-        cmd.output()
-    })
-    .await
-    .map_err(|e| format!("voice_test: {e}"))?
-    .map_err(|e| format!("spawn `alpi`: {e}"))?;
-    if !out.status.success() {
-        return Err(String::from_utf8_lossy(&out.stderr).trim().to_string());
-    }
-    Ok(())
 }
 
 #[tauri::command]
@@ -1416,6 +1397,9 @@ fn stream_chat(
             session_id: resolved_id.clone(),
         },
     );
+    if !got_error && !got_interrupted {
+        notifications::dispatch_session_done(&app, &profile, &resolved_id);
+    }
     let _ = app.emit(
         "chat-event",
         ChatEvent::Done {
@@ -1475,11 +1459,17 @@ fn workgroup_transcript(profile: String, wg_id: String) -> Result<Vec<DecryptedM
             .and_then(|v| v.as_str())
             .unwrap_or("")
             .to_string();
+        let at = post
+            .get("at")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
         out.push(DecryptedMessage {
             seq,
             from,
             from_pubkey,
             body,
+            at,
         });
     }
     Ok(out)
@@ -1504,6 +1494,13 @@ async fn workgroup_post(
 }
 
 #[tauri::command]
+async fn tts_synthesize(voice: String, text: String) -> Result<String, String> {
+    use base64::Engine;
+    let audio = tts::synthesize_cached(&voice, &text).await?;
+    Ok(base64::engine::general_purpose::STANDARD.encode(audio.as_ref()))
+}
+
+#[tauri::command]
 fn tray_announce_update(app: AppHandle, available: bool, version: Option<String>) {
     tray::announce_update(&app, available, version.as_deref());
 }
@@ -1515,11 +1512,17 @@ fn subscribe_daemon_events(app: AppHandle) {
             "host.events.subscribe",
             serde_json::json!({}),
             move |frame| {
+                notifications::dispatch_daemon_frame(&app_for_frames, &frame);
                 let _ = app_for_frames.emit("daemon-event", frame);
             },
         );
         std::thread::sleep(std::time::Duration::from_secs(2));
     }
+}
+
+#[tauri::command]
+fn set_active_view(kind: Option<String>, id: Option<String>) {
+    notifications::set_active_view(kind, id);
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -1529,6 +1532,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_notification::init())
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(move |app, shortcut, event| {
@@ -1575,6 +1579,9 @@ pub fn run() {
                         "error": error,
                     }),
                 );
+                if matches!(status, host_client::ConnectionStatus::Offline) {
+                    notifications::dispatch_daemon_disconnect(&app_for_status, id);
+                }
             });
             spawn_background("probe-active-startup", host_client::probe_active);
             spawn_background("probe-active-loop", || loop {
@@ -1609,6 +1616,7 @@ pub fn run() {
             workgroups,
             workgroup_transcript,
             workgroup_post,
+            tts_synthesize,
             read_file,
             chat_send_stream,
             chat_cancel,
@@ -1645,7 +1653,6 @@ pub fn run() {
             sandbox_network,
             voice_set_voice,
             voice_autoplay,
-            voice_test,
             gateway_config,
             gateway_gmail_authorize,
             gateway_remove,
@@ -1653,7 +1660,6 @@ pub fn run() {
             mcp_remove,
             resolve_ctx_window,
             probe_gateways,
-            skills,
             devices_list,
             devices_generate,
             devices_revoke,
@@ -1664,7 +1670,8 @@ pub fn run() {
             workgroup_update,
             workgroup_create,
             workgroup_add_member,
-            tray_announce_update
+            tray_announce_update,
+            set_active_view
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

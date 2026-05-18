@@ -1,180 +1,140 @@
+import Activity from "./Activity.jsx";
 import Icon from "./Icon.jsx";
 import iconStyles from "./Icon.module.css";
 
-export function BackIcon({ size = 16, className = "" }) {
+export { default as Icon } from "./Icon.jsx";
+
+// Canonical API: <Icon name="copy" size="lg" />.
+// Named exports below are backward-compat wrappers; new code should use <Icon name=...>.
+
+export const Search = (p) => <Icon name="search" {...p} />;
+export const Plus = (p) => <Icon name="plus" {...p} />;
+export const Arrow = (p) => <Icon name="arrow" {...p} />;
+export const ArrowLeft = (p) => <Icon name="arrow-left" {...p} />;
+export const ArrowRight = (p) => <Icon name="arrow-right" {...p} />;
+export const Refresh = (p) => <Icon name="refresh" {...p} />;
+export const SidebarI = (p) => <Icon name="sidebar" {...p} />;
+export const Gear = (p) => <Icon name="gear" {...p} />;
+export const Check = (p) => <Icon name="check" {...p} />;
+export const X = (p) => <Icon name="x" {...p} />;
+export const Pause = (p) => <Icon name="pause" {...p} />;
+export const Play = (p) => <Icon name="play" {...p} />;
+export const Copy = (p) => <Icon name="copy" {...p} />;
+export const Help = (p) => <Icon name="help" {...p} />;
+export const Cpu = (p) => <Icon name="cpu" {...p} />;
+export const Wifi = (p) => <Icon name="wifi" {...p} />;
+export const Globe = (p) => <Icon name="globe" {...p} />;
+export const Sun = (p) => <Icon name="sun" {...p} />;
+export const Moon = (p) => <Icon name="moon" {...p} />;
+export const Auto = (p) => <Icon name="auto" {...p} />;
+export const Trash = (p) => <Icon name="trash" {...p} />;
+export const ChevDown = (p) => <Icon name="chev-down" {...p} />;
+export const ChevRight = (p) => <Icon name="chev-right" {...p} />;
+export const Send = (p) => <Icon name="send" {...p} />;
+export const Dollar = (p) => <Icon name="dollar" {...p} />;
+export const Spark = (p) => <Icon name="spark" {...p} />;
+export const TagI = (p) => <Icon name="tag" {...p} />;
+export const Folder = (p) => <Icon name="folder" {...p} />;
+export const Eye = (p) => <Icon name="eye" {...p} />;
+export const Mute = (p) => <Icon name="mute" {...p} />;
+export const Archive = (p) => <Icon name="archive" {...p} />;
+export const Bell = (p) => <Icon name="bell" {...p} />;
+
+export const SearchIcon = Search;
+export const PlusIcon = Plus;
+export const ArrowUpIcon = Arrow;
+export const ArrowLeftIcon = ArrowLeft;
+export const ArrowRightIcon = ArrowRight;
+export const RefreshIcon = Refresh;
+export const SidebarIcon = SidebarI;
+export const GearIcon = Gear;
+export const CheckIcon = Check;
+export const XIcon = X;
+export const PauseIcon = Pause;
+export const PlayIcon = Play;
+export const CopyIcon = Copy;
+export const HelpIcon = Help;
+export const CpuIcon = Cpu;
+export const WifiIcon = Wifi;
+export const GlobeIcon = Globe;
+export const SunIcon = Sun;
+export const MoonIcon = Moon;
+export const AutoIcon = Auto;
+export const TrashIcon = Trash;
+export const ChevDownIcon = ChevDown;
+export const ChevRightIcon = ChevRight;
+export const SendIcon = Send;
+export const DollarIcon = Dollar;
+export const SparkIcon = Spark;
+export const TagIcon = TagI;
+export const FolderIcon = Folder;
+export const EyeIcon = Eye;
+export const MuteIcon = Mute;
+export const ArchiveIcon = Archive;
+export const BellIcon = Bell;
+export const SkipIcon = (p) => <Icon name="skip" {...p} />;
+export const StopIcon = (p) => <Icon name="stop" {...p} />;
+export const VolumeIcon = (p) => <Icon name="volume" {...p} />;
+export const EditIcon = (p) => <Icon name="edit" {...p} />;
+export const CaretIcon = (p) => <Icon name="caret" size={12} color="var(--ink-3)" {...p} />;
+export const BackIcon = (p) => <Icon name="back" size={16} {...p} />;
+export const SidebarOpenIcon = (p) => <Icon name="sidebar-open" size={16} {...p} />;
+export const SidebarCloseIcon = (p) => <Icon name="sidebar-close" size={16} {...p} />;
+export const UndoIcon = (p) => <Icon name="undo" {...p} />;
+export const QuestionIcon = (p) => <Icon name="question" {...p} />;
+export const AlpiIcon = (p) => <Icon name="alpi" size={12} {...p} />;
+
+export function SpinnerIcon({ className = "", style, ...rest }) {
   return (
-    <Icon size={size} className={className}>
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="m12 19-7-7 7-7" />
-        <path d="M19 12H5" />
-      </svg>
-    </Icon>
+    <svg
+      viewBox="0 0 16 16"
+      width="16"
+      height="16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      className={`ds-icon ds-spin ${className}`.trim()}
+      style={style}
+      aria-hidden="true"
+      {...rest}
+    >
+      <circle cx="8" cy="8" r="6" strokeDasharray="22 38" />
+    </svg>
   );
 }
 
-export function SidebarOpenIcon({ size = 16, className = "" }) {
+export function PinIcon({ filled = false, className = "", style, ...rest }) {
   return (
-    <Icon size={size} className={className}>
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <rect width="18" height="18" x="3" y="3" rx="2" />
-        <path d="M15 3v18" />
-        <path d="m8 9 3 3-3 3" />
-      </svg>
-    </Icon>
+    <svg
+      viewBox="0 0 16 16"
+      className={`ds-icon ${className}`.trim()}
+      style={{
+        width: 13,
+        height: 13,
+        stroke: "currentColor",
+        fill: filled ? "currentColor" : "none",
+        strokeWidth: 1.5,
+        strokeLinecap: "round",
+        strokeLinejoin: "round",
+        ...style,
+      }}
+      {...rest}
+    >
+      <path d="M9.5 2.5l4 4-2 .5-2.5 2.5.5 3-2.5-2.5L3 13l3-4-2.5-2.5 3 .5L9 4l.5-1.5z" />
+    </svg>
   );
 }
 
-export function SidebarCloseIcon({ size = 16, className = "" }) {
-  return (
-    <Icon size={size} className={className}>
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <rect width="18" height="18" x="3" y="3" rx="2" />
-        <path d="M15 3v18" />
-        <path d="m10 15-3-3 3-3" />
-      </svg>
-    </Icon>
-  );
-}
+export const PinOffIcon = (p) => <PinIcon filled={false} {...p} />;
 
-export function PlusIcon({ size = 14, className = "" }) {
-  return (
-    <Icon size={size} className={className}>
-      <svg viewBox="0 0 14 14" fill="none">
-        <path
-          d="M7 2.5v9M2.5 7h9"
-          stroke="currentColor"
-          strokeWidth="1.4"
-          strokeLinecap="round"
-        />
-      </svg>
-    </Icon>
-  );
-}
-
-export function CopyIcon({ size = 14, className = "" }) {
-  return (
-    <Icon size={size} className={className}>
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
-        <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
-      </svg>
-    </Icon>
-  );
-}
-
-export function UndoIcon({ size = 14, className = "" }) {
-  return (
-    <Icon size={size} className={className}>
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M9 14 4 9l5-5" />
-        <path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11" />
-      </svg>
-    </Icon>
-  );
-}
-
-export function QuestionIcon({ size = 14, className = "" }) {
-  return (
-    <Icon size={size} className={className}>
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="12" cy="12" r="10" />
-        <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
-        <path d="M12 17h.01" />
-      </svg>
-    </Icon>
-  );
-}
-
-export function CheckIcon({ size = 14, className = "" }) {
-  return (
-    <Icon size={size} className={className} color="var(--color-success, #30d158)">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M20 6 9 17l-5-5" />
-      </svg>
-    </Icon>
-  );
-}
-
-export function RefreshIcon({ size = 14, className = "" }) {
-  return (
-    <Icon size={size} className={className}>
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-        <path d="M3 3v5h5" />
-        <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
-        <path d="M16 16h5v5" />
-      </svg>
-    </Icon>
-  );
-}
-
-export function AlpiIcon({ size = 12, className = "", color = null }) {
-  return (
-    <Icon size={size} className={className} color={color}>
-      <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-        <path d="M12 3 21 12 12 21 3 12Z" />
-      </svg>
-    </Icon>
-  );
-}
-
-export function SendIcon({ size = 14, className = "" }) {
-  return (
-    <Icon size={size} className={className}>
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="m5 12 7-7 7 7" />
-        <path d="M12 19V5" />
-      </svg>
-    </Icon>
-  );
-}
-
-export function StopIcon({ size = 14, className = "" }) {
-  return (
-    <Icon size={size} className={className}>
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <rect width="18" height="18" x="3" y="3" rx="2" />
-      </svg>
-    </Icon>
-  );
-}
-
-export function CaretIcon({ size = 10, className = "" }) {
-  return (
-    <Icon size={size} className={className}>
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="m6 9 6 6 6-6" />
-      </svg>
-    </Icon>
-  );
-}
-
-export function LocalConnectionIcon({ size = 14, className = "" }) {
-  return (
-    <Icon size={size} className={className}>
-      <svg viewBox="0 0 24 24" fill="none">
-        <path d="M12 20v2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-        <path d="M12 2v2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-        <path d="M17 20v2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-        <path d="M17 2v2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-        <path d="M2 12h2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-        <path d="M2 17h2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-        <path d="M2 7h2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-        <path d="M20 12h2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-        <path d="M20 17h2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-        <path d="M20 7h2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-        <path d="M7 20v2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-        <path d="M7 2v2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-        <rect x="4" y="4" width="16" height="16" rx="2" stroke="currentColor" strokeWidth="2" />
-        <rect x="8" y="8" width="8" height="8" rx="1" stroke="currentColor" strokeWidth="2" />
-      </svg>
-    </Icon>
-  );
+export function LocalConnectionIcon(p) {
+  return <Icon name="local-connection" size={14} {...p} />;
 }
 
 export function RemoteConnectionIcon({ size = 14, className = "" }) {
   return (
-    <Icon size={size} className={className}>
+    <Icon size={size} className={className} name="alpi">
       <svg viewBox="0 0 24 24" fill="none">
         <rect width="20" height="8" x="2" y="14" rx="2" stroke="currentColor" strokeWidth="2" />
         <path d="M6.01 18H6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
@@ -187,86 +147,72 @@ export function RemoteConnectionIcon({ size = 14, className = "" }) {
   );
 }
 
-export function PinIcon({ size = 14, className = "" }) {
+export function StatusIcon({ kind, className = "", style }) {
+  if (kind === "done") {
+    return (
+      <Check
+        className={className}
+        style={{ width: 13, height: 13, strokeWidth: 2, color: "var(--c-success)", ...style }}
+      />
+    );
+  }
+  if (kind === "paused") {
+    return (
+      <Pause
+        className={className}
+        style={{ width: 11, height: 11, strokeWidth: 2, color: "var(--ink-4)", ...style }}
+      />
+    );
+  }
+  if (kind === "error") {
+    return (
+      <span
+        className={className}
+        aria-hidden
+        style={{
+          width: 7,
+          height: 7,
+          borderRadius: "50%",
+          background: "var(--c-danger)",
+          display: "inline-block",
+          ...style,
+        }}
+      />
+    );
+  }
+  if (kind === "working") {
+    return <Activity size="sm" className={className} style={style} />;
+  }
   return (
-    <Icon size={size} className={className}>
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M12 17v5" />
-        <path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z" />
-      </svg>
-    </Icon>
+    <span
+      className={className}
+      aria-hidden
+      style={{
+        width: 7,
+        height: 7,
+        borderRadius: "50%",
+        border: "1.5px solid var(--ink-4)",
+        display: "inline-block",
+        ...style,
+      }}
+    />
   );
 }
 
-export function PinOffIcon({ size = 14, className = "" }) {
-  return (
-    <Icon size={size} className={className}>
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M12 17v5" />
-        <path d="M15 9.34V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H7.89" />
-        <path d="m2 2 20 20" />
-        <path d="M9 9v1.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h11" />
-      </svg>
-    </Icon>
-  );
-}
+export const Alpaca = (p) => (
+  <svg viewBox="0 0 40 40" {...p}>
+    <circle cx="20" cy="22" r="11" fill="currentColor" />
+    <rect x="10" y="6" width="6" height="11" rx="3" fill="currentColor" />
+    <rect x="24" y="6" width="6" height="11" rx="3" fill="currentColor" />
+    <circle cx="16" cy="21" r="1.4" fill="var(--bg-pane)" />
+    <circle cx="24" cy="21" r="1.4" fill="var(--bg-pane)" />
+  </svg>
+);
+export const AlpacaIcon = Alpaca;
 
-export function StatusIcon({ kind, size = 10, className = "" }) {
-  const color =
-    kind === "working"
-      ? "var(--color-success)"
-      : kind === "error"
-        ? "var(--color-danger)"
-        : null;
-  const cls = kind === "working"
-    ? `${className} ${iconStyles.pulse}`.trim()
-    : className;
-  return (
-    <Icon size={size} color={color} className={cls}>
-      <svg viewBox="0 0 10 10" fill="none">
-        {kind === "done" && (
-          <path
-            d="M2 5.2l1.9 1.9L8 3"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        )}
-        {kind === "working" && <circle cx="5" cy="5" r="2.5" fill="currentColor" />}
-        {kind === "error" && (
-          <>
-            <circle cx="5" cy="5" r="4" fill="currentColor" />
-            <rect x="4.4" y="2.4" width="1.2" height="3.4" rx="0.4" fill="var(--color-bg-solid)" />
-            <rect x="4.4" y="6.6" width="1.2" height="1.2" rx="0.4" fill="var(--color-bg-solid)" />
-          </>
-        )}
-        {kind === "paused" && (
-          <>
-            <rect x="2.5" y="2" width="1.6" height="6" rx="0.4" fill="currentColor" />
-            <rect x="5.9" y="2" width="1.6" height="6" rx="0.4" fill="currentColor" />
-          </>
-        )}
-      </svg>
-    </Icon>
-  );
-}
-
-export function SpinnerIcon({ size = 12, className = "" }) {
-  return (
-    <Icon size={size} className={className}>
-      <svg viewBox="0 0 12 12" fill="none">
-        <circle
-          cx="6"
-          cy="6"
-          r="4.5"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.5"
-          strokeDasharray="20 30"
-          strokeLinecap="round"
-        />
-      </svg>
-    </Icon>
-  );
-}
+export const I = {
+  Search, Plus, Arrow, ArrowLeft, ArrowRight, Refresh, Sidebar: SidebarI,
+  Gear, Check, X, Pause, Play, Copy, Help, Cpu, Wifi, Globe, Sun, Moon,
+  Trash, ChevDown, ChevRight, Send, Dollar, Spark, Tag: TagI, Folder, Eye,
+  MuteIcon: Mute, Archive, Bell, Alpaca,
+};

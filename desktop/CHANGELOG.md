@@ -11,6 +11,20 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.3.0 — 2026-05-18 — desktop shell rebuild + local voice + native notifications
+
+Requires alpi ``v0.4.46`` or newer.
+
+Large desktop refactor that turns the app into a cleaner host-plane client with a stronger visual system, native notification hooks, and local voice playback.
+
+- Rebuilds the React surface around `features/`, `pages/`, and shared `primitives/`, replacing the older `components/` layout while keeping the client on daemon-host verbs only.
+- Refreshes the Alpi brand assets, Tauri icons, sidebar, settings shell, browse panels, chat headers, empty states, command palette, and shared design tokens.
+- Adds desktop-local TTS: the renderer calls a Rust Edge TTS WebSocket implementation (`desktop/src-tauri/src/tts.rs`) and plays audio locally. The daemon no longer brokers playback; `host.tts.synthesize` is gone.
+- Adds native desktop notifications for completed sessions, workgroup completions, schedules, budget thresholds, and daemon disconnects, with focus-aware suppression for the active conversation.
+- Adds local daemon autostart/retry handling, sharper offline banners, and notification deeplinks back into chat, workgroups, or settings.
+- Expands Settings with structured profile/workgroup detail views, gateway setup fields, budget editing, MCP configuration, schedule summaries, service controls, peer/workgroup management, and voice preview.
+- Improves streaming recovery UI by deduplicating repeated `tool_start` frames and keeping heartbeat/replay behavior compatible with the daemon event sidecar.
+
 ## v0.2.18 — 2026-05-14 — shared scaffold for Skills/Tools/Memory + typography pass
 
 Requires alpi ``v0.4.36`` or newer.

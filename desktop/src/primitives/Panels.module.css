@@ -1,0 +1,373 @@
+.scrim {
+  position: fixed;
+  inset: 0;
+  background: color-mix(in srgb, var(--ink) 20%, transparent);
+  backdrop-filter: blur(2px);
+  z-index: 60;
+  display: flex;
+  justify-content: center;
+}
+
+.shell {
+  background: var(--bg-elev);
+  border-radius: var(--r-2xl);
+  border: .5px solid var(--line-2);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.panelHeader {
+  padding: var(--space-6) var(--space-8);
+  border-bottom: .5px solid var(--line);
+}
+
+.panelHeaderTight {
+  padding: var(--space-5) var(--space-8);
+  border-bottom: .5px solid var(--line);
+}
+
+.panelTitle {
+  font-size: var(--fs-md);
+  font-weight: 600;
+}
+
+.panelTitleCap {
+  font-size: var(--fs-md);
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.headerEyebrow {
+  margin-left: 4px;
+}
+
+.connList {
+  padding: var(--space-3) var(--space-4);
+  gap: 1px;
+}
+
+.connRow {
+  width: 100%;
+  padding: var(--space-4) var(--space-5);
+  border-radius: var(--r-lg);
+  background: transparent;
+  text-align: left;
+  gap: var(--space-5);
+  border: 0;
+  cursor: pointer;
+}
+
+.connRow:hover {
+  background: var(--hover);
+}
+
+.connRowActive,
+.connRowActive:hover {
+  background: var(--selected);
+}
+
+.connIcon {
+  width: var(--ctrl-sm);
+  height: var(--ctrl-sm);
+  border-radius: var(--r-sm);
+  background: var(--bg-input);
+  display: grid;
+  place-items: center;
+  border: .5px solid var(--line);
+  position: relative;
+  flex-shrink: 0;
+  color: var(--ink-2);
+}
+
+.connDot {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 2px solid var(--bg-elev);
+}
+
+.connBody {
+  flex: 1;
+  min-width: 0;
+  gap: 2px;
+}
+
+.connBodyTop {
+  gap: var(--space-3);
+}
+
+.connName {
+  font-size: var(--fs-base);
+  font-weight: 500;
+}
+
+.connHost {
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+}
+
+.tagOffline {
+  color: var(--c-danger);
+  background: color-mix(in srgb, var(--c-danger) 14%, var(--bg-elev));
+}
+
+.forgetBtn {
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--r-sm);
+  flex-shrink: 0;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
+}
+
+.forgetBtn:hover {
+  background: color-mix(in srgb, var(--c-danger) 10%, transparent);
+  color: var(--c-danger);
+}
+
+.pairFoot {
+  border-top: .5px solid var(--line);
+  padding: var(--space-6) var(--space-8);
+  background: var(--bg-side);
+}
+
+.pairFootHead {
+  margin-bottom: var(--space-3);
+}
+
+.pairFootHint {
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+}
+
+.pairCode {
+  font-size: var(--fs-xs);
+}
+
+.pairRow {
+  gap: var(--space-3);
+}
+
+.pairInput {
+  flex: 1;
+}
+
+.pairBtnDisabled {
+  opacity: 0.5;
+}
+
+.paletteInputWrap {
+  padding: 0 var(--space-7);
+  border-bottom: .5px solid var(--line);
+}
+
+.paletteInput {
+  width: 100%;
+  height: 44px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  font: 14px var(--font-sans);
+  color: var(--ink);
+}
+
+.paletteBody {
+  flex: 1;
+  padding: var(--space-2) var(--space-2) var(--space-4);
+}
+
+.paletteEmpty {
+  padding: var(--space-11) 0;
+  color: var(--ink-3);
+  font-size: var(--fs-base);
+}
+
+.paletteHeader {
+  padding: var(--space-6) var(--space-5) var(--space-2);
+}
+
+.paletteItem {
+  width: 100%;
+  padding: 7px var(--space-5);
+  border-radius: var(--r-md);
+  background: transparent;
+  text-align: left;
+  gap: var(--space-4);
+  align-items: center;
+  border: 0;
+  cursor: pointer;
+}
+
+.paletteItemSelected {
+  background: var(--selected);
+}
+
+.paletteGlyph {
+  width: 16px;
+  display: inline-flex;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--ink-3);
+}
+
+.paletteLabel {
+  flex: 1;
+  font-size: var(--fs-base);
+  color: var(--ink);
+}
+
+.paletteShortcut {
+  display: inline-flex;
+  gap: 2px;
+}
+
+.mdBold {
+  font-weight: 600;
+}
+
+.mdCode {
+  font-family: var(--font-mono);
+  font-size: .92em;
+  background: var(--hover);
+  padding: 1px 5px;
+  border-radius: var(--r-xs);
+}
+
+.mdH4 {
+  margin: var(--space-8) 0 var(--space-2);
+  font-size: var(--fs-base);
+  font-weight: 600;
+  font-family: var(--font-mono);
+}
+
+.mdH3 {
+  margin: 22px 0 var(--space-3);
+  font-size: var(--fs-lg);
+  font-weight: 600;
+  font-family: var(--font-mono);
+}
+
+.mdH2 {
+  margin: var(--space-3) 0 var(--space-6);
+  font-size: var(--fs-xl);
+  font-weight: 700;
+  font-family: var(--font-mono);
+}
+
+.mdTable {
+  width: 100%;
+  border-collapse: collapse;
+  margin: var(--space-5) 0 var(--space-7);
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+}
+
+.mdTh {
+  text-align: left;
+  padding: var(--space-2) var(--space-4);
+  color: var(--ink-3);
+  font-weight: 500;
+  border-bottom: .5px solid var(--line-2);
+}
+
+.mdTd {
+  padding: var(--space-2) var(--space-4);
+  border-bottom: .5px solid var(--line);
+}
+
+.mdPre {
+  margin: var(--space-5) 0;
+  padding: var(--space-5) var(--space-6);
+  border-radius: var(--r-md);
+  background: var(--hover);
+  border: .5px solid var(--line);
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  overflow-x: auto;
+  white-space: pre;
+}
+
+.mdOl {
+  margin: var(--space-3) 0;
+  padding-left: 22px;
+  font-size: var(--fs-base);
+  line-height: var(--lh-normal);
+}
+
+.mdUl {
+  margin: var(--space-3) 0;
+  padding-left: 18px;
+  font-size: var(--fs-base);
+  line-height: var(--lh-normal);
+}
+
+.mdLi {
+  margin-bottom: var(--space-1);
+}
+
+.mdP {
+  margin: var(--space-3) 0;
+  font-size: var(--fs-base);
+  line-height: var(--lh-relaxed);
+  text-wrap: pretty;
+}
+
+.browseGrid {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  flex: 1;
+  min-height: 0;
+}
+
+.browseRail {
+  border-right: .5px solid var(--line);
+  background: var(--bg-side);
+  min-height: 0;
+}
+
+.browseSearchWrap {
+  padding: var(--space-4) var(--space-5) var(--space-2);
+}
+
+.browseSearchInput {
+  height: 30px;
+  padding: 0 var(--space-4);
+  font-size: var(--fs-sm);
+}
+
+.browseList {
+  flex: 1;
+  padding: var(--space-1) var(--space-3) var(--space-5);
+}
+
+.browseEmpty {
+  padding: var(--space-9) 0;
+  color: var(--ink-3);
+  font-size: var(--fs-sm);
+}
+
+.browseDetail {
+  min-height: 0;
+  padding: var(--space-8) 26px;
+}
+
+.browseDetailEmpty {
+  padding: 60px 0;
+  color: var(--ink-3);
+}
+
+.headerRow {
+  gap: var(--space-4);
+}
+
+.headerActions {
+  gap: var(--space-2);
+}

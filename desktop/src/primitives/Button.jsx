@@ -15,6 +15,7 @@ export default function Button({
   type = "button",
   active = false,
   style,
+  className: extraClassName = "",
 }) {
   const isIconOnly = !!icon && !children;
   const isDisabled = disabled || loading;
@@ -26,6 +27,7 @@ export default function Button({
     isIconOnly ? styles.iconOnly : styles.withLabel,
     active ? styles.active : null,
     loading ? styles.loading : null,
+    extraClassName || null,
   ]
     .filter(Boolean)
     .join(" ");

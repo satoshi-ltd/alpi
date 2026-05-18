@@ -1,0 +1,53 @@
+.params {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  margin-top: var(--space-3);
+}
+
+.params th {
+  text-align: left;
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--ink-3);
+  padding: var(--space-2) var(--space-3);
+  border-bottom: .5px solid var(--line);
+}
+
+.params td {
+  padding: var(--space-3);
+  border-bottom: .5px solid var(--line);
+  vertical-align: top;
+}
+
+.paramName {
+  color: var(--ink);
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.paramType {
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+
+.paramReq {
+  color: var(--ink-3);
+}
+
+.paramDesc {
+  font-family: var(--font-sans);
+  color: var(--ink-2);
+  line-height: var(--lh-normal);
+}
+
+.noParams {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+  font-style: italic;
+}

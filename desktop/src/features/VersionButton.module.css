@@ -1,0 +1,110 @@
+.root {
+  position: relative;
+}
+
+.trigger {
+  font-size: var(--fs-xs);
+  padding: 2px 4px;
+  margin: -2px -4px;
+  border-radius: var(--r-xs);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  color: var(--ink-4);
+  transition:
+    color var(--dur-1) var(--ease),
+    background var(--dur-1) var(--ease);
+}
+
+.trigger:hover {
+  background: var(--hover);
+  color: var(--ink-2);
+}
+
+.triggerAvailable {
+  color: var(--c-success);
+}
+
+.triggerAvailable:hover {
+  color: var(--c-success);
+}
+
+.popover {
+  position: absolute;
+  bottom: calc(100% + var(--space-3));
+  right: 0;
+  width: var(--pop-sm);
+  background: var(--bg-elev);
+  border: .5px solid var(--line-2);
+  border-radius: var(--r-xl);
+  box-shadow: var(--shadow);
+  z-index: 60;
+}
+
+.panel {
+  padding: var(--space-7);
+}
+
+.panelGap4 {
+  gap: var(--space-4);
+}
+
+.panelGap5 {
+  gap: var(--space-5);
+}
+
+.panelGap3 {
+  gap: var(--space-3);
+}
+
+.rowGap4 {
+  gap: var(--space-4);
+}
+
+.rowGap3 {
+  gap: var(--space-3);
+}
+
+.colGap1 {
+  gap: var(--space-1);
+}
+
+.label {
+  font-size: var(--fs-base);
+  color: var(--ink-2);
+}
+
+.labelStrong {
+  font-size: var(--fs-base);
+  font-weight: 500;
+}
+
+.metaXs {
+  font-size: var(--fs-xs);
+  color: var(--ink-4);
+}
+
+.metaSm {
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+}
+
+.metaBreak {
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+  word-break: break-word;
+}
+
+.versionTo {
+  color: var(--c-success);
+  font-weight: 600;
+}
+
+.installBtn {
+  height: 26px;
+  font-size: var(--fs-sm);
+}
+
+.checkIcon {
+  color: var(--c-success);
+}

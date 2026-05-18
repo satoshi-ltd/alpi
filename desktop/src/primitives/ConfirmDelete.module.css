@@ -1,0 +1,78 @@
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-7);
+  padding: var(--space-5);
+}
+.body.typed {
+  padding: var(--space-8) var(--space-8) var(--space-7);
+}
+
+.heading {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.title {
+  font-size: var(--fs-base);
+  font-weight: 600;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+  line-height: var(--lh-cozy);
+}
+.body.typed .title {
+  font-size: var(--fs-xl);
+  color: var(--c-danger);
+}
+
+.consequence {
+  font-size: var(--fs-sm);
+  color: var(--ink);
+  line-height: var(--lh-normal);
+  text-wrap: pretty;
+}
+.body.typed .consequence {
+  font-size: var(--fs-md);
+}
+
+.typedBlock {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.typedHint {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  letter-spacing: .06em;
+  color: var(--ink-3);
+}
+
+.typedHintLabel {
+  text-transform: uppercase;
+}
+
+.typedToken {
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--ink);
+  background: var(--hover);
+  border: .5px solid var(--line-2);
+  padding: 2px 8px;
+  border-radius: var(--r-xs);
+}
+
+.trigger {
+  position: relative;
+  display: inline-flex;
+}
+
+.triggerGhost {
+  color: var(--c-danger);
+}

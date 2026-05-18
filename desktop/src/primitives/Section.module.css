@@ -1,0 +1,16 @@
+.head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-4);
+  margin-bottom: var(--space-5);
+}
+
+.kicker {
+  font-size: var(--fs-xs);
+  color: var(--ink-4);
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+}

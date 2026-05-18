@@ -1,0 +1,58 @@
+.root {
+  position: relative;
+  display: inline-flex;
+  gap: 0;
+}
+
+.chev {
+  width: 12px;
+  height: 12px;
+}
+
+.scroll {
+  padding: var(--space-2);
+  max-height: 420px;
+  overflow-y: auto;
+}
+
+.empty {
+  padding: var(--space-7);
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+}
+
+.bucket {
+  padding: 10px 12px 4px;
+  display: block;
+}
+
+.row {
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: var(--r-md);
+  gap: var(--space-4);
+  background: transparent;
+  text-align: left;
+  border: 0;
+  cursor: pointer;
+}
+.row:hover {
+  background: var(--hover);
+}
+.rowCurrent {
+  background: var(--selected);
+}
+.rowCurrent:hover {
+  background: var(--selected);
+}
+
+.preview {
+  flex: 1;
+  font-size: var(--fs-base);
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

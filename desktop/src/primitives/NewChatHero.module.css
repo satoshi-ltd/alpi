@@ -1,0 +1,97 @@
+.root {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow-y: auto;
+  padding: var(--space-10) var(--space-9);
+}
+
+.body {
+  width: 100%;
+  max-width: 640px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-8);
+}
+
+.silhouette {
+  align-self: center;
+}
+
+.composer {
+  display: flex;
+}
+
+.recents {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.recentsHeader {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 0 var(--space-3);
+}
+
+.recentsTitle {
+  color: var(--ink-3);
+}
+
+.recentsCount {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+}
+
+.recentsList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.recentRow {
+  display: grid;
+  grid-template-columns: auto auto 1fr auto;
+  align-items: center;
+  gap: var(--space-6);
+  width: 100%;
+  padding: var(--space-4) var(--space-3);
+  border: 0;
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+  transition: background var(--dur-1) var(--ease);
+}
+
+.recentRow:hover {
+  background: var(--hover);
+}
+
+.recentHandle {
+  color: var(--ink-2);
+}
+
+.recentText {
+  color: var(--ink-2);
+  font-size: var(--fs-base);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.recentTime {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+  flex-shrink: 0;
+}

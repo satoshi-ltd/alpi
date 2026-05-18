@@ -1,69 +1,70 @@
 .stack {
   position: fixed;
-  bottom: var(--space-7);
-  right: var(--space-7);
+  bottom: 20px;
+  right: 20px;
   display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-  z-index: 100;
+  flex-direction: column-reverse;
+  gap: var(--space-3);
+  z-index: 200;
   pointer-events: none;
+  max-width: calc(100vw - 40px);
 }
 
 .toast {
-  pointer-events: auto;
   display: inline-flex;
   align-items: center;
   gap: var(--space-4);
-  padding: var(--space-4) var(--space-5);
-  border-radius: var(--radius-pill);
-  background: var(--color-surface);
-  color: var(--color-fg);
-  font: inherit;
-  font-size: var(--font-size-small);
-  border: 0;
-  cursor: pointer;
-  box-shadow: var(--shadow-md);
-  opacity: 0;
-  transform: translateY(var(--space-2)) scale(0.99);
-  transition:
-    opacity var(--motion-fast) var(--motion-easing),
-    transform var(--motion-fast) var(--motion-easing);
-  max-width: 360px;
-  text-align: left;
+  padding: var(--space-3) var(--space-7) var(--space-3) var(--space-6);
+  background: var(--bg-elev);
+  border: .5px solid var(--line);
+  border-radius: var(--r-3xl);
+  box-shadow: 0 0 0 .5px rgba(0, 0, 0, .04), 0 12px 32px rgba(0, 0, 0, .10);
+  font-size: var(--fs-base);
+  color: var(--ink-2);
+  pointer-events: auto;
   white-space: nowrap;
+  max-width: 100%;
 }
 
-.entered {
-  opacity: 1;
-  transform: translateY(0) scale(1);
-}
-
-.entering {
-  opacity: 0;
-  transform: translateY(var(--space-2)) scale(0.99);
-}
-
-.exiting {
-  opacity: 0;
-  transform: translateY(var(--space-1)) scale(0.99);
+.toastWithAction {
+  padding: var(--space-2) var(--space-3) var(--space-2) var(--space-6);
 }
 
 .dot {
-  width: var(--space-4);
-  height: var(--space-4);
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   flex-shrink: 0;
 }
 
-.success .dot {
-  background: var(--color-success);
+.dotPulse {
+  animation: ds-pulse-dot 1.6s ease-in-out infinite;
 }
 
-.error .dot {
-  background: var(--color-danger);
-}
-
-.message {
+.text {
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.divider {
+  width: 1px;
+  height: 14px;
+  background: var(--line-2);
+  margin: 0 2px;
+}
+
+.actionBtn {
+  padding: var(--space-1) var(--space-4);
+  border-radius: var(--r-3xl);
+  background: transparent;
+  color: var(--ink);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  border: 0;
+  cursor: pointer;
+  transition: background var(--dur-1) var(--ease);
+}
+
+.actionBtn:hover {
+  background: var(--hover);
 }

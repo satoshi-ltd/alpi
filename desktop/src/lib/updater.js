@@ -40,6 +40,9 @@ async function announce(available, version) {
 }
 
 export async function checkForUpdates() {
+  if (typeof navigator !== "undefined" && navigator.onLine === false) {
+    return setState({ checking: false, available: false, version: null, error: null });
+  }
   setState({ checking: true, error: null });
   try {
     const update = await check();
@@ -92,11 +95,18 @@ export async function applyPendingUpdate() {
 export function installUpdater() {
   checkForUpdates();
   const id = setInterval(checkForUpdates, SIX_HOURS_MS);
+  const onOnline = () => checkForUpdates();
+  if (typeof window !== "undefined") {
+    window.addEventListener("online", onOnline);
+  }
   const off = listen("tray:update-clicked", () => {
     applyPendingUpdate();
   });
   return () => {
     clearInterval(id);
+    if (typeof window !== "undefined") {
+      window.removeEventListener("online", onOnline);
+    }
     off.then((fn) => fn());
   };
 }

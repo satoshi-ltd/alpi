@@ -1,129 +1,160 @@
 import {
   createContext,
   useCallback,
-  useEffect,
   useContext,
+  useEffect,
   useRef,
   useState,
 } from "react";
 import styles from "./Notification.module.css";
 
-const NotifyContext = createContext(() => {});
+const NotifyContext = createContext(null);
 
 const DEDUP_WINDOW_MS = 2000;
 
+function normalize(arg, extra) {
+  const o = typeof arg === "string" ? { text: arg, ...(extra || {}) } : arg || {};
+  const text = o.text ?? o.message ?? "";
+  let kind = o.kind;
+  if (!kind) {
+    const v = o.variant;
+    if (v === "error") kind = "danger";
+    else if (v === "success") kind = "success";
+    else if (v === "warning") kind = "warning";
+    else kind = "info";
+  }
+  return {
+    text,
+    kind,
+    action: o.action,
+    onAction: o.onAction,
+    duration: o.duration ?? 5000,
+    persistent: !!o.persistent,
+  };
+}
+
 export function NotificationProvider({ children }) {
   const [items, setItems] = useState([]);
-  const idRef = useRef(0);
-  const timersRef = useRef(new Map());
-  // key (message|variant) → last-shown timestamp. Drops repeat toasts
-  // within DEDUP_WINDOW_MS so transient failure spam (peer probe ×3,
-  // gateway probe ×N) collapses to one visible notification.
   const recentRef = useRef(new Map());
 
   const dismiss = useCallback((id) => {
-    setItems((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, status: "exiting" } : item)),
-    );
-    const timers = timersRef.current;
-    if (timers.has(id)) {
-      clearTimeout(timers.get(id));
-    }
-    const timeoutId = setTimeout(() => {
-      setItems((prev) => prev.filter((i) => i.id !== id));
-      timers.delete(id);
-    }, 160);
-    timers.set(id, timeoutId);
+    setItems((prev) => prev.filter((x) => x.id !== id));
   }, []);
 
-  const notify = useCallback(
-    (opts) => {
-      const variant = opts.variant ?? "default";
-      const key = `${variant}|${opts.message}`;
-      const now = Date.now();
-      const recent = recentRef.current;
-      const last = recent.get(key) ?? 0;
-      if (now - last < DEDUP_WINDOW_MS) return null;
-      // Cheap GC of stale entries (any older than the window).
-      for (const [k, ts] of recent) {
-        if (now - ts >= DEDUP_WINDOW_MS) recent.delete(k);
-      }
-      recent.set(key, now);
+  const notify = useCallback((arg, extra) => {
+    const o = normalize(arg, extra);
+    if (!o.text) return null;
+    const key = `${o.kind}|${o.text}`;
+    const now = Date.now();
+    const recent = recentRef.current;
+    const last = recent.get(key) ?? 0;
+    if (now - last < DEDUP_WINDOW_MS) return null;
+    for (const [k, ts] of recent) {
+      if (now - ts >= DEDUP_WINDOW_MS) recent.delete(k);
+    }
+    recent.set(key, now);
+    const id = Math.random().toString(36).slice(2, 9);
+    setItems((prev) => [...prev, { id, ...o }]);
+    return id;
+  }, []);
 
-      const id = ++idRef.current;
-      const duration = opts.duration ?? 2400;
-      setItems((prev) => [
-        ...prev,
-        {
-          id,
-          message: opts.message,
-          variant,
-          status: "entering",
-        },
-      ]);
-      requestAnimationFrame(() => {
-        setItems((prev) =>
-          prev.map((item) =>
-            item.id === id && item.status === "entering"
-              ? { ...item, status: "entered" }
-              : item,
-          ),
-        );
-      });
-      if (duration > 0) {
-        const timeoutId = setTimeout(() => dismiss(id), duration);
-        timersRef.current.set(id, timeoutId);
-      }
-      return id;
-    },
-    [dismiss],
-  );
-
-  useEffect(
-    () => () => {
-      const timers = timersRef.current;
-      for (const timeoutId of timers.values()) {
-        clearTimeout(timeoutId);
-      }
-      timers.clear();
-    },
-    [],
-  );
+  useEffect(() => {
+    window.notify = notify;
+    window.notifyClear = dismiss;
+    return () => {
+      if (window.notify === notify) delete window.notify;
+      if (window.notifyClear === dismiss) delete window.notifyClear;
+    };
+  }, [notify, dismiss]);
 
   return (
     <NotifyContext.Provider value={notify}>
       {children}
-      <div className={styles.stack} aria-live="polite">
-        {items.map((item) => (
-          <Toast
-            key={item.id}
-            variant={item.variant}
-            status={item.status}
-            onClick={() => dismiss(item.id)}
-          >
-            {item.message}
-          </Toast>
-        ))}
-      </div>
+      <NotificationStack items={items} onDismiss={dismiss} />
     </NotifyContext.Provider>
   );
 }
 
 export function useNotify() {
-  return useContext(NotifyContext);
+  return useContext(NotifyContext) ?? (() => null);
 }
 
-function Toast({ variant, status, children, onClick }) {
-  const showDot = variant === "success" || variant === "error";
+function NotificationStack({ items, onDismiss }) {
+  if (items.length === 0) return null;
   return (
-    <button
-      className={`${styles.toast} ${styles[variant] ?? ""} ${
-        styles[status] ?? ""
-      }`}
-      onClick={onClick}
+    <div className={styles.stack} aria-live="polite">
+      {items.map((n) => (
+        <Notification key={n.id} n={n} onDismiss={() => onDismiss(n.id)} />
+      ))}
+    </div>
+  );
+}
+
+function Notification({ n, onDismiss }) {
+  const [paused, setPaused] = useState(false);
+  const [exiting, setExiting] = useState(false);
+  const timer = useRef(null);
+
+  const start = useCallback(() => {
+    if (n.persistent) return;
+    clearTimeout(timer.current);
+    timer.current = setTimeout(() => {
+      setExiting(true);
+      setTimeout(onDismiss, 180);
+    }, n.duration);
+  }, [n.persistent, n.duration, onDismiss]);
+
+  useEffect(() => {
+    start();
+    return () => clearTimeout(timer.current);
+  }, [start]);
+
+  useEffect(() => {
+    if (paused) clearTimeout(timer.current);
+    else start();
+  }, [paused, start]);
+
+  const dotColor =
+    {
+      success: "var(--c-success)",
+      warning: "var(--c-warning)",
+      danger: "var(--c-danger)",
+      info: "var(--ink-3)",
+    }[n.kind] || "var(--ink-3)";
+  const pulsing = n.kind !== "info";
+
+  return (
+    <div
+      onMouseEnter={() => setPaused(true)}
+      onMouseLeave={() => setPaused(false)}
+      className={`${styles.toast} ${n.action ? styles.toastWithAction : ""}`}
+      style={{
+        animation: exiting
+          ? "ds-notif-out .18s var(--ease) both"
+          : "ds-notif-in .26s var(--ease) both",
+      }}
     >
-      {showDot && <span className={styles.dot} aria-hidden />}
-      <span className={styles.message}>{children}</span>
-    </button>
+      <span
+        className={`${styles.dot} ${pulsing ? styles.dotPulse : ""}`}
+        style={{ background: dotColor }}
+      />
+      <span className={styles.text}>{n.text}</span>
+      {n.action && (
+        <>
+          <span aria-hidden className={styles.divider} />
+          <button
+            type="button"
+            onClick={() => {
+              n.onAction?.();
+              setExiting(true);
+              setTimeout(onDismiss, 180);
+            }}
+            className={styles.actionBtn}
+          >
+            {n.action}
+          </button>
+        </>
+      )}
+    </div>
   );
 }

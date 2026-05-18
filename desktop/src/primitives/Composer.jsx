@@ -1,10 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import Button from "./Button.jsx";
-import { SendIcon, StopIcon } from "./icons.jsx";
+import { SendButton } from "./index.js";
 import styles from "./Composer.module.css";
 
-// Shared composer for chat and workgroup posts.
-// Handles auto-grow, Enter-to-send, and mention popovers.
 export default function Composer({
   value,
   onChange,
@@ -13,24 +10,29 @@ export default function Composer({
   disabled = false,
   canSend = true,
   placeholder = "Send a message…",
-  sendTitle = "Send (Enter)",
+  sendTitle = "Send (⌘↵)",
   disabledTitle = "Type a message",
   leftActions = null,
+  hint = null,
   embedded = false,
   mentions = [],
+  accent = null,
+  topBar = null,
+  minHeight = null,
 }) {
   const textareaRef = useRef(null);
-  // Mention state tracks the active `@query` and selected item.
   const [mentionState, setMentionState] = useState(null);
   const isMentionOpen = mentionState != null && mentionState.items.length > 0;
 
-  // Auto-grow the textarea as the content changes.
   useEffect(() => {
     const ta = textareaRef.current;
     if (!ta) return;
     ta.style.height = "auto";
-    ta.style.height = `${ta.scrollHeight}px`;
-  }, [value]);
+    const floor = minHeight || 0;
+    const target = Math.min(220, Math.max(floor, ta.scrollHeight));
+    ta.style.height = `${target}px`;
+    ta.style.overflowY = ta.scrollHeight > 220 ? "auto" : "hidden";
+  }, [value, minHeight]);
 
   function recomputeMentionContext() {
     const ta = textareaRef.current;
@@ -60,12 +62,10 @@ export default function Composer({
       startIndex: ctx.startIndex,
       query: ctx.query,
       items,
-      // Keep the previous selection when it still fits.
       selected: prev && prev.selected < items.length ? prev.selected : 0,
     }));
   }
 
-  // Recompute on text edits; cursor moves come through onSelect.
   useEffect(() => {
     recomputeMentionContext();
   }, [value, mentions]);
@@ -81,7 +81,6 @@ export default function Composer({
     const next = `${before}${inserted}${after}`;
     onChange?.(next);
     setMentionState(null);
-    // Restore focus and caret after React commits the new value.
     const newCaret = before.length + inserted.length;
     requestAnimationFrame(() => {
       const cur = textareaRef.current;
@@ -126,14 +125,13 @@ export default function Composer({
         return;
       }
     }
-    if (e.key === "Enter" && !e.shiftKey) {
+    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
       e.preventDefault();
       onSubmit?.();
     }
   }
 
   function focusOnBlankClick(e) {
-    // Route padding clicks to the textarea, not interactive children.
     if (
       e.target.closest(
         'button, input, textarea, select, a, [role="button"], [data-no-focus]',
@@ -149,7 +147,12 @@ export default function Composer({
     <div
       className={`${styles.wrap} ${embedded ? styles.wrapEmbedded : ""}`}
     >
-      <div className={styles.body} onMouseDown={focusOnBlankClick}>
+      <div
+        className={styles.body}
+        data-disabled={disabled || undefined}
+        onMouseDown={focusOnBlankClick}
+      >
+        {topBar && <div className={styles.topBar}>{topBar}</div>}
         {isMentionOpen && (
           <div className={styles.mentionPopover} role="listbox">
             {mentionState.items.map((item, i) => {
@@ -211,25 +214,16 @@ export default function Composer({
           disabled={disabled}
         />
         <div className={styles.row}>
+          {hint && <span className={styles.hint}>{hint}</span>}
           <span className={styles.spacer} />
           {leftActions}
           {onCancel ? (
-            <Button
-              variant="primary"
-              icon={<StopIcon />}
-              active
-              onClick={onCancel}
-              tooltipDirection="up"
-              title="Stop generating"
-            />
+            <SendButton variant="stop" canSend onClick={onCancel} title="Stop generating" />
           ) : (
-            <Button
-              variant="primary"
-              icon={<SendIcon />}
-              disabled={!canSend}
-              active={canSend}
+            <SendButton
+              canSend={canSend && !disabled}
+              accent={accent}
               onClick={() => onSubmit?.()}
-              tooltipDirection="up"
               title={canSend ? sendTitle : disabledTitle}
             />
           )}
@@ -239,7 +233,6 @@ export default function Composer({
   );
 }
 
-// Detect an active `@query` token under the caret.
 function getMentionContext(text, caret) {
   if (caret === 0) return null;
   for (let i = caret - 1; i >= 0; i--) {

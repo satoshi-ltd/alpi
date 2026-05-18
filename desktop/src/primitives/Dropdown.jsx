@@ -15,6 +15,7 @@ export default function Dropdown({
   onQueryChange,
   onOpenChange,
   portal = false,
+  fullWidth = false,
   children,
 }) {
   const [open, setOpen] = useState(false);
@@ -124,7 +125,7 @@ export default function Dropdown({
     );
 
   return (
-    <div className={styles.wrap} ref={ref}>
+    <div className={`${styles.wrap} ${fullWidth ? styles.wrapFull : ""}`.trim()} ref={ref}>
       <button
         ref={triggerRef}
         className={`${styles.trigger} ${variantClass(variant)} ${open ? styles.triggerOpen : ""}`}
@@ -134,7 +135,14 @@ export default function Dropdown({
         {trigger.leading && (
           <span className={styles.leading}>{trigger.leading}</span>
         )}
-        <span className={styles.label}>{trigger.label}</span>
+        {trigger.caption ? (
+          <span className={styles.labelStack}>
+            <span className={styles.label}>{trigger.label}</span>
+            <span className={styles.caption}>{trigger.caption}</span>
+          </span>
+        ) : (
+          <span className={styles.label}>{trigger.label}</span>
+        )}
         <CaretIcon className={styles.caret} />
       </button>
 
@@ -182,7 +190,7 @@ function Empty({ children }) {
 }
 
 function variantClass(variant) {
-  if (variant === "outlined") return styles.triggerOutlined;
+  if (variant === "field" || variant === "outlined") return styles.triggerField;
   if (variant === "list") return styles.triggerList;
   return "";
 }

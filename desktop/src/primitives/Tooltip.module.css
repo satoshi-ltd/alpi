@@ -4,20 +4,23 @@
 
 .tooltip {
   position: fixed;
-  background: var(--color-fg);
-  color: var(--color-bg-solid);
-  font-size: var(--font-size-tiny);
-  font-weight: var(--font-weight-medium);
-  padding: var(--space-2) var(--space-4);
-  border-radius: var(--radius-sm);
+  background: var(--ink);
+  color: var(--bg-pane);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--r-sm);
   width: max-content;
-  max-width: var(--sidebar-width);
-  line-height: 1.4;
+  max-width: var(--sidebar-w);
+  line-height: var(--lh-cozy);
   text-align: left;
   pointer-events: none;
   z-index: 9999;
+  box-shadow: var(--shadow);
 }
 
 .tooltip strong {
-  font-weight: var(--font-weight-bold);
+  font-weight: 600;
 }

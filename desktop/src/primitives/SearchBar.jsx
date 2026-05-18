@@ -1,6 +1,5 @@
 import { useEffect, useRef } from "react";
-import Kbd from "./Kbd.jsx";
-import Tooltip from "./Tooltip.jsx";
+import { I, Tip } from "./index.js";
 import styles from "./SearchBar.module.css";
 
 export default function SearchBar({
@@ -32,72 +31,61 @@ export default function SearchBar({
     }
   }
 
-  const disabled = total === 0;
-  const counter = query ? `${disabled ? 0 : currentIndex + 1}/${total}` : "";
+  const noHits = query && total === 0;
+  const counter = !query ? "" : noHits ? "no hits" : `${currentIndex + 1}/${total}`;
 
   return (
-    <div className={styles.bar} role="search">
+    <div data-search-skip="1" role="search" className={styles.bar}>
+      <I.Search className={styles.leadIcon} />
       <input
         ref={inputRef}
-        className={styles.input}
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         onKeyDown={onKeyDown}
-        placeholder="Find"
+        placeholder="Find in transcript…"
         spellCheck={false}
         autoCapitalize="off"
+        className={styles.input}
       />
-      <span className={styles.counter}>{counter}</span>
-      <Tooltip
-        text={
-          <>
-            Previous <Kbd>⇧⌘G</Kbd>
-          </>
-        }
-      >
+      <span className={`mono tnum ${styles.counter} ${noHits ? styles.danger : ""}`}>
+        {counter}
+      </span>
+      <Tip text="Previous · ⇧↵" side="r">
         <button
           type="button"
-          className={styles.btn}
+          className={`iconbtn ${styles.iconbtn}`}
           onClick={onPrev}
-          disabled={disabled}
+          disabled={total === 0}
           aria-label="Previous match"
         >
-          ↑
+          <svg viewBox="0 0 16 16" className={`icon ${styles.chev}`}>
+            <path d="M4 10l4-4 4 4" />
+          </svg>
         </button>
-      </Tooltip>
-      <Tooltip
-        text={
-          <>
-            Next <Kbd>⌘G</Kbd>
-          </>
-        }
-      >
+      </Tip>
+      <Tip text="Next · ↵" side="r">
         <button
           type="button"
-          className={styles.btn}
+          className={`iconbtn ${styles.iconbtn}`}
           onClick={onNext}
-          disabled={disabled}
+          disabled={total === 0}
           aria-label="Next match"
         >
-          ↓
+          <svg viewBox="0 0 16 16" className={`icon ${styles.chev}`}>
+            <path d="M4 6l4 4 4-4" />
+          </svg>
         </button>
-      </Tooltip>
-      <Tooltip
-        text={
-          <>
-            Close <Kbd>Esc</Kbd>
-          </>
-        }
-      >
+      </Tip>
+      <Tip text="Close · esc" side="r">
         <button
           type="button"
-          className={styles.btn}
+          className={`iconbtn ${styles.iconbtn}`}
           onClick={onClose}
           aria-label="Close search"
         >
-          ✕
+          <I.X />
         </button>
-      </Tooltip>
+      </Tip>
     </div>
   );
 }

@@ -1,0 +1,82 @@
+.root {
+  position: relative;
+  display: inline-flex;
+}
+
+.trigger {
+  height: 28px;
+}
+
+.popover {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + var(--space-2));
+  width: 280px;
+  background: var(--bg-elev);
+  border: .5px solid var(--line-2);
+  border-radius: var(--r-xl);
+  box-shadow: var(--shadow);
+  padding: var(--space-2);
+  z-index: 50;
+}
+
+.search {
+  width: 100%;
+  height: 32px;
+  padding: 0 var(--space-4);
+  background: var(--bg-input);
+  border: .5px solid var(--line);
+  border-radius: var(--r-md);
+  outline: none;
+  font: inherit;
+  font-size: var(--fs-base);
+  color: var(--ink);
+  margin-bottom: var(--space-1);
+}
+
+.list {
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.empty {
+  padding: var(--space-5);
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+}
+
+.option {
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--r-md);
+  background: transparent;
+  text-align: left;
+  border: 0;
+  cursor: pointer;
+  gap: var(--space-3);
+}
+
+.option:hover {
+  background: var(--hover);
+}
+
+.optionSelected,
+.optionSelected:hover {
+  background: var(--selected);
+}
+
+.optionLabel {
+  flex: 1;
+  font-size: var(--fs-base);
+  color: var(--ink);
+}
+
+.optionModel {
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+}
+
+.rootBar { display: block; width: 100%; }
+.rootBar .popover { right: auto; left: 0; top: calc(100% + var(--space-3)); bottom: auto; width: 100%; }

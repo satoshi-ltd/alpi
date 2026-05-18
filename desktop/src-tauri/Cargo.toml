@@ -1,9 +1,10 @@
 [package]
 name = "alpi-desktop"
-version = "0.2.18"
+version = "0.3.0"
 description = "alpi desktop — filesystem-level wizard for the local alpi profile"
 authors = ["@soyjavi"]
 edition = "2021"
+default-run = "Alpi"
 
 [lib]
 name = "desktop_lib"
@@ -27,4 +28,12 @@ notify-debouncer-mini = "0.4"
 tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
 tauri-plugin-global-shortcut = "2"
+tauri-plugin-notification = "2"
 socket2 = "0.5"
+tokio = { version = "1", features = ["sync", "time"] }
+tokio-tungstenite = { version = "0.21", features = ["rustls-tls-webpki-roots"] }
+futures-util = "0.3"
+uuid = { version = "1", features = ["v4"] }
+base64 = "0.22"
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+sha2 = "0.10"

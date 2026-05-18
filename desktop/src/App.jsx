@@ -1,17 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import AppHeader from "./components/AppHeader.jsx";
-import Sidebar from "./components/Sidebar.jsx";
-import ChatPane from "./components/ChatPane.jsx";
-import OfflineBanner from "./components/OfflineBanner.jsx";
-import WorkgroupView from "./components/WorkgroupView.jsx";
-import Settings from "./components/Settings.jsx";
+import Sidebar from "./features/Sidebar.jsx";
+import ChatPane from "./pages/ChatPane.jsx";
+import WorkgroupView from "./pages/WorkgroupView.jsx";
+import Settings from "./pages/Settings.jsx";
+import { Banner } from "./primitives/index.js";
 import { useNotify } from "./primitives/Notification.jsx";
-import CommandPalette from "./primitives/CommandPalette.jsx";
-import ToolsPanel from "./components/ToolsPanel.jsx";
-import SkillsPanel from "./components/SkillsPanel.jsx";
-import MemoryPanel from "./components/MemoryPanel.jsx";
+import CommandPalette from "./features/CommandPalette.jsx";
+import CreateProfileModal from "./features/CreateProfileModal.jsx";
+import CreateWorkgroupModal from "./features/CreateWorkgroupModal.jsx";
+import ToolsPanel from "./features/ToolsPanel.jsx";
+import SkillsPanel from "./features/SkillsPanel.jsx";
+import MemoryPanel from "./features/MemoryPanel.jsx";
 import { useCommands } from "./hooks/useCommands.js";
 import { orderedJumpTargets } from "./lib/profile-order.js";
 import { installUpdater } from "./lib/updater.js";
@@ -22,8 +23,14 @@ import { useHostConnections } from "./hooks/useHostConnections.js";
 import { useNavListener } from "./hooks/useNavListener.js";
 import { usePinned } from "./hooks/usePinned.js";
 import { useLastView } from "./hooks/useLastView.js";
-import { useWindowChrome } from "./hooks/useWindowChrome.js";
 import { useWorkgroupTasks } from "./hooks/useWorkgroupTasks.js";
+import { useWindowChrome } from "./hooks/useWindowChrome.js";
+import {
+  useActiveViewPing,
+  useNotificationDeeplink,
+} from "./hooks/useNotificationDeeplink.js";
+import { useDaemonAutostart } from "./hooks/useDaemonAutostart.js";
+import { BootSplash } from "./primitives/index.js";
 import styles from "./App.module.css";
 
 function isChatSessionSummary(session) {
@@ -54,6 +61,7 @@ export default function App() {
   const [sessionData, setSessionData] = useState(null);
   const [rewriteDraft, setRewriteDraft] = useState(null);
   const [activeTask, setActiveTask] = useState(null);
+  const [recents, setRecents] = useState([]);
 
   const viewRef = useRef(view);
   const prevViewRef = useRef(view);
@@ -61,6 +69,38 @@ export default function App() {
     if (view.kind !== "settings") prevViewRef.current = view;
     viewRef.current = view;
   }, [view]);
+  useNotificationDeeplink({ setView, setSettingsTarget });
+  useActiveViewPing(view);
+
+  useEffect(() => {
+    if (view.kind !== "empty") return;
+    let cancelled = false;
+    invoke("sessions", { limit: 8 })
+      .then((rows) => {
+        if (cancelled) return;
+        const list = Array.isArray(rows) ? rows : [];
+        const sorted = list
+          .filter((s) => s.kind === "chat" && s.first_user)
+          .sort((a, b) => (b.updated_at || b.mtime || 0) - (a.updated_at || a.mtime || 0))
+          .slice(0, 4);
+        setRecents(sorted);
+      })
+      .catch(() => { if (!cancelled) setRecents([]); });
+    return () => { cancelled = true; };
+  }, [view.kind]);
+
+  const onOpenRecent = useCallback((profile, sessionId) => {
+    setView({ kind: "profile", profile, sessionId });
+  }, []);
+
+  useEffect(() => {
+    const onTtsError = (ev) => {
+      const err = ev.detail?.error || "audio failed";
+      notify({ message: `Audio: ${err}`, variant: "error" });
+    };
+    window.addEventListener("alpi-tts-error", onTtsError);
+    return () => window.removeEventListener("alpi-tts-error", onTtsError);
+  }, [notify]);
 
   const settingsTargetRef = useRef(settingsTarget);
   useEffect(() => {
@@ -71,8 +111,6 @@ export default function App() {
   const reloadRef = useRef(null);
   const pendingTurnRef = useRef(null);
 
-  // Mirrors sidebar order — pinned profiles + pinned workgroups first,
-  // then unpinned profiles by recency — so ⌘N matches the visible row.
   const jumpTargetsRef = useRef([]);
   const onJumpToProfile = useCallback((index) => {
     const item = jumpTargetsRef.current[index];
@@ -103,13 +141,13 @@ export default function App() {
       });
     }
   }, []);
+  const [createProfileOpen, setCreateProfileOpen] = useState(false);
   const onNewProfile = useCallback(() => {
-    setView({ kind: "settings" });
-    setSettingsTarget({ kind: "create-profile" });
+    setCreateProfileOpen(true);
   }, []);
+  const [createWorkgroupOpen, setCreateWorkgroupOpen] = useState(false);
   const onNewWorkgroup = useCallback(() => {
-    setSettingsTarget({ kind: "create-workgroup" });
-    setView({ kind: "settings" });
+    setCreateWorkgroupOpen(true);
   }, []);
   const [searchOpen, setSearchOpen] = useState(false);
   const searchOpenRef = useRef(false);
@@ -180,7 +218,7 @@ export default function App() {
     }
     setView({ kind: "settings" });
   }, []);
-  const { collapsed, setCollapsed, toggleSidebar } = useWindowChrome({
+  useWindowChrome({
     viewRef,
     setView,
     onJumpToProfile,
@@ -278,7 +316,6 @@ export default function App() {
 
   useEffect(() => installUpdater(), []);
 
-  // Load session detail when the active session changes.
   useEffect(() => {
     setSessionData(null);
     if (view.kind !== "profile" || !view.sessionId) return;
@@ -321,6 +358,18 @@ export default function App() {
     }, 350);
   }, []);
 
+  const onRefreshSession = useCallback(() => {
+    const v = viewRef.current;
+    if (v?.kind === "profile" && v.profile && v.sessionId) {
+      invoke("session_detail", { profile: v.profile, id: v.sessionId })
+        .then((data) => {
+          if (isChatSessionData(data)) setSessionData(data);
+        })
+        .catch(() => {});
+    }
+    reloadRef.current?.();
+  }, []);
+
   useEffect(
     () => () => {
       if (reloadTimerRef.current) clearTimeout(reloadTimerRef.current);
@@ -331,7 +380,6 @@ export default function App() {
     [],
   );
 
-  // React to filesystem-level changes the daemon broadcasts.
   useEffect(() => {
     const off = listen("fs-change", (event) => {
       const ev = event.payload;
@@ -415,7 +463,7 @@ export default function App() {
   }, [view, profiles, pickerAlpi, settingsTarget]);
 
   const onSend = useCallback(
-    async (text, model) => {
+    async (text, model, opts) => {
       if (!text.trim() || !activeProfile) return;
       if (sendingRef.current) return;
       sendingRef.current = true;
@@ -423,12 +471,17 @@ export default function App() {
         const profileName = activeProfile.name;
         const startSessionId =
           view.kind === "profile" ? view.sessionId : null;
-        const rewriteFromTurn =
+        const overrideTurn =
+          opts && Number.isInteger(opts.rewriteFromTurn)
+            ? opts.rewriteFromTurn
+            : null;
+        const rewriteFromTurn = overrideTurn ?? (
           rewriteDraft &&
           rewriteDraft.profile === profileName &&
           rewriteDraft.sessionId === startSessionId
             ? rewriteDraft.turnIndex
-            : null;
+            : null
+        );
 
         if (pendingTurn && pendingTurn.profile === profileName) {
           try {
@@ -527,6 +580,11 @@ export default function App() {
     });
   }, []);
 
+  const onRetryMessage = useCallback((profileName, sessionId, turnIndex, text) => {
+    if (!profileName || !sessionId || !text) return;
+    onSend(text, null, { rewriteFromTurn: turnIndex });
+  }, [onSend]);
+
   const onOpenWorkgroup = useCallback((workgroup) => {
     setView({
       kind: "workgroup",
@@ -587,6 +645,26 @@ export default function App() {
     (activeConnection.status === "offline" ||
       activeConnection.status === "auth-failed");
 
+  const [autostartPhase, setAutostartPhase] = useState("idle");
+  useDaemonAutostart({ activeConnection, onAttempt: setAutostartPhase });
+
+  const [bootElapsed, setBootElapsed] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setBootElapsed(true), 2500);
+    return () => clearTimeout(t);
+  }, []);
+  const activeStatus = activeConnection?.status;
+  const inBoot =
+    !bootElapsed &&
+    (activeStatus === "unknown" || activeStatus === "probing" || !activeStatus);
+  const inAutostart =
+    activeConnection?.kind === "local" &&
+    activeStatus === "offline" &&
+    autostartPhase === "starting";
+  const bootMessage = inAutostart
+    ? "Starting daemon…"
+    : "Connecting to daemon…";
+
   const jumpTargets = useMemo(
     () =>
       orderedJumpTargets({
@@ -620,12 +698,10 @@ export default function App() {
     workgroups,
     pinned,
     searchOpen,
-    collapsed,
     onSelectProfile: onOpenProfile,
     onSelectWorkgroup,
     onOpenSettings,
     onCloseSettings: closeSettings,
-    onToggleSidebar: toggleSidebar,
     onToggleSearch,
     onNewProfile,
     onNewWorkgroup,
@@ -636,48 +712,36 @@ export default function App() {
   });
 
   return (
-    <div className={styles.app} data-sidebar-collapsed={collapsed ? "1" : "0"}>
-      <AppHeader
-        view={view}
-        collapsed={view.kind === "settings" ? true : collapsed}
+    <div className={styles.app}>
+      <Sidebar
         profiles={profiles}
-        activeProfile={activeProfile}
-        activeWorkgroup={activeWorkgroup}
-        settingsWorkgroup={activeSettingsWorkgroup}
-        activeTask={activeTask}
-        sessionData={sessionData}
-        settingsRefreshing={settingsRefreshing}
-        onToggleSidebar={toggleSidebar}
-        onChangeSession={onChangeSession}
-        onNewSession={onNewSessionForCurrentProfile}
+        workgroups={workgroups}
+        taskByWorkgroup={taskByWorkgroup}
+        activityByWorkgroup={activityByWorkgroup}
+        pendingProfile={pendingTurn?.profile ?? null}
+        view={view}
+        settingsTarget={settingsTarget}
+        pinned={pinned}
+        jumpHints={jumpHints}
+        hostConnections={hostConnections}
+        daemonOffline={daemonOffline}
+        onNewChat={onNewChat}
+        onOpenProfile={onOpenProfile}
+        onOpenWorkgroup={onOpenWorkgroup}
+        onOpenSettings={onOpenSettings}
+        onOpenPalette={onTogglePalette}
+        onNewProfile={onNewProfile}
+        onNewWorkgroup={onNewWorkgroup}
         onCloseSettings={closeSettings}
-        onSettingsRefresh={onSettingsRefresh}
+        onSetSettingsTarget={setSettingsTarget}
+        onTogglePin={onTogglePin}
+        onSetHostConnection={onSetHostConnection}
+        onAddHostConnection={onAddHostConnection}
+        onForgetHostConnection={onForgetHostConnection}
+        onRefreshHostConnectionStatus={onRefreshHostConnectionStatus}
       />
-      <div className={styles.shell}>
-        {view.kind !== "settings" && (
-          <Sidebar
-            collapsed={collapsed}
-            profiles={profiles}
-            workgroups={workgroups}
-            taskByWorkgroup={taskByWorkgroup}
-            activityByWorkgroup={activityByWorkgroup}
-            pendingProfile={pendingTurn?.profile ?? null}
-            view={view}
-            pinned={pinned}
-            jumpHints={jumpHints}
-            hostConnections={hostConnections}
-            daemonOffline={daemonOffline}
-            onNewChat={onNewChat}
-            onOpenProfile={onOpenProfile}
-            onOpenWorkgroup={onOpenWorkgroup}
-            onTogglePin={onTogglePin}
-            onSetHostConnection={onSetHostConnection}
-            onAddHostConnection={onAddHostConnection}
-            onForgetHostConnection={onForgetHostConnection}
-            onRefreshHostConnectionStatus={onRefreshHostConnectionStatus}
-          />
-        )}
-        <main className={styles.main}>
+      <main className={styles.main}>
+          {(inBoot || inAutostart) && <BootSplash message={bootMessage} />}
           {view.kind === "settings" ? (
             <Settings
               profiles={profiles}
@@ -691,28 +755,37 @@ export default function App() {
               onTogglePin={onTogglePin}
               onSelectTarget={setSettingsTarget}
               onRefresh={reload}
+              onOpenChat={closeSettings}
               onSetHostConnection={onSetHostConnection}
               onAddHostConnection={onAddHostConnection}
               onForgetHostConnection={onForgetHostConnection}
               onRefreshHostConnectionStatus={onRefreshHostConnectionStatus}
             />
-          ) : daemonOffline ? (
-            <OfflineBanner
-              connectionName={activeConnection?.name}
-              connectionDetail={
-                activeConnection?.kind === "remote"
-                  ? `${activeConnection.host}:${activeConnection.port}`
-                  : activeConnection ? "host.sock" : undefined
-              }
-              onRetry={onRefreshHostConnectionStatus}
-            />
           ) : (
             <>
+              {daemonOffline && autostartPhase !== "starting" && (
+                <Banner
+                  kind="danger"
+                  pulsing
+                  action="Retry"
+                  onAction={onRefreshHostConnectionStatus}
+                >
+                  {activeConnection?.status === "auth-failed"
+                    ? `${activeConnection?.name ?? "Remote"} — token rejected. Re-pair device from Settings.`
+                    : activeConnection?.kind === "remote"
+                      ? `${activeConnection?.name ?? "Remote"} unreachable — check network / tunnel.`
+                      : autostartPhase === "gave-up"
+                        ? "Local daemon won't start — check Settings → daemon, or run `alpi daemon start` from terminal."
+                        : "Local daemon unreachable — reconnecting…"}
+                </Banner>
+              )}
               {view.kind === "workgroup" && activeWorkgroup && (
                 <WorkgroupView
                   key={`${activeWorkgroup.profile}/${activeWorkgroup.id}`}
                   workgroup={activeWorkgroup}
                   profiles={profiles}
+                  onReload={reload}
+                  daemonOffline={daemonOffline}
                   onActiveTask={(task) => {
                     setActiveTask(task);
                     if (task == null) return;
@@ -720,6 +793,10 @@ export default function App() {
                     setTaskByWorkgroup((prev) =>
                       prev[key] === task ? prev : { ...prev, [key]: task },
                     );
+                  }}
+                  onOpenSettings={(wg) => {
+                    setSettingsTarget({ kind: "workgroup", id: wg.id, profile: wg.profile });
+                    setView({ kind: "settings" });
                   }}
                   searchOpen={searchOpen}
                   onCloseSearch={onCloseSearch}
@@ -731,6 +808,7 @@ export default function App() {
                   profiles={profiles}
                   activeProfile={activeProfile}
                   sessionData={sessionData}
+                  daemonOffline={daemonOffline}
                   pendingTurn={
                     pendingTurn && pendingTurn.profile === activeProfile?.name
                       ? pendingTurn
@@ -750,24 +828,34 @@ export default function App() {
                     }
                   }}
                   onRewriteMessage={onRewriteMessage}
+                  onRetryMessage={onRetryMessage}
                   rewriteDraft={rewriteDraft}
                   onRewriteDraftApplied={() => {
                     setRewriteDraft((prev) =>
                       prev ? { ...prev, consumed: true } : prev,
                     );
                   }}
+                  onOpenSkills={onBrowseSkills}
+                  onOpenMemory={onBrowseMemory}
+                  onOpenTools={onBrowseTools}
+                  onRefreshSession={onRefreshSession}
+                  onNewSession={onNewSessionForCurrentProfile}
+                  onChangeSession={onChangeSession}
                   searchOpen={searchOpen}
                   onCloseSearch={onCloseSearch}
+                  recents={recents}
+                  onOpenRecent={onOpenRecent}
                 />
               )}
             </>
           )}
-        </main>
-      </div>
+      </main>
       <CommandPalette
         open={paletteOpen}
         onClose={onClosePalette}
         commands={paletteCommands}
+        profiles={profiles}
+        workgroups={workgroups}
       />
       <ToolsPanel
         open={browse === "tools"}
@@ -783,6 +871,30 @@ export default function App() {
         open={browse === "memory"}
         onClose={onCloseBrowse}
         profile={view.kind === "profile" ? view.profile : null}
+      />
+      <CreateProfileModal
+        open={createProfileOpen}
+        existingNames={profiles.map((p) => p.name)}
+        onClose={() => setCreateProfileOpen(false)}
+        onCreated={async (profileName) => {
+          setCreateProfileOpen(false);
+          await reload();
+          setSettingsTarget({ kind: "profile", id: profileName });
+          setView({ kind: "settings" });
+        }}
+      />
+      <CreateWorkgroupModal
+        open={createWorkgroupOpen}
+        profiles={profiles}
+        onClose={() => setCreateWorkgroupOpen(false)}
+        onCreated={async (wgId, hubName) => {
+          setCreateWorkgroupOpen(false);
+          await reload();
+          if (wgId) {
+            setSettingsTarget({ kind: "workgroup", id: wgId, profile: hubName });
+            setView({ kind: "settings" });
+          }
+        }}
       />
     </div>
   );

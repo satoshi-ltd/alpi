@@ -19,10 +19,10 @@ function MessageImpl({
   if (bubble && tintBubble) {
     bubbleStyle = {
       backgroundColor: tintFor(effectiveAccent, 0.16),
-      color: "var(--color-fg)",
+      color: "var(--ink)",
     };
   } else if (bubble) {
-    bubbleStyle = { backgroundColor: "var(--color-hover)" };
+    bubbleStyle = { backgroundColor: "var(--hover)" };
   } else {
     bubbleStyle = undefined;
   }
@@ -63,7 +63,7 @@ function MessageImpl({
         {typeof body === "string" ? (
           markdown ? (
             <div
-              className={bodyClass}
+              className={`${bodyClass} alpi-md`}
               style={bubbleStyle}
               dangerouslySetInnerHTML={{ __html: renderMarkdown(body) }}
             />
@@ -94,7 +94,7 @@ function MessageImpl({
 const Message = memo(MessageImpl);
 export default Message;
 
-const DEFAULT_ACCENT_FALLBACK = "#c8a24e";
+const DEFAULT_ACCENT_FALLBACK = "#b8954a";
 
 function readDefaultAccent() {
   if (typeof window === "undefined" || !document?.documentElement) {
