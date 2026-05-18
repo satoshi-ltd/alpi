@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
-from alpi import config as cfg_mod
+from alpi import clock, config as cfg_mod
 from alpi import llm, memory, session, tools
 from alpi.tools._budget import apply as _budget_apply
 from alpi.session import ToolLog, truncate_result
@@ -181,6 +181,15 @@ class Engine:
         # errors, and budget exhaustion leave it False so the post-turn
         # reviewer never fires on partial / abandoned context.
         turn_completed = False
+
+        # Strip prior `# NOW` blocks so multi-day sessions don't accumulate stale timestamps and confuse the agent about which one is current.
+        self.session.messages[:] = [
+            m for m in self.session.messages
+            if not (m.get("role") == "system"
+                    and isinstance(m.get("content"), str)
+                    and m["content"].startswith("# NOW\n"))
+        ]
+        self.session.messages.append({"role": "system", "content": clock.now_block()})
 
         # Inject transient workgroup context before user input.
         try:
@@ -675,7 +684,7 @@ class Engine:
             env_parts.append(f"- **profile home** (memory/skills/config): `{self.home}`")
         env = "\n".join(env_parts)
 
-        parts = [agent_profile.strip(), base.strip(), env]
+        parts = [agent_profile.strip(), base.strip(), env, clock.system_time_section()]
         hint = _platform_hint()
         if hint:
             parts.append(hint)

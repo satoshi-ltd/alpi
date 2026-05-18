@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.4.46 — 2026-05-18 — agent date/time grounding
+
+Fix for "hoy es miércoles" hallucinations on long sessions: the agent had zero date/time context in its system prompt and was guessing from training data. New `alpi/clock.py` module ships two pieces — a cache-stable timezone section baked into the system prompt, and a fresh `# NOW` block injected as a transient system message before every user turn so the prompt cache never goes stale across midnight, compaction reuse, or 5-min Anthropic cache TTL.
+
+- `alpi.clock.user_timezone()` resolves IANA TZ: `$TZ` first, then `/etc/localtime` symlink target, then `time.tzname`, fallback UTC. Validated via `zoneinfo.ZoneInfo` at each step so an invalid value never propagates.
+- `alpi.clock.system_time_section()` returns the cache-stable block for `_build_system_prompt`: `Timezone: <iana>` + a directive pointing the agent at the `# NOW` block.
+- `alpi.clock.now_block()` returns the per-turn payload: `Local: <weekday>, YYYY-MM-DD HH:MM (<tz>)` + `UTC: YYYY-MM-DDTHH:MMZ`. `engine.run_turn` strips any prior `# NOW` system message from `session.messages` before appending the fresh one, so a multi-day session never accumulates stale timestamps (and the agent can't accidentally read an older `# NOW` instead of the current one). Composes cleanly with the existing workgroup-context / skill-hint injection pattern around cache boundaries and compaction.
+- Design pulled from hermes-agent (mandatory tool-use for `date` queries) and openclaw (TZ-in-prompt + tool for the actual time). The combination here is closer to openclaw but skips the tool round-trip for casual date references — the agent already has a fresh block in context every turn.
+
+Tests in `tests/core/test_clock.py` cover TZ env precedence, invalid-TZ fallback, format stability, naive-datetime safety, and DST transitions (Madrid CET/CEST round-trip). `tests/core/test_engine_clock.py` pins the engine wiring: system prompt carries the TZ section but no rendered local/UTC strings (cache safety), each `run_turn` appends exactly one `# NOW` block before the user message, multi-turn sessions keep only the latest block, and stale `# NOW` blocks planted in `session.messages` (simulating a reloaded long-running session) get replaced rather than stacked. Full suite **1721 passed / 75 skipped**.
+
 ## v0.4.45 — 2026-05-18 — Telegram profile isolation
 
 Multi-profile daemons now isolate Telegram gateway state per profile. Telegram long-polling allows only one active `getUpdates` consumer per bot token, so Alpi now treats one Telegram bot per profile as a hard contract and avoids using a sibling profile's env for inbound authorization.

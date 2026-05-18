@@ -56,10 +56,10 @@ nav.top .row{
    Nested <a> would be invalid, so the crumbs live outside .brand. */
 .brand-lockup{display:flex;align-items:center;gap:18px;min-width:0}
 .brand{display:inline-flex;align-items:center;color:var(--fg);text-decoration:none;line-height:1}
-.brand .logo{color:var(--fg);flex-shrink:0;display:inline-flex;align-items:center;gap:6px}
+.brand .logo{color:var(--fg);flex-shrink:0;display:inline-flex;align-items:center;gap:14px}
 .brand .logo-mark{width:35px;height:40px;display:block;transform:translateY(1px)}
-.brand .logo-word{width:64px;height:32px;display:block}
-:root[data-theme="light"] .brand .logo{filter:invert(1)}
+.brand .logo-word{font-family:"Space Grotesk",sans-serif;font-weight:600;font-size:24px;line-height:1;letter-spacing:-0.02em;color:var(--fg)}
+:root[data-theme="light"] .brand .logo-mark{filter:invert(1)}
 /* Breadcrumb tail — matches the landing nav menu typography
    (JetBrains Mono, 12px, uppercase) so the header reads as one system. */
 /* Nudged down ~4px so the crumbs sit on the baseline of the "alpi"

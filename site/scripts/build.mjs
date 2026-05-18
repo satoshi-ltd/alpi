@@ -185,7 +185,7 @@ function inlineLogoPart(fileName, className, attrs = '') {
     .trim();
 }
 
-const logoSvg = `<span class="logo" aria-hidden="true">${inlineLogoPart('alpi-white.svg', 'logo-mark', 'width="35" height="40"')}${inlineLogoPart('alpi-text-white.svg', 'logo-word', 'width="64" height="32"')}</span>`;
+const logoSvg = `<span class="logo">${inlineLogoPart('alpi-white.svg', 'logo-mark', 'width="35" height="40"')}<span class="logo-word">alpi</span></span>`;
 const themeControlHtml = `<div class="bg-ctrl" role="group" aria-label="theme">
   <span>theme</span>
   <button data-theme="dark" class="on">dark</button>

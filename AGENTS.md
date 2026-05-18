@@ -36,8 +36,16 @@ this repository. Hard constraints, not suggestions.
   justification. Defaults: CSS Modules over Tailwind, hand-rolled over UI
   kits, vanilla over opinionated state libraries. Solo-maintained — every
   dep is maintenance tax forever.
-- **No Claude / Anthropic mentions in the repo.** Hard rule across code,
-  commit messages, PRs, docs.
+- **No AI-maker attribution in the repo.** No "powered by Claude",
+  "Co-Authored-By: Claude", or analogous Anthropic / OpenAI / Google /
+  Mistral credits in commit messages, PR descriptions, code comments,
+  marketing copy, README, or user-visible UI. Functional API identifiers
+  (model strings like `anthropic/claude-sonnet-4-6`, env var names like
+  `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `GEMINI_API_KEY`, provider
+  class names, LiteLLM routing prefixes) are exempt — they're protocol
+  contracts, not branding. The line: if removing the mention would break
+  auth, routing, or interop, it stays; if it's brag/credit/decorative,
+  it goes.
 
 ## Releases & versioning
 
