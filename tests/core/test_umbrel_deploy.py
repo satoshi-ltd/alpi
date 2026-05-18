@@ -1,3 +1,5 @@
+import os
+import subprocess
 from pathlib import Path
 
 from alpi import __version__ as ALPI_VERSION
@@ -66,7 +68,66 @@ def test_umbrel_store_assets_are_present() -> None:
     text = icon.read_text()
     assert 'viewBox="0 0 256 256"' in text
     assert "<rect" in text
+    assert "M 512,508" in text
+    assert "M80.0047" not in text
     assert len(screenshots) == 4
+
+
+def test_umbrel_local_package_generator_keeps_submission_manifest_clean(
+    tmp_path: Path,
+) -> None:
+    script = ROOT / "deploy" / "umbrel" / "prepare-local-package.sh"
+    dest = tmp_path / "alpi"
+
+    result = subprocess.run(
+        [str(script), str(dest)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    local_manifest = (dest / "umbrel-app.yml").read_text()
+
+    assert "gallery: []" in (UMBREL / "umbrel-app.yml").read_text()
+    assert 'icon: ""' in (UMBREL / "umbrel-app.yml").read_text()
+    assert result.stdout.strip() == str(dest)
+    assert "raw.githubusercontent.com/satoshi-ltd/alpi/main/assets/umbrel" in local_manifest
+    assert "alpi-icon.svg" in local_manifest
+    assert "alpi-screenshot-04.png" in local_manifest
+    assert 'icon: ""' not in local_manifest
+
+
+def test_umbrel_local_package_generator_honours_asset_base_override(
+    tmp_path: Path,
+) -> None:
+    script = ROOT / "deploy" / "umbrel" / "prepare-local-package.sh"
+    dest = tmp_path / "alpi"
+
+    subprocess.run(
+        [str(script), str(dest)],
+        check=True,
+        capture_output=True,
+        text=True,
+        env={
+            "PATH": os.environ["PATH"],
+            "ASSET_BASE": "https://example.invalid/branch-x/assets/umbrel",
+        },
+    )
+    local_manifest = (dest / "umbrel-app.yml").read_text()
+    assert "example.invalid/branch-x/assets/umbrel/alpi-icon.svg" in local_manifest
+    assert "example.invalid/branch-x/assets/umbrel/alpi-screenshot-04.png" in local_manifest
+    assert "raw.githubusercontent.com" not in local_manifest
+
+
+def test_umbrel_local_package_generator_refuses_unsafe_dest(tmp_path: Path) -> None:
+    script = ROOT / "deploy" / "umbrel" / "prepare-local-package.sh"
+    for bad in ("/", str(ROOT / "deploy")):
+        result = subprocess.run(
+            [str(script), bad],
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode != 0, bad
+        assert "refuse to rm -rf unsafe dest_dir" in result.stderr
 
 
 def test_umbrel_setup_skips_system_service_install(

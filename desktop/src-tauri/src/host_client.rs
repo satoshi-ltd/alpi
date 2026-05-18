@@ -54,6 +54,7 @@ struct StatusEntry {
     status: ConnectionStatus,
     error: Option<String>,
     consecutive_failures: u32,
+    alpi_version: Option<String>,
 }
 
 impl Default for StatusEntry {
@@ -62,6 +63,7 @@ impl Default for StatusEntry {
             status: ConnectionStatus::Unknown,
             error: None,
             consecutive_failures: 0,
+            alpi_version: None,
         }
     }
 }
@@ -115,6 +117,34 @@ pub fn status_for(id: &str) -> (ConnectionStatus, Option<String>) {
         }
     }
     (ConnectionStatus::Unknown, None)
+}
+
+pub fn version_for(id: &str) -> Option<String> {
+    if let Ok(map) = status_map().lock() {
+        if let Some(entry) = map.get(id) {
+            return entry.alpi_version.clone();
+        }
+    }
+    None
+}
+
+fn set_version(id: &str, version: Option<String>) {
+    let mut changed = false;
+    if let Ok(mut map) = status_map().lock() {
+        let entry = map.entry(id.to_string()).or_default();
+        if entry.alpi_version != version {
+            entry.alpi_version = version;
+            changed = true;
+        }
+    }
+    if changed {
+        if let Ok(guard) = listeners().lock() {
+            let (status, error) = status_for(id);
+            for listener in guard.iter() {
+                listener(id, status, error.as_deref());
+            }
+        }
+    }
 }
 
 // Online → Offline only flips after STICKY_OFFLINE_THRESHOLD consecutive failures.
@@ -254,6 +284,7 @@ impl HostConnection {
 
     fn with_token_redacted(&self) -> Value {
         let (status, error) = status_for(self.id());
+        let alpi_version = version_for(self.id());
         match self {
             HostConnection::Local { id, name } => {
                 json!({
@@ -262,6 +293,7 @@ impl HostConnection {
                     "kind": "local",
                     "status": status.as_str(),
                     "error": error,
+                    "alpi_version": alpi_version,
                 })
             }
             HostConnection::Remote {
@@ -281,6 +313,7 @@ impl HostConnection {
                 "revoked": revoked,
                 "status": status.as_str(),
                 "error": error,
+                "alpi_version": alpi_version,
             }),
         }
     }
@@ -1045,7 +1078,31 @@ pub fn probe_connection(conn: &HostConnection) {
         }
     }
     match result {
-        Ok(_) => set_status(&id, ConnectionStatus::Online, None),
+        Ok(_) => {
+            set_status(&id, ConnectionStatus::Online, None);
+            let version_call = match conn {
+                HostConnection::Local { .. } => {
+                    call_local_inner("host.version", json!({}), timeout)
+                }
+                HostConnection::Remote {
+                    host, port, token, ..
+                } => call_remote_once(
+                    host,
+                    *port,
+                    token,
+                    "host.version",
+                    json!({}),
+                    timeout,
+                ),
+            };
+            let version = version_call
+                .ok()
+                .as_ref()
+                .and_then(|v| v.get("version"))
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+            set_version(&id, version);
+        }
         Err(e) => {
             let next = match conn {
                 HostConnection::Local { .. } => ConnectionStatus::Offline,
@@ -1058,6 +1115,7 @@ pub fn probe_connection(conn: &HostConnection) {
                 }
             };
             set_status(&id, next, Some(e));
+            set_version(&id, None);
         }
     }
 }

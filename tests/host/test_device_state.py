@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from alpi import __version__ as alpi_version
 from alpi import config as cfg_mod
 from alpi.alp.keys import load_or_generate
 from alpi.host import device_state as host_device_state
@@ -47,6 +48,18 @@ def _bootstrap(home: Path) -> Path:
     )
     load_or_generate(home)
     return home
+
+
+@pytest.mark.asyncio
+async def test_host_version_returns_alpi_runtime(tmp_path: Path) -> None:
+    srv = host_server.Server(home=tmp_path)
+    host_device_state.register(srv)
+    resp = await srv._dispatch({
+        "id": "v",
+        "method": "host.version",
+        "params": {},
+    })
+    assert resp["result"] == {"agent_name": "alpi", "version": alpi_version}
 
 
 @pytest.mark.asyncio

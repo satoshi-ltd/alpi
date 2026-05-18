@@ -102,7 +102,15 @@ export function ConnectionPanel({
                       </span>
                     )}
                   </div>
-                  <span className={`mono ${styles.connHost}`}>{r.host}</span>
+                  <span className={`mono ${styles.connHost}`}>
+                    {r.host}
+                    {r.alpi_version && (
+                      <span className={styles.connVersion}>
+                        {" · v"}
+                        {r.alpi_version}
+                      </span>
+                    )}
+                  </span>
                 </div>
                 {!isLocal && (
                   <button

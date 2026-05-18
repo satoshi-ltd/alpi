@@ -180,17 +180,29 @@ export function useHostConnections({
   // Forward connection-status events from the daemon into local state.
   useEffect(() => {
     const off = listen("connection-status", (event) => {
-      const { id, status, error } = event.payload ?? {};
+      const { id, status, error, alpi_version } = event.payload ?? {};
       if (!id || !status) return;
       setHostConnections((prev) => {
         const before = prev.connections.find((c) => c.id === id);
-        if (before && before.status === status && before.error === error) {
+        if (
+          before &&
+          before.status === status &&
+          before.error === error &&
+          before.alpi_version === (alpi_version ?? null)
+        ) {
           return prev;
         }
         const next = {
           ...prev,
           connections: prev.connections.map((c) =>
-            c.id === id ? { ...c, status, error: error ?? null } : c,
+            c.id === id
+              ? {
+                  ...c,
+                  status,
+                  error: error ?? null,
+                  alpi_version: alpi_version ?? null,
+                }
+              : c,
           ),
         };
         hostConnectionsRef.current = next;

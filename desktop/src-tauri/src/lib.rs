@@ -1577,6 +1577,7 @@ pub fn run() {
                             host_client::ConnectionStatus::Unknown => "unknown",
                         },
                         "error": error,
+                        "alpi_version": host_client::version_for(id),
                     }),
                 );
                 if matches!(status, host_client::ConnectionStatus::Offline) {

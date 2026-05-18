@@ -79,6 +79,7 @@ export default function ConnectionSwitcher({
           host:
             c.kind === "remote" ? `${c.host}:${c.port}` : "host.sock",
           status: c.status,
+          alpi_version: c.alpi_version ?? null,
         }))}
         activeId={activeId}
         onPick={(r) => {

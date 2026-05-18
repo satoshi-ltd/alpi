@@ -10,6 +10,7 @@ from typing import Any
 
 import yaml
 
+from alpi import __version__ as _alpi_version
 from alpi import config as cfg_mod
 from alpi import home as home_mod
 from alpi.host import sessions as host_sessions
@@ -50,6 +51,7 @@ GATEWAY_ENV_KEYS = {
 
 
 def register(server: host_server.Server) -> None:
+    server.register("host.version", _host_version)
     server.register("host.profiles.list", _profiles_list)
     server.register("host.profile.summaries", _profile_summaries)
     server.register("host.profile.read_file", _profile_read_file)
@@ -85,6 +87,12 @@ def _profiles() -> list[dict[str, Any]]:
                     "is_default": False,
                 })
     return out
+
+
+async def _host_version(
+    _params: dict[str, Any], _server: host_server.Server,
+) -> dict[str, Any]:
+    return {"agent_name": "alpi", "version": _alpi_version}
 
 
 async def _profiles_list(

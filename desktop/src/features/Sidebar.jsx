@@ -179,6 +179,28 @@ function Sidebar({
 
   const hasPinned = pinnedProfiles.length > 0 || pinnedWorkgroups.length > 0;
 
+  const pinnedItems = useMemo(() => {
+    const items = [
+      ...pinnedProfiles.map((p) => ({
+        kind: "profile",
+        item: p,
+        ts: p.latest_session?.updated_at ?? p.latest_session?.started_at ?? p.latest_session?.mtime ?? 0,
+        bad: !p.model ? 1 : 0,
+      })),
+      ...pinnedWorkgroups.map((w) => ({
+        kind: "workgroup",
+        item: w,
+        ts: w.mtime ?? 0,
+        bad: w.paused ? 1 : 0,
+      })),
+    ];
+    items.sort((a, b) => {
+      if (a.bad !== b.bad) return a.bad - b.bad;
+      return b.ts - a.ts;
+    });
+    return items;
+  }, [pinnedProfiles, pinnedWorkgroups]);
+
   const navRef = useRef(null);
   const [navHeight, setNavHeight] = useState(0);
   useEffect(() => {
@@ -390,8 +412,11 @@ function Sidebar({
         <nav ref={navRef} className={styles.nav}>
           {hasPinned && (
             <Section label="Pinned" containerRef={pinnedSectionRef}>
-              {pinnedProfiles.map((p) => renderProfileRow(p, "pin:"))}
-              {pinnedWorkgroups.map((w) => renderWorkgroupRow(w, "pin:"))}
+              {pinnedItems.map((it) =>
+                it.kind === "profile"
+                  ? renderProfileRow(it.item, "pin:")
+                  : renderWorkgroupRow(it.item, "pin:"),
+              )}
             </Section>
           )}
 

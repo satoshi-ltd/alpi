@@ -11,6 +11,18 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.3.2 — 2026-05-18 — daemon version in connection metadata
+
+Requires alpi ``v0.4.47`` or newer.
+
+Small follow-up to the v0.3 shell rebuild.
+
+- **Connection metadata.** The desktop probes `host.version` after a successful connection check and carries `alpi_version` through the cached connection state, redacted connection JSON, and `connection-status` events.
+- **Connection switcher.** The connection panel now shows `v<version>` next to each host when the daemon reports it, making local/remote compatibility visible without leaving the app.
+- **Pinned recency.** Pinned profiles and pinned workgroups now share one recency-sorted list, with incomplete/paused items still drifting after healthy entries.
+
+`pnpm build` ✓; `cargo check` ✓.
+
 ## v0.3.1 — 2026-05-18 — sidebar text spec, frontend unread, design-token coverage
 
 Requires alpi ``v0.4.46`` or newer.

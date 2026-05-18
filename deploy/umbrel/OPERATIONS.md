@@ -7,8 +7,8 @@ Umbrel package versions should match Alpi versions exactly.
 
 Examples:
 
-- Alpi `0.4.20` -> publish-umbrel tag `0.4.20`
-- Alpi `0.4.20` -> `umbrel-app.yml` version `0.4.20`
+- Alpi `0.4.47` -> publish-umbrel tag `0.4.47`
+- Alpi `0.4.47` -> `umbrel-app.yml` version `0.4.47`
 
 ## 1. Bump the Umbrel package version
 
@@ -31,7 +31,7 @@ From the Alpi repository root:
 ```bash
 docker buildx build \
   --platform linux/amd64,linux/arm64 \
-  -t satoshiltd/alpi-umbrel:0.4.20 \
+  -t satoshiltd/alpi-umbrel:0.4.47 \
   -f deploy/umbrel/alpi/Dockerfile \
   --push .
 ```
@@ -39,8 +39,8 @@ docker buildx build \
 If you only need a local smoke test first:
 
 ```bash
-docker build -t satoshiltd/alpi-umbrel:0.4.20 -f deploy/umbrel/alpi/Dockerfile .
-docker run --rm -it -p 8080:8080 -v alpi-umbrel-data:/data satoshiltd/alpi-umbrel:0.4.20
+docker build -t satoshiltd/alpi-umbrel:0.4.47 -f deploy/umbrel/alpi/Dockerfile .
+docker run --rm -it -p 8080:8080 -v alpi-umbrel-data:/data satoshiltd/alpi-umbrel:0.4.47
 ```
 
 ## 3. Resolve the image digest
@@ -50,13 +50,13 @@ Umbrel requires the app-store compose file to pin the image by digest.
 After publishing:
 
 ```bash
-docker buildx imagetools inspect satoshiltd/alpi-umbrel:0.4.20
+docker buildx imagetools inspect satoshiltd/alpi-umbrel:0.4.47
 ```
 
 Copy the manifest list digest and use:
 
 ```yaml
-image: satoshiltd/alpi-umbrel:0.4.20@sha256:<digest>
+image: satoshiltd/alpi-umbrel:0.4.47@sha256:<digest>
 ```
 
 ## 4. Update the `umbrel-apps` fork
@@ -84,20 +84,74 @@ Before opening or updating the PR in `umbrel-apps`:
 
 ## 5. Install on a real Umbrel
 
-From the Umbrel machine, installation is a two-step process:
-first copy the app-store package into the local Umbrel app store,
-then ask Umbrel to install the app from that package.
+Use this path when testing Alpi on a real Umbrel before the official
+Umbrel App Store submission is merged.
 
-1. Copy the package from this repository into the local Umbrel app
-   store:
+The official package keeps `icon: ""` and `gallery: []` because Umbrel's
+new-app linter requires those fields to be empty in the store PR. For a
+local side-load, generate a temporary package with public icon and
+gallery URLs first:
+
+1. Build and push the Docker image:
+
+   ```bash
+   docker buildx build \
+     --platform linux/amd64 \
+     -t satoshiltd/alpi-umbrel:0.4.47 \
+     -f deploy/umbrel/alpi/Dockerfile \
+     --push .
+   ```
+
+   Use `--platform linux/amd64,linux/arm64` when preparing a public
+   release. For a local Intel Umbrel smoke test, `linux/amd64` is enough.
+
+2. Resolve the pushed digest:
+
+   ```bash
+   docker buildx imagetools inspect satoshiltd/alpi-umbrel:0.4.47
+   ```
+
+   Copy the top-level `Digest:` value.
+
+3. Generate the local package with icon and gallery URLs:
+
+   ```bash
+   deploy/umbrel/prepare-local-package.sh
+   ```
+
+   The command prints the generated package directory. By default it is:
+
+   ```text
+   /tmp/alpi-umbrel-local/alpi
+   ```
+
+4. Pin the generated local package to the pushed digest:
+
+   ```bash
+   python3 - <<'PY'
+   from pathlib import Path
+
+   version = "0.4.47"
+   digest = "sha256:<digest>"
+   compose = Path("/tmp/alpi-umbrel-local/alpi/docker-compose.yml")
+   text = compose.read_text()
+   text = text.replace(
+       f"image: satoshiltd/alpi-umbrel:{version}",
+       f"image: satoshiltd/alpi-umbrel:{version}@{digest}",
+   )
+   compose.write_text(text)
+   PY
+   ```
+
+5. Copy the generated local package into the local Umbrel app store:
 
    ```bash
    rsync -av \
-     /Users/javi/git/alf/deploy/umbrel/alpi/ \
+     /tmp/alpi-umbrel-local/alpi/ \
      umbrel@umbrel.local:/home/umbrel/umbrel/app-stores/getumbrel-umbrel-apps-github-53f74447/alpi/
    ```
 
-2. Install the app from Umbrel:
+6. Install the app from Umbrel:
 
    ```bash
    ssh umbrel@umbrel.local
@@ -110,16 +164,17 @@ then ask Umbrel to install the app from that package.
    umbrel client apps.install.mutate --appId alpi
    ```
 
-3. Open the app in the Umbrel dashboard.
-4. Confirm the TUI appears in the browser terminal.
-5. Exit the TUI and run:
+7. Open the app in the Umbrel dashboard.
+8. Confirm the app icon appears.
+9. Confirm the TUI appears in the browser terminal.
+10. Exit the TUI and run:
 
    ```bash
    alpi setup
    alpi doctor
    ```
 
-6. Restart the app and confirm the profile still exists.
+11. Restart the app and confirm the profile still exists.
 
 Persistence survives because:
 
@@ -133,18 +188,24 @@ When you are updating a box that already has Alpi installed, the
 sequence is:
 
 1. Build and push the new Docker image.
-2. Resolve and pin the new digest in the copied
-   `alpi/docker-compose.yml`.
-3. Copy the updated `deploy/umbrel/alpi/` package into the local
-   Umbrel app store again:
+2. Resolve the new image digest.
+3. Regenerate the local package with icon and gallery:
+
+   ```bash
+   deploy/umbrel/prepare-local-package.sh
+   ```
+
+4. Pin `/tmp/alpi-umbrel-local/alpi/docker-compose.yml` to the new
+   digest.
+5. Copy the generated package into the local Umbrel app store:
 
    ```bash
    rsync -av \
-     /Users/javi/git/alf/deploy/umbrel/alpi/ \
+     /tmp/alpi-umbrel-local/alpi/ \
      umbrel@umbrel.local:/home/umbrel/umbrel/app-stores/getumbrel-umbrel-apps-github-53f74447/alpi/
    ```
 
-4. Ask Umbrel to restart the app:
+6. Ask Umbrel to restart the app:
 
    ```bash
    ssh umbrel@umbrel.local
@@ -159,13 +220,17 @@ sequence is:
    umbreld client apps.install.mutate --appId alpi
    ```
 
-5. Verify the running container uses the new tag:
+7. Verify the running container uses the new tag:
 
    ```bash
    sudo docker ps --format '{{.Names}} {{.Image}}' | grep alpi
    ```
 
-6. Open the app and confirm the browser TUI still works.
+8. Open the app and confirm:
+
+   - the icon is visible
+   - the browser TUI still works
+   - the profile persisted under `/data/.alpi`
 
 See `deploy/umbrel/PERSISTENCE.md` for the storage model.
 

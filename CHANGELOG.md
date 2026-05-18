@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.4.47 — 2026-05-18 — host runtime version + Umbrel local package prep
+
+Small compatibility release for desktop/mobile clients and real Umbrel smoke tests.
+
+- `host.version` returns the running Alpi agent name and package version over the host plane. Clients can now display daemon compatibility from the same API surface they already use, without filesystem reads or subprocess probes.
+- Umbrel package metadata moves to `0.4.47`, and `deploy/umbrel/prepare-local-package.sh` generates a side-load package with public icon/gallery URLs while keeping the official store submission manifest clean (`icon: ""`, `gallery: []`).
+- Umbrel operations docs now describe the local side-load flow, digest pinning, app icon verification, and persistence checks.
+- Tests cover the new host verb, local package generation, and the updated Umbrel asset expectations.
+
 ## v0.4.46 — 2026-05-18 — agent date/time grounding
 
 Fix for "hoy es miércoles" hallucinations on long sessions: the agent had zero date/time context in its system prompt and was guessing from training data. New `alpi/clock.py` module ships two pieces — a cache-stable timezone section baked into the system prompt, and a fresh `# NOW` block injected as a transient system message before every user turn so the prompt cache never goes stale across midnight, compaction reuse, or 5-min Anthropic cache TTL.
