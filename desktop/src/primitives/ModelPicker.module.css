@@ -1,0 +1,119 @@
+.modelPickerWrap { position: relative; }
+
+.modelPickerTrigger {
+  height: var(--ctrl-sm);
+}
+
+.modelPickerTriggerField {
+  height: var(--ctrl-md);
+  border: .5px solid var(--line-2);
+  border-radius: var(--r-md);
+  background: var(--bg-input);
+  padding: 0 var(--space-5);
+}
+.modelPickerTriggerField:hover {
+  background: var(--bg-input);
+  border-color: color-mix(in srgb, var(--ink) 24%, transparent);
+}
+
+.modelPickerLabel {
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+}
+.modelPickerPop {
+  position: absolute;
+  width: var(--pop-md);
+  background: var(--bg-elev);
+  border: .5px solid var(--line-2);
+  border-radius: var(--r-xl);
+  box-shadow: var(--shadow);
+  z-index: 50;
+  overflow: hidden;
+}
+.modelPickerPopDown {
+  top: calc(100% + var(--space-3));
+  left: 0;
+}
+.modelPickerPopUp {
+  bottom: calc(100% + var(--space-3));
+  right: 0;
+}
+.modelPickerList {
+  padding: var(--space-2);
+  max-height: 420px;
+  overflow-y: auto;
+}
+.modelPickerEyebrow { padding: var(--space-4) var(--space-4) var(--space-1); }
+
+.modelPickerOption {
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--r-md);
+  gap: var(--space-4);
+  text-align: left;
+  background: transparent;
+  align-items: center;
+  width: 100%;
+  border: 0;
+  cursor: pointer;
+}
+.modelPickerOption:hover { background: var(--hover); }
+
+.modelPickerOptionSelected,
+.modelPickerOptionSelected:hover { background: var(--selected); }
+
+.modelPickerCheckSlot {
+  width: var(--space-6);
+  display: inline-flex;
+  justify-content: center;
+  color: transparent;
+}
+.modelPickerCheckSlotSelected { color: var(--c); }
+
+.modelPickerOptionBody {
+  flex: 1;
+  gap: 1px;
+}
+.modelPickerOptionLabel {
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  font-weight: 400;
+}
+.modelPickerOptionLabelSelected { font-weight: 600; }
+
+.modelPickerOptionCtx {
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+}
+.modelPickerBadge { font-size: var(--fs-xs); }
+
+.modelPickerFooter {
+  padding: var(--space-3) var(--space-5);
+  border-top: .5px solid var(--line);
+  background: var(--bg-side);
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+}
+.modelPickerFooterLink {
+  font-size: var(--fs-xs);
+  color: var(--ink-2);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+.modelPickerFooterLink:hover { text-decoration: underline; }
+
+.richPara { margin: 0; }
+
+.richParaSpaced { margin: var(--space-6) 0 0; }
+
+.richLine { display: block; }
+
+.richBold { font-weight: 600; }
+
+.richCode {
+  font-family: var(--font-mono);
+  font-size: .92em;
+  background: var(--hover);
+  padding: 1px 5px;
+  border-radius: var(--r-xs);
+}

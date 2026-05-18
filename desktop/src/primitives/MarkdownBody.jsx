@@ -5,7 +5,7 @@ export default function MarkdownBody({ source, className = "" }) {
   if (!source) return null;
   return (
     <div
-      className={`${styles.body} ${className}`.trim()}
+      className={`${styles.body} alpi-md ${className}`.trim()}
       dangerouslySetInnerHTML={{ __html: renderMarkdown(source) }}
     />
   );

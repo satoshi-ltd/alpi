@@ -1,8 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-
-const COLLAPSE_BELOW = 600;
-const EXPAND_ABOVE = 720;
 
 export function useWindowChrome({
   viewRef,
@@ -19,10 +16,6 @@ export function useWindowChrome({
   onBrowseSkills,
   onBrowseMemory,
 } = {}) {
-  const [collapsed, setCollapsed] = useState(false);
-  const toggleSidebar = useCallback(() => setCollapsed((c) => !c), []);
-
-  // Drag-to-move on `[data-drag]` regions; double-click toggles maximize.
   useEffect(() => {
     function onDown(e) {
       if (e.button !== 0) return;
@@ -48,19 +41,6 @@ export function useWindowChrome({
     return () => document.removeEventListener("mousedown", onDown);
   }, []);
 
-  // Auto-collapse the sidebar at narrow widths; expand above the threshold.
-  useEffect(() => {
-    function onResize() {
-      const w = window.innerWidth;
-      if (w < COLLAPSE_BELOW) setCollapsed(true);
-      else if (w > EXPAND_ABOVE) setCollapsed(false);
-    }
-    window.addEventListener("resize", onResize);
-    onResize();
-    return () => window.removeEventListener("resize", onResize);
-  }, []);
-
-  // ⌘B sidebar, ⌘N new session, ⌘, settings.
   useEffect(() => {
     if (!viewRef || !setView) return;
     function onKey(e) {
@@ -85,10 +65,6 @@ export function useWindowChrome({
         return;
       }
       if (key === "b") {
-        if (viewRef.current?.kind === "settings") return;
-        e.preventDefault();
-        e.stopPropagation();
-        setCollapsed((c) => !c);
         return;
       }
       if (e.shiftKey && key === "n") {
@@ -160,6 +136,4 @@ export function useWindowChrome({
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
   }, [viewRef, setView, onJumpToProfile, onNewProfile, onNewWorkgroup, onOpenSettings, onToggleSearch, onTogglePalette, paletteOpenRef, onClosePalette, onBrowseTools, onBrowseSkills, onBrowseMemory]);
-
-  return { collapsed, setCollapsed, toggleSidebar };
 }

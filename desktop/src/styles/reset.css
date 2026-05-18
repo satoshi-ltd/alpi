@@ -15,16 +15,19 @@ body,
 
 body {
   font-family: var(--font-sans);
-  font-size: var(--font-size-ui);
-  line-height: 1.45;
-  color: var(--color-fg);
-  background: var(--color-bg-solid);
+  font-size: var(--fs-md);
+  line-height: var(--lh-normal);
+  color: var(--ink);
+  background: var(--bg-pane);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   -webkit-user-select: none;
   user-select: none;
   cursor: default;
   overflow: hidden;
+  letter-spacing: -0.003em;
+  font-variant-numeric: tabular-nums slashed-zero;
+  font-feature-settings: "ss01", "cv11";
 }
 
 input,

@@ -1,0 +1,19 @@
+.root {
+  display: flex;
+  flex-direction: row;
+  justify-content: flex-end;
+  align-items: center;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+}
+
+.destructive {
+  background: var(--c-danger);
+  color: var(--bg-pane);
+}
+.destructive:hover {
+  background: color-mix(in srgb, var(--c-danger) 88%, black);
+}
+.destructive:active {
+  background: color-mix(in srgb, var(--c-danger) 80%, transparent);
+}

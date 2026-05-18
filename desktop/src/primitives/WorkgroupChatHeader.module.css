@@ -1,0 +1,22 @@
+.hubRow {
+  gap: 5px;
+}
+
+.label {
+  color: var(--ink-4);
+}
+
+.ink2 {
+  color: var(--ink-2);
+}
+
+.ink3 {
+  color: var(--ink-3);
+}
+
+.divider {
+  width: 1px;
+  height: var(--ctrl-2xs);
+  background: var(--line);
+  margin: 0 var(--space-1);
+}

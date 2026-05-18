@@ -1,0 +1,11 @@
+.root {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-6) var(--space-4) var(--space-2);
+  min-height: var(--ctrl-xs);
+}
+
+.label {
+  padding-left: 2px;
+}

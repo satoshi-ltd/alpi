@@ -82,16 +82,19 @@ export function useChatStream({
       const f = rec.frame ?? {};
       const kind = f.event;
       if (kind === "tool_start") {
-        nextTools.push({
+        const existing = nextTools.findIndex((t) => t.tool_id === f.tool_id);
+        const entry = {
           tool_id: f.tool_id,
           name: f.name,
           preview: f.preview,
           args: f.args,
-          states: [],
-          output: "",
+          states: existing >= 0 ? nextTools[existing].states : [],
+          output: existing >= 0 ? nextTools[existing].output : "",
           ok: null,
-          startedAt: Date.now(),
-        });
+          startedAt: existing >= 0 ? nextTools[existing].startedAt : Date.now(),
+        };
+        if (existing >= 0) nextTools[existing] = entry;
+        else nextTools.push(entry);
       } else if (kind === "tool_state") {
         for (let i = nextTools.length - 1; i >= 0; i--) {
           if (nextTools[i].tool_id === f.tool_id && nextTools[i].ok === null) {
@@ -212,26 +215,24 @@ export function useChatStream({
         return; // keepalive only — daemon proving the loop is alive
       }
       if (p.kind === "tool_start") {
-        setPendingTurn((prev) =>
-          prev
-            ? {
-                ...prev,
-                tools: [
-                  ...prev.tools,
-                  {
-                    tool_id: p.tool_id,
-                    name: p.name,
-                    preview: p.preview,
-                    args: p.args,
-                    states: [],
-                    output: "",
-                    ok: null,
-                    startedAt: Date.now(),
-                  },
-                ],
-              }
-            : prev,
-        );
+        setPendingTurn((prev) => {
+          if (!prev) return prev;
+          const existing = prev.tools.findIndex((t) => t.tool_id === p.tool_id);
+          const entry = {
+            tool_id: p.tool_id,
+            name: p.name,
+            preview: p.preview,
+            args: p.args,
+            states: existing >= 0 ? prev.tools[existing].states : [],
+            output: existing >= 0 ? prev.tools[existing].output : "",
+            ok: null,
+            startedAt: existing >= 0 ? prev.tools[existing].startedAt : Date.now(),
+          };
+          const tools = existing >= 0
+            ? prev.tools.map((t, i) => (i === existing ? entry : t))
+            : [...prev.tools, entry];
+          return { ...prev, tools };
+        });
       } else if (p.kind === "tool_state") {
         setPendingTurn((prev) => {
           if (!prev) return prev;

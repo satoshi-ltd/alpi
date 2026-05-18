@@ -6,6 +6,7 @@ pub struct SessionEntry {
     pub profile: String,
     pub mtime: u64,
     pub started_at: f64,
+    pub updated_at: f64,
     pub first_user: String,
     pub model: Option<String>,
     pub turn_count: usize,
@@ -22,4 +23,5 @@ pub struct DecryptedMessage {
     pub from: String,
     pub from_pubkey: String,
     pub body: String,
+    pub at: String,
 }

@@ -1,0 +1,20 @@
+.root {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--gap, 2px);
+  line-height: var(--lh-tight);
+}
+.root > span {
+  width: var(--dot, 4px);
+  height: var(--dot, 4px);
+  border-radius: 50%;
+  background: var(--c, currentColor);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+.root > span:nth-child(2) { animation-delay: 0.2s; }
+.root > span:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}

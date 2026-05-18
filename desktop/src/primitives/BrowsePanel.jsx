@@ -1,12 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { IconBtn, Tip, XIcon } from "./index.js";
 import styles from "./BrowsePanel.module.css";
 
 export default function BrowsePanel({
   open,
   onClose,
   title,
+  kicker,
   items,
   categoryOrder,
+  alwaysShowGroups = false,
   emptyText = "Nothing to show",
   renderDetail,
 }) {
@@ -107,26 +110,35 @@ export default function BrowsePanel({
         <div className={styles.header}>
           <span className={styles.title}>{title}</span>
           <span className={styles.counter}>{counter}</span>
+          {kicker && <span className={styles.kicker}>{kicker}</span>}
+          <span style={{ flex: 1 }} />
+          <Tip text="Close" side="r">
+            <IconBtn onClick={() => onClose?.()} aria-label="Close">
+              <XIcon />
+            </IconBtn>
+          </Tip>
         </div>
         <div className={styles.body}>
           <div className={styles.side}>
-            <input
-              ref={inputRef}
-              className={styles.input}
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              onKeyDown={onKeyDown}
-              placeholder={`Search ${title.toLowerCase()}…`}
-              spellCheck={false}
-              autoCapitalize="off"
-            />
+            <div className={styles.inputWrap}>
+              <input
+                ref={inputRef}
+                className={styles.input}
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={onKeyDown}
+                placeholder={`Search ${title.toLowerCase()}…`}
+                spellCheck={false}
+                autoCapitalize="off"
+              />
+            </div>
             <div ref={listRef} className={styles.list}>
               {flat.length === 0 ? (
                 <div className={styles.empty}>{emptyText}</div>
               ) : (
                 grouped.map(([cat, list]) => (
                   <div key={cat} className={styles.group}>
-                    {grouped.length > 1 && (
+                    {(alwaysShowGroups || grouped.length > 1) && (
                       <div className={styles.groupLabel}>{cat}</div>
                     )}
                     {list.map((it) => {

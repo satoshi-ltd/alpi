@@ -1,0 +1,50 @@
+.iconWrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  color: var(--ink-2);
+}
+
+.dot {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  border: 1.5px solid var(--bg-elev);
+}
+
+.col {
+  align-items: stretch;
+  justify-content: center;
+  flex: 1;
+  min-width: 0;
+  gap: 0;
+  text-align: left;
+}
+
+.name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
+}
+
+.host {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
+  color: var(--ink-3);
+}
+
+.hostOffline {
+  color: var(--c-danger);
+}
+
+.chev {
+  flex-shrink: 0;
+  color: var(--ink-3);
+}

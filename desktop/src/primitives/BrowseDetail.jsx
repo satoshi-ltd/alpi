@@ -7,7 +7,7 @@ export default function BrowseDetail({ name, description, path, children }) {
       {name && <h3 className={styles.name}>{name}</h3>}
       {description && (
         <p
-          className={styles.description}
+          className={`${styles.description} alpi-md`}
           dangerouslySetInnerHTML={{ __html: renderMarkdownInline(description) }}
         />
       )}

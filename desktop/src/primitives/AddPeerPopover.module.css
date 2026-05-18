@@ -1,0 +1,11 @@
+.body {
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-5);
+  gap: var(--space-4);
+}
+
+.help {
+  color: var(--ink-3);
+  font-size: var(--fs-xs);
+}
