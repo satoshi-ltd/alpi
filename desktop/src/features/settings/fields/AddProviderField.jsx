@@ -66,6 +66,7 @@ function ProviderEditor({ profile, onClose, onSaved }) {
   const notify = useNotify();
   const configured = profile.provider_keys ?? [];
   const configuredEnvs = new Set(configured.map((k) => k.env));
+  const configuredPreviews = new Map(configured.map((k) => [k.env, k.preview]));
   const ollamas = profile.provider_ollama ?? [];
   const [providerValue, setProviderValue] = useState(defaultProviderValue());
   const [busy, setBusy] = useState(false);
@@ -175,6 +176,7 @@ function ProviderEditor({ profile, onClose, onSaved }) {
           value={providerValue}
           onChange={setProviderValue}
           configuredEnvs={configuredEnvs}
+          configuredPreviews={configuredPreviews}
           savedOpenRouterModels={savedOpenRouterModels}
           autoFocusFirstField
         />

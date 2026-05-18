@@ -10,7 +10,7 @@
   text-align: left;
   font-family: var(--font-mono);
   font-size: var(--fs-xs);
-  font-weight: 500;
+  font-weight: var(--fw-medium);
   text-transform: uppercase;
   letter-spacing: .06em;
   color: var(--ink-3);
@@ -27,7 +27,7 @@
 .paramName {
   color: var(--ink);
   white-space: nowrap;
-  font-weight: 500;
+  font-weight: var(--fw-medium);
 }
 
 .paramType {

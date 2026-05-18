@@ -57,7 +57,7 @@
 }
 
 .off {
-  opacity: 0.55;
+  opacity: var(--alpha-muted);
 }
 
 .off .dot {
@@ -65,7 +65,7 @@
 }
 
 .disabled {
-  opacity: 0.45;
+  opacity: var(--alpha-disabled);
   cursor: not-allowed;
 }
 
@@ -88,7 +88,7 @@
 
 .tinted {
   color: var(--ink);
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
 }
 
 .spinner {

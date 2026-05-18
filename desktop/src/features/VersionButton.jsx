@@ -10,6 +10,20 @@ import styles from "./VersionButton.module.css";
 // eslint-disable-next-line no-undef
 const APP_VERSION = typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "0.0.0";
 
+function friendlyUpdaterError(raw) {
+  const s = String(raw || "").toLowerCase();
+  if (s.includes("platform") || s.includes("fallback")) {
+    return "No build available for your platform yet";
+  }
+  if (s.includes("network") || s.includes("fetch") || s.includes("dns") || s.includes("timeout")) {
+    return "Couldn't reach update server";
+  }
+  if (s.includes("signature") || s.includes("signing")) {
+    return "Update signature check failed";
+  }
+  return "Couldn't check for updates";
+}
+
 export default function VersionButton() {
   const [state, setState] = useState({
     checking: false,
@@ -123,13 +137,14 @@ function VersionPanel({ state, current, onInstall, onClose }) {
   }
 
   if (state.error) {
+    const friendly = friendlyUpdaterError(state.error);
     return (
       <div className={`col ${styles.panel} ${styles.panelGap3}`}>
         <div className={`row row-gap ${styles.rowGap3}`}>
           <Dot color="var(--c-danger)" size={8} />
-          <span className={styles.labelStrong}>Check failed</span>
+          <span className={styles.labelStrong}>{friendly}</span>
         </div>
-        <Mono className={styles.metaBreak}>{state.error}</Mono>
+        <Mono className={styles.metaSm}>v{current}</Mono>
       </div>
     );
   }

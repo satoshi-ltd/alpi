@@ -17,7 +17,7 @@
   color: var(--ink-2);
   font: inherit;
   font-size: var(--fs-base);
-  font-weight: 500;
+  font-weight: var(--fw-medium);
   line-height: var(--lh-tight);
   transition: background var(--dur-1) var(--ease),
     color var(--dur-1) var(--ease);
@@ -88,7 +88,7 @@
   flex: 1;
   max-width: none;
   text-align: left;
-  font-weight: 500;
+  font-weight: var(--fw-medium);
   font-size: var(--fs-base);
   line-height: var(--lh-cozy);
 }
@@ -110,7 +110,7 @@
 }
 
 .labelStack .label {
-  font-weight: 500;
+  font-weight: var(--fw-medium);
   font-size: var(--fs-base);
   line-height: var(--lh-cozy);
 }
@@ -217,7 +217,7 @@
   padding: var(--space-3) var(--space-5) var(--space-2);
   font-family: var(--font-mono);
   font-size: var(--fs-xs);
-  font-weight: 500;
+  font-weight: var(--fw-medium);
   text-transform: uppercase;
   letter-spacing: .06em;
   color: var(--ink-3);
@@ -241,7 +241,7 @@
 }
 
 .row:disabled {
-  opacity: 0.55;
+  opacity: var(--alpha-muted);
   cursor: not-allowed;
 }
 

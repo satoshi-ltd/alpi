@@ -45,9 +45,9 @@
 
 .name {
   font-size: var(--fs-sm);
-  font-weight: 500;
+  font-weight: var(--fw-medium);
 }
-.row.selected .name { font-weight: 600; }
+.row.selected .name { font-weight: var(--fw-semibold); }
 
 .desc {
   font-size: var(--fs-xs);

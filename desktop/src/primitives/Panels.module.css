@@ -30,12 +30,12 @@
 
 .panelTitle {
   font-size: var(--fs-md);
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
 }
 
 .panelTitleCap {
   font-size: var(--fs-md);
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   text-transform: capitalize;
 }
 
@@ -103,7 +103,7 @@
 
 .connName {
   font-size: var(--fs-base);
-  font-weight: 500;
+  font-weight: var(--fw-medium);
 }
 
 .connHost {
@@ -230,7 +230,7 @@
 }
 
 .mdBold {
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
 }
 
 .mdCode {
@@ -244,21 +244,21 @@
 .mdH4 {
   margin: var(--space-8) 0 var(--space-2);
   font-size: var(--fs-base);
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   font-family: var(--font-mono);
 }
 
 .mdH3 {
   margin: 22px 0 var(--space-3);
   font-size: var(--fs-lg);
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   font-family: var(--font-mono);
 }
 
 .mdH2 {
   margin: var(--space-3) 0 var(--space-6);
   font-size: var(--fs-xl);
-  font-weight: 700;
+  font-weight: var(--fw-bold);
   font-family: var(--font-mono);
 }
 
@@ -274,7 +274,7 @@
   text-align: left;
   padding: var(--space-2) var(--space-4);
   color: var(--ink-3);
-  font-weight: 500;
+  font-weight: var(--fw-medium);
   border-bottom: .5px solid var(--line-2);
 }
 

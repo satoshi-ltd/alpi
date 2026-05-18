@@ -76,9 +76,9 @@
 .modelPickerOptionLabel {
   font-family: var(--font-mono);
   font-size: var(--fs-sm);
-  font-weight: 400;
+  font-weight: var(--fw-regular);
 }
-.modelPickerOptionLabelSelected { font-weight: 600; }
+.modelPickerOptionLabelSelected { font-weight: var(--fw-semibold); }
 
 .modelPickerOptionCtx {
   font-size: var(--fs-xs);
@@ -108,7 +108,7 @@
 
 .richLine { display: block; }
 
-.richBold { font-weight: 600; }
+.richBold { font-weight: var(--fw-semibold); }
 
 .richCode {
   font-family: var(--font-mono);

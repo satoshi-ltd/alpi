@@ -13,6 +13,7 @@
   --fs-display: 28px;
   --fs-hero:    56px;
 
+  --pop-xs:     220px;
   --pop-sm:     260px;
   --pop-md:     340px;
   --pop-lg:     380px;
@@ -26,6 +27,16 @@
   --lh-cozy:    1.3;     /* UI titles, pills, tooltips, small UI text */
   --lh-normal:  1.5;     /* inputs, paragraphs */
   --lh-relaxed: 1.65;    /* long-form prose, message bodies */
+
+  --fw-regular:  400;    /* default body, sidebar default rows */
+  --fw-medium:   500;    /* UI labels, selected rows, buttons */
+  --fw-semibold: 600;    /* unread, primary CTA labels, titles */
+  --fw-bold:     700;    /* wordmarks, display headings */
+
+  --alpha-faint:    0.35;   /* pulse midpoints, ambient indicators */
+  --alpha-disabled: 0.45;   /* disabled buttons, dead controls */
+  --alpha-muted:    0.55;   /* paused / incomplete / muted rows */
+  --alpha-soft:     0.7;    /* de-emphasized still readable text */
 
   --panel-w:    1080px;
   --panel-h:    80vh;

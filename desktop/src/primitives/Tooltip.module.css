@@ -8,7 +8,7 @@
   color: var(--bg-pane);
   font-family: var(--font-mono);
   font-size: var(--fs-xs);
-  font-weight: 500;
+  font-weight: var(--fw-medium);
   letter-spacing: 0.02em;
   padding: var(--space-2) var(--space-3);
   border-radius: var(--r-sm);
@@ -22,5 +22,5 @@
 }
 
 .tooltip strong {
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
 }

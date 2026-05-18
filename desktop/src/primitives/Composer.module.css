@@ -160,7 +160,7 @@
 }
 
 .mentionItemDisabled {
-  opacity: 0.55;
+  opacity: var(--alpha-muted);
   cursor: not-allowed;
 }
 
@@ -168,7 +168,7 @@
   margin-left: auto;
   font-family: var(--font-mono);
   font-size: var(--fs-xs);
-  font-weight: 500;
+  font-weight: var(--fw-medium);
   color: var(--ink-3);
   text-transform: uppercase;
   letter-spacing: 0.02em;
@@ -185,6 +185,6 @@
 
 .mentionId {
   font-size: var(--fs-base);
-  font-weight: 500;
+  font-weight: var(--fw-medium);
   color: var(--ink);
 }

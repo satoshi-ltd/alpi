@@ -11,7 +11,7 @@
 .sectionTitle {
   margin: 0;
   font-size: var(--fs-xs);
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   letter-spacing: .10em;
   text-transform: uppercase;
   color: var(--ink-2);
@@ -247,7 +247,7 @@
 }
 
 .memberHandle {
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   font-size: var(--fs-base);
 }
 

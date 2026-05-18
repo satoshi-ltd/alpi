@@ -61,6 +61,7 @@ export default function ProviderPickerForm({
   value,
   onChange,
   configuredEnvs,
+  configuredPreviews,
   savedOpenRouterModels = [],
   autoFocusFirstField = false,
 }) {
@@ -130,7 +131,7 @@ export default function ProviderPickerForm({
               onChange={(e) => patch({ keyValue: e.target.value })}
               placeholder={
                 configuredEnvs?.has?.(meta.env)
-                  ? "(replace existing key)"
+                  ? `current: ${configuredPreviews?.get?.(meta.env) ?? "•••"} (paste to replace)`
                   : "paste API key"
               }
               spellCheck={false}

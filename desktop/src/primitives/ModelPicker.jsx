@@ -34,7 +34,8 @@ export default function ModelPicker({
     setPicked(currentModel);
   }, [currentModel]);
 
-  const label = picked?.split("/")[1] || picked || "";
+  const slash = picked?.indexOf("/") ?? -1;
+  const label = slash >= 0 ? picked.slice(slash + 1) : (picked || "");
 
   return (
     <span ref={ref} className={styles.modelPickerWrap}>

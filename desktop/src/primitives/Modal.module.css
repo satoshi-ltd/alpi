@@ -34,7 +34,7 @@
 
 .title {
   font-size: var(--fs-xl);
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   color: var(--ink);
   letter-spacing: -0.005em;
 }

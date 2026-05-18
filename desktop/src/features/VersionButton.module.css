@@ -33,7 +33,7 @@
   position: absolute;
   bottom: calc(100% + var(--space-3));
   right: 0;
-  width: var(--pop-sm);
+  width: var(--pop-xs);
   background: var(--bg-elev);
   border: .5px solid var(--line-2);
   border-radius: var(--r-xl);
@@ -76,7 +76,7 @@
 
 .labelStrong {
   font-size: var(--fs-base);
-  font-weight: 500;
+  font-weight: var(--fw-medium);
 }
 
 .metaXs {
@@ -97,7 +97,7 @@
 
 .versionTo {
   color: var(--c-success);
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
 }
 
 .installBtn {

@@ -38,6 +38,17 @@ export function ConnectionPanel({
   onPair,
 }) {
   const [pairing, setPairing] = useState("");
+  const [pairBusy, setPairBusy] = useState(false);
+  async function submitPair() {
+    if (!pairing.startsWith("alpi://") || pairBusy) return;
+    setPairBusy(true);
+    try {
+      const ok = await onPair?.(pairing);
+      if (ok !== false) setPairing("");
+    } finally {
+      setPairBusy(false);
+    }
+  }
   if (!open) return null;
   return (
     <Scrim onClose={onClose} top={80}>
@@ -129,12 +140,10 @@ export function ConnectionPanel({
             <button
               type="button"
               className={`btn btn-primary ${pairing.startsWith("alpi://") ? "" : styles.pairBtnDisabled}`}
-              disabled={!pairing.startsWith("alpi://")}
-              onClick={() => {
-                if (pairing.startsWith("alpi://")) onPair?.(pairing);
-              }}
+              disabled={!pairing.startsWith("alpi://") || pairBusy}
+              onClick={submitPair}
             >
-              Pair
+              {pairBusy ? "Pairing…" : "Pair"}
             </button>
           </div>
         </div>

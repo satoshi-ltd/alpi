@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { ConnPill } from "../primitives/index.js";
 import { ConnectionPanel } from "../primitives/Panels.jsx";
 import { Eyebrow } from "../primitives/index.js";
+import { useNotify } from "../primitives/Notification.jsx";
 import styles from "./ConnectionSwitcher.module.css";
 
 function tooltipFor(_connection, status) {
@@ -20,6 +21,7 @@ export default function ConnectionSwitcher({
 }) {
   const [open, setOpen] = useState(false);
   const probeTimerRef = useRef(null);
+  const notify = useNotify();
   const connections = state?.connections ?? [];
   const activeId = state?.active_id ?? "local";
   const active =
@@ -84,7 +86,24 @@ export default function ConnectionSwitcher({
           setOpen(false);
         }}
         onForget={(r) => onForget?.(r.id)}
-        onPair={(payload) => onAddRemote?.(payload)}
+        onPair={async (payload) => {
+          try {
+            const { name } = (await onAddRemote?.(payload)) ?? {};
+            notify({
+              message: name ? `Paired ${name}` : "Device paired",
+              variant: "success",
+            });
+            setOpen(false);
+            return true;
+          } catch (e) {
+            notify({
+              message: `Pairing failed: ${String(e)}`,
+              variant: "error",
+              duration: 5000,
+            });
+            return false;
+          }
+        }}
       />
     </div>
   );

@@ -2,8 +2,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: var(--space-3);
-  height: var(--ctrl-md);
+  gap: var(--space-2);
+  height: var(--ctrl-sm);
   padding: 0;
   border: 0;
   border-radius: var(--r-md);
@@ -11,22 +11,35 @@
   color: var(--ink-2);
   font: inherit;
   font-size: var(--fs-base);
-  font-weight: 500;
+  font-weight: var(--fw-medium);
   line-height: var(--lh-tight);
   cursor: pointer;
-  transition: background var(--dur-1) var(--ease),
-    color var(--dur-1) var(--ease),
-    opacity var(--dur-1) var(--ease);
+  transition: background 0.15s var(--ease),
+    color 0.12s var(--ease),
+    transform 0.12s var(--ease),
+    opacity 0.12s var(--ease);
 }
 
 .button:disabled {
-  opacity: 0.45;
+  opacity: var(--alpha-disabled);
   cursor: not-allowed;
 }
 
 .button:focus-visible {
-  outline: none;
-  box-shadow: var(--focus-ring);
+  outline: 2px solid color-mix(in srgb, var(--ink) 45%, transparent);
+  outline-offset: 2px;
+}
+
+.button.iconOnly:focus-visible {
+  outline-offset: 1px;
+}
+
+.button:not(:disabled):active {
+  transform: translateY(0.5px);
+}
+
+.button.iconOnly:not(:disabled):active {
+  transform: scale(0.96);
 }
 
 .icon {
@@ -45,7 +58,7 @@
 }
 
 .iconOnly {
-  width: var(--ctrl-md);
+  width: var(--ctrl-sm);
 }
 
 .ghost:not(:disabled):hover {
@@ -53,20 +66,24 @@
   color: var(--ink);
 }
 
-.ghost.active {
-  background: var(--selected);
+.ghost.active,
+.ghost:not(:disabled):active {
+  background: var(--line);
   color: var(--ink);
 }
 
 .primary {
   background: var(--ink);
   color: var(--bg-pane);
-  font-weight: 600;
 }
 
 .primary:not(:disabled).active,
 .primary:not(:disabled):hover {
   background: var(--ink-2);
+}
+
+.primary:not(:disabled):active {
+  background: color-mix(in srgb, var(--ink) 85%, transparent);
 }
 
 .danger {
@@ -80,8 +97,12 @@
 }
 
 .sm {
-  height: var(--ctrl-sm);
+  height: 24px;
   font-size: var(--fs-sm);
+}
+
+.sm.withLabel {
+  padding: 0 var(--space-4);
 }
 
 .spinner {
@@ -106,26 +127,38 @@
 }
 
 .sm.iconOnly {
-  width: var(--ctrl-sm);
+  width: 24px;
 }
 
-.xs {
-  height: var(--ctrl-xs);
-  font-size: var(--fs-sm);
+.lg {
+  height: var(--ctrl-md);
+  font-size: var(--fs-md);
 }
 
-.xs.withLabel {
-  padding: 0 var(--space-3);
+.lg.withLabel {
+  padding: 0 var(--space-6);
 }
 
-.xs.iconOnly {
-  width: var(--ctrl-xs);
+.lg.iconOnly {
+  width: var(--ctrl-md);
+}
+
+.hero {
+  height: var(--ctrl-lg);
+  font-size: var(--fs-md);
+}
+
+.hero.withLabel {
+  padding: 0 var(--space-8);
+}
+
+.hero.iconOnly {
+  width: var(--ctrl-lg);
 }
 
 .accent {
   background: var(--accent);
   color: #fff;
-  font-weight: 600;
 }
 
 .accent:not(:disabled).active,

@@ -61,7 +61,7 @@
   padding: var(--space-6) var(--space-3) var(--space-2);
   font-family: var(--font-mono);
   font-size: var(--fs-xs);
-  font-weight: 500;
+  font-weight: var(--fw-medium);
   letter-spacing: .06em;
   text-transform: uppercase;
   color: var(--ink-3);
@@ -125,7 +125,7 @@
   color: var(--ink-3);
   font-family: var(--font-mono);
   font-size: var(--fs-xs);
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   text-transform: uppercase;
   flex-shrink: 0;
   transition:
@@ -160,7 +160,7 @@
 
 .settingsTitle {
   font-size: var(--fs-md);
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
 }
 
 .spacer {

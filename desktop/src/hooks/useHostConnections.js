@@ -25,9 +25,7 @@ function parsePairingPayload(payload) {
   };
 }
 
-// Owns the connection switcher state, the profile/workgroup fetch, and the
-// per-connection localStorage cache. App.jsx provides setters for state it
-// owns (chat / view) so the hook can clear them on connection switch.
+// Connection switcher state + per-connection profile/workgroup cache; App.jsx passes its own setters (chat/view) so the hook can reset them on connection switch.
 export function useHostConnections({
   setSessionData,
   setPendingTurn,
@@ -224,7 +222,6 @@ export function useHostConnections({
     }
   }, [activeStatusKey, clearConnectionContent, reload, reloadConnections]);
 
-  // Initial fetch.
   useEffect(() => {
     reload();
     invoke("host_connections_probe_active").catch(() => {});
@@ -289,23 +286,22 @@ export function useHostConnections({
 
   const onAddHostConnection = useCallback(
     async (payload) => {
-      try {
-        const { host, port, name, token } = parsePairingPayload(payload);
-        if (!host || !port || !token) {
-          throw new Error("pairing payload needs host, port, and token");
-        }
-        const id = await invoke("host_connection_add_remote", {
-          name: name ?? host,
-          host,
-          port,
-          token,
-        });
-        await reloadConnections();
-        invoke("host_connections_probe_active").catch(() => {});
-        loadFromCache(id);
-      } catch {}
+      const { host, port, name, token } = parsePairingPayload(payload);
+      if (!host || !port || !token) {
+        throw new Error("pairing payload needs host, port, and token");
+      }
+      const resolvedName = name ?? host;
+      await invoke("host_connection_add_remote", {
+        name: resolvedName,
+        host,
+        port,
+        token,
+      });
+      await reloadConnections();
+      invoke("host_connections_probe_active").catch(() => {});
+      return { name: resolvedName };
     },
-    [loadFromCache, reloadConnections],
+    [reloadConnections],
   );
 
   const onForgetHostConnection = useCallback(

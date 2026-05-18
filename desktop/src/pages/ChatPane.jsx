@@ -119,6 +119,7 @@ export default function ChatPane({
             </div>
             <Button
               variant="primary"
+              size="hero"
               onClick={() => onConfigureProfile?.(activeProfile)}
             >
               {hasProviders ? "Pick a model" : "Set up provider"}

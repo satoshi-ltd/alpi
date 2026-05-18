@@ -3,7 +3,8 @@
 // render and ⌘1-9 jump shortcuts so the keys match what the user sees.
 
 function recency(profile) {
-  return profile.latest_session?.mtime ?? 0;
+  const ls = profile.latest_session;
+  return ls?.updated_at ?? ls?.started_at ?? ls?.mtime ?? 0;
 }
 
 export function orderedSidebarProfiles(profiles, pinnedNames = []) {

@@ -1,4 +1,4 @@
-import { Diamond, Hash, Mono, MuteIcon } from "./index.js";
+import { Diamond, Hash, MuteIcon } from "./index.js";
 import styles from "./SidebarRow.module.css";
 
 export default function SidebarRow({
@@ -6,37 +6,44 @@ export default function SidebarRow({
   id,
   color,
   sel = false,
+  unread = false,
   colorWash = false,
   onClick,
   onContextMenu,
   trailing,
   leading,
   muted = false,
+  state,
+  ariaLabel,
+  title,
 }) {
+  const isNeedsProvider = state === "needs-provider";
   const tinted = sel && colorWash && color;
   const background = tinted
     ? `color-mix(in srgb, ${color} ${kind === "workgroup" ? "14%" : "18%"}, var(--bg-side))`
     : sel
       ? "var(--selected)"
       : null;
-  const textColor = tinted
+  const tintedColor = tinted
     ? kind === "profile"
       ? `color-mix(in srgb, ${color} 90%, var(--ink))`
       : "var(--ink)"
-    : muted
-      ? "var(--ink-3)"
-      : "var(--ink)";
-  // Background + textColor are runtime-derived (color-mix + props) — kept inline.
+    : null;
+  const labelClass = kind === "workgroup" ? "sb-hash" : "sb-name";
+  const stateMod = unread ? " is-unr" : sel ? " is-sel" : "";
   return (
     <button
       type="button"
       className="ds-sb-row"
+      data-state={state || undefined}
+      aria-label={ariaLabel || undefined}
+      title={title || undefined}
       onClick={onClick}
       onContextMenu={onContextMenu}
       style={{
         ...(background ? { background } : {}),
-        color: textColor,
-        opacity: muted ? 0.55 : undefined,
+        ...(tintedColor ? { color: tintedColor } : {}),
+        ...(muted && !isNeedsProvider ? { opacity: "var(--alpha-muted)" } : {}),
       }}
     >
       {leading !== undefined
@@ -48,10 +55,13 @@ export default function SidebarRow({
               </span>
             )
           : <Diamond color={color} />}
-      <span className={`${styles.label} ${tinted ? styles.tinted : ""}`}>
-        {kind === "workgroup" ? <Mono>{`#${id}`}</Mono> : id}
+      <span
+        className={`${labelClass}${stateMod} ${styles.label}`.trim()}
+        style={tintedColor ? { color: "inherit" } : undefined}
+      >
+        {kind === "workgroup" ? `#${id}` : id}
       </span>
-      {muted && <MuteIcon className={styles.mute} />}
+      {muted && !isNeedsProvider && <MuteIcon className={styles.mute} />}
       {trailing !== undefined && trailing !== null && (
         <span className="sb-row-trailing">{trailing}</span>
       )}

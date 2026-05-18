@@ -11,6 +11,23 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.3.1 — 2026-05-18 — sidebar text spec, frontend unread, design-token coverage
+
+Requires alpi ``v0.4.46`` or newer.
+
+Visual polish pass on the new shell.
+
+- **Sidebar typography.** New `.sb-name` / `.sb-hash` / `.sb-ts` / `.sb-eyebrow` classes lock the row hierarchy (3 weights × 2 colors, `.is-sel` / `.is-unr` modifiers). Profile incomplete state: `[data-state="needs-provider"]` draws an outlined diamond, `var(--ink-3)` name, opacity .55, no `MuteIcon`. Workgroup paused: `[data-state="paused"]` just dims via opacity; the pause glyph already lives in the leading slot.
+- **Unread (frontend-only).** New `hooks/useReadState.js` persists `last_read_at` per profile + workgroup in `localStorage`, scoped by active connection id. Rows compare against `latest_session.updated_at` / `workgroup.mtime` and swap the trailing timestamp for a pulse-dot tinted with the row's accent. Reading marker syncs with `recency` while the row is active.
+- **Sidebar sort, uniform.** Pinned and unpinned sections now use the same rule: paused / incomplete drift to the end of their section, healthy items sort by recency desc.
+- **Token coverage closed.** Added `--fw-regular/medium/semibold/bold`, `--lh-tight/cozy/normal/relaxed`, `--modal-sm/md/lg`, `--alpha-faint/disabled/muted/soft`, `--pop-xs`. Migrated 97 raw `font-weight`, 76 raw `line-height`, and the high-frequency `opacity` values (0.35 / 0.45 / 0.55 / 0.7) to tokens. Body `letter-spacing` `-0.003em` → `-0.005em` per spec.
+- **Button system aligned to spec.** `.btn` / `.btn-primary` / `.btn-ghost` / `.iconbtn` / `.alink` in `design-system.css` snap to v3 spec (28h / 12px-x / gap 6, outline-based focus, active `translateY(.5px)` / `scale(.96)`). React `<Button>` gains `size="lg"` (32h) and `size="hero"` (40h × 20px-x); empty-state CTA uses `hero`. `.primary` variant flipped to solid `--ink` default → `--ink-2` on hover.
+- **Pair-device flow.** `host_connection_add_remote` no longer auto-switches active connection; toast says `Paired <name>` (not "Connected" — pairing only registers, user still switches into it), input clears only on success, panel closes.
+- **VersionButton.** Friendly updater errors (`No build available for your platform yet` / `Couldn't reach update server` / etc.) replace the raw stack. Popover at `--pop-xs` (220px) fits inside the sidebar.
+- **Misc.** `ModelPicker` label strips the first `/` only so OpenRouter shows `stepfun/step-3.5-flash` instead of just `stepfun`. `ProviderPickerForm` placeholder uses the `current: <preview> (paste to replace)` pattern. The no-provider CTA now uses the larger `hero` button size, and the tray update icon was regenerated with a red bullet bottom-right.
+
+`pnpm install --frozen-lockfile` clean; `pnpm build` ✓; `cargo check` ✓.
+
 ## v0.3.0 — 2026-05-18 — desktop shell rebuild + local voice + native notifications
 
 Requires alpi ``v0.4.46`` or newer.

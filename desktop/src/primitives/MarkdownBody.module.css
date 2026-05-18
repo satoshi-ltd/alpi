@@ -16,7 +16,7 @@
 .body h3,
 .body h4 {
   margin: var(--space-5) 0 var(--space-3);
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   line-height: var(--lh-cozy);
 }
 
@@ -94,7 +94,7 @@
   text-align: left;
   padding: var(--space-2) var(--space-4);
   color: var(--ink-3);
-  font-weight: 500;
+  font-weight: var(--fw-medium);
   border-bottom: .5px solid var(--line-2);
 }
 

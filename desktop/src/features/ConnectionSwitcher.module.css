@@ -2,7 +2,7 @@
   padding: var(--space-6) var(--space-4) var(--space-2) var(--space-1);
   font-family: var(--font-mono);
   font-size: var(--fs-xs);
-  font-weight: 500;
+  font-weight: var(--fw-medium);
   letter-spacing: .06em;
   text-transform: uppercase;
   color: var(--ink-3);
@@ -57,11 +57,11 @@
   background: var(--bg-input);
   color: var(--ink);
   font-size: var(--fs-base);
-  font-weight: 500;
+  font-weight: var(--fw-medium);
 }
 
 .add:disabled {
-  opacity: 0.45;
+  opacity: var(--alpha-disabled);
 }
 
 .row {
@@ -172,7 +172,7 @@
   0%,
   100% {
     transform: scale(0.88);
-    opacity: 0.7;
+    opacity: var(--alpha-soft);
   }
 
   50% {

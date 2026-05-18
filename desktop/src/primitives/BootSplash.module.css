@@ -16,7 +16,7 @@
 }
 
 @keyframes bootPulse {
-  0%, 100% { opacity: 0.55; }
+  0%, 100% { opacity: var(--alpha-muted); }
   50% { opacity: 1; }
 }
 

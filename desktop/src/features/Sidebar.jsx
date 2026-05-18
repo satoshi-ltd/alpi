@@ -7,10 +7,8 @@ import {
   Btn,
   IconBtn,
   Kbd,
-  Mono,
   MoonIcon,
   SunIcon,
-  Tag,
   Tip,
   ArrowLeftIcon,
   GearIcon,
@@ -26,6 +24,11 @@ import {
 import { relativeTime } from "../lib/time.js";
 import { cycleTheme, nextTheme, useTheme } from "../lib/theme.js";
 import { profileLabel } from "../lib/profile-display.js";
+import {
+  useReadState,
+  markProfileRead,
+  markWorkgroupRead,
+} from "../hooks/useReadState.js";
 import { orderedSidebarProfiles } from "../lib/profile-order.js";
 import styles from "./Sidebar.module.css";
 
@@ -85,12 +88,21 @@ function Sidebar({
 }) {
   const inSettings = view.kind === "settings";
 
+  const connId = hostConnections?.active_id ?? "local";
+  const { checkProfile: checkUnread, checkWorkgroup: checkWorkgroupUnread } =
+    useReadState(connId);
   const openProfile = inSettings
     ? (p) => onSetSettingsTarget?.({ kind: "profile", id: p.name })
-    : onOpenProfile;
+    : (p) => {
+        markProfileRead(connId, p.name);
+        onOpenProfile?.(p);
+      };
   const openWorkgroup = inSettings
     ? (w) => onSetSettingsTarget?.({ kind: "workgroup", id: w.id, profile: w.profile })
-    : onOpenWorkgroup;
+    : (w) => {
+        markWorkgroupRead(connId, w.profile, w.id);
+        onOpenWorkgroup?.(w);
+      };
   const activeProfileName = inSettings
     ? settingsTarget?.kind === "profile"
       ? settingsTarget.id
@@ -131,21 +143,33 @@ function Sidebar({
     return arr;
   }, [workgroups, pinnedWorkgroupKeys]);
 
-  const pinnedProfiles = useMemo(
-    () =>
-      pinnedProfileNames
-        .map((name) => profiles.find((p) => p.name === name))
-        .filter(Boolean),
-    [pinnedProfileNames, profiles],
-  );
+  const pinnedProfiles = useMemo(() => {
+    const list = pinnedProfileNames
+      .map((name) => profiles.find((p) => p.name === name))
+      .filter(Boolean);
+    list.sort((a, b) => {
+      const aBad = !a.model ? 1 : 0;
+      const bBad = !b.model ? 1 : 0;
+      if (aBad !== bBad) return aBad - bBad;
+      const ra = a.latest_session?.updated_at ?? a.latest_session?.started_at ?? a.latest_session?.mtime ?? 0;
+      const rb = b.latest_session?.updated_at ?? b.latest_session?.started_at ?? b.latest_session?.mtime ?? 0;
+      return rb - ra;
+    });
+    return list;
+  }, [pinnedProfileNames, profiles]);
 
-  const pinnedWorkgroups = useMemo(
-    () =>
-      pinnedWorkgroupKeys
-        .map((key) => workgroups.find((w) => `${w.profile}/${w.id}` === key))
-        .filter(Boolean),
-    [pinnedWorkgroupKeys, workgroups],
-  );
+  const pinnedWorkgroups = useMemo(() => {
+    const list = pinnedWorkgroupKeys
+      .map((key) => workgroups.find((w) => `${w.profile}/${w.id}` === key))
+      .filter(Boolean);
+    list.sort((a, b) => {
+      const aPaused = a.paused ? 1 : 0;
+      const bPaused = b.paused ? 1 : 0;
+      if (aPaused !== bPaused) return aPaused - bPaused;
+      return (b.mtime ?? 0) - (a.mtime ?? 0);
+    });
+    return list;
+  }, [pinnedWorkgroupKeys, workgroups]);
 
   const hubAccentByProfile = useMemo(() => {
     const map = {};
@@ -288,6 +312,8 @@ function Sidebar({
       active={activeProfileName === p.name}
       pending={pendingProfile === p.name}
       isPinned={pinnedProfileNames.includes(p.name)}
+      connId={connId}
+      checkUnread={checkUnread}
       onOpen={openProfile}
       onTogglePin={onTogglePin}
       onContextMenu={openProfileCtx}
@@ -305,6 +331,8 @@ function Sidebar({
         busy={!!activityByWorkgroup[key]}
         active={activeWorkgroupId === key}
         isPinned={pinnedWorkgroupKeys.includes(key)}
+        connId={connId}
+        checkUnread={checkWorkgroupUnread}
         onOpen={openWorkgroup}
         onTogglePin={onTogglePin}
         onContextMenu={openWorkgroupCtx}
@@ -534,6 +562,8 @@ const ProfileRow = memo(function ProfileRow({
   active,
   pending,
   isPinned,
+  connId,
+  checkUnread,
   onOpen,
   onTogglePin,
   onContextMenu,
@@ -549,28 +579,44 @@ const ProfileRow = memo(function ProfileRow({
   );
 
   const ls = profile.latest_session;
-  const recency = ls?.updated_at ?? ls?.started_at ?? ls?.mtime ?? 0;
+  const sessionRecency = ls?.updated_at ?? ls?.started_at ?? ls?.mtime ?? 0;
   const incomplete = !profile.model;
-  const trailing = pending ? (
-    <Tip text="thinking…" side="r">
-      <StatusIcon kind="working" />
-    </Tip>
-  ) : incomplete ? (
-    <Tag>!</Tag>
-  ) : recency > 0 ? (
-    <Mono className={`tnum ${styles.rowMeta}`}>
-      {relativeTime(recency)}
-    </Mono>
-  ) : null;
+  useEffect(() => {
+    if (active && sessionRecency > 0) markProfileRead(connId, profile.name, sessionRecency);
+  }, [active, connId, profile.name, sessionRecency]);
+  const unread =
+    !incomplete && !active && checkUnread?.(profile.name, sessionRecency);
+  const trailing = pending
+    ? (
+        <Tip text="thinking…" side="r">
+          <StatusIcon kind="working" />
+        </Tip>
+      )
+    : unread
+      ? (
+          <span
+            className="sb-unread-dot"
+            style={{ "--c": profile.accent || "var(--accent)" }}
+            aria-label="unread"
+          />
+        )
+      : sessionRecency > 0
+        ? <span className="tnum sb-ts">{relativeTime(sessionRecency)}</span>
+        : null;
+  const label = profileLabel(profile.name);
+  const incompleteHint = `@${label}, needs provider — tap to set up`;
 
   return (
     <div className={styles.rowWrap}>
       <SidebarRow
         kind="profile"
-        id={profileLabel(profile.name)}
+        id={label}
         color={profile.accent || undefined}
         sel={active}
-        muted={incomplete}
+        unread={unread}
+        state={incomplete ? "needs-provider" : undefined}
+        ariaLabel={incomplete ? incompleteHint : undefined}
+        title={incomplete ? incompleteHint : undefined}
         trailing={trailing}
         onClick={handleClick}
         onContextMenu={handleContextMenu}
@@ -587,6 +633,8 @@ const WorkgroupRow = memo(function WorkgroupRow({
   busy,
   active,
   isPinned,
+  connId,
+  checkUnread,
   onOpen,
   onTogglePin,
   onContextMenu,
@@ -630,11 +678,22 @@ const WorkgroupRow = memo(function WorkgroupRow({
     </span>
   );
 
-  const trailing = mtime > 0 ? (
-    <Mono className={`tnum ${styles.rowMeta}`}>
-      {relativeTime(mtime)}
-    </Mono>
-  ) : null;
+  useEffect(() => {
+    if (active && mtime > 0) markWorkgroupRead(connId, workgroup.profile, workgroup.id, mtime);
+  }, [active, connId, workgroup.profile, workgroup.id, mtime]);
+  const unread =
+    !paused && !active && checkUnread?.(workgroup.profile, workgroup.id, mtime);
+  const trailing = unread
+    ? (
+        <span
+          className="sb-unread-dot"
+          style={{ "--c": hubAccent || "var(--accent)" }}
+          aria-label="unread"
+        />
+      )
+    : mtime > 0
+      ? <span className="tnum sb-ts">{relativeTime(mtime)}</span>
+      : null;
 
   return (
     <div className={styles.rowWrap}>
@@ -643,7 +702,8 @@ const WorkgroupRow = memo(function WorkgroupRow({
         id={label}
         color={hubAccent || undefined}
         sel={active}
-        muted={paused}
+        unread={unread}
+        state={paused ? "paused" : undefined}
         leading={leading}
         trailing={trailing}
         onClick={handleClick}

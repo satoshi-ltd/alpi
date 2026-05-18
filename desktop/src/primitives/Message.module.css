@@ -57,7 +57,7 @@
 
 .name {
   font-size: var(--fs-sm);
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   color: var(--ink);
 }
 
@@ -154,7 +154,7 @@
 .md h3,
 .md h4 {
   margin: var(--space-5) 0 var(--space-3);
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   line-height: var(--lh-cozy);
 }
 
@@ -216,7 +216,7 @@
 
 .md a {
   color: var(--accent);
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   text-decoration: underline;
   text-underline-offset: var(--space-1);
 }
@@ -249,11 +249,11 @@
 
 .md th {
   background: var(--hover);
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
 }
 
 .md strong {
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
 }
 
 .md em {

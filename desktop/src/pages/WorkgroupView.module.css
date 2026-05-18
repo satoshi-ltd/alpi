@@ -51,7 +51,7 @@
 .emptyHash {
   font-family: var(--font-mono);
   font-size: var(--fs-hero);
-  font-weight: 500;
+  font-weight: var(--fw-medium);
   color: var(--ink-4);
   line-height: var(--lh-tight);
 }
@@ -86,7 +86,7 @@
   gap: var(--space-3);
   font-family: var(--font-mono);
   font-size: var(--fs-xs);
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   letter-spacing: .10em;
   margin-bottom: var(--space-2);
 }
@@ -94,7 +94,7 @@
 .markerTitle {
   font-family: var(--font-sans);
   font-size: var(--fs-lg);
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   letter-spacing: -0.005em;
   color: var(--ink);
   line-height: var(--lh-cozy);
@@ -127,7 +127,7 @@
 
 @keyframes workingDot {
   0%, 100% { opacity: 1; }
-  50%      { opacity: 0.35; }
+  50%      { opacity: var(--alpha-faint); }
 }
 
 .working {
@@ -142,7 +142,7 @@
   gap: var(--space-3);
   font-family: var(--font-mono);
   font-size: var(--fs-xs);
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   letter-spacing: .10em;
   text-transform: uppercase;
   color: var(--ink-2);
@@ -160,7 +160,7 @@
 
 @keyframes legacyPulse {
   0%, 100% { opacity: 1; }
-  50%      { opacity: 0.35; }
+  50%      { opacity: var(--alpha-faint); }
 }
 
 .workingReason {
@@ -171,7 +171,7 @@
 
 .workingResolved .workingPulse {
   animation: none;
-  opacity: 0.55;
+  opacity: var(--alpha-muted);
 }
 
 .skip {
@@ -183,7 +183,7 @@
 .skipLabel {
   font-family: var(--font-mono);
   font-size: var(--fs-xs);
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   letter-spacing: .10em;
   text-transform: uppercase;
   color: var(--c-warning);
@@ -204,7 +204,7 @@
 .doneLabel {
   font-family: var(--font-mono);
   font-size: var(--fs-xs);
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   letter-spacing: .10em;
   text-transform: uppercase;
   color: var(--ink-2);
@@ -223,7 +223,7 @@
 }
 
 .speakerName {
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   color: var(--ink-2);
 }
 

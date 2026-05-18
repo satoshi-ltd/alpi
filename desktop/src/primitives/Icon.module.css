@@ -17,6 +17,6 @@
 }
 
 @keyframes pulse {
-  0%, 100% { opacity: 0.45; }
+  0%, 100% { opacity: var(--alpha-disabled); }
   50%      { opacity: 1; }
 }

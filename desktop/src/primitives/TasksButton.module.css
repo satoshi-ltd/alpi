@@ -27,7 +27,7 @@
 .triggerLabel {
   font-size: var(--fs-sm);
   color: var(--ink);
-  font-weight: 500;
+  font-weight: var(--fw-medium);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -112,7 +112,7 @@
 
 .title {
   font-size: var(--fs-base);
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   color: var(--ink);
   line-height: var(--lh-cozy);
   white-space: nowrap;

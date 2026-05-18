@@ -31,13 +31,13 @@
 .ds-hash, .hash {
   font-family: var(--font-mono);
   color: var(--ink-3);
-  font-weight: 500;
+  font-weight: var(--fw-medium);
 }
 
 .eyebrow {
   font-family: var(--font-mono);
   font-size: var(--fs-xs);
-  font-weight: 500;
+  font-weight: var(--fw-medium);
   letter-spacing: .06em;
   text-transform: uppercase;
   color: var(--ink-3);
@@ -76,7 +76,7 @@
 .ds-pill.is-on,  .pill.is-on  { background: color-mix(in srgb, var(--c-success) 16%, var(--bg-pane)); color: color-mix(in srgb, var(--c-success) 70%, var(--ink)); }
 .ds-pill.is-err, .pill.is-err { background: color-mix(in srgb, var(--c-danger) 16%, var(--bg-pane)); color: color-mix(in srgb, var(--c-danger) 70%, var(--ink)); }
 .ds-pill.is-warn,.pill.is-warn{ background: color-mix(in srgb, var(--c-warning) 16%, var(--bg-pane)); color: color-mix(in srgb, var(--c-warning) 70%, var(--ink)); }
-.ds-pill.is-off, .pill.is-off { opacity: 0.55; }
+.ds-pill.is-off, .pill.is-off { opacity: var(--alpha-muted); }
 
 .ds-btn, .btn {
   display: inline-flex;
@@ -85,32 +85,33 @@
   height: var(--ctrl-sm);
   padding: 0 var(--space-5);
   border-radius: var(--r-md);
-  background: var(--line-2);
+  background: var(--hover);
   color: var(--ink);
   font-size: var(--fs-base);
   font-family: var(--font-sans);
+  font-weight: var(--fw-medium);
   line-height: var(--lh-tight);
-  transition: background 0.15s var(--ease);
+  transition: background 0.15s var(--ease), transform 0.12s var(--ease);
   border: 0;
   cursor: pointer;
   white-space: nowrap;
 }
-.ds-btn:hover,  .btn:hover  { background: color-mix(in srgb, var(--ink) 20%, var(--bg-pane)); }
-.ds-btn:active, .btn:active { background: color-mix(in srgb, var(--ink) 26%, var(--bg-pane)); }
-.ds-btn:disabled, .btn:disabled { opacity: 0.45; cursor: default; pointer-events: none; }
+.ds-btn:hover,  .btn:hover  { background: var(--line); }
+.ds-btn:active, .btn:active { background: color-mix(in srgb, var(--ink) 10%, var(--hover)); transform: translateY(0.5px); }
+.ds-btn:disabled, .btn:disabled { opacity: var(--alpha-disabled); cursor: default; pointer-events: none; }
 .ds-btn:focus-visible, .btn:focus-visible,
 .ds-btn[aria-expanded="true"], .btn[aria-expanded="true"] {
-  outline: none;
-  box-shadow: var(--focus-ring);
+  outline: 2px solid color-mix(in srgb, var(--ink) 45%, transparent);
+  outline-offset: 2px;
 }
 
 .ds-btn-primary, .btn-primary { background: var(--ink); color: var(--bg-pane); }
 .ds-btn-primary:hover,  .btn-primary:hover  { background: var(--ink-2); }
-.ds-btn-primary:active, .btn-primary:active { background: color-mix(in srgb, var(--ink) 85%, transparent); }
+.ds-btn-primary:active, .btn-primary:active { background: color-mix(in srgb, var(--ink) 85%, transparent); transform: translateY(0.5px); }
 
 .ds-btn-ghost, .btn-ghost { background: transparent; color: var(--ink-2); }
 .ds-btn-ghost:hover,  .btn-ghost:hover  { background: var(--hover); color: var(--ink); }
-.ds-btn-ghost:active, .btn-ghost:active { background: var(--line); }
+.ds-btn-ghost:active, .btn-ghost:active { background: var(--line); transform: translateY(0.5px); }
 
 .ds-iconbtn, .iconbtn {
   width: var(--ctrl-sm);
@@ -122,24 +123,29 @@
   background: transparent;
   border: 0;
   cursor: pointer;
-  transition: background var(--dur-1), color var(--dur-1), transform var(--dur-1);
+  transition: background 0.12s var(--ease), color 0.12s var(--ease), transform 0.12s var(--ease);
 }
 .ds-iconbtn:hover,  .iconbtn:hover  { background: var(--hover); color: var(--ink); }
-.ds-iconbtn:active, .iconbtn:active { background: var(--line); }
+.ds-iconbtn:active, .iconbtn:active { background: var(--line); transform: scale(0.96); }
+.ds-iconbtn:focus-visible, .iconbtn:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--ink) 45%, transparent);
+  outline-offset: 1px;
+}
 
 .ds-alink, .alink {
   padding: 4px 8px;
   margin: -4px -8px;
   border-radius: var(--r-sm);
   font-size: var(--fs-base);
+  font-weight: var(--fw-medium);
   color: var(--ink-2);
   background: transparent;
   border: 0;
   cursor: pointer;
-  transition: background var(--dur-1), color var(--dur-1);
+  transition: background 0.12s var(--ease), color 0.12s var(--ease), transform 0.12s var(--ease);
 }
 .ds-alink:hover,  .alink:hover  { background: var(--hover); color: var(--ink); }
-.ds-alink:active, .alink:active { background: var(--line); }
+.ds-alink:active, .alink:active { background: var(--line); transform: translateY(0.5px); }
 .ds-alink.danger, .alink.danger { color: var(--c-danger); }
 .ds-alink.danger:hover, .alink.danger:hover { background: color-mix(in srgb, var(--c-danger) 10%, transparent); }
 
@@ -185,7 +191,7 @@
   text-align: left;
 }
 .ds-conn-pill:hover, .conn-pill:hover { background: color-mix(in srgb, var(--ink) 4%, var(--bg-elev)); }
-.ds-conn-pill .name, .conn-pill .name { font-weight: 500; font-size: var(--fs-base); line-height: var(--lh-cozy); color: var(--ink); }
+.ds-conn-pill .name, .conn-pill .name { font-weight: var(--fw-medium); font-size: var(--fs-base); line-height: var(--lh-cozy); color: var(--ink); }
 .ds-conn-pill .host, .conn-pill .host { font-family: var(--font-mono); font-size: var(--fs-xs); color: var(--ink-3); line-height: var(--lh-cozy); }
 
 .ds-field, .field {
@@ -221,7 +227,7 @@ textarea.ds-field, textarea.field { resize: vertical; min-height: 88px; height: 
   gap: 5px;
   font-family: var(--font-mono);
   font-size: var(--fs-xs);
-  font-weight: 500;
+  font-weight: var(--fw-medium);
   letter-spacing: 0.02em;
   height: 18px;
   padding: 0 6px;
@@ -241,13 +247,13 @@ textarea.ds-field, textarea.field { resize: vertical; min-height: 88px; height: 
 
 .display {
   font-family: var(--font-sans);
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   letter-spacing: -0.018em;
   line-height: var(--lh-tight);
 }
 .display-hero {
   font-family: var(--font-sans);
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   letter-spacing: -0.020em;
   line-height: var(--lh-cozy);
   font-size: 44px;
@@ -312,7 +318,7 @@ textarea.ds-field, textarea.field { resize: vertical; min-height: 88px; height: 
   color: var(--bg-pane);
   font-family: var(--font-mono);
   font-size: var(--fs-xs);
-  font-weight: 500;
+  font-weight: var(--fw-medium);
   letter-spacing: 0.02em;
   border-radius: 5px;
   white-space: nowrap;
@@ -378,12 +384,12 @@ textarea.ds-field, textarea.field { resize: vertical; min-height: 88px; height: 
   margin: var(--space-3) 0;
   text-wrap: pretty;
 }
-.alpi-md strong, .alpi-md b { font-weight: 600; }
+.alpi-md strong, .alpi-md b { font-weight: var(--fw-semibold); }
 .alpi-md em, .alpi-md i { font-style: italic; }
 .alpi-md h1, .alpi-md h2, .alpi-md h3, .alpi-md h4 {
   font-family: var(--font-sans);
   font-size: var(--fs-lg);
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   letter-spacing: -0.01em;
   margin: var(--space-8) 0 var(--space-3);
   line-height: var(--lh-cozy);
@@ -434,7 +440,7 @@ textarea.ds-field, textarea.field { resize: vertical; min-height: 88px; height: 
 @keyframes ds-pop-in   { from { opacity: 0; transform: translateY(4px) scale(0.98); } to { opacity: 1; transform: none; } }
 @keyframes ds-fade-in  { from { opacity: 0; } to { opacity: 1; } }
 @keyframes ds-slide-up { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
-@keyframes ds-pulse-dot { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+@keyframes ds-pulse-dot { 0%, 100% { opacity: 1; } 50% { opacity: var(--alpha-faint); } }
 @keyframes ds-notif-in  { from { opacity: 0; transform: translateY(10px) scale(.96); } to { opacity: 1; transform: none; } }
 @keyframes ds-notif-out { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateY(8px); } }
 @keyframes ds-refresh-bar {
@@ -492,7 +498,7 @@ a:focus-visible,
   margin: 0 0 var(--space-5);
   font-family: var(--font-mono);
   font-size: var(--fs-xs);
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   letter-spacing: .10em;
   text-transform: uppercase;
   color: var(--ink-2);
@@ -508,7 +514,7 @@ a:focus-visible,
 .ds-field-row .lbl {
   font-family: var(--font-mono);
   font-size: var(--fs-xs);
-  font-weight: 500;
+  font-weight: var(--fw-medium);
   letter-spacing: .06em;
   text-transform: uppercase;
   color: var(--ink-3);
@@ -553,6 +559,70 @@ a:focus-visible,
   margin-left: auto;
 }
 
+/* Sidebar typography (spec: SIDEBAR · FINAL TEXT). 3 weights × 2 colors. */
+.sb-name        { font-family: var(--font-sans); font-size: var(--fs-base); font-weight: var(--fw-regular); line-height: var(--lh-tight); color: var(--ink-2); }
+.sb-name.is-sel { font-weight: var(--fw-medium); color: var(--ink); }
+.sb-name.is-unr { font-weight: var(--fw-semibold); color: var(--ink); }
+
+.sb-hash        { font-family: var(--font-mono); font-size: var(--fs-sm); font-weight: var(--fw-regular); line-height: var(--lh-tight); color: var(--ink-3); }
+.sb-hash.is-sel { font-weight: var(--fw-medium); color: var(--ink); }
+.sb-hash.is-unr { font-weight: var(--fw-semibold); color: var(--ink); }
+
+.sb-ts          { font-family: var(--font-mono); font-size: var(--fs-xs); font-weight: var(--fw-medium); line-height: var(--lh-tight); color: var(--ink-3); }
+.sb-ts.is-unr   { font-weight: var(--fw-semibold); color: var(--ink); }
+
+.sb-eyebrow     {
+  font-family: var(--font-sans);
+  font-size: 10px;
+  font-weight: var(--fw-medium);
+  line-height: var(--lh-tight);
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+/* Unread indicator: small accent dot with pulse, replaces the timestamp. */
+.sb-unread-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--c, var(--ink-3));
+  animation: sbUnreadPulse 1.6s ease-in-out infinite;
+}
+@keyframes sbUnreadPulse {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--c, var(--ink-3)) 50%, transparent); }
+  50%      { box-shadow: 0 0 0 4px color-mix(in srgb, var(--c, var(--ink-3)) 0%, transparent); }
+}
+
+/* Workgroup paused: pause glyph already signals it via leading icon, so just dim the row. */
+.ds-sb-row[data-state="paused"],
+.sb-row[data-state="paused"] {
+  opacity: var(--alpha-muted);
+}
+
+/* Profile without a model/provider configured. Discovery happens on click → NeedsProviderState. */
+.ds-sb-row[data-state="needs-provider"],
+.sb-row[data-state="needs-provider"] {
+  opacity: var(--alpha-muted);
+}
+.ds-sb-row[data-state="needs-provider"] .ds-diamond,
+.sb-row[data-state="needs-provider"] .ds-diamond {
+  background: transparent;
+  border: 1.5px solid var(--c, var(--ink-3));
+  border-radius: 1.5px;
+}
+.ds-sb-row[data-state="needs-provider"] .sb-name,
+.sb-row[data-state="needs-provider"] .sb-name {
+  font-weight: var(--fw-regular);
+  color: var(--ink-3);
+}
+.ds-sb-row[data-state="needs-provider"] .sb-name.is-sel,
+.sb-row[data-state="needs-provider"] .sb-name.is-sel {
+  font-weight: var(--fw-medium);
+  color: var(--ink);
+}
+
 .ds-chat-header {
 
   padding: var(--hero-pad-top) var(--pane-pad-x) var(--hero-pad-bottom);
@@ -576,7 +646,7 @@ a:focus-visible,
 }
 .ds-chat-header .title-row .ds-hash, .hash {
   font-size: var(--fs-display);
-  font-weight: 500;
+  font-weight: var(--fw-medium);
   color: var(--ink-4);
   line-height: var(--lh-tight);
 }
@@ -585,7 +655,7 @@ a:focus-visible,
   margin: 0;
   font-family: var(--font-sans);
   font-size: var(--fs-display);
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   letter-spacing: -0.018em;
   color: var(--ink);
   line-height: var(--lh-tight);
@@ -626,7 +696,7 @@ a:focus-visible,
 .ds-marker .ey {
   font-family: var(--font-mono);
   font-size: var(--fs-xs);
-  font-weight: 700;
+  font-weight: var(--fw-bold);
   letter-spacing: .10em;
   color: var(--ink-3);
   display: flex;
@@ -640,7 +710,7 @@ a:focus-visible,
 .ds-marker .ttl {
   font-family: var(--font-sans);
   font-size: var(--fs-lg);
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
   letter-spacing: -0.005em;
   color: var(--ink);
   line-height: var(--lh-cozy);
