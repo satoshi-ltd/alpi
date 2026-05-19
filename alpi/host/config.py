@@ -63,6 +63,7 @@ def register(server: host_server.Server) -> None:
     server.register("host.sandbox.network", _sandbox_network)
     server.register("host.voice.set_voice", _voice_set_voice)
     server.register("host.voice.autoplay", _voice_autoplay)
+    server.register("host.voice.preview", _voice_preview)
 
 
 def _resolve_home(profile: str) -> Path:
@@ -661,3 +662,85 @@ async def _voice_autoplay(
     cfg.tools.tts.autoplay = on
     cfg_mod.save(cfg)
     return {"ok": True}
+
+
+# Localized "Hello, I am Alpi" greetings used for the preview sample. Lang prefix
+# is the bit before the first `-` in the Azure voice id (`es-MX-DaliaNeural` → `es`).
+_PREVIEW_PHRASES = {
+    "en": "Hi, I'm Alpi.",
+    "es": "Hola, soy Alpi.",
+    "fr": "Bonjour, je suis Alpi.",
+    "de": "Hallo, ich bin Alpi.",
+    "it": "Ciao, sono Alpi.",
+    "pt": "Olá, sou Alpi.",
+}
+
+
+def _preview_phrase_for(voice_id: str) -> str:
+    head = (voice_id or "").split("-", 1)[0].lower()
+    return _PREVIEW_PHRASES.get(head, _PREVIEW_PHRASES["en"])
+
+
+_VOICE_PREVIEW_MAX_CHARS = 280  # ~one tweet; covers all `_PREVIEW_PHRASES` with room to spare.
+
+
+async def _voice_preview(
+    params: dict[str, Any], _server: host_server.Server,
+) -> dict[str, Any]:
+    """Synthesize a short Azure voice greeting and return base64-mp3. Stateless — no on-disk cache."""
+    import base64
+    import tempfile
+
+    try:
+        import edge_tts  # noqa: F401  (lazy import — keeps the daemon cold path light)
+    except ImportError as e:
+        raise host_server.HandlerError(
+            -32000, "tts-unavailable",
+            data={"detail": f"edge_tts not installed: {e}"},
+        ) from e
+
+    voice_id = str((params or {}).get("voice_id") or "").strip()
+    if not voice_id:
+        raise host_server.HandlerError(
+            -32602, "invalid-params", data={"detail": "voice_id required"},
+        )
+    text = str((params or {}).get("text") or "").strip() or _preview_phrase_for(voice_id)
+    if len(text) > _VOICE_PREVIEW_MAX_CHARS:
+        # DoS guard: an oversized text would ship multi-MB of base64 back over the socket.
+        raise host_server.HandlerError(
+            -32602, "invalid-params",
+            data={"detail": f"text exceeds {_VOICE_PREVIEW_MAX_CHARS} chars"},
+        )
+
+    # Write to a tmp file then read back — keeps the existing edge_tts helper
+    # API stable (it's a file-based interface) without coupling to the agent's
+    # cache directory layout.
+    with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tmp:
+        out_path = tmp.name
+    try:
+        from alpi.tools.tts import _synthesize  # reuse the same helper the agent uses
+
+        try:
+            await _synthesize(text, voice_id, Path(out_path))
+        except Exception as e:  # noqa: BLE001
+            raise host_server.HandlerError(
+                -32000, "tts-failed", data={"detail": str(e) or e.__class__.__name__},
+            ) from e
+        try:
+            audio_bytes = Path(out_path).read_bytes()
+        except OSError as e:
+            raise host_server.HandlerError(
+                -32603, "internal-error", data={"detail": f"read mp3: {e}"},
+            ) from e
+    finally:
+        try:
+            Path(out_path).unlink(missing_ok=True)
+        except OSError:
+            pass
+
+    return {
+        "voice_id": voice_id,
+        "text": text,
+        "audio_b64": base64.b64encode(audio_bytes).decode("ascii"),
+        "mime": "audio/mpeg",
+    }

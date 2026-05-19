@@ -190,7 +190,7 @@ def test_tick_fires_due_jobs_and_updates_last_run(monkeypatch, tmp_home_no_env: 
     calls = []
     monkeypatch.setattr(
         scheduler, "run_job",
-        lambda job, home: (calls.append(job["id"]) or (True, "ok")),
+        lambda job, home: (calls.append(job["id"]) or scheduler.JobOutcome(True, "ok")),
     )
 
     results = scheduler.tick(tmp_home_no_env)
@@ -214,7 +214,7 @@ def test_tick_skips_not_due(monkeypatch, tmp_home_no_env: Path) -> None:
     fired = []
     monkeypatch.setattr(
         scheduler, "run_job",
-        lambda job, home: (fired.append(1) or (True, "ok")),
+        lambda job, home: (fired.append(1) or scheduler.JobOutcome(True, "ok")),
     )
     results = scheduler.tick(tmp_home_no_env)
     assert results == []
@@ -229,7 +229,7 @@ def test_tick_failure_still_updates_last_run(monkeypatch, tmp_home_no_env: Path)
     }]
     scheduler._save_jobs(tmp_home_no_env, jobs)
     monkeypatch.setattr(scheduler, "run_job",
-                        lambda job, home: (False, "boom"))
+                        lambda job, home: scheduler.JobOutcome(False, "boom"))
     results = scheduler.tick(tmp_home_no_env)
     assert results == [("x", False, "boom")]
     saved = json.loads((tmp_home_no_env / "schedule" / "jobs.json").read_text())
@@ -267,7 +267,7 @@ def test_run_job_delivers_reply(monkeypatch, tmp_home_no_env: Path) -> None:
 
     job = {"id": "j", "kind": "cron", "prompt": "p",
            "platform": "telegram", "chat_id": "1"}
-    ok, msg = scheduler.run_job(job, tmp_home_no_env)
+    ok, msg, _reply = scheduler.run_job(job, tmp_home_no_env)
     assert ok
     assert "--no-save" in captured["args"]
     assert sent == [("telegram", "1", "hello world")]
@@ -294,7 +294,7 @@ def test_run_job_silent_when_no_platform(monkeypatch, tmp_home_no_env: Path) -> 
                         lambda p, c, t, **_: sent.append((p, c, t)))
 
     job = {"id": "j", "kind": "cron", "prompt": "reindex", "platform": ""}
-    ok, msg = scheduler.run_job(job, tmp_home_no_env)
+    ok, msg, _reply = scheduler.run_job(job, tmp_home_no_env)
     assert ok
     assert sent == []
     assert "silent" in msg
@@ -321,7 +321,7 @@ def test_run_job_uses_default_chat_id(monkeypatch, tmp_home_no_env: Path) -> Non
 
     job = {"id": "j", "kind": "cron", "prompt": "p",
            "platform": "telegram", "chat_id": ""}
-    ok, msg = scheduler.run_job(job, tmp_home_no_env)
+    ok, msg, _reply = scheduler.run_job(job, tmp_home_no_env)
     assert ok
     assert sent == [("telegram", "777", "hi")]
 
@@ -355,7 +355,7 @@ def test_run_job_skips_delivery_when_send_message_used(
 
     job = {"id": "j", "kind": "cron", "prompt": "send 'x' via telegram",
            "platform": "telegram", "chat_id": "1"}
-    ok, msg = scheduler.run_job(job, tmp_home_no_env)
+    ok, msg, _reply = scheduler.run_job(job, tmp_home_no_env)
     assert ok
     assert sent == []
     assert "send_message" in msg
@@ -406,7 +406,7 @@ def test_no_agent_silent_when_no_stdout(monkeypatch, tmp_home_no_env: Path) -> N
     job = {"id": "j", "kind": "cron", "no_agent": True,
            "prompt": f"python3 {script}",
            "platform": "", "chat_id": ""}
-    ok, msg = scheduler.run_job(job, tmp_home_no_env)
+    ok, msg, _reply = scheduler.run_job(job, tmp_home_no_env)
 
     assert ok
     assert sent == []
@@ -433,7 +433,7 @@ def test_no_agent_delivers_stdout_when_platform_set(
     job = {"id": "j", "kind": "cron", "no_agent": True,
            "prompt": f"python3 {script}",
            "platform": "telegram", "chat_id": "42"}
-    ok, msg = scheduler.run_job(job, tmp_home_no_env)
+    ok, msg, _reply = scheduler.run_job(job, tmp_home_no_env)
 
     assert ok
     assert sent == [("telegram", "42", "hello from script")]
@@ -452,7 +452,7 @@ def test_no_agent_nonzero_exit_fails_with_stderr(
 
     job = {"id": "j", "kind": "cron", "no_agent": True,
            "prompt": f"python3 {script}", "platform": "", "chat_id": ""}
-    ok, msg = scheduler.run_job(job, tmp_home_no_env)
+    ok, msg, _reply = scheduler.run_job(job, tmp_home_no_env)
 
     assert not ok
     assert "rc=2" in msg
@@ -477,7 +477,7 @@ def test_no_agent_expands_alpi_home_and_loads_dotenv(
     job = {"id": "j", "kind": "cron", "no_agent": True,
            "prompt": "python3 ${ALPI_HOME}/skills/personal/foo/scripts/run.py",
            "platform": "", "chat_id": ""}
-    ok, _ = scheduler.run_job(job, tmp_home_no_env)
+    ok, _, _ = scheduler.run_job(job, tmp_home_no_env)
 
     assert ok
     expected_script = str(tmp_home_no_env / "skills/personal/foo/scripts/run.py")
@@ -538,7 +538,7 @@ def test_no_agent_run_rejects_command_outside_skills(
 
     job = {"id": "j", "kind": "cron", "no_agent": True,
            "prompt": "/bin/echo gotcha", "platform": "", "chat_id": ""}
-    ok, msg = scheduler.run_job(job, tmp_home_no_env)
+    ok, msg, _reply = scheduler.run_job(job, tmp_home_no_env)
 
     assert not ok
     assert "no_agent rejected" in msg
@@ -562,7 +562,7 @@ def test_no_agent_env_profile_wins_over_daemon_env(
     job = {"id": "j", "kind": "cron", "no_agent": True,
            "prompt": f"python3 {script}",
            "platform": "", "chat_id": ""}
-    ok, _ = scheduler.run_job(job, tmp_home_no_env)
+    ok, _, _ = scheduler.run_job(job, tmp_home_no_env)
 
     assert ok
     assert captured["env"]["FOLDER"] == "/right/path", (
@@ -586,7 +586,7 @@ def test_no_agent_skips_threat_scan(monkeypatch, tmp_home_no_env: Path) -> None:
     job = {"id": "j", "kind": "cron", "no_agent": True,
            "prompt": f"python3 {script}",
            "platform": "", "chat_id": ""}
-    ok, _ = scheduler.run_job(job, tmp_home_no_env)
+    ok, _, _ = scheduler.run_job(job, tmp_home_no_env)
 
     assert ok
     assert scan_calls == [], "threat scan must NOT run for no_agent jobs"
@@ -662,7 +662,10 @@ def test_fire_by_id_runs_matching_job(monkeypatch, tmp_home_no_env: Path) -> Non
     def fake_run_job(job, home):
         called_with["id"] = job["id"]
         called_with["prompt"] = job["prompt"]
-        return True, "delivered to telegram:1"
+        return scheduler.JobOutcome(
+            True, "delivered to telegram:1",
+            reply="hola world", delivered_to="telegram",
+        )
 
     monkeypatch.setattr(scheduler, "run_job", fake_run_job)
 
@@ -693,7 +696,7 @@ def test_fire_by_id_does_not_consume_once_job(
          "run_at": "2099-01-01T09:00:00"},
     ], indent=2))
 
-    monkeypatch.setattr(scheduler, "run_job", lambda job, home: (True, "ok"))
+    monkeypatch.setattr(scheduler, "run_job", lambda job, home: scheduler.JobOutcome(True, "ok"))
     ok, _ = scheduler.fire_by_id(tmp_home_no_env, "tomorrow")
     assert ok
 
@@ -717,8 +720,12 @@ def test_schedule_tool_fire_action(monkeypatch, tmp_home_no_env: Path) -> None:
     jid = jobs[0]["id"]
 
     # Stub the actual subprocess-spawning turn.
-    monkeypatch.setattr(scheduler, "run_job",
-                        lambda job, home: (True, "delivered to telegram:1"))
+    monkeypatch.setattr(
+        scheduler, "run_job",
+        lambda job, home: scheduler.JobOutcome(
+            True, "delivered to telegram:1", reply="x", delivered_to="telegram",
+        ),
+    )
 
     r = Schedule().run(action="fire", id=jid)
     assert r.ok, r.error

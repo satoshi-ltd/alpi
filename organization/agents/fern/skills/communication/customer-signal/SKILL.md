@@ -53,6 +53,8 @@ After a set of customer conversations, QBRs, support ticket analysis, or review 
 ## State
 Single signals are noise; aggregated signals are pattern. Persist every customer signal so themes emerge across sources.
 
+Tables live under `state/db.sqlite` (per-skill). Schema is additive-only — `CREATE TABLE IF NOT EXISTS`, never `ALTER` destructively or `DROP`.
+
 ```sql
 CREATE TABLE IF NOT EXISTS signals (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,

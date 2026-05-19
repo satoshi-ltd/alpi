@@ -44,6 +44,8 @@ When churn rate has increased or is above benchmark, when a cohort of customers 
 ## State
 Churn analysis requires cohorts tracked over time — the diagnostic value is in the curve, not the snapshot.
 
+Tables live under `state/db.sqlite` (per-skill). Schema is additive-only — `CREATE TABLE IF NOT EXISTS`, never `ALTER` destructively or `DROP`.
+
 ```sql
 CREATE TABLE IF NOT EXISTS cohorts (
     cohort_label    TEXT PRIMARY KEY,          -- '2026-Q1', '2026-05', etc.

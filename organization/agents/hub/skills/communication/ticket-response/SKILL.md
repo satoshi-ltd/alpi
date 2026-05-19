@@ -50,6 +50,8 @@ When drafting a response to a customer support ticket — bug report, how-to que
 ## State
 Tickets reveal product patterns. Persist every handled ticket so recurring issues surface to product (`pattern_tag`) and resolution templates emerge.
 
+Tables live under `state/db.sqlite` (per-skill). Schema is additive-only — `CREATE TABLE IF NOT EXISTS`, never `ALTER` destructively or `DROP`.
+
 ```sql
 CREATE TABLE IF NOT EXISTS tickets (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,

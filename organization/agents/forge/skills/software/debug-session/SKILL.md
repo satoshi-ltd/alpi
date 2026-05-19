@@ -51,6 +51,8 @@ Can this be reproduced? [Yes / No / Intermittent]. If intermittent, note frequen
 ## State
 Bug patterns repeat. A queryable debug log turns one-off fixes into compounding knowledge.
 
+Tables live under `state/db.sqlite` (per-skill). Schema is additive-only — `CREATE TABLE IF NOT EXISTS`, never `ALTER` destructively or `DROP`.
+
 ```sql
 CREATE TABLE IF NOT EXISTS debug_log (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,

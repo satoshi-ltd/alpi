@@ -264,7 +264,7 @@ def _run_once(
     def sink(ev: AgentEvent) -> None:
         if emit_events:
             _emit_event_line(ev)
-        if ev.kind == "assistant_done" and ev.text.strip():
+        if ev.kind == "assistant_done" and ev.final and ev.text.strip():
             parts.append(ev.text)
         elif ev.kind == "error" and not emit_events:
             parts.append(f"[error] {ev.text}")

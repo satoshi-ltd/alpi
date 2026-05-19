@@ -194,7 +194,7 @@ async def _data_chat_send(
                     "tokens_before": ev.tokens_in,
                     "tokens_after": ev.tokens_out,
                 })
-            elif ev.kind == "assistant_done" and ev.text.strip():
+            elif ev.kind == "assistant_done" and ev.final and ev.text.strip():
                 parts.append(ev.text)
         final = "\n\n".join(parts).strip()
         # Once we know the final session_id we can also persist the late session frames against it (covers new sessions whose id wasn't known at entry).

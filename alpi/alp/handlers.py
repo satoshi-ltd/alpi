@@ -124,7 +124,7 @@ async def _run_turn_stream(
         def sink(ev: AgentEvent) -> None:
             if ev.kind == "assistant_delta" and ev.text:
                 loop.call_soon_threadsafe(queue.put_nowait, ("delta", ev.text))
-            elif ev.kind == "assistant_done" and ev.text.strip():
+            elif ev.kind == "assistant_done" and ev.final and ev.text.strip():
                 state["parts"].append(ev.text)
             elif ev.kind == "usage":
                 state["tokens_in"] += ev.tokens_in
@@ -198,7 +198,7 @@ def _run_turn(
 
     def sink(ev: AgentEvent) -> None:
         nonlocal tokens_in, tokens_out, cost, interrupted
-        if ev.kind == "assistant_done" and ev.text.strip():
+        if ev.kind == "assistant_done" and ev.final and ev.text.strip():
             parts.append(ev.text)
         elif ev.kind == "usage":
             tokens_in += ev.tokens_in

@@ -40,6 +40,8 @@ For each Objective:
 ## State
 Track objectives and key results across periods so review is genuinely longitudinal.
 
+Tables live under `state/db.sqlite` (per-skill). Schema is additive-only — `CREATE TABLE IF NOT EXISTS`, never `ALTER` destructively or `DROP`.
+
 ```sql
 CREATE TABLE IF NOT EXISTS objectives (
     id        INTEGER PRIMARY KEY AUTOINCREMENT,

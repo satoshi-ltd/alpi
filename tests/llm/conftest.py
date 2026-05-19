@@ -41,7 +41,10 @@ class Trace:
         return out
 
     def assistant_text(self) -> str:
-        return "\n".join(e.text for e in self.events if e.kind == "assistant_done")
+        return "\n".join(
+            e.text for e in self.events
+            if e.kind == "assistant_done" and e.final
+        )
 
 
 def _llm_home(tmp_path: Path) -> Path:

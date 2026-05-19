@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.4.48 — 2026-05-19 — host event backfill + scheduled reply contracts
+
+Host-plane reliability release for desktop/mobile clients and scheduled jobs.
+
+- Added `host.events.history({since?, kinds?, limit?})`, backed by a bounded in-memory ring and compacted JSONL sidecar, so clients can backfill recent daemon events after reconnecting. Live event frames now include `at`.
+- Added structured schedule outcomes: `schedule.done` / `schedule.failed` now carry `message`, `reply`, `delivered_to`, and `silent`, so clients can render clean notification bodies without parsing operational status text.
+- Marked final assistant replies explicitly with `AgentEvent.final`; CLI, host chat, ALP, scheduler delivery, and tests now ignore pre-tool assistant narration when building canonical replies.
+- Improved host device/config APIs: Ollama model discovery returns partial `{models, errors}` results, and `host.voice.preview` provides short daemon-side MP3 previews with controlled errors.
+- Bumped Umbrel package metadata and image tags to `0.4.48`.
+- Refreshed organization tooling: profile voice assignment, more patient ALP peer verification, organization skill linting, workgroup task bootstrap, and explicit per-skill `state/db.sqlite` notes.
+- Docs: updated architecture contracts for host events/schedule payloads and rewrote the roadmap around v0.6 reliability + v0.7 owned-client UX.
+- Tests added for event history, schedule reply payloads, final assistant replies, run-once preamble suppression, Ollama errors, voice preview, host chat, and ALP handlers.
+
 ## v0.4.47 — 2026-05-18 — host runtime version + Umbrel local package prep
 
 Small compatibility release for desktop/mobile clients and real Umbrel smoke tests.

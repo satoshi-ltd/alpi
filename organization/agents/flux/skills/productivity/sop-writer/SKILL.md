@@ -56,6 +56,8 @@ For decision points:
 ## State
 SOPs go stale. Track ownership and review schedule so staleness surfaces automatically.
 
+Tables live under `state/db.sqlite` (per-skill). Schema is additive-only — `CREATE TABLE IF NOT EXISTS`, never `ALTER` destructively or `DROP`.
+
 ```sql
 CREATE TABLE IF NOT EXISTS sops (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,

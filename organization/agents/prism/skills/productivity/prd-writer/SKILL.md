@@ -44,6 +44,8 @@ Each story must have acceptance criteria: the minimum conditions under which thi
 ## State
 Maintain the feature backlog as the canonical source of what's planned, in flight, and shipped.
 
+Tables live under `state/db.sqlite` (per-skill). Schema is additive-only — `CREATE TABLE IF NOT EXISTS`, never `ALTER` destructively or `DROP`.
+
 ```sql
 CREATE TABLE IF NOT EXISTS prds (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,

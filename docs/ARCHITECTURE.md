@@ -584,10 +584,14 @@ Verb namespaces in current shape:
   used to invoke via `alpi gateway probe`, `alpi peers ping`, and
   `alpi ctx`. Same logic, host-plane entry point.
 - **`host.events.subscribe`** — long-lived push channel. Daemon
-  emits `{event, data}` frames as state changes. Sources call
+  emits `{event, data, at}` frames as state changes. Sources call
   `alpi.host.events.emit(kind, data)`; loop is captured at first
   subscription and broadcasts via `call_soon_threadsafe` (safe to
   call from worker threads). Filter optional via `params.kinds`.
+- **`host.events.history`** — bounded backfill over the same frame
+  shape. Recent events are kept in memory and in
+  `<server.home>/host/events.jsonl`; the JSONL sidecar is periodically
+  compacted so offline clients can catch up without unbounded growth.
   Wired kinds:
   - `session_changed` — `Engine.save_session` (id + subdir).
   - `wg.done` — `workgroup_client.post()` when a hub posts a
@@ -595,7 +599,9 @@ Verb namespaces in current shape:
     prefixes + line-anchored grammar are honoured). Carries
     `wg_id`, `seq`, and a 200-char summary. Hub-only.
   - `schedule.done` / `schedule.failed` — `scheduler/run.py::tick`
-    after each job dispatch (job_id, kind, message).
+    after each job dispatch. Carries `job_id`, `kind`, `message`,
+    `reply`, `delivered_to`, and `silent`; clients use the explicit
+    fields instead of parsing the operational `message`.
   - `budget.threshold` — `ledger.record()` when a USD spend
     crosses 80% or 100% of the daily cap (highest threshold wins
     when a single record vaults past both). Engine passes

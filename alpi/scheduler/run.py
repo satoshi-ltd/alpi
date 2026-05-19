@@ -9,6 +9,7 @@ import shlex
 import signal
 import subprocess
 import sys
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -17,6 +18,22 @@ from croniter import croniter
 from alpi.gateway import delivery
 
 log = logging.getLogger("alpi.schedule")
+
+
+@dataclass
+class JobOutcome:
+    # `delivered_to`: "" | "telegram" | "email" | "external" (send_message). `silent`: True only when ok AND no user-facing output AND no delivery. Contract referenced by host event consumers — see AGENTS.md.
+    ok: bool
+    message: str
+    reply: str = ""
+    delivered_to: str = ""
+    silent: bool = False
+
+    def __iter__(self):
+        # Back-compat tuple unpack `ok, msg, reply = run_job(...)`.
+        yield self.ok
+        yield self.message
+        yield self.reply
 
 # How often to wake up and check for due jobs. 30s is fine-grained enough
 # for "every minute" expressions while keeping CPU ~0.
@@ -210,16 +227,15 @@ def validate_no_agent_command(prompt: str, home: Path) -> str | None:
     return f"no_agent python invocation needs a script under {home}/skills/"
 
 
-def _run_script_only(job: dict, home: Path) -> tuple[bool, str]:
-    # Threat scan is intentionally skipped: validator restricts the prompt
-    # to skill scripts, so prompt-injection heuristics don't apply.
+def _run_script_only(job: dict, home: Path) -> JobOutcome:
+    # Threat scan intentionally skipped: validator restricts the prompt to skill scripts on disk, so prompt-injection heuristics don't apply.
     cmd_str = (job.get("prompt") or "").strip()
     if not cmd_str:
-        return False, "empty command (no_agent)"
+        return JobOutcome(False, "empty command (no_agent)")
 
     err = validate_no_agent_command(cmd_str, home)
     if err:
-        return False, f"no_agent rejected: {err}"
+        return JobOutcome(False, f"no_agent rejected: {err}")
 
     expanded = cmd_str.replace("${ALPI_HOME}", str(home)).replace(
         "$ALPI_HOME", str(home),
@@ -227,9 +243,9 @@ def _run_script_only(job: dict, home: Path) -> tuple[bool, str]:
     try:
         argv = shlex.split(expanded)
     except ValueError as e:
-        return False, f"command parse error: {e}"
+        return JobOutcome(False, f"command parse error: {e}")
     if not argv:
-        return False, "empty command after parsing"
+        return JobOutcome(False, "empty command after parsing")
 
     env = dict(os.environ)
     _load_profile_env(home, env)
@@ -241,54 +257,51 @@ def _run_script_only(job: dict, home: Path) -> tuple[bool, str]:
             argv, env=env, capture_output=True, text=True, timeout=600,
         )
     except subprocess.TimeoutExpired:
-        return False, "script timed out"
+        return JobOutcome(False, "script timed out")
     except FileNotFoundError:
-        return False, f"executable not found: {argv[0]!r}"
+        return JobOutcome(False, f"executable not found: {argv[0]!r}")
 
     if proc.returncode != 0:
         err = (proc.stderr or "").strip()
-        return False, f"script rc={proc.returncode}: {err[:300]}"
+        return JobOutcome(False, f"script rc={proc.returncode}: {err[:300]}")
 
     reply = (proc.stdout or "").strip()
     has_platform = bool(job.get("platform"))
 
     if not reply:
-        return True, "silent run ok"
+        return JobOutcome(True, "silent run ok", silent=True)
 
     if not has_platform:
         summary = (reply[:120] + "…") if len(reply) > 120 else reply
-        return True, f"silent run ok: {summary}"
+        return JobOutcome(True, f"silent run ok: {summary}", reply=reply)
 
     platform = job["platform"].lower()
     chat_id = job.get("chat_id") or delivery.default_chat_id(platform, env=env)
     if not chat_id:
-        return False, f"no chat_id and no default for {platform}"
+        return JobOutcome(False, f"no chat_id and no default for {platform}")
     try:
         delivery.send_to(platform, chat_id, reply, env=env)
     except delivery.DeliveryError as e:
-        return False, f"delivery failed: {e}"
-    return True, f"delivered to {platform}:{chat_id}"
+        return JobOutcome(False, f"delivery failed: {e}")
+    return JobOutcome(
+        True, f"delivered to {platform}:{chat_id}",
+        reply=reply, delivered_to=platform,
+    )
 
 
-def run_job(job: dict, home: Path) -> tuple[bool, str]:
-    """Run the scheduled prompt via ``alpi chat --once``.
-
-    Delivery is opt-in: a job with no ``platform`` set runs silently
-    (work done, no gateway dispatch). Jobs that DO set ``platform``
-    keep the original "auto-deliver the agent's reply" behaviour for
-    daily-summary-style use cases. The agent can also self-deliver
-    via ``send_message`` regardless of ``platform``."""
+def run_job(job: dict, home: Path) -> JobOutcome:
+    # Jobs with no `platform` run silent (no gateway dispatch). With `platform` the agent reply auto-delivers — unless the agent already called `send_message`, in which case delivery is suppressed to avoid duplicates.
     if job.get("no_agent"):
         return _run_script_only(job, home)
 
     prompt = job.get("prompt", "").strip()
     if not prompt:
-        return False, "empty prompt"
+        return JobOutcome(False, "empty prompt")
 
     from alpi.tools.skill import scan_skill_body
     flags = scan_skill_body(prompt)
     if flags:
-        return False, f"threat scan blocked fire: {', '.join(flags)}"
+        return JobOutcome(False, f"threat scan blocked fire: {', '.join(flags)}")
 
     has_platform = bool(job.get("platform"))
     if has_platform:
@@ -327,33 +340,45 @@ def run_job(job: dict, home: Path) -> tuple[bool, str]:
             env=env, capture_output=True, text=True, timeout=600,
         )
     except subprocess.TimeoutExpired:
-        return False, "agent timed out"
+        return JobOutcome(False, "agent timed out")
     if proc.returncode != 0:
-        return False, f"agent rc={proc.returncode}: {proc.stderr[:300]}"
+        return JobOutcome(False, f"agent rc={proc.returncode}: {proc.stderr[:300]}")
 
     already_delivered, reply = _parse_events(proc.stdout or "")
 
     if already_delivered:
-        return True, "agent delivered via send_message; no duplicate reply pushed"
+        return JobOutcome(
+            True,
+            "agent delivered via send_message; no duplicate reply pushed",
+            delivered_to="external",
+        )
 
     if not has_platform:
         # Silent maintenance job — log a short summary if the agent provided one.
         summary = (reply[:120] + "…") if len(reply) > 120 else reply
-        return True, f"silent run ok{(': ' + summary) if summary else ''}"
+        return JobOutcome(
+            True,
+            f"silent run ok{(': ' + summary) if summary else ''}",
+            reply=reply,
+            silent=(not reply),
+        )
 
     if not reply:
-        return False, "agent produced no reply"
+        return JobOutcome(False, "agent produced no reply")
 
     platform = job["platform"].lower()
     chat_id = job.get("chat_id") or delivery.default_chat_id(platform, env=env)
     if not chat_id:
-        return False, f"no chat_id and no default for {platform}"
+        return JobOutcome(False, f"no chat_id and no default for {platform}")
 
     try:
         delivery.send_to(platform, chat_id, reply, env=env)
     except delivery.DeliveryError as e:
-        return False, f"delivery failed: {e}"
-    return True, f"delivered to {platform}:{chat_id}"
+        return JobOutcome(False, f"delivery failed: {e}")
+    return JobOutcome(
+        True, f"delivered to {platform}:{chat_id}",
+        reply=reply, delivered_to=platform,
+    )
 
 
 def _parse_events(stdout: str) -> tuple[bool, str]:
@@ -385,15 +410,17 @@ def fire_by_id(home: Path, job_id: str) -> tuple[bool, str]:
     exactly what the daemon would fire. Does NOT delete ``once`` jobs —
     ad-hoc fire is deliberate testing, not the natural trigger.
     """
+    # Returns 2-tuple by design; the `reply` field lives only on the host event stream.
     jobs = _load_jobs(home)
     for job in jobs:
         if job.get("id") == job_id:
             log.info("firing job %s ad-hoc (%s)", job_id, job.get("kind", "?"))
-            ok, msg = run_job(job, home)
-            log.info("job %s ad-hoc %s — %s", job_id, "OK" if ok else "FAIL", msg)
+            outcome = run_job(job, home)
+            log.info("job %s ad-hoc %s — %s", job_id,
+                     "OK" if outcome.ok else "FAIL", outcome.message)
             job["last_run_at"] = _now().isoformat()
             _save_jobs(home, jobs)
-            return ok, msg
+            return outcome.ok, outcome.message
     import difflib
     available = [str(j.get("id", "")) for j in jobs if j.get("id")]
     hit = difflib.get_close_matches(job_id, available, n=1, cutoff=0.6)
@@ -415,18 +442,22 @@ def tick(home: Path, now: datetime | None = None) -> list[tuple[str, bool, str]]
             continue
         job_id = job.get("id", "?")
         log.info("firing job %s (%s)", job_id, job.get("kind", "cron"))
-        ok, msg = run_job(job, home)
-        log.info("job %s %s — %s", job_id, "OK" if ok else "FAIL", msg)
+        outcome = run_job(job, home)
+        log.info("job %s %s — %s", job_id,
+                 "OK" if outcome.ok else "FAIL", outcome.message)
         try:
             from alpi.home import profile_name
             from alpi.host import events as host_events
             host_events.emit(
-                "schedule.done" if ok else "schedule.failed",
+                "schedule.done" if outcome.ok else "schedule.failed",
                 {
                     "profile": profile_name(home),
                     "job_id": str(job_id),
                     "kind": str(job.get("kind", "cron")),
-                    "message": msg,
+                    "message": outcome.message,
+                    "reply": (outcome.reply or "")[:2000],
+                    "delivered_to": outcome.delivered_to,
+                    "silent": outcome.silent,
                 },
             )
         except Exception:  # noqa: BLE001
@@ -434,10 +465,10 @@ def tick(home: Path, now: datetime | None = None) -> list[tuple[str, bool, str]]
         # Update last_run_at even on failure to avoid a tight re-fire loop.
         job["last_run_at"] = now.isoformat()
         changed = True
-        results.append((job_id, ok, msg))
+        results.append((job_id, outcome.ok, outcome.message))
         # One-shot jobs die after a successful fire; on failure, keep so
         # the next tick retries.
-        if job.get("kind") == "once" and ok:
+        if job.get("kind") == "once" and outcome.ok:
             continue
         kept.append(job)
 

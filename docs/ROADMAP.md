@@ -24,9 +24,10 @@ real client surface: the mobile companion. v0.6 builds on that base
 with a self-improving skill library and capability maintenance.
 
 This is the cycle where gateways stop being the main mobile story.
-Telegram, IMAP, Gmail, and Matrix stay useful, but the project should
-not depend on third-party chat apps as the primary way to reach a
-personal agent.
+Telegram, IMAP, Gmail, and Matrix stay useful as compatibility and
+automation bridges, but the primary product surface becomes Alpi-owned
+clients. New rich UX should land in desktop/mobile, not inside
+third-party chat apps.
 
 ### Device + live access
 
@@ -49,8 +50,8 @@ owned daemon through `host.*`; ALP remains the peer-to-peer plane for
 alpi-to-alpi links and workgroups.
 
 **Surfaces this could replace or extend:**
-- Telegram / Matrix gateways — keep working, but optional once the
-  companion is real.
+- Telegram / Matrix gateways — keep working as fallback and automation
+  bridges, but no longer the product's primary mobile UX.
 - `/peers`, `/budget`, `/memory` panels exposed read-only on
   the go.
 - Workgroups use the desktop view as the reference surface:
@@ -84,356 +85,421 @@ background limitation that blocks one verb), never as the v0.5 target.
 
 ## v0.6 cycle (planned)
 
-**Theme: self-improving agent + capability maintenance.** With the
-device-access, local-recall, and v0.5 hardening layers in place, v0.6
-turns the skill library into something that improves itself over time,
-adds operator-facing memory diagnostics, and introduces safe local
-skill import without adopting a marketplace or plugin runtime.
+**Theme: capability reliability + operator maintenance.** Mobile closes
+the second real client surface in v0.5. v0.6 does not add another large
+surface. It hardens the shared capability core that TUI, desktop, mobile,
+gateways, schedules, and workgroups all rely on.
+
+Hermes Agent remains useful as a reference for hardening patterns, but
+this cycle ports mechanisms rather than catalog breadth: tool-output
+sanitization, mutation verification, approval streaming, diagnostics,
+and local import. It does not port marketplace, provider zoo, or chat
+platform expansion.
+
+**Gateway posture.** Gateways are maintained, not evolved. They remain
+for compatibility, schedules, inbound email/chat, and automation
+delivery. Work is limited to reliability, security, profile isolation,
+delivery correctness, and diagnostics. New chat-platform adapters and
+gateway-specific rich interaction patterns are out of scope; those UX
+investments belong in desktop and mobile.
+
+### Reliability core
+
+| ID | Item | Status |
+|---|---|---|
+| CF.1 | Tool-output / error sanitization — scrub tool outputs and errors before they are reinserted into model context, so hostile MCP/web/file/error text is treated as untrusted data rather than latent instructions. | 🟡 |
+| CF.2 | File mutation verifier — record each `write_file` / `edit_file` mutation with path, before/after hash, size, line count, and a small diff summary. The engine surfaces the mutation footer to the model and UI after tool batches. | 🟡 |
+| CF.3 | Host approval events — terminal approval prompts become host-stream events so desktop/mobile can pause, approve/deny, and resume turns without relying on TUI-only callbacks. | 🟡 |
+| GW.1 | Gateway containment — Telegram, IMAP, Gmail, Matrix and webhook listeners fail independently with backoff and status, so one broken compatibility bridge does not degrade sibling platforms or profiles. | 🟡 |
+
+### Operator diagnostics
+
+| ID | Item | Status |
+|---|---|---|
+| CM.1 | Memory audit CLI — `alpi memory audit` reports usage pressure, stale/low-confidence entries, duplicate clusters, operational-state leaks, promotion-queue backlog, and dedup-threshold calibration candidates. | 🟡 |
+| OPS.1 | Evidence digest — `alpi ops digest [--since 7d]` summarizes the signals that decide future work: approval frequency, compaction rate, broken tools, inactive skills, memory backlog, and recurring session-search misses. | 🟡 |
+| TL.1 | Tool availability checks — fast cached `check_fn` probes hide or flag unavailable tools and MCP servers in diagnostics without installing dependencies or replacing runtime errors. | 🟡 |
+
+### Skill maintenance primitives
+
+| ID | Item | Status |
+|---|---|---|
+| SK.1 | Skill telemetry — local `.usage.json` tracks per-skill view/use/patch counts, timestamps, state, and pinned status. v0.6 measures; it does not auto-curate. | 🟡 |
+| SK.2 | Safe skill import — `alpi skill import <dir\|zip>` previews, normalizes, scans, and installs a local skill into the Alpi contract; no marketplace, remote registry, or silent update flow. | 🟡 |
+
+### CF.1. Tool-output / error sanitization
+
+Tools are the boundary where untrusted text re-enters the model loop:
+web pages, MCP servers, database errors, subprocess stderr, and file
+contents can all contain instruction-shaped text. Today many successful
+tool outputs are deliberately wrapped with injection warnings, but tool
+errors still flow back as plain `ERROR: ...` payloads. CF.1 makes the
+boundary explicit and uniform.
+
+The sanitizer should be conservative:
+
+- preserve enough detail for debugging;
+- wrap suspicious strings with an untrusted-data warning;
+- redact obvious secrets before session persistence;
+- never mutate structured data fields the tool contract requires;
+- apply to both built-in tools and wrapped MCP tools.
+
+**Non-goal.** This is not a content filter and not an LLM moderation
+layer. It is prompt-injection hygiene for text that came from outside
+the trusted user/system/tool-description channel.
+
+### CF.2. File mutation verifier
+
+Alpi already refuses syntactically broken `write_file` / `edit_file`
+writes for Python, JSON, YAML, and TOML. CF.2 adds the missing
+post-write verification surface: after a tool batch, the engine knows
+which files changed and can show a compact, machine-checkable mutation
+footer.
+
+First implementation:
+
+- file tools record `path`, operation, before/after SHA-256, byte size,
+  line count, and a short unified-diff preview;
+- the engine emits a `file_mutations` event for clients;
+- the next model step receives a short footer when mutations happened,
+  so it can verify or continue based on facts rather than intention;
+- failed writes record no mutation.
+
+**Why not LSP yet.** Language-server diagnostics can come later, once
+the verifier proves useful. LSP adds per-language processes, dependency
+management, and many false-positive failure modes. The first layer is
+hashes, sizes, diffs, and existing syntax lint.
+
+### CF.3. Host approval events
+
+Terminal approval is currently strongest in the TUI because there is an
+interactive callback. Desktop and mobile need the same contract over the
+host plane: when a command needs approval, the stream should emit an
+approval request with command, severity, pattern, and choices; the client
+answers; the engine resumes or denies.
+
+This keeps one approval policy across surfaces:
+
+- TUI keeps its current prompt UI;
+- desktop/mobile render native approval sheets;
+- gateways and schedules remain non-interactive and deny caution
+  commands unless config allowlist permits them;
+- approval decisions still land in `logs/approval.log`.
+
+### GW.1. Gateway containment
+
+Gateways run long-lived network loops against third-party services. A
+bad Telegram token, IMAP outage, Gmail refresh failure, or Matrix sync
+exception should degrade only that platform. It should not kill the
+profile's whole gateway task, starve scheduled jobs, or affect sibling
+profiles in the daemon.
+
+This item is maintenance, not product expansion. It does not add new
+platforms, native button flows, gateway-specific onboarding, or rich
+chat UX. The purpose is to keep existing bridges safe and predictable
+while users move to Alpi-owned clients for the full experience.
+
+The circuit breaker is per profile + platform:
+
+- track `healthy` / `degraded` / `disabled` status;
+- exponential backoff after repeated failures;
+- reset on a successful poll/send;
+- surface state in `alpi doctor`, `ops digest`, and host settings;
+- keep platform-specific logs parseable.
+
+### CM.1. Memory audit CLI
+
+`alpi memory audit` is the operator-facing view over memory quality. It
+does not mutate memory by default. It reports:
+
+- current `USER.md` / `MEMORY.md` / `AGENT.md` usage and pressure;
+- low-confidence entries eligible for expiry;
+- near-duplicate clusters at multiple Jaccard thresholds;
+- operational-state-looking entries that should probably live in
+  sessions or logs, not memory;
+- queued promotion candidates awaiting preview/apply;
+- compaction frequency and ratio distribution from
+  `logs/compaction.jsonl`.
+
+The command also owns dedup-threshold recalibration: run the audit at
+0.5 / 0.6 / 0.7 / 0.8 containment, inspect borderline clusters, then
+adjust the cutoff only if the data supports it.
+
+### OPS.1. Evidence digest
+
+Most roadmap items promote on evidence, but today that evidence lives in
+raw logs. `alpi ops digest [--since 7d]` creates one stateless report:
+
+- approval-prompt frequency and top trigger patterns;
+- auto-compact rate and before/after ratios by model;
+- tools that failed before doing useful work;
+- unavailable tools or MCP servers from TL.1;
+- inactive skills and usage distribution from SK.1;
+- memory promotion backlog and audit highlights;
+- repeated "when did we discuss X?" style failures that would justify
+  semantic session recall.
+
+**Non-goal.** Not a dashboard, not a metrics service, not telemetry that
+leaves the machine. It is a local report the operator runs before
+deciding what to build next.
+
+### TL.1. Tool availability checks
+
+Some tools depend on runtime capabilities that may be missing in a
+minimal profile: browser automation needs Playwright/Chromium, STT needs
+its speech stack, TTS may need audio/conversion helpers, and MCP tools
+depend on configured servers. TL.1 adds a narrow probe layer:
+
+- probes are fast and cached briefly;
+- unavailable tools are hidden from model schemas or clearly flagged in
+  diagnostics;
+- checks never install dependencies automatically;
+- the normal tool implementation remains the final runtime authority.
+
+### SK.1. Skill telemetry
+
+`skills/.usage.json` tracks local usage without adding a service:
+view count, use count, patch count, created/last-used timestamps, state
+(`active` / `stale` / `archived`), and pinned status. The `skill` tool
+updates this on view, run, test, edit, and add-file actions.
+
+v0.6 deliberately stops at measurement. Bundled `@alpi/*` skills and
+pinned skills are represented in telemetry, but no background job moves
+or rewrites them yet. That restraint matters: automatic curation needs
+real usage data and a mature audit trail.
+
+### SK.2. Safe skill import
+
+Alpi should reuse local skill material from other agent stacks or a
+checked-out repository without adopting a marketplace. `alpi skill
+import <dir|zip>` is explicit and local:
+
+1. inspect the source and show a preview;
+2. reject path traversal, hidden files, symlinks escaping the root, and
+   unsupported nested layouts;
+3. map compatible files into `scripts/`, `references/`, `assets/`,
+   `secrets/`, and `state/`;
+4. run the same scanner and schema validation as `skill(create)` /
+   `skill(add_file)`;
+5. install only after explicit confirmation.
+
+**Non-goals.** No remote registry, automatic dependency install, silent
+update flow, or external trust database.
+
+## v0.7 cycle (planned)
+
+**Theme: owned-client UX + self-improving library + recall/cost depth.**
+v0.6 makes the system observable and reliable. v0.7 uses that evidence
+to improve the agent's long-term assets and to move richer interaction
+patterns into Alpi-owned clients rather than gateways.
+
+### Owned client experience
+
+| ID | Item | Status |
+|---|---|---|
+| UX.1 | Structured clarification — the agent asks closed questions that desktop/mobile render as native choices; gateways degrade to numbered text. | 🔵 |
+| UX.2 | Rich tool cards parity — desktop/mobile render approvals, file mutations, memory promotions, skill imports, and workgroup events as first-class cards. | 🔵 |
+| UX.3 | Gateway migration nudges — gateway replies can point users back to Alpi clients for flows that need approvals, files, workgroups, or rich UI. | 🔵 |
 
 ### Self-improving skills
 
 | ID | Item | Status |
 |---|---|---|
-| AC | Skill telemetry + curator — usage tracking per skill (`view_count`, `use_count`, `last_used`, `state: active/stale/archived`) and a periodic background consolidation pass that promotes narrow session-specific skills into broad class-level umbrellas. Builds on the v0.5 AT primitives (auto-archive + `pinned` flag); adds the curator-specific pieces: `absorbed_into:` metadata on consolidating deletes, memory `pinned` flag (memory entries are also reviewer-mutable in v0.6), and a `.bak` ring per skill if single-snapshot proves insufficient under aggressive curation. | 🔵 |
-| BD | Model-family conditional prompt guidance — tool-use enforcement and family-specific operational-guidance blocks injected only for the model families that empirically need them; other families run on the shorter baseline prompt. Promoted from Future once v0.5 generates enough multi-model session evidence. | 🔵 |
+| AC.1 | Skill curator recommendations — use SK.1 telemetry to flag stale, duplicate, overly narrow, or umbrella-candidate skills. Produces reports and manual apply plans; no silent deletes. | 🔵 |
+| AC.2 | Curator apply flow — after preview, archive stale skills, add `absorbed_into:` metadata, and move detail into umbrella skill `references/` when consolidation is accepted. | 🔵 |
+| BF-8 | Skill versioning / install-update flows — pinned install source, update preview/diff, revision metadata, and rollback metadata for imported skills. | 🔵 |
 
-### Capability maintenance
-
-| ID | Item | Status |
-|---|---|---|
-| CM.1 | Memory audit CLI — `alpi memory audit` reports docs/code drift signals, low-confidence expiry candidates, duplicate clusters, promotion candidates, and memory usage pressure. | 🔵 |
-| CM.2 | Safe skill import — `alpi skill import <dir\|zip>` previews, normalizes, scans, and installs a local skill into the alpi contract; no marketplace, no remote registry. | 🔵 |
-| CM.3 | Tool availability checks — add optional `check_fn` probes so unavailable tools can be hidden or flagged consistently when real profiles show broken visible tools. | 🔵 |
-| TTS.1 | Local TTS engine + daemon-served voice — replace Edge TTS (online-only Microsoft endpoint, currently called from both daemon and Tauri) with on-device synthesis served by the daemon, so the desktop app, gateway and TUI share one path and one voice catalog. | 🔵 |
-
-### Cost / latency
+### Recall and workgroup search
 
 | ID | Item | Status |
 |---|---|---|
-| CL.1 | Prompt caching across providers — cached input is ~90% cheaper everywhere; this is the single highest-leverage cost optimization for tool-heavy turns. Provider matrix: **Auto-caching providers** cache implicitly above a threshold with no marker; some accept an optional cache-key hint that improves shard hit rate. **Marker-required providers** need explicit `cache_control: {"type": "ephemeral"}` annotations on message content blocks. **Aggregator routing** passes through to whichever upstream the model resolves to — same code path as that upstream. **Local / Ollama**: N/A. Work breakdown: (1) cross-cutting — audit `Engine` + `engine._maybe_auto_compact` for any reordering or non-deterministic mutation of the early messages, since stable prefix is the precondition for every cache mode. (2) Marker-required path — add the marker on the system message (biggest win); optionally a second breakpoint on the last tool result. (3) Auto-cache path — add the cache-key hint derived from `session.id` for better routing. (4) Explicit cache APIs — only adopt where implicit-cache miss rate is measurable; not worth the API complexity otherwise. Measured impact in one of the WHOOP-debug turns: ~$0.40-0.50 of the $3.67 was the system prompt re-billed across 26 iterations. Bigger savings on longer / multi-turn sessions. | 🔵 |
+| CM.4 | Semantic recall over past sessions — opt-in vector/semantic retrieval over session history when lexical `session_search` starts missing real queries. | 🔵 |
+| ALP.6 | Workgroup search — semantic search over workgroup transcripts via the local RAG primitives, exposed through workgroup/host surfaces after CM.4 proves stable. | 🔵 |
+| ORG.1 | Organization workspace convention — document and scaffold the "hub profile owns the shared workspace" pattern before adding shared-filesystem runtime. | 🔵 |
 
-### Memory quality (evidence-gated)
-
-| ID | Item | Status |
-|---|---|---|
-| AI (1.c) | Dedup threshold recalibration — the 70% Jaccard cutoff in `alpi/memory.py::_find_duplicate_index` was an initial guess. Measure near-duplicate density on real session-memory accumulation across multiple profiles, then tighten or loosen. Pure data exercise; the audit produces a single number change. | 🔵 |
-
-### Org-level shared surfaces
+### Cost and model behavior
 
 | ID | Item | Status |
 |---|---|---|
-| ORG.1 | Organization workspace — a shared filesystem root visible to every profile in an organization (`organization/agent-organization.md`), so workgroup outputs, brand guides, shared templates, and cross-agent reference docs have a canonical landing zone instead of being trapped inside transcripts or duplicated across profile workspaces. | 🔵 |
+| CL.1 | Prompt caching across providers — stable-prefix audit, marker-required provider support, optional cache-key hints for auto-cache providers, and measurement in `ops digest`. | 🔵 |
+| BD | Model-family conditional prompt guidance — inject heavier tool-use/verification guidance only for model families that real logs show need it. | 🔵 |
 
-### ORG.1. Organization workspace
-
-Today each profile has its own ``cfg.workspace_path`` and the
-``organization/`` scaffold is purely a bootstrap concept — there's no
-runtime entity per organization, no shared filesystem. Information
-that should be team-wide (Vera drafts strategy → Prism + Echo read it,
-a workgroup ``#done`` produces an artefact that needs a home, brand
-guides / CSVs / templates shared across roles) leaks into workgroup
-transcripts as strings or gets duplicated across profile workspaces.
-
-**Three levels of ambition, listed cheapest to most expensive. We
-promote based on real demand, not speculative scope.**
-
-1. **Convention only (no code).** Designate one profile as the
-   "hub/secretary" of the org; its personal workspace *is* the org
-   workspace. Other agents reach it via ``@hub`` (existing
-   ``link.ask`` peer model). Zero new infrastructure, zero new trust
-   model, zero new protocol. Documented in ``ORGANIZATION.md`` as a
-   pattern. Covers the 70% case where the hub naturally orchestrates
-   workgroups and is the canonical funnel for their outputs.
-
-2. **Workspace overlay.** ``cfg.workspace_path`` becomes a list:
-   ``[profile_workspace, org_workspace]``. File tools (``file_read``,
-   ``file_write``, ``search``) read from both, write to the first by
-   default, with an explicit ``scope: "org"`` argument for the shared
-   root. New config, no new protocol, no new daemon entity. Promote
-   when the convention-only pattern starts to feel hacky (e.g. agents
-   confused about "is this my doc or the hub's?").
-
-3. **First-class org entity.** ``~/.alpi/orgs/<id>/workspace/`` with
-   member profiles, roles (reader / writer / admin), event fan-out on
-   change, and shared BA RAG index across profiles. New trust model,
-   new permissions UI, new protocol verbs. Significant scope —
-   probably its own minor release. Only worth it when a real user
-   reports "the overlay can't model what I need".
-
-**Why it waits.** No documented demand from real org users yet.
-v0.5 (mobile) and v0.6 (skill curator, ALP.4 already in v0.4.25)
-are higher-leverage. Promote the convention into ``ORGANIZATION.md``
-opportunistically when someone asks how to share a doc across the
-17 agents; the overlay/first-class designs wait for that question to
-become frequent.
-
-### AI (1.c). Dedup threshold recalibration
-
-The 70% Jaccard containment cutoff that decides whether a new memory entry is a near-duplicate of an existing one was chosen as a starting point in v0.4 with no production data to calibrate against. By v0.6 users will have weeks/months of accumulated memory across multiple profiles — enough signal to ask the right question: of the writes that today trigger reinforcement, how many are genuine paraphrases vs. false-positive collisions? And of the writes that pass dedup as distinct, how many are actually paraphrases the agent should have reinforced?
-
-**Method.** A small audit pass across real `USER.md` / `MEMORY.md` files at a handful of thresholds (0.5 / 0.6 / 0.7 / 0.8 Jaccard containment), surfacing the near-duplicate pairs at each. Inspect the borderline cases by hand. Adjust the constant.
-
-**Why it waits.** Calibration without data is just renaming the guess. v0.5 (with confidence + reinforcement + sharpened type-routing shipped in v0.4.23) gives the agent the right writes; v0.6 measures whether the dedup machinery around those writes is correctly tuned.
-
-### AC. Skill telemetry + curator
-
-**Telemetry.** A sidecar `.usage.json` inside `skills/` tracks per-skill
-activity: view count, use count, patch count, created/last-used timestamps,
-and state (`active` / `stale` / `archived`). The `skill` tool updates this on
-every `load`, `run`, and `patch` call. No external service — local JSON only.
-Pinned skills (AT, v0.5) appear in telemetry but the state machine never
-auto-transitions them.
-
-**Curator.** A background pass (triggered by inactivity, default every 7 days)
-that reviews the agent-created skill library and consolidates it. The curator's
-job is not to delete — it is to **promote**: a narrow skill like
-`debug-parser-may` should become a subsection of a broader
-`debugging-patterns` umbrella, with the session detail demoted to
-`references/`. Skills unused for 30+ days are flagged `stale`; 90+ days move
-to `skills/.archive/` via the AT auto-archive primitive (recoverable). Each
-consolidating delete records `absorbed_into: <umbrella>` on the archived
-skill's frontmatter so the audit trail is intact. Bundled `@alpi/*` skills
-and pinned skills (AT) are never touched.
-
-**Algorithmic + LLM signals.** Two consolidation triggers run together: an
-algorithmic pass detects prefix clusters (`debug-parser-*`, `research-bug-*`)
-as candidates regardless of LLM judgment, and an LLM pass runs the umbrella-
-building review on the candidate set. Cheap candidates first means the LLM
-spends tokens only on real ambiguity.
-
-**Reconciliation paranoia.** When the LLM declares a consolidation in its
-structured output ("absorbed `debug-parser-may` into `debugging-patterns`"),
-the curator reconciles that against the actual tool-call audit log of the
-review thread. Mismatches surface as warnings in the per-run report rather
-than silently trusting the model. Same pattern is applicable to any place
-alpi asks the LLM to summarise what it just did.
-
-**Per-run reports.** Each curator run writes a report under
-`~/.alpi/<profile>/logs/curator/<timestamp>/` (`run.json` + `REPORT.md`)
-covering classification, consolidations attempted, mismatches, and skills
-moved. Audit trail for any future "what happened to skill X" question.
-
-**What this fixes.** Skills today accumulate as flat narrow entries because
-the agent writes them turn-by-turn without a global view. The curator adds
-that global view without requiring the agent to reason about the whole library
-on every turn.
-
-**Design constraint.** The curator is post-hoc and read-only during the
-session: it never creates skills, only consolidates what already exists.
-Skill creation remains agent-driven mid-session, guided by the AS
-system-prompt rules that ship in v0.5. Keeping creation and curation on
-separate clocks avoids the failure mode where an aggressive in-loop creator
-fragments the library faster than any review pass can consolidate it.
-
-### BD. Model-family conditional prompt guidance
-
-Different model families empirically need different amounts of tool-use
-enforcement in the system prompt. Today alpi ships a single prompt tuned for
-one family; other families occasionally under-call tools or skip verification
-steps that the prompt assumes will happen by default. BD introduces a small
-per-family routing table so the heavy enforcement blocks (mandatory tool use,
-persistence, verification, missing-context handling) only ship to the families
-that need them, and the rest run on the shorter baseline prompt.
-
-**Why v0.6 not v0.5.** v0.5's mobile work + post-turn reviewer generate the
-cross-model session data needed to calibrate which blocks each family actually
-needs. Promote to v0.6 once `agent.log` has a clear signal.
-
-### CM.1. Memory audit CLI
-
-`alpi memory audit` is the operator-facing view over the memory quality
-machinery. It does not mutate memory by default. It reports:
-
-- current `USER.md` / `MEMORY.md` usage and pressure;
-- low-confidence entries eligible for expiry;
-- near-duplicate clusters at multiple thresholds;
-- operational-state-looking entries that should probably live in sessions,
-  not memory;
-- queued promotion candidates awaiting preview/apply;
-- compaction frequency and ratio distribution, read from
-  `logs/compaction.jsonl` — evidence for promoting compaction policy to
-  config (or keeping it as constants).
-
-The command is also the natural home for the v0.6 dedup calibration work: run
-the audit at 0.5 / 0.6 / 0.7 / 0.8 containment, inspect borderline clusters,
-then adjust the cutoff if the data supports it.
-
-**Why v0.6.** v0.5 creates the promotion queue and tightens skill/tool
-eligibility. v0.6 adds the review surface once there is enough real memory data
-to make audit output meaningful.
-
-### CM.2. Safe skill import
-
-alpi should be able to reuse local skill material from other agent stacks or
-a checked-out Git repository without adopting a marketplace. `alpi skill
-import <dir|zip>` is a local, explicit import path:
-
-1. inspect the source and show a preview;
-2. reject path traversal, hidden files, symlinks escaping the root, and
-   unsupported nested layouts;
-3. map compatible files into alpi's flat `scripts/`, `references/`, `assets/`,
-   `secrets/`, and `state/` contract;
-4. run the same scanner and schema validation as `skill(add_file)` /
-   `skill(create)`;
-5. install only after explicit confirmation.
-
-**Non-goals.** No remote registry, no automatic dependency install, no silent
-update flow, and no external trust database. A user can still `git clone` a
-skill repository, inspect it, and import from disk.
-
-### CM.3. Tool availability checks
-
-Some tools depend on runtime capabilities that may be missing in a minimal
-profile: browser automation needs Playwright/Chromium, STT needs its speech
-stack, TTS may need audio/conversion helpers, and MCP tools depend on
-configured servers. v0.6 adds an optional per-tool availability probe once
-broken visible tools show up in real use.
-
-The design is deliberately narrow — a runtime probe layer, not a policy
-engine:
-
-- probes are fast and cached briefly;
-- unavailable tools are either hidden from the model or shown in diagnostics
-  with a clear reason;
-- checks never install dependencies automatically;
-- the normal tool implementation remains the source of truth for final runtime
-  errors.
-
-**Promotion condition.** Keep this as v0.6 work, not v0.5, unless v0.5 profiles
-repeatedly expose tools that fail before doing useful work.
-
-### TTS.1. Local TTS engine + daemon-served voice
-
-Today speech synthesis goes through Microsoft Edge TTS — free, no API key, but
-**online-only** and called from two different places: `edge_tts` in the daemon
-(`alpi/tools/tts.py`) and a direct WebSocket from Rust in the desktop
-(`desktop/src-tauri/src/tts.rs`). That split is the only remaining
-network-dependent piece of the speech path and has already produced three
-desynchronised voice shortlists (`VOICE_POOL`, `VOICE_SHORTLIST` in desktop,
-`_VOICE_SHORTLIST` in the daemon CLI), two cache layouts, and a duplicated
-synthesis pipeline that any future engine would have to port twice.
-
-**Phase 1 — research + benchmark.** Compare candidates on quality, on-disk
-size, cold/warm latency, license, and locale coverage: Piper (rhasspy/piper,
-MIT, ~25–60 MB/voice, ONNX/CPU), Kokoro-82M (Apache, ~330 MB single model
-covering many languages), Apple AVSpeechSynthesizer (macOS-only, native,
-zero install cost, FFI from Rust), espeak-ng as accessibility fallback. Pick
-one default engine plus optionally Apple on macOS.
-
-**Phase 2 — daemon-served synthesis.** Bundle the chosen engine in the daemon
-behind the existing `tts` tool, expose a host RPC for the desktop, and
-deprecate `src-tauri/src/tts.rs`. Edge TTS reduces to an opt-in "cloud"
-provider for users who want the larger catalog and accept the network call.
-The tray-without-daemon scenario that motivated the Rust path is no longer a
-real use case now that the desktop boots the embedded daemon.
-
-**Phase 3 — single voice catalog.** Collapse the three shortlists into one
-daemon-owned voice list (engine + locale + gender + cloud/local flag) that
-setup, settings and the per-peer deterministic hashing all consume. Surface a
-"browse all" expander against the full provider catalog when the active engine
-exposes one.
-
-**Why it waits.** Edge TTS works and is free, so this is not user-visible
-breakage today. The trigger to promote is either (a) a real offline-first
-deployment where the Microsoft endpoint is unreachable, or (b) AQ (continuous
-voice mode) being promoted from Future — continuous voice on a cloud endpoint
-is a latency and cost problem this item fixes upstream.
-
-## Future releases
-
-Items worth doing, but not part of the current cycle.
+### Voice
 
 | ID | Item | Status |
 |---|---|---|
-| BF-8 | Skill versioning / install-update flows — pinned install source, update preview/diff, revision metadata | 🔵 |
-| CM.4 | Semantic recall over past sessions — vector/semantic retrieval over session history when `session_search` stops being good enough. | 🔵 |
-| TERM.2 | Docker / SSH terminal backends — isolated or remote command execution for unattended profiles once local sandboxing is no longer enough. | 🔵 |
-| OPS.1 | Evidence digest — periodic synthetic report that surfaces the signals every evidence-gated roadmap item depends on (approval-prompt frequency, compaction rate, inactive skills, broken tools, promotion-queue backlog). | 🔵 |
-| ALP.5 | Blob transfer — `link.put_blob` / `link.get_blob`, content-addressed, chunked AEAD. Depends on real workgroup usage to justify the protocol complexity. | 🔵 |
-| ALP.6 | Workgroup search — semantic search over workgroup transcripts via local RAG (pairs with **BA**). Depends on BA landing and workgroups being heavily used. | 🔵 |
+| TTS.1 | Local TTS engine + daemon-served voice — choose a local/default engine, move synthesis behind the daemon, and collapse desktop/TUI/gateway voice catalogs into one host-served catalog. | 🔵 |
+
+### UX.1 / UX.2 / UX.3. Owned client experience
+
+Desktop and mobile are the primary product surfaces. Gateways stay
+text-first by design. v0.7 should make the owned clients materially
+better than any chat bridge:
+
+- structured clarifications render as native choices instead of asking
+  the user to type an option number;
+- approvals, file mutations, memory promotions, skill imports, and
+  workgroup events become stable cards with state, actions, and replay;
+- gateway replies can include a lightweight "open in Alpi" pointer when
+  the flow needs rich UI.
+
+**Non-goals.** No Telegram/Discord/Slack button framework, no
+gateway-specific onboarding, no attempt to turn chat apps into Alpi
+clients. Gateways remain useful because they are ubiquitous and
+automation-friendly, but they are not where new product UX goes.
+
+### AC.1 / AC.2. Skill curator
+
+The curator is post-hoc, not in-loop. It runs after real skill usage has
+accumulated, reads `skills/.usage.json`, and writes an auditable report
+under `logs/curator/<timestamp>/`.
+
+The first phase only recommends:
+
+- stale skills unused for a configurable evidence window;
+- prefix/name clusters such as `debug-parser-*`;
+- narrow session-specific skills that should become `references/` under
+  a broader umbrella;
+- imported skills with newer upstream revisions.
+
+The second phase applies only after preview:
+
+- archive stale skills through the existing `.archive/` path;
+- mark consolidating archives with `absorbed_into: <skill>`;
+- preserve original bodies in `references/`;
+- never mutate bundled `@alpi/*` skills or pinned skills.
+
+The curator reconciles its LLM summary against the actual tool-call log
+of the curator run. If the summary says a skill was absorbed but no tool
+call did that, the report marks a mismatch instead of trusting prose.
+
+### BF-8. Skill versioning / install-update flows
+
+Safe import (SK.2) handles first install. BF-8 handles what happens
+after that: revision metadata, pinned source path/URL, update preview,
+diff, and rollback metadata. This still is not a marketplace. A user
+chooses a source, inspects the diff, and confirms the update.
 
 ### CM.4. Semantic recall over past sessions
 
-Session search is the right first layer: cheap, explicit, and easy to reason
-about. Semantic recall over sessions waits until lexical search starts missing
-real queries or session volume becomes large enough that users regularly ask
-"when did we discuss X?" and cannot find it.
+Lexical `session_search` stays the first layer: cheap, explicit, easy to
+reason about. Semantic recall becomes worthwhile when session volume
+grows and users ask "when did we discuss X?" but cannot find it.
 
-When promoted, reuse the existing local embedding/store primitives instead of
-introducing an external memory provider. The first shape is an opt-in session
-index plus an explicit recall/search tool; automatic injection only comes later
-if manual retrieval proves valuable.
-
-### TERM.2. Docker / SSH terminal backends
-
-Local terminal execution plus optional OS sandboxing is enough for the current
-product. Docker and SSH become worthwhile when unattended profiles need
-stronger isolation, reproducibility, or a remote machine that the agent can
-damage without touching its own code or the user's main workstation.
-
-The first implementation should be conservative: one configured backend per
-profile, no provider zoo, no cloud sandbox abstraction, and no automatic
-migration of local files. Promote only when a real unattended workflow is
-blocked by the current local sandbox.
-
-### OPS.1. Evidence digest
-
-Most of the items in this roadmap promote on evidence — CM.3 ("if broken
-visible tools show up"), CM.4 ("when lexical search stops being good enough"),
-TERM.2 ("when a real unattended workflow is blocked"), AI(1.c) ("when there is
-enough memory data to recalibrate dedup"), BD ("once `agent.log` has a clear
-signal"). Today that evidence lives in raw logs and only surfaces when the
-creator happens to notice it.
-
-`alpi ops digest [--since 7d]` synthesises the signals into a single report:
-
-- approval-prompt frequency and the top patterns that triggered them (input
-  for further `tools.terminal.approval.allowlist` glob entries);
-- auto-compact rate, mean before/after ratio per model (read from
-  `logs/compaction.jsonl`);
-- inactive skills count and reasons (input for any future bundled-skill
-  decision and tuning the four eligibility fields);
-- tools that failed before doing useful work (the gate condition for CM.3);
-- memory promotion-queue backlog and CM.1 audit highlights;
-- session-search misses or unanswered "when did we discuss X" queries (the
-  gate condition for CM.4).
-
-**Non-goal.** Not a dashboard, not a metrics service, not always-on
-telemetry — a stateless `alpi ops digest` command the creator runs every few
-weeks to decide which gates have flipped.
-
-### ALP.5. Blob transfer
-
-Two new verbs — `link.put_blob(bytes, hash)` and `link.get_blob(hash)` — for
-sharing artefacts that have no business inline in a JSON envelope: a PDF, a
-dataset, the output of a skill, a screenshot.
-
-**Wire shape.** Content-addressed by SHA-256; the recipient stores under
-`~/.alpi/<profile>/alp/blobs/<hash>` and dedups across calls. Chunked
-transfer (default 64 KiB) with per-chunk AEAD; the final frame carries the
-full-blob signature so the receiver can verify end-to-end. Caps: per-call max
-blob size (config knob, 100 MiB default), per-day inbound budget per peer
-(separate from the spending ledger — this gates *bytes*, not LLM cost).
-
-**Pairs naturally with workgroups.** A workgroup post can reference a blob
-(`{text: "see attached", blob: "<hash>"}`); the hub fans it out and members
-`link.get_blob` from the hub on demand. No cloud upload, no third-party
-intermediary.
-
-**Why it waits.** ALP.5 is only worth the protocol complexity if workgroups
-are heavily used and blobs are a real bottleneck. That evidence doesn't exist
-yet. Promote when a workgroup user reports "I can't share a file".
+When promoted, reuse the existing local embedding/store primitives. The
+first shape is opt-in indexing plus an explicit recall/search tool.
+Automatic injection only comes later if manual retrieval proves valuable.
 
 ### ALP.6. Workgroup search
 
-`workgroup.search(workgroup_id, query)` returns the top-K posts matching a
-query, ranked by semantic similarity using the local RAG index (**BA**). The
-hub indexes its own transcript on disk; members search remotely via the
-existing ALP transport.
+`workgroup.search(workgroup_id, query)` returns top matching posts from
+a workgroup transcript. The hub indexes its local transcript; members
+search through existing host/workgroup surfaces rather than receiving a
+new protocol family.
 
-**Why it waits.** BA (v0.5) provides the RAG primitive, but workgroups
-also need to be heavily used enough that scrolling becomes a real
-friction. That second condition doesn't hold yet.
+This depends on CM.4's retrieval layer being stable. If semantic session
+recall is not reliable enough, workgroup search waits.
+
+### ORG.1. Organization workspace convention
+
+The organization scaffold exists, but there is no first-class runtime
+organization or shared filesystem. v0.7 documents the cheapest useful
+pattern: designate one hub/secretary profile as the organization
+workspace owner. Other agents reach it via existing `@hub` / `link.ask`
+flows, and workgroup outputs land there by convention.
+
+This is intentionally not the workspace overlay or first-class org
+entity. Those designs wait for real user demand.
+
+### CL.1. Prompt caching across providers
+
+Cached input is the highest-leverage cost optimization for tool-heavy
+turns, but it depends on stable prompt prefixes. v0.7 scopes it in this
+order:
+
+1. audit `Engine` and compaction for non-deterministic early-message
+   mutation;
+2. add marker support for providers that require explicit cache control;
+3. add optional cache-key hints for auto-cache providers where useful;
+4. measure cache savings in `ops digest`.
+
+Explicit cache APIs are adopted only where implicit/marker caching shows
+measurable miss-rate problems.
+
+### BD. Model-family conditional prompt guidance
+
+Different model families need different operational guidance. BD adds a
+small routing table so heavy enforcement blocks are injected only for
+families that real logs show need them. Other families keep the shorter
+baseline prompt.
+
+Promotion condition: `ops digest` or LLM test traces show repeated,
+family-specific failures such as under-calling tools, skipping
+verification, or closing turns early despite open commitments.
+
+### TTS.1. Local TTS engine + daemon-served voice
+
+Today speech synthesis is duplicated: daemon-side TTS and desktop-side
+TTS have separate catalogs and caches. v0.7 chooses one daemon-owned
+voice path:
+
+1. benchmark local candidates on quality, disk size, latency, license,
+   and locale coverage;
+2. expose daemon-hosted synthesis and voice listing over the host plane;
+3. deprecate desktop-local synthesis;
+4. keep cloud TTS as an explicit opt-in provider if useful.
+
+This is the prerequisite for any future continuous voice mode.
+
+## Future releases
+
+Items worth doing, but not part of the next two cycles.
+
+| ID | Item | Status |
+|---|---|---|
+| TERM.2 | Docker / SSH terminal backends — isolated or remote command execution for unattended profiles once local sandboxing is no longer enough. | 🔵 |
+| ALP.5 | Blob transfer — `link.put_blob` / `link.get_blob`, content-addressed, chunked AEAD. Depends on real workgroup usage to justify the protocol complexity. | 🔵 |
+| ORG.2 | Organization workspace overlay / first-class org entity — shared filesystem roots, roles, and shared RAG once convention-only org workspaces prove insufficient. | 🔵 |
+
+### TERM.2. Docker / SSH terminal backends
+
+Local terminal execution plus optional OS sandboxing is enough for the
+current product. Docker and SSH become worthwhile when unattended
+profiles need stronger isolation, reproducibility, or a remote machine
+that the agent can damage without touching its own code or the user's
+main workstation.
+
+The first implementation should be conservative: one configured backend
+per profile, no provider zoo, no cloud sandbox abstraction, and no
+automatic migration of local files.
+
+### ALP.5. Blob transfer
+
+Two new verbs — `link.put_blob(bytes, hash)` and `link.get_blob(hash)` —
+for sharing artefacts that have no business inline in a JSON envelope:
+a PDF, a dataset, the output of a skill, a screenshot.
+
+**Wire shape.** Content-addressed by SHA-256; the recipient stores under
+`~/.alpi/<profile>/alp/blobs/<hash>` and dedups across calls. Chunked
+transfer with per-chunk AEAD; the final frame carries the full-blob
+signature so the receiver can verify end-to-end.
+
+**Why it waits.** ALP.5 is only worth the protocol complexity if
+workgroups are heavily used and blobs are a real bottleneck.
+
+### ORG.2. Organization workspace overlay / first-class org entity
+
+If ORG.1's convention-only pattern becomes insufficient, two heavier
+designs remain available:
+
+1. **Workspace overlay.** `cfg.workspace_path` becomes a list:
+   `[profile_workspace, org_workspace]`. File tools read both and write
+   to the profile root by default, with an explicit shared scope.
+2. **First-class org entity.** `~/.alpi/orgs/<id>/workspace/` with
+   member profiles, roles, event fan-out, and a shared RAG index.
+
+Both add a real trust model, so they stay out of v0.7 unless users hit a
+specific organization-sharing wall.
 
 ---
 
@@ -448,13 +514,13 @@ already analysed; the "why now?" question is the open one.
 |---|---|---|
 | ALP.3+ | Multi-task workgroups (`multitask: true`, letter-prefixed task IDs) | Single-task model has not yet proven insufficient |
 | ALP.7 | Pinned shared memory per workgroup (hub-anchored `wiki.md`) | Heavy new surface (concurrency, history, roles) only justified if workgroups become heavily used |
-| Signal | Signal gateway via signal-cli | Strong privacy fit, but phone-number/SIM setup and daemon dependency make it less important once mobile is planned |
+| Signal | Signal gateway via signal-cli | Strong privacy fit, but new gateways are out of scope now that Alpi-owned clients are the primary mobile surface |
 | AY | Skills marketplace — federated, signed, never centralised | Presupposes an active author community + adoption for discovery to matter |
 | AI (2) | Memory v2 — TUI panel (collapsible, edit-in-place, "forget this") | UI weight for niche audience (power users with much memory); item 1 covers the substantive part |
 | AI (3) | Entity memory — structured SQLite store (`entities`/`relations`/`observations`) replacing the markdown memory model, with selective injection per turn instead of full-blob system prompt | Markdown memory hasn't demonstrably broken yet for real users; AI(1) is a quality pass on the existing model. Promote when a user reports `MEMORY.md` is large enough that prompt size / cost becomes a real bottleneck. BA's shared `store` primitive (v0.5) is designed so the migration is incremental when promoted. |
 | AJ | Browser realism — Cloudflare / captcha / fingerprint depth | Cat-and-mouse perpetuo; without concrete failing use case, scope can't close |
 | AQ | Continuous voice mode (push-to-talk, hotword loops) | Niche unless voice becomes a real surface for users |
-| Webhook | Inbound HTTP triggers (HMAC-signed) | "Swiss-army-knife trap" — needs real demand, not speculation |
+| Webhook | Inbound HTTP triggers (HMAC-signed) | Automation bridge, not product UX; needs repeated real demand before adding another inbound surface |
 | Cost telemetry | Cost split per-skill / per-tool | Only pays off with many skills + notably different costs; today neither holds |
 | BG re-audit | LiteLLM quarterly review — bump pin, run LLM probe, swap if better alternative emerges | Standing maintenance task; cadence + procedure documented in `OPERATIONS.md → Dependencies` |
 | Matrix E2EE | Olm/Megolm sessions, encryption store, SAS device verification, encrypted-room send/read tests | MVP intentionally unencrypted; promote when an external user runs the bot against a non-self-hosted homeserver |

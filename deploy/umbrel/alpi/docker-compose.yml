@@ -7,7 +7,7 @@ services:
       APP_PORT: 8080
 
   server:
-    image: satoshiltd/alpi-umbrel:0.4.47
+    image: satoshiltd/alpi-umbrel:0.4.48
     restart: on-failure
     stop_grace_period: 1m
     user: "1000:1000"

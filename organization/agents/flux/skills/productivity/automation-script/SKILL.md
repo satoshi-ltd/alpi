@@ -54,6 +54,8 @@ When a manual process is being considered for automation — before any code is 
 ## State
 Track every automation written so failures surface and dead automations are pruned.
 
+Tables live under `state/db.sqlite` (per-skill). Schema is additive-only — `CREATE TABLE IF NOT EXISTS`, never `ALTER` destructively or `DROP`.
+
 ```sql
 CREATE TABLE IF NOT EXISTS automations (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,

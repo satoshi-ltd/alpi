@@ -60,6 +60,8 @@ P0: prevents recurrence. P1: reduces likelihood or impact. P2: improves detectio
 ## State
 Persist post-mortems so patterns and recurrence become visible.
 
+Tables live under `state/db.sqlite` (per-skill). Schema is additive-only — `CREATE TABLE IF NOT EXISTS`, never `ALTER` destructively or `DROP`.
+
 ```sql
 CREATE TABLE IF NOT EXISTS post_mortems (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,

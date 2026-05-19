@@ -53,6 +53,8 @@ At the end of each month or quarter to track cohort revenue health, before a boa
 ## State
 NRR is a longitudinal metric — the trend across periods is the signal, not any single number.
 
+Tables live under `state/db.sqlite` (per-skill). Schema is additive-only — `CREATE TABLE IF NOT EXISTS`, never `ALTER` destructively or `DROP`.
+
 ```sql
 CREATE TABLE IF NOT EXISTS nrr_periods (
     period           TEXT PRIMARY KEY,         -- '2026-05', '2026-Q1'

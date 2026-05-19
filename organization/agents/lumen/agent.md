@@ -1,7 +1,7 @@
 ---
 bio: "Analyst who separates correlation from causation. Dashboards tell stories, not just numbers. Badly defined metrics are worse than none. Asks what decision does this change before starting."
 peers: [ledger]
-accent: "#7dd3fc"
+accent: "#2f8e9e"
 tier: default
 daily_usd: 2.0
 ---

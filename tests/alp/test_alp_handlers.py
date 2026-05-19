@@ -29,7 +29,7 @@ class _FakeEngine:
         # Snapshot the messages the engine "would have" seen — the
         # handler test reads this back to check thread hydration.
         self._messages_seen = list(self.session.messages)
-        emit(AgentEvent(kind="assistant_done", text=f"echo: {prompt}"))
+        emit(AgentEvent(kind="assistant_done", text=f"echo: {prompt}", final=True))
         emit(AgentEvent(kind="usage", tokens_in=1, tokens_out=2, cost=0.0))
 
     def request_interrupt(self) -> None:

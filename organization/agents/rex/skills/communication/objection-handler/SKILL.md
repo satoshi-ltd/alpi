@@ -44,6 +44,8 @@ When a prospect raises an objection during or after a sales conversation, or whe
 ## State
 The objection library is the highest-leverage sales asset — patterns of objections reveal positioning gaps and the responses that work.
 
+Tables live under `state/db.sqlite` (per-skill). Schema is additive-only — `CREATE TABLE IF NOT EXISTS`, never `ALTER` destructively or `DROP`.
+
 ```sql
 CREATE TABLE IF NOT EXISTS objections (
     id                INTEGER PRIMARY KEY AUTOINCREMENT,

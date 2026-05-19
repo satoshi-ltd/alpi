@@ -59,6 +59,8 @@ Before a discovery call (preparation) or after one (debrief). Also use when revi
 ## State
 Discovery patterns repeat across prospects — persist call notes so fit signals and recurring problems surface.
 
+Tables live under `state/db.sqlite` (per-skill). Schema is additive-only — `CREATE TABLE IF NOT EXISTS`, never `ALTER` destructively or `DROP`.
+
 ```sql
 CREATE TABLE IF NOT EXISTS calls (
     id                  INTEGER PRIMARY KEY AUTOINCREMENT,

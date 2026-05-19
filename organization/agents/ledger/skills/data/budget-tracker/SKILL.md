@@ -50,6 +50,8 @@ Status: On track (< 5% variance), Watch (5–15%), Over budget (> 15%).
 ## State
 Budget tracking is variance over time — single-period variance is noise; structural drift is signal.
 
+Tables live under `state/db.sqlite` (per-skill). Schema is additive-only — `CREATE TABLE IF NOT EXISTS`, never `ALTER` destructively or `DROP`.
+
 ```sql
 CREATE TABLE IF NOT EXISTS budget_lines (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,

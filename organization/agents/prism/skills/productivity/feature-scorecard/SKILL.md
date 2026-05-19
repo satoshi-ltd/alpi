@@ -44,6 +44,8 @@ When the Roadmap workgroup needs to compare feature candidates for prioritizatio
 ## State
 Persist every score so feature priority can be compared and re-evaluated.
 
+Tables live under `state/db.sqlite` (per-skill). Schema is additive-only — `CREATE TABLE IF NOT EXISTS`, never `ALTER` destructively or `DROP`.
+
 ```sql
 CREATE TABLE IF NOT EXISTS scorecards (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -55,6 +55,8 @@ Use `web_search` when you need to find sources. Use `web_fetch` to read the full
 ## State
 Competitor intelligence accumulates over time — single snapshots are misleading. Persist findings so trajectory is queryable.
 
+Tables live under `state/db.sqlite` (per-skill). Schema is additive-only — `CREATE TABLE IF NOT EXISTS`, never `ALTER` destructively or `DROP`.
+
 ```sql
 CREATE TABLE IF NOT EXISTS competitors (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,

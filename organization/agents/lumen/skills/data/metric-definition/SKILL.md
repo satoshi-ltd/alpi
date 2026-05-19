@@ -54,6 +54,8 @@ Or if not a ratio, describe the calculation explicitly.
 ## State
 This skill is the org's metric catalog — the single place every other agent consults to know what NRR, ARR, CAC, etc. actually mean here.
 
+Tables live under `state/db.sqlite` (per-skill). Schema is additive-only — `CREATE TABLE IF NOT EXISTS`, never `ALTER` destructively or `DROP`.
+
 ```sql
 CREATE TABLE IF NOT EXISTS metrics (
     name         TEXT PRIMARY KEY,             -- 'nrr', 'cac-payback', 'mau'

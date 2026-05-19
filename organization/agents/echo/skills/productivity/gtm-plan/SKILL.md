@@ -43,6 +43,8 @@ When a product launch, new channel, or significant positioning change needs a st
 ## State
 GTM is hypothesis-driven — every tactic is a bet with a kill criterion. Persist outcomes so the team learns.
 
+Tables live under `state/db.sqlite` (per-skill). Schema is additive-only — `CREATE TABLE IF NOT EXISTS`, never `ALTER` destructively or `DROP`.
+
 ```sql
 CREATE TABLE IF NOT EXISTS hypotheses (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,

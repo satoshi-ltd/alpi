@@ -1,7 +1,7 @@
 ---
 bio: "Investigative journalist turned analyst. 200 sources a day, separates signal from noise. Distrusts LinkedIn thought leaders. Spots patterns before they become trends. Always cites primary sources."
 peers: [echo, prism, vera]
-accent: "#93c5fd"
+accent: "#3d7ea6"
 tier: strong
 daily_usd: 2.0
 ---

@@ -1,38 +1,4 @@
-"""Canonical org bootstrap for the 17-agent agentic company scaffold.
-
-Agent identities live in organization/agents/<name>/agent.md:
-  frontmatter  →  bio, accent, tier, daily_usd (optional model override)
-  body         →  soul written to memories/AGENT.md
-
-Skills live in organization/agents/<name>/skills/ and
-organization/common/skills/ (shared across multiple agents).
-
-MCP servers live in organization/agents/<name>/mcp.yaml (optional).
-  Format: servers: {<name>: {command, args, env}} — merged into config.yaml.
-
-Workgroup structure and peer graph are defined in this file.
-Run any time to nuke and rebuild the full org from scratch.
-
-Steps:
-  1.  Nuke all 17 org profiles (hard remove).
-  2.  Create each profile fresh (alpi profile create).
-  3.  Copy all API keys from organization/.env (fallback: ~/.alpi/.env).
-  4.  Write memories/AGENT.md (soul from organization/agents/<name>/agent.md).
-  5.  Write memories/USER.md (org context for this agent's role and relationships).
-  6.  Patch config.yaml — model + public_bio + accent + budget.daily_usd + MCP servers.
-  7.  Install daemon (idempotent).
-  8.  Wait for ALP Ed25519 keypairs to be generated.
-  9.  Read pubkeys; cross-pin peer graph.
-  10. Restart daemon; verify every edge responds to ping.
-  11. Create 4 standing workgroups; members join each.
-  12. Install skills into each profile's skills/ directory.
-
-WARNING: wipes ~/.alpi/profiles/{vera,zeta,prism,echo,ledger,forge,sentinel,
-         canvas,quill,rex,fern,hub,lumen,flux,lex,atlas,archive} every run.
-
-Usage:
-    uv run python organization/setup.py
-"""
+"""Org bootstrap — wipes and rebuilds every profile under ~/.alpi/profiles from organization/agents/."""
 from __future__ import annotations
 
 import argparse
@@ -52,36 +18,37 @@ AGENTS_DIR = Path(__file__).parent / "agents"
 WORKGROUPS_DIR = Path(__file__).parent / "workgroups"
 COMMON_SKILLS_DIR = Path(__file__).parent / "common" / "skills"
 
-# ---------------------------------------------------------------------------
-# CONFIG — change these to retune the whole org without touching agent files
-# ---------------------------------------------------------------------------
+MODEL_DEFAULT = "openai/gpt-5.4-mini"
+MODEL_STRONG  = "anthropic/claude-sonnet-4-6"
 
-MODEL_DEFAULT = "openai/gpt-5.4-mini"           # execution agents (cheap service turns)
-MODEL_STRONG  = "anthropic/claude-sonnet-4-6"   # council + on-demand specialists
-
-BUDGET_DAILY_DEFAULT = 2.0    # USD/day  — default tier agents
-BUDGET_DAILY_STRONG  = 5.0    # USD/day  — strong tier agents (overridden per-agent below)
-BUDGET_WG            = 50.0   # USD lifetime fallback if workgroup.md omits budget_usd
-
-# ---------------------------------------------------------------------------
-# Common skills — shared across multiple agents
-# ---------------------------------------------------------------------------
-# Maps "category/skill-name" (relative to organization/common/skills/) to the
-# list of agent names that should receive a copy of that skill.
+BUDGET_DAILY_DEFAULT = 2.0
+BUDGET_DAILY_STRONG  = 5.0
+BUDGET_WG            = 50.0
 
 COMMON_SKILLS: dict[str, list[str]] = {
     "finance/unit-economics": ["echo", "ledger"],
 }
 
-# ---------------------------------------------------------------------------
-# Peer graph
-# ---------------------------------------------------------------------------
-# Peer graph — derived dynamically from agent.md + workgroup.md files
-# ---------------------------------------------------------------------------
-# Each agent declares its peers in agent.md frontmatter (peers: [...]).
-# Workgroup hub↔member pairs are added automatically from workgroup.md.
-# Edges are filtered to agents that actually exist — removing an agent
-# folder silently drops its edges without breaking the bootstrap.
+# Voice ids must be in the canonical shortlist (desktop/src/components/settings/util.js + alpi/cli.py _VOICE_SHORTLIST).
+AGENT_VOICES: dict[str, str] = {
+    "vera":     "en-US-AriaNeural",
+    "echo":     "en-GB-SoniaNeural",
+    "fern":     "en-AU-NatashaNeural",
+    "canvas":   "en-US-JennyNeural",
+    "lumen":    "fr-FR-DeniseNeural",
+    "archive":  "de-DE-KatjaNeural",
+    "quill":    "it-IT-ElsaNeural",
+    "hub":      "pt-BR-FranciscaNeural",
+    "atlas":    "en-US-GuyNeural",
+    "rex":      "en-AU-WilliamNeural",
+    "forge":    "es-ES-AlvaroNeural",
+    "zeta":     "en-GB-RyanNeural",
+    "prism":    "fr-FR-HenriNeural",
+    "ledger":   "en-US-GuyNeural",
+    "sentinel": "en-AU-WilliamNeural",
+    "flux":     "en-GB-RyanNeural",
+    "lex":      "es-ES-AlvaroNeural",
+}
 
 
 def derive_edges(
@@ -100,24 +67,16 @@ def derive_edges(
             seen.add(key)
             edges.append((a, b))
 
-    # declared peer edges from each agent.md
     for agent in agents:
         for peer in agent.get("peers", []):
             _add(agent["name"], peer)
 
-    # workgroup hub↔member edges (required for workgroup.create/join)
     for wg in workgroups:
         hub = wg["hub"]
         for member in wg["members"]:
             _add(hub, member)
 
     return edges
-
-# ---------------------------------------------------------------------------
-# Workgroup loader — reads organization/workgroups/<name>/workgroup.md
-# ---------------------------------------------------------------------------
-# frontmatter: hub, members (list), budget_usd (optional, falls back to BUDGET_WG)
-# body:        briefing text written to meta.yaml on the hub's profile
 
 
 def load_workgroups() -> list[dict]:
@@ -132,7 +91,6 @@ def load_workgroups() -> list[dict]:
             fail(f"{p}: missing YAML frontmatter")
         front = yaml.safe_load(m.group(1)) or {}
         briefing = raw[m.end():].strip()
-        # collapse the multi-line briefing to a single space-separated string
         briefing = " ".join(briefing.split())
         wgs.append({
             "name":       p.parent.name,
@@ -143,9 +101,6 @@ def load_workgroups() -> list[dict]:
         })
     return wgs
 
-# ---------------------------------------------------------------------------
-# Terminal colours
-# ---------------------------------------------------------------------------
 
 GREY, BLUE, GREEN, YELLOW, RED, RESET = (
     "\033[2m", "\033[36m", "\033[32m", "\033[33m", "\033[31m", "\033[0m",
@@ -173,10 +128,6 @@ def run(cmd: list[str], **kw) -> subprocess.CompletedProcess:
     return subprocess.run(cmd, capture_output=True, text=True, check=False, **kw)
 
 
-# ---------------------------------------------------------------------------
-# Agent loader — reads organization/agents/<name>.md
-# ---------------------------------------------------------------------------
-
 _FRONT_RE = re.compile(r"^---\s*\n(.*?)\n---\s*\n", re.DOTALL)
 
 
@@ -190,7 +141,7 @@ def _parse_agent_file(path: Path) -> dict:
 
     tier = front.get("tier", "default")
     if "model" in front:
-        model = front["model"]             # explicit override beats tier
+        model = front["model"]
     elif tier == "strong":
         model = MODEL_STRONG
     else:
@@ -199,7 +150,7 @@ def _parse_agent_file(path: Path) -> dict:
     daily_usd = float(front.get("daily_usd", BUDGET_DAILY_DEFAULT))
 
     return {
-        "name":      path.parent.name,    # <name>/agent.md → name is parent dir
+        "name":      path.parent.name,
         "bio":       front.get("bio", ""),
         "accent":    front.get("accent", "#888888"),
         "tier":      tier,
@@ -218,9 +169,7 @@ def load_agents() -> list[dict]:
 
 
 def load_agent_mcps(agent_name: str, env: dict) -> dict:
-    """Return MCP servers from agents/<name>/mcp.yaml, filtered to those whose
-    required env vars are already present. Servers with no env requirements
-    (e.g. fetch) are always included."""
+    """Return MCP servers from agents/<name>/mcp.yaml filtered by available env vars."""
     mcp_file = AGENTS_DIR / agent_name / "mcp.yaml"
     if not mcp_file.exists():
         return {}
@@ -242,7 +191,6 @@ def load_agent_mcps(agent_name: str, env: dict) -> dict:
 
 
 def _make_user_md(agent: dict, workgroups: list[dict]) -> str:
-    """Generate memories/USER.md — org context visible to the agent each session."""
     name = agent["name"].capitalize()
 
     wg_lines = []
@@ -276,13 +224,7 @@ Tasks open with `#task`, dialogue happens among peers, and the hub decides `#don
 """
 
 
-# ---------------------------------------------------------------------------
-# Step 1 — read .env from default profile
-# ---------------------------------------------------------------------------
-
-
 def read_env_lines() -> str:
-    # organization/.env takes precedence; fall back to ~/.alpi/.env
     org_env = Path(__file__).parent / ".env"
     if org_env.exists():
         return org_env.read_text()
@@ -290,11 +232,6 @@ def read_env_lines() -> str:
     if default_env.exists():
         return default_env.read_text()
     fail(f"no .env found — add API keys to organization/.env or {default_env}")
-
-
-# ---------------------------------------------------------------------------
-# Step 2 — nuke
-# ---------------------------------------------------------------------------
 
 
 def _hard_remove(home: Path, name: str) -> None:
@@ -314,19 +251,13 @@ def nuke_profiles(agents: list[dict]) -> None:
     time.sleep(0.5)
 
 
-# ---------------------------------------------------------------------------
-# Step 3 — create + configure profiles
-# ---------------------------------------------------------------------------
-
-
-ALP_BIO_LIMIT = 200  # ALP wire cap for public_bio in bytes
+ALP_BIO_LIMIT = 200
 
 
 def _truncate_bio(bio: str, limit: int = ALP_BIO_LIMIT) -> str:
     encoded = bio.encode("utf-8")
     if len(encoded) <= limit:
         return bio
-    # cut at last space before the byte limit so we don't break mid-word
     truncated = encoded[: limit - 1].decode("utf-8", errors="ignore")
     last_space = truncated.rfind(" ")
     if last_space > 0:
@@ -374,6 +305,9 @@ def bootstrap_profiles(agents: list[dict], workgroups: list[dict], env_lines: st
         cfg["public_bio"] = _truncate_bio(agent["bio"])
         cfg.setdefault("tui", {})["accent"] = agent["accent"]
         cfg.setdefault("budget", {})["daily_usd"] = agent["daily_usd"]
+        voice = AGENT_VOICES.get(agent["name"])
+        if voice:
+            cfg.setdefault("tools", {}).setdefault("tts", {})["voice"] = voice
 
         mcps = load_agent_mcps(agent["name"], env_dict)
         if mcps:
@@ -403,11 +337,6 @@ def bootstrap_profiles(agents: list[dict], workgroups: list[dict], env_lines: st
     ok("daemon installed")
 
 
-# ---------------------------------------------------------------------------
-# Step 4 — wait for ALP keypairs
-# ---------------------------------------------------------------------------
-
-
 def wait_for_keypairs(agents: list[dict]) -> None:
     step("waiting for ALP keypairs to be generated")
     names = [a["name"] for a in agents]
@@ -422,11 +351,6 @@ def wait_for_keypairs(agents: list[dict]) -> None:
     if pending:
         fail(f"ALP keys not generated for {sorted(pending)} — is the daemon running?")
     ok(f"all {len(names)} ALP keypairs present")
-
-
-# ---------------------------------------------------------------------------
-# Step 5 — cross-pin peers
-# ---------------------------------------------------------------------------
 
 
 def cross_pin(agents: list[dict], edges: list[tuple[str, str]]) -> None:
@@ -448,24 +372,23 @@ def cross_pin(agents: list[dict], edges: list[tuple[str, str]]) -> None:
     ok(f"{len(edges) * 2} pins written")
 
 
-# ---------------------------------------------------------------------------
-# Step 6 — restart daemon + verify connectivity
-# ---------------------------------------------------------------------------
-
-
 def restart_and_verify(edges: list[tuple[str, str]]) -> None:
     step("restarting daemon")
     res = run(["alpi", "daemon", "restart"])
     if res.returncode != 0:
         fail(f"daemon restart failed: {res.stderr.strip()}")
 
+    time.sleep(5)
+
     pending: set[tuple[str, str]] = set()
     for a, b in edges:
         pending.add((a, b))
         pending.add((b, a))
 
-    step(f"verifying {len(pending)} peer connections (ping)")
-    deadline = time.time() + 60
+    deadline_s = 180
+    step(f"verifying {len(pending)} peer connections (ping, up to {deadline_s}s)")
+    deadline = time.time() + deadline_s
+    backoff = 1.0
     while time.time() < deadline and pending:
         for pair in list(pending):
             caller, target = pair
@@ -473,17 +396,13 @@ def restart_and_verify(edges: list[tuple[str, str]]) -> None:
             if probe.returncode == 0:
                 pending.discard(pair)
         if pending:
-            time.sleep(2)
+            time.sleep(backoff)
+            backoff = min(backoff * 1.5, 4.0)
 
     if pending:
         details = ", ".join(f"{a}→{b}" for a, b in sorted(pending))
-        fail(f"peers unreachable after 60s: {details}")
-    ok(f"all pings answered")
-
-
-# ---------------------------------------------------------------------------
-# Step 7 — create workgroups + members join
-# ---------------------------------------------------------------------------
+        fail(f"peers unreachable after {deadline_s}s: {details}")
+    ok("all pings answered")
 
 
 def _latest_wg_dir(hub_name: str) -> Path | None:
@@ -535,11 +454,6 @@ def setup_workgroups(workgroups: list[dict]) -> None:
         time.sleep(0.2)
 
 
-# ---------------------------------------------------------------------------
-# Step 8 — install skills into profiles
-# ---------------------------------------------------------------------------
-
-
 def install_skills(agents: list[dict]) -> None:
     step("installing skills into profiles")
     agent_names = {a["name"] for a in agents}
@@ -553,7 +467,6 @@ def install_skills(agents: list[dict]) -> None:
                 shutil.rmtree(dst_skills)
             shutil.copytree(src_skills, dst_skills)
 
-    # common skills — copy to each listed agent
     for skill_path, targets in COMMON_SKILLS.items():
         src = COMMON_SKILLS_DIR / skill_path
         if not src.exists():
@@ -563,7 +476,6 @@ def install_skills(agents: list[dict]) -> None:
             if target not in agent_names:
                 warn(f"common skill target '{target}' not in agents; skipping")
                 continue
-            # preserve category/skill-name structure inside profile's skills/
             dst = PROFILES_DIR / target / "skills" / skill_path
             dst.parent.mkdir(parents=True, exist_ok=True)
             if dst.exists():
@@ -576,11 +488,6 @@ def install_skills(agents: list[dict]) -> None:
         if dst_skills.exists():
             skill_count = sum(1 for _ in dst_skills.rglob("SKILL.md"))
             ok(f"{name:<10}  {skill_count} skill(s) installed")
-
-
-# ---------------------------------------------------------------------------
-# Summary
-# ---------------------------------------------------------------------------
 
 
 def print_summary(
@@ -625,11 +532,6 @@ def print_summary(
     print()
 
 
-# ---------------------------------------------------------------------------
-# Main
-# ---------------------------------------------------------------------------
-
-
 def main() -> int:
     parser = argparse.ArgumentParser(
         description=__doc__,
@@ -638,11 +540,7 @@ def main() -> int:
     parser.add_argument(
         "--skills-only",
         action="store_true",
-        help=(
-            "Re-install skills into existing profiles without nuking them. "
-            "Safe targeted refresh — only touches each profile's skills/ "
-            "subdirectory; sessions, memory, keys, .env are preserved."
-        ),
+        help="Re-install skills into existing profiles without nuking them.",
     )
     args = parser.parse_args()
 
@@ -650,7 +548,6 @@ def main() -> int:
     workgroups = load_workgroups()
     names = [a["name"] for a in agents]
 
-    # workgroup hub/members must exist — fail early with a clear message
     for spec in workgroups:
         for role in [spec["hub"]] + spec["members"]:
             if role not in names:

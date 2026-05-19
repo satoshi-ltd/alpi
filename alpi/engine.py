@@ -108,6 +108,8 @@ class AgentEvent:
     tokens_out: int = 0
     cost: float = 0.0
     tool_id: str = ""
+    # True only on the turn's terminal `assistant_done`; preamble emissions stay False. Contract in AGENTS.md.
+    final: bool = False
 
 
 EventSink = Callable[[AgentEvent], None]
@@ -333,7 +335,7 @@ class Engine:
                         })
                         continue
                     if content:
-                        emit(AgentEvent(kind="assistant_done", text=content))
+                        emit(AgentEvent(kind="assistant_done", text=content, final=True))
                     # Last assistant-only message wins as the final reply.
                     final_assistant = content
                     turn_completed = True
@@ -441,7 +443,7 @@ class Engine:
                 peer_reply = _last_peer_reply(turn_tools)
                 if peer_reply:
                     final_assistant = peer_reply
-                    emit(AgentEvent(kind="assistant_done", text=peer_reply))
+                    emit(AgentEvent(kind="assistant_done", text=peer_reply, final=True))
                     emit(AgentEvent(kind="done"))
                     return
 

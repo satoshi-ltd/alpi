@@ -43,6 +43,12 @@ alpi is a local agent runtime:
 checks budget, injects transient context, appends user input, streams
 LLM output, executes tool calls, records usage, and saves the session.
 
+`AgentEvent(kind="assistant_done")` can fire for pre-tool narration as
+well as the final answer. Consumers that build a canonical reply
+(`chat --once`, host chat, ALP, scheduler delivery, tests) must use
+only events with `final=True`. The TUI may consume every
+`assistant_done` because it rewrites the live assistant bubble.
+
 `sessions/` is local human chat history. TUI resume, desktop profile
 history, and host `latest_session` use only sessions classified as
 `chat`; scheduled, gateway, workgroup, and system-prefixed turns must
@@ -50,11 +56,15 @@ not appear as normal profile chats.
 
 Scheduled jobs run through `alpi chat --once --emit-events --no-save`
 with `ALPI_PLATFORM=cron`. The scheduler reads stdout events and
-delivers the final reply, but no session file is saved. `serve()`
-runs each `tick()` in a dedicated `ThreadPoolExecutor`, and
-`host.schedule.fire` wraps `fire_by_id` in `run_in_executor`, so a
-long `subprocess.run` job can't starve sibling-profile coroutines on
-the daemon loop.
+delivers the final reply, but no session file is saved. `run_job()`
+returns `JobOutcome`: `ok`, operational `message`, clean `reply`,
+`delivered_to`, and `silent`. `schedule.done` / `schedule.failed`
+events carry those fields so clients render notifications from
+explicit data rather than parsing `message`. `reply` is capped at
+2000 chars in host events. `serve()` runs each `tick()` in a dedicated
+`ThreadPoolExecutor`, and `host.schedule.fire` wraps `fire_by_id` in
+`run_in_executor`, so a long `subprocess.run` job can't starve
+sibling-profile coroutines on the daemon loop.
 
 Jobs with `no_agent: true` skip the LLM entirely. The `prompt` is
 shlex-tokenized and exec'd directly (`shell=False`); `${ALPI_HOME}`
@@ -188,6 +198,18 @@ advertises the host's external name or Tailscale IP). Tokens at
 `~/.alpi/host/devices.yaml`, generated from `alpi setup → Devices`.
 The host surface includes chat, sessions, workgroups, pairing-token
 management, probes, schedule verbs, and daemon restart.
+
+`host.events.subscribe` emits live `{event, data, at}` frames.
+`host.events.history({since?, kinds?, limit?})` returns recent frames
+from a bounded in-memory ring backed by compacted
+`<server.home>/host/events.jsonl`, so desktop/mobile can backfill
+events missed while disconnected.
+
+Host model/device helpers are additive and tolerant of partial failure:
+`host.providers.ollama_models` returns `{models, errors}` so one
+unreachable local Ollama endpoint does not hide the rest, and
+`host.voice.preview` returns a short daemon-synthesized MP3 preview
+as base64 with controlled errors for missing TTS dependencies.
 
 Clients must not read `~/.alpi/` directly or spawn `alpi` as a
 subprocess. ALP (`alpi/alp/`) is separate (peer-to-peer). `Peer TCP

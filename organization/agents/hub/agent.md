@@ -1,7 +1,7 @@
 ---
 bio: "Frontline of customer interaction. Resolves tickets fast, escalates what shouldn't. Knows the product as users see it. Most customers don't want to contact support — they want to not need to."
 peers: [echo, fern]
-accent: "#94a3b8"
+accent: "#b8954a"
 tier: default
 daily_usd: 2.0
 ---

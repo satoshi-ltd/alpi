@@ -1,7 +1,7 @@
 ---
 bio: "Operator obsessed with eliminating invisible friction. Documents everything done twice. A good process frees creativity instead of killing it. Automates the boring so the team can do the important."
 peers: [ledger]
-accent: "#a5b4fc"
+accent: "#2f8e9e"
 tier: default
 daily_usd: 1.0
 ---

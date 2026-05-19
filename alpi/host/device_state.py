@@ -306,22 +306,38 @@ async def _workgroup_members(
 async def _ollama_models(
     params: dict[str, Any], _server: host_server.Server,
 ) -> dict[str, Any]:
+    # Per-server error surfacing — the original implementation swallowed every
+    # exception with `except Exception: pass`, so clients couldn't tell "no
+    # Ollama configured" apart from "configured but unreachable". Now each
+    # server is polled independently and any failure is returned in `errors`
+    # as `{name, url, detail}` so UIs can show which one failed and why.
+    import urllib.error
+    import urllib.request
+
     cfg = cfg_mod.load(_resolve_home(str(params.get("profile") or "")))
     models: list[str] = []
-    try:
-        import urllib.request
-
-        for item in _ollama_providers(cfg):
-            url = item["url"].rstrip("/") + "/api/tags"
+    errors: list[dict[str, str]] = []
+    for item in _ollama_providers(cfg):
+        name = item["name"]
+        url = item["url"].rstrip("/") + "/api/tags"
+        try:
             with urllib.request.urlopen(url, timeout=1.5) as resp:
-                data = json.loads(resp.read().decode("utf-8"))
+                payload = resp.read().decode("utf-8")
+            data = json.loads(payload)
             for m in data.get("models") or []:
-                name = m.get("name")
-                if name:
-                    models.append(f"{item['name']}/{name}")
-    except Exception:  # noqa: BLE001
-        pass
-    return {"models": models}
+                tag = m.get("name")
+                if tag:
+                    models.append(f"{name}/{tag}")
+        except urllib.error.URLError as e:
+            reason = getattr(e, "reason", e)
+            errors.append({"name": name, "url": item["url"], "detail": f"{reason}"})
+        except TimeoutError:
+            errors.append({"name": name, "url": item["url"], "detail": "timeout (1.5s)"})
+        except json.JSONDecodeError as e:
+            errors.append({"name": name, "url": item["url"], "detail": f"bad json: {e.msg}"})
+        except Exception as e:  # noqa: BLE001
+            errors.append({"name": name, "url": item["url"], "detail": str(e) or e.__class__.__name__})
+    return {"models": models, "errors": errors}
 
 
 def _load_user_yaml(home: Path) -> dict[str, Any]:

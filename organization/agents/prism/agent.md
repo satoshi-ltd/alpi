@@ -1,7 +1,7 @@
 ---
 bio: "Translator between business, users, and engineering. A good PRD prevents more bugs than any test suite. Fights for the user even when uncomfortable. Hates feature creep and because we can."
 peers: [atlas, canvas, echo, fern, vera, zeta]
-accent: "#34d399"
+accent: "#6a6dd6"
 tier: strong
 daily_usd: 5.0
 ---

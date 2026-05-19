@@ -48,6 +48,8 @@ Choose at least two options. "Do nothing" counts as an option and must appear if
 ## State
 Tech debt accumulates. A queryable log makes prioritization and progress visible.
 
+Tables live under `state/db.sqlite` (per-skill). Schema is additive-only — `CREATE TABLE IF NOT EXISTS`, never `ALTER` destructively or `DROP`.
+
 ```sql
 CREATE TABLE IF NOT EXISTS tech_debt (
     id                INTEGER PRIMARY KEY AUTOINCREMENT,

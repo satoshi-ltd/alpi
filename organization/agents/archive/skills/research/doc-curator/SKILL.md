@@ -56,6 +56,8 @@ Status definitions:
 ## State
 The doc inventory IS the curation surface — a queryable list of every doc with ownership and freshness.
 
+Tables live under `state/db.sqlite` (per-skill). Schema is additive-only — `CREATE TABLE IF NOT EXISTS`, never `ALTER` destructively or `DROP`.
+
 ```sql
 CREATE TABLE IF NOT EXISTS docs (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,

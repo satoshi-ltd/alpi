@@ -65,6 +65,8 @@ Before running an experiment (design phase) or after it completes (analysis phas
 ## State
 A/B test history is leverage — past tests tell you what doesn't work, prevent re-running, and surface effect-size patterns.
 
+Tables live under `state/db.sqlite` (per-skill). Schema is additive-only — `CREATE TABLE IF NOT EXISTS`, never `ALTER` destructively or `DROP`.
+
 ```sql
 CREATE TABLE IF NOT EXISTS ab_tests (
     id                INTEGER PRIMARY KEY AUTOINCREMENT,

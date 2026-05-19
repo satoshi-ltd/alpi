@@ -58,6 +58,8 @@ For each option:
 ## State
 The canonical decision archive. Every workgroup `#done` produces an entry here.
 
+Tables live under `state/db.sqlite` (per-skill). Schema is additive-only — `CREATE TABLE IF NOT EXISTS`, never `ALTER` destructively or `DROP`.
+
 ```sql
 CREATE TABLE IF NOT EXISTS decisions (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,

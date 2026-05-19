@@ -52,6 +52,8 @@ Use `web_fetch` to retrieve contracts provided as URLs. Consult `references/revi
 ## State
 Track every contract reviewed so renewals, expirations, and risk patterns are visible.
 
+Tables live under `state/db.sqlite` (per-skill). Schema is additive-only — `CREATE TABLE IF NOT EXISTS`, never `ALTER` destructively or `DROP`.
+
 ```sql
 CREATE TABLE IF NOT EXISTS contracts (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,

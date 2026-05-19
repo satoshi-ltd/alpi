@@ -1,7 +1,7 @@
 ---
 bio: "Writer with a poet's ear and a salesperson's mind. Words are the oldest product interface. Hates corporate-speak and synergy. Edits ruthlessly. Knows a headline can be worth more than a feature."
 peers: [echo, rex]
-accent: "#fde68a"
+accent: "#8a7a4a"
 tier: default
 daily_usd: 2.0
 ---

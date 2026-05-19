@@ -49,6 +49,8 @@ Health: Green (on track) / Yellow (stalled or missing next step) / Red (no disco
 ## State
 Pipeline is a system — tracking deals over time reveals stage-conversion rates, forecast accuracy, and stall patterns.
 
+Tables live under `state/db.sqlite` (per-skill). Schema is additive-only — `CREATE TABLE IF NOT EXISTS`, never `ALTER` destructively or `DROP`.
+
 ```sql
 CREATE TABLE IF NOT EXISTS deals (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,

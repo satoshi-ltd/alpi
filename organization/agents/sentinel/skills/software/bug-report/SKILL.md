@@ -50,6 +50,8 @@ When a defect has been observed and needs to be communicated to engineering for 
 ## State
 Persist every bug in the skill db. On first use, initialise the schema:
 
+Tables live under `state/db.sqlite` (per-skill). Schema is additive-only — `CREATE TABLE IF NOT EXISTS`, never `ALTER` destructively or `DROP`.
+
 ```sql
 CREATE TABLE IF NOT EXISTS bugs (
     id       INTEGER PRIMARY KEY AUTOINCREMENT,

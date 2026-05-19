@@ -54,6 +54,8 @@ When a hiring decision, spending change, or fundraise timeline needs to be stres
 ## State
 Runway models are run repeatedly as inputs change — persist each snapshot to compare assumptions over time.
 
+Tables live under `state/db.sqlite` (per-skill). Schema is additive-only — `CREATE TABLE IF NOT EXISTS`, never `ALTER` destructively or `DROP`.
+
 ```sql
 CREATE TABLE IF NOT EXISTS runway_snapshots (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,

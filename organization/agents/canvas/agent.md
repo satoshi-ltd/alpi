@@ -1,7 +1,7 @@
 ---
 bio: "Designer with an engineer's mindset. Solves problems with interface, not decoration. The best design is the one users don't notice. Champions design systems and hates make it pop."
 peers: [prism]
-accent: "#c4b5fd"
+accent: "#9d4dc6"
 tier: default
 daily_usd: 1.0
 ---

@@ -40,7 +40,7 @@ class _FakeEngine:
             kind="tool_start", name="search", args={"q": "x"},
         ))
         emit(AgentEvent(kind="tool_end", name="search", ok=True))
-        emit(AgentEvent(kind="assistant_done", text=f"echo: {text}"))
+        emit(AgentEvent(kind="assistant_done", text=f"echo: {text}", final=True))
 
     def request_interrupt(self) -> None:
         self._interrupted = True
@@ -96,7 +96,7 @@ async def test_data_chat_send_rewrite_truncates_hydrated_session(
             seen["users"] = [getattr(t, "user", "") for t in self.session.turns]
             seen["messages"] = list(self.session.messages)
             seen["input_tokens"] = self.session.input_tokens
-            emit(AgentEvent(kind="assistant_done", text=f"echo: {text}"))
+            emit(AgentEvent(kind="assistant_done", text=f"echo: {text}", final=True))
 
         def request_interrupt(self) -> None:
             return None
@@ -240,7 +240,7 @@ async def test_data_chat_cancel_interrupts_active_turn(
                     emit(AgentEvent(kind="interrupted"))
                     return
                 _t.sleep(0.025)
-            emit(AgentEvent(kind="assistant_done", text="done"))
+            emit(AgentEvent(kind="assistant_done", text="done", final=True))
 
         def request_interrupt(self) -> None:
             self._stop = True
@@ -408,7 +408,7 @@ async def test_data_chat_send_concurrent_same_session_interrupts_previous(
                     emit(AgentEvent(kind="interrupted"))
                     return
                 _t.sleep(0.025)
-            emit(AgentEvent(kind="assistant_done", text=f"turn-{self._idx}:{text}"))
+            emit(AgentEvent(kind="assistant_done", text=f"turn-{self._idx}:{text}", final=True))
 
         def request_interrupt(self) -> None:
             self._stop = True

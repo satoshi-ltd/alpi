@@ -82,6 +82,28 @@ every ``host.*`` verb the UI calls.
   peer-to-peer (`link.*`, `workgroup.*`) and is **not** what the client
   calls.
 
+- **Engine `assistant_done` events: `final=True` marks the deliverable.**
+  The engine emits `AgentEvent(kind="assistant_done", ...)` for **every**
+  assistant message, including preamble narration that comes *before*
+  tool calls ("Let me check things first.", etc.). Only the event that
+  closes the turn carries `final=True`. Consumers that build the
+  canonical reply (scheduler delivery, gateway, ALP) **must** filter on
+  `ev.final`; otherwise preamble leaks into the message users receive.
+  The TUI is the exception — it consumes every `assistant_done` to
+  rewrite the active bubble, which is correct for live streaming.
+
+- **`schedule.done` / `schedule.failed` events carry structured output.**
+  The scheduler tick emits `{profile, job_id, kind, message, reply,
+  delivered_to, silent}` on the host event bus. `message` is the
+  operational status for daemon logs and ops UIs. `reply` is the clean
+  agent/script output, capped at 2000 chars, intended for native
+  notification bodies. `delivered_to` tells clients whether the daemon
+  already pushed the reply through a gateway or `send_message`; `silent`
+  means a successful maintenance job produced no user-facing output and
+  native notifications should be suppressed. Do not parse `message` in
+  clients when an explicit field exists. When changing the contract,
+  update desktop/mobile consumers and bump the docs here.
+
 ## Testing
 
 ```bash

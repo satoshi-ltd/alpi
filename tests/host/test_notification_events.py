@@ -96,11 +96,15 @@ def test_schedule_tick_emits_done(tmp_path: Path, captured: list, monkeypatch) -
     (sched_dir / "jobs.json").write_text(
         '[{"id":"j1","kind":"cron","expression":"* * * * *","argv":["true"]}]'
     )
-    monkeypatch.setattr(sched_run, "run_job", lambda job, h: (True, "ran"))
+    monkeypatch.setattr(
+        sched_run, "run_job",
+        lambda job, h: sched_run.JobOutcome(True, "ran", reply="agent reply text"),
+    )
     sched_run.tick(home)
     hits = [d for k, d in captured if k == "schedule.done"]
     assert hits and hits[0]["job_id"] == "j1"
     assert hits[0]["profile"] == "atlas"
+    assert hits[0]["reply"] == "agent reply text"
 
 
 def test_schedule_tick_emits_failed(tmp_path: Path, captured: list, monkeypatch) -> None:
@@ -110,11 +114,13 @@ def test_schedule_tick_emits_failed(tmp_path: Path, captured: list, monkeypatch)
     (sched_dir / "jobs.json").write_text(
         '[{"id":"j2","kind":"cron","expression":"* * * * *","argv":["false"]}]'
     )
-    monkeypatch.setattr(sched_run, "run_job", lambda job, h: (False, "boom"))
+    monkeypatch.setattr(sched_run, "run_job", lambda job, h: sched_run.JobOutcome(False, "boom"))
     sched_run.tick(home)
     hits = [d for k, d in captured if k == "schedule.failed"]
     assert hits and hits[0]["job_id"] == "j2" and hits[0]["message"] == "boom"
     assert hits[0]["profile"] == "rex"
+    # Failed jobs carry an empty reply — no notification body to render.
+    assert hits[0]["reply"] == ""
 
 
 def _wg_with_hub(tmp_path: Path):
