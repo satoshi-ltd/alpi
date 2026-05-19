@@ -88,6 +88,68 @@ def test_list_sessions_limit_reads_recent_first(tmp_path: Path) -> None:
     assert [r["id"] for r in rows] == ["new"]
 
 
+def test_list_sessions_exposes_first_and_last_turn_previews(tmp_path: Path) -> None:
+    """first_user keeps the THREAD TOPIC (oldest turn); last_user / last_assistant track the MOST RECENT turn (mobile inbox preview)."""
+    sid = "multi"
+    p = tmp_path / "sessions" / f"{sid}.json"
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps({
+        "id": sid,
+        "model": "openrouter/x",
+        "started_at": 1_714_000_000.0,
+        "turns": [
+            {"at": 1_714_000_000.0, "user": "what is the weather", "assistant": "sunny"},
+            {"at": 1_714_000_500.0, "user": "and tomorrow",        "assistant": "rain"},
+        ],
+    }), encoding="utf-8")
+
+    row = next(r for r in data_sessions.list_sessions(tmp_path) if r["id"] == sid)
+    assert row["first_user"] == "what is the weather"
+    assert row["last_user"] == "and tomorrow"
+    assert row["last_assistant"] == "rain"
+    assert row["turn_count"] == 2
+
+
+def test_list_sessions_first_equals_last_for_single_turn(tmp_path: Path) -> None:
+    _seed_session(tmp_path, "single", "hola")
+    row = next(r for r in data_sessions.list_sessions(tmp_path) if r["id"] == "single")
+    assert row["first_user"] == "hola"
+    assert row["last_user"] == "hola"
+    assert row["last_assistant"] == "ok"
+
+
+def test_list_sessions_handles_assistantless_last_turn(tmp_path: Path) -> None:
+    """Mid-stream session: last turn missing the `assistant` key → `last_assistant` empty, `last_user` still surfaced."""
+    sid = "mid"
+    p = tmp_path / "sessions" / f"{sid}.json"
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps({
+        "id": sid,
+        "model": "openrouter/x",
+        "started_at": 1_714_000_000.0,
+        "turns": [
+            {"at": 1_714_000_000.0, "user": "hello", "assistant": "hi"},
+            {"at": 1_714_000_500.0, "user": "siguiente pregunta"},
+        ],
+    }), encoding="utf-8")
+
+    row = next(r for r in data_sessions.list_sessions(tmp_path) if r["id"] == sid)
+    assert row["last_user"] == "siguiente pregunta"
+    assert row["last_assistant"] == ""
+
+
+def test_list_sessions_empty_turns_gives_empty_previews(tmp_path: Path) -> None:
+    p = tmp_path / "sessions" / "empty.json"
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps({
+        "id": "empty", "model": "x", "started_at": 1_714_000_000.0, "turns": [],
+    }), encoding="utf-8")
+    row = next(r for r in data_sessions.list_sessions(tmp_path) if r["id"] == "empty")
+    assert row["first_user"] == ""
+    assert row["last_user"] == ""
+    assert row["last_assistant"] == ""
+
+
 def test_list_sessions_orders_by_content_not_filesystem_mtime(tmp_path: Path) -> None:
     old = _seed_session(
         tmp_path, "old", "older chat",
@@ -153,3 +215,38 @@ async def test_data_session_read_method_not_found_for_unknown_id(
     response = await srv._dispatch(body)
     assert response is not None
     assert response.get("error", {}).get("code") == -32004
+
+
+@pytest.mark.asyncio
+async def test_profile_summary_latest_session_includes_preview_fields(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """End-to-end: `host.profile.summaries` carries last_user + last_assistant under latest_session so the mobile inbox renders the preview without an extra RPC."""
+    from alpi import config as cfg_mod
+    from alpi.alp.keys import load_or_generate
+    from alpi.host import device_state as host_device_state
+
+    home = tmp_path / "h"
+    home.mkdir()
+    cfg = cfg_mod.Config(home=home, model="openai/gpt-5.4-mini")
+    cfg_mod.save(cfg)
+    load_or_generate(home)
+    (home / "sessions").mkdir(exist_ok=True, parents=True)
+    (home / "sessions" / "abc.json").write_text(json.dumps({
+        "id": "abc",
+        "started_at": 100.0,
+        "turns": [
+            {"at": 100.5, "user": "recuerdame X", "assistant": "listo te aviso"},
+        ],
+    }))
+    monkeypatch.setattr(host_device_state.home_mod, "_ROOT", home)
+    monkeypatch.setattr(data_handlers, "_resolve_home", lambda profile: home)
+
+    srv = host_server.Server(home=home)
+    host_device_state.register(srv)
+    resp = await srv._dispatch({
+        "id": "p", "method": "host.profile.summaries", "params": {},
+    })
+    latest = resp["result"]["profiles"][0]["latest_session"]
+    assert latest["first_user"] == "recuerdame X"
+    assert latest["last_assistant"] == "listo te aviso"

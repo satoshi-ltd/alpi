@@ -2,7 +2,7 @@ manifestVersion: 1
 id: alpi
 category: ai
 name: Alpi
-version: "0.4.49"
+version: "0.4.50"
 tagline: Local-first personal AI agent
 description: >-
   Alpi is a lightweight personal AI agent for terminal-first workflows,

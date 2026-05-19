@@ -442,6 +442,8 @@ def _latest_chat_for(home: Path) -> dict[str, Any] | None:
             "updated_at": row.get("updated_at"),
             "started_at": row.get("started_at"),
             "first_user": row["first_user"],
+            "last_user": row.get("last_user"),
+            "last_assistant": row.get("last_assistant"),
             "kind": row.get("kind"),
         }
     return None

@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.4.50 — 2026-05-19 — session list exposes last-turn previews for mobile inbox
+
+Adds two truncated fields to every row returned by `host.sessions.list`. The mobile inbox previously had to choose between rendering the thread topic (`first_user`, oldest turn) or pulling the full session per row just to show the latest activity — neither is acceptable for a scrolling list.
+
+- `alpi/host/sessions.py`: `list_sessions` now emits `last_user` and `last_assistant` alongside `first_user`. Both are `_truncate`d to the same `_FIRST_USER_MAX` ceiling, so a one-line preview fits without leaking session context. Single-turn sessions report `first == last`; empty-turn rows report empty strings; no client-side post-processing is required.
+- `alpi/host/device_state.py`: `_latest_chat_for` forwards the same fields into the `device.state.latest_chat` payload so the mobile home screen can pick them up without a second round trip.
+- Tests in `tests/host/test_sessions.py` pin the contract: multi-turn ordering (first = oldest, last = newest), single-turn identity (first == last), and empty-turn defensiveness.
+- Bumped Umbrel package metadata and image tags to `0.4.50`.
+
 ## v0.4.49 — 2026-05-19 — schedule auto-infers `no_agent` for shell-style prompts
 
 Closes a foot-gun in the `schedule` tool: a scheduled job whose prompt looked like a shell command (`python3 .../say.py "..."`) but omitted `no_agent=true` was accepted as a regular agent prompt — at fire time the daemon then fed the shell line to the LLM as user input instead of running the script. Caller-side mistakes (LLM forgetting the flag) now self-correct at `add` time.

@@ -47,6 +47,12 @@ def list_sessions(home: Path, limit: int | None = None) -> list[dict[str, Any]]:
         first_user = ""
         if turns:
             first_user = _truncate(str(turns[0].get("user") or ""), _FIRST_USER_MAX)
+        last_user = ""
+        last_assistant = ""
+        if turns:
+            tail = turns[-1] if isinstance(turns[-1], dict) else {}
+            last_user = _truncate(str(tail.get("user") or ""), _FIRST_USER_MAX)
+            last_assistant = _truncate(str(tail.get("assistant") or ""), _FIRST_USER_MAX)
         started_at = data.get("started_at")
         last_turn_at = 0.0
         if turns:
@@ -64,6 +70,8 @@ def list_sessions(home: Path, limit: int | None = None) -> list[dict[str, Any]]:
             "started_at": started_at,
             "updated_at": updated_at,
             "first_user": first_user,
+            "last_user": last_user,
+            "last_assistant": last_assistant,
             "model": data.get("model"),
             "turn_count": len(turns),
             "kind": _classify(first_user),
