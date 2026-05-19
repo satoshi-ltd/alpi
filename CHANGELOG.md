@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.4.49 — 2026-05-19 — schedule auto-infers `no_agent` for shell-style prompts
+
+Closes a foot-gun in the `schedule` tool: a scheduled job whose prompt looked like a shell command (`python3 .../say.py "..."`) but omitted `no_agent=true` was accepted as a regular agent prompt — at fire time the daemon then fed the shell line to the LLM as user input instead of running the script. Caller-side mistakes (LLM forgetting the flag) now self-correct at `add` time.
+
+- `alpi/tools/schedule.py`: when `add` is called with `no_agent=None` and the prompt parses (via `shlex`) into `python` / `python3` / `python3.X` + a path-like first non-flag arg (`/`, `~`, `${ALPI_HOME}`, `$ALPI_HOME`), infer `no_agent=true`. Flags like `-u` / `-O` are skipped; quoted paths survive `shlex` correctly. Path validation still runs, so a mis-pointed script fails fast at `add` time instead of silently rotting in `jobs.json` until it fires. Explicit `no_agent=False` is respected without override.
+- Output of `add` includes `· auto-inferred no_agent=true (prompt is a shell command)` when the inference triggered, so both the LLM and the user see the correction.
+- A legitimate LLM prompt that happens to begin with `python` (`python is a language, explain it`) is NOT inferred — the discriminator is the first non-flag token, not just the first word.
+- Bumped Umbrel package metadata and image tags to `0.4.49`.
+- Tests added: 13 cases in `tests/core/test_schedule_auto_no_agent.py` covering the helper heuristic (python forms, prose rejection, flag-skip, quoted paths, `${ALPI_HOME}` expansion) and end-to-end `add` action (auto-inference triggers, persists `no_agent: true`, output suffix, path validator still rejects bad paths, explicit `False` is respected, normal LLM prompts unchanged). Full suite **1761 passed / 75 skipped**.
+
 ## v0.4.48 — 2026-05-19 — host event backfill + scheduled reply contracts
 
 Host-plane reliability release for desktop/mobile clients and scheduled jobs.

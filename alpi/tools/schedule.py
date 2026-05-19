@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+import shlex
 import uuid
 from typing import Any
 
@@ -163,6 +164,10 @@ class Schedule(Tool):
         if action == "add":
             if not prompt:
                 return ToolResult(ok=False, output="", error="'prompt' is required")
+            auto_no_agent = False
+            if no_agent is None and _looks_like_shell_command(prompt):
+                no_agent = True
+                auto_no_agent = True
             if no_agent:
                 from alpi.scheduler.run import validate_no_agent_command
                 err = validate_no_agent_command(prompt, home)
@@ -243,9 +248,10 @@ class Schedule(Tool):
             else:
                 hint = "start the daemon ('alpi daemon start' or install it) to fire jobs"
 
+            suffix = " · auto-inferred no_agent=true (prompt is a shell command)" if auto_no_agent else ""
             return ToolResult(
                 ok=True,
-                output=f"Added {job['kind']} job {job['id']} — {hint}",
+                output=f"Added {job['kind']} job {job['id']} — {hint}{suffix}",
             )
 
         if action == "update":
@@ -374,6 +380,24 @@ _AUTO_DELIVERY_RE = re.compile(
     r"(?:telegram|matrix|email|mail|webhook)\b",
     re.I | re.S,
 )
+
+
+def _looks_like_shell_command(prompt: str) -> bool:
+    # Discriminator: shlex-parsed first non-flag arg after `python*` is path-like; `"python is a language"` must stay on the agent path.
+    try:
+        argv = shlex.split((prompt or "").strip())
+    except ValueError:
+        return False
+    if not argv:
+        return False
+    head = argv[0].rsplit("/", 1)[-1]
+    if not (head in {"python", "python3"} or head.startswith("python3.")):
+        return False
+    for tok in argv[1:]:
+        if tok.startswith("-"):
+            continue
+        return tok.startswith(("/", "~", "${ALPI_HOME}", "$ALPI_HOME"))
+    return False
 
 
 def _validate_prompt(prompt: str, platform: str) -> str | None:
