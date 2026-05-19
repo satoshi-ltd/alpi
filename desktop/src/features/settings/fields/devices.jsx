@@ -359,6 +359,9 @@ function PairDeviceModal({ onClose, onPaired }) {
         >
           <div className={styles.label}>Host</div>
           <div className={styles.mono}>
+            {ready && payload.scope ? (
+              <span className={scopeChipClass(payload.scope, styles)}>{payload.scope}</span>
+            ) : null}
             {ready ? `${payload.host}:${payload.port}` : "…"}
           </div>
           <div className={styles.label} style={{ marginTop: "var(--space-3)" }}>
@@ -368,7 +371,7 @@ function PairDeviceModal({ onClose, onPaired }) {
             {payload?.token ? `…${payload.token.slice(-8)}` : "…"}
           </div>
           <div className={styles.muted} style={{ marginTop: "var(--space-3)" }}>
-            Scan with the Alpi app on the other device, or copy the link below.
+            {scopeHint(payload?.scope)}
           </div>
         </div>
       </div>
@@ -397,5 +400,34 @@ function PairDeviceModal({ onClose, onPaired }) {
         onPrimary={pair}
       />
     </Modal>
+  );
+}
+
+function scopeChipClass(scope, styles) {
+  if (scope === "tailscale") return styles.scopeChipTailscale;
+  if (scope === "lan") return styles.scopeChipLan;
+  if (scope === "custom") return styles.scopeChipConfigured;
+  return styles.scopeChip;
+}
+
+const SCOPE_HINTS = {
+  tailscale:
+    "Reachable on any network the other device is on. " +
+    "Scan with the Alpi app on the other device, or copy the link below.",
+  lan:
+    "Same Wi-Fi only — the other device must share this network. " +
+    "Switch to Tailscale in Settings → Devices → Network for remote pairing.",
+  custom:
+    "Using your custom advertised hostname. " +
+    "Scan with the Alpi app on the other device, or copy the link below.",
+  umbrel:
+    "Reachable at the Umbrel hostname. " +
+    "Scan with the Alpi app on the other device, or copy the link below.",
+};
+
+function scopeHint(scope) {
+  return (
+    SCOPE_HINTS[scope] ||
+    "Scan with the Alpi app on the other device, or copy the link below."
   );
 }

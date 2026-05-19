@@ -169,8 +169,6 @@
   color: var(--ink-2);
   align-self: flex-start;
   max-width: 100%;
-  position: relative;
-  padding-right: var(--space-9);
 }
 
 .tool_running {
@@ -194,10 +192,7 @@
 .tool_fail .toolIcon { --c: var(--c-danger); }
 
 .toolActivity {
-  position: absolute;
-  right: var(--space-3);
-  top: 50%;
-  transform: translateY(-50%);
+  flex-shrink: 0;
 }
 
 .toolName {

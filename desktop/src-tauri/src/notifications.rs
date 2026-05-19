@@ -2,6 +2,7 @@ use serde::Serialize;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, Manager};
+#[cfg(not(all(debug_assertions, target_os = "macos")))]
 use tauri_plugin_notification::NotificationExt;
 
 static ACTIVE_VIEW: Mutex<Option<(String, String)>> = Mutex::new(None);
@@ -46,12 +47,36 @@ fn show(app: &AppHandle, title: &str, body: &str, deeplink: Deeplink) {
         "fired_at": chrono::Utc::now().timestamp_millis(),
     });
     let _ = app.emit("notification-fired", payload);
-    let _ = app
-        .notification()
-        .builder()
-        .title(title)
-        .body(body)
-        .show();
+
+    #[cfg(all(debug_assertions, target_os = "macos"))]
+    {
+        // `tauri dev` runs unsigned; macOS Notification Center blocks the plugin silently. Fall back to osascript which uses the system Script Editor identity — no signing or permission grant needed for verification.
+        let _ = show_via_osascript(title, body);
+    }
+    #[cfg(not(all(debug_assertions, target_os = "macos")))]
+    {
+        let _ = app
+            .notification()
+            .builder()
+            .title(title)
+            .body(body)
+            .show();
+    }
+}
+
+#[cfg(all(debug_assertions, target_os = "macos"))]
+fn show_via_osascript(title: &str, body: &str) -> std::io::Result<()> {
+    let escape = |s: &str| s.replace('\\', "\\\\").replace('"', "\\\"");
+    let script = format!(
+        r#"display notification "{}" with title "{}""#,
+        escape(body),
+        escape(title),
+    );
+    std::process::Command::new("osascript")
+        .arg("-e")
+        .arg(script)
+        .spawn()
+        .map(|_| ())
 }
 
 pub fn dispatch_daemon_frame(app: &AppHandle, frame: &serde_json::Value) {
@@ -106,16 +131,45 @@ pub fn dispatch_daemon_frame(app: &AppHandle, frame: &serde_json::Value) {
                 .and_then(|v| v.as_str())
                 .unwrap_or("")
                 .to_string();
+            // `reply` is the clean agent/script output (alpi >= 0.4.48 contract);
+            // when present, it IS the notification body. Fall back to the
+            // operational `message` string for older daemons or for jobs that
+            // carry no user-facing output.
+            let reply = data
+                .get("reply")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .trim();
             let msg = data.get("message").and_then(|v| v.as_str()).unwrap_or("");
-            let title = if ok {
-                format!("{} · schedule ran", profile)
+
+            // Suppress via explicit metadata, not by parsing `message`:
+            //   `data.silent`  = job produced NO user-facing output AND no
+            //                    delivery → silent maintenance succeeded,
+            //                    no need to interrupt the user.
+            // Failures still notify (silent is only set on the success path).
+            let silent = data
+                .get("silent")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
+            if ok && silent {
+                return;
+            }
+
+            let (title, body) = if !reply.is_empty() {
+                // Content notification: profile name as title (or just
+                // the first line of the reply if it already carries its
+                // own heading like "*Recordatorio*"), body = reply.
+                (profile.clone(), reply.to_string())
+            } else if ok {
+                (
+                    format!("{} · schedule ran", profile),
+                    if msg.is_empty() { job_id.clone() } else { format!("{}: {}", job_id, msg) },
+                )
             } else {
-                format!("{} · schedule failed", profile)
-            };
-            let body = if msg.is_empty() {
-                job_id.clone()
-            } else {
-                format!("{}: {}", job_id, msg)
+                (
+                    format!("{} · schedule failed", profile),
+                    if msg.is_empty() { job_id.clone() } else { format!("{}: {}", job_id, msg) },
+                )
             };
             show(
                 app,

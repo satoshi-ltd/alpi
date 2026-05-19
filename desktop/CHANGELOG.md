@@ -11,6 +11,27 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.3.3 — 2026-05-19 — clean schedule notifications + Ollama provider UI polish + network pairing settings
+
+Requires alpi ``v0.4.51`` or newer (the release that ships the structured `schedule.done` payload, the `{models, errors}` envelope for `ollama_models`, and the `host.network.*` RPCs that the new Network panel consumes).
+
+**Schedule notifications.** The notification handler now prefers `data.reply` as the body when present, drops the `<job_id>: silent run ok: ...` wrapper, and suppresses silent maintenance entirely.
+
+- `src-tauri/src/notifications.rs` — `schedule.done`/`failed` branch reads `data.reply` first. Title becomes the bare profile name when content is present; falls back to `<profile> · schedule ran` (or `failed`) with `<job_id>: <message>` body when `reply` is empty (older daemons, failures, send_message self-delivered). Suppress entirely when `ok && data.silent === true` — silent maintenance never wakes the user. Uses the explicit `silent` boolean from the alpi payload, not string-matching on `message`. `delivered_to` is currently ignored: the desktop notifies whenever a `reply` is present, even on jobs also routed through Telegram/etc. (owned-client-first stance).
+- Backward compatible: clients still get the legacy fallback when the daemon predates the structured payload.
+
+**Ollama provider UI.** Surfaces partial discovery results, fixes a grouping foot-gun, and migrates new inline styles to CSS modules per repo rule.
+
+- `src/features/ModelPicker.jsx` / `src/features/settings/fields/{ModelField,AddProviderField}.jsx` — `ollama_models` now returns `{models, errors[{name,url,detail}]}`; the UI consumes the envelope, falls back to the legacy bare array for older daemons, and renders unreachable instances inline (per-row in the editor, aggregate at the bottom of `ModelField` when picking a model) instead of silently dropping them.
+- `src/features/ModelPicker.jsx` — model grouping discriminator is now the **exact model identity** (`ollamaModelSet.has(m)`), not the first path segment. An Ollama server happening to be named `openrouter` no longer relabels real `openrouter/...` models under `ollama/openrouter`.
+- `src/features/settings/Settings.module.css` — four new utility classes (`warnBlock`, `warnBlockTight`, `warnLine`, `inlineRowWrap`) replace the inline `style={{ display: "block", marginTop: … }}` introduced in the same patch, keeping the file on the CSS-modules-only convention.
+
+**Network pairing settings.** Parity with `alpi setup → devices → network` — pick Tailscale / LAN / Custom advertised host from the desktop instead of editing `config.yaml` by hand.
+
+- `PairDeviceModal` shows the network character of the host as a chip (`TAILSCALE`, `LAN`, `CUSTOM`, `UMBREL`) with a scope-aware hint, instead of the procedural `CONFIGURED` value that leaked the resolution path to the UI. Driven by `host.devices.generate`'s new `scope` + `is_override` fields.
+- New `NetworkField` in `Settings → Devices` (default profile, local connection) — Chip + popover with a 4-option segmented (Auto / Tailscale / LAN / Custom), per-mode hints showing the actual detected IPs, a Custom-only input for hostnames / MagicDNS / VPN IPs, the pairing name field, and a "Save and restart" action. Public IPs, loopback, multicast / link-local / reserved, and malformed hostnames are rejected by the daemon. Auto + unavailable detections are greyed out so the user only sees what the machine can actually reach.
+- New Tauri commands `network_status`, `network_set_advertised`, `network_restart_host_server` (in `src-tauri/src/lib.rs`) thin-wrap the three `host.network.*` RPCs.
+
 ## v0.3.2 — 2026-05-18 — daemon version in connection metadata
 
 Requires alpi ``v0.4.47`` or newer.

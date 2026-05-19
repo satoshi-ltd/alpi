@@ -262,6 +262,94 @@
   color: var(--ink-3);
 }
 
+.scopeChip {
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  font-weight: var(--fw-medium);
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  padding: 1px var(--space-2);
+  border-radius: var(--r-sm);
+  margin-right: var(--space-2);
+  border: 1px solid var(--line);
+  color: var(--ink-2);
+  background: color-mix(in srgb, var(--ink) 3%, var(--bg-pane));
+}
+
+.scopeChipTailscale {
+  composes: scopeChip;
+  color: var(--accent, var(--ink-2));
+  border-color: color-mix(in srgb, var(--accent, var(--ink)) 40%, transparent);
+  background: color-mix(in srgb, var(--accent, var(--ink)) 7%, var(--bg-pane));
+}
+
+.scopeChipLan {
+  composes: scopeChip;
+  color: var(--c-warn, var(--ink-2));
+  border-color: color-mix(in srgb, var(--c-warn, var(--ink)) 35%, transparent);
+  background: color-mix(in srgb, var(--c-warn, var(--ink)) 5%, var(--bg-pane));
+}
+
+.scopeChipConfigured {
+  composes: scopeChip;
+}
+
+.networkPopover {
+  min-width: 320px;
+}
+
+.modeGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.modeOption {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--r-sm);
+  border: 1px solid var(--line);
+  background: var(--bg-pane);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color .12s ease, background .12s ease;
+}
+
+.modeOption:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent, var(--ink)) 50%, var(--line));
+}
+
+.modeOption:disabled {
+  opacity: .45;
+  cursor: not-allowed;
+}
+
+.modeOptionActive {
+  composes: modeOption;
+  border-color: var(--accent, var(--ink));
+  background: color-mix(in srgb, var(--accent, var(--ink)) 6%, var(--bg-pane));
+}
+
+.modeOptionLabel {
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  color: var(--ink);
+}
+
+.modeOptionHint {
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  color: var(--ink-3);
+  line-height: 1.3;
+}
+
 .rowValue {
   color: var(--ink);
   -webkit-user-select: text;
@@ -564,6 +652,34 @@
   font-size: var(--fs-xs);
   color: var(--c-danger);
   line-height: var(--lh-normal);
+}
+
+/* Block-level warn lines used inside an inline flow (provider rows below
+ * their label). Pre-existing `.warn` keeps inline semantics. */
+.warnBlock {
+  composes: warn;
+  display: block;
+  margin-top: var(--space-2);
+}
+
+/* Tighter spacing for warn lines that sit right under a one-line label
+ * (e.g. provider row footer). */
+.warnBlockTight {
+  composes: warn;
+  display: block;
+  margin-top: var(--space-1);
+}
+
+/* No margin — used to break a sequence of error items into their own
+ * lines inside a parent `.warnBlock`. */
+.warnLine {
+  display: block;
+}
+
+/* Inline-row variant that allows wrapping when the contained label +
+ * error text exceeds one line. */
+.inlineRowWrap {
+  flex-wrap: wrap;
 }
 
 .actions {

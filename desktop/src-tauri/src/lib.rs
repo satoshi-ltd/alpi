@@ -509,6 +509,42 @@ async fn devices_rename(token_id: String, label: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+async fn network_status() -> Result<serde_json::Value, String> {
+    let value = tauri::async_runtime::spawn_blocking(|| {
+        host_client::call("host.network.status", serde_json::json!({}))
+    })
+    .await
+    .map_err(|e| format!("join: {e}"))??;
+    Ok(value)
+}
+
+#[tauri::command]
+async fn network_set_advertised(
+    host: String,
+    device_name: String,
+) -> Result<serde_json::Value, String> {
+    let value = tauri::async_runtime::spawn_blocking(move || {
+        host_client::call(
+            "host.network.set_advertised",
+            serde_json::json!({"host": host, "device_name": device_name}),
+        )
+    })
+    .await
+    .map_err(|e| format!("join: {e}"))??;
+    Ok(value)
+}
+
+#[tauri::command]
+async fn network_restart_host_server() -> Result<serde_json::Value, String> {
+    let value = tauri::async_runtime::spawn_blocking(|| {
+        host_client::call("host.network.restart_host_server", serde_json::json!({}))
+    })
+    .await
+    .map_err(|e| format!("join: {e}"))??;
+    Ok(value)
+}
+
+#[tauri::command]
 fn profile_storage(profile: String) -> serde_json::Value {
     host_array_value(
         "host.profile.storage",
@@ -1132,22 +1168,15 @@ fn reveal_in_finder(path: String) -> Result<(), String> {
         .map_err(|e| format!("open: {e}"))
 }
 
+// Returns the full {models, errors} envelope so the UI can show *which*
+// Ollama failed and why instead of "Ollama silently has no models".
 #[tauri::command]
-async fn ollama_models(profile: String) -> Result<Vec<String>, String> {
+async fn ollama_models(profile: String) -> Result<serde_json::Value, String> {
     tauri::async_runtime::spawn_blocking(move || {
         host_client::call(
             "host.providers.ollama_models",
             serde_json::json!({"profile": profile}),
         )
-        .map(|v| {
-            v.get("models")
-                .and_then(|x| x.as_array())
-                .cloned()
-                .unwrap_or_default()
-                .into_iter()
-                .filter_map(|x| x.as_str().map(str::to_string))
-                .collect::<Vec<String>>()
-        })
     })
     .await
     .map_err(|e| format!("join: {e}"))?
@@ -1665,6 +1694,9 @@ pub fn run() {
             devices_generate,
             devices_revoke,
             devices_rename,
+            network_status,
+            network_set_advertised,
+            network_restart_host_server,
             profile_storage,
             workgroup_members,
             workgroup_action,

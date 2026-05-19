@@ -31,6 +31,7 @@ import {
   SubsystemsCell,
 } from "./fields/services.jsx";
 import { DevicesField } from "./fields/devices.jsx";
+import { NetworkField } from "./fields/network.jsx";
 import {
   DeleteProfileAction,
   StorageField,
@@ -313,6 +314,7 @@ export default function ProfileDetail({
 
         {profile.name === "default" && activeConnection?.kind === "local" && (
           <Section title="Devices">
+            <NetworkField />
             <DevicesField />
           </Section>
         )}
