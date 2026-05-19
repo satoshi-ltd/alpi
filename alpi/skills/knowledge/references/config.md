@@ -72,6 +72,7 @@ Also valid:
 | `tools.terminal.sandbox` | Next terminal call. |
 | Gateway config | Service restart usually required. |
 | Scheduler config/jobs | Scheduler/service reload or restart depending on path. |
+| `host.tcp_host`, `host.device_name` | Daemon restart. Desktop `Settings -> Devices -> pairing` can save the values and request the restart via `host.network.*`. |
 
 ## Memory
 
@@ -128,3 +129,4 @@ Invariants:
   service.
 - "Can work and personal use different models?" -> yes, use profiles.
 - "What's the difference between `Devices -> Network` and `Peer TCP listener`?" -> `Devices` configures the host-plane companion endpoint (`host.*`); `Peer TCP listener` configures ALP peer traffic (`link.*`, `workgroup.*`).
+- "Can I clear only the advertised host without changing the pairing name?" -> yes. `host.network.set_advertised` treats missing keys as preserve and explicit `""` as unset, so clients can update `host` and `device_name` independently.

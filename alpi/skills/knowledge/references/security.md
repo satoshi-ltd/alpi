@@ -62,6 +62,12 @@ Tokens at `~/.alpi/host/devices.yaml`, managed via `alpi setup →
 Devices`. Listener binds Tailscale or RFC1918 only (never public).
 Remote access for VPS = install Tailscale on the VPS, not public IP.
 
+Pairing admin and network-config verbs are local-only over the Unix
+socket. A paired remote WebSocket client cannot list/generate/revoke
+devices, change the advertised host/name, or restart the host server;
+those methods return `forbidden` on remote transport even with a valid
+token.
+
 ## Skills and secrets
 
 - Static secrets live in profile `.env` and are named in

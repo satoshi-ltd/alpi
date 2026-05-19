@@ -101,9 +101,56 @@ async def test_generate_verb_returns_full_token_with_network(
     assert result["label"] == "iPad"
     assert result["host"] == "100.64.0.1"
     assert result["scope"] == "tailscale"
+    assert result["is_override"] is False
     assert result["port"] == 49200
     assert result["pairing_name"] == "alpi-mac"
     assert len(devices.load()) == 1
+
+
+@pytest.mark.asyncio
+async def test_generate_verb_classifies_configured_override_by_host_character(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    """A cfg.host.tcp_host override that happens to be a Tailscale IP must still surface as scope='tailscale', not 'configured'. The user cares about network character; the override path is bookkeeping (`is_override=true`)."""
+    from alpi.host import network as net
+
+    monkeypatch.setattr(net, "resolve_host_endpoint", lambda h: ("100.114.140.25", "configured"))
+    monkeypatch.setattr(net, "resolve_host_tcp_port", lambda h: 49200)
+    monkeypatch.setattr(net, "resolve_host_pairing_name", lambda h: "alpi-mac")
+
+    srv = host_server.Server(home=short_tmp)
+    devices.register(srv)
+    resp = await srv._dispatch({
+        "id": "r",
+        "method": "host.devices.generate",
+        "params": {"label": "iPhone"},
+    })
+    result = resp["result"]
+    assert result["host"] == "100.114.140.25"
+    assert result["scope"] == "tailscale"  # NOT "configured"
+    assert result["is_override"] is True
+
+
+@pytest.mark.asyncio
+async def test_generate_verb_classifies_hostname_override_as_custom(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    from alpi.host import network as net
+
+    monkeypatch.setattr(net, "resolve_host_endpoint", lambda h: ("myhost.local", "configured"))
+    monkeypatch.setattr(net, "resolve_host_tcp_port", lambda h: 49200)
+    monkeypatch.setattr(net, "resolve_host_pairing_name", lambda h: "alpi-mac")
+
+    srv = host_server.Server(home=short_tmp)
+    devices.register(srv)
+    resp = await srv._dispatch({
+        "id": "r",
+        "method": "host.devices.generate",
+        "params": {"label": "iPad"},
+    })
+    result = resp["result"]
+    assert result["scope"] == "custom"
+    assert result["is_override"] is True
 
 
 @pytest.mark.asyncio

@@ -163,6 +163,7 @@ alpi/
 │   ├── chat.py            host.chat.send (streaming) + host.chat.cancel
 │   ├── config.py          mutation verbs (host.providers.*, host.peers.*, host.profile.*, host.mcp.*, host.gateway.*, host.sandbox.*, host.voice.*)
 │   ├── devices.py         host.devices.* pairing-token lifecycle
+│   ├── network_rpc.py     host.network.{status,set_advertised,restart_host_server} — pairing endpoint query + override (parity with `alpi setup → devices → network`); scope classified by host character via network.classify_scope (tailscale / lan / custom / umbrel) so clients don't surface the "configured" resolution-path detail
 │   ├── probes.py          host.gateway.probe, host.peers.ping, host.model.ctx_window
 │   ├── schedule.py        host.schedule.{list,remove,set_paused,fire}
 │   ├── daemon.py          host.daemon.restart

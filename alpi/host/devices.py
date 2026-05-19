@@ -164,13 +164,15 @@ async def _generate(
 
     label = str((params or {}).get("label") or "")
     row = add(label)
-    host, scope = endpoint
+    host, raw_scope = endpoint
+    from alpi.host.network import classify_scope
     return {
         "token": row["token"],
         "label": row["label"],
         "created": row["created"],
         "host": host,
-        "scope": scope,
+        "scope": classify_scope(host, raw_scope),
+        "is_override": raw_scope == "configured",
         "port": resolve_host_tcp_port(_ROOT),
         "pairing_name": resolve_host_pairing_name(_ROOT),
     }

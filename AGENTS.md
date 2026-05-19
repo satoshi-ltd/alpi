@@ -104,6 +104,28 @@ every ``host.*`` verb the UI calls.
   clients when an explicit field exists. When changing the contract,
   update desktop/mobile consumers and bump the docs here.
 
+- **`host.network.*` is the canonical network config surface for
+  desktop/mobile.** `host.network.status` returns
+  `{scope_in_use, host_in_use, is_override, port, device_name,
+  candidates: {tailscale, lan, configured}, diagnosis}` so clients can
+  show the live pairing endpoint AND let the user pick a different one
+  without dropping to `alpi setup`. `scope_in_use` is the network
+  character of the host (`tailscale | lan | custom | umbrel`) computed
+  via `network.classify_scope` — NOT the resolution path. `is_override`
+  carries the "this came from `cfg.host.tcp_host`" bit separately.
+  `host.network.set_advertised({host, device_name})` persists
+  `cfg.host.tcp_host` + `cfg.host.device_name`; empty `host` unsets the
+  override (back to auto-detect). Validation rejects public IPs (token
+  leak), loopback, multicast/link-local/reserved, and malformed
+  hostnames — accepts RFC1918, Tailscale CGNAT (100.64/10), and any
+  valid hostname. `host.network.restart_host_server` ends the current
+  daemon process (supervisor respawns with fresh config) and is the
+  explicit handshake clients use after writing. **Known gotcha:** a
+  stale override (e.g. Tailscale IP saved in config but Tailscale now
+  off) still classifies as `tailscale` because the IP literally is one,
+  but the daemon won't be listening on it — clients should compare
+  `host_in_use` against `candidates` to detect this and warn.
+
 ## Testing
 
 ```bash

@@ -7,7 +7,7 @@ import subprocess
 import socket
 from pathlib import Path
 
-from alpi.host.tailscale import detect_tailscale_ip
+from alpi.host.tailscale import detect_tailscale_ip, is_tailscale_ip
 from alpi.host.server import DEFAULT_TCP_PORT
 
 
@@ -166,7 +166,25 @@ def _is_private_lan(addr: str) -> bool:
     return any(ip in net for net in _PRIVATE_RANGES)
 
 
+def classify_scope(host: str | None, raw_scope: str | None) -> str | None:
+    # User-facing scope = network character of the host, not where it came from. A configured Tailscale IP reads as "tailscale", a configured hostname reads as "custom".
+    if raw_scope is None or host is None:
+        return raw_scope
+    if raw_scope == "umbrel":
+        return "umbrel"
+    if is_tailscale_ip(host):
+        return "tailscale"
+    try:
+        ip = ipaddress.ip_address(host)
+        if any(ip in net for net in _PRIVATE_RANGES):
+            return "lan"
+    except ValueError:
+        pass
+    return "custom"
+
+
 __all__ = [
+    "classify_scope",
     "detect_bind_ip",
     "resolve_host_endpoint",
     "resolve_host_pairing_name",

@@ -197,7 +197,27 @@ advertised companion endpoint; it can differ from the bind address
 advertises the host's external name or Tailscale IP). Tokens at
 `~/.alpi/host/devices.yaml`, generated from `alpi setup → Devices`.
 The host surface includes chat, sessions, workgroups, pairing-token
-management, probes, schedule verbs, and daemon restart.
+management, pairing-network config, probes, schedule verbs, and daemon
+restart.
+
+Pairing-network config is exposed as:
+
+- `host.network.status` — returns the live advertised endpoint plus
+  candidates (`tailscale`, `lan`, `configured`), `port`, `device_name`,
+  `diagnosis`, and `is_override`. `scope_in_use` is the host's network
+  character (`tailscale`, `lan`, `custom`, `umbrel`, or `None`), not the
+  raw resolution path.
+- `host.network.set_advertised({host?, device_name?})` — writes
+  `cfg.host.tcp_host` and/or `cfg.host.device_name`. Missing key =
+  preserve; explicit `""` = unset that field. Public IPs, loopback,
+  multicast/link-local/reserved addresses, and malformed hostnames are
+  rejected.
+- `host.network.restart_host_server` — idempotently restarts the daemon
+  so the TCP listener uses the fresh config.
+
+All three `host.network.*` verbs are local-only: desktop over the Unix
+socket can call them, but a paired remote client over WebSocket gets
+`forbidden`.
 
 `host.events.subscribe` emits live `{event, data, at}` frames.
 `host.events.history({since?, kinds?, limit?})` returns recent frames

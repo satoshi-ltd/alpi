@@ -24,6 +24,9 @@ _LOCAL_ONLY_METHODS = frozenset({
     "host.devices.generate",
     "host.devices.revoke",
     "host.devices.rename",
+    "host.network.status",
+    "host.network.set_advertised",
+    "host.network.restart_host_server",
 })
 
 

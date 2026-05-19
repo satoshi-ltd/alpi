@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.4.51 — 2026-05-19 — `host.network.*` RPCs for desktop/mobile pairing config
+
+Closes the parity gap between `alpi setup → devices → network` (CLI) and the desktop / mobile pairing UI. Previously the desktop's `PairDeviceModal` could only show whatever `host.devices.generate` returned and gave no way to switch between Tailscale and LAN or set a custom advertised host — the user had to drop to the terminal. Three new RPCs make the daemon's pairing endpoint queryable and editable over the host plane.
+
+- `host.network.status` returns the live pairing endpoint plus every candidate the daemon could detect: `{scope_in_use, host_in_use, is_override, port, device_name, candidates: {tailscale, lan, configured}, diagnosis}`. `scope_in_use` is normalised by `network.classify_scope` to the network character of the host — `tailscale | lan | custom | umbrel | None` — not the resolution path; `is_override` carries the "this came from `cfg.host.tcp_host`" bit separately. `candidates` lists every option in parallel so clients can render a picker even when one is missing. `diagnosis` is the same shape `diagnose_bind_ip()` already returned — useful for error UIs when no endpoint could be resolved.
+- `host.network.set_advertised({host?, device_name?})` writes `cfg.host.tcp_host` and `cfg.host.device_name`. Parameter semantics distinguish absent from empty: a missing key preserves the existing value (so a partial call with only `host` does not wipe `device_name`); an explicit `""` unsets that field. Validation rejects public IPs (token leak risk), loopback, multicast / link-local / reserved, and malformed hostnames. Accepts RFC1918, Tailscale CGNAT, and any valid hostname (`.local`, `.ts.net`, MagicDNS, custom domains). Returns `{ok, restart_needed}` so the client knows whether to call the next verb.
+- `host.network.restart_host_server` SIGTERMs the running daemon so the supervisor respawns it with the fresh config — same mechanism as `alpi setup`'s `_restart_daemon_for_apply`. Idempotent: returns `{ok: true, restarted: false}` when no daemon is running.
+- All three verbs are flagged `_LOCAL_ONLY_METHODS` in `alpi/host/server.py` — a paired remote client cannot mutate daemon config or restart the host server over WS. Handlers use `server.home` (not the module-level `_ROOT`) so the host plane contract holds for any daemon instance.
+- Wiring: registered in `alpi/service.py` alongside the rest of the host plane handlers. No changes to existing verbs; the new namespace is purely additive.
+- Tests in `tests/host/test_network_rpc.py` pin the validation matrix, the three RPC handlers across every status branch (no network, tailscale-only, lan-only, configured override), write paths (persist, unset, no-op, reject invalid), absent-vs-empty parameter semantics, and the local-only transport gate via `_handle_request(..., require_token=True)`. Full suite green.
+- Bumped Umbrel package metadata and image tags to `0.4.51`.
+
+The CLI's `_devices_network_setup` flow continues to work unchanged. The desktop UI that consumes these RPCs ships in its own release cycle.
+
 ## v0.4.50 — 2026-05-19 — session list exposes last-turn previews for mobile inbox
 
 Adds two truncated fields to every row returned by `host.sessions.list`. The mobile inbox previously had to choose between rendering the thread topic (`first_user`, oldest turn) or pulling the full session per row just to show the latest activity — neither is acceptable for a scrolling list.
