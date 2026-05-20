@@ -4,6 +4,7 @@ import Button from "../../primitives/Button.jsx";
 import Chip from "../../primitives/Chip.jsx";
 import Textarea from "../../primitives/Textarea.jsx";
 import { useNotify } from "../../primitives/Notification.jsx";
+import { useProfileDetail } from "../../hooks/useProfileDetail.js";
 import { Section, Row, CopyButton } from "./primitives.jsx";
 import { SettingsHero } from "../../primitives/index.js";
 import { Mono } from "../../primitives/index.js";
@@ -48,13 +49,19 @@ function initialDraft(profile) {
 }
 
 export default function ProfileDetail({
-  profile,
+  profile: profileSummary,
   profiles,
   activeConnection,
   onSaved,
   onNavigate,
   onOpenChat,
 }) {
+  // Lazy heavy fields (peers/models/mcps/provider_keys/sandbox/voice/tcp_*) — scoped per connection so two daemons with the same profile name never share state.
+  const { detail } = useProfileDetail(activeConnection?.id ?? null, profileSummary?.name ?? null);
+  const profile = useMemo(
+    () => ({ ...profileSummary, ...(detail || {}) }),
+    [profileSummary, detail],
+  );
   const baseline = useMemo(() => initialDraft(profile), [profile]);
   const [draft, setDraft] = useState(baseline);
   const notify = useNotify();
@@ -152,12 +159,14 @@ export default function ProfileDetail({
           <Row label="home">
             <span className={styles.inlineRow}>
               <span className={styles.mono}>{profile.home}</span>
-              <Button
-                size="sm"
-                onClick={() => invoke("reveal_in_finder", { path: profile.home })}
-              >
-                Reveal
-              </Button>
+              {activeConnection?.kind === "local" && (
+                <Button
+                  size="sm"
+                  onClick={() => invoke("reveal_in_finder", { path: profile.home })}
+                >
+                  Reveal
+                </Button>
+              )}
             </span>
           </Row>
           <Row label="model">
@@ -337,7 +346,7 @@ export default function ProfileDetail({
         </Section>
 
         <Section title="Storage">
-          <StorageField profile={profile} />
+          <StorageField profile={profile} activeConnection={activeConnection} />
         </Section>
 
         {profile.name !== "default" && (

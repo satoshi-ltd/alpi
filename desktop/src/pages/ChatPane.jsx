@@ -1,5 +1,6 @@
 import { memo, useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { useProfileDetail } from "../hooks/useProfileDetail.js";
 import AlpiPicker from "../features/AlpiPicker.jsx";
 import ToPickerBar from "../primitives/ToPickerBar.jsx";
 import ModelPicker from "../features/ModelPicker.jsx";
@@ -42,6 +43,7 @@ export default function ChatPane({
   view,
   profiles,
   activeProfile,
+  connectionId,
   sessionData,
   pendingTurn,
   onSend,
@@ -74,11 +76,18 @@ export default function ChatPane({
     setModelOverride(null);
   }, [sessionKey]);
 
+  // Lazy heavy fields — voice_id / models / mcps. Scoped per connection so two daemons with the same profile name never share state.
+  const { detail: activeDetail } = useProfileDetail(connectionId ?? null, activeProfile?.name ?? null);
+  const activeModels = activeProfile?.models ?? activeDetail?.models ?? [];
+
   const noModel = !!activeProfile && !activeProfile.model;
+  // Pre-split: needed full provider lists from summary to decide "is the profile chat-ready?". Post-split: the daemon precomputes `has_any_provider` so we don't drag the heavy detail down the hot poll.
   const hasProviders =
     !!activeProfile &&
-    ((activeProfile.models?.length ?? 0) > 0 ||
-      (activeProfile.provider_ollama?.length ?? 0) > 0);
+    (typeof activeProfile.has_any_provider === "boolean"
+      ? activeProfile.has_any_provider
+      : (activeProfile.models?.length ?? 0) > 0
+        || (activeProfile.provider_ollama?.length ?? 0) > 0);
 
   if (noModel) {
     return (
@@ -141,6 +150,7 @@ export default function ChatPane({
         <ChatComposer
           profiles={profiles}
           activeProfile={activeProfile}
+          availableModels={activeModels}
           onSelectProfile={onSelectProfile}
           onSend={onSend}
           onCancel={pendingTurn ? onCancel : null}
@@ -190,7 +200,7 @@ export default function ChatPane({
           showEmptyHint={inProfile && view.sessionId == null && !pendingTurn}
           profileName={activeProfile?.name ?? null}
           profileModel={activeProfile?.model ?? null}
-          voiceId={activeProfile?.voice_id ?? null}
+          voiceId={activeProfile?.voice_id ?? activeDetail?.voice_id ?? null}
           onRewriteMessage={onRewriteMessage}
           onRetryMessage={onRetryMessage}
           sessionId={view.sessionId ?? null}
@@ -202,6 +212,7 @@ export default function ChatPane({
       <ChatComposer
         profiles={profiles}
         activeProfile={activeProfile}
+        availableModels={activeModels}
         onSelectProfile={onSelectProfile}
         onSend={onSend}
         onCancel={pendingTurn ? onCancel : null}
@@ -629,6 +640,7 @@ const ToolCard = memo(function ToolCard({ name, preview, ok, accent }) {
 function ChatComposer({
   profiles,
   activeProfile,
+  availableModels = [],
   onSelectProfile,
   onSend,
   onCancel,
@@ -763,7 +775,7 @@ function ChatComposer({
           {!showPicker && activeProfile && (
             <ModelPicker
               profile={activeProfile.name}
-              models={activeProfile.models ?? []}
+              models={availableModels}
               defaultModel={activeProfile.model ?? null}
               value={modelOverride}
               onChange={onModelChange}

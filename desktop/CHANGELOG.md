@@ -11,6 +11,73 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.3.4 — 2026-05-20 — daemon v0.4.52 contracts: seq-only events, lite/detail profile, lazy skills body, transcript pagination, plus ConnectionPanel hydration fix and richer About macOS
+
+Requires alpi ``v0.4.52`` or newer. Migrates every host-plane consumer
+to the new daemon contracts: per-connection `seq` cursor with
+subscribe-then-backfill, lazy `host.profile.detail` + `host.skill.read`
+fetched per `(connectionId, profile)`, paginated workgroup transcript
+with `tail=true` first-paint, `session_start` as the first chat frame.
+
+**Event bus.** `subscribe_daemon_events` (Rust) opens the stream
+first, then on the `subscribed` handshake pages from the previous
+seq cursor and dedupes against the live overlap (bounded set of
+1024 seqs). Closes the race where a frame fired between `history`
+and `subscribe` was silently counted in the daemon's seq without
+ever reaching the client. Per-connection cursor stays in a
+`HashMap<connection_id, u64>` so daemon switches never replay
+cross-host state.
+
+**Daemon-event mapping.** `App.jsx::fromDaemonFrame` reacts to the
+new emits the daemon now publishes on every mutator:
+`config_changed`, `gateway_changed`, `peers_changed`,
+`profile_changed`, `workgroup_changed`, `workgroup_members`,
+`schedule.changed`. No more polling for these surfaces.
+
+**`useProfileDetail(connectionId, name)`.** New hook with a
+per-`(connectionId, name)` cache so two daemons with the same
+profile name never bleed peers/models/mcps. Refetches on
+`config_changed`/`gateway_changed`/`peers_changed` for that specific
+(connection, profile). `App.jsx` calls
+`invalidateProfileDetailCache(prev)` AND
+`invalidateProfileDetailCache(active_id)` on connection switch —
+events from the new daemon weren't received while we were elsewhere,
+so anything cached for it is potentially stale. Consumers:
+`ChatPane`, `ProfileDetail`, `CreateWorkgroupModal`,
+`WorkgroupDetail`. `useHostConnections.reload` no longer merges
+detail per-profile on every poll — hot path stays lightweight.
+
+**`SkillsPanel`.** SKILL.md body is now fetched per-skill on demand
+via `profile_skill_read` inside a `SkillDetailBody` child that owns
+its own state in `useEffect` after mount. The previous shape — a
+`fetchBody(...)` call inside `renderDetail` — tripped the React
+"setState during render" warning and tore the tree (white flash on
+open). The child receives `profile` + `skill` and swaps its body
+when `skill.name`/`skill.categoryRaw` change.
+
+**Workgroup transcript.** `workgroup_transcript({after_seq?, limit?,
+tail?})` returns `{posts, next_seq}`. First fetch uses `tail=true,
+limit=200`; subsequent fetches paginate with the cached `next_seq`.
+`lib/workgroup-fetch.js` caches per `(connection, profile, wg_id)`
+with merge-by-seq, and `invalidateTranscriptCache(connectionId)`
+clears on connection switch.
+
+**Chat replay.** `ChatEvent::SessionStart` is wired through Rust and
+`useChatStream.js` so brand-new threads can be replayed via
+`host.chat.events_since` after a silent stream — `pendingTurn.
+sessionId` is pinned on the first frame, not on `reply`.
+
+**Rust commands.** New `profile_detail`, `profile_skill_read`. The
+existing `workgroup_transcript` now takes `(after_seq, limit, tail)`
+and returns `{posts, next_seq}`.
+
+**ConnectionPanel hydration fix.** The connection row was a `<button>` containing the `Forget` `<button>`, which React reported as invalid HTML nesting and the dev tree blanked on every mount. The row is now a `<div role="button" tabIndex={0}>` with explicit `onKeyDown` for Enter/Space; the `Forget` button stays a real `<button>` and the row's `onKeyDown` guards with `e.target !== e.currentTarget` so Enter while focused on `Forget` no longer also fires the row's `onPick`.
+
+**About Alpi enriched.** The macOS app menu now mounts an explicit `Submenu` with `PredefinedMenuItem::about(Some(AboutMetadata))` populated from `Cargo.toml` + repo metadata: name, version, authors, copyright (`© 2026 Satoshi Ltd. · BUSL-1.1`), comments (tagline + description), website (`alpi.satoshi.ltd`), and license. `tauri.conf.json::bundle` also carries `publisher`, `copyright`, `category`, `shortDescription`, `longDescription`, `homepage`, and `macOS.minimumSystemVersion` so the bundled `.app` Info.plist + Spotlight/Launchpad surfaces pick the same values up.
+
+**Tests + build.** `npm run build`: green (chunk-size warning is
+pre-existing). `cargo test`: 10 passed.
+
 ## v0.3.3 — 2026-05-19 — clean schedule notifications + Ollama provider UI polish + network pairing settings
 
 Requires alpi ``v0.4.51`` or newer (the release that ships the structured `schedule.done` payload, the `{models, errors}` envelope for `ollama_models`, and the `host.network.*` RPCs that the new Network panel consumes).

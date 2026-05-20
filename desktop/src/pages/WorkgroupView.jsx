@@ -15,6 +15,7 @@ import {
   loadCachedMessages,
   saveCachedMessages,
 } from "../lib/workgroup-cache.js";
+import { fetchWorkgroupTranscript } from "../lib/workgroup-fetch.js";
 import { WorkgroupChatHeader, TasksButton } from "../primitives/index.js";
 import { JumpToLatest, MarkerCard, MessageBubble } from "../primitives/index.js";
 import {
@@ -34,9 +35,13 @@ import styles from "./WorkgroupView.module.css";
 
 const MY_SEQS_KEY = "alpi.workgroup.mySeqs";
 
-function loadMySeqs(profile, wgId) {
+function mySeqsKey(connectionId, profile, wgId) {
+  return `${MY_SEQS_KEY}.${connectionId || "local"}.${profile}.${wgId}`;
+}
+
+function loadMySeqs(connectionId, profile, wgId) {
   try {
-    const raw = localStorage.getItem(`${MY_SEQS_KEY}.${profile}.${wgId}`);
+    const raw = localStorage.getItem(mySeqsKey(connectionId, profile, wgId));
     if (!raw) return new Set();
     const arr = JSON.parse(raw);
     return new Set(Array.isArray(arr) ? arr : []);
@@ -45,10 +50,10 @@ function loadMySeqs(profile, wgId) {
   }
 }
 
-function saveMySeqs(profile, wgId, set) {
+function saveMySeqs(connectionId, profile, wgId, set) {
   try {
     localStorage.setItem(
-      `${MY_SEQS_KEY}.${profile}.${wgId}`,
+      mySeqsKey(connectionId, profile, wgId),
       JSON.stringify([...set]),
     );
   } catch {}
@@ -57,6 +62,7 @@ function saveMySeqs(profile, wgId, set) {
 export default function WorkgroupView({
   workgroup,
   profiles,
+  connectionId,
   onActiveTask,
   onOpenSettings,
   onReload,
@@ -65,8 +71,8 @@ export default function WorkgroupView({
   onCloseSearch,
 }) {
   const initialCached = useMemo(
-    () => loadCachedMessages(workgroup.profile, workgroup.id),
-    [],
+    () => loadCachedMessages(connectionId, workgroup.profile, workgroup.id),
+    [connectionId, workgroup.profile, workgroup.id],
   );
   const [messages, setMessages] = useState(
     initialCached.length > 0 ? initialCached : null,
@@ -74,7 +80,7 @@ export default function WorkgroupView({
   const [members, setMembers] = useState([]);
   const [peers, setPeers] = useState([]);
   const [mySeqs, setMySeqs] = useState(() =>
-    loadMySeqs(workgroup.profile, workgroup.id),
+    loadMySeqs(connectionId, workgroup.profile, workgroup.id),
   );
   const [error, setError] = useState(null);
   const [costs, setCosts] = useState({});
@@ -125,8 +131,8 @@ export default function WorkgroupView({
   );
 
   useEffect(() => {
-    setMySeqs(loadMySeqs(workgroup.profile, workgroup.id));
-  }, [workgroup.profile, workgroup.id]);
+    setMySeqs(loadMySeqs(connectionId, workgroup.profile, workgroup.id));
+  }, [connectionId, workgroup.profile, workgroup.id]);
 
   const [refreshTick, setRefreshTick] = useState(0);
   const [refreshBeat, setRefreshBeat] = useState(0);
@@ -183,38 +189,49 @@ export default function WorkgroupView({
       .then((p) => !cancelled && setPeers(parsePeers(p)))
       .catch(() => {});
 
-    invoke("workgroup_transcript", {
-      profile: workgroup.profile,
-      wgId: workgroup.id,
-    })
+    fetchWorkgroupTranscript(connectionId, workgroup.profile, workgroup.id)
       .then((rows) => {
         if (cancelled) return;
         const fresh = (rows ?? []).slice().sort((a, b) => a.seq - b.seq);
         setMessages(fresh);
-        saveCachedMessages(workgroup.profile, workgroup.id, fresh);
+        saveCachedMessages(connectionId, workgroup.profile, workgroup.id, fresh);
       })
       .catch((e) => !cancelled && setError(String(e)));
 
     return () => {
       cancelled = true;
     };
-  }, [workgroup.id, workgroup.profile, refreshTick]);
+  }, [workgroup.id, workgroup.profile, refreshTick, connectionId]);
 
   useEffect(() => {
-    const off = listen("fs-change", (event) => {
+    const bump = () => setRefreshTick((t) => t + 1);
+    const offFs = listen("fs-change", (event) => {
       const ev = event.payload;
       if (
         ev.kind === "workgroup_transcript" &&
         ev.profile === workgroup.profile &&
         ev.wg_id === workgroup.id
-      ) {
-        setRefreshTick((t) => t + 1);
-      }
+      ) bump();
+    });
+    // Remote daemons have no local fs watcher — daemon-event is the canonical refresh signal for the transcript.
+    const offDaemon = listen("daemon-event", (event) => {
+      const payload = event.payload ?? {};
+      // Drop frames from a daemon that's not the active one (late arrival after switch).
+      if (payload.connection_id && payload.connection_id !== connectionId) return;
+      const frame = payload.frame ?? payload;
+      const kind = frame?.event;
+      const data = frame?.data ?? {};
+      if (
+        (kind === "wg.post" || kind === "wg.done" || kind === "wg.task" || kind === "wg.skip") &&
+        data.profile === workgroup.profile &&
+        data.wg_id === workgroup.id
+      ) bump();
     });
     return () => {
-      off.then((fn) => fn());
+      offFs.then((fn) => fn());
+      offDaemon.then((fn) => fn());
     };
-  }, [workgroup.id, workgroup.profile]);
+  }, [workgroup.id, workgroup.profile, connectionId]);
 
   return (
     <>
@@ -429,7 +446,7 @@ export default function WorkgroupView({
               setMySeqs((prev) => {
                 const next = new Set(prev);
                 next.add(seq);
-                saveMySeqs(workgroup.profile, workgroup.id, next);
+                saveMySeqs(connectionId, workgroup.profile, workgroup.id, next);
                 return next;
               });
             }

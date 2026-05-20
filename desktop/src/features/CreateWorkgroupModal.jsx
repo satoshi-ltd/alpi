@@ -10,17 +10,20 @@ import {
   Textarea,
 } from "../primitives/index.js";
 import { useNotify } from "../primitives/Notification.jsx";
+import { useProfileDetail } from "../hooks/useProfileDetail.js";
 import { profileLabel } from "../lib/profile-display.js";
 import styles from "./CreateWorkgroupModal.module.css";
 
 export default function CreateWorkgroupModal({
   open,
   profiles = [],
+  connectionId = null,
   onCreated,
   onClose,
 }) {
+  // Hub eligibility (has peers) comes from the lightweight `counts.peers` on the summary — peering through the full peer array per profile would force a detail fetch for every profile, which is exactly what we just split apart.
   const eligibleHubs = useMemo(
-    () => profiles.filter((p) => (p.peers ?? []).length > 0),
+    () => profiles.filter((p) => (p.counts?.peers ?? p.peers?.length ?? 0) > 0),
     [profiles],
   );
 
@@ -44,8 +47,9 @@ export default function CreateWorkgroupModal({
     setMemberIds([]);
   }, [hubProfile]);
 
-  const hub = profiles.find((p) => p.name === hubProfile);
-  const peers = hub?.peers ?? [];
+  // Lazy peer list for the selected hub, scoped by (connection, profile) so two daemons with the same `doc` profile never bleed peers across.
+  const { detail: hubDetail } = useProfileDetail(connectionId, hubProfile || null);
+  const peers = hubDetail?.peers ?? [];
 
   const canSubmit =
     !busy && hubProfile && name.trim().length > 0 && memberIds.length > 0;

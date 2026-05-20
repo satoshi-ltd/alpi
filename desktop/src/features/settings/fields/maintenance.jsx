@@ -9,8 +9,9 @@ import { Btn } from "../../../primitives/index.js";
 import { STORAGE_SCOPE, formatBytes } from "../util.js";
 import styles from "../Settings.module.css";
 
-export function StorageField({ profile }) {
+export function StorageField({ profile, activeConnection }) {
   const [items, setItems] = useState([]);
+  const isLocal = activeConnection?.kind === "local";
   useEffect(() => {
     invoke("profile_storage", { profile: profile.name })
       .then(setItems)
@@ -40,12 +41,14 @@ export function StorageField({ profile }) {
             <Chip size="sm">
               {it.file_count} {it.file_count === 1 ? "file" : "files"}
             </Chip>
-            <Button
-              size="sm"
-              onClick={() => invoke("reveal_in_finder", { path: it.path })}
-            >
-              Reveal
-            </Button>
+            {isLocal && (
+              <Button
+                size="sm"
+                onClick={() => invoke("reveal_in_finder", { path: it.path })}
+              >
+                Reveal
+              </Button>
+            )}
           </span>
         </Row>
       ))}

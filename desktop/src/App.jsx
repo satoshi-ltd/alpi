@@ -18,6 +18,8 @@ import { orderedJumpTargets } from "./lib/profile-order.js";
 import { installUpdater } from "./lib/updater.js";
 import { findLatestTask } from "./lib/workgroup-tasks.js";
 import { saveCachedMessages } from "./lib/workgroup-cache.js";
+import { fetchWorkgroupTranscript, invalidateTranscriptCache } from "./lib/workgroup-fetch.js";
+import { invalidateProfileDetailCache } from "./hooks/useProfileDetail.js";
 import { useChatStream } from "./hooks/useChatStream.js";
 import { useHostConnections } from "./hooks/useHostConnections.js";
 import { useNavListener } from "./hooks/useNavListener.js";
@@ -280,6 +282,21 @@ export default function App() {
     workgroups,
   });
 
+  // On connection switch drop cache for BOTH prev and new active: events from the new daemon weren't received while we were elsewhere, so anything still cached for it is potentially stale.
+  const prevConnectionIdRef = useRef(hostConnections.active_id);
+  useEffect(() => {
+    const prev = prevConnectionIdRef.current;
+    if (prev !== hostConnections.active_id) {
+      if (prev) {
+        invalidateTranscriptCache(prev);
+        invalidateProfileDetailCache(prev);
+      }
+      invalidateTranscriptCache(hostConnections.active_id);
+      invalidateProfileDetailCache(hostConnections.active_id);
+    }
+    prevConnectionIdRef.current = hostConnections.active_id;
+  }, [hostConnections.active_id]);
+
   const profilesRef = useRef(profiles);
   useEffect(() => {
     profilesRef.current = profiles;
@@ -300,7 +317,7 @@ export default function App() {
     activityByWorkgroup,
     setActivityByWorkgroup,
     seenMtimesRef,
-  } = useWorkgroupTasks({ workgroups, hubPubkeyOf });
+  } = useWorkgroupTasks({ workgroups, hubPubkeyOf, connectionId: hostConnections.active_id });
 
   const [settingsRefreshTick, setSettingsRefreshTick] = useState(0);
   const [settingsRefreshing, setSettingsRefreshing] = useState(false);
@@ -380,71 +397,126 @@ export default function App() {
     [],
   );
 
-  useEffect(() => {
-    const off = listen("fs-change", (event) => {
-      const ev = event.payload;
-      const v = viewRef.current;
-      switch (ev.kind) {
-        case "session": {
-          if (
-            v.kind === "profile" &&
-            v.profile === ev.profile &&
-            v.sessionId === ev.session_id &&
-            !pendingTurnRef.current
-          ) {
-            scheduleSessionRefresh(ev.profile, ev.session_id);
-          }
-          scheduleReload();
-          break;
+  // Same reducer for fs-change (local watcher) and daemon-event (works on remote too).
+  const applyChange = useCallback((ev) => {
+    if (!ev || !ev.kind) return;
+    const v = viewRef.current;
+    switch (ev.kind) {
+      case "session": {
+        if (
+          v.kind === "profile" &&
+          v.profile === ev.profile &&
+          v.sessionId === ev.session_id &&
+          !pendingTurnRef.current
+        ) {
+          scheduleSessionRefresh(ev.profile, ev.session_id);
         }
-        case "workgroup_transcript": {
-          const key = `${ev.profile}/${ev.wg_id}`;
-          setActivityByWorkgroup((prev) => ({ ...prev, [key]: Date.now() }));
-          scheduleReload(250);
-          invoke("workgroup_transcript", {
-            profile: ev.profile,
-            wgId: ev.wg_id,
-          })
-            .then((msgs) => {
-              if (!Array.isArray(msgs)) return;
-              const hub =
-                profilesRef.current.find((p) => p.name === ev.profile)
-                  ?.pubkey_b64 ?? null;
-              const task = findLatestTask(msgs, hub);
-              setTaskByWorkgroup((prev) => {
-                if (task == null) return prev;
-                return prev[key] === task ? prev : { ...prev, [key]: task };
-              });
-              seenMtimesRef.current = {
-                ...seenMtimesRef.current,
-                [key]: Math.floor(Date.now() / 1000),
-              };
-              saveCachedMessages(ev.profile, ev.wg_id, msgs);
-            })
-            .catch(() => {});
-          break;
-        }
-        case "workgroup_meta":
-        case "workgroup_members":
-        case "peers":
-        case "subscriptions":
-        case "config":
-          scheduleReload();
-          break;
-        default:
-          break;
+        scheduleReload();
+        break;
       }
+      case "workgroup_transcript": {
+        const key = `${ev.profile}/${ev.wg_id}`;
+        const connectionId = hostConnectionsRef.current?.active_id;
+        setActivityByWorkgroup((prev) => ({ ...prev, [key]: Date.now() }));
+        scheduleReload(250);
+        fetchWorkgroupTranscript(connectionId, ev.profile, ev.wg_id)
+          .then((msgs) => {
+            if (!Array.isArray(msgs)) return;
+            // Drop late result from a previous daemon.
+            if (hostConnectionsRef.current?.active_id !== connectionId) return;
+            const hub =
+              profilesRef.current.find((p) => p.name === ev.profile)
+                ?.pubkey_b64 ?? null;
+            const task = findLatestTask(msgs, hub);
+            setTaskByWorkgroup((prev) => {
+              if (task == null) return prev;
+              return prev[key] === task ? prev : { ...prev, [key]: task };
+            });
+            seenMtimesRef.current = {
+              ...seenMtimesRef.current,
+              [key]: Math.floor(Date.now() / 1000),
+            };
+            saveCachedMessages(connectionId, ev.profile, ev.wg_id, msgs);
+          })
+          .catch(() => {});
+        break;
+      }
+      case "workgroup_meta":
+      case "workgroup_members":
+      case "peers":
+      case "subscriptions":
+      case "config":
+        scheduleReload();
+        break;
+      default:
+        break;
+    }
+  }, [scheduleReload, scheduleSessionRefresh, setActivityByWorkgroup, setTaskByWorkgroup, seenMtimesRef]);
+
+  // Maps host.events.emit() kinds onto applyChange's fs-change vocabulary. Forward-compatible for kinds the daemon may add later.
+  const fromDaemonFrame = useCallback((frame) => {
+    if (!frame || typeof frame !== "object") return null;
+    const event = frame.event;
+    const data = frame.data ?? {};
+    if (!event || typeof event !== "string") return null;
+    if (event === "session_changed") {
+      if (!data.profile) return null;
+      return {
+        kind: "session",
+        profile: data.profile,
+        session_id: data.session_id ?? data.id ?? null,
+      };
+    }
+    if (
+      event === "wg.post" ||
+      event === "wg.done" ||
+      event === "wg.task" ||
+      event === "wg.skip"
+    ) {
+      if (!data.profile || !data.wg_id) return null;
+      return { kind: "workgroup_transcript", profile: data.profile, wg_id: data.wg_id };
+    }
+    if (event === "workgroup_changed" || event === "workgroup_meta" || event === "workgroup_members") {
+      return { kind: "workgroup_meta" };
+    }
+    if (event === "peer.pairing_request" || event === "peers_changed") return { kind: "peers" };
+    if (event === "subscriptions_changed") return { kind: "subscriptions" };
+    if (
+      event === "schedule.done" ||
+      event === "schedule.failed" ||
+      event === "schedule.changed" ||
+      event === "profile_changed" ||
+      event === "config_changed" ||
+      event === "skills_changed" ||
+      event === "memory_changed" ||
+      event === "gateway_changed" ||
+      event === "budget.threshold"
+    ) {
+      return { kind: "config" };
+    }
+    return null;
+  }, []);
+
+  useEffect(() => {
+    const offFs = listen("fs-change", (e) => applyChange(e.payload));
+    const offDaemon = listen("daemon-event", (e) => {
+      const payload = e.payload ?? {};
+      // Drop frames from a non-active daemon.
+      if (
+        payload.connection_id &&
+        payload.connection_id !== hostConnectionsRef.current?.active_id
+      ) {
+        return;
+      }
+      const frame = payload.frame ?? payload;
+      const mapped = fromDaemonFrame(frame);
+      if (mapped) applyChange(mapped);
     });
     return () => {
-      off.then((fn) => fn());
+      offFs.then((fn) => fn());
+      offDaemon.then((fn) => fn());
     };
-  }, [
-    scheduleReload,
-    scheduleSessionRefresh,
-    setActivityByWorkgroup,
-    setTaskByWorkgroup,
-    seenMtimesRef,
-  ]);
+  }, [applyChange, fromDaemonFrame, hostConnectionsRef]);
 
   const sendingRef = useRef(false);
   const activeProfile = useMemo(() => {
@@ -781,9 +853,10 @@ export default function App() {
               )}
               {view.kind === "workgroup" && activeWorkgroup && (
                 <WorkgroupView
-                  key={`${activeWorkgroup.profile}/${activeWorkgroup.id}`}
+                  key={`${hostConnections.active_id}/${activeWorkgroup.profile}/${activeWorkgroup.id}`}
                   workgroup={activeWorkgroup}
                   profiles={profiles}
+                  connectionId={hostConnections.active_id}
                   onReload={reload}
                   daemonOffline={daemonOffline}
                   onActiveTask={(task) => {
@@ -807,6 +880,7 @@ export default function App() {
                   view={view}
                   profiles={profiles}
                   activeProfile={activeProfile}
+                  connectionId={hostConnections.active_id}
                   sessionData={sessionData}
                   daemonOffline={daemonOffline}
                   pendingTurn={
@@ -886,6 +960,7 @@ export default function App() {
       <CreateWorkgroupModal
         open={createWorkgroupOpen}
         profiles={profiles}
+        connectionId={hostConnections.active_id}
         onClose={() => setCreateWorkgroupOpen(false)}
         onCreated={async (wgId, hubName) => {
           setCreateWorkgroupOpen(false);

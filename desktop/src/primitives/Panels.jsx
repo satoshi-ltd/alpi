@@ -79,10 +79,18 @@ export function ConnectionPanel({
                   : "var(--c-warning)";
             const isLocal = r.kind === "local" || r.isLocal;
             return (
-              <button
+              <div
                 key={r.id}
-                type="button"
+                role="button"
+                tabIndex={0}
                 onClick={() => onPick?.(r)}
+                onKeyDown={(e) => {
+                  if (e.target !== e.currentTarget) return;
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    onPick?.(r);
+                  }
+                }}
                 className={`row row-gap ${styles.connRow} ${active ? styles.connRowActive : ""}`}
               >
                 <span className={styles.connIcon}>
@@ -124,7 +132,7 @@ export function ConnectionPanel({
                     Forget
                   </button>
                 )}
-              </button>
+              </div>
             );
           })}
         </div>

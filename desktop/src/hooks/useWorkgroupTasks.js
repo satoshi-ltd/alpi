@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
 import { findLatestTask } from "../lib/workgroup-tasks.js";
 import {
   loadCachedMessages,
   saveCachedMessages,
 } from "../lib/workgroup-cache.js";
+import { fetchWorkgroupTranscript } from "../lib/workgroup-fetch.js";
 import {
   loadTaskCache,
   saveTaskCache,
@@ -15,15 +15,17 @@ const ACTIVITY_SWEEP_MS = 3000;
 const REFRESH_INITIAL_DELAY_MS = 200;
 const REFRESH_BETWEEN_MS = 250;
 
-// Tracks the latest task per workgroup + transient activity flags. Owns the
-// transcript cache so the sidebar can render `#task` badges without a roundtrip.
-export function useWorkgroupTasks({ workgroups, hubPubkeyOf }) {
-  const persistedCache = useMemo(() => loadTaskCache(), []);
-  const [taskByWorkgroup, setTaskByWorkgroup] = useState(
-    () => persistedCache.tasks,
-  );
+export function useWorkgroupTasks({ workgroups, hubPubkeyOf, connectionId }) {
+  // Reload + remount the per-connection caches when connectionId changes — keys (profile/wgId) collide across daemons.
+  const persistedCache = useMemo(() => loadTaskCache(connectionId), [connectionId]);
+  const [taskByWorkgroup, setTaskByWorkgroup] = useState(() => persistedCache.tasks);
   const seenMtimesRef = useRef(persistedCache.mtimes);
   const [activityByWorkgroup, setActivityByWorkgroup] = useState({});
+
+  useEffect(() => {
+    setTaskByWorkgroup(persistedCache.tasks);
+    seenMtimesRef.current = persistedCache.mtimes;
+  }, [persistedCache]);
 
   // Backfill cached tasks for workgroups we haven't seen yet this session.
   useEffect(() => {
@@ -34,7 +36,7 @@ export function useWorkgroupTasks({ workgroups, hubPubkeyOf }) {
       for (const w of workgroups) {
         const key = `${w.profile}/${w.id}`;
         if (next[key]) continue;
-        const cached = loadCachedMessages(w.profile, w.id);
+        const cached = loadCachedMessages(connectionId, w.profile, w.id);
         if (cached.length === 0) continue;
         const hubName = w.hub_id ?? w.profile;
         const task = findLatestTask(cached, hubPubkeyOf(hubName));
@@ -44,7 +46,7 @@ export function useWorkgroupTasks({ workgroups, hubPubkeyOf }) {
       }
       return changed ? next : prev;
     });
-  }, [workgroups, hubPubkeyOf]);
+  }, [workgroups, hubPubkeyOf, connectionId]);
 
   // Refresh changed workgroups sequentially to avoid IPC saturation.
   const hubPubkeyOfRef = useRef(hubPubkeyOf);
@@ -70,10 +72,7 @@ export function useWorkgroupTasks({ workgroups, hubPubkeyOf }) {
         const key = `${w.profile}/${w.id}`;
         const hubName = w.hub_id ?? w.profile;
         try {
-          const msgs = await invoke("workgroup_transcript", {
-            profile: w.profile,
-            wgId: w.id,
-          });
+          const msgs = await fetchWorkgroupTranscript(connectionId, w.profile, w.id);
           if (cancelled) return;
           if (!Array.isArray(msgs)) continue;
           const hub = hubPubkeyOfRef.current(hubName);
@@ -85,7 +84,7 @@ export function useWorkgroupTasks({ workgroups, hubPubkeyOf }) {
             ...seenMtimesRef.current,
             [key]: w.mtime ?? 0,
           };
-          saveCachedMessages(w.profile, w.id, msgs);
+          saveCachedMessages(connectionId, w.profile, w.id, msgs);
         } catch {}
         await new Promise((r) => setTimeout(r, REFRESH_BETWEEN_MS));
       }
@@ -94,11 +93,11 @@ export function useWorkgroupTasks({ workgroups, hubPubkeyOf }) {
     return () => {
       cancelled = true;
     };
-  }, [workgroups]);
+  }, [workgroups, connectionId]);
 
   useEffect(() => {
-    saveTaskCache({ tasks: taskByWorkgroup, mtimes: seenMtimesRef.current });
-  }, [taskByWorkgroup]);
+    saveTaskCache(connectionId, { tasks: taskByWorkgroup, mtimes: seenMtimesRef.current });
+  }, [taskByWorkgroup, connectionId]);
 
   useEffect(() => {
     const id = setInterval(() => {

@@ -13,6 +13,7 @@ import { ConfirmDelete, ConfirmDeleteAction } from "../../primitives/index.js";
 import { SettingsHero } from "../../primitives/index.js";
 import { Diamond, Dot, Mono } from "../../primitives/index.js";
 import { BudgetEditor } from "./fields/alp.jsx";
+import { useProfileDetail } from "../../hooks/useProfileDetail.js";
 import styles from "./Settings.module.css";
 
 function renderMemberRow(m, profiles, workgroup, hubPubkey, onRemove) {
@@ -31,7 +32,7 @@ function renderMemberRow(m, profiles, workgroup, hubPubkey, onRemove) {
   );
 }
 
-export default function WorkgroupDetail({ workgroup, profiles, onSaved, onOpenChat }) {
+export default function WorkgroupDetail({ workgroup, profiles, connectionId = null, onSaved, onOpenChat }) {
   const [members, setMembers] = useState(null);
   const [busyAction, setBusyAction] = useState(null);
   const [briefing, setBriefing] = useState(workgroup.briefing ?? "");
@@ -73,7 +74,12 @@ export default function WorkgroupDetail({ workgroup, profiles, onSaved, onOpenCh
   }, [workgroup.profile, workgroup.id]);
 
   const hubName = workgroup.hub_id ?? workgroup.profile;
-  const hub = profiles.find((p) => p.name === hubName);
+  const hubSummary = profiles.find((p) => p.name === hubName);
+  // Lazy hub peer list, scoped per connection.
+  const { detail: hubDetail } = useProfileDetail(connectionId, hubName || null);
+  const hub = hubSummary
+    ? { ...hubSummary, ...(hubDetail || {}) }
+    : (hubDetail || null);
   const ownPubkey = profiles.find((p) => p.name === workgroup.profile)?.pubkey_b64;
 
   function updateBriefing(text) {

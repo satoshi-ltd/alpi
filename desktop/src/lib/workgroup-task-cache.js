@@ -1,13 +1,14 @@
-// Cache `taskByWorkgroup` and mtimes in localStorage.
-// Null means "recompute later".
-
-const KEY = "alpi:workgroup-task-cache:v2";
+const KEY_PREFIX = "alpi:workgroup-task-cache:v3";
 
 const empty = () => ({ tasks: {}, mtimes: {} });
 
-export function loadTaskCache() {
+function key(connectionId) {
+  return `${KEY_PREFIX}:${connectionId || "local"}`;
+}
+
+export function loadTaskCache(connectionId) {
   try {
-    const raw = localStorage.getItem(KEY);
+    const raw = localStorage.getItem(key(connectionId));
     if (!raw) return empty();
     const parsed = JSON.parse(raw);
     if (!parsed || typeof parsed !== "object") return empty();
@@ -27,16 +28,17 @@ export function loadTaskCache() {
   }
 }
 
-export function saveTaskCache(state) {
+export function saveTaskCache(connectionId, state) {
   try {
     const tasks = {};
     for (const [k, v] of Object.entries(state?.tasks ?? {})) {
       if (v != null) tasks[k] = v;
     }
     localStorage.setItem(
-      KEY,
+      key(connectionId),
       JSON.stringify({ tasks, mtimes: state?.mtimes ?? {} }),
     );
   } catch {
+    /* */
   }
 }

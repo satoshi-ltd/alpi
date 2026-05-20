@@ -360,6 +360,7 @@ fn ensure_local(state: &mut ConnectionsState) {
 }
 
 fn save_connections(state: &ConnectionsState) -> Result<(), String> {
+    invalidate_active_id_cache();
     let dir = connections_dir()?;
     fs::create_dir_all(&dir).map_err(|e| format!("create {}: {e}", dir.display()))?;
     let path = connections_path()?;
@@ -476,6 +477,31 @@ pub fn mark_connection_revoked(id: &str) {
     }
 }
 
+fn active_id_cache() -> &'static Mutex<Option<String>> {
+    static CACHE: OnceLock<Mutex<Option<String>>> = OnceLock::new();
+    CACHE.get_or_init(|| Mutex::new(None))
+}
+
+// Cached in memory — hot path on every daemon event frame.
+pub fn active_connection_id() -> String {
+    if let Ok(guard) = active_id_cache().lock() {
+        if let Some(id) = guard.as_ref() {
+            return id.clone();
+        }
+    }
+    let id = load_connections().active_id;
+    if let Ok(mut guard) = active_id_cache().lock() {
+        *guard = Some(id.clone());
+    }
+    id
+}
+
+fn invalidate_active_id_cache() {
+    if let Ok(mut guard) = active_id_cache().lock() {
+        *guard = None;
+    }
+}
+
 fn active_connection() -> HostConnection {
     let state = load_connections();
     state
@@ -581,10 +607,25 @@ fn call_local_inner(method: &str, params: Value, timeout: Duration) -> Result<Va
 pub fn call_stream<F>(
     method: &str,
     params: Value,
-    on_frame: F,
+    mut on_frame: F,
 ) -> Result<(), String>
 where
     F: FnMut(Value),
+{
+    call_stream_until(method, params, move |frame| {
+        on_frame(frame);
+        true
+    })
+}
+
+// on_frame returns false to break the stream early.
+pub fn call_stream_until<F>(
+    method: &str,
+    params: Value,
+    on_frame: F,
+) -> Result<(), String>
+where
+    F: FnMut(Value) -> bool,
 {
     let conn = active_connection();
     let id = conn.id().to_string();
@@ -618,7 +659,7 @@ fn call_stream_local<F>(
     mut on_frame: F,
 ) -> Result<(), String>
 where
-    F: FnMut(Value),
+    F: FnMut(Value) -> bool,
 {
     let path = socket_path()?;
     if !path.exists() {
@@ -660,7 +701,9 @@ where
             Ok(v) => v,
             Err(_) => continue,
         };
-        on_frame(frame);
+        if !on_frame(frame) {
+            break;
+        }
     }
     Ok(())
 }
@@ -785,7 +828,7 @@ fn call_stream_remote<F>(
     mut on_frame: F,
 ) -> Result<(), String>
 where
-    F: FnMut(Value),
+    F: FnMut(Value) -> bool,
 {
     let mut ws = WsClient::connect(
         host,
@@ -829,8 +872,8 @@ where
             mark_connection_revoked(connection_id);
             return Err("alp -32000: auth-failed".to_string());
         }
-        on_frame(frame);
-        if done {
+        let keep_going = on_frame(frame);
+        if done || !keep_going {
             break;
         }
     }

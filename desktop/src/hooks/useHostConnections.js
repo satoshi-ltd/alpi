@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 
+import { pruneCachedMessages } from "../lib/workgroup-cache.js";
+
 const PROFILES_CACHE_PREFIX = "alf:profiles:v1:";
 const WORKGROUPS_CACHE_PREFIX = "alf:workgroups:v1:";
 
@@ -57,6 +59,7 @@ export function useHostConnections({
   const applyProfilesAndWorkgroups = useCallback((ps, ws) => {
     setProfiles(ps);
     setWorkgroups(ws);
+    pruneCachedMessages(hostConnectionsRef.current?.active_id, ws);
     setPickerAlpi((prev) => {
       if (prev && ps.some((p) => p.name === prev)) return prev;
       const def = ps.find((p) => p.is_default && p.model);
@@ -147,6 +150,7 @@ export function useHostConnections({
           ps = fallbackProfiles;
         }
       }
+      // Detail is now LAZY: settings/profile screens fetch host.profile.detail on demand (see useProfileDetail). Reloading every profile's detail on each status flip would re-introduce the very 30–60 KB Tailscale poll we just split apart.
       if (hostConnectionsRef.current?.active_id !== activeId) return;
       const looksLikeFailure =
         Array.isArray(ps) && Array.isArray(ws) && ps.length === 0 && ws.length === 0;

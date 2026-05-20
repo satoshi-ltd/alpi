@@ -11,6 +11,7 @@ use std::process::{Command, Stdio};
 use std::sync::{Mutex, OnceLock};
 use std::thread;
 
+use tauri::menu::{AboutMetadataBuilder, Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::Manager;
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 
@@ -27,6 +28,11 @@ use crate::state::{DecryptedMessage, SessionEntry};
 #[derive(Serialize, Clone)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 enum ChatEvent {
+    // First frame of every host.chat.send stream — the session id is pinned BEFORE the engine starts so replay (host.chat.events_since) works even on brand-new sessions whose id the client hasn't seen yet.
+    SessionStart {
+        request_id: String,
+        session_id: String,
+    },
     ToolStart {
         request_id: String,
         tool_id: String,
@@ -104,6 +110,30 @@ fn profile_skills(profile: String) -> serde_json::Value {
         serde_json::json!({ "profile": profile }),
         "skills",
     )
+}
+
+#[tauri::command]
+fn profile_skill_read(
+    profile: String,
+    name: String,
+    category: Option<String>,
+) -> Result<serde_json::Value, String> {
+    let mut params = serde_json::json!({ "profile": profile, "name": name });
+    if let Some(cat) = category {
+        params["category"] = serde_json::Value::String(cat);
+    }
+    host_client::call("host.skill.read", params)
+        .map(|v| v.get("skill").cloned().unwrap_or(serde_json::Value::Null))
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn profile_detail(profile: String) -> Result<serde_json::Value, String> {
+    host_client::call(
+        "host.profile.detail",
+        serde_json::json!({ "profile": profile }),
+    )
+    .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -1282,6 +1312,19 @@ fn stream_chat(
             .and_then(|v| v.as_str())
             .unwrap_or("")
         {
+            "session_start" => {
+                let sid = frame["session_id"].as_str().unwrap_or("").to_string();
+                if !sid.is_empty() {
+                    resolved_id = sid.clone();
+                }
+                let _ = app_for_frames.emit(
+                    "chat-event",
+                    ChatEvent::SessionStart {
+                        request_id: rid_for_frames.clone(),
+                        session_id: sid,
+                    },
+                );
+            }
             "tool_start" => {
                 let _ = app_for_frames.emit(
                     "chat-event",
@@ -1460,11 +1503,22 @@ fn chat_events_since(
 }
 
 #[tauri::command]
-fn workgroup_transcript(profile: String, wg_id: String) -> Result<Vec<DecryptedMessage>, String> {
-    let result = host_client::call(
-        "host.workgroup.transcript",
-        serde_json::json!({"profile": profile, "wg_id": wg_id}),
-    )?;
+fn workgroup_transcript(
+    profile: String,
+    wg_id: String,
+    after_seq: Option<u32>,
+    limit: Option<u32>,
+    tail: Option<bool>,
+) -> Result<serde_json::Value, String> {
+    // Default: tail=true, limit=200 — first-paint must be bounded so a workgroup with 10k posts doesn't ship megabytes over Tailscale. Subsequent fetches pass after_seq for incremental delta.
+    let mut params = serde_json::json!({ "profile": profile, "wg_id": wg_id });
+    if let Some(s) = after_seq {
+        params["after_seq"] = serde_json::json!(s);
+    } else if tail.unwrap_or(true) {
+        params["tail"] = serde_json::json!(true);
+    }
+    params["limit"] = serde_json::json!(limit.unwrap_or(200));
+    let result = host_client::call("host.workgroup.transcript", params)?;
     let posts = result
         .get("posts")
         .and_then(|v| v.as_array())
@@ -1501,7 +1555,11 @@ fn workgroup_transcript(profile: String, wg_id: String) -> Result<Vec<DecryptedM
             at,
         });
     }
-    Ok(out)
+    let next_seq = result.get("next_seq").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+    Ok(serde_json::json!({
+        "posts": out,
+        "next_seq": next_seq,
+    }))
 }
 
 #[tauri::command]
@@ -1535,14 +1593,117 @@ fn tray_announce_update(app: AppHandle, available: bool, version: Option<String>
 }
 
 fn subscribe_daemon_events(app: AppHandle) {
+    use std::collections::{HashMap, HashSet, VecDeque};
+    use std::sync::{Arc, Mutex};
+
+    // Monotonic seq cursor per connection — wall-clock `at` drifted on NTP skew, seq is daemon-monotone.
+    let last_seq: Arc<Mutex<HashMap<String, u64>>> = Arc::new(Mutex::new(HashMap::new()));
+
+    fn read_seq(map: &Arc<Mutex<HashMap<String, u64>>>, id: &str) -> u64 {
+        map.lock().unwrap_or_else(|e| e.into_inner()).get(id).copied().unwrap_or(0)
+    }
+    fn bump_seq(map: &Arc<Mutex<HashMap<String, u64>>>, id: &str, seq: u64) {
+        let mut guard = map.lock().unwrap_or_else(|e| e.into_inner());
+        let cur = guard.get(id).copied().unwrap_or(0);
+        if seq > cur {
+            guard.insert(id.to_string(), seq);
+        }
+    }
+
     loop {
+        let starting_id = host_client::active_connection_id();
+        // Subscribe FIRST. Calling history before subscribe leaves a race window:
+        // a frame fired between the history reply and the stream open would be
+        // counted in the daemon's seq but never delivered to the client.
         let app_for_frames = app.clone();
-        let _ = host_client::call_stream(
+        let id_for_payload = starting_id.clone();
+        let last_seq_for_frames = Arc::clone(&last_seq);
+        let id_for_bump = starting_id.clone();
+        let last_seq_for_anchor = Arc::clone(&last_seq);
+        let anchor_id = starting_id.clone();
+
+        // Dedupe seqs across the (live ↔ post-handshake backfill) overlap.
+        let seen_seqs: Arc<Mutex<HashSet<u64>>> = Arc::new(Mutex::new(HashSet::new()));
+        let seen_order: Arc<Mutex<VecDeque<u64>>> = Arc::new(Mutex::new(VecDeque::new()));
+        let seen_seqs_for_live = Arc::clone(&seen_seqs);
+        let seen_order_for_live = Arc::clone(&seen_order);
+
+        fn mark_seen(set: &Arc<Mutex<HashSet<u64>>>, order: &Arc<Mutex<VecDeque<u64>>>, seq: u64) -> bool {
+            let mut s = set.lock().unwrap_or_else(|e| e.into_inner());
+            if s.contains(&seq) {
+                return false;
+            }
+            s.insert(seq);
+            let mut o = order.lock().unwrap_or_else(|e| e.into_inner());
+            o.push_back(seq);
+            // Bounded: drop oldest seqs once the window grows past 4× the history limit.
+            while o.len() > 1024 {
+                if let Some(old) = o.pop_front() {
+                    s.remove(&old);
+                }
+            }
+            true
+        }
+
+        let _ = host_client::call_stream_until(
             "host.events.subscribe",
             serde_json::json!({}),
             move |frame| {
+                if host_client::active_connection_id() != starting_id {
+                    return false;
+                }
+                if frame.get("event").and_then(|v| v.as_str()) == Some("subscribed") {
+                    // After the stream is hot, fill the gap by paging from the PREVIOUS cursor — anchoring at the new next_seq would silently drop anything emitted while we were dark.
+                    let prev = read_seq(&last_seq_for_anchor, &anchor_id);
+                    if prev > 0 {
+                        if let Ok(value) = host_client::call(
+                            "host.events.history",
+                            serde_json::json!({ "after_seq": prev, "limit": 200 }),
+                        ) {
+                            if let Some(events) = value.get("events").and_then(|v| v.as_array()) {
+                                for ev in events {
+                                    if let Some(seq) = ev.get("seq").and_then(|v| v.as_u64()) {
+                                        if !mark_seen(&seen_seqs_for_live, &seen_order_for_live, seq) {
+                                            continue;
+                                        }
+                                        bump_seq(&last_seq_for_anchor, &anchor_id, seq);
+                                    }
+                                    notifications::dispatch_daemon_frame(&app_for_frames, ev);
+                                    let _ = app_for_frames.emit(
+                                        "daemon-event",
+                                        serde_json::json!({
+                                            "connection_id": anchor_id,
+                                            "frame": ev,
+                                            "replay": true,
+                                        }),
+                                    );
+                                }
+                            }
+                            if let Some(next) = value.get("next_seq").and_then(|v| v.as_u64()) {
+                                bump_seq(&last_seq_for_anchor, &anchor_id, next);
+                            }
+                        }
+                    } else if let Some(anchor) = frame.get("next_seq").and_then(|v| v.as_u64()) {
+                        // First connect on this endpoint — anchor at head; no historical replay.
+                        bump_seq(&last_seq_for_anchor, &anchor_id, anchor);
+                    }
+                    return true;
+                }
+                if let Some(seq) = frame.get("seq").and_then(|v| v.as_u64()) {
+                    if !mark_seen(&seen_seqs, &seen_order, seq) {
+                        return true;  // already delivered via history backfill
+                    }
+                    bump_seq(&last_seq_for_frames, &id_for_bump, seq);
+                }
                 notifications::dispatch_daemon_frame(&app_for_frames, &frame);
-                let _ = app_for_frames.emit("daemon-event", frame);
+                let _ = app_for_frames.emit(
+                    "daemon-event",
+                    serde_json::json!({
+                        "connection_id": id_for_payload,
+                        "frame": frame,
+                    }),
+                );
+                true
             },
         );
         std::thread::sleep(std::time::Duration::from_secs(2));
@@ -1555,6 +1716,79 @@ fn set_active_view(kind: Option<String>, id: Option<String>) {
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
+fn install_app_menu(app: &AppHandle) -> tauri::Result<()> {
+    // NSAboutPanel renders name, version, copyright, credits and icon — credits is plain text, no markup, left-aligned by macOS. Short, equal-width lines look balanced.
+    let credits = concat!(
+        "Local-first agent that grows with you.\n",
+        "Each profile owns its memory, keys, model\n",
+        "and trust boundary; ALP links them across\n",
+        "machines without a registry or central cloud.\n",
+        "\n",
+        "github.com/satoshi-ltd/alpi\n",
+        "BUSL-1.1",
+    );
+    let icon = tauri::image::Image::from_bytes(include_bytes!("../icons/128x128@2x.png")).ok();
+    let mut about = AboutMetadataBuilder::new()
+        .name(Some("Alpi"))
+        .version(Some(env!("CARGO_PKG_VERSION")))
+        .authors(Some(vec!["Satoshi Ltd.".to_string()]))
+        .copyright(Some("© 2026 Satoshi Ltd."))
+        .website(Some("https://alpi.satoshi.ltd"))
+        .website_label(Some("alpi.satoshi.ltd"))
+        .license(Some("BUSL-1.1"))
+        .credits(Some(credits.to_string()));
+    if let Some(icon) = icon {
+        about = about.icon(Some(icon));
+    }
+    let about = about.build();
+
+    let about_item =
+        PredefinedMenuItem::about(app, Some("About Alpi"), Some(about))?;
+    let settings_item =
+        MenuItem::with_id(app, "menu:settings", "Settings…", true, Some("CmdOrCtrl+,"))?;
+    let sep_a = PredefinedMenuItem::separator(app)?;
+    let hide = PredefinedMenuItem::hide(app, None)?;
+    let hide_others = PredefinedMenuItem::hide_others(app, None)?;
+    let show_all = PredefinedMenuItem::show_all(app, None)?;
+    let sep_b = PredefinedMenuItem::separator(app)?;
+    let services = Submenu::with_id(app, "menu:services", "Services", true)?;
+    let sep_c = PredefinedMenuItem::separator(app)?;
+    let quit = PredefinedMenuItem::quit(app, Some("Quit Alpi"))?;
+
+    let app_submenu = Submenu::with_items(
+        app,
+        "Alpi",
+        true,
+        &[
+            &about_item,
+            &sep_a,
+            &settings_item,
+            &sep_b,
+            &services,
+            &sep_c,
+            &hide,
+            &hide_others,
+            &show_all,
+            &sep_c,
+            &quit,
+        ],
+    )?;
+
+    let menu = Menu::with_items(app, &[&app_submenu])?;
+    app.set_menu(menu)?;
+    app.on_menu_event(|app, event| {
+        if event.id.as_ref() == "menu:settings" {
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.show();
+                let _ = window.unminimize();
+                let _ = window.set_focus();
+                let _ = window.emit("nav", "settings");
+            }
+        }
+    });
+    Ok(())
+}
+
 pub fn run() {
     let toggle_shortcut = Shortcut::new(Some(Modifiers::SUPER | Modifiers::SHIFT), Code::KeyA);
 
@@ -1584,6 +1818,7 @@ pub fn run() {
                 .build(),
         )
         .setup(move |app| {
+            install_app_menu(app.handle())?;
             tray::install(app)?;
             if let Err(e) = app.global_shortcut().register(toggle_shortcut) {
                 eprintln!("global shortcut register failed: {e}");
@@ -1631,8 +1866,10 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             profiles,
             profile_summaries,
+            profile_detail,
             profile_tools,
             profile_skills,
+            profile_skill_read,
             profile_memory,
             host_connections,
             host_connection_set_active,

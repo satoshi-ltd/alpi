@@ -27,6 +27,8 @@ export function useChatStream({
   const deltaBufferRef = useRef({ assistant: "", reasoning: "" });
   const deltaFlushScheduledRef = useRef(false);
   const deltaFlushTimerRef = useRef(null);
+  // Deferred tool_end timers — must be cleared on cancel/new-request so a stale one can't mutate the next turn.
+  const toolEndTimersRef = useRef(new Set());
 
   const markActivity = useCallback(() => {
     lastEventAtRef.current = Date.now();
@@ -66,6 +68,8 @@ export function useChatStream({
   useEffect(() => {
     return () => {
       if (deltaFlushTimerRef.current) clearTimeout(deltaFlushTimerRef.current);
+      for (const t of toolEndTimersRef.current) clearTimeout(t);
+      toolEndTimersRef.current.clear();
     };
   }, []);
 
@@ -81,7 +85,9 @@ export function useChatStream({
     for (const rec of events) {
       const f = rec.frame ?? {};
       const kind = f.event;
-      if (kind === "tool_start") {
+      if (kind === "session_start") {
+        if (f.session_id) finalSessionId = f.session_id;
+      } else if (kind === "tool_start") {
         const existing = nextTools.findIndex((t) => t.tool_id === f.tool_id);
         const entry = {
           tool_id: f.tool_id,
@@ -197,7 +203,8 @@ export function useChatStream({
       const turn = pendingTurnRef.current;
       if (!turn) return;
       if (replayingRef.current) return;
-      if (!turn.sessionId) return; // new sessions can't replay; no sidecar key yet
+      // Pre-session_start: nothing to replay yet (sidecar key is the session id, daemon emits it as the first frame).
+      if (!turn.sessionId) return;
       const silentFor = Date.now() - (lastEventAtRef.current || 0);
       if (silentFor >= STALL_THRESHOLD_MS) {
         runReplay();
@@ -213,6 +220,15 @@ export function useChatStream({
       markActivity();
       if (p.kind === "heartbeat") {
         return; // keepalive only — daemon proving the loop is alive
+      }
+      if (p.kind === "session_start") {
+        // Pin the sessionId on pendingTurn BEFORE any tool/delta arrives so the stall watchdog can replay via host.chat.events_since even if the very next frame is the one that gets lost.
+        if (p.session_id) {
+          setPendingTurn((prev) =>
+            prev ? { ...prev, sessionId: p.session_id } : prev,
+          );
+        }
+        return;
       }
       if (p.kind === "tool_start") {
         setPendingTurn((prev) => {
@@ -247,7 +263,10 @@ export function useChatStream({
         const matchTool = (t) =>
           (p.tool_id && t.tool_id === p.tool_id) ||
           (!p.tool_id && t.name === p.name && t.ok === null);
+        const turnRequestId = activeRequestIdRef.current;
         function applyEnd() {
+          // Stale fires from a previous turn must not mutate the current pendingTurn.
+          if (activeRequestIdRef.current !== turnRequestId) return;
           setPendingTurn((prev) => {
             if (!prev) return prev;
             const tools = [...prev.tools];
@@ -285,7 +304,11 @@ export function useChatStream({
             };
             return { ...prev, tools };
           }
-          setTimeout(applyEnd, MIN_TOOL_RUNNING_MS - elapsed);
+          const timer = setTimeout(() => {
+            toolEndTimersRef.current.delete(timer);
+            applyEnd();
+          }, MIN_TOOL_RUNNING_MS - elapsed);
+          toolEndTimersRef.current.add(timer);
           return prev;
         });
       } else if (p.kind === "assistant_delta") {
@@ -342,8 +365,9 @@ export function useChatStream({
           return prev;
         });
       } else if (p.kind === "done") {
-        // Drop buffered deltas — the persisted session already has them.
         deltaBufferRef.current = { assistant: "", reasoning: "" };
+        for (const t of toolEndTimersRef.current) clearTimeout(t);
+        toolEndTimersRef.current.clear();
         setPendingTurn((prev) => (prev?.error ? prev : null));
       }
     });

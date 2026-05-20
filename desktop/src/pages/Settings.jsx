@@ -51,6 +51,7 @@ export default function Settings({
           key={`${selectedWorkgroup.id}:${refreshTick}`}
           workgroup={selectedWorkgroup}
           profiles={profiles}
+          connectionId={activeConnection?.id ?? null}
           onSaved={onRefresh}
           onOpenChat={onOpenChat}
         />
