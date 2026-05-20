@@ -1,3 +1,4 @@
+mod event_dispatch;
 mod host_client;
 mod home;
 mod notifications;
@@ -1593,116 +1594,110 @@ fn tray_announce_update(app: AppHandle, available: bool, version: Option<String>
 }
 
 fn subscribe_daemon_events(app: AppHandle) {
-    use std::collections::{HashMap, HashSet, VecDeque};
+    use std::collections::HashMap;
     use std::sync::{Arc, Mutex};
 
-    // Monotonic seq cursor per connection — wall-clock `at` drifted on NTP skew, seq is daemon-monotone.
-    let last_seq: Arc<Mutex<HashMap<String, u64>>> = Arc::new(Mutex::new(HashMap::new()));
+    use crate::event_dispatch::{classify_frame, SubscribeAction, SubscribeState};
 
-    fn read_seq(map: &Arc<Mutex<HashMap<String, u64>>>, id: &str) -> u64 {
-        map.lock().unwrap_or_else(|e| e.into_inner()).get(id).copied().unwrap_or(0)
-    }
-    fn bump_seq(map: &Arc<Mutex<HashMap<String, u64>>>, id: &str, seq: u64) {
-        let mut guard = map.lock().unwrap_or_else(|e| e.into_inner());
-        let cur = guard.get(id).copied().unwrap_or(0);
-        if seq > cur {
-            guard.insert(id.to_string(), seq);
-        }
-    }
+    // One state object per (daemon connection). Keeps last_seq + the dedupe window. Survives loop iterations so reconnects retain the cursor.
+    let states: Arc<Mutex<HashMap<String, SubscribeState>>> =
+        Arc::new(Mutex::new(HashMap::new()));
 
     loop {
         let starting_id = host_client::active_connection_id();
-        // Subscribe FIRST. Calling history before subscribe leaves a race window:
-        // a frame fired between the history reply and the stream open would be
-        // counted in the daemon's seq but never delivered to the client.
         let app_for_frames = app.clone();
         let id_for_payload = starting_id.clone();
-        let last_seq_for_frames = Arc::clone(&last_seq);
-        let id_for_bump = starting_id.clone();
-        let last_seq_for_anchor = Arc::clone(&last_seq);
-        let anchor_id = starting_id.clone();
-
-        // Dedupe seqs across the (live ↔ post-handshake backfill) overlap.
-        let seen_seqs: Arc<Mutex<HashSet<u64>>> = Arc::new(Mutex::new(HashSet::new()));
-        let seen_order: Arc<Mutex<VecDeque<u64>>> = Arc::new(Mutex::new(VecDeque::new()));
-        let seen_seqs_for_live = Arc::clone(&seen_seqs);
-        let seen_order_for_live = Arc::clone(&seen_order);
-
-        fn mark_seen(set: &Arc<Mutex<HashSet<u64>>>, order: &Arc<Mutex<VecDeque<u64>>>, seq: u64) -> bool {
-            let mut s = set.lock().unwrap_or_else(|e| e.into_inner());
-            if s.contains(&seq) {
-                return false;
-            }
-            s.insert(seq);
-            let mut o = order.lock().unwrap_or_else(|e| e.into_inner());
-            o.push_back(seq);
-            // Bounded: drop oldest seqs once the window grows past 4× the history limit.
-            while o.len() > 1024 {
-                if let Some(old) = o.pop_front() {
-                    s.remove(&old);
-                }
-            }
-            true
-        }
+        let states_for_loop = Arc::clone(&states);
+        let starting_id_for_match = starting_id.clone();
 
         let _ = host_client::call_stream_until(
             "host.events.subscribe",
             serde_json::json!({}),
             move |frame| {
-                if host_client::active_connection_id() != starting_id {
+                if host_client::active_connection_id() != starting_id_for_match {
                     return false;
                 }
-                if frame.get("event").and_then(|v| v.as_str()) == Some("subscribed") {
-                    // After the stream is hot, fill the gap by paging from the PREVIOUS cursor — anchoring at the new next_seq would silently drop anything emitted while we were dark.
-                    let prev = read_seq(&last_seq_for_anchor, &anchor_id);
-                    if prev > 0 {
+                let mut guard = states_for_loop
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner());
+                let state = guard
+                    .entry(starting_id_for_match.clone())
+                    .or_insert_with(|| SubscribeState::new(1024));
+                let action = classify_frame(state, &frame);
+                drop(guard);
+
+                match action {
+                    SubscribeAction::BackfillFrom(prev) => {
                         if let Ok(value) = host_client::call(
                             "host.events.history",
                             serde_json::json!({ "after_seq": prev, "limit": 200 }),
                         ) {
-                            if let Some(events) = value.get("events").and_then(|v| v.as_array()) {
+                            if let Some(events) =
+                                value.get("events").and_then(|v| v.as_array())
+                            {
                                 for ev in events {
-                                    if let Some(seq) = ev.get("seq").and_then(|v| v.as_u64()) {
-                                        if !mark_seen(&seen_seqs_for_live, &seen_order_for_live, seq) {
+                                    let mut g = states_for_loop
+                                        .lock()
+                                        .unwrap_or_else(|e| e.into_inner());
+                                    let s = g.entry(starting_id_for_match.clone())
+                                        .or_insert_with(|| SubscribeState::new(1024));
+                                    if let Some(seq) =
+                                        ev.get("seq").and_then(|v| v.as_u64())
+                                    {
+                                        if !s.mark_seen(seq) {
                                             continue;
                                         }
-                                        bump_seq(&last_seq_for_anchor, &anchor_id, seq);
+                                        s.bump_seq(seq);
                                     }
-                                    notifications::dispatch_daemon_frame(&app_for_frames, ev);
+                                    drop(g);
+                                    notifications::dispatch_daemon_frame(
+                                        &app_for_frames,
+                                        ev,
+                                    );
                                     let _ = app_for_frames.emit(
                                         "daemon-event",
                                         serde_json::json!({
-                                            "connection_id": anchor_id,
+                                            "connection_id": id_for_payload,
                                             "frame": ev,
                                             "replay": true,
                                         }),
                                     );
                                 }
                             }
-                            if let Some(next) = value.get("next_seq").and_then(|v| v.as_u64()) {
-                                bump_seq(&last_seq_for_anchor, &anchor_id, next);
+                            if let Some(next) =
+                                value.get("next_seq").and_then(|v| v.as_u64())
+                            {
+                                let mut g = states_for_loop
+                                    .lock()
+                                    .unwrap_or_else(|e| e.into_inner());
+                                g.entry(starting_id_for_match.clone())
+                                    .or_insert_with(|| SubscribeState::new(1024))
+                                    .bump_seq(next);
                             }
                         }
-                    } else if let Some(anchor) = frame.get("next_seq").and_then(|v| v.as_u64()) {
-                        // First connect on this endpoint — anchor at head; no historical replay.
-                        bump_seq(&last_seq_for_anchor, &anchor_id, anchor);
                     }
-                    return true;
-                }
-                if let Some(seq) = frame.get("seq").and_then(|v| v.as_u64()) {
-                    if !mark_seen(&seen_seqs, &seen_order, seq) {
-                        return true;  // already delivered via history backfill
+                    SubscribeAction::AnchorAt(anchor) => {
+                        if anchor > 0 {
+                            let mut g = states_for_loop
+                                .lock()
+                                .unwrap_or_else(|e| e.into_inner());
+                            g.entry(starting_id_for_match.clone())
+                                .or_insert_with(|| SubscribeState::new(1024))
+                                .bump_seq(anchor);
+                        }
                     }
-                    bump_seq(&last_seq_for_frames, &id_for_bump, seq);
+                    SubscribeAction::Deliver { .. } => {
+                        notifications::dispatch_daemon_frame(&app_for_frames, &frame);
+                        let _ = app_for_frames.emit(
+                            "daemon-event",
+                            serde_json::json!({
+                                "connection_id": id_for_payload,
+                                "frame": frame,
+                            }),
+                        );
+                    }
+                    SubscribeAction::DuplicateSeq | SubscribeAction::Ignore => {}
                 }
-                notifications::dispatch_daemon_frame(&app_for_frames, &frame);
-                let _ = app_for_frames.emit(
-                    "daemon-event",
-                    serde_json::json!({
-                        "connection_id": id_for_payload,
-                        "frame": frame,
-                    }),
-                );
                 true
             },
         );

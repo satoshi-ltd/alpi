@@ -6,6 +6,7 @@ import {
   DialogFooter,
   Dropdown,
   Eyebrow,
+  Field,
   Modal,
   Textarea,
 } from "../primitives/index.js";
@@ -46,6 +47,11 @@ export default function CreateWorkgroupModal({
   useEffect(() => {
     setMemberIds([]);
   }, [hubProfile]);
+
+  const hub = useMemo(
+    () => eligibleHubs.find((p) => p.name === hubProfile) ?? null,
+    [eligibleHubs, hubProfile],
+  );
 
   // Lazy peer list for the selected hub, scoped by (connection, profile) so two daemons with the same `doc` profile never bleed peers across.
   const { detail: hubDetail } = useProfileDetail(connectionId, hubProfile || null);
@@ -117,6 +123,7 @@ export default function CreateWorkgroupModal({
             trigger={{
               leading: hub && <Diamond color={hub.accent} />,
               label: hub ? `@${profileLabel(hub.name)}` : "Pick profile…",
+              trailing: hub?.model || undefined,
             }}
             direction="down"
             align="left"
@@ -130,6 +137,7 @@ export default function CreateWorkgroupModal({
                   key={p.name}
                   active={p.name === hubProfile}
                   leading={<Diamond color={p.accent} />}
+                  caption={p.model || undefined}
                   onClick={() => {
                     setHubProfile(p.name);
                     close();
@@ -144,8 +152,7 @@ export default function CreateWorkgroupModal({
 
         <div className={styles.field}>
           <Eyebrow>NAME</Eyebrow>
-          <input
-            className={styles.input}
+          <Field
             value={name}
             onChange={(e) => setName(e.target.value)}
             onKeyDown={(e) => {
@@ -188,7 +195,7 @@ export default function CreateWorkgroupModal({
         <div className={styles.field}>
           <Eyebrow>BRIEFING (OPTIONAL)</Eyebrow>
           <Textarea
-            className={styles.textarea}
+            className="ds-field"
             rows={3}
             value={briefing}
             onChange={(e) => setBriefing(e.target.value)}

@@ -11,6 +11,56 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.3.5 — 2026-05-20 — vitest harness + CreateWorkgroup crash fix, hub dropdown shows model, Field/Textarea primitives in modal
+
+Requires alpi ``v0.4.52`` or newer (no daemon contract change vs.
+v0.3.4). Layer-2 polish on top of the daemon migration: testing
+infrastructure, a P0 crash in the workgroup creation modal, and a
+handful of input/dropdown affordances aligned with the design spec.
+
+**Tests.** Adds vitest (`vitest run` via `pnpm test`) with a jsdom
+environment and a minimal Tauri mock (`@tauri-apps/api/core`,
+`@tauri-apps/api/event`) in `vitest.setup.js`. New suites cover the
+load-bearing paths the v0.3.4 migration introduced: `daemon-frame`
+(pure mapper from raw daemon emits), `workgroup-fetch` (transcript
+pagination contract: first fetch `tail=true`, subsequent
+`after_seq`), `workgroup-cache` (per-`(connection, wg_id)` cache),
+`useProfileDetail` (per-`(connectionId, profile)` cache invalidation
+on config/gateway/peers events), `useNavListener` (tray nav payload
+dispatch), and `useChatStream` (session_start pin, heartbeat no-op,
+done clears unless an error landed, stale request_id dropped, 10s
+stall watchdog replays sidecar and clears only on done, mid-replay
+without done preserves preview). 65 tests, all green.
+
+**CreateWorkgroupModal crash.** `+` from the sidebar threw
+`ReferenceError: hub is not defined` — the render referenced a
+`hub` object that lived only as a memo in an older revision. Restored
+the derivation via `useMemo` from `hubProfile + eligibleHubs`. The
+modal also adopts the design-system input primitives
+(`Field`, `Textarea` with `.ds-field`) so the Name placeholder
+vertical alignment matches every other input in the app; bespoke
+`.input` / `.textarea` CSS removed from
+`CreateWorkgroupModal.module.css`.
+
+**Dropdown gains `trigger.trailing`.** New slot in
+`primitives/Dropdown.jsx` for content that should sit right-aligned
+in the trigger (mono, ink-3, margin-left:auto). Used by the hub
+picker so the selected profile's model id renders inline next to
+`@name` instead of stacked underneath via `caption`. The dropdown
+row items keep `caption` to show the model under each `@name` in the
+popover.
+
+**Mid-stream cancellation correctness.** While auditing the test
+suite, hardened `daemon-frame::fromDaemonFrame` to surface the same
+shape regardless of which mutator emitted the event (test now pins
+the contract instead of relying on the consumer to be tolerant).
+
+Workgroup transcript refresh on `wg.post`/`wg.done` still flows
+through `workgroup-fetch::fetchWorkgroupTranscript`, with
+`useChatStream` driving session-detail reloads on `reply` (the
+daemon emits `reply` before `done`, so the new transcript is on disk
+by the time we refetch).
+
 ## v0.3.4 — 2026-05-20 — daemon v0.4.52 contracts: seq-only events, lite/detail profile, lazy skills body, transcript pagination, plus ConnectionPanel hydration fix and richer About macOS
 
 Requires alpi ``v0.4.52`` or newer. Migrates every host-plane consumer

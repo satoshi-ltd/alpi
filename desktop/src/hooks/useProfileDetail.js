@@ -108,4 +108,5 @@ export function invalidateProfileDetailCache(connectionId) {
 export function _clearProfileDetailCache() {
   _cache.clear();
   _inflight.clear();
+  _eventListenerInstalled = false;
 }

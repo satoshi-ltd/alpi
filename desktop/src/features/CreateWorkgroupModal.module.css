@@ -10,34 +10,6 @@
   gap: var(--space-3);
 }
 
-.input,
-.textarea {
-  width: 100%;
-  font-family: inherit;
-  font-size: var(--fs-base);
-  color: var(--ink);
-  background: var(--bg-input);
-  border: .5px solid var(--line-2);
-  border-radius: var(--r-lg);
-  padding: var(--space-4) var(--space-5);
-  outline: none;
-  transition: border-color var(--dur-1) var(--ease),
-    box-shadow var(--dur-1) var(--ease);
-}
-
-.textarea {
-  min-height: 88px;
-  line-height: var(--lh-normal);
-}
-
-.input:focus,
-.input:focus-visible,
-.textarea:focus,
-.textarea:focus-visible {
-  border-color: color-mix(in srgb, var(--ink) 30%, transparent);
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--ink) 6%, transparent);
-}
-
 .chips {
   display: flex;
   flex-wrap: wrap;

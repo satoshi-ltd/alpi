@@ -11,7 +11,8 @@ function makeKey(connectionId, profile, wgId) {
   return `${connectionId || "local"}|${profile}|${wgId}`;
 }
 
-function mergeByseq(prev, next) {
+// Exported for tests; merge is the bug-prone bit (dedupe + sort) and deserves direct coverage.
+export function mergeByseq(prev, next) {
   if (!prev || prev.length === 0) return next;
   if (!next || next.length === 0) return prev;
   const seen = new Set(prev.map((p) => p.seq));
@@ -50,6 +51,13 @@ export function fetchWorkgroupTranscript(connectionId, profile, wgId, options = 
     });
   inflight.set(key, promise);
   return promise;
+}
+
+// Test-only: drop every cache + cursor. App code never needs this.
+export function _resetTranscriptCachesForTests() {
+  inflight.clear();
+  cursors.clear();
+  cache.clear();
 }
 
 export function invalidateTranscriptCache(connectionId) {

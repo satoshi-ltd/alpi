@@ -126,6 +126,21 @@
   max-width: 240px;
 }
 
+.triggerTrailing {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  color: var(--ink-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 50%;
+}
+
+.wrapFull .trigger .triggerTrailing + .caret {
+  margin-left: var(--space-3);
+}
+
 .leading {
   display: inline-flex;
   align-items: center;

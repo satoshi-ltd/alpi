@@ -143,6 +143,9 @@ export default function Dropdown({
         ) : (
           <span className={styles.label}>{trigger.label}</span>
         )}
+        {trigger.trailing && (
+          <span className={styles.triggerTrailing}>{trigger.trailing}</span>
+        )}
         <CaretIcon className={styles.caret} />
       </button>
 
