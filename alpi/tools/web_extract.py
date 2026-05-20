@@ -86,7 +86,10 @@ class WebExtract(Tool):
         if override:
             try:
                 emit_state("extracting…")
-                out = llm.complete(messages=messages, model=override)
+                # resolve_model on a cfg-with-override pulls the right api_key from the PROFILE's .env — passing just `model=override` would leak to whatever happens to be in os.environ.
+                from dataclasses import replace as _replace
+                override_kwargs = cfg_mod.resolve_model(_replace(cfg, model=override))
+                out = llm.complete(messages=messages, **override_kwargs)
                 content = (out.content or "").strip() or "(empty extraction)"
                 return ToolResult(ok=True, output=content)
             except Exception as e:  # noqa: BLE001

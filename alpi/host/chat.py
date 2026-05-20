@@ -82,39 +82,38 @@ async def _data_chat_send(
     with _active_lock:
         _active[request_id] = engine
 
-    sid_for_lock = session_id if isinstance(session_id, str) and session_id else None
-    session_lock: asyncio.Lock | None = None
-    if sid_for_lock:
-        # Concurrent send on the same session: interrupt the previous engine and wait for it to release the lock.
-        prev = _session_active.get(sid_for_lock)
-        if prev is not None and prev is not engine:
-            prev.request_interrupt()
-        session_lock = _get_session_lock(sid_for_lock)
-        await session_lock.acquire()
-        _session_active[sid_for_lock] = engine
+    # Pin the session id BEFORE the engine runs so replay via host.chat.events_since works even for a brand-new session whose id the client hasn't seen yet.
+    effective_sid = session_id if isinstance(session_id, str) and session_id else engine.session.id
+    persisted_sid = effective_sid
 
-    # Sidecar so a desktop client whose stream socket dies mid-turn can replay via host.chat.events_since.
-    persisted_sid = sid_for_lock
-    if persisted_sid:
-        _chat_events.reset_for_turn(home, persisted_sid, request_id)
+    session_lock: asyncio.Lock | None = None
+    # Concurrent send on the same session: interrupt the previous engine and wait for it to release the lock.
+    prev = _session_active.get(effective_sid)
+    if prev is not None and prev is not engine:
+        prev.request_interrupt()
+    session_lock = _get_session_lock(effective_sid)
+    await session_lock.acquire()
+    _session_active[effective_sid] = engine
+
+    _chat_events.reset_for_turn(home, persisted_sid, request_id)
 
     stream_alive = True
 
     async def emit(frame: dict[str, Any]) -> None:
         nonlocal stream_alive
         # Persist FIRST: replay depends on the sidecar staying complete even after the wire is gone.
-        if persisted_sid:
-            try:
-                _chat_events.append(home, persisted_sid, request_id, frame)
-            except Exception:  # noqa: BLE001
-                pass
+        try:
+            _chat_events.append(home, persisted_sid, request_id, frame)
+        except Exception:  # noqa: BLE001
+            pass
         if not stream_alive:
             return
         try:
             await send_frame(frame)
         except Exception:  # noqa: BLE001
-            # Client gone. Stop trying to push frames but keep draining + persisting so the sidecar has reply/done.
             stream_alive = False
+
+    await emit({"event": "session_start", "session_id": persisted_sid})
 
     loop = asyncio.get_running_loop()
     queue: asyncio.Queue = asyncio.Queue()
@@ -197,11 +196,6 @@ async def _data_chat_send(
             elif ev.kind == "assistant_done" and ev.final and ev.text.strip():
                 parts.append(ev.text)
         final = "\n\n".join(parts).strip()
-        # Once we know the final session_id we can also persist the late session frames against it (covers new sessions whose id wasn't known at entry).
-        late_sid = engine.session.id
-        if not persisted_sid and isinstance(late_sid, str) and late_sid:
-            _chat_events.reset_for_turn(home, late_sid, request_id)
-            persisted_sid = late_sid
         await emit({
             "event": "reply",
             "text": final,
@@ -218,9 +212,9 @@ async def _data_chat_send(
         await task
         with _active_lock:
             _active.pop(request_id, None)
-        if sid_for_lock and session_lock is not None:
-            if _session_active.get(sid_for_lock) is engine:
-                _session_active.pop(sid_for_lock, None)
+        if session_lock is not None:
+            if _session_active.get(effective_sid) is engine:
+                _session_active.pop(effective_sid, None)
             session_lock.release()
 
 

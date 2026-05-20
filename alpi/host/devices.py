@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import os
 import secrets
+import threading
 import time
 from pathlib import Path
 from typing import Any
@@ -20,6 +22,43 @@ def register(server: host_server.Server) -> None:
 def _store_path() -> Path:
     from alpi.home import _ROOT
     return _ROOT / "host" / "devices.yaml"
+
+
+def _guard_pytest_isolation(path: Path) -> None:
+    """Refuse to write the real developer store from inside a pytest run. We had a regression where a test fixture forgot to monkeypatch ``alpi.home._ROOT`` and the parametrized case silently appended `seed` rows to ``~/.alpi/host/devices.yaml`` on every test run. This guard is cheap and catches the next slip in the same shape."""
+    if "PYTEST_CURRENT_TEST" not in os.environ:
+        return
+    try:
+        from alpi import home as home_mod
+        root = home_mod._ROOT
+    except Exception:  # noqa: BLE001
+        return
+    # Anything under /tmp / pytest's tmp_path / a non-default home is fine.
+    real_default = Path.home() / ".alpi"
+    try:
+        if root.resolve() == real_default.resolve():
+            raise RuntimeError(
+                "devices.save() refused to write the real ~/.alpi store from inside "
+                "a pytest run — fixture forgot to monkeypatch alpi.home._ROOT. "
+                "Tests must either use the `short_tmp` fixture or call "
+                "`monkeypatch.setattr(home_mod, '_ROOT', tmp_path)`."
+            )
+    except OSError:
+        pass
+
+
+# 5s in-process cache so per-RPC token validation doesn't hit disk on every call. Writes invalidate.
+_cache_lock = threading.Lock()
+_cached: list[dict[str, Any]] | None = None
+_cached_at: float = 0.0
+_CACHE_TTL_S = 5.0
+
+
+def _invalidate_cache() -> None:
+    global _cached, _cached_at
+    with _cache_lock:
+        _cached = None
+        _cached_at = 0.0
 
 
 def load() -> list[dict[str, Any]]:
@@ -48,17 +87,37 @@ def load() -> list[dict[str, Any]]:
     return out
 
 
+def _load_cached() -> list[dict[str, Any]]:
+    global _cached, _cached_at
+    with _cache_lock:
+        if _cached is not None and (time.time() - _cached_at) < _CACHE_TTL_S:
+            return [dict(d) for d in _cached]
+    fresh = load()
+    with _cache_lock:
+        _cached = [dict(d) for d in fresh]
+        _cached_at = time.time()
+    return fresh
+
+
 def save(devices: list[dict[str, Any]]) -> None:
+    """Atomic write via tmp+rename so a crashed daemon never leaves a half-written devices.yaml that would lock out every paired client."""
     path = _store_path()
+    _guard_pytest_isolation(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        yaml.safe_dump(devices, sort_keys=False, allow_unicode=True),
-        encoding="utf-8",
-    )
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    text = yaml.safe_dump(devices, sort_keys=False, allow_unicode=True)
+    fd = os.open(str(tmp), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     try:
-        path.chmod(0o600)
-    except OSError:
-        pass
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(text)
+            f.flush()
+            os.fsync(f.fileno())
+    except Exception:
+        try: tmp.unlink()
+        except OSError: pass
+        raise
+    os.replace(str(tmp), str(path))
+    _invalidate_cache()
 
 
 def is_valid(token: str) -> bool:
@@ -78,6 +137,33 @@ def touch(token: str) -> None:
             break
     if changed:
         save(devices)
+
+
+# Validate + record last_seen in one call; writes only when last_seen is stale to keep auth I/O bounded.
+def validate_and_touch(token: str, min_interval: float = 60.0) -> bool:
+    devices = _load_cached()
+    if not devices:
+        return True  # migration window — empty store is open even without a token.
+    if not token:
+        return False
+    now = int(time.time())
+    match_idx = -1
+    for i, d in enumerate(devices):
+        if d["token"] == token:
+            match_idx = i
+            break
+    if match_idx < 0:
+        return False
+    last = devices[match_idx].get("last_seen") or 0
+    if now - int(last) >= min_interval:
+        # Reload fresh to avoid writing a stale snapshot when the cache is older than the file.
+        fresh = load()
+        for d in fresh:
+            if d["token"] == token:
+                d["last_seen"] = now
+                break
+        save(fresh)
+    return True
 
 
 def add(label: str = "") -> dict[str, Any]:
@@ -216,5 +302,6 @@ async def _rename(
 
 
 __all__ = [
-    "register", "load", "save", "is_valid", "touch", "add", "revoke", "rename",
+    "register", "load", "save", "is_valid", "touch", "validate_and_touch",
+    "add", "revoke", "rename",
 ]

@@ -91,11 +91,30 @@ Calibration gated on v0.6 evidence (`CM.1` + `logs/compaction.jsonl`).
 
 ## `.env`
 
-Use `.env` for provider keys and static secrets. Skills declare needed
-variables with `requires_env`; values stay in `.env` and are only
-passed to subprocesses after the skill is opened.
+Use `<home>/.env` for provider keys and static secrets. Skills
+declare needed variables with `requires_env`; values stay in `.env`
+and are only passed to subprocesses after the skill is opened.
 
 Do not store secret values inside `SKILL.md`, docs, or scripts.
+
+**Per-profile, daemon-isolated** (v0.4.52). The daemon supervises
+many profiles in one process and never mutates `os.environ`. Every
+profile-scoped lookup goes through
+`alpi.home.effective_profile_env(home, *, base=None, extra=None)` =
+`base` (default `os.environ`) ∪ `<home>/.env` ∪ `extra`. Migrated
+sites: gateway adapters (`self.env` frozen at construction; Matrix
+`_build_client`, IMAP `from_env_map`), `tools/{email, terminal,
+skill, web_extract, read_image}`, `mail/{imap, gmail_auth}`, model
+selector / TUI provider gating (`Provider.has_key(env=…)`),
+`alpi.identity.draft_bio_from_agent`. LLM override paths
+(`web_extract.model`, `read_image.model`) MUST go through
+`config.resolve_model(replace(cfg, model=override))` so the
+override picks up the profile's api_key; passing raw `model=…` to
+`llm.complete` falls back to `os.environ` and breaks isolation.
+`config.load()` no longer touches `os.environ`. `_deep_merge`
+deep-copies defaults so a `cfg.providers.setdefault().append()` in
+one profile cannot leak into `DEFAULT_CONFIG` (and from there into
+every later load).
 
 ## Terminal approval allowlist
 

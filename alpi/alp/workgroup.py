@@ -808,6 +808,18 @@ def register(server: alp_server.Server, home: Path) -> None:
             member.last_seen_at = entry["ts"]
             _save_members(d, wg.members)
 
+        # wg.post mirrors workgroup_client._emit_wg_post so live clients refresh without a filesystem watcher.
+        try:
+            from alpi.host import events as host_events
+            from alpi.home import profile_name
+            host_events.emit("wg.post", {
+                "profile": profile_name(home),
+                "wg_id": wg_id,
+                "seq": seq,
+            })
+        except Exception:  # noqa: BLE001
+            pass
+
         return {"seq": seq, "ts": entry["ts"]}
 
     async def workgroup_pull(

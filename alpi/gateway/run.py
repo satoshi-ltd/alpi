@@ -139,10 +139,12 @@ def _llm_prompt(msg: IncomingMessage) -> str:
 
 async def _run_agent(msg: IncomingMessage, platform: Platform, home: Path,
                      show_trace: bool) -> str:
-    env = dict(os.environ)
-    env["ALPI_HOME"] = str(home)
-    env["ALPI_GATEWAY"] = "1"
-    env["ALPI_PLATFORM"] = msg.platform
+    from alpi.home import effective_profile_env
+    env = effective_profile_env(home, extra={
+        "ALPI_HOME": str(home),
+        "ALPI_GATEWAY": "1",
+        "ALPI_PLATFORM": msg.platform,
+    })
     prompt = _llm_prompt(msg)
     argv = [
         sys.executable, "-m", "alpi", "chat", "--once", prompt,

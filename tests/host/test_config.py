@@ -265,10 +265,10 @@ async def test_gmail_authorize_writes_env_and_streams_authorized(
     assert "GMAIL_CLIENT_ID=cid-123" in env_text
     assert "GMAIL_CLIENT_SECRET=sec-456" in env_text
     assert "GMAIL_ALLOWED_SENDERS=bob@example.com,carol@x.com" in env_text
-    # os.environ must be set so first_run can read the credentials.
+    # No os.environ shadow: gmail_auth.first_run(home) reads creds from the profile's .env on demand.
     import os
-    assert os.environ["GMAIL_CLIENT_ID"] == "cid-123"
-    assert os.environ["GMAIL_CLIENT_SECRET"] == "sec-456"
+    assert "GMAIL_CLIENT_ID" not in os.environ
+    assert "GMAIL_CLIENT_SECRET" not in os.environ
     assert frames == [
         {"event": "browser_opened"},
         {"event": "authorized", "email": "alice@example.com"},
@@ -335,8 +335,12 @@ async def test_gmail_authorize_reuses_stored_creds_on_blank_input(
 
     assert frames[-1] == {"event": "authorized", "email": "bob@example.com"}
     import os
-    assert os.environ["GMAIL_CLIENT_ID"] == "stored-id"
-    assert os.environ["GMAIL_CLIENT_SECRET"] == "stored-sec"
+    # No os.environ shadow — stored creds live only in the profile's .env.
+    assert "GMAIL_CLIENT_ID" not in os.environ
+    assert "GMAIL_CLIENT_SECRET" not in os.environ
+    env_text = (home / ".env").read_text()
+    assert "GMAIL_CLIENT_ID=stored-id" in env_text
+    assert "GMAIL_CLIENT_SECRET=stored-sec" in env_text
 
 
 @pytest.mark.asyncio
@@ -410,3 +414,104 @@ async def test_providers_set_key_rejects_duplicate_telegram_token(
     body["params"]["value"] = "bot-fresh"
     resp = await srv._dispatch(body)
     assert resp["result"]["ok"] is True
+
+
+@pytest.mark.asyncio
+async def test_mutators_emit_config_changed(tmp_path: Path, monkeypatch) -> None:
+    """Every cfg.save in alpi/host/config.py is paired with an emit so remote clients can react without polling. Tests one mutator per scope to keep the surface small."""
+    from alpi.host import events as host_events
+
+    home = _bootstrap(tmp_path)
+    monkeypatch.setattr(data_handlers, "_resolve_home", lambda p: home)
+    srv = host_server.Server(home=home)
+    data_config.register(srv)
+
+    captured: list[tuple[str, dict]] = []
+    monkeypatch.setattr(
+        host_events, "emit",
+        lambda kind, data=None: captured.append((kind, data or {})),
+    )
+
+    cases = [
+        ("host.providers.add_ollama",
+         {"profile": "default", "name": "local", "url": "http://x:11434"},
+         "providers"),
+        ("host.mcp.add",
+         {"profile": "default", "name": "fs", "command": "ls", "args": []},
+         "mcp"),
+        ("host.sandbox.set",
+         {"profile": "default", "state": "on"}, "sandbox"),
+        ("host.voice.set_voice",
+         {"profile": "default", "voice_id": "en-US-AndrewMultilingualNeural"},
+         "voice"),
+    ]
+    for method, params, scope in cases:
+        captured.clear()
+        resp = await srv._dispatch({
+            "id": "r", "method": method, "params": params,
+        })
+        assert resp.get("result", {}).get("ok") is True, resp
+        assert any(
+            k == "config_changed" and d.get("scope") == scope
+            for k, d in captured
+        ), f"no config_changed/{scope} after {method}; got {captured!r}"
+
+
+@pytest.mark.asyncio
+async def test_gateway_remove_emits_gateway_changed(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    from alpi.host import events as host_events
+
+    home = _bootstrap(tmp_path)
+    monkeypatch.setattr(data_handlers, "_resolve_home", lambda p: home)
+    (home / ".env").write_text(
+        "TELEGRAM_BOT_TOKEN=secret\nTELEGRAM_ALLOWED_CHAT_IDS=1\n",
+    )
+    srv = host_server.Server(home=home)
+    data_config.register(srv)
+
+    captured: list[tuple[str, dict]] = []
+    monkeypatch.setattr(
+        host_events, "emit",
+        lambda kind, data=None: captured.append((kind, data or {})),
+    )
+
+    resp = await srv._dispatch({
+        "id": "r", "method": "host.gateway.remove",
+        "params": {"profile": "default", "name": "telegram"},
+    })
+    assert resp["result"]["ok"] is True
+    assert ("gateway_changed", {
+        "profile": "default", "name": "telegram", "action": "removed",
+    }) in captured
+
+
+@pytest.mark.asyncio
+async def test_set_gateway_key_emits_gateway_changed_not_config(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    """Routing matters: a TELEGRAM_BOT_TOKEN rewrite is gateway-shaped (brings a poller online), not generic env. Clients refresh different surfaces on each."""
+    from alpi.host import events as host_events
+
+    home = _bootstrap(tmp_path)
+    monkeypatch.setattr(data_handlers, "_resolve_home", lambda p: home)
+    srv = host_server.Server(home=home)
+    data_config.register(srv)
+
+    captured: list[tuple[str, dict]] = []
+    monkeypatch.setattr(
+        host_events, "emit",
+        lambda kind, data=None: captured.append((kind, data or {})),
+    )
+
+    resp = await srv._dispatch({
+        "id": "r", "method": "host.providers.set_key",
+        "params": {
+            "profile": "default", "key": "TELEGRAM_BOT_TOKEN", "value": "v",
+        },
+    })
+    assert resp["result"]["ok"] is True
+    kinds = {k for k, _ in captured}
+    assert "gateway_changed" in kinds
+    assert "config_changed" not in kinds

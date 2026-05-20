@@ -248,6 +248,8 @@ def skills_index_block(home: Path, cfg_raw: dict[str, Any] | None = None) -> str
     User skills first, bundled (`@alpi/*`) after with a `[bundled]`
     marker. Empty string when neither is present.
     """
+    from alpi.home import effective_profile_env
+
     user_skills = all_skills(home)
     bundled = bundled_skills()
     if not user_skills and not bundled:
@@ -255,6 +257,8 @@ def skills_index_block(home: Path, cfg_raw: dict[str, Any] | None = None) -> str
 
     if cfg_raw is None:
         cfg_raw = _load_cfg_raw(home)
+    # Use the profile's effective env, not os.environ — otherwise a skill with requires_env tied to a per-profile .env secret would be hidden from the prompt even though it would run fine when invoked.
+    profile_env = effective_profile_env(home)
 
     lines = [
         "# AVAILABLE SKILLS",
@@ -276,7 +280,7 @@ def skills_index_block(home: Path, cfg_raw: dict[str, Any] | None = None) -> str
         # Schema-invalid skills stay out of the prompt regardless of eligibility — malformed frontmatter is unsafe to expose.
         if _schema.errors(_schema.validate_frontmatter(meta, categories=CATEGORIES)):
             continue
-        eligible, _missing = skill_eligibility(meta, cfg_raw=cfg_raw)
+        eligible, _missing = skill_eligibility(meta, env=profile_env, cfg_raw=cfg_raw)
         if not eligible:
             continue
         name = meta.get("name") or p.name
@@ -289,7 +293,8 @@ def skills_index_block(home: Path, cfg_raw: dict[str, Any] | None = None) -> str
             lines.append(f"    - {name}: {desc}" if desc else f"    - {name}")
 
     eligible_bundled = [
-        b for b in bundled if skill_eligibility(b.get("meta", {}), cfg_raw=cfg_raw)[0]
+        b for b in bundled
+        if skill_eligibility(b.get("meta", {}), env=profile_env, cfg_raw=cfg_raw)[0]
     ]
 
     if eligible_bundled:
@@ -1531,10 +1536,12 @@ def _run_or_test(home: Path, name: str, args: list[str], *, mode: str) -> ToolRe
             error=f"skill {name!r} has no output_schema; invoke requires a structured contract",
         )
 
-    env = dict(os.environ)
-    env["ALPI_HOME"] = str(home)
-    env["ALPI_SKILL_NAME"] = name
-    env["ALPI_SKILL_DIR"] = str(skill_dir)
+    from alpi.home import effective_profile_env
+    env = effective_profile_env(home, extra={
+        "ALPI_HOME": str(home),
+        "ALPI_SKILL_NAME": name,
+        "ALPI_SKILL_DIR": str(skill_dir),
+    })
 
     missing = [v for v in declared_env if v and not env.get(v)]
     if missing:

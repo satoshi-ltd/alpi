@@ -91,11 +91,16 @@ class ImapClient:
 
     @classmethod
     def from_env(cls) -> "ImapClient":
-        """Build a client from ``IMAP_*`` / ``SMTP_*`` variables in the env."""
-        addr = os.environ.get("IMAP_ADDRESS", "").strip()
-        pwd = os.environ.get("IMAP_PASSWORD", "")
-        imap = os.environ.get("IMAP_HOST", "").strip()
-        smtp = os.environ.get("SMTP_HOST", "").strip()
+        """Build a client from ``IMAP_*`` / ``SMTP_*`` variables in ``os.environ``. Prefer ``from_env_map`` from daemon code so a per-profile .env is honored without mutating the process env."""
+        return cls.from_env_map(os.environ)
+
+    @classmethod
+    def from_env_map(cls, env: dict[str, str]) -> "ImapClient":
+        """Same as ``from_env`` but reads from an explicit env map (e.g. the gateway's ``self.env`` snapshot for one profile)."""
+        addr = (env.get("IMAP_ADDRESS") or "").strip()
+        pwd = env.get("IMAP_PASSWORD") or ""
+        imap = (env.get("IMAP_HOST") or "").strip()
+        smtp = (env.get("SMTP_HOST") or "").strip()
         missing = [
             name for name, val in (
                 ("IMAP_ADDRESS", addr), ("IMAP_PASSWORD", pwd),
@@ -112,8 +117,8 @@ class ImapClient:
             password=pwd,
             imap_host=imap,
             smtp_host=smtp,
-            imap_port=int(os.environ.get("IMAP_PORT") or DEFAULT_IMAP_PORT),
-            smtp_port=int(os.environ.get("SMTP_PORT") or DEFAULT_SMTP_PORT),
+            imap_port=int(env.get("IMAP_PORT") or DEFAULT_IMAP_PORT),
+            smtp_port=int(env.get("SMTP_PORT") or DEFAULT_SMTP_PORT),
         )
 
     # Connectivity test (used by the setup wizard)

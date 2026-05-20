@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 import yaml
-from dotenv import load_dotenv
 
 DEFAULT_CONFIG: dict[str, Any] = {
     "model": "",
@@ -177,7 +177,9 @@ class Config:
 
 
 def _deep_merge(defaults: dict, user: dict | None) -> dict:
-    merged = dict(defaults)
+    """Recursive merge — user wins per-key. Defaults are deep-copied so a caller mutating ``cfg.providers["ollama"].append(...)`` can never pollute ``DEFAULT_CONFIG``; the daemon supervises many profiles in one process and a shared mutable default would leak between them."""
+    import copy
+    merged = copy.deepcopy(defaults)
     for key, value in (user or {}).items():
         if key in merged and isinstance(merged[key], dict) and isinstance(value, dict):
             merged[key] = _deep_merge(merged[key], value)
@@ -187,13 +189,8 @@ def _deep_merge(defaults: dict, user: dict | None) -> dict:
 
 
 def load(home: Path) -> Config:
-    """Load config from ~/.alpi/config.yaml and load .env into process env."""
+    """Read ``<home>/config.yaml`` only. ``<home>/.env`` is NOT loaded into ``os.environ`` — daemon supervises many profiles, so per-profile secrets are pulled on demand via ``home.read_profile_env`` (see ``resolve_model``)."""
     cfg_path = home / "config.yaml"
-    env_path = home / ".env"
-
-    # override=True so per-profile loads win — the daemon supervises many profiles in one process.
-    if env_path.exists():
-        load_dotenv(env_path, override=True)
 
     user_data: dict[str, Any] = {}
     if cfg_path.exists():
@@ -302,7 +299,25 @@ def save(cfg: Config) -> None:
     if cfg.service:
         data["service"] = cfg.service
 
-    cfg.config_path.write_text(yaml.safe_dump(data, sort_keys=False, allow_unicode=True))
+    atomic_write_yaml(cfg.config_path, data)
+
+
+def atomic_write_yaml(path: Path, data: dict[str, Any]) -> None:
+    """tmp + fsync + rename so a daemon crash mid-save never leaves a truncated yaml — half-written config silently empties providers/mcp/gateway state on the next load. Reused by ``host.config.set_field`` so direct dotted-key writes share the same safety as ``config.save``."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    text = yaml.safe_dump(data, sort_keys=False, allow_unicode=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    fd = os.open(str(tmp), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(text)
+            f.flush()
+            os.fsync(f.fileno())
+    except Exception:
+        try: tmp.unlink()
+        except OSError: pass
+        raise
+    os.replace(str(tmp), str(path))
 
 
 _GATEWAY_ALLOWED_KEYS: dict[str, frozenset[str]] = {
@@ -369,8 +384,21 @@ def _tools_delta(cfg: Config) -> dict:
     return out
 
 
+_CLOUD_API_KEY_ENV = {
+    "anthropic": "ANTHROPIC_API_KEY",
+    "openai": "OPENAI_API_KEY",
+    "openrouter": "OPENROUTER_API_KEY",
+    "gemini": "GEMINI_API_KEY",
+    "groq": "GROQ_API_KEY",
+}
+
+
 def resolve_model(cfg: Config) -> dict[str, Any]:
-    """Return the litellm.completion kwargs for the currently selected model."""
+    """Return the litellm.completion kwargs for the currently selected model.
+
+    Cloud api keys are read from the profile's ``<home>/.env`` (never
+    ``os.environ``) so two profiles in the same daemon process can hold
+    different keys for the same provider without cross-contamination."""
     model_str = cfg.model
     head, _, rest = model_str.partition("/")
 
@@ -383,7 +411,14 @@ def resolve_model(cfg: Config) -> dict[str, Any]:
             "api_key": "dummy",
         }
 
-    return {"model": model_str}
+    out: dict[str, Any] = {"model": model_str}
+    env_var = _CLOUD_API_KEY_ENV.get(head)
+    if env_var:
+        from alpi.home import read_profile_env
+        key = read_profile_env(cfg.home).get(env_var, "").strip()
+        if key:
+            out["api_key"] = key
+    return out
 
 
 def seed_defaults(home: Path) -> None:

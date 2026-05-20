@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 import abc
-import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, AsyncIterator, Awaitable, Callable
 
-from alpi.home import read_profile_env
+from alpi.home import effective_profile_env
 
 
 @dataclass
@@ -42,7 +41,7 @@ class Platform(abc.ABC):
     def __init__(self, home: Path):
         self.home = home
         # Per-profile env snapshot — profile .env overrides process env. Frozen at construction; restart daemon to apply credential edits.
-        self.env: dict[str, str] = {**os.environ, **read_profile_env(home)}
+        self.env: dict[str, str] = effective_profile_env(home)
 
     @abc.abstractmethod
     async def listen(self) -> AsyncIterator[IncomingMessage]: ...

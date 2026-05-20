@@ -200,9 +200,11 @@ class AlpiApp(App):
             return
         head = model.split("/", 1)[0]
         from alpi import providers as prov_mod
+        from alpi.home import effective_profile_env
+        env = effective_profile_env(self.cfg.home)
         for p in prov_mod.builtin():
             if p.name == head:
-                if p.api_key_env and not p.has_key():
+                if p.api_key_env and not p.has_key(env):
                     self._mount_message(ErrorLine(
                         f"model `{model}` needs {p.api_key_env} — "
                         f"not set. Run `alpi setup` to add the key."

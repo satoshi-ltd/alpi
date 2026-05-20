@@ -95,6 +95,20 @@ doesn't reach:
   frontmatter `env: [FOO]`, scoped per-turn; an MCP server opts in via
   the per-server `env:` block in `config.yaml` (`env: { GH_TOKEN:
   env:GITHUB_TOKEN }`).
+- **Per-profile env isolation under the daemon** (v0.4.52).
+  `alpi.home.effective_profile_env(home, *, base=None, extra=None)`
+  is the single helper for "give me the env this profile should
+  see": `base` (defaults to `os.environ`) ∪ `<home>/.env` ∪ `extra`.
+  The daemon never mutates `os.environ` — under multi-profile
+  supervision a global mutation would cross-contaminate every
+  profile in the process. The contract holds across the agent
+  toolchain (`tools/{skill,terminal,email,web_extract,read_image}`),
+  the gateway adapters (`gateway/{base,run,platforms/imap,
+  platforms/matrix}`, frozen `self.env` snapshot at construction),
+  mail (`mail/{imap,gmail_auth}` via `from_env_map`), the model
+  selector / TUI provider gating (`Provider.has_key(env=...)`), and
+  `alpi.identity.draft_bio_from_agent` (`config.resolve_model(cfg)`,
+  which reads the api_key from the profile's .env).
 
 - **ALP envelope binding** (v0.3.8). On top of the existing signature
   + replay-cache checks, `verify()` now pins `alp.to == self.identity`

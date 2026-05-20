@@ -81,6 +81,20 @@ def read_profile_env(home: Path) -> dict[str, str]:
     return out
 
 
+def effective_profile_env(
+    home: Path,
+    *,
+    base: dict[str, str] | None = None,
+    extra: dict[str, str] | None = None,
+) -> dict[str, str]:
+    """Effective env map for a profile call: ``base`` ∪ profile ``.env`` ∪ ``extra`` (last wins). Use this everywhere a profile-scoped subprocess/library lookup would otherwise reach into ``os.environ`` — the daemon supervises many profiles in one process, so global env would leak secrets across them. ``base`` defaults to ``os.environ`` so process-level vars (PATH, HOME, TZ, ALPI_PLATFORM) still propagate; per-profile keys (provider API keys, gateway tokens) overlay from the profile's .env."""
+    out: dict[str, str] = dict(base if base is not None else os.environ)
+    out.update(read_profile_env(home))
+    if extra:
+        out.update(extra)
+    return out
+
+
 def telegram_token_owner(
     token: str,
     *,

@@ -92,3 +92,45 @@ def test_telegram_token_owner_matches_quoted_token(tmp_path: Path) -> None:
 
 def test_read_profile_env_missing_file_returns_empty(tmp_path: Path) -> None:
     assert home.read_profile_env(tmp_path) == {}
+
+
+def test_effective_profile_env_profile_overlays_base(tmp_path: Path) -> None:
+    """Daemon supervises many profiles in one process — each effective env must layer profile .env over a clean base so process-level vars (PATH) survive while per-profile secrets win on collision."""
+    (tmp_path / ".env").write_text("OPENAI_API_KEY=from-profile\nALPI_TEST_X=yes\n")
+    base = {"PATH": "/usr/bin", "OPENAI_API_KEY": "from-base"}
+
+    env = home.effective_profile_env(tmp_path, base=base)
+
+    assert env["PATH"] == "/usr/bin"           # base passes through
+    assert env["OPENAI_API_KEY"] == "from-profile"  # profile wins
+    assert env["ALPI_TEST_X"] == "yes"
+
+
+def test_effective_profile_env_extra_overrides_everything(tmp_path: Path) -> None:
+    (tmp_path / ".env").write_text("ALPI_X=from-profile\n")
+    env = home.effective_profile_env(
+        tmp_path,
+        base={"ALPI_X": "from-base"},
+        extra={"ALPI_X": "from-extra", "ALPI_GATEWAY": "1"},
+    )
+    assert env["ALPI_X"] == "from-extra"
+    assert env["ALPI_GATEWAY"] == "1"
+
+
+def test_effective_profile_env_does_not_mutate_base(tmp_path: Path) -> None:
+    """The returned dict must be a fresh copy — mutating it (e.g. setting ALPI_SKILL_NAME for one subprocess) must not leak into the next profile's effective env."""
+    (tmp_path / ".env").write_text("FOO=bar\n")
+    base = {"PATH": "/usr/bin"}
+    env = home.effective_profile_env(tmp_path, base=base)
+    env["ALPI_LEAK"] = "yes"
+    assert "ALPI_LEAK" not in base
+
+
+def test_effective_profile_env_two_profiles_isolated(tmp_path: Path) -> None:
+    a = tmp_path / "a"; a.mkdir()
+    b = tmp_path / "b"; b.mkdir()
+    (a / ".env").write_text("OPENAI_API_KEY=alice\n")
+    (b / ".env").write_text("OPENAI_API_KEY=bob\n")
+    base = {"PATH": "/usr/bin"}
+    assert home.effective_profile_env(a, base=base)["OPENAI_API_KEY"] == "alice"
+    assert home.effective_profile_env(b, base=base)["OPENAI_API_KEY"] == "bob"

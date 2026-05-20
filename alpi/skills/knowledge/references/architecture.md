@@ -174,15 +174,19 @@ Tool actions: `memory(action="promotion_list")` read-only, `memory(action="promo
   contract is enforced at write time (TUI setup + host RPC reject
   duplicates) and listeners read their token from `<home>/.env`, not
   the global env.
-- **Per-profile env snapshot** — every `Platform` captures
-  `{**os.environ, **<home>/.env}` at construction into `self.env`.
-  Used today for **Telegram credentials** (`self._token`) and the
-  **inbound allowlist check** for every platform
-  (`delivery.is_allowed(..., env=platform.env)`), so a sibling
-  profile's `.env` cannot authorize this profile's chats. Matrix /
-  IMAP still pull some of their own credentials from `os.environ`
-  directly — not migrated yet. Snapshot is frozen at construction;
-  credential edits require a daemon/gateway restart.
+- **Per-profile env isolation** — `alpi.home.effective_profile_env(home,
+  *, base=None, extra=None)` is the canonical helper: `base`
+  (defaults to `os.environ`) overlaid with `<home>/.env` overlaid
+  with `extra`. The daemon never mutates `os.environ`. Every
+  `Platform` snapshots this into `self.env` at construction;
+  Telegram token, IMAP (`from_env_map`), Matrix `_build_client`,
+  inbound `delivery.is_allowed(env=…)` all read from it. Agent
+  tools (`tools/{skill,terminal,email,web_extract,read_image}`),
+  the model selector / TUI gating (`Provider.has_key(env=…)`),
+  identity drafting (`config.resolve_model(cfg)`), and the gateway
+  child agent extend the contract. Snapshot is frozen at
+  construction; credential edits write the file atomically but
+  live listeners pick up the change on next daemon/gateway restart.
 
 ## Host/API boundary
 
@@ -219,17 +223,51 @@ All three `host.network.*` verbs are local-only: desktop over the Unix
 socket can call them, but a paired remote client over WebSocket gets
 `forbidden`.
 
-`host.events.subscribe` emits live `{event, data, at}` frames.
-`host.events.history({since?, kinds?, limit?})` returns recent frames
-from a bounded in-memory ring backed by compacted
-`<server.home>/host/events.jsonl`, so desktop/mobile can backfill
-events missed while disconnected.
+`host.events.subscribe` emits live `{event, data, at, seq}` frames
+and a `{event: "subscribed", next_seq}` handshake on connect.
+`host.events.history({after_seq?, kinds?, limit?})` returns
+`{events, next_seq}` from a bounded in-memory ring backed by
+compacted `<server.home>/host/events.jsonl`. The contract is
+**seq-only**: clients pivot on monotonic `seq`, never wall-clock
+`at` (clock skew + suspend-resume scramble that). The legacy
+`since` param is silently ignored. **Subscribe FIRST**, then on the
+`subscribed` handshake backfill from the previous cursor — doing
+history-then-subscribe leaves a race window where frames fired
+between the two calls are counted in the daemon's seq but never
+delivered. Wired event kinds beyond chat/sessions/wg.post/wg.done:
+`schedule.{done,failed,changed}`, `config_changed`,
+`gateway_changed`, `peers_changed`, `profile_changed`,
+`workgroup_changed`, `workgroup_members`, `budget.threshold`.
 
 Host model/device helpers are additive and tolerant of partial failure:
 `host.providers.ollama_models` returns `{models, errors}` so one
 unreachable local Ollama endpoint does not hide the rest, and
 `host.voice.preview` returns a short daemon-synthesized MP3 preview
 as base64 with controlled errors for missing TTS dependencies.
+
+**Lite/detail split on the hot path** (v0.4.52). `host.profile.summaries`
+ships only the inbox/sidebar shape (name, model, accent,
+latest_session, counts, budget_*, pubkey_b64, has_any_provider,
+subsystems). The heavy companion lives in `host.profile.detail`
+(workspace, tcp_*, provider_keys, provider_ollama, sandbox*,
+voice_*, mcps, peers, models) — fetched lazily by settings/profile
+screens, cached per `(connectionId, profile)` so two daemons with
+the same profile name never bleed state. `host.skills.list` is
+also lightweight: no SKILL.md body by default (`~32KB/skill`);
+`host.skill.read({name, category?})` returns one skill's body on
+demand. `_counts.skills` counts SKILL.md directories without reading
+bodies. `host.workgroup.transcript({after_seq?, limit?, tail?})`
+returns `{posts, next_seq, limit}`; without `after_seq` the default
+is `tail=true` so first-paint of a long-lived workgroup ships the
+recent window, not the oldest. `decrypt_transcript` opens the hub
+sealed group key once outside the per-post loop.
+
+**WebSocket transport** negotiates `permessage-deflate` by default
+(`ws_serve(compression="deflate")`), which trims JSON-RPC payloads
+50–80% on Tailscale. Desktop and mobile maintain a persistent
+multiplexed WS pool per `(ip, port, token)` so chatty RPCs amortize
+the TCP+WS handshake. Streams (`host.chat.send`,
+`host.events.subscribe`) open their own dedicated socket.
 
 Clients must not read `~/.alpi/` directly or spawn `alpi` as a
 subprocess. ALP (`alpi/alp/`) is separate (peer-to-peer). `Peer TCP

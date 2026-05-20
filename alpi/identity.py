@@ -14,7 +14,7 @@ from pathlib import Path
 def draft_bio_from_agent(home: Path, cfg) -> str:
     """One-shot LLM synthesis. Returns the drafted bio or raises
     ``ValueError`` with a clear message. No side effects."""
-    from alpi import home as _home, llm as _llm
+    from alpi import config as _cfg, home as _home, llm as _llm
 
     agent_md = _home.agent_path(home)
     text = agent_md.read_text() if agent_md.exists() else ""
@@ -36,7 +36,8 @@ def draft_bio_from_agent(home: Path, cfg) -> str:
         },
         {"role": "user", "content": text[:8000]},
     ]
-    result = _llm.complete(model=cfg.model, messages=messages)
+    # resolve_model injects the profile's api_key from its .env; calling complete with raw cfg.model would silently fall back to os.environ, which under the daemon belongs to no profile in particular.
+    result = _llm.complete(messages=messages, **_cfg.resolve_model(cfg))
     lines = (result.content or "").strip().splitlines()
     if not lines:
         raise ValueError("LLM returned an empty draft")

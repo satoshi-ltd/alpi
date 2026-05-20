@@ -418,6 +418,44 @@ def test_read_image_uses_override_model_when_set(
     assert captured.get("model") == "openrouter/x/vision"
 
 
+def test_read_image_override_injects_profile_api_key(
+    tmp_home_no_env: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The override path must run through resolve_model so each profile's .env feeds its own api_key — passing ``model=override`` raw would leak whatever happens to be in os.environ at the time."""
+    (tmp_home_no_env / "config.yaml").write_text(
+        'model: anthropic/claude-sonnet-4-6\n'
+        'tools:\n  read_image:\n    model: openai/gpt-4o\n'
+    )
+    (tmp_home_no_env / ".env").write_text(
+        "OPENAI_API_KEY=from-profile\nANTHROPIC_API_KEY=anth-from-profile\n",
+    )
+    # Make sure the test sees only what's in the profile, not whatever happens to be in the shell env.
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+
+    from alpi import llm
+    from alpi.llm import Completion
+    from alpi.tools.read_image import ReadImage, MAGIC_BYTES
+
+    f = tmp_home_no_env / "pic.png"
+    f.write_bytes(MAGIC_BYTES["image/png"] + b"\x00" * 100)
+
+    captured: dict = {}
+
+    def _fake_complete(**kwargs):
+        captured.update(kwargs)
+        return Completion(
+            content="ok", input_tokens=1, output_tokens=1,
+            cost_usd=0.0, raw=None, tool_calls=[],
+        )
+
+    monkeypatch.setattr(llm, "complete", _fake_complete)
+    r = ReadImage().run(path=str(f), question="?")
+    assert r.ok
+    assert captured.get("model") == "openai/gpt-4o"
+    assert captured.get("api_key") == "from-profile"
+
+
 def test_read_image_falls_back_to_main_when_override_fails(
     tmp_home_no_env: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:

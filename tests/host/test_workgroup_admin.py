@@ -125,6 +125,37 @@ async def test_remove_workgroup_clears_dir(short_tmp: Path, monkeypatch) -> None
 
 
 @pytest.mark.asyncio
+async def test_create_emits_workgroup_changed(short_tmp: Path, monkeypatch) -> None:
+    from alpi import home as home_mod
+    from alpi.host import events as host_events
+
+    home = short_tmp / "h"
+    _seed(home)
+    monkeypatch.setattr(home_mod, "_ROOT", short_tmp)
+    monkeypatch.setattr(home_mod, "home_for", lambda profile: home)
+    srv = host_server.Server(home=home)
+    workgroup_admin.register(srv)
+
+    captured: list[tuple[str, dict]] = []
+    monkeypatch.setattr(
+        host_events, "emit",
+        lambda kind, data=None: captured.append((kind, data or {})),
+    )
+
+    resp = await srv._dispatch({
+        "id": "r",
+        "method": "host.workgroup.create",
+        "params": {"profile": "default", "name": "research", "members": []},
+    })
+    wg_id = resp["result"]["wg_id"]
+    assert any(
+        k == "workgroup_changed" and d.get("wg_id") == wg_id
+        and d.get("action") == "created"
+        for k, d in captured
+    )
+
+
+@pytest.mark.asyncio
 async def test_action_rejects_unknown(short_tmp: Path, monkeypatch) -> None:
     home = short_tmp / "h"
     _seed(home)

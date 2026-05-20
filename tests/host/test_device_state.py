@@ -81,13 +81,28 @@ async def test_device_profile_summaries_are_served_by_host(
     profile = resp["result"]["profiles"][0]
     assert profile["name"] == "default"
     assert profile["model"] == "openai/gpt-5.4-mini"
-    assert profile["workspace"] == "/tmp/work"
     assert profile["latest_session"]["id"] == "abc"
     assert profile["latest_session"]["kind"] == "chat"
     assert profile["counts"]["sessions"] == 2
     assert profile["counts"]["skills"] == 1
-    assert profile["provider_keys"][0]["env"] == "OPENAI_API_KEY"
     assert profile["pubkey_b64"]
+    # The lightweight summary must NOT carry the heavy fields anymore — those moved to host.profile.detail.
+    assert "provider_keys" not in profile
+    assert "peers" not in profile
+    assert "models" not in profile
+    assert "mcps" not in profile
+
+    detail = await srv._dispatch({
+        "id": "d",
+        "method": "host.profile.detail",
+        "params": {"profile": "default"},
+    })
+    detail_payload = detail["result"]
+    assert detail_payload["workspace"] == "/tmp/work"
+    assert detail_payload["provider_keys"][0]["env"] == "OPENAI_API_KEY"
+    assert "peers" in detail_payload
+    assert "mcps" in detail_payload
+    assert "models" in detail_payload
 
 
 def test_daemon_running_uses_os_signal_not_external_kill(
@@ -170,6 +185,44 @@ async def test_device_config_field_mutations_go_through_host(
     assert host_set["result"]["ok"] is True
     assert cfg_mod.load(home).host["tcp_port"] == 49200
 
+    # No half-written tmp left behind by the atomic writer.
+    cfg_path = home / "config.yaml"
+    assert not cfg_path.with_suffix(cfg_path.suffix + ".tmp").exists()
+
+
+@pytest.mark.asyncio
+async def test_config_set_field_emits_config_changed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Without an emit, desktop/mobile would never know a dotted-key edit landed and the UI would lag behind reality until the next manual reload."""
+    from alpi.host import events as host_events
+
+    home = _bootstrap(tmp_path / "h")
+    monkeypatch.setattr(host_handlers, "_resolve_home", lambda profile: home)
+    srv = host_server.Server(home=home)
+    host_device_state.register(srv)
+
+    captured: list[tuple[str, dict]] = []
+    monkeypatch.setattr(
+        host_events, "emit",
+        lambda kind, data=None: captured.append((kind, data or {})),
+    )
+
+    await srv._dispatch({
+        "id": "set",
+        "method": "host.config.set_field",
+        "params": {"profile": "default", "key": "alp.tcp_port", "value": "4242"},
+    })
+    await srv._dispatch({
+        "id": "unset",
+        "method": "host.config.unset_field",
+        "params": {"profile": "default", "key": "alp.tcp_port"},
+    })
+
+    kinds = [k for k, _ in captured]
+    assert kinds.count("config_changed") == 2
+    assert {d["scope"] for k, d in captured if k == "config_changed"} == {"alp"}
+
 
 @pytest.mark.asyncio
 async def test_device_gateway_and_skills_views(
@@ -205,5 +258,72 @@ async def test_device_gateway_and_skills_views(
     assert row["category"] is None
     assert row["name"] == "demo"
     assert row["description"] == "Demo skill"
-    assert "body" in row
     assert "path" in row
+    # Default listing must NOT carry the SKILL.md body — saves ~32KB/skill on the wire.
+    assert "body" not in row
+
+    # Detail path returns the body on demand (empty here — fixture has only frontmatter).
+    detail = await srv._dispatch({
+        "id": "skill-read",
+        "method": "host.skill.read",
+        "params": {"profile": "default", "name": "demo"},
+    })
+    assert "body" in detail["result"]["skill"]
+    assert detail["result"]["skill"]["description"] == "Demo skill"
+
+    # Opt-in legacy: clients that explicitly request bodies still get them.
+    legacy = await srv._dispatch({
+        "id": "skills-with-body",
+        "method": "host.skills.list",
+        "params": {"profile": "default", "include_body": True},
+    })
+    assert "body" in legacy["result"]["skills"][0]
+
+
+@pytest.mark.asyncio
+async def test_profile_summaries_does_not_block_loop(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A slow _profile_summary (e.g. a profile whose ledger.json is on a stale NFS mount) must not freeze every other coroutine on the host loop. Same root cause as scheduler.serve()'s old inline tick."""
+    import asyncio
+    import time as _time
+
+    home = _bootstrap(tmp_path / "h")
+    monkeypatch.setattr(host_device_state.home_mod, "_ROOT", home)
+    monkeypatch.setattr(host_handlers, "_resolve_home", lambda profile: home)
+    block_s = 0.4
+
+    def slow_summary(row):
+        _time.sleep(block_s)
+        return {**row, "blocked": True}
+
+    monkeypatch.setattr(host_device_state, "_profile_summary", slow_summary)
+
+    srv = host_server.Server(home=home)
+    host_device_state.register(srv)
+
+    counter = {"wakes": 0}
+
+    async def heartbeat(stop: asyncio.Event) -> None:
+        while not stop.is_set():
+            await asyncio.sleep(0.05)
+            counter["wakes"] += 1
+
+    stop = asyncio.Event()
+    hb_task = asyncio.create_task(heartbeat(stop))
+
+    dispatch_task = asyncio.create_task(srv._dispatch({
+        "id": "r", "method": "host.profile.summaries", "params": {},
+    }))
+    resp = await asyncio.wait_for(dispatch_task, timeout=block_s + 2.0)
+    stop.set()
+    try:
+        await hb_task
+    except (asyncio.CancelledError, Exception):  # noqa: BLE001
+        pass
+
+    assert resp["result"]["profiles"][0]["blocked"] is True
+    assert counter["wakes"] >= 3, (
+        f"host loop starved during host.profile.summaries — only {counter['wakes']} "
+        "heartbeats fired while _profile_summary blocked; handler must run it in a thread"
+    )

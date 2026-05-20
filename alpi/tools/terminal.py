@@ -28,8 +28,10 @@ _SAFE_ENV_KEYS = (
 
 
 def _build_subprocess_env() -> dict[str, str]:
+    from alpi.home import effective_profile_env
     from alpi.tools import _state
-    parent = os.environ
+    # Process-level keys come from os.environ (PATH, HOME, TZ, ALPI_PLATFORM…); profile-scoped secrets (active skill env keys typically include API tokens declared in .env) overlay from the active profile so terminal subprocesses see the same env the agent sees.
+    parent = effective_profile_env(get_home())
     out: dict[str, str] = {}
     for key in _SAFE_ENV_KEYS:
         if key in parent:

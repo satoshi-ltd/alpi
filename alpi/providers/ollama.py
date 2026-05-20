@@ -28,7 +28,7 @@ class OllamaProvider(Provider):
         if not self.display:
             self.display = self.name
 
-    def has_key(self) -> bool:
+    def has_key(self, env: dict[str, str] | None = None) -> bool:
         return True
 
     def list_models(self) -> list[ModelInfo]:

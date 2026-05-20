@@ -103,6 +103,30 @@ def env(monkeypatch):
     monkeypatch.setenv("SMTP_HOST", "smtp.example.com")
 
 
+def test_imap_platform_isolated_per_profile(tmp_path: Path, monkeypatch) -> None:
+    """Two profiles in one daemon: each Imap() reads its OWN .env, not the process-global IMAP_* vars or the other profile's. Without this the daemon would silently send mail from one profile through another profile's SMTP."""
+    monkeypatch.delenv("IMAP_ADDRESS", raising=False)
+    monkeypatch.delenv("IMAP_HOST", raising=False)
+
+    a = tmp_path / "a"; a.mkdir()
+    b = tmp_path / "b"; b.mkdir()
+    (a / ".env").write_text(
+        "IMAP_ADDRESS=alice@x.com\nIMAP_PASSWORD=pa\n"
+        "IMAP_HOST=imap.a.com\nSMTP_HOST=smtp.a.com\n",
+    )
+    (b / ".env").write_text(
+        "IMAP_ADDRESS=bob@y.com\nIMAP_PASSWORD=pb\n"
+        "IMAP_HOST=imap.b.com\nSMTP_HOST=smtp.b.com\n",
+    )
+
+    pa = email_platform.Imap(a)
+    pb = email_platform.Imap(b)
+    assert pa.env["IMAP_ADDRESS"] == "alice@x.com"
+    assert pb.env["IMAP_ADDRESS"] == "bob@y.com"
+    assert pa.env["IMAP_HOST"] == "imap.a.com"
+    assert pb.env["IMAP_HOST"] == "imap.b.com"
+
+
 # imap gateway
 # Baseline + polling
 # imap gateway

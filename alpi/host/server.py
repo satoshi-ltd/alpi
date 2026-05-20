@@ -104,8 +104,10 @@ class Server:
         log.info("host server listening on %s", sock)
         if self._tcp_bind is not None:
             host, port = self._tcp_bind
+            # permessage-deflate: 50–80% off JSON-RPC payloads on remote Tailscale; clients that don't negotiate fall back to raw.
             self._ws_server = await ws_serve(
                 self._handle_websocket, host=host, port=port,
+                compression="deflate",
             )
             log.info("host server listening on ws://%s:%d", host, port)
 
@@ -204,6 +206,18 @@ class Server:
                 },
             })
             return
+        # Normalise `params` to dict up front — handlers assume `(params or {}).get(...)` shape; an array/string body otherwise surfaces as a confusing internal-error.
+        raw_params = body.get("params")
+        if raw_params is not None and not isinstance(raw_params, dict):
+            await send({
+                "id": body.get("id"),
+                "error": {
+                    "code": -32602,
+                    "message": "invalid-params",
+                    "data": {"detail": "params must be an object"},
+                },
+            })
+            return
         if method in self.stream_handlers:
             await self._dispatch_stream(body, send)
             return
@@ -292,23 +306,19 @@ def _is_safe_bind(addr: str) -> bool:
 
 
 def _check_token(body: dict[str, Any]) -> bool:
-    # Empty store = migration window (open until first "Add device" flips enforcement on).
+    # validate_and_touch handles the empty-store migration window, validation AND throttled last_seen bookkeeping in a single call so chatty clients don't cause O(N) reads per RPC.
     from alpi.host import devices as devices_mod
 
-    devices = devices_mod.load()
-    if not devices:
-        return True
     params = body.get("params") or {}
     token = str(params.get("auth_token") or "")
     method = str(body.get("method") or "?")
-    if not token:
-        log.warning("host auth-failed: no token sent (method=%s)", method)
+    if not devices_mod.validate_and_touch(token):
+        if not token:
+            log.warning("host auth-failed: no token sent (method=%s)", method)
+        else:
+            log.warning(
+                "host auth-failed: token …%s not in store (method=%s)",
+                token[-8:], method,
+            )
         return False
-    if not devices_mod.is_valid(token):
-        log.warning(
-            "host auth-failed: token …%s not in store (method=%s)",
-            token[-8:], method,
-        )
-        return False
-    devices_mod.touch(token)
     return True

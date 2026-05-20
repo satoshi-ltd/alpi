@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import re
 from pathlib import Path
 from typing import Any
@@ -32,6 +33,10 @@ def _resolve_home(profile: str) -> Path:
     return home_mod.home_for(profile)
 
 
+_TRANSCRIPT_DEFAULT_LIMIT = 200
+_TRANSCRIPT_MAX_LIMIT = 1000
+
+
 async def _workgroup_transcript(
     params: dict[str, Any], _server: host_server.Server,
 ) -> dict[str, Any]:
@@ -39,7 +44,24 @@ async def _workgroup_transcript(
     wg_id = str((params or {}).get("wg_id") or "").strip()
     _check_id(wg_id, "wg_id")
     home = _resolve_home(profile)
-    return {"posts": host_workgroup.decrypt_transcript(home, wg_id)}
+    p = params or {}
+    after_seq_raw = p.get("after_seq")
+    after_seq = int(after_seq_raw) if isinstance(after_seq_raw, (int, float)) else None
+    limit_raw = p.get("limit")
+    limit = int(limit_raw) if isinstance(limit_raw, (int, float)) else _TRANSCRIPT_DEFAULT_LIMIT
+    limit = max(1, min(limit, _TRANSCRIPT_MAX_LIMIT))
+    # Without after_seq, default to tail so first-paint of a large transcript ships the recent window, not the oldest.
+    if "tail" in p:
+        tail = bool(p["tail"])
+    else:
+        tail = after_seq is None
+    # Per-post decrypt is CPU-bound; pagination caps cost and asyncio.to_thread keeps it off the loop.
+    posts = await asyncio.to_thread(
+        host_workgroup.decrypt_transcript, home, wg_id,
+        after_seq=after_seq, limit=limit, tail=tail,
+    )
+    next_seq = posts[-1]["seq"] if posts else (after_seq or 0)
+    return {"posts": posts, "next_seq": next_seq, "limit": limit}
 
 
 async def _sessions_list(
@@ -49,7 +71,8 @@ async def _sessions_list(
     limit_raw = (params or {}).get("limit")
     limit = int(limit_raw) if limit_raw is not None else None
     home = _resolve_home(profile)
-    return {"sessions": host_sessions.list_sessions(home, limit=limit)}
+    sessions = await asyncio.to_thread(host_sessions.list_sessions, home, limit)
+    return {"sessions": sessions}
 
 
 async def _session_read(

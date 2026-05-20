@@ -484,6 +484,14 @@ Two transports, one dispatcher:
    `0.0.0.0`, loopback, or public IPs — that would leak the pairing
    token over plaintext on any sniffed path. **Per-device pairing
    token required** in every request's `params.auth_token`.
+   `permessage-deflate` is negotiated by default
+   (`ws_serve(compression="deflate")`); JSON-RPC payloads drop
+   50–80% on the wire. Clients that don't negotiate fall back to
+   raw. Mobile and desktop keep a persistent multiplexed WS pool
+   per `(ip, port, token)` so RPCs don't pay a TCP+WS handshake
+   every call — the dominant cost of "remote alpi feels slow" on
+   Tailscale. Streams (`host.chat.send`, `host.events.subscribe`)
+   open their own dedicated socket.
 
 Bind and advertised endpoint are intentionally separate concerns.
 The daemon chooses where the host-plane server listens; `Devices →
@@ -541,8 +549,25 @@ secrets. The full token only escapes the daemon once, at
 
 Verb namespaces in current shape:
 
-- **`host.sessions.list`**, **`host.session.read`**,
-  **`host.workgroup.transcript`** — read-only.
+- **`host.sessions.list`**, **`host.session.read`** — read-only.
+- **`host.workgroup.transcript`** — read-only,
+  `{after_seq?, limit?, tail?}` → `{posts, next_seq, limit}`.
+  Without `after_seq` the default is `tail=true` so first-paint of a
+  long-lived workgroup ships the recent window, not the oldest 200.
+  `decrypt_transcript` opens the hub sealed group key once outside
+  the per-post loop (was O(N) Curve25519 unseals per fetch).
+- **`host.profile.summaries`** — lightweight inbox/sidebar shape:
+  `name`, `model`, `accent`, `latest_session`, `counts`, `budget_*`,
+  `pubkey_b64`, `has_any_provider`, `subsystems`. No peers/models/
+  mcps/provider_keys/sandbox/voice — those live in **`host.profile.detail`**
+  (`{workspace, tcp_port, tcp_host, provider_keys, provider_ollama,
+  sandbox*, voice_*, mcps, peers, models}`), fetched lazily by
+  settings/profile screens. The summaries verb is the hot poll; the
+  detail verb is on-demand.
+- **`host.skills.list`** — lightweight by default: `category, name,
+  description, path` (no SKILL.md body). Pass `include_body=true`
+  for legacy callers. **`host.skill.read({name, category?})`**
+  returns one skill's full body on demand.
 - **`host.chat.send`** (stream), **`host.chat.cancel`**,
   **`host.chat.events_since`** — run an engine turn for a profile,
   stream tool / reasoning / assistant events back; cancel via a
@@ -585,31 +610,55 @@ Verb namespaces in current shape:
   used to invoke via `alpi gateway probe`, `alpi peers ping`, and
   `alpi ctx`. Same logic, host-plane entry point.
 - **`host.events.subscribe`** — long-lived push channel. Daemon
-  emits `{event, data, at}` frames as state changes. Sources call
-  `alpi.host.events.emit(kind, data)`; loop is captured at first
-  subscription and broadcasts via `call_soon_threadsafe` (safe to
-  call from worker threads). Filter optional via `params.kinds`.
-- **`host.events.history`** — bounded backfill over the same frame
-  shape. Recent events are kept in memory and in
-  `<server.home>/host/events.jsonl`; the JSONL sidecar is periodically
-  compacted so offline clients can catch up without unbounded growth.
+  emits `{event, data, at, seq}` frames as state changes. Sources
+  call `alpi.host.events.emit(kind, data)`; loop is captured at
+  first subscription and broadcasts via `call_soon_threadsafe` (safe
+  to call from worker threads). Filter optional via `params.kinds`.
+  On connect the daemon sends a `{event: "subscribed", next_seq}`
+  handshake — clients anchor their cursor here and (if they had a
+  previous one) backfill the gap with `host.events.history` AFTER
+  subscribing, deduping by `seq`. Subscribe-then-backfill is
+  mandatory: history-then-subscribe leaves a race window where a
+  frame fired between the two calls is counted in the daemon's
+  `seq` but never reaches the client.
+- **`host.events.history`** — bounded backfill, seq-only contract:
+  `{after_seq?, limit?, kinds?}` → `{events, next_seq}`. Recent
+  events are kept in memory and in `<server.home>/host/events.jsonl`;
+  the JSONL sidecar is periodically compacted so offline clients can
+  catch up without unbounded growth. `_load_history` preserves JSONL
+  append order rather than resorting by `at` — clock skew /
+  suspend-resume would otherwise scramble the replay window. The
+  legacy wall-clock `since` param is silently ignored; every
+  in-repo client (CLI/TUI, desktop, mobile) advances on `seq`.
   Wired kinds:
   - `session_changed` — `Engine.save_session` (id + subdir).
-  - `wg.done` — `workgroup_client.post()` when a hub posts a
-    valid `#done` (detected by `tasks_mod.is_done`, so handle
-    prefixes + line-anchored grammar are honoured). Carries
-    `wg_id`, `seq`, and a 200-char summary. Hub-only.
+  - `wg.post` / `wg.done` — `workgroup_client.post()` (hub-only;
+    `wg.done` is detected via `tasks_mod.is_done`, honouring handle
+    prefixes + line-anchored grammar). Carry `wg_id`, `seq`, and a
+    200-char summary.
+  - `workgroup_changed` (`action: created|updated|removed|paused|
+    resumed|left`) — workgroup lifecycle from
+    `host.workgroup.{create,update,remove,action}`.
+  - `workgroup_members` — `host.workgroup.{add_member,kick}`.
   - `schedule.done` / `schedule.failed` — `scheduler/run.py::tick`
     after each job dispatch. Carries `job_id`, `kind`, `message`,
     `reply`, `delivered_to`, and `silent`; clients use the explicit
     fields instead of parsing the operational `message`.
+  - `schedule.changed` (`action: removed|paused|resumed`) —
+    schedule mutators on the host plane.
+  - `config_changed` (`scope: providers|mcp|sandbox|voice|env|<dotted-key-head>`)
+    — every cfg.save in `alpi/host/config.py` plus
+    `host.config.set_field` / `unset_field`.
+  - `gateway_changed` (`name`, `action: configured|cleared|authorized|removed`)
+    — gateway env writes, gmail OAuth success, gateway removal.
+  - `peers_changed` (`action: added|removed|accepted|discarded`)
+    — peer add/remove/pending verbs.
+  - `profile_changed` (`action: created|deleted`) — profile
+    lifecycle.
   - `budget.threshold` — `ledger.record()` when a USD spend
     crosses 80% or 100% of the daily cap (highest threshold wins
     when a single record vaults past both). Engine passes
     `cfg_budget` into the record callsite.
-  Intended consumer: the Tauri desktop tray will bridge these to OS
-  notifications in a follow-up ``desktop-v0.2.19``; this release is
-  daemon-only.
 
 Adding a new verb: create the handler in the matching `host/*.py`
 module, register on `host_server.Server.register` (or
@@ -651,23 +700,23 @@ is not supported (would force shared offsets / allowlists /
 session state).
 
 **Per-profile env snapshot.** Every `Platform` captures
-`{**os.environ, **<home>/.env}` at `__init__` into `self.env`
-(parsed via `alpi.home.read_profile_env`, which strips surrounding
-quotes). Today the snapshot is the source of truth for **Telegram
-credentials** (`self._token`) and **inbound allowlist checks across
-all platforms** via `delivery.is_allowed(msg.platform,
-msg.external_chat_id, env=platform.env)` — so a sibling profile's
-`TELEGRAM_ALLOWED_CHAT_IDS` / `IMAP_ALLOWED_SENDERS` /
-`GMAIL_ALLOWED_SENDERS` cannot authorize this profile's inbound.
-Matrix and IMAP still read several of their own credentials
-(`MATRIX_*`, `IMAP_*`) directly from `os.environ`; those paths are
-safe in practice because TUI/CLI sessions are single-profile and the
-daemon orchestrator loads each profile's `.env` before spawning its
-listener, but they have not been migrated to `self.env` yet. The
-snapshot is frozen at construction: credential or allowlist edits
-require a daemon/gateway restart to apply (the host RPC
-`host.providers.set_key` writes the file but does not hot-reload
-live listeners).
+`alpi.home.effective_profile_env(home)` at `__init__` into
+`self.env` — `os.environ` (process-level vars: PATH, HOME, TZ,
+ALPI_PLATFORM…) overlaid with `<home>/.env` (per-profile secrets).
+Quotes in the .env file are stripped. `self.env` is the source of
+truth for **all credentials and allowlist checks**: Telegram token,
+`IMAP_*`, `MATRIX_*`, `GMAIL_*`, and `delivery.is_allowed(..., env=
+platform.env)`. Matrix `_build_client` and IMAP's `ImapClient.
+from_env_map(self.env)` both read from this snapshot — no platform
+adapter touches `os.environ` directly any more. As of v0.4.52 the
+same contract extends to the agent toolchain: `tools/email`, the
+LLM-override paths in `tools/web_extract` / `tools/read_image`,
+`alpi/identity.py`, the model selector / TUI provider gating, and
+the gateway child agent (`gateway/run._run_agent` injects via
+`effective_profile_env(home, extra={...})`). The snapshot is frozen
+at construction; credential edits via the host plane write the file
+atomically but live listeners pick up the change only on next
+daemon/gateway restart.
 
 ### Schedule (`alpi/scheduler/`)
 

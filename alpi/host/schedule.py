@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import os
+from pathlib import Path
 from typing import Any
 
 from alpi.host import server as host_server
@@ -16,6 +18,33 @@ def register(server: host_server.Server) -> None:
 def _resolve_home(profile: str):
     from alpi.host.handlers import _resolve_home as _r
     return _r(profile)
+
+
+def _emit_schedule_changed(home: Path, job_id: str, action: str) -> None:
+    from alpi import home as home_mod
+    from alpi.host import events as host_events
+    host_events.emit("schedule.changed", {
+        "profile": home_mod.profile_name(home),
+        "id": job_id,
+        "action": action,
+    })
+
+
+def _atomic_write_json(path: Path, payload: Any) -> None:
+    """tmp + rename so a crash mid-write never leaves a half-written jobs.json that would silently empty the schedule on next read."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    fd = os.open(str(tmp), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(json.dumps(payload, indent=2))
+            f.flush()
+            os.fsync(f.fileno())
+    except Exception:
+        try: tmp.unlink()
+        except OSError: pass
+        raise
+    os.replace(str(tmp), str(path))
 
 
 async def _schedule_list(
@@ -58,7 +87,8 @@ async def _schedule_remove(
         raise host_server.HandlerError(
             -32004, "not-found", data={"detail": f"no job {job_id!r}"},
         )
-    p.write_text(json.dumps(keep, indent=2))
+    _atomic_write_json(p, keep)
+    _emit_schedule_changed(home, job_id, "removed")
     return {"ok": True}
 
 
@@ -93,7 +123,8 @@ async def _schedule_set_paused(
         raise host_server.HandlerError(
             -32004, "not-found", data={"detail": f"no job {job_id!r}"},
         )
-    p.write_text(json.dumps(jobs, indent=2))
+    _atomic_write_json(p, jobs)
+    _emit_schedule_changed(home, job_id, "paused" if paused else "resumed")
     return {"ok": True, "paused": paused}
 
 

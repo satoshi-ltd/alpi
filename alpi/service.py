@@ -142,10 +142,12 @@ async def _main_all(root: Path, profiles: list[str]) -> None:
             pass
     loop.call_later(5.0, _prefetch_assets)
 
+    # Load only the root .env once for daemon-wide vars (ALPI_PLATFORM, telemetry). Per-profile secrets stay out of os.environ — read on-demand by resolve_model.
+    _load_env(home_mod.alpi_root())
+
     tasks: list[asyncio.Task] = []
     for profile in profiles:
         home = home_mod.home_for(profile)
-        _load_env(home)
         try:
             subsystems = enabled_subsystems(home)
         except Exception:  # noqa: BLE001

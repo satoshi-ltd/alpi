@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 
-from alpi.home import get_home
+from alpi.home import effective_profile_env, get_home
 from alpi.mail.gmail import GmailClient, GmailError
 from alpi.mail.gmail_auth import token_path
 from alpi.mail.imap import ImapClient, ImapError, EmailMessageFull
@@ -16,9 +15,12 @@ from alpi.tools.base import Tool, ToolResult
 
 def _available_accounts() -> list[str]:
     accounts = []
-    if os.environ.get("IMAP_ADDRESS"):
+    home = get_home()
+    # Use the profile's .env, not os.environ — under the daemon two profiles can have independent IMAP credentials and we must not surface one's account in the other's tool listing.
+    env = effective_profile_env(home)
+    if env.get("IMAP_ADDRESS"):
         accounts.append("imap")
-    if token_path(get_home()).exists():
+    if token_path(home).exists():
         accounts.append("gmail")
     return accounts
 
@@ -43,7 +45,7 @@ def _resolve_client(account: str = ""):
         )
     try:
         if target == "imap":
-            return ImapClient.from_env(), None
+            return ImapClient.from_env_map(effective_profile_env(get_home())), None
         return GmailClient(get_home()), None
     except (ImapError, GmailError) as e:
         return None, str(e)

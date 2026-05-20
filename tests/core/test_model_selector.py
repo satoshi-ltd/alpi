@@ -48,3 +48,15 @@ def test_remove_env_key_deletes_only_one_line(tmp_path: Path) -> None:
     model_selector._remove_env_key(env_path, "BETA")
 
     assert env_path.read_text() == "ALPHA=1\nGAMMA=3\n"
+
+
+def test_any_saved_keys_reads_explicit_env(tmp_path: Path) -> None:
+    """The "Remove keys" affordance must light up when the *profile* has saved keys, even if the process env is empty (daemon never inherits the profile's secrets)."""
+    from alpi import providers as prov_mod
+
+    builtin = prov_mod.builtin()
+    # With explicit empty env: nothing saved → no affordance.
+    assert model_selector._any_saved_keys(builtin, env={}) is False
+    # With an OpenAI key in the profile env: affordance shows.
+    key_env_name = next(p.api_key_env for p in builtin if p.name == "openai")
+    assert model_selector._any_saved_keys(builtin, env={key_env_name: "x"}) is True

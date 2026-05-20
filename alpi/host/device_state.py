@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 import os
@@ -54,6 +55,7 @@ def register(server: host_server.Server) -> None:
     server.register("host.version", _host_version)
     server.register("host.profiles.list", _profiles_list)
     server.register("host.profile.summaries", _profile_summaries)
+    server.register("host.profile.detail", _profile_detail)
     server.register("host.profile.read_file", _profile_read_file)
     server.register("host.profile.storage", _profile_storage)
     server.register("host.config.set_field", _config_set_field)
@@ -61,6 +63,7 @@ def register(server: host_server.Server) -> None:
     server.register("host.gateway.status", _gateway_status)
     server.register("host.gateway.config", _gateway_config)
     server.register("host.skills.list", _skills_list)
+    server.register("host.skill.read", _skill_read)
     server.register("host.workgroups.list", _workgroups_list)
     server.register("host.workgroup.members", _workgroup_members)
     server.register("host.providers.ollama_models", _ollama_models)
@@ -104,7 +107,23 @@ async def _profiles_list(
 async def _profile_summaries(
     _params: dict[str, Any], _server: host_server.Server,
 ) -> dict[str, Any]:
-    return {"profiles": [_profile_summary(p) for p in _profiles()]}
+    """Hot path: inbox/sidebar listing for every connected profile. Returns only the lightweight ``_profile_summary`` shape — settings/profile screens fetch the heavy bits per-profile via ``host.profile.detail``. Pre-split this was ~10KB/profile; now ~1KB."""
+    return await asyncio.to_thread(
+        lambda: {"profiles": [_profile_summary(p) for p in _profiles()]},
+    )
+
+
+async def _profile_detail(
+    params: dict[str, Any], _server: host_server.Server,
+) -> dict[str, Any]:
+    """Heavy companion to ``host.profile.summaries`` — peers, mcps, models, provider keys, sandbox/voice. Called lazily by settings/profile/gateways screens; never by inbox polls."""
+    profile = str((params or {}).get("profile") or "")
+    home = _resolve_home(profile)
+    if not home.exists():
+        raise host_server.HandlerError(
+            -32004, "not-found", data={"detail": f"no profile {profile!r}"},
+        )
+    return await asyncio.to_thread(_profile_detail_payload, home)
 
 
 def _profile_summary(row: dict[str, Any]) -> dict[str, Any]:
@@ -120,19 +139,39 @@ def _profile_summary(row: dict[str, Any]) -> dict[str, Any]:
         "model": cfg.model or None,
         "accent": cfg.tui.get("accent"),
         "bio": cfg.public_bio or None,
-        "workspace": cfg.workspace or None,
         "subsystems": {
             "gateway": cfg.service.get("gateway", True) is not False,
             "schedule": cfg.service.get("schedule", True) is not False,
             "alp": cfg.service.get("alp", True) is not False,
             "workgroups": cfg.service.get("workgroups", True) is not False,
         },
-        "tcp_port": cfg.alp.get("tcp_port"),
-        "tcp_host": cfg.alp.get("tcp_host"),
         "budget_daily_usd": cfg.budget.get("daily_usd"),
         "budget_daily_tokens": cfg.budget.get("daily_tokens"),
         "budget_used_usd": used_usd,
         "budget_used_tokens": used_tokens,
+        "counts": _counts(home),
+        "latest_session": latest,
+        "pubkey_b64": _profile_pubkey(home),
+        # Lightweight "is the profile chat-ready?" hint so inbox/empty-state can decide without paying the cost of a host.profile.detail roundtrip per profile.
+        "has_any_provider": _has_any_provider(home, cfg),
+    }
+
+
+def _has_any_provider(home: Path, cfg: cfg_mod.Config) -> bool:
+    if (cfg.providers.get("ollama") or []):
+        return True
+    if ((cfg.providers.get("openrouter") or {}).get("models") or []):
+        return True
+    env = _env_keys(home)
+    return any(env.get(k) for k in KNOWN_PROVIDER_KEYS)
+
+
+def _profile_detail_payload(home: Path) -> dict[str, Any]:
+    cfg = cfg_mod.load(home)
+    return {
+        "workspace": cfg.workspace or None,
+        "tcp_port": cfg.alp.get("tcp_port"),
+        "tcp_host": cfg.alp.get("tcp_host"),
         "provider_keys": _provider_keys(home),
         "provider_ollama": _ollama_providers(cfg),
         "sandbox": cfg.tools.terminal.sandbox,
@@ -140,9 +179,6 @@ def _profile_summary(row: dict[str, Any]) -> dict[str, Any]:
         "voice_id": cfg.tools.tts.voice,
         "voice_autoplay": cfg.tools.tts.autoplay,
         "mcps": _mcp_servers(cfg),
-        "counts": _counts(home),
-        "latest_session": latest,
-        "pubkey_b64": _profile_pubkey(home),
         "peers": _profile_peers(home),
         "models": _models(cfg, home),
     }
@@ -173,10 +209,7 @@ async def _profile_read_file(
     return {"text": text}
 
 
-async def _profile_storage(
-    params: dict[str, Any], _server: host_server.Server,
-) -> dict[str, Any]:
-    home = _resolve_home(str(params.get("profile") or ""))
+def _storage_rows(home: Path) -> list[dict[str, Any]]:
     rows = []
     for key, label, paths in [
         ("sessions", "sessions", [home / "sessions"]),
@@ -198,7 +231,24 @@ async def _profile_storage(
             "size_bytes": size,
             "file_count": count,
         })
-    return {"storage": rows}
+    return rows
+
+
+async def _profile_storage(
+    params: dict[str, Any], _server: host_server.Server,
+) -> dict[str, Any]:
+    home = _resolve_home(str(params.get("profile") or ""))
+    # _path_stats does os.walk over sessions/, cache/, logs/, schedule/output/ and alp/workgroups/ — easily seconds on a busy profile.
+    return {"storage": await asyncio.to_thread(_storage_rows, home)}
+
+
+def _emit_config_changed(home: Path, scope: str) -> None:
+    from alpi import home as home_mod
+    from alpi.host import events as host_events
+    host_events.emit("config_changed", {
+        "profile": home_mod.profile_name(home),
+        "scope": scope,
+    })
 
 
 async def _config_set_field(
@@ -210,6 +260,7 @@ async def _config_set_field(
     data = _load_user_yaml(home)
     _set_dotted(data, key, _coerce_config_value(key, value))
     _write_user_yaml(home, data)
+    _emit_config_changed(home, scope=key.split(".", 1)[0] or "field")
     return {"ok": True}
 
 
@@ -221,6 +272,7 @@ async def _config_unset_field(
     data = _load_user_yaml(home)
     _unset_dotted(data, key)
     _write_user_yaml(home, data)
+    _emit_config_changed(home, scope=key.split(".", 1)[0] or "field")
     return {"ok": True}
 
 
@@ -260,25 +312,59 @@ async def _skills_list(
     params: dict[str, Any], _server: host_server.Server,
 ) -> dict[str, Any]:
     home = _resolve_home(str(params.get("profile") or ""))
-    return {"skills": _skills(home)}
+    # ``include_body`` defaults to False — keeps listings under a few KB even with dozens of skills. Clients ask for ``host.skill.read`` when they actually need the SKILL.md text.
+    include_body = bool((params or {}).get("include_body", False))
+    rows = await asyncio.to_thread(_skills, home, include_body=include_body)
+    return {"skills": rows}
+
+
+async def _skill_read(
+    params: dict[str, Any], _server: host_server.Server,
+) -> dict[str, Any]:
+    """Return one skill's full SKILL.md (capped at ``_SKILL_BODY_MAX``). Callers identify the skill by ``category`` + ``name`` — same shape ``host.skills.list`` returns. Path traversal would otherwise let a malicious client read arbitrary files under ``$HOME``."""
+    home = _resolve_home(str((params or {}).get("profile") or ""))
+    name = str((params or {}).get("name") or "").strip()
+    category = (params or {}).get("category")
+    category = str(category).strip() if category else None
+    if not name or "/" in name or name.startswith("."):
+        raise host_server.HandlerError(
+            -32602, "invalid-params", data={"detail": "name required and must not contain path separators"},
+        )
+    if category is not None and ("/" in category or category.startswith(".")):
+        raise host_server.HandlerError(
+            -32602, "invalid-params", data={"detail": "category must not contain path separators"},
+        )
+    skill_md = (home / "skills" / category / name / "SKILL.md") if category else (home / "skills" / name / "SKILL.md")
+    if not skill_md.exists():
+        raise host_server.HandlerError(
+            -32004, "not-found", data={"detail": f"no SKILL.md at {skill_md}"},
+        )
+    row = await asyncio.to_thread(
+        _skill_row, skill_md, category=category, name=name, include_body=True,
+    )
+    return {"skill": row}
+
+
+def _aggregate_workgroups(profile: str | None) -> list[dict[str, Any]]:
+    if profile:
+        return _workgroups_for(str(profile))
+    by_id: dict[str, dict[str, Any]] = {}
+    for p in _profiles():
+        for wg in _workgroups_for(p["name"]):
+            old = by_id.get(wg["id"])
+            if old is not None and old.get("is_hub"):
+                continue
+            by_id[wg["id"]] = wg
+    rows = list(by_id.values())
+    rows.sort(key=lambda x: int(x.get("mtime") or 0), reverse=True)
+    return rows
 
 
 async def _workgroups_list(
     params: dict[str, Any], _server: host_server.Server,
 ) -> dict[str, Any]:
     profile = params.get("profile")
-    if profile:
-        rows = _workgroups_for(str(profile))
-    else:
-        by_id: dict[str, dict[str, Any]] = {}
-        for p in _profiles():
-            for wg in _workgroups_for(p["name"]):
-                old = by_id.get(wg["id"])
-                if old is not None and old.get("is_hub"):
-                    continue
-                by_id[wg["id"]] = wg
-        rows = list(by_id.values())
-        rows.sort(key=lambda x: int(x.get("mtime") or 0), reverse=True)
+    rows = await asyncio.to_thread(_aggregate_workgroups, profile)
     return {"workgroups": rows}
 
 
@@ -349,10 +435,9 @@ def _load_user_yaml(home: Path) -> dict[str, Any]:
 
 
 def _write_user_yaml(home: Path, data: dict[str, Any]) -> None:
-    (home / "config.yaml").write_text(
-        yaml.safe_dump(data, sort_keys=False, allow_unicode=True),
-        encoding="utf-8",
-    )
+    # Atomic tmp+fsync+rename — same writer as ``config.save`` so a daemon crash mid-write never leaves a truncated config.yaml.
+    from alpi.config import atomic_write_yaml
+    atomic_write_yaml(home / "config.yaml", data)
 
 
 def _set_dotted(data: dict[str, Any], key: str, value: Any) -> None:
@@ -497,7 +582,7 @@ def _counts(home: Path) -> dict[str, int]:
         "peers": _yaml_entry_count(home / "alp" / "peers.yaml", "- id:"),
         "workgroups": _subdir_count(home / "alp" / "workgroups"),
         "sessions": len(host_sessions.list_sessions(home)),
-        "skills": len(_skills(home)),
+        "skills": _count_skill_dirs(home),
         "memory_bytes": _path_stats(home / "memories")[0],
     }
 
@@ -609,7 +694,8 @@ def _mask_key(value: str) -> str:
     return f"{value[:3]}…{value[-4:]}"
 
 
-def _skills(home: Path) -> list[dict[str, Any]]:
+def _skills(home: Path, *, include_body: bool = False) -> list[dict[str, Any]]:
+    """List skills under ``<home>/skills``. ``include_body=False`` is the hot-path default — reading the markdown body costs ~32KB per skill and is wasted bytes for listings (inbox, settings); detail views call ``host.skill.read`` instead."""
     root = home / "skills"
     rows = []
     if not root.exists():
@@ -618,33 +704,59 @@ def _skills(home: Path) -> list[dict[str, Any]]:
         if not top.is_dir() or top.name.startswith("."):
             continue
         if (top / "SKILL.md").exists():
-            rows.append(_skill_row(top / "SKILL.md", category=None, name=top.name))
+            rows.append(_skill_row(top / "SKILL.md", category=None, name=top.name, include_body=include_body))
             continue
         for child in sorted(top.iterdir()):
             if child.is_dir() and not child.name.startswith(".") and (child / "SKILL.md").exists():
-                rows.append(_skill_row(child / "SKILL.md", category=top.name, name=child.name))
+                rows.append(_skill_row(child / "SKILL.md", category=top.name, name=child.name, include_body=include_body))
     return rows
+
+
+def _count_skill_dirs(home: Path) -> int:
+    """Cheap count for summaries — never opens SKILL.md so listings don't pay the ~32KB-per-skill read cost the body path does."""
+    root = home / "skills"
+    if not root.exists():
+        return 0
+    n = 0
+    for top in sorted(root.iterdir()):
+        if not top.is_dir() or top.name.startswith("."):
+            continue
+        if (top / "SKILL.md").exists():
+            n += 1
+            continue
+        for child in sorted(top.iterdir()):
+            if child.is_dir() and not child.name.startswith(".") and (child / "SKILL.md").exists():
+                n += 1
+    return n
 
 
 _SKILL_BODY_MAX = 32_000
 
 
-def _skill_row(skill_md: Path, *, category: str | None, name: str) -> dict[str, Any]:
+def _skill_row(
+    skill_md: Path,
+    *,
+    category: str | None,
+    name: str,
+    include_body: bool = True,
+) -> dict[str, Any]:
     try:
         text = skill_md.read_text(encoding="utf-8")
     except OSError:
         text = ""
     description = _skill_description_from_text(text)
-    body = _skill_body_from_text(text)
-    if len(body) > _SKILL_BODY_MAX:
-        body = body[:_SKILL_BODY_MAX] + "\n\n…(truncated)"
-    return {
+    row: dict[str, Any] = {
         "category": category,
         "name": name,
         "description": description,
-        "body": body,
         "path": str(skill_md),
     }
+    if include_body:
+        body = _skill_body_from_text(text)
+        if len(body) > _SKILL_BODY_MAX:
+            body = body[:_SKILL_BODY_MAX] + "\n\n…(truncated)"
+        row["body"] = body
+    return row
 
 
 def _skill_description_from_text(text: str) -> str | None:

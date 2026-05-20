@@ -59,8 +59,18 @@ Not fully solved:
 
 WS transport requires a per-device token in `params.auth_token`.
 Tokens at `~/.alpi/host/devices.yaml`, managed via `alpi setup →
-Devices`. Listener binds Tailscale or RFC1918 only (never public).
-Remote access for VPS = install Tailscale on the VPS, not public IP.
+Devices`. Listener binds Tailscale or RFC1918 only (never public),
+and negotiates `permessage-deflate` so JSON-RPC payloads ship
+compressed over the link.
+
+Auth I/O hot-path: `devices.validate_and_touch(token,
+min_interval=60)` does one cached read (5s in-process TTL) per RPC
+and writes `last_seen` only when stale. `devices.save()` is atomic
+(tmp + fsync + rename with `0o600` preserved). A
+`_guard_pytest_isolation` refuses to write the real
+`~/.alpi/host/devices.yaml` under `PYTEST_CURRENT_TEST` so a test
+fixture that forgets to monkeypatch `home._ROOT` fails loud instead
+of silently appending rows to the developer's store.
 
 Pairing admin and network-config verbs are local-only over the Unix
 socket. A paired remote WebSocket client cannot list/generate/revoke
@@ -76,6 +86,20 @@ token.
 - Skill state lives in `<skill>/state/`.
 - Do not put secret values in `SKILL.md`, references, scripts, assets,
   docs, commits, or chat transcripts.
+
+## Per-profile env isolation under the daemon
+
+The daemon supervises many profiles in one process and never
+mutates `os.environ`. All profile-scoped lookups go through
+`alpi.home.effective_profile_env(home, *, base=None, extra=None)`:
+process-level vars from `os.environ` overlaid with the profile's
+`.env`. Gateway adapters snapshot this into `self.env` at
+construction (frozen until restart); agent tools, the model
+selector / TUI provider gating, the LLM-override paths in
+`web_extract` / `read_image`, `mail/{imap, gmail_auth}`, and
+`identity.draft_bio_from_agent` all consume the same helper. A
+sibling profile's `.env` therefore cannot influence this profile's
+provider gating, allowlist checks, or subprocess env.
 
 ## Credential writes (TOCTOU-safe)
 

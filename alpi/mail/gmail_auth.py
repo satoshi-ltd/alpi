@@ -72,9 +72,12 @@ def token_path(home: Path) -> Path:
     return home / "secrets" / "gmail_token.json"
 
 
-def _client_credentials() -> tuple[str, str]:
-    cid = os.environ.get("GMAIL_CLIENT_ID", "").strip()
-    csec = os.environ.get("GMAIL_CLIENT_SECRET", "").strip()
+def _client_credentials(home: Path) -> tuple[str, str]:
+    # Read from the profile's effective env so each profile uses its own OAuth client; never reach into os.environ blindly — under the daemon two profiles can have independent Gmail tokens.
+    from alpi.home import effective_profile_env
+    env = effective_profile_env(home)
+    cid = (env.get("GMAIL_CLIENT_ID") or "").strip()
+    csec = (env.get("GMAIL_CLIENT_SECRET") or "").strip()
     if not cid or not csec:
         raise GmailAuthError(
             "GMAIL_CLIENT_ID and GMAIL_CLIENT_SECRET must be set in ~/.alpi/.env "
@@ -174,7 +177,7 @@ class _CallbackHandler(http.server.BaseHTTPRequestHandler):
 
 def first_run(home: Path) -> GmailToken:
     """Open browser, wait for consent, save token to disk. Returns the token."""
-    client_id, client_secret = _client_credentials()
+    client_id, client_secret = _client_credentials(home)
     port = _find_free_port()
     redirect_uri = f"http://127.0.0.1:{port}"
     verifier, challenge = _pkce_pair()
@@ -250,7 +253,7 @@ def first_run(home: Path) -> GmailToken:
 
 
 def _refresh(home: Path, token: GmailToken) -> GmailToken:
-    client_id, client_secret = _client_credentials()
+    client_id, client_secret = _client_credentials(home)
     with httpx.Client(timeout=10.0) as client:
         r = client.post(_TOKEN_URL, data={
             "refresh_token": token.refresh_token,

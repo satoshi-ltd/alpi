@@ -39,6 +39,27 @@ def _resolve_peer(home, ref: str) -> str:
     return peer.pubkey if peer else ref
 
 
+def _emit_workgroup_changed(home, wg_id: str, action: str) -> None:
+    from alpi import home as home_mod
+    from alpi.host import events as host_events
+    host_events.emit("workgroup_changed", {
+        "profile": home_mod.profile_name(home),
+        "wg_id": wg_id,
+        "action": action,
+    })
+
+
+def _emit_workgroup_members(home, wg_id: str, members: int, key_version: int) -> None:
+    from alpi import home as home_mod
+    from alpi.host import events as host_events
+    host_events.emit("workgroup_members", {
+        "profile": home_mod.profile_name(home),
+        "wg_id": wg_id,
+        "members": members,
+        "key_version": key_version,
+    })
+
+
 async def _create(
     params: dict[str, Any], _server: host_server.Server,
 ) -> dict[str, Any]:
@@ -93,6 +114,7 @@ async def _create(
     except ValueError as e:
         raise host_server.HandlerError(-32602, "invalid-params", data={"detail": str(e)})
 
+    _emit_workgroup_changed(home, wg.meta.id, "created")
     return {"wg_id": wg.meta.id, "members": len(wg.members)}
 
 
@@ -150,6 +172,7 @@ async def _update(
         )
 
     wg_mod._save_meta(wg_mod._wg_dir(home, wg_id), wg.meta)
+    _emit_workgroup_changed(home, wg_id, "updated")
     return {"ok": True, "changes": changes}
 
 
@@ -173,6 +196,7 @@ async def _add_member(
     except ValueError as e:
         raise host_server.HandlerError(-32602, "invalid-params", data={"detail": str(e)})
     wg_setup._grant_workgroup_verbs(home, [target])
+    _emit_workgroup_members(home, wg_id, len(updated.members), updated.meta.current_key_version)
     return {
         "ok": True,
         "key_version": updated.meta.current_key_version,
@@ -197,6 +221,7 @@ async def _kick(
         updated = wg_mod.kick(home, wg_id, target)
     except ValueError as e:
         raise host_server.HandlerError(-32602, "invalid-params", data={"detail": str(e)})
+    _emit_workgroup_members(home, wg_id, len(updated.members), updated.meta.current_key_version)
     return {
         "ok": True,
         "key_version": updated.meta.current_key_version,
@@ -249,6 +274,7 @@ async def _remove(
     except Exception:  # noqa: BLE001
         pass
 
+    _emit_workgroup_changed(home, wg_id, "removed")
     return {"ok": True, "purged": sorted(set(purged))}
 
 
@@ -275,6 +301,8 @@ async def _action(
         await fn(home, wg_id)
     except Exception as e:  # noqa: BLE001
         raise host_server.HandlerError(-32603, "internal-error", data={"detail": str(e)})
+    # pause/resume/leave change observable state for every subscribed client; without an emit other apps would only notice on next manual reload.
+    _emit_workgroup_changed(home, wg_id, action)
     return {"ok": True, "action": action}
 
 

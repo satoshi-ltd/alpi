@@ -6,7 +6,6 @@ import asyncio
 import email as email_lib
 import json
 import logging
-import os
 import re
 from pathlib import Path
 from typing import AsyncIterator
@@ -55,7 +54,7 @@ class Imap(Platform):
 
     async def listen(self) -> AsyncIterator[IncomingMessage]:
         required = ("IMAP_ADDRESS", "IMAP_PASSWORD", "IMAP_HOST", "SMTP_HOST")
-        if not all(os.environ.get(v) for v in required):
+        if not all(self.env.get(v) for v in required):
             log.info("IMAP env incomplete — listener idle.")
             while True:
                 await asyncio.sleep(3600)
@@ -139,7 +138,7 @@ class Imap(Platform):
 
     async def send(self, message: OutgoingMessage) -> None:
         def _do_send() -> None:
-            client = ImapClient.from_env()
+            client = ImapClient.from_env_map(self.env)
             client.send(
                 to=[message.external_chat_id],
                 subject="[alpi] re:",
@@ -153,14 +152,14 @@ class Imap(Platform):
     # Sync IMAP helpers run in threads to avoid blocking.
 
     def _discover_baseline_uid(self) -> int:
-        client = ImapClient.from_env()
+        client = ImapClient.from_env_map(self.env)
         with client._imap() as imap:
             client._select(imap, INBOX)
             uids = client._uid_search(imap, ["ALL"])
             return int(uids[-1]) if uids else 0
 
     def _poll_once(self, since_uid: int) -> list[tuple[str, object]]:
-        client = ImapClient.from_env()
+        client = ImapClient.from_env_map(self.env)
         results: list[tuple[str, object]] = []
         with client._imap() as imap:
             client._select(imap, INBOX)
@@ -182,7 +181,7 @@ class Imap(Platform):
         return results
 
     def _mark_seen(self, uid: str) -> None:
-        client = ImapClient.from_env()
+        client = ImapClient.from_env_map(self.env)
         with client._imap() as imap:
             client._select(imap, INBOX)
             typ, _ = imap.uid("STORE", uid, "+FLAGS", r"(\Seen)")
@@ -197,7 +196,7 @@ class Imap(Platform):
             data = json.loads(p.read_text() or "{}")
         except json.JSONDecodeError:
             return None
-        addr = os.environ.get("IMAP_ADDRESS", "").lower()
+        addr = (self.env.get("IMAP_ADDRESS") or "").lower()
         val = data.get(addr)
         try:
             return int(val) if val is not None else None
@@ -211,7 +210,7 @@ class Imap(Platform):
             data = json.loads(p.read_text() or "{}") if p.exists() else {}
         except json.JSONDecodeError:
             data = {}
-        addr = os.environ.get("IMAP_ADDRESS", "").lower()
+        addr = (self.env.get("IMAP_ADDRESS") or "").lower()
         data[addr] = uid
         tmp = p.with_suffix(".json.tmp")
         tmp.write_text(json.dumps(data, indent=2))

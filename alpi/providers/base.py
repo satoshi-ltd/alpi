@@ -20,9 +20,11 @@ class Provider(abc.ABC):
     api_key_env: str   # "" if none
     description: str = ""
 
-    def has_key(self) -> bool:
+    def has_key(self, env: dict[str, str] | None = None) -> bool:
+        """``env`` overrides ``os.environ`` so the daemon can probe a specific profile's .env without leaking the process-global env across profiles. Callers that already have a profile env map (e.g. from ``home.effective_profile_env``) should pass it explicitly."""
         import os
-        return bool(self.api_key_env) and bool(os.environ.get(self.api_key_env))
+        src = env if env is not None else os.environ
+        return bool(self.api_key_env) and bool(src.get(self.api_key_env))
 
     @abc.abstractmethod
     def list_models(self) -> list[ModelInfo]: ...

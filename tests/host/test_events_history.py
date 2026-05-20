@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import time
 from pathlib import Path
 
 import pytest
@@ -18,9 +17,87 @@ def _reset_state(home: Path) -> host_server.Server:
     host_events._history.clear()
     host_events._writes_since_compact = 0
     host_events._history_path = None
+    host_events._seq_counter = 0
     srv = host_server.Server(home=home)
     host_events.register(srv)
     return srv
+
+
+def test_emit_assigns_monotonic_seq(root: Path) -> None:
+    srv = _reset_state(root)
+    host_events.emit("wg.done", {"wg_id": "a"})
+    host_events.emit("wg.post", {"wg_id": "a"})
+    host_events.emit("schedule.done", {"job_id": "x"})
+
+    out = asyncio.run(host_events._history_handler({}, srv))
+    seqs = [e["seq"] for e in out["events"]]
+    assert seqs == [1, 2, 3]
+    assert out["next_seq"] == 3
+
+
+def test_history_after_seq_returns_only_newer(root: Path) -> None:
+    srv = _reset_state(root)
+    for i in range(5):
+        host_events.emit("wg.post", {"i": i})
+
+    out = asyncio.run(host_events._history_handler({"after_seq": 2}, srv))
+    assert [e["data"]["i"] for e in out["events"]] == [2, 3, 4]
+    assert out["next_seq"] == 5
+
+
+def test_history_after_seq_beyond_head_returns_empty(root: Path) -> None:
+    srv = _reset_state(root)
+    host_events.emit("wg.done", {"wg_id": "a"})
+
+    out = asyncio.run(host_events._history_handler({"after_seq": 99}, srv))
+    assert out["events"] == []
+    assert out["next_seq"] == 1
+
+
+def test_load_history_backfills_seq_on_legacy_entries(root: Path) -> None:
+    """Existing jsonl files predate seq — _load_history must backfill so clients can pivot on it immediately."""
+    path = root / "host" / "events.jsonl"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps({"event": "wg.post", "data": {}, "at": 100.0}) + "\n"
+        + json.dumps({"event": "wg.done", "data": {}, "at": 200.0}) + "\n",
+        encoding="utf-8",
+    )
+    host_events._history.clear()
+    host_events._writes_since_compact = 0
+    host_events._history_path = None
+    host_events._seq_counter = 0
+    srv = host_server.Server(home=root)
+    host_events.register(srv)
+
+    host_events.emit("schedule.done", {"job_id": "x"})
+    out = asyncio.run(host_events._history_handler({}, srv))
+    seqs = [e["seq"] for e in out["events"]]
+    assert seqs == [1, 2, 3]
+
+
+def test_load_history_preserves_jsonl_order_under_clock_drift(root: Path) -> None:
+    """Wall-clock can go backwards (NTP skew, suspend/resume). JSONL append order is the canonical truth — _load_history must never resort by ``at`` or replay arrives scrambled."""
+    path = root / "host" / "events.jsonl"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    # 3 entries written in JSONL order with `at` going BACKWARDS (clock skew).
+    path.write_text(
+        json.dumps({"event": "a", "data": {"i": 1}, "at": 300.0}) + "\n"
+        + json.dumps({"event": "b", "data": {"i": 2}, "at": 100.0}) + "\n"
+        + json.dumps({"event": "c", "data": {"i": 3}, "at": 200.0}) + "\n",
+        encoding="utf-8",
+    )
+    host_events._history.clear()
+    host_events._writes_since_compact = 0
+    host_events._history_path = None
+    host_events._seq_counter = 0
+    srv = host_server.Server(home=root)
+    host_events.register(srv)
+
+    out = asyncio.run(host_events._history_handler({}, srv))
+    events_order = [(e["event"], e["seq"]) for e in out["events"]]
+    # JSONL order preserved; seq assigned in that order.
+    assert events_order == [("a", 1), ("b", 2), ("c", 3)]
 
 
 @pytest.fixture
@@ -57,21 +134,30 @@ def test_history_reloads_from_disk_on_register(root: Path) -> None:
     assert [e["event"] for e in out["events"]] == ["schedule.done", "session_changed"]
 
 
-def test_history_filters_by_since_and_kinds(root: Path) -> None:
+def test_history_filters_by_after_seq_and_kinds(root: Path) -> None:
     srv = _reset_state(root)
-    host_events.emit("wg.post", {"wg_id": "architecture"})
-    cutoff = time.time()
-    time.sleep(0.01)
-    host_events.emit("schedule.done", {"job_id": "x"})
-    host_events.emit("wg.done", {"wg_id": "customers"})
+    host_events.emit("wg.post", {"wg_id": "architecture"})  # seq=1
+    host_events.emit("schedule.done", {"job_id": "x"})       # seq=2
+    host_events.emit("wg.done", {"wg_id": "customers"})       # seq=3
 
-    out_since = asyncio.run(host_events._history_handler({"since": cutoff}, srv))
-    assert [e["event"] for e in out_since["events"]] == ["schedule.done", "wg.done"]
+    out_after = asyncio.run(host_events._history_handler({"after_seq": 1}, srv))
+    assert [e["event"] for e in out_after["events"]] == ["schedule.done", "wg.done"]
 
     out_kinds = asyncio.run(
         host_events._history_handler({"kinds": ["wg.done", "wg.post"]}, srv),
     )
     assert [e["event"] for e in out_kinds["events"]] == ["wg.post", "wg.done"]
+
+
+def test_history_ignores_legacy_since_param(root: Path) -> None:
+    """``since`` was removed from the contract — passing it now is a no-op (full history returned), never the old wall-clock filter. Clients are required to use ``after_seq``."""
+    srv = _reset_state(root)
+    host_events.emit("wg.post", {"wg_id": "x"})
+    host_events.emit("schedule.done", {"job_id": "x"})
+
+    # since= would have filtered to schedule.done in the old contract — now both come back.
+    out = asyncio.run(host_events._history_handler({"since": 999_999_999.0}, srv))
+    assert [e["event"] for e in out["events"]] == ["wg.post", "schedule.done"]
 
 
 def test_history_ring_caps_at_max(

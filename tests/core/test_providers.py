@@ -25,6 +25,25 @@ def test_provider_has_key_uses_environment(monkeypatch) -> None:
     assert provider.has_key() is True
 
 
+def test_provider_has_key_accepts_explicit_env(monkeypatch) -> None:
+    """Daemon needs to ask "does THIS profile have the key?" without leaking other profiles' env into the lookup."""
+    class DummyProvider(Provider):
+        name = "dummy"
+        display = "Dummy"
+        api_key_env = "DUMMY_PROVIDER_KEY"
+
+        def list_models(self) -> list[ModelInfo]:
+            return []
+
+    provider = DummyProvider()
+    monkeypatch.setenv("DUMMY_PROVIDER_KEY", "in-os-env")
+    # Empty env explicitly says "this profile has no key" — must override os.environ.
+    assert provider.has_key(env={}) is False
+    assert provider.has_key(env={"DUMMY_PROVIDER_KEY": "alice"}) is True
+    # Default still falls back to os.environ for legacy callers.
+    assert provider.has_key() is True
+
+
 def test_google_list_models_is_static() -> None:
     provider = google.Google()
     models = provider.list_models()

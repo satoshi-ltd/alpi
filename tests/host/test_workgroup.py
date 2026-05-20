@@ -67,6 +67,71 @@ def test_decrypt_transcript_hub_roundtrip(short_tmp: Path) -> None:
     assert posts[0]["from"] == "@default"
 
 
+def _append_post(home: Path, wg_id: str, body: bytes, *, seq: int) -> None:
+    kp = load_or_generate(home)
+    wg = wg_mod.load(home, wg_id)
+    assert wg is not None
+    me = wg.member(kp.pubkey_b64())
+    assert me is not None
+    group_key = wg_mod.open_sealed_group_key(me.sealed_key, kp)
+    nonce_b64, ct_b64 = wg_mod.encrypt_post(group_key, body)
+    entry = {
+        "seq": seq,
+        "ts": f"2026-05-01T00:00:{seq:02d}Z",
+        "from": kp.pubkey_b64(),
+        "key_version": me.key_version,
+        "nonce": nonce_b64,
+        "ciphertext": ct_b64,
+    }
+    p = home / "alp" / "workgroups" / wg_id / "transcript.jsonl"
+    with p.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(entry, separators=(",", ":")) + "\n")
+
+
+def test_decrypt_transcript_after_seq_returns_only_newer(short_tmp: Path) -> None:
+    home = short_tmp / "hub"
+    wg_id = _seed_workgroup_with_one_post(home, b"post-1")
+    _append_post(home, wg_id, b"post-2", seq=2)
+    _append_post(home, wg_id, b"post-3", seq=3)
+
+    posts = data_workgroup.decrypt_transcript(home, wg_id, after_seq=1)
+    assert [p["seq"] for p in posts] == [2, 3]
+    assert posts[0]["body"] == "post-2"
+
+
+def test_decrypt_transcript_tail_with_limit(short_tmp: Path) -> None:
+    home = short_tmp / "hub"
+    wg_id = _seed_workgroup_with_one_post(home, b"post-1")
+    _append_post(home, wg_id, b"post-2", seq=2)
+    _append_post(home, wg_id, b"post-3", seq=3)
+
+    posts = data_workgroup.decrypt_transcript(home, wg_id, limit=2, tail=True)
+    assert [p["seq"] for p in posts] == [2, 3]
+
+
+def test_decrypt_transcript_opens_group_key_once(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    """Reopening the sealed key per-post is ~10ms each on Curve25519; we cache it for the call so an N-post transcript stays O(N) AEAD only."""
+    home = short_tmp / "hub"
+    wg_id = _seed_workgroup_with_one_post(home, b"post-1")
+    _append_post(home, wg_id, b"post-2", seq=2)
+    _append_post(home, wg_id, b"post-3", seq=3)
+
+    real_open = wg_mod.open_sealed_group_key
+    calls = {"n": 0}
+
+    def counting_open(sealed, kp):
+        calls["n"] += 1
+        return real_open(sealed, kp)
+
+    monkeypatch.setattr(data_workgroup.wg_mod, "open_sealed_group_key", counting_open)
+
+    posts = data_workgroup.decrypt_transcript(home, wg_id)
+    assert len(posts) == 3
+    assert calls["n"] == 1
+
+
 def test_decrypt_transcript_unknown_workgroup_returns_empty(short_tmp: Path) -> None:
     home = short_tmp / "hub"
     home.mkdir()
@@ -142,6 +207,58 @@ async def test_control_method_not_found(short_tmp: Path) -> None:
         await srv.stop()
     response = json.loads(line)
     assert response["error"]["code"] == -32601
+
+
+@pytest.mark.asyncio
+async def test_workgroup_transcript_handler_defaults_to_tail(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    """First-paint default — without an after_seq cursor the daemon must return the most recent window, not the oldest. Otherwise a long-lived workgroup paints page 1 of its history every time the UI opens."""
+    home = short_tmp / "hub"
+    wg_id = _seed_workgroup_with_one_post(home, b"post-1")
+    for i in range(2, 6):
+        _append_post(home, wg_id, f"post-{i}".encode(), seq=i)
+
+    monkeypatch.setattr(data_handlers, "_resolve_home", lambda profile: home)
+    srv = host_server.Server(home=home)
+    data_handlers.register(srv)
+
+    resp = await srv._dispatch({
+        "id": "r", "method": "host.workgroup.transcript",
+        "params": {"profile": "default", "wg_id": wg_id, "limit": 3},
+    })
+    seqs = [p["seq"] for p in resp["result"]["posts"]]
+    # 3 most recent, in oldest-first order.
+    assert seqs == [3, 4, 5]
+
+
+@pytest.mark.asyncio
+async def test_workgroup_transcript_handler_paginates(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    """Handler-level surface: after_seq + limit + tail return the right slice and next_seq for incremental fetch."""
+    home = short_tmp / "hub"
+    wg_id = _seed_workgroup_with_one_post(home, b"post-1")
+    _append_post(home, wg_id, b"post-2", seq=2)
+    _append_post(home, wg_id, b"post-3", seq=3)
+
+    monkeypatch.setattr(data_handlers, "_resolve_home", lambda profile: home)
+    srv = host_server.Server(home=home)
+    data_handlers.register(srv)
+
+    resp = await srv._dispatch({
+        "id": "r", "method": "host.workgroup.transcript",
+        "params": {"profile": "default", "wg_id": wg_id, "after_seq": 1},
+    })
+    result = resp["result"]
+    assert [p["seq"] for p in result["posts"]] == [2, 3]
+    assert result["next_seq"] == 3
+
+    resp = await srv._dispatch({
+        "id": "r", "method": "host.workgroup.transcript",
+        "params": {"profile": "default", "wg_id": wg_id, "limit": 1, "tail": True},
+    })
+    assert [p["seq"] for p in resp["result"]["posts"]] == [3]
 
 
 def test_register_rejects_non_data_namespace(short_tmp: Path) -> None:

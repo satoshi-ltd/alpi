@@ -1,5 +1,77 @@
 # Changelog
 
+## v0.4.52 — 2026-05-20 — daemon: multi-profile isolation, seq-only events, lite/detail host plane, Tailscale perf
+
+Daemon-side contract release. Several `host.*` verbs and the
+gateway / tools / model-selector internals change at once. The
+in-repo desktop and mobile clients land their migrations in
+follow-up commits (`desktop-v0.2.20`, `mobile-v0.1.x`); the daemon
+keeps accepting legacy params silently for older external clients.
+
+### Profile isolation — `.env` is per-profile, daemon never mutates `os.environ`
+
+- `alpi.home.effective_profile_env(home, *, base=None, extra=None)` is the new single entry for "give me the env a profile call should see": `base` (defaults to `os.environ` for process-level keys: PATH, HOME, TZ, ALPI_PLATFORM…) ∪ `<home>/.env` ∪ `extra`. The daemon supervises many profiles in one process, so blindly reading `os.environ` for a per-profile secret used to leak the first profile loaded across every other one.
+- Migrated to per-profile env: `alpi/tools/{skill,terminal,email}.py`, `alpi/gateway/{base,run,platforms/imap,platforms/matrix}.py`, `alpi/mail/{imap,gmail_auth}.py`, `alpi/model_selector.py`, `alpi/tui/{model_panel,app}.py`, `alpi/identity.py`.
+- `Provider.has_key(env=None)` now takes an explicit env map; callers (model selector, TUI provider gating) pass the profile's effective env so a missing key in `os.environ` no longer falsely greys out a provider whose key lives in `<home>/.env`.
+- `ImapClient.from_env_map(env)` companion to `from_env()` — gateway IMAP / `tools/email` now build clients from `self.env` (frozen per-profile snapshot at construction).
+- `alpi.identity.draft_bio_from_agent` and the LLM-override paths in `tools/{web_extract,read_image}` now route through `config.resolve_model(cfg)` — without that the override would silently bypass the profile's api_key and fall back to `os.environ`.
+- `host.providers.unset_key` and `host.gateway.gmail_authorize` no longer write to `os.environ` (they wrote a process-global shadow that leaked across profiles); the profile's `.env` is the only source of truth and `gmail_auth.first_run(home)` reads it on demand.
+
+### Config-merge no longer pollutes `DEFAULT_CONFIG`
+
+- `alpi/config.py::_deep_merge` deep-copies the defaults before merging user data. Pre-fix, a profile that called `cfg.providers.setdefault("ollama", []).append(...)` mutated the shared module-level default list, leaking that "ollama" entry into every subsequent `config.load()` (including other profiles in the same daemon process). The test suite caught the leak; this kills it at the root.
+- `alpi.config.atomic_write_yaml(path, data)` extracted as a public helper (was `_atomic_write_yaml`); `host/device_state.py::_write_user_yaml` now reuses it so `host.config.set_field` / `unset_field` get the same tmp+fsync+rename safety as `config.save`. Both verbs now emit `config_changed` after the write.
+
+### Events — seq-only contract, no more wall-clock pivots
+
+- `host.events.history({after_seq?, limit?, kinds?})` is now the canonical form. The legacy `since` (wall-clock float) is silently ignored: clock skew + suspend/resume let it drop or duplicate frames. Response carries `{events, next_seq}` so clients can advance the cursor monotonically.
+- `host.events.subscribe` handshake emits `{event: "subscribed", next_seq}` on connect.
+- `_load_history()` preserves JSONL append order instead of sorting by `at`; legacy entries without `seq` get one back-filled in file order.
+- Subscribe-then-backfill is now the documented contract: clients open the stream first, then on the `subscribed` handshake page from their previous cursor — history-then-subscribe leaves a race where a frame fired between the two calls is counted in the daemon's seq but never delivered.
+
+### Event invalidations — every mutator now emits something
+
+So clients can refresh without polling:
+- `config_changed` (scope=…) from `host.config.set_field`/`unset_field` and every cfg.save in `alpi/host/config.py` (providers / mcp / sandbox / voice / env).
+- `gateway_changed` (action=…) from `gateway.remove`, gmail OAuth success, and gateway-bundled `set_key`/`unset_key`.
+- `peers_changed` (action=added|removed|accepted|discarded) from peer add/remove/pending verbs.
+- `profile_changed` (action=created|deleted).
+- `workgroup_changed` (action=created|updated|removed|paused|resumed|left) — including `host.workgroup.action`.
+- `workgroup_members` from add_member/kick.
+- `schedule.changed` (action=removed|paused|resumed) from schedule mutators; the existing `schedule.done`/`schedule.failed` keep their shape.
+
+### Workgroup transcript — tail-first contract + group-key reuse
+
+- `host.workgroup.transcript` accepts `{after_seq?, limit?, tail?}` and returns `{posts, next_seq, limit}`. Without `after_seq`, default is now `tail=true` so first-paint of a 10k-post workgroup ships the recent window, not the oldest 200. With `after_seq`, paginates incrementally.
+- `decrypt_transcript` opens the hub sealed group key **once** outside the per-post loop (was O(N) Curve25519 unseals on every fetch). 1 unseal per call regardless of transcript length.
+
+### `host.chat.send` — `session_start` is the first frame
+
+- Daemon emits `{event: "session_start", session_id}` before any tool/delta, so the client can address the sidecar (`host.chat.events_since`) even on brand-new threads whose id it hasn't seen yet — replay after a silent stream now works on turn 1.
+
+### Lite/detail split on the hot path
+
+- `host.skills.list` no longer ships the SKILL.md body by default (~32KB/skill). Pass `include_body=true` if you really want it. `host.skill.read({name, category?})` returns one skill's full body on demand. `_counts.skills` uses `_count_skill_dirs` (no body reads).
+- `host.profile.summaries` now only carries inbox/sidebar fields: name, model, accent, latest_session, counts, budget, pubkey, plus `has_any_provider` (precomputed bool so empty-state branching doesn't need detail). `host.profile.detail({profile})` returns the heavy companion: peers, models, mcps, provider_keys, sandbox/voice, tcp_*, workspace.
+
+### Wire compression
+
+- `ws_serve(compression="deflate")` enables `permessage-deflate`. Highly compressible JSON-RPC payloads (transcripts, history backfill, profile detail) drop 50–80% in size over the link — clients that don't negotiate fall back to raw.
+
+### Devices store
+
+- `devices.validate_and_touch(token, min_interval=60)` collapses the 3-reads-+-1-write per remote RPC into a single 5s in-process cached lookup with throttled `last_seen` update.
+- Atomic `devices.save()` (tmp+fsync+rename) with `0o600` preserved.
+- New `_guard_pytest_isolation` blocks `devices.save()` from writing the developer's real `~/.alpi/host/devices.yaml` under `PYTEST_CURRENT_TEST` — a regression in `tests/host/test_network_rpc.py` was silently appending `label: seed` entries on every test run.
+
+### Heavy host handlers off the loop
+
+`host.profile.summaries`, `host.profile.storage`, `host.skills.list`, `host.workgroups.list`, `host.workgroup.transcript` all run their CPU/IO body via `asyncio.to_thread`. A 400ms `_profile_summary` no longer freezes every other coroutine on the host loop.
+
+### Tests + packaging
+
+`uv run pytest -q`: **1837 passed, 76 skipped** (`--integration` / `--llm` / Linux-only sandbox). Bumped Umbrel package metadata and image tags to `0.4.52`.
+
 ## v0.4.51 — 2026-05-19 — `host.network.*` RPCs for desktop/mobile pairing config
 
 Closes the parity gap between `alpi setup → devices → network` (CLI) and the desktop / mobile pairing UI. Previously the desktop's `PairDeviceModal` could only show whatever `host.devices.generate` returned and gave no way to switch between Tailscale and LAN or set a custom advertised host — the user had to drop to the terminal. Three new RPCs make the daemon's pairing endpoint queryable and editable over the host plane.

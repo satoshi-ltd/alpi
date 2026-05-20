@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import os
 from pathlib import Path
 from typing import AsyncIterator
 
@@ -51,10 +50,10 @@ class Matrix(Platform):
 
     def _build_client(self):
         from nio import AsyncClient
-        homeserver = os.environ["MATRIX_HOMESERVER_URL"]
-        user_id = os.environ["MATRIX_USER_ID"]
-        token = os.environ["MATRIX_ACCESS_TOKEN"]
-        device_id = os.environ.get("MATRIX_DEVICE_ID", "")
+        homeserver = self.env["MATRIX_HOMESERVER_URL"]
+        user_id = self.env["MATRIX_USER_ID"]
+        token = self.env["MATRIX_ACCESS_TOKEN"]
+        device_id = self.env.get("MATRIX_DEVICE_ID", "")
         client = AsyncClient(homeserver, user_id)
         client.access_token = token
         client.user_id = user_id
@@ -63,7 +62,7 @@ class Matrix(Platform):
         return client
 
     async def listen(self) -> AsyncIterator[IncomingMessage]:
-        if not all(os.environ.get(k) for k in (
+        if not all(self.env.get(k) for k in (
             "MATRIX_HOMESERVER_URL", "MATRIX_USER_ID", "MATRIX_ACCESS_TOKEN",
         )):
             log.info("MATRIX credentials not set — matrix listener idle.")

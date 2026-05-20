@@ -18,9 +18,11 @@ def short_tmp(monkeypatch):
     d = Path(tempfile.mkdtemp(prefix="alp-host-devs-", dir="/tmp"))
     from alpi import home as home_mod
     monkeypatch.setattr(home_mod, "_ROOT", d)
+    devices._invalidate_cache()
     try:
         yield d
     finally:
+        devices._invalidate_cache()
         shutil.rmtree(d, ignore_errors=True)
 
 
@@ -262,6 +264,50 @@ async def test_devices_verbs_blocked_over_remote_transport(
     assert len(sent) == 1
     assert sent[0]["error"]["code"] == -32001
     assert sent[0]["error"]["message"] == "forbidden"
+
+
+def test_validate_and_touch_throttles_writes(short_tmp: Path, monkeypatch) -> None:
+    """Two rapid hits within ``min_interval`` must not rewrite devices.yaml —
+    otherwise every paired client's poll loop fsyncs the file every RPC."""
+    row = devices.add(label="x")
+    path = devices._store_path()
+    base_mtime = path.stat().st_mtime_ns
+
+    fake_now = float(int(devices.time.time()))
+    monkeypatch.setattr(devices.time, "time", lambda: fake_now)
+    devices._invalidate_cache()
+
+    assert devices.validate_and_touch(row["token"], min_interval=60) is True
+    first_mtime = path.stat().st_mtime_ns
+    assert first_mtime != base_mtime  # initial last_seen=None forces a write.
+
+    assert devices.validate_and_touch(row["token"], min_interval=60) is True
+    assert path.stat().st_mtime_ns == first_mtime  # throttled — no rewrite.
+
+    monkeypatch.setattr(devices.time, "time", lambda: fake_now + 61)
+    assert devices.validate_and_touch(row["token"], min_interval=60) is True
+    assert path.stat().st_mtime_ns != first_mtime  # past the window → writes again.
+
+
+def test_validate_and_touch_open_when_store_empty(short_tmp: Path) -> None:
+    assert devices.validate_and_touch("") is True
+    assert devices.validate_and_touch("anything") is True
+
+
+def test_validate_and_touch_rejects_unknown_when_populated(short_tmp: Path) -> None:
+    row = devices.add(label="x")
+    assert devices.validate_and_touch("nope") is False
+    assert devices.validate_and_touch("") is False
+    assert devices.validate_and_touch(row["token"]) is True
+
+
+def test_save_is_atomic_no_tmp_leftover(short_tmp: Path) -> None:
+    """Crash-safe save: tmp file gets renamed onto the real path, never left around."""
+    devices.add(label="x")
+    path = devices._store_path()
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    assert path.exists()
+    assert not tmp.exists()
 
 
 @pytest.mark.asyncio

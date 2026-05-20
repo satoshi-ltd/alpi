@@ -443,13 +443,17 @@ def test_local_only_methods_include_all_network_verbs() -> None:
     ("host.network.restart_host_server", {}),
 ])
 async def test_network_verbs_blocked_over_remote_transport(
-    tmp_path: Path, method: str, params: dict,
+    tmp_path: Path, method: str, params: dict, monkeypatch,
 ) -> None:
     """Same shape as the devices guard test: paired-remote callers must hit the local-only gate (-32001 forbidden) regardless of token validity. Belt-and-braces over the symbol-presence smoke above."""
     import json
+    from alpi import home as home_mod
     from alpi.host import devices
 
     home = _bootstrap(tmp_path)
+    # devices.add() resolves the store via `home_mod._ROOT` — without this monkeypatch the parametrized cases would write "seed" rows into the developer's real ~/.alpi/host/devices.yaml on every test run.
+    monkeypatch.setattr(home_mod, "_ROOT", tmp_path)
+    devices._invalidate_cache()
     row = devices.add(label="seed")  # ensure token check is enforced
     srv = host_server.Server(home=home)
     devices.register(srv)

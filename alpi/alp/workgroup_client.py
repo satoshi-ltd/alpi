@@ -342,6 +342,7 @@ async def post(
     wg = wg_mod.load(home, wg_id)
     if wg is not None and wg.meta.hub_pubkey == kp.pubkey_b64():
         result = _post_as_hub(home, wg, kp, text, cost)
+        _emit_wg_post(home, wg_id, result)
         if tasks_mod.is_done(_plaintext):
             try:
                 from alpi.host import events as host_events
@@ -398,7 +399,23 @@ async def post(
     }
     if cost:
         params["cost"] = cost
-    return await _call(home, kp, sub.hub_id, "workgroup.post", params)
+    result = await _call(home, kp, sub.hub_id, "workgroup.post", params)
+    _emit_wg_post(home, wg_id, result)
+    return result
+
+
+def _emit_wg_post(home: Path, wg_id: str, result: dict[str, Any] | None) -> None:
+    """wg.post fires on every successful post; wg.done is reserved for #done markers."""
+    try:
+        from alpi.host import events as host_events
+        from alpi.home import profile_name
+        host_events.emit("wg.post", {
+            "profile": profile_name(home),
+            "wg_id": wg_id,
+            "seq": result.get("seq") if isinstance(result, dict) else None,
+        })
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def _post_as_hub(

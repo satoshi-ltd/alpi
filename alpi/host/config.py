@@ -75,6 +75,44 @@ def _params(d: dict[str, Any], *keys: str) -> tuple[Any, ...]:
     return tuple(d.get(k) for k in keys)
 
 
+def _emit_config_changed(home: Path, scope: str) -> None:
+    """Notify subscribers that this profile's config (cfg.yaml or .env) changed. Lazy-imported to keep `alpi.host.config` importable in contexts without an event bus."""
+    from alpi import home as home_mod
+    from alpi.host import events as host_events
+    host_events.emit("config_changed", {
+        "profile": home_mod.profile_name(home),
+        "scope": scope,
+    })
+
+
+def _emit_gateway_changed(home: Path, name: str, action: str) -> None:
+    from alpi import home as home_mod
+    from alpi.host import events as host_events
+    host_events.emit("gateway_changed", {
+        "profile": home_mod.profile_name(home),
+        "name": name,
+        "action": action,
+    })
+
+
+def _emit_peers_changed(home: Path, action: str, peer_id: str = "") -> None:
+    from alpi import home as home_mod
+    from alpi.host import events as host_events
+    host_events.emit("peers_changed", {
+        "profile": home_mod.profile_name(home),
+        "action": action,
+        "peer_id": peer_id,
+    })
+
+
+def _emit_profile_changed(name: str, action: str) -> None:
+    from alpi.host import events as host_events
+    host_events.emit("profile_changed", {
+        "profile": name,
+        "action": action,
+    })
+
+
 async def _providers_set_key(
     params: dict[str, Any], _server: host_server.Server,
 ) -> dict[str, Any]:
@@ -108,6 +146,13 @@ async def _providers_set_key(
             )
     cfg = cfg_mod.load(home)
     _append_env(cfg.env_path, key, value_str)
+    # A gateway secret rewrite is observably different from a generic provider key (it may bring a poller online); route accordingly so clients can refresh the right surface.
+    for gw_name, keys in _GATEWAY_ENV_KEYS.items():
+        if key in keys:
+            _emit_gateway_changed(home, gw_name, "configured")
+            break
+    else:
+        _emit_config_changed(home, scope="env")
     return {"ok": True}
 
 
@@ -121,8 +166,13 @@ async def _providers_unset_key(
     home = _resolve_home(str(profile or ""))
     cfg = cfg_mod.load(home)
     _remove_env_key(cfg.env_path, key)
-    if key in os.environ:
-        os.environ.pop(key, None)
+    # No os.environ mutation: sibling profiles in the daemon may legitimately use the same key.
+    for gw_name, keys in _GATEWAY_ENV_KEYS.items():
+        if key in keys:
+            _emit_gateway_changed(home, gw_name, "cleared")
+            break
+    else:
+        _emit_config_changed(home, scope="env")
     return {"ok": True}
 
 
@@ -146,6 +196,7 @@ async def _providers_add_ollama(
         )
     cfg.providers.setdefault("ollama", []).append({"name": name, "url": url})
     cfg_mod.save(cfg)
+    _emit_config_changed(home, scope="providers")
     return {"ok": True}
 
 
@@ -163,6 +214,7 @@ async def _providers_remove_ollama(
         )
     cfg.providers["ollama"] = keep
     cfg_mod.save(cfg)
+    _emit_config_changed(home, scope="providers")
     return {"ok": True}
 
 
@@ -185,6 +237,7 @@ async def _providers_add_or_model(
         models.remove(suffix)
     models.insert(0, suffix)
     cfg_mod.save(cfg)
+    _emit_config_changed(home, scope="providers")
     return {"ok": True}
 
 
@@ -207,6 +260,7 @@ async def _providers_remove_or_model(
     or_cfg["models"] = models
     cfg.providers["openrouter"] = or_cfg
     cfg_mod.save(cfg)
+    _emit_config_changed(home, scope="providers")
     return {"ok": True}
 
 
@@ -232,6 +286,7 @@ async def _peers_add(
         allow=list(allow),
     )
     peers_mod.add(home, peer)
+    _emit_peers_changed(home, "added", peer_id)
     return {"ok": True}
 
 
@@ -251,6 +306,7 @@ async def _peers_remove(
         raise host_server.HandlerError(
             -32004, "not-found", data={"detail": f"no peer @{peer_id}"},
         )
+    _emit_peers_changed(home, "removed", peer_id)
     return {"ok": True}
 
 
@@ -324,6 +380,7 @@ async def _peers_pending_accept(
     )
     peers_mod.add(home, peer)
     pending_mod.remove(home, pubkey)
+    _emit_peers_changed(home, "accepted", peer_id)
     return {"ok": True}
 
 
@@ -342,6 +399,7 @@ async def _peers_pending_discard(
         raise host_server.HandlerError(
             -32004, "not-found", data={"detail": "pubkey not in pending list"},
         )
+    _emit_peers_changed(home, "discarded")
     return {"ok": True}
 
 
@@ -373,6 +431,7 @@ async def _profile_create(
             data={"detail": f"profile {name!r} already exists"},
         )
     _bootstrap(h)
+    _emit_profile_changed(name, "created")
     return {"ok": True, "home": str(h)}
 
 
@@ -444,6 +503,7 @@ async def _profile_delete(
     stamp = _time.strftime("%Y%m%d-%H%M%S")
     archived = trash_root / f"{name}-{stamp}"
     h.rename(archived)
+    _emit_profile_changed(name, "deleted")
     return {"ok": True, "archived_at": str(archived)}
 
 
@@ -470,6 +530,7 @@ async def _mcp_add(
         "env": {str(k): str(v) for k, v in env.items()},
     }
     cfg_mod.save(cfg)
+    _emit_config_changed(home, scope="mcp")
     return {"ok": True}
 
 
@@ -487,6 +548,7 @@ async def _mcp_remove(
     del servers[name]
     cfg.raw["mcp"]["servers"] = servers
     cfg_mod.save(cfg)
+    _emit_config_changed(home, scope="mcp")
     return {"ok": True}
 
 
@@ -547,13 +609,14 @@ async def _gmail_authorize(
         ("GMAIL_ALLOWED_SENDERS", senders),
     ):
         _append_env(cfg.env_path, key, val)
-        os.environ[key] = val
+    # gmail_auth reads creds from the profile's .env via _client_credentials(home) — no os.environ shadow.
 
     await send_frame({"event": "browser_opened"})
 
     loop = asyncio.get_running_loop()
     try:
         token = await loop.run_in_executor(None, lambda: gmail_auth.first_run(home))
+        _emit_gateway_changed(home, "gmail", "authorized")
         await send_frame({"event": "authorized", "email": token.email})
     except gmail_auth.GmailAuthError as exc:
         await send_frame({"event": "error", "text": str(exc)})
@@ -596,6 +659,7 @@ async def _gateway_remove(
                 token.unlink()
             except OSError:
                 pass
+    _emit_gateway_changed(home, name, "removed")
     return {"ok": True}
 
 
@@ -619,6 +683,7 @@ async def _sandbox_set(
         # ``allow_network`` is meaningless without sandbox.
         cfg.tools.terminal.allow_network = False
     cfg_mod.save(cfg)
+    _emit_config_changed(home, scope="sandbox")
     return {"ok": True}
 
 
@@ -635,6 +700,7 @@ async def _sandbox_network(
         )
     cfg.tools.terminal.allow_network = on
     cfg_mod.save(cfg)
+    _emit_config_changed(home, scope="sandbox")
     return {"ok": True}
 
 
@@ -650,6 +716,7 @@ async def _voice_set_voice(
     cfg = cfg_mod.load(home)
     cfg.tools.tts.voice = voice_id
     cfg_mod.save(cfg)
+    _emit_config_changed(home, scope="voice")
     return {"ok": True}
 
 
@@ -661,6 +728,7 @@ async def _voice_autoplay(
     cfg = cfg_mod.load(home)
     cfg.tools.tts.autoplay = on
     cfg_mod.save(cfg)
+    _emit_config_changed(home, scope="voice")
     return {"ok": True}
 
 

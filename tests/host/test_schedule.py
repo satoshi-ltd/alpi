@@ -254,6 +254,71 @@ async def test_fire_runs_off_loop_so_chat_can_progress(
 
 
 @pytest.mark.asyncio
+async def test_remove_emits_schedule_changed(tmp_path: Path, monkeypatch) -> None:
+    from alpi.host import events as host_events
+
+    home = tmp_path / "h"
+    home.mkdir()
+    monkeypatch.setattr(data_handlers, "_resolve_home", lambda p: home)
+    _seed_jobs(home, {"id": "drop0001", "kind": "cron",
+                       "expression": "* * * * *", "prompt": "x"})
+    srv = host_server.Server(home=home)
+    data_schedule.register(srv)
+
+    captured: list[tuple[str, dict]] = []
+    monkeypatch.setattr(
+        host_events, "emit",
+        lambda kind, data=None: captured.append((kind, data or {})),
+    )
+
+    await srv._dispatch({
+        "id": "r", "method": "host.schedule.remove",
+        "params": {"profile": "default", "id": "drop0001"},
+    })
+    assert ("schedule.changed", {
+        "profile": "default", "id": "drop0001", "action": "removed",
+    }) in captured
+
+
+@pytest.mark.asyncio
+async def test_set_paused_emits_schedule_changed(tmp_path: Path, monkeypatch) -> None:
+    from alpi.host import events as host_events
+
+    home = tmp_path / "h"
+    home.mkdir()
+    monkeypatch.setattr(data_handlers, "_resolve_home", lambda p: home)
+    _seed_jobs(home, {"id": "abc12345", "kind": "cron",
+                       "expression": "* * * * *", "prompt": "x"})
+    srv = host_server.Server(home=home)
+    data_schedule.register(srv)
+
+    captured: list[tuple[str, dict]] = []
+    monkeypatch.setattr(
+        host_events, "emit",
+        lambda kind, data=None: captured.append((kind, data or {})),
+    )
+
+    await srv._dispatch({
+        "id": "r", "method": "host.schedule.set_paused",
+        "params": {"profile": "default", "id": "abc12345", "paused": True},
+    })
+    await srv._dispatch({
+        "id": "r", "method": "host.schedule.set_paused",
+        "params": {"profile": "default", "id": "abc12345", "paused": False},
+    })
+    actions = [d["action"] for k, d in captured if k == "schedule.changed"]
+    assert actions == ["paused", "resumed"]
+
+
+def test_atomic_write_no_tmp_left_behind(tmp_path: Path) -> None:
+    target = tmp_path / "jobs.json"
+    data_schedule._atomic_write_json(target, [{"id": "a"}])
+    assert target.exists()
+    assert not target.with_suffix(target.suffix + ".tmp").exists()
+    assert json.loads(target.read_text()) == [{"id": "a"}]
+
+
+@pytest.mark.asyncio
 async def test_fire_unknown_returns_404(tmp_path: Path, monkeypatch) -> None:
     home = tmp_path / "h"
     home.mkdir()

@@ -116,3 +116,40 @@ def test_resolve_model_ollama() -> None:
     assert kwargs["model"] == "openai/llama3.1"
     assert kwargs["api_base"] == "http://localhost:11434/v1"
     assert kwargs["api_key"] == "dummy"
+
+
+def test_resolve_model_reads_api_key_from_profile_env(tmp_path: Path, monkeypatch) -> None:
+    """Cloud api keys live in <home>/.env and are bound per-call, never via os.environ.
+    Regression: with `load_dotenv(override=True)` at config.load() the daemon would
+    leak profile A's OPENAI_API_KEY into profile B's calls."""
+    home_a = tmp_path / "a"; home_a.mkdir()
+    home_b = tmp_path / "b"; home_b.mkdir()
+    (home_a / ".env").write_text("OPENAI_API_KEY=A_KEY\n")
+    # Profile B has no .env at all.
+
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+
+    cfg_a = config.Config(home=home_a, model="openai/gpt-4o")
+    cfg_b = config.Config(home=home_b, model="openai/gpt-4o")
+
+    # Order matters: load A first, then resolve B. With the old global-env
+    # behaviour, B would carry A's key.
+    config.load(home_a)
+    config.load(home_b)
+
+    assert config.resolve_model(cfg_a)["api_key"] == "A_KEY"
+    assert "api_key" not in config.resolve_model(cfg_b)
+    # Also: config.load must NOT mutate os.environ.
+    import os
+    assert os.environ.get("OPENAI_API_KEY") is None
+
+
+def test_resolve_model_profile_env_wins_over_os_environ(tmp_path: Path, monkeypatch) -> None:
+    """Daemon-wide ALPI vars stay in os.environ, but per-provider keys
+    must come from the profile's own .env when present."""
+    home = tmp_path / "p"; home.mkdir()
+    (home / ".env").write_text("ANTHROPIC_API_KEY=profile_key\n")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "global_leak")
+
+    cfg = config.Config(home=home, model="anthropic/claude-sonnet-4-6")
+    assert config.resolve_model(cfg)["api_key"] == "profile_key"

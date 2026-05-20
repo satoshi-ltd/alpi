@@ -233,7 +233,10 @@ class ReadImage(Tool):
         first_error: str | None = None
         if override:
             try:
-                out = llm.complete(messages=messages, model=override)
+                # resolve_model with the override resolves the profile's api_key for the override head ("openai", "anthropic"…) — passing just `model=override` would silently fall back to os.environ.
+                from dataclasses import replace as _replace
+                override_kwargs = cfg_mod.resolve_model(_replace(cfg, model=override))
+                out = llm.complete(messages=messages, **override_kwargs)
                 return _finalize(out)
             except Exception as e:  # noqa: BLE001
                 tool_state_mod.emit_state("retrying with main model…", error=True)

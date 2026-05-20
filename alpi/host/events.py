@@ -16,6 +16,17 @@ _lock = threading.Lock()
 _subscribers: set[tuple[asyncio.Queue, frozenset[str] | None]] = set()
 _loop_ref: asyncio.AbstractEventLoop | None = None
 
+# Per-process monotone seq; clients pivot on it via `after_seq`.
+_seq_lock = threading.Lock()
+_seq_counter = 0
+
+
+def _next_seq() -> int:
+    global _seq_counter
+    with _seq_lock:
+        _seq_counter += 1
+        return _seq_counter
+
 # Rolling history so clients that were offline when an event fired can backfill on
 # connect via host.events.history. Bounded in memory by HISTORY_MAX; the JSONL
 # sidecar is compacted every COMPACT_EVERY writes so it can't grow unboundedly
@@ -39,6 +50,7 @@ def _history_file() -> Path:
 
 
 def _load_history() -> None:
+    global _seq_counter
     path = _history_file()
     if not path.exists():
         return
@@ -57,10 +69,24 @@ def _load_history() -> None:
             continue
         if isinstance(obj, dict) and "event" in obj:
             items.append(obj)
+    items = items[-HISTORY_MAX:]
+    # JSONL append order is canonical — resorting by `at` would scramble replay under NTP/suspend skew.
+    max_seq = 0
+    for it in items:
+        s = it.get("seq")
+        if isinstance(s, int) and s > max_seq:
+            max_seq = s
+    next_seq = max_seq
+    for it in items:
+        if not isinstance(it.get("seq"), int):
+            next_seq += 1
+            it["seq"] = next_seq
     with _history_lock:
         _history.clear()
-        for it in items[-HISTORY_MAX:]:
+        for it in items:
             _history.append(it)
+    with _seq_lock:
+        _seq_counter = next_seq
 
 
 def _compact_jsonl(path: Path, snapshot: list[dict[str, Any]]) -> None:
@@ -115,7 +141,12 @@ def register(server: host_server.Server) -> None:
 
 
 def emit(kind: str, data: dict[str, Any] | None = None) -> None:
-    payload = {"event": kind, "data": data or {}, "at": time.time()}
+    payload = {
+        "event": kind,
+        "data": data or {},
+        "at": time.time(),
+        "seq": _next_seq(),
+    }
     _append_history(payload)
     with _lock:
         if not _subscribers or _loop_ref is None:
@@ -158,7 +189,9 @@ async def _subscribe_handler(
     with _lock:
         _subscribers.add(entry)
     try:
-        await send_frame({"event": "subscribed"})
+        with _seq_lock:
+            anchor = _seq_counter
+        await send_frame({"event": "subscribed", "next_seq": anchor})
         while True:
             payload = await queue.get()
             try:
@@ -173,8 +206,9 @@ async def _subscribe_handler(
 async def _history_handler(
     params: dict[str, Any], _server: host_server.Server,
 ) -> dict[str, Any]:
-    since = params.get("since")
-    since_ts = float(since) if isinstance(since, (int, float)) else None
+    """``host.events.history`` — seq-only contract; ``since`` was dropped (clock-drift fragile)."""
+    after_seq_raw = params.get("after_seq")
+    after_seq = int(after_seq_raw) if isinstance(after_seq_raw, (int, float)) else None
     limit_raw = params.get("limit")
     limit = int(limit_raw) if isinstance(limit_raw, (int, float)) else HISTORY_MAX
     limit = max(1, min(limit, HISTORY_MAX))
@@ -188,13 +222,15 @@ async def _history_handler(
 
     with _history_lock:
         items = list(_history)
-    if since_ts is not None:
-        items = [it for it in items if float(it.get("at") or 0) > since_ts]
+    if after_seq is not None:
+        items = [it for it in items if isinstance(it.get("seq"), int) and it["seq"] > after_seq]
     if kinds is not None:
         items = [it for it in items if it.get("event") in kinds]
     if len(items) > limit:
         items = items[-limit:]
-    return {"events": items}
+    with _seq_lock:
+        next_seq = _seq_counter
+    return {"events": items, "next_seq": next_seq}
 
 
 __all__ = ["register", "emit"]

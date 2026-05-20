@@ -209,8 +209,11 @@ async def test_data_chat_send_streams_events_in_order(
 
     kinds = [e.get("event") for e in events]
     assert kinds == [
-        "tool_start", "tool_end", "reply", "done",
+        "session_start", "tool_start", "tool_end", "reply", "done",
     ]
+    # session_start must arrive first so the client can pin the id and replay via host.chat.events_since if the stream dies mid-turn.
+    start = events[0]
+    assert start["session_id"] == "fake-session-id"
     reply = next(e for e in events if e["event"] == "reply")
     assert reply["text"] == "echo: hello"
     assert reply["session_id"] == "fake-session-id"

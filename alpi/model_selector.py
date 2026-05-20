@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from typing import Any
 
@@ -62,6 +61,9 @@ def _remember_openrouter_model(cfg: cfg_mod.Config, model_id: str) -> None:
 
 
 def _pick_provider(cfg: cfg_mod.Config) -> Provider | None:
+    from alpi.home import effective_profile_env
+    env = effective_profile_env(cfg.home)
+
     builtin = prov_mod.builtin()
     ollamas = prov_mod.ollama(cfg.providers.get("ollama", []))
     active_head = cfg.model.split("/", 1)[0]
@@ -76,15 +78,15 @@ def _pick_provider(cfg: cfg_mod.Config) -> Provider | None:
     cloud: list[tuple[str, str, Any, bool]] = []
     for p in builtin:
         parts = []
-        if p.api_key_env and p.has_key():
+        if p.api_key_env and p.has_key(env):
             parts.append("key saved")
         parts.append(p.description)
-        if p.api_key_env and not p.has_key():
+        if p.api_key_env and not p.has_key(env):
             parts.append("[key needed]")
         cloud.append((p.display, " · ".join(parts), p, p.name == active_head))
 
     manage: list[tuple[str, str, Any, bool]] = []
-    if ollamas or _any_saved_keys(builtin):
+    if ollamas or _any_saved_keys(builtin, env):
         manage.append(("Remove keys", "delete API keys or Ollama servers",
                        _MANAGE_SAVED, False))
 
@@ -194,13 +196,14 @@ def _prompt_custom_model(provider: Provider, current: str) -> str | None:
 
 
 def _ensure_key(cfg: cfg_mod.Config, provider: Provider) -> None:
-    if not provider.api_key_env or provider.has_key():
+    from alpi.home import effective_profile_env
+    env = effective_profile_env(cfg.home)
+    if not provider.api_key_env or provider.has_key(env):
         return
     value = ui.password(f"Enter {provider.api_key_env} for {provider.display}:")
     if not value:
         return
     _append_env(cfg.env_path, provider.api_key_env, value)
-    os.environ[provider.api_key_env] = value
 
 
 def _add_ollama_connection(cfg: cfg_mod.Config):
@@ -255,17 +258,20 @@ def _remove_env_key(env_path: Path, key: str) -> None:
     _atomic_write_env(env_path, "\n".join(lines) + ("\n" if lines else ""))
 
 
-def _any_saved_keys(builtin: list[Provider]) -> bool:
-    return any(p.has_key() for p in builtin if p.api_key_env)
+def _any_saved_keys(builtin: list[Provider], env: dict[str, str] | None = None) -> bool:
+    return any(p.has_key(env) for p in builtin if p.api_key_env)
 
 
 # Saved keys submenu.
 def _manage_saved(cfg: cfg_mod.Config) -> None:
+    from alpi.home import effective_profile_env
+    env = effective_profile_env(cfg.home)
+
     builtin = prov_mod.builtin()
 
     items: list = []
     for p in builtin:
-        if p.api_key_env and os.environ.get(p.api_key_env):
+        if p.api_key_env and env.get(p.api_key_env):
             items.append((p.api_key_env, ("key", p.api_key_env), "API key in .env"))
     for entry in cfg.providers.get("ollama", []) or []:
         name = entry.get("name", "")
@@ -287,7 +293,6 @@ def _manage_saved(cfg: cfg_mod.Config) -> None:
     kind, target = choice
     if kind == "key":
         _remove_env_key(cfg.env_path, target)
-        os.environ.pop(target, None)
         ui.ok_and_wait(f"removed {target} from .env")
     elif kind == "ollama":
         cfg.providers["ollama"] = [

@@ -68,8 +68,10 @@ class ProviderPanel(FloatingPanel):
         olist.focus()
 
     def _build_options(self) -> list[Option]:
+        from alpi.home import effective_profile_env
         from alpi.tui.list_row import build_options
 
+        env = effective_profile_env(self.cfg.home)
         active_head = self.cfg.model.split("/", 1)[0]
         items: list[tuple[str, str, str]] = []
 
@@ -77,7 +79,7 @@ class ProviderPanel(FloatingPanel):
             self.cfg.providers.get("openrouter", {}).get("models", []) or []
         )
         for p in prov_mod.builtin():
-            if p.api_key_env and not p.has_key():
+            if p.api_key_env and not p.has_key(env):
                 continue
             # OpenRouter is usable only once the user has registered at
             # least one model id via `alpi setup` — we don't fetch the

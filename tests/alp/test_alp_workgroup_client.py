@@ -790,3 +790,115 @@ def test_leave_rejects_unknown_workgroup(short_tmp: Path) -> None:
     load_or_generate(home)
     with pytest.raises(ValueError, match="not subscribed"):
         asyncio.run(wc.leave(home, "wg_does_not_exist"))
+
+
+@pytest.mark.asyncio
+async def test_post_as_hub_emits_wg_post_event(
+    short_tmp: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Every hub post fires `wg.post` so live clients (mobile) refresh the
+    transcript without a filesystem watcher. Desktop has a Tauri fs-watcher
+    so this event is technically redundant there, but emission is cheap and
+    keeps both runtimes on the same event bus."""
+    hub_home = short_tmp / "alice"; hub_home.mkdir()
+    hub_kp = load_or_generate(hub_home)
+    wg = wg_mod.create(
+        hub_home, name="design", hub_kp=hub_kp, member_pubkeys=[],
+    )
+
+    captured: list[tuple[str, dict]] = []
+    import alpi.host.events as host_events
+    monkeypatch.setattr(
+        host_events, "emit",
+        lambda kind, data=None: captured.append((kind, data or {})),
+    )
+
+    await wc.post(hub_home, wg.meta.id, b"hello team")
+
+    posts = [(k, d) for (k, d) in captured if k == "wg.post"]
+    dones = [(k, d) for (k, d) in captured if k == "wg.done"]
+    assert len(posts) == 1, f"expected one wg.post, got {captured}"
+    assert posts[0][1]["wg_id"] == wg.meta.id
+    assert isinstance(posts[0][1].get("seq"), int)
+    # Plain message without a #done marker → no wg.done.
+    assert dones == []
+
+
+@pytest.mark.asyncio
+async def test_post_as_hub_with_done_emits_both_events(
+    short_tmp: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A `#done` marker fires wg.post AND wg.done — they are separate signals."""
+    hub_home = short_tmp / "alice"; hub_home.mkdir()
+    hub_kp = load_or_generate(hub_home)
+    wg = wg_mod.create(
+        hub_home, name="design", hub_kp=hub_kp, member_pubkeys=[],
+    )
+
+    captured: list[tuple[str, dict]] = []
+    import alpi.host.events as host_events
+    monkeypatch.setattr(
+        host_events, "emit",
+        lambda kind, data=None: captured.append((kind, data or {})),
+    )
+
+    await wc.post(hub_home, wg.meta.id, b"#done shipped to staging")
+
+    kinds = [k for (k, _) in captured]
+    assert "wg.post" in kinds
+    assert "wg.done" in kinds
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_remote_member_post_emits_wg_post_on_hub(
+    short_tmp: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When a remote member posts to the hub via ALP, the hub-side
+    workgroup_post handler must also emit `wg.post` — otherwise a mobile
+    client subscribed to the hub's host.events stream would never see incoming
+    member transcript posts in real time (desktop watches the FS, mobile
+    only has the event bus)."""
+    hub_home = short_tmp / "alice"; hub_home.mkdir()
+    bob_home = short_tmp / "bob"; bob_home.mkdir()
+    alice_kp = load_or_generate(hub_home)
+    bob_kp = load_or_generate(bob_home)
+    _pin(hub_home, "bob", bob_kp.pubkey_b64(),
+         ["workgroup.join", "workgroup.post", "workgroup.pull"])
+    _pin(bob_home, "alice", alice_kp.pubkey_b64(), ["link.ping"])
+
+    wg = wg_mod.create(
+        hub_home, name="design", hub_kp=alice_kp,
+        member_pubkeys=[bob_kp.pubkey_b64()],
+    )
+
+    server = alp_server.Server(home=hub_home, agent_name="alice")
+    wg_mod.register(server, hub_home)
+    await server.start()
+
+    captured: list[tuple[str, dict]] = []
+    import alpi.host.events as host_events
+    monkeypatch.setattr(
+        host_events, "emit",
+        lambda kind, data=None: captured.append((kind, data or {})),
+    )
+
+    import alpi.alp.workgroup_client as wc_mod
+    original_resolver = wc_mod._intra_socket_path
+    wc_mod._intra_socket_path = lambda peer_id: server.socket_path()
+    try:
+        await wc.join(bob_home, "alice", wg.meta.id)
+        await wc.post(bob_home, wg.meta.id, b"hi from bob")
+    finally:
+        wc_mod._intra_socket_path = original_resolver
+        await server.stop()
+
+    posts = [(k, d) for (k, d) in captured if k == "wg.post"]
+    # Bob's own emit (from workgroup_client._emit_wg_post) + Alice's hub-side emit (from workgroup.py::workgroup_post) — at least the hub-side one must be present.
+    assert len(posts) >= 1, f"expected wg.post from hub server, got {captured}"
+    hub_post = next(((k, d) for (k, d) in posts if d.get("profile") == "default"), None)
+    assert hub_post is not None, (
+        f"hub (alice) didn't emit wg.post on incoming remote member post; captured: {captured}"
+    )
+    assert hub_post[1]["wg_id"] == wg.meta.id
+    assert isinstance(hub_post[1].get("seq"), int)

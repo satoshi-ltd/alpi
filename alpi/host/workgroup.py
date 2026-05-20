@@ -9,10 +9,34 @@ from alpi.alp import workgroup as wg_mod
 from alpi.alp.keys import load_or_generate
 
 
-def decrypt_transcript(home: Path, wg_id: str) -> list[dict[str, Any]]:
+def decrypt_transcript(
+    home: Path,
+    wg_id: str,
+    *,
+    after_seq: int | None = None,
+    limit: int | None = None,
+    tail: bool = False,
+) -> list[dict[str, Any]]:
+    """Return decrypted transcript posts, oldest-first.
+
+    Pagination is mandatory once a transcript grows past a few hundred posts:
+    decrypt cost is per-post (libsodium AEAD + JSON parse), so even with the
+    group key opened once the linear walk dominates for chatty hubs. Callers
+    pass ``after_seq`` for incremental updates or ``tail=True`` with ``limit``
+    for first-paint of a large transcript.
+    """
     raw = _read_jsonl(home, wg_id)
     if not raw:
         return []
+
+    if after_seq is not None:
+        raw = [p for p in raw if int(p.get("seq", 0)) > int(after_seq)]
+        if not raw:
+            return []
+    if tail and limit is not None and limit > 0 and len(raw) > limit:
+        raw = raw[-limit:]
+    elif limit is not None and limit > 0 and len(raw) > limit:
+        raw = raw[:limit]
 
     kp = load_or_generate(home)
 
@@ -55,7 +79,15 @@ def _decrypt_as_hub(
     if me is None:
         return []
     cur_version = me.key_version
-    cur_sealed = me.sealed_key
+    # Open the sealed group key ONCE outside the loop — used to be reopened per-post (O(N) Curve25519 unseals on every transcript fetch, ~10ms each on a busy hub).
+    try:
+        group_key = wg_mod.open_sealed_group_key(me.sealed_key, kp)
+    except Exception as e:  # noqa: BLE001
+        # Hub cannot unseal its own key — degrade gracefully, never return half-decrypted state.
+        group_key = None
+        unseal_error = str(e)
+    else:
+        unseal_error = ""
 
     handles = _handle_map(home, wg)
     out: list[dict[str, Any]] = []
@@ -65,9 +97,10 @@ def _decrypt_as_hub(
         body: str
         if v != cur_version:
             body = f"[v{v} key rotated out of hub state]"
+        elif group_key is None:
+            body = f"[decrypt failed: {unseal_error}]"
         else:
             try:
-                group_key = wg_mod.open_sealed_group_key(cur_sealed, kp)
                 body = wg_mod.decrypt_post(
                     group_key, post["nonce"], post["ciphertext"],
                 ).decode("utf-8", errors="replace")
