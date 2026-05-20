@@ -257,7 +257,6 @@ def skills_index_block(home: Path, cfg_raw: dict[str, Any] | None = None) -> str
 
     if cfg_raw is None:
         cfg_raw = _load_cfg_raw(home)
-    # Use the profile's effective env, not os.environ — otherwise a skill with requires_env tied to a per-profile .env secret would be hidden from the prompt even though it would run fine when invoked.
     profile_env = effective_profile_env(home)
 
     lines = [
@@ -928,7 +927,12 @@ class Skill(Tool):
         return ToolResult(ok=False, output="", error=f"unknown action: {action}")
 
 
-def _state_tag(meta: dict[str, str], *, cfg_raw: dict[str, Any] | None = None) -> str:
+def _state_tag(
+    meta: dict[str, str],
+    *,
+    env: dict[str, str] | None = None,
+    cfg_raw: dict[str, Any] | None = None,
+) -> str:
     """``""`` | ``[invalid: …]`` | ``[inactive: …]``; runtime ``broken`` lives in ``validate``."""
     from alpi.tools import _skill_schema as _schema
     schema_errors = _schema.errors(
@@ -938,7 +942,7 @@ def _state_tag(meta: dict[str, str], *, cfg_raw: dict[str, Any] | None = None) -
         first = schema_errors[0]
         more = f", +{len(schema_errors) - 1} more" if len(schema_errors) > 1 else ""
         return f"  [invalid: {first.field} ({first.message}){more}]"
-    ok, missing = skill_eligibility(meta, cfg_raw=cfg_raw)
+    ok, missing = skill_eligibility(meta, env=env, cfg_raw=cfg_raw)
     if not ok:
         return f"  [inactive: missing {', '.join(missing)}]"
     return ""
@@ -946,7 +950,9 @@ def _state_tag(meta: dict[str, str], *, cfg_raw: dict[str, Any] | None = None) -
 
 def _list(home: Path) -> ToolResult:
     """List every skill tagged via ``_state_tag``; ``validate`` runs the deeper checks."""
+    from alpi.home import effective_profile_env
     cfg_raw = _load_cfg_raw(home)
+    env = effective_profile_env(home)
     lines: list[str] = []
     root = home / "skills"
     if root.exists():
@@ -960,14 +966,14 @@ def _list(home: Path) -> ToolResult:
             lines.append(f"{cat.name}:")
             for s in skill_dirs:
                 meta = _frontmatter(s / "SKILL.md")
-                lines.append(f"  - {s.name}{_state_tag(meta, cfg_raw=cfg_raw)}")
+                lines.append(f"  - {s.name}{_state_tag(meta, env=env, cfg_raw=cfg_raw)}")
     bundled = bundled_skills()
     if bundled:
         if lines:
             lines.append("")
         lines.append("@alpi/ [bundled]:")
         for b in bundled:
-            lines.append(f"  - {b['name']}{_state_tag(b.get('meta', {}), cfg_raw=cfg_raw)}")
+            lines.append(f"  - {b['name']}{_state_tag(b.get('meta', {}), env=env, cfg_raw=cfg_raw)}")
     if not lines:
         lines.append("(no skills)")
     return ToolResult(ok=True, output="\n".join(lines))
@@ -1472,7 +1478,12 @@ def _run_or_test(home: Path, name: str, args: list[str], *, mode: str) -> ToolRe
 
     skill_md = skill_dir / "SKILL.md"
     eligibility_meta = _frontmatter(skill_md) if skill_md.is_file() else {}
-    ok, missing = skill_eligibility(eligibility_meta, cfg_raw=_load_cfg_raw(home))
+    from alpi.home import effective_profile_env
+    ok, missing = skill_eligibility(
+        eligibility_meta,
+        env=effective_profile_env(home),
+        cfg_raw=_load_cfg_raw(home),
+    )
     if not ok:
         return ToolResult(
             ok=False, output="",
@@ -1793,13 +1804,15 @@ def keyword_match_hint(
         return ""
     if cfg_raw is None:
         cfg_raw = _load_cfg_raw(home)
+    from alpi.home import effective_profile_env
     from alpi.tools import _skill_schema as _schema
+    env = effective_profile_env(home)
     hits: list[str] = []
     for path in all_skills(home):
         meta = _frontmatter(path / "SKILL.md")
         if _schema.errors(_schema.validate_frontmatter(meta, categories=CATEGORIES)):
             continue
-        if not skill_eligibility(meta, cfg_raw=cfg_raw)[0]:
+        if not skill_eligibility(meta, env=env, cfg_raw=cfg_raw)[0]:
             continue
         if _keyword_matches(tokens, skill_keywords(meta)):
             hits.append(meta.get("name") or path.name)
@@ -1807,7 +1820,7 @@ def keyword_match_hint(
         meta = b.get("meta", {})
         if _schema.errors(_schema.validate_frontmatter(meta, categories=CATEGORIES)):
             continue
-        if not skill_eligibility(meta, cfg_raw=cfg_raw)[0]:
+        if not skill_eligibility(meta, env=env, cfg_raw=cfg_raw)[0]:
             continue
         if _keyword_matches(tokens, skill_keywords(meta)):
             hits.append(b["name"])

@@ -166,7 +166,6 @@ async def _providers_unset_key(
     home = _resolve_home(str(profile or ""))
     cfg = cfg_mod.load(home)
     _remove_env_key(cfg.env_path, key)
-    # No os.environ mutation: sibling profiles in the daemon may legitimately use the same key.
     for gw_name, keys in _GATEWAY_ENV_KEYS.items():
         if key in keys:
             _emit_gateway_changed(home, gw_name, "cleared")
@@ -609,7 +608,6 @@ async def _gmail_authorize(
         ("GMAIL_ALLOWED_SENDERS", senders),
     ):
         _append_env(cfg.env_path, key, val)
-    # gmail_auth reads creds from the profile's .env via _client_credentials(home) — no os.environ shadow.
 
     await send_frame({"event": "browser_opened"})
 

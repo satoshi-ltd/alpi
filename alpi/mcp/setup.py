@@ -125,7 +125,7 @@ def _wizard(
             ui.press_enter()
             return
 
-    env_vars = _ask_env_vars(existing=current_env)
+    env_vars = _ask_env_vars(home, existing=current_env)
 
     client = MCPClient(name=name, command=command, args=args, env=env_vars)
     try:
@@ -161,16 +161,20 @@ def _remove(home: Path, servers: dict) -> None:
 # Env var collection (walk existing, then add loop)
 
 
-def _ask_env_vars(existing: dict[str, str] | None = None) -> dict[str, str]:
-    import os
+def _ask_env_vars(
+    home: Path,
+    existing: dict[str, str] | None = None,
+) -> dict[str, str]:
+    from alpi.home import effective_profile_env
 
+    env = effective_profile_env(home)
     existing = existing or {}
     out: dict[str, str] = {}
 
     # 1) Walk existing mappings. Password prompt per var: ENTER keeps
     #    the current .env value, typing replaces it.
     for var, ref in existing.items():
-        current = os.environ.get(var, "")
+        current = env.get(var, "")
         value = ui.password(var, current=current)
         if value is None:
             # Ctrl-C mid-wizard. Preserve what we had so far.
@@ -197,7 +201,7 @@ def _ask_env_vars(existing: dict[str, str] | None = None) -> dict[str, str]:
         if not var or var in out:
             continue
 
-        current = os.environ.get(var, "")
+        current = env.get(var, "")
         value = ui.password(var, current=current)
         if value:
             if value != current:
@@ -210,7 +214,6 @@ def _persist(
     home: Path, name: str, command: str, args: list[str],
     env_vars: dict[str, str],
 ) -> None:
-    import os
     env_path = home / ".env"
     inline = {
         k[len("__inline__:"):]: v
@@ -218,7 +221,6 @@ def _persist(
     }
     for var, val in inline.items():
         _append_env(env_path, var, val)
-        os.environ[var] = val
 
     cleaned_env = {
         k: v for k, v in env_vars.items() if not k.startswith("__inline__:")

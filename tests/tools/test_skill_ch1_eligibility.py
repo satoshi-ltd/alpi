@@ -273,3 +273,90 @@ def test_list_shows_compound_inactive_reason(
     assert "[inactive:" in line
     assert "env var ZTOKEN" in line
     assert "binary gh" in line
+
+
+# Per-profile env contract — regressions caught after v0.4.52 ship.
+# A skill whose requires_env is satisfied by the PROFILE's .env (and only
+# the profile's) must be eligible / runnable from a chat in that profile.
+
+
+def test_skill_run_uses_profile_env_not_os_environ(
+    isolated_home: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``skill(action='run', name=...)`` checked eligibility against ``os.environ`` by default before v0.4.52, so a key only in ``<home>/.env`` would falsely flag the skill inactive."""
+    monkeypatch.delenv("FOLDER_FROM_PROFILE", raising=False)
+    (isolated_home / ".env").write_text("FOLDER_FROM_PROFILE=/x/y/z\n")
+    r = Skill().run(
+        action="create",
+        name="env-from-profile",
+        category="software",
+        description="needs FOLDER_FROM_PROFILE.",
+        body="## When to use\nFor the profile-env contract test.\n",
+        requires_env=["FOLDER_FROM_PROFILE"],
+    )
+    assert r.ok, r.error
+    # run with no script falls through to ToolResult error("no script") — but
+    # the eligibility gate is what we're pinning here; if eligibility wrongly
+    # fails, the error message would mention env var FOLDER_FROM_PROFILE.
+    r2 = Skill().run(action="run", name="env-from-profile")
+    assert "env var FOLDER_FROM_PROFILE" not in (r2.error or ""), r2.error
+
+
+def test_skill_list_marks_eligible_when_key_in_profile_env(
+    isolated_home: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``skill(action='list')`` rendered ``[inactive: env var …]`` even when the key was present in the profile's .env — fixed by piping ``effective_profile_env`` into ``_state_tag``."""
+    monkeypatch.delenv("DOC_TOKEN", raising=False)
+    (isolated_home / ".env").write_text("DOC_TOKEN=ok\n")
+    r = Skill().run(
+        action="create",
+        name="doc-only",
+        category="personal",
+        description="Profile-scoped token.",
+        body="## When to use\nProfile env test.\n",
+        requires_env=["DOC_TOKEN"],
+    )
+    assert r.ok, r.error
+    r2 = Skill().run(action="list")
+    assert r2.ok
+    line = next(ln for ln in r2.output.splitlines() if "doc-only" in ln)
+    assert "[inactive:" not in line, line
+
+
+def test_skills_index_block_keeps_profile_env_skills_visible(
+    isolated_home: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """System-prompt skill index — pre-fix a requires_env tied to the profile would be silently filtered out, hiding the skill from the agent."""
+    monkeypatch.delenv("DOC_TOKEN", raising=False)
+    (isolated_home / ".env").write_text("DOC_TOKEN=ok\n")
+    r = Skill().run(
+        action="create",
+        name="visible-via-profile",
+        category="personal",
+        description="Profile-scoped token.",
+        body="## When to use\nIndex visibility test.\n",
+        requires_env=["DOC_TOKEN"],
+    )
+    assert r.ok, r.error
+    idx = skills_index_block(isolated_home)
+    assert "visible-via-profile" in idx
+
+
+def test_keyword_match_hint_respects_profile_env(
+    isolated_home: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The per-turn keyword hint also filtered by eligibility against ``os.environ``; ensure it now uses the profile env."""
+    monkeypatch.delenv("DOC_TOKEN", raising=False)
+    (isolated_home / ".env").write_text("DOC_TOKEN=ok\n")
+    r = Skill().run(
+        action="create",
+        name="hinted-skill",
+        category="personal",
+        description="Hinted by some keyword.",
+        body="## When to use\nKeyword hint test.\n",
+        requires_env=["DOC_TOKEN"],
+        keywords=["bananarama"],
+    )
+    assert r.ok, r.error
+    hint = keyword_match_hint(isolated_home, "do something with bananarama today")
+    assert "hinted-skill" in hint

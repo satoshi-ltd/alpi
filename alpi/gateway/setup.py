@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 from alpi import ui
+from alpi.home import effective_profile_env
 from alpi.model_selector import _append_env
 
 
@@ -16,8 +16,9 @@ def run(home: Path) -> None:
         home=home,
     )
 
-    current_token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
-    current_chats = os.environ.get("TELEGRAM_ALLOWED_CHAT_IDS", "")
+    env = effective_profile_env(home)
+    current_token = env.get("TELEGRAM_BOT_TOKEN", "")
+    current_chats = env.get("TELEGRAM_ALLOWED_CHAT_IDS", "")
 
     if not current_token:
         ui.dim(
@@ -65,8 +66,5 @@ def run(home: Path) -> None:
     env_path = home / ".env"
     _append_env(env_path, "TELEGRAM_BOT_TOKEN", token)
     _append_env(env_path, "TELEGRAM_ALLOWED_CHAT_IDS", ",".join(chat_ids))
-    # Mirror to os.environ so the status line updates immediately.
-    os.environ["TELEGRAM_BOT_TOKEN"] = token
-    os.environ["TELEGRAM_ALLOWED_CHAT_IDS"] = ",".join(chat_ids)
 
     ui.saved_and_wait(env_path)

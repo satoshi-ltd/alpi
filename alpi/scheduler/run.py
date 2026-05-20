@@ -161,20 +161,6 @@ def _last_user_activity(home: Path) -> datetime | None:
 
 
 
-def _load_profile_env(home: Path, env: dict) -> None:
-    # Override, not setdefault: daemon supervises multiple profiles and a
-    # sibling's FOLDER in os.environ must not win over the firing profile.
-    env_file = home / ".env"
-    if not env_file.exists():
-        return
-    for ln in env_file.read_text().splitlines():
-        ln = ln.strip()
-        if not ln or ln.startswith("#") or "=" not in ln:
-            continue
-        k, _, v = ln.partition("=")
-        env[k.strip()] = v.strip()
-
-
 def validate_no_agent_command(prompt: str, home: Path) -> str | None:
     # Form-based allowlist: only `python[3] [flags] <skill_script>` or a
     # `<skill_script>` invoked directly. Blocks `-c`/`-m` (inline code/module
@@ -247,10 +233,11 @@ def _run_script_only(job: dict, home: Path) -> JobOutcome:
     if not argv:
         return JobOutcome(False, "empty command after parsing")
 
-    env = dict(os.environ)
-    _load_profile_env(home, env)
-    env["ALPI_HOME"] = str(home)
-    env["ALPI_PLATFORM"] = "cron"
+    from alpi.home import effective_profile_env as _effective_profile_env
+    env = _effective_profile_env(home, extra={
+        "ALPI_HOME": str(home),
+        "ALPI_PLATFORM": "cron",
+    })
 
     try:
         proc = subprocess.run(
@@ -321,10 +308,11 @@ def run_job(job: dict, home: Path) -> JobOutcome:
         )
     wrapped = wrap_header + "\n\n" + prompt
 
-    env = dict(os.environ)
-    _load_profile_env(home, env)
-    env["ALPI_HOME"] = str(home)
-    env["ALPI_PLATFORM"] = "cron"
+    from alpi.home import effective_profile_env as _effective_profile_env
+    env = _effective_profile_env(home, extra={
+        "ALPI_HOME": str(home),
+        "ALPI_PLATFORM": "cron",
+    })
     try:
         proc = subprocess.run(
             [
@@ -550,8 +538,8 @@ def ensure_running(home: Path) -> int | None:
     # closes its handle immediately after spawn so we don't hold extra
     # fds open in the TUI.
     log_fd = open(log_file_path, "a")
-    env = dict(os.environ)
-    env["ALPI_HOME"] = str(home)
+    from alpi.home import effective_profile_env as _effective_profile_env
+    env = _effective_profile_env(home, extra={"ALPI_HOME": str(home)})
     try:
         proc = subprocess.Popen(
             [sys.executable, "-m", "alpi", "schedule", "start"],

@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 from alpi import ui
+from alpi.home import effective_profile_env
 from alpi.model_selector import _append_env
 
 
@@ -16,12 +16,13 @@ def run(home: Path) -> None:
         home=home,
     )
 
-    current_url = os.environ.get("MATRIX_HOMESERVER_URL", "")
-    current_user = os.environ.get("MATRIX_USER_ID", "")
-    current_token = os.environ.get("MATRIX_ACCESS_TOKEN", "")
-    current_device = os.environ.get("MATRIX_DEVICE_ID", "")
-    current_rooms = os.environ.get("MATRIX_ALLOWED_ROOMS", "")
-    current_senders = os.environ.get("MATRIX_ALLOWED_SENDERS", "")
+    env = effective_profile_env(home)
+    current_url = env.get("MATRIX_HOMESERVER_URL", "")
+    current_user = env.get("MATRIX_USER_ID", "")
+    current_token = env.get("MATRIX_ACCESS_TOKEN", "")
+    current_device = env.get("MATRIX_DEVICE_ID", "")
+    current_rooms = env.get("MATRIX_ALLOWED_ROOMS", "")
+    current_senders = env.get("MATRIX_ALLOWED_SENDERS", "")
 
     if not current_token:
         ui.dim(
@@ -93,14 +94,5 @@ def run(home: Path) -> None:
     _append_env(env_path, "MATRIX_ALLOWED_ROOMS", ",".join(rooms))
     if senders:
         _append_env(env_path, "MATRIX_ALLOWED_SENDERS", ",".join(senders))
-
-    os.environ["MATRIX_HOMESERVER_URL"] = url
-    os.environ["MATRIX_USER_ID"] = user_id
-    os.environ["MATRIX_ACCESS_TOKEN"] = token
-    if device_id:
-        os.environ["MATRIX_DEVICE_ID"] = device_id
-    os.environ["MATRIX_ALLOWED_ROOMS"] = ",".join(rooms)
-    if senders:
-        os.environ["MATRIX_ALLOWED_SENDERS"] = ",".join(senders)
 
     ui.saved_and_wait(env_path)

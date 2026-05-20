@@ -932,12 +932,13 @@ async def _dispatch_workgroup_turn(
             "Match the user, do not default to English."
         )
         env_extra = {}
-    env = dict(os.environ)
-    env["ALPI_HOME"] = str(home)
-    env["ALPI_WORKGROUP_DISPATCH"] = wg_id
-    if round_hub_seq is not None and round_hub_seq > 0:
-        env["ALPI_WORKGROUP_ROUND_HUB_SEQ"] = str(round_hub_seq)
-    env.update(env_extra)
+    from alpi.home import effective_profile_env as _effective_profile_env
+    env = _effective_profile_env(home, extra={
+        "ALPI_HOME": str(home),
+        "ALPI_WORKGROUP_DISPATCH": wg_id,
+        **({"ALPI_WORKGROUP_ROUND_HUB_SEQ": str(round_hub_seq)} if (round_hub_seq is not None and round_hub_seq > 0) else {}),
+        **env_extra,
+    })
     argv = [
         sys.executable, "-m", "alpi", "-p", profile,
         "chat", "--once", prompt,

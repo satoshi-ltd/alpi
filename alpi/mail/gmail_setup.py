@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 from alpi import ui
+from alpi.home import effective_profile_env
 from alpi.mail import gmail_auth
 from alpi.model_selector import _append_env
 
@@ -31,9 +31,10 @@ def run(home: Path) -> None:
     )
     ui._console.print("")
 
-    current_cid = os.environ.get("GMAIL_CLIENT_ID", "")
-    current_csec = os.environ.get("GMAIL_CLIENT_SECRET", "")
-    current_senders = os.environ.get("GMAIL_ALLOWED_SENDERS", "")
+    env = effective_profile_env(home)
+    current_cid = env.get("GMAIL_CLIENT_ID", "")
+    current_csec = env.get("GMAIL_CLIENT_SECRET", "")
+    current_senders = env.get("GMAIL_ALLOWED_SENDERS", "")
 
     client_id = ui.text("OAuth Client ID", default=current_cid)
     if not client_id:
@@ -58,7 +59,6 @@ def run(home: Path) -> None:
         ("GMAIL_ALLOWED_SENDERS", senders),
     ):
         _append_env(env, key, val)
-        os.environ[key] = val
 
     if not ui.confirm("Authorize now via browser?", default=True):
         ui.ok_and_wait("credentials saved. Run this wizard again to authorize.")

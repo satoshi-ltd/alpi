@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 from alpi import ui
+from alpi.home import effective_profile_env
 from alpi.mail.imap import (
     DEFAULT_IMAP_PORT, DEFAULT_SMTP_PORT, ImapClient, ImapError,
 )
@@ -19,13 +19,14 @@ def run(home: Path) -> None:
         home=home,
     )
 
-    current_addr = os.environ.get("IMAP_ADDRESS", "")
-    current_pw = os.environ.get("IMAP_PASSWORD", "")
-    current_imap = os.environ.get("IMAP_HOST", "")
-    current_smtp = os.environ.get("SMTP_HOST", "")
-    current_imap_port = os.environ.get("IMAP_PORT") or str(DEFAULT_IMAP_PORT)
-    current_smtp_port = os.environ.get("SMTP_PORT") or str(DEFAULT_SMTP_PORT)
-    current_senders = os.environ.get("IMAP_ALLOWED_SENDERS", "")
+    env = effective_profile_env(home)
+    current_addr = env.get("IMAP_ADDRESS", "")
+    current_pw = env.get("IMAP_PASSWORD", "")
+    current_imap = env.get("IMAP_HOST", "")
+    current_smtp = env.get("SMTP_HOST", "")
+    current_imap_port = env.get("IMAP_PORT") or str(DEFAULT_IMAP_PORT)
+    current_smtp_port = env.get("SMTP_PORT") or str(DEFAULT_SMTP_PORT)
+    current_senders = env.get("IMAP_ALLOWED_SENDERS", "")
 
     if not current_addr:
         ui.dim(
@@ -100,7 +101,6 @@ def run(home: Path) -> None:
         writes.append(("SMTP_PORT", str(smtp_port)))
     for key, val in writes:
         _append_env(env, key, val)
-        os.environ[key] = val
 
     ui.saved(env)
     from alpi.mail.pgp_setup import maybe_offer

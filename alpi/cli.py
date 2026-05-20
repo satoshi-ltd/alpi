@@ -1444,7 +1444,6 @@ def _remove_gateway_flow(h: Path, configured: list[str]) -> None:
 
     for key in _GATEWAY_ENV_KEYS.get(target, ()):
         _remove_env_key(h / ".env", key)
-        os.environ.pop(key, None)
     if target == "gmail":
         token_file = h / "secrets" / "gmail_token.json"
         if token_file.exists():
