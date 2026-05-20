@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.4.54 — 2026-05-20 — daemon: skill prose-mode env passthrough, terminal `ALPI_HOME`/`WORKSPACE`, `send_message` profile env
+
+Patch on top of v0.4.53. Four gaps left over from the v0.4.52/.53 env-isolation refactor:
+
+- `alpi/tools/skill.py`: prose branch of `_run_or_test` now calls `_state.add_skill_env(...)` with `requires_env`/`env` from the eligibility metadata. Parity with `_view`. Without this, prose-only skills (e.g. `mirai/bitbucket-pr-reviewer`) reach for `terminal` and the subprocess sees no declared secrets.
+- `alpi/tools/terminal.py`: `_build_subprocess_env` now always sets `ALPI_HOME=str(get_home())` (contextvar-bound, not `os.environ`) and `WORKSPACE=str(cfg.workspace_path)` when the active profile declares one. Skill prose like `${ALPI_HOME}/skills/.../triage.py` and `ls -d $WORKSPACE/*/` (`mirai/refresh-and-index`) now resolve.
+- `alpi/tools/send_message.py` + `alpi/gateway/delivery.py`: `SendMessage.run` builds `env = effective_profile_env(get_home())` and threads it into `delivery.default_chat_id(env=)` and `delivery.send_to(env=)`. `_send_email_sync` now accepts `env` and routes through `ImapClient.from_env_map(env)`. Closes the multi-profile leak where `TELEGRAM_*` / `WEBHOOK_POST_URL` / `IMAP_*` only living in `<home>/.env` were invisible.
+- Tests: 4 new in `tests/tools/test_skill_env_chain.py` + `tests/tools/test_send_message.py` covering the prose-run env path, contextvar-bound `ALPI_HOME`, `WORKSPACE` from `config.yaml`, and profile-env passthrough in `SendMessage`. Existing `send_message` stubs updated to the new `env=` kwarg.
+- Bumped Umbrel package metadata and image tags to `0.4.54`.
+
 ## v0.4.53 — 2026-05-20 — daemon: profile-env shortcuts in skills, scheduler, mail, and setup wizards
 
 Patch on top of v0.4.52: that release promised per-profile env isolation but left a handful of `skill_eligibility` callsites and subprocess-env builders still defaulting to `os.environ`, plus three setup wizards still mutating it on credential writes. The visible symptom: a chat in profile `doc` reported `coros` (and any skill with `requires_env`) as inactive, because the daemon no longer pre-loaded per-profile `.env` into the process env and these callsites never picked up `effective_profile_env(home)`. The remaining `os.environ` mutations after this patch are process-level only (`ALPI_PROFILE` in `cli.py::_resolve_home` so child processes inherit the active profile; `LITELLM_LOG` in `llm.py` to silence the library at import) — never profile credentials.

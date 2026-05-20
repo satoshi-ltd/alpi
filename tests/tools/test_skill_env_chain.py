@@ -25,6 +25,7 @@ from pathlib import Path
 
 import pytest
 
+from alpi.home import reset_active_home, set_active_home
 from alpi.tools import _state
 from alpi.tools.skill import Skill
 from alpi.tools.terminal import _build_subprocess_env
@@ -149,6 +150,103 @@ def test_skill_with_no_env_declarations_passes_no_vars(
     Skill().run(action="view", name="no-env")
     env = _build_subprocess_env()
     assert "RANDOM_VAR" not in env
+
+
+def test_run_without_run_py_registers_requires_env(
+    isolated_home: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Skill with no ``scripts/run.py`` runs in manual-prose mode: the
+    agent reads SKILL.md and reaches for terminal() to execute the
+    described steps. ``run`` must register ``requires_env`` so the
+    subprocess sees the declared vars — the bug reported by @soyjavi
+    where bitbucket-pr-reviewer's triage.py died with ``missing env:
+    BITBUCKET_URL`` despite the var being in the profile .env."""
+    monkeypatch.setenv("BITBUCKET_URL", "https://bb.example/api")
+    Skill().run(
+        action="create",
+        name="prose-skill",
+        category="software",
+        description="No run.py; instructs the agent via prose",
+        body="## When to use\nRun via terminal.\n",
+        requires_env=["BITBUCKET_URL"],
+    )
+
+    _state.reset_skill_env()
+    r = Skill().run(action="run", name="prose-skill")
+    assert r.ok, r.error
+    assert "follow these instructions to execute it manually" in r.output
+    assert "BITBUCKET_URL" in _state.get_active_skills_env()
+
+    env = _build_subprocess_env()
+    assert env.get("BITBUCKET_URL") == "https://bb.example/api"
+
+
+def test_run_without_run_py_honours_legacy_env_field(
+    isolated_home: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("LEGACY_VAR", "legacy-value")
+    skill_dir = isolated_home / "skills" / "personal" / "legacy-run"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(
+        "---\n"
+        "name: legacy-run\n"
+        "description: Pre-requires_env prose skill\n"
+        "category: personal\n"
+        "env: ['LEGACY_VAR']\n"
+        "---\n"
+        "## When to use\nFor compat.\n"
+    )
+
+    _state.reset_skill_env()
+    Skill().run(action="run", name="legacy-run")
+    env = _build_subprocess_env()
+    assert env.get("LEGACY_VAR") == "legacy-value"
+
+
+def test_terminal_env_exposes_workspace_from_config(
+    tmp_home_no_env: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``mirai/refresh-and-index`` runs ``ls -d $WORKSPACE/*/`` via
+    terminal; ``$WORKSPACE`` must be populated from ``config.yaml``
+    even though it is not in os.environ."""
+    monkeypatch.delenv("WORKSPACE", raising=False)
+    workspace = tmp_home_no_env / "workspace"
+    workspace.mkdir()
+    (tmp_home_no_env / "config.yaml").write_text(
+        f"workspace: {workspace}\n"
+    )
+    _state.reset_skill_env()
+
+    token = set_active_home(tmp_home_no_env)
+    try:
+        env = _build_subprocess_env()
+    finally:
+        reset_active_home(token)
+
+    assert env.get("WORKSPACE") == str(workspace)
+
+
+def test_terminal_env_exposes_alpi_home_from_contextvar(
+    tmp_home_no_env: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """In the daemon, the active profile is bound via ``set_active_home``
+    contextvar — ``ALPI_HOME`` is NOT in ``os.environ``. Skill prose like
+    ``python3 ${ALPI_HOME}/skills/.../triage.py`` expands to empty unless
+    terminal injects it. Reproduces @soyjavi's mirai failure mode."""
+    monkeypatch.delenv("ALPI_HOME", raising=False)
+    monkeypatch.delenv("ALPI_PROFILE", raising=False)
+    _state.reset_skill_env()
+
+    token = set_active_home(tmp_home_no_env)
+    try:
+        env = _build_subprocess_env()
+    finally:
+        reset_active_home(token)
+
+    assert env.get("ALPI_HOME") == str(tmp_home_no_env), (
+        "terminal subprocess env must surface the contextvar-bound home; "
+        "otherwise ${ALPI_HOME} in skill prose expands to empty."
+    )
 
 
 def test_view_sub_file_does_not_register_env(

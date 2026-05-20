@@ -75,12 +75,14 @@ class SendMessage(Tool):
     def run(self, text: str, platform: str = "telegram",
             chat_id: str | None = None,
             attachment: str | None = None) -> ToolResult:
+        from alpi.home import effective_profile_env, get_home
         from alpi.tools._sandbox import require_network
         blocked = require_network("send_message")
         if blocked is not None:
             return blocked
+        env = effective_profile_env(get_home())
         platform = (platform or "telegram").strip().lower()
-        target = (chat_id or "").strip() or delivery.default_chat_id(platform)
+        target = (chat_id or "").strip() or delivery.default_chat_id(platform, env=env)
         if not target:
             return ToolResult(
                 ok=False, output="",
@@ -96,7 +98,7 @@ class SendMessage(Tool):
             except ValueError as e:
                 return ToolResult(ok=False, output="", error=str(e))
         try:
-            delivery.send_to(platform, target, text, attachment=attachment)
+            delivery.send_to(platform, target, text, attachment=attachment, env=env)
         except delivery.DeliveryError as e:
             return ToolResult(ok=False, output="", error=str(e))
         return ToolResult(ok=True, output="delivered")

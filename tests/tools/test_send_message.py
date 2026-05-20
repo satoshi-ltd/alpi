@@ -106,12 +106,13 @@ def test_send_to_telegram_splits_long_messages(monkeypatch) -> None:
     assert len(posts[0]) == delivery.TELEGRAM_MAX_CHARS
 
 
-def test_send_message_tool_uses_default_chat(monkeypatch) -> None:
+def test_send_message_tool_uses_default_chat(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("ALPI_HOME", str(tmp_path))
     monkeypatch.setenv("TELEGRAM_ALLOWED_CHAT_IDS", "42")
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "x")
     called = {}
 
-    def fake_send(platform, chat_id, text, attachment=None):
+    def fake_send(platform, chat_id, text, attachment=None, env=None):
         called["args"] = (platform, chat_id, text, attachment)
 
     monkeypatch.setattr(delivery, "send_to", fake_send)
@@ -126,14 +127,15 @@ def test_send_message_tool_explicit_platform_chat(monkeypatch) -> None:
     calls = []
     monkeypatch.setattr(
         delivery, "send_to",
-        lambda p, c, t, attachment=None: calls.append((p, c, t, attachment)),
+        lambda p, c, t, attachment=None, env=None: calls.append((p, c, t, attachment)),
     )
     result = SendMessage().run(text="hi", platform="telegram", chat_id="42")
     assert result.ok
     assert calls == [("telegram", "42", "hi", None)]
 
 
-def test_send_message_tool_no_allowlist_fails(monkeypatch) -> None:
+def test_send_message_tool_no_allowlist_fails(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("ALPI_HOME", str(tmp_path))
     monkeypatch.delenv("TELEGRAM_ALLOWED_CHAT_IDS", raising=False)
     result = SendMessage().run(text="hi")
     assert not result.ok
@@ -147,12 +149,48 @@ def test_send_message_tool_attachment_passes_through(monkeypatch, tmp_path: Path
     calls = []
     monkeypatch.setattr(
         delivery, "send_to",
-        lambda p, c, t, attachment=None: calls.append((p, c, t, attachment)),
+        lambda p, c, t, attachment=None, env=None: calls.append((p, c, t, attachment)),
     )
     result = SendMessage().run(text="", attachment=str(audio))
     assert result.ok
     assert calls[0][3] == str(audio)
     assert result.output == "delivered"
+
+
+def test_send_message_tool_passes_profile_env_to_delivery(
+    monkeypatch, tmp_path: Path,
+) -> None:
+    """SendMessage must look up chat-id and credentials from the active
+    profile's .env, not os.environ. Reproduces the multi-profile leak
+    where TELEGRAM_ALLOWED_CHAT_IDS only living in <home>/.env is
+    ignored because delivery.default_chat_id falls back to os.environ."""
+    monkeypatch.delenv("TELEGRAM_ALLOWED_CHAT_IDS", raising=False)
+    monkeypatch.delenv("TELEGRAM_BOT_TOKEN", raising=False)
+
+    home = tmp_path / "profile"
+    home.mkdir()
+    (home / ".env").write_text(
+        "TELEGRAM_ALLOWED_CHAT_IDS=77\nTELEGRAM_BOT_TOKEN=tok\n"
+    )
+
+    from alpi.home import reset_active_home, set_active_home
+    captured: dict = {}
+
+    def fake_send(platform, chat_id, text, attachment=None, env=None):
+        captured["chat"] = chat_id
+        captured["env"] = env
+
+    monkeypatch.setattr(delivery, "send_to", fake_send)
+    token = set_active_home(home)
+    try:
+        result = SendMessage().run(text="ping")
+    finally:
+        reset_active_home(token)
+
+    assert result.ok, result.error
+    assert captured["chat"] == "77"
+    assert captured["env"].get("TELEGRAM_BOT_TOKEN") == "tok"
+    assert captured["env"].get("TELEGRAM_ALLOWED_CHAT_IDS") == "77"
 
 
 def test_send_to_attachment_missing_file(monkeypatch) -> None:

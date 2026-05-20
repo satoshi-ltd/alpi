@@ -82,7 +82,7 @@ def send_to(
     elif platform == "email":
         if attachment:
             raise DeliveryError("attachment on email not supported via send_message; use the `email` tool")
-        _send_email_sync(chat_id, text)
+        _send_email_sync(chat_id, text, env=env)
     elif platform == "gmail":
         if attachment:
             raise DeliveryError("attachment on gmail not supported via send_message; use the `email` tool")
@@ -144,10 +144,14 @@ def _send_telegram_sync(
                 )
 
 
-def _send_email_sync(chat_id: str, text: str) -> None:
+def _send_email_sync(chat_id: str, text: str, env: dict | None = None) -> None:
     from alpi.mail.imap import ImapClient, ImapError
     try:
-        client = ImapClient.from_env()
+        client = (
+            ImapClient.from_env_map(env)
+            if env is not None
+            else ImapClient.from_env()
+        )
     except ImapError as e:
         raise DeliveryError(str(e))
     try:

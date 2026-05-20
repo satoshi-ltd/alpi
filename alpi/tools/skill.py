@@ -1509,6 +1509,11 @@ def _run_or_test(home: Path, name: str, args: list[str], *, mode: str) -> ToolRe
                 ok=False, output="",
                 error=f"skill {name!r} has neither scripts/run.py nor SKILL.md",
             )
+        from alpi.tools import _state
+        declared_env = _parse_env_list(eligibility_meta.get("requires_env", ""))
+        declared_env += _parse_env_list(eligibility_meta.get("env", ""))
+        if declared_env:
+            _state.add_skill_env(declared_env)
         body = skill_md.read_text()
         return ToolResult(
             ok=True,
