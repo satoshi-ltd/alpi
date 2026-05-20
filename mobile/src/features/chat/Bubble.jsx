@@ -1,0 +1,140 @@
+import { useCallback } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { radii, space } from '../../theme/tokens';
+
+import { Diamond } from '../../components/Diamond';
+import { RichText } from '../../components/RichText';
+import { useTheme } from '../../theme/ThemeContext';
+
+function mixHex(hex, pct, base) {
+  const fromHex = (h) => {
+    const v = h.replace('#', '');
+    return [parseInt(v.slice(0, 2), 16), parseInt(v.slice(2, 4), 16), parseInt(v.slice(4, 6), 16)];
+  };
+  const [r1, g1, b1] = fromHex(hex);
+  const [r2, g2, b2] = fromHex(base);
+  const r = Math.round(r1 * pct + r2 * (1 - pct));
+  const g = Math.round(g1 * pct + g2 * (1 - pct));
+  const b = Math.round(b1 * pct + b2 * (1 - pct));
+  return `rgb(${r},${g},${b})`;
+}
+
+const BUBBLE_FONT_SIZE = 15.5;
+const META_FONT_SIZE = 11;
+
+const S = StyleSheet.create({
+  userWrap: { alignItems: 'flex-end', paddingHorizontal: space.s7, gap: space.s1 },
+  agentWrap: { paddingHorizontal: space.s7 },
+  bubble: {
+    maxWidth: '82%',
+    paddingHorizontal: space.s6,
+    paddingVertical: space.s5,
+    borderRadius: radii.xl,
+  },
+  bubbleBorder: { borderWidth: 0.5 },
+  bubbleText: { fontSize: BUBBLE_FONT_SIZE, lineHeight: BUBBLE_FONT_SIZE * 1.45 },
+  meta: { fontSize: META_FONT_SIZE, lineHeight: META_FONT_SIZE },
+  speakerRow: { flexDirection: 'row', alignItems: 'center', gap: space.s2 },
+  wgRowLeft: { alignItems: 'flex-start', paddingHorizontal: space.s7, gap: space.s1 },
+  wgRowRight: { alignItems: 'flex-end', paddingHorizontal: space.s7, gap: space.s1 },
+});
+
+export function ProfileUserMessage({ text, ts, accent, onLongPress }) {
+  const { colors, fonts } = useTheme();
+  const bubbleStyle = useCallback(
+    ({ pressed }) => [
+      S.bubble,
+      { backgroundColor: accent ?? colors.ink, opacity: pressed ? 0.85 : 1 },
+    ],
+    [accent, colors.ink],
+  );
+  return (
+    <View style={S.userWrap}>
+      <Pressable onLongPress={onLongPress} delayLongPress={350} style={bubbleStyle}>
+        <Text style={[S.bubbleText, { fontFamily: fonts.sans.regular, color: '#ffffff' }]}>
+          {text}
+        </Text>
+      </Pressable>
+      {ts ? (
+        <Text style={[S.meta, { fontFamily: fonts.monoMedium, color: colors.ink3 }]}>{ts}</Text>
+      ) : null}
+    </View>
+  );
+}
+
+export function ProfileAssistantMessage({ text, onLongPress }) {
+  const { colors } = useTheme();
+  const wrapStyle = useCallback(
+    ({ pressed }) => [S.agentWrap, pressed && { opacity: 0.85 }],
+    [],
+  );
+  return (
+    <Pressable onLongPress={onLongPress} delayLongPress={350} style={wrapStyle}>
+      <RichText size={16} color={colors.ink}>
+        {text}
+      </RichText>
+    </Pressable>
+  );
+}
+
+export function WorkgroupMessage({ body, speakerName, speakerAccent, isFromHub, seq, cost, onLongPress }) {
+  const { colors, fonts } = useTheme();
+  const tintPct = isFromHub ? 0.14 : 0.12;
+  const bg = mixHex(speakerAccent ?? colors.ink3, tintPct, colors.bgPane);
+  const right = isFromHub;
+
+  const seqStr = seq != null ? `#${seq}` : null;
+  let costStr = null;
+  if (cost) {
+    const tok = typeof cost.tokens === 'number' ? cost.tokens : 0;
+    const usd = typeof cost.usd === 'number' ? cost.usd : 0;
+    const tokFmt = tok >= 1000 ? `${(tok / 1000).toFixed(1)}K` : `${tok}`;
+    const usdFmt = usd >= 0.01 ? `$${usd.toFixed(2)}` : `$${usd.toFixed(4)}`;
+    costStr = `${tokFmt} · ${usdFmt}`;
+  }
+
+  const metaStyle = [S.meta, { fontFamily: fonts.monoMedium, color: colors.ink3 }];
+  const SpeakerEl = (
+    <View style={S.speakerRow}>
+      {!isFromHub ? <Diamond color={speakerAccent} size={7} /> : null}
+      <Text style={metaStyle}>{speakerName}</Text>
+      {isFromHub ? <Diamond color={speakerAccent} size={7} /> : null}
+    </View>
+  );
+  const SeqEl = seqStr ? <Text style={metaStyle}>{seqStr}</Text> : null;
+  const CostEl = costStr ? <Text style={metaStyle}>{costStr}</Text> : null;
+
+  const bubbleStyle = useCallback(
+    ({ pressed }) => [
+      S.bubble,
+      S.bubbleBorder,
+      { backgroundColor: bg, borderColor: colors.line, opacity: pressed ? 0.85 : 1 },
+    ],
+    [bg, colors.line],
+  );
+
+  return (
+    <View style={right ? S.wgRowRight : S.wgRowLeft}>
+      <View style={S.speakerRow}>
+        {right ? (
+          <>
+            {CostEl}
+            {SeqEl}
+            {SpeakerEl}
+          </>
+        ) : (
+          <>
+            {SpeakerEl}
+            {SeqEl}
+            {CostEl}
+          </>
+        )}
+      </View>
+      <Pressable onLongPress={onLongPress} delayLongPress={350} style={bubbleStyle}>
+        <Text style={[S.bubbleText, { fontFamily: fonts.sans.regular, color: colors.ink }]}>
+          {body}
+        </Text>
+      </Pressable>
+    </View>
+  );
+}

@@ -1,0 +1,128 @@
+import { StyleSheet, Text, View } from 'react-native';
+import { space , fontSizes} from '../../theme/tokens';
+
+import { Diamond } from '../../components/Diamond';
+import { useTheme } from '../../theme/ThemeContext';
+import { ThinkingDots } from './ThinkingDots';
+
+const TINTS = { task: 0.11, working: 0.14, done: 0.18, skip: 0.12 };
+const LABELS = { task: 'TASK', working: 'WORKING', done: 'DONE', skip: 'SKIP' };
+
+const S = StyleSheet.create({
+  wrapLeft: { alignItems: 'flex-start', paddingHorizontal: space.s7, gap: space.s1 },
+  wrapRight: { alignItems: 'flex-end', paddingHorizontal: space.s7, gap: space.s1 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: space.s2 },
+  card: {
+    maxWidth: '90%',
+    borderRadius: 14,
+    paddingHorizontal: space.s7,
+    paddingVertical: space.s6,
+  },
+  eyebrowRow: { flexDirection: 'row', alignItems: 'center', gap: space.s2, marginBottom: space.s2 },
+  iconSlot: { width: 14, alignItems: 'center', justifyContent: 'center' },
+  eyebrowText: { fontSize: fontSizes.micro, lineHeight: 10, letterSpacing: 1 },
+  title: { fontSize: fontSizes.msg, lineHeight: 16 * 1.3, letterSpacing: -0.16, marginBottom: space.s2 },
+  body: { fontSize: 14.5, lineHeight: 14.5 * 1.5 },
+  meta: { fontSize: fontSizes.xs, lineHeight: 11 },
+  doneTick: { fontSize: fontSizes.sm, fontWeight: '700', lineHeight: 12 },
+  skipDot: { width: 10, height: 10, borderRadius: 5, borderWidth: 1.5, overflow: 'hidden' },
+  skipBar: { position: 'absolute', width: 14, height: 1.5, top: 3.5, left: -2.5, transform: [{ rotate: '45deg' }] },
+  taskDot: { width: 6, height: 6, borderRadius: 3 },
+});
+
+function mixHex(hex, pct, base) {
+  const fromHex = (h) => {
+    const v = h.replace('#', '');
+    return [parseInt(v.slice(0, 2), 16), parseInt(v.slice(2, 4), 16), parseInt(v.slice(4, 6), 16)];
+  };
+  const [r1, g1, b1] = fromHex(hex);
+  const [r2, g2, b2] = fromHex(base);
+  const r = Math.round(r1 * pct + r2 * (1 - pct));
+  const g = Math.round(g1 * pct + g2 * (1 - pct));
+  const b = Math.round(b1 * pct + b2 * (1 - pct));
+  return `rgb(${r},${g},${b})`;
+}
+
+function MarkerIcon({ variant, color }) {
+  if (variant === 'working') return <ThinkingDots color={color} />;
+  if (variant === 'done') {
+    return <Text style={[S.doneTick, { color }]}>✓</Text>;
+  }
+  if (variant === 'skip') {
+    return (
+      <View style={[S.skipDot, { borderColor: color }]}>
+        <View style={[S.skipBar, { backgroundColor: color }]} />
+      </View>
+    );
+  }
+  return <View style={[S.taskDot, { backgroundColor: color }]} />;
+}
+
+export function MarkerCard({ variant = 'task', side = 'left', hubColor, speakerName, isFromHub, seq, cost, title, children }) {
+  const { colors, fonts, shadow , fontSizes} = useTheme();
+  const pct = TINTS[variant] ?? 0.11;
+  const baseAccent = variant === 'skip' ? colors.warning : hubColor ?? colors.ink3;
+  const tint = mixHex(baseAccent, pct, colors.bgPane);
+  const isRight = side === 'right';
+
+  let costStr = null;
+  if (cost) {
+    const tok = typeof cost.tokens === 'number' ? cost.tokens : 0;
+    const usd = typeof cost.usd === 'number' ? cost.usd : 0;
+    const tokFmt = tok >= 1000 ? `${(tok / 1000).toFixed(1)}K` : `${tok}`;
+    const usdFmt = usd >= 0.01 ? `$${usd.toFixed(2)}` : `$${usd.toFixed(4)}`;
+    costStr = `${tokFmt} · ${usdFmt}`;
+  }
+
+  const metaStyle = [S.meta, { fontFamily: fonts.monoMedium, color: colors.ink3 }];
+
+  const SpeakerEl = speakerName ? (
+    <View style={S.row}>
+      {!isRight ? <Diamond color={baseAccent} size={7} /> : null}
+      <Text style={metaStyle}>{speakerName}</Text>
+      {isRight ? <Diamond color={baseAccent} size={7} /> : null}
+    </View>
+  ) : null;
+
+  return (
+    <View style={isRight ? S.wrapRight : S.wrapLeft}>
+      {speakerName || seq != null || costStr ? (
+        <View style={S.row}>
+          {isRight ? (
+            <>
+              {costStr ? <Text style={metaStyle}>{costStr}</Text> : null}
+              {seq != null ? <Text style={metaStyle}>{`#${seq}`}</Text> : null}
+              {SpeakerEl}
+            </>
+          ) : (
+            <>
+              {SpeakerEl}
+              {seq != null ? <Text style={metaStyle}>{`#${seq}`}</Text> : null}
+              {costStr ? <Text style={metaStyle}>{costStr}</Text> : null}
+            </>
+          )}
+        </View>
+      ) : null}
+      <View style={[S.card, { backgroundColor: tint }, shadow.sm]}>
+        <View style={S.eyebrowRow}>
+          <View style={S.iconSlot}>
+            <MarkerIcon variant={variant} color={baseAccent} />
+          </View>
+          <Text style={[S.eyebrowText, { fontFamily: fonts.monoSemibold, color: colors.ink3 }]}>
+            {LABELS[variant]}
+          </Text>
+        </View>
+        {title ? (
+          <Text style={[S.title, { fontFamily: fonts.sans.semibold, color: colors.ink }]}>
+            {title}
+          </Text>
+        ) : null}
+        {children ? (
+          <Text style={[S.body, { fontFamily: fonts.sans.regular, color: colors.ink2 }]}>
+            {children}
+          </Text>
+        ) : null}
+      </View>
+    </View>
+  );
+}
