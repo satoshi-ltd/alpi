@@ -4,6 +4,7 @@ import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { radii, space , fontSizes} from '../theme/tokens';
 
 import { AlpiMark } from '../components/AlpiMark';
+import { ensureRegistered as ensureAlnRegistered } from '../features/aln/backgroundTask';
 import { authenticate, biometricCapabilities, getBiometricPref } from './biometric';
 import { useEndpoint } from './EndpointContext';
 import { useTheme } from '../theme/ThemeContext';
@@ -46,6 +47,11 @@ export function AppBootstrap({ children }) {
     const allowWhileUnpaired = firstSegment === 'pair' || firstSegment === 'onboarding';
     if (!hasConn && !allowWhileUnpaired) router.replace('/onboarding');
   }, [ready, hasConn, firstSegment, router]);
+
+  useEffect(() => {
+    if (!ready || !hasConn) return;
+    ensureAlnRegistered().catch(() => { /* */ });
+  }, [ready, hasConn]);
 
   if (!ready) {
     return (

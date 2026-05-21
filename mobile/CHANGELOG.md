@@ -14,6 +14,57 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.1.4 — 2026-05-21 — AX Local Notify (ambient notifications)
+
+Requires alpi ``v0.5.8`` or newer. The mobile app now surfaces
+events from your paired daemons as local notifications, even when
+the app is closed — without using Apple/Google push infrastructure
+and without any Satoshi-operated relay.
+
+- Background polling via ``expo-background-task`` (iOS BGTaskScheduler,
+  Android WorkManager) wakes the app every 15–60 min (system-paced).
+  Each wake-up calls ``host.events.history`` over Tailscale across all
+  paired connections and renders local notifications for new events.
+- Notifiable kinds: ``wg.mention``, ``wg.done``, ``chat.turn_done``,
+  ``approval.request``, ``schedule.done``, ``schedule.failed``,
+  ``budget.threshold``. Everything else (plumbing events) is filtered
+  out so the notification stream stays signal-only.
+- ``chat.turn_done`` covers the canonical case: you kicked off a
+  long-running research / multi-tool task in a profile, closed the
+  app, and want a notification when it finishes. Only emitted for
+  user-initiated turns that crossed a noise floor (any tool call OR
+  ≥5s elapsed), so quick ``hola → hola`` exchanges don't ping.
+- Foreground gating: while the app is active, ALN does NOT fire
+  native notifications — the existing in-app event stream (toasts,
+  modals, inbox refresh) handles those. Background-only delivery
+  avoids duplicates and keeps the foreground experience uncluttered.
+- Settings shows the OS notification permission as the single
+  productive control (tap to request / status pill). The OS-level
+  permission is the only gate: granting it activates ambient
+  notifications; revoking it from iOS / Android settings is the only
+  "off switch". No alpi-side toggle to keep out of sync. Dev builds
+  also expose a "Test notifications" route under Settings for sample
+  payload / deep-link checks; that route is hidden in production and
+  redirects to home if accessed by URL.
+- Background polling refuses to advance cursor when the OS
+  permission is not granted — events stay re-fetchable until the
+  user grants permission, so nothing is lost between revoke and
+  re-grant cycles.
+- Tapping a notification deep-links into the right screen: workgroup
+  screen for mentions/dones, profile schedule for cron results.
+- Seq-based cursor with idempotent dedup. Re-pulls of historical
+  events do not re-notify. State is per-connection so two paired
+  daemons stay independent.
+- Dev-only "Test notifications" surface (``__DEV__`` gated, hidden
+  from Settings in production, redirects to home if accessed by URL):
+  one button per notifiable kind that fires a sample notification with
+  a synthetic payload. Verifies styling, permission flow, and deep-
+  link routing behavior. Native scheduling errors are NOT silently
+  eaten — the dispatch result is surfaced via toast.
+- Trade-off documented honestly: latency is 15–60 min on iOS
+  (system decides), and delivery is opportunistic, not guaranteed.
+  Instant alerts still belong on the Telegram/Matrix gateways.
+
 ## v0.1.3 — 2026-05-21 — reasoning effort in profile settings
 
 Requires alpi ``v0.5.4`` or newer. On older daemons the row stays

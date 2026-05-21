@@ -49,12 +49,21 @@ export function EndpointProvider({ children }) {
     const target = connections.find((c) => c.id === id);
     if (target) dropEndpointPool(target);
     await removeConnection(id);
+    try {
+      const { clearState } = await import('../features/aln/state');
+      await clearState(id);
+    } catch { /* */ }
     await refresh();
   }, [refresh, connections]);
 
   const unpair = useCallback(async () => {
     for (const c of connections) dropEndpointPool(c);
+    const ids = connections.map((c) => c.id);
     await clearAll();
+    try {
+      const { clearState } = await import('../features/aln/state');
+      for (const id of ids) await clearState(id);
+    } catch { /* */ }
     await refresh();
   }, [refresh, connections]);
 

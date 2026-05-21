@@ -5,6 +5,15 @@ import * as SecureStore from 'expo-secure-store';
 const KEY = 'alpi.connections';
 const LEGACY_KEY = 'alpi.endpoint';
 
+function secureOpts() {
+  try {
+    if (SecureStore.AFTER_FIRST_UNLOCK !== undefined) {
+      return { keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK };
+    }
+  } catch { /* */ }
+  return {};
+}
+
 function genId() {
   return `c-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
 }
@@ -35,7 +44,7 @@ async function readRaw() {
 }
 
 async function writeRaw(state) {
-  await SecureStore.setItemAsync(KEY, JSON.stringify(state));
+  await SecureStore.setItemAsync(KEY, JSON.stringify(state), secureOpts());
 }
 
 async function migrateLegacy() {

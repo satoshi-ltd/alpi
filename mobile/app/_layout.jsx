@@ -26,6 +26,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { ToastProvider, useToast } from '../src/components/Toast';
 import { ApprovalSheet } from '../src/features/approval/ApprovalSheet';
+import { useNotificationTapRouter } from '../src/features/aln/deeplink';
 import { EventsProvider } from '../src/hooks/useEvents';
 import { useScheduleToast } from '../src/hooks/useScheduleToast';
 import { AppBootstrap } from '../src/lib/AppBootstrap';
@@ -75,6 +76,7 @@ function AuthFailedBridge() {
 function Routes() {
   const { mode, colors } = useTheme();
   useScheduleToast();
+  useNotificationTapRouter();
   return (
     <>
       <StatusBar style={mode === 'dark' ? 'light' : 'dark'} />

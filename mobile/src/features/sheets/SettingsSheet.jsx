@@ -17,6 +17,7 @@ import {
 } from '../../lib/biometric';
 import { useEndpoint } from '../../lib/EndpointContext';
 import { signOut } from '../../lib/signOut';
+import { getPermissionStatus, requestPermission } from '../aln/notify';
 import { useTheme } from '../../theme/ThemeContext';
 
 const APP_VERSION = Constants.expoConfig?.version ?? '0.0.0';
@@ -34,12 +35,27 @@ export function SettingsSheet({ open, onClose }) {
   const [bioOn, setBioOn] = useState(false);
   const [bioCaps, setBioCaps] = useState({ hasHardware: false, enrolled: false, label: 'Biometric' });
   const [confirmSignOut, setConfirmSignOut] = useState(false);
+  const [notifPerm, setNotifPerm] = useState('undetermined');
 
   useEffect(() => {
     if (!open) return;
     biometricCapabilities().then(setBioCaps);
     getBiometricPref().then(setBioOn);
+    getPermissionStatus().then(setNotifPerm);
   }, [open]);
+
+  const onPermissionPress = async () => {
+    if (notifPerm === 'granted') {
+      toast?.({
+        title: 'Already granted',
+        message: 'Revoke in iOS / Android system settings.',
+        duration: 2400,
+      });
+      return;
+    }
+    const next = await requestPermission();
+    setNotifPerm(next);
+  };
 
   const navigate = (path) => {
     onClose?.();
@@ -104,6 +120,25 @@ export function SettingsSheet({ open, onClose }) {
           chevron={false}
         />
 
+
+        <SectionHeader>Notifications</SectionHeader>
+        <Row
+          label="System permission"
+          helper="ambient background updates · zero relay · ~15–60 min cadence"
+          value={<StatusValue active={notifPerm === 'granted'} />}
+          onPress={onPermissionPress}
+          chevron={notifPerm !== 'granted'}
+        />
+        {__DEV__ && (
+          <>
+            <RowSeparator />
+            <Row
+              label="Test notifications"
+              helper="dev-only · sample notifications + routing check"
+              onPress={() => navigate('/debug/aln')}
+            />
+          </>
+        )}
 
         <SectionHeader>Appearance</SectionHeader>
         <Row label="Theme" value={appearanceLabel} onPress={cycleAppearance} />
