@@ -25,6 +25,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { ToastProvider, useToast } from '../src/components/Toast';
+import { ApprovalSheet } from '../src/features/approval/ApprovalSheet';
 import { EventsProvider } from '../src/hooks/useEvents';
 import { useScheduleToast } from '../src/hooks/useScheduleToast';
 import { AppBootstrap } from '../src/lib/AppBootstrap';
@@ -87,6 +88,7 @@ function Routes() {
           }}
         />
       </AppBootstrap>
+      <ApprovalSheet />
     </>
   );
 }

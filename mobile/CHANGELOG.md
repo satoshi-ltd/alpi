@@ -14,6 +14,19 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.1.2 — 2026-05-21 — approval sheet for caution commands
+
+Requires alpi ``v0.5.1`` or newer. On older daemons the sheet stays
+dormant.
+
+- Caution commands (recursive `rm`, `sudo`, force-push, …) now open a
+  sheet with four choices: allow once, allow this session, always,
+  deny. Previously these only worked from the TUI.
+- Opening the app mid-prompt or switching to a daemon that already
+  has a pending prompt shows it immediately.
+- The sheet pops automatically if another paired client answers
+  first.
+
 ## v0.1.1 — 2026-05-21 — endpoint switch hardening + skeleton polish
 
 Requires alpi ``v0.4.52`` or newer. No daemon contract change.
