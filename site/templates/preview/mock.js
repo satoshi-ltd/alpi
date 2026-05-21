@@ -60,9 +60,9 @@ const WORKGROUPS = [
 
 const REMOTES = [
   { id: 'local',   name: 'Local daemon',        host: 'host.sock',             status: 'connected', isLocal: true },
-  { id: 'studio',  name: 'studio.local',        host: '100.114.140.25:49200',  status: 'available' },
-  { id: 'umbrel',  name: 'umbrel.home',         host: '100.123.17.103:49200',  status: 'available' },
-  { id: 'office',  name: 'office-mbp.local',    host: '100.81.252.85:49200',   status: 'offline' },
+  { id: 'studio',  name: 'studio.local',        host: '100.64.12.34:49200',    status: 'available' },
+  { id: 'umbrel',  name: 'umbrel.home',         host: '100.65.23.45:49200',    status: 'available' },
+  { id: 'office',  name: 'office-mbp.local',    host: '100.66.34.56:49200',    status: 'offline' },
 ];
 
 const PEERS_BY_PROFILE = {

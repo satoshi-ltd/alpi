@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.5.2 — 2026-05-21 — file mutation evidence after each tool batch (CF.2)
+
+Patch on top of v0.5.1. The agent now reasons over what actually got
+written to disk instead of what it intended to write.
+
+- After every tool batch, the next model step receives a compact
+  footer listing each file touched: path, op, hash, byte + line
+  delta. Closes a common failure mode where the model "thought" it
+  had written something it hadn't.
+- Failed writes (lint refusal, missing file, no unique match…)
+  produce no footer entry — only committed state is reported.
+- The same evidence rides the host event bus as `file_mutations`,
+  tagged with profile + session, with a short diff preview per
+  mutation for future surface integration in desktop / mobile chat.
+- Umbrel package + image tag bumped to `0.5.2`.
+
 ## v0.5.1 — 2026-05-21 — terminal approvals over the host plane (CF.3)
 
 First v0.6-cycle release. Caution-command approvals (recursive `rm`,

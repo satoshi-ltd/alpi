@@ -340,7 +340,7 @@ function PairDeviceFlow({ open, onClose }) {
           <div className="col" style={{ gap: 6 }}>
             <FLabel>Host</FLabel>
             <span className="mono" style={{ fontSize: 12, color: hasLabel ? 'var(--ink-2)' : 'var(--ink-4)' }}>
-              100.114.140.25:49200
+              100.64.12.34:49200
             </span>
           </div>
           <div className="col" style={{ gap: 6 }}>
@@ -365,7 +365,7 @@ function PairDeviceFlow({ open, onClose }) {
         transition: 'opacity .22s var(--ease)',
       }}>
         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
-          alpi://device?v=2&host=100.114.140.25&port=49200&name={slug}&token=…
+          alpi://device?v=2&host=100.64.12.34&port=49200&name={slug}&token=…
         </span>
         <button className="iconbtn" style={{ width: 22, height: 22 }} disabled={!hasLabel}>
           <window.I.Copy style={{ width: 12, height: 12 }} />
@@ -865,4 +865,3 @@ function NewWorkgroupModal({ open, onClose, onCreate }) {
 }
 
 Object.assign(window, { NewProfileModal, NewWorkgroupModal });
-

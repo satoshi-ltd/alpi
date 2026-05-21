@@ -35,7 +35,6 @@ diagnostics are in; new rich gateway UX belongs in desktop/mobile.
 | ID | Item | Status |
 |---|---|---|
 | CF.1 | Tool-output / error sanitization — scrub tool outputs and errors before they are reinserted into model context, so hostile MCP/web/file/error text is treated as untrusted data rather than latent instructions. | 🟡 |
-| CF.2 | File mutation verifier — record each `write_file` / `edit_file` mutation with path, before/after hash, size, line count, and a small diff summary. The engine surfaces the mutation footer to the model and UI after tool batches. | 🟡 |
 | GW.1 | Gateway containment — Telegram, IMAP, Gmail, Matrix and webhook listeners fail independently with backoff and status, so one broken compatibility bridge does not degrade sibling platforms or profiles. | 🟡 |
 | AX-push | Native push notifications for mobile mentions, new `#task`, and task completion. v0.5 shipped the in-app mobile surface; v0.6 adds out-of-app APNs / FCM delivery through daemon device-token registration and event-stream wakeups. | 🟡 |
 
@@ -74,28 +73,6 @@ The sanitizer should be conservative:
 **Non-goal.** This is not a content filter and not an LLM moderation
 layer. It is prompt-injection hygiene for text that came from outside
 the trusted user/system/tool-description channel.
-
-### CF.2. File mutation verifier
-
-Alpi already refuses syntactically broken `write_file` / `edit_file`
-writes for Python, JSON, YAML, and TOML. CF.2 adds the missing
-post-write verification surface: after a tool batch, the engine knows
-which files changed and can show a compact, machine-checkable mutation
-footer.
-
-First implementation:
-
-- file tools record `path`, operation, before/after SHA-256, byte size,
-  line count, and a short unified-diff preview;
-- the engine emits a `file_mutations` event for clients;
-- the next model step receives a short footer when mutations happened,
-  so it can verify or continue based on facts rather than intention;
-- failed writes record no mutation.
-
-**Why not LSP yet.** Language-server diagnostics can come later, once
-the verifier proves useful. LSP adds per-language processes, dependency
-management, and many false-positive failure modes. The first layer is
-hashes, sizes, diffs, and existing syntax lint.
 
 ### GW.1. Gateway containment
 

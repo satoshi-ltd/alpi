@@ -74,6 +74,8 @@ class EditFile(Tool):
                 error=f"refused — edit would make {p.name} unparseable: {lint_err}",
             )
         p.write_text(new_content)
+        from alpi.tools import _mutations
+        _mutations.record_mutation(_mutations.build_record(p, text, new_content, op_hint="edit"))
         return ToolResult(ok=True, output=f"Edited {p}")
 
 

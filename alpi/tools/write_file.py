@@ -52,6 +52,11 @@ class WriteFile(Tool):
                 ok=False, output="",
                 error=f"refused — content would be unparseable: {lint_err}",
             )
+        before: str | None
+        try:
+            before = p.read_text() if p.exists() else None
+        except OSError:
+            before = None
         p.parent.mkdir(parents=True, exist_ok=True)
         # Atomic overwrite: write to a sibling tmp file and os.replace onto
         # the target. If we crash mid-write the original is untouched.
@@ -59,6 +64,8 @@ class WriteFile(Tool):
         tmp = p.with_suffix(p.suffix + ".tmp")
         tmp.write_text(content)
         os.replace(tmp, p)
+        from alpi.tools import _mutations
+        _mutations.record_mutation(_mutations.build_record(p, before, content))
         return ToolResult(ok=True, output=f"Wrote {len(content):,} chars to {p}")
 
 

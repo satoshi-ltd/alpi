@@ -395,8 +395,8 @@ ${bodyHtml}
 </main>
 
 ${themeControlHtml}
-<script src="../doc.js"></script>
-<script src="../demo.js" defer></script>
+<script src="../doc.js?v=${VERSION}"></script>
+<script src="../demo.js?v=${VERSION}" defer></script>
 </body>
 </html>
 `;
@@ -437,7 +437,7 @@ ${renderDocsGrid({
 </main>
 
 ${themeControlHtml}
-<script src="../doc.js"></script>
+<script src="../doc.js?v=${VERSION}"></script>
 </body>
 </html>
 `;
@@ -496,6 +496,8 @@ const landing = readFileSync(join(TPL, 'landing.html'), 'utf8')
   // chrome, and footer all track pyproject.toml regardless of which
   // version the template was last saved with.
   .replace(/\bv\d+\.\d+\.\d+\b/g, `v${VERSION}`)
+  // cache-bust the demo widget script — same defense as doc.js/apps.css.
+  .replace('src="demo.js"', `src="demo.js?v=${VERSION}"`)
   // Desktop version goes AFTER the alpi-version sweep so the regex
   // above doesn't clobber it (desktop ships on its own track).
   .replace('<!-- DESKTOP_DOWNLOAD_URL -->', DESKTOP_DOWNLOAD_URL)
@@ -517,7 +519,10 @@ const apps = readFileSync(join(TPL, 'apps.html'), 'utf8')
   .replace('<!-- THEME_CONTROL (injected by build.mjs — same component used by docs) -->', themeControlHtml)
   .replace(/\bv\d+\.\d+\.\d+\b/g, `v${VERSION}`)
   .replace('<!-- DESKTOP_DOWNLOAD_URL -->', DESKTOP_DOWNLOAD_URL)
-  .replace('<!-- DESKTOP_VERSION -->', `v${DESKTOP_VERSION}`);
+  .replace('<!-- DESKTOP_VERSION -->', `v${DESKTOP_VERSION}`)
+  // cache-bust shared assets so a Cloudflare edge copy of an older doc.js can't crash against new HTML markup.
+  .replace('href="apps.css"', `href="apps.css?v=${VERSION}"`)
+  .replace('src="doc.js"', `src="doc.js?v=${VERSION}"`);
 write(join(DIST, 'apps.html'), apps);
 
 // Live preview — copies the desktop prototype (the React+Babel one) into /preview/.

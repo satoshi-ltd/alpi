@@ -364,6 +364,8 @@ class Engine:
                     ))
                 tool_state_mod.set_usage_sink(_absorb_usage)
 
+                from alpi.tools import _mutations
+                _mut_token = _mutations.begin_batch()
                 batch_reasoning = content
                 for i, tc in enumerate(tool_calls):
                     reasoning_for_this_tool = batch_reasoning if i == 0 else ""
@@ -435,6 +437,25 @@ class Engine:
 
                 tool_state_mod.set_interrupt_getter(None)
                 tool_state_mod.set_usage_sink(None)
+
+                _muts = _mutations.end_batch(_mut_token)
+                if _muts:
+                    try:
+                        from alpi.host import events as _host_events
+                        from alpi.home import profile_name as _profile_name
+                        _host_events.emit(
+                            "file_mutations",
+                            {
+                                "profile": _profile_name(self.home),
+                                "session_id": self.session.id,
+                                "mutations": [m.to_dict() for m in _muts],
+                            },
+                        )
+                    except Exception:  # noqa: BLE001
+                        pass
+                    footer = _mutations.format_footer(_muts)
+                    if footer:
+                        self.session.messages.append({"role": "system", "content": footer})
 
                 if self.interrupt_requested:
                     self._finalize_interrupt(emit)
