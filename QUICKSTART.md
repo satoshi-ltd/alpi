@@ -1,9 +1,9 @@
 # Quickstart
 
 First-day walkthrough. Takes about 10 minutes end-to-end and leaves
-you with a working alpi — a model picked, a workspace pinned,
-messaging over Telegram optional, and the gateway running as a
-background service.
+you with a working alpi — model selected, workspace pinned, first
+session running, and `alpi doctor` green. Profiles, gateways, apps,
+and ALP come next.
 
 For concepts behind any step, see [ARCHITECTURE.md](docs/ARCHITECTURE.md).
 For the security posture, see [SECURITY.md](docs/SECURITY.md).
@@ -90,7 +90,7 @@ default behaviour without typing `-c` every time, enable
 `tui.auto_resume` in `~/.alpi/config.yaml` (or set it via
 `alpi setup`).
 
-## 6. Connect a gateway (optional)
+## 6. Optional: connect a gateway
 
 If you want alpi to answer you on Telegram / IMAP / Gmail / Matrix, run the
 wizard again:
@@ -107,11 +107,11 @@ alpi daemon status
 alpi daemon start
 ```
 
-The single `alpi daemon` process supervises every profile on the
-machine. It hosts gateways, scheduler ticks, ALP listeners,
-workgroup pollers, and the host plane. Messages from the gateway
-share per-chat session threads with your TUI, so a conversation
-started on Telegram can continue in the terminal.
+Gateways are compatibility bridges for 24/7 reach. The primary
+surfaces are the terminal, desktop app, and mobile app talking to
+the daemon directly. The single `alpi daemon` process supervises
+every profile on the machine and hosts gateways, scheduler ticks,
+ALP listeners, workgroup pollers, and the host plane.
 
 ## 7. Add a second profile (optional)
 

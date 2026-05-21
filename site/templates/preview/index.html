@@ -1,0 +1,687 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Alpi — redesign</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+
+<style>
+/* ─── tokens ─────────────────────────────────────────────────────────────── */
+:root{
+  /* ─ Type ─ */
+  --font-sans:  "Geist", ui-sans-serif, system-ui, sans-serif;
+  --font-mono:  "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* Font sizes — 7 sizes total. Multiples of clean integers. */
+  --fs-xs:      11px;     /* tag, kbd, meta mono, marker eyebrow */
+  --fs-sm:      12px;     /* labels, pill, mono inline */
+  --fs-base:    13px;     /* body, list row, action link */
+  --fs-md:      14px;     /* chat bubble */
+  --fs-lg:      15px;     /* section heading, profile message body */
+  --fs-xl:      18px;     /* card heading */
+  --fs-display: 28px;     /* hero h1 */
+
+  /* Line-height — 4-step scale */
+  --lh-tight:   1;        /* controls, chips, single-line labels */
+  --lh-cozy:    1.3;      /* UI titles, pills, tooltips, small UI text */
+  --lh-normal:  1.5;      /* inputs, paragraphs */
+  --lh-relaxed: 1.65;     /* long-form prose, message bodies */
+
+  /* Popover widths — 4 standard sizes */
+  --pop-sm:     260px;    /* budget edit, version, voice picker */
+  --pop-md:     340px;    /* devices list, workgroup peers */
+  --pop-lg:     380px;    /* peers + invites, sessions */
+  --pop-xl:     440px;    /* delete/MCP/providers modals */
+
+  /* Spacing scale */
+  --space-1: 4px;
+  --space-2: 6px;
+  --space-3: 8px;
+  --space-4: 10px;
+  --space-5: 12px;
+  --space-6: 14px;
+  --space-7: 16px;
+  --space-8: 20px;
+  --space-9: 24px;
+  --space-10: 32px;
+  --space-11: 40px;
+
+  /* Density */
+  --pad: 16px;
+  --sidebar-w: 280px;
+  --row-h: 32px;
+  --gap-y: 14px;
+
+  /* Stream — reading column for chat & settings */
+  --stream-max: 920px;
+  --bubble-max: 76%;
+  --composer-max: var(--stream-max);
+
+  /* Layout constants — main pane padding & hero geometry */
+  --titlebar-h: 38px;            /* macOS-style traffic light row */
+  --pane-pad-x: var(--space-10); /* 32px — horizontal padding of main content */
+  --hero-pad-top: 46px;          /* titlebar-h + 8 — pushes hero below traffic lights */
+  --hero-pad-bottom: 18px;       /* visual breathing under the meta line */
+  --stream-pad-top: var(--space-9);    /* 24px above first message */
+  --stream-pad-bottom: var(--space-7); /* 16px below last message */
+  --composer-pad-top: var(--space-7);    /* 16px */
+  --composer-pad-bottom: var(--space-9); /* 24px */
+
+  /* Radii — use tokens */
+  --r-xs: 4px;    /* tag, kbd */
+  --r-sm: 6px;    /* pill inner, code */
+  --r-md: 8px;    /* button, list row */
+  --r-lg: 10px;   /* cell, field */
+  --r-xl: 12px;   /* popover */
+  --r-2xl: 14px;  /* card */
+  --r-3xl: 16px;  /* large card, panel */
+  --ease: cubic-bezier(.2,.7,.2,1);
+
+  /* Semantic colors — shared across modes */
+  --c-success: #3fb37a;  /* connected, active, done */
+  --c-warning: #d4b443;  /* available, paused */
+  --c-danger:  #c14545;  /* offline, delete */
+
+  /* ──── Direction A · Calm (warm) — LIGHT ──── */
+  --bg:        #f6f3ec;       /* page warm cream */
+  --bg-pane:  #fbfaf5;        /* main content surface */
+  --bg-side:  #f1ede4;        /* sidebar */
+  --bg-elev:  #ffffff;
+  --bg-input: #ffffff;
+  --ink:       #1a1815;
+  --ink-2:    #514c45;
+  --ink-3:    #8c8479;
+  --ink-4:    #b8af9f;
+  --line:      rgba(26,24,21,.08);
+  --line-2:    rgba(26,24,21,.14);
+  --tint-mix:  10%;
+  --tint-mix-strong: 22%;
+  --hover:     rgba(26,24,21,.04);
+  --selected:  rgba(26,24,21,.06);
+  --shadow:    0 1px 0 rgba(255,255,255,.6) inset, 0 12px 36px rgba(26,16,4,.08);
+  --shadow-sm: 0 1px 2px rgba(26,16,4,.06), 0 0 0 .5px rgba(26,24,21,.08);
+
+  --display-font: var(--font-serif);
+  --display-italic: italic;
+  --display-weight: 400;
+}
+
+/* ──── Direction A · Calm — DARK ──── */
+[data-mode="dark"]{
+  --bg:       #14110d;
+  --bg-pane:  #1b1814;
+  --bg-side:  #110e0b;
+  --bg-elev:  #232019;
+  --bg-input: #1b1814;
+  --ink:       #f3eee2;
+  --ink-2:    #c4bcab;
+  --ink-3:    #8c8479;
+  --ink-4:    #5b554a;
+  --line:      rgba(243,238,226,.08);
+  --line-2:    rgba(243,238,226,.16);
+  --hover:     rgba(243,238,226,.04);
+  --selected:  rgba(243,238,226,.07);
+  --tint-mix: 14%;
+  --tint-mix-strong: 32%;
+  --shadow:    0 1px 0 rgba(255,255,255,.04) inset, 0 12px 36px rgba(0,0,0,.5);
+  --shadow-sm: 0 0 0 .5px rgba(243,238,226,.08);
+}
+
+/* ──── Direction B · Console — LIGHT ──── */
+[data-direction="console"]{
+  --bg:        #eef0f2;        /* cool surround */
+  --bg-pane:  #ffffff;
+  --bg-side:  #f5f6f8;
+  --bg-elev:  #ffffff;
+  --bg-input: #ffffff;
+  --ink:       #0b1117;
+  --ink-2:    #3d4955;
+  --ink-3:    #7c8896;
+  --ink-4:    #b1bac4;
+  --line:      rgba(11,17,23,.07);
+  --line-2:    rgba(11,17,23,.14);
+  --hover:     rgba(11,17,23,.04);
+  --selected:  rgba(11,17,23,.06);
+  --tint-mix:  14%;
+  --tint-mix-strong: 30%;
+  --shadow:    0 0 0 .5px rgba(11,17,23,.08), 0 18px 50px rgba(11,17,23,.10);
+  --shadow-sm: 0 0 0 .5px rgba(11,17,23,.10);
+
+  --display-font: var(--font-sans);
+  --display-italic: normal;
+  --display-weight: 600;
+}
+
+/* ──── Direction B · Console — DARK ──── */
+[data-direction="console"][data-mode="dark"]{
+  --bg:        #0a0d11;
+  --bg-pane:  #11151a;
+  --bg-side:  #0c1014;
+  --bg-elev:  #161b22;
+  --bg-input: #11151a;
+  --ink:       #e6edf3;
+  --ink-2:    #b1bac4;
+  --ink-3:    #7d8590;
+  --ink-4:    #484f58;
+  --line:      rgba(230,237,243,.08);
+  --line-2:    rgba(230,237,243,.16);
+  --hover:     rgba(230,237,243,.04);
+  --selected:  rgba(230,237,243,.07);
+  --shadow:    0 0 0 .5px rgba(230,237,243,.06), 0 18px 50px rgba(0,0,0,.6);
+  --shadow-sm: 0 0 0 .5px rgba(230,237,243,.08);
+}
+
+/* ─── console sub-styles ─── */
+/* default 'studio' — already defined above */
+
+/* 'brutalist' — sharper, hairline borders, mono on titles, 0-radius corners */
+[data-direction="console"][data-style="brutalist"]{
+  --r-sm: 2px; --r-md: 3px; --r-lg: 4px; --r-xl: 6px;
+  --display-font: var(--font-mono);
+  --display-weight: 600;
+  --line:   rgba(11,17,23,.12);
+  --line-2: rgba(11,17,23,.22);
+}
+[data-direction="console"][data-style="brutalist"][data-mode="dark"]{
+  --line:   rgba(230,237,243,.10);
+  --line-2: rgba(230,237,243,.22);
+}
+[data-direction="console"][data-style="brutalist"] .window{
+  border-radius: 0;
+}
+
+/* 'muji' — calmer, more whitespace, very soft tints, paper background */
+[data-direction="console"][data-style="muji"]{
+  --bg:       #f4f2ec;
+  --bg-pane:  #faf9f4;
+  --bg-side:  #efece4;
+  --bg-elev:  #ffffff;
+  --bg-input: #ffffff;
+  --line:     rgba(40,32,18,.07);
+  --line-2:   rgba(40,32,18,.13);
+  --ink:      #1e1c17;
+  --ink-2:    #524c41;
+  --ink-3:    #908775;
+  --ink-4:    #bdb3a0;
+  --tint-mix: 8%;
+  --tint-mix-strong: 18%;
+}
+[data-direction="console"][data-style="muji"][data-mode="dark"]{
+  --bg:       #15140f;
+  --bg-pane:  #1b1914;
+  --bg-side:  #11100c;
+  --bg-elev:  #232017;
+  --bg-input: #1b1914;
+  --ink:      #f1ede2;
+  --ink-2:    #c5bdab;
+  --ink-3:    #847b69;
+  --ink-4:    #5a5346;
+  --line:     rgba(241,237,226,.06);
+  --line-2:   rgba(241,237,226,.13);
+}
+
+/* density: compact */
+[data-density="compact"]{
+  --pad: 12px;
+  --sidebar-w: 248px;
+  --row-h: 28px;
+  --gap-y: 10px;
+}
+
+/* ─── base ───────────────────────────────────────────────────────────────── */
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+html{ height:100%; }
+body{
+  font: 14px/1.5 var(--font-sans);
+  color: var(--ink);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  height: 100vh;
+  overflow: hidden;
+  font-feature-settings: "ss01","cv11";
+  letter-spacing: -0.005em;
+}
+button{
+  appearance: none; border: 0; background: transparent;
+  font: inherit; color: inherit; cursor: pointer; padding: 0;
+}
+input, textarea{ font: inherit; color: inherit; }
+::selection{ background: color-mix(in srgb, var(--accent, #3fb37a) 30%, transparent); }
+
+/* hide native scrollbars except where needed */
+.scroll{ overflow-y:auto; scrollbar-width: thin; scrollbar-color: var(--ink-4) transparent; }
+.scroll::-webkit-scrollbar{ width:8px }
+.scroll::-webkit-scrollbar-thumb{ background: var(--line-2); border-radius: 4px; border: 2px solid transparent; background-clip: content-box }
+.scroll::-webkit-scrollbar-thumb:hover{ background: var(--ink-4); border:2px solid transparent; background-clip: content-box }
+
+/* ─── window chrome ─────────────────────────────────────────────────────── */
+.surround{
+  position: fixed; inset: 0;
+  background:
+    radial-gradient(1200px 800px at 80% -10%, color-mix(in srgb, var(--accent, var(--ink)) 6%, transparent), transparent 60%),
+    var(--bg);
+  display: grid; place-items: center;
+  padding: 28px;
+}
+.window{
+  width: min(1440px, 100%);
+  height: min(900px, calc(100vh - 56px));
+  background: var(--bg-pane);
+  border-radius: 14px;
+  box-shadow:
+    0 0 0 .5px var(--line-2),
+    0 30px 80px rgba(0,0,0,.18),
+    0 0 0 1px rgba(255,255,255,.03) inset;
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: var(--sidebar-w) 1fr;
+  grid-template-rows: 100%;
+  position: relative;
+}
+
+/* traffic lights row */
+.titlebar{
+  position: absolute; left: 0; right: 0; top: 0; height: 38px;
+  display: flex; align-items: center; gap: 8px;
+  padding: 0 14px;
+  z-index: 30;
+  pointer-events: none;
+  -webkit-app-region: drag;
+}
+.tl{ display:flex; gap:8px; }
+.tl span{ width:12px; height:12px; border-radius: 50%; background: var(--ink-4); opacity:.55; }
+[data-direction="calm"] .tl span:nth-child(1){ background:#ed6a5e }
+[data-direction="calm"] .tl span:nth-child(2){ background:#f4bf4f }
+[data-direction="calm"] .tl span:nth-child(3){ background:#61c554 }
+[data-direction="console"] .tl span:nth-child(1){ background:#ff5f57 }
+[data-direction="console"] .tl span:nth-child(2){ background:#febc2e }
+[data-direction="console"] .tl span:nth-child(3){ background:#28c840 }
+
+/* ─── shared atoms ─────────────────────────────────────────────────────── */
+.diamond{
+  display:inline-block; width:9px; height:9px;
+  transform: rotate(45deg);
+  background: var(--c, var(--ink-3));
+  border-radius: 1.5px;
+  flex-shrink:0;
+}
+.dot{ display:inline-block; width:7px; height:7px; border-radius:50%; background: var(--c, var(--ink-3)); flex-shrink:0; }
+.hash{ font-family: var(--font-mono); color: var(--ink-3); font-weight: 500; }
+
+.eyebrow{
+  font: 500 10px/1 var(--font-sans);
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+[data-direction="console"] .eyebrow{
+  font-family: var(--font-mono);
+  font-weight: 500;
+  letter-spacing: .06em;
+}
+
+.mono{ font-family: var(--font-mono); font-size: 12.5px; }
+.kbd{
+  font-family: var(--font-mono); font-size: 11px;
+  padding: 1px 5px; border-radius: 4px;
+  background: var(--hover); border: .5px solid var(--line);
+}
+
+/* pills */
+.pill{
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 22px; padding: 0 8px;
+  border-radius: 999px;
+  background: var(--hover);
+  color: var(--ink-2);
+  font-size: 12px;
+  font-family: var(--font-mono);
+}
+.pill.is-on{ background: color-mix(in srgb, #3fb37a 16%, var(--bg-pane)); color: color-mix(in srgb, #3fb37a 70%, var(--ink)); }
+.pill.is-err{ background: color-mix(in srgb, #c14545 16%, var(--bg-pane)); color: color-mix(in srgb, #c14545 70%, var(--ink)); }
+.pill.is-off{ opacity: .55 }
+
+/* buttons */
+.btn{
+  display:inline-flex; align-items:center; gap: 6px;
+  height: 28px; padding: 0 12px;
+  border-radius: 8px;
+  background: var(--hover);
+  color: var(--ink);
+  font-size: 13px;
+  transition: background .15s var(--ease);
+}
+.btn:hover{ background: var(--line); }
+.btn-primary{ background: var(--ink); color: var(--bg-pane); }
+.btn-primary:hover{ background: var(--ink-2); }
+.btn-ghost{ background: transparent; color: var(--ink-2); }
+.btn-ghost:hover{ background: var(--hover); color: var(--ink); }
+
+.iconbtn{
+  width: 28px; height: 28px; display: grid; place-items: center;
+  border-radius: 8px; color: var(--ink-2); transition: background .12s, color .12s;
+}
+.iconbtn:hover{ background: var(--hover); color: var(--ink); }
+
+/* icons */
+.icon{ width:16px; height:16px; stroke: currentColor; fill: none; stroke-width: 1.5; }
+
+/* color tint helper */
+.tinted{
+  background: color-mix(in srgb, var(--c, transparent) var(--tint-mix), var(--bg-pane));
+}
+.tinted-strong{
+  background: color-mix(in srgb, var(--c, transparent) var(--tint-mix-strong), var(--bg-pane));
+}
+
+/* connection indicator on the sidebar */
+.conn-pill{
+  display: flex; align-items: center; gap: 10px;
+  width: 100%;
+  height: 44px; padding: 0 12px;
+  border-radius: 10px;
+  background: var(--bg-elev);
+  border: .5px solid var(--line);
+  cursor: pointer;
+  transition: background .12s;
+}
+.conn-pill:hover{ background: color-mix(in srgb, var(--ink) 4%, var(--bg-elev)); }
+.conn-pill .name{ font-weight: 500; font-size: 13px; line-height: var(--lh-cozy); }
+.conn-pill .host{ font-family: var(--font-mono); font-size: 11px; color: var(--ink-3); line-height: var(--lh-cozy); }
+
+/* generic field */
+.field{
+  display:block; width:100%;
+  background: var(--bg-input);
+  color: var(--ink);
+  border: .5px solid var(--line-2);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font: inherit;
+  outline: none;
+  transition: border-color .12s, box-shadow .12s;
+}
+.field:focus{
+  border-color: color-mix(in srgb, var(--ink) 30%, transparent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--ink) 6%, transparent);
+}
+.field-mono{ font-family: var(--font-mono); font-size: 13px; }
+textarea.field{ resize: vertical; min-height: 88px; line-height: var(--lh-normal); }
+
+/* tooltip-y badge */
+.badge{
+  display:inline-flex; align-items:center; gap:5px;
+  font: 500 10.5px/1 var(--font-mono);
+  height: 18px; padding: 0 6px;
+  border-radius: 4px;
+  color: var(--ink-3);
+  background: var(--hover);
+}
+
+/* ─── animations ─────────────────────────────────────────────────────────── */
+@keyframes pop-in { from { opacity: 0; transform: translateY(4px) scale(.98); } to { opacity: 1; transform: none; } }
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes slide-up { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes pulse-dot { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
+
+.anim-pop  { animation: pop-in .22s var(--ease) both; }
+.anim-fade { animation: fade-in .18s var(--ease) both; }
+.anim-up   { animation: slide-up .26s var(--ease) both; }
+.pulse-dot { animation: pulse-dot 1.6s ease-in-out infinite; }
+
+/* notification entry animation */
+@keyframes notif-in {
+  from { opacity: 0; transform: translateY(10px) scale(.96); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes notif-out {
+  from { opacity: 1; transform: none; }
+  to   { opacity: 0; transform: translateY(8px); }
+}
+
+/* hover-reveal message actions (used in profile 1:1 chat) */
+.msg-row:hover .msg-actions{ opacity: 1; }
+
+/* search highlights */
+mark.__sr-hit{
+  background: color-mix(in srgb, var(--c-warning) 45%, transparent);
+  color: var(--ink);
+  border-radius: 2px;
+  padding: 0 1px;
+}
+mark.__sr-hit.__sr-active{
+  background: color-mix(in srgb, var(--c-warning) 90%, transparent);
+  outline: 1px solid var(--c-warning);
+}
+.banner{
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 32px;
+  font-size: 12.5px; color: var(--ink);
+  border-bottom: .5px solid var(--line);
+}
+.banner.is-danger { background: color-mix(in srgb, var(--c-danger) 10%, var(--bg-pane)); }
+.banner.is-warning{ background: color-mix(in srgb, var(--c-warning) 12%, var(--bg-pane)); }
+.banner.is-info   { background: color-mix(in srgb, var(--ink) 5%, var(--bg-pane)); }
+.banner .b-dot    { width: 7px; height: 7px; border-radius: 50%; }
+
+/* brand mark — alpi.svg uses currentColor.
+   Use as a mask so we can tint with parent color (profile accent, ink, etc.) */
+.alpi-mark{
+  display: inline-block;
+  background-color: currentColor;
+  mask: url(alpi.svg) center / contain no-repeat;
+  -webkit-mask: url(alpi.svg) center / contain no-repeat;
+}
+.alpi-mark-sm{
+  display: inline-block;
+  background-color: currentColor;
+  mask: url(alpi-sm.svg) center / contain no-repeat;
+  -webkit-mask: url(alpi-sm.svg) center / contain no-repeat;
+}
+
+/* ─── reusable layout primitives ────────────────────────────────────────── */
+.row{ display:flex; align-items:center; }
+.row-gap{ gap: 8px; }
+.col{ display:flex; flex-direction: column; }
+.between{ justify-content: space-between; }
+.center{ justify-content: center; align-items: center; }
+.stretch{ width:100%; }
+
+/* serif title in Calm direction */
+.display{
+  font-family: var(--display-font);
+  font-style: var(--display-italic);
+  font-weight: var(--display-weight);
+  letter-spacing: -0.018em;
+  line-height: 1.05;
+}
+/* Hero variant — used in empty states / welcome screens (44px) */
+.display-hero{
+  font-family: var(--display-font);
+  font-style: var(--display-italic);
+  font-weight: var(--display-weight);
+  letter-spacing: -0.020em;
+  line-height: 1.1;
+  font-size: 44px;
+}
+
+/* ─── console refinements ─────────────────────────────────────────────── */
+[data-direction="console"]{
+  letter-spacing: -0.003em;
+}
+[data-direction="console"] body, [data-direction="console"] .body-font{
+  font-variant-numeric: tabular-nums slashed-zero;
+}
+[data-direction="console"] .display{
+  letter-spacing: -0.018em;
+}
+[data-direction="console"][data-style="brutalist"] .display{
+  letter-spacing: -0.005em;
+  text-transform: lowercase;
+}
+
+/* hairlines for brutalist */
+[data-style="brutalist"] .card,
+[data-style="brutalist"] .field,
+[data-style="brutalist"] .conn-pill{
+  border-radius: var(--r-md);
+}
+
+/* mini bar — used for context %, budget %, etc */
+.bar{ position:relative; height: 3px; border-radius: 999px; background: var(--line); overflow:hidden; }
+.bar > i{ position:absolute; inset:0; background: var(--c, var(--ink-2)); border-radius:inherit; display:block; width: var(--p, 0%); }
+[data-style="brutalist"] .bar{ border-radius: 0; }
+
+/* tabular numerals everywhere meta is shown */
+.tnum{ font-variant-numeric: tabular-nums slashed-zero; }
+
+/* small badge variants */
+.tag{ display:inline-flex; align-items:center; gap:5px; font: 500 10.5px/1 var(--font-mono); letter-spacing:.02em; height: 18px; padding: 0 6px; border-radius: 4px; color: var(--ink-3); background: var(--hover); }
+.tag-out{ background: transparent; border: .5px solid var(--line-2); }
+
+/* card */
+.card{
+  background: var(--bg-elev);
+  border: .5px solid var(--line);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+/* sticky inline tabbar inside a panel */
+.tabs{ display:flex; gap: 2px; padding: 3px; background: var(--hover); border-radius: 8px; border: .5px solid var(--line); }
+.tabs > button{ padding: 4px 10px; border-radius: 6px; font-size: 12px; color: var(--ink-3); }
+.tabs > button[aria-selected="true"]{ background: var(--bg-pane); color: var(--ink); box-shadow: 0 1px 0 rgba(0,0,0,.03); }
+[data-mode="dark"] .tabs > button[aria-selected="true"]{ background: var(--bg-elev); }
+
+/* ─── tooltip ─────────────────────────────────────────────────────────── */
+.tip{ position: relative; display: inline-flex; }
+.tip > .tip-body{
+  position: absolute; left: 50%; top: calc(100% + 6px);
+  transform: translateX(-50%) translateY(2px);
+  padding: 4px 8px;
+  background: var(--ink);
+  color: var(--bg-pane);
+  font: 500 11px/1.2 var(--font-mono);
+  letter-spacing: .02em;
+  border-radius: 5px;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity .12s, transform .12s;
+  box-shadow: 0 4px 16px rgba(0,0,0,.15);
+  z-index: 100;
+}
+[data-mode="dark"] .tip > .tip-body{ background: var(--ink); color: var(--bg-pane); }
+.tip > .tip-body::before{
+  content: ''; position: absolute; left: 50%; top: -3px;
+  transform: translateX(-50%) rotate(45deg);
+  width: 6px; height: 6px;
+  background: var(--ink);
+}
+.tip > .tip-body.tip-r{ left: auto; right: 0; transform: translateY(2px); }
+.tip > .tip-body.tip-r::before{ left: auto; right: 12px; }
+.tip > .tip-body.tip-l{ left: 0; right: auto; transform: translateY(2px); }
+.tip > .tip-body.tip-l::before{ left: 12px; right: auto; }
+.tip > .tip-body.tip-up{ top: auto; bottom: calc(100% + 6px); transform: translateX(-50%) translateY(-2px); }
+.tip > .tip-body.tip-up::before{ top: auto; bottom: -3px; }
+.tip:hover > .tip-body{ opacity: 1; transform: translateX(-50%) translateY(0); }
+.tip:hover > .tip-body.tip-r{ transform: translateY(0); }
+.tip:hover > .tip-body.tip-l{ transform: translateY(0); }
+.tip:hover > .tip-body.tip-up{ transform: translateX(-50%) translateY(0); }
+/* show-all mode */
+[data-show-tips="true"] .tip > .tip-body{ opacity: 1; transform: translateX(-50%) translateY(0); }
+[data-show-tips="true"] .tip > .tip-body.tip-r,
+[data-show-tips="true"] .tip > .tip-body.tip-l{ transform: translateY(0); }
+[data-show-tips="true"] .tip > .tip-body.tip-up{ transform: translateX(-50%) translateY(0); }
+
+/* ─── interaction states ─────────────────────────────────────────────────── */
+/* keyboard focus — visible ring; never mouse focus */
+:focus{ outline: 0; }
+button:focus-visible,
+a:focus-visible,
+[role="button"]:focus-visible{
+  outline: 2px solid color-mix(in srgb, var(--ink) 45%, transparent);
+  outline-offset: 2px;
+  border-radius: var(--r-md);
+}
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible{
+  /* field already has focus styling; keep it */
+}
+
+/* active/pressed — darker bg on common buttons */
+.btn:active{ background: color-mix(in srgb, var(--ink) 10%, var(--hover)); transform: translateY(.5px); }
+.btn-primary:active{ background: color-mix(in srgb, var(--ink) 85%, transparent); }
+.btn-ghost:active{ background: var(--line); }
+.iconbtn:active{ background: var(--line); transform: scale(.96); }
+.alink:active{ background: var(--line); }
+
+/* disabled — universal */
+button:disabled,
+.btn:disabled{ opacity: .45; cursor: default; pointer-events: none; }
+
+/* ─── tweaks panel overrides — give it a bit more breathing room */
+.twk-panel{ width: 280px; }
+
+/* ─── embedded-in-iframe overrides ───────────────────────────────────────
+   Drop the outer .surround chrome (padding + cream background that frames
+   the inner window) when the prototype runs inside the live-preview iframe
+   on /apps. The iframe is the viewport — the inner .window fills it with
+   its own traffic-light chrome and a subtle border-radius so it reads as
+   "the app", not as a flush rectangle.
+*/
+html, body{ background: transparent; }
+.surround{ padding: 0; background: transparent; }
+.window{
+  width: 100%;
+  height: 100vh;
+  border-radius: 12px;
+  box-shadow:
+    0 0 0 .5px var(--line-2),
+    0 20px 50px rgba(0,0,0,.18);
+}
+</style>
+</head>
+<body>
+
+<div id="root"></div>
+
+<!-- React + Babel -->
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script src="mock.js"></script>
+<script type="text/babel" src="tweaks-panel.jsx"></script>
+<script type="text/babel" src="icons.jsx"></script>
+<script type="text/babel" src="sidebar.jsx"></script>
+<script type="text/babel" src="chat.jsx"></script>
+<script type="text/babel" src="settings.jsx"></script>
+<script type="text/babel" src="panels.jsx"></script>
+<script type="text/babel" src="popovers.jsx"></script>
+<script type="text/babel" src="context-menu.jsx"></script>
+<script type="text/babel" src="notifications.jsx"></script>
+<script type="text/babel" src="search.jsx"></script>
+<script type="text/babel" src="app.jsx"></script>
+
+<script>
+// Tweak defaults (host-rewritable)
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "style": "studio",
+  "dark": false,
+  "wayfinding": "subtle",
+  "showTips": false,
+  "daemonOffline": false,
+  "firstRun": false
+}/*EDITMODE-END*/;
+window.TWEAK_DEFAULTS = TWEAK_DEFAULTS;
+</script>
+
+</body>
+</html>

@@ -8,7 +8,7 @@
   const TOPBAR = {
     fresh:'alpi v0.3.0 <span class="sep">·</span> <span class="lbl">profile </span><span class="acc">default</span> <span class="sep">·</span> sandbox off <span class="sep">·</span> ~/projects/alpi',
     work: 'alpi v0.3.0 <span class="sep">·</span> <span class="lbl">profile </span><span class="acc">work</span> <span class="sep">·</span> sandbox off <span class="sep">·</span> ~/projects/work',
-    personal:'alpi v0.3.0 <span class="sep">·</span> <span class="lbl">profile </span><span class="acc">personal</span> <span class="sep">·</span> sandbox off <span class="sep">·</span> ~/git/alpi',
+    personal:'alpi v0.3.0 <span class="sep">·</span> <span class="lbl">profile </span><span class="acc">doc</span> <span class="sep">·</span> sandbox on <span class="sep">·</span> ~/life/health',
   };
   const STATUS = {
     fresh:'<span class="diamond">◆</span> openai/gpt-5.4-mini <span class="sep">·</span> ctx 1.2K/272K <span class="sep">·</span> $0.00',
@@ -35,38 +35,35 @@
       initialBody:"",
       turns:[
         {
-          input:"what's on my plate today?",
+          input:"what should i do with dinner, training, and tomorrow's calls?",
           lines:[
-            { d:300, t: tool("schedule", "list · upcoming",      '<span class="muted">3 events</span>') },
-            { d:380, t: tool("memory",   "read · today's notes", '<span class="muted">2 reminders</span>') },
+            { d:300, t: tool("schedule", "list · today",         '<span class="muted">4 events</span>') },
+            { d:380, t: tool("memory",   "read · health notes",  '<span class="muted">sleep + training</span>') },
+            { d:360, t: tool("peer",     "link.ask · pantry",    '<span class="muted">meal options</span>') },
             { d:240, t:"" },
-            { d:320, t:'<span class="bot">You have 3 things today:</span>' },
-            { d:160, t:'<span class="bot">  · 10:00 — design review with @marta</span>' },
-            { d:160, t:'<span class="bot">  · 14:30 — finish the v0.3 changelog</span>' },
-            { d:160, t:'<span class="bot">  · 18:00 — daughter pickup</span>' },
+            { d:320, t:'<span class="bot">Keep dinner light: rice, eggs, greens. Pantry has everything.</span>' },
+            { d:160, t:'<span class="bot">Move the tempo run to tomorrow morning; recovery is low today.</span>' },
+            { d:160, t:'<span class="bot">Your 09:30 call needs the budget note — I can draft it now.</span>' },
           ],
           postPause: 1400,
         },
         {
-          input:"what is ALP and how do peers stay private?",
+          input:"ask builder to review the payment PR before standup",
           lines:[
-            { d:320, t: tool("skill", "view · @alpi/knowledge",        '<span class="muted">routing table</span>') },
-            { d:520, t: tool("skill", "view · file=references/alp.md", '<span class="muted">protocol §</span>') },
+            { d:320, t: tool("peer", "link.ask · builder", '<span class="muted">PR review</span>') },
+            { d:520, t: tool("todo", "track · 3 checks",   '<span class="muted">tests, copy, risk</span>') },
             { d:280, t:"" },
-            { d:360, t:'<span class="bot">ALP is the Alpi Link Protocol — how alpis talk to each other.</span>' },
-            { d:160, t:'<span class="bot">  · ALP.1 over Unix sockets (same machine).</span>' },
-            { d:160, t:'<span class="bot">  · ALP.2 over Noise_XK TCP (across machines).</span>' },
-            { d:160, t:'<span class="bot">  · ALP.3 adds shared workgroups.</span>' },
-            { d:240, t:'<span class="bot">Every envelope is Ed25519-signed. Peers are pinned by pubkey —</span>' },
-            { d:140, t:'<span class="bot">no discovery service, no central registry.</span>' },
+            { d:360, t:'<span class="bot">@builder found one real issue: retry state is not reset after timeout.</span>' },
+            { d:160, t:'<span class="bot">It left a minimal patch and a focused test. Everything else is cosmetic.</span>' },
           ],
           postPause: 1500,
         },
         {
-          input:"post the ops note to workgroup:home",
+          input:"post the decision to #launch and notify the phone if anyone blocks",
           lines:[
-            { d:480, t: tool("peer", "workgroup.post · home", "3 members", "0.2s") },
-            { d:420, t:'<span class="bot">posted. @maria and @pi will pull it from the workgroup when they come online.</span>' },
+            { d:480, t: tool("peer", "workgroup.post · launch", "5 members", "0.2s") },
+            { d:420, t: tool("schedule", "watch · blockers", '<span class="muted">next 2h</span>') },
+            { d:420, t:'<span class="bot">posted. If a profile flags a blocker, desktop and mobile will show the same thread.</span>' },
           ],
           postPause: 1700,
         },
@@ -137,25 +134,28 @@
       initialBody:"",
       turns:[
         {
-          input:"hi",
+          input:"what can you see in this workspace?",
           lines:[
-            { d:300, t:'<span class="diamond">◆</span> <span class="bot">Hi! I\'m alpi, your personal agent. What can I help with today?</span>' },
+            { d:320, t: tool("search", "files · README", '<span class="muted">3 matches</span>') },
+            { d:360, t: tool("read_file", "README.md", '<span class="muted">8.4 KB</span>') },
+            { d:240, t:"" },
+            { d:300, t:'<span class="bot">This looks like an alpi workspace: Python package, docs, site templates, and app clients.</span>' },
+            { d:160, t:'<span class="bot">I\'ll treat relative paths as rooted here unless you tell me otherwise.</span>' },
           ],
           postPause: 900,
         },
         {
-          input:"summarize today's emails",
+          input:"remember that i prefer short direct answers",
           lines:[
-            { d:400, t: tool("email", "read inbox", '<span class="muted">8 messages, 2 starred</span>') },
+            { d:400, t: tool("memory", "append · USER.md", '<span class="muted">preference</span>') },
             { d:240, t:"" },
-            { d:280, t:'<span class="bot">You have 8 new emails today. The two starred ones look most actionable:</span>' },
-            { d:140, t:'<span class="bot">the deployment review from @marta and the contract follow-up from legal.</span>' },
+            { d:280, t:'<span class="bot">Noted. I\'ll keep replies concise unless the task needs detail.</span>' },
           ],
           postPause: 1500,
         },
       ],
       loop:false,
-      caption:"Type your first message. Useful first slash commands: /help · /memory · /skills · /status · /new · /model. Re-open a past session anytime with `alpi -c`."
+      caption:"Type your first message. The useful first test is workspace awareness; the second is memory. Slash commands to try next: /help · /memory · /skills · /status · /new · /model."
     },
     {
       id:5, title:"Ask alpi about itself",
@@ -183,7 +183,7 @@
         },
       ],
       loop:false,
-      caption:"alpi ships its first bundled skill: `@alpi/knowledge`. Ask anything about alpi itself — config, commands, the protocol — and it answers from the shipped docs without hitting the web."
+      caption:"alpi ships `@alpi/knowledge`. Ask about config, commands, profiles, skills, or ALP and it answers from the shipped docs without hitting the web."
     },
     {
       id:6, title:"Connect a gateway",
@@ -201,7 +201,7 @@
 
   <span class="check">✓</span> Service installed: <span class="acc">com.alpi.service.default</span>
   <span class="check">✓</span> Listening · pid 86403`,
-      caption:"alpi setup → Gateways then Service → Install. The unified service hosts gateway, scheduler, and ALP listener — answers Telegram / IMAP / Gmail 24/7 with per-chat session threading."
+      caption:"Optional. Use gateways only when you want 24/7 reach through Telegram / IMAP / Gmail. The primary surfaces are terminal, desktop, and mobile clients over the daemon."
     },
     {
       id:7, title:"Check health",

@@ -63,7 +63,7 @@ alpi runs a single `com.alpi.daemon` process (launchd plist on
 macOS, systemd-user unit on Linux) that supervises every profile
 under `~/.alpi/` — default plus each `profiles/<name>/`. Each
 profile gets its own per-service supervised tasks named
-`<profile>/<service>` (e.g. `mirai/gateway`, `ghost/alp`); a crash
+`<profile>/<service>` (e.g. `doc/gateway`, `builder/alp`); a crash
 in one profile's service leaves siblings untouched.
 
 | What it does | Lifecycle | Install / config |

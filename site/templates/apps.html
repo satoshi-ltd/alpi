@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<!-- SEO_HEAD (injected by build.mjs) -->
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="apps.css" />
+</head>
+<body>
+<div id="ascii-bg" aria-hidden="true"><pre id="ascii-pre"></pre></div>
+<div class="veil"></div>
+
+<!-- NAV (injected by build.mjs) -->
+
+<!-- HERO -->
+<section class="apps-hero">
+  <div class="shell">
+    <div class="kicker"><span class="dot"></span>v0.0.0 · two clients · one daemon</div>
+    <h1>Reach your alpi <span class="slash">/</span> from any device.</h1>
+    <p class="lead">
+      Once a daemon is running on your laptop, home server, or umbrel, the desktop and mobile apps connect to it as paired clients over Tailscale. Same profiles, same memory, same approvals — just the surface differs.
+    </p>
+    <div class="cta-row">
+      <a class="btn btn-primary" href="#desktop">Desktop <span class="arr">↓</span></a>
+      <a class="btn btn-ghost" href="#mobile">Mobile <span class="arr">↓</span></a>
+      <button class="btn btn-ghost" id="open-preview" type="button">See it live <span class="arr">↗</span></button>
+    </div>
+  </div>
+</section>
+
+<!-- DESKTOP -->
+<section id="desktop" class="app-block">
+  <div class="shell">
+    <div class="app-grid">
+      <div class="app-copy">
+        <div class="eyebrow">desktop · macOS</div>
+        <h2>The window you keep open all day.</h2>
+        <p class="sub">
+          Native Tauri shell with one job: be the most pleasant way to talk to your alpi. Multi-daemon picker (local + every remote you've paired), per-profile chat, workgroup viewer, sessions sheet, native approval modal for caution commands, model override per turn.
+        </p>
+
+        <ul class="feature-list">
+          <li><strong>Multi-daemon.</strong> Switch between local, home server, and any paired remote alpi with one click. Each connection holds its own profiles, workgroups, and session state.</li>
+          <li><strong>Native approvals.</strong> When the agent wants to run something risky (`rm -rf`, `sudo`, force-push…) the modal pops with command preview, severity, and four choices: once / session / always / deny.</li>
+          <li><strong>Workgroup-aware.</strong> Transcript, roster, briefing, tasks, post composer. Same surface ALP.3 workgroups have on every client.</li>
+          <li><strong>Realistic loading.</strong> Skeletons match the row geometry so first paint doesn't ghost the layout.</li>
+          <li><strong>Source available.</strong> <a href="https://github.com/satoshi-ltd/alpi/tree/main/desktop">desktop/</a>, BSL-1.1.</li>
+        </ul>
+
+        <div class="cta-row mt-8">
+          <a class="btn btn-primary" href="<!-- DESKTOP_DOWNLOAD_URL -->">Download for macOS <span class="arr">→</span></a>
+          <button class="btn btn-ghost" data-open-preview type="button">See it live <span class="arr">↗</span></button>
+        </div>
+        <p class="mono meta-note"><!-- DESKTOP_VERSION --> · macOS .dmg is the happy path · Linux build available in <a class="link-inline" href="https://github.com/satoshi-ltd/alpi/releases">releases</a></p>
+      </div>
+
+      <div class="app-art" aria-hidden="true">
+        <div class="art-window">
+          <div class="art-titlebar">
+            <span class="tl"></span><span class="tl"></span><span class="tl"></span>
+            <span class="art-title">alpi · doc@local</span>
+          </div>
+          <div class="art-body">
+            <div class="art-sidebar">
+              <div class="art-pill">⚡ local · host.sock</div>
+              <div class="art-row art-row-active"><span class="art-mark art-mark-doc"></span>doc<span class="art-meta">claude-sonnet-4-6</span></div>
+              <div class="art-row"><span class="art-mark art-mark-pantry"></span>pantry<span class="art-meta">gpt-5.4-mini</span></div>
+              <div class="art-row"><span class="art-mark art-mark-builder"></span>builder<span class="art-meta">gpt-5.4-mini</span></div>
+              <div class="art-row"><span class="art-mark art-mark-vera"></span>vera<span class="art-meta">claude-haiku-4-5</span></div>
+              <div class="art-divider"></div>
+              <div class="art-row-sub"><span class="art-mark art-mark-wg"></span>#roadmap</div>
+              <div class="art-row-sub"><span class="art-mark art-mark-wg"></span>#customers</div>
+            </div>
+            <div class="art-main">
+              <div class="art-main-head">
+                <div class="art-main-title">
+                  <span class="art-hash">#</span>
+                  <span class="art-profile">doc</span>
+                  <span class="art-meta-inline">claude-sonnet-4-6 · 14 turns · $0.24 / $1.00</span>
+                </div>
+                <div class="art-main-actions">
+                  <span class="art-action">↻</span>
+                  <span class="art-action">⋯</span>
+                </div>
+              </div>
+              <div class="art-stream">
+                <div class="art-msg art-msg-user"><span>How is my recovery this week?</span></div>
+                <div class="art-msg art-msg-bot">
+                  <span>Average 82% — above your monthly baseline (76%). The lowest day lines up with the long zone-2 session.</span>
+                  <span class="art-tool"><span class="art-tool-icon">◆</span> read_file <span class="art-tool-arg">sleep.md</span></span>
+                  <span class="art-tool art-tool-running"><span class="art-tool-icon art-tool-icon-on">◆</span> session_search <span class="art-tool-arg">thursday recovery</span> <span class="art-tool-spin">⟳</span></span>
+                </div>
+              </div>
+              <div class="art-composer">
+                <span class="art-composer-hash">#</span>
+                <span class="art-composer-text">type a message…</span>
+                <span class="art-kbd">⌘↵</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- MOBILE -->
+<section id="mobile" class="app-block">
+  <div class="shell">
+    <div class="app-grid app-grid-flip">
+      <div class="app-art" aria-hidden="true">
+        <div class="art-phone">
+          <div class="art-phone-screen">
+            <div class="art-phone-statusbar">
+              <span class="art-phone-time">9:41</span>
+              <span class="art-phone-island"></span>
+              <span class="art-phone-icons">
+                <span class="art-phone-sig"></span>
+                <span class="art-phone-wifi"></span>
+                <span class="art-phone-bat"></span>
+              </span>
+            </div>
+            <div class="art-phone-header">
+              <span class="art-phone-name">doc</span>
+              <span class="art-phone-pill">@home-server</span>
+            </div>
+            <div class="art-phone-body">
+              <div class="art-msg art-msg-user"><span>backup status?</span></div>
+              <div class="art-msg art-msg-bot">
+                <span>✓ 02:11 UTC · 184GB · ok. Last 7 days clean.</span>
+                <span class="art-tool"><span class="art-tool-icon">◆</span> skill <span class="art-tool-arg">backup_check</span></span>
+              </div>
+            </div>
+            <div class="art-composer art-composer-phone">
+              <span class="art-composer-text">ask anything…</span>
+              <span class="art-composer-send">↑</span>
+            </div>
+            <div class="art-phone-home"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="app-copy">
+        <div class="eyebrow">mobile · iOS + android</div>
+        <h2>Your alpi, in your pocket.</h2>
+        <p class="sub">
+          Pair your phone with a daemon by scanning the QR from desktop or terminal. Then chat, manage workgroups, inspect tasks, and approve caution commands — anywhere you have Tailscale.
+        </p>
+
+        <ul class="feature-list">
+          <li><strong>QR pairing.</strong> No accounts, no cloud. The daemon generates a one-time pairing token; your phone scans it and stores it in the device secure store (iOS Keychain / Android Keystore via Expo SecureStore).</li>
+          <li><strong>Inbox + workgroups.</strong> Pinned profiles, segmented filters, full workgroup transcript with task markers and post composer.</li>
+          <li><strong>Approvals on the go.</strong> A caution-command prompt opens a native sheet — you can allow or deny from the bus stop.</li>
+          <li><strong>Biometric unlock.</strong> Face ID / fingerprint gates the app; pairing tokens stay on the device.</li>
+          <li><strong>No telemetry.</strong> The phone speaks only to the daemons you paired. Nothing else.</li>
+        </ul>
+
+        <div class="cta-row mt-8">
+          <span class="btn btn-store btn-disabled">iOS · TestFlight internal</span>
+          <span class="btn btn-store btn-disabled">Android · internal builds</span>
+        </div>
+        <p class="mono meta-note">Mobile builds are in internal testing. Follow <a class="link-inline" href="https://github.com/satoshi-ltd/alpi/releases">releases</a> for the public rollout.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- SHARED FOOTER NOTE -->
+<section class="app-block app-footer-note">
+  <div class="shell">
+    <div class="eyebrow">how this fits</div>
+    <h2>The daemon is the agent. The apps are just clients.</h2>
+    <p class="sub">
+      No matter which client you use — TUI, desktop, mobile — the agent never leaves the daemon. Memory, skills, model keys, and approvals all live on the machine you trust. The apps render and forward; they never carry an LLM of their own. Run one alpi, or a network of them, and the same memory follows you across surfaces.
+    </p>
+    <p class="mt-7">
+      <a class="btn btn-ghost" href="index.html#install">Install the daemon <span class="arr">→</span></a>
+      <a class="btn btn-ghost ml-3" href="docs/ARCHITECTURE.html">Read the architecture <span class="arr">→</span></a>
+    </p>
+  </div>
+</section>
+
+<!-- PREVIEW OVERLAY -->
+<div class="preview-overlay" id="preview-overlay" hidden role="dialog" aria-modal="true" aria-label="alpi desktop preview">
+  <div class="preview-backdrop" data-close-preview></div>
+  <button class="preview-close-float" type="button" data-close-preview aria-label="Close preview">esc</button>
+  <div class="preview-frame">
+    <div class="preview-body" id="preview-body">
+      <!-- The actual desktop prototype lives in /preview/. It's a React+Babel
+           bundle (~600KB) so we load it lazily — the iframe src is set the first
+           time the overlay opens, not on page load. Sandboxed: the prototype
+           posts a few __edit_mode_* messages to its parent (host protocol from
+           the design tool); we don't respond, so the tweaks panel stays hidden. -->
+      <iframe
+        id="preview-iframe"
+        title="alpi desktop live preview"
+        sandbox="allow-scripts allow-same-origin"
+        loading="lazy"
+        referrerpolicy="no-referrer"
+      ></iframe>
+      <div class="preview-loading" id="preview-loading">
+        <span class="mono">loading preview…</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  const overlay = document.getElementById('preview-overlay');
+  if (!overlay) return;
+  const iframe = document.getElementById('preview-iframe');
+  const loading = document.getElementById('preview-loading');
+  let loaded = false;
+
+  function open() {
+    overlay.hidden = false;
+    document.body.style.overflow = 'hidden';
+    if (!loaded) {
+      loaded = true;
+      iframe.addEventListener('load', () => loading?.remove(), { once: true });
+      iframe.src = 'preview/index.html';
+    }
+    setTimeout(() => overlay.classList.add('preview-open'), 10);
+  }
+  function close() {
+    overlay.classList.remove('preview-open');
+    setTimeout(() => {
+      overlay.hidden = true;
+      document.body.style.overflow = '';
+    }, 220);
+  }
+  for (const el of document.querySelectorAll('#open-preview, [data-open-preview]')) {
+    el.addEventListener('click', open);
+  }
+  for (const el of document.querySelectorAll('[data-close-preview]')) {
+    el.addEventListener('click', close);
+  }
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !overlay.hidden) close();
+  });
+})();
+</script>
+
+<!-- THEME_CONTROL (injected by build.mjs — same component used by docs) -->
+<script src="doc.js"></script>
+</body>
+</html>

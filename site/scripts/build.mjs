@@ -17,10 +17,11 @@ const TPL  = join(SITE, 'templates');
 const SITE_URL    = (process.env.SITE_URL    || 'https://alpi.satoshi-ltd.com').replace(/\/+$/, '');
 const SITE_NAME   = process.env.SITE_NAME   || 'alpi';
 const SITE_TAGLINE = 'your private agent network';
-const SITE_DESCRIPTION = "alpi starts as the agent in your terminal, then grows with you: profiles for work, cron, home servers, research, and workgroups with other alpis. Each profile owns its memory, keys, model, skills, gateways, approvals, and trust boundary. ALP links them across machines without a registry, central account, or mandatory cloud.";
-const OG_IMAGE = `${SITE_URL}/assets/alpi-brand.png`;
+const SITE_DESCRIPTION = "alpi is a daemon you run, with terminal, desktop, and mobile clients on top. Profiles isolate memory, keys, models, skills, schedules, approvals, and trust. ALP links your alpis across machines without a registry, central account, or mandatory cloud.";
+// 1200×630 — standard OG / Twitter card ratio. Crops cleanly on Twitter, Slack, LinkedIn and Discord previews.
+const OG_IMAGE = `${SITE_URL}/assets/alpi-social.png`;
 const OG_IMAGE_W = 1200;
-const OG_IMAGE_H = 800;
+const OG_IMAGE_H = 630;
 const TWITTER     = '@soyjavi';
 
 // ── version (single source of truth: pyproject.toml) ─────────────────────────
@@ -215,6 +216,10 @@ function renderNav(kind, opts = {}) {
     brandHref = '../index.html';
     crumbs.push({ label: 'DOCS', href: 'index.html', docs: true });
     crumbs.push({ label: opts.current, current: true });
+  } else if (kind === 'apps') {
+    // Subpage at the site root — brand goes to landing, crumb shows the section.
+    brandHref = 'index.html';
+    crumbs.push({ label: 'APPS', current: true, docs: true });
   }
 
   const crumbsHtml = crumbs.length
@@ -228,11 +233,12 @@ function renderNav(kind, opts = {}) {
       }).join('')}</span>`
     : '';
 
+  // Menu is only rendered on the landing — paths are relative to the site root.
   const menuLinks = [
     ['#what', 'What'],
     ['#quickstart', 'Quickstart'],
+    ['apps.html', 'Apps'],
     ['#alp', 'ALP'],
-    ['#deployments', 'Deploy'],
     ['docs/index.html', 'Docs'],
   ];
   const menuHtml = showMenu
@@ -248,7 +254,10 @@ function renderNav(kind, opts = {}) {
   </div>`
     : '';
 
-  const ctaHref = kind === 'landing' ? '#install' : '../index.html#install';
+  // CTA install anchor lives on the landing — point at it correctly from each surface.
+  const ctaHref = kind === 'landing' ? '#install'
+    : kind === 'apps' ? 'index.html#install'
+    : '../index.html#install';
 
   return `<nav class="top">
   <div class="shell row">
@@ -357,7 +366,7 @@ ${renderHead({
 <link rel="stylesheet" href="../demo.css" />
 </head>
 <body>
-<canvas id="ascii-bg" aria-hidden="true"></canvas>
+<div id="ascii-bg" aria-hidden="true"><pre id="ascii-pre"></pre></div>
 <div class="veil"></div>
 
 ${renderNav('doc', { current: doc.slug })}
@@ -412,7 +421,7 @@ ${renderHead({
 <link rel="stylesheet" href="../doc.css" />
 </head>
 <body>
-<canvas id="ascii-bg" aria-hidden="true"></canvas>
+<div id="ascii-bg" aria-hidden="true"><pre id="ascii-pre"></pre></div>
 <div class="veil"></div>
 
 ${renderNav('docs-index')}
@@ -493,6 +502,30 @@ const landing = readFileSync(join(TPL, 'landing.html'), 'utf8')
   .replace('<!-- DESKTOP_VERSION -->', `v${DESKTOP_VERSION}`);
 write(join(DIST, 'index.html'), landing);
 
+// Apps page — same head/nav infra as landing, but its own template + CSS
+const appsHead = renderHead({
+  kind: 'landing',
+  title: 'alpi apps — desktop + mobile',
+  description: 'Desktop and mobile clients for alpi. The agent stays in the daemon you run; the apps connect to it over Tailscale with QR-pair tokens, biometric unlock, and native approval modals for caution commands.',
+  path: '/apps.html',
+  iconPath: 'assets/alpi-favicon.svg',
+});
+copyFileSync(join(TPL, 'apps.css'), join(DIST, 'apps.css'));
+const apps = readFileSync(join(TPL, 'apps.html'), 'utf8')
+  .replace('<meta charset="utf-8" />\n<!-- SEO_HEAD (injected by build.mjs) -->', appsHead)
+  .replace('<!-- NAV (injected by build.mjs) -->', renderNav('apps'))
+  .replace('<!-- THEME_CONTROL (injected by build.mjs — same component used by docs) -->', themeControlHtml)
+  .replace(/\bv\d+\.\d+\.\d+\b/g, `v${VERSION}`)
+  .replace('<!-- DESKTOP_DOWNLOAD_URL -->', DESKTOP_DOWNLOAD_URL)
+  .replace('<!-- DESKTOP_VERSION -->', `v${DESKTOP_VERSION}`);
+write(join(DIST, 'apps.html'), apps);
+
+// Live preview — copies the desktop prototype (the React+Babel one) into /preview/.
+// The /apps "see it live" CTA opens this in an iframe inside an overlay.
+// Heavy (~600KB of React+Babel from unpkg + 13 jsx files); lazy-loaded only when the overlay opens.
+const previewSrc = join(TPL, 'preview');
+if (existsSync(previewSrc)) copyTree(previewSrc, join(DIST, 'preview'));
+
 // Docs index
 write(join(DIST, 'docs', 'index.html'), docsIndexPage());
 
@@ -528,6 +561,7 @@ for (let k = 0; k < DOCS.length; k++) {
 const today = new Date().toISOString().slice(0, 10);
 const sitemapUrls = [
   { loc: `${SITE_URL}/`, priority: '1.0', changefreq: 'weekly' },
+  { loc: `${SITE_URL}/apps.html`, priority: '0.95', changefreq: 'weekly' },
   { loc: `${SITE_URL}/docs/`, priority: '0.9', changefreq: 'weekly' },
   ...DOCS.map(d => ({
     loc: `${SITE_URL}/docs/${d.slug}.html`,

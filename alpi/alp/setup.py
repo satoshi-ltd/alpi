@@ -118,7 +118,7 @@ def _accept_or_discard_pending(home: Path, pubkey: str) -> None:
         close="Back",
     )
     if choice == "accept":
-        peer_id = ui.text("Pin under id (e.g. 'mirai')")
+        peer_id = ui.text("Pin under id (e.g. 'builder')")
         if not peer_id:
             return
         peer_id = peer_id.strip()
@@ -379,7 +379,7 @@ def _add(home: Path) -> None:
     )
     ui._console.print("")
 
-    raw_id = ui.text("Peer id (short handle, e.g. mirai, home-server):")
+    raw_id = ui.text("Peer id (short handle, e.g. builder, home-server):")
     if not raw_id:
         return ui.cancelled()
     peer_id = raw_id.strip().lower()

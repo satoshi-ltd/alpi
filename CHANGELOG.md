@@ -50,8 +50,8 @@ compatible with `v0.5.0`.
 
 Patch on top of v0.4.53. Four gaps left over from the v0.4.52/.53 env-isolation refactor:
 
-- `alpi/tools/skill.py`: prose branch of `_run_or_test` now calls `_state.add_skill_env(...)` with `requires_env`/`env` from the eligibility metadata. Parity with `_view`. Without this, prose-only skills (e.g. `mirai/bitbucket-pr-reviewer`) reach for `terminal` and the subprocess sees no declared secrets.
-- `alpi/tools/terminal.py`: `_build_subprocess_env` now always sets `ALPI_HOME=str(get_home())` (contextvar-bound, not `os.environ`) and `WORKSPACE=str(cfg.workspace_path)` when the active profile declares one. Skill prose like `${ALPI_HOME}/skills/.../triage.py` and `ls -d $WORKSPACE/*/` (`mirai/refresh-and-index`) now resolve.
+- `alpi/tools/skill.py`: prose branch of `_run_or_test` now calls `_state.add_skill_env(...)` with `requires_env`/`env` from the eligibility metadata. Parity with `_view`. Without this, prose-only skills can reach for `terminal` while the subprocess sees no declared secrets.
+- `alpi/tools/terminal.py`: `_build_subprocess_env` now always sets `ALPI_HOME=str(get_home())` (contextvar-bound, not `os.environ`) and `WORKSPACE=str(cfg.workspace_path)` when the active profile declares one. Skill prose like `${ALPI_HOME}/skills/.../triage.py` and `ls -d $WORKSPACE/*/` now resolves correctly.
 - `alpi/tools/send_message.py` + `alpi/gateway/delivery.py`: `SendMessage.run` builds `env = effective_profile_env(get_home())` and threads it into `delivery.default_chat_id(env=)` and `delivery.send_to(env=)`. `_send_email_sync` now accepts `env` and routes through `ImapClient.from_env_map(env)`. Closes the multi-profile leak where `TELEGRAM_*` / `WEBHOOK_POST_URL` / `IMAP_*` only living in `<home>/.env` were invisible.
 - Tests: 4 new in `tests/tools/test_skill_env_chain.py` + `tests/tools/test_send_message.py` covering the prose-run env path, contextvar-bound `ALPI_HOME`, `WORKSPACE` from `config.yaml`, and profile-env passthrough in `SendMessage`. Existing `send_message` stubs updated to the new `env=` kwarg.
 - Bumped Umbrel package metadata and image tags to `0.4.54`.
@@ -850,7 +850,7 @@ imperative rule biasing small models (~70% follow on nano).
 ### `@<peer>` mentions match anywhere in the text — ALP.3.1
 
 The `@<peer>` shortcut now fires anywhere in the text — `"hey
-@mirai can you check?"` pings mirai naturally. Boundary rules:
+@builder can you check?"` pings builder naturally. Boundary rules:
 `@` must follow whitespace or be at position 0
 (`email@gmail.com` skips), and the id must resolve to a pinned
 peer (`@property` falls to LLM). `#task`/`#done` stay strict

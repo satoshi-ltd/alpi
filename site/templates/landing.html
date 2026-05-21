@@ -201,6 +201,12 @@
   @media(max-width:860px){.grid.c3,.grid.c4{grid-template-columns:repeat(2,1fr)}}
   @media(max-width:560px){.grid.c2,.grid.c3,.grid.c4{grid-template-columns:1fr}}
   .cell{background:var(--bg);padding:32px;min-height:180px;min-width:0;display:flex;flex-direction:column;gap:12px}
+  .cell-roomy{padding:36px}
+  .cta-line{margin-top:18px}
+  .meta-line{font-size:13px;margin-top:12px;color:var(--muted)}
+  .meta-line a.link-inline,.link-inline{color:var(--fg);border-bottom:1px solid var(--dim)}
+  .link-inline:hover{border-color:var(--fg)}
+  .apps-footnote{margin-top:32px}
   .cell .n{font-family:"JetBrains Mono",monospace;font-size:11px;color:var(--muted)}
   .cell p{color:var(--muted);font-size:14.5px;line-height:1.55}
   .cell .tag{
@@ -346,11 +352,11 @@
       your private <span class="slash">/</span><br/>agent network.
     </h1>
     <p class="lead">
-      alpi starts as the agent in your terminal. Then it grows with you: one profile for work, one for cron, one on your home server, one for research, one in a workgroup with other alpis. Each profile has its own memory, keys, model, skills, gateways, approvals, and trust boundary. ALP links them across machines without a registry, central account, or mandatory cloud. <em>Bring any model. Keep every key. Run one alpi, or a network that stays yours.</em>
+      alpi turns the computers you already own into a private network of useful agents. One profile can track your health, meals, calendar, and backups; another can review PRs, watch schedules, and coordinate with a team workgroup. <em>The daemon keeps the memory, keys, skills, approvals, and logs. The terminal, desktop, and mobile apps are just surfaces on top.</em>
     </p>
     <div class="cta-row">
       <a class="btn btn-primary" href="#install">$ uv tool install alpi-agent <span class="arr">→</span></a>
-      <a class="btn btn-ghost" href="#principles">read the principles</a>
+      <a class="btn btn-ghost" href="apps.html">browse the apps</a>
     </div>
 
     <div data-alpi-demo data-scene-set="hero" aria-hidden="true"></div>
@@ -363,14 +369,14 @@
     <div class="eyebrow">01 / what alpi is</div>
     <h2>The unit is not a chat. It is a profile.</h2>
     <p class="sub">
-      A profile can be personal, work, cron, research, or a home-server peer. It owns identity, memory, model, tools, gateways, schedules, logs, approvals, and ALP capabilities. That is how alpi does daily-agent work without losing the shape needed for private multi-machine and shared-workgroup setups.
+      A profile is an operating boundary — health, kitchen, work, cron, research, or a home-server peer. It owns identity, memory, model, tools, schedules, logs, approvals, and ALP capabilities. That is how alpi does daily-agent work without collapsing your personal life, professional work, and shared automation into one blurry assistant.
     </p>
 
     <div class="grid c3">
       <div class="cell">
         <span class="n">// identity</span>
-        <h3>One profile, one alpi.</h3>
-        <p>Personal, work, cron, home-server, research: each profile has its own model, memory, skills, keys, gateway, schedules, logs, approvals, and ALP peer list.</p>
+        <h3>A profile is the boundary.</h3>
+        <p>Health, kitchen, work, cron, home-server, research: each profile owns its model, memory, skills, keys, schedules, logs, approvals, and ALP peer list. Crossing the boundary requires capabilities you grant explicitly.</p>
         <span class="tag">per-profile</span>
       </div>
       <div class="cell">
@@ -407,10 +413,60 @@
   </div>
 </section>
 
+<!-- USE CASES -->
+<section id="use-cases">
+  <div class="shell">
+    <div class="eyebrow">02 / what you can build</div>
+    <h2>Personal agents and professional agents, in the same system.</h2>
+    <p class="sub">
+      alpi is not a single bot personality. It is a place to create small, durable alpis around real responsibilities. Keep them separate when context should stay separate; connect them when cooperation is useful.
+    </p>
+
+    <div class="grid c3" style="margin-top:64px">
+      <div class="cell">
+        <span class="n">personal · health</span>
+        <h3>@doc</h3>
+        <p>Sync wearable exports, read training notes, remember constraints, and produce a weekly review. Health data stays in one profile instead of leaking into work conversations.</p>
+        <span class="tag">memory + skills + schedule</span>
+      </div>
+      <div class="cell">
+        <span class="n">personal · kitchen</span>
+        <h3>@pantry</h3>
+        <p>Turn fridge inventory, food preferences, budget, and calendar into meal plans and grocery lists. It can ask @doc for constraints without inheriting the whole health memory.</p>
+        <span class="tag">profile-to-profile</span>
+      </div>
+      <div class="cell">
+        <span class="n">personal · home ops</span>
+        <h3>@home</h3>
+        <p>Watch backups, deliveries, receipts, warranties, and maintenance reminders. This is household operations, not a hardware-specific smart-home integration.</p>
+        <span class="tag">cron + files</span>
+      </div>
+      <div class="cell">
+        <span class="n">work · engineering</span>
+        <h3>@builder</h3>
+        <p>Review PRs, run focused tests, write small patches, summarize repo drift, and keep an approval trail around risky terminal actions.</p>
+        <span class="tag">tools + approvals</span>
+      </div>
+      <div class="cell">
+        <span class="n">work · operations</span>
+        <h3>@ops</h3>
+        <p>Run scheduled checks, inspect logs, open incidents, and report only the useful deltas. Put it on an always-on machine and reach it from desktop or mobile.</p>
+        <span class="tag">daemon + Tailscale</span>
+      </div>
+      <div class="cell">
+        <span class="n">company · workgroup</span>
+        <h3>#launch</h3>
+        <p>A hub-held transcript where several profiles coordinate: product, engineering, support, legal. Each member keeps its own memory and budget, but the workgroup has shared state.</p>
+        <span class="tag">ALP.3</span>
+      </div>
+    </div>
+  </div>
+</section>
+
 <!-- QUICKSTART -->
 <section id="quickstart">
   <div class="shell">
-    <div class="eyebrow">02 / quickstart</div>
+    <div class="eyebrow">03 / quickstart</div>
     <h2>Ten minutes, end to end.</h2>
     <p class="sub">
       Install. Pick a model. Pin a workspace. Send a message. Connect a gateway if you want 24/7 messaging. Add a profile if you want isolation. Link machines or workgroups over ALP when you want a private network. All of it lives behind <span class="mono" style="color:var(--fg)">alpi setup</span>.
@@ -444,8 +500,8 @@
       </div>
       <div class="cell">
         <span class="n">step · 06</span>
-        <h3>Connect a gateway.</h3>
-        <p><span class="mono" style="color:var(--fg)">alpi setup → Gateways</span> then <span class="mono" style="color:var(--fg)">Service → Install</span>. The unified service hosts gateway, scheduler, and ALP listener on one PID — answers Telegram / IMAP / Gmail 24/7 with per-chat session threading.</p>
+        <h3>Optional: connect a gateway.</h3>
+        <p>Skip unless you want 24/7 reach through Telegram / IMAP / Gmail. <span class="mono" style="color:var(--fg)">alpi setup → Gateways</span> then <span class="mono" style="color:var(--fg)">Service → Install</span>. The same service also hosts the scheduler and ALP listener. Compatibility bridge, not the primary surface.</p>
       </div>
       <div class="cell">
         <span class="n">step · 07</span>
@@ -469,16 +525,16 @@
 <!-- IN ACTION -->
 <section id="in-action">
   <div class="shell">
-    <div class="eyebrow">03 / in action</div>
-    <h2>A small agent with a long reach.</h2>
+    <div class="eyebrow">04 / in action</div>
+    <h2>A small daemon with a long reach.</h2>
     <p class="sub">
-      alpi is not a framework you admire from a README. It is the thing you ask from a terminal, a phone, a mailbox, a cron job, or another machine — with the same memory and the same boundaries each time.
+      alpi is not a framework that only makes sense in a README. It is the thing you ask from a terminal, a desktop app, a phone, a schedule, or another machine — with the same memory and the same boundaries each time.
     </p>
 
     <div class="grid c2" style="margin-top:64px">
       <div class="cell">
-        <span class="n">// memory across sessions</span>
-        <h3>It remembers what matters.</h3>
+        <span class="n">// personal memory</span>
+        <h3>It remembers the things that actually matter.</h3>
         <pre class="mini-term" style="margin-top:14px;background:#0f0f0e;border:1px solid var(--line);border-radius:4px;padding:14px 16px;font-size:12.5px;line-height:1.55;color:var(--muted);overflow:auto"><span style="color:#d8d8d4">you</span> › my partner's birthday is march 14th
 <span style="color:#b8b8b4">alpi</span> › noted. added to MEMORY.md.
 …
@@ -488,37 +544,50 @@
       </div>
 
       <div class="cell">
-        <span class="n">// live skills</span>
-        <h3>Drop a folder. It's a new capability.</h3>
+        <span class="n">// local skills</span>
+        <h3>Drop a folder. It becomes a capability.</h3>
         <pre class="mini-term" style="margin-top:14px;background:#0f0f0e;border:1px solid var(--line);border-radius:4px;padding:14px 16px;font-size:12.5px;line-height:1.55;color:var(--muted);overflow:auto"><span style="color:#7a7a76">~/.alpi/skills/</span>
-  finance/
+  pantry/
     SKILL.md          <span style="color:#7a7a76"># when to invoke</span>
-    scripts/fetch.py
-    references/ledger.md
+    scripts/plan.py
+    references/preferences.md
 
-<span style="color:#d8d8d4">you</span> › how much did i spend on groceries last month?
-<span style="color:#b8b8b4">alpi</span> › → skill(finance) → fetch.py → €412.80 across 23 tx</pre>
+<span style="color:#d8d8d4">you</span> › what should we cook before the spinach goes bad?
+<span style="color:#b8b8b4">alpi</span> › → skill(pantry) → plan.py → rice bowl tonight, soup tomorrow</pre>
       </div>
 
       <div class="cell">
-        <span class="n">// alp · peer-to-peer</span>
-        <h3>Ask your other machine to do it.</h3>
+        <span class="n">// work profile</span>
+        <h3>Let a work profile touch work context.</h3>
         <pre class="mini-term" style="margin-top:14px;background:#0f0f0e;border:1px solid var(--line);border-radius:4px;padding:14px 16px;font-size:12.5px;line-height:1.55;color:var(--muted);overflow:auto"><span style="color:#7a7a76"># on the laptop</span>
-<span style="color:#d8d8d4">you</span> › ask nas to pull the latest logs and tell me what's odd
-<span style="color:#b8b8b4">alpi</span> › → link.ask(peer=nas, brief=…)
-         ← 3 auth failures from 185.220.x at 03:14 UTC.
-         consistent with a credential-stuffing probe.</pre>
+<span style="color:#d8d8d4">you</span> › ask builder to review the checkout PR
+<span style="color:#b8b8b4">alpi</span> › → link.ask(peer=builder, brief=…)
+         ← real issue: retry state survives timeout.
+         patch + regression test are ready.</pre>
       </div>
 
       <div class="cell">
-        <span class="n">// reachable anywhere</span>
-        <h3>Reach it from the messenger you already open.</h3>
-        <pre class="mini-term" style="margin-top:14px;background:#0f0f0e;border:1px solid var(--line);border-radius:4px;padding:14px 16px;font-size:12.5px;line-height:1.55;color:var(--muted);overflow:auto"><span style="color:#7a7a76"># from your phone, 400km away</span>
+        <span class="n">// approvals you can see</span>
+        <h3>It asks before running anything risky.</h3>
+        <pre class="mini-term" style="margin-top:14px;background:#0f0f0e;border:1px solid var(--line);border-radius:4px;padding:14px 16px;font-size:12.5px;line-height:1.55;color:var(--muted);overflow:auto"><span style="color:#7a7a76"># caution patterns (recursive rm, sudo, force-push, …)</span>
+<span style="color:#b8b8b4">alpi</span> › would like to run: <span style="color:#d8d8d4">rm -rf build</span>
+         <span style="color:#c8a24e">▲ recursive rm</span>
+         [ allow once / session / always / deny ]
+<span style="color:#d8d8d4">you</span> › once
+<span style="color:#b8b8b4">alpi</span> › ✓ done. logged to approval.log.
+
+<span style="color:#7a7a76"># surfaces in terminal, desktop, AND mobile — same prompt</span></pre>
+      </div>
+
+      <div class="cell">
+        <span class="n">// mobile + remote</span>
+        <h3>Reach it from any device on your Tailscale.</h3>
+        <pre class="mini-term" style="margin-top:14px;background:#0f0f0e;border:1px solid var(--line);border-radius:4px;padding:14px 16px;font-size:12.5px;line-height:1.55;color:var(--muted);overflow:auto"><span style="color:#7a7a76"># open the mobile app on the bus, 400km away</span>
 <span style="color:#d8d8d4">you</span> › did the backup run tonight?
 <span style="color:#b8b8b4">alpi</span> › ✓ 02:11 UTC, 184GB, ok.
          previous 7 days also clean.
 
-<span style="color:#7a7a76"># fail-closed allowlist; unknown senders drop silently</span></pre>
+<span style="color:#7a7a76"># same daemon, same memory, same approvals</span></pre>
       </div>
     </div>
   </div>
@@ -527,7 +596,7 @@
 <!-- DEPLOYMENTS -->
 <section id="deployments">
   <div class="shell">
-    <div class="eyebrow">04 / deployments</div>
+    <div class="eyebrow">05 / deployments</div>
     <h2>Six topologies. Pick the closest.</h2>
     <p class="sub">
       alpi is designed to scale from one laptop to a private network of alpis, without ever needing a central server. Each shape is a reference you can adapt — profiles provide identity, ALP provides the wire.
@@ -537,7 +606,7 @@
       <div class="cell" style="padding:36px">
         <span class="n">topology · 01</span>
         <h3>Laptop only.</h3>
-        <p>One profile, one machine, TUI for chat. Optional gateway daemon for 24/7 Telegram / IMAP / Gmail. Zero ALP. The baseline — 90% of individual users stop here.</p>
+        <p>One profile, one machine, terminal or desktop app on top of a local daemon. Zero ALP. Add a gateway later if you want 24/7 messenger reach. The baseline — 90% of individual users stop here.</p>
       </div>
       <div class="cell" style="padding:36px">
         <span class="n">topology · 02</span>
@@ -576,10 +645,10 @@
 <!-- ALP PROTOCOL -->
 <section id="alp">
   <div class="shell">
-    <div class="eyebrow">05 / alp</div>
-    <h2>A closed protocol for private agent networks.</h2>
+    <div class="eyebrow">06 / alp</div>
+    <h2>A narrow protocol for private agent networks.</h2>
     <p class="sub">
-      ALP (Alpi Link Protocol) connects alpi instances on the same machine, across different machines, and inside shared workgroups. ALP.1 uses Unix sockets, ALP.2 uses Noise_XK over TCP, and ALP.3 adds workgroup verbs. Pinned pubkeys, fail-closed capabilities, no registry, no discovery service, no generic federation layer.
+      ALP (Alpi Link Protocol) connects alpi instances on the same machine, across different machines, and inside shared workgroups. ALP.1 uses Unix sockets, ALP.2 uses Noise_XK over TCP, and ALP.3 adds workgroup verbs. Pinned pubkeys, fail-closed capabilities, no registry, no discovery service, no generic federation layer. Apache-2.0; trust model is closed-scope, the protocol itself is auditable.
     </p>
 
     <div class="grid c3" style="margin-top:64px">
@@ -624,7 +693,7 @@
 <!-- PRINCIPLES (Satoshi Ltd.) -->
 <section id="principles">
   <div class="shell">
-    <div class="eyebrow">06 / principles</div>
+    <div class="eyebrow">07 / principles</div>
     <h2>Inherited from Satoshi Ltd.</h2>
     <p class="sub">
       alpi is published by <a href="https://www.satoshi-ltd.com/" style="color:var(--fg);border-bottom:1px solid var(--dim)">Satoshi Ltd.</a> and inherits its six operating principles. They aren't aspirational copy — every non-obvious design choice in the repo traces back to one of these.
@@ -634,7 +703,7 @@
       <div class="cell">
         <span class="n">principle · 01</span>
         <h3>Privacy by Design.</h3>
-        <p>No discovery. No registry. No telemetry. LiteLLM's default telemetry is audited off at release — regression-tested. ALP is a closed protocol by construction: every exposed knob is a potential attack vector.</p>
+        <p>No discovery. No registry. No telemetry. LiteLLM's default telemetry is audited off at release — regression-tested. ALP has a closed-scope trust model: every exposed knob is a potential attack vector.</p>
       </div>
       <div class="cell">
         <span class="n">principle · 02</span>
@@ -672,7 +741,7 @@
 <!-- LICENSE (summary → docs) -->
 <section id="license">
   <div class="shell">
-    <div class="eyebrow">07 / license</div>
+    <div class="eyebrow">08 / license</div>
     <h2>Free to try. Clear path to production.</h2>
     <p class="sub">
       Personal use, research, evaluation, and non-production deployments are free. Commercial production deployments are covered by a Satoshi Ltd. licence. The agent core is source-available under BUSL-1.1 and converts to Apache-2.0 on 2030-04-23; ALP is Apache-2.0.
@@ -696,7 +765,7 @@
 <!-- INSTALL -->
 <section id="install">
   <div class="shell">
-    <div class="eyebrow">08 / install</div>
+    <div class="eyebrow">09 / install</div>
     <h2>Four commands. No account.</h2>
 
     <pre class="ascii-diagram" style="margin-top:56px;font-size:14px;line-height:1.8;max-width:780px">
@@ -723,26 +792,34 @@ $ alpi doctor
   </div>
 </section>
 
-<!-- DESKTOP -->
-<section id="desktop">
+<!-- APPS -->
+<section id="apps">
   <div class="shell">
-    <div class="eyebrow">09 / desktop</div>
-    <h2>A graphical client. Same daemon underneath.</h2>
+    <div class="eyebrow">10 / apps</div>
+    <h2>Two graphical clients. Same daemon underneath.</h2>
     <p class="sub">
-      Once <span class="mono" style="color:var(--fg)">alpi</span> is installed and the service is running, the desktop app is a second client over the same local daemon — same profiles, same workgroups, same approvals, same logs. The terminal stays canonical; the window is convenient on the days you don't want one.
+      The terminal remains the lowest-level surface, but you don't have to live in it. The desktop app is a second client over the same local daemon. The mobile app is a third client — it connects over Tailscale to the daemon you already run on your laptop or home server. Same profiles, same workgroups, same approvals, same logs.
     </p>
 
-    <div style="margin-top:48px;display:flex;align-items:center;gap:24px;flex-wrap:wrap">
-      <a class="btn btn-primary" href="<!-- DESKTOP_DOWNLOAD_URL -->">
-        Download alpi desktop <span class="arr">→</span>
-      </a>
-      <span class="mono muted" style="font-size:14px">
-        <!-- DESKTOP_VERSION --> · macOS download
-      </span>
+    <div class="grid c2" style="margin-top:64px">
+      <div class="cell cell-roomy">
+        <span class="n">// desktop · macOS</span>
+        <h3>Native window. Multi-daemon.</h3>
+        <p>Pair with one or more daemons (local + every remote you own), switch with one click. Tool calls grouped, realistic loading skeletons, native approval modal for caution commands, session resume, profile + model picker. Available now.</p>
+        <p class="cta-line"><a class="btn btn-primary" href="<!-- DESKTOP_DOWNLOAD_URL -->">Download desktop <span class="arr">→</span></a></p>
+        <p class="mono meta-line"><!-- DESKTOP_VERSION --> · macOS .dmg (Linux build in releases) · <a class="link-inline" href="apps.html">see it live</a></p>
+      </div>
+      <div class="cell cell-roomy">
+        <span class="n">// mobile · iOS + android</span>
+        <h3>Your alpi in your pocket.</h3>
+        <p>Pair your phone with the daemon by scanning a QR. Chat, workgroups, inbox, tasks, approvals — all the host-plane surfaces from the desktop, sized for one hand. Biometric unlock, no telemetry, pairing tokens stay on the device.</p>
+        <p class="cta-line"><a class="btn btn-ghost" href="apps.html">See mobile <span class="arr">→</span></a></p>
+        <p class="mono meta-line">Mobile builds in internal testing</p>
+      </div>
     </div>
 
-    <p class="sub" style="margin-top:32px">
-      Source → <a href="https://github.com/satoshi-ltd/alpi/tree/main/desktop" style="color:var(--fg)">desktop/</a> · Releases → <a href="https://github.com/satoshi-ltd/alpi/blob/main/desktop/CHANGELOG.md" style="color:var(--fg)">desktop/CHANGELOG.md</a>
+    <p class="sub apps-footnote">
+      Both apps are clients — the agent never leaves the daemon. Read the full feature breakdown on <a class="link-inline" href="apps.html">alpi.satoshi-ltd.com/apps</a>.
     </p>
   </div>
 </section>
@@ -750,7 +827,7 @@ $ alpi doctor
 <!-- DOCS -->
 <section id="docs">
   <div class="shell">
-    <div class="eyebrow">10 / documentation</div>
+    <div class="eyebrow">11 / documentation</div>
     <h2>Live. In the repo. Auditable.</h2>
     <p class="sub">Each doc is a reference of something that already ships — historical decisions live in commits, planned work in the ROADMAP.</p>
 
@@ -766,6 +843,7 @@ $ alpi doctor
         <h5>Product</h5>
         <ul>
           <li><a href="#what">What alpi is</a></li>
+          <li><a href="#use-cases">Use cases</a></li>
           <li><a href="#quickstart">Quickstart</a></li>
           <li><a href="#deployments">Deployments</a></li>
           <li><a href="#alp">ALP protocol</a></li>

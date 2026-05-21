@@ -657,7 +657,7 @@ class Engine:
 
         # Environment context — the model only thinks in terms of the
         # workspace. cwd is intentionally hidden: it bled confusion into
-        # path interpretation (``/mirai`` → absolute root) and the user
+        # path interpretation (``/profile`` → absolute root) and the user
         # never references it by name anyway.
         workspace = self.cfg.workspace_path
         env_parts = ["# ENVIRONMENT"]

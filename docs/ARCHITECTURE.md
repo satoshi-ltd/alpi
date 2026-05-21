@@ -376,7 +376,7 @@ that hosts every profile under `~/.alpi/` (default plus each
 `profiles/<name>/`) on the same asyncio loop. Per-(profile,
 service) tasks are independently supervised — a crash in one
 profile's gateway leaves siblings untouched. Tasks are named
-`<profile>/<service>` (e.g. `mirai/gateway`, `ghost/alp`) so logs
+`<profile>/<service>` (e.g. `doc/gateway`, `builder/alp`) so logs
 + `asyncio.all_tasks()` stay readable.
 
 Per-profile services (`service.{gateway, schedule, alp,
@@ -451,7 +451,7 @@ tools that resolve their home via `home.get_home()` would all see
 the same env vars and write to default's home. The engine wraps
 each `run_turn` in a `home.set_active_home(self.home)` contextvar
 binding (per-thread); `get_home()` consults this binding before
-the env. Without it, mirai's memory tool would write to default's
+the env. Without it, another profile's memory tool would write to default's
 `USER.md`. See `tests/core/test_home.py` for the isolation tests.
 
 `daemon_status(root)` is the snapshot used by `alpi daemon status`
