@@ -19,6 +19,7 @@ import {
   AddProviderField,
   McpField,
   ModelField,
+  ReasoningEffortField,
   VoiceField,
 } from "./fields/agent.jsx";
 import {
@@ -45,6 +46,7 @@ function initialDraft(profile) {
     workspace: profile.workspace ?? "",
     model: profile.model ?? "",
     accent: (profile.accent ?? "").toLowerCase(),
+    reasoningEffort: profile.model_reasoning_effort ?? "",
   };
 }
 
@@ -186,6 +188,14 @@ export default function ProfileDetail({
               <AddProviderField profile={profile} onSaved={onSaved} />
             </span>
           </Row>
+          {profile.model_reasoning_supported && (
+            <Row label="reasoning">
+              <ReasoningEffortField
+                value={draft.reasoningEffort}
+                onChange={(v) => update("reasoningEffort", v)}
+              />
+            </Row>
+          )}
           <BudgetField profile={profile} onSaved={onSaved} />
           <Row label="workspace">
             <WorkspaceField

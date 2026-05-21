@@ -11,6 +11,19 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.3.8 — 2026-05-21 — reasoning effort in profile settings
+
+Requires alpi ``v0.5.4`` or newer. On older daemons the row stays
+hidden.
+
+- Profile settings expose a reasoning effort dropdown
+  (``Default / Low / Medium / High``) right under the model picker,
+  for OpenAI o-series, Claude 3.7+ / 4+, Gemini 2.5+, DeepSeek R1,
+  and any OpenRouter route.
+- The row only appears when the picked model supports reasoning;
+  swapping to an unsupported model clears the value automatically.
+- Mid-chat model overrides from the composer don't carry effort.
+
 ## v0.3.7 — 2026-05-21 — approval modal for caution commands
 
 Requires alpi ``v0.5.1`` or newer. On older daemons the modal stays

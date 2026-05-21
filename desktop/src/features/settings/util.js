@@ -23,6 +23,7 @@ export const FIELD_KEYS = {
   workspace: "workspace",
   model: "model",
   accent: "tui.accent",
+  reasoningEffort: "model_reasoning.effort",
 };
 
 export const SUBSYSTEMS = ["gateway", "schedule", "alp", "workgroups"];
