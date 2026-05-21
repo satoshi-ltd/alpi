@@ -1,5 +1,34 @@
 # Changelog
 
+## v0.5.0 — 2026-05-21 — v0.5 cycle close: mobile client shipped
+
+Milestone release. No new daemon contract vs. `v0.4.54`; this
+bumps the CLI / Python package to mark the close of the v0.5 cycle.
+
+What shipped during the cycle:
+
+- Capability hardening: skill eligibility fields, granular terminal
+  approval allowlists, memory promotion queue, compaction event log
+  guardrails, and profile-scoped env isolation.
+- Memory v2 quality pass: operational-state warnings, cross-file
+  dedup, usage hints, and safer promotion flows.
+- Host plane for owned clients: WebSocket pairing, per-device tokens,
+  lite/detail split, seq-only events, Tailscale-friendly payloads, and
+  remote desktop/mobile connection hardening.
+- Mobile client: chat, inbox, workgroups, profile settings, pairing,
+  sessions, activity, biometric unlock, skeleton loading states, and
+  endpoint-switch safety in `mobile-v0.1.0` / `mobile-v0.1.1`.
+
+Native mobile push notifications are deferred to v0.6. The in-app
+mobile surface is live; out-of-app APNs / FCM delivery now belongs to
+the reliability cycle.
+
+Desktop and mobile keep independent release tracks. `desktop-v0.3.6`
+and `mobile-v0.1.1` require `alpi v0.4.52` or newer and remain
+compatible with `v0.5.0`.
+
+- Bumped Umbrel package metadata and image tags to `0.5.0`.
+
 ## v0.4.54 — 2026-05-20 — daemon: skill prose-mode env passthrough, terminal `ALPI_HOME`/`WORKSPACE`, `send_message` profile env
 
 Patch on top of v0.4.53. Four gaps left over from the v0.4.52/.53 env-isolation refactor:

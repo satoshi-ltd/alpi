@@ -137,3 +137,15 @@ pytest --llm             # adds tests that make real LLM calls
 CI (`.github/workflows/test.yml`) runs `fast` and `integration` jobs on
 every push and PR — backstop only, not a substitute for running the suite
 locally before declaring done.
+
+A repo-versioned `pre-commit` hook (`.githooks/pre-commit`) runs only
+the suites touched by the staged diff — alpi (pytest), desktop
+(`pnpm test` + `cargo test`), mobile (`npm test`). Enable once per
+clone:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+Override with `git commit --no-verify` only when you know what you're
+doing (half-merge in progress, etc.).

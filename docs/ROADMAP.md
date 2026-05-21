@@ -12,96 +12,23 @@ Legend: 🔵 backlog · 🟡 next up · ⏸ blocked · 🔴 gate.
 
 ---
 
-## v0.5 cycle (active)
+## v0.6 cycle (active)
 
-**Theme: closing the device-access loop on mobile + tightening the
-capability core.** Remote desktop, local recall over the workspace
-(BA), the memory v2 quality pass, and the v0.5 capability hardening
-pass (skills eligibility, granular approval allowlist, memory
-promotion queue, compaction event log + regression guard) all
-shipped during the v0.4 line. What remains for v0.5 is the second
-real client surface: the mobile companion. v0.6 builds on that base
-with a self-improving skill library and capability maintenance.
+**Theme: reliability before new surface area.** v0.5 delivered the
+second owned client surface through mobile. v0.6 hardens the shared
+capability core underneath TUI, desktop, mobile, schedules, workgroups,
+and compatibility gateways.
 
-This is the cycle where gateways stop being the main mobile story.
-Telegram, IMAP, Gmail, and Matrix stay useful as compatibility and
-automation bridges, but the primary product surface becomes Alpi-owned
-clients. New rich UX should land in desktop/mobile, not inside
-third-party chat apps.
+Hermes Agent remains a reference for hardening mechanisms, not a
+feature catalog to port wholesale. This cycle focuses on trust
+boundaries, mutation evidence, approval flow, diagnostics, and local
+skill maintenance. Marketplace, provider breadth, and new chat-platform
+adapters stay out of scope.
 
-### Device + live access
-
-| ID | Item | Status |
-|---|---|---|
-| AX-mobile | Mobile companion (iOS / Android) — full chat, status, peers, and workgroups surface from the user's own profile. Daemon side shipped in v0.4.1 (host plane on WebSocket + per-device pairing tokens, see CHANGELOG). Mobile preview exists; desktop remains the reference surface. | 🟡 |
-
-### AX-mobile. Mobile companion (iOS / Android)
-
-After **desktop-v0.1.0** validated the visual UI, mobile is the
-next surface. Same product contract as desktop remote mode: a
-host-plane client paired to a user's own daemon over WebSocket with a
-per-device token. More friction lives in App Store signing, iOS
-background restrictions, and distribution.
-
-**Why a companion, not a full port.** A mobile alpi running its
-own LLM + tools doubles the security surface and the
-maintenance cost without adding capability. The companion controls an
-owned daemon through `host.*`; ALP remains the peer-to-peer plane for
-alpi-to-alpi links and workgroups.
-
-**Surfaces this could replace or extend:**
-- Telegram / Matrix gateways — keep working as fallback and automation
-  bridges, but no longer the product's primary mobile UX.
-- `/peers`, `/budget`, `/memory` panels exposed read-only on
-  the go.
-- Workgroups use the desktop view as the reference surface:
-  transcript, roster, active task, post composer, pause/resume state,
-  and task markers.
-
-**Workgroup scope.** Desktop workgroups are already operational, so
-mobile does not invent a separate viewer. It ports the same product
-surface into the companion:
-
-- transcript with speaker identity, task markers, and working/done
-  state;
-- roster + peer status;
-- create/join/manage where the mobile UX can do it safely;
-- post composer for active members;
-- notifications for mentions, new `#task`, and task completion.
-
-Mobile ships full parity with desktop. Read-only fallbacks are only
-acceptable as last-mile implementation cuts (e.g., a specific iOS
-background limitation that blocks one verb), never as the v0.5 target.
-
-**Open questions before scope locks:**
-- Tauri vs. native (SwiftUI / Kotlin) — Tauri wins on desktop
-  but mobile is more contested; native may be better for iOS
-  background + push notifications.
-- iOS background restrictions — mobile should initiate host-plane
-  connections to the user's daemon rather than accepting inbound
-  connections.
-- Distribution — TestFlight + Play Store internal track at
-  first.
-
-## v0.6 cycle (planned)
-
-**Theme: capability reliability + operator maintenance.** Mobile closes
-the second real client surface in v0.5. v0.6 does not add another large
-surface. It hardens the shared capability core that TUI, desktop, mobile,
-gateways, schedules, and workgroups all rely on.
-
-Hermes Agent remains useful as a reference for hardening patterns, but
-this cycle ports mechanisms rather than catalog breadth: tool-output
-sanitization, mutation verification, approval streaming, diagnostics,
-and local import. It does not port marketplace, provider zoo, or chat
-platform expansion.
-
-**Gateway posture.** Gateways are maintained, not evolved. They remain
-for compatibility, schedules, inbound email/chat, and automation
-delivery. Work is limited to reliability, security, profile isolation,
-delivery correctness, and diagnostics. New chat-platform adapters and
-gateway-specific rich interaction patterns are out of scope; those UX
-investments belong in desktop and mobile.
+**Gateway posture.** Gateways stay supported for compatibility,
+automation delivery, and inbound email/chat. They are maintained, not
+expanded: reliability, profile isolation, delivery correctness, and
+diagnostics are in; new rich gateway UX belongs in desktop/mobile.
 
 ### Reliability core
 
@@ -111,6 +38,7 @@ investments belong in desktop and mobile.
 | CF.2 | File mutation verifier — record each `write_file` / `edit_file` mutation with path, before/after hash, size, line count, and a small diff summary. The engine surfaces the mutation footer to the model and UI after tool batches. | 🟡 |
 | CF.3 | Host approval events — terminal approval prompts become host-stream events so desktop/mobile can pause, approve/deny, and resume turns without relying on TUI-only callbacks. | 🟡 |
 | GW.1 | Gateway containment — Telegram, IMAP, Gmail, Matrix and webhook listeners fail independently with backoff and status, so one broken compatibility bridge does not degrade sibling platforms or profiles. | 🟡 |
+| AX-push | Native push notifications for mobile mentions, new `#task`, and task completion. v0.5 shipped the in-app mobile surface; v0.6 adds out-of-app APNs / FCM delivery through daemon device-token registration and event-stream wakeups. | 🟡 |
 
 ### Operator diagnostics
 

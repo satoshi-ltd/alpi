@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+# Root pre-commit hook: runs ONLY the test suites whose code is touched by the
+# staged changes. Keep it fast — full matrix lives in CI, this hook is the
+# "didn't ship something obviously broken" guard.
+#
+# Enable once per clone: git config core.hooksPath .githooks
+#
+# Exit non-zero blocks the commit; the user can override with `git commit
+# --no-verify` if they know what they're doing (e.g. half-merge in progress).
+
+set -euo pipefail
+
+# repo root regardless of where git invokes us from
+ROOT="$(git rev-parse --show-toplevel)"
+cd "$ROOT"
+
+# Only consider files that survive staging — Added, Copied, Modified, Renamed, Type-changed.
+STAGED="$(git diff --cached --name-only --diff-filter=ACMRT)"
+if [ -z "$STAGED" ]; then
+  echo "[pre-commit] no staged files, skipping"
+  exit 0
+fi
+
+run_alpi=false
+run_desktop=false
+run_mobile=false
+
+while IFS= read -r f; do
+  case "$f" in
+    alpi/*|tests/*|pyproject.toml|uv.lock|deploy/umbrel/*)
+      run_alpi=true
+      ;;
+    desktop/*)
+      run_desktop=true
+      ;;
+    mobile/*)
+      run_mobile=true
+      ;;
+  esac
+done <<< "$STAGED"
+
+ec=0
+
+if $run_alpi; then
+  echo "[pre-commit] alpi changes detected → uv run pytest -q"
+  if ! uv run pytest -q --ignore=tests/llm --ignore=tests/integration; then
+    ec=1
+  fi
+fi
+
+if $run_desktop; then
+  echo "[pre-commit] desktop changes detected → npm test + cargo test"
+  if ! ( cd desktop && pnpm run test ); then ec=1; fi
+  if ! ( cd desktop/src-tauri && cargo test --quiet ); then ec=1; fi
+fi
+
+if $run_mobile; then
+  echo "[pre-commit] mobile changes detected → npm test"
+  if ! ( cd mobile && npm test ); then ec=1; fi
+fi
+
+if [ "$ec" -ne 0 ]; then
+  echo "[pre-commit] tests failed — fix or re-run with: git commit --no-verify (only when you really mean it)"
+fi
+
+exit "$ec"
