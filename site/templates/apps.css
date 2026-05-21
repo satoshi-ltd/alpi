@@ -1,11 +1,6 @@
-/* /apps page — reuses doc.css tokens + nav. This file adds the page-specific
-   layout (hero, app blocks, faux window + phone art, and the preview overlay
-   with the simulated desktop chrome). */
-
-@import url("doc.css");
-
-/* The page sits on the same ascii backdrop as the landing; doc.css already
-   styles #ascii-bg + .veil + nav.top. Below: just the page surfaces. */
+/* /apps page — apps.html links doc.css directly first, then this file. No
+   @import here on purpose: nested @import delays applying doc.css rules and
+   bites pages that depend on its tokens / #ascii-bg styles during first paint. */
 
 :root{
   /* font-size scale — only what /apps actually consumes; doc.css already provides --bg/--fg/--muted/--line/--dim */

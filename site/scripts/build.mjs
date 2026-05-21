@@ -362,7 +362,7 @@ ${renderHead({
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../doc.css" />
+<link rel="stylesheet" href="../doc.css?v=${VERSION}" />
 <link rel="stylesheet" href="../demo.css" />
 </head>
 <body>
@@ -418,7 +418,7 @@ ${renderHead({
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../doc.css" />
+<link rel="stylesheet" href="../doc.css?v=${VERSION}" />
 </head>
 <body>
 <div id="ascii-bg" aria-hidden="true"><pre id="ascii-pre"></pre></div>
@@ -520,7 +520,8 @@ const apps = readFileSync(join(TPL, 'apps.html'), 'utf8')
   .replace(/\bv\d+\.\d+\.\d+\b/g, `v${VERSION}`)
   .replace('<!-- DESKTOP_DOWNLOAD_URL -->', DESKTOP_DOWNLOAD_URL)
   .replace('<!-- DESKTOP_VERSION -->', `v${DESKTOP_VERSION}`)
-  // cache-bust shared assets so a Cloudflare edge copy of an older doc.js can't crash against new HTML markup.
+  // cache-bust shared assets so a Cloudflare edge copy of an older bundle can't crash against new HTML markup.
+  .replace('href="doc.css"', `href="doc.css?v=${VERSION}"`)
   .replace('href="apps.css"', `href="apps.css?v=${VERSION}"`)
   .replace('src="doc.js"', `src="doc.js?v=${VERSION}"`);
 write(join(DIST, 'apps.html'), apps);
