@@ -191,6 +191,136 @@ async def test_device_config_field_mutations_go_through_host(
 
 
 @pytest.mark.asyncio
+async def test_reasoning_effort_set_and_auto_clear_on_model_swap(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """host.config.set_field model_reasoning.effort validates + persists; switching `model` to an unsupported one auto-clears the effort so a stale value can't survive."""
+    home = _bootstrap(tmp_path / "h")
+    monkeypatch.setattr(host_handlers, "_resolve_home", lambda profile: home)
+    srv = host_server.Server(home=home)
+    host_device_state.register(srv)
+
+    # Land on a reasoning model first.
+    await srv._dispatch({
+        "id": "set-model",
+        "method": "host.config.set_field",
+        "params": {"profile": "default", "key": "model", "value": "openai/o3-mini"},
+    })
+    set_effort = await srv._dispatch({
+        "id": "set-eff",
+        "method": "host.config.set_field",
+        "params": {"profile": "default", "key": "model_reasoning.effort", "value": "high"},
+    })
+    assert set_effort["result"]["ok"] is True
+    assert cfg_mod.load(home).model_reasoning.effort == "high"
+
+    # Invalid effort is dropped, not stored as garbage.
+    await srv._dispatch({
+        "id": "bad-eff",
+        "method": "host.config.set_field",
+        "params": {"profile": "default", "key": "model_reasoning.effort", "value": "wibble"},
+    })
+    assert cfg_mod.load(home).model_reasoning.effort == ""
+
+    # Set effort again, then switch to a non-reasoning model — effort must auto-clear.
+    await srv._dispatch({
+        "id": "set-eff-2",
+        "method": "host.config.set_field",
+        "params": {"profile": "default", "key": "model_reasoning.effort", "value": "medium"},
+    })
+    assert cfg_mod.load(home).model_reasoning.effort == "medium"
+
+    await srv._dispatch({
+        "id": "swap-model",
+        "method": "host.config.set_field",
+        "params": {"profile": "default", "key": "model", "value": "openai/gpt-4o"},
+    })
+    reloaded = cfg_mod.load(home)
+    assert reloaded.model == "openai/gpt-4o"
+    assert reloaded.model_reasoning.effort == ""
+
+
+@pytest.mark.asyncio
+async def test_reasoning_effort_rejected_when_current_model_unsupported(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """profile.detail would report effort=high + supported=false otherwise; the host RPC refuses to persist effort on a model that can't use it."""
+    home = _bootstrap(tmp_path / "h")
+    monkeypatch.setattr(host_handlers, "_resolve_home", lambda profile: home)
+    srv = host_server.Server(home=home)
+    host_device_state.register(srv)
+
+    # Default model in _bootstrap is gpt-5.4-mini (no reasoning).
+    resp = await srv._dispatch({
+        "id": "set-eff",
+        "method": "host.config.set_field",
+        "params": {"profile": "default", "key": "model_reasoning.effort", "value": "high"},
+    })
+    assert resp["result"]["ok"] is True
+    assert cfg_mod.load(home).model_reasoning.effort == ""
+
+    # Now switch to a reasoning model, then setting effort works.
+    await srv._dispatch({
+        "id": "swap-model",
+        "method": "host.config.set_field",
+        "params": {"profile": "default", "key": "model", "value": "openai/o3-mini"},
+    })
+    await srv._dispatch({
+        "id": "set-eff-2",
+        "method": "host.config.set_field",
+        "params": {"profile": "default", "key": "model_reasoning.effort", "value": "high"},
+    })
+    assert cfg_mod.load(home).model_reasoning.effort == "high"
+
+
+@pytest.mark.asyncio
+async def test_profile_detail_exposes_reasoning_state(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home = _bootstrap(tmp_path / "h")
+    cfg = cfg_mod.load(home)
+    cfg.model = "openai/o3-mini"
+    cfg.model_reasoning.effort = "high"
+    cfg_mod.save(cfg)
+
+    monkeypatch.setattr(host_handlers, "_resolve_home", lambda profile: home)
+    srv = host_server.Server(home=home)
+    host_device_state.register(srv)
+
+    resp = await srv._dispatch({
+        "id": "detail",
+        "method": "host.profile.detail",
+        "params": {"profile": "default"},
+    })
+    detail = resp["result"]
+    assert detail["model_reasoning_effort"] == "high"
+    assert detail["model_reasoning_supported"] is True
+
+
+@pytest.mark.asyncio
+async def test_profile_detail_reports_unsupported_for_non_reasoning_model(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home = _bootstrap(tmp_path / "h")
+    cfg = cfg_mod.load(home)
+    cfg.model = "openai/gpt-4o"
+    cfg_mod.save(cfg)
+
+    monkeypatch.setattr(host_handlers, "_resolve_home", lambda profile: home)
+    srv = host_server.Server(home=home)
+    host_device_state.register(srv)
+
+    resp = await srv._dispatch({
+        "id": "detail",
+        "method": "host.profile.detail",
+        "params": {"profile": "default"},
+    })
+    detail = resp["result"]
+    assert detail["model_reasoning_supported"] is False
+    assert detail["model_reasoning_effort"] == ""
+
+
+@pytest.mark.asyncio
 async def test_config_set_field_emits_config_changed(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:

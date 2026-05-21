@@ -86,9 +86,8 @@ class WebExtract(Tool):
         if override:
             try:
                 emit_state("extracting…")
-                # resolve_model on a cfg-with-override pulls the right api_key from the PROFILE's .env — passing just `model=override` would leak to whatever happens to be in os.environ.
-                from dataclasses import replace as _replace
-                override_kwargs = cfg_mod.resolve_model(_replace(cfg, model=override))
+                # resolve_model pulls the right api_key from the PROFILE's .env via the override head ("openai", "anthropic"…). `include_reasoning=False` so the profile's effort doesn't leak into a tool sub-model.
+                override_kwargs = cfg_mod.resolve_model(cfg, model=override, include_reasoning=False)
                 out = llm.complete(messages=messages, **override_kwargs)
                 content = (out.content or "").strip() or "(empty extraction)"
                 return ToolResult(ok=True, output=content)

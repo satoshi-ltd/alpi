@@ -68,6 +68,7 @@ def stream(
     tools: list[dict[str, Any]] | None = None,
     api_base: str | None = None,
     api_key: str | None = None,
+    **extra: Any,
 ):
     """Yield streaming chunks from the LLM."""
     import os
@@ -94,6 +95,10 @@ def stream(
             }
     if api_key:
         kwargs["api_key"] = api_key
+    if extra:
+        # Deep-merge so reasoning's extra_body coexists with Ollama's options.num_ctx.
+        from alpi.providers.reasoning import merge_into_kwargs
+        kwargs = merge_into_kwargs(kwargs, extra)
 
     # FD-level silence only while litellm resolves the provider (first chunk).
     save_out, save_err = os.dup(1), os.dup(2)
@@ -177,6 +182,7 @@ def complete(
     tools: list[dict[str, Any]] | None = None,
     api_base: str | None = None,
     api_key: str | None = None,
+    **extra: Any,
 ) -> Completion:
     """Call the LLM and return a normalized Completion."""
     import os
@@ -193,6 +199,9 @@ def complete(
         kwargs["api_base"] = api_base
     if api_key:
         kwargs["api_key"] = api_key
+    if extra:
+        from alpi.providers.reasoning import merge_into_kwargs
+        kwargs = merge_into_kwargs(kwargs, extra)
 
     # Don't redirect FDs here — _silence_litellm() at import time warmed up
     # the provider cache, so no more "Provider List" banners. Redirecting

@@ -42,8 +42,33 @@ def run(cfg: cfg_mod.Config) -> None:
 
     cfg.model = model_id
     _remember_openrouter_model(cfg, model_id)
+    _pick_reasoning_effort(cfg, model_id)
     cfg_mod.save(cfg)
     ui.ok_and_wait(f"model set to [b]{model_id}[/b]")
+
+
+def _pick_reasoning_effort(cfg: cfg_mod.Config, model_id: str) -> None:
+    """Prompt for reasoning effort only on models that declare support."""
+    from alpi.providers.reasoning import supports_reasoning
+    if not supports_reasoning(model_id):
+        cfg.model_reasoning.effort = ""
+        return
+    current = cfg.model_reasoning.effort or "medium"
+    items = [
+        ("Default", "",       "use provider default"),
+        ("Low",     "low",    "fastest, cheapest"),
+        ("Medium",  "medium", "balanced"),
+        ("High",    "high",   "slower, more thorough"),
+    ]
+    choice = ui.menu(
+        f"Reasoning effort for {model_id}",
+        items,
+        subtitle=f"current: {current}",
+        home=cfg.home,
+    )
+    if choice is None:
+        return
+    cfg.model_reasoning.effort = choice
 
 
 def _remember_openrouter_model(cfg: cfg_mod.Config, model_id: str) -> None:

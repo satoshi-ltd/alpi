@@ -1,5 +1,28 @@
 # Changelog
 
+## v0.5.4 — 2026-05-21 — reasoning effort per profile model (MC.1)
+
+Patch on top of v0.5.3. Profile setup and settings now expose a
+`off / low / medium / high` reasoning effort control for the default
+model, applied automatically to every flow that uses it (TUI,
+desktop, mobile, schedules, gateways, skills).
+
+- Setup wizard prompts for effort right after picking a reasoning-
+  capable model. Setting is persisted in `model_reasoning.effort`.
+- Desktop + mobile profile settings expose the same control. The
+  dropdown only appears when the picked model supports reasoning;
+  changing to an unsupported model auto-clears the value.
+- Mid-chat model overrides (desktop / mobile composer, TUI `/model`)
+  do NOT carry effort — overrides are "a different model, no extra
+  knobs". Tool sub-models (`web_extract`, `read_image`) are also
+  protected.
+- Supported: OpenAI o-series, Claude 3.7+ / 4+, Gemini 2.5+,
+  DeepSeek R1, Grok 3-4 reasoning. OpenRouter models always show
+  the dropdown — alpi forwards the unified `reasoning` parameter,
+  which OpenRouter normally no-ops when the upstream provider
+  doesn't accept it under default routing.
+- Umbrel package + image tag bumped to `0.5.4`.
+
 ## v0.5.3 — 2026-05-21 — memory routing: pronoun-based, not noun-based
 
 Patch on top of v0.5.2. Fixes a misrouting where "your name is Clara"

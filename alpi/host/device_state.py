@@ -168,6 +168,7 @@ def _has_any_provider(home: Path, cfg: cfg_mod.Config) -> bool:
 
 def _profile_detail_payload(home: Path) -> dict[str, Any]:
     cfg = cfg_mod.load(home)
+    from alpi.providers.reasoning import supports_reasoning
     return {
         "workspace": cfg.workspace or None,
         "tcp_port": cfg.alp.get("tcp_port"),
@@ -181,6 +182,8 @@ def _profile_detail_payload(home: Path) -> dict[str, Any]:
         "mcps": _mcp_servers(cfg),
         "peers": _profile_peers(home),
         "models": _models(cfg, home),
+        "model_reasoning_effort": cfg.model_reasoning.effort,
+        "model_reasoning_supported": supports_reasoning(cfg.model),
     }
 
 
@@ -258,7 +261,28 @@ async def _config_set_field(
     key = str(params.get("key") or "")
     value = params.get("value")
     data = _load_user_yaml(home)
-    _set_dotted(data, key, _coerce_config_value(key, value))
+    coerced = _coerce_config_value(key, value)
+    if key == "model_reasoning.effort":
+        from alpi.providers.reasoning import normalise_effort, supports_reasoning
+        normalised = normalise_effort(coerced)
+        current_model = str(data.get("model") or "")
+        # Refuse to persist effort when the current model can't act on it — otherwise profile.detail would report effort="high" + supported=false, which is confusing dead state. The user can resolve it by setting effort AFTER switching to a supported model.
+        if normalised and supports_reasoning(current_model):
+            _set_dotted(data, key, normalised)
+        else:
+            _unset_dotted(data, key)
+            if isinstance(data.get("model_reasoning"), dict) and not data["model_reasoning"]:
+                data.pop("model_reasoning", None)
+    elif key == "model":
+        _set_dotted(data, key, coerced)
+        # Switching to an unsupported model auto-clears the effort so the dropdown disappears without a stale value lurking.
+        from alpi.providers.reasoning import supports_reasoning
+        if not supports_reasoning(str(coerced)):
+            _unset_dotted(data, "model_reasoning.effort")
+            if isinstance(data.get("model_reasoning"), dict) and not data["model_reasoning"]:
+                data.pop("model_reasoning", None)
+    else:
+        _set_dotted(data, key, coerced)
     _write_user_yaml(home, data)
     _emit_config_changed(home, scope=key.split(".", 1)[0] or "field")
     return {"ok": True}

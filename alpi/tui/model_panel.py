@@ -184,7 +184,8 @@ class ModelListPanel(FloatingPanel):
         if not model_id:
             return
         # Session-only switch: update memory only; do not persist.
-        self.cfg.model = model_id
+        from alpi.providers.reasoning import apply_session_model_override
+        apply_session_model_override(self.cfg, model_id)
         app = self.app
         app.cfg = self.cfg                            # type: ignore[attr-defined]
         app.engine.cfg = self.cfg                     # type: ignore[attr-defined]

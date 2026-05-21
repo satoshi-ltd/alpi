@@ -21,6 +21,9 @@ COMMON_SKILLS_DIR = Path(__file__).parent / "common" / "skills"
 MODEL_DEFAULT = "openai/gpt-5.4-mini"
 MODEL_STRONG  = "anthropic/claude-sonnet-4-6"
 
+# Strong-tier agents (Claude Sonnet 4-6) get medium reasoning by default — the work they do (strategy, synthesis, hard decisions) benefits from extended thinking. Default-tier agents stay on gpt-5.4-mini which is not a reasoning model. Per-agent override lives in agent.md frontmatter (`reasoning_effort: high|low|off`).
+REASONING_EFFORT_STRONG_DEFAULT = "medium"
+
 BUDGET_DAILY_DEFAULT = 2.0
 BUDGET_DAILY_STRONG  = 5.0
 BUDGET_WG            = 50.0
@@ -149,15 +152,36 @@ def _parse_agent_file(path: Path) -> dict:
 
     daily_usd = float(front.get("daily_usd", BUDGET_DAILY_DEFAULT))
 
+    # Reasoning effort: explicit frontmatter wins; otherwise strong-tier defaults to medium, default-tier to "". YAML 1.1 booleanises bare `off` / `no` to False, so handle that case too.
+    if "reasoning_effort" in front:
+        raw_eff = front["reasoning_effort"]
+        if raw_eff is False:
+            reasoning_effort = ""
+        else:
+            raw_str = str(raw_eff or "").strip().lower()
+            if raw_str in {"off", "none", "no", "disabled", "false"}:
+                reasoning_effort = ""
+            elif raw_str in {"low", "medium", "high"}:
+                reasoning_effort = raw_str
+            elif tier == "strong":
+                reasoning_effort = REASONING_EFFORT_STRONG_DEFAULT
+            else:
+                reasoning_effort = ""
+    elif tier == "strong":
+        reasoning_effort = REASONING_EFFORT_STRONG_DEFAULT
+    else:
+        reasoning_effort = ""
+
     return {
-        "name":      path.parent.name,
-        "bio":       front.get("bio", ""),
-        "accent":    front.get("accent", "#888888"),
-        "tier":      tier,
-        "model":     model,
-        "daily_usd": daily_usd,
-        "soul":      soul,
-        "peers":     list(front.get("peers", [])),
+        "name":             path.parent.name,
+        "bio":              front.get("bio", ""),
+        "accent":           front.get("accent", "#888888"),
+        "tier":             tier,
+        "model":            model,
+        "daily_usd":        daily_usd,
+        "reasoning_effort": reasoning_effort,
+        "soul":             soul,
+        "peers":            list(front.get("peers", [])),
     }
 
 
@@ -305,6 +329,13 @@ def bootstrap_profiles(agents: list[dict], workgroups: list[dict], env_lines: st
         cfg["public_bio"] = _truncate_bio(agent["bio"])
         cfg.setdefault("tui", {})["accent"] = agent["accent"]
         cfg.setdefault("budget", {})["daily_usd"] = agent["daily_usd"]
+
+        # Persist reasoning effort only on models that can use it; otherwise drop the key (matches host.config.set_field invariant — no dead state in config).
+        from alpi.providers.reasoning import supports_reasoning
+        if agent["reasoning_effort"] and supports_reasoning(agent["model"]):
+            cfg["model_reasoning"] = {"effort": agent["reasoning_effort"]}
+        else:
+            cfg.pop("model_reasoning", None)
         voice = AGENT_VOICES.get(agent["name"])
         if voice:
             cfg.setdefault("tools", {}).setdefault("tts", {})["voice"] = voice
@@ -320,7 +351,10 @@ def bootstrap_profiles(agents: list[dict], workgroups: list[dict], env_lines: st
         (mem_dir / "USER.md").write_text(_make_user_md(agent, workgroups))
 
         mcp_note = f"  mcps={','.join(mcps)}" if mcps else ""
-        ok(f"{agent['name']:<10}  model={agent['model']}  daily=${agent['daily_usd']:.1f}{mcp_note}")
+        from alpi.providers.reasoning import supports_reasoning
+        applied_effort = agent["reasoning_effort"] if (agent["reasoning_effort"] and supports_reasoning(agent["model"])) else ""
+        reasoning_note = f"  reasoning={applied_effort}" if applied_effort else ""
+        ok(f"{agent['name']:<10}  model={agent['model']}  daily=${agent['daily_usd']:.1f}{reasoning_note}{mcp_note}")
 
     install_code = (
         "from alpi import service as svc\n"
@@ -501,6 +535,7 @@ def print_summary(
     print(f"  agents      {GREY}{len(names)}{RESET}")
     print(f"  edges       {GREY}{len(edges)}{RESET}")
     print(f"  model       {GREY}strong={MODEL_STRONG}  default={MODEL_DEFAULT}{RESET}")
+    print(f"  reasoning   {GREY}strong tier defaults to '{REASONING_EFFORT_STRONG_DEFAULT}'; per-agent override in frontmatter (reasoning_effort: low|medium|high|off){RESET}")
     print()
 
     grouped: dict[str, list[str]] = {}

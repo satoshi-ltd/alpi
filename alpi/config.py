@@ -131,6 +131,12 @@ class MemoryConfig:
 
 
 @dataclass
+class ModelReasoningConfig:
+    # "" | "low" | "medium" | "high" — applied only to cfg.model, never to mid-chat overrides or tool sub-models. "" = no reasoning param sent ("off" coerces to "" on save).
+    effort: str = ""
+
+
+@dataclass
 class Config:
     home: Path
     model: str
@@ -138,6 +144,7 @@ class Config:
     providers: dict[str, Any] = field(default_factory=dict)
     tools: ToolsConfig = field(default_factory=ToolsConfig)
     memory: MemoryConfig = field(default_factory=MemoryConfig)
+    model_reasoning: ModelReasoningConfig = field(default_factory=ModelReasoningConfig)
     tui: dict[str, Any] = field(default_factory=dict)
     gateway: dict[str, Any] = field(default_factory=dict)
     alp: dict[str, Any] = field(default_factory=dict)
@@ -245,6 +252,13 @@ def load(home: Path) -> Config:
         review_interval=int(mem_raw.get("review_interval", 0) or 0),
     )
 
+    reasoning_raw = data.get("model_reasoning") or {}
+    # "off" persisted on disk normalises to "" on load — keeps the dataclass canonical (empty string = no param).
+    effort_in = str(reasoning_raw.get("effort", "") or "").strip().lower()
+    reasoning_cfg = ModelReasoningConfig(
+        effort=effort_in if effort_in in {"low", "medium", "high"} else "",
+    )
+
     return Config(
         home=home,
         model=data.get("model", DEFAULT_CONFIG["model"]),
@@ -252,6 +266,7 @@ def load(home: Path) -> Config:
         providers=data.get("providers", DEFAULT_CONFIG["providers"]),
         tools=tools_cfg,
         memory=memory_cfg,
+        model_reasoning=reasoning_cfg,
         tui=data.get("tui", DEFAULT_CONFIG["tui"]),
         gateway=data.get("gateway", DEFAULT_CONFIG["gateway"]),
         alp=dict(data.get("alp") or {}),
@@ -282,6 +297,9 @@ def save(cfg: Config) -> None:
     tools_delta = _tools_delta(cfg)
     if tools_delta:
         data["tools"] = tools_delta
+
+    if cfg.model_reasoning.effort:
+        data["model_reasoning"] = {"effort": cfg.model_reasoning.effort}
 
     tui_delta = {k: v for k, v in (cfg.tui or {}).items() if v != DEFAULT_CONFIG["tui"].get(k)}
     if tui_delta:
@@ -393,14 +411,25 @@ _CLOUD_API_KEY_ENV = {
 }
 
 
-def resolve_model(cfg: Config) -> dict[str, Any]:
+def resolve_model(
+    cfg: Config, *, model: str | None = None, include_reasoning: bool = True,
+) -> dict[str, Any]:
     """Return the litellm.completion kwargs for the currently selected model.
 
     Cloud api keys are read from the profile's ``<home>/.env`` (never
     ``os.environ``) so two profiles in the same daemon process can hold
-    different keys for the same provider without cross-contamination."""
-    model_str = cfg.model
+    different keys for the same provider without cross-contamination.
+
+    ``model`` override: when an explicit ``model`` is passed, the helper
+    resolves THAT model's api_base / api_key and does NOT attach the
+    profile's reasoning_effort (the override is a different model, not
+    a different reasoning preference). The default-model path keeps
+    reasoning when ``cfg.model_reasoning.effort`` is set and the model
+    supports it.
+    """
+    model_str = model or cfg.model
     head, _, rest = model_str.partition("/")
+    is_default_model = model is None or model == cfg.model
 
     ollama_eps = {c.get("name"): c for c in cfg.providers.get("ollama", [])}
     if head in ollama_eps:
@@ -418,6 +447,11 @@ def resolve_model(cfg: Config) -> dict[str, Any]:
         key = read_profile_env(cfg.home).get(env_var, "").strip()
         if key:
             out["api_key"] = key
+    if include_reasoning and is_default_model and cfg.model_reasoning.effort:
+        from alpi.providers.reasoning import merge_into_kwargs, reasoning_kwargs
+        extra = reasoning_kwargs(model_str, cfg.model_reasoning.effort)
+        if extra:
+            out = merge_into_kwargs(out, extra)
     return out
 
 

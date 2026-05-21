@@ -70,7 +70,8 @@ async def _data_chat_send(
 
     cfg = cfg_mod.load(home)
     if isinstance(model_override, str) and model_override:
-        cfg.model = model_override
+        from alpi.providers.reasoning import apply_session_model_override
+        apply_session_model_override(cfg, model_override)
     engine = Engine(home=home, cfg=cfg)
     if isinstance(session_id, str) and session_id:
         from alpi.host.handlers import _check_id
