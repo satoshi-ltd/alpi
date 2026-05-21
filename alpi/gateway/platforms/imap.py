@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import AsyncIterator
 
 from alpi.mail.imap import ImapClient, ImapError
+from alpi.gateway import breaker as _breaker
 from alpi.gateway.base import IncomingMessage, OutgoingMessage, Platform
 
 log = logging.getLogger("alpi.gateway.imap")
@@ -77,7 +78,13 @@ class Imap(Platform):
             log.info("IMAP baseline UID: %s (no backfill)", last_uid)
 
         first_poll = True
+        breaker = _breaker.for_home(self.home)
         while True:
+            if breaker.should_skip("imap"):
+                await asyncio.sleep(min(self._poll_interval, 60))
+                continue
+            poll_failed = False
+            poll_error: str = ""
             try:
                 new_msgs = await asyncio.to_thread(
                     self._poll_once, last_uid,
@@ -85,9 +92,26 @@ class Imap(Platform):
             except ImapError as e:
                 log.warning("email poll failed: %s", e)
                 new_msgs = []
+                poll_failed = True
+                poll_error = str(e)
             except Exception as e:  # noqa: BLE001
                 log.exception("email poll crashed: %s", e)
                 new_msgs = []
+                poll_failed = True
+                poll_error = f"{type(e).__name__}: {e}"
+
+            if poll_failed:
+                prev, curr = breaker.record_failure("imap", poll_error)
+                if prev != curr:
+                    st = breaker.state_of("imap")
+                    _breaker.emit_state_event(
+                        self.home, "imap", prev, curr,
+                        reason=poll_error, disabled_until=st.disabled_until,
+                    )
+            else:
+                prev, curr = breaker.record_success("imap")
+                if prev != curr:
+                    _breaker.emit_state_event(self.home, "imap", prev, curr)
 
             if first_poll and new_msgs:
                 log.info("catching up on %d email(s) from backlog", len(new_msgs))

@@ -66,6 +66,7 @@ def run_all(home: Path, profile: str) -> list[Check]:
             "workspace": _check_workspace(cfg),
             "tools": _check_tools(),
             "skills": _check_skills(home),
+            "gateway_state": _check_gateway_state(home),
             "services": _check_services(home, profile),
             "security": _check_security(cfg),
         }
@@ -85,9 +86,43 @@ def run_all(home: Path, profile: str) -> list[Check]:
     out.extend(sync_checks["tools"])
     out.extend(sync_checks["skills"])
     out.extend(live.get("gateways", []))
+    out.extend(sync_checks["gateway_state"])
     out.extend(sync_checks["services"])
     out.extend(live.get("mcps", []))
     out.extend(sync_checks["security"])
+    return out
+
+
+def _check_gateway_state(home: Path) -> list[Check]:
+    """GW.1 — surface circuit-breaker state. Silent when every platform is healthy; one row per degraded/disabled platform with last error + cooldown when applicable. Doctor stays scannable on the happy path."""
+    from alpi.gateway import breaker as _breaker
+    import time as _time
+
+    out: list[Check] = []
+    try:
+        store = _breaker.for_home(home)
+        states = store.all_states()
+    except Exception:  # noqa: BLE001
+        return out
+
+    nowt = _time.time()
+    for name, st in sorted(states.items()):
+        if st.status == "healthy":
+            continue
+        if st.status == "disabled":
+            remaining = max(0.0, st.disabled_until - nowt)
+            detail = (
+                f"disabled — cooldown {int(remaining)}s remaining "
+                f"({st.consecutive_failures} consecutive failures: {st.last_error or 'unknown'})"
+            )
+            out.append(Check("Gateways", name, "warn", detail))
+        elif st.status == "degraded":
+            detail = (
+                f"{st.consecutive_failures} consecutive failure"
+                f"{'' if st.consecutive_failures == 1 else 's'}: "
+                f"{st.last_error or 'unknown'}"
+            )
+            out.append(Check("Gateways", name, "warn", detail))
     return out
 
 

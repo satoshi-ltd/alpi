@@ -278,3 +278,73 @@ def test_doctor_skills_warns_on_pinned_but_cold(tmp_path: Path, monkeypatch) -> 
     assert warn is not None
     assert warn.name == "cold-pinned"
     assert "pinned but" in warn.detail
+
+
+def test_doctor_silent_when_all_gateways_healthy(tmp_path: Path, monkeypatch) -> None:
+    """No breaker file → no platform has ever failed → no rows under
+    Gateways from the breaker section. Doctor stays scannable on the
+    happy path."""
+    _write_cfg(tmp_path, workspace=str(tmp_path))
+    _write_env(tmp_path, OPENROUTER_API_KEY="x")
+    from alpi import service
+    monkeypatch.setattr(service, "daemon_installed", lambda: False)
+    monkeypatch.setattr(service, "daemon_running_pid", lambda root: None)
+
+    checks = doctor.run_all(tmp_path, "default")
+    gw_breaker_rows = [
+        c for c in checks
+        if c.group == "Gateways" and c.name in ("telegram", "imap", "gmail", "matrix")
+    ]
+    assert gw_breaker_rows == []
+
+
+def test_doctor_warns_on_disabled_gateway(tmp_path: Path, monkeypatch) -> None:
+    """A platform locked out by the breaker shows up as a warn row with
+    cooldown + last error. exit_code stays 0 (warn != fail) so a broken
+    upstream doesn't break operator scripts."""
+    _write_cfg(tmp_path, workspace=str(tmp_path))
+    _write_env(tmp_path, OPENROUTER_API_KEY="x")
+    from alpi import service
+    from alpi.gateway import breaker as br
+    monkeypatch.setattr(service, "daemon_installed", lambda: False)
+    monkeypatch.setattr(service, "daemon_running_pid", lambda root: None)
+
+    store = br.BreakerStore(tmp_path)
+    for _ in range(br.FAILURE_THRESHOLD):
+        store.record_failure("telegram", "401 Unauthorized", now=1000.0)
+    br._singletons.clear()
+
+    checks = doctor.run_all(tmp_path, "default")
+    tg = next(
+        (c for c in checks if c.group == "Gateways" and c.name == "telegram"),
+        None,
+    )
+    assert tg is not None
+    assert tg.status == "warn"
+    assert "disabled" in tg.detail
+    assert "401" in tg.detail
+    assert doctor.exit_code(checks) == 0
+
+
+def test_doctor_warns_on_degraded_gateway(tmp_path: Path, monkeypatch) -> None:
+    _write_cfg(tmp_path, workspace=str(tmp_path))
+    _write_env(tmp_path, OPENROUTER_API_KEY="x")
+    from alpi import service
+    from alpi.gateway import breaker as br
+    monkeypatch.setattr(service, "daemon_installed", lambda: False)
+    monkeypatch.setattr(service, "daemon_running_pid", lambda root: None)
+
+    store = br.BreakerStore(tmp_path)
+    store.record_failure("imap", "timeout", now=1000.0)
+    store.record_failure("imap", "timeout", now=1001.0)
+    br._singletons.clear()
+
+    checks = doctor.run_all(tmp_path, "default")
+    row = next(
+        (c for c in checks if c.group == "Gateways" and c.name == "imap"),
+        None,
+    )
+    assert row is not None
+    assert row.status == "warn"
+    assert "2 consecutive failures" in row.detail
+    assert "timeout" in row.detail

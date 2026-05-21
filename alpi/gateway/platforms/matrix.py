@@ -8,6 +8,7 @@ import logging
 from pathlib import Path
 from typing import AsyncIterator
 
+from alpi.gateway import breaker as _breaker
 from alpi.gateway.base import IncomingMessage, OutgoingMessage, Platform
 from alpi.gateway.delivery import allowed_chat_ids
 
@@ -88,11 +89,22 @@ class Matrix(Platform):
         own_user = self._client.user_id
 
         first_sync = True
+        breaker = _breaker.for_home(self.home)
         while True:
+            if breaker.should_skip("matrix"):
+                await asyncio.sleep(30)
+                continue
             try:
                 resp = await self._client.sync(timeout=30000, since=self._next_batch)
             except Exception as e:  # noqa: BLE001
                 log.warning("matrix sync failed: %s", e)
+                prev, curr = breaker.record_failure("matrix", str(e))
+                if prev != curr:
+                    st = breaker.state_of("matrix")
+                    _breaker.emit_state_event(
+                        self.home, "matrix", prev, curr,
+                        reason=str(e), disabled_until=st.disabled_until,
+                    )
                 await asyncio.sleep(5)
                 continue
 
@@ -100,8 +112,19 @@ class Matrix(Platform):
             if not new_token:
                 err = getattr(resp, "message", str(resp))
                 log.warning("matrix sync returned no next_batch: %s", err)
+                prev, curr = breaker.record_failure("matrix", err[:200])
+                if prev != curr:
+                    st = breaker.state_of("matrix")
+                    _breaker.emit_state_event(
+                        self.home, "matrix", prev, curr,
+                        reason=err[:200], disabled_until=st.disabled_until,
+                    )
                 await asyncio.sleep(5)
                 continue
+
+            prev, curr = breaker.record_success("matrix")
+            if prev != curr:
+                _breaker.emit_state_event(self.home, "matrix", prev, curr)
 
             # First sync after a fresh start: skip backlog (we don't replay
             # history). Save the cursor and continue.

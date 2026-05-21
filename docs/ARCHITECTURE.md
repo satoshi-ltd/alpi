@@ -753,6 +753,17 @@ pins the contract.
 
 Spawns user-configured MCP servers (stdio JSON-RPC, SSE planned). Their tools are wrapped and registered as alpi tools. Servers configured in `config.yaml` under `mcp.servers.<name>` (command, args, env). Management lives in `alpi setup → MCPs`; `alpi mcp` itself is not exposed on the CLI surface.
 
+**External orchestration frameworks.** Alpi does not embed LangGraph,
+CrewAI, AutoGen, or similar graph/supervisor runtimes in core. They
+overlap with Alpi's own agent loop and bring a heavier dependency,
+state, and observability model than the local-first runtime needs.
+Interop belongs at the edge: expose the external workflow as an MCP
+server and let Alpi call it as a tool, or wrap a local workflow in a
+scripted skill. ALP is not the adapter layer for these frameworks; ALP
+is reserved for sovereign profile-to-profile collaboration across
+machines, while MCP is the interop layer for external runtimes and
+tools.
+
 ### Logging (`alpi/_log.py`, `alpi/logs.py`)
 
 Every subsystem writes to a single flat folder: `~/.alpi/logs/<subsystem>.log`, rotated at 1 MB with no backups. Same format everywhere (`%(asctime)s %(levelname)s %(name)s %(message)s`) so `alpi logs` can merge them by timestamp prefix. The source tag on display comes from the filename.

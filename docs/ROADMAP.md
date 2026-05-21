@@ -21,8 +21,8 @@ and compatibility gateways.
 
 Hermes Agent remains a reference for hardening mechanisms, not a
 feature catalog to port wholesale. This cycle focuses on trust
-boundaries, mutation evidence, approval flow, diagnostics, and local
-skill maintenance. Marketplace, provider breadth, and new chat-platform
+boundaries, mutation evidence, approval flow, and operator
+diagnostics. Marketplace, provider breadth, and new chat-platform
 adapters stay out of scope.
 
 **Gateway posture.** Gateways stay supported for compatibility,
@@ -30,80 +30,35 @@ automation delivery, and inbound email/chat. They are maintained, not
 expanded: reliability, profile isolation, delivery correctness, and
 diagnostics are in; new rich gateway UX belongs in desktop/mobile.
 
-### Reliability core
-
-| ID | Item | Status |
-|---|---|---|
-| GW.1 | Gateway containment — Telegram, IMAP, Gmail, Matrix and webhook listeners fail independently with backoff and status, so one broken compatibility bridge does not degrade sibling platforms or profiles. | 🟡 |
-
 ### Operator diagnostics
 
 | ID | Item | Status |
 |---|---|---|
-| OPS.1 | Evidence digest — `alpi ops digest [--since 7d]` summarizes the signals that decide future work: approval frequency, compaction rate, broken tools, inactive skills, memory backlog, and recurring session-search misses. | 🟡 |
-
-### Skill maintenance primitives
-
-| ID | Item | Status |
-|---|---|---|
-| SK.2 | Safe skill import — `alpi skill import <dir\|zip>` previews, normalizes, scans, and installs a local skill into the Alpi contract; no marketplace, remote registry, or silent update flow. | 🟡 |
-
-### GW.1. Gateway containment
-
-Gateways run long-lived network loops against third-party services. A
-bad Telegram token, IMAP outage, Gmail refresh failure, or Matrix sync
-exception should degrade only that platform. It should not kill the
-profile's whole gateway task, starve scheduled jobs, or affect sibling
-profiles in the daemon.
-
-This item is maintenance, not product expansion. It does not add new
-platforms, native button flows, gateway-specific onboarding, or rich
-chat UX. The purpose is to keep existing bridges safe and predictable
-while users move to Alpi-owned clients for the full experience.
-
-The circuit breaker is per profile + platform:
-
-- track `healthy` / `degraded` / `disabled` status;
-- exponential backoff after repeated failures;
-- reset on a successful poll/send;
-- surface state in `alpi doctor`, `ops digest`, and host settings;
-- keep platform-specific logs parseable.
+| OPS.1 | Evidence digest — `alpi ops digest [--since 7d]` aggregates existing on-disk signals (broken tools / MCPs, gateway state, inactive skills, memory backlog, compaction rate) into one local report. No LLM, no dashboard, no recommendations. | 🟡 |
 
 ### OPS.1. Evidence digest
 
-Most roadmap items promote on evidence, but today that evidence lives in
-raw logs. `alpi ops digest [--since 7d]` creates one stateless report:
+`alpi ops digest [--since 7d]` is a **simple local report**, not an
+observability product. Pure aggregation over data already on disk:
 
-- approval-prompt frequency and top trigger patterns;
-- auto-compact rate and before/after ratios by model;
-- tools that failed before doing useful work;
-- unavailable tools or MCP servers (from the v0.5.6 availability layer);
+- broken / unavailable tools + MCP servers (from the v0.5.6 availability layer);
+- gateway state per platform + profile (degraded / disabled, from the v0.5.10 breaker layer);
 - inactive skills and usage distribution (from the v0.5.9 telemetry layer);
-- memory promotion backlog and audit highlights;
-- repeated "when did we discuss X?" style failures that would justify
-  semantic session recall.
+- memory promotion backlog (and audit highlights from `memory audit`);
+- compaction rate over the window, if the log is present.
 
-**Non-goal.** Not a dashboard, not a metrics service, not telemetry that
-leaves the machine. It is a local report the operator runs before
-deciding what to build next.
+**Out of scope, deliberately**:
 
-### SK.2. Safe skill import
+- No LLM-driven summary, ranking, or recommendation. The digest just
+  surfaces the numbers; the operator decides what to act on.
+- No dashboard, no metrics service, no telemetry that leaves the machine.
+- No new on-disk state — every section reads existing primitives.
+- Approval-frequency patterns, session-search misses, and other
+  speculative signals stay out until there's a concrete use case
+  pulling for them.
 
-Alpi should reuse local skill material from other agent stacks or a
-checked-out repository without adopting a marketplace. `alpi skill
-import <dir|zip>` is explicit and local:
-
-1. inspect the source and show a preview;
-2. reject path traversal, hidden files, symlinks escaping the root, and
-   unsupported nested layouts;
-3. map compatible files into `scripts/`, `references/`, `assets/`,
-   `secrets/`, and `state/`;
-4. run the same scanner and schema validation as `skill(create)` /
-   `skill(add_file)`;
-5. install only after explicit confirmation.
-
-**Non-goals.** No remote registry, automatic dependency install, silent
-update flow, or external trust database.
+The discipline is intentional: this command exists to make decisions,
+not to become a feature with its own surface area.
 
 ## v0.7 cycle (planned)
 
@@ -335,6 +290,7 @@ already analysed; the "why now?" question is the open one.
 | ALP.7 | Pinned shared memory per workgroup (hub-anchored `wiki.md`) | Heavy new surface (concurrency, history, roles) only justified if workgroups become heavily used |
 | Signal | Signal gateway via signal-cli | Strong privacy fit, but new gateways are out of scope now that Alpi-owned clients are the primary mobile surface |
 | AY | Skills marketplace — federated, signed, never centralised | Presupposes an active author community + adoption for discovery to matter |
+| SK.2 | Safe skill import (`alpi skill import <dir\|zip>` — preview, scan, install) | Pulls toward marketplace/import-ecosystem mental model without a concrete user pull. Promote when somebody actually needs to migrate a batch of skills from another stack. |
 | AI (2) | Memory v2 — TUI panel (collapsible, edit-in-place, "forget this") | UI weight for niche audience (power users with much memory); item 1 covers the substantive part |
 | AI (3) | Entity memory — structured SQLite store (`entities`/`relations`/`observations`) replacing the markdown memory model, with selective injection per turn instead of full-blob system prompt | Markdown memory hasn't demonstrably broken yet for real users; AI(1) is a quality pass on the existing model. Promote when a user reports `MEMORY.md` is large enough that prompt size / cost becomes a real bottleneck. BA's shared `store` primitive (v0.5) is designed so the migration is incremental when promoted. |
 | AJ | Browser realism — Cloudflare / captcha / fingerprint depth | Cat-and-mouse perpetuo; without concrete failing use case, scope can't close |
@@ -586,6 +542,18 @@ Not planned. Research-grade, irrelevant for everyday personal use.
   audience with better tooling and active community. XMPP's
   user base today (`conversations.im`) overlaps heavily with
   Matrix users — same population, fewer obstacles.
+- **LangGraph / CrewAI / AutoGen as a core dependency.** Third-party
+  agent-orchestration frameworks are out of core scope. They overlap
+  with `alpi/engine.py` (the LLM loop + tool dispatch) but bring a
+  graph/state-machine mental model that doesn't match Alpi's
+  "profile = personality + memory + tools, peers talk over ALP"
+  shape. They also drag in heavy dependency trees and push users
+  toward hosted observability (LangSmith and similar) that contradicts
+  the "zero server, zero telemetry" stance. Users who already run
+  one of these stacks should expose their workflow as an **MCP
+  server** that Alpi consumes, or wrap it in a **scripted skill**.
+  ALP stays the protocol for sovereign profile-to-profile
+  collaboration; MCP stays the interop layer for external runtimes.
 
 **Rejected architecture attempts:**
 

@@ -10,6 +10,7 @@ from typing import Any, AsyncIterator
 
 import httpx
 
+from alpi.gateway import breaker as _breaker
 from alpi.gateway.base import IncomingMessage, OutgoingMessage, Platform
 from alpi.gateway.delivery import format_for_telegram
 
@@ -69,8 +70,12 @@ class Telegram(Platform):
         last_streak_log = 0.0
         conflict_announced = False
         SUMMARY_INTERVAL_SEC = 300.0
+        breaker = _breaker.for_home(self.home)
         async with httpx.AsyncClient(timeout=60) as client:
             while True:
+                if breaker.should_skip("telegram"):
+                    await asyncio.sleep(30)
+                    continue
                 try:
                     resp = await client.get(
                         f"{url_base}/getUpdates",
@@ -83,6 +88,8 @@ class Telegram(Platform):
                     is_conflict = "409" in str(e)
                     now = asyncio.get_running_loop().time()
                     if is_conflict:
+                        # 409 means another process owns the long-poll — not a real
+                        # upstream failure. Don't escalate the breaker.
                         if not conflict_announced:
                             log.warning(
                                 "Telegram bot already polled by another process (409 Conflict). "
@@ -106,6 +113,13 @@ class Telegram(Platform):
                             )
                             error_streak = 0
                             last_streak_log = now
+                    prev, curr = breaker.record_failure("telegram", str(e))
+                    if prev != curr:
+                        st = breaker.state_of("telegram")
+                        _breaker.emit_state_event(
+                            self.home, "telegram", prev, curr,
+                            reason=str(e), disabled_until=st.disabled_until,
+                        )
                     await asyncio.sleep(5)
                     continue
                 last_error_class = None
@@ -113,6 +127,9 @@ class Telegram(Platform):
                 if conflict_announced:
                     log.info("Telegram polling recovered (409 cleared).")
                     conflict_announced = False
+                prev, curr = breaker.record_success("telegram")
+                if prev != curr:
+                    _breaker.emit_state_event(self.home, "telegram", prev, curr)
 
                 results = data.get("result", [])
                 if first_poll and results:

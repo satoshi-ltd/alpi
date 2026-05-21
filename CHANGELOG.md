@@ -1,5 +1,43 @@
 # Changelog
 
+## v0.5.10 — 2026-05-22 — gateway containment (GW.1)
+
+Per profile + per platform circuit breaker for the gateway loop. A
+bad Telegram token, IMAP outage, Gmail refresh failure, or Matrix
+sync exception now degrades only that one platform; sibling
+platforms on the same profile keep ticking and other profiles are
+untouched.
+
+- ``alpi/gateway/breaker.py`` ships a thread-safe ``BreakerStore``
+  per profile, persisted to ``<home>/gateway/.breaker-state.json``.
+  Each platform reports ``record_success`` / ``record_failure`` per
+  tick. After 5 consecutive failures the platform flips to
+  ``disabled`` and the next tick is held with exponential backoff
+  (5min → 10 → 20 → 40 → 60min cap). A successful tick resets the
+  counter and restores ``healthy``.
+- Telegram, IMAP, Gmail, and Matrix listeners wrap their poll loops
+  with the breaker: ``should_skip`` bails before hitting the
+  upstream when the platform is in cooldown. Existing per-platform
+  state files (telegram-state.json, imap-state.json, …) are
+  unchanged. The Telegram 409 conflict path is intentionally
+  excluded — "another process is polling" is not an upstream
+  failure and shouldn't escalate the breaker.
+- ``gateway.state`` host event emitted on transitions
+  (``healthy`` ↔ ``degraded`` ↔ ``disabled``) with platform, reason,
+  and cooldown deadline. Desktop / mobile clients can subscribe and
+  render live state without polling. No-op transitions (e.g., second
+  failure while already degraded) do NOT emit, so the event stream
+  stays signal-only.
+- ``alpi doctor`` adds gateway-state rows: silent when every
+  platform is healthy, one ``warn`` per platform in degraded or
+  disabled state with last error + remaining cooldown. Warns don't
+  break exit code so a flaky upstream doesn't break operator
+  scripts or cron.
+- Atomic state writes use per-pid + per-thread tmp suffixes so two
+  daemons on the same profile dir can't clobber each other's
+  ``.breaker-state.json.tmp`` during the rename.
+- Umbrel package + image tag bumped to ``0.5.10``.
+
 ## v0.5.9 — 2026-05-21 — skill telemetry (SK.1)
 
 Per-skill view / use / patch counters persisted to

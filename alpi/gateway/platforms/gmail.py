@@ -11,6 +11,7 @@ from typing import AsyncIterator
 
 import httpx
 
+from alpi.gateway import breaker as _breaker
 from alpi.gateway.base import IncomingMessage, OutgoingMessage, Platform
 from alpi.gateway.platforms.imap import _is_automated
 from alpi.mail.gmail import GmailClient, GmailError
@@ -61,15 +62,38 @@ class Gmail(Platform):
         client = GmailClient(self.home)
 
         first_poll = True
+        breaker = _breaker.for_home(self.home)
         while True:
+            if breaker.should_skip("gmail"):
+                await asyncio.sleep(min(self._poll_interval, 60))
+                continue
+            poll_failed = False
+            poll_error: str = ""
             try:
                 events = await asyncio.to_thread(self._list_history, last_history)
             except (GmailAuthError, GmailError) as e:
                 log.warning("Gmail poll failed: %s", e)
                 events = {"messages": [], "newHistoryId": last_history}
+                poll_failed = True
+                poll_error = str(e)
             except Exception as e:  # noqa: BLE001
                 log.exception("Gmail poll crashed: %s", e)
                 events = {"messages": [], "newHistoryId": last_history}
+                poll_failed = True
+                poll_error = f"{type(e).__name__}: {e}"
+
+            if poll_failed:
+                prev, curr = breaker.record_failure("gmail", poll_error)
+                if prev != curr:
+                    st = breaker.state_of("gmail")
+                    _breaker.emit_state_event(
+                        self.home, "gmail", prev, curr,
+                        reason=poll_error, disabled_until=st.disabled_until,
+                    )
+            else:
+                prev, curr = breaker.record_success("gmail")
+                if prev != curr:
+                    _breaker.emit_state_event(self.home, "gmail", prev, curr)
 
             new_history = events.get("newHistoryId") or last_history
             pending = events.get("messages") or []
