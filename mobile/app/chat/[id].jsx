@@ -11,8 +11,9 @@ import { ProfileAssistantMessage, ProfileUserMessage } from '../../src/features/
 import { ChatHeader } from '../../src/features/chat/ChatHeader';
 import { Composer } from '../../src/features/chat/Composer';
 import { MessageActionsSheet } from '../../src/features/chat/MessageActionsSheet';
+import { ChatSkeleton } from '../../src/features/chat/ChatSkeleton';
 import { ThinkingDots } from '../../src/features/chat/ThinkingDots';
-import { ToolCallRow } from '../../src/features/chat/ToolCallRow';
+import { ToolCallGroup, groupConsecutiveTools } from '../../src/features/chat/ToolCallRow';
 import { SessionsSheet } from '../../src/features/sheets/SessionsSheet';
 import { useChatSend } from '../../src/hooks/useChatSend';
 import { useProfileSummaries, useSession, useSessionsList } from '../../src/hooks/useDaemonData';
@@ -59,14 +60,8 @@ const TurnBlock = memo(function TurnBlock({ turn, accent, colors, fonts, fontSiz
       ) : null}
       {turn.tools?.length ? (
         <View style={TURN_STYLES.tools}>
-          {turn.tools.map((t, i) => (
-            <ToolCallRow
-              key={t.tool_id ?? `${t.name}:${i}`}
-              name={t.name}
-              status={t.ok == null ? 'running' : t.ok ? 'success' : 'error'}
-              args={t.args}
-              accent={accent}
-            />
+          {groupConsecutiveTools(turn.tools).map((g, i) => (
+            <ToolCallGroup key={`g-${i}-${g.tools[0].tool_id ?? g.name}`} group={g} accent={accent} />
           ))}
         </View>
       ) : null}
@@ -145,7 +140,7 @@ function ChatList({ turns, pendingTurn, loading, hydrating, profileName, model, 
   );
 
   if ((loading || hydrating) && full.length === 0) {
-    return <View style={{ flex: 1, backgroundColor: colors.bg }} />;
+    return <ChatSkeleton kind="profile" accent={accent} />;
   }
   if (full.length === 0) {
     return <EmptyThread profileName={profileName} model={model} accent={accent} colors={colors} fonts={fonts} />;

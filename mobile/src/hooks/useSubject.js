@@ -10,6 +10,12 @@ export function useProfile(name) {
   const summaries = useProfileSummaries();
   const { call } = useEndpoint();
   const [detail, setDetail] = useState(null);
+  // reset detail synchronously on name/endpoint flip — else prev endpoint's detail bleeds for one frame
+  const [tracked, setTracked] = useState({ name, call });
+  if (tracked.name !== name || tracked.call !== call) {
+    setTracked({ name, call });
+    setDetail(null);
+  }
   const summary = useMemo(
     () => summaries.data?.profiles?.find((p) => p.name === name) ?? null,
     [summaries.data, name],

@@ -8,6 +8,7 @@ import { Dot } from '../../src/components/Dot';
 import { useToast } from '../../src/components/Toast';
 import { WorkgroupMessage } from '../../src/features/chat/Bubble';
 import { ChatHeader } from '../../src/features/chat/ChatHeader';
+import { ChatSkeleton } from '../../src/features/chat/ChatSkeleton';
 import { Composer } from '../../src/features/chat/Composer';
 import { MarkerCard } from '../../src/features/chat/MarkerCard';
 import { MessageActionsSheet } from '../../src/features/chat/MessageActionsSheet';
@@ -157,11 +158,7 @@ const WgList = forwardRef(function WgList(
   );
 
   if (loading && messages.length === 0) {
-    return (
-      <View style={WG_STYLES.emptyHero}>
-        <ActivityIndicator color={colors.ink3} />
-      </View>
-    );
+    return <ChatSkeleton kind="workgroup" accent={accent} />;
   }
   if (!loading && messages.length === 0) {
     return (

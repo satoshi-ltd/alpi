@@ -54,31 +54,43 @@ async function fetchAndStore(key, call, method, params) {
   return promise;
 }
 
+function initialSnapFor(key) {
+  if (!key) return { data: null, loading: false, error: null };
+  const entry = entryFor(key);
+  if (entry.data !== null) return snapshotOf(entry);
+  return { data: null, loading: true, error: null };
+}
+
 function usePolledCall(method, params, deps, opts = {}) {
   const { endpoint, call } = useEndpoint();
   const skip = !!opts.skipWhen;
   const key = endpoint && !skip ? keyFor(endpoint.id, method, params) : null;
 
-  const [snap, setSnap] = useState(() => {
-    if (!key) return { data: null, loading: false, error: null };
-    const entry = entryFor(key);
-    if (entry.data !== null) return snapshotOf(entry);
-    return { data: null, loading: true, error: null };
-  });
+  const [snap, setSnap] = useState(() => initialSnapFor(key));
+  // reset snap synchronously on key flip — else one render bleeds prev endpoint's data
+  const [trackedKey, setTrackedKey] = useState(key);
+  if (trackedKey !== key) {
+    setTrackedKey(key);
+    setSnap(initialSnapFor(key));
+  }
+
+  const keyRef = useRef(key);
+  keyRef.current = key;
 
   useEffect(() => {
-    if (!key) {
-      setSnap({ data: null, loading: false, error: null });
-      return undefined;
-    }
+    if (!key) return undefined;
     const entry = entryFor(key);
-    entry.listeners.add(setSnap);
+    // captured-key guard: a notify() fired on the prev entry between flip and cleanup must not setSnap with stale data
+    const listener = (s) => {
+      if (keyRef.current === key) setSnap(s);
+    };
+    entry.listeners.add(listener);
     setSnap(snapshotOf(entry));
     if (!entry.inflight && entry.data === null) {
       fetchAndStore(key, call, method, params).catch(() => {});
     }
     return () => {
-      entry.listeners.delete(setSnap);
+      entry.listeners.delete(listener);
     };
   }, [key, call, method]); // eslint-disable-line react-hooks/exhaustive-deps
 

@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { ActivityIndicator, ScrollView, Text, View } from 'react-native';
+import { ScrollView, Text, View } from 'react-native';
 import { space , fontSizes} from '../../theme/tokens';
 
 import { PickerRow } from '../../components/PickerRow';
@@ -7,6 +7,7 @@ import { Row, RowSeparator, SectionHeader } from '../../components/Row';
 import { Sheet } from '../../components/Sheet';
 import { useSessionsList } from '../../hooks/useDaemonData';
 import { useTheme } from '../../theme/ThemeContext';
+import { SessionsSkeleton } from './SessionsSkeleton';
 
 const DAY_MS = 86400000;
 
@@ -74,9 +75,7 @@ export function SessionsSheet({ open, onClose, profile, accent, activeSessionId,
     >
       <ScrollView contentContainerStyle={{ paddingBottom: space.s7 }}>
         {sessions.loading && rows.length === 0 ? (
-          <View style={{ padding: space.s10, alignItems: 'center' }}>
-            <ActivityIndicator color={colors.ink3} />
-          </View>
+          <SessionsSkeleton />
         ) : rows.length === 0 ? (
           <Row label="No previous chats" helper="start one to fill the list" chevron={false} />
         ) : (

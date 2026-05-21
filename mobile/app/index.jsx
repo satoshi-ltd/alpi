@@ -9,6 +9,7 @@ import { Icon } from '../src/components/Icon';
 import { Swipeable } from '../src/components/Swipeable';
 import { ConnHeader } from '../src/features/inbox/ConnHeader';
 import { InboxRow } from '../src/features/inbox/InboxRow';
+import { InboxSkeleton } from '../src/features/inbox/InboxSkeleton';
 import { PinnedRow } from '../src/features/inbox/PinnedRow';
 import { RowContextSheet } from '../src/features/inbox/RowContextSheet';
 import { SegmentedFilter } from '../src/features/inbox/SegmentedFilter';
@@ -158,6 +159,7 @@ export default function Inbox() {
   );
 
   const showEmpty = !loading && filtered.length === 0;
+  const showSkeleton = loading && filtered.length === 0;
 
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
@@ -191,7 +193,9 @@ export default function Inbox() {
         contentContainerStyle={{ paddingBottom: 120, flexGrow: 1 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.ink3} />}
         ListEmptyComponent={
-          showEmpty ? (
+          showSkeleton ? (
+            <InboxSkeleton />
+          ) : showEmpty ? (
             <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: space.s10, gap: space.s3, minHeight: 240 }}>
               <Text style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.lg, color: colors.ink2 }}>
                 What's on your mind?
