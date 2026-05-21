@@ -2,7 +2,7 @@
 export const profileAccents = {
   alpi: '#b8954a',
   doc: '#3d7ea6',
-  mirai: '#c14545',
+  builder: '#c14545',
   vera: '#9d4dc6',
   abby: '#c14580',
   etxea: '#2f7d6e',

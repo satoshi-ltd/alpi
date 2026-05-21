@@ -50,6 +50,52 @@ export function BudgetSheet({ open, onClose, profileName, initialValue, onSave }
   );
 }
 
+const REASONING_OPTIONS = [
+  { value: '', label: 'Default', helper: 'use provider default' },
+  { value: 'low', label: 'Low', helper: 'fastest, cheapest' },
+  { value: 'medium', label: 'Medium', helper: 'balanced' },
+  { value: 'high', label: 'High', helper: 'slower, more thorough' },
+];
+
+export function ReasoningEffortSheet({ open, onClose, initialValue, onSave }) {
+  const toast = useToast();
+  const [value, setValue] = useState(initialValue ?? '');
+  useEffect(() => { if (open) setValue(initialValue ?? ''); }, [open, initialValue]);
+  const save = async () => {
+    try {
+      await onSave?.(value);
+      toast({ title: 'Reasoning saved', duration: 1400 });
+      onClose?.();
+    } catch (e) {
+      toast({ title: 'Save failed', message: String(e), duration: 2400 });
+    }
+  };
+  return (
+    <Sheet
+      open={open}
+      onClose={onClose}
+      title="Reasoning effort"
+      subtitle="how hard the model thinks before answering"
+      primaryAction={{ label: 'Save', onPress: save }}
+    >
+      <View style={{ paddingVertical: space.s5 }}>
+        {REASONING_OPTIONS.map((opt, i) => (
+          <View key={opt.value || 'off'}>
+            {i > 0 ? <RowSeparator /> : null}
+            <PickerRow
+              label={opt.label}
+              helper={opt.helper}
+              selected={value === opt.value}
+              onPress={() => setValue(opt.value)}
+            />
+          </View>
+        ))}
+      </View>
+    </Sheet>
+  );
+}
+
+
 export function WorkspaceSheet({ open, onClose, profileName, initialValue, onSave }) {
   const toast = useToast();
   const [value, setValue] = useState(initialValue ?? '');

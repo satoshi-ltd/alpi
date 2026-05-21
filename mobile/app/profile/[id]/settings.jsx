@@ -24,6 +24,7 @@ import { AccentSheet } from '../../../src/features/sheets/AccentSheet';
 import {
   BudgetSheet,
   ModelSheet,
+  ReasoningEffortSheet,
   VoiceSheet,
   WorkspaceSheet,
 } from '../../../src/features/sheets/ProfileFieldSheets';
@@ -183,6 +184,17 @@ export default function ProfileSettings() {
           value={profile.model ? profile.model.split('/').slice(1).join('/') : '—'}
           onPress={() => setSheet('model')}
         />
+        {profile.model_reasoning_supported && (
+          <>
+            <RowSeparator />
+            <Row
+              label="Reasoning"
+              helper="how hard the model thinks before answering"
+              value={(profile.model_reasoning_effort || 'default')}
+              onPress={() => setSheet('reasoning')}
+            />
+          </>
+        )}
         <RowSeparator />
         <Row
           label="Budget"
@@ -387,6 +399,12 @@ export default function ProfileSettings() {
         openrouterModels={(profile.providers?.openrouter?.models) ?? []}
         ollamaNames={(profile.provider_ollama ?? []).map((o) => o.name)}
         onSave={(value) => saveField('model', value)}
+      />
+      <ReasoningEffortSheet
+        open={sheet === 'reasoning'}
+        onClose={() => setSheet(null)}
+        initialValue={profile.model_reasoning_effort ?? ''}
+        onSave={(value) => saveField('model_reasoning.effort', value)}
       />
       <BudgetSheet
         open={sheet === 'budget'}

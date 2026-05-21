@@ -14,6 +14,19 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.1.3 — 2026-05-21 — reasoning effort in profile settings
+
+Requires alpi ``v0.5.4`` or newer. On older daemons the row stays
+hidden.
+
+- Profile settings expose a reasoning effort sheet
+  (``Default / Low / Medium / High``) right under the model picker,
+  for OpenAI o-series, Claude 3.7+ / 4+, Gemini 2.5+, DeepSeek R1,
+  and any OpenRouter route.
+- The row only appears when the picked model supports reasoning;
+  swapping to an unsupported model clears the value automatically.
+- Mid-chat model overrides from the composer don't carry effort.
+
 ## v0.1.2 — 2026-05-21 — approval sheet for caution commands
 
 Requires alpi ``v0.5.1`` or newer. On older daemons the sheet stays
