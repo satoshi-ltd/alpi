@@ -12,55 +12,7 @@ Legend: 🔵 backlog · 🟡 next up · ⏸ blocked · 🔴 gate.
 
 ---
 
-## v0.6 cycle (active)
-
-**Theme: reliability before new surface area.** v0.5 delivered the
-second owned client surface through mobile. v0.6 hardens the shared
-capability core underneath TUI, desktop, mobile, schedules, workgroups,
-and compatibility gateways.
-
-Hermes Agent remains a reference for hardening mechanisms, not a
-feature catalog to port wholesale. This cycle focuses on trust
-boundaries, mutation evidence, approval flow, and operator
-diagnostics. Marketplace, provider breadth, and new chat-platform
-adapters stay out of scope.
-
-**Gateway posture.** Gateways stay supported for compatibility,
-automation delivery, and inbound email/chat. They are maintained, not
-expanded: reliability, profile isolation, delivery correctness, and
-diagnostics are in; new rich gateway UX belongs in desktop/mobile.
-
-### Operator diagnostics
-
-| ID | Item | Status |
-|---|---|---|
-| OPS.1 | Evidence digest — `alpi ops digest [--since 7d]` aggregates existing on-disk signals (broken tools / MCPs, gateway state, inactive skills, memory backlog, compaction rate) into one local report. No LLM, no dashboard, no recommendations. | 🟡 |
-
-### OPS.1. Evidence digest
-
-`alpi ops digest [--since 7d]` is a **simple local report**, not an
-observability product. Pure aggregation over data already on disk:
-
-- broken / unavailable tools + MCP servers (from the v0.5.6 availability layer);
-- gateway state per platform + profile (degraded / disabled, from the v0.5.10 breaker layer);
-- inactive skills and usage distribution (from the v0.5.9 telemetry layer);
-- memory promotion backlog (and audit highlights from `memory audit`);
-- compaction rate over the window, if the log is present.
-
-**Out of scope, deliberately**:
-
-- No LLM-driven summary, ranking, or recommendation. The digest just
-  surfaces the numbers; the operator decides what to act on.
-- No dashboard, no metrics service, no telemetry that leaves the machine.
-- No new on-disk state — every section reads existing primitives.
-- Approval-frequency patterns, session-search misses, and other
-  speculative signals stay out until there's a concrete use case
-  pulling for them.
-
-The discipline is intentional: this command exists to make decisions,
-not to become a feature with its own surface area.
-
-## v0.7 cycle (planned)
+## v0.7 cycle (active)
 
 **Theme: owned-client UX + self-improving library + recall/cost depth.**
 v0.6 makes the system observable and reliable. v0.7 uses that evidence
@@ -72,7 +24,7 @@ patterns into Alpi-owned clients rather than gateways.
 | ID | Item | Status |
 |---|---|---|
 | UX.1 | Structured clarification — the agent asks closed questions that desktop/mobile render as native choices; gateways degrade to numbered text. | 🔵 |
-| UX.2 | Rich tool cards parity — desktop/mobile render approvals, file mutations, memory promotions, skill imports, and workgroup events as first-class cards. | 🔵 |
+| UX.2 | Rich tool cards parity — desktop/mobile render approvals, file mutations, memory promotions, and workgroup events as first-class cards. | 🔵 |
 | UX.3 | Gateway migration nudges — gateway replies can point users back to Alpi clients for flows that need approvals, files, workgroups, or rich UI. | 🔵 |
 
 ### Self-improving skills
@@ -81,7 +33,6 @@ patterns into Alpi-owned clients rather than gateways.
 |---|---|---|
 | AC.1 | Skill curator recommendations — use the v0.5.9 telemetry to flag stale, duplicate, overly narrow, or umbrella-candidate skills. Produces reports and manual apply plans; no silent deletes. | 🔵 |
 | AC.2 | Curator apply flow — after preview, archive stale skills, add `absorbed_into:` metadata, and move detail into umbrella skill `references/` when consolidation is accepted. | 🔵 |
-| BF-8 | Skill versioning / install-update flows — pinned install source, update preview/diff, revision metadata, and rollback metadata for imported skills. | 🔵 |
 
 ### Recall and workgroup search
 
@@ -95,7 +46,7 @@ patterns into Alpi-owned clients rather than gateways.
 
 | ID | Item | Status |
 |---|---|---|
-| CL.1 | Prompt caching across providers — stable-prefix audit, marker-required provider support, optional cache-key hints for auto-cache providers, and measurement in `ops digest`. | 🔵 |
+| CL.1 | Prompt caching across providers — stable-prefix audit, marker-required provider support, optional cache-key hints for auto-cache providers, and measurement in `alpi digest`. | 🔵 |
 | BD | Model-family conditional prompt guidance — inject heavier tool-use/verification guidance only for model families that real logs show need it. | 🔵 |
 
 ### Voice
@@ -112,8 +63,8 @@ better than any chat bridge:
 
 - structured clarifications render as native choices instead of asking
   the user to type an option number;
-- approvals, file mutations, memory promotions, skill imports, and
-  workgroup events become stable cards with state, actions, and replay;
+- approvals, file mutations, memory promotions, and workgroup events
+  become stable cards with state, actions, and replay;
 - gateway replies can include a lightweight "open in Alpi" pointer when
   the flow needs rich UI.
 
@@ -146,13 +97,6 @@ The second phase applies only after preview:
 The curator reconciles its LLM summary against the actual tool-call log
 of the curator run. If the summary says a skill was absorbed but no tool
 call did that, the report marks a mismatch instead of trusting prose.
-
-### BF-8. Skill versioning / install-update flows
-
-Safe import (SK.2) handles first install. BF-8 handles what happens
-after that: revision metadata, pinned source path/URL, update preview,
-diff, and rollback metadata. This still is not a marketplace. A user
-chooses a source, inspects the diff, and confirms the update.
 
 ### CM.4. Semantic recall over past sessions
 
@@ -195,7 +139,7 @@ order:
    mutation;
 2. add marker support for providers that require explicit cache control;
 3. add optional cache-key hints for auto-cache providers where useful;
-4. measure cache savings in `ops digest`.
+4. measure cache savings in `alpi digest`.
 
 Explicit cache APIs are adopted only where implicit/marker caching shows
 measurable miss-rate problems.
@@ -207,7 +151,7 @@ small routing table so heavy enforcement blocks are injected only for
 families that real logs show need them. Other families keep the shorter
 baseline prompt.
 
-Promotion condition: `ops digest` or LLM test traces show repeated,
+Promotion condition: `alpi digest` or LLM test traces show repeated,
 family-specific failures such as under-calling tools, skipping
 verification, or closing turns early despite open commitments.
 
@@ -291,6 +235,7 @@ already analysed; the "why now?" question is the open one.
 | Signal | Signal gateway via signal-cli | Strong privacy fit, but new gateways are out of scope now that Alpi-owned clients are the primary mobile surface |
 | AY | Skills marketplace — federated, signed, never centralised | Presupposes an active author community + adoption for discovery to matter |
 | SK.2 | Safe skill import (`alpi skill import <dir\|zip>` — preview, scan, install) | Pulls toward marketplace/import-ecosystem mental model without a concrete user pull. Promote when somebody actually needs to migrate a batch of skills from another stack. |
+| BF-8 | Skill versioning / install-update flows | Depends on SK.2 and imported-source metadata. Keep it out while import itself is deferred. |
 | AI (2) | Memory v2 — TUI panel (collapsible, edit-in-place, "forget this") | UI weight for niche audience (power users with much memory); item 1 covers the substantive part |
 | AI (3) | Entity memory — structured SQLite store (`entities`/`relations`/`observations`) replacing the markdown memory model, with selective injection per turn instead of full-blob system prompt | Markdown memory hasn't demonstrably broken yet for real users; AI(1) is a quality pass on the existing model. Promote when a user reports `MEMORY.md` is large enough that prompt size / cost becomes a real bottleneck. BA's shared `store` primitive (v0.5) is designed so the migration is incremental when promoted. |
 | AJ | Browser realism — Cloudflare / captcha / fingerprint depth | Cat-and-mouse perpetuo; without concrete failing use case, scope can't close |

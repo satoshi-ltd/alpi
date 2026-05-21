@@ -5,7 +5,7 @@ to ``<profile>/skills/.usage.json``. Pure measurement: state classification
 (active / stale / archived) is derived on read from ``last_seen`` so the
 file never drifts out of sync with the real cutoffs.
 
-Consumers: ``alpi doctor``, future ``alpi ops digest`` (OPS.1), and the
+Consumers: ``alpi doctor``, future ``alpi digest`` (OPS.1), and the
 v0.7 curator (AC.1) which will recommend prunes from this data.
 """
 

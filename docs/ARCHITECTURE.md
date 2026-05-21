@@ -803,6 +803,25 @@ Progressive rendering: `run_and_render()` uses `rich.live.Live` — every row ap
 
 Exit codes: `1` if any check returns `fail`, `0` for warn/info/ok. Warnings don't break cron. The wizard entry ignores the exit code — it press-enter-waits so the user can read.
 
+### Ops digest (`alpi/ops_digest.py`)
+
+`alpi digest [--since 7d]` is the read-only evidence rollup for
+operator decisions. It deliberately does not own new state: each section
+reads the primitive owned by another subsystem.
+
+- **Tools** — current TL.1 availability report from `alpi.tools`.
+- **Gateways** — GW.1 breaker states from `<home>/gateway/.breaker-state.json`.
+- **Skills** — SK.1 summary from `skills_usage`.
+- **Memory** — promotion queue counts plus memory-file pressure.
+- **Compaction** — event count and after/before ratios from
+  `logs/compaction.jsonl` over the requested window.
+
+The command has two renderers: a compact Rich view for humans and
+`--json` for scripts. The JSON is a dataclass dump of the report shape.
+It is not an observability daemon, dashboard, recommendation engine, or
+telemetry channel. Tests pin the read-only contract by snapshotting the
+profile tree before and after a digest run.
+
 ### Sessions (`alpi/session.py`, `alpi/session_map.py`)
 
 Turn-based JSON: `turns: [{at, user, tools[], assistant}]` plus cumulative metrics. `ToolLog` carries `at, name, args, result (truncated hint), ok, duration_s, reasoning (non-empty only on first tool of a batch)`. Empty sessions (no user message) are NOT saved.

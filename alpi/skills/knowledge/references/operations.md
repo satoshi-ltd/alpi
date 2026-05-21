@@ -12,6 +12,21 @@ alpi doctor
 Use `doctor` before guessing. It checks common config, provider,
 workspace, daemon-backed features, and environment problems.
 
+## Operator evidence digest
+
+```bash
+alpi digest
+alpi digest --since 24h
+alpi digest --json
+alpi -p <profile> digest --since 7d
+```
+
+Use `alpi digest` when deciding what actually needs attention. It is
+read-only and aggregates existing evidence: unavailable tools, gateway
+breaker state, skill telemetry, memory promotion backlog / pressure, and
+compaction rate. It does not call an LLM, write state, recommend actions,
+or send telemetry.
+
 ## Daemon commands
 
 ```bash

@@ -1,5 +1,29 @@
 # Changelog
 
+## v0.6.0 — 2026-05-22 — evidence digest (OPS.1)
+
+Minor bump closing the v0.6 reliability + operator-diagnostics cycle.
+
+- Added ``alpi digest [--since 7d]``: a read-only local report over
+  existing evidence from tool availability, gateway breaker state, skill
+  telemetry, memory promotion backlog / pressure, and compaction logs.
+- ``--since`` accepts ``7d`` / ``12h`` / ``30m`` shorthand or a raw
+  numeric day value. ``--json`` emits the full dataclass schema for
+  automation and downstream tooling.
+- The digest deliberately stays small: no LLM summary, no
+  recommendations, no dashboard, no metrics service, no new on-disk
+  state, and no telemetry leaving the machine.
+- The v0.6 cycle is now closed. Its through-line was reliability before
+  new surface area: untrusted-output boundaries (CF.1), tool
+  availability checks (TL.1), memory audit (CM.1), local-notification
+  backend events (ALN), skill telemetry (SK.1), gateway containment
+  (GW.1), and now the operator evidence digest (OPS.1).
+- SK.2 ``alpi skill import`` remains deferred until there is real user
+  pull for batch migration from another stack; foreground toasts for
+  extra notification event kinds also stay out until a concrete UX gap
+  appears.
+- Umbrel package + image tag bumped to ``0.6.0``.
+
 ## v0.5.10 — 2026-05-22 — gateway containment (GW.1)
 
 Per profile + per platform circuit breaker for the gateway loop. A
@@ -42,7 +66,7 @@ untouched.
 
 Per-skill view / use / patch counters persisted to
 ``<profile>/skills/.usage.json``. Pure measurement — no auto-curate,
-no archive, no pruning. The data feeds the future ``alpi ops digest``
+no archive, no pruning. The data feeds the future ``alpi digest``
 (OPS.1) and unblocks the v0.7 skill curator (AC.1) which will
 recommend pruning candidates from this history once it has months of
 real usage to look at.

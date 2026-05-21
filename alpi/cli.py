@@ -3850,7 +3850,7 @@ def cmd_memory_promote(ctx: click.Context, apply_all: bool, discard_all: bool) -
 @memory_group.command("audit")
 @click.option(
     "--json", "as_json", is_flag=True, default=False,
-    help="Emit the full report as JSON (machine-readable for ops/digest).",
+    help="Emit the full report as JSON (machine-readable for memory audit tooling).",
 )
 @click.pass_context
 def cmd_memory_audit(ctx: click.Context, as_json: bool) -> None:
@@ -3974,6 +3974,144 @@ def _render_audit(report, console) -> None:
             console.print(f"  · {w}")
     else:
         console.print("[green]no pressure warnings[/green]")
+
+
+@main.command("digest")
+@click.option(
+    "--since", "window", default="7d",
+    help="time window for stats: e.g. 7d, 24h, 30m (default 7d).",
+)
+@click.option(
+    "--json", "as_json", is_flag=True, default=False,
+    help="emit the full report as JSON for automation / chaining.",
+)
+@click.pass_context
+def cmd_digest(ctx: click.Context, window: str, as_json: bool) -> None:
+    """Read-only evidence digest aggregating existing on-disk signals:
+    broken tools, gateway state, skill usage, memory backlog, compaction
+    rate. Sibling to ``alpi doctor`` — doctor is "is this healthy now?",
+    digest is "what happened in the last N days?". No LLM, no dashboard,
+    no recommendations."""
+    from alpi import ops_digest, ui
+
+    try:
+        window_days = ops_digest.parse_window(window)
+    except ValueError as e:
+        raise click.ClickException(str(e))
+
+    h: Path = ctx.obj["home"]
+    report = ops_digest.run_digest(h, window_days=window_days)
+
+    if as_json:
+        click.echo(_digest_to_json(report))
+        return
+
+    _render_digest(report, ui._console)
+
+
+def _digest_to_json(report) -> str:
+    """Stable schema for downstream consumers — future OPS automation or external dashboards parsing the JSON output."""
+    import json
+    from dataclasses import asdict
+    return json.dumps(asdict(report), indent=2, default=str)
+
+
+def _render_digest(report, console) -> None:
+    """Rich-formatted digest, organised so the operator can decide what to act on in a single scan."""
+    from rich.table import Table
+
+    console.print(f"[b]digest[/b] · window: {report.window_days:.1f}d")
+    console.print("")
+
+    # Tools
+    t = report.tools
+    console.print("[dim]Tools[/dim]")
+    if t.unavailable:
+        for name, reason in t.unavailable:
+            console.print(f"  [yellow]·[/yellow] {name} — {reason}")
+        console.print(f"  [dim]{t.total - len(t.unavailable)} other tools available[/dim]")
+    else:
+        console.print(f"  [green]{t.total} tools available[/green]")
+    console.print("")
+
+    # Gateways
+    g = report.gateways
+    console.print("[dim]Gateways[/dim]")
+    if g.total_tracked == 0:
+        console.print("  [dim]no tracked platforms yet[/dim]")
+    elif not g.degraded and not g.disabled:
+        console.print(f"  [green]{g.by_state.get('healthy', 0)} healthy[/green]")
+    else:
+        for d in g.disabled:
+            cooldown = int(d.get("cooldown_remaining_s") or 0)
+            console.print(
+                f"  [red]·[/red] {d['platform']} — disabled, "
+                f"cooldown {cooldown}s ({d['consecutive_failures']} failures: "
+                f"{d.get('last_error') or 'unknown'})"
+            )
+        for d in g.degraded:
+            console.print(
+                f"  [yellow]·[/yellow] {d['platform']} — degraded "
+                f"({d['consecutive_failures']} consecutive: "
+                f"{d.get('last_error') or 'unknown'})"
+            )
+        healthy = g.by_state.get("healthy", 0)
+        if healthy:
+            console.print(f"  [dim]{healthy} healthy[/dim]")
+    console.print("")
+
+    # Skills
+    s = report.skills
+    console.print("[dim]Skills[/dim]")
+    if s.total == 0:
+        console.print("  [dim]no usage recorded[/dim]")
+    else:
+        bs = s.by_state
+        console.print(
+            f"  {s.total} tracked · "
+            f"{bs.get('active', 0)} active / "
+            f"{bs.get('stale', 0)} stale / "
+            f"{bs.get('archived', 0)} archived"
+        )
+        if s.top_used:
+            top = ", ".join(f"{n} ({c})" for n, c in s.top_used)
+            console.print(f"  [dim]top used: {top}[/dim]")
+        for name, state in s.pinned_cold:
+            console.print(
+                f"  [yellow]·[/yellow] {name} — pinned but {state}"
+            )
+    console.print("")
+
+    # Memory
+    m = report.memory
+    console.print("[dim]Memory[/dim]")
+    if m.promotion_pending == 0:
+        console.print("  [dim]no pending promotions[/dim]")
+    else:
+        age = (
+            f"oldest {m.promotion_oldest_age_days:.1f}d"
+            if m.promotion_oldest_age_days is not None else "unknown age"
+        )
+        by = ", ".join(
+            f"{k}={v}" for k, v in sorted(m.promotion_by_target.items())
+        )
+        console.print(f"  {m.promotion_pending} pending · {age} · {by}")
+    for w in m.pressure_warnings:
+        console.print(f"  [yellow]·[/yellow] {w}")
+    console.print("")
+
+    # Compaction
+    c = report.compaction
+    console.print("[dim]Compaction[/dim]")
+    if c.events_in_window == 0:
+        console.print(f"  [dim]no events in last {report.window_days:.1f}d[/dim]")
+    else:
+        ratio = "—" if c.avg_ratio is None else f"{c.avg_ratio * 100:.0f}%"
+        fired = "—" if c.fired_pct is None else f"{c.fired_pct * 100:.0f}%"
+        console.print(
+            f"  {c.events_in_window} event(s) · "
+            f"avg ratio after/before={ratio} · fired={fired}"
+        )
 
 
 if __name__ == "__main__":

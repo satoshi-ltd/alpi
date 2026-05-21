@@ -81,6 +81,12 @@ sidecar (`sessions/_events_<session_id>.jsonl`); the desktop calls
 stream socket dies mid-turn. A 5s `heartbeat` frame keeps the
 client's stall watchdog alive on long tool calls.
 
+`alpi digest` is the read-only evidence rollup. It does not own new
+state: tools come from TL.1 availability, gateways from GW.1 breaker
+state, skills from SK.1 telemetry, memory from the promotion queue /
+file pressure, and compaction from `logs/compaction.jsonl`. Human output
+is compact; `--json` dumps the report shape for scripts.
+
 Skills are exposed through a compact index in the system prompt.
 Keyword hints can add a one-turn system message nudging toward matching
 skills.

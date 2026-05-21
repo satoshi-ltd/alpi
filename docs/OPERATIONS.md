@@ -292,6 +292,30 @@ Use cases:
 - **Cron snapshot** — `alpi diff --since 24h --json` piped into
   whatever dashboard collects per-profile activity.
 
+## Operator evidence digest
+
+`alpi digest [--since 7d]` answers a different question from
+`alpi diff`: not "what changed?", but "what parts of this profile need
+operator attention?" It is a read-only aggregation over state Alpi
+already writes:
+
+```bash
+alpi digest                 # last 7 days, human output
+alpi digest --since 24h
+alpi digest --since 30m
+alpi digest --json          # machine-readable report
+alpi -p work digest --json
+```
+
+The report covers unavailable tools, gateway breaker state, skill usage
+telemetry, memory promotion backlog / pressure, and compaction rate over
+the window. It does not run an LLM, write new state, make
+recommendations, or send telemetry anywhere.
+
+Use it before roadmap or ops decisions: if a proposed improvement has no
+evidence in the digest, it probably belongs in "listening first" until a
+real profile starts showing the pain.
+
 ## Disaster recovery checklist
 
 You've lost a machine. Here's the order of operations to restore.
