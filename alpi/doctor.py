@@ -65,6 +65,7 @@ def run_all(home: Path, profile: str) -> list[Check]:
             "model": _check_model(cfg, env),
             "workspace": _check_workspace(cfg),
             "tools": _check_tools(),
+            "skills": _check_skills(home),
             "services": _check_services(home, profile),
             "security": _check_security(cfg),
         }
@@ -82,10 +83,36 @@ def run_all(home: Path, profile: str) -> list[Check]:
     out.extend(sync_checks["model"])
     out.extend(sync_checks["workspace"])
     out.extend(sync_checks["tools"])
+    out.extend(sync_checks["skills"])
     out.extend(live.get("gateways", []))
     out.extend(sync_checks["services"])
     out.extend(live.get("mcps", []))
     out.extend(sync_checks["security"])
+    return out
+
+
+def _check_skills(home: Path) -> list[Check]:
+    """SK.1 — surface skill telemetry. One summary row + warns for pinned skills that have gone cold (most likely curation candidates). Stale/archived counts inform but don't warn — pruning is AC.1's job in v0.7."""
+    from alpi import skills_usage as _su
+
+    stats = _su.summary(home)
+    total = stats["total"]
+    out: list[Check] = []
+    if total == 0:
+        out.append(Check("Skills", "telemetry", "info", "no usage recorded yet"))
+        return out
+    by_state = stats["by_state"]
+    out.append(Check(
+        "Skills", "telemetry", "ok",
+        f"{total} tracked · "
+        f"{by_state['active']} active / {by_state['stale']} stale / "
+        f"{by_state['archived']} archived",
+    ))
+    for name, state in stats["pinned_cold"]:
+        out.append(Check(
+            "Skills", name, "warn",
+            f"pinned but {state} — review for curation",
+        ))
     return out
 
 

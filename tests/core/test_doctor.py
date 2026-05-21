@@ -209,3 +209,72 @@ def test_doctor_tools_group_warns_on_unavailable(
         for c in tools_checks
     )
     assert doctor.exit_code(checks) == 0
+
+
+def test_doctor_skills_info_when_no_telemetry(tmp_path: Path, monkeypatch) -> None:
+    """Fresh profile with no recorded skill usage gets an info row, not a
+    fail — the absence of data is normal for a just-installed alpi."""
+    _write_cfg(tmp_path, workspace=str(tmp_path))
+    _write_env(tmp_path, OPENROUTER_API_KEY="x")
+    from alpi import service
+    monkeypatch.setattr(service, "daemon_installed", lambda: False)
+    monkeypatch.setattr(service, "daemon_running_pid", lambda root: None)
+
+    checks = doctor.run_all(tmp_path, "default")
+    skills_checks = [c for c in checks if c.group == "Skills"]
+    assert len(skills_checks) == 1
+    assert skills_checks[0].status == "info"
+    assert "no usage recorded" in skills_checks[0].detail
+
+
+def test_doctor_skills_summary_when_telemetry_present(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    """A profile with mixed-state skills gets one ok summary line with the
+    by-state counts. ``time.time`` is pinned so the active/stale/archived
+    cutoffs land predictably regardless of when CI runs the suite."""
+    _write_cfg(tmp_path, workspace=str(tmp_path))
+    _write_env(tmp_path, OPENROUTER_API_KEY="x")
+    from alpi import service, skills_usage as su
+    monkeypatch.setattr(service, "daemon_installed", lambda: False)
+    monkeypatch.setattr(service, "daemon_running_pid", lambda root: None)
+
+    now = 1_700_000_000.0
+    day = 86400.0
+    monkeypatch.setattr(su.time, "time", lambda: now)
+    su.record_usage(tmp_path, "fresh", "view", now=now - 1 * day)
+    su.record_usage(tmp_path, "ageing", "view", now=now - 45 * day)
+    su.record_usage(tmp_path, "ancient", "view", now=now - 200 * day)
+
+    checks = doctor.run_all(tmp_path, "default")
+    skills_checks = [c for c in checks if c.group == "Skills"]
+    summary = next((c for c in skills_checks if c.name == "telemetry"), None)
+    assert summary is not None
+    assert summary.status == "ok"
+    assert "3 tracked" in summary.detail
+    assert "1 active" in summary.detail
+    assert "1 stale" in summary.detail
+    assert "1 archived" in summary.detail
+
+
+def test_doctor_skills_warns_on_pinned_but_cold(tmp_path: Path, monkeypatch) -> None:
+    """The interesting curation signal: a skill the user explicitly pinned
+    but hasn't touched in months. Surfaces as a per-skill warn so the
+    operator sees it without scanning every entry by hand."""
+    _write_cfg(tmp_path, workspace=str(tmp_path))
+    _write_env(tmp_path, OPENROUTER_API_KEY="x")
+    from alpi import service, skills_usage as su
+    monkeypatch.setattr(service, "daemon_installed", lambda: False)
+    monkeypatch.setattr(service, "daemon_running_pid", lambda root: None)
+
+    now = 1_700_000_000.0
+    monkeypatch.setattr(su.time, "time", lambda: now)
+    su.record_usage(tmp_path, "cold-pinned", "view",
+                    pinned=True, now=now - 120 * 86400.0)
+
+    checks = doctor.run_all(tmp_path, "default")
+    skills_checks = [c for c in checks if c.group == "Skills"]
+    warn = next((c for c in skills_checks if c.status == "warn"), None)
+    assert warn is not None
+    assert warn.name == "cold-pinned"
+    assert "pinned but" in warn.detail

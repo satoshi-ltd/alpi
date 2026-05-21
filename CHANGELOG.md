@@ -1,5 +1,38 @@
 # Changelog
 
+## v0.5.9 — 2026-05-21 — skill telemetry (SK.1)
+
+Per-skill view / use / patch counters persisted to
+``<profile>/skills/.usage.json``. Pure measurement — no auto-curate,
+no archive, no pruning. The data feeds the future ``alpi ops digest``
+(OPS.1) and unblocks the v0.7 skill curator (AC.1) which will
+recommend pruning candidates from this history once it has months of
+real usage to look at.
+
+- ``alpi.skills_usage`` module: ``record_usage``, ``forget``,
+  ``load_all``, ``classify`` (active / stale / archived derived from
+  ``last_seen`` so the file never drifts out of sync), and
+  ``summary`` (aggregated stats: total, by-state counts, top-used,
+  pinned-but-cold candidates).
+- Every successful ``skill`` action dispatch now bumps the right
+  counter: ``view`` / ``validate`` → view_count;
+  ``run`` / ``invoke`` / ``test`` → use_count; ``create`` / ``edit``
+  / ``patch`` / ``add_file`` / ``remove_file`` / ``set_meta`` →
+  patch_count. ``delete`` removes the entry so usage doesn't outlive
+  the skill itself. The meta ``list`` action and failed dispatches
+  never touch telemetry — ``list`` has no target skill name to
+  attribute usage to.
+- ``pinned`` flag is snapshot from frontmatter on every touch so
+  curation downstream doesn't have to re-read every ``SKILL.md`` to
+  know which entries the user explicitly wants to keep.
+- ``alpi doctor`` adds a ``Skills`` group: a single ``ok`` summary
+  with active/stale/archived counts when there's telemetry, an
+  ``info`` row when the profile has no recorded usage yet, plus one
+  ``warn`` per pinned-but-cold skill (the highest-signal curation
+  candidate). State cutoffs: ``active`` < 30 days, ``stale`` 30–90
+  days, ``archived`` ≥ 90 days. Warns don't break exit code.
+- Umbrel package + image tag bumped to ``0.5.9``.
+
 ## v0.5.8 — 2026-05-21 — AX Local Notify (ALN) groundwork
 
 Two new host event kinds feeding the **AX Local Notify (ALN)** mobile

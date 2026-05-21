@@ -46,7 +46,6 @@ diagnostics are in; new rich gateway UX belongs in desktop/mobile.
 
 | ID | Item | Status |
 |---|---|---|
-| SK.1 | Skill telemetry — local `.usage.json` tracks per-skill view/use/patch counts, timestamps, state, and pinned status. v0.6 measures; it does not auto-curate. | 🟡 |
 | SK.2 | Safe skill import — `alpi skill import <dir\|zip>` previews, normalizes, scans, and installs a local skill into the Alpi contract; no marketplace, remote registry, or silent update flow. | 🟡 |
 
 ### GW.1. Gateway containment
@@ -79,7 +78,7 @@ raw logs. `alpi ops digest [--since 7d]` creates one stateless report:
 - auto-compact rate and before/after ratios by model;
 - tools that failed before doing useful work;
 - unavailable tools or MCP servers (from the v0.5.6 availability layer);
-- inactive skills and usage distribution from SK.1;
+- inactive skills and usage distribution (from the v0.5.9 telemetry layer);
 - memory promotion backlog and audit highlights;
 - repeated "when did we discuss X?" style failures that would justify
   semantic session recall.
@@ -87,18 +86,6 @@ raw logs. `alpi ops digest [--since 7d]` creates one stateless report:
 **Non-goal.** Not a dashboard, not a metrics service, not telemetry that
 leaves the machine. It is a local report the operator runs before
 deciding what to build next.
-
-### SK.1. Skill telemetry
-
-`skills/.usage.json` tracks local usage without adding a service:
-view count, use count, patch count, created/last-used timestamps, state
-(`active` / `stale` / `archived`), and pinned status. The `skill` tool
-updates this on view, run, test, edit, and add-file actions.
-
-v0.6 deliberately stops at measurement. Bundled `@alpi/*` skills and
-pinned skills are represented in telemetry, but no background job moves
-or rewrites them yet. That restraint matters: automatic curation needs
-real usage data and a mature audit trail.
 
 ### SK.2. Safe skill import
 
@@ -137,7 +124,7 @@ patterns into Alpi-owned clients rather than gateways.
 
 | ID | Item | Status |
 |---|---|---|
-| AC.1 | Skill curator recommendations — use SK.1 telemetry to flag stale, duplicate, overly narrow, or umbrella-candidate skills. Produces reports and manual apply plans; no silent deletes. | 🔵 |
+| AC.1 | Skill curator recommendations — use the v0.5.9 telemetry to flag stale, duplicate, overly narrow, or umbrella-candidate skills. Produces reports and manual apply plans; no silent deletes. | 🔵 |
 | AC.2 | Curator apply flow — after preview, archive stale skills, add `absorbed_into:` metadata, and move detail into umbrella skill `references/` when consolidation is accepted. | 🔵 |
 | BF-8 | Skill versioning / install-update flows — pinned install source, update preview/diff, revision metadata, and rollback metadata for imported skills. | 🔵 |
 

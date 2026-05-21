@@ -11,6 +11,7 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from alpi import skills_usage as _skills_usage
 from alpi.home import get_home
 from alpi.tools.base import Tool, ToolResult
 
@@ -857,7 +858,23 @@ class Skill(Tool):
         args: list[str] | None = None,
     ) -> ToolResult:
         home = get_home()
+        result = self._dispatch(
+            home, action, name, category, description, body,
+            requires_env, requires_bins, requires_config, platforms,
+            tools, keywords, output_schema, fields, subdir, filename,
+            content, old_string, new_string, file, confirm_user_skill,
+            args,
+        )
+        _record_skill_usage(home, action, name, result.ok)
+        return result
 
+    def _dispatch(
+        self, home, action, name, category, description, body,
+        requires_env, requires_bins, requires_config, platforms,
+        tools, keywords, output_schema, fields, subdir, filename,
+        content, old_string, new_string, file, confirm_user_skill,
+        args,
+    ) -> ToolResult:
         if action == "list":
             return _list(home)
         if action == "view":
@@ -1860,6 +1877,35 @@ def _annotate_with_validation(message: str, skill_dir: Path) -> str:
     if not findings:
         return message
     return f"{message}\n\nvalidation:\n  " + "\n  ".join(findings)
+
+
+def _resolve_pinned(home: Path, name: str) -> bool:
+    if not name:
+        return False
+    try:
+        target = _find_skill(home, name)
+        if target is None:
+            return False
+        return _is_pinned(target)
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _record_skill_usage(
+    home: Path, action: str, name: str, ok: bool,
+) -> None:
+    """Hook called after every successful ``skill`` action dispatch — bumps the per-skill counter in ``skills/.usage.json``. Failures and the meta ``list`` action are skipped so noise doesn't pollute the telemetry."""
+    if not ok or not name or action == "list":
+        return
+    try:
+        if action == "delete":
+            _skills_usage.forget(home, name)
+            return
+        _skills_usage.record_usage(
+            home, name, action, pinned=_resolve_pinned(home, name),
+        )
+    except Exception:  # noqa: BLE001
+        pass
 
 
 TOOL = Skill
