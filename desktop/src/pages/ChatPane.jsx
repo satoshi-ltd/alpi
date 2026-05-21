@@ -152,6 +152,7 @@ export default function ChatPane({
           activeProfile={activeProfile}
           availableModels={activeModels}
           onSelectProfile={onSelectProfile}
+          onConfigureProfile={onConfigureProfile}
           onSend={onSend}
           onCancel={pendingTurn ? onCancel : null}
           disabled={daemonOffline}
@@ -214,6 +215,7 @@ export default function ChatPane({
         activeProfile={activeProfile}
         availableModels={activeModels}
         onSelectProfile={onSelectProfile}
+        onConfigureProfile={onConfigureProfile}
         onSend={onSend}
         onCancel={pendingTurn ? onCancel : null}
         disabled={daemonOffline}
@@ -323,9 +325,17 @@ const Transcript = memo(function Transcript({
     if (!showSkeleton) return <div className={styles.loading} />;
     return (
       <div className={styles.loading}>
-        <Skeleton width="60%" height="1.2em" />
-        <Skeleton width="80%" height="1.2em" />
-        <Skeleton width="45%" height="1.2em" />
+        <div className={styles.loadingUser}>
+          <div className={styles.loadingUserBubble}>
+            <Skeleton width="95%" height="1em" />
+            <Skeleton width="62%" height="1em" />
+          </div>
+        </div>
+        <div className={styles.loadingAssistant}>
+          <Skeleton width="78%" height="1em" />
+          <Skeleton width="92%" height="1em" />
+          <Skeleton width="55%" height="1em" />
+        </div>
       </div>
     );
   }
@@ -473,14 +483,8 @@ const Turn = memo(function Turn({
       )}
       {tools.length > 0 && (
         <div className={styles.toolGroup}>
-          {tools.map((t, i) => (
-            <ToolCard
-              key={t.tool_id ?? `${t.name}:${i}`}
-              name={t.name}
-              preview={previewForArgs(t.args)}
-              ok={t.ok ?? null}
-              accent={accent}
-            />
+          {groupConsecutiveTools(tools).map((g, i) => (
+            <ToolGroupCard key={`g-${i}-${g.tools[0].tool_id ?? g.name}`} group={g} accent={accent} />
           ))}
         </div>
       )}
@@ -570,6 +574,84 @@ function renderPreview(str) {
   );
 }
 
+// Adjacent same-name tools collapse into one row with ×N badge + per-call dots; click to expand.
+function groupConsecutiveTools(tools) {
+  const groups = [];
+  for (const t of tools) {
+    const last = groups[groups.length - 1];
+    if (last && last.name === t.name) {
+      last.tools.push(t);
+    } else {
+      groups.push({ name: t.name, tools: [t] });
+    }
+  }
+  return groups;
+}
+
+function statusOf(t) {
+  return t.ok === null || t.ok === undefined ? "running" : t.ok ? "ok" : "fail";
+}
+
+const ToolGroupCard = memo(function ToolGroupCard({ group, accent }) {
+  const [expanded, setExpanded] = useState(false);
+  if (group.tools.length === 1) {
+    const t = group.tools[0];
+    return (
+      <ToolCard
+        name={t.name}
+        preview={previewForArgs(t.args)}
+        ok={t.ok ?? null}
+        accent={accent}
+      />
+    );
+  }
+  // Group derives its visual status from the worst child: any failed → fail; any running → running; else ok.
+  const groupStatus = group.tools.some((t) => statusOf(t) === "fail")
+    ? "fail"
+    : group.tools.some((t) => statusOf(t) === "running")
+      ? "running"
+      : "ok";
+  const diamondColor = groupStatus === "fail" ? "var(--c-danger)" : (accent || undefined);
+  const rootStyle = groupStatus === "running" && accent ? { "--accent": accent } : undefined;
+  const last = group.tools[group.tools.length - 1];
+  return (
+    <>
+      <button
+        type="button"
+        className={`${styles.tool} ${styles[`tool_${groupStatus}`]} ${styles.toolGroupClickable}`}
+        style={rootStyle}
+        onClick={() => setExpanded((v) => !v)}
+        aria-label={expanded ? "Collapse tool group" : `Expand ${group.tools.length} ${group.name} calls`}
+      >
+        <Diamond color={diamondColor} size={8} className={styles.toolIcon} />
+        <span className={styles.toolName}>{group.name}</span>
+        <span className={styles.toolGroupBadge}>×{group.tools.length}</span>
+        <span className={styles.toolGroupDots}>
+          {group.tools.map((t, i) => (
+            <span
+              key={t.tool_id ?? i}
+              className={`${styles.toolGroupDot} ${styles[`toolGroupDot_${statusOf(t)}`]}`}
+            />
+          ))}
+        </span>
+        {last.args ? (
+          <span className={styles.toolPreview}>{renderPreview(previewForArgs(last.args))}</span>
+        ) : null}
+      </button>
+      {expanded && group.tools.map((t, i) => (
+        <div key={t.tool_id ?? `${t.name}:${i}`} className={styles.toolGroupChild}>
+          <ToolCard
+            name={t.name}
+            preview={previewForArgs(t.args)}
+            ok={t.ok ?? null}
+            accent={accent}
+          />
+        </div>
+      ))}
+    </>
+  );
+});
+
 function PendingTurn({ turn, accent }) {
   const tools = turn.tools ?? [];
   const hasRunningTool = tools.some((t) => t.ok === null);
@@ -582,14 +664,8 @@ function PendingTurn({ turn, accent }) {
       )}
       {tools.length > 0 && (
         <div className={styles.toolGroup}>
-          {tools.map((t, i) => (
-            <ToolCard
-              key={t.tool_id || i}
-              name={t.name}
-              preview={previewForArgs(t.args)}
-              ok={t.ok}
-              accent={accent}
-            />
+          {groupConsecutiveTools(tools).map((g, i) => (
+            <ToolGroupCard key={`g-${i}-${g.tools[0].tool_id ?? g.name}`} group={g} accent={accent} />
           ))}
         </div>
       )}
@@ -607,7 +683,7 @@ function PendingTurn({ turn, accent }) {
         <div className={styles.toolError}>{turn.error}</div>
       )}
       {!turn.error && !turn.assistantPreview && tools.length === 0 && (
-        <Activity size="xl" className={styles.thinking} />
+        <Activity size="lg" tint={accent} className={styles.thinking} />
       )}
     </div>
   );
@@ -642,6 +718,7 @@ function ChatComposer({
   activeProfile,
   availableModels = [],
   onSelectProfile,
+  onConfigureProfile,
   onSend,
   onCancel,
   showPicker,
@@ -779,6 +856,7 @@ function ChatComposer({
               defaultModel={activeProfile.model ?? null}
               value={modelOverride}
               onChange={onModelChange}
+              onSetDefault={() => onConfigureProfile?.(activeProfile)}
               accent={activeProfile.accent ?? null}
             />
           )}

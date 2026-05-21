@@ -11,6 +11,26 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.3.6 — 2026-05-21 — connection switch hardening + grouped tool calls
+
+Requires alpi ``v0.4.52`` or newer. No daemon contract change.
+
+- Connection switching is now atomic from the UI's point of view:
+  local/remote changes reset the picker, reject stale reloads with a
+  switch token, and load the incoming connection cache only after the
+  active connection ref has flipped. This prevents the temporary
+  "remote selected, local data visible" frame and avoids pruning the
+  outgoing workgroup cache with the incoming workgroup list.
+- Adjacent same-name tool calls collapse into a single row with an
+  ``×N`` badge and per-call status dots. The row expands to show the
+  individual calls without changing transcript data.
+- Chat loading now renders a realistic user-bubble / assistant-line
+  skeleton instead of an empty pane.
+- The model override footer's ``Set default…`` action now opens the
+  active profile settings.
+- Added ``useHostConnections.test.js`` coverage for cache pruning,
+  picker reset, and A→B→A stale reload rejection. 68/68 tests pass.
+
 ## v0.3.5 — 2026-05-20 — vitest harness + CreateWorkgroup crash fix, hub dropdown shows model, Field/Textarea primitives in modal
 
 Requires alpi ``v0.4.52`` or newer (no daemon contract change vs.

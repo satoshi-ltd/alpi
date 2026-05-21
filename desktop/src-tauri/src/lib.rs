@@ -1769,7 +1769,21 @@ fn install_app_menu(app: &AppHandle) -> tauri::Result<()> {
         ],
     )?;
 
-    let menu = Menu::with_items(app, &[&app_submenu])?;
+    let undo = PredefinedMenuItem::undo(app, None)?;
+    let redo = PredefinedMenuItem::redo(app, None)?;
+    let edit_sep = PredefinedMenuItem::separator(app)?;
+    let cut = PredefinedMenuItem::cut(app, None)?;
+    let copy = PredefinedMenuItem::copy(app, None)?;
+    let paste = PredefinedMenuItem::paste(app, None)?;
+    let select_all = PredefinedMenuItem::select_all(app, None)?;
+    let edit_submenu = Submenu::with_items(
+        app,
+        "Edit",
+        true,
+        &[&undo, &redo, &edit_sep, &cut, &copy, &paste, &select_all],
+    )?;
+
+    let menu = Menu::with_items(app, &[&app_submenu, &edit_submenu])?;
     app.set_menu(menu)?;
     app.on_menu_event(|app, event| {
         if event.id.as_ref() == "menu:settings" {

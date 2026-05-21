@@ -132,6 +132,7 @@ export function useHostConnections({
   const reload = useCallback(async () => {
     const cur = hostConnectionsRef.current;
     const activeId = cur?.active_id ?? "local";
+    const switchId = connectionSwitchRef.current;
     const active = cur?.connections?.find((c) => c.id === cur.active_id);
     const status = active?.status;
     if (status !== "online") {
@@ -151,7 +152,13 @@ export function useHostConnections({
         }
       }
       // Detail is now LAZY: settings/profile screens fetch host.profile.detail on demand (see useProfileDetail). Reloading every profile's detail on each status flip would re-introduce the very 30–60 KB Tailscale poll we just split apart.
-      if (hostConnectionsRef.current?.active_id !== activeId) return;
+      // switchId guards A→B→A races where active_id alone would match
+      if (
+        hostConnectionsRef.current?.active_id !== activeId ||
+        connectionSwitchRef.current !== switchId
+      ) {
+        return;
+      }
       const looksLikeFailure =
         Array.isArray(ps) && Array.isArray(ws) && ps.length === 0 && ws.length === 0;
       const refreshed = hostConnectionsRef.current?.connections?.find(
@@ -164,7 +171,10 @@ export function useHostConnections({
         saveToCache(activeId, ps, ws);
       }
     } catch {
-      if (hostConnectionsRef.current?.active_id === activeId) {
+      if (
+        hostConnectionsRef.current?.active_id === activeId &&
+        connectionSwitchRef.current === switchId
+      ) {
         showCachedOrClear(
           activeId,
           hostConnectionsRef.current?.connections?.find((c) => c.id === activeId)
@@ -254,25 +264,24 @@ export function useHostConnections({
       if (pending?.profile) {
         invoke("chat_cancel", { profile: pending.profile }).catch(() => {});
       }
+      // ref + state must flip BEFORE loadFromCache — pruneCachedMessages reads hostConnectionsRef
+      const next = {
+        ...previousState,
+        active_id: id,
+        connections: previousState.connections.map((c) =>
+          c.id === id ? { ...c, status: "probing", error: null } : c,
+        ),
+      };
+      hostConnectionsRef.current = next;
+      setHostConnections(next);
       setRewriteDraft(null);
       setSessionData(null);
       setPendingTurn(null);
       setActiveTask(null);
       setView((v) => (v.kind === "settings" ? v : { kind: "empty" }));
+      // reset picker — applyProfilesAndWorkgroups keeps prev if name collides across connections
+      setPickerAlpi(null);
       loadFromCache(id);
-      setHostConnections((prev) => {
-        if (prev.active_id === id) return prev;
-        const next = {
-          ...prev,
-          active_id: id,
-          connections: prev.connections.map((c) =>
-            c.id === id ? { ...c, status: "probing", error: null } : c,
-          ),
-        };
-        hostConnectionsRef.current = next;
-        return next;
-      });
-      syncedStatusRef.current = `${id}:probing:`;
 
       invoke("host_connection_set_active", { id })
         .then(() => {
@@ -283,6 +292,7 @@ export function useHostConnections({
           if (connectionSwitchRef.current === switchId) {
             hostConnectionsRef.current = previousState;
             setHostConnections(previousState);
+            setPickerAlpi(null);
             loadFromCache(previousState.active_id);
           }
           reloadConnections();

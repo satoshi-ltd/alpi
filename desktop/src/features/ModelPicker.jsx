@@ -8,6 +8,7 @@ export default function ModelPicker({
   defaultModel,
   value,
   onChange,
+  onSetDefault,
   accent,
   mode = "override",
   variant = "ghost",
@@ -71,6 +72,7 @@ export default function ModelPicker({
       models={groupedModels}
       mode={mode}
       variant={variant}
+      onSetDefault={onSetDefault}
       onPick={(id) => {
         if (mode === "default") onChange?.(id);
         else onChange?.(id === defaultModel ? null : id);
