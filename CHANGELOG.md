@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.5.1 — 2026-05-21 — terminal approvals over the host plane (CF.3)
+
+First v0.6-cycle release. Caution-command approvals (recursive `rm`,
+`sudo`, force-push, …) are no longer TUI-only — desktop and mobile
+can answer them through the daemon. The TUI flow is untouched; the
+daemon and any subscribed client are now equivalent surfaces.
+
+- Caution prompts are streamed to subscribed clients while the
+  engine waits; the client's choice resumes the turn.
+- 60-second auto-deny matches the existing TUI behavior; nothing
+  changes for schedules, gateways, or cron-platform turns.
+- A client opened mid-window can fetch in-flight prompts on mount
+  and answer them, instead of silently waiting out the timeout.
+- Each prompt carries the active profile so multi-profile daemons
+  show the right tag in the modal.
+- Bumped Umbrel package + image tag to `0.5.1`.
+
 ## v0.5.0 — 2026-05-21 — v0.5 cycle close: mobile client shipped
 
 Milestone release. No new daemon contract vs. `v0.4.54`; this

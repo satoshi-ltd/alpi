@@ -1142,6 +1142,7 @@ async def _run_host(home: Path, profile: str) -> None:
         log.warning("host subsystem requested for %r — only default can host", profile)
         return
 
+    from alpi.host import approval as host_approval
     from alpi.host import chat as host_chat
     from alpi.host import config as host_config
     from alpi.host import daemon as host_daemon
@@ -1175,6 +1176,7 @@ async def _run_host(home: Path, profile: str) -> None:
     host_device_state.register(server)
     host_daemon.register(server)
     host_events.register(server)
+    host_approval.register(server)
     host_schedule.register(server)
     host_wg_admin.register(server)
     host_probes.register(server)

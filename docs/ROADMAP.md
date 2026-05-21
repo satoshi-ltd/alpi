@@ -36,7 +36,6 @@ diagnostics are in; new rich gateway UX belongs in desktop/mobile.
 |---|---|---|
 | CF.1 | Tool-output / error sanitization — scrub tool outputs and errors before they are reinserted into model context, so hostile MCP/web/file/error text is treated as untrusted data rather than latent instructions. | 🟡 |
 | CF.2 | File mutation verifier — record each `write_file` / `edit_file` mutation with path, before/after hash, size, line count, and a small diff summary. The engine surfaces the mutation footer to the model and UI after tool batches. | 🟡 |
-| CF.3 | Host approval events — terminal approval prompts become host-stream events so desktop/mobile can pause, approve/deny, and resume turns without relying on TUI-only callbacks. | 🟡 |
 | GW.1 | Gateway containment — Telegram, IMAP, Gmail, Matrix and webhook listeners fail independently with backoff and status, so one broken compatibility bridge does not degrade sibling platforms or profiles. | 🟡 |
 | AX-push | Native push notifications for mobile mentions, new `#task`, and task completion. v0.5 shipped the in-app mobile surface; v0.6 adds out-of-app APNs / FCM delivery through daemon device-token registration and event-stream wakeups. | 🟡 |
 
@@ -97,22 +96,6 @@ First implementation:
 the verifier proves useful. LSP adds per-language processes, dependency
 management, and many false-positive failure modes. The first layer is
 hashes, sizes, diffs, and existing syntax lint.
-
-### CF.3. Host approval events
-
-Terminal approval is currently strongest in the TUI because there is an
-interactive callback. Desktop and mobile need the same contract over the
-host plane: when a command needs approval, the stream should emit an
-approval request with command, severity, pattern, and choices; the client
-answers; the engine resumes or denies.
-
-This keeps one approval policy across surfaces:
-
-- TUI keeps its current prompt UI;
-- desktop/mobile render native approval sheets;
-- gateways and schedules remain non-interactive and deny caution
-  commands unless config allowlist permits them;
-- approval decisions still land in `logs/approval.log`.
 
 ### GW.1. Gateway containment
 
