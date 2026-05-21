@@ -13,6 +13,7 @@ from typing import Callable
 from alpi import clock, config as cfg_mod
 from alpi import llm, memory, session, tools
 from alpi.tools._budget import apply as _budget_apply
+from alpi.tools._sanitizer import sanitize_tool_payload
 from alpi.session import ToolLog, truncate_result
 
 
@@ -422,7 +423,9 @@ class Engine:
                         "role": "tool",
                         "tool_call_id": tid,
                         "name": name,
-                        "content": payload,
+                        "content": sanitize_tool_payload(
+                            name, payload, is_error=not result.ok,
+                        ),
                     })
                     turn_tools.append(ToolLog(
                         at=tool_started, name=name, args=args,

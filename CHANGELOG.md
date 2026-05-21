@@ -1,5 +1,30 @@
 # Changelog
 
+## v0.5.5 — 2026-05-21 — untrusted-data boundary for tool outputs (CF.1)
+
+Patch on top of v0.5.4. Every tool result, success or error, now
+re-enters the model's message history wrapped in explicit
+data-not-instruction markers. Built-in tools and MCP tools share
+the same hook, so hostile text from web pages, MCP responses,
+subprocess stderr, file contents or DB rows is consistently
+boundaried — never treated as latent instructions.
+
+- Every ``role: "tool"`` message is wrapped with
+  ``[UNTRUSTED OUTPUT tool=<name> kind=data|error …]`` /
+  ``[END OUTPUT tool=<name>]``. The raw payload is preserved
+  verbatim between the markers so debugging stays intact.
+- Errors (previously injected as plain ``ERROR: …``) are wrapped
+  the same way with ``kind=error`` — stderr, MCP failures, DB
+  errors all flow through the same boundary now.
+- When a known injection pattern (override directives, fake system
+  / assistant turns, credential-exfil verbs, invisible unicode) is
+  detected, a ``[SECURITY WARNING …]`` line is added inside the
+  header so the model treats the body with extra suspicion.
+- The wrapping is model-context only — the desktop / mobile / TUI
+  event streams keep the raw payload, so no marker noise appears
+  in the user-facing UI.
+- Umbrel package + image tag bumped to ``0.5.5``.
+
 ## v0.5.4 — 2026-05-21 — reasoning effort per profile model (MC.1)
 
 Patch on top of v0.5.3. Profile setup and settings now expose a

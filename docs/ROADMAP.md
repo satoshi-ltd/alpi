@@ -34,7 +34,6 @@ diagnostics are in; new rich gateway UX belongs in desktop/mobile.
 
 | ID | Item | Status |
 |---|---|---|
-| CF.1 | Tool-output / error sanitization — scrub tool outputs and errors before they are reinserted into model context, so hostile MCP/web/file/error text is treated as untrusted data rather than latent instructions. | 🟡 |
 | GW.1 | Gateway containment — Telegram, IMAP, Gmail, Matrix and webhook listeners fail independently with backoff and status, so one broken compatibility bridge does not degrade sibling platforms or profiles. | 🟡 |
 | AX-push | Native push notifications for mobile mentions, new `#task`, and task completion. v0.5 shipped the in-app mobile surface; v0.6 adds out-of-app APNs / FCM delivery through daemon device-token registration and event-stream wakeups. | 🟡 |
 
@@ -52,27 +51,6 @@ diagnostics are in; new rich gateway UX belongs in desktop/mobile.
 |---|---|---|
 | SK.1 | Skill telemetry — local `.usage.json` tracks per-skill view/use/patch counts, timestamps, state, and pinned status. v0.6 measures; it does not auto-curate. | 🟡 |
 | SK.2 | Safe skill import — `alpi skill import <dir\|zip>` previews, normalizes, scans, and installs a local skill into the Alpi contract; no marketplace, remote registry, or silent update flow. | 🟡 |
-
-### CF.1. Tool-output / error sanitization
-
-Tools are the boundary where untrusted text re-enters the model loop:
-web pages, MCP servers, database errors, subprocess stderr, and file
-contents can all contain instruction-shaped text. Today many successful
-tool outputs are deliberately wrapped with injection warnings, but tool
-errors still flow back as plain `ERROR: ...` payloads. CF.1 makes the
-boundary explicit and uniform.
-
-The sanitizer should be conservative:
-
-- preserve enough detail for debugging;
-- wrap suspicious strings with an untrusted-data warning;
-- redact obvious secrets before session persistence;
-- never mutate structured data fields the tool contract requires;
-- apply to both built-in tools and wrapped MCP tools.
-
-**Non-goal.** This is not a content filter and not an LLM moderation
-layer. It is prompt-injection hygiene for text that came from outside
-the trusted user/system/tool-description channel.
 
 ### GW.1. Gateway containment
 
