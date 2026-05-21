@@ -1,5 +1,40 @@
 # Changelog
 
+## v0.5.8 — 2026-05-21 — AX Local Notify (ALN) groundwork
+
+Two new host event kinds feeding the **AX Local Notify (ALN)** mobile
+notifications path:
+
+- ``wg.mention`` — emitted both client-side (``workgroup_client.pull``)
+  and hub-side (``workgroup.post`` handler decrypts incoming peer
+  ciphertext) whenever a workgroup post ``@``-mentions the local
+  profile. Self-posts suppressed; email-shaped strings excluded by the
+  whitespace-boundary anchor; re-pulls of historical posts do NOT
+  re-emit (``min_seq=cursor`` guard).
+- ``chat.turn_done`` — emitted at the end of a naturally-completed
+  ``Engine.run_turn`` when ``source="user"`` (i.e. the turn was
+  started from desktop / mobile / TUI / CLI, not a peer link). Gated
+  by a noise heuristic: at least one tool call OR ≥5s elapsed —
+  trivial ``hola → hola`` exchanges do not notify. Payload carries
+  profile, session_id, duration_s, tool_count, and a 200-char
+  summary of the final assistant reply.
+
+These join the existing event family (``wg.post``, ``wg.done``,
+``approval.request``, ``schedule.done``, ``budget.threshold``…)
+consumed via the ``host.events.subscribe`` / ``host.events.history``
+stream.
+
+**Architectural commitment baked in**: ALN deliberately avoids APNs /
+FCM and any Satoshi-operated relay. Mobile uses ``expo-background-task``
+to wake periodically, polls ``host.events.history`` over the user's
+own Tailscale, and renders local notifications on-device. No device
+tokens registered with Apple/Google, no central server, no telemetry.
+The trade-off is latency (15–60 min on iOS, system-paced) in exchange
+for the alpi promise of zero servers in the middle. Mobile-side
+wiring lands in ``mobile-v0.1.4``.
+
+- Umbrel package + image tag bumped to ``0.5.8``.
+
 ## v0.5.7 — 2026-05-21 — memory audit CLI (CM.1) + reasoning capability fix
 
 Read-only operator surface for memory quality, and a fix for the

@@ -556,7 +556,52 @@ async def pull(
     sub.append_recent(decrypted)
     _absorb_roster(sub, raw.get("members"))
     sub_mod.upsert(home, sub)
+
+    _emit_wg_mentions(
+        home, wg_id, decrypted,
+        own_pubkey=kp.pubkey_b64(), min_seq=cursor,
+    )
+
     return decrypted, head
+
+
+def _emit_wg_mentions(
+    home: Path, wg_id: str, posts: list[dict[str, Any]],
+    *, own_pubkey: str, min_seq: int = 0,
+) -> None:
+    """Emit ``wg.mention`` for pulled posts that mention the local profile; skip self-posts and ``seq <= min_seq`` so re-pulls don't duplicate."""
+    try:
+        from alpi.alp import tasks as tasks_mod
+        from alpi.home import profile_name
+        from alpi.host import events as host_events
+    except Exception:  # noqa: BLE001
+        return
+
+    me = (profile_name(home) or "").lower()
+    if not me:
+        return
+
+    for p in posts:
+        if int(p.get("seq") or 0) <= min_seq:
+            continue
+        if str(p.get("from") or "") == own_pubkey:
+            continue
+        text = str(p.get("text") or "")
+        if not text:
+            continue
+        mentioned = {m.lower() for m in tasks_mod.mentions_in(text)}
+        if me not in mentioned:
+            continue
+        try:
+            host_events.emit("wg.mention", {
+                "profile": profile_name(home),
+                "wg_id": wg_id,
+                "seq": int(p.get("seq") or 0),
+                "from": str(p.get("from") or ""),
+                "summary": text[:200],
+            })
+        except Exception:  # noqa: BLE001
+            pass
 
 
 async def leave(home: Path, wg_id: str) -> dict[str, Any]:

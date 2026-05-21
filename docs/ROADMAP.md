@@ -35,7 +35,6 @@ diagnostics are in; new rich gateway UX belongs in desktop/mobile.
 | ID | Item | Status |
 |---|---|---|
 | GW.1 | Gateway containment — Telegram, IMAP, Gmail, Matrix and webhook listeners fail independently with backoff and status, so one broken compatibility bridge does not degrade sibling platforms or profiles. | 🟡 |
-| AX-push | Native push notifications for mobile mentions, new `#task`, and task completion. v0.5 shipped the in-app mobile surface; v0.6 adds out-of-app APNs / FCM delivery through daemon device-token registration and event-stream wakeups. | 🟡 |
 
 ### Operator diagnostics
 

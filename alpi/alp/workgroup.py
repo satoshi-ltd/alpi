@@ -584,6 +584,51 @@ def add_member(home: Path, wg_id: str, target_pubkey: str) -> Workgroup:
     return wg
 
 
+def _emit_hub_wg_mention(
+    home: Path, wg: "Workgroup", entry: dict[str, Any],
+    nonce: str, ciphertext: str,
+) -> None:
+    """Decrypt a member's incoming post on the hub side and emit ``wg.mention`` if the hub profile is ``@``-tagged. Mirrors ``_emit_wg_mentions`` on the client pull path."""
+    if entry.get("from") == wg.meta.hub_pubkey:
+        return
+    try:
+        from alpi.alp import tasks as tasks_mod
+        from alpi.alp.keys import load_or_generate
+        from alpi.home import profile_name
+        from alpi.host import events as host_events
+    except Exception:  # noqa: BLE001
+        return
+
+    me = (profile_name(home) or "").lower()
+    if not me:
+        return
+
+    hub_member = wg.member(wg.meta.hub_pubkey)
+    if hub_member is None or not hub_member.sealed_key:
+        return
+
+    try:
+        hub_kp = load_or_generate(home)
+        group_key = open_sealed_group_key(hub_member.sealed_key, hub_kp)
+        plaintext = decrypt_post(group_key, nonce, ciphertext).decode("utf-8", errors="replace")
+    except Exception:  # noqa: BLE001
+        return
+
+    mentioned = {m.lower() for m in tasks_mod.mentions_in(plaintext)}
+    if me not in mentioned:
+        return
+    try:
+        host_events.emit("wg.mention", {
+            "profile": profile_name(home),
+            "wg_id": wg.meta.id,
+            "seq": int(entry.get("seq") or 0),
+            "from": str(entry.get("from") or ""),
+            "summary": plaintext[:200],
+        })
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def _read_transcript(d: Path) -> list[dict[str, Any]]:
     p = d / _TRANSCRIPT
     if not p.exists():
@@ -808,7 +853,6 @@ def register(server: alp_server.Server, home: Path) -> None:
             member.last_seen_at = entry["ts"]
             _save_members(d, wg.members)
 
-        # wg.post mirrors workgroup_client._emit_wg_post so live clients refresh without a filesystem watcher.
         try:
             from alpi.host import events as host_events
             from alpi.home import profile_name
@@ -819,6 +863,8 @@ def register(server: alp_server.Server, home: Path) -> None:
             })
         except Exception:  # noqa: BLE001
             pass
+
+        _emit_hub_wg_mention(home, wg, entry, nonce, ciphertext)
 
         return {"seq": seq, "ts": entry["ts"]}
 

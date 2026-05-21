@@ -23,7 +23,7 @@ class _FakeEngine:
     def __init__(self, *, home: Path, cfg) -> None:  # noqa: ANN001
         self.session = _FakeSession()
 
-    def run_turn(self, prompt: str, emit) -> None:  # noqa: ANN001
+    def run_turn(self, prompt: str, emit, *, source: str = "user") -> None:  # noqa: ANN001
         from alpi.engine import AgentEvent
 
         # Snapshot the messages the engine "would have" seen — the

@@ -902,3 +902,244 @@ async def test_remote_member_post_emits_wg_post_on_hub(
     )
     assert hub_post[1]["wg_id"] == wg.meta.id
     assert isinstance(hub_post[1].get("seq"), int)
+
+
+def test_emit_wg_mentions_fires_when_local_profile_is_mentioned(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Pulled posts that ``@``-mention the local profile name must produce a
+    ``wg.mention`` host event so mobile ALN can surface them as notifications."""
+    home = tmp_path / "profiles" / "vera"
+    home.mkdir(parents=True)
+
+    captured: list[tuple[str, dict]] = []
+    import alpi.host.events as host_events
+    monkeypatch.setattr(
+        host_events, "emit",
+        lambda kind, data=None: captured.append((kind, data or {})),
+    )
+
+    from alpi.alp.workgroup_client import _emit_wg_mentions
+    posts = [
+        {"seq": 7, "from": "peer_alice_pubkey", "text": "@vera can you look at this?"},
+    ]
+    _emit_wg_mentions(home, "wg_xyz", posts, own_pubkey="vera_pubkey")
+
+    hits = [d for k, d in captured if k == "wg.mention"]
+    assert len(hits) == 1
+    assert hits[0]["profile"] == "vera"
+    assert hits[0]["wg_id"] == "wg_xyz"
+    assert hits[0]["seq"] == 7
+    assert hits[0]["from"] == "peer_alice_pubkey"
+    assert "@vera" in hits[0]["summary"]
+
+
+def test_emit_wg_mentions_skips_self_posts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A profile mentioning itself in an outbound post must NOT generate a
+    notification — that's a self-emit, not a peer mention."""
+    home = tmp_path / "profiles" / "vera"
+    home.mkdir(parents=True)
+
+    captured: list[tuple[str, dict]] = []
+    import alpi.host.events as host_events
+    monkeypatch.setattr(
+        host_events, "emit",
+        lambda kind, data=None: captured.append((kind, data or {})),
+    )
+
+    from alpi.alp.workgroup_client import _emit_wg_mentions
+    posts = [
+        {"seq": 8, "from": "vera_pubkey", "text": "@vera taking this"},
+    ]
+    _emit_wg_mentions(home, "wg_xyz", posts, own_pubkey="vera_pubkey")
+
+    assert [(k, d) for k, d in captured if k == "wg.mention"] == []
+
+
+def test_emit_wg_mentions_skips_unrelated_mentions(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A peer mentioning ``@alice`` in a workgroup where the local profile is
+    ``vera`` must not fire — only mentions of the local profile count."""
+    home = tmp_path / "profiles" / "vera"
+    home.mkdir(parents=True)
+
+    captured: list[tuple[str, dict]] = []
+    import alpi.host.events as host_events
+    monkeypatch.setattr(
+        host_events, "emit",
+        lambda kind, data=None: captured.append((kind, data or {})),
+    )
+
+    from alpi.alp.workgroup_client import _emit_wg_mentions
+    posts = [
+        {"seq": 9, "from": "bob_pubkey", "text": "@alice please review"},
+    ]
+    _emit_wg_mentions(home, "wg_xyz", posts, own_pubkey="vera_pubkey")
+
+    assert [(k, d) for k, d in captured if k == "wg.mention"] == []
+
+
+def test_emit_wg_mentions_does_not_match_emails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``foo@vera.com`` should not be treated as a mention of ``@vera`` — the
+    regex requires a whitespace/start-of-line boundary before ``@``."""
+    home = tmp_path / "profiles" / "vera"
+    home.mkdir(parents=True)
+
+    captured: list[tuple[str, dict]] = []
+    import alpi.host.events as host_events
+    monkeypatch.setattr(
+        host_events, "emit",
+        lambda kind, data=None: captured.append((kind, data or {})),
+    )
+
+    from alpi.alp.workgroup_client import _emit_wg_mentions
+    posts = [
+        {"seq": 10, "from": "bob", "text": "contact me at foo@vera.com for details"},
+    ]
+    _emit_wg_mentions(home, "wg_xyz", posts, own_pubkey="vera_pubkey")
+
+    assert [(k, d) for k, d in captured if k == "wg.mention"] == []
+
+
+def test_emit_wg_mentions_skips_seq_below_min_seq(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A re-pull with ``since=0`` (or any explicit replay) must NOT re-emit
+    notifications for posts the caller already saw. ``min_seq`` is the cursor
+    at the start of the pull — only ``seq > min_seq`` posts emit."""
+    home = tmp_path / "profiles" / "vera"
+    home.mkdir(parents=True)
+
+    captured: list[tuple[str, dict]] = []
+    import alpi.host.events as host_events
+    monkeypatch.setattr(
+        host_events, "emit",
+        lambda kind, data=None: captured.append((kind, data or {})),
+    )
+
+    from alpi.alp.workgroup_client import _emit_wg_mentions
+    posts = [
+        {"seq": 3,  "from": "bob", "text": "@vera ping (old)"},   # below cursor
+        {"seq": 5,  "from": "bob", "text": "@vera ping (cursor)"},  # at cursor — excluded
+        {"seq": 7,  "from": "bob", "text": "@vera ping (new)"},   # above cursor
+    ]
+    _emit_wg_mentions(home, "wg_xyz", posts,
+                      own_pubkey="vera_pubkey", min_seq=5)
+
+    seqs = [d["seq"] for k, d in captured if k == "wg.mention"]
+    assert seqs == [7], f"expected only seq=7 to emit, got {seqs}"
+
+
+@pytest.mark.asyncio
+async def test_pull_emits_wg_mention_for_remote_post_targeting_local(
+    short_tmp: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """End-to-end wiring: an incoming workgroup post that ``@``-mentions the
+    local profile must produce a ``wg.mention`` host event when ``pull()`` runs.
+    Guards against a refactor that silently drops the emit hook."""
+    hub_home = short_tmp / "profiles" / "alice"; hub_home.mkdir(parents=True)
+    bob_home = short_tmp / "profiles" / "vera"; bob_home.mkdir(parents=True)
+    alice_kp = load_or_generate(hub_home)
+    bob_kp = load_or_generate(bob_home)
+    _pin(hub_home, "vera", bob_kp.pubkey_b64(),
+         ["workgroup.join", "workgroup.post", "workgroup.pull",
+          "workgroup.leave"])
+    _pin(bob_home, "alice", alice_kp.pubkey_b64(),
+         ["link.ping"])
+
+    wg = wg_mod.create(
+        hub_home, name="ops", hub_kp=alice_kp,
+        member_pubkeys=[bob_kp.pubkey_b64()],
+    )
+
+    server = alp_server.Server(home=hub_home, agent_name="alice")
+    wg_mod.register(server, hub_home)
+    await server.start()
+
+    captured: list[tuple[str, dict]] = []
+    import alpi.host.events as host_events
+    monkeypatch.setattr(
+        host_events, "emit",
+        lambda kind, data=None: captured.append((kind, data or {})),
+    )
+
+    import alpi.alp.workgroup_client as wc_mod
+    original_resolver = wc_mod._intra_socket_path
+    wc_mod._intra_socket_path = lambda peer_id: server.socket_path()
+    try:
+        await wc.join(bob_home, "alice", wg.meta.id)
+        # Alice (hub) posts a message that mentions @vera (bob's profile).
+        await wc.post(hub_home, wg.meta.id, b"@vera could you take this?")
+        # Bob (vera) pulls — that's when the daemon should fire wg.mention.
+        await wc.pull(bob_home, wg.meta.id)
+    finally:
+        wc_mod._intra_socket_path = original_resolver
+        await server.stop()
+
+    mentions = [d for k, d in captured if k == "wg.mention"]
+    vera_mentions = [d for d in mentions if d.get("profile") == "vera"]
+    assert len(vera_mentions) >= 1, (
+        f"expected wg.mention emit on vera's pull side; captured: {captured}"
+    )
+    m = vera_mentions[0]
+    assert m["wg_id"] == wg.meta.id
+    assert isinstance(m["seq"], int) and m["seq"] >= 1
+    assert "@vera" in m["summary"]
+
+
+@pytest.mark.asyncio
+async def test_hub_emits_wg_mention_when_member_post_targets_hub_profile(
+    short_tmp: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When a member posts a message mentioning the hub profile, the hub-side
+    workgroup.post handler must decrypt the ciphertext and emit wg.mention so
+    the hub's mobile/desktop also sees the alert."""
+    hub_home = short_tmp / "profiles" / "alice"; hub_home.mkdir(parents=True)
+    bob_home = short_tmp / "profiles" / "bob"; bob_home.mkdir(parents=True)
+    alice_kp = load_or_generate(hub_home)
+    bob_kp = load_or_generate(bob_home)
+    _pin(hub_home, "bob", bob_kp.pubkey_b64(),
+         ["workgroup.join", "workgroup.post", "workgroup.pull",
+          "workgroup.leave"])
+    _pin(bob_home, "alice", alice_kp.pubkey_b64(),
+         ["link.ping"])
+
+    wg = wg_mod.create(
+        hub_home, name="ops", hub_kp=alice_kp,
+        member_pubkeys=[bob_kp.pubkey_b64()],
+    )
+
+    server = alp_server.Server(home=hub_home, agent_name="alice")
+    wg_mod.register(server, hub_home)
+    await server.start()
+
+    captured: list[tuple[str, dict]] = []
+    import alpi.host.events as host_events
+    monkeypatch.setattr(
+        host_events, "emit",
+        lambda kind, data=None: captured.append((kind, data or {})),
+    )
+
+    import alpi.alp.workgroup_client as wc_mod
+    original_resolver = wc_mod._intra_socket_path
+    wc_mod._intra_socket_path = lambda peer_id: server.socket_path()
+    try:
+        await wc.join(bob_home, "alice", wg.meta.id)
+        await wc.post(bob_home, wg.meta.id, b"@alice can you take this?")
+    finally:
+        wc_mod._intra_socket_path = original_resolver
+        await server.stop()
+
+    mentions = [d for k, d in captured if k == "wg.mention"]
+    hub_mentions = [d for d in mentions if d.get("profile") == "alice"]
+    assert len(hub_mentions) >= 1, (
+        f"hub didn't emit wg.mention for incoming @alice post; captured: {captured}"
+    )
+    m = hub_mentions[0]
+    assert m["wg_id"] == wg.meta.id
+    assert "@alice" in m["summary"]

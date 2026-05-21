@@ -145,18 +145,20 @@ class Engine:
         self.session.messages.append({"role": "system", "content": self._system_prompt})
         self.interrupt_requested = False
 
-    def run_turn(self, user_text: str, emit: EventSink) -> None:
-        """Run a full turn and bind ``self.home`` for the duration."""
+    def run_turn(self, user_text: str, emit: EventSink, *, source: str = "user") -> None:
+        """Run a full turn and bind ``self.home`` for the duration. ``source`` tags the trigger ("user" from desktop/mobile/TUI/CLI, "peer" from ALP link, etc.) and gates the ``chat.turn_done`` ambient-notification emit so peer-driven turns don't notify the local user."""
         from alpi.home import reset_active_home, set_active_home
 
         token = set_active_home(self.home)
         try:
             with self._turn_lock:
-                self._run_turn_locked(user_text, emit)
+                self._run_turn_locked(user_text, emit, source=source)
         finally:
             reset_active_home(token)
 
-    def _run_turn_locked(self, user_text: str, emit: EventSink) -> None:
+    def _run_turn_locked(
+        self, user_text: str, emit: EventSink, *, source: str = "user",
+    ) -> None:
         from alpi import config as _cfg_mod
         from alpi import ledger
 
@@ -482,12 +484,43 @@ class Engine:
                 tools=turn_tools,
                 started_at=turn_started,
             )
+            elapsed = time.time() - turn_started
             self._log_agent_turn(
                 user_text, final_assistant, turn_tools,
-                elapsed=time.time() - turn_started,
+                elapsed=elapsed,
             )
             if turn_completed:
+                self._maybe_emit_chat_turn_done(
+                    source=source, elapsed=elapsed,
+                    tools_count=len(turn_tools),
+                    assistant=final_assistant,
+                )
                 self._maybe_spawn_review()
+
+    def _maybe_emit_chat_turn_done(
+        self, *, source: str, elapsed: float, tools_count: int, assistant: str,
+    ) -> None:
+        """Emit ``chat.turn_done`` for ALN — user-initiated turns only, and only when there's something worth notifying about (any tool call or ≥5s of work). Skips trivial fast turns like ``hola → hola`` so mobile doesn't get a notif for every exchange."""
+        if source != "user":
+            return
+        if tools_count < 1 and elapsed < 5.0:
+            return
+        try:
+            from alpi.home import profile_name
+            from alpi.host import events as host_events
+            summary = (assistant or "").strip().replace("\n", " ")
+            if len(summary) > 200:
+                summary = summary[:199] + "…"
+            host_events.emit("chat.turn_done", {
+                "profile": profile_name(self.home),
+                "session_id": self.session.id,
+                "source": source,
+                "duration_s": round(elapsed, 2),
+                "tool_count": tools_count,
+                "summary": summary,
+            })
+        except Exception:  # noqa: BLE001
+            pass
 
     def _maybe_spawn_review(self) -> None:
         """Fire the post-turn memory reviewer if the cadence threshold is hit.

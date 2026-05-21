@@ -138,7 +138,7 @@ async def _run_turn_stream(
         def worker() -> None:
             try:
                 with ledger.peer_context(peer_id):
-                    engine.run_turn(prompt, emit=sink)
+                    engine.run_turn(prompt, emit=sink, source="peer")
             finally:
                 loop.call_soon_threadsafe(queue.put_nowait, SENTINEL)
 
@@ -213,7 +213,7 @@ def _run_turn(
         from alpi import ledger
 
         with ledger.peer_context(peer_id):
-            engine.run_turn(prompt, emit=sink)
+            engine.run_turn(prompt, emit=sink, source="peer")
         # Mention threads live in ``mentions/<sender>.json``, not
         # ``sessions/``, so ``alpi -p <peer> --continue`` stays clean.
         reply_text = "\n\n".join(parts).strip()
