@@ -11,6 +11,19 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.3.7 — 2026-05-21 — approval modal for caution commands
+
+Requires alpi ``v0.5.1`` or newer. On older daemons the modal stays
+dormant.
+
+- Caution commands (recursive `rm`, `sudo`, force-push, …) now open a
+  modal with four choices: allow once, allow this session, always,
+  deny. Previously these only worked from the TUI.
+- The modal shows the command, profile, severity, and a live
+  countdown to the daemon's auto-deny.
+- Opening the app mid-prompt or switching to a connection that
+  already has a pending prompt shows it immediately.
+
 ## v0.3.6 — 2026-05-21 — connection switch hardening + grouped tool calls
 
 Requires alpi ``v0.4.52`` or newer. No daemon contract change.

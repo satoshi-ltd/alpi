@@ -1151,6 +1151,27 @@ async fn daemon_restart() -> Result<(), String> {
 }
 
 #[tauri::command]
+async fn approval_respond(request_id: String, choice: String) -> Result<serde_json::Value, String> {
+    let params = serde_json::json!({ "request_id": request_id, "choice": choice });
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        host_client::call("host.approval.respond", params)
+    })
+    .await
+    .map_err(|e| format!("join: {e}"))??;
+    Ok(result)
+}
+
+#[tauri::command]
+async fn approval_pending() -> Result<serde_json::Value, String> {
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        host_client::call("host.approval.pending", serde_json::json!({}))
+    })
+    .await
+    .map_err(|e| format!("join: {e}"))??;
+    Ok(result)
+}
+
+#[tauri::command]
 async fn resolve_ctx_window(profile: String, model: String) -> Result<u64, String> {
     let result = tauri::async_runtime::spawn_blocking(move || {
         host_client::call(
@@ -1917,6 +1938,8 @@ pub fn run() {
             schedule_set_paused,
             schedule_fire,
             daemon_restart,
+            approval_respond,
+            approval_pending,
             profile_create,
             profile_delete,
             provider_set_key,

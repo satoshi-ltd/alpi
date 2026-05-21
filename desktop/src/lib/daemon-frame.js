@@ -26,6 +26,10 @@ export function fromDaemonFrame(frame) {
   if (event === "workgroup_changed" || event === "workgroup_meta" || event === "workgroup_members") {
     return { kind: "workgroup_meta" };
   }
+  if (event === "approval.request" || event === "approval.resolved") {
+    // App.jsx handles these in-place (queue mutations); applyChange is for fs invalidations.
+    return null;
+  }
   if (event === "peer.pairing_request" || event === "peers_changed") return { kind: "peers" };
   if (event === "subscriptions_changed") return { kind: "subscriptions" };
   if (

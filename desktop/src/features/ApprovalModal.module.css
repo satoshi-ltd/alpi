@@ -1,0 +1,108 @@
+.head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-bottom: var(--space-5);
+}
+
+.severity {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  color: var(--ink-2);
+  letter-spacing: 0.04em;
+}
+
+.dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--c-danger);
+}
+.dot[data-severity="caution"] { background: var(--c-warning, var(--ink-2)); }
+.dot[data-severity="dangerous"] { background: var(--c-danger); }
+.dot[data-severity="safe"] { background: var(--ink-4); }
+
+.pattern {
+  font-family: var(--font-mono);
+  font-size: var(--fs-base);
+  font-weight: var(--fw-medium);
+  color: var(--ink);
+}
+
+.command {
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+  background: color-mix(in srgb, var(--ink) 3%, var(--bg-pane));
+  border: 0.5px solid var(--line);
+  border-radius: var(--r-md);
+  padding: var(--space-5);
+  margin: 0 0 var(--space-5);
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 180px;
+}
+
+.meta {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+  margin-bottom: var(--space-3);
+}
+
+.choices {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.choice {
+  appearance: none;
+  text-align: left;
+  background: var(--bg-pane);
+  border: 0.5px solid var(--line);
+  border-radius: var(--r-md);
+  padding: var(--space-5) var(--space-6);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.choice:hover:not(:disabled) {
+  background: var(--hover);
+  border-color: color-mix(in srgb, var(--ink) 20%, transparent);
+}
+
+.choice:disabled {
+  opacity: 0.5;
+  cursor: progress;
+}
+
+.choiceLabel {
+  font-family: var(--font-sans);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  color: var(--ink);
+}
+
+.choiceHint {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+}
+
+.danger .choiceLabel { color: var(--c-danger); }
+
+.error {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--c-danger);
+  margin-top: var(--space-3);
+}

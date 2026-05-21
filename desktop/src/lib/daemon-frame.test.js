@@ -82,6 +82,11 @@ describe("fromDaemonFrame", () => {
     });
   });
 
+  it("approval.* frames return null — App.jsx handles them via the pending queue, not applyChange", () => {
+    expect(fromDaemonFrame({ event: "approval.request", data: { request_id: "x" } })).toBeNull();
+    expect(fromDaemonFrame({ event: "approval.resolved", data: { request_id: "x" } })).toBeNull();
+  });
+
   it("unknown event kinds return null (forward-compat)", () => {
     expect(fromDaemonFrame({ event: "some.future.event", data: {} })).toBeNull();
   });

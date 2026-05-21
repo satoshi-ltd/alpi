@@ -8,6 +8,7 @@ import Settings from "./pages/Settings.jsx";
 import { Banner } from "./primitives/index.js";
 import { useNotify } from "./primitives/Notification.jsx";
 import CommandPalette from "./features/CommandPalette.jsx";
+import ApprovalModal from "./features/ApprovalModal.jsx";
 import CreateProfileModal from "./features/CreateProfileModal.jsx";
 import CreateWorkgroupModal from "./features/CreateWorkgroupModal.jsx";
 import ToolsPanel from "./features/ToolsPanel.jsx";
@@ -20,6 +21,7 @@ import { findLatestTask } from "./lib/workgroup-tasks.js";
 import { saveCachedMessages } from "./lib/workgroup-cache.js";
 import { fetchWorkgroupTranscript, invalidateTranscriptCache } from "./lib/workgroup-fetch.js";
 import { fromDaemonFrame } from "./lib/daemon-frame.js";
+import { enqueueRequest as enqueueApprovalRequest } from "./lib/approval-queue.js";
 import { invalidateProfileDetailCache } from "./hooks/useProfileDetail.js";
 import { useChatStream } from "./hooks/useChatStream.js";
 import { useHostConnections } from "./hooks/useHostConnections.js";
@@ -166,6 +168,14 @@ export default function App() {
     setPaletteOpen((v) => !v);
   }, []);
   const onClosePalette = useCallback(() => setPaletteOpen(false), []);
+
+  const [approvalQueue, setApprovalQueue] = useState([]);
+  const onApprovalResolved = useCallback((requestId) => {
+    setApprovalQueue((q) => q.filter((r) => r.request_id !== requestId));
+  }, []);
+  const mergeApprovalRequest = useCallback((req) => {
+    setApprovalQueue((q) => enqueueApprovalRequest(q, req));
+  }, []);
 
   const [browse, setBrowse] = useState(null);
   const onCloseBrowse = useCallback(() => setBrowse(null), []);
@@ -468,6 +478,16 @@ export default function App() {
         return;
       }
       const frame = payload.frame ?? payload;
+      // approval.request: enqueue caution prompt. approval.resolved: pop in case another client answered first.
+      if (frame?.event === "approval.request") {
+        mergeApprovalRequest(frame.data ?? {});
+        return;
+      }
+      if (frame?.event === "approval.resolved") {
+        const rid = frame.data?.request_id;
+        if (rid) setApprovalQueue((q) => q.filter((r) => r.request_id !== rid));
+        return;
+      }
       const mapped = fromDaemonFrame(frame);
       if (mapped) applyChange(mapped);
     });
@@ -475,7 +495,22 @@ export default function App() {
       offFs.then((fn) => fn());
       offDaemon.then((fn) => fn());
     };
-  }, [applyChange, hostConnectionsRef]);
+  }, [applyChange, hostConnectionsRef, mergeApprovalRequest]);
+
+  // Cold-start recovery: subscribe anchors at next_seq so requests emitted before mount won't reach the stream. Fetch pending now and after any connection switch.
+  // ALSO drop the previous connection's queue: a stale entry would route host.approval.respond through the NEW daemon and either return unknown or, worse, confuse the user.
+  useEffect(() => {
+    setApprovalQueue([]);
+    let cancelled = false;
+    invoke("approval_pending")
+      .then((res) => {
+        if (cancelled) return;
+        const items = res?.requests || [];
+        for (const it of items) mergeApprovalRequest(it);
+      })
+      .catch(() => { /* daemon may be offline / older */ });
+    return () => { cancelled = true; };
+  }, [hostConnections.active_id, mergeApprovalRequest]);
 
   const sendingRef = useRef(false);
   const activeProfile = useMemo(() => {
@@ -930,6 +965,7 @@ export default function App() {
           }
         }}
       />
+      <ApprovalModal requests={approvalQueue} onResolved={onApprovalResolved} />
     </div>
   );
 }
