@@ -41,7 +41,6 @@ diagnostics are in; new rich gateway UX belongs in desktop/mobile.
 
 | ID | Item | Status |
 |---|---|---|
-| CM.1 | Memory audit CLI — `alpi memory audit` reports usage pressure, stale/low-confidence entries, duplicate clusters, operational-state leaks, promotion-queue backlog, and dedup-threshold calibration candidates. | 🟡 |
 | OPS.1 | Evidence digest — `alpi ops digest [--since 7d]` summarizes the signals that decide future work: approval frequency, compaction rate, broken tools, inactive skills, memory backlog, and recurring session-search misses. | 🟡 |
 
 ### Skill maintenance primitives
@@ -71,24 +70,6 @@ The circuit breaker is per profile + platform:
 - reset on a successful poll/send;
 - surface state in `alpi doctor`, `ops digest`, and host settings;
 - keep platform-specific logs parseable.
-
-### CM.1. Memory audit CLI
-
-`alpi memory audit` is the operator-facing view over memory quality. It
-does not mutate memory by default. It reports:
-
-- current `USER.md` / `MEMORY.md` / `AGENT.md` usage and pressure;
-- low-confidence entries eligible for expiry;
-- near-duplicate clusters at multiple Jaccard thresholds;
-- operational-state-looking entries that should probably live in
-  sessions or logs, not memory;
-- queued promotion candidates awaiting preview/apply;
-- compaction frequency and ratio distribution from
-  `logs/compaction.jsonl`.
-
-The command also owns dedup-threshold recalibration: run the audit at
-0.5 / 0.6 / 0.7 / 0.8 containment, inspect borderline clusters, then
-adjust the cutoff only if the data supports it.
 
 ### OPS.1. Evidence digest
 

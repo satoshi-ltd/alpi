@@ -1,5 +1,32 @@
 # Changelog
 
+## v0.5.7 — 2026-05-21 — memory audit CLI (CM.1) + reasoning capability fix
+
+Read-only operator surface for memory quality, and a fix for the
+reasoning effort dropdown that was silently hidden on direct
+openai/anthropic models.
+
+- ``alpi memory audit`` reports six categories without mutating
+  anything: usage pressure per file (USER.md, MEMORY.md, AGENT.md),
+  low-confidence entries eligible for expiry, near-duplicate clusters
+  at four overlap-coefficient thresholds (0.5 / 0.6 / 0.7 / 0.8 — the
+  sweep is the calibration tool for the dedup cutoff hard-coded at
+  0.7), operational-state-looking entries that probably belong in
+  sessions or logs, promotion-queue backlog, and compaction-log stats
+  for the last 7 / 30 days.
+- ``alpi memory audit --json`` emits the same report as machine-
+  readable JSON, ready for OPS.1 to fold into the future evidence
+  digest.
+- The audit never rewrites any file — including ``promotion_queue.jsonl``,
+  which the production ``list_pending`` would normally compact.
+- Reasoning effort dropdown now appears for every reasoning-capable
+  direct model: ``supports_reasoning`` consults the curated catalog
+  first, falls back to a regex (now including ``openai/gpt-5.*``) for
+  custom-typed model strings. The MC.1 dropdown was silently hidden on
+  ``openai/gpt-5.4-mini`` because the previous regex excluded the
+  GPT-5 family as "speculative", which OpenAI's docs in fact confirm.
+- Umbrel package + image tag bumped to ``0.5.7``.
+
 ## v0.5.6 — 2026-05-21 — tool availability probes (TL.1)
 
 Patch on top of v0.5.5. Tools whose optional runtime deps are missing

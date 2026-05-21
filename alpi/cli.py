@@ -3847,6 +3847,135 @@ def cmd_memory_promote(ctx: click.Context, apply_all: bool, discard_all: bool) -
     click.echo(f"applied={applied}  discarded={discarded}  skipped={skipped}")
 
 
+@memory_group.command("audit")
+@click.option(
+    "--json", "as_json", is_flag=True, default=False,
+    help="Emit the full report as JSON (machine-readable for ops/digest).",
+)
+@click.pass_context
+def cmd_memory_audit(ctx: click.Context, as_json: bool) -> None:
+    """Read-only memory quality report: usage pressure, low-confidence
+    stale entries, near-duplicate clusters at multiple thresholds,
+    operational-state leaks, promotion-queue backlog, compaction stats."""
+    from alpi import memory_audit, ui
+
+    h: Path = ctx.obj["home"]
+    report = memory_audit.run_audit(h)
+
+    if as_json:
+        click.echo(_audit_to_json(report))
+        return
+
+    _render_audit(report, ui._console)
+
+
+def _audit_to_json(report) -> str:
+    """Serialise an ``AuditReport`` to JSON. Frozen schema for OPS.1."""
+    import json
+    from dataclasses import asdict
+    return json.dumps(asdict(report), indent=2, default=str)
+
+
+def _render_audit(report, console) -> None:
+    """Rich-formatted audit. Keep concise so the operator can scan it whole."""
+    from rich.table import Table
+
+    console.print("[b]memory audit[/b]")
+    console.print("")
+
+    # Usage
+    console.print("[dim]Usage[/dim]")
+    t = Table(show_header=True, header_style="dim", box=None, padding=(0, 1))
+    t.add_column("file")
+    t.add_column("used", justify="right")
+    t.add_column("limit", justify="right")
+    t.add_column("%", justify="right")
+    for u in report.usage:
+        pct = "—" if u.percent is None else f"{u.percent * 100:.0f}%"
+        limit = "—" if u.limit is None else str(u.limit)
+        style = "yellow" if u.percent is not None and u.percent >= 0.80 else ""
+        t.add_row(u.name, str(u.used), limit, pct, style=style)
+    console.print(t)
+    console.print("")
+
+    # Stale / low-confidence
+    console.print(f"[dim]Low-confidence stale ({len(report.stale)})[/dim]")
+    if report.stale:
+        for s in report.stale[:10]:
+            console.print(f"  [yellow]·[/yellow] {s.file}#{s.index} "
+                          f"captured={s.captured} — {s.text}")
+        if len(report.stale) > 10:
+            console.print(f"  [dim]… {len(report.stale) - 10} more[/dim]")
+    else:
+        console.print("  [green]none[/green]")
+    console.print("")
+
+    # Duplicate clusters per threshold
+    console.print("[dim]Duplicate clusters (token-overlap threshold sweep)[/dim]")
+    for d in report.duplicates:
+        n = len(d.clusters)
+        affected = sum(len(c.members) for c in d.clusters)
+        ending = "y" if affected == 1 else "ies"
+        summary = f"{n} cluster(s), {affected} entr{ending}"
+        line = f"  threshold={d.threshold:.1f} → "
+        if n == 0:
+            line += f"[green]{summary}[/green]"
+        else:
+            line += summary
+        console.print(line)
+        for c in d.clusters[:3]:
+            ids = ", ".join("#" + str(i) for i, _ in c.members)
+            console.print(f"      [dim]{c.file}: {ids}[/dim]")
+        if len(d.clusters) > 3:
+            console.print(f"      [dim]… {len(d.clusters) - 3} more clusters[/dim]")
+    console.print("")
+
+    # Operational state
+    console.print(f"[dim]Operational-state leaks ({len(report.operational)})[/dim]")
+    if report.operational:
+        for op in report.operational[:10]:
+            console.print(f"  [yellow]·[/yellow] {op.file}#{op.index} "
+                          f"({op.warning}) — {op.text}")
+        if len(report.operational) > 10:
+            console.print(f"  [dim]… {len(report.operational) - 10} more[/dim]")
+    else:
+        console.print("  [green]none[/green]")
+    console.print("")
+
+    # Promotion queue
+    p = report.promotion
+    console.print("[dim]Promotion queue[/dim]")
+    if p.pending == 0:
+        console.print("  [green]empty[/green]")
+    else:
+        age = f"oldest {p.oldest_age_days:.1f}d" if p.oldest_age_days is not None else "unknown age"
+        by = ", ".join(f"{k}={v}" for k, v in sorted(p.by_target.items()))
+        console.print(f"  {p.pending} pending · {age} · {by}")
+    console.print("")
+
+    # Compaction
+    c = report.compaction
+    console.print("[dim]Compaction[/dim]")
+    if c.events_30d == 0:
+        console.print("  [dim]no events in last 30d[/dim]")
+    else:
+        ratio = "—" if c.avg_ratio is None else f"{c.avg_ratio * 100:.0f}%"
+        fired = "—" if c.fired_pct is None else f"{c.fired_pct * 100:.0f}%"
+        console.print(
+            f"  {c.events_7d} in 7d / {c.events_30d} in 30d · "
+            f"avg ratio after/before={ratio} · fired={fired}"
+        )
+    console.print("")
+
+    # Warnings footer
+    if report.pressure_warnings:
+        console.print("[yellow]pressure[/yellow]")
+        for w in report.pressure_warnings:
+            console.print(f"  · {w}")
+    else:
+        console.print("[green]no pressure warnings[/green]")
+
+
 if __name__ == "__main__":
     main(obj={})
     sys.exit(0)
