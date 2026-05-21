@@ -36,3 +36,8 @@ class Tool(abc.ABC):
                 "parameters": cls.parameters,
             },
         }
+
+    @classmethod
+    def check(cls) -> tuple[bool, str]:
+        """TL.1 — fast availability probe. ``(True, "")`` = ready; ``(False, reason)`` hides the tool from the LLM schema and flags it in ``alpi doctor``. Override on tools whose optional runtime deps may be missing on a minimal install. Never install anything; the runtime implementation is the final authority."""
+        return True, ""

@@ -79,6 +79,13 @@ class Stt(Tool):
         "required": ["path"],
     }
 
+    @classmethod
+    def check(cls) -> tuple[bool, str]:
+        import importlib.util
+        if importlib.util.find_spec("faster_whisper") is None:
+            return False, "faster-whisper not installed"
+        return True, ""
+
     def run(self, path: str, language: str = "") -> ToolResult:
         try:
             resolved = resolve_path(path)

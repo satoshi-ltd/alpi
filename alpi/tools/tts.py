@@ -143,6 +143,13 @@ class Tts(Tool):
         "required": ["text"],
     }
 
+    @classmethod
+    def check(cls) -> tuple[bool, str]:
+        import importlib.util
+        if importlib.util.find_spec("edge_tts") is None:
+            return False, "edge-tts not installed"
+        return True, ""
+
     def run(self, text: str, voice: str = "") -> ToolResult:
         if not text or not text.strip():
             return ToolResult(ok=False, output="", error="text is empty")

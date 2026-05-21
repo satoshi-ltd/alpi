@@ -1,5 +1,27 @@
 # Changelog
 
+## v0.5.6 — 2026-05-21 — tool availability probes (TL.1)
+
+Patch on top of v0.5.5. Tools whose optional runtime deps are missing
+are now hidden from the LLM schema and flagged in ``alpi doctor``,
+so a partial install can't surface a broken capability that fails at
+the first call.
+
+- Every ``Tool`` subclass can override ``check() -> (available, reason)``.
+  Default is "available"; override for tools with heavy/optional deps.
+- ``browser`` / ``stt`` / ``tts`` probe their underlying package
+  (``playwright`` / ``faster-whisper`` / ``edge-tts``) and report
+  unavailable cleanly when missing instead of crashing at call time.
+- Probes are cached for 60 s so schema generation stays cheap.
+- ``alpi doctor`` adds a ``Tools`` group: a single OK summary when
+  every tool is available, plus one warn row per missing tool with the
+  reason. Warns don't break the exit code, so a minimal install still
+  passes CI / cron.
+- Probes never install anything; if a probe passes but the tool's
+  runtime still fails, the tool's own error remains the final
+  authority.
+- Umbrel package + image tag bumped to ``0.5.6``.
+
 ## v0.5.5 — 2026-05-21 — untrusted-data boundary for tool outputs (CF.1)
 
 Patch on top of v0.5.4. Every tool result, success or error, now

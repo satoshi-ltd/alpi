@@ -43,7 +43,6 @@ diagnostics are in; new rich gateway UX belongs in desktop/mobile.
 |---|---|---|
 | CM.1 | Memory audit CLI — `alpi memory audit` reports usage pressure, stale/low-confidence entries, duplicate clusters, operational-state leaks, promotion-queue backlog, and dedup-threshold calibration candidates. | 🟡 |
 | OPS.1 | Evidence digest — `alpi ops digest [--since 7d]` summarizes the signals that decide future work: approval frequency, compaction rate, broken tools, inactive skills, memory backlog, and recurring session-search misses. | 🟡 |
-| TL.1 | Tool availability checks — fast cached `check_fn` probes hide or flag unavailable tools and MCP servers in diagnostics without installing dependencies or replacing runtime errors. | 🟡 |
 
 ### Skill maintenance primitives
 
@@ -99,7 +98,7 @@ raw logs. `alpi ops digest [--since 7d]` creates one stateless report:
 - approval-prompt frequency and top trigger patterns;
 - auto-compact rate and before/after ratios by model;
 - tools that failed before doing useful work;
-- unavailable tools or MCP servers from TL.1;
+- unavailable tools or MCP servers (from the v0.5.6 availability layer);
 - inactive skills and usage distribution from SK.1;
 - memory promotion backlog and audit highlights;
 - repeated "when did we discuss X?" style failures that would justify
@@ -108,19 +107,6 @@ raw logs. `alpi ops digest [--since 7d]` creates one stateless report:
 **Non-goal.** Not a dashboard, not a metrics service, not telemetry that
 leaves the machine. It is a local report the operator runs before
 deciding what to build next.
-
-### TL.1. Tool availability checks
-
-Some tools depend on runtime capabilities that may be missing in a
-minimal profile: browser automation needs Playwright/Chromium, STT needs
-its speech stack, TTS may need audio/conversion helpers, and MCP tools
-depend on configured servers. TL.1 adds a narrow probe layer:
-
-- probes are fast and cached briefly;
-- unavailable tools are hidden from model schemas or clearly flagged in
-  diagnostics;
-- checks never install dependencies automatically;
-- the normal tool implementation remains the final runtime authority.
 
 ### SK.1. Skill telemetry
 

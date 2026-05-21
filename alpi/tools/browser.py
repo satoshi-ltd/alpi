@@ -387,6 +387,13 @@ class Browser(Tool):
         "required": ["action"],
     }
 
+    @classmethod
+    def check(cls) -> tuple[bool, str]:
+        import importlib.util
+        if importlib.util.find_spec("playwright") is None:
+            return False, "playwright not installed"
+        return True, ""
+
     def run(
         self,
         action: str,

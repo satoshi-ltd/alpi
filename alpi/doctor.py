@@ -64,6 +64,7 @@ def run_all(home: Path, profile: str) -> list[Check]:
             "version": _check_version(),
             "model": _check_model(cfg, env),
             "workspace": _check_workspace(cfg),
+            "tools": _check_tools(),
             "services": _check_services(home, profile),
             "security": _check_security(cfg),
         }
@@ -75,15 +76,33 @@ def run_all(home: Path, profile: str) -> list[Check]:
             except Exception as e:  # noqa: BLE001
                 live[key] = [Check("Live", key, "fail", str(e))]
 
-    # Render order: version → model → workspace → gateways → services → mcps → security.
+    # Render order: version → model → workspace → tools → gateways → services → mcps → security.
     out: list[Check] = []
     out.extend(sync_checks["version"])
     out.extend(sync_checks["model"])
     out.extend(sync_checks["workspace"])
+    out.extend(sync_checks["tools"])
     out.extend(live.get("gateways", []))
     out.extend(sync_checks["services"])
     out.extend(live.get("mcps", []))
     out.extend(sync_checks["security"])
+    return out
+
+
+def _check_tools() -> list[Check]:
+    """TL.1 — flag tools whose optional runtime deps are missing. Available tools share a single summary line; only unavailable ones get their own row so doctor stays scannable."""
+    from alpi import tools as tools_mod
+
+    report = tools_mod.availability_report()
+    unavailable = [(name, reason) for name, ok, reason in report if not ok]
+    out: list[Check] = []
+    if unavailable:
+        for name, reason in unavailable:
+            out.append(Check("Tools", name, "warn", reason or "unavailable"))
+        ok_count = len(report) - len(unavailable)
+        out.append(Check("Tools", "registry", "info", f"{ok_count} other tools available"))
+    else:
+        out.append(Check("Tools", "registry", "ok", f"{len(report)} tools available"))
     return out
 
 

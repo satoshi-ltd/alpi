@@ -153,3 +153,59 @@ def test_doctor_reports_umbrel_managed_daemon(tmp_path: Path, monkeypatch) -> No
     daemon = next(c for c in checks if c.group == "Services" and c.name == "Daemon")
     assert daemon.status == "ok"
     assert daemon.detail == "managed by Umbrel (pid 4321)"
+
+
+def test_doctor_tools_group_summary_when_all_available(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    """TL.1 — when every tool reports available, doctor emits a single
+    summary row under Tools (one row, status ok). Doctor stays scannable
+    instead of listing 25+ tools individually."""
+    _write_cfg(tmp_path, workspace=str(tmp_path))
+    _write_env(tmp_path, OPENROUTER_API_KEY="x")
+    from alpi import service, tools as tools_mod
+    monkeypatch.setattr(service, "daemon_installed", lambda: False)
+    monkeypatch.setattr(service, "daemon_running_pid", lambda root: None)
+    monkeypatch.setattr(
+        tools_mod, "availability_report",
+        lambda: [("read_file", True, ""), ("memory", True, "")],
+    )
+
+    checks = doctor.run_all(tmp_path, "default")
+    tools_checks = [c for c in checks if c.group == "Tools"]
+    assert len(tools_checks) == 1
+    assert tools_checks[0].name == "registry"
+    assert tools_checks[0].status == "ok"
+    assert "2 tools available" in tools_checks[0].detail
+
+
+def test_doctor_tools_group_warns_on_unavailable(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    """When a tool is unavailable, doctor emits one warn row per unavailable
+    tool plus an info row summarising the rest. exit_code stays 0 (warns are
+    not fails) so cron and CI don't break on a partial install."""
+    _write_cfg(tmp_path, workspace=str(tmp_path))
+    _write_env(tmp_path, OPENROUTER_API_KEY="x")
+    from alpi import service, tools as tools_mod
+    monkeypatch.setattr(service, "daemon_installed", lambda: False)
+    monkeypatch.setattr(service, "daemon_running_pid", lambda root: None)
+    monkeypatch.setattr(
+        tools_mod, "availability_report",
+        lambda: [
+            ("read_file", True, ""),
+            ("browser",   False, "playwright not installed"),
+            ("stt",       False, "faster-whisper not installed"),
+        ],
+    )
+
+    checks = doctor.run_all(tmp_path, "default")
+    tools_checks = [c for c in checks if c.group == "Tools"]
+    statuses = {(c.name, c.status, c.detail) for c in tools_checks}
+    assert ("browser", "warn", "playwright not installed") in statuses
+    assert ("stt", "warn", "faster-whisper not installed") in statuses
+    assert any(
+        c.name == "registry" and c.status == "info" and "1 other" in c.detail
+        for c in tools_checks
+    )
+    assert doctor.exit_code(checks) == 0

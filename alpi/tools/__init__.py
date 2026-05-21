@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from alpi.tools.base import Tool, ToolResult
+from alpi.tools._availability import is_available, invalidate as _invalidate_availability
 from alpi.tools import (
     peer,
     browser,
@@ -48,11 +49,18 @@ def get(name: str) -> type[Tool] | None:
 
 
 def schemas() -> list[dict]:
-    return [cls.schema() for cls in _TOOLS.values()]
+    """Schemas the LLM sees. Unavailable tools (TL.1 probe failed) are filtered so the model can't reach for a broken capability."""
+    return [cls.schema() for cls in _TOOLS.values() if is_available(cls)[0]]
+
+
+def availability_report() -> list[tuple[str, bool, str]]:
+    """Fresh ``(name, available, reason)`` snapshot for every registered tool. Bypasses the cache so `alpi doctor` always shows current state."""
+    _invalidate_availability()
+    return [(cls.name, *is_available(cls)) for cls in _TOOLS.values()]
 
 
 def execute(name: str, arguments: dict) -> ToolResult:
-    """Execute a tool by name. Unknown names return an error result."""
+    """Execute a tool by name. Unknown or currently-unavailable names return an error result instead of calling .run()."""
     cls = _TOOLS.get(name)
     if cls is None:
         available = ", ".join(sorted(_TOOLS.keys()))
@@ -60,6 +68,12 @@ def execute(name: str, arguments: dict) -> ToolResult:
             ok=False,
             output="",
             error=f"unknown tool: {name}. Available tools: {available}",
+        )
+    ok, reason = is_available(cls)
+    if not ok:
+        return ToolResult(
+            ok=False, output="",
+            error=f"tool unavailable: {name} ({reason or 'check failed'})",
         )
     try:
         return cls().run(**arguments)
@@ -105,4 +119,7 @@ for _mod in (
     if _cls is not None:
         register(_cls)
 
-__all__ = ["Tool", "ToolResult", "all_tools", "get", "register", "schemas"]
+__all__ = [
+    "Tool", "ToolResult",
+    "all_tools", "get", "register", "schemas", "availability_report",
+]
