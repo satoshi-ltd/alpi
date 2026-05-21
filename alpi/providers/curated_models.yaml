@@ -1,20 +1,29 @@
 openai:
   - id: gpt-5.5
     note: flagship
+    reasoning: true
   - id: gpt-5.5-pro
     note: pro · extended reasoning
+    reasoning: true
   - id: gpt-5.4-mini
     note: balanced
+    reasoning: true
   - id: gpt-5.4-nano
     note: cheap · fast
+    reasoning: true
   - id: gpt-5.3-codex
     note: coding
+    reasoning: true
   - id: o3
     note: heavy reasoning
+    reasoning: true
 anthropic:
   - id: claude-opus-4-7
     note: flagship
+    reasoning: true
   - id: claude-sonnet-4-6
     note: balanced
+    reasoning: true
   - id: claude-haiku-4-5
     note: cheap · fast
+    reasoning: true

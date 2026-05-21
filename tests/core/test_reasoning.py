@@ -33,6 +33,12 @@ def test_normalise_effort_canonicalises_or_drops(raw, expected) -> None:
 @pytest.mark.parametrize("model", [
     "openai/o3-mini",
     "openai/o4-mini",
+    "openai/gpt-5.4-mini",      # curated catalog
+    "openai/gpt-5.4-nano",      # curated catalog
+    "openai/gpt-5.5",           # curated catalog
+    "openai/gpt-5.5-pro",       # curated catalog
+    "openai/gpt-5",             # custom-typed (catalog miss → regex fallback)
+    "openai/gpt-5-mini",        # custom-typed (regex fallback)
     "anthropic/claude-sonnet-4-6",
     "anthropic/claude-opus-4",
     "google/gemini-2.5-pro",
@@ -48,8 +54,6 @@ def test_supports_reasoning_true_for_known_models(model) -> None:
     "",
     "openai/gpt-4o",
     "openai/gpt-4o-mini",
-    "openai/gpt-5.4",
-    "openai/gpt-5.4-mini",
     "anthropic/claude-3.5-sonnet",
     "anthropic/claude-3-haiku",
     "google/gemini-1.5-pro",
@@ -59,6 +63,18 @@ def test_supports_reasoning_true_for_known_models(model) -> None:
 ])
 def test_supports_reasoning_false_for_known_unsupported_direct(model) -> None:
     assert supports_reasoning(model) is False
+
+
+def test_supports_reasoning_consults_curated_catalog() -> None:
+    """The catalog (`curated_models.yaml`) is the source of truth for openai /
+    anthropic. Every curated entry flagged `reasoning: true` must resolve to
+    True so the wizard / settings always offer the dropdown for picked models."""
+    from alpi.providers.curated import load_curated
+    for provider in ("openai", "anthropic"):
+        for entry in load_curated(provider):
+            if entry.get("reasoning"):
+                qualified = f"{provider}/{entry['id']}"
+                assert supports_reasoning(qualified) is True, qualified
 
 
 @pytest.mark.parametrize("model", [

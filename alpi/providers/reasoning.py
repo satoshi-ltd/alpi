@@ -23,9 +23,10 @@ def normalise_effort(value: Any) -> str:
     return ""
 
 
-# Direct providers: hardcoded patterns. Passing an unknown reasoning param to OpenAI / Anthropic / Gemini via litellm can surface as an API error, so we hide the dropdown on models we can't confirm.
+# Direct providers without a curated YAML catalog (google/deepseek/xai) — we fall back to regex. OpenAI + Anthropic are catalog-driven: the YAML is the source of truth, the regex below is the safety net for custom-typed model strings the user enters via the wizard's "custom model" prompt.
 _DIRECT_PATTERNS: tuple[re.Pattern, ...] = (
     re.compile(r"^openai/o[1-9](?:[._-]|$)"),
+    re.compile(r"^openai/gpt-5(?:[.-]|$)"),
     # Two Claude naming conventions in the wild:
     #   old: anthropic/claude-3-7-sonnet / anthropic/claude-3-5-sonnet (only 3.7+ supports thinking)
     #   new: anthropic/claude-sonnet-4-6 / claude-opus-4 / claude-haiku-4-5 (Claude 4+ supports thinking)
@@ -35,21 +36,34 @@ _DIRECT_PATTERNS: tuple[re.Pattern, ...] = (
     re.compile(r"^xai/grok-(?:3|4)-reasoning"),
 )
 
+_CATALOG_PROVIDERS = frozenset({"openai", "anthropic"})
+
 
 def supports_reasoning(model: str) -> bool:
     """True when the wizard / settings UI should expose the effort dropdown.
 
-    OpenRouter is treated as "always supports": their unified ``reasoning`` param
-    is documented to be silently ignored when the upstream doesn't support it,
-    so we trust the user + OpenRouter to handle the no-op. Direct providers use
-    a conservative pattern list because passing an unknown param to
-    OpenAI / Anthropic / Gemini via litellm can surface as an API error.
+    Order of evidence:
+    1. ``openrouter/*`` — always True; OpenRouter's unified ``reasoning`` param
+       is silently ignored upstream when not supported, so we let the user pick.
+    2. ``openai/<id>`` / ``anthropic/<id>`` — consult `curated_models.yaml`. The
+       catalog is the source of truth: a model marked ``reasoning: true`` is
+       supported, anything else (including unknown ids) falls through to (3).
+    3. Regex fallback — catches o-series, gpt-5.x, Claude 3.7+/4+, Gemini 2.5+,
+       DeepSeek R1, Grok 3/4 reasoning, even when the user types the model
+       name manually outside the curated catalog.
     """
     if not model:
         return False
     m = model.strip()
     if m.startswith("openrouter/"):
         return True
+    if "/" in m:
+        provider, model_id = m.split("/", 1)
+        if provider in _CATALOG_PROVIDERS:
+            from alpi.providers.curated import load_curated
+            for entry in load_curated(provider):
+                if entry.get("id") == model_id and entry.get("reasoning"):
+                    return True
     for pat in _DIRECT_PATTERNS:
         if pat.match(m):
             return True

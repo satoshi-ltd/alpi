@@ -250,7 +250,13 @@ async def test_reasoning_effort_rejected_when_current_model_unsupported(
     srv = host_server.Server(home=home)
     host_device_state.register(srv)
 
-    # Default model in _bootstrap is gpt-5.4-mini (no reasoning).
+    # Land on a model that genuinely doesn't support reasoning (gpt-4o-mini stays out of the catalog and out of the regex fallback).
+    await srv._dispatch({
+        "id": "to-nonreasoning",
+        "method": "host.config.set_field",
+        "params": {"profile": "default", "key": "model", "value": "openai/gpt-4o-mini"},
+    })
+
     resp = await srv._dispatch({
         "id": "set-eff",
         "method": "host.config.set_field",
