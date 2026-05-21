@@ -56,6 +56,72 @@ def test_content_param_description_reinforces_neutral_voice() -> None:
     assert "name" in hint.lower()
 
 
+def test_tool_description_pins_pronoun_routing_block() -> None:
+    """v0.5.3 fix: \"tu nombre es Clara\" was landing in USER.md as a
+    user preference instead of AGENT.md as the assistant's own
+    identity. The description must carry an explicit pronoun-routing
+    block + the anti-pattern-match warning so the model decides by
+    *who* the fact is about, not by the noun \"name\"."""
+    desc = Memory.description
+    assert "Pronoun routing" in desc
+    assert "YOU are X" in desc or "YOU (the assistant)" in desc
+    assert "Do not pattern-match" in desc
+    assert '"name"' in desc
+
+
+def test_tool_description_pins_seven_disambiguation_examples() -> None:
+    """The seven disambiguation lines below the pronoun-routing block
+    are the concrete cases small models pattern-match on. Each line
+    pairs an example with the correct target — losing any of these is
+    a routing regression."""
+    desc = Memory.description
+    examples = [
+        ('"Your name is Clara"', "AGENT.md"),
+        ('"Call yourself doc"', "AGENT.md"),
+        ('"You\'re a senior engineer"', "AGENT.md"),
+        ('"User prefers concise replies"', "AGENT.md"),
+        ('"My name is Javi"', "USER.md"),
+        ('"I\'m Spanish"', "USER.md"),
+        ('"The repo uses pytest with xdist"', "MEMORY.md"),
+    ]
+    for example, target in examples:
+        assert example in desc, f"missing disambiguation example: {example}"
+        idx = desc.index(example)
+        tail = desc[idx:idx + 200]
+        assert target in tail, (
+            f"example {example} not followed by its target ({target}); "
+            f"got tail: {tail!r}"
+        )
+
+
+def test_user_md_bullet_does_not_route_assistant_preferences_to_user() -> None:
+    """USER.md's bullet used to list \"long-term preferences and dislikes\"
+    without qualifying — that re-introduced the bug where \"prefers
+    concise replies\" (about your OUTPUT) ended up in USER.md. The
+    qualifier \"NOT about your replies\" / \"preferences about HOW YOU
+    REPLY go to AGENT.md\" must stay."""
+    desc = Memory.description
+    user_md_block_start = desc.index("USER.md   — the USER")
+    agent_md_block_start = desc.index("AGENT.md  — YOU")
+    user_block = desc[user_md_block_start:agent_md_block_start]
+    normalised = " ".join(user_block.lower().split())
+    assert "preferences about how you reply" in normalised or \
+           "preferences about your replies" in normalised
+
+
+def test_system_prompt_pins_pronoun_routing_rule() -> None:
+    """The Memory section of the system prompt reinforces the same
+    pronoun rule. If the rule lives only in the tool description, weak
+    models can skim past it; the system prompt is read every turn."""
+    from pathlib import Path
+    prompt_path = Path(__file__).resolve().parents[2] / "alpi" / "prompts" / "system_prompt.md"
+    prompt = prompt_path.read_text()
+    assert "Pronoun routing" in prompt
+    assert "AGENT.md" in prompt and "USER.md" in prompt
+    assert "your name is x" in prompt.lower()
+    assert "my name is x" in prompt.lower()
+
+
 def test_add_user_fact(isolated_home: Path) -> None:
     r = Memory().run(action="add", target="USER.md", content="Javi prefiere café negro.")
     assert r.ok, r.error

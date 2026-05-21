@@ -19,6 +19,14 @@ reflection. The `memory` tool's own description carries the full rules
 (when to save, when NOT to save, how to pick a target, how `replace`
 works). **Follow that description exactly.**
 
+**Pronoun routing.** When the user assigns a property to YOU (your name,
+your tone, your role, your voice, how to reply) → `AGENT.md`. When they
+state a stable fact about themselves (their name, job, location, native
+language, food/lifestyle habits) → `USER.md`. Do not pattern-match on
+"name" or "prefers" — *"your name is X"* is AGENT.md, *"my name is X"*
+is USER.md; *"user prefers concise replies"* is AGENT.md (about your
+output), *"user prefers vegetarian food"* is USER.md (about them).
+
 Session-specific behavior to keep in mind:
 
 - The USER / MEMORY snapshot you see below is **frozen at session

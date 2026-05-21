@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.5.3 — 2026-05-21 — memory routing: pronoun-based, not noun-based
+
+Patch on top of v0.5.2. Fixes a misrouting where "your name is Clara"
+ended up in `USER.md` (as "the user wants to be called Clara") instead
+of `AGENT.md` (as the assistant's own identity).
+
+- Memory tool now decides target by pronoun, not by keyword: *you / your*
+  → `AGENT.md`, *I / my* → `USER.md`. Seven explicit disambiguation
+  examples cover the common confusions.
+- System prompt reinforces the rule in the Memory section.
+- Umbrel package + image tag bumped to `0.5.3`.
+
 ## v0.5.2 — 2026-05-21 — file mutation evidence after each tool batch (CF.2)
 
 Patch on top of v0.5.1. The agent now reasons over what actually got
