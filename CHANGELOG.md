@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.6.2 — 2026-05-22 — user message visible mid-turn
+
+Fix: a paired client (desktop / mobile remount) reading a session
+during a long-running turn no longer has to wait until the assistant
+replies to see what the user just said.
+
+- ``Engine.run_turn`` now writes a stub turn (your message, empty
+  assistant + tools) to ``session.json`` as soon as the user message
+  is appended, and emits ``session_changed`` via the existing host
+  event stream. The final turn replaces the stub in place — exactly
+  one turn per call, no duplicates on interrupt or error.
+- Side benefit: desktop's "Last activity" + chat preview update the
+  instant a message lands, not minutes later when a tool finally
+  finishes.
+
 ## v0.6.1 — 2026-05-22 — agent.message event + send_message default to alpi channel
 
 Strategic shift: alpi-native notification delivery becomes the

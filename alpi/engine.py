@@ -145,8 +145,11 @@ class Engine:
         self.session.messages.append({"role": "system", "content": self._system_prompt})
         self.interrupt_requested = False
 
-    def run_turn(self, user_text: str, emit: EventSink, *, source: str = "user") -> None:
-        """Run a full turn and bind ``self.home`` for the duration. ``source`` tags the trigger ("user" from desktop/mobile/TUI/CLI, "peer" from ALP link, etc.) and gates the ``chat.turn_done`` ambient-notification emit so peer-driven turns don't notify the local user."""
+    def run_turn(
+        self, user_text: str, emit: EventSink, *, source: str = "user",
+        persist_inflight: bool = True,
+    ) -> None:
+        """Run a full turn and bind ``self.home`` for the duration. ``source`` tags the trigger ("user" from desktop/mobile/TUI/CLI, "peer" from ALP link, etc.) and gates the ``chat.turn_done`` ambient-notification emit so peer-driven turns don't notify the local user. ``persist_inflight`` controls the early stub write; CLI ``--no-save`` callers must disable it."""
         from alpi.home import (
             reset_active_home, reset_active_session,
             set_active_home, set_active_session,
@@ -156,13 +159,17 @@ class Engine:
         session_token = set_active_session(self.session.id)
         try:
             with self._turn_lock:
-                self._run_turn_locked(user_text, emit, source=source)
+                self._run_turn_locked(
+                    user_text, emit, source=source,
+                    persist_inflight=persist_inflight,
+                )
         finally:
             reset_active_session(session_token)
             reset_active_home(home_token)
 
     def _run_turn_locked(
         self, user_text: str, emit: EventSink, *, source: str = "user",
+        persist_inflight: bool = True,
     ) -> None:
         from alpi import config as _cfg_mod
         from alpi import ledger
@@ -226,6 +233,17 @@ class Engine:
 
         self.session.messages.append({"role": "user", "content": user_text})
         emit(AgentEvent(kind="user", text=user_text))
+
+        # In-flight stub turn: paired clients reading session.json see the user message before the LLM replies; the finally block replaces it with the completed turn.
+        self.session.log_turn(
+            user=user_text, assistant="", tools=[],
+            started_at=turn_started,
+        )
+        if persist_inflight:
+            try:
+                self.save_session()
+            except Exception:  # noqa: BLE001
+                pass
 
         schemas = tools.schemas()
         call_kwargs = cfg_mod.resolve_model(self.cfg)
@@ -481,14 +499,15 @@ class Engine:
             emit(AgentEvent(kind="error", text="Reached max tool steps; stopping."))
         finally:
             todo_mod.reset_store(todo_token)
-            # Always log a turn when one was started — even on interrupt,
-            # error or max_steps. This keeps /search and resume accurate.
-            self.session.log_turn(
-                user=user_text,
-                assistant=final_assistant,
-                tools=turn_tools,
-                started_at=turn_started,
+            # Replace the in-flight stub from turn-start, or append if an early exception aborted before it was logged.
+            final_turn = session.Turn(
+                at=turn_started, user=user_text,
+                tools=turn_tools, assistant=final_assistant,
             )
+            if self.session.turns and self.session.turns[-1].at == turn_started:
+                self.session.turns[-1] = final_turn
+            else:
+                self.session.turns.append(final_turn)
             elapsed = time.time() - turn_started
             self._log_agent_turn(
                 user_text, final_assistant, turn_tools,

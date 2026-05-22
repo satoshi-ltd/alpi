@@ -284,7 +284,7 @@ def _run_once(
 
     prev_handler = _signal.signal(_signal.SIGINT, _on_sigint)
     try:
-        engine.run_turn(user_text, emit=sink)
+        engine.run_turn(user_text, emit=sink, persist_inflight=persist)
     finally:
         _signal.signal(_signal.SIGINT, prev_handler)
     if persist:

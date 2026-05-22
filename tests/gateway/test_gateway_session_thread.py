@@ -23,7 +23,7 @@ def fake_engine(monkeypatch):
             self.cfg = cfg
             self.session = Session(home=home, model=cfg.model)
 
-        def run_turn(self, user_text, emit=None):
+        def run_turn(self, user_text, emit=None, persist_inflight=True):
             from alpi.session import Turn
             self.session.turns.append(Turn(at=0.0, user=user_text, tools=[], assistant="ok"))
             self.session.messages.append({"role": "user", "content": user_text})
