@@ -9,6 +9,26 @@ import {
 
 const DEEPLINK_TTL_MS = 30_000;
 
+export function resolveDeeplink(deeplink) {
+  const { kind, profile, id } = deeplink || {};
+  if (kind === "chat" && profile) {
+    return { view: { kind: "profile", profile, sessionId: id || null } };
+  }
+  if (kind === "profile" && profile) {
+    return { view: { kind: "profile", profile, sessionId: null } };
+  }
+  if (kind === "workgroup" && profile && id) {
+    return { view: { kind: "workgroup", profile, id } };
+  }
+  if (kind === "settings") {
+    return {
+      settingsTarget: profile ? { kind: "profile", id: profile } : null,
+      view: { kind: "settings" },
+    };
+  }
+  return null;
+}
+
 export function useNotificationDeeplink({ setView, setSettingsTarget }) {
   const pendingRef = useRef(null);
 
@@ -25,15 +45,12 @@ export function useNotificationDeeplink({ setView, setSettingsTarget }) {
         return;
       }
       pendingRef.current = null;
-      const { kind, profile, id } = pending.deeplink || {};
-      if (kind === "chat" && profile) {
-        setView({ kind: "profile", profile, sessionId: id || null });
-      } else if (kind === "workgroup" && profile && id) {
-        setView({ kind: "workgroup", profile, id });
-      } else if (kind === "settings") {
-        if (profile) setSettingsTarget({ kind: "profile", id: profile });
-        setView({ kind: "settings" });
+      const action = resolveDeeplink(pending.deeplink);
+      if (!action) return;
+      if (action.settingsTarget !== undefined) {
+        setSettingsTarget(action.settingsTarget);
       }
+      if (action.view) setView(action.view);
     };
 
     (async () => {

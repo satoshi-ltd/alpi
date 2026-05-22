@@ -11,6 +11,25 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.3.13 — 2026-05-22 — pair-then-cancel no longer silently un-pairs
+
+The "Pair new device" modal used to revoke the freshly-generated
+token whenever it closed via Cancel or the X — even when the phone
+had already scanned the QR or pasted the link. Result: the phone
+thought it was paired, the daemon no longer trusted its token, the
+desktop list looked empty.
+
+- Cancel now checks the daemon's view of the token. If the phone
+  already touched it (``last_seen`` set), the device is kept and
+  saved with whatever label you typed (or "Unnamed device" if
+  blank); the list refreshes. Unused tokens still get cleaned up.
+- Notification taps for ``agent.message`` payloads without a
+  bound ``session_id`` now land on the profile's latest chat
+  instead of doing nothing — the Rust side emits
+  ``kind: "profile"`` and the JS consumer had no handler for it.
+- New tests: ``lib/device-pair`` and
+  ``hooks/useNotificationDeeplink``.
+
 ## v0.3.12 — 2026-05-22 — instant fire feedback
 
 Requires alpi ``v0.6.3`` or newer.

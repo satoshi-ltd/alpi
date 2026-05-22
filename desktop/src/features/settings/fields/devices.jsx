@@ -8,6 +8,7 @@ import Skeleton from "../../../primitives/Skeleton.jsx";
 import { CopyIcon } from "../../../primitives/icons.jsx";
 import useAutoPosition from "../../../primitives/useAutoPosition.js";
 import { useNotify } from "../../../primitives/Notification.jsx";
+import { resolveCancelAction } from "../../../lib/device-pair.js";
 import { useDismissOnOutside } from "../../../hooks/useDismissOnOutside.js";
 import { Row } from "../primitives.jsx";
 import { Btn } from "../../../primitives/index.js";
@@ -315,7 +316,24 @@ function PairDeviceModal({ onClose, onPaired }) {
   }
 
   async function cancel() {
+    let action = { kind: payload?.token_id ? "revoke" : "noop" };
     if (payload?.token_id) {
+      try {
+        const devices = await invoke("devices_list");
+        action = resolveCancelAction(devices, payload.token_id, label);
+      } catch {
+        // list rpc failed — keep the conservative default (revoke the orphan token)
+      }
+    }
+    if (action.kind === "keep") {
+      try {
+        await invoke("devices_rename", { tokenId: payload.token_id, label: action.label });
+      } catch { /* rename is best-effort — list still gets the row */ }
+      notify({ message: `Device "${action.label}" paired`, variant: "success" });
+      onPaired?.();
+      return;
+    }
+    if (action.kind === "revoke") {
       invoke("devices_revoke", { tokenId: payload.token_id }).catch(() => {});
     }
     onClose?.();
