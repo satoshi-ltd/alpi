@@ -30,15 +30,17 @@ export default function Pair() {
     setError(null);
     try {
       const endpoint = parsePairing(input);
-      const status = await probe(endpoint);
+      // probe() returns {status, version, deviceName} — destructuring is load-bearing; previous code compared the object to 'online' and every pairing failed.
+      const { status, deviceName } = await probe(endpoint);
       if (status === 'auth-failed') {
         throw new PairingError('Token rejected by daemon. Generate a fresh pairing link on the daemon and try again.');
       }
       if (status !== 'online') {
         throw new PairingError(`Daemon unreachable at ${endpoint.ip}:${endpoint.port}. Make sure the daemon is running, both devices are on the same network, and the port is open.`);
       }
-      await addConnection(endpoint);
-      toast({ title: 'Paired', message: `Connected to ${endpoint.name}`, duration: 2200 });
+      const finalEndpoint = deviceName ? { ...endpoint, name: deviceName } : endpoint;
+      await addConnection(finalEndpoint);
+      toast({ title: 'Paired', message: `Connected to ${finalEndpoint.name}`, duration: 2200 });
       router.replace('/paired');
     } catch (e) {
       setError(e?.message ?? 'Pairing failed');

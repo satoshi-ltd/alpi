@@ -6,23 +6,26 @@ const PROBE_TIMEOUT_MS = 3500;
 const VERSION_TIMEOUT_MS = 2000;
 
 export async function probe(endpoint) {
-  if (!endpoint) return { status: 'unknown', version: null };
+  if (!endpoint) return { status: 'unknown', version: null, deviceName: null };
   try {
     await call(endpoint, 'host.profile.summaries', {}, { timeoutMs: PROBE_TIMEOUT_MS });
-    // Best-effort version fetch — pre-0.4.x daemons lack host.version, row just omits the chip.
     let version = null;
+    let deviceName = null;
     try {
       const res = await call(endpoint, 'host.version', {}, { timeoutMs: VERSION_TIMEOUT_MS });
       if (res && typeof res.version === 'string') version = res.version;
+      if (res && typeof res.device_name === 'string' && res.device_name.trim()) {
+        deviceName = res.device_name.trim();
+      }
     } catch {
       // version is non-fatal
     }
-    return { status: 'online', version };
+    return { status: 'online', version, deviceName };
   } catch (e) {
     if (e instanceof RpcError && e.code === AUTH_FAILED) {
-      return { status: 'auth-failed', version: null };
+      return { status: 'auth-failed', version: null, deviceName: null };
     }
-    return { status: 'offline', version: null };
+    return { status: 'offline', version: null, deviceName: null };
   }
 }
 

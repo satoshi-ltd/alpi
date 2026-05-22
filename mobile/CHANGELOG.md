@@ -14,6 +14,20 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.1.8 — 2026-05-22 — pairing fixes
+
+Requires alpi ``v0.6.4`` or newer for the daemon-name fix; the
+unreachable bug works against any daemon.
+
+- Pairing no longer always reports "Daemon unreachable" — the
+  reachability check was comparing the wrong shape (regression
+  since v0.1.0) and every pair attempt fell through to the error
+  branch even when the daemon was up. Five regression tests added.
+- The connection label is now the daemon's own ``device_name``
+  (set via ``alpi setup``), not the label the pairing URL carried
+  for the device being paired. So pairing your iPhone to your
+  Macbook.Pro daemon shows "Macbook.Pro", not "iPhone".
+
 ## v0.1.7 — 2026-05-22 — instant fire feedback
 
 Requires alpi ``v0.6.3`` or newer.

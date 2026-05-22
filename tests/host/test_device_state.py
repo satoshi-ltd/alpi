@@ -59,7 +59,50 @@ async def test_host_version_returns_alpi_runtime(tmp_path: Path) -> None:
         "method": "host.version",
         "params": {},
     })
-    assert resp["result"] == {"agent_name": "alpi", "version": alpi_version}
+    assert resp["result"]["agent_name"] == "alpi"
+    assert resp["result"]["version"] == alpi_version
+    # device_name is always present (empty when alpi setup was skipped) so paired clients can label the connection with the daemon's identity instead of whatever string the pairing link carried.
+    assert "device_name" in resp["result"]
+
+
+@pytest.mark.asyncio
+async def test_host_version_surfaces_device_name_from_config(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Mobile / desktop pairing uses ``host.version.device_name`` as the connection label. Without this field the URL's ``name=...`` (which historically carried the device-being-paired label) wins by default — that is the bug v0.6.4 fixes."""
+    home = tmp_path / "h"
+    home.mkdir()
+    (home / "config.yaml").write_text(
+        "host:\n  device_name: Macbook.Pro\n  tcp_host: 100.64.0.1\n",
+    )
+    monkeypatch.setattr("alpi.home.get_home", lambda: home)
+    srv = host_server.Server(home=home)
+    host_device_state.register(srv)
+    resp = await srv._dispatch({
+        "id": "v",
+        "method": "host.version",
+        "params": {},
+    })
+    assert resp["result"]["device_name"] == "Macbook.Pro"
+
+
+@pytest.mark.asyncio
+async def test_host_version_blank_device_name_when_unset(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When ``alpi setup`` hasn't been run, device_name is blank — clients fall back to the URL-provided name (back-compat for old links)."""
+    home = tmp_path / "h"
+    home.mkdir()
+    (home / "config.yaml").write_text("host:\n  tcp_host: 100.64.0.1\n")
+    monkeypatch.setattr("alpi.home.get_home", lambda: home)
+    srv = host_server.Server(home=home)
+    host_device_state.register(srv)
+    resp = await srv._dispatch({
+        "id": "v",
+        "method": "host.version",
+        "params": {},
+    })
+    assert resp["result"]["device_name"] == ""
 
 
 @pytest.mark.asyncio

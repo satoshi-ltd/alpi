@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.6.4 — 2026-05-22 — daemon identifies itself on pair
+
+The daemon now reports its own ``device_name`` (set via
+``alpi setup``) in the ``host.version`` reply. Pairing clients
+use that as the connection label instead of whatever string the
+pairing URL carried — fixes mobile showing the device-being-paired
+label (e.g. "iPhone") as if it were the daemon's name.
+
+- ``host.version`` returns ``{agent_name, version, device_name}``.
+  ``device_name`` is blank when ``alpi setup`` hasn't been run;
+  clients then fall back to the URL-provided name (back-compat).
+
 ## v0.6.3 — 2026-05-22 — fire-and-forget schedule
 
 Manual schedule fires from desktop / mobile no longer block the UI
