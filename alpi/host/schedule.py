@@ -1,11 +1,16 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 from pathlib import Path
 from typing import Any
 
 from alpi.host import server as host_server
+
+
+# Strong references to in-flight fire-and-forget tasks. asyncio.create_task only holds a weak ref, so without this a long-running fire (up to 10 min) could be GC'd mid-flight; the discard callback drops the entry when the task finishes.
+_BACKGROUND_FIRES: set[asyncio.Task] = set()
 
 
 def register(server: host_server.Server) -> None:
@@ -131,7 +136,8 @@ async def _schedule_set_paused(
 async def _schedule_fire(
     params: dict[str, Any], _server: host_server.Server,
 ) -> dict[str, Any]:
-    import asyncio
+    """Fire-and-forget: validate the job id synchronously (so a stale id from the UI still returns -32004 instead of silently dropping into a background failure), then schedule the run and return. A blocking wait would freeze the UI for the agent's whole runtime (often 20-60s, up to 10 min). `fire_by_id` itself emits `schedule.done` / `schedule.failed` when the job finishes."""
+    import logging
 
     from alpi.host.handlers import _check_id
     from alpi.scheduler.run import fire_by_id
@@ -140,14 +146,30 @@ async def _schedule_fire(
     job_id = str((params or {}).get("id") or "").strip()
     _check_id(job_id, "id")
     home = _resolve_home(profile)
-    # fire_by_id spawns a child via subprocess.run with a 10-min timeout — off-loop or it freezes every other coroutine (same root cause as alpi/scheduler/run.py:serve).
-    loop = asyncio.get_running_loop()
-    ok, msg = await loop.run_in_executor(None, fire_by_id, home, job_id)
-    if not ok:
+
+    jobs_path = home / "schedule" / "jobs.json"
+    try:
+        jobs = json.loads(jobs_path.read_text()) if jobs_path.exists() else []
+    except (OSError, json.JSONDecodeError):
+        jobs = []
+    if not any(isinstance(j, dict) and j.get("id") == job_id for j in jobs):
         raise host_server.HandlerError(
-            -32004, "fire-failed", data={"detail": msg},
+            -32004, "fire-failed", data={"detail": f"no job with id {job_id!r}"},
         )
-    return {"ok": True, "detail": msg}
+
+    async def _run() -> None:
+        loop = asyncio.get_running_loop()
+        try:
+            await loop.run_in_executor(None, fire_by_id, home, job_id)
+        except Exception as exc:  # noqa: BLE001
+            logging.getLogger("alpi.host.schedule").exception(
+                "background fire crashed for %s/%s: %s", home, job_id, exc,
+            )
+
+    task = asyncio.create_task(_run())
+    _BACKGROUND_FIRES.add(task)
+    task.add_done_callback(_BACKGROUND_FIRES.discard)
+    return {"ok": True, "id": job_id}
 
 
 __all__ = ["register"]

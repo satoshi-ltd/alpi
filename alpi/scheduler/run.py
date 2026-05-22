@@ -468,7 +468,9 @@ def fire_by_id(home: Path, job_id: str) -> tuple[bool, str]:
     """Run one specific job ad-hoc, bypassing the schedule check. Same
     threat-scan + dispatch path as the daemon tick, so what you test is
     exactly what the daemon would fire. Does NOT delete ``once`` jobs —
-    ad-hoc fire is deliberate testing, not the natural trigger.
+    ad-hoc fire is deliberate testing, not the natural trigger. Emits
+    ``schedule.done`` / ``schedule.failed`` on the host event stream so
+    a UI-triggered fire-and-forget run still surfaces the result.
     """
     # Returns 2-tuple by design; the `reply` field lives only on the host event stream.
     jobs = _load_jobs(home)
@@ -478,6 +480,7 @@ def fire_by_id(home: Path, job_id: str) -> tuple[bool, str]:
             outcome = run_job(job, home)
             log.info("job %s ad-hoc %s — %s", job_id,
                      "OK" if outcome.ok else "FAIL", outcome.message)
+            _emit_schedule_event(home, job, outcome)
             job["last_run_at"] = _now().isoformat()
             _save_jobs(home, jobs)
             return outcome.ok, outcome.message
@@ -486,6 +489,27 @@ def fire_by_id(home: Path, job_id: str) -> tuple[bool, str]:
     hit = difflib.get_close_matches(job_id, available, n=1, cutoff=0.6)
     hint = f". Did you mean {hit[0]!r}?" if hit else ""
     return False, f"no job with id {job_id!r}{hint}"
+
+
+def _emit_schedule_event(home: Path, job: dict, outcome: JobOutcome) -> None:
+    """Emit `schedule.done` / `schedule.failed` for one finished run. Used by both `tick()` (daemon-driven) and `fire_by_id()` (manual UI) so the host event stream is consistent regardless of how the fire was triggered — a failed manual fire must still notify the user."""
+    try:
+        from alpi.home import profile_name
+        from alpi.host import events as host_events
+        host_events.emit(
+            "schedule.done" if outcome.ok else "schedule.failed",
+            {
+                "profile": profile_name(home),
+                "job_id": str(job.get("id", "?")),
+                "kind": str(job.get("kind", "cron")),
+                "message": outcome.message,
+                "reply": (outcome.reply or "")[:2000],
+                "delivered_to": outcome.delivered_to,
+                "silent": outcome.silent,
+            },
+        )
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def tick(home: Path, now: datetime | None = None) -> list[tuple[str, bool, str]]:
@@ -505,23 +529,7 @@ def tick(home: Path, now: datetime | None = None) -> list[tuple[str, bool, str]]
         outcome = run_job(job, home)
         log.info("job %s %s — %s", job_id,
                  "OK" if outcome.ok else "FAIL", outcome.message)
-        try:
-            from alpi.home import profile_name
-            from alpi.host import events as host_events
-            host_events.emit(
-                "schedule.done" if outcome.ok else "schedule.failed",
-                {
-                    "profile": profile_name(home),
-                    "job_id": str(job_id),
-                    "kind": str(job.get("kind", "cron")),
-                    "message": outcome.message,
-                    "reply": (outcome.reply or "")[:2000],
-                    "delivered_to": outcome.delivered_to,
-                    "silent": outcome.silent,
-                },
-            )
-        except Exception:  # noqa: BLE001
-            pass
+        _emit_schedule_event(home, job, outcome)
         # Update last_run_at even on failure to avoid a tight re-fire loop.
         job["last_run_at"] = now.isoformat()
         changed = True

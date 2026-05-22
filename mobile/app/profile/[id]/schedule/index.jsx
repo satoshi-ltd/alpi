@@ -38,9 +38,10 @@ export default function ScheduleList() {
     setBusyId(jid);
     try {
       await call('host.schedule.fire', { profile: id, id: jid });
-      toast({ title: 'Fired', message: jid, duration: 1500 });
+      // Defer the toast so iOS finishes dismissing the ActionSheet Modal first; presenting Toast's Modal while another is still tearing down silently drops it on iOS.
+      setTimeout(() => toast({ message: `Schedule ${jid} started`, kind: 'success', duration: 2000 }), 350);
     } catch (e) {
-      toast({ title: 'Fire failed', message: String(e) });
+      setTimeout(() => toast({ message: `Fire failed: ${String(e)}`, kind: 'danger', duration: 4000 }), 350);
     } finally {
       setBusyId(null);
     }

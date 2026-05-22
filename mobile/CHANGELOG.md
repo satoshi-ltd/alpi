@@ -14,6 +14,17 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.1.7 — 2026-05-22 — instant fire feedback
+
+Requires alpi ``v0.6.3`` or newer.
+
+- Tapping "Fire now" on a schedule shows an immediate
+  ``Schedule X started`` toast (matched to the desktop style)
+  instead of holding the action sheet open until the agent
+  finished. The job's result still arrives through the usual
+  notification, and failures surface through the existing
+  schedule event path.
+
 ## v0.1.6 — 2026-05-22 — leaving a chat no longer kills the work, lighter activity UI
 
 Requires alpi ``v0.6.2`` or newer. Long-running tools (research,

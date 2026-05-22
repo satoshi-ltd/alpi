@@ -167,7 +167,11 @@ async def test_paused_jobs_skip_tick(tmp_path: Path) -> None:
 @pytest.mark.asyncio
 async def test_fire_runs_job_via_scheduler(tmp_path: Path, monkeypatch) -> None:
     """``host.schedule.fire`` delegates to ``scheduler.run.fire_by_id``
-    so manual + auto fires share the same threat-scan + dispatch."""
+    so manual + auto fires share the same threat-scan + dispatch.
+    The handler is fire-and-forget, so we wait for the background task
+    to finish before asserting the executor was invoked."""
+    import asyncio
+
     home = tmp_path / "h"
     home.mkdir()
     monkeypatch.setattr(data_handlers, "_resolve_home", lambda p: home)
@@ -177,9 +181,12 @@ async def test_fire_runs_job_via_scheduler(tmp_path: Path, monkeypatch) -> None:
     data_schedule.register(srv)
 
     captured: list[tuple[Path, str]] = []
+    done = asyncio.Event()
+    loop = asyncio.get_running_loop()
 
     def fake_fire(h, jid):
         captured.append((h, jid))
+        loop.call_soon_threadsafe(done.set)
         return True, "fired"
 
     monkeypatch.setattr("alpi.scheduler.run.fire_by_id", fake_fire)
@@ -188,17 +195,19 @@ async def test_fire_runs_job_via_scheduler(tmp_path: Path, monkeypatch) -> None:
         "id": "r", "method": "host.schedule.fire",
         "params": {"profile": "default", "id": "real0001"},
     })
-    assert resp["result"] == {"ok": True, "detail": "fired"}
+    assert resp["result"] == {"ok": True, "id": "real0001"}
+    await asyncio.wait_for(done.wait(), timeout=2.0)
     assert captured == [(home, "real0001")]
 
 
 @pytest.mark.asyncio
-async def test_fire_runs_off_loop_so_chat_can_progress(
+async def test_fire_returns_before_job_completes(
     tmp_path: Path, monkeypatch,
 ) -> None:
-    """fire_by_id wraps subprocess.run(timeout=600). If the host handler
-    awaits it inline, the host loop freezes — same root cause as
-    scheduler.serve()'s old inline tick()."""
+    """Fire-and-forget contract: the handler returns the moment the
+    background task is scheduled, NOT when the job finishes. Old
+    blocking behavior froze the UI for the agent's whole runtime
+    (often 20-60s). The handler must complete in well under that."""
     import asyncio
     import time as _time
 
@@ -210,47 +219,207 @@ async def test_fire_runs_off_loop_so_chat_can_progress(
     srv = host_server.Server(home=home)
     data_schedule.register(srv)
 
-    fire_started = asyncio.Event()
+    block_s = 0.6
     fire_done = asyncio.Event()
-    block_s = 0.4
+    loop = asyncio.get_running_loop()
 
     def slow_fire(h, jid):  # noqa: ANN001
-        loop.call_soon_threadsafe(fire_started.set)
         _time.sleep(block_s)
         loop.call_soon_threadsafe(fire_done.set)
         return True, "fired"
 
     monkeypatch.setattr("alpi.scheduler.run.fire_by_id", slow_fire)
 
-    loop = asyncio.get_running_loop()
-    counter = {"wakes": 0}
-
-    async def heartbeat() -> None:
-        while not fire_done.is_set():
-            await asyncio.sleep(0.05)
-            counter["wakes"] += 1
-
-    dispatch_task = asyncio.create_task(srv._dispatch({
+    t0 = _time.monotonic()
+    resp = await srv._dispatch({
         "id": "r", "method": "host.schedule.fire",
         "params": {"profile": "default", "id": "blkr1234"},
-    }))
-    hb_task = asyncio.create_task(heartbeat())
+    })
+    elapsed = _time.monotonic() - t0
 
-    try:
-        await asyncio.wait_for(fire_started.wait(), timeout=2.0)
-        resp = await asyncio.wait_for(dispatch_task, timeout=block_s + 2.0)
-    finally:
-        hb_task.cancel()
-        try:
-            await hb_task
-        except (asyncio.CancelledError, Exception):  # noqa: BLE001
-            pass
-
-    assert resp["result"] == {"ok": True, "detail": "fired"}
-    assert counter["wakes"] >= 3, (
-        f"host loop starved during host.schedule.fire — only {counter['wakes']} "
-        "heartbeats fired while fire_by_id blocked; handler must run it in an executor"
+    assert resp["result"] == {"ok": True, "id": "blkr1234"}
+    assert elapsed < block_s / 2, (
+        f"host.schedule.fire blocked for {elapsed:.2f}s while the job "
+        f"itself took {block_s}s — handler is not fire-and-forget."
     )
+
+    # The background task still runs to completion and invokes fire_by_id.
+    await asyncio.wait_for(fire_done.wait(), timeout=block_s + 2.0)
+
+
+@pytest.mark.asyncio
+async def test_fire_emits_schedule_done_event(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    """A successful manual fire must emit `schedule.done` so the UI can flip from "started" to a final result. Without this, fire-and-forget would mean a failed job goes silent."""
+    import asyncio
+
+    from alpi.host import events as host_events
+    from alpi.scheduler.run import JobOutcome
+
+    home = tmp_path / "h"
+    home.mkdir()
+    monkeypatch.setattr(data_handlers, "_resolve_home", lambda p: home)
+    _seed_jobs(home, {"id": "evt00001", "kind": "cron",
+                       "expression": "* * * * *", "prompt": "x"})
+    srv = host_server.Server(home=home)
+    data_schedule.register(srv)
+
+    seen: list[tuple[str, dict]] = []
+    monkeypatch.setattr(host_events, "emit",
+                        lambda kind, data: seen.append((kind, data)))
+    # Stub run_job (not fire_by_id) so the real emit path inside fire_by_id runs.
+    monkeypatch.setattr("alpi.scheduler.run.run_job",
+                        lambda job, home: JobOutcome(True, "delivered"))
+
+    resp = await srv._dispatch({
+        "id": "r", "method": "host.schedule.fire",
+        "params": {"profile": "default", "id": "evt00001"},
+    })
+    assert resp["result"] == {"ok": True, "id": "evt00001"}
+
+    for _ in range(20):
+        if any(k == "schedule.done" for k, _ in seen):
+            break
+        await asyncio.sleep(0.05)
+
+    done_events = [d for k, d in seen if k == "schedule.done"]
+    assert done_events, f"expected schedule.done event, got: {[k for k, _ in seen]}"
+    assert done_events[0]["job_id"] == "evt00001"
+
+
+@pytest.mark.asyncio
+async def test_fire_emits_schedule_failed_on_failure(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    """A failing manual fire must emit `schedule.failed`. Without this, fire-and-forget would hide errors from the UI — the toast already said "fired", the user expects a follow-up."""
+    import asyncio
+
+    from alpi.host import events as host_events
+    from alpi.scheduler.run import JobOutcome
+
+    home = tmp_path / "h"
+    home.mkdir()
+    monkeypatch.setattr(data_handlers, "_resolve_home", lambda p: home)
+    _seed_jobs(home, {"id": "fail0001", "kind": "cron",
+                       "expression": "* * * * *", "prompt": "x"})
+    srv = host_server.Server(home=home)
+    data_schedule.register(srv)
+
+    seen: list[tuple[str, dict]] = []
+    monkeypatch.setattr(host_events, "emit",
+                        lambda kind, data: seen.append((kind, data)))
+    monkeypatch.setattr("alpi.scheduler.run.run_job",
+                        lambda job, home: JobOutcome(False, "agent rc=1: boom"))
+
+    resp = await srv._dispatch({
+        "id": "r", "method": "host.schedule.fire",
+        "params": {"profile": "default", "id": "fail0001"},
+    })
+    assert resp["result"] == {"ok": True, "id": "fail0001"}
+
+    for _ in range(20):
+        if any(k == "schedule.failed" for k, _ in seen):
+            break
+        await asyncio.sleep(0.05)
+
+    failed_events = [d for k, d in seen if k == "schedule.failed"]
+    assert failed_events, f"expected schedule.failed event, got: {[k for k, _ in seen]}"
+    assert failed_events[0]["job_id"] == "fail0001"
+    assert "boom" in failed_events[0]["message"]
+
+
+@pytest.mark.asyncio
+async def test_fire_holds_strong_reference_to_background_task(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    """asyncio.create_task only keeps a weak ref to the task. For a 10-min agent run we cannot let the task vanish under GC pressure mid-fire — the module-level _BACKGROUND_FIRES set is the strong reference."""
+    import asyncio
+    import gc
+
+    from alpi.host import schedule as sched_mod
+
+    home = tmp_path / "h"
+    home.mkdir()
+    monkeypatch.setattr(data_handlers, "_resolve_home", lambda p: home)
+    _seed_jobs(home, {"id": "refs0001", "kind": "cron",
+                       "expression": "* * * * *", "prompt": "x"})
+    srv = host_server.Server(home=home)
+    data_schedule.register(srv)
+
+    started = asyncio.Event()
+    finish = asyncio.Event()
+    loop = asyncio.get_running_loop()
+
+    def slow_fire(h, jid):
+        loop.call_soon_threadsafe(started.set)
+        # Hold here until the test releases us.
+        while not finish.is_set():
+            import time as _t
+            _t.sleep(0.02)
+        return True, "fired"
+
+    monkeypatch.setattr("alpi.scheduler.run.fire_by_id", slow_fire)
+
+    sched_mod._BACKGROUND_FIRES.clear()
+    await srv._dispatch({
+        "id": "r", "method": "host.schedule.fire",
+        "params": {"profile": "default", "id": "refs0001"},
+    })
+    await asyncio.wait_for(started.wait(), timeout=2.0)
+
+    # Force a GC pass while the task is still in flight; without the strong ref this could collect the task object.
+    gc.collect()
+    assert len(sched_mod._BACKGROUND_FIRES) == 1, (
+        "background task lost its strong reference; would be GC-eligible mid-fire"
+    )
+
+    finish.set()
+    # Wait for the discard callback.
+    for _ in range(40):
+        if not sched_mod._BACKGROUND_FIRES:
+            break
+        await asyncio.sleep(0.05)
+    assert not sched_mod._BACKGROUND_FIRES, (
+        "discard callback did not run; task set leaks finished entries"
+    )
+
+
+@pytest.mark.asyncio
+async def test_fire_swallows_background_exceptions(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    """A crashing fire_by_id must not propagate out of the background
+    task. The user already got `ok:true` from the handler; surfacing
+    the crash later would only show up as an unhandled task warning
+    in logs (which is what we already log explicitly)."""
+    import asyncio
+
+    home = tmp_path / "h"
+    home.mkdir()
+    monkeypatch.setattr(data_handlers, "_resolve_home", lambda p: home)
+    _seed_jobs(home, {"id": "boom0001", "kind": "cron",
+                       "expression": "* * * * *", "prompt": "x"})
+    srv = host_server.Server(home=home)
+    data_schedule.register(srv)
+
+    raised = asyncio.Event()
+    loop = asyncio.get_running_loop()
+
+    def crash(h, jid):
+        loop.call_soon_threadsafe(raised.set)
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr("alpi.scheduler.run.fire_by_id", crash)
+
+    resp = await srv._dispatch({
+        "id": "r", "method": "host.schedule.fire",
+        "params": {"profile": "default", "id": "boom0001"},
+    })
+    assert resp["result"] == {"ok": True, "id": "boom0001"}
+    await asyncio.wait_for(raised.wait(), timeout=2.0)
+    # Give the background task a moment to land in the except clause.
+    await asyncio.sleep(0.1)
 
 
 @pytest.mark.asyncio

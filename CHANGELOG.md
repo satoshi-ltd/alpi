@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.6.3 — 2026-05-22 — fire-and-forget schedule
+
+Manual schedule fires from desktop / mobile no longer block the UI
+for the full duration of the agent's run (often 20-60s, sometimes
+minutes). The host returns immediately; the job continues in the
+background and its result still arrives through the existing
+`agent.message` / `schedule.done` events.
+
+- `host.schedule.fire` validates the job id synchronously (a stale
+  id from the UI still returns the same `-32004` error as before)
+  and then schedules the job in a background task. The handler
+  resolves in well under 100ms instead of waiting for the agent.
+- `fire_by_id` now emits `schedule.done` / `schedule.failed` on the
+  host event stream the same way `tick()` did, so a manual fire
+  that errors out still surfaces in the UI instead of going silent
+  after the initial "started" toast.
+- No change to the actual job execution path — same threat-scan,
+  same dispatch, same delivery surfaces.
+
 ## v0.6.2 — 2026-05-22 — user message visible mid-turn
 
 Fix: a paired client (desktop / mobile remount) reading a session

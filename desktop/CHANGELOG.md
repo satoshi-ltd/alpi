@@ -11,6 +11,16 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.3.12 — 2026-05-22 — instant fire feedback
+
+Requires alpi ``v0.6.3`` or newer.
+
+- Pressing "Fire" on a schedule now shows an immediate
+  ``Schedule X started`` toast instead of freezing for the full
+  agent run (which could be 30s or more). The job's result still
+  arrives through the usual notification, and a job that errors
+  out is surfaced through the existing schedule failure path.
+
 ## v0.3.11 — 2026-05-22 — lighter tool-call activity
 
 UI cleanup of the chat turn.

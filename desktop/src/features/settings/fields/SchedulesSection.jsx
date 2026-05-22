@@ -25,7 +25,7 @@ export function SchedulesSection({ profile }) {
     setBusyId(`fire:${id}`);
     try {
       await invoke("schedule_fire", { profile: profile.name, id });
-      notify({ message: `fired ${id}`, variant: "success", duration: 2400 });
+      notify({ message: `Schedule ${id} started`, variant: "success", duration: 2000 });
       await load();
     } catch (e) {
       notify({ message: `fire failed: ${String(e)}`, variant: "error", duration: 4000 });
