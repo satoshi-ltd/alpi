@@ -11,6 +11,18 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.3.11 — 2026-05-22 — lighter tool-call activity
+
+UI cleanup of the chat turn.
+
+- The inline activity spinner inside a running tool row is gone —
+  the existing accent-coloured pulse already says "this is the one
+  running". One signal, not two.
+- The "thinking…" indicator now only shows in the brief window
+  between the user message and the first tool call (or first
+  assistant text). Once a tool has started, the pulse takes over;
+  once the assistant starts replying, the text itself does.
+
 ## v0.3.10 — 2026-05-22 — ESC closes every popover
 
 UX polish for the in-app pickers.

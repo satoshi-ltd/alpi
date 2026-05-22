@@ -706,9 +706,6 @@ const ToolCard = memo(function ToolCard({ name, preview, ok, accent }) {
       {preview && (
         <span className={styles.toolPreview}>{renderPreview(preview)}</span>
       )}
-      {status === "running" && (
-        <Activity size="md" tint={accent} className={styles.toolActivity} />
-      )}
     </div>
   );
 });
