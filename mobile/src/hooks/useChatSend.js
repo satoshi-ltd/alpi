@@ -32,7 +32,8 @@ export function useChatSend({ profile, sessionId, onCompleted }) {
 
   useEffect(
     () => () => {
-      handleRef.current?.cancel?.();
+      // detach() not cancel() — unmount must NOT interrupt long-running daemon tools.
+      handleRef.current?.detach?.();
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
       if (watchdogTimerRef.current) clearInterval(watchdogTimerRef.current);
     },

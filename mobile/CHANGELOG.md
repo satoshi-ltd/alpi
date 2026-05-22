@@ -14,6 +14,24 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.1.6 — 2026-05-22 — leaving a chat no longer kills the work, lighter activity UI
+
+Requires alpi ``v0.6.2`` or newer. Long-running tools (research,
+deep web fetches, etc.) now survive screen exits, and the chat
+view drops a couple of redundant activity indicators.
+
+- Navigating away from a chat closes the local WebSocket but does
+  NOT tell the daemon to interrupt. The tool finishes on the
+  daemon side; come back later and the full reply is there,
+  loaded from the persisted session.
+- New ``detach()`` on the stream handle, used by ``useChatSend``
+  on unmount. The explicit cancel button keeps cancelling.
+- No more spinner inside a running tool row — the existing pulse
+  already conveys "this is the one running".
+- The "thinking" dots now only appear in the brief window between
+  the user message and the first tool call (or first assistant
+  text). After that, the pulse / streaming text takes over.
+
 ## v0.1.5 — 2026-05-22 — agent.message ambient notifications
 
 Requires alpi ``v0.6.1`` or newer. The mobile app now surfaces the

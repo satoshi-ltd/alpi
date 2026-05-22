@@ -248,6 +248,10 @@ export function callStream(endpoint, method, params, handlers) {
       }
       close();
     },
+    // Closes the WS without firing cancelMethod — use on unmount; cancel() only on explicit user action.
+    detach: () => {
+      close();
+    },
   };
 }
 

@@ -97,6 +97,15 @@ describe("useChatSend.send", () => {
     expect(result.current.pendingTurn).toBeNull();
   });
 
+  it("unmount detaches but does NOT cancel — daemon work survives screen exit", () => {
+    lastStreamHandle = { cancel: vi.fn(), detach: vi.fn() };
+    const { result, unmount } = renderHook(() => useChatSend({ profile: "doc" }));
+    act(() => result.current.send("research awake"));
+    unmount();
+    expect(lastStreamHandle.detach).toHaveBeenCalledTimes(1);
+    expect(lastStreamHandle.cancel).not.toHaveBeenCalled();
+  });
+
   it("onError recovers from sidecar when host.chat.events_since contains done", async () => {
     mockCall.mockResolvedValueOnce({
       events: [

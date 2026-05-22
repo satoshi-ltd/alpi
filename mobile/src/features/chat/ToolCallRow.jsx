@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Animated, Pressable, Text, View } from 'react-native';
+import { Animated, Pressable, Text, View } from 'react-native';
 import { fontSizes, radii, space } from '../../theme/tokens';
 
 import { Diamond } from '../../components/Diamond';
@@ -119,9 +119,6 @@ export function ToolCallRow({ name, status = 'success', args, accent }) {
             {argsStr}
           </Text>
         ) : null}
-        {isRunning ? (
-          <ActivityIndicator size="small" color={accent ?? colors.ink3} style={{ marginLeft: space.s1, transform: [{ scale: 0.7 }] }} />
-        ) : null}
       </Animated.View>
     </View>
   );
@@ -222,9 +219,6 @@ export function ToolCallGroup({ group, accent }) {
             >
               {argsStr}
             </Text>
-          ) : null}
-          {isRunning ? (
-            <ActivityIndicator size="small" color={accent ?? colors.ink3} style={{ transform: [{ scale: 0.6 }] }} />
           ) : null}
         </Pressable>
       </View>

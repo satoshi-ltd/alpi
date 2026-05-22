@@ -70,7 +70,7 @@ const TurnBlock = memo(function TurnBlock({ turn, accent, colors, fonts, fontSiz
           text={turn.assistant}
           onLongPress={() => onActionTarget({ kind: 'agent', text: turn.assistant })}
         />
-      ) : turn.pending ? (
+      ) : turn.pending && !(turn.tools?.length) ? (
         <View style={TURN_STYLES.thinkingHolder}>
           <ThinkingDots color={accent} />
         </View>
