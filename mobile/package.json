@@ -1,6 +1,6 @@
 {
   "name": "mobile",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "main": "expo-router/entry",
   "scripts": {
     "start": "expo start",
@@ -15,7 +15,7 @@
     "eas:init": "npx -y eas-cli project:init",
     "build:dev": "npx -y eas-cli build --platform android --profile development",
     "build:preview": "npx -y eas-cli build --platform android --profile preview",
-    "build:prod": "npx -y eas-cli build --platform android --profile production"
+    "build:prod": "npx -y eas-cli build --platform android --profile production --clear-cache"
   },
   "dependencies": {
     "@expo-google-fonts/geist": "^0.4.1",
@@ -26,6 +26,7 @@
     "expo-asset": "~55.0.17",
     "expo-audio": "~55.0.14",
     "expo-background-task": "~55.0.0",
+    "expo-build-properties": "~55.0.14",
     "expo-camera": "~55.0.19",
     "expo-clipboard": "~55.0.13",
     "expo-constants": "~55.0.16",
@@ -36,9 +37,9 @@
     "expo-notifications": "~55.0.23",
     "expo-router": "~55.0.16",
     "expo-secure-store": "~55.0.14",
-    "expo-task-manager": "~55.0.16",
     "expo-splash-screen": "~55.0.21",
     "expo-status-bar": "~55.0.6",
+    "expo-task-manager": "~55.0.16",
     "react": "19.2.0",
     "react-native": "0.83.6",
     "react-native-gesture-handler": "~2.30.0",

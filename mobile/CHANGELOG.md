@@ -14,6 +14,21 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.1.9 — 2026-05-22 — Android cleartext for local daemons
+
+Pairing on Android always returned "Daemon unreachable" against a
+daemon on the Tailscale / LAN / Umbrel network. Android 9+ blocks
+cleartext WebSocket traffic by default; iOS allowed it, so the
+issue only surfaced on Android (e.g. a Samsung S25 on Tailscale).
+
+- ``expo-build-properties@55.0.14`` added; ``usesCleartextTraffic:
+  true`` configured inside the plugin entry. Expo SDK 55 routes
+  this property exclusively through the plugin — a top-level
+  ``android.usesCleartextTraffic`` in ``app.json`` is silently
+  ignored. Verified with ``expo config --type introspect`` that
+  the AndroidManifest receives ``android:usesCleartextTraffic='true'``.
+- Requires a fresh EAS build to land (native manifest change).
+
 ## v0.1.8 — 2026-05-22 — pairing fixes
 
 Requires alpi ``v0.6.4`` or newer for the daemon-name fix; the
