@@ -14,6 +14,22 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.1.10 — 2026-05-22 — notification deep link lands on the right chat
+
+Requires alpi ``v0.6.5`` or newer for the daemon side of the fix
+(older daemons still emit the broken path; the mobile fallback
+below covers them).
+
+- Tapping a notification with an ``agent.message`` or
+  ``chat.turn_done`` payload now routes to the profile's chat
+  (``/chat/<profile>``) instead of a non-existent
+  ``/chat/<session_id>`` (the chat route reads ``[id]`` as a
+  profile name, so the session-id path resolved to a "profile
+  not found" / unmatched-route state).
+- The ``session_id`` continues to travel in the notification
+  payload so the chat screen can pre-select that session once it
+  mounts.
+
 ## v0.1.9 — 2026-05-22 — Android cleartext for local daemons
 
 Pairing on Android always returned "Daemon unreachable" against a

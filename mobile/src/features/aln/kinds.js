@@ -77,12 +77,12 @@ export function deepLinkFor(event, _connection) {
       if (typeof data.deep_link === 'string' && data.deep_link) {
         return data.deep_link;
       }
-      return data.session_id ? `/chat/${data.session_id}` : '/';
+      return data.profile ? `/chat/${data.profile}` : '/';
     case 'wg.mention':
     case 'wg.done':
       return data.wg_id ? `/wg/${data.wg_id}` : '/';
     case 'chat.turn_done':
-      return data.session_id ? `/chat/${data.session_id}` : '/';
+      return data.profile ? `/chat/${data.profile}` : '/';
     case 'approval.request':
       return '/';
     case 'schedule.done':

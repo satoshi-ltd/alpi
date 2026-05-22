@@ -1,11 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
-// `probe()` returns {status, version} — every call site MUST destructure
-// or the status comparison silently falls through to the offline branch.
-// Regression cover for pair.jsx: it used `const status = await probe(...)`
-// and then `if (status !== 'online')` → always true → "Daemon unreachable"
-// for every pairing, even when the daemon was actually up on Tailscale.
-
 const mockCall = vi.fn();
 const AUTH_FAILED = -32099;
 class RpcError extends Error {
@@ -34,7 +28,6 @@ describe('probe', () => {
     const result = await probe({ ip: '100.64.0.1', port: 49200, token: 't' });
     expect(typeof result).toBe('object');
     expect(result).toEqual({ status: 'online', version: '0.6.3', deviceName: 'Macbook.Pro' });
-    // Critically: callers that compared `result === 'online'` would break.
     expect(result === 'online').toBe(false);
   });
 

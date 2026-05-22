@@ -127,8 +127,8 @@ describe('deepLinkFor', () => {
     expect(deepLinkFor({ event: 'schedule.done', data: { profile: 'vera' } })).toBe('/profile/vera/schedule');
   });
 
-  it('routes chat.turn_done to the session', () => {
-    expect(deepLinkFor({ event: 'chat.turn_done', data: { session_id: 'sess-9' } })).toBe('/chat/sess-9');
+  it('routes chat.turn_done to the profile chat', () => {
+    expect(deepLinkFor({ event: 'chat.turn_done', data: { profile: 'abby', session_id: 'sess-9' } })).toBe('/chat/abby');
     expect(deepLinkFor({ event: 'chat.turn_done', data: {} })).toBe('/');
   });
 
@@ -139,11 +139,11 @@ describe('deepLinkFor', () => {
     })).toBe('/profile/abby');
   });
 
-  it('routes agent.message to the chat session when no explicit deep_link', () => {
+  it('routes agent.message to the profile chat when no explicit deep_link', () => {
     expect(deepLinkFor({
       event: 'agent.message',
-      data: { session_id: 'sess-1' },
-    })).toBe('/chat/sess-1');
+      data: { profile: 'abby', session_id: 'sess-1' },
+    })).toBe('/chat/abby');
     expect(deepLinkFor({ event: 'agent.message', data: {} })).toBe('/');
   });
 
