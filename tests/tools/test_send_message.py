@@ -106,64 +106,253 @@ def test_send_to_telegram_splits_long_messages(monkeypatch) -> None:
     assert len(posts[0]) == delivery.TELEGRAM_MAX_CHARS
 
 
-def test_send_message_tool_uses_default_chat(monkeypatch, tmp_path: Path) -> None:
+def _capture_events(monkeypatch) -> list[tuple[str, dict]]:
+    captured: list[tuple[str, dict]] = []
+    from alpi.host import events as host_events
+    monkeypatch.setattr(
+        host_events, "emit",
+        lambda kind, data=None: captured.append((kind, dict(data or {}))),
+    )
+    return captured
+
+
+def test_send_message_default_channel_alpi_emits_event_no_gateway(
+    monkeypatch, tmp_path: Path,
+) -> None:
+    """The strategic default: alpi-native delivery via the host event
+    stream. No gateway config required — works on a fresh profile with
+    zero Telegram / IMAP setup."""
+    monkeypatch.setenv("ALPI_HOME", str(tmp_path))
+    events = _capture_events(monkeypatch)
+    gateway_calls: list = []
+    monkeypatch.setattr(
+        delivery, "send_to",
+        lambda *a, **kw: gateway_calls.append(("send_to", a, kw)),
+    )
+
+    result = SendMessage().run(text="ping")
+    assert result.ok, result.error
+    assert "alpi" in result.output
+
+    agent_msgs = [d for k, d in events if k == "agent.message"]
+    assert len(agent_msgs) == 1
+    assert agent_msgs[0]["body"] == "ping"
+    assert agent_msgs[0]["severity"] == "normal"
+    assert agent_msgs[0]["kind"] == "result"
+    assert gateway_calls == []
+
+
+def test_send_message_alpi_uses_title_and_severity(
+    monkeypatch, tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("ALPI_HOME", str(tmp_path))
+    events = _capture_events(monkeypatch)
+
+    result = SendMessage().run(
+        text="Don't forget the standup at 10:30",
+        title="Meeting in 10 min",
+        severity="important",
+        kind="reminder",
+    )
+    assert result.ok, result.error
+    msg = next(d for k, d in events if k == "agent.message")
+    assert msg["title"] == "Meeting in 10 min"
+    assert msg["severity"] == "important"
+    assert msg["kind"] == "reminder"
+
+
+def test_send_message_attaches_active_session(
+    monkeypatch, tmp_path: Path,
+) -> None:
+    """When the Engine has bound an active session via ``set_active_session``, the alpi-channel event carries ``session_id`` + ``deep_link`` so the mobile/desktop notification tap routes back to the right chat — not the inbox."""
+    from alpi.home import reset_active_session, set_active_session
+
+    monkeypatch.setenv("ALPI_HOME", str(tmp_path))
+    events = _capture_events(monkeypatch)
+
+    token = set_active_session("sess-abc-123")
+    try:
+        result = SendMessage().run(text="task done")
+    finally:
+        reset_active_session(token)
+
+    assert result.ok, result.error
+    msg = next(d for k, d in events if k == "agent.message")
+    assert msg["session_id"] == "sess-abc-123"
+    assert msg["deep_link"] == "/chat/sess-abc-123"
+
+
+def test_send_message_omits_session_when_not_bound(
+    monkeypatch, tmp_path: Path,
+) -> None:
+    """No active session (e.g. a one-shot ``alpi -c`` invocation) → no session_id / deep_link in the payload. Mobile / desktop fall back to a generic profile-level route."""
+    monkeypatch.setenv("ALPI_HOME", str(tmp_path))
+    events = _capture_events(monkeypatch)
+
+    result = SendMessage().run(text="ping")
+    assert result.ok, result.error
+    msg = next(d for k, d in events if k == "agent.message")
+    assert "session_id" not in msg
+    assert "deep_link" not in msg
+
+
+def test_send_message_channel_telegram_only_dispatches_gateway(
+    monkeypatch, tmp_path: Path,
+) -> None:
+    """``channel="telegram"`` is the explicit opt-in path. No alpi-native
+    event fires — the user asked specifically for Telegram."""
     monkeypatch.setenv("ALPI_HOME", str(tmp_path))
     monkeypatch.setenv("TELEGRAM_ALLOWED_CHAT_IDS", "42")
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "x")
-    called = {}
-
-    def fake_send(platform, chat_id, text, attachment=None, env=None):
-        called["args"] = (platform, chat_id, text, attachment)
-
-    monkeypatch.setattr(delivery, "send_to", fake_send)
-    result = SendMessage().run(text="ping")
-    assert result.ok
-    assert called["args"] == ("telegram", "42", "ping", None)
-    assert result.output == "delivered"
-
-
-def test_send_message_tool_explicit_platform_chat(monkeypatch) -> None:
-    monkeypatch.setenv("TELEGRAM_ALLOWED_CHAT_IDS", "42")
-    calls = []
+    events = _capture_events(monkeypatch)
+    calls: list = []
     monkeypatch.setattr(
         delivery, "send_to",
         lambda p, c, t, attachment=None, env=None: calls.append((p, c, t, attachment)),
     )
-    result = SendMessage().run(text="hi", platform="telegram", chat_id="42")
-    assert result.ok
+
+    result = SendMessage().run(text="hi", channel="telegram", chat_id="42")
+    assert result.ok, result.error
     assert calls == [("telegram", "42", "hi", None)]
+    assert [k for k, _ in events if k == "agent.message"] == []
 
 
-def test_send_message_tool_no_allowlist_fails(monkeypatch, tmp_path: Path) -> None:
+def test_send_message_channel_both_emits_event_and_gateway(
+    monkeypatch, tmp_path: Path,
+) -> None:
+    """``channel="both"`` is the redundancy mode for users who want
+    overlap: alpi-native delivery for the paired app AND a gateway
+    dispatch for belt-and-suspenders."""
+    monkeypatch.setenv("ALPI_HOME", str(tmp_path))
+    monkeypatch.setenv("TELEGRAM_ALLOWED_CHAT_IDS", "42")
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "x")
+    events = _capture_events(monkeypatch)
+    calls: list = []
+    monkeypatch.setattr(
+        delivery, "send_to",
+        lambda p, c, t, attachment=None, env=None: calls.append((p, c, t, attachment)),
+    )
+
+    result = SendMessage().run(
+        text="hi", channel="both", platform="telegram", chat_id="42",
+    )
+    assert result.ok, result.error
+    assert calls == [("telegram", "42", "hi", None)]
+    assert [k for k, _ in events if k == "agent.message"] == ["agent.message"]
+    assert "alpi" in result.output and "telegram" in result.output
+
+
+def test_send_message_channel_both_tolerates_gateway_failure(
+    monkeypatch, tmp_path: Path,
+) -> None:
+    """If the alpi channel succeeded, a gateway dispatch failure should
+    NOT fail the whole call — the user already got the notification on
+    their paired app. Only fail when alpi is not the channel."""
+    monkeypatch.setenv("ALPI_HOME", str(tmp_path))
+    monkeypatch.setenv("TELEGRAM_ALLOWED_CHAT_IDS", "42")
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "x")
+    _capture_events(monkeypatch)
+
+    def boom(*a, **kw):
+        raise delivery.DeliveryError("telegram down")
+    monkeypatch.setattr(delivery, "send_to", boom)
+
+    result = SendMessage().run(
+        text="hi", channel="both", platform="telegram", chat_id="42",
+    )
+    assert result.ok, result.error
+    assert "telegram(failed" in result.output
+
+
+def test_send_message_gateway_only_fails_when_no_chat_id(
+    monkeypatch, tmp_path: Path,
+) -> None:
     monkeypatch.setenv("ALPI_HOME", str(tmp_path))
     monkeypatch.delenv("TELEGRAM_ALLOWED_CHAT_IDS", raising=False)
-    result = SendMessage().run(text="hi")
+    result = SendMessage().run(text="hi", channel="telegram")
     assert not result.ok
     assert "no chat_id" in result.error
 
 
-def test_send_message_tool_attachment_passes_through(monkeypatch, tmp_path: Path) -> None:
+def test_send_message_rejects_invalid_channel(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("ALPI_HOME", str(tmp_path))
+    result = SendMessage().run(text="hi", channel="signal")
+    assert not result.ok
+    assert "invalid channel" in result.error
+
+
+def test_send_message_rejects_invalid_both_platform(
+    monkeypatch, tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("ALPI_HOME", str(tmp_path))
+    result = SendMessage().run(text="hi", channel="both", platform="signal")
+    assert not result.ok
+    assert "invalid gateway platform" in result.error
+
+
+def test_send_message_rejects_invalid_severity(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("ALPI_HOME", str(tmp_path))
+    result = SendMessage().run(text="hi", severity="ULTRA")
+    assert not result.ok
+    assert "invalid severity" in result.error
+
+
+def test_send_message_rejects_invalid_kind(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("ALPI_HOME", str(tmp_path))
+    result = SendMessage().run(text="hi", kind="wibble")
+    assert not result.ok
+    assert "invalid kind" in result.error
+
+
+def test_send_message_rejects_empty_text_without_attachment(
+    monkeypatch, tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("ALPI_HOME", str(tmp_path))
+    result = SendMessage().run(text="")
+    assert not result.ok
+    assert "empty" in result.error
+
+
+def test_send_message_alpi_requires_text_even_with_attachment(
+    monkeypatch, tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("ALPI_HOME", str(tmp_path))
+    audio = tmp_path / "clip.ogg"
+    audio.write_bytes(b"OggS")
+    result = SendMessage().run(text="", channel="alpi", attachment=str(audio))
+    assert not result.ok
+    assert "alpi channel requires non-empty text" in result.error
+
+
+def test_send_message_attachment_only_via_gateway(
+    monkeypatch, tmp_path: Path,
+) -> None:
+    """Voice-note flow: ``tts(format=ogg)`` → ``send_message(channel="telegram", attachment=...)``. Local notifications don't carry attachments, so attachment-only delivery goes via gateway."""
     monkeypatch.setenv("TELEGRAM_ALLOWED_CHAT_IDS", "42")
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "x")
     audio = tmp_path / "clip.ogg"
     audio.write_bytes(b"OggS")
     calls = []
     monkeypatch.setattr(
         delivery, "send_to",
-        lambda p, c, t, attachment=None, env=None: calls.append((p, c, t, attachment)),
+        lambda p, c, t, attachment=None, env=None: calls.append(
+            (p, c, t, attachment),
+        ),
     )
-    result = SendMessage().run(text="", attachment=str(audio))
-    assert result.ok
+
+    result = SendMessage().run(
+        text="", channel="telegram", attachment=str(audio),
+    )
+    assert result.ok, result.error
     assert calls[0][3] == str(audio)
-    assert result.output == "delivered"
 
 
-def test_send_message_tool_passes_profile_env_to_delivery(
+def test_send_message_gateway_uses_profile_env(
     monkeypatch, tmp_path: Path,
 ) -> None:
-    """SendMessage must look up chat-id and credentials from the active
-    profile's .env, not os.environ. Reproduces the multi-profile leak
-    where TELEGRAM_ALLOWED_CHAT_IDS only living in <home>/.env is
-    ignored because delivery.default_chat_id falls back to os.environ."""
+    """Multi-profile env scoping still holds: when an explicit gateway
+    channel is used, credentials come from the active profile's .env, not
+    process env. Reproduces the multi-profile leak fix."""
     monkeypatch.delenv("TELEGRAM_ALLOWED_CHAT_IDS", raising=False)
     monkeypatch.delenv("TELEGRAM_BOT_TOKEN", raising=False)
 
@@ -183,14 +372,13 @@ def test_send_message_tool_passes_profile_env_to_delivery(
     monkeypatch.setattr(delivery, "send_to", fake_send)
     token = set_active_home(home)
     try:
-        result = SendMessage().run(text="ping")
+        result = SendMessage().run(text="ping", channel="telegram")
     finally:
         reset_active_home(token)
 
     assert result.ok, result.error
     assert captured["chat"] == "77"
     assert captured["env"].get("TELEGRAM_BOT_TOKEN") == "tok"
-    assert captured["env"].get("TELEGRAM_ALLOWED_CHAT_IDS") == "77"
 
 
 def test_send_to_attachment_missing_file(monkeypatch) -> None:

@@ -15,6 +15,11 @@ _HOME_CTX: ContextVar[Optional[Path]] = ContextVar(
     "alpi_active_home", default=None,
 )
 
+# Active-session context — Engine.run_turn binds it so tools like send_message attach session_id without plumbing it through every callsite.
+_SESSION_CTX: ContextVar[Optional[str]] = ContextVar(
+    "alpi_active_session", default=None,
+)
+
 
 def set_active_home(home: Optional[Path]) -> object:
     """Bind ``home`` to the current context and return the reset token."""
@@ -23,6 +28,18 @@ def set_active_home(home: Optional[Path]) -> object:
 
 def reset_active_home(token: object) -> None:
     _HOME_CTX.reset(token)
+
+
+def set_active_session(session_id: Optional[str]) -> object:
+    return _SESSION_CTX.set(session_id)
+
+
+def reset_active_session(token: object) -> None:
+    _SESSION_CTX.reset(token)
+
+
+def get_active_session() -> Optional[str]:
+    return _SESSION_CTX.get()
 
 
 def get_home(profile: Optional[str] = None) -> Path:

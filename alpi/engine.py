@@ -147,14 +147,19 @@ class Engine:
 
     def run_turn(self, user_text: str, emit: EventSink, *, source: str = "user") -> None:
         """Run a full turn and bind ``self.home`` for the duration. ``source`` tags the trigger ("user" from desktop/mobile/TUI/CLI, "peer" from ALP link, etc.) and gates the ``chat.turn_done`` ambient-notification emit so peer-driven turns don't notify the local user."""
-        from alpi.home import reset_active_home, set_active_home
+        from alpi.home import (
+            reset_active_home, reset_active_session,
+            set_active_home, set_active_session,
+        )
 
-        token = set_active_home(self.home)
+        home_token = set_active_home(self.home)
+        session_token = set_active_session(self.session.id)
         try:
             with self._turn_lock:
                 self._run_turn_locked(user_text, emit, source=source)
         finally:
-            reset_active_home(token)
+            reset_active_session(session_token)
+            reset_active_home(home_token)
 
     def _run_turn_locked(
         self, user_text: str, emit: EventSink, *, source: str = "user",

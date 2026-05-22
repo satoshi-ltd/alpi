@@ -1,5 +1,62 @@
 # Changelog
 
+## v0.6.1 — 2026-05-22 — agent.message event + send_message default to alpi channel
+
+Strategic shift: alpi-native notification delivery becomes the
+default path for the agent reaching the user, gateways become
+explicit opt-in. This makes the owned mobile / desktop apps the
+primary notification surface and removes the implicit Telegram
+coupling that existed in the old ``send_message`` tool.
+
+- New host event ``agent.message`` (payload: profile, title, body,
+  severity, kind, optional session_id / deep_link). Persisted via
+  the existing ``host.events`` stream, picked up by mobile ALN
+  (background polling) and by desktop notifications (live subscribe
+  + native dispatch via the existing ``notifications.rs`` surface).
+  No new infrastructure — reuses ``host.events.emit``.
+- ``send_message`` tool reworked. New parameters: ``title``,
+  ``severity`` (``normal``/``important``/``urgent``), ``kind``
+  (``reminder``/``result``/``alert``/``ack``), and ``channel``
+  (``alpi`` default / ``telegram`` / ``imap`` / ``gmail`` /
+  ``matrix`` / ``webhook`` / ``both``). The default ``alpi`` channel
+  emits the host event; gateway channels keep the previous
+  ``delivery.send_to`` dispatch. ``both`` does alpi-native AND a
+  gateway redundantly. Old skills that explicitly pass
+  ``platform="telegram"`` need to migrate to ``channel="telegram"`` —
+  there's no implicit telegram default anymore.
+- Behavior when ``channel="both"`` is forgiving: a gateway dispatch
+  failure does NOT fail the call when the alpi event already fired
+  (the user got the notification on their paired app). Gateway-only
+  failures still propagate as ``ok=false``.
+- Tool description rewritten to teach the LLM: "default is alpi —
+  works without gateway config. Only pass a gateway channel when the
+  user explicitly asks for that platform." The previous
+  Telegram-centric description is gone.
+- Attachments stay gateway-only (local notifications carry text).
+  The ``tts → send_message(attachment=…)`` voice-note flow keeps
+  working when the agent passes ``channel="telegram"``.
+- ``host/events.jsonl`` history persists ``agent.message`` like any
+  other event; mobile ALN polls it through ``host.events.history``.
+- Scheduled jobs now use ``send_message(channel="alpi")`` as the
+  single explicit path for successful proactive notifications.
+  ``schedule.done`` remains activity/history only and does not wake
+  the user; ``schedule.failed`` still notifies automatically. The
+  scheduler re-emits ``agent.message`` from the daemon process when a
+  schedule child successfully calls ``send_message``, so desktop live
+  subscribers and mobile background polling see the notification even
+  though the scheduled agent ran in a subprocess.
+- Notification policy tightened on two surfaces:
+  - ``wg.mention`` is no longer a notifiable kind. Peer mentions
+    in a workgroup are intermediate activity, not an interrupt —
+    waking the human breaks the autonomy model between ``#task``
+    and ``#done``. The event still fires (inbox / activity / unread
+    counters can use it); only the native banner is gone.
+  - Desktop now surfaces ``approval.request`` as a native banner
+    when the window is NOT focused. When focused, the in-app
+    ApprovalSheet modal continues to handle it — no double-notify.
+    Mobile already had native notification for this kind.
+- Umbrel package + image tag bumped to ``0.6.1``.
+
 ## v0.6.0 — 2026-05-22 — evidence digest (OPS.1)
 
 Minor bump closing the v0.6 reliability + operator-diagnostics cycle.

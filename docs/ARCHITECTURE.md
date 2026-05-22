@@ -643,7 +643,11 @@ Verb namespaces in current shape:
   - `schedule.done` / `schedule.failed` — `scheduler/run.py::tick`
     after each job dispatch. Carries `job_id`, `kind`, `message`,
     `reply`, `delivered_to`, and `silent`; clients use the explicit
-    fields instead of parsing the operational `message`.
+    fields instead of parsing the operational `message`. Successful
+    schedules are activity/history only; jobs that need to wake the
+    user call `send_message(channel="alpi")`, which is re-emitted as
+    `agent.message` from the scheduler daemon. `schedule.failed`
+    remains an interrupt.
   - `schedule.changed` (`action: removed|paused|resumed`) —
     schedule mutators on the host plane.
   - `config_changed` (`scope: providers|mcp|sandbox|voice|env|<dotted-key-head>`)

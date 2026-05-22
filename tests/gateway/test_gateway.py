@@ -111,6 +111,50 @@ async def test_run_agent_hides_traces_when_muted(monkeypatch, tmp_home_no_env: P
 
 
 @pytest.mark.asyncio
+async def test_run_agent_reemits_child_agent_message(
+    monkeypatch, tmp_home_no_env: Path,
+) -> None:
+    events = [
+        {
+            "kind": "tool_start",
+            "name": "send_message",
+            "args": {
+                "text": "Background task finished.",
+                "title": "Task done",
+                "channel": "alpi",
+                "severity": "important",
+                "kind": "result",
+            },
+        },
+        {"kind": "tool_end", "name": "send_message", "ok": True},
+        {"kind": "reply", "text": "done"},
+    ]
+    monkeypatch.setattr(
+        gw_run.asyncio, "create_subprocess_exec",
+        _fake_subprocess(_event_lines(events)),
+    )
+    captured = []
+    from alpi.host import events as host_events
+    monkeypatch.setattr(
+        host_events, "emit",
+        lambda kind, data=None: captured.append((kind, dict(data or {}))),
+    )
+
+    platform = FakePlatform(tmp_home_no_env)
+    msg = IncomingMessage(platform="fake", external_user_id="u", external_chat_id="c", text="hi")
+    reply = await gw_run._run_agent(msg, platform, tmp_home_no_env, show_trace=False)
+
+    assert reply == "done"
+    assert captured == [("agent.message", {
+        "profile": "default",
+        "title": "Task done",
+        "body": "Background task finished.",
+        "severity": "important",
+        "kind": "result",
+    })]
+
+
+@pytest.mark.asyncio
 async def test_process_starts_and_stops_typing_on_telegram(
     monkeypatch, tmp_home_no_env: Path,
 ) -> None:

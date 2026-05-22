@@ -250,6 +250,14 @@ def _run_once(
                 "name": ev.name,
                 "preview": arg_hint(ev.name, ev.args or {}),
             }
+            if ev.name == "send_message":
+                args = ev.args or {}
+                payload["args"] = {
+                    k: args[k] for k in (
+                        "text", "title", "severity", "kind",
+                        "channel", "platform",
+                    ) if k in args
+                }
         elif ev.kind == "tool_end":
             payload = {"kind": "tool_end", "name": ev.name, "ok": ev.ok}
         elif ev.kind == "error":

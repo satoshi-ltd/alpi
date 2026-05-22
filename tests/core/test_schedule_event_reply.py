@@ -125,6 +125,87 @@ def test_event_reply_empty_when_send_message_handled_delivery(
     assert payload["silent"] is False
 
 
+def test_send_message_from_schedule_reemits_agent_message_in_daemon(
+    monkeypatch, tmp_home_no_env: Path,
+) -> None:
+    """The scheduled agent runs in a subprocess. The parent scheduler must re-emit the alpi-native notification in the daemon process so desktop/mobile subscribers see it."""
+
+    class _Proc:
+        returncode = 0
+        stdout = _events_stdout([
+            {
+                "kind": "tool_start",
+                "name": "send_message",
+                "args": {
+                    "text": "Research finished.",
+                    "title": "Research done",
+                    "severity": "important",
+                    "kind": "result",
+                    "channel": "alpi",
+                },
+            },
+            {"kind": "tool_end", "name": "send_message", "ok": True},
+            {"kind": "reply", "text": "already sent"},
+        ])
+        stderr = ""
+
+    monkeypatch.setattr(scheduler.subprocess, "run", lambda *a, **kw: _Proc())
+    emits = _capture_emit(monkeypatch)
+
+    _seed_job(tmp_home_no_env, {
+        "id": "research", "kind": "cron", "expression": "* * * * *",
+        "prompt": "notify when done", "platform": "", "chat_id": "",
+        "last_run_at": None,
+    })
+    scheduler.tick(tmp_home_no_env)
+
+    agent_messages = [d for k, d in emits if k == "agent.message"]
+    assert agent_messages == [{
+        "profile": "default",
+        "title": "Research done",
+        "body": "Research finished.",
+        "severity": "important",
+        "kind": "result",
+    }]
+    done = [d for k, d in emits if k == "schedule.done"][0]
+    assert done["delivered_to"] == "external"
+    assert done["reply"] == ""
+
+
+def test_failed_send_message_does_not_count_as_delivered(
+    monkeypatch, tmp_home_no_env: Path,
+) -> None:
+    """A failed send_message call should not suppress the final schedule reply."""
+
+    class _Proc:
+        returncode = 0
+        stdout = _events_stdout([
+            {
+                "kind": "tool_start",
+                "name": "send_message",
+                "args": {"text": "Ping", "channel": "alpi"},
+            },
+            {"kind": "tool_end", "name": "send_message", "ok": False},
+            {"kind": "reply", "text": "fallback summary"},
+        ])
+        stderr = ""
+
+    monkeypatch.setattr(scheduler.subprocess, "run", lambda *a, **kw: _Proc())
+    emits = _capture_emit(monkeypatch)
+
+    _seed_job(tmp_home_no_env, {
+        "id": "fallback", "kind": "cron", "expression": "* * * * *",
+        "prompt": "notify when done", "platform": "", "chat_id": "",
+        "last_run_at": None,
+    })
+    scheduler.tick(tmp_home_no_env)
+
+    assert [d for k, d in emits if k == "agent.message"] == []
+    done = [d for k, d in emits if k == "schedule.done"][0]
+    assert done["reply"] == "fallback summary"
+    assert done["delivered_to"] == ""
+
+
 def test_event_reply_empty_on_failure(
     monkeypatch, tmp_home_no_env: Path,
 ) -> None:

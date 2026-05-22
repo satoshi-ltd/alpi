@@ -257,6 +257,7 @@ def test_run_job_delivers_reply(monkeypatch, tmp_home_no_env: Path) -> None:
 
     def fake_run(*a, **kw):
         captured["args"] = a[0]
+        captured["env"] = kw.get("env") or {}
         return _FakeCompletedProcess()
 
     monkeypatch.setattr(scheduler.subprocess, "run", fake_run)
@@ -270,6 +271,7 @@ def test_run_job_delivers_reply(monkeypatch, tmp_home_no_env: Path) -> None:
     ok, msg, _reply = scheduler.run_job(job, tmp_home_no_env)
     assert ok
     assert "--no-save" in captured["args"]
+    assert captured["env"].get("ALPI_SCHEDULE_CHILD") == "1"
     assert sent == [("telegram", "1", "hello world")]
     assert "telegram:1" in msg
 
@@ -299,7 +301,10 @@ def test_run_job_silent_when_no_platform(monkeypatch, tmp_home_no_env: Path) -> 
     assert sent == []
     assert "silent" in msg
     joined = " ".join(captured_args["cmd"])
-    assert "silent maintenance task" in joined
+    # New contract: wrapper teaches the agent to call send_message(channel="alpi") if a notification is wanted; schedule.done alone doesn't wake the user.
+    assert "send_message" in joined
+    assert "schedule.done" in joined
+    assert "alpi" in joined
 
 
 def test_run_job_uses_default_chat_id(monkeypatch, tmp_home_no_env: Path) -> None:

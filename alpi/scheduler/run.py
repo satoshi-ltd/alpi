@@ -35,6 +35,14 @@ class JobOutcome:
         yield self.message
         yield self.reply
 
+
+@dataclass
+class ParsedEvents:
+    send_message_used: bool
+    reply: str
+    agent_messages: list[dict]
+
+
 # How often to wake up and check for due jobs. 30s is fine-grained enough
 # for "every minute" expressions while keeping CPU ~0.
 TICK_SECONDS = 30
@@ -294,17 +302,25 @@ def run_job(job: dict, home: Path) -> JobOutcome:
     if has_platform:
         wrap_header = (
             "[SCHEDULED: running from cron; user is not watching live. "
-            "Answer concisely; the reply is auto-delivered to their chat. "
-            "If the job is purely to deliver text, just write the text as "
-            "the reply — do NOT also call `send_message`; that would "
-            "send it twice.]"
+            "Answer concisely; the reply is auto-delivered to the "
+            "configured gateway. If the job is purely to deliver text, "
+            "just write the text as the reply — do NOT also call "
+            "`send_message`; that would send it twice.]"
         )
     else:
         wrap_header = (
-            "[SCHEDULED: running from cron as a silent maintenance task. "
-            "No reply is delivered anywhere. Do the work, then end with "
-            "an empty reply (a short summary is fine but discarded — it "
-            "only ends up in the daemon log).]"
+            "[SCHEDULED: running from cron; no user is watching live and "
+            "no gateway is wired to this job. Schedule success on its "
+            "own does NOT notify the user — Alpi apps treat "
+            "`schedule.done` as activity history, not as an interrupt.\n"
+            "\n"
+            "If this job is supposed to alert / remind / report something "
+            "to the user, call `send_message(channel=\"alpi\", text=…, "
+            "title=…)` explicitly — that is the only way the user gets a "
+            "native notification on their paired Alpi app.\n"
+            "\n"
+            "If the job is silent maintenance with nothing to report, "
+            "finish with an empty reply.]"
         )
     wrapped = wrap_header + "\n\n" + prompt
 
@@ -312,6 +328,8 @@ def run_job(job: dict, home: Path) -> JobOutcome:
     env = _effective_profile_env(home, extra={
         "ALPI_HOME": str(home),
         "ALPI_PLATFORM": "cron",
+        "ALPI_SCHEDULE_CHILD": "1",
+        "ALPI_PARENT_EMITS_AGENT_MESSAGE": "1",
     })
     try:
         proc = subprocess.run(
@@ -332,7 +350,9 @@ def run_job(job: dict, home: Path) -> JobOutcome:
     if proc.returncode != 0:
         return JobOutcome(False, f"agent rc={proc.returncode}: {proc.stderr[:300]}")
 
-    already_delivered, reply = _parse_events(proc.stdout or "")
+    parsed = _parse_events(proc.stdout or "")
+    _emit_agent_messages(home, parsed.agent_messages)
+    already_delivered, reply = parsed.send_message_used, parsed.reply
 
     if already_delivered:
         return JobOutcome(
@@ -369,10 +389,12 @@ def run_job(job: dict, home: Path) -> JobOutcome:
     )
 
 
-def _parse_events(stdout: str) -> tuple[bool, str]:
-    """Return (send_message_used, final_reply_text) from --emit-events output."""
+def _parse_events(stdout: str) -> ParsedEvents:
+    """Parse --emit-events stdout from the schedule child process."""
     sent_via_tool = False
     reply = ""
+    pending_send_args: list[dict] = []
+    agent_messages: list[dict] = []
     for line in stdout.splitlines():
         line = line.strip()
         if not line:
@@ -383,10 +405,60 @@ def _parse_events(stdout: str) -> tuple[bool, str]:
             continue
         kind = ev.get("kind")
         if kind == "tool_start" and ev.get("name") == "send_message":
-            sent_via_tool = True
+            args = ev.get("args")
+            pending_send_args.append(args if isinstance(args, dict) else {})
+        elif kind == "tool_end" and ev.get("name") == "send_message":
+            args = pending_send_args.pop(0) if pending_send_args else {}
+            if ev.get("ok") is True:
+                sent_via_tool = True
+                msg = _agent_message_from_send_args(args)
+                if msg:
+                    agent_messages.append(msg)
         elif kind == "reply":
             reply = (ev.get("text") or "").strip()
-    return sent_via_tool, reply
+    return ParsedEvents(sent_via_tool, reply, agent_messages)
+
+
+def _agent_message_from_send_args(args: dict) -> dict | None:
+    channel = str(args.get("channel") or "alpi").strip().lower()
+    if channel not in {"alpi", "both"}:
+        return None
+    text = str(args.get("text") or "").strip()
+    if not text:
+        return None
+    severity = str(args.get("severity") or "normal").strip().lower()
+    if severity not in {"normal", "important", "urgent"}:
+        severity = "normal"
+    kind = str(args.get("kind") or "result").strip().lower()
+    if kind not in {"reminder", "result", "alert", "ack"}:
+        kind = "result"
+    title = str(args.get("title") or "").strip()
+    return {
+        "title": title,
+        "body": text,
+        "severity": severity,
+        "kind": kind,
+    }
+
+
+def _emit_agent_messages(home: Path, messages: list[dict]) -> None:
+    if not messages:
+        return
+    try:
+        from alpi.home import profile_name
+        from alpi.host import events as host_events
+        profile = profile_name(home)
+        for msg in messages:
+            payload = {
+                "profile": profile,
+                "title": msg.get("title") or profile or "alpi",
+                "body": msg["body"],
+                "severity": msg.get("severity") or "normal",
+                "kind": msg.get("kind") or "result",
+            }
+            host_events.emit("agent.message", payload)
+    except Exception:  # noqa: BLE001
+        pass
 
 
 # Tick + main loop

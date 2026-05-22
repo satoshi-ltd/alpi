@@ -59,8 +59,11 @@ with `ALPI_PLATFORM=cron`. The scheduler reads stdout events and
 delivers the final reply, but no session file is saved. `run_job()`
 returns `JobOutcome`: `ok`, operational `message`, clean `reply`,
 `delivered_to`, and `silent`. `schedule.done` / `schedule.failed`
-events carry those fields so clients render notifications from
-explicit data rather than parsing `message`. `reply` is capped at
+events carry those fields so clients render activity/error UI from
+explicit data rather than parsing `message`. Successful schedules do
+not notify natively; jobs that need to wake the user call
+`send_message(channel="alpi")`, which the scheduler re-emits as
+`agent.message` from the daemon process. `reply` is capped at
 2000 chars in host events. `serve()` runs each `tick()` in a dedicated
 `ThreadPoolExecutor`, and `host.schedule.fire` wraps `fire_by_id` in
 `run_in_executor`, so a long `subprocess.run` job can't starve
