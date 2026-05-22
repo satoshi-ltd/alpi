@@ -1,5 +1,31 @@
 # Changelog
 
+## v0.6.5 — 2026-05-22 — host.network.status no longer freezes the UI, agent notification deep link
+
+Opening the default profile's settings used to hang the desktop
+for ~5s while ``host.network.status`` ran the same expensive
+network probes (Tailscale CLI subprocess, ifconfig, UDP route)
+three to four times in series. The handler also blocked the host
+event loop, which queued every other RPC behind it.
+
+- Endpoint probes consolidated into a single ``_probe_endpoints``
+  call, dispatched off-loop via ``asyncio.to_thread``. Endpoint
+  resolution, candidates, and diagnosis all consume one shared
+  probe result instead of re-shelling for each field.
+- Resolution order preserved: configured → umbrel → tailscale →
+  lan. Umbrel deployments still advertise via
+  ``DEVICE_DOMAIN_NAME`` / ``ALPI_HOST_ADVERTISE_HOST`` (the
+  refactor briefly lost this branch — a regression test now
+  pins it).
+- New regression test pins the once-and-only-once probe contract
+  so the hang can't sneak back in.
+- ``send_message`` now emits ``deep_link`` as ``/chat/<profile>``
+  instead of ``/chat/<session_id>``. The mobile chat route reads
+  the URL segment as a profile name; the old session-id path
+  resolved to a broken "profile not found" state when users
+  tapped notifications. ``session_id`` still travels in the
+  payload for the chat screen to pre-select.
+
 ## v0.6.4 — 2026-05-22 — daemon identifies itself on pair
 
 The daemon now reports its own ``device_name`` (set via

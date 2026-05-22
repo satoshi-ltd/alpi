@@ -80,19 +80,25 @@ def test_validate_rejects_empty_label() -> None:
 # --------------------------------------------------------------------
 
 
+def _stub_probes(monkeypatch, *, tailscale=None, lan=None, udp_ip=None, udp_err=None, ifconfig=None):
+    monkeypatch.setattr(
+        "alpi.host.network_rpc._probe_endpoints",
+        lambda: {
+            "tailscale": tailscale,
+            "lan": lan,
+            "udp_ip": udp_ip,
+            "udp_err": udp_err,
+            "ifconfig": ifconfig,
+        },
+    )
+
+
 @pytest.mark.asyncio
 async def test_status_reports_in_use_host_and_port(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     home = _bootstrap(tmp_path)
-    # No Tailscale, no LAN — endpoint resolves to None. Status still works.
-    monkeypatch.setattr("alpi.host.network.detect_bind_ip", lambda: None)
-    monkeypatch.setattr("alpi.host.tailscale.detect_tailscale_ip", lambda: None)
-    monkeypatch.setattr("alpi.host.network._detect_lan_ip", lambda: None)
-    monkeypatch.setattr("alpi.host.network.diagnose_bind_ip", lambda: {
-        "tailscale": None, "udp_probe_ip": None, "udp_probe_error": "no route",
-        "udp_probe_is_private": None, "ifconfig_lan": None,
-    })
+    _stub_probes(monkeypatch, udp_err="no route")
 
     srv = host_server.Server(home=home)
     network_rpc.register(srv)
@@ -111,13 +117,7 @@ async def test_status_reports_tailscale_when_present(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     home = _bootstrap(tmp_path)
-    monkeypatch.setattr("alpi.host.tailscale.detect_tailscale_ip", lambda: "100.114.140.25")
-    monkeypatch.setattr("alpi.host.network._detect_lan_ip", lambda: "192.168.1.10")
-    # resolve_host_endpoint uses detect_bind_ip → tailscale wins.
-    monkeypatch.setattr(
-        "alpi.host.network.detect_bind_ip",
-        lambda: ("100.114.140.25", "tailscale"),
-    )
+    _stub_probes(monkeypatch, tailscale="100.114.140.25", lan="192.168.1.10")
 
     srv = host_server.Server(home=home)
     network_rpc.register(srv)
@@ -134,12 +134,7 @@ async def test_status_reports_lan_when_no_tailscale(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     home = _bootstrap(tmp_path)
-    monkeypatch.setattr("alpi.host.tailscale.detect_tailscale_ip", lambda: None)
-    monkeypatch.setattr("alpi.host.network._detect_lan_ip", lambda: "192.168.1.10")
-    monkeypatch.setattr(
-        "alpi.host.network.detect_bind_ip",
-        lambda: ("192.168.1.10", "lan"),
-    )
+    _stub_probes(monkeypatch, lan="192.168.1.10")
 
     srv = host_server.Server(home=home)
     network_rpc.register(srv)
@@ -147,6 +142,107 @@ async def test_status_reports_lan_when_no_tailscale(
     result = resp["result"]
     assert result["scope_in_use"] == "lan"
     assert result["host_in_use"] == "192.168.1.10"
+
+
+@pytest.mark.asyncio
+async def test_status_probes_each_endpoint_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home = _bootstrap(tmp_path)
+    calls = {"n": 0}
+
+    def fake_probes():
+        calls["n"] += 1
+        return {
+            "tailscale": "100.114.140.25",
+            "lan": "192.168.1.10",
+            "udp_ip": "192.168.1.10",
+            "udp_err": None,
+            "ifconfig": "192.168.1.10",
+        }
+
+    monkeypatch.setattr("alpi.host.network_rpc._probe_endpoints", fake_probes)
+    srv = host_server.Server(home=home)
+    network_rpc.register(srv)
+    await srv._dispatch({"id": "n", "method": "host.network.status", "params": {}})
+    assert calls["n"] == 1, (
+        f"_probe_endpoints called {calls['n']} times — the dedup that "
+        "fixed the default-profile 5s hang has regressed"
+    )
+
+
+@pytest.mark.asyncio
+async def test_status_resolves_umbrel_when_platform_is_umbrel(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home = _bootstrap(tmp_path)
+    monkeypatch.setenv("ALPI_PLATFORM", "umbrel")
+    monkeypatch.setenv("DEVICE_DOMAIN_NAME", "umbrel.local")
+    monkeypatch.delenv("ALPI_HOST_ADVERTISE_HOST", raising=False)
+    _stub_probes(monkeypatch)
+
+    srv = host_server.Server(home=home)
+    network_rpc.register(srv)
+    resp = await srv._dispatch({"id": "n", "method": "host.network.status", "params": {}})
+    r = resp["result"]
+    assert r["host_in_use"] == "umbrel.local"
+    assert r["scope_in_use"] == "umbrel"
+    assert r["is_override"] is False
+    assert r["candidates"]["umbrel"] == "umbrel.local"
+
+
+@pytest.mark.asyncio
+async def test_status_umbrel_override_takes_priority_over_hint(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home = _bootstrap(tmp_path)
+    monkeypatch.setenv("ALPI_PLATFORM", "umbrel")
+    monkeypatch.setenv("DEVICE_DOMAIN_NAME", "fallback.local")
+    monkeypatch.setenv("ALPI_HOST_ADVERTISE_HOST", "advertised.local")
+    _stub_probes(monkeypatch)
+
+    srv = host_server.Server(home=home)
+    network_rpc.register(srv)
+    resp = await srv._dispatch({"id": "n", "method": "host.network.status", "params": {}})
+    assert resp["result"]["host_in_use"] == "advertised.local"
+    assert resp["result"]["scope_in_use"] == "umbrel"
+
+
+@pytest.mark.asyncio
+async def test_status_umbrel_with_no_hint_returns_none(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home = _bootstrap(tmp_path)
+    monkeypatch.setenv("ALPI_PLATFORM", "umbrel")
+    monkeypatch.delenv("DEVICE_DOMAIN_NAME", raising=False)
+    monkeypatch.delenv("ALPI_HOST_ADVERTISE_HOST", raising=False)
+    monkeypatch.delenv("DEVICE_HOSTNAME", raising=False)
+    _stub_probes(monkeypatch, tailscale="100.114.140.25", lan="192.168.1.10")
+
+    srv = host_server.Server(home=home)
+    network_rpc.register(srv)
+    resp = await srv._dispatch({"id": "n", "method": "host.network.status", "params": {}})
+    assert resp["result"]["host_in_use"] is None
+    assert resp["result"]["scope_in_use"] is None
+
+
+@pytest.mark.asyncio
+async def test_status_configured_overrides_umbrel(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home = _bootstrap(tmp_path)
+    cfg = cfg_mod.load(home)
+    cfg.host = {"tcp_host": "operator.set.example"}
+    cfg_mod.save(cfg)
+    monkeypatch.setenv("ALPI_PLATFORM", "umbrel")
+    monkeypatch.setenv("DEVICE_DOMAIN_NAME", "umbrel.local")
+    _stub_probes(monkeypatch)
+
+    srv = host_server.Server(home=home)
+    network_rpc.register(srv)
+    resp = await srv._dispatch({"id": "n", "method": "host.network.status", "params": {}})
+    assert resp["result"]["host_in_use"] == "operator.set.example"
+    assert resp["result"]["is_override"] is True
 
 
 @pytest.mark.asyncio

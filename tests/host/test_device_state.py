@@ -69,7 +69,6 @@ async def test_host_version_returns_alpi_runtime(tmp_path: Path) -> None:
 async def test_host_version_surfaces_device_name_from_config(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Mobile / desktop pairing uses ``host.version.device_name`` as the connection label. Without this field the URL's ``name=...`` (which historically carried the device-being-paired label) wins by default — that is the bug v0.6.4 fixes."""
     home = tmp_path / "h"
     home.mkdir()
     (home / "config.yaml").write_text(
@@ -90,7 +89,6 @@ async def test_host_version_surfaces_device_name_from_config(
 async def test_host_version_blank_device_name_when_unset(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """When ``alpi setup`` hasn't been run, device_name is blank — clients fall back to the URL-provided name (back-compat for old links)."""
     home = tmp_path / "h"
     home.mkdir()
     (home / "config.yaml").write_text("host:\n  tcp_host: 100.64.0.1\n")

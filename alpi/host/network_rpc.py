@@ -26,29 +26,68 @@ def register(server: host_server.Server) -> None:
     server.register("host.network.restart_host_server", _restart_host_server)
 
 
+def _probe_endpoints() -> dict[str, Any]:
+    import socket
+
+    from alpi.host.network import _detect_lan_ip_via_ifconfig, _is_private_lan
+    from alpi.host.tailscale import detect_tailscale_ip
+
+    ts = detect_tailscale_ip()
+    udp_ip: str | None = None
+    udp_err: str | None = None
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            s.connect(("8.8.8.8", 53))
+            udp_ip = s.getsockname()[0]
+        finally:
+            s.close()
+    except OSError as exc:
+        udp_err = str(exc)
+    ifc = _detect_lan_ip_via_ifconfig()
+    lan = (udp_ip if (udp_ip and _is_private_lan(udp_ip)) else None) or ifc
+    return {
+        "tailscale": ts,
+        "lan": lan,
+        "udp_ip": udp_ip,
+        "udp_err": udp_err,
+        "ifconfig": ifc,
+    }
+
+
 async def _status(_params: dict[str, Any], server: host_server.Server) -> dict[str, Any]:
+    # Resolution order: configured → umbrel → tailscale → lan. Probes run once off-loop.
+    import asyncio
+    import os
+
     from alpi import config as cfg_mod
     from alpi.host.network import (
-        _detect_lan_ip,
-        diagnose_bind_ip,
-        resolve_host_endpoint,
+        _is_private_lan,
+        _umbrel_host_hint,
         resolve_host_pairing_name,
         resolve_host_tcp_port,
     )
-    from alpi.host.tailscale import detect_tailscale_ip
 
     home = server.home
     cfg = cfg_mod.load(home)
     configured = str((cfg.host or {}).get("tcp_host") or "").strip() or None
+    is_umbrel = os.environ.get("ALPI_PLATFORM") == "umbrel"
+    umbrel_hint = _umbrel_host_hint() if is_umbrel else None
 
-    try:
-        endpoint = resolve_host_endpoint(home)
-    except Exception:  # noqa: BLE001
-        endpoint = None
-    host_in_use: str | None = None
-    raw_scope: str | None = None
-    if endpoint is not None:
-        host_in_use, raw_scope = endpoint
+    probes = await asyncio.to_thread(_probe_endpoints)
+
+    host_in_use: str | None
+    raw_scope: str | None
+    if configured:
+        host_in_use, raw_scope = configured, "configured"
+    elif is_umbrel:
+        host_in_use, raw_scope = (umbrel_hint, "umbrel") if umbrel_hint else (None, None)
+    elif probes["tailscale"]:
+        host_in_use, raw_scope = probes["tailscale"], "tailscale"
+    elif probes["lan"]:
+        host_in_use, raw_scope = probes["lan"], "lan"
+    else:
+        host_in_use, raw_scope = None, None
 
     return {
         "scope_in_use": classify_scope(host_in_use, raw_scope),
@@ -57,11 +96,20 @@ async def _status(_params: dict[str, Any], server: host_server.Server) -> dict[s
         "port": resolve_host_tcp_port(home),
         "device_name": resolve_host_pairing_name(home),
         "candidates": {
-            "tailscale": detect_tailscale_ip(),
-            "lan": _detect_lan_ip(),
+            "tailscale": probes["tailscale"],
+            "lan": probes["lan"],
             "configured": configured,
+            "umbrel": umbrel_hint,
         },
-        "diagnosis": diagnose_bind_ip(),
+        "diagnosis": {
+            "tailscale": probes["tailscale"],
+            "udp_probe_ip": probes["udp_ip"],
+            "udp_probe_error": probes["udp_err"],
+            "udp_probe_is_private": (
+                str(_is_private_lan(probes["udp_ip"])) if probes["udp_ip"] else None
+            ),
+            "ifconfig_lan": probes["ifconfig"],
+        },
     }
 
 

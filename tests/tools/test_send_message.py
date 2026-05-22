@@ -164,7 +164,6 @@ def test_send_message_alpi_uses_title_and_severity(
 def test_send_message_attaches_active_session(
     monkeypatch, tmp_path: Path,
 ) -> None:
-    """When the Engine has bound an active session via ``set_active_session``, the alpi-channel event carries ``session_id`` + ``deep_link`` so the mobile/desktop notification tap routes back to the right chat — not the inbox."""
     from alpi.home import reset_active_session, set_active_session
 
     monkeypatch.setenv("ALPI_HOME", str(tmp_path))
@@ -179,13 +178,12 @@ def test_send_message_attaches_active_session(
     assert result.ok, result.error
     msg = next(d for k, d in events if k == "agent.message")
     assert msg["session_id"] == "sess-abc-123"
-    assert msg["deep_link"] == "/chat/sess-abc-123"
+    assert msg["deep_link"] == f"/chat/{msg['profile']}"
 
 
 def test_send_message_omits_session_when_not_bound(
     monkeypatch, tmp_path: Path,
 ) -> None:
-    """No active session (e.g. a one-shot ``alpi -c`` invocation) → no session_id / deep_link in the payload. Mobile / desktop fall back to a generic profile-level route."""
     monkeypatch.setenv("ALPI_HOME", str(tmp_path))
     events = _capture_events(monkeypatch)
 
@@ -193,7 +191,27 @@ def test_send_message_omits_session_when_not_bound(
     assert result.ok, result.error
     msg = next(d for k, d in events if k == "agent.message")
     assert "session_id" not in msg
-    assert "deep_link" not in msg
+    assert msg["deep_link"] == f"/chat/{msg['profile']}"
+
+
+def test_send_message_deep_link_never_carries_session_id(
+    monkeypatch, tmp_path: Path,
+) -> None:
+    from alpi.home import reset_active_session, set_active_session
+
+    monkeypatch.setenv("ALPI_HOME", str(tmp_path))
+    events = _capture_events(monkeypatch)
+
+    token = set_active_session("sess-XYZ-999")
+    try:
+        SendMessage().run(text="task done")
+    finally:
+        reset_active_session(token)
+
+    msg = next(d for k, d in events if k == "agent.message")
+    assert "sess-XYZ-999" not in msg["deep_link"], (
+        f"deep_link must not embed the session id; got {msg['deep_link']!r}"
+    )
 
 
 def test_send_message_channel_telegram_only_dispatches_gateway(

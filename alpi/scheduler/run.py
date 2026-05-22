@@ -492,7 +492,6 @@ def fire_by_id(home: Path, job_id: str) -> tuple[bool, str]:
 
 
 def _emit_schedule_event(home: Path, job: dict, outcome: JobOutcome) -> None:
-    """Emit `schedule.done` / `schedule.failed` for one finished run. Used by both `tick()` (daemon-driven) and `fire_by_id()` (manual UI) so the host event stream is consistent regardless of how the fire was triggered — a failed manual fire must still notify the user."""
     try:
         from alpi.home import profile_name
         from alpi.host import events as host_events

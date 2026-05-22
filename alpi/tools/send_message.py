@@ -262,7 +262,8 @@ def _emit_agent_message(
         session_id = None
     if session_id:
         payload["session_id"] = session_id
-        payload["deep_link"] = f"/chat/{session_id}"
+    if prof:
+        payload["deep_link"] = f"/chat/{prof}"
 
     try:
         host_events.emit("agent.message", payload)

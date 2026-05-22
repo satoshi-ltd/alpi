@@ -166,10 +166,6 @@ async def test_paused_jobs_skip_tick(tmp_path: Path) -> None:
 
 @pytest.mark.asyncio
 async def test_fire_runs_job_via_scheduler(tmp_path: Path, monkeypatch) -> None:
-    """``host.schedule.fire`` delegates to ``scheduler.run.fire_by_id``
-    so manual + auto fires share the same threat-scan + dispatch.
-    The handler is fire-and-forget, so we wait for the background task
-    to finish before asserting the executor was invoked."""
     import asyncio
 
     home = tmp_path / "h"
@@ -204,10 +200,6 @@ async def test_fire_runs_job_via_scheduler(tmp_path: Path, monkeypatch) -> None:
 async def test_fire_returns_before_job_completes(
     tmp_path: Path, monkeypatch,
 ) -> None:
-    """Fire-and-forget contract: the handler returns the moment the
-    background task is scheduled, NOT when the job finishes. Old
-    blocking behavior froze the UI for the agent's whole runtime
-    (often 20-60s). The handler must complete in well under that."""
     import asyncio
     import time as _time
 
@@ -251,7 +243,6 @@ async def test_fire_returns_before_job_completes(
 async def test_fire_emits_schedule_done_event(
     tmp_path: Path, monkeypatch,
 ) -> None:
-    """A successful manual fire must emit `schedule.done` so the UI can flip from "started" to a final result. Without this, fire-and-forget would mean a failed job goes silent."""
     import asyncio
 
     from alpi.host import events as host_events
@@ -292,7 +283,6 @@ async def test_fire_emits_schedule_done_event(
 async def test_fire_emits_schedule_failed_on_failure(
     tmp_path: Path, monkeypatch,
 ) -> None:
-    """A failing manual fire must emit `schedule.failed`. Without this, fire-and-forget would hide errors from the UI — the toast already said "fired", the user expects a follow-up."""
     import asyncio
 
     from alpi.host import events as host_events
@@ -333,7 +323,6 @@ async def test_fire_emits_schedule_failed_on_failure(
 async def test_fire_holds_strong_reference_to_background_task(
     tmp_path: Path, monkeypatch,
 ) -> None:
-    """asyncio.create_task only keeps a weak ref to the task. For a 10-min agent run we cannot let the task vanish under GC pressure mid-fire — the module-level _BACKGROUND_FIRES set is the strong reference."""
     import asyncio
     import gc
 
@@ -389,10 +378,6 @@ async def test_fire_holds_strong_reference_to_background_task(
 async def test_fire_swallows_background_exceptions(
     tmp_path: Path, monkeypatch,
 ) -> None:
-    """A crashing fire_by_id must not propagate out of the background
-    task. The user already got `ok:true` from the handler; surfacing
-    the crash later would only show up as an unhandled task warning
-    in logs (which is what we already log explicitly)."""
     import asyncio
 
     home = tmp_path / "h"

@@ -95,7 +95,6 @@ def _profiles() -> list[dict[str, Any]]:
 async def _host_version(
     _params: dict[str, Any], server: host_server.Server,
 ) -> dict[str, Any]:
-    """Identity probe: paired clients label the connection with the daemon's own ``device_name`` instead of whatever string the pairing link carried. Blank when ``alpi setup`` was skipped — clients then fall back to the URL-provided name."""
     try:
         cfg = cfg_mod.load(home_mod.get_home())
         device_name = str((cfg.host or {}).get("device_name") or "").strip()

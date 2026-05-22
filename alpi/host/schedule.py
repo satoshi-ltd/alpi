@@ -9,7 +9,7 @@ from typing import Any
 from alpi.host import server as host_server
 
 
-# Strong references to in-flight fire-and-forget tasks. asyncio.create_task only holds a weak ref, so without this a long-running fire (up to 10 min) could be GC'd mid-flight; the discard callback drops the entry when the task finishes.
+# asyncio.create_task is weak-ref; this set keeps the task alive until done_callback drops it.
 _BACKGROUND_FIRES: set[asyncio.Task] = set()
 
 
@@ -136,7 +136,6 @@ async def _schedule_set_paused(
 async def _schedule_fire(
     params: dict[str, Any], _server: host_server.Server,
 ) -> dict[str, Any]:
-    """Fire-and-forget: validate the job id synchronously (so a stale id from the UI still returns -32004 instead of silently dropping into a background failure), then schedule the run and return. A blocking wait would freeze the UI for the agent's whole runtime (often 20-60s, up to 10 min). `fire_by_id` itself emits `schedule.done` / `schedule.failed` when the job finishes."""
     import logging
 
     from alpi.host.handlers import _check_id
