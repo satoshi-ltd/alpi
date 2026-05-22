@@ -1,9 +1,8 @@
 export const NOTIFIABLE_KINDS = [
-  'wg.mention',
+  'agent.message',
   'wg.done',
   'chat.turn_done',
   'approval.request',
-  'schedule.done',
   'schedule.failed',
   'budget.threshold',
 ];
@@ -16,6 +15,13 @@ export function formatNotification(event, connection) {
   const profile = data.profile || '';
   const prefix = profile ? `${conn} · ${profile}` : conn;
   switch (kind) {
+    case 'agent.message': {
+      const sev = data.severity && data.severity !== 'normal' ? ` · ${data.severity}` : '';
+      return {
+        title: data.title || `${prefix}${sev}`,
+        body: data.body || 'New message from your agent.',
+      };
+    }
     case 'wg.mention':
       return {
         title: `${prefix} · mention`,
@@ -45,7 +51,7 @@ export function formatNotification(event, connection) {
     case 'schedule.done':
       return {
         title: `${prefix} · schedule ok`,
-        body: data.message || data.reply || 'Scheduled job completed.',
+        body: data.reply || data.message || 'Scheduled job completed.',
       };
     case 'schedule.failed':
       return {
@@ -67,6 +73,11 @@ export function deepLinkFor(event, _connection) {
   const kind = event?.event;
   const data = event?.data || {};
   switch (kind) {
+    case 'agent.message':
+      if (typeof data.deep_link === 'string' && data.deep_link) {
+        return data.deep_link;
+      }
+      return data.session_id ? `/chat/${data.session_id}` : '/';
     case 'wg.mention':
     case 'wg.done':
       return data.wg_id ? `/wg/${data.wg_id}` : '/';

@@ -4,10 +4,7 @@ import { loadState, recordSeen, saveState } from './state';
 
 export { recordSeen };
 
-// host.events.history returns the most-recent ``limit`` events when there are
-// more than ``limit`` since the cursor. ALN is "surface the latest, drop the
-// in-between": if the user went a week off-grid and 500 events accumulated,
-// we don't try to backfill — we notify the most recent ~50 and skip ahead.
+// host.events.history returns the tail when >limit events since cursor — ALN surfaces the latest and skips ahead, no backfill of older missed events.
 const POLL_LIMIT = 50;
 const POLL_TIMEOUT_MS = 8000;
 

@@ -14,6 +14,32 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.1.5 — 2026-05-22 — agent.message ambient notifications
+
+Requires alpi ``v0.6.1`` or newer. The mobile app now surfaces the
+new ``agent.message`` host event as a local notification, so any
+``send_message`` call the agent makes via the default ``alpi``
+channel lands as a native banner without any gateway in the middle.
+
+- ``agent.message`` added to ALN's ``NOTIFIABLE_KINDS``. Title is
+  the payload's ``title`` (falls back to a connection / profile /
+  severity composite). Body is the payload's ``body``.
+- Tap deep-link: ``data.deep_link`` wins when present; otherwise
+  routes to ``/chat/<session_id>`` if the agent attached one. Falls
+  back to the inbox root when neither is available.
+- ``schedule.done`` is intentionally NOT in ALN's notifiable set.
+  Successful schedules are activity/history only; jobs that need to
+  wake the user call ``send_message(channel="alpi")`` explicitly.
+  ``schedule.failed`` remains notifiable.
+- The dev-only "Test notifications" route under Settings includes
+  an ``agent.message`` sample so the deep-link routing can be
+  verified locally with a single tap.
+- ``wg.mention`` removed from the notifiable kinds list. Peer
+  mentions in a workgroup are intermediate activity — waking the
+  user breaks the ``#task``/``#done`` autonomy model. The event
+  still flows through the live subscription; inbox / unread surfaces
+  can use it. Only the native banner is gone.
+
 ## v0.1.4 — 2026-05-21 — AX Local Notify (ambient notifications)
 
 Requires alpi ``v0.5.8`` or newer. The mobile app now surfaces

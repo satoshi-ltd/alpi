@@ -1,12 +1,12 @@
 import { NOTIFIABLE_KINDS } from './kinds';
 
 const FIXTURES = {
-  'wg.mention': {
-    profile: 'vera',
-    wg_id: 'wg-debug',
-    seq: 999,
-    from: 'peer-debug',
-    summary: '@vera could you review the Q2 plan before tomorrow?',
+  'agent.message': {
+    profile: 'abby',
+    title: 'Meeting in 10 min',
+    body: 'Standup with the design team at 10:30.',
+    severity: 'important',
+    kind: 'reminder',
   },
   'wg.done': {
     profile: 'vera',
@@ -29,13 +29,6 @@ const FIXTURES = {
     pattern: 'recursive rm',
     severity: 'caution',
     timeout_s: 60,
-  },
-  'schedule.done': {
-    profile: 'vera',
-    job_id: 'job-debug',
-    kind: 'cron',
-    message: 'Morning briefing delivered.',
-    reply: 'Inbox cleaned, 3 priorities flagged.',
   },
   'schedule.failed': {
     profile: 'vera',

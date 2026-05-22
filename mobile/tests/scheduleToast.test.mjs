@@ -17,66 +17,54 @@ function test(name, fn) {
   }
 }
 
-test('reply present → profile as title, reply as message', () => {
-  const t = buildScheduleToast('schedule.done', {
-    profile: 'abby',
-    job_id: 'ab12',
+test('schedule.done success is NEVER toasted — schedule success is not an interrupt; jobs that want to notify call send_message explicitly', () => {
+  assert.equal(buildScheduleToast('schedule.done', {
+    profile: 'abby', job_id: 'ab12',
     message: 'silent run ok: ⏰ comprar pan',
     reply: '⏰ comprar pan',
-    silent: false,
-  });
-  assert.equal(t.title, 'abby');
-  assert.equal(t.message, '⏰ comprar pan');
+  }), null);
+  assert.equal(buildScheduleToast('schedule.done', {
+    profile: 'mirai', message: 'silent run ok', silent: true,
+  }), null);
+  assert.equal(buildScheduleToast('schedule.done', {
+    profile: 'mirai', job_id: 'standup',
+    message: 'agent delivered via send_message',
+    delivered_to: 'external',
+  }), null);
 });
 
-test('silent=true on success → suppressed', () => {
-  const t = buildScheduleToast('schedule.done', {
-    profile: 'mirai',
-    message: 'silent run ok',
-    reply: '',
-    silent: true,
-  });
-  assert.equal(t, null);
-});
-
-test('silent on failure is ignored — errors always surface', () => {
+test('schedule.failed always toasts — errors always need attention', () => {
   const t = buildScheduleToast('schedule.failed', {
-    profile: 'doc',
-    job_id: 'weekly',
-    message: 'rc=1',
-    reply: '',
-    silent: true,
+    profile: 'doc', job_id: 'weekly', message: 'rc=1',
   });
   assert.notEqual(t, null);
   assert.equal(t.title, 'doc · schedule failed');
+  assert.equal(t.message, 'weekly: rc=1');
 });
 
-test('send_message self-delivered → toast with fallback message', () => {
-  const t = buildScheduleToast('schedule.done', {
-    profile: 'mirai',
-    job_id: 'standup',
-    message: 'agent delivered via send_message; no duplicate reply pushed',
-    reply: '',
-    delivered_to: 'external',
+test('schedule.failed with no message falls back to job_id only', () => {
+  const t = buildScheduleToast('schedule.failed', {
+    profile: 'doc', job_id: 'weekly',
   });
-  assert.equal(t.title, 'mirai · schedule ran');
-  assert.ok(t.message.startsWith('standup:'));
+  assert.notEqual(t, null);
+  assert.equal(t.message, 'weekly');
 });
 
 test('unknown event → null', () => {
   assert.equal(buildScheduleToast('wg.done', {}), null);
   assert.equal(buildScheduleToast('session_changed', {}), null);
+  assert.equal(buildScheduleToast('agent.message', {}), null);
 });
 
-test('null/missing fields tolerated', () => {
-  const t = buildScheduleToast('schedule.done', { reply: undefined });
-  assert.equal(t.title, ' · schedule ran');
-  assert.equal(t.message, '');
+test('null/missing fields on failure tolerated', () => {
+  const t = buildScheduleToast('schedule.failed', {});
+  assert.notEqual(t, null);
+  assert.equal(t.title, ' · schedule failed');
 });
 
 test('duration is set (default 5000ms — readable for a sentence)', () => {
-  const t = buildScheduleToast('schedule.done', {
-    profile: 'abby', reply: 'go drink water',
+  const t = buildScheduleToast('schedule.failed', {
+    profile: 'abby', job_id: 'x', message: 'boom',
   });
   assert.equal(typeof t.duration, 'number');
   assert.ok(t.duration >= 3000);

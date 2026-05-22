@@ -6,7 +6,7 @@ import { buildScheduleToast } from '../lib/scheduleToast';
 
 export function useScheduleToast() {
   const toast = useToast();
-  useEventEffect(['schedule.done', 'schedule.failed'], (ev) => {
+  useEventEffect(['schedule.failed'], (ev) => {
     const payload = buildScheduleToast(ev.event, ev.data);
     if (payload) toast(payload);
   });
