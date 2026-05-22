@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from "react";
+
+import { useDismissOnOutside } from "../hooks/useDismissOnOutside.js";
 import { I } from "./icons.jsx";
 import Tip from "./Tip.jsx";
 import styles from "./ModelPicker.module.css";
@@ -22,14 +24,7 @@ export default function ModelPicker({
   const [picked, setPicked] = useState(currentModel);
   const ref = useRef(null);
 
-  useEffect(() => {
-    if (!open) return undefined;
-    const onDoc = (e) => {
-      if (!ref.current?.contains(e.target)) setOpen(false);
-    };
-    document.addEventListener("mousedown", onDoc);
-    return () => document.removeEventListener("mousedown", onDoc);
-  }, [open]);
+  useDismissOnOutside({ open, onClose: () => setOpen(false), wrapRef: ref });
 
   useEffect(() => {
     setPicked(currentModel);

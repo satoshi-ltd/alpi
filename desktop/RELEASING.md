@@ -259,8 +259,8 @@ contract is:
 - bump desktop version in the repo
 - merge to ``main``
 - let ``publish-desktop`` publish ``desktop-latest``
-- let ``deploy-site`` rebuild and direct-upload the site from the same
-  commit
+- ``publish-site`` then fires automatically via ``workflow_run`` and
+  rebuilds + uploads the site from the same commit
 
 If the site shows the right version but the button 404s, the release
 pipeline is broken. If the button works but the site shows the old

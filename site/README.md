@@ -49,15 +49,15 @@ GitHub configuration:
 - Secret: `CLOUDFLARE_API_TOKEN` with `Account / Cloudflare Pages / Edit`
 - Variable or secret: `CLOUDFLARE_PAGES_PROJECT_NAME`
 
-Workflow: `.github/workflows/deploy-site.yml`
+Workflow: `.github/workflows/publish-site.yml`
 
-The workflow runs unit tests, integration tests, package build checks,
-the site build, and a release-contract gate before the Wrangler direct
-upload. The release-contract gate waits until the CLI version from
-`pyproject.toml` exists on PyPI, the matching `vX.Y.Z` GitHub release
-exists, and the desktop version from `desktop/src-tauri/tauri.conf.json`
-exists in the rolling `desktop-latest` GitHub release. That keeps the
-landing page from advertising a version or download that did not publish.
+The workflow fires automatically via `workflow_run` after a successful
+`publish` (alpi PyPI release) or `publish-desktop` (desktop release), and
+on any push to `main` that touches `site/**`. It rebuilds the static
+site and direct-uploads it to Cloudflare Pages with Wrangler. Because
+the build reads `pyproject.toml` and `desktop/src-tauri/tauri.conf.json`
+straight from the commit that triggered it, the landing page can only
+advertise versions that already landed on PyPI / `desktop-latest`.
 
 Cloudflare Pages build settings are only used if you intentionally run a
 Cloudflare-side build:

@@ -11,6 +11,16 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.3.10 — 2026-05-22 — ESC closes every popover
+
+UX polish for the in-app pickers.
+
+- ESC now closes the Model picker, Accent color picker, and the
+  generic Settings popover (Anchored / Popped). They used to only
+  close on outside click — keyboard users had to grab the mouse.
+- Outside-click and ESC handling unified across all popovers, no
+  more ad-hoc listeners.
+
 ## v0.3.9 — 2026-05-22 — agent.message native notifications
 
 Requires alpi ``v0.6.1`` or newer. The Tauri client now surfaces the

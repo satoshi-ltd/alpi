@@ -3,37 +3,43 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 PUBLISH = ROOT / ".github" / "workflows" / "publish.yml"
+PUBLISH_DESKTOP = ROOT / ".github" / "workflows" / "publish-desktop.yml"
 PUBLISH_SITE = ROOT / ".github" / "workflows" / "publish-site.yml"
 
 
-def test_publish_runs_site_deploy_after_pypi() -> None:
-    """Site deploy is the final step of the release chain — no polling."""
-    text = PUBLISH.read_text()
+def test_publish_site_is_single_source_of_truth() -> None:
+    """``publish-site.yml`` owns the site rebuild + deploy. Other release workflows must not duplicate it."""
+    publish = PUBLISH.read_text()
+    desktop = PUBLISH_DESKTOP.read_text()
 
-    site_build = text.split("  site-build:", 1)[1].split("\n  deploy-site:", 1)[0]
-    deploy_site = text.split("  deploy-site:", 1)[1]
+    assert "node site/scripts/build.mjs" not in publish
+    assert "cloudflare/wrangler-action" not in publish
+    assert "pages deploy" not in publish
 
-    assert "node site/scripts/build.mjs" in site_build
-    assert "needs: check-version" in site_build
-
-    # deploy-site must run AFTER publish-pypi so the site reflects
-    # what's actually live on PyPI.
-    assert "publish-pypi" in deploy_site
-    assert "site-build" in deploy_site
-    assert "cloudflare/wrangler-action@v3" in deploy_site
-    assert "CLOUDFLARE_ACCOUNT_ID" in deploy_site
-    assert "CLOUDFLARE_API_TOKEN" in deploy_site
-    assert "CLOUDFLARE_PAGES_PROJECT_NAME" in deploy_site
-    assert "pages deploy site-dist" in deploy_site
+    assert "node site/scripts/build.mjs" not in desktop
+    assert "cloudflare/wrangler-action" not in desktop
+    assert "pages deploy" not in desktop
 
 
-def test_publish_site_is_workflow_dispatch_only() -> None:
-    """``publish-site.yml`` exists for on-demand redeploys without a release."""
+def test_publish_site_auto_fires_after_release_workflows() -> None:
+    """A successful ``publish`` or ``publish-desktop`` must rebuild the site automatically."""
     text = PUBLISH_SITE.read_text()
-    assert "workflow_dispatch:" in text
-    # Must not auto-fire on push — that's what publish.yml owns.
-    on_block = text.split("on:", 1)[1].split("\n\n", 1)[0]
-    assert "push:" not in on_block
+    on_block = text.split("on:", 1)[1].split("\njobs:", 1)[0]
+
+    assert "workflow_dispatch:" in on_block
+    assert "workflow_run:" in on_block
+    assert '"publish"' in on_block
+    assert '"publish-desktop"' in on_block
+    assert "branches: [main]" in on_block
+
+    assert "push:" in on_block
+    assert '"site/**"' in on_block
+
+    assert "github.event.workflow_run.conclusion == 'success'" in text
+
     assert "node site/scripts/build.mjs" in text
     assert "cloudflare/wrangler-action@v3" in text
+    assert "CLOUDFLARE_ACCOUNT_ID" in text
+    assert "CLOUDFLARE_API_TOKEN" in text
+    assert "CLOUDFLARE_PAGES_PROJECT_NAME" in text
     assert "pages deploy site-dist" in text

@@ -4,18 +4,12 @@ import Tip from "./Tip.jsx";
 import Chip from "./Chip.jsx";
 import ConfirmDelete from "./ConfirmDelete.jsx";
 import Diamond from "./Diamond.jsx";
+import { useDismissOnOutside } from "../hooks/useDismissOnOutside.js";
 import styles from "./SettingsLayout.module.css";
 
 function Anchored({ open, onClose, children, width = 320, align = "left" }) {
   const ref = useRef(null);
-  useEffect(() => {
-    if (!open) return undefined;
-    const onDoc = (e) => {
-      if (!ref.current?.contains(e.target)) onClose();
-    };
-    document.addEventListener("mousedown", onDoc);
-    return () => document.removeEventListener("mousedown", onDoc);
-  }, [open, onClose]);
+  useDismissOnOutside({ open, onClose, wrapRef: ref });
   if (!open) return null;
   return (
     <div
@@ -126,14 +120,7 @@ export function AccentPicker({ value, onChange }) {
   const [hex, setHex] = useState(value || "#b8954a");
   const ref = useRef(null);
 
-  useEffect(() => {
-    if (!open) return undefined;
-    const onDoc = (e) => {
-      if (!ref.current?.contains(e.target)) setOpen(false);
-    };
-    document.addEventListener("mousedown", onDoc);
-    return () => document.removeEventListener("mousedown", onDoc);
-  }, [open]);
+  useDismissOnOutside({ open, onClose: () => setOpen(false), wrapRef: ref });
 
   useEffect(() => {
     setHex(value || "#b8954a");

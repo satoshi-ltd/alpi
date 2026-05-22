@@ -1,7 +1,22 @@
 name: publish-site
 
+# The site reads pyproject.toml (alpi version) and tauri.conf.json
+# (desktop version) at build time. Any release that bumps either of
+# those needs the site rebuilt so the download links and badges don't
+# go stale. workflow_run gates ensure a failed parent release never
+# triggers a deploy.
+
 on:
   workflow_dispatch:
+  workflow_run:
+    workflows: ["publish", "publish-desktop"]
+    types: [completed]
+    branches: [main]
+  push:
+    branches: [main]
+    paths:
+      - "site/**"
+      - ".github/workflows/publish-site.yml"
 
 permissions: {}
 
@@ -14,6 +29,9 @@ jobs:
     name: site build
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    # When triggered by a parent workflow, only proceed on success — a
+    # failed publish-desktop / publish must not push an inconsistent site.
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
