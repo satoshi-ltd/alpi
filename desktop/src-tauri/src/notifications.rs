@@ -86,6 +86,53 @@ pub fn dispatch_daemon_frame(app: &AppHandle, frame: &serde_json::Value) {
         .cloned()
         .unwrap_or(serde_json::Value::Null);
     match event {
+        "approval.request" => {
+            // Skip native banner when window focused — App.jsx's ApprovalSheet modal already pops, banner would be a duplicate.
+            if window_focused(app) {
+                return;
+            }
+            let profile = data
+                .get("profile")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let command = data
+                .get("command")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .trim();
+            let pattern = data
+                .get("pattern")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            let severity = data
+                .get("severity")
+                .and_then(|v| v.as_str())
+                .unwrap_or("caution");
+            let request_id = data
+                .get("request_id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let title = format!("{} · approval needed ({})", profile, severity);
+            let body = if !command.is_empty() {
+                command.to_string()
+            } else if !pattern.is_empty() {
+                pattern.to_string()
+            } else {
+                "Tool execution awaiting approval.".to_string()
+            };
+            show(
+                app,
+                &title,
+                &body,
+                Deeplink {
+                    kind: "approval".into(),
+                    profile: Some(profile),
+                    id: Some(request_id),
+                },
+            );
+        }
         "wg.done" => {
             let profile = data
                 .get("profile")
@@ -119,8 +166,8 @@ pub fn dispatch_daemon_frame(app: &AppHandle, frame: &serde_json::Value) {
                 },
             );
         }
-        "schedule.done" | "schedule.failed" => {
-            let ok = event == "schedule.done";
+        "schedule.failed" => {
+            // schedule.done success doesn't notify natively; jobs that want to interrupt call send_message(channel="alpi"). Only failures wake the user.
             let profile = data
                 .get("profile")
                 .and_then(|v| v.as_str())
@@ -131,45 +178,12 @@ pub fn dispatch_daemon_frame(app: &AppHandle, frame: &serde_json::Value) {
                 .and_then(|v| v.as_str())
                 .unwrap_or("")
                 .to_string();
-            // `reply` is the clean agent/script output (alpi >= 0.4.48 contract);
-            // when present, it IS the notification body. Fall back to the
-            // operational `message` string for older daemons or for jobs that
-            // carry no user-facing output.
-            let reply = data
-                .get("reply")
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .trim();
             let msg = data.get("message").and_then(|v| v.as_str()).unwrap_or("");
-
-            // Suppress via explicit metadata, not by parsing `message`:
-            //   `data.silent`  = job produced NO user-facing output AND no
-            //                    delivery → silent maintenance succeeded,
-            //                    no need to interrupt the user.
-            // Failures still notify (silent is only set on the success path).
-            let silent = data
-                .get("silent")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(false);
-            if ok && silent {
-                return;
-            }
-
-            let (title, body) = if !reply.is_empty() {
-                // Content notification: profile name as title (or just
-                // the first line of the reply if it already carries its
-                // own heading like "*Recordatorio*"), body = reply.
-                (profile.clone(), reply.to_string())
-            } else if ok {
-                (
-                    format!("{} · schedule ran", profile),
-                    if msg.is_empty() { job_id.clone() } else { format!("{}: {}", job_id, msg) },
-                )
+            let title = format!("{} · schedule failed", profile);
+            let body = if msg.is_empty() {
+                job_id.clone()
             } else {
-                (
-                    format!("{} · schedule failed", profile),
-                    if msg.is_empty() { job_id.clone() } else { format!("{}: {}", job_id, msg) },
-                )
+                format!("{}: {}", job_id, msg)
             };
             show(
                 app,
@@ -181,6 +195,47 @@ pub fn dispatch_daemon_frame(app: &AppHandle, frame: &serde_json::Value) {
                     id: Some("schedules".into()),
                 },
             );
+        }
+        "agent.message" => {
+            let profile = data
+                .get("profile")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let title = data
+                .get("title")
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.is_empty())
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| profile.clone());
+            let body = data
+                .get("body")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .trim()
+                .to_string();
+            if body.is_empty() {
+                return;
+            }
+            let session_id = data
+                .get("session_id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let deeplink = if !session_id.is_empty() {
+                Deeplink {
+                    kind: "chat".into(),
+                    profile: Some(profile),
+                    id: Some(session_id),
+                }
+            } else {
+                Deeplink {
+                    kind: "profile".into(),
+                    profile: Some(profile),
+                    id: None,
+                }
+            };
+            show(app, &title, &body, deeplink);
         }
         "budget.threshold" => {
             let profile = data

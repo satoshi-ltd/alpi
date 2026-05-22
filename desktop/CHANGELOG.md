@@ -11,6 +11,34 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.3.9 — 2026-05-22 — agent.message native notifications
+
+Requires alpi ``v0.6.1`` or newer. The Tauri client now surfaces the
+new ``agent.message`` host event as a native macOS / Windows / Linux
+notification, so the agent reaching the user via
+``send_message(channel="alpi")`` lands as a system banner without any
+gateway involvement.
+
+- ``dispatch_daemon_frame`` adds a match arm for ``agent.message``
+  in ``src-tauri/src/notifications.rs``. Title falls back to the
+  profile name when the payload omits it; body is the message text.
+- Deep link: when the payload carries ``session_id``, tapping the
+  notification routes to ``/chat/<session_id>`` on the active
+  connection. Otherwise it lands on the profile.
+- Empty-body events are dropped silently — no point waking the user
+  for nothing.
+- ``schedule.done`` success does not fire native notifications.
+  Successful schedules that need to wake the user now do so through
+  ``send_message(channel="alpi")`` / ``agent.message``; only
+  ``schedule.failed`` wakes the user automatically.
+- ``approval.request`` now also fires a native banner when the
+  window is NOT focused. When the desktop window is in front, the
+  existing in-app ``ApprovalSheet`` queue continues to own the
+  flow — no double-notify. Title carries the severity (``caution``
+  / ``danger``) and body shows the command or pattern that needs
+  approval. Tap deep-links to ``/approval/<request_id>`` on the
+  source profile.
+
 ## v0.3.8 — 2026-05-21 — reasoning effort in profile settings
 
 Requires alpi ``v0.5.4`` or newer. On older daemons the row stays
