@@ -94,6 +94,9 @@ export function useChatSend({ profile, sessionId, onCompleted }) {
       };
       if (sessionId) params.session_id = sessionId;
       if (options.model) params.model = options.model;
+      if (Number.isInteger(options.rewriteFromTurn)) {
+        params.rewrite_from_turn = options.rewriteFromTurn;
+      }
 
       // Daemon mints session_id for new threads — surface via onCompleted so caller pins it before next send.
       let streamSessionId = sessionId ?? null;

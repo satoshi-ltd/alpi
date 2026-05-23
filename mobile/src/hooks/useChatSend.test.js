@@ -51,6 +51,28 @@ describe("useChatSend.send", () => {
     expect(result.current.pendingTurn.pending).toBe(true);
   });
 
+  it("forwards rewrite_from_turn when options.rewriteFromTurn is an integer", () => {
+    const { result } = renderHook(() => useChatSend({ profile: "doc", sessionId: "s-1" }));
+    act(() => result.current.send("edited text", { rewriteFromTurn: 4 }));
+    const [, params] = mockCallStream.mock.calls[0];
+    expect(params.rewrite_from_turn).toBe(4);
+    expect(params.session_id).toBe("s-1");
+  });
+
+  it("omits rewrite_from_turn for normal sends", () => {
+    const { result } = renderHook(() => useChatSend({ profile: "doc" }));
+    act(() => result.current.send("hello"));
+    const [, params] = mockCallStream.mock.calls[0];
+    expect(params).not.toHaveProperty("rewrite_from_turn");
+  });
+
+  it("ignores rewriteFromTurn when it is not an integer", () => {
+    const { result } = renderHook(() => useChatSend({ profile: "doc" }));
+    act(() => result.current.send("hello", { rewriteFromTurn: "3" }));
+    const [, params] = mockCallStream.mock.calls[0];
+    expect(params).not.toHaveProperty("rewrite_from_turn");
+  });
+
   it("session_start frame pins sessionId on pendingTurn", () => {
     const { result } = renderHook(() => useChatSend({ profile: "doc" }));
     act(() => result.current.send("hi"));

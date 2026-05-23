@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Platform, Pressable, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { radii, space , fontSizes} from '../../theme/tokens';
@@ -14,10 +14,19 @@ export function Composer({
   onMicPress,
   onMicLongPress,
   mentionSource,
+  seedText,
+  seedKey,
 }) {
   const { colors, fonts , fontSizes} = useTheme();
   const insets = useSafeAreaInsets();
   const [text, setText] = useState('');
+  const lastSeedKeyRef = useRef(seedKey);
+  useEffect(() => {
+    if (seedKey != null && seedKey !== lastSeedKeyRef.current) {
+      setText(seedText ?? '');
+      lastSeedKeyRef.current = seedKey;
+    }
+  }, [seedKey, seedText]);
   const hasText = text.trim().length > 0;
 
   const mentionMatch = mentionSource && text.length > 0

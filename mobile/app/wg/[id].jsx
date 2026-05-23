@@ -45,12 +45,16 @@ const WG_STYLES = StyleSheet.create({
   },
 });
 
-const WgItem = memo(function WgItem({ m, hubPubkey, workingStale, accent, accentFor, setActionTarget, colors, fonts, fontSizes }) {
+const WgItem = memo(function WgItem({ m, hubPubkey, ownPubkey, workingStale, accent, accentFor, setActionTarget, colors, fonts, fontSizes }) {
   const speakerName = m.from?.startsWith('@') ? m.from.slice(1) : m.from || '';
   const speakerAccent = accentFor(speakerName, accent);
   const isFromHub = hubPubkey != null && m.from_pubkey === hubPubkey;
+  const isOwn = ownPubkey != null && m.from_pubkey === ownPubkey;
   const c = classifyMessage(m.body);
   const isStaleWorking = c.variant === 'working' && workingStale.has(m.seq);
+  const makeTarget = () => (
+    isOwn ? { kind: 'user', text: m.body } : { kind: 'agent', text: m.body }
+  );
 
   if (c.variant === 'task') {
     return (
@@ -75,7 +79,7 @@ const WgItem = memo(function WgItem({ m, hubPubkey, workingStale, accent, accent
         isFromHub={isFromHub}
         seq={m.seq}
         cost={m.cost}
-        onLongPress={() => setActionTarget({ kind: 'agent', text: m.body })}
+        onLongPress={() => setActionTarget(makeTarget())}
       />
     );
   }
@@ -103,7 +107,7 @@ const WgItem = memo(function WgItem({ m, hubPubkey, workingStale, accent, accent
         isFromHub={isFromHub}
         seq={m.seq > 0 ? m.seq : null}
         cost={m.cost}
-        onLongPress={() => setActionTarget({ kind: 'agent', text: m.body })}
+        onLongPress={() => setActionTarget(makeTarget())}
       />
       {m.error ? (
         <Text style={[WG_STYLES.error, { color: colors.danger, fontFamily: fonts.mono, fontSize: fontSizes.xs }]}>
@@ -115,7 +119,7 @@ const WgItem = memo(function WgItem({ m, hubPubkey, workingStale, accent, accent
 });
 
 const WgList = forwardRef(function WgList(
-  { messages, hubPubkey, workingStale, accent, accentFor, setActionTarget, hubLabel, colors, fonts, fontSizes, loading },
+  { messages, hubPubkey, ownPubkey, workingStale, accent, accentFor, setActionTarget, hubLabel, colors, fonts, fontSizes, loading },
   ref,
 ) {
   const [pageSize, setPageSize] = useState(INITIAL_PAGE);
@@ -144,6 +148,7 @@ const WgList = forwardRef(function WgList(
         <WgItem
           m={item}
           hubPubkey={hubPubkey}
+          ownPubkey={ownPubkey}
           workingStale={workingStale}
           accent={accent}
           accentFor={accentFor}
@@ -154,7 +159,7 @@ const WgList = forwardRef(function WgList(
         />
       </View>
     ),
-    [hubPubkey, workingStale, accent, accentFor, setActionTarget, colors, fonts, fontSizes],
+    [hubPubkey, ownPubkey, workingStale, accent, accentFor, setActionTarget, colors, fonts, fontSizes],
   );
 
   if (loading && messages.length === 0) {
@@ -259,6 +264,9 @@ export default function WorkgroupChat() {
     return summaries.data?.profiles?.find((p) => p.name === wg.hub_id) ?? null;
   }, [wg, summaries.data]);
   const hubPubkey = hub?.pubkey_b64 ?? wg?.hub_pubkey_b64 ?? null;
+  const ownPubkey = profile
+    ? summaries.data?.profiles?.find((p) => p.name === profile)?.pubkey_b64 ?? `local:${profile}`
+    : 'local';
 
   const persistedRaw = transcript.data?.posts ?? transcript.data?.messages ?? [];
   const persisted = Array.isArray(persistedRaw) ? persistedRaw : [];
@@ -266,6 +274,7 @@ export default function WorkgroupChat() {
 
   const toast = useToast();
   const [actionTarget, setActionTarget] = useState(null);
+  const [composerSeed, setComposerSeed] = useState(null);
   const [sending, setSending] = useState(false);
   const [optimistic, setOptimistic] = useState([]);
 
@@ -308,9 +317,6 @@ export default function WorkgroupChat() {
     const trimmed = text.trim();
     if (!trimmed || sending) return;
     const tempSeq = -Date.now();
-    const ownPubkey = profile
-      ? summaries.data?.profiles?.find((p) => p.name === profile)?.pubkey_b64 ?? `local:${profile}`
-      : 'local';
     const optimisticMsg = {
       seq: tempSeq,
       from: `@${profile}`,
@@ -406,6 +412,7 @@ export default function WorkgroupChat() {
           ref={listApiRef}
           messages={messages}
           hubPubkey={hubPubkey}
+          ownPubkey={ownPubkey}
           workingStale={workingStale}
           accent={accent}
           accentFor={accentFor}
@@ -423,9 +430,22 @@ export default function WorkgroupChat() {
           onMicPress={() => toast({ title: 'Voice messages coming soon', kind: 'info', duration: 1800 })}
           onMicLongPress={() => toast({ title: 'Voice messages coming soon', kind: 'info', duration: 1800 })}
           mentionSource={mentionSource}
+          seedText={composerSeed?.text}
+          seedKey={composerSeed?.key}
         />
       </KeyboardAvoidingView>
-      <MessageActionsSheet target={actionTarget} onClose={() => setActionTarget(null)} />
+      <MessageActionsSheet
+        target={actionTarget}
+        onClose={() => setActionTarget(null)}
+        onEdit={(t) => {
+          setComposerSeed({ text: t.text ?? '', key: Date.now() });
+          setActionTarget(null);
+        }}
+        onRetry={(t) => {
+          setActionTarget(null);
+          if (t?.text) sendMessage(t.text);
+        }}
+      />
       <TasksSheet
         open={tasksOpen}
         onClose={() => setTasksOpen(false)}

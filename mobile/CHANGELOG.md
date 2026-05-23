@@ -14,6 +14,29 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.1.12 — 2026-05-23 — long-press Edit and Retry actually do something
+
+Both chat and workgroup screens forgot to wire `onEdit` and
+`onRetry` on the MessageActionsSheet, so the Edit / Retry /
+Ask again rows were no-ops.
+
+- Chat user message → Edit prefills the composer; Retry re-sends
+  with `rewrite_from_turn` so the daemon truncates back to that
+  turn (matches desktop).
+- Chat assistant message → Ask again re-sends the *original
+  user prompt* (carried in `target.retryText`) with
+  `rewrite_from_turn`. Previously it would have echoed the
+  assistant text as the new prompt.
+- Workgroup own messages → Edit + Retry (re-post; workgroups
+  have no truncate primitive). Workgroup foreign messages →
+  only Copy (Ask again hidden — re-posting another peer's text
+  on your own account is the wrong default).
+- Composer accepts `seedText` + `seedKey` props for external
+  seeding without lifting state.
+- Action visibility lives in `messageActions.buildMessageActions`
+  with regression tests covering each (kind, retryText)
+  combination.
+
 ## v0.1.11 — 2026-05-23 — workspace edits stick in the sheet
 
 - The workspace sheet now accepts external `initialValue`

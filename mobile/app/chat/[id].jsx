@@ -11,6 +11,7 @@ import { ProfileAssistantMessage, ProfileUserMessage } from '../../src/features/
 import { ChatHeader } from '../../src/features/chat/ChatHeader';
 import { Composer } from '../../src/features/chat/Composer';
 import { MessageActionsSheet } from '../../src/features/chat/MessageActionsSheet';
+import { retryTextFor } from '../../src/features/chat/messageActions';
 import { ChatSkeleton } from '../../src/features/chat/ChatSkeleton';
 import { ThinkingDots } from '../../src/features/chat/ThinkingDots';
 import { ToolCallGroup, groupConsecutiveTools } from '../../src/features/chat/ToolCallRow';
@@ -46,7 +47,7 @@ const TURN_STYLES = StyleSheet.create({
   emptyModel: { fontSize: fontSizes.sm, textAlign: 'center' },
 });
 
-const TurnBlock = memo(function TurnBlock({ turn, accent, colors, fonts, fontSizes, onActionTarget }) {
+const TurnBlock = memo(function TurnBlock({ turn, turnIndex, accent, colors, fonts, fontSizes, onActionTarget }) {
   const ts = turn.at ? relativeTime(turn.at * 1000) : '';
   return (
     <View style={TURN_STYLES.block}>
@@ -55,7 +56,7 @@ const TurnBlock = memo(function TurnBlock({ turn, accent, colors, fonts, fontSiz
           text={turn.user}
           ts={ts}
           accent={accent}
-          onLongPress={() => onActionTarget({ kind: 'user', text: turn.user })}
+          onLongPress={() => onActionTarget({ kind: 'user', text: turn.user, turnIndex })}
         />
       ) : null}
       {turn.tools?.length ? (
@@ -68,7 +69,12 @@ const TurnBlock = memo(function TurnBlock({ turn, accent, colors, fonts, fontSiz
       {turn.assistant ? (
         <ProfileAssistantMessage
           text={turn.assistant}
-          onLongPress={() => onActionTarget({ kind: 'agent', text: turn.assistant })}
+          onLongPress={() => onActionTarget({
+            kind: 'agent',
+            text: turn.assistant,
+            retryText: turn.user,
+            turnIndex,
+          })}
         />
       ) : turn.pending && !(turn.tools?.length) ? (
         <View style={TURN_STYLES.thinkingHolder}>
@@ -122,13 +128,21 @@ function ChatList({ turns, pendingTurn, loading, hydrating, profileName, model, 
     return out;
   }, [turns, pendingTurn]);
 
-  const visible = useMemo(() => full.slice(-pageSize).slice().reverse(), [full, pageSize]);
+  const visible = useMemo(() => {
+    const start = Math.max(0, full.length - pageSize);
+    const out = [];
+    for (let i = full.length - 1; i >= start; i -= 1) {
+      out.push({ turn: full[i], turnIndex: i });
+    }
+    return out;
+  }, [full, pageSize]);
   const hasMore = full.length > pageSize;
 
   const renderItem = useCallback(
     ({ item }) => (
       <TurnBlock
-        turn={item}
+        turn={item.turn}
+        turnIndex={item.turnIndex}
         accent={accent}
         colors={colors}
         fonts={fonts}
@@ -151,7 +165,7 @@ function ChatList({ turns, pendingTurn, loading, hydrating, profileName, model, 
       inverted
       data={visible}
       // Composite key: pending and the matching persisted turn share idx 0 in the inverted visible window → row stays mounted across the done→refresh swap. Adding idx disambiguates same-text repeats (sending "ok" twice no longer collides).
-      keyExtractor={(turn, idx) => `${turn.user ?? ''}|${idx}`}
+      keyExtractor={(item, idx) => `${item.turn.user ?? ''}|${item.turnIndex}|${idx}`}
       renderItem={renderItem}
       contentContainerStyle={{ paddingTop: space.s5, paddingBottom: space.s5 }}
       onEndReached={hasMore ? () => setPageSize((n) => n + PAGE_STEP) : undefined}
@@ -294,7 +308,26 @@ export default function ProfileChat() {
     }
   });
 
-  const sendMessage = (text) => streamSend(text);
+  const sendMessage = (text, options) => streamSend(text, options);
+  const [composerSeed, setComposerSeed] = useState(null);
+  const [pendingRewriteIndex, setPendingRewriteIndex] = useState(null);
+  const onEditTarget = (target) => {
+    setComposerSeed({ text: target.text ?? '', key: Date.now() });
+    setPendingRewriteIndex(Number.isInteger(target.turnIndex) ? target.turnIndex : null);
+    setActionTarget(null);
+  };
+  const onRetryTarget = (target) => {
+    setActionTarget(null);
+    const text = retryTextFor(target);
+    if (!text) return;
+    const opts = Number.isInteger(target.turnIndex) ? { rewriteFromTurn: target.turnIndex } : undefined;
+    sendMessage(text, opts);
+  };
+  const onComposerSend = (text) => {
+    const opts = Number.isInteger(pendingRewriteIndex) ? { rewriteFromTurn: pendingRewriteIndex } : undefined;
+    setPendingRewriteIndex(null);
+    sendMessage(text, opts);
+  };
 
   if (!endpoint) {
     return (
@@ -392,13 +425,20 @@ export default function ProfileChat() {
           <Composer
             placeholder={`Message @${profile.name}…`}
             accent={accent}
-            onSend={sendMessage}
+            onSend={onComposerSend}
             onMicPress={micUnavailable}
             onMicLongPress={micUnavailable}
+            seedText={composerSeed?.text}
+            seedKey={composerSeed?.key}
           />
         </KeyboardAvoidingView>
       )}
-      <MessageActionsSheet target={actionTarget} onClose={() => setActionTarget(null)} />
+      <MessageActionsSheet
+        target={actionTarget}
+        onClose={() => setActionTarget(null)}
+        onEdit={onEditTarget}
+        onRetry={onRetryTarget}
+      />
       <SessionsSheet
         open={sessionsOpen}
         onClose={() => setSessionsOpen(false)}
