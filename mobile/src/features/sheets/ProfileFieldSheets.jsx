@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
 import { radii, space , fontSizes} from '../../theme/tokens';
 
@@ -8,6 +8,7 @@ import { Pill } from '../../components/Pill';
 import { RowSeparator, SectionHeader } from '../../components/Row';
 import { Sheet } from '../../components/Sheet';
 import { useToast } from '../../components/Toast';
+import { nextSheetValue } from '../../lib/sheet-value';
 import { useOllamaModels } from '../../hooks/useDaemonData';
 import { useEndpoint } from '../../lib/EndpointContext';
 import { noteFor } from '../../lib/curatedModels';
@@ -99,8 +100,16 @@ export function ReasoningEffortSheet({ open, onClose, initialValue, onSave }) {
 export function WorkspaceSheet({ open, onClose, profileName, initialValue, onSave }) {
   const toast = useToast();
   const [value, setValue] = useState(initialValue ?? '');
+  const prevInitRef = useRef(null);
   useEffect(() => {
-    if (open) setValue(initialValue ?? '');
+    if (!open) { prevInitRef.current = null; return; }
+    const newInit = initialValue ?? '';
+    setValue((current) => nextSheetValue({
+      current,
+      newInitial: newInit,
+      prevInitial: prevInitRef.current,
+    }));
+    prevInitRef.current = newInit;
   }, [open, initialValue]);
   const save = async () => {
     try {

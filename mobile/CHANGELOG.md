@@ -14,6 +14,16 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.1.11 — 2026-05-23 — workspace edits stick in the sheet
+
+- The workspace sheet now accepts external `initialValue`
+  updates only while the user has not typed: if `initialValue`
+  arrives async after the sheet opens (e.g. via
+  `host.profile.detail`), the field hydrates; once the user
+  starts typing, further external updates are ignored until the
+  next time the sheet opens. Logic in `lib/sheet-value`,
+  covered by five regression tests.
+
 ## v0.1.10 — 2026-05-22 — notification deep link lands on the right chat
 
 Requires alpi ``v0.6.5`` or newer for the daemon side of the fix
