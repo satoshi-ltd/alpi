@@ -24,7 +24,86 @@ When Alpi ships a new version, update these files:
 The Docker image tag and the Umbrel manifest version should stay in
 lockstep with `pyproject.toml` and `alpi/__init__.py`.
 
-## 2. Build and publish the Docker image
+## 2. One-shot local deploy
+
+For day-to-day sideloading onto a real Umbrel, use the one-shot script:
+
+```bash
+deploy/umbrel/deploy-to-umbrel.sh
+```
+
+The script:
+
+1. Verifies that `pyproject.toml` and `deploy/umbrel/alpi/umbrel-app.yml`
+   agree on the version.
+2. Builds and pushes `satoshiltd/alpi-umbrel:<version>`.
+3. Resolves the Docker Hub manifest digest.
+4. Generates the local Umbrel package with public icon and gallery URLs.
+5. Pins `deploy/umbrel/alpi/docker-compose.yml` to
+   `satoshiltd/alpi-umbrel:<version>@sha256:<digest>`.
+6. Detects the Umbrel app-store path on the remote box.
+7. Copies the package to Umbrel with `rsync`.
+8. For an existing install, syncs the new compose/manifest from the
+   app-store copy into Umbrel's `app-data/<app>/` directory, excluding
+   the persistent `data/` subtree.
+9. Tries `install`, or `restart` for an existing install.
+10. Stops with a diagnostic error instead of auto-uninstalling the app,
+    so a broken Umbrel state cannot silently wipe `/data/.alpi`.
+11. Prints the final container state.
+
+Expected interaction:
+
+- Docker Hub login must already exist on the Mac running the script.
+- SSH access to `umbrel@umbrel.local` must already work.
+- The script may prompt for the Umbrel SSH password and `sudo` password.
+
+Useful overrides:
+
+```bash
+VERSION=0.6.5 deploy/umbrel/deploy-to-umbrel.sh
+SKIP_BUILD=1 deploy/umbrel/deploy-to-umbrel.sh
+PLATFORMS=linux/amd64,linux/arm64 deploy/umbrel/deploy-to-umbrel.sh
+UMBREL_HOST=umbrel.local deploy/umbrel/deploy-to-umbrel.sh
+UMBREL_STORE_DIR=/home/umbrel/umbrel/app-stores/<store>/alpi deploy/umbrel/deploy-to-umbrel.sh
+```
+
+## 3. Migrate an existing local `~/.alpi` to Umbrel
+
+If you already have real profiles on another machine, do not copy
+directories by hand. Use the encrypted machine backup flow:
+
+```bash
+deploy/umbrel/migrate-home-to-umbrel.sh
+```
+
+The migration script:
+
+1. Reads your local Alpi home from `~/.alpi` by default.
+2. Prompts once for a migration passphrase.
+3. Creates an encrypted whole-home backup with `alpi backup`.
+4. Copies that archive to the Umbrel host.
+5. Restores it inside the running `alpi_server_1` container with
+   `alpi restore --force`.
+6. Restarts the Umbrel app.
+7. Keeps the encrypted local archive in `/tmp` so you still have a
+   portable rollback artifact.
+
+Useful overrides:
+
+```bash
+SOURCE_HOME=/Users/javi/.alpi deploy/umbrel/migrate-home-to-umbrel.sh
+LOCAL_ARCHIVE=/tmp/alpi-macbook-to-umbrel.alpi-backup deploy/umbrel/migrate-home-to-umbrel.sh
+UMBREL_HOST=umbrel.local deploy/umbrel/migrate-home-to-umbrel.sh
+```
+
+Notes:
+
+- Run this only after Alpi is already installed on Umbrel.
+- The restore is a full replace of Umbrel's `/data/.alpi`, not a merge.
+- This is the right path for migrating `default` plus named profiles such
+  as `etxea`, `doc`, and `abby`.
+
+## 4. Build and publish the Docker image
 
 From the Alpi repository root:
 
@@ -43,7 +122,7 @@ docker build -t satoshiltd/alpi-umbrel:0.4.47 -f deploy/umbrel/alpi/Dockerfile .
 docker run --rm -it -p 8080:8080 -v alpi-umbrel-data:/data satoshiltd/alpi-umbrel:0.4.47
 ```
 
-## 3. Resolve the image digest
+## 5. Resolve the image digest
 
 Umbrel requires the app-store compose file to pin the image by digest.
 
@@ -59,7 +138,7 @@ Copy the manifest list digest and use:
 image: satoshiltd/alpi-umbrel:0.4.47@sha256:<digest>
 ```
 
-## 4. Update the `umbrel-apps` fork
+## 6. Update the `umbrel-apps` fork
 
 In the fork of `getumbrel/umbrel-apps`, only copy:
 
@@ -82,7 +161,7 @@ Before opening or updating the PR in `umbrel-apps`:
 2. Set `submission:` in `alpi/umbrel-app.yml` to the exact PR URL.
 3. Leave `icon: ""` and `gallery: []` for a new app submission.
 
-## 5. Install on a real Umbrel
+## 6. Install on a real Umbrel
 
 Use this path when testing Alpi on a real Umbrel before the official
 Umbrel App Store submission is merged.
@@ -182,7 +261,7 @@ Persistence survives because:
 - `HOME=/data`
 - Alpi stores its root under `/data/.alpi`
 
-## 6. Update an existing Umbrel install
+## 7. Update an existing Umbrel install
 
 When you are updating a box that already has Alpi installed, the
 sequence is:
@@ -234,7 +313,7 @@ sequence is:
 
 See `deploy/umbrel/PERSISTENCE.md` for the storage model.
 
-## 7. Update an existing Umbrel PR
+## 8. Update an existing Umbrel PR
 
 If the Umbrel linter complains:
 
@@ -251,7 +330,7 @@ If the Umbrel linter complains:
 - `unsafe user`:
   keep `user: "1000:1000"` in compose and run the image as non-root
 
-## 8. Practical release checklist
+## 9. Practical release checklist
 
 1. Sync Umbrel package version to the current Alpi version.
 2. Run:

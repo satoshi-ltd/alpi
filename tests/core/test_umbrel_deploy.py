@@ -130,6 +130,43 @@ def test_umbrel_local_package_generator_refuses_unsafe_dest(tmp_path: Path) -> N
         assert "refuse to rm -rf unsafe dest_dir" in result.stderr
 
 
+def test_umbrel_one_shot_deploy_script_is_guarded() -> None:
+    script = ROOT / "deploy" / "umbrel" / "deploy-to-umbrel.sh"
+    text = script.read_text()
+
+    assert "version mismatch:" in text
+    assert "prepare-local-package.sh" in text
+    assert "Resolving Umbrel app-store path" in text
+    assert "PASTE_DIGEST_HERE" in text
+    assert "Trying app install" in text
+    assert "Trying app restart" in text
+    assert "@sha256:*@sha256:" in text
+    assert "ControlMaster=auto" in text
+    assert "Validating sudo access" in text
+    assert "sudo -n docker ps" in text
+    assert 'PLATFORMS="${PLATFORMS:-linux/amd64,linux/arm64}"' in text
+    assert 'sudo -n rsync -a --exclude=data "$app_dir/" "$app_data_dir/"' in text
+    assert "restart failed — investigate before forcing reinstall" in text
+    assert "install failed — investigate Umbrel app state before forcing reinstall" in text
+    assert "apps.uninstall.mutate" not in text
+
+
+def test_umbrel_migration_script_uses_backup_restore_flow() -> None:
+    script = ROOT / "deploy" / "umbrel" / "migrate-home-to-umbrel.sh"
+    text = script.read_text()
+
+    assert 'SOURCE_HOME="${SOURCE_HOME:-$HOME/.alpi}"' in text
+    assert "ALPI_HOME=\"$SOURCE_HOME\" uv run alpi backup" in text
+    assert "--passphrase-stdin" in text
+    assert "sudo -n docker cp" in text
+    assert "alpi restore /tmp/alpi-migration.alpi-backup --passphrase-stdin --force" in text
+    assert 'printf "Migration passphrase: " >&2' in text
+    assert 'printf \'%s\\n\' "$passphrase" | sudo -n docker exec -i' in text
+    assert "apps.restart.mutate" in text
+    assert "ControlMaster=auto" in text
+    assert "Local encrypted archive kept at:" in text
+
+
 def test_umbrel_setup_skips_system_service_install(
     tmp_path: Path, monkeypatch,
 ) -> None:
