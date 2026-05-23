@@ -209,7 +209,7 @@ function ProfileBudgetEditor({ currentUsd, currentTokens, onSave }) {
   );
 }
 
-export function WorkspaceField({ value, onChange }) {
+export function WorkspaceField({ value, onChange, isLocal = true }) {
   async function browse() {
     try {
       const path = await invoke("pick_folder");
@@ -227,9 +227,11 @@ export function WorkspaceField({ value, onChange }) {
         onChange={(e) => onChange(e.target.value)}
         placeholder="absolute path"
       />
-      <Button size="sm" onClick={browse}>
-        Browse…
-      </Button>
+      {isLocal && (
+        <Button size="sm" onClick={browse}>
+          Browse…
+        </Button>
+      )}
     </span>
   );
 }

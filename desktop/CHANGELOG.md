@@ -11,6 +11,21 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.3.14 — 2026-05-23 — workspace edits stick + Browse hidden on remote
+
+- The settings draft now merges baseline updates field-by-field
+  only into fields the user has not touched. In-flight typing
+  survives `config_changed` re-fetches, while async
+  `host.profile.detail` arrivals (workspace + other heavy fields
+  not present in `host.profile.summaries`) hydrate untouched
+  fields correctly. Full reset still happens on profile or
+  connection switch. Merge logic lives in `lib/profile-draft`
+  with six regression tests.
+- The Browse… button next to the workspace path opens the local
+  Mac folder picker; on remote daemons (Tailscale / Umbrel) that
+  path is meaningless. The button is hidden when the active
+  connection is not local.
+
 ## v0.3.13 — 2026-05-22 — pair-then-cancel no longer silently un-pairs
 
 The "Pair new device" modal used to revoke the freshly-generated

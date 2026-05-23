@@ -9,6 +9,7 @@ import { Section, Row, CopyButton } from "./primitives.jsx";
 import { SettingsHero } from "../../primitives/index.js";
 import { Mono } from "../../primitives/index.js";
 import { FIELD_KEYS } from "./util.js";
+import { mergeProfileDraft } from "../../lib/profile-draft.js";
 import {
   AccentField,
   BudgetField,
@@ -68,8 +69,21 @@ export default function ProfileDetail({
   const [draft, setDraft] = useState(baseline);
   const notify = useNotify();
   const timersRef = useRef({});
+  const prevBaselineRef = useRef(baseline);
+  const profileKey = `${profile.name}|${activeConnection?.id ?? ""}`;
+  const prevProfileKeyRef = useRef(profileKey);
 
-  useEffect(() => { setDraft(baseline); }, [baseline]);
+  useEffect(() => {
+    setDraft((d) => mergeProfileDraft({
+      draft: d,
+      baseline,
+      prevBaseline: prevBaselineRef.current,
+      profileKey,
+      prevProfileKey: prevProfileKeyRef.current,
+    }));
+    prevBaselineRef.current = baseline;
+    prevProfileKeyRef.current = profileKey;
+  }, [baseline, profileKey]);
 
   useEffect(() => {
     const timers = timersRef.current;
@@ -201,6 +215,7 @@ export default function ProfileDetail({
             <WorkspaceField
               value={draft.workspace}
               onChange={(v) => update("workspace", v)}
+              isLocal={activeConnection?.kind === "local"}
             />
           </Row>
           <Row label="accent">
