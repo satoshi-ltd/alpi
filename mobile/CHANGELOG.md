@@ -14,6 +14,31 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.1.13 — 2026-05-24 — your message stops showing twice while streaming
+
+Since alpi v0.6.2 the daemon writes a *stub* turn (with the user
+text but an empty assistant) into session.json as soon as the
+user message lands, so paired clients see the message
+immediately. Mobile didn't account for that: while the agent was
+still streaming, the stub from `turns` and the optimistic
+`pendingTurn` from useChatSend both rendered → you saw your
+prompt twice. As soon as the assistant finished, the stub got
+filled in and the duplicate collapsed.
+
+- ChatList's turn merge moved into a pure
+  `mergeStreamingTurn(turns, pendingTurn)` helper. Single rule:
+  if the last persisted turn has the same `user` and an empty
+  `assistant`, treat it as the stub and merge `pendingTurn`
+  into it; otherwise just append `pendingTurn`. Text identity
+  is not used as a turn id — sending the same text twice in a
+  row no longer eats the second message.
+- A transient 1-frame visual duplicate during the
+  done→pendingTurn-clear swap is accepted; swallowing a
+  legitimate repeat is worse.
+- 7 regression tests cover the stub merge, the same-text-twice
+  case, the post-stream duplicate-is-acceptable case, and the
+  defensive null-turns paths.
+
 ## v0.1.12 — 2026-05-23 — long-press Edit and Retry actually do something
 
 Both chat and workgroup screens forgot to wire `onEdit` and

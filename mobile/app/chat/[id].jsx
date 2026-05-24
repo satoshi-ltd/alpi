@@ -12,6 +12,7 @@ import { ChatHeader } from '../../src/features/chat/ChatHeader';
 import { Composer } from '../../src/features/chat/Composer';
 import { MessageActionsSheet } from '../../src/features/chat/MessageActionsSheet';
 import { retryTextFor } from '../../src/features/chat/messageActions';
+import { mergeStreamingTurn } from '../../src/features/chat/chatTurns';
 import { ChatSkeleton } from '../../src/features/chat/ChatSkeleton';
 import { ThinkingDots } from '../../src/features/chat/ThinkingDots';
 import { ToolCallGroup, groupConsecutiveTools } from '../../src/features/chat/ToolCallRow';
@@ -114,19 +115,7 @@ function EmptyThread({ profileName, model, accent, colors, fonts }) {
 function ChatList({ turns, pendingTurn, loading, hydrating, profileName, model, accent, onActionTarget, colors, fonts, fontSizes }) {
   const [pageSize, setPageSize] = useState(INITIAL_PAGE);
 
-  // Drop pendingTurn once daemon persists the same user message → avoids 1-frame duplicate.
-  const full = useMemo(() => {
-    const out = [...turns];
-    if (pendingTurn) {
-      const last = turns[turns.length - 1];
-      const persisted =
-        last &&
-        last.user === pendingTurn.user &&
-        (last.assistant?.length ?? 0) > 0;
-      if (!persisted) out.push(pendingTurn);
-    }
-    return out;
-  }, [turns, pendingTurn]);
+  const full = useMemo(() => mergeStreamingTurn(turns, pendingTurn), [turns, pendingTurn]);
 
   const visible = useMemo(() => {
     const start = Math.max(0, full.length - pageSize);
