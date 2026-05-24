@@ -11,6 +11,28 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.3.15 — 2026-05-24 — connection switch no longer leaks previous daemon's data
+
+Two unrelated bugs collapsed into the same UX: switching from one
+daemon to another (e.g. local → Tailscale) briefly showed content
+that belonged to the previous connection.
+
+Requires alpi ``v0.6.6`` or newer.
+
+- New-chat view's "Recent chats" used to linger from the previous
+  connection until something else forced a re-render. The effect
+  that loads it only depended on ``view.kind``, so a connection
+  switch (which keeps view kind as ``"empty"``) skipped the reload.
+  Now it also depends on the active connection id and clears the
+  list before the fetch so there is no flash of the previous
+  daemon's sessions.
+- ``host.events.subscribe`` cursor is now keyed by
+  ``daemon:<device_id>`` instead of by connection id. Re-pairing
+  the same daemon, or switching between LAN/Tailscale routes that
+  point at the same daemon, no longer resets the event cursor.
+  ``HostConnection`` carries the ``device_id`` captured from
+  ``host.version`` during probe.
+
 ## v0.3.14 — 2026-05-23 — workspace edits stick + Browse hidden on remote
 
 - The settings draft now merges baseline updates field-by-field

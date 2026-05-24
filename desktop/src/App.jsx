@@ -79,6 +79,8 @@ export default function App() {
 
   useEffect(() => {
     if (view.kind !== "empty") return;
+    // Clear before fetch so a connection switch does not flash the previous daemon's recents while invoke is in flight.
+    setRecents([]);
     let cancelled = false;
     invoke("sessions", { limit: 8 })
       .then((rows) => {
@@ -92,7 +94,7 @@ export default function App() {
       })
       .catch(() => { if (!cancelled) setRecents([]); });
     return () => { cancelled = true; };
-  }, [view.kind]);
+  }, [view.kind, hostConnections.active_id]);
 
   const onOpenRecent = useCallback((profile, sessionId) => {
     setView({ kind: "profile", profile, sessionId });
