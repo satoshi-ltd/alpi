@@ -75,10 +75,7 @@ def test_description_required() -> None:
 
 
 def test_description_too_long_is_warning_not_error() -> None:
-    # Bundled / instructional skills (e.g. ``@alpi/knowledge``) use
-    # the description as a directive that legitimately exceeds the
-    # headline length. The schema warns to encourage brevity but
-    # never blocks creation on length alone.
+    # Instructional skill descriptions can legitimately exceed the headline length. The schema warns to encourage brevity but never blocks creation on length alone.
     issues = _validate(description="x" * 200)
     msg = next((i for i in issues if i.field == "description"), None)
     assert msg is not None and msg.severity == "warning"
@@ -132,7 +129,7 @@ def test_origin_invalid_is_error() -> None:
 
 
 def test_origin_valid_passes() -> None:
-    for o in ("agent", "user", "bundled"):
+    for o in ("agent", "user"):
         assert _validate(origin=o) == []
 
 

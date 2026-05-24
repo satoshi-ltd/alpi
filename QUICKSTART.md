@@ -73,8 +73,8 @@ Useful first commands to try inside the TUI:
 - `/new` — start a fresh session.
 
 And try asking alpi about itself — *"how do I configure the TUI
-theme?"*, *"how does the ALP protocol work?"*. The bundled
-`@alpi/knowledge` skill answers from the shipped docs without
+theme?"*, *"how does the ALP protocol work?"*. The
+`alpi_knowledge` tool answers from the packaged docs without
 leaving the terminal.
 
 Leave it with Ctrl-C or `/exit`.

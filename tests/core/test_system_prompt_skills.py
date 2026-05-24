@@ -38,3 +38,14 @@ def test_system_prompt_carries_skill_quality_rules(
 
     # Rule 3: patch outdated skills proactively, don't wait to be asked.
     assert "Patch outdated skills proactively" in prompt
+
+
+def test_system_prompt_carries_alpi_knowledge_rule(
+        bootstrapped_home: Path) -> None:
+    """A regression that drops the alpi_knowledge rule would let the agent answer alpi questions from training data — which predates alpi entirely."""
+    cfg = config.load(bootstrapped_home)
+    engine = Engine(home=bootstrapped_home, cfg=cfg)
+    prompt = engine._system_prompt
+
+    assert "ALPI SELF-KNOWLEDGE" in prompt
+    assert "alpi_knowledge" in prompt

@@ -92,7 +92,7 @@ The second phase applies only after preview:
 - archive stale skills through the existing `.archive/` path;
 - mark consolidating archives with `absorbed_into: <skill>`;
 - preserve original bodies in `references/`;
-- never mutate bundled `@alpi/*` skills or pinned skills.
+- never mutate pinned skills.
 
 The curator reconciles its LLM summary against the actual tool-call log
 of the curator run. If the summary says a skill was absorbed but no tool
@@ -313,14 +313,12 @@ reuses the same trust pattern as ALP peers (pubkey-pinned, no
 discovery service).
 
 **Why it waits.** Presupposes an active author community + a
-catalog big enough that discovery matters. Bundled skills ship
-under `@alpi/*` only when they reinforce the core workflow —
-memory, peer graph, host-plane, or operator tooling — rather
-than wrap a third-party domain. `@alpi/knowledge` in v0.3 is the
-reference example. BF skills v2 primitives make third-party
-skills shippable through user-controlled imports
-(see CM.2 above), so domain-specific work belongs in
-user-published skills, not in `@alpi/*`.
+catalog big enough that discovery matters. The runtime no longer
+ships skills — capabilities the agent needs to self-describe live
+as first-class tools (e.g. ``alpi_knowledge``), and skills are
+entirely user-owned. BF skills v2 primitives make third-party
+skills shippable through user-controlled imports (see CM.2 above),
+so domain-specific work belongs in user-published skills.
 Marketplace promotes only when there's evidence that real authors
 want to publish for real users.
 
@@ -389,11 +387,10 @@ skill / tool would surface "which skill costs me $14/mo, which
 tool costs $2/turn" — input for pruning.
 
 **Why it waits.** Only pays off with many skills + notably
-different costs per skill — neither holds today (one bundled
-skill in v0.3, second in v0.5, plus a handful of user-authored
-ones at most). The dimension explosion is dead weight until
-the catalog grows. May be discarded entirely if no demand
-emerges by v0.6.
+different costs per skill — neither holds today (skills are
+entirely user-owned, with a handful at most per profile). The
+dimension explosion is dead weight until the catalog grows. May
+be discarded entirely if no demand emerges by v0.6.
 
 ---
 
@@ -468,15 +465,15 @@ Not planned. Research-grade, irrelevant for everyday personal use.
   reverse-engineered with frequent bans, and the attack surface
   is catastrophic (a compromised bot leaks every chat). Not worth
   shipping for a personal agent.
-- **Smart-home / `@alpi/home`.** Home orchestration is out of
-  core scope. Owning device protocols (Hue, Xiaomi, Zigbee, Matter,
-  vendor APIs) would pull Alpi into hardware-specific maintenance
-  and physical-world safety policy, and the surface depends almost
-  entirely on which hardware each user happens to own. Users who
-  need it can expose Home Assistant through an MCP server or a
-  local profile skill — Alpi consumes that without owning a single
-  device protocol. Core Alpi stays focused on profiles, workgroups,
-  host-plane clients, memory, and operator tooling.
+- **Smart-home orchestration.** Owning device protocols (Hue,
+  Xiaomi, Zigbee, Matter, vendor APIs) would pull Alpi into
+  hardware-specific maintenance and physical-world safety policy,
+  and the surface depends almost entirely on which hardware each
+  user happens to own. Users who need it can expose Home Assistant
+  through an MCP server or a local profile skill — Alpi consumes
+  that without owning a single device protocol. Core Alpi stays
+  focused on profiles, workgroups, host-plane clients, memory, and
+  operator tooling.
 - **Discord gateway.** Bot tokens grant full server access — same
   blast-radius profile as Telegram with no added value, since
   Telegram covers the "messaging gateway" role already.
@@ -541,9 +538,9 @@ Not planned. Research-grade, irrelevant for everyday personal use.
   ("less formal but not jokey; respect my code-switching") that a
   form can't.
 - **Default skills bundle (AO, v0.3).** Resolved as "ship nothing
-  by default". Curated bundled skills under the reserved
-  `@alpi/*` namespace remain possible only when they reinforce the
-  core workflow; community marketplace ideas live in Future versions.
+  by default". Skills are entirely user-owned; runtime capabilities
+  (e.g. ``alpi_knowledge``) live as first-class tools, not skills.
+  Community marketplace ideas live in Future versions.
 - **`alpi run "<prompt>"` as a separate command.** Already
   covered by `alpi chat --once "<prompt>"`. Adding a second
   alias is bloat without value.

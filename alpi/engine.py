@@ -771,7 +771,9 @@ class Engine:
         hint = _platform_hint()
         if hint:
             parts.append(hint)
+        from alpi.tools.knowledge import PROMPT_RULE as _ALPI_KNOWLEDGE_RULE
         from alpi.tools.skill import skills_index_block
+        parts.append(_ALPI_KNOWLEDGE_RULE)
         skills_block = skills_index_block(self.home, cfg_raw=self.cfg.raw)
         if skills_block:
             parts.append(skills_block)

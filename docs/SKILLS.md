@@ -55,113 +55,20 @@ miscellaneous
 If a skill doesn't fit, pick the closest match and put the actual
 domain in the description. Never invent a new category.
 
-## Bundled vs user skills
+## Skills are user-owned
 
-There are two namespaces, kept strictly apart by construction.
+All skills live under `{home}/skills/<category>/<name>/` and the
+`skill` tool can create, edit, or delete them. There is no
+"bundled" namespace any more: capabilities the runtime needs to
+self-describe (e.g. answering questions about alpi itself) are
+exposed as **first-class tools**, not as skills.
 
-**User skills** live under `{home}/skills/<category>/<name>/` and
-are the only ones the `skill` tool can create, edit, or delete.
-These are the skills the user (or the agent on the user's behalf)
-writes.
-
-**Bundled skills** ship with the alpi package and are addressed
-with the prefix `@alpi/<name>`. They live inside the `alpi.skills`
-package as importable resources; they never materialise on disk
-at `{home}/skills/`.
-
-### Why ship skills with the binary
-
-A bundled skill is a curated capability that ships **with the
-binary**. Five properties fall out of that single decision:
-
-1. **No second install step.** `uv tool install alpi-agent` and
-   the skill is live. No registry to fetch from, no marketplace
-   to browse, no `npm install`-equivalent for capabilities. The
-   user gets a useful agent on first run.
-2. **Works offline.** Embedded as package resources, not
-   downloaded on demand. A laptop on a plane still has every
-   bundled skill available.
-3. **Version-pinned to the binary.** A bundled skill that uses a
-   new tool API cannot drift from the binary that exposes that
-   API. There is no compatibility matrix to maintain — the skill
-   is built and tested against the same wheel the user installs.
-4. **Auditable.** The source is in the wheel. `unzip -l
-   alpi_agent-X.Y.Z.whl | grep skills/` shows every file. No
-   external fetch, no mystery code path.
-5. **Curated, not a catalog.** First-party capabilities Satoshi
-   Ltd. ships because they solve a recurring problem we've seen
-   in real use, or because the skill is self-referential and
-   *can't* be authored by the user (they'd need the answer
-   first to write it).
-
-### Properties enforced on every bundled skill
-
-- **Read-only.** `skill(action="create"|"edit"|"patch"|
-  "add_file"|"remove_file"|"delete")` on a `@alpi/*` name is
-  rejected with a message pointing at the variant pattern below.
-- **Always-latest.** Upgrades land on every `uv tool install
-  --reinstall`; bundled skills track the binary, no merge, no
-  migration, no drift.
-- **Discoverable.** `skill(action="list")` shows them under the
-  `@alpi/` heading; `skills_index_block` injects them into every
-  system prompt with the `[bundled]` marker.
-
-**Collision is impossible by construction.** The `@` sigil is not
-a legal category name (the category validator rejects any
-`category.startswith("@")`). A user cannot create `@alpi/foo`;
-if a rogue write lands at `{home}/skills/@alpi/foo/SKILL.md`
-directly via shell, the listing skips any category whose name
-starts with `@` as a defence in depth.
-
-**Variant pattern.** If a user wants their own take on a bundled
-skill (e.g. "`@alpi/obsidian-writer` but tuned for my vault"),
-they create a new user skill with a different name in any non-`@`
-category — for example `personal/obsidian-writer`. Both coexist
-and both appear in the `skill list` + system-prompt index; the
-LLM picks by description fit.
-
-**Discovery primacy.** User skills render first in the system-
-prompt index, bundled after with the `[bundled]` marker. That
-ordering nudges the LLM toward user-tailored content when a
-semantic match exists.
-
-### Currently bundled
-
-| Skill | Description |
-|---|---|
-| `@alpi/knowledge` | Answer questions about alpi itself — config, commands, ALP protocol, skills, security, gateways, deployment — using the bundled documentation instead of guessing or web-searching. |
-
-Each entry above is a directory under `alpi/skills/<name>/` in
-the source tree. The set grows by curation, not by submission.
-
-### Curation policy — when does something become bundled?
-
-A capability earns a slot in `@alpi/*` when **at least one** of
-these is true:
-
-- **It's self-referential.** The user can't reasonably author it
-  themselves because the skill *is* the knowledge they'd need to
-  author it. `@alpi/knowledge` is the canonical example: a user
-  who doesn't know how alpi works can't write a skill that
-  teaches alpi how alpi works.
-- **It must work offline / on first install.** Anything
-  intrinsic to the agent's UX from the moment it starts. A user
-  who has just typed `alpi setup` for the first time should not
-  need network access to ask "how do I do X?".
-- **It's a recurring user pattern.** Five users authored the
-  same skill across their profiles. A pattern that repeats is a
-  candidate to lift into the bundle.
-
-Things that **don't** belong in `@alpi/*`:
-
-- Third-party integrations (Whoop, Strava, Notion, …). Those
-  belong in the user namespace, or eventually in the federated
-  skills marketplace tracked under `AY` (v0.5 roadmap).
-- Vendor-specific or workspace-specific recipes. By definition
-  not portable enough to ship for everyone.
-- Anything that needs credentials. Bundled skills are read-only
-  and stateless; secrets live in the user namespace.
-
+The single example is the `alpi_knowledge` tool, which reads
+packaged Markdown from `alpi/knowledge/references/` (synced from
+`docs/` by `scripts/sync_knowledge.py`). It is available on every
+profile from the moment alpi is installed; the system prompt
+instructs the agent to call it before answering any question about
+alpi. See [ARCHITECTURE.md](ARCHITECTURE.md) for the tool layer.
 
 ## Frontmatter
 
@@ -353,8 +260,7 @@ on first invocation; idempotent.
   in practice).
 
 **Scope:** strictly per-skill. The `skill` argument resolves
-against the profile's installed skills; bundled `@alpi/*` skills
-cannot use `db` (read-only by design). Backup-friendly: when AW
+against the profile's installed skills. Backup-friendly: when AW
 ships, `db.sqlite` flows through the encrypted archive like any
 other file under the skill directory.
 
@@ -391,8 +297,8 @@ skill(action="view",     name=..., [file="scripts/foo.py"])
 skill(action="validate", name=...)
 ```
 
-Mutating (user skills require `confirm_user_skill=true`; bundled
-`@alpi/*` rejects every mutation):
+Mutating (require `confirm_user_skill=true` on user-origin
+skills):
 
 ```
 skill(action="create", name=..., category=..., description=..., body=...,

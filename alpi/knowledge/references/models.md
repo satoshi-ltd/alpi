@@ -3,6 +3,13 @@
 Use this for "what model should I use?", especially with skills,
 tools, gateways, and long sessions.
 
+## Answer directly
+
+- For tool-heavy profiles, recommend a strong tool-calling/router model.
+- For cheap background work, recommend a cheaper service model only if the task is low-risk.
+- For local/private use, recommend a capable local model and warn that weak local tool calling can break multi-step workflows.
+- If asked about fallback models, say they are stored in config but do not promise automatic escalation unless the installed version explicitly implements it.
+
 ## Main rule
 
 alpi needs tool-calling discipline more than chat benchmark scores.
@@ -11,6 +18,10 @@ skill index, calls `skill(action="view")`, preserves tool schemas, and
 recovers from tool errors.
 
 ## Good primary routers
+
+Examples current for this release. Model availability and provider
+names can change; if exact availability matters, check the user's
+provider or OpenRouter catalog.
 
 Use these for profiles with many skills, persistent memory, database
 state, shell commands, or important side effects:
@@ -25,6 +36,9 @@ state, shell commands, or important side effects:
 | GPT-5.4 | `openai/gpt-5.4` |
 
 ## Cheap service turns
+
+Examples current for this release. Use them for low-risk tasks where
+occasional routing weakness is acceptable.
 
 Use these for low-risk gateway traffic, heartbeats, summaries, simple
 lookups, and short commands:
@@ -72,3 +86,9 @@ alpi currently selects one primary model per profile. `fallback_models`
 exists in config, but do not assume automatic runtime escalation unless
 the installed version explicitly implements it. Use separate profiles
 for different model roles today.
+
+## Related topics
+
+- Model config keys: `config`
+- Skills and tool routing: `skills`
+- Provider setup: `install`

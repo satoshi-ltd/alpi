@@ -3,6 +3,13 @@
 Use this for "what is a profile?", "where is my data?", or "how do I
 separate work/personal?"
 
+## Answer directly
+
+- Default profile lives at `~/.alpi/`.
+- Named profiles live at `~/.alpi/profiles/<name>/`.
+- Use profiles for separate identity, memory, credentials, ALP trust, or budget.
+- Use workspace for project scope when identity/memory can be shared.
+
 ## Short answer
 
 A profile is an isolated alpi identity and data directory. Use
@@ -76,3 +83,10 @@ personal alpis should be separate", profiles are the answer.
 Run one service process per profile. If a gateway or scheduler behaves
 as if it is using the wrong identity, check which profile's service is
 running.
+
+## Related topics
+
+- Config and `.env`: `config`
+- Daemon lifecycle: `operations`
+- ALP identity: `alp`
+- Skills per profile: `skills`

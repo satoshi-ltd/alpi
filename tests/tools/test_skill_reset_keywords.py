@@ -12,7 +12,6 @@ import pytest
 
 from alpi.tools.skill import (
     Skill,
-    bundled_skills,
     keyword_match_hint,
     skill_keywords,
 )
@@ -66,15 +65,6 @@ def test_reset_state_unknown_skill(isolated_home: Path) -> None:
     r = Skill().run(action="reset_state", name="nope", confirm_user_skill=True)
     assert not r.ok
     assert "skill not found" in r.error
-
-
-def test_reset_state_rejects_bundled(isolated_home: Path) -> None:
-    if not bundled_skills():
-        pytest.skip("no bundled skills available")
-    name = bundled_skills()[0]["name"]
-    r = Skill().run(action="reset_state", name=name)
-    assert not r.ok
-    assert "bundled" in r.error
 
 
 def test_reset_state_user_origin_requires_confirmation(

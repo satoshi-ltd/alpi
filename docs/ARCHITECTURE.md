@@ -171,14 +171,14 @@ alpi/
 │   ├── events.py          host.events.subscribe + thread-safe emit() for daemon-pushed updates
 │   ├── workgroup.py       transcript decryption (hub + member shapes)
 │   └── sessions.py        plaintext session list / read
-└── skills/                 bundled skill blueprints; read-only, resolved via `@alpi/<name>` (see docs/SKILLS.md)
+└── knowledge/              `alpi_knowledge` answer packs — Markdown the tool reads (see docs/SKILLS.md)
 ```
 
-Runtime state (user skills, sessions, memories, logs, ALP peers,
-keys) does not ship with the package — it's generated per profile
-under `~/.alpi/`. The `alpi/skills/` package directory holds only
-bundled skill blueprints addressed as `@alpi/<name>`; bundled and
-user skills coexist in the listing, kept apart by namespace.
+Runtime state (skills, sessions, memories, logs, ALP peers, keys)
+does not ship with the package — it's generated per profile under
+`~/.alpi/`. The `alpi/knowledge/references/` directory holds the
+answer packs the `alpi_knowledge` tool serves; there is no bundled
+skill namespace.
 See Profile home layout immediately below. The `skill` tool
 (`alpi/tools/skill.py`) manages user-created skills
 that live at `{home}/skills/<category>/<name>/`.

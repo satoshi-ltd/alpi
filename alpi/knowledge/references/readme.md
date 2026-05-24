@@ -39,8 +39,8 @@ alpi --version
   terminal commands.
 - **Memory**: persistent user/project facts, written through the
   `memory` tool.
-- **Skills**: reusable workflows stored under `~/.alpi/skills/...`;
-  bundled skills use `@alpi/<name>`.
+- **Skills**: reusable workflows stored under `~/.alpi/skills/...`,
+  entirely user-owned.
 - **Gateway**: daemon-hosted inbound surface for Telegram, IMAP,
   Gmail, and Matrix.
 - **Schedule**: recurring jobs that run through the same agent loop.
@@ -53,7 +53,7 @@ alpi --version
 - Profile isolation.
 - File, terminal, browser/search, memory, schedule, research, and
   delegate tools.
-- Bundled `@alpi/knowledge` skill.
+- `alpi_knowledge` tool backed by packaged references.
 - Optional OS sandbox for terminal/file isolation.
 - Gateway, scheduler, and host-plane daemon.
 - ALP identity and peer/workgroup features.
@@ -65,8 +65,8 @@ alpi --version
 - alpi is not a browser-only assistant.
 - alpi does not make weak models reliable; tool discipline still
   depends on model quality.
-- The bundled knowledge references describe shipped behavior, not the
-  unreleased roadmap.
+- The packaged knowledge references describe shipped behavior, not
+  the unreleased roadmap.
 
 ## Where to look next
 

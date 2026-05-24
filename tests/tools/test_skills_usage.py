@@ -13,11 +13,11 @@ def _load_raw(home: Path) -> dict:
 
 
 def test_record_creates_file_and_initial_entry(tmp_path: Path) -> None:
-    su.record_usage(tmp_path, "@alpi/knowledge", "view", now=1000.0)
+    su.record_usage(tmp_path, "okr-review", "view", now=1000.0)
 
     raw = _load_raw(tmp_path)
     assert raw["v"] == su.USAGE_VERSION
-    entry = raw["skills"]["@alpi/knowledge"]
+    entry = raw["skills"]["okr-review"]
     assert entry["view_count"] == 1
     assert entry["use_count"] == 0
     assert entry["patch_count"] == 0

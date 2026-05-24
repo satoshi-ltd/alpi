@@ -3,6 +3,13 @@
 Use this for install, update, uninstall, dev install, and supported
 install paths.
 
+## Answer directly
+
+- Default install: `uv tool install alpi-agent`.
+- First run after install: `alpi setup`, then `alpi`.
+- Update: `uv tool upgrade alpi-agent`, then restart the daemon if it is running.
+- Uninstalling the binary does not delete `~/.alpi`.
+
 ## Recommended install
 
 ```bash

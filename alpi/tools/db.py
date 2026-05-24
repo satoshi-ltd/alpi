@@ -19,13 +19,7 @@ SQLITE_BUSY_TIMEOUT_S = 5.0
 def _resolve_db(skill_name: str) -> tuple[Path, str | None]:
     if not skill_name:
         return Path(), "'skill' is required"
-    from alpi.tools.skill import BUNDLED_PREFIX, _find_skill
-    if skill_name.startswith(BUNDLED_PREFIX):
-        return Path(), (
-            f"{skill_name!r} is a bundled skill — bundled skills are "
-            "read-only and do not own a state DB. Create a user skill "
-            "in another category if you need one."
-        )
+    from alpi.tools.skill import _find_skill
     home = get_home()
     skill_dir = _find_skill(home, skill_name)
     if skill_dir is None:
@@ -67,8 +61,7 @@ class Db(Tool):
         "\n"
         "Quotas: 50 MB file, 10 000 rows max per query result, 5 s "
         "busy timeout. Scope is per-skill: one skill cannot touch "
-        "another skill's DB. Bundled skills (``@alpi/*``) cannot use "
-        "``db`` — they're read-only by design.\n"
+        "another skill's DB.\n"
         "\n"
         "Wipe state via ``skill(action='reset_state', name=…)`` — "
         "removes ``state/`` including the SQLite file. Use when a "

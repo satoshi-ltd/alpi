@@ -172,49 +172,6 @@ def _scan_secret_env_reads(body: str, allowed_env: set[str]) -> list[str]:
     return findings
 
 
-BUNDLED_PREFIX = "@alpi/"
-
-
-def _bundled_root():
-    try:
-        from importlib.resources import files
-        return files("alpi.skills")
-    except (ModuleNotFoundError, FileNotFoundError):
-        return None
-
-
-def _bundled_skill(name: str):
-    if not name.startswith(BUNDLED_PREFIX):
-        return None
-    base = _bundled_root()
-    if base is None:
-        return None
-    target = base / name[len(BUNDLED_PREFIX):]
-    return target if target.is_dir() else None
-
-
-def bundled_skills() -> list[dict]:
-    base = _bundled_root()
-    if base is None:
-        return []
-    out: list[dict] = []
-    for entry in sorted(base.iterdir(), key=lambda p: p.name):
-        if entry.name.startswith("_") or not entry.is_dir():
-            continue
-        skill_md = entry / "SKILL.md"
-        if not skill_md.is_file():
-            continue
-        meta = _frontmatter_from_text(skill_md.read_text())
-        out.append({
-            "name": f"{BUNDLED_PREFIX}{entry.name}",
-            "category": meta.get("category") or "miscellaneous",
-            "description": meta.get("description") or "",
-            "path": entry,
-            "meta": meta,
-        })
-    return out
-
-
 def all_skills(home: Path) -> list[Path]:
     root = home / "skills"
     if not root.exists():
@@ -246,14 +203,12 @@ def agent_skill_count(home: Path) -> int:
 def skills_index_block(home: Path, cfg_raw: dict[str, Any] | None = None) -> str:
     """Compact skills index for system-prompt injection.
 
-    User skills first, bundled (`@alpi/*`) after with a `[bundled]`
-    marker. Empty string when neither is present.
+    Empty string when no user skills are installed.
     """
     from alpi.home import effective_profile_env
 
     user_skills = all_skills(home)
-    bundled = bundled_skills()
-    if not user_skills and not bundled:
+    if not user_skills:
         return ""
 
     if cfg_raw is None:
@@ -266,10 +221,8 @@ def skills_index_block(home: Path, cfg_raw: dict[str, Any] | None = None) -> str
         "research) check this list. When a skill matches the user's "
         "request, prefer it: load the SKILL.md with "
         "`skill(action='view', name=...)` and follow its instructions. "
-        "User skills (listed first) carry the user's preferred approach "
-        "and often hold cached state from previous runs; bundled skills "
-        "(marked `[bundled]`, prefix `@alpi/`) ship with alpi and are "
-        "read-only.",
+        "Skills carry the user's preferred approach and often hold "
+        "cached state from previous runs.",
         "",
     ]
 
@@ -292,41 +245,10 @@ def skills_index_block(home: Path, cfg_raw: dict[str, Any] | None = None) -> str
         for name, desc in sorted(by_cat[cat]):
             lines.append(f"    - {name}: {desc}" if desc else f"    - {name}")
 
-    eligible_bundled = [
-        b for b in bundled
-        if skill_eligibility(b.get("meta", {}), env=profile_env, cfg_raw=cfg_raw)[0]
-    ]
-
-    if eligible_bundled:
-        if by_cat:
-            lines.append("")
-        lines.append("  @alpi/ [bundled]:")
-        for b in eligible_bundled:
-            desc = b["description"]
-            lines.append(
-                f"    - {b['name']}: {desc}" if desc else f"    - {b['name']}"
-            )
-
-        if any(b["name"] == "@alpi/knowledge" for b in eligible_bundled):
-            lines.append("")
-            lines.append(
-                "RULE — alpi self-knowledge: if the user's question "
-                "mentions ``alpi`` (the project — config, commands, "
-                "protocol, skills, deployment, install), CALL "
-                "``skill(action='view', name='@alpi/knowledge')`` "
-                "FIRST and read the routing table inside. Then read "
-                "the relevant ``references/<topic>.md``. The bundled "
-                "docs are authoritative; your training is not — alpi "
-                "shipped after your cutoff. Do NOT answer alpi "
-                "questions from general knowledge."
-            )
     return "\n".join(lines)
 
 
 def _find_skill(home: Path, name: str):
-    bundled = _bundled_skill(name)
-    if bundled is not None:
-        return bundled
     for p in all_skills(home):
         if p.name == name:
             return p
@@ -879,17 +801,6 @@ class Skill(Tool):
             return _list(home)
         if action == "view":
             return _view(home, name, file)
-        mutating = {"create", "edit", "patch", "add_file",
-                    "remove_file", "delete"}
-        if action in mutating and name.startswith(BUNDLED_PREFIX):
-            return ToolResult(
-                ok=False, output="",
-                error=(
-                    f"{name!r} is a bundled skill — read-only. Create "
-                    f"your own variant with a different name in another "
-                    f"category (e.g. category='personal')."
-                ),
-            )
         if action == "create":
             return _create(home, name, category, description, body,
                            requires_env or [], tools or [],
@@ -984,13 +895,6 @@ def _list(home: Path) -> ToolResult:
             for s in skill_dirs:
                 meta = _frontmatter(s / "SKILL.md")
                 lines.append(f"  - {s.name}{_state_tag(meta, env=env, cfg_raw=cfg_raw)}")
-    bundled = bundled_skills()
-    if bundled:
-        if lines:
-            lines.append("")
-        lines.append("@alpi/ [bundled]:")
-        for b in bundled:
-            lines.append(f"  - {b['name']}{_state_tag(b.get('meta', {}), env=env, cfg_raw=cfg_raw)}")
     if not lines:
         lines.append("(no skills)")
     return ToolResult(ok=True, output="\n".join(lines))
@@ -1651,11 +1555,6 @@ def _reset_state(
     """Wipe ``<skill>/state/`` contents; dir + mode preserved."""
     if not name:
         return ToolResult(ok=False, output="", error="'name' is required")
-    if name.startswith(BUNDLED_PREFIX):
-        return ToolResult(
-            ok=False, output="",
-            error=f"{name!r} is bundled — read-only, no state to reset",
-        )
     skill_dir = _find_skill(home, name)
     if skill_dir is None:
         return ToolResult(ok=False, output="", error=f"skill not found: {name}")
@@ -1728,11 +1627,6 @@ def _set_meta(
         return ToolResult(
             ok=False, output="",
             error=f"unknown frontmatter field(s): {', '.join(unknown)}",
-        )
-    if name.startswith(BUNDLED_PREFIX):
-        return ToolResult(
-            ok=False, output="",
-            error=f"{name!r} is bundled — read-only",
         )
     skill_dir = _find_skill(home, name)
     if skill_dir is None:
@@ -1838,14 +1732,6 @@ def keyword_match_hint(
             continue
         if _keyword_matches(tokens, skill_keywords(meta)):
             hits.append(meta.get("name") or path.name)
-    for b in bundled_skills():
-        meta = b.get("meta", {})
-        if _schema.errors(_schema.validate_frontmatter(meta, categories=CATEGORIES)):
-            continue
-        if not skill_eligibility(meta, env=env, cfg_raw=cfg_raw)[0]:
-            continue
-        if _keyword_matches(tokens, skill_keywords(meta)):
-            hits.append(b["name"])
     if not hits:
         return ""
     unique = sorted(set(hits))[:_HINT_MAX_SKILLS]

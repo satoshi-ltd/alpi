@@ -3,6 +3,13 @@
 Use this for "how do I start?", "first run", or "what commands do I
 type after installing?"
 
+## Answer directly
+
+- New user path: install, run `alpi setup`, then run `alpi`.
+- Project-specific work: set `workspace` during setup or in config.
+- More than one identity: create a named profile and run setup for it.
+- Gateways, schedules, desktop, and mobile need the daemon.
+
 ## Minimal first run
 
 ```bash

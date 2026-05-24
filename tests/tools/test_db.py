@@ -2,7 +2,7 @@
 
 Surface tested: query / exec, parameterised SQL, scope isolation
 between skills, quota enforcement, error paths (unknown skill,
-bundled skill, malformed SQL).
+malformed SQL).
 """
 
 from __future__ import annotations
@@ -137,15 +137,6 @@ def test_unknown_skill_rejected(isolated_home: Path) -> None:
     )
     assert not r.ok
     assert "skill not found" in r.error
-
-
-def test_bundled_skill_rejected(isolated_home: Path) -> None:
-    r = Db().run(
-        action="query", skill="@alpi/knowledge",
-        sql="SELECT 1",
-    )
-    assert not r.ok
-    assert "bundled" in r.error
 
 
 def test_unknown_action_rejected(isolated_home: Path, whoop_skill: str) -> None:

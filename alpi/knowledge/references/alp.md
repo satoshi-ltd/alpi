@@ -3,6 +3,13 @@
 Use this for Alpi Link Protocol, peer identity, link methods,
 workgroups, budgets, and ALP vs local host API.
 
+## Answer directly
+
+- Desktop/mobile should not use ALP; they use `host.*`.
+- ALP is for trusted alpi-to-alpi peers and workgroups.
+- Trust is explicit and profile-scoped, not machine-scoped.
+- For workgroups, answer in terms of hub, members, transcript, budget, and group key.
+
 ## Short answer
 
 ALP is the peer-to-peer plane for trusted alpi instances. It is used
@@ -82,3 +89,9 @@ bounded result rather than silently retrying expensive work.
   profile has its own identity.
 - "How do I debug a peer?" -> check identity, peer list, transport
   reachability, logs, and budget.
+
+## Related topics
+
+- Host-plane clients and pairing: `deployments`
+- Profile identity boundaries: `profiles`
+- Security model: `security`

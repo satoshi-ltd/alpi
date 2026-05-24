@@ -238,16 +238,6 @@ def test_set_meta_unknown_skill(isolated_home: Path) -> None:
     assert "skill not found" in r.error
 
 
-def test_set_meta_rejects_bundled(isolated_home: Path) -> None:
-    r = Skill().run(
-        action="set_meta",
-        name="@alpi/knowledge",
-        fields={"keywords": ["x"]},
-    )
-    assert not r.ok
-    assert "bundled" in r.error
-
-
 def test_set_meta_origin_user_requires_confirmation(
     isolated_home: Path,
 ) -> None:

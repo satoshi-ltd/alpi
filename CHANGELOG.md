@@ -1,5 +1,31 @@
 # Changelog
 
+## v0.6.7 — 2026-05-24 — alpi self-knowledge moves from skill to first-class tool
+
+The `@alpi/knowledge` bundled skill is gone. The capability that
+let alpi answer questions about itself is now an ordinary tool —
+``alpi_knowledge`` — backed by packaged Markdown under
+``alpi/knowledge/references/``. Skills become entirely user-owned;
+the whole "bundled skill" plumbing is removed.
+
+- ``alpi_knowledge`` tool with two actions: ``index`` lists the
+  available topics with one-line summaries; ``view topic=…``
+  returns the full answer pack. Topic enum lives in
+  ``alpi.knowledge.TOPICS`` and is exposed in the tool's JSON
+  schema so the model cannot submit an invalid topic.
+- A short ``# ALPI SELF-KNOWLEDGE`` rule injects into every system
+  prompt so the agent calls the tool before answering alpi
+  questions, instead of guessing from training data.
+- ``alpi/skills/`` package directory is deleted along with the
+  ``@alpi/`` prefix, ``bundled_skills()``, ``_bundled_skill()``,
+  ``_bundled_root()``, the read-only mutating-action guards on
+  ``@alpi/*`` names, and the ``origin: bundled`` schema value.
+  ``skill list`` and ``skills_index_block`` only show user skills.
+- ``scripts/sync_knowledge.py`` becomes a drift validator (no
+  copy) — the references are hand-tuned LLM answer packs, not
+  raw ``docs/`` dumps. Exit 2 if ``TOPICS`` and the on-disk file
+  set disagree.
+
 ## v0.6.6 — 2026-05-24 — host.version exposes a stable device_id
 
 Mobile / desktop clients had no way to detect that two paired

@@ -14,7 +14,7 @@ _ENV_VAR_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 _BIN_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+-]*$")
 _CONFIG_PATH_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*$")
 
-_VALID_ORIGINS = frozenset({"agent", "user", "bundled"})
+_VALID_ORIGINS = frozenset({"agent", "user"})
 _VALID_PLATFORMS = frozenset({"macos", "linux", "windows"})
 
 DESC_MAX = 150
@@ -91,12 +91,11 @@ def _check_description(meta: dict[str, str]) -> list[Issue]:
         return [Issue("description", "error", "required")]
     out: list[Issue] = []
     if len(desc) > DESC_MAX:
-        # Warning only — bundled instructional descriptions can exceed it legitimately.
+        # Warning only — long descriptions are sometimes intentional for instructional skills.
         out.append(Issue(
             "description", "warning",
             f"long ({len(desc)} chars; soft limit {DESC_MAX}) — descriptions "
-            "are headlines, keep them short unless the skill is bundled and "
-            "instructional",
+            "are headlines, keep them short",
         ))
     if desc.endswith("."):
         out.append(Issue(
