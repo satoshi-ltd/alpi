@@ -30,15 +30,17 @@ export default function Pair() {
     setError(null);
     try {
       const endpoint = parsePairing(input);
-      // probe() returns {status, version, deviceName} — destructuring is load-bearing; previous code compared the object to 'online' and every pairing failed.
-      const { status, deviceName } = await probe(endpoint);
+      const { status, deviceName, deviceId } = await probe(endpoint);
       if (status === 'auth-failed') {
         throw new PairingError('Token rejected by daemon. Generate a fresh pairing link on the daemon and try again.');
       }
       if (status !== 'online') {
         throw new PairingError(`Daemon unreachable at ${endpoint.ip}:${endpoint.port}. Make sure the daemon is running, both devices are on the same network, and the port is open.`);
       }
-      const finalEndpoint = deviceName ? { ...endpoint, name: deviceName } : endpoint;
+      if (!deviceId) {
+        throw new PairingError('Daemon too old or host.version unavailable. Update alpi to v0.6.6 or newer and retry.');
+      }
+      const finalEndpoint = { ...endpoint, deviceId, ...(deviceName ? { name: deviceName } : {}) };
       await addConnection(finalEndpoint);
       toast({ title: 'Paired', message: `Connected to ${finalEndpoint.name}`, duration: 2200 });
       router.replace('/paired');

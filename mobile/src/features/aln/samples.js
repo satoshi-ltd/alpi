@@ -14,14 +14,6 @@ const FIXTURES = {
     seq: 998,
     summary: 'Task closed: shortlist of 5 vendors with notes.',
   },
-  'chat.turn_done': {
-    profile: 'vera',
-    session_id: 'sess-debug',
-    source: 'user',
-    duration_s: 187.3,
-    tool_count: 12,
-    summary: 'Research complete: 5 vendors ranked by price, SLA, integration cost.',
-  },
   'approval.request': {
     profile: 'vera',
     request_id: 'req-debug',

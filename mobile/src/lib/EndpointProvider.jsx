@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { EndpointContext } from './EndpointContext';
 import { probe, probeAll } from './probe';
 import { call as rpcCall, callStream as rpcCallStream, dropEndpointPool } from './rpc';
-import { clearAll, loadConnections, removeConnection, saveConnection, setActiveConnection } from './store';
+import { clearAll, loadConnections, removeConnection, saveConnection, setActiveConnection, setDeviceIds } from './store';
 
 // auth-failed handling lives in <AuthFailedBridge> (app/_layout.jsx) — it needs router + toast context.
 export function EndpointProvider({ children }) {
@@ -23,9 +23,13 @@ export function EndpointProvider({ children }) {
     setConnections(state.connections);
     setActiveId(state.active_id);
     setReady(true);
-    const { status, versions } = await probeAll(state.connections);
+    const { status, versions, deviceIds } = await probeAll(state.connections);
     setProbeState(status);
     setVersionState(versions);
+    if (deviceIds.size > 0) {
+      const next = await setDeviceIds(deviceIds);
+      setConnections(next.connections);
+    }
   }, []);
 
   useEffect(() => {
@@ -49,20 +53,34 @@ export function EndpointProvider({ children }) {
     const target = connections.find((c) => c.id === id);
     if (target) dropEndpointPool(target);
     await removeConnection(id);
-    try {
-      const { clearState } = await import('../features/aln/state');
-      await clearState(id);
-    } catch { /* */ }
+    if (target?.deviceId) {
+      const stillUsed = connections.some(
+        (c) => c.id !== id && c.deviceId === target.deviceId,
+      );
+      if (!stillUsed) {
+        try {
+          const { alnStateKey, clearState } = await import('../features/aln/state');
+          await clearState(alnStateKey(target));
+        } catch { /* */ }
+      }
+    }
     await refresh();
   }, [refresh, connections]);
 
   const unpair = useCallback(async () => {
     for (const c of connections) dropEndpointPool(c);
-    const ids = connections.map((c) => c.id);
+    const targets = [...connections];
     await clearAll();
     try {
-      const { clearState } = await import('../features/aln/state');
-      for (const id of ids) await clearState(id);
+      const { alnStateKey, clearState } = await import('../features/aln/state');
+      const cleared = new Set();
+      for (const c of targets) {
+        if (!c.deviceId) continue;
+        const key = alnStateKey(c);
+        if (cleared.has(key)) continue;
+        cleared.add(key);
+        await clearState(key);
+      }
     } catch { /* */ }
     await refresh();
   }, [refresh, connections]);
@@ -75,7 +93,7 @@ export function EndpointProvider({ children }) {
       next.set(id, 'probing');
       return next;
     });
-    const { status, version } = await probe(target);
+    const { status, version, deviceId } = await probe(target);
     setProbeState((m) => {
       const next = new Map(m);
       next.set(id, status);
@@ -87,6 +105,10 @@ export function EndpointProvider({ children }) {
       else next.delete(id);
       return next;
     });
+    if (deviceId && deviceId !== target.deviceId) {
+      const next = await setDeviceIds(new Map([[id, deviceId]]));
+      setConnections(next.connections);
+    }
     return status;
   }, [connections]);
 

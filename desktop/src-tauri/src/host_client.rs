@@ -244,6 +244,8 @@ pub enum HostConnection {
     Local {
         id: String,
         name: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        device_id: Option<String>,
     },
     Remote {
         id: String,
@@ -253,6 +255,8 @@ pub enum HostConnection {
         token: String,
         #[serde(default)]
         revoked: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        device_id: Option<String>,
     },
 }
 
@@ -269,6 +273,7 @@ impl Default for ConnectionsState {
             connections: vec![HostConnection::Local {
                 id: LOCAL_ID.to_string(),
                 name: "Local daemon".to_string(),
+                device_id: None,
             }],
         }
     }
@@ -282,11 +287,25 @@ impl HostConnection {
         }
     }
 
+    pub fn device_id(&self) -> Option<&str> {
+        match self {
+            HostConnection::Local { device_id, .. } => device_id.as_deref(),
+            HostConnection::Remote { device_id, .. } => device_id.as_deref(),
+        }
+    }
+
+    pub fn set_device_id(&mut self, value: Option<String>) {
+        match self {
+            HostConnection::Local { device_id, .. } => *device_id = value,
+            HostConnection::Remote { device_id, .. } => *device_id = value,
+        }
+    }
+
     fn with_token_redacted(&self) -> Value {
         let (status, error) = status_for(self.id());
         let alpi_version = version_for(self.id());
         match self {
-            HostConnection::Local { id, name } => {
+            HostConnection::Local { id, name, device_id } => {
                 json!({
                     "id": id,
                     "name": name,
@@ -294,6 +313,7 @@ impl HostConnection {
                     "status": status.as_str(),
                     "error": error,
                     "alpi_version": alpi_version,
+                    "device_id": device_id,
                 })
             }
             HostConnection::Remote {
@@ -303,6 +323,7 @@ impl HostConnection {
                 port,
                 token,
                 revoked,
+                device_id,
             } => json!({
                 "id": id,
                 "name": name,
@@ -314,6 +335,7 @@ impl HostConnection {
                 "status": status.as_str(),
                 "error": error,
                 "alpi_version": alpi_version,
+                "device_id": device_id,
             }),
         }
     }
@@ -356,7 +378,31 @@ fn ensure_local(state: &mut ConnectionsState) {
     state.connections.insert(0, HostConnection::Local {
         id: LOCAL_ID.to_string(),
         name: "Local daemon".to_string(),
+        device_id: None,
     });
+}
+
+pub fn active_subscription_key() -> Option<String> {
+    let state = load_connections();
+    let active = state.connections.iter().find(|c| c.id() == state.active_id)?;
+    active.device_id().map(|d| format!("daemon:{d}"))
+}
+
+fn persist_device_id(connection_id: &str, device_id: &str) {
+    let mut state = load_connections();
+    let mut changed = false;
+    for conn in state.connections.iter_mut() {
+        if conn.id() == connection_id {
+            if conn.device_id() != Some(device_id) {
+                conn.set_device_id(Some(device_id.to_string()));
+                changed = true;
+            }
+            break;
+        }
+    }
+    if changed {
+        let _ = save_connections(&state);
+    }
 }
 
 fn save_connections(state: &ConnectionsState) -> Result<(), String> {
@@ -450,6 +496,7 @@ pub fn add_remote_connection(
         port,
         token: token.trim().to_string(),
         revoked: false,
+        device_id: None,
     });
     state.active_id = id.clone();
     save_connections(&state)?;
@@ -512,6 +559,7 @@ fn active_connection() -> HostConnection {
         .unwrap_or(HostConnection::Local {
             id: LOCAL_ID.to_string(),
             name: "Local daemon".to_string(),
+            device_id: None,
         })
 }
 
@@ -1138,13 +1186,22 @@ pub fn probe_connection(conn: &HostConnection) {
                     timeout,
                 ),
             };
-            let version = version_call
-                .ok()
+            let version_value = version_call.ok();
+            let version = version_value
                 .as_ref()
                 .and_then(|v| v.get("version"))
                 .and_then(|v| v.as_str())
                 .map(|s| s.to_string());
             set_version(&id, version);
+            let device_id = version_value
+                .as_ref()
+                .and_then(|v| v.get("device_id"))
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.is_empty())
+                .map(|s| s.to_string());
+            if let Some(did) = device_id {
+                persist_device_id(&id, &did);
+            }
         }
         Err(e) => {
             let next = match conn {
@@ -1198,6 +1255,7 @@ mod tests {
         let local = HostConnection::Local {
             id: LOCAL_ID.to_string(),
             name: "Local daemon".to_string(),
+            device_id: None,
         };
         let remote = HostConnection::Remote {
             id: "remote-1".to_string(),
@@ -1206,6 +1264,7 @@ mod tests {
             port: 49200,
             token: "secret".to_string(),
             revoked: false,
+            device_id: None,
         };
         assert_eq!(
             probe_timeout_for(&local),
@@ -1215,6 +1274,31 @@ mod tests {
             probe_timeout_for(&remote),
             Duration::from_millis(PROBE_REMOTE_TIMEOUT_MS)
         );
+    }
+
+    #[test]
+    fn device_id_round_trip_through_set_and_get() {
+        let mut local = HostConnection::Local {
+            id: LOCAL_ID.to_string(),
+            name: "Local".to_string(),
+            device_id: None,
+        };
+        assert!(local.device_id().is_none());
+        local.set_device_id(Some("uuid-mac".to_string()));
+        assert_eq!(local.device_id(), Some("uuid-mac"));
+
+        let mut remote = HostConnection::Remote {
+            id: "r".to_string(),
+            name: "R".to_string(),
+            host: "1.1.1.1".to_string(),
+            port: 49200,
+            token: "t".to_string(),
+            revoked: false,
+            device_id: Some("uuid-mac".to_string()),
+        };
+        assert_eq!(remote.device_id(), Some("uuid-mac"));
+        remote.set_device_id(None);
+        assert!(remote.device_id().is_none());
     }
 
     #[test]

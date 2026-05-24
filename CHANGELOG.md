@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.6.6 — 2026-05-24 — host.version exposes a stable device_id
+
+Mobile / desktop clients had no way to detect that two paired
+connections referred to the same daemon (e.g. LAN address vs
+Tailscale address). The ALN background poll was deduping by
+`(ip, port)`, which still treated those as different daemons →
+duplicated notifications.
+
+- ``host.version`` now returns a ``device_id`` (UUID4 minted on
+  first call, persisted in ``~/.alpi/host/device_id`` and stable
+  across daemon restarts). Paired clients use it to dedupe and
+  to namespace their per-daemon state. First-call mint is atomic
+  (``O_CREAT | O_EXCL``, mode ``0o600``) so two clients racing the
+  initial ``host.version`` cannot end up with distinct ids.
+
 ## v0.6.5 — 2026-05-22 — host.network.status no longer freezes the UI, agent notification deep link
 
 Opening the default profile's settings used to hang the desktop

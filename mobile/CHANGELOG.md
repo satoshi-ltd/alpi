@@ -14,6 +14,52 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.1.14 — 2026-05-24 — stop notification flood
+
+Several independent fixes that together kill the "same
+notification fires many times" symptom.
+
+Requires alpi ``v0.6.6`` or newer for the daemon-identity piece;
+the rest works against any daemon.
+
+- ALN now claims events in the persisted cursor BEFORE attempting
+  to fire the notification. The previous order (fire → on success
+  → commit) was fragile: Android Doze can kill the background
+  task between ``scheduleNotificationAsync`` (notif already
+  delivered to the OS) and ``SecureStore.setItemAsync``, leaving
+  the seq uncommitted → next wake re-fetches the same events and
+  re-fires. Trade-off: a rare OS kill mid-task may now lose one
+  notification rather than dup it forever.
+- ``runPollOnce`` dedupes connections by daemon identity
+  (``device_id`` from ``host.version``), not by ``(ip, port)``.
+  LAN address + Tailscale address pointing at the same daemon
+  now collapse to one poll. Re-pairings the user collected
+  during cleartext debugging are also collapsed. Same-daemon
+  ties resolve to the most recently added connection
+  (``added_at``).
+- Per-daemon state (``afterSeq`` / ``seenIds``) is keyed by
+  ``daemon:<device_id>`` instead of ``connection.id``. Re-pairing
+  the same daemon no longer resets the cursor.
+- In-memory mutex on ``runPollOnce``: a second wake-up while the
+  first is still running returns ``{skipped: 'in-flight'}``
+  instead of starting a second concurrent poll.
+- ``chat.turn_done`` removed from ``NOTIFIABLE_KINDS``: every
+  assistant turn was emitting one, flooding the lock screen
+  with redundant noise. Real "user got a message" still fires
+  through ``agent.message``.
+- Pairing rejects a daemon that answers ``host.version`` without
+  a ``device_id`` (instead of saving a half-functional connection
+  that ALN would then ignore). ``saveConnection`` refuses entries
+  without a ``deviceId`` and ``loadConnections`` filters any
+  legacy entry lacking one. ``unpair()`` and ``signOut()`` also
+  wipe the legacy ``alpi.endpoint`` SecureStore key for hygiene.
+
+Logic split across pure helpers (``groupConnectionsByDaemon``,
+``alnStateKey``); regression tests cover group-by-daemon + route
+failover, claim-before-fire ordering, in-flight mutex, no-event
+skip, permission bail, no-``chat.turn_done``, and
+``alnStateKey`` requiring a ``deviceId``.
+
 ## v0.1.13 — 2026-05-24 — your message stops showing twice while streaming
 
 Since alpi v0.6.2 the daemon writes a *stub* turn (with the user

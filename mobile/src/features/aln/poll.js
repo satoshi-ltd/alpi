@@ -1,6 +1,6 @@
 import { call } from '../../lib/rpc';
 import { NOTIFIABLE_KINDS } from './kinds';
-import { loadState, recordSeen, saveState } from './state';
+import { alnStateKey, loadState, recordSeen, saveState } from './state';
 
 export { recordSeen };
 
@@ -12,10 +12,12 @@ export const WAKE_BUDGET_MS = 25_000;
 
 export async function pollConnection(connection, { now } = {}) {
   const nowMs = now ?? Date.now();
-  let state = await loadState(connection.id);
+  const key = alnStateKey(connection);
+  let state = await loadState(key);
   state.lastPollMs = nowMs;
 
   const newEvents = [];
+  let ok = false;
 
   try {
     const resp = await call(
@@ -32,16 +34,17 @@ export async function pollConnection(connection, { now } = {}) {
     }
     state.lastSuccessMs = Date.now();
     state.lastError = '';
+    ok = true;
   } catch (e) {
     state.lastError = String(e?.message || e || 'poll failed');
   }
 
-  await saveState(connection.id, state);
-  return { events: newEvents, state };
+  await saveState(key, state);
+  return { events: newEvents, state, ok };
 }
 
-export async function commitDelivered(connectionId, events) {
-  let state = await loadState(connectionId);
+export async function commitDelivered(stateKey, events) {
+  let state = await loadState(stateKey);
   let cursor = state.afterSeq;
   for (const ev of events) {
     const evId = `${ev?.event || ''}:${ev?.seq ?? ''}`;
@@ -49,5 +52,5 @@ export async function commitDelivered(connectionId, events) {
     if (Number.isFinite(ev?.seq) && ev.seq > cursor) cursor = ev.seq;
   }
   state.afterSeq = cursor;
-  await saveState(connectionId, state);
+  await saveState(stateKey, state);
 }

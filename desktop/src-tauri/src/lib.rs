@@ -1626,10 +1626,16 @@ fn subscribe_daemon_events(app: AppHandle) {
 
     loop {
         let starting_id = host_client::active_connection_id();
+        let Some(sub_key) = host_client::active_subscription_key() else {
+            host_client::probe_active();
+            std::thread::sleep(std::time::Duration::from_secs(2));
+            continue;
+        };
         let app_for_frames = app.clone();
         let id_for_payload = starting_id.clone();
         let states_for_loop = Arc::clone(&states);
         let starting_id_for_match = starting_id.clone();
+        let key_for_loop = sub_key.clone();
 
         let _ = host_client::call_stream_until(
             "host.events.subscribe",
@@ -1642,7 +1648,7 @@ fn subscribe_daemon_events(app: AppHandle) {
                     .lock()
                     .unwrap_or_else(|e| e.into_inner());
                 let state = guard
-                    .entry(starting_id_for_match.clone())
+                    .entry(key_for_loop.clone())
                     .or_insert_with(|| SubscribeState::new(1024));
                 let action = classify_frame(state, &frame);
                 drop(guard);
@@ -1660,7 +1666,7 @@ fn subscribe_daemon_events(app: AppHandle) {
                                     let mut g = states_for_loop
                                         .lock()
                                         .unwrap_or_else(|e| e.into_inner());
-                                    let s = g.entry(starting_id_for_match.clone())
+                                    let s = g.entry(key_for_loop.clone())
                                         .or_insert_with(|| SubscribeState::new(1024));
                                     if let Some(seq) =
                                         ev.get("seq").and_then(|v| v.as_u64())
@@ -1691,7 +1697,7 @@ fn subscribe_daemon_events(app: AppHandle) {
                                 let mut g = states_for_loop
                                     .lock()
                                     .unwrap_or_else(|e| e.into_inner());
-                                g.entry(starting_id_for_match.clone())
+                                g.entry(key_for_loop.clone())
                                     .or_insert_with(|| SubscribeState::new(1024))
                                     .bump_seq(next);
                             }
@@ -1702,7 +1708,7 @@ fn subscribe_daemon_events(app: AppHandle) {
                             let mut g = states_for_loop
                                 .lock()
                                 .unwrap_or_else(|e| e.into_inner());
-                            g.entry(starting_id_for_match.clone())
+                            g.entry(key_for_loop.clone())
                                 .or_insert_with(|| SubscribeState::new(1024))
                                 .bump_seq(anchor);
                         }

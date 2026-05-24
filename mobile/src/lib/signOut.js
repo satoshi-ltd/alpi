@@ -2,6 +2,7 @@ import * as SecureStore from 'expo-secure-store';
 
 import { resetReadState } from './readState';
 
+// alpi.endpoint is the legacy single-endpoint key; loadConnections no longer migrates it, but signOut still wipes it so an old build's leftover token does not linger in SecureStore.
 const KEYS = [
   'alpi.connections',
   'alpi.endpoint',

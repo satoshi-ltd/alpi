@@ -3,6 +3,11 @@ import * as SecureStore from 'expo-secure-store';
 const KEY_PREFIX = 'aln.state.';
 const SEEN_CAP = 500;
 
+export function alnStateKey(connection) {
+  const id = connection?.deviceId;
+  return id ? `daemon:${id}` : '';
+}
+
 function secureOpts() {
   try {
     if (SecureStore.AFTER_FIRST_UNLOCK !== undefined) {

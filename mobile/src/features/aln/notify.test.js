@@ -24,7 +24,7 @@ beforeEach(() => {
 });
 
 describe('fireForEvent foreground gating', () => {
-  const ev = { event: 'wg.mention', seq: 7, data: { profile: 'vera', wg_id: 'wg1', summary: '@vera' } };
+  const ev = { event: 'wg.done', seq: 7, data: { profile: 'vera', wg_id: 'wg1', summary: 'task closed' } };
   const conn = { id: 'c1', name: 'home' };
 
   it('fires when app is in background', async () => {

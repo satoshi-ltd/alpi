@@ -9,6 +9,7 @@ vi.mock('expo-secure-store', () => ({
 }));
 
 import {
+  alnStateKey,
   clearState,
   loadState,
   recordSeen,
@@ -21,6 +22,22 @@ describe('stateKey', () => {
     expect(stateKey('a')).toBe('aln.state.a');
     expect(stateKey('b')).toBe('aln.state.b');
     expect(stateKey('a')).not.toBe(stateKey('b'));
+  });
+});
+
+describe('alnStateKey', () => {
+  it('keys by deviceId so different connections to the same daemon share one state file', () => {
+    const a = { id: 'conn-1', deviceId: 'mac-uuid' };
+    const b = { id: 'conn-2', deviceId: 'mac-uuid' };
+    expect(alnStateKey(a)).toBe(alnStateKey(b));
+    expect(alnStateKey(a)).toBe('daemon:mac-uuid');
+  });
+
+  it('returns empty string when deviceId is missing — no legacy fallback to connection id', () => {
+    expect(alnStateKey({ id: 'conn-no-deviceid' })).toBe('');
+    expect(alnStateKey(null)).toBe('');
+    expect(alnStateKey(undefined)).toBe('');
+    expect(alnStateKey({})).toBe('');
   });
 });
 

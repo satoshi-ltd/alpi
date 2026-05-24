@@ -104,7 +104,40 @@ async def _host_version(
         "agent_name": "alpi",
         "version": _alpi_version,
         "device_name": device_name,
+        "device_id": _ensure_device_id(server.home),
     }
+
+
+def _ensure_device_id(home: Path) -> str:
+    # Atomic create-or-read so two concurrent first-call clients cannot mint distinct ids and race the write — the loser's O_EXCL fails and it falls through to read the winner's value.
+    import os
+    import uuid
+    path = home / "host" / "device_id"
+    try:
+        existing = path.read_text(encoding="utf-8").strip()
+        if existing:
+            return existing
+    except OSError:
+        pass
+    new_id = uuid.uuid4().hex
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        fd = os.open(str(path), os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+        try:
+            os.write(fd, new_id.encode("utf-8"))
+        finally:
+            os.close(fd)
+        return new_id
+    except FileExistsError:
+        try:
+            existing = path.read_text(encoding="utf-8").strip()
+            if existing:
+                return existing
+        except OSError:
+            pass
+        return ""
+    except OSError:
+        return ""
 
 
 async def _profiles_list(

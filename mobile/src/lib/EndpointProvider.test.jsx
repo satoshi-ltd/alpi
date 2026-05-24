@@ -42,21 +42,31 @@ vi.mock("./store", () => ({
     storeMutations.push({ op: "clear" });
     storeState = { v: 1, active_id: null, connections: [] };
   },
+  setDeviceIds: async (map) => {
+    storeMutations.push({ op: "setDeviceIds", count: map.size });
+    for (const conn of storeState.connections) {
+      const next = map.get(conn.id);
+      if (next) conn.deviceId = next;
+    }
+    return structuredClone(storeState);
+  },
 }));
 
 // Probe returns whatever the test sets. Default: every connection is online.
 let probeResults = new Map();
 vi.mock("./probe", () => ({
-  probe: async (endpoint) => probeResults.get(endpoint.id) ?? { status: "online", version: "0.4.54" },
+  probe: async (endpoint) => probeResults.get(endpoint.id) ?? { status: "online", version: "0.4.54", deviceId: null },
   probeAll: async (connections) => {
     const status = new Map();
     const versions = new Map();
+    const deviceIds = new Map();
     for (const c of connections) {
       const r = probeResults.get(c.id) ?? { status: "online", version: "0.4.54" };
       status.set(c.id, r.status);
       if (r.version) versions.set(c.id, r.version);
+      if (r.deviceId) deviceIds.set(c.id, r.deviceId);
     }
-    return { status, versions };
+    return { status, versions, deviceIds };
   },
 }));
 

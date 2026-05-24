@@ -61,8 +61,72 @@ async def test_host_version_returns_alpi_runtime(tmp_path: Path) -> None:
     })
     assert resp["result"]["agent_name"] == "alpi"
     assert resp["result"]["version"] == alpi_version
-    # device_name is always present (empty when alpi setup was skipped) so paired clients can label the connection with the daemon's identity instead of whatever string the pairing link carried.
     assert "device_name" in resp["result"]
+    assert "device_id" in resp["result"]
+
+
+@pytest.mark.asyncio
+async def test_host_version_device_id_is_stable_across_calls(tmp_path: Path) -> None:
+    srv = host_server.Server(home=tmp_path)
+    host_device_state.register(srv)
+
+    first = await srv._dispatch({"id": "v1", "method": "host.version", "params": {}})
+    second = await srv._dispatch({"id": "v2", "method": "host.version", "params": {}})
+
+    assert first["result"]["device_id"]
+    assert first["result"]["device_id"] == second["result"]["device_id"]
+    persisted = (tmp_path / "host" / "device_id").read_text(encoding="utf-8").strip()
+    assert persisted == first["result"]["device_id"]
+
+
+@pytest.mark.asyncio
+async def test_host_version_device_id_survives_restart(tmp_path: Path) -> None:
+    (tmp_path / "host").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "host" / "device_id").write_text("preexisting-id-42", encoding="utf-8")
+
+    srv = host_server.Server(home=tmp_path)
+    host_device_state.register(srv)
+    resp = await srv._dispatch({"id": "v", "method": "host.version", "params": {}})
+
+    assert resp["result"]["device_id"] == "preexisting-id-42"
+
+
+@pytest.mark.asyncio
+async def test_host_version_device_id_is_atomic_under_concurrent_first_call(tmp_path: Path) -> None:
+    """Two clients hitting host.version at the same first-call moment must agree on one device_id. O_EXCL create means the loser's open raises FileExistsError and it re-reads the winner's value, instead of overwriting it."""
+    import asyncio
+
+    srv = host_server.Server(home=tmp_path)
+    host_device_state.register(srv)
+
+    results = await asyncio.gather(*[
+        srv._dispatch({"id": f"v{i}", "method": "host.version", "params": {}})
+        for i in range(8)
+    ])
+    ids = {r["result"]["device_id"] for r in results}
+    assert len(ids) == 1, f"concurrent first-call minted {len(ids)} distinct ids: {ids}"
+    persisted = (tmp_path / "host" / "device_id").read_text(encoding="utf-8").strip()
+    assert persisted == next(iter(ids))
+
+
+@pytest.mark.asyncio
+async def test_host_version_device_id_is_per_home_so_two_daemons_get_distinct_ids(tmp_path: Path) -> None:
+    home_a = tmp_path / "a"
+    home_b = tmp_path / "b"
+    home_a.mkdir()
+    home_b.mkdir()
+
+    srv_a = host_server.Server(home=home_a)
+    host_device_state.register(srv_a)
+    srv_b = host_server.Server(home=home_b)
+    host_device_state.register(srv_b)
+
+    a = await srv_a._dispatch({"id": "va", "method": "host.version", "params": {}})
+    b = await srv_b._dispatch({"id": "vb", "method": "host.version", "params": {}})
+
+    assert a["result"]["device_id"]
+    assert b["result"]["device_id"]
+    assert a["result"]["device_id"] != b["result"]["device_id"]
 
 
 @pytest.mark.asyncio

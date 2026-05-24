@@ -1,9 +1,8 @@
-// Storage: { v:1, active_id, connections: [{id,name,ip,port,token,kind:'remote',added_at}] }. Legacy single-endpoint `alpi.endpoint` migrates to id='paired' on first load.
-
 import * as SecureStore from 'expo-secure-store';
 
 const KEY = 'alpi.connections';
-const LEGACY_KEY = 'alpi.endpoint';
+// Wiped on clearAll() so an old build's leftover token does not linger after unpair. Never read/migrated.
+const LEGACY_ENDPOINT_KEY = 'alpi.endpoint';
 
 function secureOpts() {
   try {
@@ -34,7 +33,9 @@ function isValidConnection(c) {
     && typeof c.ip === 'string'
     && typeof c.port === 'number'
     && typeof c.token === 'string'
-    && typeof c.name === 'string';
+    && typeof c.name === 'string'
+    && typeof c.deviceId === 'string'
+    && c.deviceId.length > 0;
 }
 
 async function readRaw() {
@@ -47,43 +48,15 @@ async function writeRaw(state) {
   await SecureStore.setItemAsync(KEY, JSON.stringify(state), secureOpts());
 }
 
-async function migrateLegacy() {
-  const legacy = await SecureStore.getItemAsync(LEGACY_KEY);
-  if (!legacy) return null;
-  try {
-    const ep = JSON.parse(legacy);
-    if (!ep || typeof ep.ip !== 'string' || typeof ep.port !== 'number' || typeof ep.token !== 'string') {
-      await SecureStore.deleteItemAsync(LEGACY_KEY);
-      return null;
-    }
-    const conn = {
-      id: 'paired',
-      name: typeof ep.name === 'string' ? ep.name : 'alpi',
-      ip: ep.ip,
-      port: ep.port,
-      token: ep.token,
-      kind: 'remote',
-      added_at: Date.now(),
-    };
-    const state = { v: 1, active_id: conn.id, connections: [conn] };
-    await writeRaw(state);
-    await SecureStore.deleteItemAsync(LEGACY_KEY);
-    return state;
-  } catch {
-    return null;
-  }
-}
-
 export async function loadConnections() {
-  let state = await readRaw();
-  if (!state) {
-    const migrated = await migrateLegacy();
-    state = migrated ?? { v: 1, active_id: null, connections: [] };
-  }
+  const state = (await readRaw()) ?? { v: 1, active_id: null, connections: [] };
   return normalize(state);
 }
 
 export async function saveConnection(endpoint) {
+  if (!endpoint?.deviceId || typeof endpoint.deviceId !== 'string') {
+    throw new Error('saveConnection requires a deviceId — pair against an alpi daemon v0.6.6 or newer.');
+  }
   const state = await loadConnections();
   const id = endpoint.id ?? genId();
   const conn = {
@@ -94,6 +67,7 @@ export async function saveConnection(endpoint) {
     token: endpoint.token,
     kind: 'remote',
     added_at: Date.now(),
+    deviceId: endpoint.deviceId,
   };
   const existingIdx = state.connections.findIndex((c) => c.id === id);
   if (existingIdx >= 0) state.connections[existingIdx] = conn;
@@ -121,5 +95,19 @@ export async function setActiveConnection(id) {
 
 export async function clearAll() {
   await SecureStore.deleteItemAsync(KEY);
-  await SecureStore.deleteItemAsync(LEGACY_KEY);
+  await SecureStore.deleteItemAsync(LEGACY_ENDPOINT_KEY);
+}
+
+export async function setDeviceIds(idToDeviceId) {
+  const state = await loadConnections();
+  let changed = false;
+  for (const conn of state.connections) {
+    const next = idToDeviceId.get(conn.id);
+    if (next && conn.deviceId !== next) {
+      conn.deviceId = next;
+      changed = true;
+    }
+  }
+  if (changed) await writeRaw(state);
+  return state;
 }
