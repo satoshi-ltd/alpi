@@ -1007,6 +1007,62 @@ fn run_gmail_oauth(
 const _OAUTH_READ_TIMEOUT_SECS: u64 = 30;
 const _OAUTH_ACCEPT_TIMEOUT_SECS: u64 = 300;
 
+// Paste fallback for cross-machine setups (SSH X-forwarding, VNC,
+// Tauri inside a VM, …) where the desktop process and the user's
+// browser don't share a 127.0.0.1. The user opens the consent URL
+// on whatever device has their browser, copies the failed redirect
+// URL from the address bar, pastes it back here. We parse code+state
+// and call exchange directly — same daemon endpoint the loopback
+// path uses, no new architecture.
+#[tauri::command]
+async fn gateway_gmail_paste(app: AppHandle, pasted_url: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let emit_err = |text: String| {
+            let _ = app.emit(
+                "gmail-auth-event",
+                serde_json::json!({"event": "error", "text": text}),
+            );
+        };
+
+        let (code, state, error) = parse_oauth_callback_input(&pasted_url);
+        if !error.is_empty() {
+            return emit_err(format!("Google denied consent: {error}"));
+        }
+        if code.is_empty() {
+            return emit_err(
+                "no `code` parameter found in pasted URL — copy the FULL redirect URL from your browser's address bar"
+                    .into(),
+            );
+        }
+        if state.is_empty() {
+            return emit_err(
+                "no `state` parameter found in pasted URL — the link is malformed".into(),
+            );
+        }
+
+        match host_client::call(
+            "host.gateway.gmail.exchange",
+            serde_json::json!({"state": state, "code": code}),
+        ) {
+            Ok(v) => {
+                let email = v
+                    .get("email")
+                    .and_then(|e| e.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                let _ = app.emit(
+                    "gmail-auth-event",
+                    serde_json::json!({"event": "authorized", "email": email}),
+                );
+            }
+            Err(e) => emit_err(format!("token exchange failed: {e}")),
+        }
+    })
+    .await
+    .map_err(|e| format!("join: {e}"))?;
+    Ok(())
+}
+
 fn parse_oauth_callback(path: &str) -> (String, String, String) {
     let query = path.split_once('?').map(|(_, q)| q).unwrap_or("");
     let mut code = String::new();
@@ -1026,6 +1082,23 @@ fn parse_oauth_callback(path: &str) -> (String, String, String) {
         }
     }
     (code, state, error)
+}
+
+// Same query parser, but tolerates the user pasting a full URL
+// (``http://127.0.0.1:55989/?code=…``) — the paste fallback in the
+// desktop modal accepts whatever the user copies from their browser
+// bar, including the scheme + host they can't reach.
+fn parse_oauth_callback_input(input: &str) -> (String, String, String) {
+    let trimmed = input.trim();
+    let path_query = if let Some((_, after_scheme)) = trimmed.split_once("://") {
+        match after_scheme.find('/') {
+            Some(slash) => &after_scheme[slash..],
+            None => "/",
+        }
+    } else {
+        trimmed
+    };
+    parse_oauth_callback(path_query)
 }
 
 fn percent_decode(s: &str) -> String {
@@ -2181,6 +2254,7 @@ pub fn run() {
             voice_autoplay,
             gateway_config,
             gateway_gmail_authorize,
+            gateway_gmail_paste,
             gateway_remove,
             mcp_add,
             mcp_remove,
@@ -2208,7 +2282,7 @@ pub fn run() {
 
 #[cfg(test)]
 mod oauth_callback_tests {
-    use super::{parse_oauth_callback, percent_decode};
+    use super::{parse_oauth_callback, parse_oauth_callback_input, percent_decode};
 
     #[test]
     fn parse_extracts_code_state_error() {
@@ -2250,5 +2324,42 @@ mod oauth_callback_tests {
         assert_eq!(percent_decode("abc%"), "abc%");
         assert_eq!(percent_decode("abc%2"), "abc%2");
         assert_eq!(percent_decode("abc%2Q"), "abc%2Q"); // not hex
+    }
+
+    #[test]
+    fn input_accepts_full_url() {
+        let (c, s, e) =
+            parse_oauth_callback_input("http://127.0.0.1:55989/?code=abc&state=xyz");
+        assert_eq!(c, "abc");
+        assert_eq!(s, "xyz");
+        assert!(e.is_empty());
+    }
+
+    #[test]
+    fn input_accepts_query_only() {
+        let (c, s, _) = parse_oauth_callback_input("/?code=abc&state=xyz");
+        assert_eq!(c, "abc");
+        assert_eq!(s, "xyz");
+    }
+
+    #[test]
+    fn input_trims_whitespace() {
+        let (c, _, _) =
+            parse_oauth_callback_input("  http://127.0.0.1:1/?code=trimmed&state=x  \n");
+        assert_eq!(c, "trimmed");
+    }
+
+    #[test]
+    fn input_tolerates_https_scheme() {
+        // Google sometimes appends to a URL the user could mistakenly grab
+        // from a redirector — the parser still works after the first '/'.
+        let (c, _, _) = parse_oauth_callback_input("https://anything/?code=ok&state=s");
+        assert_eq!(c, "ok");
+    }
+
+    #[test]
+    fn input_returns_empty_when_no_query() {
+        let (c, s, e) = parse_oauth_callback_input("http://127.0.0.1:1/");
+        assert!(c.is_empty() && s.is_empty() && e.is_empty());
     }
 }

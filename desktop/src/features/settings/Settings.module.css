@@ -791,6 +791,34 @@
   margin-top: var(--space-2);
   word-break: break-all;
 }
+
+.gmailPasteFallback {
+  margin-top: var(--space-3);
+}
+.gmailPasteSummary {
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: var(--ink-3);
+}
+.gmailPasteHint {
+  margin-top: var(--space-2);
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+.gmailPasteInput {
+  width: 100%;
+  margin-top: var(--space-2);
+  margin-bottom: var(--space-2);
+  font-family: var(--font-mono, monospace);
+  font-size: 0.78rem;
+  padding: var(--space-2);
+  border: 1px solid var(--c-border, #ccc);
+  border-radius: var(--radius-2, 4px);
+  background: var(--c-bg-input, transparent);
+  color: inherit;
+  resize: vertical;
+  word-break: break-all;
+}
 .popoverFooterRight {
   margin-left: auto;
   display: flex;

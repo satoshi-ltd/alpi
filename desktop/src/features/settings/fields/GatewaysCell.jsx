@@ -135,6 +135,7 @@ function GmailAuthModal({ profile, config, onClose, onSaved }) {
   }, [config]);
 
   const [authUrl, setAuthUrl] = useState("");
+  const [pastedUrl, setPastedUrl] = useState("");
 
   useEffect(() => {
     mounted.current = true;
@@ -189,6 +190,20 @@ function GmailAuthModal({ profile, config, onClose, onSaved }) {
         clientSecret: clientSecret.trim(),
         allowedSenders: senders.trim(),
       });
+    } catch (e) {
+      setPhase("error");
+      setStatusText(String(e));
+      setBusy(false);
+    }
+  }
+
+  async function submitPastedCallback() {
+    const url = pastedUrl.trim();
+    if (!url) return;
+    setBusy(true);
+    setStatusText("Exchanging code with Google…");
+    try {
+      await invoke("gateway_gmail_paste", { pastedUrl: url });
     } catch (e) {
       setPhase("error");
       setStatusText(String(e));
@@ -270,6 +285,35 @@ function GmailAuthModal({ profile, config, onClose, onSaved }) {
             {authUrl}
           </a>
         </div>
+      )}
+      {phase === "waiting" && (
+        <details className={styles.gmailPasteFallback}>
+          <summary className={styles.gmailPasteSummary}>
+            Browser on a different machine? Paste the callback URL
+          </summary>
+          <p className={`${styles.muted} ${styles.gmailPasteHint}`}>
+            After authorizing in your browser, Google redirects to a
+            <code> http://127.0.0.1:…/?code=… </code> URL that fails to
+            load. Copy that full URL from the address bar and paste it
+            here.
+          </p>
+          <textarea
+            className={styles.gmailPasteInput}
+            placeholder="http://127.0.0.1:55989/?code=…&state=…"
+            value={pastedUrl}
+            onChange={(e) => setPastedUrl(e.target.value)}
+            rows={3}
+            spellCheck={false}
+            disabled={busy && phase !== "waiting"}
+          />
+          <Btn
+            variant="primary"
+            onClick={submitPastedCallback}
+            disabled={!pastedUrl.trim() || (busy && statusText.startsWith("Exchanging"))}
+          >
+            Use pasted URL
+          </Btn>
+        </details>
       )}
       <div className={styles.popoverFooter}>
         {config?.GMAIL_CLIENT_ID && !busy && (

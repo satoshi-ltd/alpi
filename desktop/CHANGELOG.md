@@ -11,6 +11,31 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.3.18 — 2026-05-25 — Gmail paste fallback for cross-machine setups
+
+0.3.17 fixed remote daemons by moving the OAuth loopback to
+the desktop process. That still assumes the **desktop** and
+the **browser** are on the same machine — which fails for
+SSH X-forwarding, VNC, or Tauri running inside a VM/container
+while you stare at it from your host. Added a paste escape
+hatch alongside the loopback.
+
+- A new "Browser on a different machine? Paste the callback
+  URL" disclosure in the Gmail consent modal. Open the auth
+  URL on whichever device has your real browser, copy the
+  failed ``http://127.0.0.1:…/?code=…`` URL from the address
+  bar, paste it back here, click "Use pasted URL". The desktop
+  parses the URL and calls ``host.gateway.gmail.exchange``
+  directly with the code+state.
+- The loopback path is still the fast happy path — it just
+  races the paste flow. Whichever finishes first wins; the
+  loser hits "unknown or expired state" on the daemon and the
+  client ignores it silently.
+- New Tauri command ``gateway_gmail_paste`` plus a tolerant
+  callback-URL parser (accepts a full URL or just the query).
+  Unit tests cover both shapes plus whitespace trim and
+  malformed input.
+
 ## v0.3.17 — 2026-05-25 — Gmail authorization works against remote daemons
 
 The Gmail gateway modal used to lie ("Browser opened…") and
