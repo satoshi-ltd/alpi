@@ -11,6 +11,29 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.3.17 — 2026-05-25 — Gmail authorization works against remote daemons
+
+The Gmail gateway modal used to lie ("Browser opened…") and
+hang forever when the daemon was on another machine: the OAuth
+loopback ran inside the daemon, unreachable from your browser.
+
+- The loopback HTTP server now runs in the desktop process,
+  not the daemon. The flow: bind a free port on this machine →
+  ``host.gateway.gmail.begin`` returns the consent URL →
+  system browser opens → callback hits the local loopback →
+  ``host.gateway.gmail.exchange`` finishes the token exchange
+  on the daemon. Works against a local or Umbrel/SSH daemon.
+- The modal shows the consent URL inline while waiting, with
+  a clickable link. If your default browser failed to launch,
+  open the link in any browser **on this machine** — the
+  loopback redirect is bound to ``127.0.0.1`` here, so opening
+  the URL from your phone or another laptop won't reach back.
+- The flow times out after 5 min if no callback arrives (closed
+  tab, consent abandoned, etc.) instead of hanging the modal
+  silently — error surfaces in the toast and the modal status.
+- Requires alpi ≥ 0.6.9 (the new ``gmail.begin`` /
+  ``gmail.exchange`` host methods).
+
 ## v0.3.16 — 2026-05-25 — launch with a dead daemon no longer blanks the window
 
 Two real crashes plus a UX overhaul of the cold-start offline

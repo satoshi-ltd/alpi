@@ -134,6 +134,8 @@ function GmailAuthModal({ profile, config, onClose, onSaved }) {
     }
   }, [config]);
 
+  const [authUrl, setAuthUrl] = useState("");
+
   useEffect(() => {
     mounted.current = true;
     const unlistenPromise = listen("gmail-auth-event", (ev) => {
@@ -141,15 +143,20 @@ function GmailAuthModal({ profile, config, onClose, onSaved }) {
       const frame = ev.payload;
       if (frame.event === "browser_opened") {
         setPhase("waiting");
-        setStatusText("Browser opened — complete the Google consent flow…");
+        setAuthUrl(frame.auth_url || "");
+        setStatusText(
+          "Complete the Google consent flow in your browser. If no tab opened, use the link below.",
+        );
       } else if (frame.event === "authorized") {
         setPhase("done");
+        setAuthUrl("");
         setStatusText(`Authorized as ${frame.email}`);
         setBusy(false);
         notify({ message: `Gmail authorized as ${frame.email}`, variant: "success" });
         onSaved();
       } else if (frame.event === "error") {
         setPhase("error");
+        setAuthUrl("");
         setStatusText(frame.text || "authorization failed");
         setBusy(false);
         notify({ message: frame.text || "Gmail auth failed", variant: "error", duration: 5000 });
@@ -246,18 +253,22 @@ function GmailAuthModal({ profile, config, onClose, onSaved }) {
       </div>
       {statusText && (
         <div
-          className={styles.muted}
-          style={{
-            marginTop: "var(--space-2)",
-            color:
-              phase === "error"
-                ? "var(--c-danger)"
-                : phase === "done"
-                  ? "var(--c-success)"
-                  : undefined,
-          }}
+          className={`${styles.muted} ${styles.gmailAuthStatus} ${
+            phase === "error"
+              ? styles.gmailAuthStatusError
+              : phase === "done"
+                ? styles.gmailAuthStatusDone
+                : ""
+          }`}
         >
           {statusText}
+        </div>
+      )}
+      {phase === "waiting" && authUrl && (
+        <div className={`${styles.muted} ${styles.gmailAuthUrl}`}>
+          <a href={authUrl} target="_blank" rel="noreferrer">
+            {authUrl}
+          </a>
         </div>
       )}
       <div className={styles.popoverFooter}>

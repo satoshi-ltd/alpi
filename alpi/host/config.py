@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import re
+import time
 from pathlib import Path
 from typing import Any
 
@@ -58,7 +59,8 @@ def register(server: host_server.Server) -> None:
     server.register("host.mcp.add", _mcp_add)
     server.register("host.mcp.remove", _mcp_remove)
     server.register("host.gateway.remove", _gateway_remove)
-    server.register_stream("host.gateway.gmail_authorize", _gmail_authorize)
+    server.register("host.gateway.gmail.begin", _gmail_begin)
+    server.register("host.gateway.gmail.exchange", _gmail_exchange)
     server.register("host.sandbox.set", _sandbox_set)
     server.register("host.sandbox.network", _sandbox_network)
     server.register("host.voice.set_voice", _voice_set_voice)
@@ -569,12 +571,69 @@ _GATEWAY_ENV_KEYS = {
 }
 
 
-async def _gmail_authorize(
-    params: dict[str, Any],
-    _server: host_server.Server,
-    send_frame,
-) -> None:
-    import asyncio
+# In-memory pending OAuth handles, keyed by ``state``. The verifier is
+# the PKCE secret — it lives only on the daemon between begin/exchange.
+# A daemon restart between the two clears them (TTL-bounded anyway), so
+# the client must restart the flow; that's preferable to persisting a
+# secret blob across restarts for a 5-minute window.
+_GMAIL_BEGIN_TTL = 300
+_pending_gmail: dict[str, dict[str, Any]] = {}
+
+
+def _gc_pending_gmail() -> None:
+    now = time.time()
+    expired = [
+        s for s, rec in _pending_gmail.items() if now - rec["created"] > _GMAIL_BEGIN_TTL
+    ]
+    for s in expired:
+        _pending_gmail.pop(s, None)
+
+
+def _validate_loopback_redirect_uri(uri: str) -> None:
+    """Reject anything that isn't a loopback http URI.
+
+    Google's "Desktop app" OAuth client only accepts loopback redirect
+    targets, and we want to mirror that contract on the daemon side —
+    if a future client sneaks in a non-loopback URI, the token would
+    end up at someone else's HTTP endpoint. Cheap guardrail."""
+    from urllib.parse import urlparse
+    try:
+        parsed = urlparse(uri)
+    except ValueError as exc:
+        raise host_server.HandlerError(
+            -32602, "invalid-params",
+            data={"detail": f"redirect_uri unparseable: {exc}"},
+        )
+    if parsed.scheme != "http":
+        raise host_server.HandlerError(
+            -32602, "invalid-params",
+            data={"detail": "redirect_uri scheme must be http (loopback)"},
+        )
+    if parsed.hostname not in ("127.0.0.1", "localhost"):
+        raise host_server.HandlerError(
+            -32602, "invalid-params",
+            data={"detail": "redirect_uri host must be 127.0.0.1 or localhost"},
+        )
+    try:
+        port = parsed.port
+    except ValueError:
+        port = None
+    if port is None or not (1 <= port <= 65535):
+        raise host_server.HandlerError(
+            -32602, "invalid-params",
+            data={"detail": "redirect_uri must specify a valid port"},
+        )
+
+
+async def _gmail_begin(
+    params: dict[str, Any], _server: host_server.Server,
+) -> dict[str, Any]:
+    """Persist Gmail OAuth credentials and start a consent flow.
+
+    The client supplies its own ``redirect_uri`` — typically a
+    loopback on the **client machine**, where the browser actually
+    runs. The daemon stashes the PKCE verifier under ``state`` until
+    ``host.gateway.gmail.exchange`` comes back with the code."""
     from alpi.mail import gmail_auth
     from alpi.model_selector import _append_env
 
@@ -594,13 +653,19 @@ async def _gmail_authorize(
         senders = ",".join(
             s.strip().lower() for s in str(senders_raw).split(",") if s.strip()
         )
+    redirect_uri = str(params.get("redirect_uri") or "").strip()
+    if not redirect_uri:
+        raise host_server.HandlerError(
+            -32602, "invalid-params",
+            data={"detail": "redirect_uri is required (client-side loopback URL)"},
+        )
+    _validate_loopback_redirect_uri(redirect_uri)
 
     if not client_id or not client_secret:
-        await send_frame({
-            "event": "error",
-            "text": "client_id and client_secret are required",
-        })
-        return
+        raise host_server.HandlerError(
+            -32602, "invalid-params",
+            data={"detail": "client_id and client_secret are required"},
+        )
 
     for key, val in (
         ("GMAIL_CLIENT_ID", client_id),
@@ -609,17 +674,59 @@ async def _gmail_authorize(
     ):
         _append_env(cfg.env_path, key, val)
 
-    await send_frame({"event": "browser_opened"})
-
-    loop = asyncio.get_running_loop()
+    _gc_pending_gmail()
     try:
-        token = await loop.run_in_executor(None, lambda: gmail_auth.first_run(home))
-        _emit_gateway_changed(home, "gmail", "authorized")
-        await send_frame({"event": "authorized", "email": token.email})
+        handle = gmail_auth.prepare(home, redirect_uri=redirect_uri)
     except gmail_auth.GmailAuthError as exc:
-        await send_frame({"event": "error", "text": str(exc)})
-    except Exception as exc:  # noqa: BLE001
-        await send_frame({"event": "error", "text": f"unexpected: {exc!r}"})
+        raise host_server.HandlerError(
+            -32603, "internal", data={"detail": str(exc)},
+        )
+    _pending_gmail[handle.state] = {
+        "code_verifier": handle.code_verifier,
+        "redirect_uri": handle.redirect_uri,
+        "home": home,
+        "created": time.time(),
+    }
+    return {"auth_url": handle.auth_url, "state": handle.state}
+
+
+async def _gmail_exchange(
+    params: dict[str, Any], _server: host_server.Server,
+) -> dict[str, Any]:
+    """Finalize the consent flow. The client posts ``state`` + ``code`` it
+    captured from its own loopback redirect."""
+    from alpi.mail import gmail_auth
+
+    state = str(params.get("state") or "").strip()
+    code = str(params.get("code") or "").strip()
+    if not state or not code:
+        raise host_server.HandlerError(
+            -32602, "invalid-params",
+            data={"detail": "state and code are required"},
+        )
+
+    _gc_pending_gmail()
+    record = _pending_gmail.pop(state, None)
+    if record is None:
+        raise host_server.HandlerError(
+            -32602, "invalid-params",
+            data={"detail": "unknown or expired state — restart the auth flow"},
+        )
+
+    home: Path = record["home"]
+    try:
+        token = gmail_auth.exchange(
+            home,
+            code=code,
+            code_verifier=record["code_verifier"],
+            redirect_uri=record["redirect_uri"],
+        )
+    except gmail_auth.GmailAuthError as exc:
+        raise host_server.HandlerError(
+            -32603, "internal", data={"detail": str(exc)},
+        )
+    _emit_gateway_changed(home, "gmail", "authorized")
+    return {"email": token.email}
 
 
 def _read_env_file(env_path: Path) -> dict[str, str]:

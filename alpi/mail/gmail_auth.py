@@ -1,11 +1,11 @@
-"""Gmail OAuth2 — Authorization Code + PKCE flow (desktop loopback).
+"""Gmail OAuth2 — Authorization Code + PKCE flow.
 
 Scopes requested:
   - https://www.googleapis.com/auth/gmail.modify
   - https://www.googleapis.com/auth/gmail.send
 
 Token lifecycle:
-  - First run: browser consent → loopback callback → exchange code
+  - First run: browser consent → callback delivers ``code`` → exchange
     for access + refresh tokens. Saved to
     ``~/.alpi/profiles/<name>/gmail_token.json`` (mode 0600).
   - Subsequent: ``get_access_token()`` refreshes if <120s of
@@ -13,8 +13,20 @@ Token lifecycle:
     schedule daemon racing on the same file.
 
 Client credentials (``GMAIL_CLIENT_ID`` / ``GMAIL_CLIENT_SECRET``)
-are read from the profile's ``.env``. Storing them there matches
-the pattern used by every other secret in alpi.
+are read from the profile's ``.env``.
+
+The flow is **split** into ``prepare`` (build auth URL, allocate
+state + PKCE verifier) and ``exchange`` (swap code for tokens).
+Callers compose them:
+
+  - ``first_run(home)`` — CLI local: opens a loopback on the
+    *same* machine that runs the wizard and the browser.
+  - ``first_run_paste(home)`` — CLI headless: prints URL, reads
+    pasted callback URL from stdin. No loopback. Use over SSH.
+  - desktop / remote daemons — ``prepare`` runs on the daemon,
+    the **client** runs the loopback against its own browser,
+    then calls ``exchange`` over the host plane. The daemon
+    never touches a browser or a local port.
 """
 
 from __future__ import annotations
@@ -23,7 +35,6 @@ import base64
 import hashlib
 import http.server
 import json
-import os
 import secrets
 import socket
 import time
@@ -48,6 +59,7 @@ _TOKEN_URL = "https://oauth2.googleapis.com/token"
 _USERINFO_URL = "https://openidconnect.googleapis.com/v1/userinfo"
 
 _REFRESH_SKEW_SECONDS = 120
+_OAUTH_TIMEOUT_SECONDS = 300
 
 
 class GmailAuthError(RuntimeError):
@@ -66,6 +78,15 @@ class GmailToken:
 
     def needs_refresh(self) -> bool:
         return self.expires_in() < _REFRESH_SKEW_SECONDS
+
+
+@dataclass
+class AuthHandle:
+    """Opaque-from-the-outside handle returned by ``prepare``. The caller passes ``code_verifier`` and ``redirect_uri`` back into ``exchange``; the verifier never leaves the host (it's the PKCE secret)."""
+    auth_url: str
+    state: str
+    code_verifier: str
+    redirect_uri: str
 
 
 def token_path(home: Path) -> Path:
@@ -175,15 +196,16 @@ class _CallbackHandler(http.server.BaseHTTPRequestHandler):
         pass
 
 
-def first_run(home: Path) -> GmailToken:
-    """Open browser, wait for consent, save token to disk. Returns the token."""
-    client_id, client_secret = _client_credentials(home)
-    port = _find_free_port()
-    redirect_uri = f"http://127.0.0.1:{port}"
+def prepare(home: Path, *, redirect_uri: str) -> AuthHandle:
+    """Build the Google consent URL and stash a fresh PKCE verifier.
+
+    Does no I/O beyond reading the profile env. Safe to run on a
+    daemon: no browser, no loopback. The caller decides where the
+    redirect lands (their own loopback, or a paste flow)."""
+    client_id, _ = _client_credentials(home)
     verifier, challenge = _pkce_pair()
     state = secrets.token_urlsafe(24)
-
-    auth_params = {
+    qs = urllib.parse.urlencode({
         "client_id": client_id,
         "redirect_uri": redirect_uri,
         "response_type": "code",
@@ -193,35 +215,35 @@ def first_run(home: Path) -> GmailToken:
         "code_challenge": challenge,
         "code_challenge_method": "S256",
         "state": state,
-    }
-    auth_url = f"{_AUTH_URL}?{urllib.parse.urlencode(auth_params)}"
+    })
+    return AuthHandle(
+        auth_url=f"{_AUTH_URL}?{qs}",
+        state=state,
+        code_verifier=verifier,
+        redirect_uri=redirect_uri,
+    )
 
-    server = _CallbackServer(("127.0.0.1", port), _CallbackHandler)
-    try:
-        webbrowser.open(auth_url)
-    except Exception:  # noqa: BLE001
-        pass
-    print(f"\nIf the browser did not open, visit:\n  {auth_url}\n")
-    server.timeout = 300
-    deadline = time.time() + 300
-    while server.received_code is None and server.received_error is None:
-        server.handle_request()
-        if time.time() > deadline:
-            raise GmailAuthError("OAuth timed out after 5 min waiting for consent")
 
-    if server.received_error:
-        raise GmailAuthError(f"OAuth denied: {server.received_error}")
-    if server.received_state != state:
-        raise GmailAuthError("OAuth state mismatch — possible CSRF")
+def exchange(
+    home: Path,
+    *,
+    code: str,
+    code_verifier: str,
+    redirect_uri: str,
+) -> GmailToken:
+    """Swap the authorization ``code`` for tokens and persist them.
 
+    ``redirect_uri`` must match the one passed to ``prepare`` —
+    Google requires byte-equality on the token endpoint."""
+    client_id, client_secret = _client_credentials(home)
     with httpx.Client(timeout=10.0) as client:
         r = client.post(_TOKEN_URL, data={
-            "code": server.received_code,
+            "code": code,
             "client_id": client_id,
             "client_secret": client_secret,
             "redirect_uri": redirect_uri,
             "grant_type": "authorization_code",
-            "code_verifier": verifier,
+            "code_verifier": code_verifier,
         })
         if r.status_code != 200:
             raise GmailAuthError(f"token exchange failed: {r.status_code} {r.text}")
@@ -250,6 +272,91 @@ def first_run(home: Path) -> GmailToken:
     with _lock(home):
         _save(home, token)
     return token
+
+
+def first_run(home: Path) -> GmailToken:
+    """Browser + local loopback flow. Requires a usable browser and a
+    loopback socket on the **same machine** running this function.
+
+    Falls back to ``first_run_paste`` automatically if ``webbrowser.open``
+    reports failure (typical on headless boxes)."""
+    port = _find_free_port()
+    redirect_uri = f"http://127.0.0.1:{port}"
+    handle = prepare(home, redirect_uri=redirect_uri)
+
+    opened = False
+    try:
+        opened = webbrowser.open(handle.auth_url)
+    except Exception:  # noqa: BLE001
+        opened = False
+    if not opened:
+        return _paste_flow(home, handle, port)
+
+    print(f"\nIf the browser did not open, visit:\n  {handle.auth_url}\n")
+    server = _CallbackServer(("127.0.0.1", port), _CallbackHandler)
+    server.timeout = _OAUTH_TIMEOUT_SECONDS
+    deadline = time.time() + _OAUTH_TIMEOUT_SECONDS
+    while server.received_code is None and server.received_error is None:
+        server.handle_request()
+        if time.time() > deadline:
+            raise GmailAuthError("OAuth timed out after 5 min waiting for consent")
+
+    if server.received_error:
+        raise GmailAuthError(f"OAuth denied: {server.received_error}")
+    if server.received_state != handle.state:
+        raise GmailAuthError("OAuth state mismatch — possible CSRF")
+
+    return exchange(
+        home,
+        code=server.received_code or "",
+        code_verifier=handle.code_verifier,
+        redirect_uri=redirect_uri,
+    )
+
+
+def first_run_paste(home: Path) -> GmailToken:
+    """Headless flow: print the consent URL, accept the pasted callback URL from stdin. No loopback, no browser-opening assumption — use this over SSH or inside a container."""
+    port = _find_free_port()
+    redirect_uri = f"http://127.0.0.1:{port}"
+    handle = prepare(home, redirect_uri=redirect_uri)
+    return _paste_flow(home, handle, port)
+
+
+def _paste_flow(home: Path, handle: AuthHandle, port: int) -> GmailToken:
+    print(
+        "\nGmail OAuth — paste flow (no local browser available).\n\n"
+        "1. Open this URL in any browser, on any device:\n"
+        f"     {handle.auth_url}\n\n"
+        "2. Authorize Gmail access. Google will redirect to a URL like:\n"
+        f"     http://127.0.0.1:{port}/?code=...&state=...\n"
+        "   The page WILL fail to load — that's expected. Copy the FULL\n"
+        "   URL from your browser's address bar.\n",
+        flush=True,
+    )
+    try:
+        pasted = input("3. Paste the callback URL here: ").strip()
+    except EOFError:
+        raise GmailAuthError("OAuth aborted — no input received")
+    parsed = urlparse(pasted)
+    params = parse_qs(parsed.query)
+    code = (params.get("code") or [None])[0]
+    state = (params.get("state") or [None])[0]
+    error = (params.get("error") or [None])[0]
+    if error:
+        raise GmailAuthError(f"OAuth denied: {error}")
+    if not code:
+        raise GmailAuthError(
+            "no `code` parameter found in pasted URL — did you copy the "
+            "redirect URL from your browser's address bar?"
+        )
+    if state != handle.state:
+        raise GmailAuthError("OAuth state mismatch — possible CSRF or stale paste")
+    return exchange(
+        home,
+        code=code,
+        code_verifier=handle.code_verifier,
+        redirect_uri=handle.redirect_uri,
+    )
 
 
 def _refresh(home: Path, token: GmailToken) -> GmailToken:

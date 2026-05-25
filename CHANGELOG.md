@@ -1,5 +1,34 @@
 # Changelog
 
+## v0.6.9 — 2026-05-25 — Gmail OAuth works against remote daemons
+
+The Gmail OAuth wizard used to fail silently when the daemon
+wasn't on the same machine as your browser — the consent
+loopback ran inside the daemon, so on Umbrel (or any headless
+host) Google's redirect landed nowhere. Two ways out now:
+
+- **From the desktop app**: the loopback HTTP server moved
+  to the client side. The desktop binds the redirect port on
+  *your* machine, asks the daemon to prepare the consent URL,
+  opens your browser, captures the callback locally, and hands
+  the code back to the daemon for the token exchange. The
+  daemon never touches a browser. Works identically against a
+  local or remote daemon.
+- **From SSH / over the CLI wizard**: ``alpi setup`` falls back
+  to a paste flow when no browser is available — it prints the
+  consent URL, you open it on any device, and paste the failed
+  redirect URL (the one with ``?code=…``) back into the prompt.
+  Force this mode with ``ALPI_HEADLESS=1`` if browser detection
+  guesses wrong.
+- The streaming host method ``host.gateway.gmail_authorize``
+  is replaced by two non-streaming endpoints,
+  ``host.gateway.gmail.begin`` and ``host.gateway.gmail.exchange``.
+  Verifier state lives on the daemon for 5 minutes between the
+  two calls; restart the flow if it expires.
+- The desktop modal now shows the consent URL inline while
+  waiting — no more "Browser opened — complete the consent
+  flow…" when nothing actually opened.
+
 ## v0.6.8 — 2026-05-25 — workspace index goes back to incremental, with safer corners
 
 The "always rebuild" semantics from v0.6.7's working tree got

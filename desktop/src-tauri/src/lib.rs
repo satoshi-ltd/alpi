@@ -826,6 +826,19 @@ fn gateway_config(profile: String, name: String) -> std::collections::HashMap<St
     .unwrap_or_default()
 }
 
+// Gmail OAuth — the loopback HTTP server lives on the **client** (this
+// desktop process), never on the daemon. The daemon may be remote and
+// headless; only the client machine has a browser. We:
+//   1. Bind a TCP socket on 127.0.0.1:<random> here.
+//   2. Ask the daemon to prepare the consent URL with that redirect.
+//   3. Open the URL in the system browser.
+//   4. Accept ONE GET, parse code+state from the query.
+//   5. Hand them back to the daemon for the token exchange.
+//
+// Events emitted to JS (`gmail-auth-event`):
+//   { event: "browser_opened" }       — auth_url launched
+//   { event: "authorized", email }    — token persisted by daemon
+//   { event: "error", text }          — anything failed
 #[tauri::command]
 async fn gateway_gmail_authorize(
     app: AppHandle,
@@ -834,19 +847,227 @@ async fn gateway_gmail_authorize(
     client_secret: String,
     allowed_senders: String,
 ) -> Result<(), String> {
-    let params = serde_json::json!({
-        "profile": profile,
-        "client_id": client_id,
-        "client_secret": client_secret,
-        "allowed_senders": allowed_senders,
-    });
-    tauri::async_runtime::spawn_blocking(move || {
-        host_client::call_stream("host.gateway.gmail_authorize", params, move |frame| {
-            let _ = app.emit("gmail-auth-event", frame);
-        })
-    })
-    .await
-    .map_err(|e| format!("join: {e}"))??;
+    tauri::async_runtime::spawn_blocking(move || run_gmail_oauth(app, profile, client_id, client_secret, allowed_senders))
+        .await
+        .map_err(|e| format!("join: {e}"))?;
+    Ok(())
+}
+
+fn run_gmail_oauth(
+    app: AppHandle,
+    profile: String,
+    client_id: String,
+    client_secret: String,
+    allowed_senders: String,
+) {
+    use std::io::{ErrorKind, Read, Write};
+    use std::net::TcpListener;
+    use std::time::{Duration, Instant};
+
+    let emit_err = |text: String| {
+        let _ = app.emit(
+            "gmail-auth-event",
+            serde_json::json!({"event": "error", "text": text}),
+        );
+    };
+
+    // 1. Bind the loopback first so we can advertise the exact port we'll
+    //    be listening on. Port-0 lets the OS pick one; we never reserve.
+    let listener = match TcpListener::bind("127.0.0.1:0") {
+        Ok(l) => l,
+        Err(e) => return emit_err(format!("cannot bind loopback: {e}")),
+    };
+    let port = match listener.local_addr() {
+        Ok(addr) => addr.port(),
+        Err(e) => return emit_err(format!("cannot resolve loopback port: {e}")),
+    };
+    let redirect_uri = format!("http://127.0.0.1:{port}");
+
+    // 2. Ask the daemon to persist creds + prepare the consent URL.
+    let begin_resp = match host_client::call(
+        "host.gateway.gmail.begin",
+        serde_json::json!({
+            "profile": profile,
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "allowed_senders": allowed_senders,
+            "redirect_uri": redirect_uri,
+        }),
+    ) {
+        Ok(v) => v,
+        Err(e) => return emit_err(format!("daemon refused gmail.begin: {e}")),
+    };
+    let auth_url = begin_resp
+        .get("auth_url")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
+        .unwrap_or_default();
+    let state = begin_resp
+        .get("state")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
+        .unwrap_or_default();
+    if auth_url.is_empty() || state.is_empty() {
+        return emit_err("daemon returned no auth_url/state".into());
+    }
+
+    // 3. Launch the browser. If this fails we still wait for the user to
+    //    paste the URL manually (the JS modal also shows the URL).
+    let _ = open_in_browser(&auth_url);
+    let _ = app.emit(
+        "gmail-auth-event",
+        serde_json::json!({"event": "browser_opened", "auth_url": auth_url}),
+    );
+
+    // 4. Accept exactly one inbound and read the GET request.
+    // 300s matches the daemon's pending-state TTL. ``set_read_timeout``
+    // doesn't apply until AFTER ``accept`` returns, so without an
+    // explicit deadline a user who never finishes consent (closes the
+    // tab, Google never redirects) would hang this thread forever.
+    let _ = listener.set_ttl(64);
+    if let Err(e) = listener.set_nonblocking(true) {
+        return emit_err(format!("listener config failed: {e}"));
+    }
+    let deadline = Instant::now() + Duration::from_secs(_OAUTH_ACCEPT_TIMEOUT_SECS);
+    let (mut stream, _peer) = loop {
+        match listener.accept() {
+            Ok(pair) => break pair,
+            Err(ref e) if e.kind() == ErrorKind::WouldBlock => {
+                if Instant::now() >= deadline {
+                    return emit_err(
+                        "OAuth timed out: no callback received in 5 min — restart the flow".into(),
+                    );
+                }
+                std::thread::sleep(Duration::from_millis(200));
+            }
+            Err(e) => return emit_err(format!("loopback accept failed: {e}")),
+        }
+    };
+    // Block-mode again for the single read; we already gated the accept above.
+    let _ = stream.set_nonblocking(false);
+    let _ = stream.set_read_timeout(Some(Duration::from_secs(_OAUTH_READ_TIMEOUT_SECS)));
+    let mut buf = [0u8; 2048];
+    let n = match stream.read(&mut buf) {
+        Ok(n) => n,
+        Err(e) => return emit_err(format!("loopback read failed: {e}")),
+    };
+    let request_line = std::str::from_utf8(&buf[..n])
+        .ok()
+        .and_then(|s| s.lines().next())
+        .unwrap_or("")
+        .to_string();
+    let path = request_line.split_whitespace().nth(1).unwrap_or("");
+    let (got_code, got_state, got_err) = parse_oauth_callback(path);
+
+    // 5. Close the browser tab with a friendly page no matter what.
+    let body = if got_err.is_empty() && !got_code.is_empty() {
+        "<h1>alpi — Gmail authorized</h1><p>You can close this tab and return to alpi.</p>"
+    } else {
+        "<h1>alpi — Gmail authorization failed</h1><p>Return to alpi for details.</p>"
+    };
+    let response = format!(
+        "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+        body.len(),
+        body,
+    );
+    let _ = stream.write_all(response.as_bytes());
+    let _ = stream.flush();
+    drop(stream);
+    drop(listener);
+
+    if !got_err.is_empty() {
+        return emit_err(format!("Google denied consent: {got_err}"));
+    }
+    if got_code.is_empty() {
+        return emit_err("no `code` returned by Google (consent cancelled?)".into());
+    }
+    if got_state != state {
+        return emit_err("OAuth state mismatch — possible CSRF or stale flow".into());
+    }
+
+    // 6. Hand the code to the daemon for the token exchange.
+    let exchange = match host_client::call(
+        "host.gateway.gmail.exchange",
+        serde_json::json!({"state": state, "code": got_code}),
+    ) {
+        Ok(v) => v,
+        Err(e) => return emit_err(format!("token exchange failed: {e}")),
+    };
+    let email = exchange
+        .get("email")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let _ = app.emit(
+        "gmail-auth-event",
+        serde_json::json!({"event": "authorized", "email": email}),
+    );
+}
+
+const _OAUTH_READ_TIMEOUT_SECS: u64 = 30;
+const _OAUTH_ACCEPT_TIMEOUT_SECS: u64 = 300;
+
+fn parse_oauth_callback(path: &str) -> (String, String, String) {
+    let query = path.split_once('?').map(|(_, q)| q).unwrap_or("");
+    let mut code = String::new();
+    let mut state = String::new();
+    let mut error = String::new();
+    for pair in query.split('&') {
+        let (k, v) = match pair.split_once('=') {
+            Some(kv) => kv,
+            None => continue,
+        };
+        let decoded = percent_decode(v);
+        match k {
+            "code" => code = decoded,
+            "state" => state = decoded,
+            "error" => error = decoded,
+            _ => {}
+        }
+    }
+    (code, state, error)
+}
+
+fn percent_decode(s: &str) -> String {
+    // Minimal %XX + '+' decoder for OAuth query params (ASCII-only fields).
+    let bytes = s.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        let b = bytes[i];
+        if b == b'+' {
+            out.push(b' ');
+            i += 1;
+        } else if b == b'%' && i + 2 < bytes.len() {
+            let hi = (bytes[i + 1] as char).to_digit(16);
+            let lo = (bytes[i + 2] as char).to_digit(16);
+            if let (Some(h), Some(l)) = (hi, lo) {
+                out.push(((h << 4) | l) as u8);
+                i += 3;
+            } else {
+                out.push(b);
+                i += 1;
+            }
+        } else {
+            out.push(b);
+            i += 1;
+        }
+    }
+    String::from_utf8(out).unwrap_or_default()
+}
+
+fn open_in_browser(url: &str) -> std::io::Result<()> {
+    #[cfg(target_os = "macos")]
+    let mut cmd = Command::new("open");
+    #[cfg(target_os = "linux")]
+    let mut cmd = Command::new("xdg-open");
+    #[cfg(target_os = "windows")]
+    let mut cmd = {
+        let mut c = Command::new("cmd");
+        c.args(["/C", "start", ""]);
+        c
+    };
+    cmd.arg(url).stdout(Stdio::null()).stderr(Stdio::null()).spawn()?;
     Ok(())
 }
 
@@ -1983,4 +2204,51 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod oauth_callback_tests {
+    use super::{parse_oauth_callback, percent_decode};
+
+    #[test]
+    fn parse_extracts_code_state_error() {
+        let (c, s, e) = parse_oauth_callback("/?code=abc&state=xyz");
+        assert_eq!(c, "abc");
+        assert_eq!(s, "xyz");
+        assert_eq!(e, "");
+
+        let (c, s, e) = parse_oauth_callback("/?error=access_denied&state=zzz");
+        assert_eq!(c, "");
+        assert_eq!(s, "zzz");
+        assert_eq!(e, "access_denied");
+    }
+
+    #[test]
+    fn parse_ignores_unknown_keys_and_handles_no_query() {
+        let (c, s, e) = parse_oauth_callback("/?foo=bar&code=ok&baz=qux");
+        assert_eq!(c, "ok");
+        assert_eq!(s, "");
+        assert_eq!(e, "");
+
+        let (c, s, e) = parse_oauth_callback("/");
+        assert!(c.is_empty() && s.is_empty() && e.is_empty());
+    }
+
+    #[test]
+    fn parse_decodes_percent_and_plus() {
+        // Google does not actually percent-encode the code, but defend
+        // anyway — easier than reasoning about provider quirks.
+        let (c, _, _) = parse_oauth_callback("/?code=hello%20world");
+        assert_eq!(c, "hello world");
+        let (c, _, _) = parse_oauth_callback("/?code=a+b%2Bc");
+        assert_eq!(c, "a b+c");
+    }
+
+    #[test]
+    fn percent_decode_handles_truncated_escape() {
+        // Stray % at end-of-input must not panic.
+        assert_eq!(percent_decode("abc%"), "abc%");
+        assert_eq!(percent_decode("abc%2"), "abc%2");
+        assert_eq!(percent_decode("abc%2Q"), "abc%2Q"); // not hex
+    }
 }

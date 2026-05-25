@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from alpi import ui
@@ -64,8 +65,14 @@ def run(home: Path) -> None:
         ui.ok_and_wait("credentials saved. Run this wizard again to authorize.")
         return
 
+    # Honour ALPI_HEADLESS for SSH/container sessions where no browser
+    # can open: skip the loopback and go straight to paste flow. The
+    # auto-fallback in ``first_run`` also catches this, but the env var
+    # lets the user force paste mode even when webbrowser.open lies.
+    headless = os.environ.get("ALPI_HEADLESS", "").strip() not in ("", "0", "false", "no")
+    runner = gmail_auth.first_run_paste if headless else gmail_auth.first_run
     try:
-        token = gmail_auth.first_run(home)
+        token = runner(home)
     except gmail_auth.GmailAuthError as e:
         ui.fail_and_wait(str(e))
         return

@@ -781,6 +781,16 @@
   align-items: center;
   margin-top: var(--space-4);
 }
+
+.gmailAuthStatus {
+  margin-top: var(--space-2);
+}
+.gmailAuthStatus.gmailAuthStatusError { color: var(--c-danger); }
+.gmailAuthStatus.gmailAuthStatusDone { color: var(--c-success); }
+.gmailAuthUrl {
+  margin-top: var(--space-2);
+  word-break: break-all;
+}
 .popoverFooterRight {
   margin-left: auto;
   display: flex;

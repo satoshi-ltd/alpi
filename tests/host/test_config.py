@@ -229,7 +229,7 @@ async def test_gateway_remove_drops_env(tmp_path: Path, monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
-async def test_gmail_authorize_writes_env_and_streams_authorized(
+async def test_gmail_begin_writes_env_and_returns_auth_url(
     tmp_path: Path, monkeypatch,
 ) -> None:
     home = _bootstrap(tmp_path)
@@ -237,73 +237,128 @@ async def test_gmail_authorize_writes_env_and_streams_authorized(
     # Strip env vars that might have leaked in from the developer's shell.
     for key in ("GMAIL_CLIENT_ID", "GMAIL_CLIENT_SECRET", "GMAIL_ALLOWED_SENDERS"):
         monkeypatch.delenv(key, raising=False)
+    # Clear any pending state from a previous test.
+    data_config._pending_gmail.clear()
 
-    fake_token = type(
-        "FakeToken", (), {"email": "alice@example.com"},
-    )()
-    from alpi.mail import gmail_auth as ga
-
-    monkeypatch.setattr(ga, "first_run", lambda h: fake_token)
-
-    frames: list[dict] = []
-
-    async def collect(frame):
-        frames.append(frame)
-
-    await data_config._gmail_authorize(
+    result = await data_config._gmail_begin(
         {
             "profile": "default",
             "client_id": "cid-123",
             "client_secret": "sec-456",
             "allowed_senders": " Bob@Example.com , carol@x.com ",
+            "redirect_uri": "http://127.0.0.1:55555",
         },
         None,
-        collect,
     )
 
     env_text = (home / ".env").read_text()
     assert "GMAIL_CLIENT_ID=cid-123" in env_text
     assert "GMAIL_CLIENT_SECRET=sec-456" in env_text
     assert "GMAIL_ALLOWED_SENDERS=bob@example.com,carol@x.com" in env_text
-    # No os.environ shadow: gmail_auth.first_run(home) reads creds from the profile's .env on demand.
+    # No os.environ shadow: prepare reads creds from the profile's .env on demand.
     import os
     assert "GMAIL_CLIENT_ID" not in os.environ
     assert "GMAIL_CLIENT_SECRET" not in os.environ
-    assert frames == [
-        {"event": "browser_opened"},
-        {"event": "authorized", "email": "alice@example.com"},
-    ]
+
+    assert result["auth_url"].startswith("https://accounts.google.com/o/oauth2/v2/auth?")
+    assert "redirect_uri=http%3A%2F%2F127.0.0.1%3A55555" in result["auth_url"]
+    assert result["state"] and result["state"] in data_config._pending_gmail
 
 
 @pytest.mark.asyncio
-async def test_gmail_authorize_missing_creds_emits_error(
+async def test_gmail_begin_missing_creds_raises(
     tmp_path: Path, monkeypatch,
 ) -> None:
     home = _bootstrap(tmp_path)
     monkeypatch.setattr(data_handlers, "_resolve_home", lambda p: home)
     for key in ("GMAIL_CLIENT_ID", "GMAIL_CLIENT_SECRET", "GMAIL_ALLOWED_SENDERS"):
         monkeypatch.delenv(key, raising=False)
+    data_config._pending_gmail.clear()
 
-    frames: list[dict] = []
-
-    async def collect(frame):
-        frames.append(frame)
-
-    await data_config._gmail_authorize(
-        {"profile": "default", "client_id": "", "client_secret": ""},
-        None,
-        collect,
-    )
-
-    assert len(frames) == 1
-    assert frames[0]["event"] == "error"
-    assert "required" in frames[0]["text"]
-    # No .env file should have been written.
+    with pytest.raises(host_server.HandlerError) as ei:
+        await data_config._gmail_begin(
+            {
+                "profile": "default", "client_id": "", "client_secret": "",
+                "redirect_uri": "http://127.0.0.1:1",
+            },
+            None,
+        )
+    assert "required" in (ei.value.data or {}).get("detail", "")
     assert not (home / ".env").exists() or "GMAIL_CLIENT_ID" not in (home / ".env").read_text()
 
 
 @pytest.mark.asyncio
-async def test_gmail_authorize_reuses_stored_creds_on_blank_input(
+@pytest.mark.parametrize(
+    "bad_uri",
+    [
+        "https://evil.example.com/cb",          # non-http scheme
+        "http://evil.example.com:80/cb",        # non-loopback host
+        "http://127.0.0.1",                     # no port
+        "http://127.0.0.1:0",                   # port 0
+        "http://[::1]:55555",                   # IPv6 loopback not in allowlist (fine — keep strict)
+        "ftp://127.0.0.1:55555",                # wrong scheme
+        "127.0.0.1:55555",                      # missing scheme
+    ],
+)
+async def test_gmail_begin_rejects_non_loopback_redirect_uri(
+    bad_uri: str, tmp_path: Path, monkeypatch,
+) -> None:
+    home = _bootstrap(tmp_path)
+    monkeypatch.setattr(data_handlers, "_resolve_home", lambda p: home)
+    for key in ("GMAIL_CLIENT_ID", "GMAIL_CLIENT_SECRET", "GMAIL_ALLOWED_SENDERS"):
+        monkeypatch.delenv(key, raising=False)
+    data_config._pending_gmail.clear()
+
+    with pytest.raises(host_server.HandlerError):
+        await data_config._gmail_begin(
+            {
+                "profile": "default", "client_id": "x", "client_secret": "y",
+                "redirect_uri": bad_uri,
+            },
+            None,
+        )
+
+
+@pytest.mark.asyncio
+async def test_gmail_begin_accepts_localhost_loopback(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    home = _bootstrap(tmp_path)
+    monkeypatch.setattr(data_handlers, "_resolve_home", lambda p: home)
+    for key in ("GMAIL_CLIENT_ID", "GMAIL_CLIENT_SECRET", "GMAIL_ALLOWED_SENDERS"):
+        monkeypatch.delenv(key, raising=False)
+    data_config._pending_gmail.clear()
+
+    result = await data_config._gmail_begin(
+        {
+            "profile": "default", "client_id": "x", "client_secret": "y",
+            "redirect_uri": "http://localhost:42424",
+        },
+        None,
+    )
+    assert "redirect_uri=http%3A%2F%2Flocalhost%3A42424" in result["auth_url"]
+
+
+@pytest.mark.asyncio
+async def test_gmail_begin_missing_redirect_uri_raises(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    home = _bootstrap(tmp_path)
+    monkeypatch.setattr(data_handlers, "_resolve_home", lambda p: home)
+    for key in ("GMAIL_CLIENT_ID", "GMAIL_CLIENT_SECRET", "GMAIL_ALLOWED_SENDERS"):
+        monkeypatch.delenv(key, raising=False)
+    data_config._pending_gmail.clear()
+
+    with pytest.raises(host_server.HandlerError) as ei:
+        await data_config._gmail_begin(
+            {"profile": "default", "client_id": "x", "client_secret": "y"},
+            None,
+        )
+    assert "redirect_uri" in (ei.value.data or {}).get("detail", "")
+
+
+@pytest.mark.asyncio
+async def test_gmail_begin_reuses_stored_creds_on_blank_input(
     tmp_path: Path, monkeypatch,
 ) -> None:
     """Re-authorize without re-typing the secret falls back to .env."""
@@ -315,64 +370,133 @@ async def test_gmail_authorize_reuses_stored_creds_on_blank_input(
     monkeypatch.setattr(data_handlers, "_resolve_home", lambda p: home)
     for key in ("GMAIL_CLIENT_ID", "GMAIL_CLIENT_SECRET", "GMAIL_ALLOWED_SENDERS"):
         monkeypatch.delenv(key, raising=False)
+    data_config._pending_gmail.clear()
 
-    fake_token = type("FakeToken", (), {"email": "bob@example.com"})()
-    from alpi.mail import gmail_auth as ga
-
-    monkeypatch.setattr(ga, "first_run", lambda h: fake_token)
-
-    frames: list[dict] = []
-
-    async def collect(frame):
-        frames.append(frame)
-
-    # All inputs blank — should reuse stored values.
-    await data_config._gmail_authorize(
-        {"profile": "default", "client_id": "", "client_secret": ""},
+    result = await data_config._gmail_begin(
+        {
+            "profile": "default", "client_id": "", "client_secret": "",
+            "redirect_uri": "http://127.0.0.1:42",
+        },
         None,
-        collect,
     )
-
-    assert frames[-1] == {"event": "authorized", "email": "bob@example.com"}
-    import os
-    # No os.environ shadow — stored creds live only in the profile's .env.
-    assert "GMAIL_CLIENT_ID" not in os.environ
-    assert "GMAIL_CLIENT_SECRET" not in os.environ
+    assert "client_id=stored-id" in result["auth_url"]
     env_text = (home / ".env").read_text()
     assert "GMAIL_CLIENT_ID=stored-id" in env_text
     assert "GMAIL_CLIENT_SECRET=stored-sec" in env_text
 
 
 @pytest.mark.asyncio
-async def test_gmail_authorize_propagates_oauth_error(
+async def test_gmail_exchange_runs_auth_exchange_with_stored_verifier(
     tmp_path: Path, monkeypatch,
 ) -> None:
     home = _bootstrap(tmp_path)
     monkeypatch.setattr(data_handlers, "_resolve_home", lambda p: home)
     for key in ("GMAIL_CLIENT_ID", "GMAIL_CLIENT_SECRET", "GMAIL_ALLOWED_SENDERS"):
         monkeypatch.delenv(key, raising=False)
+    data_config._pending_gmail.clear()
+
+    # First: seed a pending state via begin.
+    begin = await data_config._gmail_begin(
+        {
+            "profile": "default", "client_id": "x", "client_secret": "y",
+            "redirect_uri": "http://127.0.0.1:9999",
+        },
+        None,
+    )
+    state = begin["state"]
+
+    fake_token = type("FakeToken", (), {"email": "alice@example.com"})()
+    captured: dict = {}
+    from alpi.mail import gmail_auth as ga
+
+    def fake_exchange(h, *, code, code_verifier, redirect_uri):
+        captured["home"] = h
+        captured["code"] = code
+        captured["code_verifier"] = code_verifier
+        captured["redirect_uri"] = redirect_uri
+        return fake_token
+
+    monkeypatch.setattr(ga, "exchange", fake_exchange)
+
+    result = await data_config._gmail_exchange(
+        {"state": state, "code": "the-google-code"},
+        None,
+    )
+
+    assert result == {"email": "alice@example.com"}
+    assert captured["code"] == "the-google-code"
+    assert captured["redirect_uri"] == "http://127.0.0.1:9999"
+    assert len(captured["code_verifier"]) >= 43  # PKCE min length
+    # State should be consumed exactly once.
+    assert state not in data_config._pending_gmail
+
+
+@pytest.mark.asyncio
+async def test_gmail_exchange_unknown_state_raises(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    home = _bootstrap(tmp_path)
+    monkeypatch.setattr(data_handlers, "_resolve_home", lambda p: home)
+    data_config._pending_gmail.clear()
+
+    with pytest.raises(host_server.HandlerError) as ei:
+        await data_config._gmail_exchange(
+            {"state": "ghost-state", "code": "irrelevant"},
+            None,
+        )
+    assert "expired" in (ei.value.data or {}).get("detail", "")
+
+
+@pytest.mark.asyncio
+async def test_gmail_exchange_propagates_oauth_error(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    home = _bootstrap(tmp_path)
+    monkeypatch.setattr(data_handlers, "_resolve_home", lambda p: home)
+    for key in ("GMAIL_CLIENT_ID", "GMAIL_CLIENT_SECRET", "GMAIL_ALLOWED_SENDERS"):
+        monkeypatch.delenv(key, raising=False)
+    data_config._pending_gmail.clear()
+
+    begin = await data_config._gmail_begin(
+        {
+            "profile": "default", "client_id": "x", "client_secret": "y",
+            "redirect_uri": "http://127.0.0.1:42",
+        },
+        None,
+    )
+    state = begin["state"]
 
     from alpi.mail import gmail_auth as ga
 
-    def boom(_h):
+    def boom(_h, **_kw):
         raise ga.GmailAuthError("OAuth denied: access_denied")
 
-    monkeypatch.setattr(ga, "first_run", boom)
+    monkeypatch.setattr(ga, "exchange", boom)
 
-    frames: list[dict] = []
+    with pytest.raises(host_server.HandlerError) as ei:
+        await data_config._gmail_exchange(
+            {"state": state, "code": "anything"},
+            None,
+        )
+    assert "access_denied" in (ei.value.data or {}).get("detail", "")
+    # State was consumed even on failure — the user must restart the flow.
+    assert state not in data_config._pending_gmail
 
-    async def collect(frame):
-        frames.append(frame)
 
-    await data_config._gmail_authorize(
-        {"profile": "default", "client_id": "x", "client_secret": "y"},
-        None,
-        collect,
-    )
-
-    assert frames[0] == {"event": "browser_opened"}
-    assert frames[1]["event"] == "error"
-    assert "access_denied" in frames[1]["text"]
+def test_gc_pending_gmail_purges_old_entries(monkeypatch) -> None:
+    import time as _t
+    data_config._pending_gmail.clear()
+    data_config._pending_gmail["fresh"] = {
+        "code_verifier": "v", "redirect_uri": "u",
+        "home": Path("/x"), "created": _t.time(),
+    }
+    data_config._pending_gmail["stale"] = {
+        "code_verifier": "v", "redirect_uri": "u",
+        "home": Path("/x"), "created": _t.time() - data_config._GMAIL_BEGIN_TTL - 1,
+    }
+    data_config._gc_pending_gmail()
+    assert "fresh" in data_config._pending_gmail
+    assert "stale" not in data_config._pending_gmail
 
 
 @pytest.mark.asyncio
