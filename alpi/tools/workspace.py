@@ -57,6 +57,8 @@ _SUPPORTED_SUFFIXES: frozenset[str] = (
 _ocr_reader_cache = None
 _ocr_reader_lock = threading.Lock()
 
+_EMBED_BATCH = 64
+
 _SKIP_DIRS: frozenset[str] = frozenset({
     ".git", ".hg", ".svn",
     "node_modules", "__pycache__", ".venv", "venv", ".tox",
@@ -72,8 +74,16 @@ def _ensure_schema(
     conn: sqlite3.Connection,
     dim: int,
     embedder_name: str,
+    root: str | None = None,
     force: bool = False,
-) -> None:
+) -> bool:
+    """Make schema match (dim, embedder, root); rebuild content tables if not.
+
+    Index path (root != None): drops + recreates content when force, embedder/dim
+    changed, or workspace_root changed. Returns True when a rebuild happened so
+    the caller can decide on VACUUM. Search path (root == None) never drops and
+    raises EmbedderMismatch on embedder/dim drift.
+    """
     conn.executescript(
         """
         CREATE TABLE IF NOT EXISTS workspace_meta (
@@ -103,20 +113,33 @@ def _ensure_schema(
     )
     stored_dim = _get_meta(conn, "dim")
     stored_embedder = _get_meta(conn, "embedder")
+    stored_root = _get_meta(conn, "workspace_root")
     if stored_dim is None:
         _set_meta(conn, "dim", str(dim))
         _set_meta(conn, "embedder", embedder_name)
+        if root is not None:
+            _set_meta(conn, "workspace_root", root)
         conn.commit()
-        return
-    mismatch = int(stored_dim) != dim or stored_embedder != embedder_name
-    if not mismatch:
-        return
-    if not force:
-        raise EmbedderMismatch(
-            f"Index was built with {stored_embedder} (dim={stored_dim}) "
-            f"but current embedder is {embedder_name} (dim={dim}). "
-            f"Re-index: index_workspace with force=true."
-        )
+        return False
+    embedder_changed = int(stored_dim) != dim or stored_embedder != embedder_name
+    if root is None:
+        if embedder_changed:
+            raise EmbedderMismatch(
+                f"Index was built with {stored_embedder} (dim={stored_dim}) "
+                f"but current embedder is {embedder_name} (dim={dim}). "
+                f"Re-index: run index_workspace to rebuild."
+            )
+        return False
+    # Migrate 0.6.6 indexes (no workspace_root in meta): seed the field silently instead of rebuilding the whole index. Stale entries from a moved workspace are caught by the global orphan purge in _index.
+    if stored_root is None and conn.execute(
+        "SELECT 1 FROM workspace_files LIMIT 1"
+    ).fetchone() is not None:
+        _set_meta(conn, "workspace_root", root)
+        stored_root = root
+        conn.commit()
+    root_changed = stored_root != root
+    if not (force or embedder_changed or root_changed):
+        return False
     conn.executescript(
         """
         DROP TABLE IF EXISTS workspace_vec;
@@ -146,7 +169,9 @@ def _ensure_schema(
     )
     _set_meta(conn, "dim", str(dim))
     _set_meta(conn, "embedder", embedder_name)
+    _set_meta(conn, "workspace_root", root)
     conn.commit()
+    return True
 
 
 class EmbedderMismatch(RuntimeError):
@@ -358,9 +383,12 @@ def _index(
     embedder: embed_mod.Embedder | None = None,
 ) -> dict[str, Any]:
     embedder = embedder or embed_mod.default()
+    root_str = str(root.resolve())
     conn = open_store(home)
     try:
-        _ensure_schema(conn, embedder.dim, embedder.name, force=force)
+        rebuilt = _ensure_schema(
+            conn, embedder.dim, embedder.name, root=root_str, force=force,
+        )
         indexed_files = 0
         skipped_files = 0
         added_chunks = 0
@@ -373,10 +401,14 @@ def _index(
             mtime = stat.st_mtime
             size = stat.st_size
             existing = conn.execute(
-                "SELECT mtime FROM workspace_files WHERE source_path = ?",
+                "SELECT mtime, size FROM workspace_files WHERE source_path = ?",
                 (rel,),
             ).fetchone()
-            if existing and not force and abs(existing["mtime"] - mtime) < 1e-6:
+            if (
+                existing
+                and abs(existing["mtime"] - mtime) < 1e-6
+                and existing["size"] == size
+            ):
                 skipped_files += 1
                 continue
             reader = _reader_for(path.suffix.lower(), ocr=ocr)
@@ -403,7 +435,10 @@ def _index(
                 (rel, mtime, size),
             )
             bodies = [c[2] for c in chunks]
-            vectors = embedder.embed(bodies)
+            vectors: list[list[float]] = []
+            # Cap batch so a multi-MB log chunked into thousands of pieces does not OOM the embedder.
+            for i in range(0, len(bodies), _EMBED_BATCH):
+                vectors.extend(embedder.embed(bodies[i:i + _EMBED_BATCH]))
             for chunk_idx, ((line_start, line_end, body), vec) in enumerate(
                 zip(chunks, vectors, strict=True)
             ):
@@ -420,23 +455,16 @@ def _index(
                 added_chunks += 1
             indexed_files += 1
         removed_files = 0
-        root_prefix = str(root.resolve())
-        scoped = conn.execute(
-            "SELECT source_path FROM workspace_files WHERE source_path = ? "
-            "OR source_path LIKE ?",
-            (root_prefix, root_prefix + "/%"),
-        ).fetchall()
-        for row in scoped:
+        # Scan everything, not just under root: catches zombies left by the 0.6.6→0.6.8 migration when stored_root was assumed equal to the new root but the workspace actually moved.
+        rows = conn.execute("SELECT source_path FROM workspace_files").fetchall()
+        for row in rows:
             sp = row["source_path"]
             if sp not in seen_paths:
                 _delete_file(conn, sp)
                 removed_files += 1
         conn.commit()
-        if force:
-            # _ensure_schema dropped the old tables, leaving every page in
-            # the SQLite freelist — the file never shrinks back. VACUUM
-            # after the rebuild commits compacts to the new index's real
-            # size. Must run outside any transaction.
+        if rebuilt:
+            # VACUUM must run outside any transaction; compacts the freelist left behind by the drop+rebuild so the file does not stay inflated.
             prior_isolation = conn.isolation_level
             conn.isolation_level = None
             try:
@@ -505,9 +533,9 @@ class IndexWorkspace(Tool):
     name = "index_workspace"
     description = (
         "Build (or refresh) the semantic index over the user's local "
-        "files so `search_workspace` can answer free-form questions about "
-        "their content. Embeddings + index live in the profile's local "
-        "store; nothing leaves the machine.\n"
+        "files so `search_workspace` can answer free-form questions "
+        "about their content. Embeddings + index live in the profile's "
+        "local store; nothing leaves the machine.\n"
         "\n"
         "Run this when:\n"
         "  • The user asks you to recall something from their files and "
@@ -532,9 +560,12 @@ class IndexWorkspace(Tool):
         "tool again with `ocr=true`. Otherwise mention the deferred "
         "files in your answer so the user knows they exist.\n"
         "\n"
-        "Incremental — files whose mtime hasn't moved are skipped. "
-        "Skips .git, node_modules, build dirs. Limits: text 1 MB, "
-        "binary docs 10 MB, images 20 MB."
+        "Incremental — files whose mtime hasn't moved are skipped, "
+        "files removed from disk are purged, a workspace-root or "
+        "embedder change auto-triggers a full rebuild. `force=true` "
+        "always rebuilds from scratch, useful when an index looks "
+        "inconsistent. Skips .git, node_modules, build dirs. Limits: "
+        "text 1 MB, binary docs 10 MB, images 20 MB."
     )
     parameters = {
         "type": "object",
@@ -550,7 +581,7 @@ class IndexWorkspace(Tool):
             },
             "force": {
                 "type": "boolean",
-                "description": "Re-embed every file even if mtime is unchanged.",
+                "description": "Drop the entire index and rebuild from scratch. Default false (incremental).",
                 "default": False,
             },
             "ocr": {
@@ -575,7 +606,7 @@ class IndexWorkspace(Tool):
         if not root.exists() or not root.is_dir():
             return ToolResult(ok=False, output="", error=f"Not a directory: {root}")
         try:
-            summary = _index(root, glob, force, home=get_home(), ocr=ocr)
+            summary = _index(root, glob, force=force, home=get_home(), ocr=ocr)
         except EmbedderMismatch as e:
             return ToolResult(ok=False, output="", error=str(e))
         return ToolResult(ok=True, output=json.dumps(summary))

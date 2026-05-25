@@ -1,5 +1,41 @@
 # Changelog
 
+## v0.6.8 — 2026-05-25 — workspace index goes back to incremental, with safer corners
+
+The "always rebuild" semantics from v0.6.7's working tree got
+reverted: on a large vault (Obsidian-class or any repo with
+thousands of files), paying for a full re-embed on every call is
+expensive and forces every search-empty turn into minutes of
+blocked I/O. Restored incremental indexing as the default and
+closed the correctness gaps that made the original "always
+rebuild" tempting.
+
+- ``index_workspace`` is incremental by default again: files
+  whose mtime AND size both match the last index are skipped;
+  files removed from disk are purged from the index. Adding size
+  to the skip check catches tools that preserve mtime when
+  content changes (rsync --times, some sync clients).
+- The workspace root is now persisted in ``workspace_meta``.
+  Pointing ``index_workspace`` at a new path auto-triggers a full
+  rebuild — no zombie entries from the previous root. A 0.6.6
+  index that lacks the new meta row is migrated silently on the
+  first run (the field gets seeded, no rebuild) so the upgrade
+  doesn't force a minutes-long re-embed on large vaults.
+- Orphan purge now scans the whole index instead of only paths
+  under the current root, so leftover entries from a moved
+  workspace get cleaned on the next incremental run.
+- An embedder or vector-dim change auto-rebuilds at index time
+  (no need to pass ``force``). Search still raises
+  ``EmbedderMismatch`` so the user knows to re-run.
+- ``force=true`` is back on the tool surface as the explicit
+  "nuke and rebuild" escape hatch; the value also drives the
+  post-commit ``VACUUM`` so the SQLite freelist doesn't leave the
+  file inflated after a drop.
+- Embedding runs in batches of 64 chunks. A multi-MB file
+  chunked into thousands of pieces no longer loads the entire
+  body into the embedder at once — a real OOM risk with large
+  log files.
+
 ## v0.6.7 — 2026-05-24 — alpi self-knowledge moves from skill to first-class tool
 
 The `@alpi/knowledge` bundled skill is gone. The capability that

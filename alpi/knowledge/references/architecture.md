@@ -98,8 +98,9 @@ Important tool helpers:
   formats.
 - `safe_write_secret(...)` is the canonical path for credential files.
 - `search_workspace` is semantic local RAG over the user's workspace.
-- `index_workspace(force=true)` rebuilds and vacuums the per-profile
-  SQLite RAG store.
+- `index_workspace(path?, glob?, force?, ocr?)` is incremental by
+  default (mtime-skip, deleted files purged); auto-rebuilds on a
+  workspace-root or embedder change; `force=true` drops + vacuums.
 
 ## Skills and knowledge
 

@@ -208,6 +208,84 @@ def test_embedder_mismatch_resolved_by_force_reindex(tmp_home, tmp_path, stub_em
     assert res["results"]
 
 
+def test_index_migrates_pre_0_6_8_meta_without_rebuild(tmp_home, tmp_path, stub_embedder):
+    # Seed a populated index, then drop workspace_root from meta to simulate an index built before workspace_root tracking shipped.
+    from alpi.core.store import open_store
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    _make_workspace(workspace)
+    first = json.loads(ws.IndexWorkspace().run(path=str(workspace)).output)
+    assert first["indexed_files"] == 2
+
+    conn = open_store(tmp_home)
+    try:
+        conn.execute("DELETE FROM workspace_meta WHERE key = 'workspace_root'")
+        conn.commit()
+    finally:
+        conn.close()
+
+    # The next call must NOT rebuild — it should detect the missing meta, seed silently, and incrementally skip every file.
+    second = json.loads(ws.IndexWorkspace().run(path=str(workspace)).output)
+    assert second["indexed_files"] == 0
+    assert second["skipped_files"] == 2
+    assert second["total_chunks"] == first["total_chunks"]
+
+
+def test_size_change_with_preserved_mtime_is_reindexed(tmp_home, tmp_path, stub_embedder):
+    # Some tools (rsync --times, sync clients) preserve mtime when content changes. Skip must consider size too, otherwise stale chunks survive.
+    import os
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    _make_workspace(workspace)
+    ws.IndexWorkspace().run(path=str(workspace))
+
+    react = workspace / "notes" / "react.md"
+    original_mtime = react.stat().st_mtime
+    react.write_text(react.read_text() + "\nAdded content that grows the file.")
+    os.utime(react, (original_mtime, original_mtime))
+
+    out = json.loads(ws.IndexWorkspace().run(path=str(workspace)).output)
+    assert out["indexed_files"] == 1
+    assert out["skipped_files"] == 1
+
+
+def test_index_auto_rebuilds_on_embedder_change(tmp_home, tmp_path, stub_embedder, monkeypatch):
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    _make_workspace(workspace)
+    ws.IndexWorkspace().run(path=str(workspace))
+
+    class OtherEmbedder(StubEmbedder):
+        name = "different"
+        dim = 8
+
+    monkeypatch.setattr(embed_mod, "_DEFAULT", OtherEmbedder())
+    out = ws.IndexWorkspace().run(path=str(workspace))
+    assert out.ok, out.error
+    summary = json.loads(out.output)
+    assert summary["embedder"] == "different"
+    assert summary["dim"] == 8
+    assert summary["indexed_files"] == 2
+    assert summary["skipped_files"] == 0
+
+
+def test_index_auto_rebuilds_on_workspace_root_change(tmp_home, tmp_path, stub_embedder):
+    old_root = tmp_path / "old"
+    old_root.mkdir()
+    _make_workspace(old_root)
+    ws.IndexWorkspace().run(path=str(old_root))
+
+    new_root = tmp_path / "new"
+    new_root.mkdir()
+    (new_root / "fresh.md").write_text("# Fresh\nA file only present under the new root.\n")
+    second = json.loads(ws.IndexWorkspace().run(path=str(new_root)).output)
+    assert second["indexed_files"] == 1
+    assert second["skipped_files"] == 0
+    assert second["total_files"] == 1
+    res = json.loads(ws.SearchWorkspace().run(query="React migration").output)
+    assert all("react.md" not in r["path"] for r in res["results"])
+
+
 def test_index_purges_deleted_files(tmp_home, tmp_path, stub_embedder):
     workspace = tmp_path / "ws"
     workspace.mkdir()
