@@ -15,6 +15,7 @@ import { Btn } from "../../../primitives/index.js";
 import Field from "../../../primitives/Field.jsx";
 import { ConfirmDelete, DialogFooter } from "../../../primitives/index.js";
 import { formatLastSeen } from "../util.js";
+import { useActiveRole } from "../../../hooks/useActiveRole.js";
 import styles from "../Settings.module.css";
 
 export function DevicesField() {
@@ -24,6 +25,8 @@ export function DevicesField() {
   const [selectedTokenId, setSelectedTokenId] = useState(null);
   const [revokeTarget, setRevokeTarget] = useState(null);
   const detailAnchorRef = useRef(null);
+  const activeRole = useActiveRole();
+  const canManage = activeRole === "admin" || activeRole == null;
 
   const reload = useCallback(async () => {
     try {
@@ -112,6 +115,7 @@ export function DevicesField() {
             {selected && (
               <DeviceDetailPopover
                 device={selected}
+                canManage={canManage}
                 anchorRef={detailAnchorRef}
                 onClose={() => setSelectedTokenId(null)}
                 onRename={(label) => rename(selected.token_id, label)}
@@ -119,11 +123,35 @@ export function DevicesField() {
                   setRevokeTarget(selected);
                   setSelectedTokenId(null);
                 }}
+                onPromote={async () => {
+                  try {
+                    await invoke("devices_promote", { tokenId: selected.token_id });
+                    notify({ message: "Device promoted to admin", variant: "success" });
+                    setSelectedTokenId(null);
+                    await reload();
+                  } catch (e) {
+                    notify({ message: `promote: ${String(e)}`, variant: "error" });
+                  }
+                }}
+                onDemote={async () => {
+                  try {
+                    await invoke("devices_demote", { tokenId: selected.token_id });
+                    notify({ message: "Device demoted to member", variant: "success" });
+                    setSelectedTokenId(null);
+                    await reload();
+                  } catch (e) {
+                    notify({ message: `demote: ${String(e)}`, variant: "error" });
+                  }
+                }}
               />
             )}
           </span>
         )}
-        <Button size="sm" onClick={() => setAdding(true)}>+ Add device</Button>
+        {canManage ? (
+          <Button size="sm" onClick={() => setAdding(true)}>+ Add device</Button>
+        ) : (
+          <span className={styles.muted}>member device — admin-only</span>
+        )}
       </span>
       {adding && (
         <PairDeviceModal
@@ -153,10 +181,20 @@ export function DevicesField() {
   );
 }
 
-function DeviceDetailPopover({ device, anchorRef, onClose, onRename, onRequestRevoke }) {
+function DeviceDetailPopover({
+  device,
+  canManage,
+  anchorRef,
+  onClose,
+  onRename,
+  onRequestRevoke,
+  onPromote,
+  onDemote,
+}) {
   const popoverRef = useRef(null);
   const [label, setLabel] = useState(device.label ?? "");
   const [busy, setBusy] = useState(false);
+  const role = device.role ?? "member";
   const pos = useAutoPosition({
     open: true,
     anchorRef,
@@ -195,6 +233,28 @@ function DeviceDetailPopover({ device, anchorRef, onClose, onRename, onRequestRe
         />
       </div>
       <div className={styles.field}>
+        <label className={styles.label}>role</label>
+        <span>
+          <Chip size="sm">{role}</Chip>
+          {canManage && (
+            <Btn
+              variant="ghost"
+              size="sm"
+              disabled={busy}
+              onClick={async () => {
+                setBusy(true);
+                try {
+                  if (role === "admin") await onDemote?.();
+                  else await onPromote?.();
+                } finally { setBusy(false); }
+              }}
+            >
+              {role === "admin" ? "Demote to member" : "Promote to admin"}
+            </Btn>
+          )}
+        </span>
+      </div>
+      <div className={styles.field}>
         <label className={styles.label}>token id</label>
         <span className={styles.mono}>…{device.token_id}</span>
       </div>
@@ -207,7 +267,7 @@ function DeviceDetailPopover({ device, anchorRef, onClose, onRename, onRequestRe
           type="button"
           className="alink danger"
           onClick={onRequestRevoke}
-          disabled={busy}
+          disabled={busy || !canManage}
         >
           Revoke device…
         </button>
@@ -239,12 +299,13 @@ function PairDeviceModal({ onClose, onPaired }) {
   const [qrSvg, setQrSvg] = useState("");
   const [warn, setWarn] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [grantAdmin, setGrantAdmin] = useState(false);
   const generatedRef = useRef(false);
 
   useEffect(() => {
     if (generatedRef.current) return;
     generatedRef.current = true;
-    invoke("devices_generate", { label: "" })
+    invoke("devices_generate", { label: "", role: "member" })
       .then((p) => {
         const token = p?.token || "";
         setPayload({ ...p, token_id: token.slice(-8) });
@@ -307,7 +368,11 @@ function PairDeviceModal({ onClose, onPaired }) {
     setBusy(true);
     try {
       await invoke("devices_rename", { tokenId: payload.token_id, label: trimmed });
-      notify({ message: `Device "${trimmed}" paired`, variant: "success" });
+      if (grantAdmin) {
+        await invoke("devices_promote", { tokenId: payload.token_id });
+      }
+      const roleSuffix = grantAdmin ? " (admin)" : "";
+      notify({ message: `Device "${trimmed}"${roleSuffix} paired`, variant: "success" });
       onPaired?.();
     } catch (e) {
       notify({ message: `pair: ${String(e)}`, variant: "error", duration: 4000 });
@@ -329,7 +394,13 @@ function PairDeviceModal({ onClose, onPaired }) {
       try {
         await invoke("devices_rename", { tokenId: payload.token_id, label: action.label });
       } catch { /* rename is best-effort — list still gets the row */ }
-      notify({ message: `Device "${action.label}" paired`, variant: "success" });
+      if (grantAdmin) {
+        try {
+          await invoke("devices_promote", { tokenId: payload.token_id });
+        } catch { /* same best-effort — user can promote later from Devices list */ }
+      }
+      const roleSuffix = grantAdmin ? " (admin)" : "";
+      notify({ message: `Device "${action.label}"${roleSuffix} paired`, variant: "success" });
       onPaired?.();
       return;
     }
@@ -363,6 +434,27 @@ function PairDeviceModal({ onClose, onPaired }) {
           spellCheck={false}
           disabled={busy}
         />
+      </div>
+
+      <div className={styles.field}>
+        <label className={styles.checkboxRow}>
+          <input
+            type="checkbox"
+            checked={grantAdmin}
+            onChange={(e) => setGrantAdmin(e.target.checked)}
+            disabled={busy}
+          />
+          <span>
+            Grant admin access
+            <span className={styles.muted}>
+              {" "}— this device will be able to manage profiles, gateways,
+              and other devices over the network. Either role can still drive
+              the agent via chat, so this is NOT a sandbox on the agent's
+              tools, only on host setup. Leave unchecked for shared,
+              lost-prone, or read-only devices.
+            </span>
+          </span>
+        </label>
       </div>
 
       <div className={`${styles.inlineRow} ${styles.devicePairBody}`}>

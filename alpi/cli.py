@@ -1875,7 +1875,8 @@ def _devices_setup(h: Path) -> None:
             for d in rows:
                 tid = (d["token"] or "")[-8:]
                 last = _format_last_seen(d.get("last_seen"))
-                items.append((d["label"] or tid, ("device", tid), last))
+                role = d.get("role") or "member"
+                items.append((d["label"] or tid, ("device", tid), f"{role} · {last}"))
 
         items.append(None)
         items.append(("+ Add device", "add",
@@ -1977,7 +1978,18 @@ def _device_add(h: Path, endpoint) -> None:
     if label is None:
         return ui.cancelled()
 
-    row = devices_mod.add(label=label or "device")
+    ui.dim(
+        "Admin devices can manage profiles, gateways, workgroups, providers,\n"
+        "and other devices over WebSocket — full remote control plane. Member\n"
+        "devices keep chat / read / post-in-workgroups but cannot mutate config.\n"
+        "Either role can still drive the agent (member can call chat), so this\n"
+        "is NOT a sandbox boundary on the agent's tools — only on host setup.\n"
+        "Leave as 'No' for shared, lost-prone, or read-only devices."
+    )
+    grant_admin = ui.confirm("Grant admin access?", default=False)
+    role = "admin" if grant_admin else "member"
+
+    row = devices_mod.add(label=label or "device", role=role)
 
     import io
     import json
@@ -2019,6 +2031,7 @@ def _device_add(h: Path, endpoint) -> None:
         qr.print_ascii(out=buf, invert=True)
     ui._console.print(buf.getvalue())
     ui._console.print(f"[dim]label:    [/dim] {row['label']}")
+    ui._console.print(f"[dim]role:     [/dim] {row['role']}")
     ui._console.print(f"[dim]token id:[/dim] …{row['token'][-8:]}")
     ui._console.print(f"[dim]desktop:  [/dim] {link}")
     ui._console.print("")
@@ -2119,14 +2132,24 @@ def _device_detail(token_id: str) -> None:
         if target is None:
             return
 
+        current_role = target.get("role") or "member"
+        flip_label = "Demote to member" if current_role == "admin" else "Promote to admin"
+        flip_hint = (
+            "member can still chat, see events, post in workgroups"
+            if current_role == "admin"
+            else "admin unlocks profile/gateway/device management over WS"
+        )
+
         choice = ui.menu(
             ui.crumb("setup", "devices", target["label"] or token_id),
             [
                 ("Label", "label", target["label"] or "(none)"),
+                ("Role", "noop", current_role),
                 ("Token id", "noop", f"…{token_id}"),
                 ("Last seen", "noop", _format_last_seen(target.get("last_seen"))),
                 None,
                 ("Rename", "rename", ""),
+                (flip_label, "flip_role", flip_hint),
                 ("Revoke", "revoke", "the device will lose access immediately"),
             ],
             subtitle="device detail",
@@ -2142,6 +2165,16 @@ def _device_detail(token_id: str) -> None:
             if new_label is None:
                 continue
             devices_mod.rename(target["token"], new_label)
+            continue
+        if choice == "flip_role":
+            new_role = "member" if current_role == "admin" else "admin"
+            if not ui.confirm(
+                f"Change {target['label'] or token_id} to {new_role}?",
+                default=False,
+            ):
+                continue
+            devices_mod.set_role(target["token"], new_role)
+            ui.ok_and_wait(f"role updated to {new_role}")
             continue
         if choice == "revoke":
             if not ui.confirm(

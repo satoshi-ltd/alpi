@@ -18,15 +18,55 @@ log = logging.getLogger("alpi.host.server")
 
 DEFAULT_TCP_PORT = 49200
 
-# Pairing admin — rejected over WS, allowed over Unix socket.
+# Reserved for the local Unix socket — even an admin remote device cannot rebind the network or restart the daemon.
 _LOCAL_ONLY_METHODS = frozenset({
-    "host.devices.list",
-    "host.devices.generate",
-    "host.devices.revoke",
-    "host.devices.rename",
     "host.network.status",
     "host.network.set_advertised",
     "host.network.restart_host_server",
+})
+
+# Require ``role == "admin"`` when called over WS. Local socket bypasses (see ``devices.validate_and_lookup_role`` for the empty-store bootstrap).
+_ADMIN_METHODS = frozenset({
+    "host.providers.set_key",
+    "host.providers.unset_key",
+    "host.providers.add_ollama",
+    "host.providers.remove_ollama",
+    "host.providers.add_openrouter_model",
+    "host.providers.remove_openrouter_model",
+    "host.peers.add",
+    "host.peers.remove",
+    "host.peers.pending_accept",
+    "host.peers.pending_discard",
+    "host.identity.draft",
+    "host.profile.create",
+    "host.profile.delete",
+    "host.config.set_field",
+    "host.config.unset_field",
+    "host.mcp.add",
+    "host.mcp.remove",
+    "host.gateway.remove",
+    "host.gateway.gmail.begin",
+    "host.gateway.gmail.exchange",
+    "host.sandbox.set",
+    "host.sandbox.network",
+    "host.voice.set_voice",
+    "host.voice.autoplay",
+    "host.schedule.fire",
+    "host.schedule.remove",
+    "host.schedule.set_paused",
+    "host.workgroup.create",
+    "host.workgroup.update",
+    "host.workgroup.add_member",
+    "host.workgroup.kick",
+    "host.workgroup.remove",
+    "host.workgroup.action",
+    "host.approval.respond",
+    "host.daemon.restart",
+    "host.devices.generate",
+    "host.devices.revoke",
+    "host.devices.rename",
+    "host.devices.promote",
+    "host.devices.demote",
 })
 
 
@@ -188,12 +228,16 @@ class Server:
         except json.JSONDecodeError:
             log.debug("malformed JSON on host transport; dropping")
             return
-        if require_token and not _check_token(body):
-            await send({
-                "id": body.get("id"),
-                "error": {"code": -32000, "message": "auth-failed"},
-            })
-            return
+        # Unix socket is the source of trust; treat as admin-equivalent.
+        role = "admin"
+        if require_token:
+            valid, role = _check_token_role(body)
+            if not valid:
+                await send({
+                    "id": body.get("id"),
+                    "error": {"code": -32000, "message": "auth-failed"},
+                })
+                return
         method = str(body.get("method") or "")
         if require_token and method in _LOCAL_ONLY_METHODS:
             log.warning("host forbidden: %s blocked over remote transport", method)
@@ -203,6 +247,17 @@ class Server:
                     "code": -32001,
                     "message": "forbidden",
                     "data": {"detail": "method is local-only"},
+                },
+            })
+            return
+        if require_token and method in _ADMIN_METHODS and role != "admin":
+            log.warning("host forbidden: %s blocked for role=%s", method, role)
+            await send({
+                "id": body.get("id"),
+                "error": {
+                    "code": -32001,
+                    "message": "forbidden",
+                    "data": {"detail": "admin role required"},
                 },
             })
             return
@@ -306,13 +361,17 @@ def _is_safe_bind(addr: str) -> bool:
 
 
 def _check_token(body: dict[str, Any]) -> bool:
-    # validate_and_touch handles the empty-store migration window, validation AND throttled last_seen bookkeeping in a single call so chatty clients don't cause O(N) reads per RPC.
+    return _check_token_role(body)[0]
+
+
+def _check_token_role(body: dict[str, Any]) -> tuple[bool, str]:
     from alpi.host import devices as devices_mod
 
     params = body.get("params") or {}
     token = str(params.get("auth_token") or "")
     method = str(body.get("method") or "?")
-    if not devices_mod.validate_and_touch(token):
+    valid, role = devices_mod.validate_and_lookup_role(token)
+    if not valid:
         if not token:
             log.warning("host auth-failed: no token sent (method=%s)", method)
         else:
@@ -320,5 +379,5 @@ def _check_token(body: dict[str, Any]) -> bool:
                 "host auth-failed: token …%s not in store (method=%s)",
                 token[-8:], method,
             )
-        return False
-    return True
+        return False, ""
+    return True, role

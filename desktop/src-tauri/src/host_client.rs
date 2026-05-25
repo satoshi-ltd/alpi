@@ -55,6 +55,7 @@ struct StatusEntry {
     error: Option<String>,
     consecutive_failures: u32,
     alpi_version: Option<String>,
+    role: Option<String>,
 }
 
 impl Default for StatusEntry {
@@ -64,6 +65,7 @@ impl Default for StatusEntry {
             error: None,
             consecutive_failures: 0,
             alpi_version: None,
+            role: None,
         }
     }
 }
@@ -128,12 +130,40 @@ pub fn version_for(id: &str) -> Option<String> {
     None
 }
 
+pub fn role_for(id: &str) -> Option<String> {
+    if let Ok(map) = status_map().lock() {
+        if let Some(entry) = map.get(id) {
+            return entry.role.clone();
+        }
+    }
+    None
+}
+
 fn set_version(id: &str, version: Option<String>) {
     let mut changed = false;
     if let Ok(mut map) = status_map().lock() {
         let entry = map.entry(id.to_string()).or_default();
         if entry.alpi_version != version {
             entry.alpi_version = version;
+            changed = true;
+        }
+    }
+    if changed {
+        if let Ok(guard) = listeners().lock() {
+            let (status, error) = status_for(id);
+            for listener in guard.iter() {
+                listener(id, status, error.as_deref());
+            }
+        }
+    }
+}
+
+fn set_role(id: &str, role: Option<String>) {
+    let mut changed = false;
+    if let Ok(mut map) = status_map().lock() {
+        let entry = map.entry(id.to_string()).or_default();
+        if entry.role != role {
+            entry.role = role;
             changed = true;
         }
     }
@@ -304,6 +334,7 @@ impl HostConnection {
     fn with_token_redacted(&self) -> Value {
         let (status, error) = status_for(self.id());
         let alpi_version = version_for(self.id());
+        let role = role_for(self.id());
         match self {
             HostConnection::Local { id, name, device_id } => {
                 json!({
@@ -314,6 +345,7 @@ impl HostConnection {
                     "error": error,
                     "alpi_version": alpi_version,
                     "device_id": device_id,
+                    "role": role,
                 })
             }
             HostConnection::Remote {
@@ -336,6 +368,7 @@ impl HostConnection {
                 "error": error,
                 "alpi_version": alpi_version,
                 "device_id": device_id,
+                "role": role,
             }),
         }
     }
@@ -1193,6 +1226,13 @@ pub fn probe_connection(conn: &HostConnection) {
                 .and_then(|v| v.as_str())
                 .map(|s| s.to_string());
             set_version(&id, version);
+            let role = version_value
+                .as_ref()
+                .and_then(|v| v.get("role"))
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.is_empty())
+                .map(|s| s.to_string());
+            set_role(&id, role);
             let device_id = version_value
                 .as_ref()
                 .and_then(|v| v.get("device_id"))

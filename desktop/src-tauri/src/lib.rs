@@ -501,16 +501,46 @@ fn devices_list() -> serde_json::Value {
 }
 
 #[tauri::command]
-async fn devices_generate(label: String) -> Result<serde_json::Value, String> {
+async fn devices_generate(
+    label: String,
+    role: Option<String>,
+) -> Result<serde_json::Value, String> {
+    let role = role.unwrap_or_else(|| "member".into());
     let value = tauri::async_runtime::spawn_blocking(move || {
         host_client::call(
             "host.devices.generate",
-            serde_json::json!({"label": label}),
+            serde_json::json!({"label": label, "role": role}),
         )
     })
     .await
     .map_err(|e| format!("join: {e}"))??;
     Ok(value)
+}
+
+#[tauri::command]
+async fn devices_promote(token_id: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        host_client::call(
+            "host.devices.promote",
+            serde_json::json!({"token_id": token_id}),
+        )
+    })
+    .await
+    .map_err(|e| format!("join: {e}"))??;
+    Ok(())
+}
+
+#[tauri::command]
+async fn devices_demote(token_id: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        host_client::call(
+            "host.devices.demote",
+            serde_json::json!({"token_id": token_id}),
+        )
+    })
+    .await
+    .map_err(|e| format!("join: {e}"))??;
+    Ok(())
 }
 
 #[tauri::command]
@@ -2262,6 +2292,8 @@ pub fn run() {
             probe_gateways,
             devices_list,
             devices_generate,
+            devices_promote,
+            devices_demote,
             devices_revoke,
             devices_rename,
             network_status,

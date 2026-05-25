@@ -28,6 +28,7 @@ import { useHostConnections } from "./hooks/useHostConnections.js";
 import { useNavListener } from "./hooks/useNavListener.js";
 import { usePinned } from "./hooks/usePinned.js";
 import { useLastView } from "./hooks/useLastView.js";
+import { useActiveRole } from "./hooks/useActiveRole.js";
 import { useWorkgroupTasks } from "./hooks/useWorkgroupTasks.js";
 import { useWindowChrome } from "./hooks/useWindowChrome.js";
 import {
@@ -128,6 +129,9 @@ export default function App() {
       });
     }
   }, []);
+  const activeRole = useActiveRole();
+  // Pre-probe (``null``) defaults to allow — local Unix socket users have no token but are admin-equiv, and the role probe lands within a couple seconds for remote.
+  const canAdminEarly = activeRole === "admin" || activeRole == null;
   const [createProfileOpen, setCreateProfileOpen] = useState(false);
   const onNewProfile = useCallback(() => {
     setCreateProfileOpen(true);
@@ -136,6 +140,8 @@ export default function App() {
   const onNewWorkgroup = useCallback(() => {
     setCreateWorkgroupOpen(true);
   }, []);
+  const adminOnNewProfile = canAdminEarly ? onNewProfile : null;
+  const adminOnNewWorkgroup = canAdminEarly ? onNewWorkgroup : null;
   const [searchOpen, setSearchOpen] = useState(false);
   const searchOpenRef = useRef(false);
   useEffect(() => {
@@ -217,8 +223,8 @@ export default function App() {
     viewRef,
     setView,
     onJumpToProfile,
-    onNewProfile,
-    onNewWorkgroup,
+    onNewProfile: adminOnNewProfile,
+    onNewWorkgroup: adminOnNewWorkgroup,
     onOpenSettings,
     onToggleSearch,
     onTogglePalette,
@@ -765,8 +771,8 @@ export default function App() {
     onOpenSettings,
     onCloseSettings: closeSettings,
     onToggleSearch,
-    onNewProfile,
-    onNewWorkgroup,
+    onNewProfile: adminOnNewProfile,
+    onNewWorkgroup: adminOnNewWorkgroup,
     onNewChat,
     onBrowseTools,
     onBrowseSkills,
@@ -792,8 +798,8 @@ export default function App() {
         onOpenWorkgroup={onOpenWorkgroup}
         onOpenSettings={onOpenSettings}
         onOpenPalette={onTogglePalette}
-        onNewProfile={onNewProfile}
-        onNewWorkgroup={onNewWorkgroup}
+        onNewProfile={adminOnNewProfile}
+        onNewWorkgroup={adminOnNewWorkgroup}
         onCloseSettings={closeSettings}
         onSetSettingsTarget={setSettingsTarget}
         onTogglePin={onTogglePin}

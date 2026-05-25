@@ -254,7 +254,7 @@ async def test_device_read_file_rejects_escape(
         "method": "host.profile.read_file",
         "params": {"profile": "default", "rel_path": "../outside.txt"},
     })
-    assert bad["error"]["code"] == -32004
+    assert bad["error"]["code"] == -32001
 
 
 @pytest.mark.asyncio

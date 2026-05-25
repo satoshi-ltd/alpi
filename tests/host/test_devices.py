@@ -205,13 +205,11 @@ async def test_revoke_unknown_returns_not_found(short_tmp: Path) -> None:
     assert resp["error"]["code"] == -32004
 
 
-def test_check_token_open_when_store_empty(short_tmp: Path) -> None:
-    """Migration: empty store = open. Tailscale-only setups keep
-    working until first Add device."""
+def test_check_token_fail_closed_when_store_empty(short_tmp: Path) -> None:
     from alpi.host.server import _check_token
 
-    assert _check_token({"params": {}}) is True
-    assert _check_token({"params": {"auth_token": "anything"}}) is True
+    assert _check_token({"params": {}}) is False
+    assert _check_token({"params": {"auth_token": "anything"}}) is False
 
 
 def test_check_token_enforces_once_store_has_entries(short_tmp: Path) -> None:
@@ -234,18 +232,16 @@ def test_check_token_touches_last_seen_on_match(short_tmp: Path) -> None:
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("method", [
-    "host.devices.list",
     "host.devices.generate",
     "host.devices.revoke",
     "host.devices.rename",
+    "host.devices.promote",
+    "host.devices.demote",
 ])
-async def test_devices_verbs_blocked_over_remote_transport(
+async def test_devices_mutations_require_admin_role(
     short_tmp: Path, method: str,
 ) -> None:
-    """Pairing admin must never traverse a paired remote — a peer with
-    a token must not be able to enumerate, mint, or kick devices on
-    the host machine. The Unix socket is the only legitimate caller."""
-    row = devices.add(label="seed")  # so token check is enforced
+    row = devices.add(label="seed", role="member")
     srv = host_server.Server(home=short_tmp)
     devices.register(srv)
 
@@ -264,6 +260,317 @@ async def test_devices_verbs_blocked_over_remote_transport(
     assert len(sent) == 1
     assert sent[0]["error"]["code"] == -32001
     assert sent[0]["error"]["message"] == "forbidden"
+    assert "admin role required" in sent[0]["error"]["data"]["detail"]
+
+
+@pytest.mark.asyncio
+async def test_devices_list_open_to_members(short_tmp: Path) -> None:
+    member = devices.add(label="phone", role="member")
+    devices.add(label="laptop", role="admin")
+    srv = host_server.Server(home=short_tmp)
+    devices.register(srv)
+
+    sent: list[dict] = []
+
+    async def send(payload):
+        sent.append(payload)
+
+    body = {
+        "id": "r", "method": "host.devices.list",
+        "params": {"auth_token": member["token"]},
+    }
+    await srv._handle_request(json.dumps(body), send, require_token=True)
+
+    assert len(sent) == 1
+    assert "error" not in sent[0]
+    rows = sent[0]["result"]["devices"]
+    assert {r["label"] for r in rows} == {"phone", "laptop"}
+    assert {r["role"] for r in rows} == {"member", "admin"}
+    # Full tokens stay server-side regardless of who's asking.
+    assert all("token" not in r for r in rows)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("method", [
+    "host.devices.generate",
+    "host.devices.revoke",
+    "host.devices.promote",
+    "host.devices.demote",
+])
+async def test_devices_mutations_allowed_for_admin(
+    short_tmp: Path, monkeypatch, method: str,
+) -> None:
+    admin = devices.add(label="laptop", role="admin")
+    target = devices.add(label="victim", role="member")
+    srv = host_server.Server(home=short_tmp)
+    devices.register(srv)
+
+    from alpi.host import network as net_mod
+    monkeypatch.setattr(net_mod, "resolve_host_endpoint", lambda _r: ("100.0.0.1", "tailscale"))
+    monkeypatch.setattr(net_mod, "resolve_host_tcp_port", lambda _r: 49200)
+    monkeypatch.setattr(net_mod, "resolve_host_pairing_name", lambda _r: "alpi")
+    monkeypatch.setattr(net_mod, "classify_scope", lambda _h, _s: "tailscale")
+
+    sent: list[dict] = []
+
+    async def send(payload):
+        sent.append(payload)
+
+    body = {
+        "id": "r", "method": method,
+        "params": {
+            "auth_token": admin["token"],
+            "token_id": target["token"][-8:],
+            "label": "renamed",
+        },
+    }
+    await srv._handle_request(json.dumps(body), send, require_token=True)
+
+    assert len(sent) == 1, sent
+    assert "error" not in sent[0], sent[0]
+
+
+@pytest.mark.asyncio
+async def test_devices_promote_demote_flip_role(short_tmp: Path) -> None:
+    admin = devices.add(label="laptop", role="admin")
+    target = devices.add(label="phone", role="member")
+    srv = host_server.Server(home=short_tmp)
+    devices.register(srv)
+
+    sent: list[dict] = []
+
+    async def send(p):
+        sent.append(p)
+
+    promote = {
+        "id": "1", "method": "host.devices.promote",
+        "params": {"auth_token": admin["token"], "token_id": target["token"][-8:]},
+    }
+    await srv._handle_request(json.dumps(promote), send, require_token=True)
+    assert sent[-1]["result"]["role"] == "admin"
+    assert any(d["token"] == target["token"] and d["role"] == "admin" for d in devices.load())
+
+    demote = {
+        "id": "2", "method": "host.devices.demote",
+        "params": {"auth_token": admin["token"], "token_id": target["token"][-8:]},
+    }
+    await srv._handle_request(json.dumps(demote), send, require_token=True)
+    assert sent[-1]["result"]["role"] == "member"
+    assert any(d["token"] == target["token"] and d["role"] == "member" for d in devices.load())
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("method", sorted(host_server._ADMIN_METHODS))
+async def test_every_admin_method_rejects_member_token(
+    short_tmp: Path, method: str,
+) -> None:
+    member = devices.add(label="phone", role="member")
+    srv = host_server.Server(home=short_tmp)
+    devices.register(srv)
+
+    sent: list[dict] = []
+
+    async def send(p):
+        sent.append(p)
+
+    body = {
+        "id": "x", "method": method,
+        "params": {"auth_token": member["token"]},
+    }
+    await srv._handle_request(json.dumps(body), send, require_token=True)
+
+    assert len(sent) == 1, f"{method}: no response"
+    err = sent[0].get("error")
+    assert err is not None, f"{method}: should have been forbidden, got {sent[0]}"
+    assert err["code"] == -32001, f"{method}: wrong code {err}"
+    assert "admin role required" in err.get("data", {}).get("detail", ""), method
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "rel_path",
+    [
+        # Top-level daemon directories.
+        ".env",
+        "./.env",
+        ".env.local",
+        ".envrc",
+        "secrets/gmail_token.json",
+        "secrets/api_keys.json",
+        "host/devices.yaml",
+        "gateway/telegram-state.json",
+        "cache/update_check.json",
+        # Nested directories — the prefix-only check used to miss these.
+        "alp/secrets/identity.key",
+        "skills/personal/foo/secrets/token.json",
+        "skills/personal/foo/.env",
+        "workspace/.env",
+        "workspace/sub/.env.local",
+        # Case-insensitive — matters on macOS HFS+/APFS default.
+        "Secrets/anything",
+        "WORKSPACE/.ENV",
+        # Common private-key extensions.
+        "memories/id_rsa.pem",
+        "skills/foo/server.key",
+        "data/cert.p12",
+        # Path escape.
+        "../outside.txt",
+    ],
+)
+async def test_profile_read_file_denies_secret_paths(
+    short_tmp: Path, rel_path: str,
+) -> None:
+    from alpi.host import device_state
+
+    admin = devices.add(label="laptop", role="admin")
+    home = short_tmp / "profiles" / "default"
+    home.mkdir(parents=True)
+
+    from alpi.host import handlers as host_handlers
+    import unittest.mock as _mock
+    with _mock.patch.object(host_handlers, "_resolve_home", return_value=home):
+        srv = host_server.Server(home=short_tmp)
+        device_state.register(srv)
+        sent: list[dict] = []
+
+        async def send(p):
+            sent.append(p)
+
+        body = {
+            "id": "x", "method": "host.profile.read_file",
+            "params": {
+                "auth_token": admin["token"],
+                "profile": "default", "rel_path": rel_path,
+            },
+        }
+        await srv._handle_request(json.dumps(body), send, require_token=True)
+
+    assert len(sent) == 1
+    err = sent[0].get("error")
+    assert err is not None, f"{rel_path}: not blocked — got {sent[0]}"
+    assert err["code"] == -32001, err
+
+
+@pytest.mark.asyncio
+async def test_profile_read_file_blocks_symlink_into_denied_subtree(
+    short_tmp: Path,
+) -> None:
+    from alpi.host import device_state
+
+    admin = devices.add(label="laptop", role="admin")
+    home = short_tmp / "profiles" / "default"
+    (home / "secrets").mkdir(parents=True)
+    (home / "secrets" / "gmail_token.json").write_text("REAL_TOKEN")
+    (home / "memories").mkdir(parents=True)
+    # User content directory points at a daemon-internal file via symlink.
+    (home / "memories" / "innocent.md").symlink_to(home / "secrets" / "gmail_token.json")
+
+    from alpi.host import handlers as host_handlers
+    import unittest.mock as _mock
+    with _mock.patch.object(host_handlers, "_resolve_home", return_value=home):
+        srv = host_server.Server(home=short_tmp)
+        device_state.register(srv)
+        sent: list[dict] = []
+
+        async def send(p):
+            sent.append(p)
+
+        body = {
+            "id": "x", "method": "host.profile.read_file",
+            "params": {
+                "auth_token": admin["token"],
+                "profile": "default", "rel_path": "memories/innocent.md",
+            },
+        }
+        await srv._handle_request(json.dumps(body), send, require_token=True)
+
+    assert sent[0].get("error", {}).get("code") == -32001
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "rel_path",
+    [
+        "alp/peers.yaml",
+        "alp/workgroups/abc/transcript.jsonl",
+        "memories/USER.md",
+        "skills/personal/foo/SKILL.md",
+        "workspace/notes.md",
+        "logs/agent.log",
+    ],
+)
+async def test_profile_read_file_allows_member_visible_content(
+    short_tmp: Path, rel_path: str,
+) -> None:
+    from alpi.host import device_state
+
+    member = devices.add(label="phone", role="member")
+    home = short_tmp / "profiles" / "default"
+    target = home / rel_path
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text("legit content")
+
+    from alpi.host import handlers as host_handlers
+    import unittest.mock as _mock
+    with _mock.patch.object(host_handlers, "_resolve_home", return_value=home):
+        srv = host_server.Server(home=short_tmp)
+        device_state.register(srv)
+        sent: list[dict] = []
+
+        async def send(p):
+            sent.append(p)
+
+        body = {
+            "id": "x", "method": "host.profile.read_file",
+            "params": {
+                "auth_token": member["token"],
+                "profile": "default", "rel_path": rel_path,
+            },
+        }
+        await srv._handle_request(json.dumps(body), send, require_token=True)
+
+    assert "error" not in sent[0], f"{rel_path}: false positive — {sent[0]}"
+    assert sent[0]["result"]["text"] == "legit content"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "method", ["host.devices.generate", "host.profile.delete", "host.daemon.restart"],
+)
+async def test_empty_store_does_not_open_admin_methods_over_ws(
+    short_tmp: Path, method: str,
+) -> None:
+    srv = host_server.Server(home=short_tmp)
+    devices.register(srv)
+    sent: list[dict] = []
+
+    async def send(p):
+        sent.append(p)
+
+    for params in ({}, {"auth_token": "anything"}, {"auth_token": ""}):
+        sent.clear()
+        body = {"id": "x", "method": method, "params": params}
+        await srv._handle_request(json.dumps(body), send, require_token=True)
+        err = sent[0].get("error")
+        assert err is not None, f"{method} {params} leaked through with empty store"
+        assert err["code"] == -32000, (method, params, err)
+        assert err["message"] == "auth-failed"
+
+
+def test_legacy_yaml_without_role_defaults_to_member(short_tmp: Path) -> None:
+    import yaml as _yaml
+    path = devices._store_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(_yaml.safe_dump([
+        {"token": "tok-legacy", "label": "Old MacBook", "created": 1, "last_seen": None},
+    ]))
+    devices._invalidate_cache()
+    rows = devices.load()
+    assert rows[0]["role"] == "member"
+    # And the dispatcher refuses admin methods to the legacy device.
+    valid, role = devices.validate_and_lookup_role("tok-legacy")
+    assert valid is True
+    assert role == "member"
 
 
 def test_validate_and_touch_throttles_writes(short_tmp: Path, monkeypatch) -> None:
@@ -289,9 +596,12 @@ def test_validate_and_touch_throttles_writes(short_tmp: Path, monkeypatch) -> No
     assert path.stat().st_mtime_ns != first_mtime  # past the window → writes again.
 
 
-def test_validate_and_touch_open_when_store_empty(short_tmp: Path) -> None:
-    assert devices.validate_and_touch("") is True
-    assert devices.validate_and_touch("anything") is True
+def test_validate_and_touch_fail_closed_when_store_empty(short_tmp: Path) -> None:
+    assert devices.validate_and_touch("") is False
+    assert devices.validate_and_touch("anything") is False
+    valid, role = devices.validate_and_lookup_role("anything")
+    assert valid is False
+    assert role == ""
 
 
 def test_validate_and_touch_rejects_unknown_when_populated(short_tmp: Path) -> None:

@@ -805,6 +805,19 @@
   font-size: 0.8rem;
   line-height: 1.4;
 }
+.checkboxRow {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  font-size: 0.85rem;
+  line-height: 1.4;
+  cursor: pointer;
+}
+.checkboxRow input[type="checkbox"] {
+  margin-top: 3px;
+  cursor: pointer;
+}
+
 .gmailPasteInput {
   width: 100%;
   margin-top: var(--space-2);

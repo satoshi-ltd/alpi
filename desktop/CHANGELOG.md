@@ -11,6 +11,64 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.3.19 — 2026-05-25 — pair-with-role UI + role-aware gating
+
+Surfaces the v0.6.10 ``admin / member`` device roles. Requires
+alpi ≥ 0.6.10.
+
+- Pair modal in Settings → Devices gains a **Grant admin
+  access** checkbox under the label field, default off. The
+  device is minted as ``member`` and promoted to ``admin``
+  inline (``devices_promote``) if the checkbox is on when you
+  hit Pair. The success toast reflects the final role.
+- Device detail popover now shows the role as a chip with a
+  **Promote to admin** / **Demote to member** button. Both
+  call the new ``host.devices.promote`` / ``host.devices.demote``
+  endpoints. Buttons gated by the active connection's role.
+- ``+ Add device`` is hidden when the active connection's role
+  is ``member`` — daemon would refuse anyway, but the UI
+  shouldn't pretend to offer the action. Same for Revoke.
+- New ``useActiveRole()`` hook reads the role from
+  ``host_connections()`` and refreshes on the existing
+  ``connection-status`` event. Cached in Rust per-connection
+  alongside ``alpi_version``; sourced from the ``role`` field
+  the daemon added to ``host.version``.
+- Two new Tauri commands ``devices_promote`` and
+  ``devices_demote`` wire through to the daemon via the normal
+  host plane — admin WS clients can promote / demote remote
+  devices too (the daemon enforces ``_ADMIN_METHODS``). Cached
+  role on the affected device's desktop refreshes on next probe
+  (~30 s); not a security gap since the daemon rejects regardless.
+- **Settings → Devices** section used to be hidden whenever
+  the active connection was remote (legacy "local-only" rule).
+  Now it shows up for any admin connection — local Unix socket
+  OR remote WS with ``role=admin``. Network sub-section
+  (``host.network.*``) stays local-only since the daemon never
+  unlocks those over WS.
+- **Sidebar gating**: the ``+`` buttons for new profile and new
+  workgroup, plus the **Delete profile** action in Settings,
+  are now hidden for member-role connections. The daemon
+  would refuse anyway, but the UI shouldn't pretend.
+  Member-visible copy still mentions that this only gates the
+  host control plane — the agent's own tools remain reachable
+  via ``host.chat.send``.
+- **Keyboard shortcuts and command palette** also stop offering
+  *New profile* / *New workgroup* when the active connection is
+  member. Both ``useWindowChrome`` and ``useCommands`` now
+  receive ``null`` callbacks under that role, so ``⇧⌘N`` /
+  ``⇧⌘W`` no-op and the palette omits the entries entirely
+  instead of opening a modal that the daemon would reject.
+  Role is read once at the App level via the new
+  ``useActiveRole`` hook; pre-probe (no role yet) defaults to
+  *allow* so local boot doesn't lose the shortcuts.
+- **Pair-modal admin promote** is now honoured on the cancel /
+  keep-anyway path too. If you ticked *Grant admin access*, then
+  scanned the QR from the phone (which makes ``devices.list``
+  see the device as paired) and closed the modal via Cancel,
+  the device used to stay as ``member`` because the rename
+  branch ran but the promote did not. Promote now fires in both
+  paths.
+
 ## v0.3.18 — 2026-05-25 — Gmail paste fallback for cross-machine setups
 
 0.3.17 fixed remote daemons by moving the OAuth loopback to

@@ -8,7 +8,9 @@ secrets, host pairing, and threat model questions.
 - alpi is local-first and has no hosted control plane.
 - Secrets go in profile `.env` or skill `secrets/`.
 - The workspace is a default path, not a hard sandbox boundary.
-- Remote clients cannot administer pairing or network settings.
+- Paired devices carry a role (`admin` or `member`); the dispatcher
+  blocks sensitive verbs from member tokens. Network admin is still
+  local-only over the Unix socket.
 
 ## Short answer
 
@@ -36,20 +38,53 @@ Suggested pattern:
 - email/internet automation profile: sandbox on,
 - work/client profile: separate profile and workspace.
 
-## Host pairing
+## Host pairing and device roles
 
 Desktop/mobile WebSocket transport uses per-device tokens from
-`~/.alpi/host/devices.yaml`. The listener binds Tailscale or RFC1918 LAN,
-not public addresses.
+`~/.alpi/host/devices.yaml`. Each entry carries a `role`: `admin` or
+`member` (older entries without the field read back as `member`). The
+listener binds Tailscale or RFC1918 LAN, not public addresses.
 
-Local-only over Unix socket:
+Three trust tiers:
 
-- list/generate/revoke devices,
-- change advertised host/device name,
-- restart host server.
+- **Unix socket (local)** — sovereign. Mints the first device and
+  recovers from a lost admin token. Bypasses all role checks.
+- **WS admin** — can manage profiles, gateways, providers, MCP,
+  workgroups, peers, sandbox, schedules, daemon restart, and other
+  devices (add / promote / demote / revoke).
+- **WS member** — chat, events, read-only views, schedule listing,
+  workgroup posting and reading, voice preview. Sensitive **host
+  control plane** mutations reject with `-32001 forbidden / admin
+  role required`. The role does NOT sandbox the agent's own tools
+  — `host.chat.send` is open to members, so anything the agent can
+  do (workspace writes, memory edits, network calls) is still
+  reachable. Use the OS sandbox flag or separate profiles for that
+  boundary, not the device role.
 
-A paired remote WebSocket client gets `forbidden` for those admin verbs
-even with a valid token.
+Local-only verbs (admin role does not unlock them):
+
+- `host.network.status`,
+- `host.network.set_advertised`,
+- `host.network.restart_host_server`.
+
+`host.profile.read_file` denies secret content regardless of role —
+checked by path *components*, not just top-level prefixes, so
+nested ones don't slip through:
+
+- Any path component named `secrets` (e.g. `alp/secrets/key`,
+  `skills/foo/secrets/token.json`).
+- Top-level `host/`, `gateway/`, `cache/` subtrees (daemon
+  internal state).
+- Any basename starting with `.env` (`.env`, `.env.local`,
+  `skills/foo/.env`, `workspace/.env`).
+- Common private-key extensions (`.pem`, `.key`, `.p12`, `.pfx`,
+  `.keystore`).
+- Path escapes (`../foo`) — return `-32001 forbidden`, same
+  envelope as a denied secret read.
+- Symlinks that resolve into a denied subtree.
+
+Secrets reach the model only through dedicated, audited methods
+(gateway setup, devices.list redacted view, etc.).
 
 ## Skills and secrets
 

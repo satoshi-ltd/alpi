@@ -93,18 +93,26 @@ def _profiles() -> list[dict[str, Any]]:
 
 
 async def _host_version(
-    _params: dict[str, Any], server: host_server.Server,
+    params: dict[str, Any], server: host_server.Server,
 ) -> dict[str, Any]:
     try:
         cfg = cfg_mod.load(home_mod.get_home())
         device_name = str((cfg.host or {}).get("device_name") or "").strip()
     except Exception:  # noqa: BLE001
         device_name = ""
+    # The Unix-socket caller carries no token but is sovereign — report admin so the local desktop still unlocks the full UI without a separate "is local" probe.
+    from alpi.host import devices as devices_mod
+    token = str((params or {}).get("auth_token") or "")
+    role = "admin"
+    if token:
+        valid, looked_up = devices_mod.validate_and_lookup_role(token)
+        role = looked_up if valid else "member"
     return {
         "agent_name": "alpi",
         "version": _alpi_version,
         "device_name": device_name,
         "device_id": _ensure_device_id(server.home),
+        "role": role,
     }
 
 
@@ -229,11 +237,44 @@ def _profile_detail_payload(home: Path) -> dict[str, Any]:
     }
 
 
+# Sensitive content `read_file` must never expose, no matter the caller's role. Component-based so nested directories (skills/foo/secrets/, alp/secrets/, workspace/.env) are caught — top-level prefix matching wasn't enough.
+_TOP_LEVEL_DENY = frozenset({"host", "gateway", "cache"})
+_DENIED_COMPONENT = "secrets"
+_DENIED_BASENAME_PREFIX = ".env"
+_DENIED_EXTENSIONS = (".pem", ".key", ".p12", ".pfx", ".keystore")
+
+
+def _is_denied_read_path(rel_path: str) -> bool:
+    import os
+    rel = os.path.normpath(rel_path).replace("\\", "/")
+    if rel.startswith("../") or rel == ".." or rel.startswith("/"):
+        return True
+    if rel in (".", ""):
+        return False
+    parts = [p for p in rel.split("/") if p]
+    parts_lower = [p.lower() for p in parts]
+    if any(p == _DENIED_COMPONENT for p in parts_lower):
+        return True
+    if parts_lower[0] in _TOP_LEVEL_DENY:
+        return True
+    basename = parts_lower[-1]
+    if basename.startswith(_DENIED_BASENAME_PREFIX):
+        return True
+    if any(basename.endswith(ext) for ext in _DENIED_EXTENSIONS):
+        return True
+    return False
+
+
 async def _profile_read_file(
     params: dict[str, Any], _server: host_server.Server,
 ) -> dict[str, Any]:
     profile = str(params.get("profile") or "")
     rel_path = str(params.get("rel_path") or "")
+    if _is_denied_read_path(rel_path):
+        raise host_server.HandlerError(
+            -32001, "forbidden",
+            data={"detail": "path holds daemon secrets and cannot be read via host.profile.read_file"},
+        )
     home = _resolve_home(profile)
     abs_path = home / rel_path
     try:
@@ -246,6 +287,16 @@ async def _profile_read_file(
         raise host_server.HandlerError(
             -32602, "invalid-params", data={"detail": "path escapes home"},
         )
+    # Belt-and-braces: even after symlink resolution, refuse if the real path lands inside a denied subtree of the same home (symlinked secrets directory).
+    try:
+        denied_real = real.relative_to(home.resolve())
+        if _is_denied_read_path(str(denied_real)):
+            raise host_server.HandlerError(
+                -32001, "forbidden",
+                data={"detail": "resolved path holds daemon secrets"},
+            )
+    except ValueError:
+        pass
     data = real.read_bytes()
     truncated = len(data) > READ_MAX_BYTES
     text = data[:READ_MAX_BYTES].decode("utf-8", errors="replace")

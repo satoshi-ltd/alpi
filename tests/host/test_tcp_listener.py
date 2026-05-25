@@ -186,6 +186,9 @@ async def test_server_accepts_calls_over_websocket_when_bound(
     from alpi import home as home_mod
     monkeypatch.setattr(home_mod, "_ROOT", short_tmp)
 
+    from alpi.host import devices as devices_mod
+    row = devices_mod.add(label="test", role="member")
+
     with patch.object(
         host_server.Server, "_validate_tcp_bind",
         staticmethod(lambda b: b),
@@ -204,7 +207,8 @@ async def test_server_accepts_calls_over_websocket_when_bound(
             port = sockets[0].getsockname()[1]
             async with websockets.connect(f"ws://127.0.0.1:{port}") as ws:
                 await ws.send(json.dumps({
-                    "id": "1", "method": "host.ping", "params": {},
+                    "id": "1", "method": "host.ping",
+                    "params": {"auth_token": row["token"]},
                 }))
                 response = json.loads(await ws.recv())
             assert response["result"] == {"pong": True}
@@ -220,6 +224,9 @@ async def test_server_accepts_multiple_calls_on_one_websocket(
     home.mkdir()
     from alpi import home as home_mod
     monkeypatch.setattr(home_mod, "_ROOT", short_tmp)
+
+    from alpi.host import devices as devices_mod
+    row = devices_mod.add(label="test", role="member")
 
     with patch.object(
         host_server.Server, "_validate_tcp_bind",
@@ -237,11 +244,13 @@ async def test_server_accepts_multiple_calls_on_one_websocket(
             port = srv._ws_server.sockets[0].getsockname()[1]
             async with websockets.connect(f"ws://127.0.0.1:{port}") as ws:
                 await ws.send(json.dumps({
-                    "id": "1", "method": "host.ping", "params": {"n": 1},
+                    "id": "1", "method": "host.ping",
+                    "params": {"auth_token": row["token"], "n": 1},
                 }))
                 first = json.loads(await ws.recv())
                 await ws.send(json.dumps({
-                    "id": "2", "method": "host.ping", "params": {"n": 2},
+                    "id": "2", "method": "host.ping",
+                    "params": {"auth_token": row["token"], "n": 2},
                 }))
                 second = json.loads(await ws.recv())
             assert first["result"] == {"pong": 1}

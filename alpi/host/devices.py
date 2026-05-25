@@ -12,11 +12,22 @@ import yaml
 from alpi.host import server as host_server
 
 
+_VALID_ROLES = frozenset({"member", "admin"})
+
+
+def _normalise_role(value: Any) -> str:
+    """Anything not in ``_VALID_ROLES`` collapses to ``"member"`` — least-privilege fallback for entries that predate the field on disk."""
+    role = str(value or "").strip().lower()
+    return role if role in _VALID_ROLES else "member"
+
+
 def register(server: host_server.Server) -> None:
     server.register("host.devices.list", _list)
     server.register("host.devices.generate", _generate)
     server.register("host.devices.revoke", _revoke)
     server.register("host.devices.rename", _rename)
+    server.register("host.devices.promote", _promote)
+    server.register("host.devices.demote", _demote)
 
 
 def _store_path() -> Path:
@@ -83,6 +94,7 @@ def load() -> list[dict[str, Any]]:
             "label": str(row.get("label") or ""),
             "created": int(row.get("created") or 0),
             "last_seen": int(row.get("last_seen")) if row.get("last_seen") else None,
+            "role": _normalise_role(row.get("role")),
         })
     return out
 
@@ -141,11 +153,18 @@ def touch(token: str) -> None:
 
 # Validate + record last_seen in one call; writes only when last_seen is stale to keep auth I/O bounded.
 def validate_and_touch(token: str, min_interval: float = 60.0) -> bool:
+    return validate_and_lookup_role(token, min_interval=min_interval)[0]
+
+
+def validate_and_lookup_role(
+    token: str, min_interval: float = 60.0,
+) -> tuple[bool, str]:
+    """Returns ``(valid, role)``; empty role string when invalid. Fail-closed for every WS path: an empty/missing store still rejects every token. The local Unix socket bootstraps the first device by bypassing token auth entirely (``require_token=False``) — no remote needs the empty-store backdoor."""
+    if not token:
+        return False, ""
     devices = _load_cached()
     if not devices:
-        return True  # migration window — empty store is open even without a token.
-    if not token:
-        return False
+        return False, ""
     now = int(time.time())
     match_idx = -1
     for i, d in enumerate(devices):
@@ -153,7 +172,8 @@ def validate_and_touch(token: str, min_interval: float = 60.0) -> bool:
             match_idx = i
             break
     if match_idx < 0:
-        return False
+        return False, ""
+    role = _normalise_role(devices[match_idx].get("role"))
     last = devices[match_idx].get("last_seen") or 0
     if now - int(last) >= min_interval:
         # Reload fresh to avoid writing a stale snapshot when the cache is older than the file.
@@ -163,10 +183,10 @@ def validate_and_touch(token: str, min_interval: float = 60.0) -> bool:
                 d["last_seen"] = now
                 break
         save(fresh)
-    return True
+    return True, role
 
 
-def add(label: str = "") -> dict[str, Any]:
+def add(label: str = "", role: str = "member") -> dict[str, Any]:
     devices = load()
     # 24 bytes urlsafe = 32 chars, 192 bits entropy — keeps the QR small.
     row = {
@@ -174,10 +194,28 @@ def add(label: str = "") -> dict[str, Any]:
         "label": (label or "").strip() or "pending",
         "created": int(time.time()),
         "last_seen": None,
+        "role": _normalise_role(role),
     }
     devices.append(row)
     save(devices)
     return row
+
+
+def set_role(token: str, role: str) -> bool:
+    """Flip role on an existing device; unknown roles are silently rejected to avoid widening the enum on disk."""
+    if role not in _VALID_ROLES:
+        return False
+    devices = load()
+    changed = False
+    for d in devices:
+        if d["token"] == token:
+            if d.get("role") != role:
+                d["role"] = role
+                changed = True
+            break
+    if changed:
+        save(devices)
+    return changed
 
 
 def revoke(token: str) -> bool:
@@ -212,6 +250,7 @@ def _redacted(d: dict[str, Any]) -> dict[str, Any]:
         "label": d.get("label") or "",
         "created": d.get("created") or 0,
         "last_seen": d.get("last_seen"),
+        "role": _normalise_role(d.get("role")),
     }
 
 
@@ -249,13 +288,15 @@ async def _generate(
         )
 
     label = str((params or {}).get("label") or "")
-    row = add(label)
+    role = _normalise_role((params or {}).get("role"))
+    row = add(label, role=role)
     host, raw_scope = endpoint
     from alpi.host.network import classify_scope
     return {
         "token": row["token"],
         "label": row["label"],
         "created": row["created"],
+        "role": row["role"],
         "host": host,
         "scope": classify_scope(host, raw_scope),
         "is_override": raw_scope == "configured",
@@ -301,7 +342,35 @@ async def _rename(
     return {"ok": True}
 
 
+async def _promote(
+    params: dict[str, Any], _server: host_server.Server,
+) -> dict[str, Any]:
+    return await _set_role_handler(params, "admin")
+
+
+async def _demote(
+    params: dict[str, Any], _server: host_server.Server,
+) -> dict[str, Any]:
+    return await _set_role_handler(params, "member")
+
+
+async def _set_role_handler(params: dict[str, Any], role: str) -> dict[str, Any]:
+    token_id = str((params or {}).get("token_id") or "")
+    if not token_id:
+        raise host_server.HandlerError(
+            -32602, "invalid-params", data={"detail": "token_id required"},
+        )
+    target = next((d for d in load() if (d["token"] or "")[-8:] == token_id), None)
+    if target is None:
+        raise host_server.HandlerError(
+            -32004, "not-found",
+            data={"detail": f"no device matching token_id {token_id!r}"},
+        )
+    set_role(target["token"], role)
+    return {"ok": True, "role": role}
+
+
 __all__ = [
     "register", "load", "save", "is_valid", "touch", "validate_and_touch",
-    "add", "revoke", "rename",
+    "validate_and_lookup_role", "add", "revoke", "rename", "set_role",
 ]

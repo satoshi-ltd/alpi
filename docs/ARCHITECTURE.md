@@ -507,9 +507,11 @@ Wire shape (both transports):
 {"id": "<reqid>", "method": "host.<noun>.<verb>", "params": {…, "auth_token": "<token>"}}
 ```
 
-Unix socket payload omits `auth_token`. WS payload requires it once
-at least one device has been paired — empty store stays open as a
-migration window for setups that predate v0.5.
+Unix socket payload omits `auth_token` — the local transport is
+sovereign and bypasses token validation entirely. WS **always**
+requires a valid token; an empty or missing `devices.yaml` rejects
+every WS request (fail-closed). The first device is minted locally
+over the Unix socket; there is no remote bootstrap path.
 
 The daemon writes either a single response line or, for streaming
 verbs (`host.chat.send`, `host.events.subscribe`), multiple frames
@@ -524,16 +526,39 @@ listener other alpis use for `link.*` and `workgroup.*`.
 
 Each remote device holds its own opaque token. The store lives at
 `~/.alpi/host/devices.yaml` (mode 0600) as a list of
-`{token, label, created, last_seen}`. The daemon validates the
-token in `_check_token` (`alpi/host/server.py`); a hit also bumps
-`last_seen` so the user sees who's active.
+`{token, label, created, last_seen, role}`. `role` is `admin` or
+`member`; missing or unknown values collapse to `member` (least
+privilege). The daemon validates the token in `_check_token_role`
+(`alpi/host/server.py`); a hit also bumps `last_seen` so the user
+sees who's active and returns the role to the dispatcher.
+
+Three trust tiers gate every WS call:
+
+- **Unix socket** — sovereign. Used by the local CLI and the
+  desktop running on the same machine; bypasses every role check.
+- **WS admin** — full app-level CRUD + device management
+  (`host.devices.generate / revoke / rename / promote / demote`).
+- **WS member** — chat, events, read-only views, schedule listing,
+  workgroup post/read, voice preview. Admin verbs reject with
+  `-32001 forbidden / "admin role required"`.
+
+The admin set lives in `_ADMIN_METHODS`; the strictly-local set
+in `_LOCAL_ONLY_METHODS` (network admin only — no role unlocks
+those over WS).
 
 Token lifecycle:
 
-- **Generate**: `host.devices.generate(label?)` returns a fresh
-  `secrets.token_urlsafe(24)` (192 bits, 32 chars). The token is
-  embedded in the QR shown by `alpi setup → Devices → + Add
-  device`. Mobile / desktop save it to their secure store.
+- **Generate**: `host.devices.generate(label?, role?)` returns a
+  fresh `secrets.token_urlsafe(24)` (192 bits, 32 chars). The
+  token is embedded in the QR shown by `alpi setup → Devices →
+  + Add device`. Mobile / desktop save it to their secure store.
+  Both the TUI and the desktop pair modal expose a **Grant admin
+  access** option; the default is `member`. Mobile UI gating for
+  member tokens is a separate follow-up — the daemon enforces
+  regardless.
+- **Promote / demote**: `host.devices.promote(token_id)` and
+  `host.devices.demote(token_id)` flip the role on an existing
+  device. Admin-only.
 - **Use**: every WS request carries `auth_token`. Fail =
   JSON-RPC `{code: -32000, message: "auth-failed"}` and the
   connection closes; the mobile app's auth-failed handler wipes

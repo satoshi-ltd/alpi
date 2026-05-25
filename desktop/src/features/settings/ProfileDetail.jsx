@@ -346,9 +346,9 @@ export default function ProfileDetail({
           </Row>
         </Section>
 
-        {profile.name === "default" && activeConnection?.kind === "local" && (
+        {profile.name === "default" && (activeConnection?.kind === "local" || activeConnection?.role === "admin") && (
           <Section title="Devices">
-            <NetworkField />
+            {activeConnection?.kind === "local" && <NetworkField />}
             <DevicesField />
           </Section>
         )}
@@ -374,7 +374,8 @@ export default function ProfileDetail({
           <StorageField profile={profile} activeConnection={activeConnection} />
         </Section>
 
-        {profile.name !== "default" && (
+        {profile.name !== "default"
+          && (activeConnection?.kind === "local" || activeConnection?.role === "admin") && (
           <Section title="Danger Zone">
             <Row label="delete">
               <DeleteProfileAction profile={profile} onDeleted={onSaved} />

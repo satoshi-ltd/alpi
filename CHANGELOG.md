@@ -1,5 +1,81 @@
 # Changelog
 
+## v0.6.10 — 2026-05-25 — paired devices get a role (admin / member)
+
+Device tokens now carry a role on disk. The dispatcher checks it
+before sensitive host methods, so an admin device on Tailscale
+can do remote setup (create profiles, add gateways, mint other
+devices, restart the daemon) while a member device stays
+read-mostly. The local socket on the daemon's own machine is
+unchanged — sovereign authority for bootstrap and recovery.
+
+Re-pair every device after upgrading: this release **does not
+preserve backward compatibility** with pre-0.6.10 entries.
+Anything without an explicit role collapses to ``member`` at
+load time, so an old admin device becomes member until re-paired.
+
+- ``devices.yaml`` entries gain a ``role`` field; unknown
+  values fall back to ``member`` (least privilege).
+- ``_ADMIN_METHODS`` enforced in ``alpi/host/server.py`` over
+  WS, covering 35+ verbs across providers, profile CRUD,
+  config field writes, MCP add/remove, gateway config
+  (including Gmail OAuth ``begin``/``exchange``), sandbox,
+  peers, identity draft, schedule fire/remove/pause, workgroup
+  CRUD/action, voice config, approval respond, daemon restart,
+  and device CRUD. Local socket bypasses every check.
+- New host methods ``host.devices.promote`` and
+  ``host.devices.demote`` flip the role on an existing device
+  by ``token_id``. Admin-only.
+- ``host.devices.generate`` accepts an optional ``role`` param
+  (default ``member``); ``host.devices.list`` stays open to
+  members and now returns the role on each redacted row (the
+  full token still never leaves the daemon).
+- ``_LOCAL_ONLY_METHODS`` shrinks to the three
+  ``host.network.*`` verbs — only network admin still requires
+  sitting at the daemon's terminal.
+- ``host.profile.read_file`` rejects secret content for every
+  caller, admin or member. The check is by path *components* so
+  nested directories don't slip through: any ``secrets`` part of
+  the path (catches ``alp/secrets/``, ``skills/foo/secrets/``);
+  top-level ``host/`` / ``gateway/`` / ``cache/``; any basename
+  starting with ``.env`` (``.env``, ``.env.local``,
+  ``skills/foo/.env``, ``workspace/.env``); common private-key
+  extensions (``.pem``, ``.key``, ``.p12``, ``.pfx``,
+  ``.keystore``); symlinks that resolve into a denied subtree;
+  ``../`` escapes (now ``-32001 forbidden`` instead of the old
+  ``-32004 not-found``). Comparison is case-insensitive so
+  ``SECRETS/`` on macOS HFS+/APFS is caught too.
+- TUI ``alpi setup → devices → + Add device`` now asks
+  *"Grant admin access?"* before minting (defaults to No /
+  member). The device-detail screen shows the role and offers
+  Promote / Demote actions.
+- The device list (TUI) shows the role next to the
+  last-seen badge.
+- ``host.version`` now also returns the caller's ``role`` so
+  desktop / mobile clients can gate admin UI before the daemon
+  has to refuse a call.
+- Empty-store fail-closed for WS: previously a missing or empty
+  ``devices.yaml`` accepted any WS token as admin (open
+  "migration window"). With roles in play that's a remote
+  admin backdoor — closed. The local Unix socket is the only
+  way to mint the first device, exactly as the bootstrap docs
+  describe.
+- **Mobile policy.** The role applies to mobile clients the same
+  way it applies to desktop: the daemon enforces from `host.version`
+  and `_ADMIN_METHODS`. Mobile UI must gate admin actions for
+  member tokens — followed up separately. The pair copy on TUI
+  and desktop no longer singles out phones ("leave unchecked for
+  phones" → "leave unchecked for shared, lost-prone, or read-only
+  devices"); your primary phone can absolutely be admin.
+- **`member` is NOT a sandbox on the agent's tools.** The role
+  gates the host control plane (config, devices, gateways, MCP,
+  profile lifecycle, schedules, daemon restart). ``host.chat.send``
+  stays open to members, so the agent's own capabilities
+  (workspace writes, memory edits, network) remain reachable.
+  Use the OS sandbox flag or separate profiles for that boundary.
+  Documented in ``docs/SECURITY.md``, ``docs/ARCHITECTURE.md``,
+  and ``alpi/knowledge/references/security.md``.
+
 ## v0.6.9 — 2026-05-25 — Gmail OAuth works against remote daemons
 
 The Gmail OAuth wizard used to fail silently when the daemon
