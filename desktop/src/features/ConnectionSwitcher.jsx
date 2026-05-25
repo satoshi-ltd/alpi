@@ -11,6 +11,15 @@ function tooltipFor(_connection, status) {
     : "Switch connection";
 }
 
+export function useFireOnce(signal, onTrigger) {
+  const firedRef = useRef(false);
+  useEffect(() => {
+    if (!signal || firedRef.current) return;
+    firedRef.current = true;
+    onTrigger();
+  }, [signal, onTrigger]);
+}
+
 export default function ConnectionSwitcher({
   className = "",
   state,
@@ -18,10 +27,16 @@ export default function ConnectionSwitcher({
   onAddRemote,
   onForget,
   onOpen,
+  autoOpenSignal = false,
 }) {
   const [open, setOpen] = useState(false);
   const probeTimerRef = useRef(null);
   const notify = useNotify();
+
+  useFireOnce(autoOpenSignal, () => {
+    setOpen(true);
+    onOpen?.().catch(() => {});
+  });
   const connections = state?.connections ?? [];
   const activeId = state?.active_id ?? "local";
   const active =

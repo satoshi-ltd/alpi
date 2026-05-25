@@ -21,10 +21,10 @@ export function resolveDeeplink(deeplink) {
     return { view: { kind: "workgroup", profile, id } };
   }
   if (kind === "settings") {
-    return {
-      settingsTarget: profile ? { kind: "profile", id: profile } : null,
-      view: { kind: "settings" },
-    };
+    // Convention: undefined settingsTarget means "keep current"; null would crash settingsTarget.kind in App.jsx.
+    const action = { view: { kind: "settings" } };
+    if (profile) action.settingsTarget = { kind: "profile", id: profile };
+    return action;
   }
   return null;
 }

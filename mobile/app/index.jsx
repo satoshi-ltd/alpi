@@ -20,6 +20,7 @@ import { SettingsSheet } from '../src/features/sheets/SettingsSheet';
 import { useEventEffect } from '../src/hooks/useEvents';
 import { useInbox } from '../src/hooks/useInbox';
 import { useEndpoint } from '../src/lib/EndpointContext';
+import { useFireOnce } from '../src/lib/useFireOnce';
 import { usePins } from '../src/lib/pins';
 import { useTheme } from '../src/theme/ThemeContext';
 
@@ -43,6 +44,10 @@ export default function Inbox() {
   );
 
   const daemonStatus = endpoint ? probeState.get(endpoint.id) ?? 'unknown' : 'offline';
+
+  const activeFailed =
+    !!endpoint && (daemonStatus === 'offline' || daemonStatus === 'auth-failed');
+  useFireOnce(activeFailed, () => setSheet('conn'));
 
   const enriched = useMemo(() => {
     const seen = new Set();

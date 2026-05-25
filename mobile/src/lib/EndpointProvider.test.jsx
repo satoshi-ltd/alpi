@@ -107,14 +107,13 @@ async function mount() {
 }
 
 describe("EndpointProvider lifecycle", () => {
-  it("loads stored connections and exposes the active endpoint", async () => {
+  it("loads stored connections and probes ONLY the active endpoint on cold start", async () => {
     const { captureRef } = await mount();
     expect(captureRef.current.connections).toHaveLength(2);
     expect(captureRef.current.activeId).toBe("alpha");
     expect(captureRef.current.endpoint.id).toBe("alpha");
-    // probeAll seeded both statuses.
     expect(captureRef.current.probeState.get("alpha")).toBe("online");
-    expect(captureRef.current.probeState.get("beta")).toBe("online");
+    expect(captureRef.current.probeState.has("beta")).toBe(false);
     expect(captureRef.current.versionState.get("alpha")).toBe("0.4.54");
   });
 

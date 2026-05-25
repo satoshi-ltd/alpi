@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
 import { radii, space , fontSizes} from '../../theme/tokens';
 
@@ -32,9 +32,14 @@ function Tag({ label, tone }) {
 export function ConnectionSheet({ open, onClose }) {
   const { colors } = useTheme();
   const router = useRouter();
-  const { connections, activeId, probeState, versionState, setActive, forget } = useEndpoint();
+  const { connections, activeId, probeState, versionState, setActive, forget, probeAll } = useEndpoint();
   const [target, setTarget] = useState(null);
   const [confirmForget, setConfirmForget] = useState(null);
+
+  useEffect(() => {
+    if (!open) return;
+    probeAll().catch(() => { /* */ });
+  }, [open, probeAll]);
 
   const handlePair = () => {
     onClose?.();

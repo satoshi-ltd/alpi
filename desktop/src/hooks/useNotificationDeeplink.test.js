@@ -34,9 +34,8 @@ describe("resolveDeeplink", () => {
     });
   });
 
-  it("opens settings without a target when no profile attached", () => {
+  it("opens settings without resetting the target when no profile attached — null would crash App.jsx settingsTarget.kind dereferences", () => {
     expect(resolveDeeplink({ kind: "settings" })).toEqual({
-      settingsTarget: null,
       view: { kind: "settings" },
     });
   });

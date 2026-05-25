@@ -85,6 +85,7 @@ function Sidebar({
   onAddHostConnection,
   onForgetHostConnection,
   onRefreshHostConnectionStatus,
+  autoOpenConnectionSwitcher = false,
 }) {
   const inSettings = view.kind === "settings";
 
@@ -389,6 +390,7 @@ function Sidebar({
               onAddRemote={onAddHostConnection}
               onForget={onForgetHostConnection}
               onOpen={onRefreshHostConnectionStatus}
+              autoOpenSignal={autoOpenConnectionSwitcher}
             />
           </div>
           {!daemonOffline && !inSettings && (

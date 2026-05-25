@@ -14,6 +14,26 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.1.15 — 2026-05-25 — cold-start probes only the active daemon
+
+Cheaper, more honest startup: the cold-start path no longer
+probes every saved connection on launch — that was wasted work
+since per-row status is only ever shown inside the connection
+sheet.
+
+- ``EndpointProvider.refresh()`` loads from SecureStore and
+  probes the active endpoint only. New ``probeAllConnections``
+  handles the full-list refresh and fires on
+  ``ConnectionSheet`` open. Non-active rows stay ``unknown``
+  until that surface is visible.
+- ``ConnectionSheet`` triggers ``probeAll`` in a ``useEffect``
+  gated on ``open`` so the network cost lands at the moment
+  the user actually wants to pick.
+- Cold-start failure auto-opens the connection sheet once
+  (``useFireOnce`` hook) so the user can switch or pair instead
+  of landing on an offline-only inbox. Later blips do not
+  re-pop the sheet.
+
 ## v0.1.14 — 2026-05-24 — stop notification flood
 
 Several independent fixes that together kill the "same

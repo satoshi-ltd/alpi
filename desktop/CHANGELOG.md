@@ -11,6 +11,38 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.3.16 — 2026-05-25 — launch with a dead daemon no longer blanks the window
+
+Two real crashes plus a UX overhaul of the cold-start offline
+path.
+
+- **Fixed** the temporal-dead-zone crash from 0.3.15: the
+  recents-fetch effect referenced ``hostConnections.active_id``
+  before ``useHostConnections()`` had initialised it. Moved the
+  effect below the hook.
+- **Fixed** a settings-deeplink crash: a notification deep link
+  with ``kind: "settings"`` and no profile used to set
+  ``settingsTarget`` to ``null``, then ``activeProfile`` /
+  ``activeSettingsWorkgroup`` dereferenced ``settingsTarget.kind``
+  → ``TypeError``. ``resolveDeeplink`` now omits the field when
+  there's no profile (convention: ``undefined`` = keep current
+  target) and both useMemos use optional chaining.
+- **Removed** the 2.5-second ``BootSplash`` grace. The shell now
+  renders from the first frame — sidebar, chat pane, banner —
+  while the active connection is being probed in the background.
+  Same pattern the mobile client already uses.
+- **Auto-open the connection switcher** once on cold-start when
+  the active daemon's probe settles to ``offline`` or
+  ``auth-failed``. Local daemons get the autostart attempt first
+  and only fall through when autostart gives up. Remote daemons
+  open the picker immediately on offline. Once-per-session via a
+  ``useFireOnce`` hook so a later Tailscale blip can't re-pop the
+  modal after the user has closed it.
+- The offline ``Banner`` now also covers the
+  ``autostartPhase === "starting"`` window with an info-toned
+  "Starting local daemon…" message, replacing the part of the
+  splash that used to mask it.
+
 ## v0.3.15 — 2026-05-24 — connection switch no longer leaks previous daemon's data
 
 Two unrelated bugs collapsed into the same UX: switching from one

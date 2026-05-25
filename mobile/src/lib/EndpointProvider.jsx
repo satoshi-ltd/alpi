@@ -18,7 +18,45 @@ export function EndpointProvider({ children }) {
     [connections, activeId],
   );
 
+  const probeByIdFrom = useCallback(async (list, id) => {
+    const target = list.find((c) => c.id === id);
+    if (!target) return 'unknown';
+    setProbeState((m) => {
+      const next = new Map(m);
+      next.set(id, 'probing');
+      return next;
+    });
+    const { status, version, deviceId } = await probe(target);
+    setProbeState((m) => {
+      const next = new Map(m);
+      next.set(id, status);
+      return next;
+    });
+    setVersionState((m) => {
+      const next = new Map(m);
+      if (version) next.set(id, version);
+      else next.delete(id);
+      return next;
+    });
+    if (deviceId && deviceId !== target.deviceId) {
+      const next = await setDeviceIds(new Map([[id, deviceId]]));
+      setConnections(next.connections);
+    }
+    return status;
+  }, []);
+
+  // Cold-start probes ONLY the active; full-list probe lives in probeAllConnections (sheet on-open).
   const refresh = useCallback(async () => {
+    const state = await loadConnections();
+    setConnections(state.connections);
+    setActiveId(state.active_id);
+    setReady(true);
+    if (state.active_id) {
+      await probeByIdFrom(state.connections, state.active_id);
+    }
+  }, [probeByIdFrom]);
+
+  const probeAllConnections = useCallback(async () => {
     const state = await loadConnections();
     setConnections(state.connections);
     setActiveId(state.active_id);
@@ -85,32 +123,10 @@ export function EndpointProvider({ children }) {
     await refresh();
   }, [refresh, connections]);
 
-  const probeOne = useCallback(async (id) => {
-    const target = connections.find((c) => c.id === id);
-    if (!target) return 'unknown';
-    setProbeState((m) => {
-      const next = new Map(m);
-      next.set(id, 'probing');
-      return next;
-    });
-    const { status, version, deviceId } = await probe(target);
-    setProbeState((m) => {
-      const next = new Map(m);
-      next.set(id, status);
-      return next;
-    });
-    setVersionState((m) => {
-      const next = new Map(m);
-      if (version) next.set(id, version);
-      else next.delete(id);
-      return next;
-    });
-    if (deviceId && deviceId !== target.deviceId) {
-      const next = await setDeviceIds(new Map([[id, deviceId]]));
-      setConnections(next.connections);
-    }
-    return status;
-  }, [connections]);
+  const probeOne = useCallback(
+    (id) => probeByIdFrom(connections, id),
+    [connections, probeByIdFrom],
+  );
 
   const call = useCallback(
     (method, params) => {
@@ -146,11 +162,11 @@ export function EndpointProvider({ children }) {
       forget,
       unpair,
       probeOne,
-      probeAll: refresh,
+      probeAll: probeAllConnections,
       call,
       callStream,
     }),
-    [ready, connections, activeId, activeEndpoint, probeState, versionState, setActive, addConnection, forget, unpair, probeOne, refresh, call, callStream],
+    [ready, connections, activeId, activeEndpoint, probeState, versionState, setActive, addConnection, forget, unpair, probeOne, probeAllConnections, call, callStream],
   );
 
   return <EndpointContext.Provider value={value}>{children}</EndpointContext.Provider>;

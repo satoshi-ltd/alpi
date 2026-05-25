@@ -35,7 +35,6 @@ import {
   useNotificationDeeplink,
 } from "./hooks/useNotificationDeeplink.js";
 import { useDaemonAutostart } from "./hooks/useDaemonAutostart.js";
-import { BootSplash } from "./primitives/index.js";
 import styles from "./App.module.css";
 
 function isChatSessionSummary(session) {
@@ -76,25 +75,6 @@ export default function App() {
   }, [view]);
   useNotificationDeeplink({ setView, setSettingsTarget });
   useActiveViewPing(view);
-
-  useEffect(() => {
-    if (view.kind !== "empty") return;
-    // Clear before fetch so a connection switch does not flash the previous daemon's recents while invoke is in flight.
-    setRecents([]);
-    let cancelled = false;
-    invoke("sessions", { limit: 8 })
-      .then((rows) => {
-        if (cancelled) return;
-        const list = Array.isArray(rows) ? rows : [];
-        const sorted = list
-          .filter((s) => s.kind === "chat" && s.first_user)
-          .sort((a, b) => (b.updated_at || b.mtime || 0) - (a.updated_at || a.mtime || 0))
-          .slice(0, 4);
-        setRecents(sorted);
-      })
-      .catch(() => { if (!cancelled) setRecents([]); });
-    return () => { cancelled = true; };
-  }, [view.kind, hostConnections.active_id]);
 
   const onOpenRecent = useCallback((profile, sessionId) => {
     setView({ kind: "profile", profile, sessionId });
@@ -310,6 +290,24 @@ export default function App() {
     prevConnectionIdRef.current = hostConnections.active_id;
   }, [hostConnections.active_id]);
 
+  useEffect(() => {
+    if (view.kind !== "empty") return;
+    setRecents([]);
+    let cancelled = false;
+    invoke("sessions", { limit: 8 })
+      .then((rows) => {
+        if (cancelled) return;
+        const list = Array.isArray(rows) ? rows : [];
+        const sorted = list
+          .filter((s) => s.kind === "chat" && s.first_user)
+          .sort((a, b) => (b.updated_at || b.mtime || 0) - (a.updated_at || a.mtime || 0))
+          .slice(0, 4);
+        setRecents(sorted);
+      })
+      .catch(() => { if (!cancelled) setRecents([]); });
+    return () => { cancelled = true; };
+  }, [view.kind, hostConnections.active_id]);
+
   const profilesRef = useRef(profiles);
   useEffect(() => {
     profilesRef.current = profiles;
@@ -519,7 +517,7 @@ export default function App() {
     if (view.kind === "profile") {
       return profiles.find((p) => p.name === view.profile) ?? null;
     }
-    if (view.kind === "settings" && settingsTarget.kind === "profile") {
+    if (view.kind === "settings" && settingsTarget?.kind === "profile") {
       return (
         profiles.find((p) => p.name === settingsTarget.id) ?? profiles[0] ?? null
       );
@@ -688,7 +686,7 @@ export default function App() {
   }, []);
 
   const activeSettingsWorkgroup = useMemo(() => {
-    if (view.kind !== "settings" || settingsTarget.kind !== "workgroup") {
+    if (view.kind !== "settings" || settingsTarget?.kind !== "workgroup") {
       return null;
     }
     return workgroups.find((w) => w.id === settingsTarget.id) ?? null;
@@ -716,22 +714,18 @@ export default function App() {
   const [autostartPhase, setAutostartPhase] = useState("idle");
   useDaemonAutostart({ activeConnection, onAttempt: setAutostartPhase });
 
-  const [bootElapsed, setBootElapsed] = useState(false);
-  useEffect(() => {
-    const t = setTimeout(() => setBootElapsed(true), 2500);
-    return () => clearTimeout(t);
-  }, []);
   const activeStatus = activeConnection?.status;
-  const inBoot =
-    !bootElapsed &&
-    (activeStatus === "unknown" || activeStatus === "probing" || !activeStatus);
-  const inAutostart =
+  const isLocalAutostartInFlight =
     activeConnection?.kind === "local" &&
     activeStatus === "offline" &&
     autostartPhase === "starting";
-  const bootMessage = inAutostart
-    ? "Starting daemon…"
-    : "Connecting to daemon…";
+
+  // Local connections defer to autostart; only auto-open after it gave up.
+  const autoOpenConnectionSwitcher =
+    hostConnections.connections.length > 0 &&
+    (activeStatus === "auth-failed" ||
+      (activeStatus === "offline" &&
+        (activeConnection?.kind !== "local" || autostartPhase === "gave-up")));
 
   const jumpTargets = useMemo(
     () =>
@@ -807,9 +801,9 @@ export default function App() {
         onAddHostConnection={onAddHostConnection}
         onForgetHostConnection={onForgetHostConnection}
         onRefreshHostConnectionStatus={onRefreshHostConnectionStatus}
+        autoOpenConnectionSwitcher={autoOpenConnectionSwitcher}
       />
       <main className={styles.main}>
-          {(inBoot || inAutostart) && <BootSplash message={bootMessage} />}
           {view.kind === "settings" ? (
             <Settings
               profiles={profiles}
@@ -831,20 +825,22 @@ export default function App() {
             />
           ) : (
             <>
-              {daemonOffline && autostartPhase !== "starting" && (
+              {daemonOffline && (
                 <Banner
-                  kind="danger"
-                  pulsing
-                  action="Retry"
-                  onAction={onRefreshHostConnectionStatus}
+                  kind={isLocalAutostartInFlight ? "info" : "danger"}
+                  pulsing={!isLocalAutostartInFlight}
+                  action={isLocalAutostartInFlight ? null : "Retry"}
+                  onAction={isLocalAutostartInFlight ? null : onRefreshHostConnectionStatus}
                 >
                   {activeConnection?.status === "auth-failed"
                     ? `${activeConnection?.name ?? "Remote"} — token rejected. Re-pair device from Settings.`
                     : activeConnection?.kind === "remote"
                       ? `${activeConnection?.name ?? "Remote"} unreachable — check network / tunnel.`
-                      : autostartPhase === "gave-up"
-                        ? "Local daemon won't start — check Settings → daemon, or run `alpi daemon start` from terminal."
-                        : "Local daemon unreachable — reconnecting…"}
+                      : isLocalAutostartInFlight
+                        ? "Starting local daemon…"
+                        : autostartPhase === "gave-up"
+                          ? "Local daemon won't start — check Settings → daemon, or run `alpi daemon start` from terminal."
+                          : "Local daemon unreachable — reconnecting…"}
                 </Banner>
               )}
               {view.kind === "workgroup" && activeWorkgroup && (
