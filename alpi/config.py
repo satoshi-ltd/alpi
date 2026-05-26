@@ -26,7 +26,6 @@ DEFAULT_CONFIG: dict[str, Any] = {
         },
         "tts": {
             "voice": "en-US-AriaNeural",
-            "autoplay": True,
             "rate": "",
             "pitch": "",
         },
@@ -100,7 +99,6 @@ class BrowserToolConfig:
 @dataclass
 class TtsToolConfig:
     voice: str = "en-US-AriaNeural"
-    autoplay: bool = True
     rate: str = ""  # "+10%" / "-20%" / "" = neutral
     pitch: str = ""  # "+5Hz" / "-10Hz" / "" = neutral
 
@@ -237,7 +235,6 @@ def load(home: Path) -> Config:
         ),
         tts=TtsToolConfig(
             voice=str(tts_raw.get("voice", "en-US-AriaNeural") or "en-US-AriaNeural"),
-            autoplay=bool(tts_raw.get("autoplay", True)),
             rate=str(tts_raw.get("rate", "") or ""),
             pitch=str(tts_raw.get("pitch", "") or ""),
         ),
@@ -384,8 +381,6 @@ def _tools_delta(cfg: Config) -> dict:
     tts_out: dict[str, Any] = {}
     if cfg.tools.tts.voice != d["tts"]["voice"]:
         tts_out["voice"] = cfg.tools.tts.voice
-    if cfg.tools.tts.autoplay != d["tts"]["autoplay"]:
-        tts_out["autoplay"] = cfg.tools.tts.autoplay
     if cfg.tools.tts.rate != d["tts"]["rate"]:
         tts_out["rate"] = cfg.tools.tts.rate
     if cfg.tools.tts.pitch != d["tts"]["pitch"]:

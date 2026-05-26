@@ -4,10 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
-import os
-import platform
-import shutil
-import subprocess
 from pathlib import Path
 
 from alpi import config as cfg_mod
@@ -25,8 +21,8 @@ def _cache_dir(home: Path) -> Path:
     return p
 
 
-def _cache_key(text: str, voice: str, rate: str, pitch: str, fmt: str) -> str:
-    blob = f"{voice}\x00{rate}\x00{pitch}\x00{fmt}\x00{text}".encode("utf-8")
+def _cache_key(text: str, voice: str, rate: str, pitch: str) -> str:
+    blob = f"{voice}\x00{rate}\x00{pitch}\x00mp3\x00{text}".encode("utf-8")
     return hashlib.sha256(blob).hexdigest()[:16]
 
 
@@ -49,68 +45,11 @@ async def _synthesize(text: str, voice: str, out_path: Path,
     await communicate.save(str(out_path))
 
 
-def _convert_mp3_to_ogg(src: Path, dst: Path) -> tuple[bool, str]:
-    if shutil.which("ffmpeg") is None:
-        return False, "ffmpeg not installed"
-    try:
-        proc = subprocess.run(
-            [
-                "ffmpeg", "-y", "-loglevel", "error",
-                "-i", str(src),
-                "-c:a", "libopus", "-b:a", "32k",
-                "-ac", "1", "-ar", "48000",
-                "-vn", str(dst),
-            ],
-            capture_output=True, text=True, timeout=60,
-        )
-    except subprocess.TimeoutExpired:
-        return False, "ffmpeg timed out"
-    if proc.returncode != 0:
-        tail = (proc.stderr or proc.stdout or "").strip().splitlines()[-1:] or [""]
-        return False, f"ffmpeg exited {proc.returncode}: {tail[0]}"
-    return True, "ffmpeg"
-
-
-def _player_cmd() -> list[str] | None:
-    system = platform.system()
-    if system == "Darwin" and shutil.which("afplay"):
-        return ["afplay"]
-    if system == "Linux":
-        for name in ("paplay", "aplay", "ffplay"):
-            if shutil.which(name):
-                if name == "ffplay":
-                    return ["ffplay", "-nodisp", "-autoexit", "-loglevel", "quiet"]
-                return [name]
-    if system == "Windows":
-        return [
-            "powershell", "-NoProfile", "-Command",
-            "(New-Object Media.SoundPlayer $args[0]).PlaySync()",
-        ]
-    return None
-
-
-def _play_blocking(path: Path) -> tuple[bool, str]:
-    cmd = _player_cmd()
-    if cmd is None:
-        return False, f"no audio player found on {platform.system()}"
-    try:
-        proc = subprocess.run([*cmd, str(path)], capture_output=True, text=True, timeout=120)
-    except subprocess.TimeoutExpired:
-        return False, "player timed out"
-    except FileNotFoundError as e:
-        return False, f"player not found: {e}"
-    if proc.returncode != 0:
-        tail = (proc.stderr or proc.stdout or "").strip().splitlines()[-1:] or [""]
-        return False, f"player exited {proc.returncode}: {tail[0]}"
-    return True, cmd[0]
-
-
 class Tts(Tool):
     name = "tts"
     description = (
         "Synthesize speech from text (Microsoft Edge TTS, free, no API key). "
-        "Autoplays locally when `tools.tts.autoplay` is on (default). "
-        "Returns the audio file path.\n"
+        "Returns the path to a cached MP3 — the daemon does NOT play audio.\n"
         "\n"
         "Pass `voice` to override the configured default for one call "
         "(e.g. `voice=\"es-ES-ElviraNeural\"`). Rate and pitch are NOT "
@@ -118,12 +57,11 @@ class Tts(Tool):
         "config. If the user asks to change speed or pitch, tell them to "
         "edit config; don't try to pass it here.\n"
         "\n"
-        "Text limit: 1000 chars. Output format is picked automatically.\n"
+        "Text limit: 1000 chars.\n"
         "\n"
-        "If the user asks you to deliver the audio to an external chat "
-        "(e.g. 'send it as a voice note on Telegram'), chain `send_message"
-        "(attachment=<path>)` after this tool. Otherwise autoplay is the "
-        "delivery — no chain needed.\n"
+        "Delivery is up to the caller: the alpi mobile / desktop apps stream "
+        "the file directly; for an external chat (e.g. Telegram) chain "
+        "`send_message(attachment=<path>)` after this tool.\n"
         "\n"
         "After delivering audio, don't restate the path, format, or tool "
         "result in your follow-up text."
@@ -171,47 +109,27 @@ class Tts(Tool):
         chosen_voice = (voice or cfg.tools.tts.voice).strip()
         chosen_rate = _normalize_prosody(cfg.tools.tts.rate)
         chosen_pitch = _normalize_prosody(cfg.tools.tts.pitch)
-        is_gateway = os.environ.get("ALPI_GATEWAY") == "1"
-        fmt = "ogg" if is_gateway else "mp3"
 
         cache = _cache_dir(home)
-        key = _cache_key(text, chosen_voice, chosen_rate, chosen_pitch, fmt)
-        out_path = cache / f"{key}.{fmt}"
+        key = _cache_key(text, chosen_voice, chosen_rate, chosen_pitch)
+        out_path = cache / f"{key}.mp3"
 
         if not (out_path.exists() and out_path.stat().st_size > 0):
             tool_state_mod.emit_state(f"synthesizing ({chosen_voice})…")
-            mp3_tmp = cache / f"{key}.mp3" if fmt == "ogg" else out_path
             try:
                 asyncio.run(_synthesize(
-                    text, chosen_voice, mp3_tmp,
+                    text, chosen_voice, out_path,
                     rate=chosen_rate, pitch=chosen_pitch,
                 ))
             except Exception as e:  # noqa: BLE001
-                if mp3_tmp.exists():
-                    try: mp3_tmp.unlink()
+                if out_path.exists():
+                    try: out_path.unlink()
                     except OSError: pass
                 return ToolResult(ok=False, output="", error=f"edge-tts failed: {e}")
-            if not mp3_tmp.exists() or mp3_tmp.stat().st_size == 0:
+            if not out_path.exists() or out_path.stat().st_size == 0:
                 return ToolResult(ok=False, output="", error="edge-tts produced empty file")
-            if fmt == "ogg":
-                tool_state_mod.emit_state("converting to ogg…")
-                ok_conv, detail = _convert_mp3_to_ogg(mp3_tmp, out_path)
-                if not ok_conv:
-                    return ToolResult(
-                        ok=False, output="",
-                        error=f"ogg conversion failed ({detail})",
-                    )
-                try: mp3_tmp.unlink()
-                except OSError: pass
 
-        if is_gateway or not cfg.tools.tts.autoplay:
-            return ToolResult(ok=True, output=f"saved → {out_path}")
-
-        tool_state_mod.emit_state("playing…")
-        ok, detail = _play_blocking(out_path)
-        if ok:
-            return ToolResult(ok=True, output=f"played via {detail} → {out_path}")
-        return ToolResult(ok=True, output=f"saved → {out_path} (autoplay failed: {detail})")
+        return ToolResult(ok=True, output=f"saved → {out_path}")
 
 
 TOOL = Tts

@@ -11,6 +11,21 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.3.21 — 2026-05-26 — drop the TTS autoplay toggle
+
+Audio playback already lives on each message bubble. The separate
+autoplay row in profile settings was redundant and only made sense
+when the daemon was the player — now it's gone.
+
+- Profile → Voice loses the **Autoplay** row. Voice picker + Test
+  stay; everything else about audio delivery is on the message
+  itself.
+- The ``voice_autoplay`` Tauri command is gone. Older builds
+  pinned against the new daemon get ``method-not-found`` and
+  surface it as a normal toast, no crash.
+
+Requires alpi ≥ 0.6.12.
+
 ## v0.3.20 — 2026-05-25 — Notifications inbox replaces Activity
 
 The sidebar gets a bell — a persistent inbox of proactive

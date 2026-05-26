@@ -227,7 +227,6 @@ function ProfileDetail({ id, state, ui }) {
   const [tcpOn, setTcpOn] = useStateS(false);
   const [terminal, setTerminal] = useStateS(false);
   const [network, setNetwork] = useStateS(false);
-  const [autoplay, setAutoplay] = useStateS(true);
   const [voiceId, setVoiceId] = useStateS('aria');
   const [pairOpen, setPairOpen] = useStateS(false);
   const [mcpOpen, setMcpOpen] = useStateS(false);
@@ -467,10 +466,6 @@ function ProfileDetail({ id, state, ui }) {
               {({ close }) => <window.VoicePickerPopover value={voiceId} onChange={(id) => { setVoiceId(id); close(); }} />}
             </Popped>
             <ActionLink>Test</ActionLink>
-          </Field>
-          <Field label="Autoplay">
-            <span className={'pill ' + (autoplay ? 'is-on' : 'is-off')}>● {autoplay ? 'on' : 'off'}</span>
-            <ActionLink onClick={() => setAutoplay(v => !v)}>{autoplay ? 'Disable' : 'Enable'}</ActionLink>
           </Field>
         </Section>
 

@@ -1,5 +1,33 @@
 # Changelog
 
+## v0.6.12 / desktop-v0.3.21 / mobile-v0.1.17 — 2026-05-26 — tts stops trying to be a player
+
+The daemon no longer plays audio. The ``tts`` tool still synthesises
+through Microsoft Edge TTS and caches an MP3 — but local speaker
+playback, the per-profile autoplay toggle, and the gateway-specific
+voice-note conversion (mp3 → ogg via ``ffmpeg``) are all gone. The
+mobile and desktop apps already show a play button on each message,
+which is now the only delivery surface for free-form audio.
+
+- Always MP3 output. ``~/.alpi/cache/tts/<hash>.mp3`` regardless of
+  caller. The ``ALPI_GATEWAY`` env var is gone too — gateways no
+  longer need a special TTS code path.
+- ``tools.tts.autoplay`` removed from config. ``alpi voice
+  autoplay`` subcommand removed. Setup wizard ``voice`` section
+  drops the toggle. Desktop / mobile profile settings drop the
+  autoplay row.
+- ``host.voice.autoplay`` JSON-RPC verb removed. Paired clients
+  on older daemons that still call it get a clean
+  ``method-not-found``.
+- Telegram voice-note inline UX → audio attachment. To deliver TTS
+  to Telegram the agent now chains ``send_message(attachment=
+  <path>)``; the message shows as an MP3 attachment rather than
+  an inline voice waveform. ``ffmpeg`` is no longer a runtime
+  dependency for tts.
+
+Upgrade note: any ``tools.tts.autoplay`` line left in
+``config.yaml`` is harmless — the loader ignores unknown keys.
+
 ## v0.6.11 — 2026-05-25 — persistent inbox for proactive messages
 
 Notifications stop being one-shot. Every proactive ``send_message``

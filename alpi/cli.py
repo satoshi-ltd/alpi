@@ -927,7 +927,7 @@ def mcp_remove(ctx: click.Context, name: str) -> None:
 
 @main.group()
 def voice() -> None:
-    """Configure TTS voice + autoplay for this profile."""
+    """Configure TTS voice for this profile."""
 
 
 @voice.command("set-voice")
@@ -942,18 +942,6 @@ def voice_set_voice(ctx: click.Context, voice_id: str) -> None:
     click.echo(f"voice set to {cfg.tools.tts.voice}")
 
 
-@voice.command("autoplay")
-@click.argument("state", type=click.Choice(["on", "off"]))
-@click.pass_context
-def voice_autoplay(ctx: click.Context, state: str) -> None:
-    """Toggle speaker playback when the assistant emits TTS."""
-    h: Path = ctx.obj["home"]
-    cfg = config.load(h)
-    cfg.tools.tts.autoplay = state == "on"
-    config.save(cfg)
-    click.echo(f"autoplay {state}")
-
-
 _VOICE_TEST_PHRASES = {
     "en": "Hello, I'm Alpi.",
     "es": "Hola, soy Alpi.",
@@ -964,15 +952,36 @@ _VOICE_TEST_PHRASES = {
 }
 
 
+def _voice_player_cmd() -> list[str] | None:
+    import platform
+    import shutil
+    system = platform.system()
+    if system == "Darwin" and shutil.which("afplay"):
+        return ["afplay"]
+    if system == "Linux":
+        for name in ("paplay", "aplay", "ffplay"):
+            if shutil.which(name):
+                if name == "ffplay":
+                    return ["ffplay", "-nodisp", "-autoexit", "-loglevel", "quiet"]
+                return [name]
+    if system == "Windows":
+        return [
+            "powershell", "-NoProfile", "-Command",
+            "(New-Object Media.SoundPlayer $args[0]).PlaySync()",
+        ]
+    return None
+
+
 @voice.command("test")
 @click.option("--voice", "voice_override", default=None,
               help="Override the configured voice id for this preview.")
 @click.pass_context
 def voice_test(ctx: click.Context, voice_override: str | None) -> None:
-    """Synthesize a short greeting in the voice's locale and play it."""
+    """Synthesize a short greeting in the voice's locale; play it if a local player is available, otherwise print the saved file path."""
     import asyncio
+    import subprocess as _sp
     import tempfile
-    from alpi.tools.tts import _player_cmd, _synthesize
+    from alpi.tools.tts import _synthesize
 
     h: Path = ctx.obj["home"]
     cfg = config.load(h)
@@ -980,23 +989,29 @@ def voice_test(ctx: click.Context, voice_override: str | None) -> None:
     lang = voice_id.split("-", 1)[0].lower() if "-" in voice_id else "en"
     phrase = _VOICE_TEST_PHRASES.get(lang, _VOICE_TEST_PHRASES["en"])
 
-    if _player_cmd() is None:
-        raise click.ClickException(
-            "no audio player found — install afplay (macOS), paplay/aplay/ffplay (Linux), or PowerShell (Windows)"
-        )
     with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tmp:
         out = Path(tmp.name)
+    asyncio.run(_synthesize(phrase, voice_id, out))
+
+    cmd = _voice_player_cmd()
+    if cmd is None:
+        click.echo(f"saved: {out}")
+        return
+    reason = ""
     try:
-        asyncio.run(_synthesize(phrase, voice_id, out))
-        import subprocess as _sp
-        cmd = _player_cmd()
-        _sp.run([*cmd, str(out)], capture_output=True, timeout=30)
-    finally:
-        try:
-            out.unlink()
-        except OSError:
-            pass
-    click.echo(f"played: {phrase}")
+        proc = _sp.run([*cmd, str(out)], capture_output=True, timeout=30)
+        if proc.returncode != 0:
+            reason = f"exit {proc.returncode}"
+    except _sp.TimeoutExpired:
+        reason = "timed out"
+    except FileNotFoundError as e:
+        reason = f"player missing: {e}"
+    if not reason:
+        try: out.unlink()
+        except OSError: pass
+        click.echo(f"played: {phrase}")
+        return
+    click.echo(f"saved: {out} (player failed: {reason})")
 
 
 @main.group()
@@ -2667,12 +2682,11 @@ def _voice_display(voice_id: str) -> str:
 
 
 def _voice_status(cfg: config.Config) -> str:
-    ap = "autoplay on" if cfg.tools.tts.autoplay else "autoplay off"
-    return f"{_voice_display(cfg.tools.tts.voice)} · {ap}"
+    return _voice_display(cfg.tools.tts.voice)
 
 
 def _voice_setup(h: Path) -> None:
-    """Pick the Edge TTS voice + autoplay toggle for the `tts` tool."""
+    """Pick the Edge TTS voice for the `tts` tool."""
     from alpi import ui
 
     while True:
@@ -2684,8 +2698,8 @@ def _voice_setup(h: Path) -> None:
             home=h,
         )
         ui.dim(
-            "Default voice for audio output + autoplay toggle. Any pick is "
-            "permanent until you change it here."
+            "Default voice for audio output. Any pick is permanent until "
+            "you change it here."
         )
         ui._console.print("")
 
@@ -2693,14 +2707,6 @@ def _voice_setup(h: Path) -> None:
         collected: list[tuple[str, str, str, bool]] = []
         for vid, name, desc in _VOICE_SHORTLIST:
             collected.append((name, desc, vid, vid == cfg.tools.tts.voice))
-        collected.append(
-            (
-                "Autoplay: " + ("on" if cfg.tools.tts.autoplay else "off"),
-                "toggle speaker playback",
-                "__autoplay__",
-                False,
-            )
-        )
         width = max(len(lab) for lab, _s, _v, _a in collected)
 
         items: list = []
@@ -2722,12 +2728,6 @@ def _voice_setup(h: Path) -> None:
 
         choice = ui.menu("", items, home=h, close="Back")
         if choice is None:
-            return
-
-        if choice == "__autoplay__":
-            cfg.tools.tts.autoplay = not cfg.tools.tts.autoplay
-            config.save(cfg)
-            ui.ok_and_wait(f"autoplay {'on' if cfg.tools.tts.autoplay else 'off'}")
             return
 
         cfg.tools.tts.voice = choice

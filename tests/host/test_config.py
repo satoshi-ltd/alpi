@@ -191,7 +191,7 @@ async def test_sandbox_network_requires_sandbox(tmp_path: Path, monkeypatch) -> 
 
 
 @pytest.mark.asyncio
-async def test_voice_set_voice_and_autoplay(tmp_path: Path, monkeypatch) -> None:
+async def test_voice_set_voice(tmp_path: Path, monkeypatch) -> None:
     home = _bootstrap(tmp_path)
     monkeypatch.setattr(data_handlers, "_resolve_home", lambda p: home)
     srv = host_server.Server(home=home)
@@ -201,13 +201,22 @@ async def test_voice_set_voice_and_autoplay(tmp_path: Path, monkeypatch) -> None
              "params": {"profile": "default", "voice_id": "es-ES-ElviraNeural"}}
     assert (await srv._dispatch(set_v))["result"]["ok"] is True
 
-    auto = {"id": "2", "method": "host.voice.autoplay",
-            "params": {"profile": "default", "state": "on"}}
-    assert (await srv._dispatch(auto))["result"]["ok"] is True
-
     cfg = cfg_mod.load(home)
     assert cfg.tools.tts.voice == "es-ES-ElviraNeural"
-    assert cfg.tools.tts.autoplay is True
+
+
+@pytest.mark.asyncio
+async def test_voice_autoplay_verb_is_unregistered(tmp_path: Path, monkeypatch) -> None:
+    home = _bootstrap(tmp_path)
+    monkeypatch.setattr(data_handlers, "_resolve_home", lambda p: home)
+    srv = host_server.Server(home=home)
+    data_config.register(srv)
+
+    resp = await srv._dispatch({
+        "id": "1", "method": "host.voice.autoplay",
+        "params": {"profile": "default", "state": "on"},
+    })
+    assert resp["error"]["message"] == "method-not-found"
 
 
 @pytest.mark.asyncio

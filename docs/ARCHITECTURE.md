@@ -616,7 +616,7 @@ Verb namespaces in current shape:
   **`host.peers.{add,remove,pending_list,pending_accept,pending_discard}`**,
   **`host.profile.{create,delete}`**,
   **`host.mcp.{add,remove}`**, **`host.gateway.remove`**,
-  **`host.sandbox.{set,network}`**, **`host.voice.{set_voice,autoplay}`**
+  **`host.sandbox.{set,network}`**, **`host.voice.set_voice`**
   — config mutations. Each is a thin wrapper around the same
   internal helper the matching CLI subcommand calls. The
   `host.peers.pending_*` verbs surface unpinned-sender entries

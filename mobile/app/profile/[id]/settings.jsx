@@ -88,7 +88,7 @@ export default function ProfileSettings() {
   const scheduleCount = schedule.data?.jobs?.length ?? 0;
   const peerCount = profile.counts?.peers ?? profile.peers?.length ?? 0;
 
-  // Field keys are dotted paths into user.yaml (e.g. `tui.accent`); voice + autoplay use dedicated RPCs.
+  // Field keys are dotted paths into user.yaml (e.g. `tui.accent`); voice uses a dedicated RPC.
   const saveField = (key, value) =>
     call('host.config.set_field', { profile: id, key, value }).then(() => refresh());
 
@@ -116,15 +116,6 @@ export default function ProfileSettings() {
       toast({ title: `${name} failed`, message: String(e) });
     } finally {
       setBusySubsystem(null);
-    }
-  };
-
-  const toggleAutoplay = async () => {
-    try {
-      await call('host.voice.autoplay', { profile: id, state: profile.voice_autoplay ? 'off' : 'on' });
-      refresh();
-    } catch (e) {
-      toast({ title: 'Autoplay failed', message: String(e) });
     }
   };
 
@@ -319,14 +310,6 @@ export default function ProfileSettings() {
           label="Voice"
           value={voiceLabel(profile.voice_id) ?? 'not set'}
           onPress={() => setSheet('voice')}
-        />
-        <RowSeparator />
-        <Row
-          label="Autoplay"
-          helper="speak agent replies through speakers"
-          value={<OnOff on={!!profile.voice_autoplay} />}
-          onPress={toggleAutoplay}
-          chevron={false}
         />
 
         <SectionHeader>MCP Servers</SectionHeader>

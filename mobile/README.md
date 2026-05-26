@@ -54,7 +54,7 @@ multiple paired daemons.
   kick, leave/delete.
 - **Profile settings.** Overview, model picker (PickerRow), budget,
   workspace, accent, subsystem toggles (gateway/schedule/alp/workgroups),
-  gateways, identity, peers, schedule, sandbox, voice + autoplay,
+  gateways, identity, peers, schedule, sandbox, voice,
   MCP add/remove, providers (Ollama-first, then cloud keys),
   brain (skills, memories, tools), storage breakdown, delete profile.
 - **Live events.** Single `host.events.subscribe` stream at app root

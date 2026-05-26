@@ -228,7 +228,6 @@ def _profile_detail_payload(home: Path) -> dict[str, Any]:
         "sandbox": cfg.tools.terminal.sandbox,
         "sandbox_allow_network": cfg.tools.terminal.allow_network,
         "voice_id": cfg.tools.tts.voice,
-        "voice_autoplay": cfg.tools.tts.autoplay,
         "mcps": _mcp_servers(cfg),
         "peers": _profile_peers(home),
         "models": _models(cfg, home),

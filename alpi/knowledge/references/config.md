@@ -75,6 +75,20 @@ Also valid:
 | Scheduler config/jobs | Scheduler reload or daemon restart depending on path. |
 | `host.tcp_host`, `host.device_name` | Daemon restart. |
 
+## TTS / voice
+
+Config keys:
+
+- `tools.tts.voice`
+- `tools.tts.rate`
+- `tools.tts.pitch`
+
+The `tts` tool only synthesizes and returns a cached MP3 path. The
+daemon does not play audio, there is no `tools.tts.autoplay`, and
+there is no `host.voice.autoplay` host verb. Desktop/mobile playback is
+an explicit per-message action; external chats receive audio only when
+the agent chains `send_message(attachment=<mp3 path>)`.
+
 ## `.env`
 
 Use profile `.env` for provider keys and static secrets. Skills declare

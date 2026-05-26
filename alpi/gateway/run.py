@@ -142,7 +142,6 @@ async def _run_agent(msg: IncomingMessage, platform: Platform, home: Path,
     from alpi.home import effective_profile_env
     env = effective_profile_env(home, extra={
         "ALPI_HOME": str(home),
-        "ALPI_GATEWAY": "1",
         "ALPI_PARENT_EMITS_AGENT_MESSAGE": "1",
         "ALPI_PLATFORM": msg.platform,
     })

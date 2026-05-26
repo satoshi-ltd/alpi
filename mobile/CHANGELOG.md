@@ -14,6 +14,21 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.1.17 — 2026-05-26 — drop the TTS autoplay toggle
+
+Audio playback is already a per-message action (the play button in
+each bubble). The separate autoplay row in profile settings was
+redundant and only made sense when the daemon was the player — now
+it's gone.
+
+- Profile → Voice loses the **Autoplay** row. Voice picker stays;
+  audio delivery is up to the message UI.
+- The mobile client no longer calls ``host.voice.autoplay``. Older
+  daemons that still register it are unaffected; new daemons reply
+  ``method-not-found`` to anything that calls it.
+
+Requires alpi ≥ 0.6.12.
+
 ## v0.1.16 — 2026-05-25 — Outputs inbox replaces Activity
 
 The bell icon now opens a real inbox of proactive messages, not

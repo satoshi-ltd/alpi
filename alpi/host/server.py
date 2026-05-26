@@ -50,7 +50,6 @@ _ADMIN_METHODS = frozenset({
     "host.sandbox.set",
     "host.sandbox.network",
     "host.voice.set_voice",
-    "host.voice.autoplay",
     "host.schedule.fire",
     "host.schedule.remove",
     "host.schedule.set_paused",

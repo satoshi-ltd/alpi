@@ -111,10 +111,10 @@ def test_effective_profile_env_extra_overrides_everything(tmp_path: Path) -> Non
     env = home.effective_profile_env(
         tmp_path,
         base={"ALPI_X": "from-base"},
-        extra={"ALPI_X": "from-extra", "ALPI_GATEWAY": "1"},
+        extra={"ALPI_X": "from-extra", "ALPI_PLATFORM": "telegram"},
     )
     assert env["ALPI_X"] == "from-extra"
-    assert env["ALPI_GATEWAY"] == "1"
+    assert env["ALPI_PLATFORM"] == "telegram"
 
 
 def test_effective_profile_env_does_not_mutate_base(tmp_path: Path) -> None:

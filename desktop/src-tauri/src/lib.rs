@@ -1269,15 +1269,6 @@ async fn voice_set_voice(profile: String, voice_id: String) -> Result<(), String
 }
 
 #[tauri::command]
-async fn voice_autoplay(profile: String, state: String) -> Result<(), String> {
-    alp_call_async(
-        "host.voice.autoplay",
-        serde_json::json!({"profile": profile, "state": state}),
-    )
-    .await
-}
-
-#[tauri::command]
 async fn sandbox_set(profile: String, state: String) -> Result<(), String> {
     alp_call_async(
         "host.sandbox.set",
@@ -2353,7 +2344,6 @@ pub fn run() {
             sandbox_set,
             sandbox_network,
             voice_set_voice,
-            voice_autoplay,
             gateway_config,
             gateway_gmail_authorize,
             gateway_gmail_paste,
