@@ -87,6 +87,10 @@ Important host contracts:
 - `host.events.subscribe` streams `{event, data, at, seq}`.
 - `host.events.history` is `seq`-based; clients should not use wall-clock
   timestamps as cursors.
+- `host.events.*` is transport, not durable history. `host/events.jsonl`
+  is a bounded reconnect replay buffer (`HISTORY_MAX = 500`) and can
+  drop rows under load. UIs that need browseable history must query the
+  durable stores: outputs, sessions, or workgroup transcripts.
 - `host.chat.send` has a replay sidecar; clients recover missed frames
   with `host.chat.events_since(after_seq)`.
 - `host.profile.summaries` is the lightweight sidebar shape.
@@ -109,6 +113,19 @@ Important host contracts:
   retention so clients only render a two-state inbox. The daemon
   also emits `output.created` so inbox surfaces can refresh
   without polling.
+- `host.sessions.delete` bulk-deletes chat sessions by id. It is
+  admin-only, refuses active/busy sessions, and removes both
+  `sessions/<id>.json` and `_events_<id>.jsonl`.
+
+## Doctor and cleanup
+
+- `alpi doctor` is read-only health. It may warn about outsized
+  per-profile stores (sessions, TTS cache, workgroup transcripts) but
+  never deletes.
+- `alpi setup -> Cleanup` is the manual cleanup surface for caches,
+  logs, mentions, gateway sessions, schedule output, workgroup files,
+  and RAG freelist vacuum.
+- Desktop Manage Sessions is the richer UI for pruning chat sessions.
 
 ## Tools
 

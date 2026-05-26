@@ -1,3 +1,22 @@
+"""Daemon-pushed event bus + bounded replay window.
+
+Contract: this is transport, not durable history. ``host/events.jsonl``
+is a rolling buffer (``HISTORY_MAX``) sized for reconnect backfill
+within a single session of activity — it can drop old rows under load
+and is never the source of truth for anything user-visible.
+
+Source-of-truth state for things a user can browse lives elsewhere:
+
+- agent notifications → ``outputs/outputs.jsonl`` (per-profile,
+  capped, surveyable via ``host.outputs.*``)
+- chat threads → ``sessions/<id>.json``
+- workgroup posts → ``alp/workgroups/<id>/transcript.jsonl``
+
+Clients consume this bus for *live* state changes and reconnect
+catch-up; if a UI needs to render history older than the replay
+window, it must query the durable store, not ``host.events.history``.
+"""
+
 from __future__ import annotations
 
 import asyncio

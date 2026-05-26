@@ -69,6 +69,7 @@ def run_all(home: Path, profile: str) -> list[Check]:
             "gateway_state": _check_gateway_state(home),
             "services": _check_services(home, profile),
             "security": _check_security(cfg),
+            "storage": _check_storage(home),
         }
 
         for fut in as_completed(futures):
@@ -90,6 +91,7 @@ def run_all(home: Path, profile: str) -> list[Check]:
     out.extend(sync_checks["services"])
     out.extend(live.get("mcps", []))
     out.extend(sync_checks["security"])
+    out.extend(sync_checks["storage"])
     return out
 
 
@@ -789,3 +791,53 @@ def _sandbox_backend() -> str | None:
     if shutil.which("bwrap"):
         return "bwrap"
     return None
+
+
+# Storage thresholds — per-profile. Doctor only warns; cleanup is a user action via `alpi setup → Cleanup` or desktop Manage Sessions. Tuned for surprise-noise: a profile only ever sees a row when something is genuinely outsized.
+_MB = 1024 * 1024
+_STORAGE_THRESHOLDS = {
+    "sessions":   ("Sessions",            "sessions",          1024 * _MB),
+    "tts":        ("TTS cache",           "cache/tts",          500 * _MB),
+    "workgroups": ("Workgroup transcripts", "alp/workgroups",   250 * _MB),
+}
+
+
+def _dir_size(d: Path) -> int:
+    if not d.exists() or not d.is_dir():
+        return 0
+    total = 0
+    try:
+        for p in d.rglob("*"):
+            if p.is_file():
+                try:
+                    total += p.stat().st_size
+                except OSError:
+                    pass
+    except OSError:
+        pass
+    return total
+
+
+def _fmt_mb(n: int) -> str:
+    mb = n / _MB
+    if mb >= 1024:
+        return f"{mb / 1024:.1f} GB"
+    return f"{mb:.0f} MB"
+
+
+def _check_storage(home: Path) -> list[Check]:
+    """ST.1 — warn when a per-profile store is outsized. Silent on the happy path; doctor never deletes — pointer is ``alpi setup → Cleanup`` (CLI) or desktop Manage Sessions for the sessions store."""
+    out: list[Check] = []
+    for _key, (label, rel, limit) in _STORAGE_THRESHOLDS.items():
+        size = _dir_size(home / rel)
+        if size > limit:
+            hint = (
+                "desktop Manage Sessions or `alpi setup → Cleanup`"
+                if rel == "sessions"
+                else "`alpi setup → Cleanup`"
+            )
+            out.append(Check(
+                "Storage", label, "warn",
+                f"{_fmt_mb(size)} on disk — review via {hint}",
+            ))
+    return out

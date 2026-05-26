@@ -665,6 +665,16 @@ Verb namespaces in current shape:
   `schedule.done` and `schedule.failed` events ship `output_id`
   + `deep_link: /outputs/<profile>/<id>` whenever an output was
   filed so clients can deep-link straight to the row.
+
+**Contract.** ``host.events.*`` is transport, not durable history.
+The replay window (``HISTORY_MAX = 500``) is sized for reconnect
+catch-up within a session of activity — it can drop old rows under
+load and must never be the source of truth for anything a user can
+browse. Durable user-visible state lives in the per-profile stores
+that ``host.outputs.*`` / ``host.sessions.*`` / workgroup transcripts
+read from. If a UI needs history older than the replay window, it
+queries those stores, not ``host.events.history``.
+
 - **`host.events.subscribe`** — long-lived push channel. Daemon
   emits `{event, data, at, seq}` frames as state changes. Sources
   call `alpi.host.events.emit(kind, data)`; loop is captured at

@@ -348,3 +348,64 @@ def test_doctor_warns_on_degraded_gateway(tmp_path: Path, monkeypatch) -> None:
     assert row.status == "warn"
     assert "2 consecutive failures" in row.detail
     assert "timeout" in row.detail
+
+
+def test_storage_check_silent_when_under_thresholds(tmp_path: Path, monkeypatch) -> None:
+    _write_cfg(tmp_path, workspace=str(tmp_path))
+    _write_env(tmp_path, OPENROUTER_API_KEY="x")
+    from alpi import service
+    monkeypatch.setattr(service, "daemon_installed", lambda: False)
+    monkeypatch.setattr(service, "daemon_running_pid", lambda root: None)
+
+    (tmp_path / "cache" / "tts").mkdir(parents=True)
+    (tmp_path / "cache" / "tts" / "tiny.mp3").write_bytes(b"x" * 1024)
+
+    checks = doctor.run_all(tmp_path, "default")
+    storage_rows = [c for c in checks if c.group == "Storage"]
+    assert storage_rows == []
+
+
+def test_storage_check_warns_when_tts_cache_outsized(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    _write_cfg(tmp_path, workspace=str(tmp_path))
+    _write_env(tmp_path, OPENROUTER_API_KEY="x")
+    from alpi import service
+    monkeypatch.setattr(service, "daemon_installed", lambda: False)
+    monkeypatch.setattr(service, "daemon_running_pid", lambda root: None)
+    monkeypatch.setattr(
+        doctor, "_STORAGE_THRESHOLDS",
+        {"tts": ("TTS cache", "cache/tts", 1024)},
+    )
+
+    cache = tmp_path / "cache" / "tts"
+    cache.mkdir(parents=True)
+    (cache / "fat.mp3").write_bytes(b"x" * 4096)
+
+    checks = doctor.run_all(tmp_path, "default")
+    row = next(c for c in checks if c.group == "Storage" and c.name == "TTS cache")
+    assert row.status == "warn"
+    assert "Cleanup" in row.detail
+
+
+def test_storage_check_points_sessions_at_desktop(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    _write_cfg(tmp_path, workspace=str(tmp_path))
+    _write_env(tmp_path, OPENROUTER_API_KEY="x")
+    from alpi import service
+    monkeypatch.setattr(service, "daemon_installed", lambda: False)
+    monkeypatch.setattr(service, "daemon_running_pid", lambda root: None)
+    monkeypatch.setattr(
+        doctor, "_STORAGE_THRESHOLDS",
+        {"sessions": ("Sessions", "sessions", 1024)},
+    )
+
+    sess = tmp_path / "sessions"
+    sess.mkdir()
+    (sess / "huge.json").write_bytes(b"x" * 8192)
+
+    checks = doctor.run_all(tmp_path, "default")
+    row = next(c for c in checks if c.group == "Storage" and c.name == "Sessions")
+    assert row.status == "warn"
+    assert "Manage Sessions" in row.detail

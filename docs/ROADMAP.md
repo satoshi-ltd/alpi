@@ -46,7 +46,7 @@ patterns into Alpi-owned clients rather than gateways.
 
 | ID | Item | Status |
 |---|---|---|
-| CL.1 | Prompt caching across providers — stable-prefix audit, marker-required provider support, optional cache-key hints for auto-cache providers, and measurement in `alpi digest`. | 🔵 |
+| CL.1 | Prompt caching across providers — stable-prefix audit, marker-required provider support, optional cache-key hints for auto-cache providers, and measurement in `alpi digest`. | 🟡 |
 | BD | Model-family conditional prompt guidance — inject heavier tool-use/verification guidance only for model families that real logs show need it. | 🔵 |
 
 ### Voice

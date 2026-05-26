@@ -2777,11 +2777,18 @@ def _cleanup_categories(h: Path) -> list[dict]:
 
     return [
         {
-            "key": "audio",
-            "label": "Audio cache",
-            "desc": "TTS output + inbound Telegram voice notes",
-            "files": tts_files + inbound_files,
-            "size": _sum(tts_files + inbound_files),
+            "key": "tts",
+            "label": "TTS cache",
+            "desc": "synthesized speech MP3s in `cache/tts/`",
+            "files": tts_files,
+            "size": _sum(tts_files),
+        },
+        {
+            "key": "inbound_media",
+            "label": "Inbound media cache",
+            "desc": "downloaded voice notes / attachments in `cache/inbound/`",
+            "files": inbound_files,
+            "size": _sum(inbound_files),
         },
         {
             "key": "sessions",

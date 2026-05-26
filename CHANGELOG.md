@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.6.14 — 2026-05-26 — storage hygiene
+
+- ``alpi doctor`` gains a Storage check that flags outsized
+  per-profile stores: sessions > 1 GB, TTS cache > 500 MB,
+  workgroup transcripts > 250 MB. Warning-only — it points you to
+  ``alpi setup → Cleanup`` (or desktop Manage Sessions for the
+  sessions store) and never deletes on its own. Silent on the
+  happy path.
+- ``alpi setup → Cleanup`` splits the old "Audio cache" row into
+  **TTS cache** and **Inbound media cache** so you can reclaim
+  synthesised speech without touching downloaded voice notes (or
+  the other way round).
+- Documented contract: ``host.events.*`` is transport with a
+  bounded replay window for reconnects, never the source of truth
+  for anything a user can browse. Durable state lives in
+  ``outputs.jsonl`` / ``sessions/<id>.json`` / workgroup
+  transcripts. UI history features must read those, not
+  ``host.events.history``.
+
 ## v0.6.13 / desktop-v0.3.22 — 2026-05-26 — Manage Sessions on desktop
 
 The desktop client gets a real session manager. The Sessions
