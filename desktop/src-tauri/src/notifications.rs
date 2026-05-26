@@ -185,16 +185,26 @@ pub fn dispatch_daemon_frame(app: &AppHandle, frame: &serde_json::Value) {
             } else {
                 format!("{}: {}", job_id, msg)
             };
-            show(
-                app,
-                &title,
-                &body,
+            let output_id = data
+                .get("output_id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            // output_id is the v0.6.11+ path; fall back to the schedule list for older daemons.
+            let deeplink = if !output_id.is_empty() {
+                Deeplink {
+                    kind: "output".into(),
+                    profile: Some(profile),
+                    id: Some(output_id),
+                }
+            } else {
                 Deeplink {
                     kind: "settings".into(),
                     profile: Some(profile),
                     id: Some("schedules".into()),
-                },
-            );
+                }
+            };
+            show(app, &title, &body, deeplink);
         }
         "agent.message" => {
             let profile = data
@@ -217,12 +227,24 @@ pub fn dispatch_daemon_frame(app: &AppHandle, frame: &serde_json::Value) {
             if body.is_empty() {
                 return;
             }
+            let output_id = data
+                .get("output_id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
             let session_id = data
                 .get("session_id")
                 .and_then(|v| v.as_str())
                 .unwrap_or("")
                 .to_string();
-            let deeplink = if !session_id.is_empty() {
+            // output_id is the v0.6.11+ path; older daemons fall back to the chat/profile deeplink.
+            let deeplink = if !output_id.is_empty() {
+                Deeplink {
+                    kind: "output".into(),
+                    profile: Some(profile),
+                    id: Some(output_id),
+                }
+            } else if !session_id.is_empty() {
                 Deeplink {
                     kind: "chat".into(),
                     profile: Some(profile),

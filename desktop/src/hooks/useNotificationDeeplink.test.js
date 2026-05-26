@@ -27,6 +27,17 @@ describe("resolveDeeplink", () => {
     });
   });
 
+  it("opens the notifications modal with a target when kind=output carries profile+id", () => {
+    const action = resolveDeeplink({ kind: "output", profile: "abby", id: "abc123" });
+    expect(action).toEqual({ notifications: { profile: "abby", id: "abc123" } });
+    expect(action.view).toBeUndefined();
+  });
+
+  it("ignores kind=output with missing profile or id — the daemon's contract requires both", () => {
+    expect(resolveDeeplink({ kind: "output", profile: "abby" })).toBeNull();
+    expect(resolveDeeplink({ kind: "output", id: "abc123" })).toBeNull();
+  });
+
   it("opens settings with a profile target when provided", () => {
     expect(resolveDeeplink({ kind: "settings", profile: "abby" })).toEqual({
       settingsTarget: { kind: "profile", id: "abby" },

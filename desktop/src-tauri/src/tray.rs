@@ -8,7 +8,7 @@ use tauri::{
 };
 
 const TRAY_ICON: &[u8] = include_bytes!("../icons/tray-template.png");
-const TRAY_ICON_UPDATE: &[u8] = include_bytes!("../icons/tray-template-update.png");
+const TRAY_ICON_NOTIFICATION: &[u8] = include_bytes!("../icons/tray-template-notification.png");
 const TOGGLE_ACCELERATOR: &str = "CmdOrCtrl+Shift+A";
 
 #[derive(Default)]
@@ -16,6 +16,7 @@ struct TrayState {
     update_available: bool,
     update_version: Option<String>,
     window_visible: bool,
+    unread_outputs: u64,
 }
 
 fn state() -> &'static Mutex<TrayState> {
@@ -41,6 +42,23 @@ fn build_menu(app: &AppHandle, s: &TrayState) -> tauri::Result<Menu<tauri::Wry>>
     let separator = PredefinedMenuItem::separator(app)?;
     let quit_item = PredefinedMenuItem::quit(app, Some("Quit Alpi"))?;
 
+    let notifications_item = if s.unread_outputs > 0 {
+        let label = if s.unread_outputs > 99 {
+            "Notifications (99+)".to_string()
+        } else {
+            format!("Notifications ({})", s.unread_outputs)
+        };
+        Some(MenuItem::with_id(
+            app,
+            "notifications",
+            &label,
+            true,
+            Some("CmdOrCtrl+O"),
+        )?)
+    } else {
+        None
+    };
+
     if s.update_available {
         let header_label = match s.update_version.as_deref() {
             Some(v) => format!("An update is available ({v})"),
@@ -51,20 +69,26 @@ fn build_menu(app: &AppHandle, s: &TrayState) -> tauri::Result<Menu<tauri::Wry>>
         let update_action =
             MenuItem::with_id(app, "update", "Restart to update", true, None::<&str>)?;
         let update_sep = PredefinedMenuItem::separator(app)?;
-        Menu::with_items(
-            app,
-            &[
-                &open_item,
-                &settings_item,
-                &update_sep,
-                &update_header,
-                &update_action,
-                &separator,
-                &quit_item,
-            ],
-        )
+        let mut items: Vec<&dyn tauri::menu::IsMenuItem<tauri::Wry>> =
+            vec![&open_item, &settings_item];
+        if let Some(ref n) = notifications_item {
+            items.push(n);
+        }
+        items.push(&update_sep);
+        items.push(&update_header);
+        items.push(&update_action);
+        items.push(&separator);
+        items.push(&quit_item);
+        Menu::with_items(app, &items)
     } else {
-        Menu::with_items(app, &[&open_item, &settings_item, &separator, &quit_item])
+        let mut items: Vec<&dyn tauri::menu::IsMenuItem<tauri::Wry>> =
+            vec![&open_item, &settings_item];
+        if let Some(ref n) = notifications_item {
+            items.push(n);
+        }
+        items.push(&separator);
+        items.push(&quit_item);
+        Menu::with_items(app, &items)
     }
 }
 
@@ -77,12 +101,16 @@ fn rebuild_menu(app: &AppHandle) {
     }
 }
 
-fn refresh_icon(app: &AppHandle, update_available: bool) {
-    // Disable template mode for the update variant so the red badge keeps its color.
-    let bytes = if update_available { TRAY_ICON_UPDATE } else { TRAY_ICON };
+fn refresh_icon(app: &AppHandle) {
+    // Template ON for both variants — macOS auto-tints to the menu bar theme. The dot ends up tinted alongside the silhouette; red emphasis lives in the Dock badge + sidebar bell.
+    let needs_attention = {
+        let s = state().lock().unwrap();
+        s.update_available || s.unread_outputs > 0
+    };
+    let bytes = if needs_attention { TRAY_ICON_NOTIFICATION } else { TRAY_ICON };
     if let (Ok(icon), Some(tray)) = (Image::from_bytes(bytes), app.tray_by_id("main")) {
         let _ = tray.set_icon(Some(icon));
-        let _ = tray.set_icon_as_template(!update_available);
+        let _ = tray.set_icon_as_template(true);
     }
 }
 
@@ -131,6 +159,15 @@ pub fn install(app: &mut App) -> tauri::Result<()> {
             "update" => {
                 let _ = app.emit("tray:update-clicked", ());
             }
+            "notifications" => {
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.show();
+                    let _ = window.unminimize();
+                    let _ = window.set_focus();
+                    set_window_visible(app, true);
+                }
+                let _ = app.emit("tray:notifications-clicked", ());
+            }
             _ => {}
         })
         .build(app)?;
@@ -150,7 +187,7 @@ pub fn announce_update(app: &AppHandle, available: bool, version: Option<&str>) 
         s.update_version = version.map(str::to_string);
     }
     rebuild_menu(app);
-    refresh_icon(app, available);
+    refresh_icon(app);
 }
 
 pub fn set_window_visible(app: &AppHandle, visible: bool) {
@@ -163,3 +200,33 @@ pub fn set_window_visible(app: &AppHandle, visible: bool) {
     }
     rebuild_menu(app);
 }
+
+pub fn announce_notifications(app: &AppHandle, unread: u64) {
+    {
+        let mut s = state().lock().unwrap();
+        if s.unread_outputs == unread {
+            return;
+        }
+        s.unread_outputs = unread;
+    }
+    rebuild_menu(app);
+    refresh_icon(app);
+    set_dock_badge(app, unread);
+}
+
+#[cfg(target_os = "macos")]
+fn set_dock_badge(app: &AppHandle, unread: u64) {
+    let label = if unread == 0 {
+        None
+    } else if unread > 99 {
+        Some("99+".to_string())
+    } else {
+        Some(unread.to_string())
+    };
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.set_badge_label(label);
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn set_dock_badge(_app: &AppHandle, _unread: u64) {}

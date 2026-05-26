@@ -4,6 +4,7 @@ import VersionButton from "./VersionButton.jsx";
 import { SidebarRow, SectionLabel, ContextMenu } from "../primitives/index.js";
 import {
   AutoIcon,
+  BellIcon,
   Btn,
   IconBtn,
   Kbd,
@@ -86,6 +87,8 @@ function Sidebar({
   onForgetHostConnection,
   onRefreshHostConnectionStatus,
   autoOpenConnectionSwitcher = false,
+  onOpenNotifications,
+  notificationsUnread = 0,
 }) {
   const inSettings = view.kind === "settings";
 
@@ -481,6 +484,8 @@ function Sidebar({
         inSettings={inSettings}
         onOpenSettings={() => onOpenSettings?.()}
         onOpenPalette={() => onOpenPalette?.()}
+        onOpenNotifications={onOpenNotifications}
+        notificationsUnread={notificationsUnread}
       />
       {ctxMenu && (
         <ContextMenu
@@ -494,35 +499,63 @@ function Sidebar({
   );
 }
 
-function SidebarFooter({ inSettings, onOpenSettings, onOpenPalette }) {
+function SidebarFooter({
+  inSettings,
+  onOpenSettings,
+  onOpenPalette,
+  onOpenNotifications,
+  notificationsUnread = 0,
+}) {
   return (
     <div className={`${styles.footer} ${inSettings ? styles.footerSettings : ""}`}>
-      <button
-        type="button"
-        className={`ds-sb-row ${styles.footerButton}`}
-        onClick={inSettings ? onOpenPalette : onOpenSettings}
-      >
-        {inSettings ? <SearchIcon /> : <GearIcon />}
-        <span className={styles.rowLabel}>
-          {inSettings ? "Command…" : "Settings"}
-        </span>
-        <span className={styles.footerKbds} aria-hidden>
+      <Tip text={inSettings ? "Command palette · ⌘K" : "Settings · ⌘,"} side="up">
+        <button
+          type="button"
+          className={`ds-sb-row ${styles.footerButton}`}
+          onClick={inSettings ? onOpenPalette : onOpenSettings}
+        >
+          {inSettings ? <SearchIcon /> : <GearIcon />}
+          <span className={styles.rowLabel}>
+            {inSettings ? "Command…" : "Settings"}
+          </span>
           {inSettings ? (
-            <>
+            <span className={styles.footerKbds} aria-hidden>
               <Kbd>⌘</Kbd>
               <Kbd>K</Kbd>
-            </>
-          ) : (
-            <>
-              <Kbd>⌘</Kbd>
-              <Kbd>,</Kbd>
-            </>
-          )}
-        </span>
-      </button>
+            </span>
+          ) : null}
+        </button>
+      </Tip>
+      {!inSettings && (
+        <NotificationsBellButton
+          unread={notificationsUnread}
+          onClick={onOpenNotifications}
+        />
+      )}
       {!inSettings && <ThemeButton />}
+      <span className={styles.footerSpacer} aria-hidden />
       <VersionButton />
     </div>
+  );
+}
+
+function NotificationsBellButton({ unread = 0, onClick }) {
+  const tip = unread > 0
+    ? `Notifications · ${unread} unread · ⌘O`
+    : "Notifications · ⌘O";
+  return (
+    <Tip text={tip} side="up">
+      <IconBtn aria-label={tip} onClick={onClick}>
+        <span className={styles.bellWrap}>
+          <BellIcon />
+          {unread > 0 ? (
+            <span className={styles.bellBadge} aria-hidden>
+              {unread > 99 ? "99+" : unread}
+            </span>
+          ) : null}
+        </span>
+      </IconBtn>
+    </Tip>
   );
 }
 

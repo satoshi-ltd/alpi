@@ -20,6 +20,10 @@ export function resolveDeeplink(deeplink) {
   if (kind === "workgroup" && profile && id) {
     return { view: { kind: "workgroup", profile, id } };
   }
+  if (kind === "output" && profile && id) {
+    // No view swap — leave whatever the user is on. The opened modal owns selection.
+    return { notifications: { profile, id } };
+  }
   if (kind === "settings") {
     // Convention: undefined settingsTarget means "keep current"; null would crash settingsTarget.kind in App.jsx.
     const action = { view: { kind: "settings" } };
@@ -29,8 +33,10 @@ export function resolveDeeplink(deeplink) {
   return null;
 }
 
-export function useNotificationDeeplink({ setView, setSettingsTarget }) {
+export function useNotificationDeeplink({ setView, setSettingsTarget, openNotifications }) {
   const pendingRef = useRef(null);
+  const openNotificationsRef = useRef(openNotifications);
+  useEffect(() => { openNotificationsRef.current = openNotifications; }, [openNotifications]);
 
   useEffect(() => {
     let unlistenFired = null;
@@ -51,6 +57,7 @@ export function useNotificationDeeplink({ setView, setSettingsTarget }) {
         setSettingsTarget(action.settingsTarget);
       }
       if (action.view) setView(action.view);
+      if (action.notifications) openNotificationsRef.current?.(action.notifications);
     };
 
     (async () => {

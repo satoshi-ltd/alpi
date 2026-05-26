@@ -15,6 +15,7 @@ export function useWindowChrome({
   onBrowseTools,
   onBrowseSkills,
   onBrowseMemory,
+  onToggleNotifications,
 } = {}) {
   useEffect(() => {
     function onDown(e) {
@@ -123,6 +124,12 @@ export function useWindowChrome({
         onTogglePalette?.();
         return;
       }
+      if (key === "o" && !e.shiftKey && !e.altKey) {
+        e.preventDefault();
+        e.stopPropagation();
+        onToggleNotifications?.();
+        return;
+      }
       if (e.shiftKey && (key === "t" || key === "s" || key === "m")) {
         if (viewRef.current?.kind === "profile") {
           e.preventDefault();
@@ -135,5 +142,5 @@ export function useWindowChrome({
     }
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [viewRef, setView, onJumpToProfile, onNewProfile, onNewWorkgroup, onOpenSettings, onToggleSearch, onTogglePalette, paletteOpenRef, onClosePalette, onBrowseTools, onBrowseSkills, onBrowseMemory]);
+  }, [viewRef, setView, onJumpToProfile, onNewProfile, onNewWorkgroup, onOpenSettings, onToggleSearch, onTogglePalette, paletteOpenRef, onClosePalette, onBrowseTools, onBrowseSkills, onBrowseMemory, onToggleNotifications]);
 }

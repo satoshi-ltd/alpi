@@ -4,6 +4,7 @@
   --font-sans: "Geist", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 
+  --fs-xxs:     9px;
   --fs-xs:      11px;
   --fs-sm:      12px;
   --fs-base:    13px;
@@ -85,6 +86,7 @@
   --r-xl:  12px;
   --r-2xl: 14px;
   --r-3xl: 16px;
+  --r-pill: 999px;
 
   --ease: cubic-bezier(.2, .7, .2, 1);
   --dur-1: var(--dur-1);

@@ -11,6 +11,44 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.3.20 — 2026-05-25 — Notifications inbox replaces Activity
+
+The sidebar gets a bell — a persistent inbox of proactive
+messages from every profile on the active connection. Same
+surface, same rows as the mobile screen: every ``send_message``
+and every schedule failure files a durable row you can open
+later instead of catching it once on the OS notification tray.
+Requires alpi ≥ 0.6.11.
+
+- New ``Notifications`` modal — master-detail layout. Left
+  column lists rows across every profile on the active
+  connection (profile diamond + ``@name · source · relative
+  time`` + body preview); right pane shows the full body with
+  markdown, ``Open schedule`` / ``Open chat`` contextual action,
+  and ``Copy``. ``Mark all read`` in the header.
+- Bell button next to ``Settings`` in the sidebar footer, with a
+  live unread badge and ``⌘O`` hotkey. Tooltip reads
+  ``Notifications · N unread · ⌘O``.
+- The macOS tray now mirrors unread outputs too: the tray icon
+  switches to the attention variant, the menu shows
+  ``Notifications (N)``, and the Dock badge carries the unread
+  count. Updates still keep their own restart action in the same
+  menu.
+- Opening a row marks it read; ``Mark all read`` clears every
+  ``unread`` across the active connection's profiles via
+  ``host.outputs.mark_all_read``. List, detail and the bell
+  badge re-fetch together after any mark/clear, so siblings
+  don't drift.
+- Native notifications now deep-link to the persisted row.
+  ``agent.message`` and ``schedule.failed`` honour the daemon's
+  ``deep_link`` (``/outputs/<profile>/<id>``) — clicking the
+  banner opens the modal with that exact row selected, instead
+  of dumping you into a chat or the schedule list. Older daemons
+  fall back to the previous deep-link targets.
+- Refresh-on-event: the modal and bell listen for the daemon's
+  ``output.created`` / ``output.updated`` events and re-fetch
+  without polling.
+
 ## v0.3.19 — 2026-05-25 — pair-with-role UI + role-aware gating
 
 Surfaces the v0.6.10 ``admin / member`` device roles. Requires

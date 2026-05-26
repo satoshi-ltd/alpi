@@ -1475,6 +1475,69 @@ async fn daemon_restart() -> Result<(), String> {
 }
 
 #[tauri::command]
+async fn outputs_list(
+    profile: String,
+    status: Option<String>,
+    limit: Option<u32>,
+) -> Result<serde_json::Value, String> {
+    let mut params = serde_json::json!({"profile": profile});
+    if let Some(s) = status {
+        params["status"] = serde_json::Value::String(s);
+    }
+    if let Some(l) = limit {
+        params["limit"] = serde_json::Value::Number(serde_json::Number::from(l));
+    }
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        host_client::call("host.outputs.list", params)
+    })
+    .await
+    .map_err(|e| format!("outputs_list: {e}"))??;
+    Ok(result
+        .get("outputs")
+        .cloned()
+        .unwrap_or(serde_json::Value::Array(vec![])))
+}
+
+#[tauri::command]
+async fn outputs_read(profile: String, id: String) -> Result<serde_json::Value, String> {
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        host_client::call(
+            "host.outputs.read",
+            serde_json::json!({"profile": profile, "id": id}),
+        )
+    })
+    .await
+    .map_err(|e| format!("outputs_read: {e}"))??;
+    Ok(result.get("output").cloned().unwrap_or(serde_json::Value::Null))
+}
+
+#[tauri::command]
+async fn outputs_mark_read(profile: String, id: String) -> Result<serde_json::Value, String> {
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        host_client::call(
+            "host.outputs.mark_read",
+            serde_json::json!({"profile": profile, "id": id}),
+        )
+    })
+    .await
+    .map_err(|e| format!("outputs_mark_read: {e}"))??;
+    Ok(result.get("output").cloned().unwrap_or(serde_json::Value::Null))
+}
+
+#[tauri::command]
+async fn outputs_mark_all_read(profile: String) -> Result<u64, String> {
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        host_client::call(
+            "host.outputs.mark_all_read",
+            serde_json::json!({"profile": profile}),
+        )
+    })
+    .await
+    .map_err(|e| format!("outputs_mark_all_read: {e}"))??;
+    Ok(result.get("count").and_then(|v| v.as_u64()).unwrap_or(0))
+}
+
+#[tauri::command]
 async fn approval_respond(request_id: String, choice: String) -> Result<serde_json::Value, String> {
     let params = serde_json::json!({ "request_id": request_id, "choice": choice });
     let result = tauri::async_runtime::spawn_blocking(move || {
@@ -1938,6 +2001,11 @@ fn tray_announce_update(app: AppHandle, available: bool, version: Option<String>
     tray::announce_update(&app, available, version.as_deref());
 }
 
+#[tauri::command]
+fn tray_announce_notifications(app: AppHandle, unread: u64) {
+    tray::announce_notifications(&app, unread);
+}
+
 fn subscribe_daemon_events(app: AppHandle) {
     use std::collections::HashMap;
     use std::sync::{Arc, Mutex};
@@ -2268,6 +2336,10 @@ pub fn run() {
             schedule_set_paused,
             schedule_fire,
             daemon_restart,
+            outputs_list,
+            outputs_read,
+            outputs_mark_read,
+            outputs_mark_all_read,
             approval_respond,
             approval_pending,
             profile_create,
@@ -2306,6 +2378,7 @@ pub fn run() {
             workgroup_create,
             workgroup_add_member,
             tray_announce_update,
+            tray_announce_notifications,
             set_active_view
         ])
         .run(tauri::generate_context!())

@@ -11,6 +11,7 @@ import CommandPalette from "./features/CommandPalette.jsx";
 import ApprovalModal from "./features/ApprovalModal.jsx";
 import CreateProfileModal from "./features/CreateProfileModal.jsx";
 import CreateWorkgroupModal from "./features/CreateWorkgroupModal.jsx";
+import NotificationsModal from "./features/NotificationsModal.jsx";
 import ToolsPanel from "./features/ToolsPanel.jsx";
 import SkillsPanel from "./features/SkillsPanel.jsx";
 import MemoryPanel from "./features/MemoryPanel.jsx";
@@ -25,6 +26,7 @@ import { enqueueRequest as enqueueApprovalRequest } from "./lib/approval-queue.j
 import { invalidateProfileDetailCache } from "./hooks/useProfileDetail.js";
 import { useChatStream } from "./hooks/useChatStream.js";
 import { useHostConnections } from "./hooks/useHostConnections.js";
+import { useOutputs } from "./hooks/useOutputs.js";
 import { useNavListener } from "./hooks/useNavListener.js";
 import { usePinned } from "./hooks/usePinned.js";
 import { useLastView } from "./hooks/useLastView.js";
@@ -74,7 +76,25 @@ export default function App() {
     if (view.kind !== "settings") prevViewRef.current = view;
     viewRef.current = view;
   }, [view]);
-  useNotificationDeeplink({ setView, setSettingsTarget });
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [notificationsTarget, setNotificationsTarget] = useState(null);
+  const openNotificationsForDeeplink = useCallback((target) => {
+    setNotificationsTarget(target || null);
+    setNotificationsOpen(true);
+  }, []);
+  const onOpenNotifications = useCallback(() => {
+    setNotificationsTarget(null);
+    setNotificationsOpen((v) => !v);
+  }, []);
+  const onCloseNotifications = useCallback(() => {
+    setNotificationsOpen(false);
+    setNotificationsTarget(null);
+  }, []);
+  useNotificationDeeplink({
+    setView,
+    setSettingsTarget,
+    openNotifications: openNotificationsForDeeplink,
+  });
   useActiveViewPing(view);
 
   const onOpenRecent = useCallback((profile, sessionId) => {
@@ -233,6 +253,7 @@ export default function App() {
     onBrowseTools,
     onBrowseSkills,
     onBrowseMemory,
+    onToggleNotifications: onOpenNotifications,
   });
   useNavListener(setView);
 
@@ -271,6 +292,25 @@ export default function App() {
   useEffect(() => {
     reloadRef.current = reload;
   }, [reload]);
+
+  const { rows: unreadOutputs } = useOutputs({
+    profiles,
+    connectionId: hostConnections.active_id,
+    status: "unread",
+  });
+  const notificationsUnread = unreadOutputs.length;
+
+  useEffect(() => {
+    invoke("tray_announce_notifications", { unread: notificationsUnread }).catch(() => {});
+  }, [notificationsUnread]);
+
+  useEffect(() => {
+    const off = listen("tray:notifications-clicked", () => {
+      setNotificationsTarget(null);
+      setNotificationsOpen(true);
+    });
+    return () => { off.then((fn) => fn()); };
+  }, []);
 
   const { pinned, onTogglePin } = usePinned(hostConnections.active_id);
   useLastView({
@@ -808,6 +848,8 @@ export default function App() {
         onForgetHostConnection={onForgetHostConnection}
         onRefreshHostConnectionStatus={onRefreshHostConnectionStatus}
         autoOpenConnectionSwitcher={autoOpenConnectionSwitcher}
+        onOpenNotifications={onOpenNotifications}
+        notificationsUnread={notificationsUnread}
       />
       <main className={styles.main}>
           {view.kind === "settings" ? (
@@ -970,6 +1012,21 @@ export default function App() {
         }}
       />
       <ApprovalModal requests={approvalQueue} onResolved={onApprovalResolved} />
+      <NotificationsModal
+        open={notificationsOpen}
+        onClose={onCloseNotifications}
+        profiles={profiles}
+        connectionId={hostConnections.active_id}
+        selectedId={notificationsTarget?.id}
+        selectedProfile={notificationsTarget?.profile}
+        onOpenChat={(profile, sessionId) =>
+          setView({ kind: "profile", profile, sessionId: sessionId || null })
+        }
+        onOpenSchedule={(profile) => {
+          setSettingsTarget({ kind: "profile", id: profile });
+          setView({ kind: "settings" });
+        }}
+      />
     </div>
   );
 }
