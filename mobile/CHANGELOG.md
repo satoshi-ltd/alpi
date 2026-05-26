@@ -14,6 +14,33 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.1.16 — 2026-05-25 — Outputs inbox replaces Activity
+
+The bell icon now opens a real inbox of proactive messages, not
+a transient event log. Every ``send_message`` and every schedule
+failure is a durable row you can come back to — survives reboots,
+app kills, and the OS clearing the notification tray.
+
+- New ``Outputs`` screen at the bell-icon target. Pull-to-refresh,
+  ``Mark all read`` in the header (with a live unread count
+  beside the title). Auto-refreshes when the daemon emits
+  ``output.created`` / ``output.updated``.
+- Tapping a row opens an output detail screen with the full body,
+  source (``send_message`` / ``schedule``), severity, delivered
+  channels, ``Copy``, and a contextual ``Open chat`` / ``Open
+  schedule`` button when applicable.
+- Opening a row marks it read; ``Mark all read`` clears every
+  ``unread`` across the active daemon's profiles via
+  ``host.outputs.mark_all_read``.
+- ``agent.message`` and ``schedule.failed`` notifications now
+  honour the daemon's ``deep_link`` (``/outputs/<profile>/<id>``)
+  and land you on the persisted row instead of a chat window.
+- The old ``Activity`` event-history sheet is gone — events are
+  internal transport now, the inbox is the surface.
+
+Requires alpi ``v0.6.11`` or later (older daemons don't ship
+``host.outputs.*``).
+
 ## v0.1.15 — 2026-05-25 — cold-start probes only the active daemon
 
 Cheaper, more honest startup: the cold-start path no longer

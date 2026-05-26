@@ -61,6 +61,9 @@ export function deepLinkFor(event, _connection) {
     case 'approval.request':
       return '/';
     case 'schedule.failed':
+      if (typeof data.deep_link === 'string' && data.deep_link) {
+        return data.deep_link;
+      }
       return data.profile ? `/profile/${data.profile}/schedule` : '/';
     case 'budget.threshold':
       return data.profile ? `/profile/${data.profile}` : '/';

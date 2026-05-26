@@ -79,15 +79,22 @@ describe('deepLinkFor', () => {
     expect(deepLinkFor({ event: 'wg.done', data: { wg_id: 'wg-xyz' } })).toBe('/wg/wg-xyz');
   });
 
-  it('routes schedule.failed to the profile schedule', () => {
+  it('routes schedule.failed via explicit deep_link to the failed output row', () => {
+    expect(deepLinkFor({
+      event: 'schedule.failed',
+      data: { profile: 'vera', deep_link: '/outputs/vera/abc123', output_id: 'abc123' },
+    })).toBe('/outputs/vera/abc123');
+  });
+
+  it('falls back to the profile schedule when schedule.failed has no deep_link (older daemons)', () => {
     expect(deepLinkFor({ event: 'schedule.failed', data: { profile: 'vera' } })).toBe('/profile/vera/schedule');
   });
 
-  it('routes agent.message via explicit deep_link when present', () => {
+  it('routes agent.message via explicit deep_link to the output row', () => {
     expect(deepLinkFor({
       event: 'agent.message',
-      data: { deep_link: '/profile/abby', session_id: 'sess-1' },
-    })).toBe('/profile/abby');
+      data: { deep_link: '/outputs/abby/abc123', output_id: 'abc123' },
+    })).toBe('/outputs/abby/abc123');
   });
 
   it('routes agent.message to the profile chat when no explicit deep_link', () => {

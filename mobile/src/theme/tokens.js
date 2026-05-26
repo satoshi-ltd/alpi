@@ -19,6 +19,7 @@ export const fonts = {
 };
 
 export const fontSizes = {
+  xxs: 9,
   micro: 10,
   tiny: 11,
   small: 12,

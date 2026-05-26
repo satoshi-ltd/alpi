@@ -101,18 +101,18 @@ export function ConnHeader({
           <View
             style={{
               position: 'absolute',
-              top: 6,
-              right: 6,
-              minWidth: 16,
-              height: 16,
+              top: 2,
+              right: 2,
+              minWidth: space.s6,
+              height: space.s6,
               paddingHorizontal: space.s1,
-              borderRadius: radii.sm,
+              borderRadius: radii.pill,
               backgroundColor: colors.danger,
               alignItems: 'center',
               justifyContent: 'center',
             }}
           >
-            <Text style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.micro, lineHeight: 16, color: '#fff' }}>
+            <Text style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.xxs, lineHeight: space.s6, color: '#fff' }}>
               {unread}
             </Text>
           </View>

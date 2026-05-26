@@ -7,6 +7,8 @@ const FIXTURES = {
     body: 'Standup with the design team at 10:30.',
     severity: 'important',
     kind: 'reminder',
+    output_id: 'sample-output-id',
+    deep_link: '/outputs/abby/sample-output-id',
   },
   'wg.done': {
     profile: 'vera',
@@ -27,6 +29,8 @@ const FIXTURES = {
     job_id: 'job-debug',
     kind: 'cron',
     message: 'Morning briefing failed: upstream model timeout.',
+    output_id: 'sample-fail-id',
+    deep_link: '/outputs/vera/sample-fail-id',
   },
   'budget.threshold': {
     profile: 'vera',
