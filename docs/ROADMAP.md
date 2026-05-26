@@ -39,7 +39,6 @@ patterns into Alpi-owned clients rather than gateways.
 |---|---|---|
 | CM.4 | Semantic recall over past sessions — opt-in vector/semantic retrieval over session history when lexical `session_search` starts missing real queries. | 🔵 |
 | ALP.6 | Workgroup search — semantic search over workgroup transcripts via the local RAG primitives, exposed through workgroup/host surfaces after CM.4 proves stable. | 🔵 |
-| ORG.1 | Organization workspace convention — document and scaffold the "hub profile owns the shared workspace" pattern before adding shared-filesystem runtime. | 🟡 |
 
 ### Cost and model behavior
 
@@ -105,17 +104,6 @@ new protocol family.
 This depends on CM.4's retrieval layer being stable. If semantic session
 recall is not reliable enough, workgroup search waits.
 
-### ORG.1. Organization workspace convention
-
-The organization scaffold exists, but there is no first-class runtime
-organization or shared filesystem. v0.7 documents the cheapest useful
-pattern: designate one hub/secretary profile as the organization
-workspace owner. Other agents reach it via existing `@hub` / `link.ask`
-flows, and workgroup outputs land there by convention.
-
-This is intentionally not the workspace overlay or first-class org
-entity. Those designs wait for real user demand.
-
 ### BD. Model-family conditional prompt guidance
 
 Different model families need different operational guidance. BD adds a
@@ -179,8 +167,13 @@ workgroups are heavily used and blobs are a real bottleneck.
 
 ### ORG.2. Organization workspace overlay / first-class org entity
 
-If ORG.1's convention-only pattern becomes insufficient, two heavier
-designs remain available:
+The "Archive owns the shared workspace" convention shipped with the
+organization scaffold ([organization/agent-organization.md →
+Shared workspace convention](../organization/agent-organization.md#shared-workspace-convention))
+covers single-keeper read paths today. If that convention stops being
+enough — non-Archive writers, concurrent scans on the hot path, or
+enforced access roles across humans — two heavier designs remain
+available:
 
 1. **Workspace overlay.** `cfg.workspace_path` becomes a list:
    `[profile_workspace, org_workspace]`. File tools read both and write

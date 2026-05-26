@@ -1,5 +1,29 @@
 # Changelog
 
+## v0.6.17 — 2026-05-27 — runtime-created profiles come online without a daemon restart
+
+Creating a profile while the daemon was running left it half-alive:
+chat worked through ``host.sock``, but the per-profile peer-link
+listener (``alp/alp.sock``) never bound. Peers that pointed at the new
+profile by pubkey saw it as ``offline`` even though both lived on the
+same host. The daemon had taken a one-shot snapshot of ``profiles/``
+at boot and never looked again.
+
+- The central service now rescans ``profiles/`` every 5 seconds and
+  starts subsystems for any newly observed profile. New profiles
+  reach ``online`` within one tick of creation, regardless of whether
+  they were created from the CLI, desktop, mobile, or a script.
+- A broken ``config.yaml`` in one profile no longer blocks discovery
+  of the others; the offending profile is retried on the next tick.
+- Profile homes resolve against the running daemon's root rather than
+  the import-time root. Daemons started with ``ALPI_HOME`` pointed
+  elsewhere (Umbrel deployments, tests with temp roots) now see the
+  correct ``profiles/<name>/`` paths.
+- ``SIGTERM``/``SIGINT`` still wake the wait immediately, so shutdown
+  latency is unchanged.
+- Out of scope: dynamic stop for deleted/archived profiles — those
+  still require a daemon restart.
+
 ## v0.6.16 — 2026-05-26 — skill curator (AC.1, report-only)
 
 Post-hoc curator that reads ``skills/.usage.json`` + the on-disk

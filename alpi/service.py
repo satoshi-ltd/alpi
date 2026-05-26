@@ -20,6 +20,8 @@ from alpi._proc_io import drain_tail
 
 log = logging.getLogger("alpi.service")
 
+_PROFILE_RESCAN_SECONDS = 5.0
+
 
 # Public — orchestration
 
@@ -145,25 +147,67 @@ async def _main_all(root: Path, profiles: list[str]) -> None:
     # Load only the root .env once for daemon-wide vars (ALPI_PLATFORM, telemetry). Per-profile secrets stay out of os.environ — read on-demand by resolve_model.
     _load_env(home_mod.alpi_root())
 
+    active_profiles: set[str] = set()
     tasks: list[asyncio.Task] = []
-    for profile in profiles:
-        home = home_mod.home_for(profile)
-        try:
-            subsystems = enabled_subsystems(home)
-        except Exception:  # noqa: BLE001
-            log.exception("profile %s: cannot read config — skipping boot", profile)
-            continue
-        tasks.extend(_profile_tasks(home, profile, subsystems))
+    _start_new_profiles(root, profiles, active_profiles, tasks)
 
     if not tasks:
-        log.warning("no profile subsystems enabled — central will idle")
-        await stop.wait()
-        return
+        log.warning(
+            "no profile subsystems enabled at boot — central will rescan every %.0fs",
+            _PROFILE_RESCAN_SECONDS,
+        )
 
-    await stop.wait()
+    while not stop.is_set():
+        try:
+            await asyncio.wait_for(stop.wait(), timeout=_PROFILE_RESCAN_SECONDS)
+        except asyncio.TimeoutError:
+            pass
+        if stop.is_set():
+            break
+        _start_new_profiles(
+            root, home_mod.list_profiles(root), active_profiles, tasks,
+        )
+
     for t in tasks:
         t.cancel()
     await asyncio.gather(*tasks, return_exceptions=True)
+
+
+def _profile_home(root: Path, profile: str) -> Path:
+    """Resolve a profile's home against the daemon's ``root``, not ``home_mod._ROOT``."""
+    if not profile or profile == "default":
+        return root
+    return root / "profiles" / profile
+
+
+def _start_new_profiles(
+    root: Path,
+    profiles: list[str],
+    active_profiles: set[str],
+    tasks: list[asyncio.Task],
+) -> None:
+    """Start subsystems for new profiles; per-profile errors do not block the rest."""
+    for profile in profiles:
+        if profile in active_profiles:
+            continue
+        home = _profile_home(root, profile)
+        try:
+            subsystems = enabled_subsystems(home)
+        except Exception:  # noqa: BLE001
+            log.exception(
+                "profile %s: cannot read config — retry next tick", profile,
+            )
+            continue
+        new_tasks = _profile_tasks(home, profile, subsystems)
+        tasks.extend(new_tasks)
+        active_profiles.add(profile)
+        if new_tasks:
+            log.info(
+                "profile %s: started %d subsystem task(s)",
+                profile, len(new_tasks),
+            )
+        else:
+            log.info("profile %s: no subsystems enabled", profile)
 
 
 def _profile_tasks(

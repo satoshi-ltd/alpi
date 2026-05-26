@@ -1327,6 +1327,24 @@ Switching between shapes does not change the agent's `agent.md`, skills, or how 
 
 ---
 
+## Shared workspace convention
+
+The org keeps **one** directory of shared artifacts — PDFs, markdowns, contracts, meeting notes, exported decision records — and **Archive** is the profile that owns it. Whatever directory you point Archive's `cfg.workspace_path` at IS the org's workspace by convention. Other profiles' workspaces stay local to each profile's home; nothing here forces a shared filesystem at the OS level.
+
+Other agents do not mount, scan, or write to the shared workspace directly. They consult it through Archive via `link.ask`, the same way they consult the rest of Archive's stack ([Read path](#read-path)). Writes land there through three channels Archive already covers in its [Write path](#write-path): humans drop files, workgroup `#done` triggers capture skills, or Archive's `memory(action="add")` pins an invariant.
+
+The pattern is intentionally conventional, not enforced. ALP gives every profile the same primitives; this scaffold simply names one profile as the canonical owner so artifacts don't sprawl across N homes. A different scaffold could split ownership by domain (one workspace per Council member), or skip a shared workspace entirely. Adapters override here.
+
+**When to promote.** "Ask Archive" stays the cheapest answer until one of these shows up:
+
+- A non-Archive agent needs to **write into** the shared corpus directly (today only Archive writes; others read via `link.ask`).
+- Several agents need to **scan the same files concurrently** at hot-path cost — round-tripping through Archive becomes the bottleneck.
+- Multiple humans operating the org need **enforced access roles** on the corpus (write-only-on-approval, read-restricted folders, etc.).
+
+When any of those is real, the next move is ORG.2 — workspace overlay or first-class org entity, both already sketched in [docs/ROADMAP.md](../docs/ROADMAP.md). Until then this convention covers the cost-effective 95%.
+
+---
+
 ## Workgroup Creation Permissions
 
 Persistent workgroups are stable. Ad-hoc workgroups exist for genuinely unique situations.

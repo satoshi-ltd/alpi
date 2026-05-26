@@ -86,22 +86,93 @@ awk -v image="$PINNED_IMAGE" '
 ' "$LOCAL_PACKAGE/docker-compose.yml" > "$tmp_compose"
 mv "$tmp_compose" "$LOCAL_PACKAGE/docker-compose.yml"
 
+if ! grep -qF 'syncthing/data:/data/workspace' "$LOCAL_PACKAGE/docker-compose.yml"; then
+  echo "Injecting Syncthing workspace bind into local package compose"
+  awk '
+    /\$\{APP_DATA_DIR\}\/data:\/data/ {
+      print
+      print "      - ${APP_DATA_DIR}/../syncthing/data:/data/workspace"
+      next
+    }
+    { print }
+  ' "$LOCAL_PACKAGE/docker-compose.yml" > "$tmp_compose"
+  mv "$tmp_compose" "$LOCAL_PACKAGE/docker-compose.yml"
+fi
+
 if [ -n "$UMBREL_STORE_DIR" ]; then
   remote_app_dir="$UMBREL_STORE_DIR"
 else
   echo "Resolving Umbrel app-store path"
   remote_app_dir="$(
-    ssh "${SSH_OPTS[@]}" "$UMBREL_USER@$UMBREL_HOST" \
-      "find /home/umbrel/umbrel/app-stores -maxdepth 2 -type d -name '$UMBREL_APP_ID' | grep getumbrel | head -n 1 || true"
+    ssh "${SSH_OPTS[@]}" "$UMBREL_USER@$UMBREL_HOST" "sh -s" -- "$UMBREL_APP_ID" <<'REMOTE'
+set -eu
+app_id="$1"
+for root in \
+  /home/umbrel/umbrel/app-stores \
+  /home/umbrel/umbrel/app-store
+do
+  [ -d "$root" ] || continue
+  candidate="$(
+    find "$root" -maxdepth 6 -type d -name "$app_id" 2>/dev/null \
+      | awk '
+          /getumbrel|umbrel-apps/ { preferred[++p] = $0; next }
+          { fallback[++f] = $0 }
+          END {
+            if (p) { print preferred[1]; exit }
+            if (f) { print fallback[1]; exit }
+          }
+        '
+  )"
+  if [ -n "$candidate" ]; then
+    printf '%s\n' "$candidate"
+    exit 0
+  fi
+done
+REMOTE
   )"
   if [ -z "$remote_app_dir" ]; then
     remote_app_dir="$(
-      ssh "${SSH_OPTS[@]}" "$UMBREL_USER@$UMBREL_HOST" \
-        "find /home/umbrel/umbrel/app-stores -maxdepth 2 -type d -name '$UMBREL_APP_ID' | head -n 1 || true"
+      ssh "${SSH_OPTS[@]}" "$UMBREL_USER@$UMBREL_HOST" "sh -s" -- "$UMBREL_APP_ID" <<'REMOTE'
+set -eu
+app_id="$1"
+for root in \
+  /home/umbrel/umbrel/app-stores \
+  /home/umbrel/umbrel/app-store
+do
+  [ -d "$root" ] || continue
+  store="$(
+    find "$root" -mindepth 1 -maxdepth 1 -type d 2>/dev/null \
+      | awk '
+          /getumbrel|umbrel-apps/ { preferred[++p] = $0; next }
+          { fallback[++f] = $0 }
+          END {
+            if (p) { print preferred[1]; exit }
+            if (f) { print fallback[1]; exit }
+          }
+        '
+  )"
+  if [ -n "$store" ]; then
+    printf '%s/%s\n' "$store" "$app_id"
+    exit 0
+  fi
+done
+REMOTE
     )"
   fi
   if [ -z "$remote_app_dir" ]; then
     echo "could not resolve remote Umbrel app-store path for $UMBREL_APP_ID" >&2
+    echo "" >&2
+    echo "remote Umbrel app-store roots:" >&2
+    ssh "${SSH_OPTS[@]}" "$UMBREL_USER@$UMBREL_HOST" \
+      "for d in /home/umbrel/umbrel/app-stores /home/umbrel/umbrel/app-store; do [ -d \"\$d\" ] && echo \"\$d\" && ls -1 \"\$d\" | sed 's/^/  /'; done" >&2 || true
+    echo "" >&2
+    echo "any alpi dirs anywhere under /home/umbrel/umbrel:" >&2
+    ssh "${SSH_OPTS[@]}" "$UMBREL_USER@$UMBREL_HOST" \
+      "find /home/umbrel/umbrel -maxdepth 4 -type d -name '$UMBREL_APP_ID' 2>/dev/null | sed 's/^/  /'" >&2 || true
+    echo "" >&2
+    echo "If the app is not installed, install it from the Umbrel UI first." >&2
+    echo "If the dir exists but the find missed it, override:" >&2
+    echo "  UMBREL_STORE_DIR=<full path> $0" >&2
     exit 1
   fi
 fi
@@ -154,8 +225,14 @@ trpc_bool() {
   esac
 }
 
+server_container() {
+  sudo -n docker ps -a --format '{{.Names}}' \
+    | grep -E "^${app_id}[-_]server[-_]1$" \
+    | head -n 1
+}
+
 container_exists() {
-  sudo -n docker ps -a --format '{{.Names}}' | grep -qx "${app_id}_server_1"
+  [ -n "$(server_container)" ]
 }
 
 sync_app_data() {
@@ -177,12 +254,15 @@ sync_app_data() {
   esac
 }
 
-if sudo -n docker ps -a --format '{{.Names}}' | grep -qx "${app_id}_server_1"; then
+if container_exists; then
   sync_app_data
   echo "Trying app restart"
   if ! trpc_bool apps.restart.mutate; then
     echo "restart failed — investigate before forcing reinstall" >&2
-    echo "  sudo docker logs ${app_id}_server_1 --tail 80" >&2
+    container="$(server_container || true)"
+    if [ -n "$container" ]; then
+      echo "  sudo docker logs $container --tail 80" >&2
+    fi
     exit 1
   fi
 else
@@ -203,6 +283,6 @@ fi
 REMOTE
 
 ssh -tt "${SSH_OPTS[@]}" "$UMBREL_USER@$UMBREL_HOST" \
-  "chmod +x '$remote_script' && '$remote_script' '$UMBREL_APP_ID' '$remote_app_dir' '$PINNED_IMAGE'; rm -f '$remote_script'"
+  "chmod +x '$remote_script' && '$remote_script' '$UMBREL_APP_ID' '$remote_app_dir' '$PINNED_IMAGE'; status=\$?; rm -f '$remote_script'; exit \$status"
 
 echo "Done: $PINNED_IMAGE"

@@ -233,3 +233,136 @@ async def test_supervise_isolates_subsystem_crash() -> None:
     # ``alp`` exercises the (home, profile) call shape.
     await service._supervise(boom, Path("/tmp"), "alice", "alp")
     # If we got here, the crash was swallowed.
+
+
+def test_profile_home_resolves_against_root(tmp_path: Path) -> None:
+    """``_profile_home`` honors the daemon's ``root``, not the import-time ``_ROOT``."""
+    root = tmp_path / "alt-root"
+    assert service._profile_home(root, "default") == root
+    assert service._profile_home(root, "alfa") == root / "profiles" / "alfa"
+
+
+def test_start_new_profiles_skips_already_active(
+    monkeypatch, tmp_path: Path,
+) -> None:
+    """Re-scanning the same profile must not duplicate its tasks."""
+    root = _make_root(tmp_path, ["alfa"])
+
+    calls: list[tuple[Path, str]] = []
+
+    def fake_profile_tasks(home, profile, subsystems):
+        calls.append((home, profile))
+        return []
+
+    monkeypatch.setattr(service, "_profile_tasks", fake_profile_tasks)
+    active: set[str] = set()
+    tasks: list = []
+
+    service._start_new_profiles(root, ["default", "alfa"], active, tasks)
+    service._start_new_profiles(root, ["default", "alfa"], active, tasks)
+
+    assert calls == [
+        (root, "default"),
+        (root / "profiles" / "alfa", "alfa"),
+    ]
+    assert active == {"default", "alfa"}
+
+
+def test_start_new_profiles_retries_on_config_error(
+    monkeypatch, tmp_path: Path,
+) -> None:
+    """A broken config keeps the profile inactive so the next tick retries."""
+    root = _make_root(tmp_path, ["alfa"])
+    expected_home = root / "profiles" / "alfa"
+
+    seen_homes: list[Path] = []
+
+    def flaky(home: Path) -> dict[str, bool]:
+        seen_homes.append(home)
+        if len(seen_homes) == 1:
+            raise RuntimeError("synthetic yaml error")
+        return {
+            "gateway": False, "schedule": False, "alp": False,
+            "host": False, "workgroups": False,
+        }
+
+    monkeypatch.setattr(service, "enabled_subsystems", flaky)
+    monkeypatch.setattr(service, "_profile_tasks", lambda *_: [])
+
+    active: set[str] = set()
+    tasks: list = []
+    service._start_new_profiles(root, ["alfa"], active, tasks)
+    assert "alfa" not in active
+
+    service._start_new_profiles(root, ["alfa"], active, tasks)
+    assert "alfa" in active
+    assert seen_homes == [expected_home, expected_home]
+
+
+def test_start_new_profiles_marks_zero_subsystem_profile_active(
+    monkeypatch, tmp_path: Path,
+) -> None:
+    """Profile with everything disabled is still marked active to stop log spam."""
+    root = _make_root(tmp_path, ["alfa"])
+
+    monkeypatch.setattr(service, "enabled_subsystems", lambda _: {
+        "gateway": False, "schedule": False, "alp": False,
+        "host": False, "workgroups": False,
+    })
+    monkeypatch.setattr(service, "_profile_tasks", lambda *_: [])
+
+    active: set[str] = set()
+    tasks: list = []
+    service._start_new_profiles(root, ["alfa"], active, tasks)
+    service._start_new_profiles(root, ["alfa"], active, tasks)
+
+    assert active == {"alfa"}
+    assert tasks == []
+
+
+@pytest.mark.asyncio
+async def test_main_all_picks_up_runtime_profile(
+    monkeypatch, tmp_path: Path,
+) -> None:
+    """A profile created after boot must be discovered by the rescan loop."""
+    root = _make_root(tmp_path, ["alfa"])
+    monkeypatch.setattr(service, "_PROFILE_RESCAN_SECONDS", 0.05)
+    monkeypatch.setattr(service, "_prefetch_assets", lambda: None)
+    monkeypatch.setattr(service, "_load_env", lambda *_: None)
+
+    started: list[tuple[Path, str]] = []
+
+    def fake_profile_tasks(home, profile, subsystems):
+        started.append((home, profile))
+        t = asyncio.create_task(asyncio.sleep(60), name=f"{profile}/fake")
+        return [t]
+
+    monkeypatch.setattr(service, "_profile_tasks", fake_profile_tasks)
+
+    runner = asyncio.create_task(service._main_all(
+        root, home_mod.list_profiles(root),
+    ))
+    try:
+        for _ in range(40):
+            await asyncio.sleep(0.02)
+            names = {p for _, p in started}
+            if {"default", "alfa"}.issubset(names):
+                break
+        names = {p for _, p in started}
+        assert {"default", "alfa"}.issubset(names), started
+
+        (root / "profiles" / "bravo").mkdir()
+        (root / "profiles" / "bravo" / "config.yaml").write_text("model: x\n")
+
+        for _ in range(40):
+            await asyncio.sleep(0.05)
+            if any(p == "bravo" for _, p in started):
+                break
+        bravo = [home for home, p in started if p == "bravo"]
+        assert bravo == [root / "profiles" / "bravo"], started
+    finally:
+        runner.cancel()
+        try:
+            await runner
+        except (asyncio.CancelledError, Exception):
+            pass

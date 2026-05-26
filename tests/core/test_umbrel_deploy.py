@@ -136,19 +136,19 @@ def test_umbrel_one_shot_deploy_script_is_guarded() -> None:
 
     assert "version mismatch:" in text
     assert "prepare-local-package.sh" in text
+    assert "Injecting Syncthing workspace bind into local package compose" in text
+    assert '${APP_DATA_DIR}/../syncthing/data:/data/workspace' in text
     assert "Resolving Umbrel app-store path" in text
-    assert "PASTE_DIGEST_HERE" in text
-    assert "Trying app install" in text
-    assert "Trying app restart" in text
-    assert "@sha256:*@sha256:" in text
     assert "ControlMaster=auto" in text
-    assert "Validating sudo access" in text
-    assert "sudo -n docker ps" in text
     assert 'PLATFORMS="${PLATFORMS:-linux/amd64,linux/arm64}"' in text
-    assert 'sudo -n rsync -a --exclude=data "$app_dir/" "$app_data_dir/"' in text
-    assert "restart failed — investigate before forcing reinstall" in text
-    assert "install failed — investigate Umbrel app state before forcing reinstall" in text
+    assert "Applying package on Umbrel" in text
+    assert "sync_app_data" in text
+    assert "rsync -a --exclude=data" in text
+    assert "apps.restart.mutate" in text
+    assert "apps.install.mutate" in text
     assert "apps.uninstall.mutate" not in text
+    assert "server_container()" in text
+    assert r"^${app_id}[-_]server[-_]1$" in text
 
 
 def test_umbrel_migration_script_uses_backup_restore_flow() -> None:
