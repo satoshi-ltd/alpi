@@ -1192,6 +1192,65 @@ def release_notes(since: str | None, output: str | None) -> None:
         click.echo(rendered, nl=False)
 
 
+@main.group()
+def curator() -> None:
+    """Post-hoc skill curator (review-only). See ``alpi curator review --help``."""
+
+
+@curator.command("review")
+@click.option(
+    "--window-days",
+    type=float,
+    default=None,
+    help="Treat a skill as stale when its last_seen is older than this many days (defaults to skills_usage.STALE_DAYS = 30).",
+)
+@click.option(
+    "--profile",
+    "profile_name",
+    default=None,
+    help="Profile to inspect (defaults to the active alpi home).",
+)
+@click.pass_context
+def curator_review(
+    ctx: click.Context,
+    window_days: float | None,
+    profile_name: str | None,
+) -> None:
+    """Inspect the skills library and write a markdown + json report under ``<home>/logs/curator/<UTC-timestamp>/``. The curator never mutates skills."""
+    from alpi import curator as _curator
+    if profile_name:
+        h = home.home_for(profile_name)
+    else:
+        h = ctx.obj["home"]
+    findings = _curator.review(h, window_days=window_days)
+    out_dir = _curator.write_report(h, findings)
+    s = findings["summary"]
+    click.echo(f"report: {out_dir / 'report.md'}")
+    click.echo(
+        f"stale={s['stale']} cold={s['cold']} clusters={s['prefix_clusters']} "
+        f"(of {s['skills_on_disk']} skills, {s['skills_with_usage']} with telemetry)"
+    )
+
+
+@curator.command("list")
+@click.option("--profile", "profile_name", default=None,
+              help="Profile to inspect (defaults to the active alpi home).")
+@click.pass_context
+def curator_list(ctx: click.Context, profile_name: str | None) -> None:
+    """List past curator reports, newest first."""
+    from alpi import curator as _curator
+    if profile_name:
+        h = home.home_for(profile_name)
+    else:
+        h = ctx.obj["home"]
+    reports = _curator.list_reports(h)
+    if not reports:
+        click.echo("(no curator reports yet)")
+        return
+    for p in reports:
+        click.echo(str(p / "report.md"))
+
+
 @main.command("doctor")
 @click.pass_context
 def doctor_cmd(ctx: click.Context) -> None:
@@ -2756,6 +2815,17 @@ def _cleanup_categories(h: Path) -> list[dict]:
 
     from alpi.core import store as store_mod
 
+    def _dir_size(d: Path) -> int:
+        total = 0
+        if d.exists():
+            for p in d.rglob("*"):
+                if p.is_file():
+                    try:
+                        total += p.stat().st_size
+                    except OSError:
+                        pass
+        return total
+
     tts_files = _all(_dir("cache/tts"))
     inbound_files = _all(_dir("cache/inbound"))
     session_files = _all(_dir("sessions"))
@@ -2770,6 +2840,12 @@ def _cleanup_categories(h: Path) -> list[dict]:
     turns_path = _dir("alp/turns.jsonl")
     if turns_path.is_file():
         wg_files.append(turns_path)
+    curator_root = _dir("logs/curator")
+    curator_dirs: list[Path] = (
+        [p for p in curator_root.iterdir() if p.is_dir()]
+        if curator_root.exists() else []
+    )
+    curator_size = sum(_dir_size(d) for d in curator_dirs)
     rag_reclaimable = store_mod.reclaimable_bytes(h)
     rag_files: list[Path] = (
         [store_mod.store_path(h)] if rag_reclaimable > 0 else []
@@ -2831,6 +2907,14 @@ def _cleanup_categories(h: Path) -> list[dict]:
             "desc": "encrypted transcripts + turn telemetry under `alp/`",
             "files": wg_files,
             "size": _sum(wg_files),
+        },
+        {
+            "key": "curator",
+            "label": "Curator reports",
+            "desc": "past skill curator reviews under `logs/curator/<timestamp>/`",
+            "files": curator_dirs,
+            "size": curator_size,
+            "action": "rmtree",
         },
         {
             "key": "rag",
@@ -2896,6 +2980,22 @@ def _cleanup_setup(h: Path) -> None:
                 f"compacted {target['label']}: "
                 f"{home_mod.format_bytes(before)} → {home_mod.format_bytes(after)}"
             )
+            continue
+        if target.get("action") == "rmtree":
+            if not ui.confirm(
+                f"  Delete {n} item(s) · {size_label} from {target['label']}?",
+                default=False,
+            ):
+                continue
+            import shutil
+            deleted = 0
+            for p in target["files"]:
+                try:
+                    shutil.rmtree(p)
+                    deleted += 1
+                except OSError as e:  # noqa: BLE001
+                    ui.fail(f"could not delete {p.name}: {e}")
+            ui.ok_and_wait(f"removed {deleted} item(s) from {target['label']}")
             continue
         if not ui.confirm(
             f"  Delete {n} file(s) · {size_label} from {target['label']}?",

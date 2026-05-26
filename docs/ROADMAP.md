@@ -31,7 +31,6 @@ patterns into Alpi-owned clients rather than gateways.
 
 | ID | Item | Status |
 |---|---|---|
-| AC.1 | Skill curator recommendations — use the v0.5.9 telemetry to flag stale, duplicate, overly narrow, or umbrella-candidate skills. Produces reports and manual apply plans; no silent deletes. | 🟡 |
 | AC.2 | Curator apply flow — after preview, archive stale skills, add `absorbed_into:` metadata, and move detail into umbrella skill `references/` when consolidation is accepted. | 🔵 |
 
 ### Recall and workgroup search
@@ -72,21 +71,10 @@ gateway-specific onboarding, no attempt to turn chat apps into Alpi
 clients. Gateways remain useful because they are ubiquitous and
 automation-friendly, but they are not where new product UX goes.
 
-### AC.1 / AC.2. Skill curator
+### AC.2. Skill curator apply flow
 
-The curator is post-hoc, not in-loop. It runs after real skill usage has
-accumulated, reads `skills/.usage.json`, and writes an auditable report
-under `logs/curator/<timestamp>/`.
-
-The first phase only recommends:
-
-- stale skills unused for a configurable evidence window;
-- prefix/name clusters such as `debug-parser-*`;
-- narrow session-specific skills that should become `references/` under
-  a broader umbrella;
-- imported skills with newer upstream revisions.
-
-The second phase applies only after preview:
+AC.1 (shipped) writes a recommendations report. AC.2 closes the loop by
+applying those recommendations after explicit preview:
 
 - archive stale skills through the existing `.archive/` path;
 - mark consolidating archives with `absorbed_into: <skill>`;

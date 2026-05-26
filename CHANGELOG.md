@@ -1,5 +1,30 @@
 # Changelog
 
+## v0.6.16 — 2026-05-26 — skill curator (AC.1, report-only)
+
+Post-hoc curator that reads ``skills/.usage.json`` + the on-disk
+skills tree and writes a markdown + json report under
+``<home>/logs/curator/<UTC-timestamp>/``. Never mutates skills — apply
+suggestions land in AC.2.
+
+- New ``alpi curator review`` writes the report and prints its path.
+  Flag ``--window-days N`` widens the staleness threshold (defaults
+  to 30, matching ``skills_usage.STALE_DAYS``); ``--profile name``
+  inspects a non-active profile.
+- Heuristics: **stale** (telemetry exists, ``last_seen`` past the
+  window, not pinned), **cold** (on-disk skill with no telemetry row
+  whose ``SKILL.md`` mtime is itself past the window), and **prefix
+  clusters** (three or more skills sharing a ``<word>-`` prefix —
+  candidates for umbrella consolidation).
+- ``alpi curator list`` lists past reports newest-first.
+- ``alpi setup → Cleanup`` gains a **Curator reports** row that
+  rm-trees every ``logs/curator/<ts>/`` dir at once. The existing
+  ``Subsystem logs`` category only walked top-level files in
+  ``logs/`` — the per-run subdirs would have piled up otherwise.
+- Out of scope for this phase: session-narrowness detection (telemetry
+  lacks session ids), upstream-update checks (no import system yet),
+  and any mutation — that is AC.2.
+
 ## v0.6.15 — 2026-05-26 — prompt caching (CL.1)
 
 Stable cacheable prefix + LiteLLM-native ``cache_control`` injection

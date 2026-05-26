@@ -124,6 +124,32 @@ def test_compact_returns_zero_when_no_store(tmp_path: Path) -> None:
     assert store_mod.reclaimable_bytes(tmp_path) == 0
 
 
+def test_curator_category_lists_report_dirs_recursively(tmp_path: Path) -> None:
+    """Curator writes ``logs/curator/<ts>/report.md`` + ``.json``. The Cleanup category must surface the per-run dirs (not flat files) and report total bytes from rglob."""
+    from alpi import curator
+    for ts in (1_700_000_000.0, 1_800_000_000.0):
+        curator.write_report(tmp_path, curator.review(tmp_path, now=ts), ts=ts)
+
+    cats = _cleanup_categories(tmp_path)
+    cur = next(c for c in cats if c["key"] == "curator")
+
+    assert cur["action"] == "rmtree"
+    assert len(cur["files"]) == 2
+    assert all(p.is_dir() for p in cur["files"])
+    assert cur["size"] > 0
+    for d in cur["files"]:
+        assert (d / "report.md").exists()
+        assert (d / "report.json").exists()
+
+
+def test_curator_category_empty_when_no_reports(tmp_path: Path) -> None:
+    cats = _cleanup_categories(tmp_path)
+    cur = next(c for c in cats if c["key"] == "curator")
+    assert cur["files"] == []
+    assert cur["size"] == 0
+    assert cur["action"] == "rmtree"
+
+
 def test_bootstrap_gitignore_covers_private_dirs(tmp_path: Path) -> None:
     """A profile's ``.gitignore`` must hide every dir that holds private
     history so users syncing ``~/.alpi`` via git don't leak chats."""
