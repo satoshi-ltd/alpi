@@ -160,13 +160,15 @@ def test_send_message_from_schedule_reemits_agent_message_in_daemon(
     scheduler.tick(tmp_home_no_env)
 
     agent_messages = [d for k, d in emits if k == "agent.message"]
-    assert agent_messages == [{
-        "profile": "default",
-        "title": "Research done",
-        "body": "Research finished.",
-        "severity": "important",
-        "kind": "result",
-    }]
+    assert len(agent_messages) == 1
+    msg = agent_messages[0]
+    assert msg["profile"] == "default"
+    assert msg["title"] == "Research done"
+    assert msg["body"] == "Research finished."
+    assert msg["severity"] == "important"
+    assert msg["kind"] == "result"
+    assert msg["output_id"]
+    assert msg["deep_link"] == f"/outputs/{msg['profile']}/{msg['output_id']}"
     done = [d for k, d in emits if k == "schedule.done"][0]
     assert done["delivered_to"] == "external"
     assert done["reply"] == ""

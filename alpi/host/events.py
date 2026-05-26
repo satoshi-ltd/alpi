@@ -41,12 +41,10 @@ _writes_since_compact = 0
 
 
 def _history_file() -> Path:
-    # register(server) sets _history_path from the daemon's Server(home=...).
-    # Fall back to alpi.home._ROOT for unit tests or embedded contexts that
-    # never call register() — defensive, not the happy path.
     if _history_path is not None:
         return _history_path
-    return home_mod._ROOT / "host" / "events.jsonl"
+    # alpi_root honors ALPI_HOME so unregistered emits in tests don't write to the developer's real ~/.alpi.
+    return home_mod.alpi_root() / "host" / "events.jsonl"
 
 
 def _load_history() -> None:

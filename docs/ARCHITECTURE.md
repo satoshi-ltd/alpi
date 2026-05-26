@@ -122,6 +122,7 @@ alpi/
 ├── ui.py                   shared wizard/menu primitives
 ├── service.py              unified orchestrator — runs every enabled subsystem on one asyncio loop; install/uninstall launchd / systemd unit per profile
 ├── ledger.py               daily spend ledger (logs/ledger.json) + profile cap gate
+├── outputs.py              persistent inbox JSONL store (send_message + schedule failures)
 ├── status.py               canonical /status rows (TUI + Telegram share this)
 ├── prompts/
 │   ├── default_agent.md
@@ -166,6 +167,7 @@ alpi/
 │   ├── network_rpc.py     host.network.{status,set_advertised,restart_host_server} — pairing endpoint query + override (parity with `alpi setup → devices → network`); scope classified by host character via network.classify_scope (tailscale / lan / custom / umbrel) so clients don't surface the "configured" resolution-path detail
 │   ├── probes.py          host.gateway.probe, host.peers.ping, host.model.ctx_window
 │   ├── schedule.py        host.schedule.{list,remove,set_paused,fire}
+│   ├── outputs.py         host.outputs.{list,read,mark_read,mark_all_read}
 │   ├── daemon.py          host.daemon.restart
 │   ├── device_state.py    device-facing profile state (profiles, summaries, storage, gateways, skills, workgroups)
 │   ├── events.py          host.events.subscribe + thread-safe emit() for daemon-pushed updates
@@ -209,6 +211,8 @@ that live at `{home}/skills/<category>/<name>/`.
 │   └── secrets/alp_key.{pem,pub}   Ed25519 identity (private 0600, public 0644)
 ├── host/                   control-plane state (default profile only)
 │   └── host.sock          Unix socket the desktop / mobile client connects to
+├── outputs/                persistent inbox for proactive agent messages + schedule failures
+│   └── outputs.jsonl       JSONL store (≤500 rows, atomic compaction)
 └── logs/                   service.log, agent.log, approval.log, ledger.json,
                             plus subsystem logs such as gateway.log / schedule.log / alp.log
 
@@ -634,6 +638,33 @@ Verb namespaces in current shape:
   **`host.model.ctx_window`** — diagnostic probes the desktop / TUI
   used to invoke via `alpi gateway probe`, `alpi peers ping`, and
   `alpi ctx`. Same logic, host-plane entry point.
+- **`host.outputs.{list,read,mark_read,mark_all_read}`** —
+  durable inbox for proactive agent messages and schedule
+  results. Backed by `<home>/outputs/outputs.jsonl` (capped at
+  500 rows, atomic compaction). Producers:
+  - `send_message` files an output for every successful call
+    (`alpi`, `both`, gateway-only). Attachment-only deliveries
+    with no text body skip the row — the artifact lives in the
+    gateway, nothing to revisit.
+  - `scheduler/run.py` files an output on `schedule.failed`
+    (always) AND on `schedule.done` when the job delivered its
+    reply through a real gateway channel (`telegram` / `email`
+    / `matrix` / …). Jobs that already routed through
+    `send_message` (`delivered_to="external"`) don't get a
+    duplicate row. Silent maintenance and stdout-only summaries
+    write nothing — operational noise the user never saw.
+  In schedule and gateway subprocesses the parent daemon is the
+  single source of truth: the child's `send_message` is suppressed
+  and the parent parses the `tool_end` args (via
+  `alpi.outputs.record_child_send_message`) to file one canonical
+  output with the full `delivered_to` list. Each row carries
+  `{id, profile, created_at, source, source_id, body,
+  severity, kind, status: unread|read, session_id, delivered_to}`.
+  No `archive` action — the 500-row cap handles retention so
+  clients only render a two-state inbox. `agent.message`,
+  `schedule.done` and `schedule.failed` events ship `output_id`
+  + `deep_link: /outputs/<profile>/<id>` whenever an output was
+  filed so clients can deep-link straight to the row.
 - **`host.events.subscribe`** — long-lived push channel. Daemon
   emits `{event, data, at, seq}` frames as state changes. Sources
   call `alpi.host.events.emit(kind, data)`; loop is captured at
@@ -672,7 +703,18 @@ Verb namespaces in current shape:
     schedules are activity/history only; jobs that need to wake the
     user call `send_message(channel="alpi")`, which is re-emitted as
     `agent.message` from the scheduler daemon. `schedule.failed`
-    remains an interrupt.
+    remains an interrupt and carries `output_id` + `deep_link`
+    (`/outputs/<profile>/<id>`) so clients can land on the persisted
+    failure record.
+  - `agent.message` — `send_message(channel in {"alpi","both"})`. In
+    daemon turns it fires from the tool process; for scheduled jobs
+    the parent re-emits after parsing the child subprocess events.
+    Always carries `output_id` + `deep_link`
+    (`/outputs/<profile>/<id>`) so clients land on the canonical
+    output instead of the chat window.
+  - `output.created` — companion event for every new outputs row
+    (`source`: `send_message | schedule`). Lets inbox surfaces
+    refresh without polling `host.outputs.list`.
   - `schedule.changed` (`action: removed|paused|resumed`) —
     schedule mutators on the host plane.
   - `config_changed` (`scope: providers|mcp|sandbox|voice|env|<dotted-key-head>`)

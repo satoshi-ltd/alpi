@@ -1,0 +1,311 @@
+"""JSONL store at ``<home>/outputs/outputs.jsonl``, capped at MAX_OUTPUTS.
+
+Row schema (one JSON object per line):
+    id           12 hex chars
+    profile      ``default`` or ``<name>``
+    created_at   epoch seconds (float)
+    source       ``send_message`` | ``schedule``
+    source_id    job id when source=schedule, else ``""``
+    body         message body
+    severity     ``normal`` | ``important`` | ``urgent``
+    kind         ``reminder`` | ``result`` | ``alert`` | ``ack``
+    status       ``unread`` | ``read``
+    session_id   originating chat session, or ``""``
+    delivered_to channels the matching notification went out on
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import secrets
+import threading
+import time
+from pathlib import Path
+from typing import Any, Iterable
+
+MAX_OUTPUTS = 500
+
+VALID_SOURCE = frozenset({"send_message", "schedule"})
+VALID_SEVERITY = frozenset({"normal", "important", "urgent"})
+VALID_KIND = frozenset({"reminder", "result", "alert", "ack"})
+VALID_STATUS = frozenset({"unread", "read"})
+
+_lock = threading.Lock()
+
+
+def _store_path(home: Path) -> Path:
+    return home / "outputs" / "outputs.jsonl"
+
+
+def _new_id() -> str:
+    return secrets.token_hex(6)
+
+
+def _read_all(home: Path) -> list[dict[str, Any]]:
+    path = _store_path(home)
+    if not path.exists():
+        return []
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return []
+    out: list[dict[str, Any]] = []
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            obj = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(obj, dict) and isinstance(obj.get("id"), str) and obj["id"]:
+            out.append(obj)
+    return out
+
+
+def _atomic_rewrite(path: Path, items: Iterable[dict[str, Any]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    fd = os.open(str(tmp), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            for it in items:
+                f.write(json.dumps(it, ensure_ascii=False) + "\n")
+            f.flush()
+            os.fsync(f.fileno())
+    except Exception:
+        try:
+            tmp.unlink()
+        except OSError:
+            pass
+        raise
+    os.replace(str(tmp), str(path))
+
+
+def append(
+    home: Path,
+    *,
+    profile: str,
+    source: str,
+    body: str,
+    severity: str = "normal",
+    kind: str = "result",
+    session_id: str = "",
+    source_id: str = "",
+    delivered_to: list[str] | None = None,
+) -> dict[str, Any]:
+    if source not in VALID_SOURCE:
+        raise ValueError(f"invalid source: {source!r}")
+    if severity not in VALID_SEVERITY:
+        severity = "normal"
+    if kind not in VALID_KIND:
+        kind = "result"
+
+    output = {
+        "id": _new_id(),
+        "profile": profile or "default",
+        "created_at": time.time(),
+        "source": source,
+        "source_id": source_id or "",
+        "body": body or "",
+        "severity": severity,
+        "kind": kind,
+        "status": "unread",
+        "session_id": session_id or "",
+        "delivered_to": list(delivered_to or []),
+    }
+
+    path = _store_path(home)
+    with _lock:
+        existing = _read_all(home)
+        existing.append(output)
+        if len(existing) > MAX_OUTPUTS:
+            existing = existing[-MAX_OUTPUTS:]
+            _atomic_rewrite(path, existing)
+        else:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with path.open("a", encoding="utf-8") as f:
+                f.write(json.dumps(output, ensure_ascii=False) + "\n")
+    return output
+
+
+def list_outputs(
+    home: Path,
+    *,
+    status: str | None = None,
+    limit: int = 100,
+) -> list[dict[str, Any]]:
+    items = _read_all(home)
+    if status is not None:
+        if status not in VALID_STATUS:
+            return []
+        items = [it for it in items if it.get("status") == status]
+    items.sort(key=lambda it: float(it.get("created_at") or 0.0), reverse=True)
+    if limit > 0:
+        items = items[:limit]
+    return items
+
+
+def read(home: Path, output_id: str) -> dict[str, Any] | None:
+    for it in _read_all(home):
+        if it.get("id") == output_id:
+            return it
+    return None
+
+
+def _mutate(home: Path, output_id: str, mutate) -> dict[str, Any] | None:
+    with _lock:
+        items = _read_all(home)
+        target: dict[str, Any] | None = None
+        for it in items:
+            if it.get("id") == output_id:
+                target = it
+                break
+        if target is None:
+            return None
+        mutate(target)
+        _atomic_rewrite(_store_path(home), items)
+        return target
+
+
+def mark_read(home: Path, output_id: str) -> dict[str, Any] | None:
+    def _apply(it: dict[str, Any]) -> None:
+        if it.get("status") == "unread":
+            it["status"] = "read"
+    return _mutate(home, output_id, _apply)
+
+
+def mark_all_read(home: Path) -> int:
+    with _lock:
+        items = _read_all(home)
+        touched = 0
+        for it in items:
+            if it.get("status") == "unread":
+                it["status"] = "read"
+                touched += 1
+        if touched:
+            _atomic_rewrite(_store_path(home), items)
+        return touched
+
+
+_CHILD_VALID_CHANNELS = frozenset({
+    "alpi", "both", "telegram", "imap", "gmail", "matrix", "webhook",
+})
+_CHILD_GATEWAYS = frozenset({"telegram", "imap", "gmail", "matrix", "webhook"})
+
+
+def normalize_send_message_args(args: dict) -> dict | None:
+    """Returns None when the call wasn't user-facing (empty text or malformed channel) so callers skip it."""
+    text = str(args.get("text") or "").strip()
+    if not text:
+        return None
+    channel = str(args.get("channel") or "alpi").strip().lower()
+    if channel not in _CHILD_VALID_CHANNELS:
+        return None
+    severity = str(args.get("severity") or "normal").strip().lower()
+    if severity not in VALID_SEVERITY:
+        severity = "normal"
+    kind = str(args.get("kind") or "result").strip().lower()
+    if kind not in VALID_KIND:
+        kind = "result"
+    notification_title = str(args.get("title") or "").strip()
+    gateway = ""
+    if channel == "both":
+        gateway = str(args.get("platform") or "telegram").strip().lower()
+    elif channel != "alpi":
+        gateway = channel
+    if gateway and gateway not in _CHILD_GATEWAYS:
+        gateway = ""
+    delivered_to: list[str] = []
+    if channel in {"alpi", "both"}:
+        delivered_to.append("alpi")
+    if gateway:
+        delivered_to.append(gateway)
+    return {
+        "notification_title": notification_title,
+        "body": text,
+        "severity": severity,
+        "kind": kind,
+        "channel": channel,
+        "delivered_to": delivered_to,
+    }
+
+
+def record_child_send_message(home: Path, args: dict) -> str:
+    """Files the output and emits output.created. Emits agent.message (with output_id + deep_link) only for alpi/both — gateway-only channels already dispatched downstream, no need to wake the native client."""
+    record = normalize_send_message_args(args)
+    if record is None:
+        return ""
+
+    try:
+        from alpi.home import profile_name
+        from alpi.host import events as host_events
+    except Exception:  # noqa: BLE001
+        return ""
+
+    profile = profile_name(home)
+    body = record["body"]
+    notification_title = record["notification_title"] or profile or "alpi"
+    severity = record["severity"]
+    kind = record["kind"]
+    channel = record["channel"]
+    delivered_to = list(record["delivered_to"])
+
+    try:
+        output = append(
+            home,
+            profile=profile,
+            source="send_message",
+            body=body,
+            severity=severity,
+            kind=kind,
+            delivered_to=delivered_to,
+        )
+    except Exception:  # noqa: BLE001
+        return ""
+
+    output_id = output["id"]
+    try:
+        host_events.emit("output.created", {
+            "profile": profile,
+            "id": output_id,
+            "source": "send_message",
+            "severity": severity,
+            "kind": kind,
+        })
+    except Exception:  # noqa: BLE001
+        pass
+
+    if channel in {"alpi", "both"}:
+        payload = {
+            "profile": profile,
+            "title": notification_title,
+            "body": body,
+            "severity": severity,
+            "kind": kind,
+            "output_id": output_id,
+            "deep_link": f"/outputs/{profile}/{output_id}",
+        }
+        try:
+            host_events.emit("agent.message", payload)
+        except Exception:  # noqa: BLE001
+            pass
+
+    return output_id
+
+
+__all__ = [
+    "MAX_OUTPUTS",
+    "VALID_SOURCE",
+    "VALID_SEVERITY",
+    "VALID_KIND",
+    "VALID_STATUS",
+    "append",
+    "list_outputs",
+    "read",
+    "mark_read",
+    "mark_all_read",
+    "normalize_send_message_args",
+    "record_child_send_message",
+]

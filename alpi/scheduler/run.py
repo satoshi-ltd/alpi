@@ -390,7 +390,6 @@ def run_job(job: dict, home: Path) -> JobOutcome:
 
 
 def _parse_events(stdout: str) -> ParsedEvents:
-    """Parse --emit-events stdout from the schedule child process."""
     sent_via_tool = False
     reply = ""
     pending_send_args: list[dict] = []
@@ -411,54 +410,21 @@ def _parse_events(stdout: str) -> ParsedEvents:
             args = pending_send_args.pop(0) if pending_send_args else {}
             if ev.get("ok") is True:
                 sent_via_tool = True
-                msg = _agent_message_from_send_args(args)
-                if msg:
-                    agent_messages.append(msg)
+                agent_messages.append(args)
         elif kind == "reply":
             reply = (ev.get("text") or "").strip()
     return ParsedEvents(sent_via_tool, reply, agent_messages)
-
-
-def _agent_message_from_send_args(args: dict) -> dict | None:
-    channel = str(args.get("channel") or "alpi").strip().lower()
-    if channel not in {"alpi", "both"}:
-        return None
-    text = str(args.get("text") or "").strip()
-    if not text:
-        return None
-    severity = str(args.get("severity") or "normal").strip().lower()
-    if severity not in {"normal", "important", "urgent"}:
-        severity = "normal"
-    kind = str(args.get("kind") or "result").strip().lower()
-    if kind not in {"reminder", "result", "alert", "ack"}:
-        kind = "result"
-    title = str(args.get("title") or "").strip()
-    return {
-        "title": title,
-        "body": text,
-        "severity": severity,
-        "kind": kind,
-    }
 
 
 def _emit_agent_messages(home: Path, messages: list[dict]) -> None:
     if not messages:
         return
     try:
-        from alpi.home import profile_name
-        from alpi.host import events as host_events
-        profile = profile_name(home)
-        for msg in messages:
-            payload = {
-                "profile": profile,
-                "title": msg.get("title") or profile or "alpi",
-                "body": msg["body"],
-                "severity": msg.get("severity") or "normal",
-                "kind": msg.get("kind") or "result",
-            }
-            host_events.emit("agent.message", payload)
+        from alpi import outputs as outputs_mod
     except Exception:  # noqa: BLE001
-        pass
+        return
+    for args in messages:
+        outputs_mod.record_child_send_message(home, args)
 
 
 # Tick + main loop
@@ -492,21 +458,83 @@ def fire_by_id(home: Path, job_id: str) -> tuple[bool, str]:
 
 
 def _emit_schedule_event(home: Path, job: dict, outcome: JobOutcome) -> None:
+    """Output rules:
+    - failure → file an alert.
+    - success on a real gateway (telegram/email/…) → file the reply.
+    - success via send_message (delivered_to="external") → skip; the tool already filed it.
+    - success with no delivery channel → skip; stdout the user never saw isn't state.
+    """
     try:
+        from alpi import outputs as outputs_mod
         from alpi.home import profile_name
         from alpi.host import events as host_events
-        host_events.emit(
-            "schedule.done" if outcome.ok else "schedule.failed",
-            {
-                "profile": profile_name(home),
-                "job_id": str(job.get("id", "?")),
-                "kind": str(job.get("kind", "cron")),
-                "message": outcome.message,
-                "reply": (outcome.reply or "")[:2000],
-                "delivered_to": outcome.delivered_to,
-                "silent": outcome.silent,
-            },
-        )
+        profile = profile_name(home)
+        job_id = str(job.get("id", "?"))
+        kind = str(job.get("kind", "cron"))
+        event_kind = "schedule.done" if outcome.ok else "schedule.failed"
+        payload = {
+            "profile": profile,
+            "job_id": job_id,
+            "kind": kind,
+            "message": outcome.message,
+            "reply": (outcome.reply or "")[:2000],
+            "delivered_to": outcome.delivered_to,
+            "silent": outcome.silent,
+        }
+        output_id = ""
+        out_kind = ""
+        out_severity = ""
+        if not outcome.ok:
+            try:
+                output = outputs_mod.append(
+                    home,
+                    profile=profile,
+                    source="schedule",
+                    source_id=job_id,
+                    body=outcome.message or "",
+                    severity="important",
+                    kind="alert",
+                    delivered_to=[],
+                )
+                output_id = output["id"]
+                out_kind, out_severity = "alert", "important"
+            except Exception:  # noqa: BLE001
+                output_id = ""
+        elif (
+            outcome.delivered_to
+            and outcome.delivered_to != "external"
+            and outcome.reply
+            and outcome.reply.strip()
+            and not outcome.silent
+        ):
+            delivered_to_list = [outcome.delivered_to]
+            try:
+                output = outputs_mod.append(
+                    home,
+                    profile=profile,
+                    source="schedule",
+                    source_id=job_id,
+                    body=(outcome.reply or "")[:2000],
+                    severity="normal",
+                    kind="result",
+                    delivered_to=delivered_to_list,
+                )
+                output_id = output["id"]
+                out_kind, out_severity = "result", "normal"
+            except Exception:  # noqa: BLE001
+                output_id = ""
+        if output_id:
+            payload["output_id"] = output_id
+            payload["deep_link"] = f"/outputs/{profile}/{output_id}"
+        host_events.emit(event_kind, payload)
+        if output_id:
+            host_events.emit("output.created", {
+                "profile": profile,
+                "id": output_id,
+                "source": "schedule",
+                "severity": out_severity,
+                "kind": out_kind,
+            })
     except Exception:  # noqa: BLE001
         pass
 

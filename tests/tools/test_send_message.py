@@ -178,7 +178,8 @@ def test_send_message_attaches_active_session(
     assert result.ok, result.error
     msg = next(d for k, d in events if k == "agent.message")
     assert msg["session_id"] == "sess-abc-123"
-    assert msg["deep_link"] == f"/chat/{msg['profile']}"
+    assert msg["output_id"]
+    assert msg["deep_link"] == f"/outputs/{msg['profile']}/{msg['output_id']}"
 
 
 def test_send_message_omits_session_when_not_bound(
@@ -191,7 +192,8 @@ def test_send_message_omits_session_when_not_bound(
     assert result.ok, result.error
     msg = next(d for k, d in events if k == "agent.message")
     assert "session_id" not in msg
-    assert msg["deep_link"] == f"/chat/{msg['profile']}"
+    assert msg["output_id"]
+    assert msg["deep_link"] == f"/outputs/{msg['profile']}/{msg['output_id']}"
 
 
 def test_send_message_deep_link_never_carries_session_id(
@@ -345,7 +347,8 @@ def test_send_message_alpi_requires_text_even_with_attachment(
 def test_send_message_attachment_only_via_gateway(
     monkeypatch, tmp_path: Path,
 ) -> None:
-    """Voice-note flow: ``tts(format=ogg)`` → ``send_message(channel="telegram", attachment=...)``. Local notifications don't carry attachments, so attachment-only delivery goes via gateway."""
+    """Voice-note flow: ``tts(format=ogg)`` → ``send_message(channel="telegram", attachment=...)``. Local notifications don't carry attachments, so attachment-only delivery goes via gateway. ``ALPI_HOME`` isolation is mandatory: ``SendMessage.run`` resolves the home via ``get_home()`` and would otherwise leak into the developer's real ``~/.alpi``."""
+    monkeypatch.setenv("ALPI_HOME", str(tmp_path))
     monkeypatch.setenv("TELEGRAM_ALLOWED_CHAT_IDS", "42")
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "x")
     audio = tmp_path / "clip.ogg"

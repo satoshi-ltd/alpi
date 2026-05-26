@@ -187,13 +187,7 @@ class SendMessage(Tool):
                 return ToolResult(ok=False, output="", error=str(e))
 
         delivered: list[str] = []
-
-        if emit_alpi:
-            _emit_agent_message(
-                text=text, title=title,
-                severity=severity, kind=kind,
-            )
-            delivered.append("alpi")
+        delivered_to: list[str] = []
 
         if gateway_target:
             env = effective_profile_env(get_home())
@@ -218,57 +212,121 @@ class SendMessage(Tool):
                         attachment=attachment, env=env,
                     )
                     delivered.append(gateway_target)
+                    delivered_to.append(gateway_target)
                 except delivery.DeliveryError as e:
                     if not emit_alpi:
                         return ToolResult(ok=False, output="", error=str(e))
                     delivered.append(f"{gateway_target}(failed: {e})")
 
+        # Schedule/gateway children defer to the parent: it parses tool_end and files the single canonical output.
+        if _suppress_native_emit():
+            if emit_alpi:
+                delivered.insert(0, "alpi")
+            return ToolResult(ok=True, output=f"delivered: {', '.join(delivered)}")
+
+        if emit_alpi:
+            _create_output_and_emit_message(
+                text=text, title=title,
+                severity=severity, kind=kind,
+                source="send_message", source_id="",
+                delivered_to=["alpi", *delivered_to],
+            )
+            delivered.insert(0, "alpi")
+        elif gateway_target and delivered_to and text.strip():
+            # Attachment-only sends (TTS voice notes) skip — nothing displayable to revisit in the inbox.
+            _create_output(
+                text=text, severity=severity, kind=kind,
+                source="send_message", source_id="",
+                delivered_to=delivered_to,
+            )
+
         return ToolResult(ok=True, output=f"delivered: {', '.join(delivered)}")
 
 
-def _emit_agent_message(
-    *, text: str, title: str, severity: str, kind: str,
-) -> None:
-    """Emit ``agent.message`` for paired desktop/mobile native delivery; guarded so a daemon without host.events still returns ``ok`` from the tool."""
+def _suppress_native_emit() -> bool:
     import os
-    if (
+    return (
         os.environ.get("ALPI_SCHEDULE_CHILD") == "1"
         or os.environ.get("ALPI_PARENT_EMITS_AGENT_MESSAGE") == "1"
-    ):
-        return
+    )
+
+
+def _create_output_and_emit_message(
+    *, text: str, title: str, severity: str, kind: str,
+    source: str, source_id: str, delivered_to: list[str],
+) -> str:
+    """Callers must guard with _suppress_native_emit() — schedule/gateway children defer to the parent."""
+    output = _create_output(
+        text=text, severity=severity, kind=kind,
+        source=source, source_id=source_id, delivered_to=delivered_to,
+    )
+    if output is None:
+        return ""
+
+    payload: dict = {
+        "profile": output["profile"],
+        "title": title or output["profile"] or "alpi",
+        "body": output["body"],
+        "severity": output["severity"],
+        "kind": output["kind"],
+        "output_id": output["id"],
+        "deep_link": f"/outputs/{output['profile']}/{output['id']}",
+    }
+    if output.get("session_id"):
+        payload["session_id"] = output["session_id"]
+
     try:
-        from alpi.home import get_active_session, get_home, profile_name
         from alpi.host import events as host_events
+        host_events.emit("agent.message", payload)
+        host_events.emit("output.created", {
+            "profile": output["profile"],
+            "id": output["id"],
+            "source": output["source"],
+            "severity": output["severity"],
+            "kind": output["kind"],
+        })
     except Exception:  # noqa: BLE001
-        return
+        pass
+
+    return output["id"]
+
+
+def _create_output(
+    *, text: str, severity: str, kind: str,
+    source: str, source_id: str, delivered_to: list[str],
+) -> dict | None:
+    # Persistence is opportunistic — failures never block delivery.
+    try:
+        from alpi import outputs as outputs_mod
+        from alpi.home import get_active_session, get_home, profile_name
+    except Exception:  # noqa: BLE001
+        return None
 
     try:
         home = get_home()
         prof = profile_name(home)
     except Exception:  # noqa: BLE001
-        prof = ""
-
-    payload: dict = {
-        "profile": prof,
-        "title": title or prof or "alpi",
-        "body": text,
-        "severity": severity,
-        "kind": kind,
-    }
+        return None
 
     try:
-        session_id = get_active_session()
+        session_id = get_active_session() or ""
     except Exception:  # noqa: BLE001
-        session_id = None
-    if session_id:
-        payload["session_id"] = session_id
-    if prof:
-        payload["deep_link"] = f"/chat/{prof}"
+        session_id = ""
 
     try:
-        host_events.emit("agent.message", payload)
+        return outputs_mod.append(
+            home,
+            profile=prof,
+            source=source,
+            source_id=source_id,
+            body=text,
+            severity=severity,
+            kind=kind,
+            session_id=session_id,
+            delivered_to=delivered_to,
+        )
     except Exception:  # noqa: BLE001
-        pass
+        return None
 
 
 TOOL = SendMessage

@@ -1,5 +1,43 @@
 # Changelog
 
+## v0.6.11 — 2026-05-25 — persistent inbox for proactive messages
+
+Notifications stop being one-shot. Every proactive ``send_message``
+and every schedule failure now files a durable row in a per-profile
+inbox at ``~/.alpi/[profiles/<name>/]outputs/``, capped at 500
+entries. Tapping the notification on a paired device deep-links to
+that row instead of dumping you into the chat window, so the
+context survives reboots, OS notification-tray clearing, and being
+offline when the message fired.
+
+- New ``outputs/`` store under each profile home, with a simple
+  ``unread`` / ``read`` lifecycle and per-row ``delivered_to``
+  (alpi, gateway, or both). No archive — the 500-row cap handles
+  retention, so the inbox stays a two-state surface.
+- Schedules that deliver to a real gateway channel
+  (``platform=telegram`` / email / matrix / …) now file an inbox
+  row with the reply body. Stdout-only maintenance jobs and
+  silent runs still write nothing — the inbox stays a surface
+  for things the user actually saw or could have seen.
+- Schedule failures still file ``important`` / ``alert`` rows.
+- Attachment-only ``send_message`` calls (TTS → Telegram voice
+  notes) no longer leave empty inbox rows — the audio lives in
+  the gateway and there's nothing displayable to keep.
+- ``agent.message`` and ``schedule.failed`` events now carry
+  ``output_id`` + a profile-scoped ``deep_link`` so future mobile
+  / desktop builds can route straight to the row.
+- A schedule or gateway turn that calls ``send_message`` produces
+  exactly one inbox row, with ``delivered_to`` reflecting every
+  channel the agent used (``alpi``, ``telegram``, or both).
+- New host verbs ``host.outputs.{list, read, mark_read,
+  mark_all_read}`` plus ``output.created`` / ``output.updated``
+  push events for inbox surfaces that want to refresh without
+  polling.
+
+Companion mobile / desktop releases will start consuming this
+foundation in the next builds; this release is the daemon-side
+contract that everything else builds on.
+
 ## v0.6.10 — 2026-05-25 — paired devices get a role (admin / member)
 
 Device tokens now carry a role on disk. The dispatcher checks it

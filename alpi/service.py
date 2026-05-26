@@ -1151,6 +1151,7 @@ async def _run_host(home: Path, profile: str) -> None:
     from alpi.host import handlers as host_handlers
     from alpi.host import devices as host_devices
     from alpi.host import network_rpc as host_network
+    from alpi.host import outputs as host_outputs
     from alpi.host import probes as host_probes
     from alpi.host import schedule as host_schedule
     from alpi.host import tools as host_tools
@@ -1182,6 +1183,7 @@ async def _run_host(home: Path, profile: str) -> None:
     host_probes.register(server)
     host_devices.register(server)
     host_network.register(server)
+    host_outputs.register(server)
     host_tools.register(server)
     await server.start()
     try:

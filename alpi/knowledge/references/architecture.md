@@ -61,10 +61,19 @@ alpi is a local agent runtime:
 - Script jobs with `no_agent: true` run directly with `shell=False`.
 - `schedule.done` / `schedule.failed` carry structured payloads:
   `profile`, `job_id`, `kind`, `message`, `reply`, `delivered_to`,
-  `silent`.
+  `silent`. On `schedule.failed` the payload also carries
+  `output_id` + `deep_link` (`/outputs/<profile>/<id>`) pointing at
+  the persisted failure row.
 - Successful schedules are not native-notified by default. A job that
   should notify the user calls `send_message(channel="alpi")`, which
-  emits `agent.message`.
+  emits `agent.message` carrying `output_id` + `deep_link`.
+- In schedule and gateway subprocesses the parent daemon is the
+  single source of truth: the child's `send_message` is suppressed
+  and the parent parses the `tool_end` args through the shared
+  `alpi.outputs.record_child_send_message` helper to create the
+  canonical output and re-emit `agent.message`. Gateway-only
+  channels still produce an output (so the user can revisit what
+  was pushed to Telegram/etc.) but skip the alpi-native notification.
 
 ## Host API
 
@@ -85,6 +94,21 @@ Important host contracts:
 - `host.skills.list` is metadata-only; `host.skill.read` returns a skill body.
 - `host.network.*` controls companion app pairing/network config and is
   local-only.
+- `host.outputs.{list,read,mark_read,mark_all_read}` exposes the
+  persistent inbox (proactive agent messages + schedule results).
+  Backed by `<home>/outputs/outputs.jsonl`, capped at 500 rows.
+  Producers: `send_message` (every channel — alpi / both /
+  gateway-only with non-empty text) and the scheduler on
+  `schedule.failed` (always) and `schedule.done` when the reply
+  was delivered to a real gateway channel (telegram / email /
+  matrix / …). Stdout-only maintenance scripts and silent jobs
+  file nothing. Each row
+  has `{id, profile, created_at, source (send_message|schedule),
+  source_id, body, severity, kind, status (unread|read),
+  session_id, delivered_to}`. No archive flow — the cap handles
+  retention so clients only render a two-state inbox. The daemon
+  also emits `output.created` so inbox surfaces can refresh
+  without polling.
 
 ## Tools
 

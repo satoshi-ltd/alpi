@@ -100,6 +100,12 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
 # Fixtures
 # --------------------------------------------------------------------
 
+@pytest.fixture(autouse=True, scope="session")
+def _isolate_host_events_history(tmp_path_factory: pytest.TempPathFactory) -> None:
+    from alpi.host import events as _host_events
+    _host_events._history_path = tmp_path_factory.mktemp("host-events") / "events.jsonl"
+
+
 @pytest.fixture(autouse=True)
 def _scrub_sensitive_env(monkeypatch: pytest.MonkeyPatch) -> None:
     """Deny secrets to every test by default. The developer's shell may

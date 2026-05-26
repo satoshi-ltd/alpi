@@ -191,7 +191,8 @@ async def _run_agent(msg: IncomingMessage, platform: Platform, home: Path,
             elif kind == "tool_end" and event.get("name") == "send_message":
                 args = pending_send_args.pop(0) if pending_send_args else {}
                 if event.get("ok") is True:
-                    _emit_agent_message_from_child(home, args)
+                    from alpi import outputs as outputs_mod
+                    outputs_mod.record_child_send_message(home, args)
             elif kind == "error" and show_trace:
                 await platform.send(OutgoingMessage(
                     external_chat_id=msg.external_chat_id,
@@ -232,35 +233,6 @@ async def _run_agent(msg: IncomingMessage, platform: Platform, home: Path,
         log.error("agent subprocess failed (rc=%s): %s", rc, stderr_tail[-500:])
         return reply or f"(agent error, rc={rc})"
     return reply
-
-
-def _emit_agent_message_from_child(home: Path, args: dict) -> None:
-    channel = str(args.get("channel") or "alpi").strip().lower()
-    if channel not in {"alpi", "both"}:
-        return
-    text = str(args.get("text") or "").strip()
-    if not text:
-        return
-    severity = str(args.get("severity") or "normal").strip().lower()
-    if severity not in {"normal", "important", "urgent"}:
-        severity = "normal"
-    kind = str(args.get("kind") or "result").strip().lower()
-    if kind not in {"reminder", "result", "alert", "ack"}:
-        kind = "result"
-    title = str(args.get("title") or "").strip()
-    try:
-        from alpi.home import profile_name
-        from alpi.host import events as host_events
-        profile = profile_name(home)
-        host_events.emit("agent.message", {
-            "profile": profile,
-            "title": title or profile or "alpi",
-            "body": text,
-            "severity": severity,
-            "kind": kind,
-        })
-    except Exception:  # noqa: BLE001
-        pass
 
 
 def _format_tool_trace(event: dict[str, Any]) -> str:

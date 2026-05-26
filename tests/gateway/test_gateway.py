@@ -145,13 +145,107 @@ async def test_run_agent_reemits_child_agent_message(
     reply = await gw_run._run_agent(msg, platform, tmp_home_no_env, show_trace=False)
 
     assert reply == "done"
-    assert captured == [("agent.message", {
-        "profile": "default",
-        "title": "Task done",
-        "body": "Background task finished.",
-        "severity": "important",
-        "kind": "result",
-    })]
+    from alpi import outputs as outputs_mod
+    items = outputs_mod.list_outputs(tmp_home_no_env)
+    assert len(items) == 1
+    out = items[0]
+    assert out["body"] == "Background task finished."
+    assert out["delivered_to"] == ["alpi"]
+
+    kinds = [k for k, _ in captured]
+    assert "output.created" in kinds
+    msg_payload = next(d for k, d in captured if k == "agent.message")
+    assert msg_payload["profile"] == "default"
+    assert msg_payload["title"] == "Task done"
+    assert msg_payload["body"] == "Background task finished."
+    assert msg_payload["severity"] == "important"
+    assert msg_payload["kind"] == "result"
+    assert msg_payload["output_id"] == out["id"]
+    assert msg_payload["deep_link"] == f"/outputs/default/{out['id']}"
+
+
+@pytest.mark.asyncio
+async def test_run_agent_records_gateway_only_send_message(
+    monkeypatch, tmp_home_no_env: Path,
+) -> None:
+    """Gateway-only from a gateway child: parent files the output but no agent.message."""
+    events = [
+        {
+            "kind": "tool_start",
+            "name": "send_message",
+            "args": {
+                "text": "FYI", "title": "ping",
+                "channel": "telegram", "chat_id": "1",
+            },
+        },
+        {"kind": "tool_end", "name": "send_message", "ok": True},
+        {"kind": "reply", "text": "done"},
+    ]
+    monkeypatch.setattr(
+        gw_run.asyncio, "create_subprocess_exec",
+        _fake_subprocess(_event_lines(events)),
+    )
+    captured: list = []
+    from alpi.host import events as host_events
+    monkeypatch.setattr(
+        host_events, "emit",
+        lambda kind, data=None: captured.append((kind, dict(data or {}))),
+    )
+
+    platform = FakePlatform(tmp_home_no_env)
+    msg = IncomingMessage(platform="fake", external_user_id="u", external_chat_id="c", text="hi")
+    await gw_run._run_agent(msg, platform, tmp_home_no_env, show_trace=False)
+
+    from alpi import outputs as outputs_mod
+    items = outputs_mod.list_outputs(tmp_home_no_env)
+    assert len(items) == 1
+    assert items[0]["delivered_to"] == ["telegram"]
+    assert [k for k, _ in captured if k == "agent.message"] == []
+    assert [k for k, _ in captured if k == "output.created"] == ["output.created"]
+
+
+@pytest.mark.asyncio
+async def test_run_agent_records_both_with_full_delivered_to(
+    monkeypatch, tmp_home_no_env: Path,
+) -> None:
+    """channel="both" from a gateway child: one output, one agent.message with output_id."""
+    events = [
+        {
+            "kind": "tool_start",
+            "name": "send_message",
+            "args": {
+                "text": "ping", "title": "t",
+                "channel": "both", "platform": "telegram",
+            },
+        },
+        {"kind": "tool_end", "name": "send_message", "ok": True},
+        {"kind": "reply", "text": "done"},
+    ]
+    monkeypatch.setattr(
+        gw_run.asyncio, "create_subprocess_exec",
+        _fake_subprocess(_event_lines(events)),
+    )
+    captured: list = []
+    from alpi.host import events as host_events
+    monkeypatch.setattr(
+        host_events, "emit",
+        lambda kind, data=None: captured.append((kind, dict(data or {}))),
+    )
+
+    platform = FakePlatform(tmp_home_no_env)
+    msg = IncomingMessage(platform="fake", external_user_id="u", external_chat_id="c", text="hi")
+    await gw_run._run_agent(msg, platform, tmp_home_no_env, show_trace=False)
+
+    from alpi import outputs as outputs_mod
+    items = outputs_mod.list_outputs(tmp_home_no_env)
+    assert len(items) == 1
+    out = items[0]
+    assert out["delivered_to"] == ["alpi", "telegram"]
+
+    msgs = [d for k, d in captured if k == "agent.message"]
+    assert len(msgs) == 1
+    assert msgs[0]["output_id"] == out["id"]
+    assert msgs[0]["deep_link"] == f"/outputs/default/{out['id']}"
 
 
 @pytest.mark.asyncio
