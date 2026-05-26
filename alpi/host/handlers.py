@@ -18,6 +18,7 @@ def register(server: host_server.Server) -> None:
     server.register("host.workgroup.transcript", _workgroup_transcript)
     server.register("host.sessions.list", _sessions_list)
     server.register("host.session.read", _session_read)
+    server.register("host.sessions.delete", _sessions_delete)
 
 
 def _check_id(name: str, kind: str) -> None:
@@ -89,3 +90,41 @@ async def _session_read(
             -32004, "not-found", data={"detail": str(e)},
         )
     return {"session": data}
+
+
+_MAX_DELETE_IDS = 200
+
+
+async def _sessions_delete(
+    params: dict[str, Any], _server: host_server.Server,
+) -> dict[str, Any]:
+    """Bulk-delete sessions. Per-id outcome: skipped (busy or missing) goes to ``errors``; removed goes to ``deleted``."""
+    from alpi.host import chat as host_chat
+    profile = str((params or {}).get("profile") or "")
+    raw_ids = (params or {}).get("ids")
+    if not isinstance(raw_ids, list) or not raw_ids:
+        raise host_server.HandlerError(
+            -32602, "invalid-params", data={"detail": "ids must be a non-empty list"},
+        )
+    if len(raw_ids) > _MAX_DELETE_IDS:
+        raise host_server.HandlerError(
+            -32602, "invalid-params",
+            data={"detail": f"too many ids (max {_MAX_DELETE_IDS})"},
+        )
+    home = _resolve_home(profile)
+    deleted: list[str] = []
+    errors: list[dict[str, str]] = []
+    for raw in raw_ids:
+        sid = str(raw or "").strip()
+        if not sid or not _SAFE_ID.match(sid):
+            errors.append({"id": sid, "code": "invalid-id"})
+            continue
+        if sid in host_chat._session_active:
+            errors.append({"id": sid, "code": "session-busy"})
+            continue
+        existed = await asyncio.to_thread(host_sessions.delete_session, home, sid)
+        if existed:
+            deleted.append(sid)
+        else:
+            errors.append({"id": sid, "code": "not-found"})
+    return {"deleted": deleted, "errors": errors}

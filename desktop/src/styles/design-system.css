@@ -113,6 +113,10 @@
 .ds-btn-ghost:hover,  .btn-ghost:hover  { background: var(--hover); color: var(--ink); }
 .ds-btn-ghost:active, .btn-ghost:active { background: var(--line); transform: translateY(0.5px); }
 
+.ds-btn-danger, .btn-danger { background: var(--c-danger); color: var(--bg-pane); }
+.ds-btn-danger:hover,  .btn-danger:hover  { background: color-mix(in srgb, var(--c-danger) 88%, black); }
+.ds-btn-danger:active, .btn-danger:active { background: color-mix(in srgb, var(--c-danger) 80%, transparent); transform: translateY(0.5px); }
+
 .ds-iconbtn, .iconbtn {
   width: var(--ctrl-sm);
   height: var(--ctrl-sm);

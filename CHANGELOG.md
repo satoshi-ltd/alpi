@@ -1,5 +1,28 @@
 # Changelog
 
+## v0.6.13 / desktop-v0.3.22 — 2026-05-26 — Manage Sessions on desktop
+
+The desktop client gets a real session manager. The Sessions
+popover in the chat header now has a ``Manage sessions →``
+footer link that opens a full inbox: every chat thread on the
+profile, with activity, turns, and disk size; filter chips for
+``All``, ``≥ 30 days``, ``≥ 90 days``, ``< 3 turns``; sort by
+size / activity / turns / created. Bulk-select with checkboxes
+(``⌘A`` / Shift+click range), then delete with a typed-confirm.
+
+- The active session is locked — its checkbox is disabled and
+  the row carries a ``◆ current session`` marker.
+- Backend gains a ``host.sessions.delete`` admin verb that takes
+  ``ids: [...]`` and returns ``{deleted, errors}``. Refuses
+  in-flight sessions with ``session-busy`` and missing ids with
+  ``not-found``. Removes both ``<id>.json`` and the per-turn
+  replay sidecar ``_events_<id>.jsonl`` in one go.
+- ``host.sessions.list`` now exposes ``size_bytes`` per row
+  (session file + sidecar), so the UI can show real disk
+  pressure without a second RPC.
+- The Sessions popover footer also shows the per-profile
+  session count next to the new link.
+
 ## v0.6.12 / desktop-v0.3.21 / mobile-v0.1.17 — 2026-05-26 — tts stops trying to be a player
 
 The daemon no longer plays audio. The ``tts`` tool still synthesises

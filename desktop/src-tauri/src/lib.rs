@@ -319,12 +319,17 @@ fn sessions_via_alp(profile: &str, limit: Option<usize>) -> Vec<SessionEntry> {
             .get("last_ctx_tokens")
             .and_then(|v| v.as_u64())
             .unwrap_or(0);
+        let size_bytes = row
+            .get("size_bytes")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0);
         out.push(SessionEntry {
             id,
             profile: profile.to_string(),
             mtime,
             started_at,
             updated_at,
+            size_bytes,
             first_user,
             model,
             turn_count,
@@ -345,6 +350,17 @@ fn session_detail(profile: String, id: String) -> Result<serde_json::Value, Stri
         serde_json::json!({"profile": profile, "id": id}),
     )?;
     Ok(result.get("session").cloned().unwrap_or(serde_json::Value::Null))
+}
+
+#[tauri::command]
+async fn sessions_delete(
+    profile: String,
+    ids: Vec<String>,
+) -> Result<serde_json::Value, String> {
+    let params = serde_json::json!({"profile": profile, "ids": ids});
+    tauri::async_runtime::spawn_blocking(move || host_client::call("host.sessions.delete", params))
+        .await
+        .map_err(|e| format!("host.sessions.delete: {e}"))?
 }
 
 #[tauri::command]
@@ -2299,6 +2315,7 @@ pub fn run() {
             host_connection_probe,
             sessions,
             session_detail,
+            sessions_delete,
             workgroups,
             workgroup_transcript,
             workgroup_post,

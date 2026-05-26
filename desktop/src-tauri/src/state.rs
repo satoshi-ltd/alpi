@@ -7,6 +7,7 @@ pub struct SessionEntry {
     pub mtime: u64,
     pub started_at: f64,
     pub updated_at: f64,
+    pub size_bytes: u64,
     pub first_user: String,
     pub model: Option<String>,
     pub turn_count: usize,

@@ -217,6 +217,135 @@ async def test_data_session_read_method_not_found_for_unknown_id(
     assert response.get("error", {}).get("code") == -32004
 
 
+def test_list_sessions_size_bytes_sums_main_and_sidecar(tmp_path: Path) -> None:
+    p = _seed_session(tmp_path, "sized", "hello")
+    sidecar = tmp_path / "sessions" / "_events_sized.jsonl"
+    sidecar.write_text("x" * 1000, encoding="utf-8")
+    row = next(r for r in data_sessions.list_sessions(tmp_path) if r["id"] == "sized")
+    assert row["size_bytes"] == p.stat().st_size + 1000
+
+
+def test_list_sessions_size_bytes_works_without_sidecar(tmp_path: Path) -> None:
+    p = _seed_session(tmp_path, "lonely", "hello")
+    row = next(r for r in data_sessions.list_sessions(tmp_path) if r["id"] == "lonely")
+    assert row["size_bytes"] == p.stat().st_size
+
+
+def test_delete_session_removes_main_and_sidecar(tmp_path: Path) -> None:
+    p = _seed_session(tmp_path, "doomed", "hi")
+    sidecar = tmp_path / "sessions" / "_events_doomed.jsonl"
+    sidecar.write_text("frame\n", encoding="utf-8")
+    assert data_sessions.delete_session(tmp_path, "doomed") is True
+    assert not p.exists()
+    assert not sidecar.exists()
+
+
+def test_delete_session_returns_false_when_missing(tmp_path: Path) -> None:
+    (tmp_path / "sessions").mkdir(parents=True, exist_ok=True)
+    assert data_sessions.delete_session(tmp_path, "ghost") is False
+
+
+@pytest.mark.asyncio
+async def test_sessions_delete_rpc_deletes_each_id(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    _seed_session(home, "a", "a")
+    _seed_session(home, "b", "b")
+    srv = host_server.Server(home=home)
+    data_handlers.register(srv)
+    monkeypatch.setattr(data_handlers, "_resolve_home", lambda p: home)
+
+    response = await srv._dispatch({
+        "id": "r", "method": "host.sessions.delete",
+        "params": {"profile": "default", "ids": ["a", "b"]},
+    })
+    assert response["result"] == {"deleted": ["a", "b"], "errors": []}
+    assert not (home / "sessions" / "a.json").exists()
+    assert not (home / "sessions" / "b.json").exists()
+
+
+@pytest.mark.asyncio
+async def test_sessions_delete_rpc_refuses_busy_id(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    from alpi.host import chat as host_chat
+    home = tmp_path / "home"
+    home.mkdir()
+    _seed_session(home, "busy", "hi")
+    srv = host_server.Server(home=home)
+    data_handlers.register(srv)
+    monkeypatch.setattr(data_handlers, "_resolve_home", lambda p: home)
+    monkeypatch.setitem(host_chat._session_active, "busy", object())
+
+    response = await srv._dispatch({
+        "id": "r", "method": "host.sessions.delete",
+        "params": {"profile": "default", "ids": ["busy"]},
+    })
+    assert response["result"] == {
+        "deleted": [],
+        "errors": [{"id": "busy", "code": "session-busy"}],
+    }
+    assert (home / "sessions" / "busy.json").exists()
+
+
+@pytest.mark.asyncio
+async def test_sessions_delete_rpc_reports_missing(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    _seed_session(home, "real", "hi")
+    srv = host_server.Server(home=home)
+    data_handlers.register(srv)
+    monkeypatch.setattr(data_handlers, "_resolve_home", lambda p: home)
+
+    response = await srv._dispatch({
+        "id": "r", "method": "host.sessions.delete",
+        "params": {"profile": "default", "ids": ["real", "ghost"]},
+    })
+    assert response["result"]["deleted"] == ["real"]
+    assert response["result"]["errors"] == [{"id": "ghost", "code": "not-found"}]
+
+
+@pytest.mark.asyncio
+async def test_sessions_delete_rpc_rejects_invalid_id(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    srv = host_server.Server(home=home)
+    data_handlers.register(srv)
+    monkeypatch.setattr(data_handlers, "_resolve_home", lambda p: home)
+
+    response = await srv._dispatch({
+        "id": "r", "method": "host.sessions.delete",
+        "params": {"profile": "default", "ids": ["../etc/passwd"]},
+    })
+    assert response["result"]["deleted"] == []
+    assert response["result"]["errors"] == [
+        {"id": "../etc/passwd", "code": "invalid-id"},
+    ]
+
+
+@pytest.mark.asyncio
+async def test_sessions_delete_rpc_requires_non_empty_ids(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    srv = host_server.Server(home=home)
+    data_handlers.register(srv)
+    monkeypatch.setattr(data_handlers, "_resolve_home", lambda p: home)
+
+    response = await srv._dispatch({
+        "id": "r", "method": "host.sessions.delete",
+        "params": {"profile": "default", "ids": []},
+    })
+    assert response["error"]["message"] == "invalid-params"
+
+
 @pytest.mark.asyncio
 async def test_profile_summary_latest_session_includes_preview_fields(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,

@@ -11,6 +11,7 @@ import {
   Tip,
 } from "./index.js";
 import { Popover } from "./index.js";
+import ManageSessionsModal from "../features/sessions/ManageSessionsModal.jsx";
 import styles from "./SessionsButton.module.css";
 
 const DAY_MS = 86400000;
@@ -37,13 +38,16 @@ function previewOf(s) {
 
 export default function SessionsButton({
   profile,
+  accent,
   activeSessionId,
   onChange,
   onNew,
 }) {
   const [open, setOpen] = useState(false);
+  const [manageOpen, setManageOpen] = useState(false);
   const [sessions, setSessions] = useState([]);
   const [loaded, setLoaded] = useState(false);
+  const [reloadTick, setReloadTick] = useState(0);
 
   useEffect(() => {
     if (!profile) {
@@ -66,7 +70,7 @@ export default function SessionsButton({
     return () => {
       cancelled = true;
     };
-  }, [profile, open]);
+  }, [profile, open, reloadTick]);
 
   const grouped = useMemo(() => {
     const m = new Map();
@@ -125,7 +129,33 @@ export default function SessionsButton({
             </div>
           ))}
         </div>
+        <div className={styles.popFooter}>
+          <Mono className={styles.popCount}>
+            {sessions.length} session{sessions.length === 1 ? "" : "s"}
+          </Mono>
+          <Btn
+            variant="ghost"
+            onClick={() => {
+              setOpen(false);
+              setManageOpen(true);
+            }}
+          >
+            Manage sessions →
+          </Btn>
+        </div>
       </Popover>
+      <ManageSessionsModal
+        open={manageOpen}
+        onClose={() => setManageOpen(false)}
+        profile={profile}
+        accent={accent}
+        currentSessionId={activeSessionId}
+        onDeleted={(deletedIds) => {
+          if (!deletedIds?.length) return;
+          if (deletedIds.includes(activeSessionId)) onChange?.(null);
+          setReloadTick((n) => n + 1);
+        }}
+      />
     </span>
   );
 }

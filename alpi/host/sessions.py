@@ -36,9 +36,18 @@ def list_sessions(home: Path, limit: int | None = None) -> list[dict[str, Any]]:
         if p.stem.startswith("_"):
             continue
         try:
-            mtime = int(p.stat().st_mtime)
+            st = p.stat()
+            mtime = int(st.st_mtime)
+            size_bytes = int(st.st_size)
         except OSError:
             mtime = 0
+            size_bytes = 0
+        # The per-turn replay sidecar is freed alongside the session on delete, so its bytes count toward the row's reported size.
+        sidecar = d / f"_events_{p.stem}.jsonl"
+        try:
+            size_bytes += int(sidecar.stat().st_size)
+        except OSError:
+            pass
         try:
             data = json.loads(p.read_text(encoding="utf-8"))
         except Exception:  # noqa: BLE001
@@ -69,6 +78,7 @@ def list_sessions(home: Path, limit: int | None = None) -> list[dict[str, Any]]:
             "mtime": mtime,
             "started_at": started_at,
             "updated_at": updated_at,
+            "size_bytes": size_bytes,
             "first_user": first_user,
             "last_user": last_user,
             "last_assistant": last_assistant,
@@ -91,6 +101,30 @@ def read_session(home: Path, session_id: str) -> dict[str, Any]:
     if not p.exists():
         raise FileNotFoundError(f"no session {session_id!r}")
     return json.loads(p.read_text(encoding="utf-8"))
+
+
+def session_paths(home: Path, session_id: str) -> tuple[Path, Path]:
+    d = home / "sessions"
+    return d / f"{session_id}.json", d / f"_events_{session_id}.jsonl"
+
+
+def delete_session(home: Path, session_id: str) -> bool:
+    """Remove ``<id>.json`` + ``_events_<id>.jsonl``. Returns True iff the session file existed."""
+    main, sidecar = session_paths(home, session_id)
+    existed = main.exists()
+    try:
+        main.unlink()
+    except FileNotFoundError:
+        pass
+    except OSError:
+        return False
+    try:
+        sidecar.unlink()
+    except FileNotFoundError:
+        pass
+    except OSError:
+        pass
+    return existed
 
 
 def _classify(first_user: str) -> str:

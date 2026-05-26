@@ -115,6 +115,7 @@ export default function ProfileChatHeader({
       ) : (
         <SessionsButton
           profile={profile?.name}
+          accent={accent}
           activeSessionId={activeSessionId}
           onChange={onChangeSession}
           onNew={onNewSession}

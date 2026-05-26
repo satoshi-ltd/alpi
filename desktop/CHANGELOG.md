@@ -11,6 +11,31 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.3.22 — 2026-05-26 — Manage Sessions
+
+The Sessions popover in the chat header gains a
+``Manage sessions →`` footer link that opens a full session
+inbox: every chat thread on the profile with activity, turns,
+and disk size, filter chips, sort, and bulk delete behind a
+typed-confirm.
+
+- Filter chips: ``All``, ``≥ 30 days``, ``≥ 90 days``,
+  ``< 3 turns``. Sort dropdown: size / activity / turns /
+  created. Default sort = size.
+- The active session is locked. Its checkbox is disabled and
+  the row carries a ``◆ current session`` marker.
+- Bulk select with ``⌘A`` (visible rows) or ``Shift+click`` for
+  range. Header CTA swaps from ``Close`` to ``Cancel ▸ Delete N``
+  (red) once anything is selected; footer shows
+  ``Selected N · XX KB to free``.
+- The confirm modal uses typed mode (``Type DELETE to confirm``)
+  with the freed-bytes figure and an irreversible warning.
+- Each row's size now counts both the session file and its
+  per-turn replay sidecar, so the freed estimate matches what
+  the disk actually loses.
+
+Requires alpi ≥ 0.6.13.
+
 ## v0.3.21 — 2026-05-26 — drop the TTS autoplay toggle
 
 Audio playback already lives on each message bubble. The separate

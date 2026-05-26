@@ -17,7 +17,9 @@ const Btn = forwardRef(function Btn(
       ? "ds-btn-primary"
       : variant === "ghost"
         ? "ds-btn-ghost"
-        : "";
+        : variant === "danger"
+          ? "ds-btn-danger"
+          : "";
   const tagProps = Tag === "button" ? { type: type || "button" } : {};
   return (
     <Tag

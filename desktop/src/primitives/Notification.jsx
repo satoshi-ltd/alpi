@@ -75,8 +75,10 @@ export function NotificationProvider({ children }) {
   );
 }
 
+const NOOP_NOTIFY = () => null;
+
 export function useNotify() {
-  return useContext(NotifyContext) ?? (() => null);
+  return useContext(NotifyContext) ?? NOOP_NOTIFY;
 }
 
 function NotificationStack({ items, onDismiss }) {
