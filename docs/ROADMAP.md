@@ -23,7 +23,7 @@ patterns into Alpi-owned clients rather than gateways.
 
 | ID | Item | Status |
 |---|---|---|
-| UX.1 | Structured clarification — the agent asks closed questions that desktop/mobile render as native choices; gateways degrade to numbered text. | 🔵 |
+| UX.1 | Structured clarification — the agent asks closed questions that desktop/mobile render as native choices; gateways degrade to numbered text. | 🟡 |
 | UX.2 | Rich tool cards parity — desktop/mobile render approvals, file mutations, memory promotions, and workgroup events as first-class cards. | 🔵 |
 | UX.3 | Gateway migration nudges — gateway replies can point users back to Alpi clients for flows that need approvals, files, workgroups, or rich UI. | 🔵 |
 
@@ -31,7 +31,7 @@ patterns into Alpi-owned clients rather than gateways.
 
 | ID | Item | Status |
 |---|---|---|
-| AC.1 | Skill curator recommendations — use the v0.5.9 telemetry to flag stale, duplicate, overly narrow, or umbrella-candidate skills. Produces reports and manual apply plans; no silent deletes. | 🔵 |
+| AC.1 | Skill curator recommendations — use the v0.5.9 telemetry to flag stale, duplicate, overly narrow, or umbrella-candidate skills. Produces reports and manual apply plans; no silent deletes. | 🟡 |
 | AC.2 | Curator apply flow — after preview, archive stale skills, add `absorbed_into:` metadata, and move detail into umbrella skill `references/` when consolidation is accepted. | 🔵 |
 
 ### Recall and workgroup search
@@ -40,13 +40,12 @@ patterns into Alpi-owned clients rather than gateways.
 |---|---|---|
 | CM.4 | Semantic recall over past sessions — opt-in vector/semantic retrieval over session history when lexical `session_search` starts missing real queries. | 🔵 |
 | ALP.6 | Workgroup search — semantic search over workgroup transcripts via the local RAG primitives, exposed through workgroup/host surfaces after CM.4 proves stable. | 🔵 |
-| ORG.1 | Organization workspace convention — document and scaffold the "hub profile owns the shared workspace" pattern before adding shared-filesystem runtime. | 🔵 |
+| ORG.1 | Organization workspace convention — document and scaffold the "hub profile owns the shared workspace" pattern before adding shared-filesystem runtime. | 🟡 |
 
 ### Cost and model behavior
 
 | ID | Item | Status |
 |---|---|---|
-| CL.1 | Prompt caching across providers — stable-prefix audit, marker-required provider support, optional cache-key hints for auto-cache providers, and measurement in `alpi digest`. | 🟡 |
 | BD | Model-family conditional prompt guidance — inject heavier tool-use/verification guidance only for model families that real logs show need it. | 🔵 |
 
 ### Voice
@@ -128,21 +127,6 @@ flows, and workgroup outputs land there by convention.
 
 This is intentionally not the workspace overlay or first-class org
 entity. Those designs wait for real user demand.
-
-### CL.1. Prompt caching across providers
-
-Cached input is the highest-leverage cost optimization for tool-heavy
-turns, but it depends on stable prompt prefixes. v0.7 scopes it in this
-order:
-
-1. audit `Engine` and compaction for non-deterministic early-message
-   mutation;
-2. add marker support for providers that require explicit cache control;
-3. add optional cache-key hints for auto-cache providers where useful;
-4. measure cache savings in `alpi digest`.
-
-Explicit cache APIs are adopted only where implicit/marker caching shows
-measurable miss-rate problems.
 
 ### BD. Model-family conditional prompt guidance
 

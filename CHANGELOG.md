@@ -1,5 +1,43 @@
 # Changelog
 
+## v0.6.15 — 2026-05-26 — prompt caching (CL.1)
+
+Stable cacheable prefix + LiteLLM-native ``cache_control`` injection
+on supported models. No config, no audit logs, no provider table — the
+SDK's own capability check picks the right behaviour per model and
+provider.
+
+- The cacheable system prompt is now assembled by
+  ``alpi.prompt_cache.build_parts`` as a named map in a canonical
+  order (``agent_profile``, ``base_prompt``, ``env``, ``system_time``,
+  ``surface``, ``knowledge_rule``, ``skills_index``, ``user_md``,
+  ``memory_md``). The rendered text the LLM sees is byte-identical to
+  the previous build path, so any session pinned to the old prefix
+  keeps hitting cache.
+- Per-turn volatile context (``# NOW``, workgroup context, skill
+  keyword hints) is appended by the engine as separate system messages
+  and never enters the prefix builder — covered by a regression test.
+- For models that ``litellm.utils.supports_prompt_caching`` flags
+  (Anthropic Claude, Bedrock Claude, Vertex / AI Studio Gemini, and
+  the OpenRouter routes LiteLLM knows about), the engine forwards
+  ``cache_control_injection_points: [{location: "message", index: 0}]``
+  to ``litellm.completion``. The marker lands on ``messages[0]``, the
+  stable prefix — never on the volatile ``# NOW`` / workgroup / hint
+  messages at ``messages[1..N]``. Auto-cache providers (OpenAI,
+  DeepSeek, xAI) keep working through prefix stability alone.
+- Defensive fallback: a missing helper, a raised exception, or an
+  unknown model returns ``{}`` and the turn runs without the marker.
+  Caching is opt-in optimisation; it never breaks a call.
+- Tool definitions are now byte-stable across calls. ``Schedule.schema``
+  used to embed ``Current time: <datetime.now()>`` in its description
+  to ground relative phrases; the per-turn ``# NOW`` system block
+  already does that, and the timestamp was flipping the tools-defs
+  cache key on every request — Anthropic served zero cache reads. The
+  preamble is gone; live smoke against ``anthropic/claude-haiku-4-5``
+  now reports ~98% of the prefix coming from cache on the second turn
+  of an identical-prefix session. A regression test pins
+  ``tools.schemas()`` to byte-equality across consecutive calls.
+
 ## v0.6.14 — 2026-05-26 — storage hygiene
 
 - ``alpi doctor`` gains a Storage check that flags outsized

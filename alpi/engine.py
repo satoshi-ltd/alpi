@@ -27,42 +27,7 @@ def _strip_cache_noise(text: str) -> str:
     return _CACHE_NOISE_RE.sub("", text).strip()
 
 
-_PLATFORM_HINTS: dict[str, str] = {
-    "cron": (
-        "# SURFACE: scheduled job\n"
-        "You are running as a scheduled job. No user is present — you "
-        "cannot ask questions, request clarification, or wait for "
-        "follow-up. Execute the task fully and autonomously, making "
-        "reasonable decisions where needed. Your reply is "
-        "auto-delivered to the job's configured destination; put the "
-        "primary content directly in your response."
-    ),
-    "telegram": (
-        "# SURFACE: Telegram\n"
-        "You are replying on Telegram. Plain Markdown is auto-converted "
-        "to Telegram's MarkdownV2 (bold, italic, inline code, code "
-        "blocks, links, headers). Tables, blockquotes, and deeply "
-        "nested lists do NOT render — prefer flat text. Keep replies "
-        "chat-friendly: short paragraphs, no sign-offs. Attach files "
-        "via `send_message(attachment=…)`, not by inlining paths."
-    ),
-    "email": (
-        "# SURFACE: email\n"
-        "You are replying by email. Plain text only — no Markdown, it "
-        "shows as literal asterisks and backticks. Keep replies "
-        "concise. The subject line is preserved for threading. Skip "
-        "greetings and sign-offs unless the user's message warranted "
-        "them (business tone vs casual)."
-    ),
-    "gmail": (
-        "# SURFACE: email\n"
-        "You are replying by email. Plain text only — no Markdown, it "
-        "shows as literal asterisks and backticks. Keep replies "
-        "concise. The subject line is preserved for threading. Skip "
-        "greetings and sign-offs unless the user's message warranted "
-        "them (business tone vs casual)."
-    ),
-}
+from alpi.prompt_cache import PLATFORM_HINTS as _PLATFORM_HINTS
 
 
 def _last_peer_reply(turn_tools) -> str:
@@ -79,9 +44,8 @@ def _last_peer_reply(turn_tools) -> str:
 
 
 def _platform_hint() -> str:
-    import os
-    platform = (os.environ.get("ALPI_PLATFORM") or "").strip().lower()
-    return _PLATFORM_HINTS.get(platform, "")
+    from alpi.prompt_cache import _platform_hint as _ph
+    return _ph()
 
 
 def _maybe_load_mcps(cfg: cfg_mod.Config) -> list:
@@ -247,6 +211,8 @@ class Engine:
 
         schemas = tools.schemas()
         call_kwargs = cfg_mod.resolve_model(self.cfg)
+        from alpi import prompt_cache as _pc
+        call_kwargs.update(_pc.cache_kwargs_for_model(call_kwargs.get("model", "")))
         max_steps = self.cfg.tools.max_steps_per_turn
 
         self._maybe_auto_compact(emit, call_kwargs)
@@ -722,63 +688,5 @@ class Engine:
         return path
 
     def _build_system_prompt(self) -> str:
-        from importlib import resources
-
-        agent_profile = (
-            self.cfg.agent_path.read_text()
-            if self.cfg.agent_path.exists() else ""
-        )
-        base = resources.files("alpi.prompts").joinpath("system_prompt.md").read_text()
-        mem = memory.MemoryStore(home=self.home)
-        try:
-            mem.prune_low_confidence(max_age_days=memory.LOW_CONFIDENCE_MAX_AGE_DAYS)
-        except Exception:
-            pass
-        snap = mem.snapshot()
-
-        # Environment context — the model only thinks in terms of the
-        # workspace. cwd is intentionally hidden: it bled confusion into
-        # path interpretation (``/profile`` → absolute root) and the user
-        # never references it by name anyway.
-        workspace = self.cfg.workspace_path
-        env_parts = ["# ENVIRONMENT"]
-        if workspace is not None:
-            env_parts.append(f"- **workspace** (default root for relative paths): `{workspace}`")
-            env_parts.append(f"- **profile home** (memory/skills/config): `{self.home}`")
-            env_parts.append(
-                "- **Path rule**: relative paths (`foo/`, `my-project`) "
-                f"resolve from the workspace (`{workspace}/foo/`). Absolute "
-                "paths work anywhere the OS lets you read/write — including "
-                "`~/Documents`, `/tmp`, other project dirs — except sensitive "
-                "system locations (`/etc`, SSH keys, credentials) which are "
-                "denied. Prefer the workspace for the user's main context; "
-                "reach outside only when they ask for a specific path."
-            )
-        else:
-            import os as _os
-            cwd = _os.getcwd()
-            env_parts.append(
-                f"- **workspace**: NOT SET — falling back to your current "
-                f"working directory: `{cwd}`. Relative paths resolve from "
-                "there. Absolute paths work anywhere except sensitive "
-                "system locations. Suggest `/workspace <path>` to the user "
-                "if they want a stable root."
-            )
-            env_parts.append(f"- **profile home** (memory/skills/config): `{self.home}`")
-        env = "\n".join(env_parts)
-
-        parts = [agent_profile.strip(), base.strip(), env, clock.system_time_section()]
-        hint = _platform_hint()
-        if hint:
-            parts.append(hint)
-        from alpi.tools.knowledge import PROMPT_RULE as _ALPI_KNOWLEDGE_RULE
-        from alpi.tools.skill import skills_index_block
-        parts.append(_ALPI_KNOWLEDGE_RULE)
-        skills_block = skills_index_block(self.home, cfg_raw=self.cfg.raw)
-        if skills_block:
-            parts.append(skills_block)
-        if snap["USER.md"].strip():
-            parts.append("# USER PROFILE\n" + snap["USER.md"].strip())
-        if snap["MEMORY.md"].strip():
-            parts.append("# AGENT MEMORY\n" + snap["MEMORY.md"].strip())
-        return "\n\n".join(p for p in parts if p)
+        from alpi import prompt_cache
+        return prompt_cache.render_cacheable(prompt_cache.build_parts(self.home, self.cfg))

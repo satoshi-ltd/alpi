@@ -146,21 +146,7 @@ class Schedule(Tool):
         "required": ["action"],
     }
 
-    @classmethod
-    def schema(cls) -> dict[str, Any]:
-        """Inject current local time so the LLM can resolve relative phrases
-        ("in 10 min", "tomorrow at 9", "next Monday") to correct absolute
-        times. Without this, the LLM has no grounding for today's date."""
-        from datetime import datetime
-        now = datetime.now().astimezone()
-        preamble = (
-            f"Current time: {now.strftime('%Y-%m-%d %H:%M:%S %z')}. "
-            f"Use this as the reference for any relative phrase like "
-            f"\"in N minutes\", \"tonight\", \"tomorrow\", \"next Monday\".\n\n"
-        )
-        base = super().schema()
-        base["function"]["description"] = preamble + base["function"]["description"]
-        return base
+    # No ``datetime.now()`` here — it would shift the tool-defs cache key every call; the per-turn ``# NOW`` block handles relative-time grounding.
 
     def run(self, action: str, kind: str = "", expression: str = "",
             after_hours: float | None = None, prompt: str = "",
