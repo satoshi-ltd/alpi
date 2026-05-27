@@ -388,6 +388,54 @@ async def test_every_admin_method_rejects_member_token(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
+    "method",
+    [
+        "host.clarification.respond",
+        "host.clarification.pending",
+    ],
+)
+async def test_clarification_rpc_is_member_callable(
+    short_tmp: Path, method: str,
+) -> None:
+    """A ``member`` device that can chat with the agent must also be able to
+    answer the agent's clarification questions. Approval stays admin-only
+    because it authorizes commands; clarification only resolves a question.
+    Member tokens MUST pass the admin gate for these two methods (the call
+    can still fail downstream for unrelated reasons — e.g. unknown
+    request_id — but never with ``-32001 admin role required``)."""
+    member = devices.add(label="phone", role="member")
+    srv = host_server.Server(home=short_tmp)
+    devices.register(srv)
+    # Wire the real clarification handlers so the dispatch reaches them.
+    from alpi.host import clarification as host_clar
+    host_clar.register(srv)
+
+    sent: list[dict] = []
+
+    async def send(p):
+        sent.append(p)
+
+    body = {
+        "id": "x", "method": method,
+        "params": {
+            "auth_token": member["token"],
+            # Bogus request_id is fine — we only care that the gate doesn't
+            # short-circuit with "admin role required".
+            "request_id": "deadbeef",
+            "choice": "X",
+        },
+    }
+    await srv._handle_request(json.dumps(body), send, require_token=True)
+
+    assert len(sent) == 1
+    err = sent[0].get("error")
+    if err is not None:
+        assert "admin role required" not in err.get("data", {}).get("detail", ""), method
+    host_clar._reset_for_tests()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
     "rel_path",
     [
         # Top-level daemon directories.

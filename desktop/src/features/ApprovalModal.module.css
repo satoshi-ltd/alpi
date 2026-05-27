@@ -1,108 +1,144 @@
 .head {
   display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  margin-bottom: var(--space-5);
+  align-items: flex-start;
+  gap: var(--space-5);
+  margin-bottom: var(--space-7);
 }
 
-.severity {
+.headText {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.eyebrow {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: 0;
   font-family: var(--font-mono);
   font-size: var(--fs-xs);
   font-weight: var(--fw-medium);
-  color: var(--ink-2);
+  color: var(--ink-3);
   letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
-.dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--c-danger);
-}
-.dot[data-severity="caution"] { background: var(--c-warning, var(--ink-2)); }
-.dot[data-severity="dangerous"] { background: var(--c-danger); }
-.dot[data-severity="safe"] { background: var(--ink-4); }
+.eyebrow .sep { color: var(--ink-4); }
 
-.pattern {
-  font-family: var(--font-mono);
-  font-size: var(--fs-base);
-  font-weight: var(--fw-medium);
+.eyebrow .diamondWrap {
+  display: inline-flex;
+  align-items: center;
+  margin-right: var(--space-2);
+}
+
+.eyebrow .profile {
+  color: var(--ink-2);
+}
+
+.eyebrow .surface {
+  color: var(--ink-3);
+}
+
+.sev_caution   { color: var(--c-warning); }
+.sev_dangerous { color: var(--c-danger); }
+.sev_safe      { color: var(--ink-3); }
+
+.title {
+  font-family: var(--font-sans);
+  font-size: var(--fs-lg);
+  font-weight: var(--fw-semibold);
   color: var(--ink);
+  line-height: var(--lh-cozy);
 }
 
 .command {
   font-family: var(--font-mono);
-  font-size: var(--fs-sm);
-  color: var(--ink-2);
-  background: color-mix(in srgb, var(--ink) 3%, var(--bg-pane));
-  border: 0.5px solid var(--line);
-  border-radius: var(--r-md);
-  padding: var(--space-5);
-  margin: 0 0 var(--space-5);
+  font-size: var(--fs-lg);
+  color: var(--ink);
+  background: var(--bg-input);
+  border: 0.5px solid var(--line-2);
+  border-radius: var(--r-xl);
+  padding: var(--space-5) var(--space-6);
+  margin: 0;
   overflow-x: auto;
   white-space: pre-wrap;
   word-break: break-all;
   max-height: 180px;
 }
 
-.meta {
+.cwd {
   font-family: var(--font-mono);
   font-size: var(--fs-xs);
   color: var(--ink-3);
-  margin-bottom: var(--space-3);
+  margin-top: var(--space-1);
 }
+
+.cwd .cwdPath { color: var(--ink-2); }
 
 .choices {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: var(--space-1);
+  margin-top: var(--space-7);
 }
 
-.choice {
+.row {
   appearance: none;
   text-align: left;
-  background: var(--bg-pane);
-  border: 0.5px solid var(--line);
+  background: transparent;
+  border: 0;
   border-radius: var(--r-md);
-  padding: var(--space-5) var(--space-6);
+  padding: var(--space-4) var(--space-5);
   cursor: pointer;
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  transition: background 0.12s, border-color 0.12s;
-}
-
-.choice:hover:not(:disabled) {
-  background: var(--hover);
-  border-color: color-mix(in srgb, var(--ink) 20%, transparent);
-}
-
-.choice:disabled {
-  opacity: 0.5;
-  cursor: progress;
-}
-
-.choiceLabel {
+  gap: var(--space-1);
+  transition: background 0.12s var(--ease);
   font-family: var(--font-sans);
-  font-size: var(--fs-sm);
-  font-weight: var(--fw-medium);
-  color: var(--ink);
 }
 
-.choiceHint {
+.row:hover:not(:disabled) { background: var(--hover); }
+.row:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.rowLabel {
+  font-size: var(--fs-lg);
+  font-weight: var(--fw-semibold);
+  color: var(--ink);
+  line-height: var(--lh-cozy);
+}
+
+.rowHint {
   font-family: var(--font-mono);
-  font-size: var(--fs-xs);
+  font-size: var(--fs-sm);
   color: var(--ink-3);
 }
 
-.danger .choiceLabel { color: var(--c-danger); }
+.footer {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  margin-top: var(--space-7);
+}
+
+.denyBtn {
+  background: var(--c-danger);
+  color: var(--bg-pane);
+}
+
+.denyBtn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--c-danger) 85%, var(--ink));
+  color: var(--bg-pane);
+}
+
+.denyBtn:disabled {
+  opacity: 0.4;
+}
 
 .error {
+  margin-top: var(--space-3);
   font-family: var(--font-mono);
   font-size: var(--fs-xs);
   color: var(--c-danger);
-  margin-top: var(--space-3);
 }

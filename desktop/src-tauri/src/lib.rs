@@ -1566,6 +1566,29 @@ async fn approval_pending() -> Result<serde_json::Value, String> {
 }
 
 #[tauri::command]
+async fn clarification_respond(
+    request_id: String, choice: String,
+) -> Result<serde_json::Value, String> {
+    let params = serde_json::json!({ "request_id": request_id, "choice": choice });
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        host_client::call("host.clarification.respond", params)
+    })
+    .await
+    .map_err(|e| format!("join: {e}"))??;
+    Ok(result)
+}
+
+#[tauri::command]
+async fn clarification_pending() -> Result<serde_json::Value, String> {
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        host_client::call("host.clarification.pending", serde_json::json!({}))
+    })
+    .await
+    .map_err(|e| format!("join: {e}"))??;
+    Ok(result)
+}
+
+#[tauri::command]
 async fn resolve_ctx_window(profile: String, model: String) -> Result<u64, String> {
     let result = tauri::async_runtime::spawn_blocking(move || {
         host_client::call(
@@ -2350,6 +2373,8 @@ pub fn run() {
             outputs_mark_all_read,
             approval_respond,
             approval_pending,
+            clarification_respond,
+            clarification_pending,
             profile_create,
             profile_delete,
             provider_set_key,

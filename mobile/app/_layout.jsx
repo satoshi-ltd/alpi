@@ -26,6 +26,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { ToastProvider, useToast } from '../src/components/Toast';
 import { ApprovalSheet } from '../src/features/approval/ApprovalSheet';
+import { ClarificationSheet } from '../src/features/clarification/ClarificationSheet';
 import { useNotificationTapRouter } from '../src/features/aln/deeplink';
 import { EventsProvider } from '../src/hooks/useEvents';
 import { useScheduleToast } from '../src/hooks/useScheduleToast';
@@ -91,6 +92,7 @@ function Routes() {
         />
       </AppBootstrap>
       <ApprovalSheet />
+      <ClarificationSheet />
     </>
   );
 }

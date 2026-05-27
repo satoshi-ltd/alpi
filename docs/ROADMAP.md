@@ -23,7 +23,6 @@ patterns into Alpi-owned clients rather than gateways.
 
 | ID | Item | Status |
 |---|---|---|
-| UX.1 | Structured clarification — the agent asks closed questions that desktop/mobile render as native choices; gateways degrade to numbered text. | 🟡 |
 | UX.2 | Rich tool cards parity — desktop/mobile render approvals, file mutations, memory promotions, and workgroup events as first-class cards. | 🔵 |
 | UX.3 | Gateway migration nudges — gateway replies can point users back to Alpi clients for flows that need approvals, files, workgroups, or rich UI. | 🔵 |
 
@@ -52,14 +51,12 @@ patterns into Alpi-owned clients rather than gateways.
 |---|---|---|
 | TTS.1 | Local TTS engine + daemon-served voice — choose a local/default engine, move synthesis behind the daemon, and collapse desktop/TUI/gateway voice catalogs into one host-served catalog. | 🔵 |
 
-### UX.1 / UX.2 / UX.3. Owned client experience
+### UX.2 / UX.3. Owned client experience
 
 Desktop and mobile are the primary product surfaces. Gateways stay
 text-first by design. v0.7 should make the owned clients materially
 better than any chat bridge:
 
-- structured clarifications render as native choices instead of asking
-  the user to type an option number;
 - approvals, file mutations, memory promotions, and workgroup events
   become stable cards with state, actions, and replay;
 - gateway replies can include a lightweight "open in Alpi" pointer when

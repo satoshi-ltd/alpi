@@ -413,7 +413,21 @@ const Turn = memo(function Turn({
   onRetryMessage,
 }) {
   const notify = useNotify();
-  const tools = turn.tools ?? [];
+  const allTools = turn.tools ?? [];
+  const tools = allTools.filter((t) => t.name !== "ask_user");
+  const askUserAnswers = allTools
+    .filter((t) => t.name === "ask_user")
+    .map((t) => ({
+      tool_id: t.tool_id,
+      result: (t.output || t.result || "").trim(),
+      question: t.args?.question || "",
+    }))
+    .filter((a) => a.result);
+  const lastAskUserAnswer = askUserAnswers[askUserAnswers.length - 1]?.result;
+  // Only suppress the assistant message when it is the *exact* echo of the
+  // ask_user result. If the model adds genuine commentary after a cancel /
+  // timeout / no-handler (e.g. "no problem, defaulting to X"), keep it.
+  const hideAssistant = lastAskUserAnswer && turn.assistant?.trim() === lastAskUserAnswer;
   const [ttsState, setTtsState] = useState(null);
   useEffect(() => subscribeTts(setTtsState), []);
   const online = useOnline();
@@ -488,7 +502,15 @@ const Turn = memo(function Turn({
           ))}
         </div>
       )}
-      {turn.assistant && (
+      {askUserAnswers.map((a) => (
+        <AskUserAnswer
+          key={a.tool_id ?? a.result}
+          result={a.result}
+          question={a.question}
+          accent={accent}
+        />
+      ))}
+      {turn.assistant && !hideAssistant && (
         <ProfileMessage
           role="assistant"
           footer={
@@ -555,6 +577,43 @@ const Turn = memo(function Turn({
     </div>
   );
 });
+
+const ASK_USER_NO_ANSWER_TAGS = [
+  ["User cancelled clarification.", "CANCELLED"],
+  ["No response received", "EXPIRED"],
+  ["This run has no live user", "NO ANSWER"],
+  ["No user-facing surface accepted", "NO ANSWER"],
+  ["Clarification handler failed", "FAILED"],
+];
+
+function askUserNoAnswerTag(result) {
+  if (!result) return null;
+  for (const [prefix, tag] of ASK_USER_NO_ANSWER_TAGS) {
+    if (result.startsWith(prefix)) return tag;
+  }
+  return null;
+}
+
+function AskUserAnswer({ result, question, accent }) {
+  const noAnswerTag = askUserNoAnswerTag(result);
+  if (noAnswerTag) {
+    return (
+      <div className={styles.askUserBanner}>
+        <div className={styles.askUserBannerQuestion}>{question || result}</div>
+        <div className={styles.askUserBannerTag}>
+          <span aria-hidden>∅</span>
+          <span>{noAnswerTag}</span>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className={styles.askUserAnswer}>
+      <Diamond color={accent || undefined} size={11} className={styles.askUserDiamond} />
+      <span className={styles.askUserAnswerLabel}>{result}</span>
+    </div>
+  );
+}
 
 function previewForArgs(args) {
   if (!args || typeof args !== "object") return "";
@@ -653,8 +712,16 @@ const ToolGroupCard = memo(function ToolGroupCard({ group, accent }) {
 });
 
 function PendingTurn({ turn, accent }) {
-  const tools = turn.tools ?? [];
-  const hasRunningTool = tools.some((t) => t.ok === null);
+  const allTools = turn.tools ?? [];
+  const tools = allTools.filter((t) => t.name !== "ask_user");
+  const askUserAnswers = allTools
+    .filter((t) => t.name === "ask_user")
+    .map((t) => ({
+      tool_id: t.tool_id,
+      result: (t.output || t.result || "").trim(),
+      question: t.args?.question || "",
+    }))
+    .filter((a) => a.result);
   return (
     <div className={styles.turn}>
       {turn.user && (
@@ -669,6 +736,14 @@ function PendingTurn({ turn, accent }) {
           ))}
         </div>
       )}
+      {askUserAnswers.map((a) => (
+        <AskUserAnswer
+          key={a.tool_id ?? a.result}
+          result={a.result}
+          question={a.question}
+          accent={accent}
+        />
+      ))}
       {turn.assistantPreview && (
         <ProfileMessage role="assistant">
           <span
@@ -682,7 +757,7 @@ function PendingTurn({ turn, accent }) {
       {turn.error && (
         <div className={styles.toolError}>{turn.error}</div>
       )}
-      {!turn.error && !turn.assistantPreview && tools.length === 0 && (
+      {!turn.error && !turn.assistantPreview && allTools.length === 0 && (
         <Activity size="lg" tint={accent} className={styles.thinking} />
       )}
     </div>

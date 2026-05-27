@@ -9,6 +9,7 @@ import { Banner } from "./primitives/index.js";
 import { useNotify } from "./primitives/Notification.jsx";
 import CommandPalette from "./features/CommandPalette.jsx";
 import ApprovalModal from "./features/ApprovalModal.jsx";
+import ClarificationModal from "./features/ClarificationModal.jsx";
 import CreateProfileModal from "./features/CreateProfileModal.jsx";
 import CreateWorkgroupModal from "./features/CreateWorkgroupModal.jsx";
 import NotificationsModal from "./features/NotificationsModal.jsx";
@@ -23,6 +24,7 @@ import { saveCachedMessages } from "./lib/workgroup-cache.js";
 import { fetchWorkgroupTranscript, invalidateTranscriptCache } from "./lib/workgroup-fetch.js";
 import { fromDaemonFrame } from "./lib/daemon-frame.js";
 import { enqueueRequest as enqueueApprovalRequest } from "./lib/approval-queue.js";
+import { enqueueRequest as enqueueClarificationRequest } from "./lib/clarification-queue.js";
 import { invalidateProfileDetailCache } from "./hooks/useProfileDetail.js";
 import { useChatStream } from "./hooks/useChatStream.js";
 import { useHostConnections } from "./hooks/useHostConnections.js";
@@ -183,6 +185,14 @@ export default function App() {
   }, []);
   const mergeApprovalRequest = useCallback((req) => {
     setApprovalQueue((q) => enqueueApprovalRequest(q, req));
+  }, []);
+
+  const [clarificationQueue, setClarificationQueue] = useState([]);
+  const onClarificationResolved = useCallback((requestId) => {
+    setClarificationQueue((q) => q.filter((r) => r.request_id !== requestId));
+  }, []);
+  const mergeClarificationRequest = useCallback((req) => {
+    setClarificationQueue((q) => enqueueClarificationRequest(q, req));
   }, []);
 
   const [browse, setBrowse] = useState(null);
@@ -534,6 +544,15 @@ export default function App() {
         if (rid) setApprovalQueue((q) => q.filter((r) => r.request_id !== rid));
         return;
       }
+      if (frame?.event === "clarification.request") {
+        mergeClarificationRequest(frame.data ?? {});
+        return;
+      }
+      if (frame?.event === "clarification.resolved") {
+        const rid = frame.data?.request_id;
+        if (rid) setClarificationQueue((q) => q.filter((r) => r.request_id !== rid));
+        return;
+      }
       const mapped = fromDaemonFrame(frame);
       if (mapped) applyChange(mapped);
     });
@@ -541,7 +560,7 @@ export default function App() {
       offFs.then((fn) => fn());
       offDaemon.then((fn) => fn());
     };
-  }, [applyChange, hostConnectionsRef, mergeApprovalRequest]);
+  }, [applyChange, hostConnectionsRef, mergeApprovalRequest, mergeClarificationRequest]);
 
   // Cold-start recovery: subscribe anchors at next_seq so requests emitted before mount won't reach the stream. Fetch pending now and after any connection switch.
   // ALSO drop the previous connection's queue: a stale entry would route host.approval.respond through the NEW daemon and either return unknown or, worse, confuse the user.
@@ -557,6 +576,19 @@ export default function App() {
       .catch(() => { /* daemon may be offline / older */ });
     return () => { cancelled = true; };
   }, [hostConnections.active_id, mergeApprovalRequest]);
+
+  useEffect(() => {
+    setClarificationQueue([]);
+    let cancelled = false;
+    invoke("clarification_pending")
+      .then((res) => {
+        if (cancelled) return;
+        const items = res?.requests || [];
+        for (const it of items) mergeClarificationRequest(it);
+      })
+      .catch(() => { /* daemon may be offline / older */ });
+    return () => { cancelled = true; };
+  }, [hostConnections.active_id, mergeClarificationRequest]);
 
   const sendingRef = useRef(false);
   const activeProfile = useMemo(() => {
@@ -1012,6 +1044,7 @@ export default function App() {
         }}
       />
       <ApprovalModal requests={approvalQueue} onResolved={onApprovalResolved} />
+      <ClarificationModal requests={clarificationQueue} onResolved={onClarificationResolved} />
       <NotificationsModal
         open={notificationsOpen}
         onClose={onCloseNotifications}

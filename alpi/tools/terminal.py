@@ -131,9 +131,10 @@ class Terminal(Tool):
         "Do NOT touch memory files (USER.md/MEMORY.md/AGENT.md) — "
         "use `memory`.\n"
         "\n"
-        "Stay inside the workspace. If the user wants something outside, "
-        "suggest `/workspace <path>` — don't break out with absolute "
-        "paths or `~`."
+        "Stay inside the workspace for exploratory shell work. If the user "
+        "explicitly gives you a shell command with an absolute path or `~`, "
+        "run that literal command instead of refusing in prose; the approval "
+        "gate and OS sandbox decide whether it may execute."
     )
     parameters = {
         "type": "object",
@@ -171,7 +172,8 @@ class Terminal(Tool):
     def _run_fg(self, command: str, timeout: int, cwd: str | None) -> ToolResult:
         if not command:
             return ToolResult(ok=False, output="", error="command is required")
-        decision = approval_check(command)
+        effective_cwd = cwd or _default_cwd()
+        decision = approval_check(command, cwd=effective_cwd)
         if not decision.allowed:
             return ToolResult(
                 ok=False, output="",
@@ -185,7 +187,7 @@ class Terminal(Tool):
         try:
             proc = subprocess.run(
                 popen_args, shell=use_shell, capture_output=True, text=True,
-                timeout=timeout, cwd=cwd or _default_cwd(),
+                timeout=timeout, cwd=effective_cwd,
                 env=_build_subprocess_env(),
             )
         except subprocess.TimeoutExpired:
@@ -203,7 +205,8 @@ class Terminal(Tool):
     def _run_bg(self, command: str, cwd: str | None) -> ToolResult:
         if not command:
             return ToolResult(ok=False, output="", error="command is required")
-        decision = approval_check(command)
+        effective_cwd = cwd or _default_cwd()
+        decision = approval_check(command, cwd=effective_cwd)
         if not decision.allowed:
             return ToolResult(
                 ok=False, output="",
@@ -221,7 +224,7 @@ class Terminal(Tool):
         # Popen dups the fd at spawn — closing our handle after is safe.
         with open(log.name, "ab") as out_fh:
             proc = subprocess.Popen(
-                popen_args, shell=use_shell, cwd=cwd or _default_cwd(),
+                popen_args, shell=use_shell, cwd=effective_cwd,
                 stdout=out_fh, stderr=subprocess.STDOUT,
                 start_new_session=True, env=_build_subprocess_env(),
             )

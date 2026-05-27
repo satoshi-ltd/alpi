@@ -2,7 +2,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, FlatList, KeyboardAvoidingView, Platform, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { space , fontSizes} from '../../src/theme/tokens';
+import { radii, space , fontSizes} from '../../src/theme/tokens';
 
 import { AlpiMark } from '../../src/components/AlpiMark';
 import { Button } from '../../src/components/Button';
@@ -16,6 +16,8 @@ import { mergeStreamingTurn } from '../../src/features/chat/chatTurns';
 import { ChatSkeleton } from '../../src/features/chat/ChatSkeleton';
 import { ThinkingDots } from '../../src/features/chat/ThinkingDots';
 import { ToolCallGroup, groupConsecutiveTools } from '../../src/features/chat/ToolCallRow';
+import { askUserNoAnswerTag } from '../../src/features/chat/askUserAnswer';
+import { Diamond } from '../../src/components/Diamond';
 import { SessionsSheet } from '../../src/features/sheets/SessionsSheet';
 import { useChatSend } from '../../src/hooks/useChatSend';
 import { useProfileSummaries, useSession, useSessionsList } from '../../src/hooks/useDaemonData';
@@ -50,6 +52,20 @@ const TURN_STYLES = StyleSheet.create({
 
 const TurnBlock = memo(function TurnBlock({ turn, turnIndex, accent, colors, fonts, fontSizes, onActionTarget }) {
   const ts = turn.at ? relativeTime(turn.at * 1000) : '';
+  const askUsers = (turn.tools ?? []).filter((t) => t.name === 'ask_user');
+  const otherTools = (turn.tools ?? []).filter((t) => t.name !== 'ask_user');
+  const askUserAnswers = askUsers
+    .map((t) => ({
+      tool_id: t.tool_id,
+      result: (t.output || t.result || '').trim(),
+      question: t.args?.question || '',
+    }))
+    .filter((t) => t.result);
+  const lastAnswer = askUserAnswers[askUserAnswers.length - 1]?.result;
+  // Only suppress when the assistant exactly echoes the ask_user result —
+  // genuine commentary after cancel / timeout / no-handler stays visible.
+  const assistantEchoesAsk = lastAnswer && turn.assistant?.trim() === lastAnswer;
+  const showAssistant = !!turn.assistant && !assistantEchoesAsk;
   return (
     <View style={TURN_STYLES.block}>
       {turn.user ? (
@@ -60,14 +76,25 @@ const TurnBlock = memo(function TurnBlock({ turn, turnIndex, accent, colors, fon
           onLongPress={() => onActionTarget({ kind: 'user', text: turn.user, turnIndex })}
         />
       ) : null}
-      {turn.tools?.length ? (
+      {otherTools.length ? (
         <View style={TURN_STYLES.tools}>
-          {groupConsecutiveTools(turn.tools).map((g, i) => (
+          {groupConsecutiveTools(otherTools).map((g, i) => (
             <ToolCallGroup key={`g-${i}-${g.tools[0].tool_id ?? g.name}`} group={g} accent={accent} />
           ))}
         </View>
       ) : null}
-      {turn.assistant ? (
+      {askUserAnswers.map((a) => (
+        <AskUserAnswer
+          key={a.tool_id ?? a.result}
+          result={a.result}
+          question={a.question}
+          accent={accent}
+          colors={colors}
+          fonts={fonts}
+          fontSizes={fontSizes}
+        />
+      ))}
+      {showAssistant ? (
         <ProfileAssistantMessage
           text={turn.assistant}
           onLongPress={() => onActionTarget({
@@ -77,7 +104,7 @@ const TurnBlock = memo(function TurnBlock({ turn, turnIndex, accent, colors, fon
             turnIndex,
           })}
         />
-      ) : turn.pending && !(turn.tools?.length) ? (
+      ) : turn.pending && !otherTools.length && !askUsers.length ? (
         <View style={TURN_STYLES.thinkingHolder}>
           <ThinkingDots color={accent} />
         </View>
@@ -90,6 +117,51 @@ const TurnBlock = memo(function TurnBlock({ turn, turnIndex, accent, colors, fon
     </View>
   );
 });
+
+function AskUserAnswer({ result, question, accent, colors, fonts, fontSizes }) {
+  const noAnswerTag = askUserNoAnswerTag(result);
+  if (noAnswerTag) {
+    return (
+      <View style={{ paddingHorizontal: space.s7 }}>
+        <View
+          style={{
+            borderRadius: radii.md,
+            borderWidth: 0.5,
+            borderColor: colors.line,
+            paddingHorizontal: space.s5,
+            paddingVertical: space.s4,
+            gap: space.s2,
+          }}
+        >
+          <Text style={{ fontFamily: fonts.sans.medium, fontSize: fontSizes.bodyLg, color: colors.ink3 }}>
+            {question || result}
+          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s2 }}>
+            <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.tiny, color: colors.ink3 }}>∅</Text>
+            <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.tiny, color: colors.ink3, letterSpacing: 0.6 }}>
+              {noAnswerTag}
+            </Text>
+          </View>
+        </View>
+      </View>
+    );
+  }
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s3, paddingHorizontal: space.s7 }}>
+      <Diamond color={accent ?? colors.ink3} size={11} />
+      <Text
+        style={{
+          flex: 1,
+          fontFamily: fonts.sans.regular,
+          fontSize: fontSizes.bodyLg,
+          color: colors.ink,
+        }}
+      >
+        {result}
+      </Text>
+    </View>
+  );
+}
 
 function EmptyThread({ profileName, model, accent, colors, fonts }) {
   return (

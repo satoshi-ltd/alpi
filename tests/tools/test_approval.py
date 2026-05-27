@@ -40,14 +40,14 @@ def test_caution_denied_without_callback() -> None:
 
 def test_caution_allowed_once_does_not_persist() -> None:
     choices = iter(["once"])
-    _approval.set_prompt_callback(lambda c, p, s: next(choices))
+    _approval.set_prompt_callback(lambda c, p, s, cwd=None: next(choices))
     assert check("rm -rf node_modules").allowed
     _approval.set_prompt_callback(None)
     assert not check("rm -rf node_modules").allowed
 
 
 def test_caution_session_persists_until_cleared() -> None:
-    _approval.set_prompt_callback(lambda c, p, s: "session")
+    _approval.set_prompt_callback(lambda c, p, s, cwd=None: "session")
     assert check("rm -rf node_modules").allowed
     _approval.set_prompt_callback(None)
     assert check("rm -rf node_modules").allowed
@@ -57,7 +57,7 @@ def test_caution_session_persists_until_cleared() -> None:
 
 
 def test_caution_always_persists_to_config(tmp_path: Path) -> None:
-    _approval.set_prompt_callback(lambda c, p, s: "always")
+    _approval.set_prompt_callback(lambda c, p, s, cwd=None: "always")
     assert check("rm -rf node_modules").allowed
 
     import yaml
@@ -75,7 +75,7 @@ def test_allowlist_from_config_honoured(tmp_path: Path) -> None:
 
 
 def test_deny_blocks() -> None:
-    _approval.set_prompt_callback(lambda c, p, s: "deny")
+    _approval.set_prompt_callback(lambda c, p, s, cwd=None: "deny")
     d = check("rm -rf node_modules")
     assert not d.allowed
     assert "rejected" in d.reason.lower()
@@ -83,7 +83,7 @@ def test_deny_blocks() -> None:
 
 def test_dangerous_not_prompted_even_with_callback() -> None:
     called = []
-    _approval.set_prompt_callback(lambda c, p, s: called.append(1) or "always")
+    _approval.set_prompt_callback(lambda c, p, s, cwd=None: called.append(1) or "always")
     d = check("mkfs.ext4 /dev/sda1")
     assert not d.allowed
     assert called == []
@@ -162,7 +162,7 @@ def test_empty_entries_skipped(tmp_path: Path) -> None:
 
 def test_session_allowlist_still_takes_precedence(tmp_path: Path) -> None:
     """Session allowlist short-circuits before the persistent path is consulted."""
-    _approval.set_prompt_callback(lambda c, p, s: "session")
+    _approval.set_prompt_callback(lambda c, p, s, cwd=None: "session")
     assert check("rm -rf node_modules").allowed
     _approval.set_prompt_callback(None)
     # Same severity-category passes without persistent allowlist or callback.

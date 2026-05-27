@@ -1,5 +1,47 @@
 # Changelog
 
+## v0.6.18 — 2026-05-27 — ask_user (UX.1) + approval gets cwd context
+
+The agent can ask a closed question through a structured primitive
+that owned clients (desktop / mobile / TUI) render natively, while
+gateways degrade to a numbered text list. The approval modal also
+gains the working directory the command will run in.
+
+- New tool ``ask_user(question, choices, allow_other=True, multi=False)``.
+  Accepts 2-4 ``{label, description?}`` items for single-select and
+  2-8 for ``multi=True``; validates uniqueness and non-empty labels,
+  routes by surface, and returns the chosen string back to the model.
+  With ``multi=True`` the result is the picked labels joined by
+  ``", "`` and ``allow_other`` is ignored.
+- ``alpi/host/clarification.py`` mirrors the approval Future-bridge.
+  Two RPCs (``host.clarification.respond`` /
+  ``host.clarification.pending``), two events
+  (``clarification.request`` / ``clarification.resolved``), 5-minute
+  default timeout, idempotent late-response handling. Both RPCs accept
+  ``member`` tokens — any device that can chat with the agent must be
+  able to answer its questions; ``approval.respond`` stays admin-only
+  because it authorizes commands. For ``multi=True`` the wire protocol
+  is a JSON-array string of labels (``'["A","B"]'``); the server
+  validates every element against the offered labels, dedupes, and
+  joins to ``", "`` for the model — labels that contain commas survive
+  intact.
+- The TUI plugs an inline ``stdin/stdout`` handler for ``alpi chat
+  --once`` and a Textual ``ClarificationPanel`` for the full
+  ``alpi chat`` shell. Both reprompt on empty / unknown multi picks
+  instead of resolving to the empty string.
+- Gateway turns (``ALPI_PLATFORM`` set) short-circuit to a numbered
+  text block so the user can answer freely in their next inbound
+  message; no Future, no host plumbing.
+- The approval gate now receives the *effective* ``cwd`` (already
+  resolved through ``terminal._default_cwd()``) and forwards it in the
+  ``approval.request`` event so owned clients can show it under the
+  command. Path is collapsed to ``~`` on the daemon side.
+- System prompt is firmer about the boundary: the agent is **not** the
+  safety layer for shell commands — ``terminal`` has its own approval
+  modal and the user decides there. Refusing destructive commands in
+  prose, or pre-confirming them via ``ask_user(Continue, Cancel)``, is
+  flagged as wrong behaviour.
+
 ## v0.6.17 — 2026-05-27 — runtime-created profiles come online without a daemon restart
 
 Creating a profile while the daemon was running left it half-alive:

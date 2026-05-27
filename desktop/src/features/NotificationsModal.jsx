@@ -9,6 +9,7 @@ import {
   IconBtn,
   MarkdownBody,
   Mono,
+  Tip,
   XIcon,
 } from "../primitives/index.js";
 import { useNotify } from "../primitives/Notification.jsx";
@@ -186,9 +187,11 @@ export default function NotificationsModal({
           {unread > 0 ? (
             <Btn variant="ghost" onClick={onMarkAll}>Mark all read</Btn>
           ) : null}
-          <IconBtn aria-label="Close" onClick={() => onClose?.()}>
-            <XIcon />
-          </IconBtn>
+          <Tip text="Close" side="down">
+            <IconBtn aria-label="Close" onClick={() => onClose?.()}>
+              <XIcon />
+            </IconBtn>
+          </Tip>
         </header>
 
         <div className={styles.body}>

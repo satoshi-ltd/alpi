@@ -19,6 +19,7 @@ export function Sheet({
   footer,
   children,
   maxHeight = '88%',
+  hideHeader = false,
 }) {
   const { colors, fonts, shadow , fontSizes} = useTheme();
   const insets = useSafeAreaInsets();
@@ -69,6 +70,7 @@ export function Sheet({
                   }}
                 />
               </View>
+              {hideHeader ? null : (
               <View
                 style={{
                   flexDirection: 'row',
@@ -113,6 +115,7 @@ export function Sheet({
                   </Pressable>
                 )}
               </View>
+              )}
             </View>
           </GestureDetector>
           <View

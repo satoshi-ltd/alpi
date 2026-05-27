@@ -82,7 +82,12 @@ def _client_id_hint() -> str | None:
     return os.environ.get("ALPI_HOST_CLIENT_ID") or None
 
 
-def host_approval_callback(cmd: str, pattern: str, severity: _approval.Severity) -> str:
+def host_approval_callback(
+    cmd: str,
+    pattern: str,
+    severity: _approval.Severity,
+    cwd: str | None = None,
+) -> str:
     """Synchronous prompt callback signature expected by ``_approval.check``.
 
     Runs on the tool execution thread; bridges to the asyncio loop, awaits
@@ -102,12 +107,23 @@ def host_approval_callback(cmd: str, pattern: str, severity: _approval.Severity)
     except Exception:  # noqa: BLE001
         profile = os.environ.get("ALPI_PROFILE") or None
 
+    # Collapse $HOME→~ on the daemon side so every client renders the same
+    # display string without needing access to the daemon's filesystem.
+    cwd_display: str | None = None
+    if cwd:
+        try:
+            home_path = os.path.expanduser("~")
+            cwd_display = cwd.replace(home_path, "~", 1) if home_path and cwd.startswith(home_path) else cwd
+        except Exception:  # noqa: BLE001
+            cwd_display = cwd
+
     payload = {
         "request_id": request_id,
         "command": cmd,
         "severity": severity.value if hasattr(severity, "value") else str(severity),
         "pattern": pattern,
         "profile": profile,
+        "cwd": cwd_display,
         "ts": time.time(),
         "timeout_s": PROMPT_TIMEOUT_S,
     }

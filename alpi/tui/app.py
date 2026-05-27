@@ -265,12 +265,16 @@ class AlpiApp(App):
 
         from alpi.tools._approval import set_prompt_callback
         set_prompt_callback(self._approval_prompt_blocking)
+        from alpi.tools._clarification import set_handler as _set_clarify
+        _set_clarify(self._clarification_prompt_blocking)
 
     async def on_unmount(self) -> None:
         from alpi.tools._approval import set_prompt_callback
         set_prompt_callback(None)
+        from alpi.tools._clarification import set_handler as _set_clarify
+        _set_clarify(None)
 
-    def _approval_prompt_blocking(self, command: str, pattern: str, severity) -> str:
+    def _approval_prompt_blocking(self, command: str, pattern: str, severity, cwd: str | None = None) -> str:
         import threading
         from alpi.tui.screens import ApprovalPanel
 
@@ -289,6 +293,36 @@ class AlpiApp(App):
         if not done.wait(60):
             self.call_from_thread(self._dismiss_panels)
             return "deny"
+        return result[0]
+
+    def _clarification_prompt_blocking(
+        self,
+        question: str,
+        choices: list[dict],
+        allow_other: bool,
+        multi: bool = False,
+    ) -> str:
+        import threading
+        from alpi.tui.screens import ClarificationPanel
+
+        result: list[str] = [""]
+        done = threading.Event()
+
+        def _on_choice(choice: str) -> None:
+            result[0] = choice or ""
+            done.set()
+
+        def _show() -> None:
+            self._show_panel(
+                ClarificationPanel(
+                    question, choices, bool(allow_other), bool(multi), _on_choice,
+                ),
+            )
+
+        self.call_from_thread(_show)
+        if not done.wait(300):
+            self.call_from_thread(self._dismiss_panels)
+            return ""
         return result[0]
 
     def on_input_submitted(self, event: Input.Submitted) -> None:

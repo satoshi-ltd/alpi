@@ -121,7 +121,8 @@ _session_allowlist: set[str] = set()
 _lock = threading.Lock()
 
 PromptChoice = str  # "once" | "session" | "always" | "deny"
-PromptFn = Callable[[str, str, Severity], PromptChoice]
+# ``cwd`` is the *effective* working directory the command will run in (already resolved through ``terminal._default_cwd()``). Callbacks that want to display it to the user can collapse ``$HOME`` to ``~`` themselves.
+PromptFn = Callable[[str, str, Severity, Optional[str]], PromptChoice]
 
 _prompt_callback: Optional[PromptFn] = None
 
@@ -260,14 +261,14 @@ def _log_decision(cmd: str, decision: Decision) -> None:
         pass
 
 
-def check(cmd: str) -> Decision:
-    decision = _check_inner(cmd)
+def check(cmd: str, cwd: str | None = None) -> Decision:
+    decision = _check_inner(cmd, cwd=cwd)
     if decision.severity != Severity.SAFE:
         _log_decision(cmd, decision)
     return decision
 
 
-def _check_inner(cmd: str) -> Decision:
+def _check_inner(cmd: str, cwd: str | None = None) -> Decision:
     severity, desc = classify(cmd)
     if severity == Severity.SAFE:
         return Decision(allowed=True, severity=severity)
@@ -309,7 +310,7 @@ def _check_inner(cmd: str) -> Decision:
         )
 
     try:
-        choice = (fn(cmd, desc, severity) or "deny").lower()
+        choice = (fn(cmd, desc, severity, cwd) or "deny").lower()
     except Exception as e:  # noqa: BLE001
         return Decision(
             allowed=False, severity=severity, pattern=desc,

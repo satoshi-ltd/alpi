@@ -1,23 +1,22 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 
-import { Modal } from "../primitives/index.js";
+import { Button, Diamond, IconBtn, Modal, Tip } from "../primitives/index.js";
+import { X } from "../primitives/icons.jsx";
 import styles from "./ApprovalModal.module.css";
 
-const CHOICES = [
-  { value: "once", label: "Allow once", hint: "Approve just this command." },
-  { value: "session", label: "Allow this session", hint: "Re-approve next time the daemon restarts." },
-  { value: "always", label: "Always allow this pattern", hint: "Persist in config.yaml allowlist." },
-  { value: "deny", label: "Deny", hint: "Refuse — model will be told and move on.", danger: true },
+const ALLOW_CHOICES = [
+  { value: "once",    label: "Allow once",        hint: "just this invocation" },
+  { value: "session", label: "Allow this session", hint: "remember until daemon restarts" },
+  { value: "always",  label: "Always allow",       hint: "add to allowlist" },
 ];
 
-// Hooks into App.jsx's daemon-event stream via the `requests` prop (a queue of pending approvals).
-// Top of queue is shown; on respond/dismiss it pops. respond() calls host.approval.respond through Rust.
+// Top of the `requests` queue is shown; respond/dismiss pops via `onResolved`.
+// Closing the modal (X or backdrop key) maps to "deny" — the safe default.
 export default function ApprovalModal({ requests, onResolved }) {
   const current = requests[0] ?? null;
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
-  // 1Hz tick so `auto-deny in Ns` actually counts down between renders.
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
@@ -35,6 +34,13 @@ export default function ApprovalModal({ requests, onResolved }) {
     ? Math.max(0, Math.round((current.deadline - now) / 1000))
     : null;
 
+  const eyebrow = useMemo(() => {
+    if (!current) return null;
+    const severity = (current.severity || "caution").toLowerCase();
+    const tail = remaining !== null ? `AUTO-DENY IN ${remaining}S` : null;
+    return { severity, sevLabel: severity.toUpperCase(), tail };
+  }, [current, remaining]);
+
   if (!current) return null;
 
   async function choose(choice) {
@@ -46,7 +52,6 @@ export default function ApprovalModal({ requests, onResolved }) {
         requestId: current.request_id,
         choice,
       });
-      // Daemon returns {ok: false, reason} when the request expired racing the timeout — surface it but still pop locally.
       if (res && res.ok === false) {
         setErr(res.reason || "request no longer pending");
       }
@@ -57,36 +62,69 @@ export default function ApprovalModal({ requests, onResolved }) {
     }
   }
 
+  const deny = () => choose("deny");
+
   return (
-    <Modal open closeOnBackdrop={false} width={480}>
+    <Modal open closeOnBackdrop={false} width="var(--modal-md)">
       <div className={styles.head}>
-        <div className={styles.severity}>
-          <span className={styles.dot} data-severity={current.severity} />
-          {(current.severity || "caution").toUpperCase()}
+        <div className={styles.headText}>
+          <div className={styles.eyebrow}>
+            <span className={styles[`sev_${eyebrow.severity}`]}>SANDBOX</span>
+            <span className={styles.sep}> · </span>
+            <span className={styles.diamondWrap}>
+              <Diamond color={`var(--c-danger)`} size={8} />
+            </span>
+            {current.profile ? (
+              <span className={styles.profile}>@{current.profile.toUpperCase()}</span>
+            ) : null}
+            <span className={styles.sep}> · </span>
+            <span className={styles.surface}>SHELL</span>
+            {eyebrow.tail ? (
+              <>
+                <span className={styles.sep}> · </span>
+                <span>{eyebrow.tail}</span>
+              </>
+            ) : null}
+          </div>
+          <div className={styles.title}>Allow this command?</div>
         </div>
-        <div className={styles.pattern}>{current.pattern}</div>
+        <Tip text="Close" side="down">
+          <IconBtn aria-label="Close" onClick={deny} disabled={busy}>
+            <X />
+          </IconBtn>
+        </Tip>
       </div>
+
       <pre className={styles.command}>{current.command}</pre>
-      {current.profile ? (
-        <div className={styles.meta}>profile: {current.profile}</div>
-      ) : null}
-      {remaining !== null ? (
-        <div className={styles.meta}>auto-deny in {remaining}s</div>
-      ) : null}
+      {current.cwd ? <div className={styles.cwd}>cwd <span className={styles.cwdPath}>{current.cwd}</span></div> : null}
+
       <div className={styles.choices}>
-        {CHOICES.map((c) => (
+        {ALLOW_CHOICES.map((c) => (
           <button
             key={c.value}
             type="button"
-            className={`${styles.choice} ${c.danger ? styles.danger : ""}`}
+            className={styles.row}
             onClick={() => choose(c.value)}
             disabled={busy}
           >
-            <div className={styles.choiceLabel}>{c.label}</div>
-            <div className={styles.choiceHint}>{c.hint}</div>
+            <div className={styles.rowLabel}>{c.label}</div>
+            <div className={styles.rowHint}>{c.hint}</div>
           </button>
         ))}
       </div>
+
+      <div className={styles.footer}>
+        <Button
+          variant="danger"
+          size="lg"
+          className={styles.denyBtn}
+          onClick={deny}
+          disabled={busy}
+        >
+          Deny
+        </Button>
+      </div>
+
       {err ? <div className={styles.error}>{err}</div> : null}
     </Modal>
   );

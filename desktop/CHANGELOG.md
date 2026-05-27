@@ -11,6 +11,27 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.3.23 — 2026-05-27 — ask_user clarification modal (UX.1)
+
+When the agent calls ``ask_user`` on the daemon, desktop pops a
+native modal with one button per choice instead of asking in chat
+text. Pairs with the matching mobile sheet and the TUI inline
+prompt.
+
+- New ``ClarificationModal``: question + per-choice buttons (with
+  optional description), Cancel, and an "Other…" affordance that
+  swaps in a text input when the user wants to answer outside the
+  enumerated set.
+- Same event/queue plumbing as the approval modal: subscribes to
+  ``clarification.request``/``clarification.resolved`` on the live
+  stream, calls ``host.clarification.pending`` on connection switch
+  for cold-start recovery, dedupes by ``request_id``.
+- Two new Tauri commands — ``clarification_respond`` and
+  ``clarification_pending`` — forward to the daemon RPCs of the same
+  name.
+
+Requires alpi ≥ 0.6.18.
+
 ## v0.3.22 — 2026-05-26 — Manage Sessions
 
 The Sessions popover in the chat header gains a

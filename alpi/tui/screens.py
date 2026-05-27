@@ -552,3 +552,159 @@ class ApprovalPanel(FloatingPanel):
         choice = event.option.id or "deny"
         self.remove()
         self._on_choice(choice)
+
+
+class ClarificationPanel(FloatingPanel):
+    panel_title = "Question"
+    DEFAULT_CSS = _LIST_PANEL_CSS + """
+    ClarificationPanel #clarify-other {
+        margin-top: 1;
+    }
+    """
+
+    _OTHER_KEY = "__other__"
+
+    def __init__(
+        self,
+        question: str,
+        choices: list[dict],
+        allow_other: bool,
+        multi: bool,
+        on_choice,
+    ) -> None:
+        super().__init__()
+        self._question = question
+        self._choices = choices
+        self._allow_other = bool(allow_other) and not bool(multi)
+        self._multi = bool(multi)
+        self._on_choice = on_choice
+        self._awaiting_input = False
+        self._input_purpose = ""
+        self.panel_title = "Question"
+
+    def compose_body(self) -> ComposeResult:
+        from alpi.tui.list_row import build_options
+        yield Static(self._question, classes="entry-desc")
+        if self._multi:
+            from textual.widgets import Input
+            yield Static(
+                "Multi-select — type comma-separated numbers or labels.",
+                classes="entry-desc",
+            )
+            for i, c in enumerate(self._choices, start=1):
+                line = f"  {i}. {c['label']}"
+                if c.get("description"):
+                    line += f" — {c['description']}"
+                yield Static(line, classes="entry-desc")
+            self._awaiting_input = True
+            self._input_purpose = "multi"
+            yield Input(
+                placeholder="e.g. 1,3 or Sleep summary, Training load",
+                id="clarify-other",
+            )
+            return
+        accent = self.app.theme_variables.get("accent")
+        items: list[tuple[str, str, str]] = []
+        for c in self._choices:
+            items.append((c["label"], c["label"], c.get("description", "") or ""))
+        if self._allow_other:
+            items.append((
+                self._OTHER_KEY, "Other",
+                "type your own answer",
+            ))
+        options = build_options(items, accent=accent)
+        yield OptionList(*options, id="clarify-options", compact=True)
+
+    def on_mount(self) -> None:
+        self.call_after_refresh(self._focus_first)
+
+    def _focus_first(self) -> None:
+        try:
+            if self._multi:
+                from textual.widgets import Input
+                self.query_one(Input).focus()
+            else:
+                self.query_one(OptionList).focus()
+        except Exception:  # noqa: BLE001
+            pass
+
+    def on_option_list_option_selected(
+        self, event: OptionList.OptionSelected,
+    ) -> None:
+        choice = event.option.id or ""
+        if choice == self._OTHER_KEY:
+            self._show_other_input()
+            return
+        self.remove()
+        self._on_choice(choice)
+
+    def _show_other_input(self) -> None:
+        from textual.widgets import Input
+        self._awaiting_input = True
+        self._input_purpose = "other"
+        try:
+            self.query_one(OptionList).remove()
+        except Exception:  # noqa: BLE001
+            pass
+        inp = Input(
+            placeholder="Type your answer, press Enter…",
+            id="clarify-other",
+        )
+        self.mount(inp)
+        inp.focus()
+
+    def on_input_submitted(self, event) -> None:
+        if not self._awaiting_input:
+            return
+        text = (event.value or "").strip()
+        if self._input_purpose == "multi":
+            picks = self._resolve_multi(text)
+            if not picks:
+                # Don't close — let the user retry (mirrors the inline TUI reprompt).
+                self._show_multi_error(
+                    "No valid picks recognised. Use the numbers shown or the "
+                    "labels exactly; separate with commas."
+                )
+                return
+            self.remove()
+            self._on_choice(", ".join(picks))
+            return
+        self.remove()
+        self._on_choice(text)
+
+    def _show_multi_error(self, message: str) -> None:
+        from textual.widgets import Input
+        try:
+            existing = self.query_one("#clarify-error", Static)
+            existing.update(message)
+        except Exception:  # noqa: BLE001
+            try:
+                inp = self.query_one(Input)
+                err = Static(message, id="clarify-error", classes="entry-desc")
+                self.mount(err, before=inp)
+            except Exception:  # noqa: BLE001
+                pass
+        try:
+            inp = self.query_one(Input)
+            inp.value = ""
+            inp.focus()
+        except Exception:  # noqa: BLE001
+            pass
+
+    def _resolve_multi(self, raw: str) -> list[str]:
+        picked: list[str] = []
+        label_lookup = {c["label"].lower(): c["label"] for c in self._choices}
+        for tok in (t.strip() for t in raw.split(",")):
+            if not tok:
+                continue
+            if tok.isdigit():
+                idx = int(tok)
+                if 1 <= idx <= len(self._choices):
+                    lab = self._choices[idx - 1]["label"]
+                    if lab not in picked:
+                        picked.append(lab)
+                continue
+            resolved = label_lookup.get(tok.lower())
+            if resolved and resolved not in picked:
+                picked.append(resolved)
+        return picked

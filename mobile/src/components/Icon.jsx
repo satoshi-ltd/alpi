@@ -18,6 +18,7 @@ const PATHS = {
   cpu: 'M4 4h16v16H4zM8 8h8v8H8zM4 8h2M4 16h2M20 8h-2M20 16h-2M8 4v2M16 4v2M8 20v2M16 20v2',
   wifi: 'M2 9a15 15 0 0120 0M5 13a10 10 0 0114 0M8.5 16.5a5 5 0 017 0',
   x: 'M6 6l12 12M18 6L6 18',
+  edit: 'M16.5 3.75l3.75 3.75L9 18.75H5.25V15z',
   // Clock — circle outline (in EXTRAS) + two hands at 12 + 4 to read as "recent / sessions".
   clock: 'M12 7v5l3 2',
 };

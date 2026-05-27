@@ -6,6 +6,7 @@ from alpi.tools.base import Tool, ToolResult
 from alpi.tools._availability import is_available, invalidate as _invalidate_availability
 from alpi.tools import (
     peer,
+    ask_user as ask_user_tool,
     browser,
     db as db_tool,
     delegate,
@@ -116,6 +117,7 @@ for _mod in (
     stt_tool,
     peer,
     workgroup_tool,
+    ask_user_tool,
 ):
     _cls = getattr(_mod, "TOOL", None)
     if _cls is not None:

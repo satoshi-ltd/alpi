@@ -1,5 +1,9 @@
 import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
+
+import IconBtn from "./IconBtn.jsx";
+import Tip from "./Tip.jsx";
+import { XIcon } from "./icons.jsx";
 import styles from "./Modal.module.css";
 
 export default function Modal({
@@ -48,16 +52,15 @@ export default function Modal({
           <div className={styles.titleRow}>
             {title && <div className={styles.title}>{title}</div>}
             {closeButton && (
-              <button
-                type="button"
-                className={`iconbtn ${styles.closeBtn}`}
-                onClick={() => onClose?.()}
-                aria-label="Close"
-              >
-                <svg viewBox="0 0 16 16" width="14" height="14" stroke="currentColor" strokeWidth="1.5" fill="none">
-                  <path d="M4 4l8 8M12 4l-8 8" />
-                </svg>
-              </button>
+              <Tip text="Close" side="down">
+                <IconBtn
+                  aria-label="Close"
+                  className={styles.closeBtn}
+                  onClick={() => onClose?.()}
+                >
+                  <XIcon />
+                </IconBtn>
+              </Tip>
             )}
           </div>
         )}

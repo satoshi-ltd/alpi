@@ -283,10 +283,15 @@ def _run_once(
         engine.request_interrupt()
 
     prev_handler = _signal.signal(_signal.SIGINT, _on_sigint)
+    from alpi.tools import _clarification as _clar
+    from alpi.tui.clarification_inline import inline_handler as _inline_clarify
+    prev_clarify = _clar.get_handler()
+    _clar.set_handler(_inline_clarify)
     try:
         engine.run_turn(user_text, emit=sink, persist_inflight=persist)
     finally:
         _signal.signal(_signal.SIGINT, prev_handler)
+        _clar.set_handler(prev_clarify)
     if persist:
         try:
             engine.save_session()

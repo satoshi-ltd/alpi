@@ -14,6 +14,26 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.1.18 — 2026-05-27 — ask_user clarification sheet (UX.1)
+
+When the agent calls ``ask_user`` on a daemon paired with this
+device, mobile pops a native sheet with one button per choice
+instead of asking via numbered chat text.
+
+- New ``ClarificationSheet`` (rendering) + ``useClarificationQueue``
+  (state + RPC) under ``src/features/clarification/``. Mirrors the
+  approval-sheet pattern.
+- Subscribes to ``clarification.request`` /
+  ``clarification.resolved`` on the live event stream and fetches
+  ``host.clarification.pending`` whenever the active endpoint
+  changes so cold-start clients pick up in-flight requests.
+- An "Other…" affordance swaps in a text input when the user wants
+  to answer outside the enumerated choices; closing the sheet sends
+  a clean ``User cancelled clarification.`` so the daemon resolves
+  the model's Future cleanly.
+
+Requires alpi ≥ 0.6.18.
+
 ## v0.1.17 — 2026-05-26 — drop the TTS autoplay toggle
 
 Audio playback is already a per-message action (the play button in

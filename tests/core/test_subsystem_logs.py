@@ -79,7 +79,7 @@ def test_approval_logs_allow_when_user_approves(tmp_path: Path, monkeypatch) -> 
     monkeypatch.setattr(home_mod, "get_home", lambda: tmp_path)
 
     _approval.clear_session_allowlist()
-    _approval.set_prompt_callback(lambda cmd, desc, sev: "session")
+    _approval.set_prompt_callback(lambda cmd, desc, sev, cwd=None: "session")
 
     decision = _approval.check("sudo -s")
     assert decision.allowed is True
