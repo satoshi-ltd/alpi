@@ -8,9 +8,7 @@ import logging
 import os
 import sys
 from pathlib import Path
-from typing import Any
 
-from alpi import config as config_mod
 from alpi._proc_io import drain_tail
 from alpi.gateway import delivery
 from alpi.gateway.base import IncomingMessage, OutgoingMessage, Platform
@@ -52,16 +50,6 @@ async def _process(platform: Platform, msg: IncomingMessage, home: Path) -> None
 
     parsed_mention = alp_mention.parse(msg.text, home=home)
     if parsed_mention is not None:
-        # Mirror the LLM tool-trace UX.
-        platform_cfg = _load_platform_cfg(home, platform.name)
-        if _show_tool_trace(platform.name, platform_cfg):
-            trace = _format_tool_trace({
-                "name": "peer",
-                "preview": f"peer_id={parsed_mention.peer_id}",
-            })
-            await platform.send(OutgoingMessage(
-                external_chat_id=msg.external_chat_id, text=trace,
-            ))
         result = await alp_mention.execute(
             home, parsed_mention.peer_id, parsed_mention.prompt,
         )
@@ -85,16 +73,12 @@ async def _process(platform: Platform, msg: IncomingMessage, home: Path) -> None
             ))
         return
 
-    # Per-platform UX config.
-    platform_cfg = _load_platform_cfg(home, platform.name)
     typing_task: asyncio.Task | None = None
     if _typing_indicator_enabled(platform.name):
         typing_task = asyncio.create_task(_typing_loop(platform, msg.external_chat_id))
 
-    show_trace = _show_tool_trace(platform.name, platform_cfg)
-
     try:
-        reply = await _run_agent(msg, platform, home, show_trace=show_trace)
+        reply = await _run_agent(msg, platform, home)
     finally:
         if typing_task is not None:
             typing_task.cancel()
@@ -137,8 +121,7 @@ def _llm_prompt(msg: IncomingMessage) -> str:
     return msg.text
 
 
-async def _run_agent(msg: IncomingMessage, platform: Platform, home: Path,
-                     show_trace: bool) -> str:
+async def _run_agent(msg: IncomingMessage, platform: Platform, home: Path) -> str:
     from alpi.home import effective_profile_env
     env = effective_profile_env(home, extra={
         "ALPI_HOME": str(home),
@@ -182,21 +165,11 @@ async def _run_agent(msg: IncomingMessage, platform: Platform, home: Path,
                 if event.get("name") == "send_message":
                     args = event.get("args")
                     pending_send_args.append(args if isinstance(args, dict) else {})
-                if show_trace:
-                    trace = _format_tool_trace(event)
-                    await platform.send(OutgoingMessage(
-                        external_chat_id=msg.external_chat_id, text=trace,
-                    ))
             elif kind == "tool_end" and event.get("name") == "send_message":
                 args = pending_send_args.pop(0) if pending_send_args else {}
                 if event.get("ok") is True:
                     from alpi import outputs as outputs_mod
                     outputs_mod.record_child_send_message(home, args)
-            elif kind == "error" and show_trace:
-                await platform.send(OutgoingMessage(
-                    external_chat_id=msg.external_chat_id,
-                    text=f"⚠︎ {event.get('text', 'error')}",
-                ))
     except asyncio.CancelledError:
         # Cancellation doesn't kill the child — terminate, give it 3s, then kill.
         try:
@@ -234,34 +207,11 @@ async def _run_agent(msg: IncomingMessage, platform: Platform, home: Path,
     return reply
 
 
-def _format_tool_trace(event: dict[str, Any]) -> str:
-    name = event.get("name", "?")
-    preview = (event.get("preview") or "").strip()
-    if preview:
-        return f"◆ {name} · {preview}"
-    return f"◆ {name}"
-
-
-def _load_platform_cfg(home: Path, platform: str) -> dict[str, Any]:
-    try:
-        cfg = config_mod.load(home)
-        return dict((cfg.gateway or {}).get(platform, {}))
-    except Exception as e:  # noqa: BLE001
-        log.warning("Could not load gateway config for %s: %s", platform, e)
-        return {}
-
-
 _CHAT_PLATFORMS = frozenset({"telegram", "matrix"})
 
 
 def _typing_indicator_enabled(platform: str) -> bool:
     return platform in _CHAT_PLATFORMS
-
-
-def _show_tool_trace(platform: str, platform_cfg: dict[str, Any]) -> bool:
-    if platform in _CHAT_PLATFORMS:
-        return bool(platform_cfg.get("show_tool_trace", True))
-    return False  # email → tool traces would each be a separate message
 
 
 async def serve(home: Path) -> None:

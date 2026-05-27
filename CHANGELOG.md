@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.6.19 — 2026-05-27 — gateways stay text-first
+
+Telegram and Matrix no longer post intermediate tool-call lines into the
+chat. You get a single, clean reply per turn — the same one a human
+would send. If you want to watch what the agent is doing, use a
+TUI / desktop / mobile session.
+
+- Removed the per-platform ``show_tool_trace`` knob from
+  ``config.yaml`` (silently ignored on load — no migration needed).
+- ``@mention`` replies on gateways no longer prefix a ``◆ peer …``
+  trace line.
+- Owned clients (TUI / desktop / mobile) are unchanged: they keep
+  rendering tool calls in their own native UI.
+
 ## v0.6.18 — 2026-05-27 — ask_user (UX.1) + approval gets cwd context
 
 The agent can ask a closed question through a structured primitive

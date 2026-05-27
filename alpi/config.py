@@ -43,12 +43,8 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "servers": {},
     },
     "gateway": {
-        "telegram": {
-            "show_tool_trace": True,
-        },
-        "matrix": {
-            "show_tool_trace": True,
-        },
+        "telegram": {},
+        "matrix": {},
         "imap": {
             "poll_interval": 60,
             "mark_as_read": True,
@@ -336,8 +332,8 @@ def atomic_write_yaml(path: Path, data: dict[str, Any]) -> None:
 
 
 _GATEWAY_ALLOWED_KEYS: dict[str, frozenset[str]] = {
-    "telegram": frozenset({"show_tool_trace"}),
-    "matrix": frozenset({"show_tool_trace"}),
+    "telegram": frozenset(),
+    "matrix": frozenset(),
     "imap": frozenset({"poll_interval", "mark_as_read"}),
     "gmail": frozenset({"poll_interval", "mark_as_read"}),
 }

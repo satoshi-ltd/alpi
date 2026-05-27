@@ -53,8 +53,9 @@ def test_save_drops_suppressed_gateway_keys(tmp_home_no_env: Path) -> None:
     config.save(cfg)
 
     on_disk = yaml.safe_load((tmp_home_no_env / "config.yaml").read_text())
-    assert on_disk["gateway"]["telegram"] == {"show_tool_trace": True}
-    assert on_disk["gateway"]["matrix"] == {"show_tool_trace": False}
+    # show_tool_trace was dropped — gateways never emit tool traces anymore.
+    assert on_disk["gateway"]["telegram"] == {}
+    assert on_disk["gateway"]["matrix"] == {}
     assert on_disk["gateway"]["imap"] == {"poll_interval": 90, "mark_as_read": False}
     assert on_disk["gateway"]["gmail"] == {"poll_interval": 30, "mark_as_read": True}
 

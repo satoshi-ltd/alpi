@@ -69,7 +69,8 @@ def _event_lines(events: list[dict[str, Any]]) -> list[bytes]:
 
 
 @pytest.mark.asyncio
-async def test_run_agent_streams_tool_traces(monkeypatch, tmp_home_no_env: Path) -> None:
+async def test_run_agent_never_emits_tool_traces(monkeypatch, tmp_home_no_env: Path) -> None:
+    """Gateways stay text-first: tool traces are never sent as separate messages."""
     events = [
         {"kind": "tool_start", "name": "memory", "preview": "update USER.md"},
         {"kind": "tool_start", "name": "web_search", "preview": "madrid weather"},
@@ -82,29 +83,7 @@ async def test_run_agent_streams_tool_traces(monkeypatch, tmp_home_no_env: Path)
 
     platform = FakePlatform(tmp_home_no_env)
     msg = IncomingMessage(platform="fake", external_user_id="u", external_chat_id="c", text="hi")
-    reply = await gw_run._run_agent(msg, platform, tmp_home_no_env, show_trace=True)
-
-    assert reply == "done"
-    assert [m.text for m in platform.sent] == [
-        "◆ memory · update USER.md",
-        "◆ web_search · madrid weather",
-    ]
-
-
-@pytest.mark.asyncio
-async def test_run_agent_hides_traces_when_muted(monkeypatch, tmp_home_no_env: Path) -> None:
-    events = [
-        {"kind": "tool_start", "name": "memory", "preview": "x"},
-        {"kind": "reply", "text": "done"},
-    ]
-    monkeypatch.setattr(
-        gw_run.asyncio, "create_subprocess_exec",
-        _fake_subprocess(_event_lines(events)),
-    )
-
-    platform = FakePlatform(tmp_home_no_env)
-    msg = IncomingMessage(platform="fake", external_user_id="u", external_chat_id="c", text="hi")
-    reply = await gw_run._run_agent(msg, platform, tmp_home_no_env, show_trace=False)
+    reply = await gw_run._run_agent(msg, platform, tmp_home_no_env)
 
     assert reply == "done"
     assert platform.sent == []
@@ -142,7 +121,7 @@ async def test_run_agent_reemits_child_agent_message(
 
     platform = FakePlatform(tmp_home_no_env)
     msg = IncomingMessage(platform="fake", external_user_id="u", external_chat_id="c", text="hi")
-    reply = await gw_run._run_agent(msg, platform, tmp_home_no_env, show_trace=False)
+    reply = await gw_run._run_agent(msg, platform, tmp_home_no_env)
 
     assert reply == "done"
     from alpi import outputs as outputs_mod
@@ -194,7 +173,7 @@ async def test_run_agent_records_gateway_only_send_message(
 
     platform = FakePlatform(tmp_home_no_env)
     msg = IncomingMessage(platform="fake", external_user_id="u", external_chat_id="c", text="hi")
-    await gw_run._run_agent(msg, platform, tmp_home_no_env, show_trace=False)
+    await gw_run._run_agent(msg, platform, tmp_home_no_env)
 
     from alpi import outputs as outputs_mod
     items = outputs_mod.list_outputs(tmp_home_no_env)
@@ -234,7 +213,7 @@ async def test_run_agent_records_both_with_full_delivered_to(
 
     platform = FakePlatform(tmp_home_no_env)
     msg = IncomingMessage(platform="fake", external_user_id="u", external_chat_id="c", text="hi")
-    await gw_run._run_agent(msg, platform, tmp_home_no_env, show_trace=False)
+    await gw_run._run_agent(msg, platform, tmp_home_no_env)
 
     from alpi import outputs as outputs_mod
     items = outputs_mod.list_outputs(tmp_home_no_env)
@@ -300,10 +279,10 @@ async def test_process_never_starts_typing_on_email(
 
 
 @pytest.mark.asyncio
-async def test_process_respects_telegram_show_tool_trace_false(
+async def test_process_ignores_legacy_telegram_show_tool_trace(
     monkeypatch, tmp_home_no_env: Path,
 ) -> None:
-    """gateway.telegram.show_tool_trace stays configurable per profile."""
+    """Legacy gateway.telegram.show_tool_trace is ignored; gateways stay text-first."""
     (tmp_home_no_env / "config.yaml").write_text(
         "gateway:\n  telegram:\n    show_tool_trace: false\n"
     )
@@ -330,33 +309,27 @@ async def test_process_respects_telegram_show_tool_trace_false(
 
 
 def test_gateway_config_defaults_nested(tmp_home_no_env: Path) -> None:
-    """post-suppression DEFAULT_CONFIG: chat platforms keep show_tool_trace only."""
+    """post-suppression DEFAULT_CONFIG: chat platforms carry no UX knobs; email keeps polling."""
     cfg = config.load(tmp_home_no_env)
-    assert cfg.gateway["telegram"]["show_tool_trace"] is True
-    assert cfg.gateway["matrix"]["show_tool_trace"] is True
+    assert cfg.gateway["telegram"] == {}
+    assert cfg.gateway["matrix"] == {}
     assert cfg.gateway["imap"]["poll_interval"] == 60
     assert cfg.gateway["imap"]["mark_as_read"] is True
-    for chat in ("telegram", "matrix"):
-        assert "typing_indicator" not in cfg.gateway[chat]
-    for email in ("imap", "gmail"):
-        assert "typing_indicator" not in cfg.gateway[email]
-        assert "show_tool_trace" not in cfg.gateway[email]
+    for platform in ("telegram", "matrix", "imap", "gmail"):
+        assert "typing_indicator" not in cfg.gateway[platform]
+        assert "show_tool_trace" not in cfg.gateway[platform]
 
 
 def test_gateway_config_deep_merge(tmp_home_no_env: Path) -> None:
     # Override one configurable flag and keep the rest by deep merge.
     (tmp_home_no_env / "config.yaml").write_text(
         "gateway:\n"
-        "  telegram:\n"
-        "    show_tool_trace: false\n"
         "  imap:\n"
         "    poll_interval: 30\n"
     )
     cfg = config.load(tmp_home_no_env)
-    assert cfg.gateway["telegram"]["show_tool_trace"] is False
     assert cfg.gateway["imap"]["poll_interval"] == 30
     assert cfg.gateway["imap"]["mark_as_read"] is True  # default kept
-    assert cfg.gateway["imap"]["mark_as_read"] is True          # default kept
 
 
 def test_is_allowed_uses_per_profile_env(tmp_path, monkeypatch) -> None:

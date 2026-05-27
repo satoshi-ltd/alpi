@@ -753,16 +753,16 @@ Inbound platform listeners (Telegram long-poll, IMAP polling,
 Gmail OAuth, webhook stub) hosted by the alpi daemon. Each
 platform iterates `async for msg in platform.listen()`; per
 incoming message the gateway spawns `alpi chat --once --emit-events`,
-streaming tool traces as `◆ {tool} · {arg_hint}` with the typing
-indicator on while the subprocess works.
+keeps the typing indicator on while the subprocess works, and sends
+only the final reply back to the gateway.
 
 Allowlist: `TELEGRAM_ALLOWED_CHAT_IDS` and `IMAP_ALLOWED_SENDERS`
 in `.env`, fail-closed if unset. Per-platform user config under
-`gateway.*` in `config.yaml`: chat platforms (Telegram, Matrix)
-expose `show_tool_trace`, IMAP/Gmail expose `poll_interval` and
-`mark_as_read`. Typing indicators are hardcoded by platform (chat
-on, email off — email has no typing concept); email tool traces
-are hardcoded off because each trace would be its own message.
+`gateway.*` in `config.yaml`: Telegram/Matrix intentionally expose
+no UX knobs; IMAP/Gmail expose `poll_interval` and `mark_as_read`.
+Typing indicators are hardcoded by platform (chat on, email off —
+email has no typing concept). Gateways never send intermediate tool
+traces; use TUI, desktop, or mobile when you want live execution UI.
 
 Disable for a profile via `alpi setup → Services → Daemon →
 Gateway · off` (writes `service.gateway: false`).

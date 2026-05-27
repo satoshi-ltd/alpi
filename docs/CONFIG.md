@@ -17,10 +17,8 @@ providers:
 mcp:
   servers: {}
 gateway:
-  telegram:
-    show_tool_trace: true
-  matrix:
-    show_tool_trace: true
+  telegram: {}
+  matrix: {}
   imap:
     poll_interval: 60
     mark_as_read: true
@@ -319,17 +317,11 @@ debug inspection (`cat sessions/<id>.json`) always has the full
 context. Gateway surfaces (Telegram, Email) never rendered
 reasoning, so this flag has no effect there.
 
-### Gateway — Telegram
+### Gateway — Telegram / Matrix
 
-| Key | Default | Why |
-|---|---|---|
-| `gateway.telegram.show_tool_trace` | `true` | Interactive chat; seeing tool calls in real time makes progress legible. |
-
-### Gateway — Matrix
-
-| Key | Default | Why |
-|---|---|---|
-| `gateway.matrix.show_tool_trace` | `true` | Same rationale as Telegram — Matrix is an interactive chat surface. |
+Telegram and Matrix expose no per-platform config keys. They keep
+typing indicators hardcoded on and send only the final agent reply.
+Use TUI, desktop, or mobile when you want live tool progress.
 
 ### Gateway — IMAP
 
