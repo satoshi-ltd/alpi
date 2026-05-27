@@ -11,6 +11,20 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.3.24 — 2026-05-27 — notifications get search + undo delete
+
+Cleaner inbox modal: live local search, and individual notifications
+can be removed straight from the row with a 5-second undo.
+
+- Local search bar above the list filters by body, title, profile,
+  source and severity.
+- Hover a row → the timestamp swaps to a discreet × close. Click
+  removes the notification instantly and shows a toast with **Undo**
+  for 5s; the backend delete fires after that.
+- Dropped the red bullet next to unread rows — the bold body already
+  communicates unread.
+- Requires alpi ≥ 0.6.20 (uses the new `host.outputs.delete`).
+
 ## v0.3.23 — 2026-05-27 — ask_user clarification modal (UX.1)
 
 When the agent calls ``ask_user`` on the daemon, desktop pops a

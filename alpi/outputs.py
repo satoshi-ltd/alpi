@@ -176,6 +176,17 @@ def mark_read(home: Path, output_id: str) -> dict[str, Any] | None:
     return _mutate(home, output_id, _apply)
 
 
+def delete(home: Path, output_id: str) -> bool:
+    """Remove one output by id. Returns True iff a row was actually dropped."""
+    with _lock:
+        items = _read_all(home)
+        kept = [it for it in items if it.get("id") != output_id]
+        if len(kept) == len(items):
+            return False
+        _atomic_rewrite(_store_path(home), kept)
+        return True
+
+
 def mark_all_read(home: Path) -> int:
     with _lock:
         items = _read_all(home)
@@ -306,6 +317,7 @@ __all__ = [
     "read",
     "mark_read",
     "mark_all_read",
+    "delete",
     "normalize_send_message_args",
     "record_child_send_message",
 ]

@@ -208,10 +208,7 @@ async def _respond_handler(
                         "ok": False,
                         "reason": f"unknown label(s): {', '.join(unknown)}",
                     }
-                # Tool result to the model stays the human-readable join. Labels
-                # containing commas survive validation here even if they look
-                # ambiguous in the rendered string — the model treats the
-                # whole result as the user's choice, not as a parseable list.
+                # Labels containing commas survive validation (wire is JSON-array) even if the joined model-facing string is ambiguous; the model treats the whole result as the user's choice, not a parseable list.
                 resolved = ", ".join(tokens)
             elif not allow_other and choice not in valid_labels:
                 return {"ok": False, "reason": "choice does not match any offered label"}

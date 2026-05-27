@@ -63,8 +63,7 @@ export default function ClarificationModal({ requests, onResolved }) {
         requestId: current.request_id,
         choice: text,
       });
-      // Server-side validation can reject (unknown label, malformed multi answer).
-      // Surface the reason and let the user retry — do NOT drop the request.
+      // Server-side validation can reject; keep the request and surface the reason so the user can retry.
       if (res && res.ok === false) {
         setErr(res.reason || "request no longer pending");
         setBusy(false);

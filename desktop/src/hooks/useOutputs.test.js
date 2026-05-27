@@ -1,9 +1,15 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { renderHook, act, waitFor } from "@testing-library/react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 
-import { useMarkAllOutputsRead, useOutput, useOutputs } from "./useOutputs.js";
+import {
+  pendingDeleteKeys,
+  useDeleteOutput,
+  useMarkAllOutputsRead,
+  useOutput,
+  useOutputs,
+} from "./useOutputs.js";
 
 
 let daemonEventListener;
@@ -170,5 +176,95 @@ describe("local pub/sub after mutations", () => {
     });
     await new Promise((r) => setTimeout(r, 20));
     expect(listCalls).toBe(before2);
+  });
+});
+
+
+describe("useDeleteOutput", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    for (const key of pendingDeleteKeys()) {
+      const [profile, id] = key.split(":");
+      const { result } = renderHook(() => useDeleteOutput());
+      result.current.cancel(profile, id);
+    }
+    vi.useRealTimers();
+  });
+
+  it("schedule waits the delay then calls outputs_delete", async () => {
+    invoke.mockResolvedValue(null);
+    const { result } = renderHook(() => useDeleteOutput());
+
+    act(() => {
+      result.current.schedule("abby", "out-1");
+    });
+    expect(invoke).not.toHaveBeenCalled();
+    expect(pendingDeleteKeys()).toEqual(["abby:out-1"]);
+
+    await act(async () => {
+      vi.advanceTimersByTime(5000);
+      await Promise.resolve();
+    });
+    expect(invoke).toHaveBeenCalledWith("outputs_delete", { profile: "abby", id: "out-1" });
+    expect(pendingDeleteKeys()).toEqual([]);
+  });
+
+  it("cancel before the timeout drops the timer without calling the RPC", async () => {
+    invoke.mockResolvedValue(null);
+    const { result } = renderHook(() => useDeleteOutput());
+
+    act(() => {
+      result.current.schedule("abby", "out-2");
+    });
+    const cancelled = result.current.cancel("abby", "out-2");
+    expect(cancelled).toBe(true);
+    expect(pendingDeleteKeys()).toEqual([]);
+
+    await act(async () => {
+      vi.advanceTimersByTime(10000);
+      await Promise.resolve();
+    });
+    expect(invoke).not.toHaveBeenCalled();
+  });
+
+  it("re-scheduling the same key cancels the previous timer", async () => {
+    invoke.mockResolvedValue(null);
+    const { result } = renderHook(() => useDeleteOutput());
+
+    act(() => {
+      result.current.schedule("abby", "out-3", { delayMs: 1000 });
+    });
+    act(() => {
+      vi.advanceTimersByTime(500);
+    });
+    act(() => {
+      result.current.schedule("abby", "out-3", { delayMs: 1000 });
+    });
+    act(() => {
+      vi.advanceTimersByTime(600);
+    });
+    expect(invoke).not.toHaveBeenCalled();
+
+    await act(async () => {
+      vi.advanceTimersByTime(500);
+      await Promise.resolve();
+    });
+    expect(invoke).toHaveBeenCalledTimes(1);
+  });
+
+  it("keys by profile:id so the same id under different profiles is independent", async () => {
+    invoke.mockResolvedValue(null);
+    const { result } = renderHook(() => useDeleteOutput());
+
+    act(() => {
+      result.current.schedule("abby", "shared");
+      result.current.schedule("vera", "shared");
+    });
+    expect(pendingDeleteKeys().sort()).toEqual(["abby:shared", "vera:shared"]);
+
+    result.current.cancel("abby", "shared");
+    expect(pendingDeleteKeys()).toEqual(["vera:shared"]);
   });
 });

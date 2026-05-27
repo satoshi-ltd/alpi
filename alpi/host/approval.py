@@ -107,8 +107,7 @@ def host_approval_callback(
     except Exception:  # noqa: BLE001
         profile = os.environ.get("ALPI_PROFILE") or None
 
-    # Collapse $HOME→~ on the daemon side so every client renders the same
-    # display string without needing access to the daemon's filesystem.
+    # Collapse $HOME→~ on the daemon side so clients render the same display string without needing access to the daemon's filesystem.
     cwd_display: str | None = None
     if cwd:
         try:

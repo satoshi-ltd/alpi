@@ -93,6 +93,21 @@ def test_mark_all_read_empty_inbox_is_zero(home: Path) -> None:
     assert outputs_mod.mark_all_read(home) == 0
 
 
+def test_delete_drops_one_row(home: Path) -> None:
+    a = _append(home, body="a")
+    b = _append(home, body="b")
+    assert outputs_mod.delete(home, a["id"]) is True
+    items = outputs_mod.list_outputs(home)
+    assert [it["id"] for it in items] == [b["id"]]
+
+
+def test_delete_unknown_id_returns_false(home: Path) -> None:
+    _append(home, body="a")
+    assert outputs_mod.delete(home, "deadbeefcafe") is False
+    # Nothing was touched.
+    assert len(outputs_mod.list_outputs(home)) == 1
+
+
 def test_mark_all_read_idempotent(home: Path) -> None:
     _append(home, body="a")
     outputs_mod.mark_all_read(home)

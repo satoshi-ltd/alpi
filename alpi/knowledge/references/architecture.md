@@ -98,7 +98,7 @@ Important host contracts:
 - `host.skills.list` is metadata-only; `host.skill.read` returns a skill body.
 - `host.network.*` controls companion app pairing/network config and is
   local-only.
-- `host.outputs.{list,read,mark_read,mark_all_read}` exposes the
+- `host.outputs.{list,read,mark_read,mark_all_read,delete}` exposes the
   persistent inbox (proactive agent messages + schedule results).
   Backed by `<home>/outputs/outputs.jsonl`, capped at 500 rows.
   Producers: `send_message` (every channel — alpi / both /

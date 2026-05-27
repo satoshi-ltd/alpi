@@ -9,13 +9,20 @@ import {
   IconBtn,
   MarkdownBody,
   Mono,
+  SearchIcon,
   Tip,
   XIcon,
 } from "../primitives/index.js";
 import { useNotify } from "../primitives/Notification.jsx";
 import { relativeTime } from "../lib/time.js";
 import { profileLabel } from "../lib/profile-display.js";
-import { useOutput, useOutputs, useMarkAllOutputsRead } from "../hooks/useOutputs.js";
+import {
+  pendingDeleteKeys,
+  useDeleteOutput,
+  useMarkAllOutputsRead,
+  useOutput,
+  useOutputs,
+} from "../hooks/useOutputs.js";
 import styles from "./NotificationsModal.module.css";
 
 
@@ -89,8 +96,11 @@ export default function NotificationsModal({
   }, [profiles]);
   const { rows, refresh } = useOutputs({ profiles, connectionId });
   const markAll = useMarkAllOutputsRead();
+  const { schedule: scheduleDelete, cancel: cancelDelete } = useDeleteOutput();
   const [pendingId, setPendingId] = useState(null);
   const [pendingProfile, setPendingProfile] = useState(null);
+  const [query, setQuery] = useState("");
+  const [hiddenIds, setHiddenIds] = useState(() => new Set());
   const wrapRef = useRef(null);
 
   const activeId = pendingId ?? selectedId ?? rows[0]?.id ?? null;
@@ -100,7 +110,18 @@ export default function NotificationsModal({
     if (!open) {
       setPendingId(null);
       setPendingProfile(null);
+      setQuery("");
+      return;
     }
+    // hiddenIds reseeds from in-flight pending deletes so a row in its undo window stays hidden across modal reopens.
+    setHiddenIds(() => {
+      const next = new Set();
+      for (const key of pendingDeleteKeys()) {
+        const idx = key.indexOf(":");
+        if (idx > 0) next.add(key.slice(idx + 1));
+      }
+      return next;
+    });
   }, [open]);
 
   useEffect(() => {
@@ -135,6 +156,26 @@ export default function NotificationsModal({
 
   const unread = useMemo(() => rows.filter((r) => r.status === "unread").length, [rows]);
 
+  const visibleRows = useMemo(
+    () => rows.filter((r) => !hiddenIds.has(r.id)),
+    [rows, hiddenIds],
+  );
+
+  const filteredRows = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return visibleRows;
+    return visibleRows.filter((row) => {
+      const hay = [
+        row.body,
+        row.title,
+        row.profile,
+        sourceTag(row),
+        row.severity,
+      ].filter(Boolean).join(" ").toLowerCase();
+      return hay.includes(q);
+    });
+  }, [visibleRows, query]);
+
   const onSelectRow = useCallback((row) => {
     setPendingId(row.id);
     setPendingProfile(row.profile);
@@ -146,6 +187,32 @@ export default function NotificationsModal({
     await Promise.all(names.map((n) => markAll(n)));
     refresh();
   }, [profiles, markAll, refresh]);
+
+  const onDeleteRow = useCallback((row) => {
+    setHiddenIds((prev) => {
+      const next = new Set(prev);
+      next.add(row.id);
+      return next;
+    });
+    if (row.id === activeId && row.profile === activeProfile) {
+      setPendingId(null);
+      setPendingProfile(null);
+    }
+    scheduleDelete(row.profile, row.id);
+    notify({
+      message: "Notification deleted",
+      action: "Undo",
+      onAction: () => {
+        cancelDelete(row.profile, row.id);
+        setHiddenIds((prev) => {
+          if (!prev.has(row.id)) return prev;
+          const next = new Set(prev);
+          next.delete(row.id);
+          return next;
+        });
+      },
+    });
+  }, [scheduleDelete, cancelDelete, notify, activeId, activeProfile]);
 
   const onCopy = useCallback(async () => {
     if (!detail) return;
@@ -195,26 +262,47 @@ export default function NotificationsModal({
         </header>
 
         <div className={styles.body}>
-          <ul className={styles.list} role="listbox">
-            {rows.length === 0 ? (
-              <li className={styles.empty}>
-                <span className={styles.emptyTitle}>Inbox zero</span>
-                <span className={styles.emptyHint}>
-                  Notifications land here when an agent calls <code>send_message</code> or a scheduled job fails.
-                </span>
-              </li>
-            ) : (
-              rows.map((row) => (
-                <NotificationRow
-                  key={`${row.profile}:${row.id}`}
-                  row={row}
-                  accent={accentByName[row.profile]}
-                  active={row.id === activeId && row.profile === activeProfile}
-                  onSelect={onSelectRow}
-                />
-              ))
-            )}
-          </ul>
+          <div className={styles.sidebar}>
+            <div className={styles.searchWrap}>
+              <SearchIcon className={styles.searchIcon} />
+              <input
+                type="text"
+                className={styles.searchInput}
+                placeholder="Search notifications…"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                aria-label="Search notifications"
+              />
+            </div>
+            <ul className={styles.list} role="listbox">
+              {rows.length === 0 ? (
+                <li className={styles.empty}>
+                  <span className={styles.emptyTitle}>Inbox zero</span>
+                  <span className={styles.emptyHint}>
+                    Notifications land here when an agent calls <code>send_message</code> or a scheduled job fails.
+                  </span>
+                </li>
+              ) : filteredRows.length === 0 ? (
+                <li className={styles.empty}>
+                  <span className={styles.emptyTitle}>No matches</span>
+                  <span className={styles.emptyHint}>
+                    Try a different query, or clear it to see everything.
+                  </span>
+                </li>
+              ) : (
+                filteredRows.map((row) => (
+                  <NotificationRow
+                    key={`${row.profile}:${row.id}`}
+                    row={row}
+                    accent={accentByName[row.profile]}
+                    active={row.id === activeId && row.profile === activeProfile}
+                    onSelect={onSelectRow}
+                    onDelete={onDeleteRow}
+                  />
+                ))
+              )}
+            </ul>
+          </div>
 
           <div className={styles.detail}>
             {detail ? (
@@ -237,9 +325,13 @@ export default function NotificationsModal({
 }
 
 
-function NotificationRow({ row, accent, active, onSelect }) {
+function NotificationRow({ row, accent, active, onSelect, onDelete }) {
   const unread = row.status === "unread";
   const label = profileLabel(row.profile);
+  const handleDelete = (e) => {
+    e.stopPropagation();
+    onDelete?.(row);
+  };
   return (
     <li
       role="option"
@@ -247,11 +339,6 @@ function NotificationRow({ row, accent, active, onSelect }) {
       className={`${styles.row} ${active ? styles.rowActive : ""} ${unread ? styles.rowUnread : ""}`}
       onClick={() => onSelect?.(row)}
     >
-      <span
-        className={styles.rowPip}
-        aria-hidden
-        style={unread ? { background: accent || "var(--c-danger)" } : undefined}
-      />
       <div className={styles.rowBody}>
         <div className={styles.rowMeta}>
           <span className={styles.rowMetaLead}>
@@ -259,7 +346,16 @@ function NotificationRow({ row, accent, active, onSelect }) {
             <Mono>@{label}</Mono>
             <Mono>· {sourceTag(row)}</Mono>
           </span>
-          <Mono>{relativeTime(row.created_at)}</Mono>
+          <span className={styles.rowSlot}>
+            <Mono className={styles.rowTs}>{relativeTime(row.created_at)}</Mono>
+            <span className={styles.rowDelete}>
+              <Tip text="Delete" side="up">
+                <IconBtn aria-label="Delete notification" onClick={handleDelete}>
+                  <XIcon />
+                </IconBtn>
+              </Tip>
+            </span>
+          </span>
         </div>
         <div className={styles.rowTitle}>{bodyPreview(row)}</div>
       </div>

@@ -240,3 +240,44 @@ async def test_mark_all_read_zero_when_inbox_clean(tmp_path: Path, monkeypatch) 
         "params": {"profile": "default"},
     })
     assert resp["result"] == {"ok": True, "count": 0}
+
+
+@pytest.mark.asyncio
+async def test_delete_removes_one(tmp_path: Path, monkeypatch) -> None:
+    home = tmp_path / "h"
+    home.mkdir()
+    a = _seed(home, body="a")
+    _seed(home, body="b")
+    srv = _bind(monkeypatch, home)
+
+    captured: list = []
+    from alpi.host import events as host_events
+    monkeypatch.setattr(
+        host_events, "emit",
+        lambda kind, data=None: captured.append((kind, dict(data or {}))),
+    )
+
+    resp = await srv._dispatch({
+        "id": "r", "method": "host.outputs.delete",
+        "params": {"profile": "default", "id": a["id"]},
+    })
+    assert resp["result"] == {"ok": True}
+    remaining = outputs_mod.list_outputs(home)
+    assert [it["body"] for it in remaining] == ["b"]
+    kinds = [(k, d.get("action")) for k, d in captured if k == "output.updated"]
+    assert kinds == [("output.updated", "deleted")]
+
+
+@pytest.mark.asyncio
+async def test_delete_unknown_id_returns_404(tmp_path: Path, monkeypatch) -> None:
+    home = tmp_path / "h"
+    home.mkdir()
+    _seed(home, body="a")
+    srv = _bind(monkeypatch, home)
+
+    resp = await srv._dispatch({
+        "id": "r", "method": "host.outputs.delete",
+        "params": {"profile": "default", "id": "deadbeefcafe"},
+    })
+    assert resp["error"]["code"] == -32004
+    assert "deadbeefcafe" in resp["error"]["data"]["detail"]

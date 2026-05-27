@@ -1545,6 +1545,19 @@ async fn outputs_mark_all_read(profile: String) -> Result<u64, String> {
 }
 
 #[tauri::command]
+async fn outputs_delete(profile: String, id: String) -> Result<serde_json::Value, String> {
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        host_client::call(
+            "host.outputs.delete",
+            serde_json::json!({"profile": profile, "id": id}),
+        )
+    })
+    .await
+    .map_err(|e| format!("outputs_delete: {e}"))??;
+    Ok(result)
+}
+
+#[tauri::command]
 async fn approval_respond(request_id: String, choice: String) -> Result<serde_json::Value, String> {
     let params = serde_json::json!({ "request_id": request_id, "choice": choice });
     let result = tauri::async_runtime::spawn_blocking(move || {
@@ -2371,6 +2384,7 @@ pub fn run() {
             outputs_read,
             outputs_mark_read,
             outputs_mark_all_read,
+            outputs_delete,
             approval_respond,
             approval_pending,
             clarification_respond,

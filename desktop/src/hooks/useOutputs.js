@@ -143,3 +143,46 @@ export function useMarkAllOutputsRead() {
     }
   }, []);
 }
+
+
+// Module-level so the undo timer survives modal unmount; keyed by
+// ``profile:id`` because output ids are profile-scoped, not global.
+const _pendingDeletes = new Map();
+
+function _pendingKey(profile, id) {
+  return `${profile}:${id}`;
+}
+
+export function pendingDeleteKeys() {
+  return Array.from(_pendingDeletes.keys());
+}
+
+export function useDeleteOutput() {
+  const schedule = useCallback((profile, id, { delayMs = 5000 } = {}) => {
+    if (!profile || !id) return;
+    const key = _pendingKey(profile, id);
+    const prev = _pendingDeletes.get(key);
+    if (prev) clearTimeout(prev);
+    const timer = setTimeout(async () => {
+      _pendingDeletes.delete(key);
+      try {
+        await invoke("outputs_delete", { profile, id });
+        notifyLocalChange();
+      } catch {
+        /* best-effort: row may already be gone */
+      }
+    }, delayMs);
+    _pendingDeletes.set(key, timer);
+  }, []);
+
+  const cancel = useCallback((profile, id) => {
+    const key = _pendingKey(profile, id);
+    const timer = _pendingDeletes.get(key);
+    if (!timer) return false;
+    clearTimeout(timer);
+    _pendingDeletes.delete(key);
+    return true;
+  }, []);
+
+  return { schedule, cancel };
+}

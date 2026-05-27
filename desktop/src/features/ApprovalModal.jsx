@@ -11,8 +11,7 @@ const ALLOW_CHOICES = [
   { value: "always",  label: "Always allow",       hint: "add to allowlist" },
 ];
 
-// Top of the `requests` queue is shown; respond/dismiss pops via `onResolved`.
-// Closing the modal (X or backdrop key) maps to "deny" — the safe default.
+// Closing the modal maps to "deny" — the safe default for an unattended caution/dangerous command.
 export default function ApprovalModal({ requests, onResolved }) {
   const current = requests[0] ?? null;
   const [busy, setBusy] = useState(false);

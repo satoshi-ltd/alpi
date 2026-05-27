@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.6.20 — 2026-05-27 — outputs can be deleted
+
+You can now remove individual entries from the agent's inbox; the
+backend has the verb, owned clients use it.
+
+- New `host.outputs.delete` RPC removes one entry by id and emits
+  `output.updated { action: deleted }` so other clients drop it from
+  their list. Member-callable, like the other outputs verbs.
+
 ## v0.6.19 — 2026-05-27 — gateways stay text-first
 
 Telegram and Matrix no longer post intermediate tool-call lines into the
