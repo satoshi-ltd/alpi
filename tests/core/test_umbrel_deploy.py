@@ -16,6 +16,7 @@ def test_umbrel_package_runs_tui_behind_app_proxy() -> None:
     manifest = (UMBREL / "umbrel-app.yml").read_text()
 
     assert "APP_HOST: alpi_server_1" in compose
+    assert "APP_HOST: server" not in compose
     assert "APP_PORT: 8080" in compose
     assert f"satoshiltd/alpi-umbrel:{ALPI_VERSION}" in compose
     assert 'user: "1000:1000"' in compose

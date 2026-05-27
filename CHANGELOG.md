@@ -1,5 +1,29 @@
 # Changelog
 
+## v0.6.26 — 2026-05-27 — Umbrel container restart hardening
+
+Two boot-time fixes that together stop the Umbrel app from looping
+through `Error: daemon already running (pid 9)` after a `stop`/`start`
+or any abnormal exit.
+
+- **Persistent fastembed cache.** `core.embed.FastembedEmbedder` passes
+  `cache_dir=alpi_root() / "cache" / "fastembed"` to
+  `TextEmbedding(...)`. On Umbrel this lands inside the `/data` VOLUME
+  so the ONNX weights survive `restart`/`stop`/`start`; on Mac/Linux
+  it lands inside `~/.alpi/` next to every other daemon-managed
+  artifact. The new path inherits the existing backup exclusion
+  (`cache/` is already in `alpi.backup._EXCLUDE_DIRS`).
+- **Pidfile validates by process start time.** `daemon_running_pid`
+  used to trust any PID that answered `os.kill(pid, 0)`, so a stale
+  `service.pid` (e.g. PID `9`) on the persistent volume could match
+  an unrelated process in the new container — entrypoint then exited
+  `1`, restart-on-failure looped. The pidfile now stores
+  `<pid> <starttime>` (Linux `/proc/<pid>/stat` field 22); on read,
+  a starttime mismatch unlinks the file and reports "no daemon
+  running" so the new container starts fresh. The Umbrel entrypoint
+  also clears `service.pid` on boot as belt-and-braces — runtime
+  state has no meaning across container boundaries.
+
 ## v0.6.25 — 2026-05-27 — device revoke is idempotent
 
 Same UX fix as `host.peers.remove` (v0.6.23), extended to paired

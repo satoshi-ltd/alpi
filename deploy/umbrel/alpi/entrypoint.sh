@@ -7,6 +7,9 @@ export ALPI_TTYD_PORT="${ALPI_TTYD_PORT:-8080}"
 
 mkdir -p "$HOME/.alpi"
 
+# Previous container's PID has no meaning here — belt-and-braces with alpi's starttime check.
+rm -f "$HOME/.alpi/service.pid"
+
 ttyd_pid=""
 alpi daemon start &
 daemon_pid="$!"

@@ -48,23 +48,60 @@ def daemon_log_path(root: Path) -> Path:
     return root / "logs" / "service.log"
 
 
+def _proc_starttime(pid: int) -> str | None:
+    # /proc/<pid>/stat field 22 — survives container PID reuse. None on non-Linux.
+    try:
+        with open(f"/proc/{pid}/stat", "rb") as f:
+            data = f.read()
+    except OSError:
+        return None
+    rparen = data.rfind(b")")
+    if rparen < 0:
+        return None
+    tail = data[rparen + 1:].split()
+    if len(tail) < 20:
+        return None
+    try:
+        return tail[19].decode("ascii")
+    except UnicodeDecodeError:
+        return None
+
+
+def _unlink_stale_pidfile(p: Path) -> None:
+    try:
+        p.unlink()
+    except OSError as e:
+        log.warning("stale pidfile %s could not be removed: %s", p, e)
+
+
 def daemon_running_pid(root: Path) -> int | None:
-    """Liveness check for the central PID file."""
+    # starttime check guards against PID reuse across container restarts; os.kill alone trusts any squatter.
     p = daemon_pid_path(root)
     if not p.exists():
         return None
     try:
-        pid = int(p.read_text().strip())
-    except (ValueError, OSError):
+        raw = p.read_text().strip()
+    except OSError:
         return None
+    if not raw:
+        return None
+    parts = raw.split()
+    try:
+        pid = int(parts[0])
+    except ValueError:
+        return None
+    expected_start = parts[1] if len(parts) >= 2 else None
     try:
         os.kill(pid, 0)
     except OSError:
-        try:
-            p.unlink()
-        except OSError:
-            pass
+        _unlink_stale_pidfile(p)
         return None
+    if expected_start is not None:
+        actual_start = _proc_starttime(pid)
+        # actual_start is None on non-Linux — can't verify → trust the weak check.
+        if actual_start is not None and actual_start != expected_start:
+            _unlink_stale_pidfile(p)
+            return None
     return pid
 
 
@@ -1270,7 +1307,9 @@ def _configure_logging_daemon(root: Path) -> None:
 def _write_daemon_pid(root: Path) -> None:
     p = daemon_pid_path(root)
     p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(str(os.getpid()))
+    pid = os.getpid()
+    start = _proc_starttime(pid)
+    p.write_text(f"{pid} {start}" if start else str(pid))
 
 
 def _clear_daemon_pid(root: Path) -> None:

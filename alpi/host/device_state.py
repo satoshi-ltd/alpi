@@ -605,24 +605,13 @@ def _coerce_config_value(key: str, value: Any) -> Any:
 
 
 def _daemon_pid() -> int | None:
-    path = home_mod._ROOT / "service.pid"
-    try:
-        return int(path.read_text(encoding="utf-8").strip())
-    except Exception:  # noqa: BLE001
-        return None
+    from alpi import service
+    return service.daemon_running_pid(home_mod._ROOT)
 
 
 def _daemon_running() -> bool:
-    pid = _daemon_pid()
-    if not pid:
-        return False
-    try:
-        os.kill(pid, 0)
-        return True
-    except ProcessLookupError:
-        return False
-    except PermissionError:
-        return True
+    # service.daemon_running_pid already does the os.kill probe + starttime validation.
+    return _daemon_pid() is not None
 
 
 def _installed_via() -> str | None:

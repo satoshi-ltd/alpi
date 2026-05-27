@@ -43,8 +43,12 @@ class FastembedEmbedder:
             if self._model is not None:
                 return self._model
             from fastembed import TextEmbedding
+            from alpi import home as home_mod
 
-            self._model = TextEmbedding(model_name=self.name)
+            # Persistent + backup-excluded (cache/ is in alpi.backup._EXCLUDE_DIRS).
+            cache = home_mod.alpi_root() / "cache" / "fastembed"
+            cache.mkdir(parents=True, exist_ok=True)
+            self._model = TextEmbedding(model_name=self.name, cache_dir=str(cache))
             return self._model
 
     def embed(self, texts: list[str]) -> list[list[float]]:

@@ -233,6 +233,21 @@ def test_daemon_running_uses_os_signal_not_external_kill(
     assert calls == [(123, 0)]
 
 
+def test_daemon_running_reads_new_pidfile_format(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Regression: 0.6.26 changed write format to "<pid> <starttime>". A second reader at device_state._daemon_pid was doing int(strip()) and choking on the space, reporting daemon stopped while it was alive — desktop greyed out all subsystems.
+    from alpi import service
+    home = tmp_path / "h"
+    home.mkdir()
+    (home / "service.pid").write_text("123 99999999\n")
+    monkeypatch.setattr(host_device_state.home_mod, "_ROOT", home)
+    monkeypatch.setattr(host_device_state.os, "kill", lambda *_a, **_k: None)
+    monkeypatch.setattr(service, "_proc_starttime", lambda pid: "99999999")
+    assert host_device_state._daemon_pid() == 123
+    assert host_device_state._daemon_running() is True
+
+
 @pytest.mark.asyncio
 async def test_device_read_file_rejects_escape(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,

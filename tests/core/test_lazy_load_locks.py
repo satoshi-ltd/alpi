@@ -31,8 +31,9 @@ def test_embedder_loads_once_under_concurrency(monkeypatch):
     calls = {"n": 0}
 
     class FakeTextEmbedding:
-        def __init__(self, model_name):
+        def __init__(self, model_name, cache_dir=None):
             calls["n"] += 1
+            calls["cache_dir"] = cache_dir
 
     monkeypatch.setattr("fastembed.TextEmbedding", FakeTextEmbedding)
     emb = embed_mod.FastembedEmbedder()
