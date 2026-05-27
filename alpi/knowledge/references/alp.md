@@ -35,6 +35,13 @@ Peers are explicit. A peer record binds identity and reachability
 metadata. Do not treat arbitrary network callers as trusted just
 because they can reach a socket/port.
 
+The peer `id` is a **local label** for human/UI use only — never sent
+on the wire and never used to locate a co-located peer. Intra-machine
+peers are resolved by `pubkey` against the other local profiles'
+keypairs, so a peer pinned under any alias different from the real
+profile name still routes correctly. The `id` only fallback applies
+when the pubkey doesn't match any local profile.
+
 ## Transports
 
 - Same machine: Unix-domain socket.

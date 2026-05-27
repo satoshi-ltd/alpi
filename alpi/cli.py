@@ -3409,11 +3409,7 @@ def peers_ping(ctx: click.Context, peer_id: str) -> None:
                 )
             )
         else:
-            if peer_id == "default":
-                target_home = Path.home() / ".alpi"
-            else:
-                target_home = Path.home() / ".alpi" / "profiles" / peer_id
-            socket_path = target_home / "alp" / "alp.sock"
+            socket_path = peers_mod.local_socket_path(peer)
             if not socket_path.exists():
                 raise click.ClickException(
                     f"target socket not found: {socket_path}\n"

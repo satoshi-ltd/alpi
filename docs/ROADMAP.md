@@ -14,10 +14,13 @@ Legend: 🔵 backlog · 🟡 next up · ⏸ blocked · 🔴 gate.
 
 ## v0.7 cycle (active)
 
-**Theme: owned-client UX + self-improving library + recall/cost depth.**
+**Theme: owned-client UX + self-improving library + prompt reliability
++ operator surfaces.**
 v0.6 makes the system observable and reliable. v0.7 uses that evidence
-to improve the agent's long-term assets and to move richer interaction
-patterns into Alpi-owned clients rather than gateways.
+to improve the agent's long-term assets, move richer interaction
+patterns into Alpi-owned clients rather than gateways, and tighten the
+operator surfaces (device scope, mobile parity, daemon restart) that
+sovereignty depends on.
 
 ### Owned client experience
 
@@ -32,24 +35,24 @@ patterns into Alpi-owned clients rather than gateways.
 |---|---|---|
 | AC.2 | Curator apply flow — after preview, archive stale skills, add `absorbed_into:` metadata, and move detail into umbrella skill `references/` when consolidation is accepted. | 🔵 |
 
-### Recall and workgroup search
-
-| ID | Item | Status |
-|---|---|---|
-| CM.4 | Semantic recall over past sessions — opt-in vector/semantic retrieval over session history when lexical `session_search` starts missing real queries. | 🔵 |
-| ALP.6 | Workgroup search — semantic search over workgroup transcripts via the local RAG primitives, exposed through workgroup/host surfaces after CM.4 proves stable. | 🔵 |
-
 ### Cost and model behavior
 
 | ID | Item | Status |
 |---|---|---|
 | BD | Model-family conditional prompt guidance — inject heavier tool-use/verification guidance only for model families that real logs show need it. | 🔵 |
 
-### Voice
+### Sovereignty controls
 
 | ID | Item | Status |
 |---|---|---|
-| TTS.1 | Local TTS engine + daemon-served voice — choose a local/default engine, move synthesis behind the daemon, and collapse desktop/TUI/gateway voice catalogs into one host-served catalog. | 🔵 |
+| HOST.1 | Per-device profile scope — at pairing time the admin chooses which profiles a member device can reach; host RPCs gate on `device.profile_scope` before serving. | 🟡 |
+
+### Operator UX
+
+| ID | Item | Status |
+|---|---|---|
+| UX.5 | Mobile admin parity — full device pairing / role / scope management in mobile, matching desktop. | 🟡 |
+| UX.7 | Restart daemon button — explicit, user-visible restart from `Settings → Daemon` in desktop and mobile, with reconnect feedback. | 🟡 |
 
 ### UX.2 / UX.3. Owned client experience
 
@@ -81,26 +84,6 @@ The curator reconciles its LLM summary against the actual tool-call log
 of the curator run. If the summary says a skill was absorbed but no tool
 call did that, the report marks a mismatch instead of trusting prose.
 
-### CM.4. Semantic recall over past sessions
-
-Lexical `session_search` stays the first layer: cheap, explicit, easy to
-reason about. Semantic recall becomes worthwhile when session volume
-grows and users ask "when did we discuss X?" but cannot find it.
-
-When promoted, reuse the existing local embedding/store primitives. The
-first shape is opt-in indexing plus an explicit recall/search tool.
-Automatic injection only comes later if manual retrieval proves valuable.
-
-### ALP.6. Workgroup search
-
-`workgroup.search(workgroup_id, query)` returns top matching posts from
-a workgroup transcript. The hub indexes its local transcript; members
-search through existing host/workgroup surfaces rather than receiving a
-new protocol family.
-
-This depends on CM.4's retrieval layer being stable. If semantic session
-recall is not reliable enough, workgroup search waits.
-
 ### BD. Model-family conditional prompt guidance
 
 Different model families need different operational guidance. BD adds a
@@ -112,19 +95,151 @@ Promotion condition: `alpi digest` or LLM test traces show repeated,
 family-specific failures such as under-calling tools, skipping
 verification, or closing turns early despite open commitments.
 
-### TTS.1. Local TTS engine + daemon-served voice
+### HOST.1. Per-device profile scope
 
-Today speech synthesis is duplicated: daemon-side TTS and desktop-side
-TTS have separate catalogs and caches. v0.7 chooses one daemon-owned
-voice path:
+Today a paired device is either `admin` (full access to every profile
+on the host) or `member` (read + chat across every profile, no
+mutations). The role is global. Operationally that's too coarse: a
+shared phone should reach only `@home`, a partner's laptop only
+`@finance`, etc.
 
-1. benchmark local candidates on quality, disk size, latency, license,
-   and locale coverage;
-2. expose daemon-hosted synthesis and voice listing over the host plane;
-3. deprecate desktop-local synthesis;
-4. keep cloud TTS as an explicit opt-in provider if useful.
+Shape:
 
-This is the prerequisite for any future continuous voice mode.
+- `host.devices.generate` accepts an optional `profiles: [<name>]`
+  list. Empty means "all", same as today.
+- `device.profile_scope` lands in the device record; `list` exposes it
+  (admin-only).
+- Host RPCs that take a `profile` param check
+  `profile in device.profile_scope or device.role == "admin"` before
+  dispatching. Out-of-scope calls return `-32008 forbidden`.
+- `host.devices.set_profiles(token_id, profiles)` lets the admin
+  tighten or loosen scope post-pairing without re-issuing the token.
+
+Admin keeps the bypass — that's the management role. Member without
+scope (the default after migration) keeps current behavior. Member
+with explicit scope gets the new gate.
+
+**Non-goals.** No per-tool scope inside a profile (the `tools.deny`
+list at config level covers that). No per-method scope inside a
+profile (admin vs member already differentiate mutating vs reading).
+
+### UX.5. Mobile admin parity (devices)
+
+Mobile today is read-only on the devices surface. Pairing tokens, role
+flips, revokes all happen from desktop. With `HOST.1` adding granular
+scope, the gap widens — an admin away from their desktop can't reshape
+access.
+
+Bring mobile to desktop parity on the device flow:
+
+- `Settings → Devices` lists every paired device with role + scope
+  chips;
+- `+ Pair device` generates a token (admin-only), with the new
+  profile-scope picker if scope ≠ all;
+- promote / demote / rename / revoke as inline row actions;
+- the token-reveal modal copies once and never again, matching desktop.
+
+The host plane already exposes everything; this is pure mobile UI
+work, plus the new HOST.1 verbs once they land.
+
+**Non-goals.** No mobile-side network configuration (Tailscale / TCP
+host stays in desktop / `alpi setup`).
+
+### UX.7. Restart daemon button
+
+`host.daemon.restart` already exists (called by `SubsystemsCell` on
+subsystem toggle). What's missing is a deliberate, user-visible
+button — today the only way to restart from inside a client is to
+flip and re-flip a subsystem chip, which is an awful affordance.
+
+`Settings → Daemon` adds a `Restart` button (desktop + mobile) that:
+
+- calls `host.daemon.restart`;
+- shows "restarting…" until the client's `host.events.subscribe`
+  stream reconnects to the new daemon;
+- toasts success or transport error.
+
+On Mac/Linux the daemon is supervised by launchd / systemd / manual
+foreground; on Umbrel it's the entrypoint with `restart: on-failure`.
+Both paths converge: the daemon process exits, the supervisor
+re-launches it, the client reconnects. The button needs to handle the
+reconnect race, nothing more.
+
+**Non-goals.** No "force kill" mode — if the daemon hangs through
+`restart`, the user reaches for SSH (Umbrel) or
+`alpi daemon stop --force` (local). Hiding a force kill behind a UI
+button invites users to use it as a first resort.
+
+## v0.8 cycle (planned)
+
+**Theme: multimodal input + RAG ingestion.**
+v0.7 sharpens owned clients and operator surfaces. v0.8 opens the
+agent to non-text content (PDFs, images) and closes the
+durable-knowledge loop ("learn this file") so workspace + RAG become
+the agent's long-term memory of documents.
+
+### Multimodal + ingestion
+
+| ID | Item | Status |
+|---|---|---|
+| MM.1 | Multimodal chat input — `host.chat.send` accepts attachments; TUI/desktop/mobile let users attach images and PDFs; engine forwards them through the model's multimodal payload. | 🔵 |
+| RAG.2 | Document ingestion — "learn this file" flow drops the attachment into `workspace/`, reindexes the per-profile RAG store, and exposes it through `search_workspace` like any other workspace content. | 🔵 |
+
+### MM.1. Multimodal chat input
+
+The chat protocol is text-only today: `host.chat.send` carries a `text`
+field, and the model never sees binary content unless a tool (e.g.
+`read_file`) extracts it as text first. That works for code, logs and
+markdown. It breaks for the two most common operator inputs that
+**aren't** text: PDF documents and screenshots / photos.
+
+litellm already speaks vision against most modern providers (OpenAI 4o,
+Claude 3.5+, Gemini, OpenRouter vision routes). The missing pieces are
+wire format and surfaces:
+
+- `host.chat.send` accepts `attachments: [{path, mime, …}]`. The daemon
+  reads the bytes and embeds images as base64 in the multimodal
+  payload. Text-bearing PDFs go through `pypdf` (already in deps);
+  scanned PDFs get rendered to images via `pypdfium2` (also in deps)
+  and treated as image attachments so the model's vision can read them
+  — no separate OCR step.
+- TUI gets a `/attach <path>` slash command; desktop gets a paperclip
+  in the composer; mobile reuses the OS file/photo picker.
+- Engine logs attachments in the session JSON so resume/replay
+  reconstructs the full multimodal turn, not just the text.
+
+**Non-goals.** No image generation (that's `N` long-term). No OCR tool
+exposed to the agent — scanned PDFs become rendered pages routed
+through the same vision path as any other image. No video or audio
+attachments — voice has its own path via gateway audio + STT.
+
+### RAG.2. Document ingestion ("learn this file")
+
+MM.1 ships per-turn multimodal — the file lives only in the message it
+arrived with. RAG.2 closes the loop for the durable case: "remember
+this document forever, treat it as a knowledge source."
+
+Flow:
+
+1. user drops the file in chat with an intent ("learn this", or an
+   explicit button in desktop/mobile);
+2. the daemon moves the file into `workspace/<filename>` (the agent's
+   long-term storage root, already present);
+3. reindexes the per-profile `rag/store.sqlite` via the existing
+   `core/embed.py` + sqlite-vec primitives;
+4. the agent reaches it through `search_workspace`, the same surface as
+   every other workspace document.
+
+**Why funnel through `workspace/`.** Single storage model: the agent's
+long-term knowledge lives in `workspace/`, and the RAG index is a
+derived view of it. No second store, no orphan vectors that don't map
+back to a file, backups already cover `workspace/` in the per-profile
+snapshot.
+
+**Non-goals.** No auto-ingestion of every attached file
+(predictability matters; users decide what becomes permanent). No
+external corpus crawl ("ingest this URL deep-walk"). No cross-profile
+shared RAG — that's an org concern (`ORG.2`).
 
 ## Future releases
 
@@ -206,6 +321,10 @@ already analysed; the "why now?" question is the open one.
 | Cost telemetry | Cost split per-skill / per-tool | Only pays off with many skills + notably different costs; today neither holds |
 | BG re-audit | LiteLLM quarterly review — bump pin, run LLM probe, swap if better alternative emerges | Standing maintenance task; cadence + procedure documented in `OPERATIONS.md → Dependencies` |
 | Matrix E2EE | Olm/Megolm sessions, encryption store, SAS device verification, encrypted-room send/read tests | MVP intentionally unencrypted; promote when an external user runs the bot against a non-self-hosted homeserver |
+| CM.4 | Semantic recall over past sessions — opt-in vector retrieval when lexical `session_search` starts missing real queries | Lexical layer hasn't visibly failed yet; promote on the first "I know we discussed X, where is it?" miss |
+| ALP.6 | Workgroup search — semantic search over workgroup transcripts | Depends on CM.4 being stable; promotes with it, not before |
+| TTS.1 | Local TTS engine + daemon-served voice — single host-served voice catalog, deprecate desktop-local synthesis | Current cloud TTS path works; promote alongside `AQ` (continuous voice) or when desktop/daemon catalog drift becomes a real operator burden |
+| UX.6 | Desktop `.env` manager — per-profile environment editor (mask/reveal/audit) for keys other than provider keys | Provider keys already have a first-class flow; promote when editing other `.env` entries by hand becomes a real friction reported by users |
 
 Promotion criteria: real user demand, or concrete blocker for
 a v0.x feature that depends on it. None of these items
@@ -353,6 +472,75 @@ different costs per skill — neither holds today (skills are
 entirely user-owned, with a handful at most per profile). The
 dimension explosion is dead weight until the catalog grows. May
 be discarded entirely if no demand emerges by v0.6.
+
+### CM.4. Semantic recall over past sessions
+
+Lexical `session_search` stays the first layer: cheap, explicit,
+easy to reason about. Semantic recall becomes worthwhile when
+session volume grows and users ask "when did we discuss X?" but
+cannot find it.
+
+When promoted, reuse the existing local embedding / store
+primitives. The first shape is opt-in indexing plus an explicit
+recall/search tool. Automatic injection only comes later if
+manual retrieval proves valuable.
+
+**Why it waits.** The promotion signal — lexical search visibly
+failing on real queries — has not materialised. Promote on the
+first concrete "I know we discussed X, where is it?" miss, not
+on speculative scale.
+
+### ALP.6. Workgroup search
+
+`workgroup.search(workgroup_id, query)` returns top matching
+posts from a workgroup transcript. The hub indexes its local
+transcript; members search through existing host/workgroup
+surfaces rather than receiving a new protocol family.
+
+**Why it waits.** Depends on `CM.4`'s retrieval layer being
+stable. If semantic session recall is not reliable enough,
+workgroup search waits — they promote together.
+
+### TTS.1. Local TTS engine + daemon-served voice
+
+Today speech synthesis is duplicated: daemon-side TTS and
+desktop-side TTS have separate catalogs and caches. The clean
+shape is one daemon-owned voice path:
+
+1. benchmark local candidates on quality, disk size, latency,
+   license, and locale coverage;
+2. expose daemon-hosted synthesis and voice listing over the host
+   plane;
+3. deprecate desktop-local synthesis;
+4. keep cloud TTS as an explicit opt-in provider if useful.
+
+**Why it waits.** Current cloud TTS path works. Promote alongside
+`AQ` (continuous voice mode) — at that point a single daemon-owned
+voice path becomes the prerequisite rather than a cleanup
+exercise. Or earlier if desktop/daemon catalog drift becomes a
+real operator burden.
+
+### UX.6. Desktop `.env` manager
+
+Provider keys already have a first-class flow
+(`host.providers.set_key`, masked in UI, audit-log on write).
+Everything else in the per-profile `.env` — Bitbucket creds,
+Telegram bot token, custom integration secrets — today requires
+editing the file by hand or via terminal.
+
+When promoted, `Settings → Environment` gets a per-profile card:
+
+- list of `KEY` entries with mask + reveal toggle (same pattern
+  as provider keys);
+- inline edit / add / delete, debounced save via new
+  `host.config.set_env_field` / `unset_env_field` verbs;
+- never echo values in logs; the audit ledger records the key
+  name + action, never the value.
+
+**Why it waits.** Power users edit `.env` by hand without much
+friction. Promote when somebody reports the manual edit + daemon
+restart loop as a real operational pain. No mobile counterpart
+either way — entering secrets on a phone keyboard is hostile UX.
 
 ---
 

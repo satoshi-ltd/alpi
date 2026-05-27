@@ -164,14 +164,7 @@ async def _peers_ping(
                 timeout=alp_client.PING_TIMEOUT_SECONDS,
             )
         else:
-            from alpi import home as home_mod
-            target_home = home_mod.find_home_by_pubkey(peer.pubkey)
-            if target_home is None:
-                target_home = (
-                    Path.home() / ".alpi" if peer_id == "default"
-                    else Path.home() / ".alpi" / "profiles" / peer_id
-                )
-            socket_path = target_home / "alp" / "alp.sock"
+            socket_path = peers_mod.local_socket_path(peer)
             if not socket_path.exists():
                 return {"status": "off", "reason": "target socket not found"}
             result = await alp_client.call(

@@ -93,16 +93,6 @@ def parse(text: str, home: Path | None = None) -> Mention | None:
     return Mention(peer_id=peer_id, prompt=prompt)
 
 
-def _target_home(peer_id: str, pubkey: str = "") -> Path:
-    from alpi import home as home_mod
-    match = home_mod.find_home_by_pubkey(pubkey) if pubkey else None
-    if match is not None:
-        return match
-    if peer_id == "default":
-        return Path.home() / ".alpi"
-    return Path.home() / ".alpi" / "profiles" / peer_id
-
-
 async def execute(home: Path, peer_id: str, prompt: str, *, timeout: float = 300.0) -> Result:
     """Run a single ``link.ask`` against a pinned peer.
 
@@ -129,7 +119,7 @@ async def execute(home: Path, peer_id: str, prompt: str, *, timeout: float = 300
                 timeout=timeout,
             )
         else:
-            socket_path = _target_home(peer_id, peer.pubkey) / "alp" / "alp.sock"
+            socket_path = peers_mod.local_socket_path(peer)
             if not socket_path.exists():
                 return Result(
                     ok=False,
@@ -194,7 +184,7 @@ async def execute_stream(
                 timeout=timeout,
             )
         else:
-            socket_path = _target_home(peer_id, peer.pubkey) / "alp" / "alp.sock"
+            socket_path = peers_mod.local_socket_path(peer)
             if not socket_path.exists():
                 yield {
                     "kind": "error",

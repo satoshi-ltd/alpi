@@ -156,12 +156,13 @@ async def test_peers_ping_unix_socket_uses_short_timeout(
     monkeypatch.setattr(alp_client, "call", fake_call)
 
     class FakePeer:
+        id = "_probe_test_peer"
         address = ""  # empty address forces the Unix-socket branch
         pubkey = "x" * 44
 
     monkeypatch.setattr(peers_mod, "get_by_id", lambda *_a, **_k: FakePeer())
 
-    profiles_dir = Path.home() / ".alpi" / "profiles" / "_probe_test_peer"
+    profiles_dir = short_tmp / "profiles" / "_probe_test_peer"
     sock = profiles_dir / "alp" / "alp.sock"
     sock.parent.mkdir(parents=True, exist_ok=True)
     sock.touch()

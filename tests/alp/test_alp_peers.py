@@ -89,3 +89,88 @@ def test_entries_missing_required_fields_are_skipped(tmp_path: Path) -> None:
     loaded = peers_mod.load(tmp_path)
     assert len(loaded) == 1
     assert loaded[0].id == "a"
+
+
+def test_local_socket_path_resolves_by_pubkey_first(tmp_path, monkeypatch) -> None:
+    from alpi import home as home_mod
+    from alpi.alp import keys as keys_mod
+
+    root = tmp_path / ".alpi"
+    root.mkdir()
+    target = root / "profiles" / "real_name"
+    target.mkdir(parents=True)
+    target_kp = keys_mod.generate(target)
+    monkeypatch.setattr(home_mod, "_ROOT", root)
+    monkeypatch.setattr(Path, "home", staticmethod(lambda: tmp_path))
+
+    peer = Peer(
+        id="totally_random_alias",
+        pubkey=target_kp.pubkey_b64(),
+        allow=["link.ping"],
+    )
+    assert peers_mod.local_socket_path(peer) == target / "alp" / "alp.sock"
+
+
+def test_local_socket_path_falls_back_to_peer_id_when_pubkey_unknown(
+    tmp_path, monkeypatch,
+) -> None:
+    from alpi import home as home_mod
+
+    root = tmp_path / ".alpi"
+    root.mkdir()
+    monkeypatch.setattr(home_mod, "_ROOT", root)
+    monkeypatch.delenv("ALPI_HOME", raising=False)
+
+    peer = Peer(id="remote", pubkey="REMOTE_NOT_LOCAL", allow=["link.ping"])
+    expected = root / "profiles" / "remote" / "alp" / "alp.sock"
+    assert peers_mod.local_socket_path(peer) == expected
+
+
+def test_local_socket_path_default_profile(tmp_path, monkeypatch) -> None:
+    from alpi import home as home_mod
+
+    root = tmp_path / ".alpi"
+    root.mkdir()
+    monkeypatch.setattr(home_mod, "_ROOT", root)
+    monkeypatch.delenv("ALPI_HOME", raising=False)
+
+    peer = Peer(id="default", pubkey="UNKNOWN", allow=["link.ping"])
+    assert peers_mod.local_socket_path(peer) == root / "alp" / "alp.sock"
+
+
+def test_local_socket_path_honors_alpi_home_on_fallback(
+    tmp_path, monkeypatch,
+) -> None:
+    alt_root = tmp_path / "alt-root"
+    alt_root.mkdir()
+    monkeypatch.setenv("ALPI_HOME", str(alt_root))
+    monkeypatch.setattr(Path, "home", staticmethod(lambda: tmp_path / "noise"))
+
+    peer = Peer(id="remote", pubkey="REMOTE_NOT_LOCAL", allow=["link.ping"])
+    assert peers_mod.local_socket_path(peer) == alt_root / "profiles" / "remote" / "alp" / "alp.sock"
+
+    peer_default = Peer(id="default", pubkey="UNKNOWN", allow=["link.ping"])
+    assert peers_mod.local_socket_path(peer_default) == alt_root / "alp" / "alp.sock"
+
+
+def test_local_socket_path_resolves_alias_by_pubkey_under_alpi_home(
+    tmp_path, monkeypatch,
+) -> None:
+    from alpi import home as home_mod
+    from alpi.alp import keys as keys_mod
+
+    alt_root = tmp_path / "alt-root"
+    real_target = alt_root / "profiles" / "real_name"
+    real_target.mkdir(parents=True)
+    target_kp = keys_mod.generate(real_target)
+
+    monkeypatch.setenv("ALPI_HOME", str(alt_root))
+    monkeypatch.setattr(home_mod, "_ROOT", tmp_path / "noise-default")
+    monkeypatch.setattr(Path, "home", staticmethod(lambda: tmp_path / "noise"))
+
+    peer = Peer(
+        id="completely_unrelated_alias",
+        pubkey=target_kp.pubkey_b64(),
+        allow=["link.ping"],
+    )
+    assert peers_mod.local_socket_path(peer) == real_target / "alp" / "alp.sock"

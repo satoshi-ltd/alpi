@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.6.27 — 2026-05-27 — local peer routing centralised
+
+Two more code paths still resolved co-located peer sockets by
+`peer_id` instead of pubkey — `alpi peers ping` CLI and the workgroup
+client. Both hit the exact bug 0.6.24 closed for the host probe and
+`link.ask`: a peer pinned under any alias different from the real
+profile name would route to the wrong directory and fail.
+
+- New helper `peers_mod.local_socket_path(peer)` is the single source
+  of truth for "where is this co-located peer's `alp.sock`". Tries
+  `home.find_home_by_pubkey(peer.pubkey)` first, falls back to
+  `peer.id` only when the pubkey isn't co-located. Five callers now
+  go through it: `host.peers.ping`, `link.ask` (`alpi.alp.mention`),
+  the setup TUI probe, the workgroup client and `alpi peers ping`
+  CLI.
+- The previous per-module helpers (`_target_home`, `_intra_socket_path`)
+  are gone — no caller can drift back to id-only routing by accident.
+
 ## v0.6.26 — 2026-05-27 — Umbrel container restart hardening
 
 Two boot-time fixes that together stop the Umbrel app from looping

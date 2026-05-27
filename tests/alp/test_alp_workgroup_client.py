@@ -148,9 +148,9 @@ async def test_join_persists_subscription_and_pull_decrypts(
     server = alp_server.Server(home=hub_home, agent_name="alice")
     wg_mod.register(server, hub_home)
     await server.start()
-    import alpi.alp.workgroup_client as wc_mod
-    original_resolver = wc_mod._intra_socket_path
-    wc_mod._intra_socket_path = lambda peer_id: server.socket_path()
+    from alpi.alp import peers as peers_mod
+    original_resolver = peers_mod.local_socket_path
+    peers_mod.local_socket_path = lambda peer: server.socket_path()
     try:
         sub = await wc.join(bob_home, "alice", wg.meta.id)
         assert sub.wg_id == wg.meta.id
@@ -172,7 +172,7 @@ async def test_join_persists_subscription_and_pull_decrypts(
         posts2, _ = await wc.pull(bob_home, wg.meta.id)
         assert posts2 == []
     finally:
-        wc_mod._intra_socket_path = original_resolver
+        peers_mod.local_socket_path = original_resolver
         await server.stop()
 
 
@@ -225,9 +225,9 @@ async def test_pull_picks_up_rotated_key(short_tmp: Path) -> None:
     server = alp_server.Server(home=hub_home, agent_name="alice")
     wg_mod.register(server, hub_home)
     await server.start()
-    import alpi.alp.workgroup_client as wc_mod
-    original = wc_mod._intra_socket_path
-    wc_mod._intra_socket_path = lambda peer_id: server.socket_path()
+    from alpi.alp import peers as peers_mod
+    original = peers_mod.local_socket_path
+    peers_mod.local_socket_path = lambda peer: server.socket_path()
     try:
         await wc.join(bob_home, "alice", wg.meta.id)
         wg_mod.kick(hub_home, wg.meta.id, carol_kp.pubkey_b64())
@@ -242,7 +242,7 @@ async def test_pull_picks_up_rotated_key(short_tmp: Path) -> None:
         assert posts[0]["text"] == "after rotate"
         assert posts[0]["key_version"] == 2
     finally:
-        wc_mod._intra_socket_path = original
+        peers_mod.local_socket_path = original
         await server.stop()
 
 
@@ -263,16 +263,16 @@ async def test_leave_drops_subscription_locally(short_tmp: Path) -> None:
     server = alp_server.Server(home=hub_home, agent_name="alice")
     wg_mod.register(server, hub_home)
     await server.start()
-    import alpi.alp.workgroup_client as wc_mod
-    original = wc_mod._intra_socket_path
-    wc_mod._intra_socket_path = lambda peer_id: server.socket_path()
+    from alpi.alp import peers as peers_mod
+    original = peers_mod.local_socket_path
+    peers_mod.local_socket_path = lambda peer: server.socket_path()
     try:
         await wc.join(bob_home, "alice", wg.meta.id)
         assert sub_mod.get(bob_home, wg.meta.id) is not None
         await wc.leave(bob_home, wg.meta.id)
         assert sub_mod.get(bob_home, wg.meta.id) is None
     finally:
-        wc_mod._intra_socket_path = original
+        peers_mod.local_socket_path = original
         await server.stop()
 
 
@@ -350,13 +350,13 @@ async def test_join_propagates_public_bio_to_hub(short_tmp: Path) -> None:
     server = alp_server.Server(home=hub_home, agent_name="alice")
     wg_mod.register(server, hub_home)
     await server.start()
-    import alpi.alp.workgroup_client as wc_mod
-    original = wc_mod._intra_socket_path
-    wc_mod._intra_socket_path = lambda peer_id: server.socket_path()
+    from alpi.alp import peers as peers_mod
+    original = peers_mod.local_socket_path
+    peers_mod.local_socket_path = lambda peer: server.socket_path()
     try:
         sub = await wc.join(bob_home, "alice", wg.meta.id)
     finally:
-        wc_mod._intra_socket_path = original
+        peers_mod.local_socket_path = original
         await server.stop()
 
     assert sub.roster_bios.get(bob_kp.pubkey_b64()) == \
@@ -541,13 +541,13 @@ async def test_join_propagates_tts_voice_to_hub(short_tmp: Path) -> None:
     server = alp_server.Server(home=hub_home, agent_name="alice")
     wg_mod.register(server, hub_home)
     await server.start()
-    import alpi.alp.workgroup_client as wc_mod
-    original = wc_mod._intra_socket_path
-    wc_mod._intra_socket_path = lambda peer_id: server.socket_path()
+    from alpi.alp import peers as peers_mod
+    original = peers_mod.local_socket_path
+    peers_mod.local_socket_path = lambda peer: server.socket_path()
     try:
         sub = await wc.join(bob_home, "alice", wg.meta.id)
     finally:
-        wc_mod._intra_socket_path = original
+        peers_mod.local_socket_path = original
         await server.stop()
 
     assert sub.roster_voices.get(bob_kp.pubkey_b64()) == "en-US-GuyNeural"
@@ -883,14 +883,14 @@ async def test_remote_member_post_emits_wg_post_on_hub(
         lambda kind, data=None: captured.append((kind, data or {})),
     )
 
-    import alpi.alp.workgroup_client as wc_mod
-    original_resolver = wc_mod._intra_socket_path
-    wc_mod._intra_socket_path = lambda peer_id: server.socket_path()
+    from alpi.alp import peers as peers_mod
+    original_resolver = peers_mod.local_socket_path
+    peers_mod.local_socket_path = lambda peer: server.socket_path()
     try:
         await wc.join(bob_home, "alice", wg.meta.id)
         await wc.post(bob_home, wg.meta.id, b"hi from bob")
     finally:
-        wc_mod._intra_socket_path = original_resolver
+        peers_mod.local_socket_path = original_resolver
         await server.stop()
 
     posts = [(k, d) for (k, d) in captured if k == "wg.post"]
@@ -1068,9 +1068,9 @@ async def test_pull_emits_wg_mention_for_remote_post_targeting_local(
         lambda kind, data=None: captured.append((kind, data or {})),
     )
 
-    import alpi.alp.workgroup_client as wc_mod
-    original_resolver = wc_mod._intra_socket_path
-    wc_mod._intra_socket_path = lambda peer_id: server.socket_path()
+    from alpi.alp import peers as peers_mod
+    original_resolver = peers_mod.local_socket_path
+    peers_mod.local_socket_path = lambda peer: server.socket_path()
     try:
         await wc.join(bob_home, "alice", wg.meta.id)
         # Alice (hub) posts a message that mentions @vera (bob's profile).
@@ -1078,7 +1078,7 @@ async def test_pull_emits_wg_mention_for_remote_post_targeting_local(
         # Bob (vera) pulls — that's when the daemon should fire wg.mention.
         await wc.pull(bob_home, wg.meta.id)
     finally:
-        wc_mod._intra_socket_path = original_resolver
+        peers_mod.local_socket_path = original_resolver
         await server.stop()
 
     mentions = [d for k, d in captured if k == "wg.mention"]
@@ -1125,14 +1125,14 @@ async def test_hub_emits_wg_mention_when_member_post_targets_hub_profile(
         lambda kind, data=None: captured.append((kind, data or {})),
     )
 
-    import alpi.alp.workgroup_client as wc_mod
-    original_resolver = wc_mod._intra_socket_path
-    wc_mod._intra_socket_path = lambda peer_id: server.socket_path()
+    from alpi.alp import peers as peers_mod
+    original_resolver = peers_mod.local_socket_path
+    peers_mod.local_socket_path = lambda peer: server.socket_path()
     try:
         await wc.join(bob_home, "alice", wg.meta.id)
         await wc.post(bob_home, wg.meta.id, b"@alice can you take this?")
     finally:
-        wc_mod._intra_socket_path = original_resolver
+        peers_mod.local_socket_path = original_resolver
         await server.stop()
 
     mentions = [d for k, d in captured if k == "wg.mention"]

@@ -236,7 +236,7 @@ def test_daemon_running_uses_os_signal_not_external_kill(
 def test_daemon_running_reads_new_pidfile_format(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # Regression: 0.6.26 changed write format to "<pid> <starttime>". A second reader at device_state._daemon_pid was doing int(strip()) and choking on the space, reporting daemon stopped while it was alive — desktop greyed out all subsystems.
+    # Pidfile is "<pid> <starttime>" — int(strip()) would choke on the space.
     from alpi import service
     home = tmp_path / "h"
     home.mkdir()

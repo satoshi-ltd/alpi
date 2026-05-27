@@ -634,12 +634,15 @@ Verb namespaces in current shape:
   Tauri layer used to shell out to `alpi workgroup …` for these;
   v0.5 routes them through the host plane so mobile reuses the same
   contract.
-- **`host.devices.{list,generate,revoke,rename}`** — pairing-token
-  management for the WebSocket transport. `list` redacts the full
-  token to `token_id` (last 8 chars); `generate` returns the fresh
-  full token exactly once. `revoke` is idempotent — `{ok: true,
-  existed: <bool>}` instead of `-32004` when the token_id is already
-  gone, same rationale as `host.peers.remove`.
+- **`host.devices.{list,generate,revoke,rename,promote,demote}`** —
+  pairing-token management for the WebSocket transport. `list`
+  redacts the full token to `token_id` (last 8 chars); `generate`
+  returns the fresh full token exactly once. `revoke` is idempotent
+  — `{ok: true, existed: <bool>}` instead of `-32004` when the
+  token_id is already gone, same rationale as `host.peers.remove`.
+  `rename` / `promote` / `demote` still raise `-32004` when the
+  device is missing — they mutate state of an existing row, so a
+  silent no-op would hide user mistakes.
 - **`host.gateway.probe`**, **`host.peers.ping`**,
   **`host.model.ctx_window`** — diagnostic probes the desktop / TUI
   used to invoke via `alpi gateway probe`, `alpi peers ping`, and

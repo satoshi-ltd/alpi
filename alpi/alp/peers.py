@@ -126,3 +126,13 @@ def remove(home: Path, peer_id: str) -> bool:
         return False
     save(home, peers)
     return True
+
+
+def local_socket_path(peer: Peer) -> Path:
+    # Pubkey-first; peer.id is a user-chosen alias, not a routing key.
+    from alpi import home as home_mod
+    match = home_mod.find_home_by_pubkey(peer.pubkey) if peer.pubkey else None
+    if match is None:
+        root = home_mod.alpi_root()
+        match = root if peer.id == "default" else root / "profiles" / peer.id
+    return match / "alp" / "alp.sock"

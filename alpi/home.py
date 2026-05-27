@@ -146,10 +146,11 @@ def profile_name(home: Path) -> str:
 
 
 def find_home_by_pubkey(pubkey: str, root: Path | None = None) -> Path | None:
+    # Default root via alpi_root() — honors ALPI_HOME.
     if not pubkey:
         return None
     from alpi.alp import keys as keys_mod
-    base = root or _ROOT
+    base = root or alpi_root()
     candidates: list[Path] = [base]
     sub = base / "profiles"
     if sub.is_dir():

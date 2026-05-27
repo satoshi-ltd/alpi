@@ -238,17 +238,10 @@ def _resolve_hub(home: Path, peer_id: str) -> _Resolved:
         return _Resolved(
             socket_path=None, host=host, port=int(port_s), hub_pubkey=peer.pubkey,
         )
-    socket_path = _intra_socket_path(peer_id)
+    socket_path = peers_mod.local_socket_path(peer)
     return _Resolved(
         socket_path=socket_path, host=None, port=None, hub_pubkey=peer.pubkey,
     )
-
-
-def _intra_socket_path(peer_id: str) -> Path:
-    """Return the intra-machine socket path for `peer_id`."""
-    if peer_id == "default":
-        return Path.home() / ".alpi" / "alp" / "alp.sock"
-    return Path.home() / ".alpi" / "profiles" / peer_id / "alp" / "alp.sock"
 
 
 async def _call(home: Path, kp: Keypair, peer_id: str, method: str,
