@@ -308,10 +308,16 @@ def _storage_rows(home: Path) -> list[dict[str, Any]]:
     rows = []
     for key, label, paths in [
         ("sessions", "sessions", [home / "sessions"]),
+        ("skills", "skills", [home / "skills"]),
+        ("memories", "memories", [home / "memories"]),
+        ("rag", "rag", [home / "rag"]),
+        ("outputs", "outputs", [home / "outputs"]),
         ("audio", "audio", [home / "cache" / "tts", home / "cache" / "inbound"]),
         ("logs", "logs", [home / "logs"]),
         ("schedule", "schedule", [home / "schedule" / "output"]),
         ("workgroups", "workgroups", [home / "alp" / "workgroups", home / "alp" / "turns.jsonl"]),
+        ("gateway", "gateway", [home / "gateway" / "sessions"]),
+        ("mentions", "mentions", [home / "mentions"]),
     ]:
         size = 0
         count = 0

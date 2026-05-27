@@ -11,6 +11,17 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.3.25 — 2026-05-27 — storage panel covers the full profile
+
+Profile → Storage now shows where your disk is actually going,
+not just sessions / audio / logs / schedule / workgroups.
+
+- Six new rows with hover scope tooltip: **skills**, **memories**,
+  **rag** (workspace embeddings — often the largest by far),
+  **outputs** (notifications inbox), **gateway** (telegram/email/matrix
+  chat sessions) and **mentions** (@-mention threads from ALP peers).
+- Requires alpi ≥ 0.6.21.
+
 ## v0.3.24 — 2026-05-27 — notifications get search + undo delete
 
 Cleaner inbox modal: live local search, and individual notifications

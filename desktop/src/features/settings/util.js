@@ -75,10 +75,16 @@ export const GATEWAY_FIELDS = {
 
 export const STORAGE_SCOPE = {
   sessions: "chat transcripts",
+  skills: "user-created skills (scripts, references, state)",
+  memories: "USER.md, MEMORY.md, AGENT.md + backups + promotion queue",
+  rag: "workspace embeddings (sqlite-vec store)",
+  outputs: "notifications inbox",
   audio: "TTS output + inbound voice notes",
   logs: "gateway, schedule, agent, approval",
   schedule: "stdout/stderr of past jobs",
   workgroups: "encrypted transcripts + turn telemetry",
+  gateway: "telegram/email/matrix chat sessions",
+  mentions: "@-mention threads from ALP peers",
 };
 
 export const PAID_PROVIDERS = [

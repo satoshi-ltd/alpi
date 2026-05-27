@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.6.21 — 2026-05-27 — storage report covers the whole profile
+
+`host.profile.storage` now reports every on-disk shape a user might
+want to inspect, not just chat transcripts and logs.
+
+- New rows on top of the existing five: **skills**, **memories**,
+  **rag** (workspace embeddings), **outputs** (notifications inbox),
+  **gateway** (telegram/email/matrix chat sessions) and **mentions**
+  (@-mention threads from ALP peers).
+- Same shape and payload — clients that already iterate the response
+  surface the new rows automatically.
+
 ## v0.6.20 — 2026-05-27 — outputs can be deleted
 
 You can now remove individual entries from the agent's inbox; the

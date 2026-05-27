@@ -167,7 +167,7 @@ alpi/
 │   ├── network_rpc.py     host.network.{status,set_advertised,restart_host_server} — pairing endpoint query + override (parity with `alpi setup → devices → network`); scope classified by host character via network.classify_scope (tailscale / lan / custom / umbrel) so clients don't surface the "configured" resolution-path detail
 │   ├── probes.py          host.gateway.probe, host.peers.ping, host.model.ctx_window
 │   ├── schedule.py        host.schedule.{list,remove,set_paused,fire}
-│   ├── outputs.py         host.outputs.{list,read,mark_read,mark_all_read}
+│   ├── outputs.py         host.outputs.{list,read,mark_read,mark_all_read,delete}
 │   ├── daemon.py          host.daemon.restart
 │   ├── device_state.py    device-facing profile state (profiles, summaries, storage, gateways, skills, workgroups)
 │   ├── events.py          host.events.subscribe + thread-safe emit() for daemon-pushed updates
@@ -638,7 +638,7 @@ Verb namespaces in current shape:
   **`host.model.ctx_window`** — diagnostic probes the desktop / TUI
   used to invoke via `alpi gateway probe`, `alpi peers ping`, and
   `alpi ctx`. Same logic, host-plane entry point.
-- **`host.outputs.{list,read,mark_read,mark_all_read}`** —
+- **`host.outputs.{list,read,mark_read,mark_all_read,delete}`** —
   durable inbox for proactive agent messages and schedule
   results. Backed by `<home>/outputs/outputs.jsonl` (capped at
   500 rows, atomic compaction). Producers:
