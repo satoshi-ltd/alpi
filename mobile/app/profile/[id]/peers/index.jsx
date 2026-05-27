@@ -1,4 +1,5 @@
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import { useCallback } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { radii, space , fontSizes} from '../../../../src/theme/tokens';
@@ -26,19 +27,24 @@ export default function PeersList() {
   const toast = useToast();
   const { call } = useEndpoint();
   const { colors, fonts, fontSizes } = useTheme();
-  const { profile, loading } = useProfile(id);
+  const { profile, loading, refreshDetail } = useProfile(id);
   const pendingQ = usePeersPending(id);
+
+  useFocusEffect(useCallback(() => {
+    refreshDetail?.();
+    pendingQ.refresh?.();
+  }, [refreshDetail, pendingQ.refresh]));
 
   // Peer shape: {id, pubkey, address, alias, allow}. No liveness — host.peers.ping is separate, skipped for cost.
   const peers = profile?.peers ?? [];
   const pending = pendingQ.data?.pending ?? [];
 
-  // host.peers.pending_discard silently noops if the pubkey already left pending.
   const discard = async (pubkey) => {
     try {
       await call('host.peers.pending_discard', { profile: id, pubkey });
       toast({ title: 'Discarded', message: shortPubkey(pubkey), duration: 1500 });
       pendingQ.refresh?.();
+      refreshDetail?.();
     } catch (e) {
       toast({ title: 'Discard failed', message: String(e) });
     }

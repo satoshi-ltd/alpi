@@ -60,7 +60,7 @@ export default function ProfileDetail({
   onOpenChat,
 }) {
   // Lazy heavy fields (peers/models/mcps/provider_keys/sandbox/voice/tcp_*) — scoped per connection so two daemons with the same profile name never share state.
-  const { detail } = useProfileDetail(activeConnection?.id ?? null, profileSummary?.name ?? null);
+  const { detail, refresh } = useProfileDetail(activeConnection?.id ?? null, profileSummary?.name ?? null);
   const profile = useMemo(
     () => ({ ...profileSummary, ...(detail || {}) }),
     [profileSummary, detail],
@@ -333,7 +333,7 @@ export default function ProfileDetail({
             </span>
           </Row>
           <Row label="peers">
-            <PeersField profile={profile} profiles={profiles} onSaved={onSaved} />
+            <PeersField profile={profile} profiles={profiles} onSaved={onSaved} onRefresh={refresh} />
           </Row>
           <Row label="workgroups">
             <WorkgroupsField

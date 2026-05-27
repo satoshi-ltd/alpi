@@ -53,3 +53,43 @@ describe("useProfile endpoint switch", () => {
     );
   });
 });
+
+describe("useProfile refreshDetail", () => {
+  it("explicit refreshDetail() re-fetches host.profile.detail and updates `profile`", async () => {
+    const responses = [
+      { peers: [{ id: "alice" }] },
+      { peers: [{ id: "alice" }, { id: "bob" }] },
+    ];
+    let i = 0;
+    const call = async (method) => {
+      if (method === "host.profile.summaries") {
+        return { profiles: [{ name: "doc" }] };
+      }
+      if (method === "host.profile.detail") {
+        return responses[Math.min(i++, responses.length - 1)];
+      }
+      return null;
+    };
+    function Wrapper({ children }) {
+      return (
+        <EndpointContext.Provider value={{ endpoint: { id: "x" }, call }}>{children}</EndpointContext.Provider>
+      );
+    }
+
+    const { result } = renderHook(() => useProfile("doc"), { wrapper: Wrapper });
+    await waitFor(() =>
+      expect(result.current.profile?.peers).toEqual([{ id: "alice" }]),
+    );
+
+    await act(async () => {
+      await result.current.refreshDetail();
+    });
+
+    await waitFor(() =>
+      expect(result.current.profile?.peers).toEqual([
+        { id: "alice" },
+        { id: "bob" },
+      ]),
+    );
+  });
+});

@@ -126,6 +126,31 @@ def test_effective_profile_env_does_not_mutate_base(tmp_path: Path) -> None:
     assert "ALPI_LEAK" not in base
 
 
+def test_find_home_by_pubkey_does_not_generate_missing_keys(
+    tmp_path: Path,
+) -> None:
+    # Lookup must not load_or_generate — would surface ALP secrets from a read.
+    from alpi.alp import keys as keys_mod
+
+    root = tmp_path / ".alpi"
+    root.mkdir()
+    initialised = root / "profiles" / "real"
+    initialised.mkdir(parents=True)
+    uninitialised = root / "profiles" / "empty"
+    uninitialised.mkdir(parents=True)
+    target_kp = keys_mod.generate(initialised)
+
+    found = home.find_home_by_pubkey(target_kp.pubkey_b64(), root=root)
+    assert found == initialised
+    assert not keys_mod.exists(uninitialised)
+    assert not keys_mod.exists(root)
+
+    missing = home.find_home_by_pubkey("NOT_A_REAL_PUBKEY", root=root)
+    assert missing is None
+    assert not keys_mod.exists(uninitialised)
+    assert not keys_mod.exists(root)
+
+
 def test_effective_profile_env_two_profiles_isolated(tmp_path: Path) -> None:
     a = tmp_path / "a"; a.mkdir()
     b = tmp_path / "b"; b.mkdir()

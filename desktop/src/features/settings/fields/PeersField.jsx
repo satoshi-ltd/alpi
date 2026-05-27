@@ -50,7 +50,7 @@ function renderPeerStatusChip(status, reason) {
   return null;
 }
 
-export function PeersField({ profile, profiles, onSaved }) {
+export function PeersField({ profile, profiles, onSaved, onRefresh }) {
   const peers = profile.peers ?? [];
   const [statusById, setStatusById] = useState({});
   const [reasonById, setReasonById] = useState({});
@@ -93,6 +93,7 @@ export function PeersField({ profile, profiles, onSaved }) {
       });
       notify({ message: `peer @${id} pinned`, variant: "success" });
       setPendingTick((t) => t + 1);
+      await onRefresh?.();
       await onSaved?.();
     } catch (e) {
       notify({ message: `accept: ${String(e)}`, variant: "error", duration: 4000 });
@@ -103,6 +104,7 @@ export function PeersField({ profile, profiles, onSaved }) {
     try {
       await invoke("peers_pending_discard", { profile: profile.name, pubkey });
       setPendingTick((t) => t + 1);
+      await onRefresh?.();
     } catch (e) {
       notify({ message: `discard: ${String(e)}`, variant: "error", duration: 3000 });
     }
@@ -144,6 +146,7 @@ export function PeersField({ profile, profiles, onSaved }) {
   async function removePeer(peerId) {
     try {
       await invoke("peer_remove", { profile: profile.name, peerId });
+      await onRefresh?.();
       await onSaved?.();
       notify({ message: `peer @${peerId} removed`, variant: "success", duration: 2500 });
     } catch (e) {
@@ -218,7 +221,7 @@ export function PeersField({ profile, profiles, onSaved }) {
             existingIds={peers.map((p) => p.id)}
             anchorRef={addAnchorRef}
             onClose={() => setAddOpen(false)}
-            onAdded={onSaved}
+            onAdded={async () => { await onRefresh?.(); await onSaved?.(); }}
           />
         )}
       </span>

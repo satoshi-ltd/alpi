@@ -149,10 +149,10 @@ before any `id`-based routing occurs.
 
 | Field | Required | Meaning |
 |---|---|---|
-| `id` | yes | Human handle. Unique within this profile's peer list. |
+| `id` | yes | Human handle. Unique within this profile's peer list. Not transmitted on the wire and not used to locate the target — the daemon resolves intra-machine peers by `pubkey` against the other local profiles' keypairs, so naming a local peer under an arbitrary `id` is fine. |
 | `alias` | no | Optional display label. |
-| `pubkey` | yes | Base64-encoded Ed25519 public key. |
-| `address` | for inter-machine | `host:port`. Omit for intra-profile peers. |
+| `pubkey` | yes | Base64-encoded Ed25519 public key. The sole routing key for intra-machine dispatch. |
+| `address` | for inter-machine | `host:port`. Omit for intra-profile peers — see the `id` row for how the local socket is resolved. |
 | `allow` | yes | Fail-closed list of methods the peer may invoke. `workgroup.*` methods bypass this list — workgroup membership (enforced per-handler with `-32008 workgroup-not-member`) is the real gate. |
 | `rate_limit.requests_per_minute` | no | Throttle. Default allows 10/min/peer. Enforced before handler dispatch. |
 
@@ -202,7 +202,11 @@ the desktop app, or a plain `cat`) and decides:
 - **Accept** → write the pubkey to `peers.yaml` with chosen `id` and
   `allow` list, drop the entry from `pending_peers.yaml`.
 - **Discard** → just drop the entry. No notification to the sender;
-  the silent-drop posture is preserved.
+  the silent-drop posture is preserved. Discard has **no memory**:
+  if the same sender pings again, a fresh entry appears in
+  `pending_peers.yaml` and the receiver decides again. There is no
+  denylist and no cooldown — every appearance corresponds to a real
+  envelope from the other side.
 
 Verification of the pubkey out-of-band is the receiver's
 responsibility — the protocol does not carry profile names or any

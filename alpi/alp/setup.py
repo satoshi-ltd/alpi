@@ -181,7 +181,7 @@ async def _probe_one(
                 timeout=_PING_TIMEOUT,
             )
             return ("on", None)
-        socket_path = _target_home(peer.id) / "alp" / "alp.sock"
+        socket_path = _target_home(peer.id, peer.pubkey) / "alp" / "alp.sock"
         if not socket_path.exists():
             return ("off", f"socket missing: {socket_path}")
         await alp_client.call(
@@ -222,7 +222,11 @@ def _detect_local_mismatches(entries: list[Peer]) -> dict[str, str]:
     return out
 
 
-def _target_home(peer_id: str) -> Path:
+def _target_home(peer_id: str, pubkey: str = "") -> Path:
+    from alpi import home as home_mod
+    match = home_mod.find_home_by_pubkey(pubkey) if pubkey else None
+    if match is not None:
+        return match
     if peer_id == "default":
         return Path.home() / ".alpi"
     return Path.home() / ".alpi" / "profiles" / peer_id

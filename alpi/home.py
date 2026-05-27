@@ -145,6 +145,27 @@ def profile_name(home: Path) -> str:
     return "default"
 
 
+def find_home_by_pubkey(pubkey: str, root: Path | None = None) -> Path | None:
+    if not pubkey:
+        return None
+    from alpi.alp import keys as keys_mod
+    base = root or _ROOT
+    candidates: list[Path] = [base]
+    sub = base / "profiles"
+    if sub.is_dir():
+        candidates.extend(sorted(p for p in sub.iterdir() if p.is_dir()))
+    for home in candidates:
+        if not keys_mod.exists(home):
+            continue
+        try:
+            kp = keys_mod.load(home)
+        except Exception:  # noqa: BLE001
+            continue
+        if kp.pubkey_b64() == pubkey:
+            return home
+    return None
+
+
 def list_profiles(root: Path | None = None) -> list[str]:
     """Return ``default`` plus each profile directory under ``<root>``."""
     base = root or _ROOT

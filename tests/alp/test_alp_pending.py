@@ -226,16 +226,46 @@ async def test_host_pending_discard(tmp_path: Path, monkeypatch) -> None:
         "id": "r", "method": "host.peers.pending_discard",
         "params": {"profile": "default", "pubkey": "PK_A"},
     })
-    assert drop["result"]["ok"] is True
+    assert drop["result"] == {"ok": True, "existed": True}
 
-    miss = await srv._dispatch({
+    idem = await srv._dispatch({
         "id": "r", "method": "host.peers.pending_discard",
         "params": {"profile": "default", "pubkey": "GHOST"},
     })
-    assert miss["error"]["code"] == -32004
+    assert idem["result"] == {"ok": True, "existed": False}
 
     remaining = {e.pubkey for e in pending.load(home)}
     assert remaining == {"PK_B"}
+
+
+@pytest.mark.asyncio
+async def test_host_pending_discard_does_not_block_future_record(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    # Discard is local-and-now only — no hidden cooldown or denylist.
+    from alpi import home as home_mod
+    from alpi.alp import keys as keys_mod
+    from alpi.host import config as host_config
+    from alpi.host import server as host_server
+
+    home = tmp_path / ".alpi"
+    home.mkdir()
+    monkeypatch.setattr(home_mod, "_ROOT", home)
+    keys_mod.load_or_generate(home)
+    pending.record(home, "PK_X")
+
+    srv = host_server.Server(home=home)
+    host_config.register(srv)
+
+    await srv._dispatch({
+        "id": "r", "method": "host.peers.pending_discard",
+        "params": {"profile": "default", "pubkey": "PK_X"},
+    })
+    assert pending.load(home) == []
+
+    pending.record(home, "PK_X")
+    pubkeys = {e.pubkey for e in pending.load(home)}
+    assert pubkeys == {"PK_X"}
 
 
 @pytest.mark.asyncio

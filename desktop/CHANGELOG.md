@@ -11,6 +11,18 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.3.26 — 2026-05-27 — peers panel refreshes on every action
+
+The peers dropdown no longer keeps showing a stale peer after you
+remove it, and pending invites disappear the moment you discard them.
+
+- Add / remove / accept / discard now force a refresh of the profile
+  detail cache instead of relying solely on the daemon push event.
+  Even if the event arrives late or is dropped over a flaky remote
+  connection, the dropdown reflects the daemon state immediately.
+- Pairs with the alpi 0.6.24 local peer routing fix; ensure both
+  upgrade together.
+
 ## v0.3.25 — 2026-05-27 — storage panel covers the full profile
 
 Profile → Storage now shows where your disk is actually going,

@@ -1,6 +1,6 @@
 // Small derived hooks so screens can grab a single profile / workgroup from the cached lists without re-fetching.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { useEndpoint } from '../lib/EndpointContext';
 import { useEventEffect } from './useEvents';
@@ -43,7 +43,22 @@ export function useProfile(name) {
     () => (summary ? { ...summary, ...(detail || {}) } : null),
     [summary, detail],
   );
-  return { profile, loading: summaries.loading, error: summaries.error, refresh: summaries.refresh };
+  const refreshDetail = useCallback(async () => {
+    if (!name) return;
+    try {
+      const d = await call('host.profile.detail', { profile: name });
+      setDetail(d || null);
+    } catch {
+      // keep stale snapshot on failure — never blank a populated UI.
+    }
+  }, [name, call]);
+  return {
+    profile,
+    loading: summaries.loading,
+    error: summaries.error,
+    refresh: summaries.refresh,
+    refreshDetail,
+  };
 }
 
 export function useWorkgroup(id) {

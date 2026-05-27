@@ -151,3 +151,44 @@ def test_execute_routes_remote_peer_over_tcp(
     assert captured["peer_id"] == "bob"
     assert captured["method"] == "link.ask"
     assert captured["params"] == {"prompt": "ping"}
+
+
+def test_execute_local_peer_resolves_socket_by_pubkey(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Without pubkey resolution probe says online but link.ask 404s under arbitrary alias.
+    from alpi import home as home_mod
+    from alpi.alp import keys as keys_mod
+
+    root = tmp_path / ".alpi"
+    root.mkdir()
+    monkeypatch.setattr(home_mod, "_ROOT", root)
+
+    me = root / "profiles" / "me"
+    me.mkdir(parents=True)
+    target = root / "profiles" / "real_name"
+    target.mkdir(parents=True)
+    keys_mod.generate(me)
+    target_kp = keys_mod.generate(target)
+
+    peers_mod.add(
+        me,
+        Peer(id="arbitrary", pubkey=target_kp.pubkey_b64(), allow=["link.ask"]),
+    )
+
+    sock = target / "alp" / "alp.sock"
+    sock.parent.mkdir(parents=True, exist_ok=True)
+    sock.touch()
+
+    captured: dict = {}
+
+    async def fake_call(**kwargs):
+        captured.update(kwargs)
+        return {"text": "pong unix", "tokens_in": 0, "tokens_out": 0, "cost": 0.0}
+
+    monkeypatch.setattr("alpi.alp.mention.alp_client.call", fake_call)
+
+    import asyncio
+    result = asyncio.run(execute(me, "arbitrary", "hi"))
+    assert result.ok is True
+    assert str(captured["socket_path"]) == str(sock)

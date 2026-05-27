@@ -14,6 +14,20 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.1.20 — 2026-05-27 — peers screen refreshes on every action
+
+Same fix as desktop 0.3.26 — the peers screen no longer needs a daemon
+push event to drop a revoked peer or hide a discarded invite.
+
+- The peers list re-reads `host.profile.detail` on focus, so returning
+  from add / revoke / accept reflects the daemon state immediately
+  even if the `peers_changed` event is delayed over a flaky Tailscale
+  leg.
+- Discarding a pending invite forces an in-place refresh of both the
+  pending list and the profile detail.
+- `useProfile` now exposes `refreshDetail()` for any screen that needs
+  to force a re-read of the heavy companion (peers, models, mcps).
+
 ## v0.1.19 — 2026-05-27 — design tokens aligned with desktop
 
 Same clothing-size scale as the desktop CSS variables, so a value that

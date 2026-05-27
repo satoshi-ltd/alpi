@@ -185,6 +185,56 @@ async def test_peers_ping_unix_socket_uses_short_timeout(
 
 
 @pytest.mark.asyncio
+async def test_peers_ping_resolves_colocated_profile_by_pubkey(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    # peer.id is a user-chosen alias; the socket must come from pubkey lookup.
+    root = short_tmp / ".alpi"
+    root.mkdir()
+    home = root  # default profile
+    target_profile = root / "profiles" / "real_name"
+    target_profile.mkdir(parents=True)
+
+    from alpi import home as home_mod
+    from alpi.alp import keys as keys_mod
+    monkeypatch.setattr(home_mod, "_ROOT", root)
+    monkeypatch.setattr(home_mod, "home_for", lambda profile: home)
+    keys_mod.load_or_generate(home)
+    target_kp = keys_mod.load_or_generate(target_profile)
+
+    from alpi.alp import client as alp_client
+    from alpi.alp import peers as peers_mod
+
+    captured: dict = {}
+
+    async def fake_call(**kwargs):
+        captured.update(kwargs)
+        return {"agent_name": "x", "version": "x", "nonce": "n"}
+
+    monkeypatch.setattr(alp_client, "call", fake_call)
+
+    class FakePeer:
+        address = ""
+        pubkey = target_kp.pubkey_b64()
+
+    monkeypatch.setattr(peers_mod, "get_by_id", lambda *_a, **_k: FakePeer())
+
+    sock = target_profile / "alp" / "alp.sock"
+    sock.parent.mkdir(parents=True, exist_ok=True)
+    sock.touch()
+
+    srv = host_server.Server(home=home)
+    probes.register(srv)
+    resp = await srv._dispatch({
+        "id": "r",
+        "method": "host.peers.ping",
+        "params": {"profile": "default", "peer_id": "arbitrary_alias"},
+    })
+    assert resp["result"]["status"] == "on"
+    assert str(captured["socket_path"]) == str(sock)
+
+
+@pytest.mark.asyncio
 async def test_model_ctx_window_returns_int(short_tmp: Path, monkeypatch) -> None:
     home = short_tmp / "h"
     home.mkdir()

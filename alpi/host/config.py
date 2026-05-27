@@ -324,25 +324,24 @@ async def _peers_pending_list(
 
 
 def _local_profile_pubkeys() -> dict[str, str]:
-    """Map ``pubkey -> profile_name`` for local profiles."""
+    # Read-only — never load_or_generate; that would materialise ALP secrets from a pending_list lookup.
     from alpi import home as home_mod
-    from alpi.alp.keys import load_or_generate as _load
+    from alpi.alp import keys as keys_mod
 
     out: dict[str, str] = {}
     root = home_mod._ROOT
-    try:
-        kp = _load(root)
-        out[kp.pubkey_b64()] = "default"
-    except Exception:  # noqa: BLE001
-        pass
+    if keys_mod.exists(root):
+        try:
+            out[keys_mod.load(root).pubkey_b64()] = "default"
+        except Exception:  # noqa: BLE001
+            pass
     profiles_root = root / "profiles"
     if profiles_root.exists():
         for prof_dir in profiles_root.iterdir():
-            if not prof_dir.is_dir():
+            if not prof_dir.is_dir() or not keys_mod.exists(prof_dir):
                 continue
             try:
-                kp = _load(prof_dir)
-                out[kp.pubkey_b64()] = prof_dir.name
+                out[keys_mod.load(prof_dir).pubkey_b64()] = prof_dir.name
             except Exception:  # noqa: BLE001
                 continue
     return out
@@ -393,12 +392,10 @@ async def _peers_pending_discard(
         raise host_server.HandlerError(
             -32602, "invalid-params", data={"detail": "pubkey required"},
         )
-    if not pending_mod.remove(home, pubkey):
-        raise host_server.HandlerError(
-            -32004, "not-found", data={"detail": "pubkey not in pending list"},
-        )
-    _emit_peers_changed(home, "discarded")
-    return {"ok": True}
+    existed = pending_mod.remove(home, pubkey)
+    if existed:
+        _emit_peers_changed(home, "discarded")
+    return {"ok": True, "existed": existed}
 
 
 async def _profile_create(

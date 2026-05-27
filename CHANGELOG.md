@@ -1,5 +1,25 @@
 # Changelog
 
+## v0.6.24 — 2026-05-27 — local peer routing + safer reads
+
+Two classes of peer bug closed without adding any hidden state: local
+peers under an arbitrary alias now route end-to-end, and read-only
+peer lookups stop materialising ALP secrets on disk. Discard stays
+honest — it clears the current pending row and nothing else.
+
+- Local peer routing resolves by **pubkey** in every code path —
+  `host.peers.ping`, `link.ask` (`alpi.alp.mention`) and the setup TUI
+  probes. Peering another local profile under any alias works
+  end-to-end, not just on the liveness chip.
+- `host.peers.pending_discard` is idempotent: discarding a pubkey
+  that's no longer in pending returns `{ok: true, existed: false}`
+  instead of `-32004 not-found`. Discard only removes the current
+  pending row — no denylist, no cooldown, no hidden state. If the
+  other peer keeps trying, the invite reappears; you decide each time.
+- `_local_profile_pubkeys` and `find_home_by_pubkey` no longer
+  generate ALP keypairs as a side effect of read-only lookups, so a
+  `pending_list` roundtrip never materialises secrets on disk.
+
 ## v0.6.23 — 2026-05-27 — peer remove is idempotent
 
 Removing a peer no longer fails when the peer is already gone — the

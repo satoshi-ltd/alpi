@@ -623,7 +623,11 @@ Verb namespaces in current shape:
   recorded by the ALP server (see [ALP.md → Pending invites](ALP.md#pending-invites));
   `pending_list` enriches each row with `local_profile` when the
   pubkey resolves to a profile on this machine, so the desktop /
-  TUI can pre-fill the peer id without prompting.
+  TUI can pre-fill the peer id without prompting. `host.peers.remove`
+  and `host.peers.pending_discard` are **idempotent**: they return
+  `{ok: true, existed: <bool>}` instead of raising `-32004 not-found`
+  when the row is already gone, so a stale UI click or a parallel
+  retry never blocks the user's intent.
 - **`host.workgroup.{create,update,add_member,kick,remove,action,post}`**
   — workgroup CRUD, hub-only for create/update/add_member/kick/remove,
   member-side for action (pause/resume/leave) and post. The desktop
@@ -637,7 +641,11 @@ Verb namespaces in current shape:
 - **`host.gateway.probe`**, **`host.peers.ping`**,
   **`host.model.ctx_window`** — diagnostic probes the desktop / TUI
   used to invoke via `alpi gateway probe`, `alpi peers ping`, and
-  `alpi ctx`. Same logic, host-plane entry point.
+  `alpi ctx`. Same logic, host-plane entry point. `host.peers.ping`
+  resolves intra-machine targets by `pubkey` (not by the peer's
+  local `id`), so a co-located peer pinned under any alias still
+  finds the right `alp.sock` — the alias never has to match the
+  remote profile's name.
 - **`host.outputs.{list,read,mark_read,mark_all_read,delete}`** —
   durable inbox for proactive agent messages and schedule
   results. Backed by `<home>/outputs/outputs.jsonl` (capped at
