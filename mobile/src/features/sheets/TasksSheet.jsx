@@ -1,5 +1,5 @@
 import { Pressable, ScrollView, Text, View } from 'react-native';
-import { radii, space , fontSizes} from '../../theme/tokens';
+import { fonts, radii, space , fontSizes} from '../../theme/tokens';
 
 import { Sheet } from '../../components/Sheet';
 import { ThinkingDots } from '../chat/ThinkingDots';
@@ -21,7 +21,7 @@ function mix(hex, pct, base) {
 
 function StatusIcon({ status, accent, colors }) {
   if (status === 'done') {
-    return <Text style={{ color: accent, fontSize: fontSizes.xl, lineHeight: 18, fontWeight: '700' }}>✓</Text>;
+    return <Text style={{ color: accent, fontSize: fontSizes.xl, lineHeight: 18, fontFamily: fonts.sans.bold }}>✓</Text>;
   }
   if (status === 'skip') {
     return (

@@ -37,9 +37,7 @@ function enqueueRequest(q, req) {
   ];
 }
 
-// Mirror of useApprovalQueue: owns the pending clarification queue and the
-// host.clarification.respond RPC. Splits state from rendering so the queue
-// can be tested in jsdom without RN view primitives.
+// Owns the pending clarification queue + host.clarification.respond RPC; state split from rendering for jsdom tests.
 export function useClarificationQueue() {
   const { call, endpoint } = useEndpoint();
   const [queue, setQueue] = useState([]);
@@ -88,8 +86,7 @@ export function useClarificationQueue() {
         request_id: current.request_id,
         choice: text,
       });
-      // Server-side validation can reject (unknown label). Keep the request
-      // in the queue so the user can retry; just surface the reason.
+      // Server-side validation can reject; keep the request and surface the reason so the user can retry.
       if (res && res.ok === false) {
         setError(res.reason || 'request no longer pending');
         return;

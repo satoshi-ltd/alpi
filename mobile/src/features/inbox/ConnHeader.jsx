@@ -1,5 +1,5 @@
 import { Pressable, Text, View } from 'react-native';
-import { radii, space , fontSizes} from '../../theme/tokens';
+import { radii, space , fontSizes, lineHeights} from '../../theme/tokens';
 
 import { Icon } from '../../components/Icon';
 import { useTheme } from '../../theme/ThemeContext';
@@ -68,13 +68,13 @@ export function ConnHeader({
         <View style={{ flexDirection: 'column', minWidth: 0 }}>
           <Text
             numberOfLines={1}
-            style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.base, lineHeight: 16, color: colors.ink }}
+            style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.base, lineHeight: fontSizes.base * lineHeights.cozy, color: colors.ink }}
           >
             {name}
           </Text>
           <Text
             numberOfLines={1}
-            style={{ fontFamily: fonts.mono, fontSize: fontSizes.micro, lineHeight: 12, color: colors.ink3 }}
+            style={{ fontFamily: fonts.mono, fontSize: fontSizes.xxs, lineHeight: fontSizes.xxs * lineHeights.cozy, color: colors.ink3 }}
           >
             {host}
           </Text>

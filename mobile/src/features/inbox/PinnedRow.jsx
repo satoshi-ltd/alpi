@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { Animated, Pressable, ScrollView, Text, View } from 'react-native';
-import { radii, space , fontSizes} from '../../theme/tokens';
+import { fonts, radii, space , fontSizes} from '../../theme/tokens';
 
 import { Hash } from '../../components/Hash';
 import { accentForProfile } from '../../theme/accents';
@@ -66,7 +66,7 @@ function Pip({ kind, color, count, bg }) {
           justifyContent: 'center',
         }}
       >
-        <Text style={{ color: '#fff', fontSize: fontSizes.micro, fontWeight: '600', lineHeight: 13 }}>{count}</Text>
+        <Text style={{ color: '#fff', fontSize: fontSizes.xxs, fontFamily: fonts.sans.semibold, lineHeight: 13 }}>{count}</Text>
       </View>
     );
   }

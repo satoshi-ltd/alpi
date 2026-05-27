@@ -14,6 +14,27 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.1.19 — 2026-05-27 — design tokens aligned with desktop
+
+Same clothing-size scale as the desktop CSS variables, so a value that
+reads as "lg" in one client renders the same in the other. No visible
+shift in everyday screens; a handful of sub-px differences in chat
+bubbles, headers and badges get rounded to the nearest token.
+
+- Font sizes collapsed from 21 names → 9 (xxs · xs · sm · base · md ·
+  lg · xl · 2xl · display). Same scale as desktop `--fs-*` with one
+  extra `2xl: 22` for the Locked / empty-chat heading.
+- Line heights aligned with desktop multipliers (tight 1, cozy 1.3,
+  normal 1.5, relaxed 1.65) and applied as `fontSize · tier` across
+  flowing text. Badges and icon-centering keep their raw pixel values
+  because they're layout, not typography.
+- A few stray `15.5` / `14.5` / `11.5` font sizes and a couple of bug
+  `fontWeight` strings (those don't apply to Inter loaded by family)
+  are fixed.
+- Four unused design-system primitives (`Eyebrow`, `SearchField`,
+  `Switch`, `SwitchRow`) and the dead `Geist` fallback font family are
+  removed.
+
 ## v0.1.18 — 2026-05-27 — ask_user clarification sheet (UX.1)
 
 When the agent calls ``ask_user`` on a daemon paired with this

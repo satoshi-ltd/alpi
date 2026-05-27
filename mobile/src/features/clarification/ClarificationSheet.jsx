@@ -75,7 +75,7 @@ export function ClarificationSheet() {
               <Text
                 style={{
                   fontFamily: fonts.mono,
-                  fontSize: fontSizes.small,
+                  fontSize: fontSizes.sm,
                   color: colors.ink3,
                   letterSpacing: 0.6,
                 }}
@@ -85,8 +85,8 @@ export function ClarificationSheet() {
               <Text
                 style={{
                   fontFamily: fonts.sans.bold,
-                  fontSize: fontSizes.bodyLg,
-                  lineHeight: fontSizes.bodyLg * lineHeights.normal,
+                  fontSize: fontSizes.lg,
+                  lineHeight: fontSizes.lg * lineHeights.normal,
                   color: colors.ink,
                 }}
               >
@@ -143,7 +143,7 @@ export function ClarificationSheet() {
           ) : null}
 
           {error ? (
-            <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.small, color: colors.danger }}>
+            <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.danger }}>
               {error}
             </Text>
           ) : null}
@@ -207,7 +207,7 @@ function Checkbox({ checked, color }) {
       }}
     >
       {checked ? (
-        <Text style={{ color: '#fff', fontSize: fontSizes.body, lineHeight: fontSizes.body }}>✓</Text>
+        <Text style={{ color: '#fff', fontSize: fontSizes.md, lineHeight: fontSizes.md }}>✓</Text>
       ) : null}
     </View>
   );
@@ -238,8 +238,8 @@ function OtherInline({ otherText, setOtherText, onSend, onCancel, busy, colors, 
         editable={!busy}
         style={{
           fontFamily: fonts.sans.regular,
-          fontSize: fontSizes.bodyLg,
-          lineHeight: fontSizes.bodyLg * lineHeights.normal,
+          fontSize: fontSizes.lg,
+          lineHeight: fontSizes.lg * lineHeights.normal,
           color: colors.ink,
           minHeight: 64,
           textAlignVertical: 'top',
@@ -248,7 +248,7 @@ function OtherInline({ otherText, setOtherText, onSend, onCancel, busy, colors, 
       />
       <View style={{ flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: space.s5, marginTop: space.s3 }}>
         <Pressable disabled={busy} onPress={onCancel} hitSlop={6}>
-          <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.body, color: colors.ink3 }}>
+          <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.md, color: colors.ink3 }}>
             Cancel
           </Text>
         </Pressable>
@@ -263,7 +263,7 @@ function OtherInline({ otherText, setOtherText, onSend, onCancel, busy, colors, 
             opacity: canSend ? 1 : 0.35,
           }}
         >
-          <Text style={{ fontFamily: fonts.sans.medium, fontSize: fontSizes.body, color: colors.bgPane }}>
+          <Text style={{ fontFamily: fonts.sans.medium, fontSize: fontSizes.md, color: colors.bgPane }}>
             Send
           </Text>
         </Pressable>
@@ -283,11 +283,11 @@ function SingleChoices({
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s5 }}>
             <Radio filled={false} color={colors.ink3} />
             <View style={{ flex: 1 }}>
-              <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.bodyLg, lineHeight: fontSizes.bodyLg * lineHeights.normal, color: colors.ink }}>
+              <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.lg, lineHeight: fontSizes.lg * lineHeights.normal, color: colors.ink }}>
                 {c.label}
               </Text>
               {c.description ? (
-                <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.small, color: colors.ink3 }}>
+                <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.ink3 }}>
                   {c.description}
                 </Text>
               ) : null}
@@ -299,7 +299,7 @@ function SingleChoices({
         <ChoiceRow disabled={busy} onPress={() => setOtherMode(true)}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s5 }}>
             <Icon name="edit" size={20} color={colors.ink3} />
-            <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.bodyLg, lineHeight: fontSizes.bodyLg * lineHeights.normal, color: colors.ink3 }}>
+            <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.lg, lineHeight: fontSizes.lg * lineHeights.normal, color: colors.ink3 }}>
               Type your own…
             </Text>
           </View>
@@ -330,11 +330,11 @@ function MultiChoices({ choices, picked, onToggle, busy, colors, fonts }) {
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s5 }}>
               <Checkbox checked={checked} color={checked ? colors.ink : colors.ink3} />
               <View style={{ flex: 1 }}>
-                <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.bodyLg, lineHeight: fontSizes.bodyLg * lineHeights.normal, color: colors.ink }}>
+                <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.lg, lineHeight: fontSizes.lg * lineHeights.normal, color: colors.ink }}>
                   {c.label}
                 </Text>
                 {c.description ? (
-                  <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.small, color: colors.ink3 }}>
+                  <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.ink3 }}>
                     {c.description}
                   </Text>
                 ) : null}
@@ -362,7 +362,7 @@ function ConfirmChoices({ choices, onPick, busy, colors, fonts }) {
           opacity: busy ? 0.5 : pressed ? 0.85 : 1,
         })}
       >
-        <Text style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.bodyLg, color: colors.bgPane }}>
+        <Text style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.lg, color: colors.bgPane }}>
           {primary.label}
         </Text>
       </Pressable>
@@ -375,7 +375,7 @@ function ConfirmChoices({ choices, onPick, busy, colors, fonts }) {
           opacity: busy ? 0.5 : pressed ? 0.5 : 1,
         })}
       >
-        <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.bodyLg, color: colors.ink2 }}>
+        <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.lg, color: colors.ink2 }}>
           {secondary.label}
         </Text>
       </Pressable>
@@ -398,7 +398,7 @@ function Footer({ picked, busy, onContinue, colors, fonts }) {
           opacity: canContinue ? 1 : 0.4,
         }}
       >
-        <Text style={{ fontFamily: fonts.sans.medium, fontSize: fontSizes.body, color: colors.bgPane }}>
+        <Text style={{ fontFamily: fonts.sans.medium, fontSize: fontSizes.md, color: colors.bgPane }}>
           {picked.length > 0 ? `Continue · ${picked.length}` : 'Continue'}
         </Text>
       </Pressable>

@@ -4,7 +4,7 @@ import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { radii, space , fontSizes} from '../src/theme/tokens';
+import { radii, space , fontSizes, lineHeights} from '../src/theme/tokens';
 
 import { Button } from '../src/components/Button';
 import { useToast } from '../src/components/Toast';
@@ -149,7 +149,7 @@ export default function Pair() {
 
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
       <ScrollView contentContainerStyle={{ padding: space.s8, gap: space.s8 }} keyboardShouldPersistTaps="handled">
-        <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.md, color: colors.ink2, lineHeight: 22 }}>
+        <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.md, color: colors.ink2, lineHeight: fontSizes.md * lineHeights.normal }}>
           Open your daemon's settings, choose{' '}
           <Text style={{ fontFamily: fonts.mono, color: colors.ink }}>Settings → Devices → + Pair phone</Text>, then either
           scan the QR or paste the <Text style={{ fontFamily: fonts.mono, color: colors.ink }}>alpi://</Text> link below.

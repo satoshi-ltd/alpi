@@ -52,32 +52,32 @@ export function ApprovalSheet() {
           <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: space.s5 }}>
             <View style={{ flex: 1, gap: space.s2 }}>
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center' }}>
-                <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.small, color: severityColor, letterSpacing: 0.6 }}>
+                <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: severityColor, letterSpacing: 0.6 }}>
                   SANDBOX
                 </Text>
-                <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.small, color: colors.ink4, letterSpacing: 0.6 }}>
+                <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.ink4, letterSpacing: 0.6 }}>
                   {' · '}
                 </Text>
                 <View style={{ paddingRight: space.s2 }}>
                   <Diamond color={colors.danger} size={9} />
                 </View>
                 {current.profile ? (
-                  <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.small, color: colors.ink2, letterSpacing: 0.6 }}>
+                  <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.ink2, letterSpacing: 0.6 }}>
                     {`@${current.profile.toUpperCase()}`}
                   </Text>
                 ) : null}
-                <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.small, color: colors.ink4, letterSpacing: 0.6 }}>
+                <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.ink4, letterSpacing: 0.6 }}>
                   {' · '}
                 </Text>
-                <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.small, color: colors.ink3, letterSpacing: 0.6 }}>
+                <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.ink3, letterSpacing: 0.6 }}>
                   SHELL
                 </Text>
                 {eyebrow.tail ? (
                   <>
-                    <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.small, color: colors.ink4, letterSpacing: 0.6 }}>
+                    <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.ink4, letterSpacing: 0.6 }}>
                       {' · '}
                     </Text>
-                    <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.small, color: colors.ink3, letterSpacing: 0.6 }}>
+                    <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.ink3, letterSpacing: 0.6 }}>
                       {eyebrow.tail}
                     </Text>
                   </>
@@ -86,8 +86,8 @@ export function ApprovalSheet() {
               <Text
                 style={{
                   fontFamily: fonts.sans.bold,
-                  fontSize: fontSizes.bodyLg,
-                  lineHeight: fontSizes.bodyLg * lineHeights.normal,
+                  fontSize: fontSizes.lg,
+                  lineHeight: fontSizes.lg * lineHeights.normal,
                   color: colors.ink,
                 }}
               >
@@ -112,13 +112,13 @@ export function ApprovalSheet() {
               }}
               contentContainerStyle={{ paddingVertical: space.s5, paddingHorizontal: space.s6 }}
             >
-              <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.bodyLg, color: colors.ink }}>
+              <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.lg, color: colors.ink }}>
                 {current.command}
               </Text>
             </ScrollView>
 
             {current.cwd ? (
-              <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.tiny, color: colors.ink3 }}>
+              <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3 }}>
                 cwd <Text style={{ color: colors.ink2 }}>{current.cwd}</Text>
               </Text>
             ) : null}
@@ -141,14 +141,14 @@ export function ApprovalSheet() {
                 <Text
                   style={{
                     fontFamily: fonts.sans.semibold,
-                    fontSize: fontSizes.bodyLg,
-                    lineHeight: fontSizes.bodyLg * lineHeights.normal,
+                    fontSize: fontSizes.lg,
+                    lineHeight: fontSizes.lg * lineHeights.normal,
                     color: colors.ink,
                   }}
                 >
                   {c.label}
                 </Text>
-                <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.small, color: colors.ink3 }}>
+                <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.ink3 }}>
                   {c.hint}
                 </Text>
               </Pressable>
@@ -167,13 +167,13 @@ export function ApprovalSheet() {
               opacity: busy ? 0.4 : pressed ? 0.85 : 1,
             })}
           >
-            <Text style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.bodyLg, color: colors.bgPane }}>
+            <Text style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.lg, color: colors.bgPane }}>
               Deny
             </Text>
           </Pressable>
 
           {error ? (
-            <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.small, color: colors.danger }}>
+            <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.danger }}>
               {error}
             </Text>
           ) : null}

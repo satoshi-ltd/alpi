@@ -187,7 +187,7 @@ export function ToolCallGroup({ group, accent }) {
             {group.name}
           </Text>
           <View style={{
-            paddingHorizontal: 5,
+            paddingHorizontal: space.s2,
             height: 15,
             borderRadius: radii.sm,
             backgroundColor: colors.hover,
@@ -197,7 +197,7 @@ export function ToolCallGroup({ group, accent }) {
               ×{group.tools.length}
             </Text>
           </View>
-          <View style={{ flexDirection: 'row', gap: 3 }}>
+          <View style={{ flexDirection: 'row', gap: space.s1 }}>
             {group.tools.map((t, i) => {
               const st = toolStatus(t);
               const bg = st === 'error' ? colors.danger

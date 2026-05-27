@@ -5,7 +5,7 @@ import { useTheme } from '../theme/ThemeContext';
 
 const SIZES = {
   md: { h: 40, padX: 14, radius: 10, fontSize: fontSizes.md, ghostFontSize: 14, weightFilled: 'semibold', weightGhost: 'medium' },
-  lg: { h: 48, padX: 18, radius: 14, fontSize: fontSizes.msg, ghostFontSize: 15, weightFilled: 'semibold', weightGhost: 'medium' },
+  lg: { h: 48, padX: 18, radius: 14, fontSize: fontSizes.lg, ghostFontSize: 15, weightFilled: 'semibold', weightGhost: 'medium' },
   hero: { h: 56, padX: 22, radius: 14, fontSize: fontSizes.xl, ghostFontSize: 16, weightFilled: 'semibold', weightGhost: 'medium' },
 };
 

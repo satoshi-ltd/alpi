@@ -46,7 +46,7 @@ const TURN_STYLES = StyleSheet.create({
   error: { paddingHorizontal: space.s7 },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: space.s10, gap: space.s10 },
   emptyTextWrap: { gap: space.s4, alignItems: 'center' },
-  emptyHeading: { fontSize: fontSizes.hLg, lineHeight: 26, letterSpacing: -0.018 * 22, textAlign: 'center' },
+  emptyHeading: { fontSize: fontSizes["2xl"], lineHeight: 26, letterSpacing: -0.018 * 22, textAlign: 'center' },
   emptyModel: { fontSize: fontSizes.sm, textAlign: 'center' },
 });
 
@@ -62,8 +62,7 @@ const TurnBlock = memo(function TurnBlock({ turn, turnIndex, accent, colors, fon
     }))
     .filter((t) => t.result);
   const lastAnswer = askUserAnswers[askUserAnswers.length - 1]?.result;
-  // Only suppress when the assistant exactly echoes the ask_user result —
-  // genuine commentary after cancel / timeout / no-handler stays visible.
+  // Suppress only on exact echo; useful commentary after cancel/timeout/no-handler stays visible.
   const assistantEchoesAsk = lastAnswer && turn.assistant?.trim() === lastAnswer;
   const showAssistant = !!turn.assistant && !assistantEchoesAsk;
   return (
@@ -133,12 +132,12 @@ function AskUserAnswer({ result, question, accent, colors, fonts, fontSizes }) {
             gap: space.s2,
           }}
         >
-          <Text style={{ fontFamily: fonts.sans.medium, fontSize: fontSizes.bodyLg, color: colors.ink3 }}>
+          <Text style={{ fontFamily: fonts.sans.medium, fontSize: fontSizes.lg, color: colors.ink3 }}>
             {question || result}
           </Text>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s2 }}>
-            <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.tiny, color: colors.ink3 }}>∅</Text>
-            <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.tiny, color: colors.ink3, letterSpacing: 0.6 }}>
+            <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3 }}>∅</Text>
+            <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3, letterSpacing: 0.6 }}>
               {noAnswerTag}
             </Text>
           </View>
@@ -153,7 +152,7 @@ function AskUserAnswer({ result, question, accent, colors, fonts, fontSizes }) {
         style={{
           flex: 1,
           fontFamily: fonts.sans.regular,
-          fontSize: fontSizes.bodyLg,
+          fontSize: fontSizes.lg,
           color: colors.ink,
         }}
       >

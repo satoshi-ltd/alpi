@@ -64,8 +64,8 @@ export function Field({
             paddingTop: 0,
             paddingBottom: 0,
             fontFamily: mono ? fonts.mono : fonts.sans.regular,
-            fontSize: mono ? fontSizes.sm : fontSizes.msg,
-            lineHeight: (mono ? fontSizes.sm : fontSizes.msg) * 1.4,
+            fontSize: mono ? fontSizes.sm : fontSizes.lg,
+            lineHeight: (mono ? fontSizes.sm : fontSizes.lg) * 1.4,
             color: editable ? colors.ink : colors.ink2,
             textAlignVertical: multiline ? 'top' : 'center',
           }}

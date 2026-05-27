@@ -3,7 +3,7 @@ import { Keyboard, Modal, Pressable, Text, View } from 'react-native';
 import { GestureDetector } from 'react-native-gesture-handler';
 import Animated from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { radii, space , fontSizes} from '../theme/tokens';
+import { radii, space , fontSizes, lineHeights} from '../theme/tokens';
 
 import { useTheme } from '../theme/ThemeContext';
 import { Button } from './Button';
@@ -86,7 +86,7 @@ export function Sheet({
                     style={{
                       fontFamily: fonts.sans.semibold,
                       fontSize: fontSizes.xl,
-                      lineHeight: 22,
+                      lineHeight: fontSizes.xl * lineHeights.cozy,
                       letterSpacing: -0.18,
                       color: colors.ink,
                     }}
@@ -98,7 +98,7 @@ export function Sheet({
                       style={{
                         fontFamily: fonts.mono,
                         fontSize: fontSizes.sm,
-                        lineHeight: 15.6,
+                        lineHeight: fontSizes.sm * lineHeights.cozy,
                         color: colors.ink3,
                         marginTop: space.s1,
                       }}

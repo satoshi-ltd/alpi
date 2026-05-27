@@ -36,7 +36,7 @@ export function ScreenHeader({ title, subtitle, onBack, right, leadingGlyph }) {
             numberOfLines={1}
             style={{
               fontFamily: fonts.sans.semibold,
-              fontSize: fontSizes.msg,
+              fontSize: fontSizes.lg,
               lineHeight: space.s8,
               color: colors.ink,
             }}

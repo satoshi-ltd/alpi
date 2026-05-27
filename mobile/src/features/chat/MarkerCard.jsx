@@ -1,5 +1,5 @@
 import { StyleSheet, Text, View } from 'react-native';
-import { space , fontSizes} from '../../theme/tokens';
+import { space , fontSizes, lineHeights} from '../../theme/tokens';
 
 import { Diamond } from '../../components/Diamond';
 import { useTheme } from '../../theme/ThemeContext';
@@ -20,11 +20,11 @@ const S = StyleSheet.create({
   },
   eyebrowRow: { flexDirection: 'row', alignItems: 'center', gap: space.s2, marginBottom: space.s2 },
   iconSlot: { width: 14, alignItems: 'center', justifyContent: 'center' },
-  eyebrowText: { fontSize: fontSizes.micro, lineHeight: 10, letterSpacing: 1 },
-  title: { fontSize: fontSizes.msg, lineHeight: 16 * 1.3, letterSpacing: -0.16, marginBottom: space.s2 },
-  body: { fontSize: 14.5, lineHeight: 14.5 * 1.5 },
-  meta: { fontSize: fontSizes.xs, lineHeight: 11 },
-  doneTick: { fontSize: fontSizes.sm, fontWeight: '700', lineHeight: 12 },
+  eyebrowText: { fontSize: fontSizes.xxs, lineHeight: 10, letterSpacing: 1 },
+  title: { fontSize: fontSizes.lg, lineHeight: fontSizes.lg * lineHeights.cozy, letterSpacing: -0.16, marginBottom: space.s2 },
+  body: { fontSize: fontSizes.md, lineHeight: fontSizes.md * 1.5 },
+  meta: { fontSize: fontSizes.xs, lineHeight: fontSizes.xs * lineHeights.tight },
+  doneTick: { fontSize: fontSizes.sm, lineHeight: 12 },
   skipDot: { width: 10, height: 10, borderRadius: 5, borderWidth: 1.5, overflow: 'hidden' },
   skipBar: { position: 'absolute', width: 14, height: 1.5, top: 3.5, left: -2.5, transform: [{ rotate: '45deg' }] },
   taskDot: { width: 6, height: 6, borderRadius: 3 },

@@ -1,5 +1,5 @@
 import { Pressable, Text, View } from 'react-native';
-import { radii , fontSizes} from '../../theme/tokens';
+import { radii, space, fontSizes } from '../../theme/tokens';
 
 import { useTheme } from '../../theme/ThemeContext';
 
@@ -16,7 +16,7 @@ export function SegmentedFilter({ value, onChange }) {
     <View
       style={{
         flexDirection: 'row',
-        padding: 2,
+        padding: space.s1,
         backgroundColor: colors.bgInput,
         borderRadius: 9,
         gap: 0,
@@ -30,7 +30,7 @@ export function SegmentedFilter({ value, onChange }) {
             onPress={() => onChange(t.id)}
             style={{
               flex: 1,
-              paddingVertical: 7,
+              paddingVertical: space.s3,
               paddingHorizontal: 0,
               borderRadius: radii.sm,
               alignItems: 'center',

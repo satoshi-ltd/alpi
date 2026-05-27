@@ -9,6 +9,7 @@ import { Row, RowSeparator } from '../../../../src/components/Row';
 import { ScreenHeader } from '../../../../src/components/ScreenHeader';
 import { useGatewayStatus } from '../../../../src/hooks/useDaemonData';
 import { GATEWAY_DESC, GATEWAY_LABELS, GATEWAY_ORDER } from '../../../../src/lib/gateways';
+import { space } from '../../../../src/theme/tokens';
 import { useTheme } from '../../../../src/theme/ThemeContext';
 
 export default function GatewaysList() {
@@ -29,7 +30,7 @@ export default function GatewaysList() {
       />
       <ScrollView>
         {gateways.loading && !gateways.data ? (
-          <View style={{ padding: 32, alignItems: 'center' }}>
+          <View style={{ padding: space.s11, alignItems: 'center' }}>
             <ActivityIndicator color={colors.ink3} />
           </View>
         ) : (

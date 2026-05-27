@@ -1,5 +1,5 @@
 import { Text, View } from 'react-native';
-import { space , fontSizes} from '../theme/tokens';
+import { space , fontSizes, lineHeights} from '../theme/tokens';
 
 import { useTheme } from '../theme/ThemeContext';
 
@@ -85,8 +85,8 @@ export function RichText({ children, color, size }) {
           key={`h-${i}`}
           style={{
             fontFamily: fonts.sans.semibold,
-            fontSize: fontSizes.msg,
-            lineHeight: 16 * 1.2,
+            fontSize: fontSizes.lg,
+            lineHeight: fontSizes.lg * lineHeights.cozy,
             color: colors.ink,
             marginTop: space.s6,
             marginBottom: space.s1,

@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { radii, space } from '../../theme/tokens';
+import { fontSizes, radii, space } from '../../theme/tokens';
 
 import { Diamond } from '../../components/Diamond';
 import { RichText } from '../../components/RichText';
@@ -19,9 +19,6 @@ function mixHex(hex, pct, base) {
   return `rgb(${r},${g},${b})`;
 }
 
-const BUBBLE_FONT_SIZE = 15.5;
-const META_FONT_SIZE = 11;
-
 const S = StyleSheet.create({
   userWrap: { alignItems: 'flex-end', paddingHorizontal: space.s7, gap: space.s1 },
   agentWrap: { paddingHorizontal: space.s7 },
@@ -32,8 +29,8 @@ const S = StyleSheet.create({
     borderRadius: radii.xl,
   },
   bubbleBorder: { borderWidth: 0.5 },
-  bubbleText: { fontSize: BUBBLE_FONT_SIZE, lineHeight: BUBBLE_FONT_SIZE * 1.45 },
-  meta: { fontSize: META_FONT_SIZE, lineHeight: META_FONT_SIZE },
+  bubbleText: { fontSize: fontSizes.lg, lineHeight: fontSizes.lg * 1.45 },
+  meta: { fontSize: fontSizes.xs, lineHeight: fontSizes.xs },
   speakerRow: { flexDirection: 'row', alignItems: 'center', gap: space.s2 },
   wgRowLeft: { alignItems: 'flex-start', paddingHorizontal: space.s7, gap: space.s1 },
   wgRowRight: { alignItems: 'flex-end', paddingHorizontal: space.s7, gap: space.s1 },

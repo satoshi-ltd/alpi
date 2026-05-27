@@ -6,44 +6,33 @@ export const fonts = {
     semibold: 'Inter_600SemiBold',
     bold: 'Inter_700Bold',
   },
-  sansFallback: {
-    regular: 'Geist_400Regular',
-    medium: 'Geist_500Medium',
-    semibold: 'Geist_600SemiBold',
-    bold: 'Geist_700Bold',
-  },
   // Mono regular kept as a plain string for back-compat with callers using `fontFamily: fonts.mono`.
   mono: 'JetBrainsMono_400Regular',
   monoMedium: 'JetBrainsMono_500Medium',
   monoSemibold: 'JetBrainsMono_600SemiBold',
 };
 
+// Clothing-size scale aligned with desktop --fs-* (with one extra `2xl` for the 22px display heading mobile uses on Locked / empty chat).
 export const fontSizes = {
   xxs: 9,
-  micro: 10,
-  tiny: 11,
-  small: 12,
-  label: 13,
-  body: 14,
-  bodyLg: 15,
-  msg: 16,
-  h: 17,
-  hLg: 22,
-  display: 28,
-  // Legacy aliases — kept for back-compat with screens that haven't migrated to canonical names.
   xs: 11,
   sm: 12,
   base: 13,
   md: 14,
   lg: 15,
-  xl: 17,
+  xl: 18,
+  '2xl': 22,
+  display: 28,
 };
 
+// Multipliers aligned with desktop --lh-*. Applied as fontSize * lineHeights.<tier>.
+// tight: controls / chips / single-line labels. cozy: UI titles, pills, tooltips.
+// normal: inputs, paragraphs. relaxed: long-form prose, message bodies.
 export const lineHeights = {
   tight: 1,
   cozy: 1.3,
-  normal: 1.45,
-  relaxed: 1.55,
+  normal: 1.5,
+  relaxed: 1.65,
 };
 
 export const space = {

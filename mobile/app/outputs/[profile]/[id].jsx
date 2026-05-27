@@ -176,7 +176,7 @@ export default function OutputDetailScreen() {
             ) : null}
           </View>
 
-          <RichText size={fontSizes.msg} color={colors.ink}>
+          <RichText size={fontSizes.lg} color={colors.ink}>
             {row.body || ''}
           </RichText>
 

@@ -1,6 +1,6 @@
 import { memo, useCallback, useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { space , fontSizes} from '../../theme/tokens';
+import { space , fontSizes, lineHeights} from '../../theme/tokens';
 
 import { Dot } from '../../components/Dot';
 import { Glyph } from '../../components/Glyph';
@@ -19,9 +19,9 @@ const STATIC = StyleSheet.create({
   body: { flex: 1, minWidth: 0, flexDirection: 'column', gap: space.s1 },
   header: { flexDirection: 'row', alignItems: 'center', gap: space.s2 },
   meta: { alignItems: 'flex-end', justifyContent: 'center', gap: space.s1, flexShrink: 0 },
-  name: { fontSize: fontSizes.lg, lineHeight: 18 },
-  preview: { fontSize: fontSizes.md, lineHeight: 13.5 * 1.35 },
-  ts: { fontSize: fontSizes.xs, lineHeight: 11 },
+  name: { fontSize: fontSizes.lg, lineHeight: fontSizes.lg * lineHeights.cozy },
+  preview: { fontSize: fontSizes.md, lineHeight: fontSizes.md * lineHeights.cozy },
+  ts: { fontSize: fontSizes.xs, lineHeight: fontSizes.xs * lineHeights.tight },
 });
 
 // onPress/onLongPress receive `item` so parents can pass stable refs and keep memo() effective.

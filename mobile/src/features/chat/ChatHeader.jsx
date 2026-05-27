@@ -1,5 +1,5 @@
 import { Pressable, Text, View } from 'react-native';
-import { radii, space , fontSizes} from '../../theme/tokens';
+import { radii, space , fontSizes, lineHeights} from '../../theme/tokens';
 
 import { Diamond } from '../../components/Diamond';
 import { Icon } from '../../components/Icon';
@@ -34,11 +34,11 @@ export function ChatHeader({ kind, accent, title, meta, onBack, onMore, onPickSe
           {kind === 'profile' ? (
             <Diamond color={accent} size={11} />
           ) : (
-            <Text style={{ fontFamily: fonts.monoMedium, fontSize: fontSizes.msg, color: colors.ink3 }}>#</Text>
+            <Text style={{ fontFamily: fonts.monoMedium, fontSize: fontSizes.lg, color: colors.ink3 }}>#</Text>
           )}
           <Text
             numberOfLines={1}
-            style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.msg, lineHeight: 19.2, color: colors.ink }}
+            style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.lg, lineHeight: fontSizes.lg * lineHeights.cozy, color: colors.ink }}
           >
             {title}
           </Text>
@@ -48,8 +48,8 @@ export function ChatHeader({ kind, accent, title, meta, onBack, onMore, onPickSe
             numberOfLines={1}
             style={{
               fontFamily: fonts.mono,
-              fontSize: 11.5,
-              lineHeight: 13.8,
+              fontSize: fontSizes.xs,
+              lineHeight: fontSizes.xs * lineHeights.cozy,
               color: colors.ink3,
               marginTop: 1,
             }}
