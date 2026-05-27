@@ -73,6 +73,7 @@ Three options:
 | Key | Default | Type | Takes effect |
 |---|---|---|---|
 | `tools.max_steps_per_turn` | `40` | int | next turn |
+| `tools.deny` | `[]` | list of tool names | next turn |
 | `tools.web_extract.model` | `""` (use main) | string | next turn |
 | `tools.read_image.model` | `""` (use main) | string | next turn |
 | `tools.terminal.sandbox` | `false` | bool | next turn |
@@ -97,6 +98,43 @@ or lower a chatty tool's cap.
 Precedence: `tools.<name>.max_result_chars` (if set) → `tools.budget.per_result_chars` → hardcoded `100_000`.
 
 Not implemented (tracked, not planned): per-turn aggregate cap and inline preview. Comparable agents carry both, but alpi only ships them if real turns start burning through several large tool results.
+
+`tools.deny` is a per-profile denylist of tool names. Denied tools are
+**absent from the schema the LLM sees** (it can't reach for what it
+doesn't know about) AND **refused by the executor** as defence in
+depth — if a stale context or a peer's `link.ask` names a denied tool,
+the call returns `tool denied for this profile: <name>` instead of
+running. Unknown names are no-ops, so typos are harmless.
+
+Canonical names are the strings used at registration time —
+`write_file`, `edit_file`, `terminal`, `email`, `send_message`,
+`schedule`, `delegate`, `peer`, `index_workspace`, `search_workspace`,
+`alpi_knowledge`, `research`, `browser`, `workgroup`, etc. See
+`alpi/tools/__init__.py` for the full registry. Note: the alpi-docs
+tool registers as `alpi_knowledge`, not `knowledge` — writing
+`knowledge` in `deny` is a no-op.
+
+Useful for tightening a profile that is exposed to less-trusted input
+— e.g. a "librarian" profile that other peers reach via `link.ask`
+and that has no business writing files, running shell, or sending
+mail:
+
+```yaml
+# ~/.alpi/profiles/archi/config.yaml
+tools:
+  deny:
+    - write_file
+    - edit_file
+    - terminal
+    - email
+    - send_message
+    - schedule
+    - delegate
+```
+
+Today this is YAML-only. There is no `alpi setup` wizard for `deny`
+and no surface for it in the desktop/mobile apps — the surface is
+power-user enough that raw names beat any UI we'd build right now.
 
 `tools.terminal.sandbox` enables OS-level isolation on shell commands
 (macOS `sandbox-exec`, Linux `bubblewrap`). Toggle via `alpi setup →

@@ -71,6 +71,7 @@ Also valid:
 | `workspace` | Next tool call after reload. |
 | `budget` | Next turn. |
 | `tools.terminal.sandbox` | Next terminal call. |
+| `tools.deny` | Next turn (re-read from disk per turn, same as `budget`). |
 | Gateway config | Usually daemon/gateway restart. |
 | Scheduler config/jobs | Scheduler reload or daemon restart depending on path. |
 | `host.tcp_host`, `host.device_name` | Daemon restart. |
@@ -127,6 +128,30 @@ tools:
 Dangerous classifications are always blocked. Globs do not apply to
 compound commands with pipes, `&&`, `;`, backticks, or command
 substitution.
+
+## Tool denylist
+
+`tools.deny` is a per-profile list of tool names hidden from the
+LLM's schema and refused by the executor as defence in depth. Used
+to tighten profiles exposed to less-trusted input (e.g. a librarian
+profile reachable via `link.ask`).
+
+```yaml
+tools:
+  deny:
+    - write_file
+    - edit_file
+    - terminal
+    - email
+    - send_message
+    - schedule
+    - delegate
+```
+
+Use the canonical registered name — `alpi_knowledge`, not
+`knowledge`; `search_workspace`, not `workspace_search`. Unknown
+names are no-ops (typos are harmless). A bare string
+(`deny: terminal`) collapses to `[]`, not a per-char iteration.
 
 ## Common questions
 

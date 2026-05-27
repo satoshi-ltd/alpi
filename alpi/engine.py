@@ -138,14 +138,15 @@ class Engine:
         from alpi import config as _cfg_mod
         from alpi import ledger
 
-        # Re-read budget from disk so live edits apply on the next turn.
+        # Re-read budget + tools.deny from disk so live YAML edits apply on the next turn without needing a profile restart.
         try:
-            fresh_budget = _cfg_mod.load(self.home).budget
+            fresh = _cfg_mod.load(self.home)
+            self.cfg.budget = fresh.budget
+            self.cfg.tools.deny = fresh.tools.deny
         except Exception:  # noqa: BLE001
-            fresh_budget = self.cfg.budget
-        self.cfg.budget = fresh_budget
+            pass
         try:
-            ledger.check(self.home, fresh_budget)
+            ledger.check(self.home, self.cfg.budget)
         except ledger.BudgetExceeded as e:
             emit(AgentEvent(kind="error", text=str(e)))
             return
@@ -209,7 +210,8 @@ class Engine:
             except Exception:  # noqa: BLE001
                 pass
 
-        schemas = tools.schemas()
+        deny_tools = frozenset(self.cfg.tools.deny)
+        schemas = tools.schemas(deny=deny_tools)
         call_kwargs = cfg_mod.resolve_model(self.cfg)
         from alpi import prompt_cache as _pc
         call_kwargs.update(_pc.cache_kwargs_for_model(call_kwargs.get("model", "")))
@@ -280,7 +282,7 @@ class Engine:
                     usd=float(final.get("cost_usd", 0.0)),
                     tokens=int(final.get("input_tokens", 0))
                           + int(final.get("output_tokens", 0)),
-                    cfg_budget=fresh_budget,
+                    cfg_budget=self.cfg.budget,
                 )
                 self.session.last_ctx_tokens = int(final.get("input_tokens", 0))
                 emit(AgentEvent(
@@ -348,7 +350,7 @@ class Engine:
                     _ledger.record(
                         self.home, usd=float(cost),
                         tokens=int(in_tok) + int(out_tok),
-                        cfg_budget=fresh_budget,
+                        cfg_budget=self.cfg.budget,
                     )
                     emit(AgentEvent(
                         kind="usage", tokens_in=in_tok, tokens_out=out_tok,
@@ -403,7 +405,7 @@ class Engine:
 
                     tool_started = time.time()
                     try:
-                        result = tools.execute(name, args)
+                        result = tools.execute(name, args, deny=deny_tools)
                     finally:
                         tool_state_mod.set_emit(None)
                     duration = time.time() - tool_started

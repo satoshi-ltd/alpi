@@ -16,6 +16,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "providers": {"ollama": []},
     "tools": {
         "max_steps_per_turn": 40,
+        "deny": [],
         "web_extract": {"model": ""},
         "read_image": {"model": ""},
         "browser": {"vision": False},
@@ -108,6 +109,8 @@ class SttToolConfig:
 @dataclass
 class ToolsConfig:
     max_steps_per_turn: int = 40  # ceiling on tool-calls per user turn
+    # Tool names hidden from the LLM schema AND refused by the executor; unknown names are no-ops so typos are harmless.
+    deny: list[str] = field(default_factory=list)
     web_extract: WebExtractToolConfig = field(default_factory=WebExtractToolConfig)
     read_image: ReadImageToolConfig = field(default_factory=ReadImageToolConfig)
     terminal: TerminalToolConfig = field(default_factory=TerminalToolConfig)
@@ -177,6 +180,20 @@ class Config:
         return self.home / "config.yaml"
 
 
+def _normalize_deny(raw: Any) -> list[str]:
+    """Tolerate hand-written ``tools.deny`` shapes: must be a list, items get ``strip()``, duplicates dropped, order preserved. A bare string (``deny: terminal``) collapses to ``[]`` rather than iterating chars."""
+    if not isinstance(raw, list):
+        return []
+    seen: set[str] = set()
+    out: list[str] = []
+    for item in raw:
+        name = str(item).strip()
+        if name and name not in seen:
+            seen.add(name)
+            out.append(name)
+    return out
+
+
 def _deep_merge(defaults: dict, user: dict | None) -> dict:
     """Recursive merge — user wins per-key. Defaults are deep-copied so a caller mutating ``cfg.providers["ollama"].append(...)`` can never pollute ``DEFAULT_CONFIG``; the daemon supervises many profiles in one process and a shared mutable default would leak between them."""
     import copy
@@ -209,6 +226,7 @@ def load(home: Path) -> Config:
         max_steps_per_turn=int(
             tools_raw.get("max_steps_per_turn", DEFAULT_CONFIG["tools"]["max_steps_per_turn"])
         ),
+        deny=_normalize_deny(tools_raw.get("deny")),
         web_extract=WebExtractToolConfig(
             model=str(web_extract_raw.get("model", "") or ""),
         ),
@@ -352,6 +370,8 @@ def _tools_delta(cfg: Config) -> dict:
     d = DEFAULT_CONFIG["tools"]
     if cfg.tools.max_steps_per_turn != d["max_steps_per_turn"]:
         out["max_steps_per_turn"] = cfg.tools.max_steps_per_turn
+    if cfg.tools.deny:
+        out["deny"] = list(cfg.tools.deny)
     if cfg.tools.web_extract.model != d["web_extract"]["model"]:
         out["web_extract"] = {"model": cfg.tools.web_extract.model}
     ri_out: dict[str, Any] = {}

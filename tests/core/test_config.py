@@ -94,6 +94,57 @@ def test_tools_section_defaults(tmp_home_no_env: Path) -> None:
     cfg = config.load(tmp_home_no_env)
     assert cfg.tools.web_extract.model == ""
     assert cfg.tools.max_steps_per_turn == 40
+    assert cfg.tools.deny == []
+
+
+def test_tools_deny_roundtrips(tmp_home_no_env: Path) -> None:
+    import yaml
+    (tmp_home_no_env / "config.yaml").write_text(yaml.safe_dump({
+        "tools": {"deny": ["write_file", "terminal", "email"]},
+    }))
+
+    cfg = config.load(tmp_home_no_env)
+    assert cfg.tools.deny == ["write_file", "terminal", "email"]
+
+    cfg.model = "openai/gpt-4o"
+    config.save(cfg)
+
+    reloaded = config.load(tmp_home_no_env)
+    assert reloaded.tools.deny == ["write_file", "terminal", "email"]
+
+    on_disk = yaml.safe_load((tmp_home_no_env / "config.yaml").read_text())
+    assert on_disk["tools"]["deny"] == ["write_file", "terminal", "email"]
+
+
+def test_tools_deny_omitted_when_empty(tmp_home_no_env: Path) -> None:
+    import yaml
+    config.seed_defaults(tmp_home_no_env)
+    cfg = config.load(tmp_home_no_env)
+    cfg.model = "openai/gpt-4o"
+    config.save(cfg)
+    on_disk = yaml.safe_load((tmp_home_no_env / "config.yaml").read_text())
+    assert "deny" not in (on_disk.get("tools") or {})
+
+
+def test_tools_deny_string_does_not_iterate_chars(tmp_home_no_env: Path) -> None:
+    """Hand-edit gotcha: ``deny: terminal`` (bare string) must collapse to ``[]``, not ``['t', 'e', 'r', ...]``."""
+    import yaml
+    (tmp_home_no_env / "config.yaml").write_text(yaml.safe_dump({
+        "tools": {"deny": "terminal"},
+    }))
+    cfg = config.load(tmp_home_no_env)
+    assert cfg.tools.deny == []
+
+
+def test_tools_deny_strips_and_dedupes(tmp_home_no_env: Path) -> None:
+    import yaml
+    (tmp_home_no_env / "config.yaml").write_text(yaml.safe_dump({
+        "tools": {"deny": [
+            " write_file ", "terminal", "write_file", "", "  ", "email",
+        ]},
+    }))
+    cfg = config.load(tmp_home_no_env)
+    assert cfg.tools.deny == ["write_file", "terminal", "email"]
 
 
 def test_resolve_model_plain() -> None:

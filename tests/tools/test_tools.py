@@ -244,6 +244,49 @@ def test_schemas_shape() -> None:
     assert all("function" in s and "name" in s["function"] for s in schemas)
 
 
+def test_schemas_honors_deny() -> None:
+    base = {s["function"]["name"] for s in tools.schemas()}
+    assert "write_file" in base
+    assert "terminal" in base
+    filtered = {
+        s["function"]["name"]
+        for s in tools.schemas(deny=frozenset({"write_file", "terminal"}))
+    }
+    assert "write_file" not in filtered
+    assert "terminal" not in filtered
+    assert base - {"write_file", "terminal"} == filtered
+
+
+def test_schemas_deny_ignores_unknown_names() -> None:
+    base = {s["function"]["name"] for s in tools.schemas()}
+    filtered = {
+        s["function"]["name"]
+        for s in tools.schemas(deny=frozenset({"nonexistent_tool_xyz"}))
+    }
+    assert base == filtered
+
+
+def test_execute_refuses_denied_tool() -> None:
+    result = tools.execute(
+        "write_file",
+        {"path": "/tmp/should-not-write.txt", "content": "x"},
+        deny=frozenset({"write_file"}),
+    )
+    assert not result.ok
+    assert "denied" in (result.error or "")
+    assert "tools.deny" in (result.error or "")
+
+
+def test_execute_without_deny_runs_normally(tmp_home_no_env: Path) -> None:
+    target = tmp_home_no_env / "ok.txt"
+    result = tools.execute(
+        "write_file",
+        {"path": str(target), "content": "hello"},
+    )
+    assert result.ok, result.error
+    assert target.read_text() == "hello"
+
+
 def test_research_depth_resolves_from_config(tmp_home_no_env) -> None:
     from alpi.tools.research import _resolve_depth, DEPTH_STEPS_DEFAULTS
     from alpi import config as cfg_mod

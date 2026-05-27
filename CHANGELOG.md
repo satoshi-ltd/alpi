@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.6.22 — 2026-05-27 — per-profile tool denylist
+
+You can now hide individual tools from a profile so the LLM never
+sees them in its schema and the executor refuses them. Useful for
+tightening profiles exposed to less-trusted input — e.g. a librarian
+profile that other peers reach via `link.ask` and that has no
+business writing files, running shell, or sending mail.
+
+- New `tools.deny: [<name>, …]` key in `config.yaml`. Denied tools
+  are absent from the schema AND refused by the executor as defence
+  in depth. Unknown names are no-ops, so typos are harmless.
+- The `peer` tool no longer claims its prompt is "single-shot — no
+  session resume"; the receiver hydrates up to 20 prior @-mention
+  turns from the caller, so follow-ups already work.
+
 ## v0.6.21 — 2026-05-27 — storage report covers the whole profile
 
 `host.profile.storage` now reports every on-disk shape a user might

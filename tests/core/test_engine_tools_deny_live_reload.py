@@ -1,0 +1,78 @@
+"""Pin contract: ``tools.deny`` is re-read from disk on every turn, and the per-turn refresh path does not bind names it then fails to reference (regression for a ``fresh_budget`` typo that crashed every run)."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+import yaml
+
+from alpi.config import Config, ToolsConfig
+from alpi.engine import Engine
+
+
+@pytest.fixture
+def engine(monkeypatch, tmp_path: Path) -> Engine:
+    home = tmp_path / "h"
+    home.mkdir()
+    (home / "sessions").mkdir()
+    (home / "config.yaml").write_text(yaml.safe_dump({
+        "model": "gpt-5.4-mini",
+        "tools": {"deny": ["write_file"]},
+    }))
+    monkeypatch.setattr("alpi.engine._maybe_load_mcps", lambda _cfg: [])
+    monkeypatch.setattr(Engine, "_build_system_prompt", lambda self: "alpi")
+    monkeypatch.setattr("alpi.ctx_window.resolve", lambda _h, _c, _m: 400_000)
+    monkeypatch.setattr("alpi.ledger.check", lambda *a, **kw: None)
+    monkeypatch.setattr("alpi.ledger.record", lambda *a, **kw: None)
+    cfg = Config(
+        home=home, model="gpt-5.4-mini",
+        tools=ToolsConfig(max_steps_per_turn=6, deny=["write_file"]),
+        raw={},
+    )
+    return Engine(home=home, cfg=cfg)
+
+
+def _stream_one(text: str):
+    if text:
+        yield {"text_delta": text}
+    yield {
+        "final": True,
+        "input_tokens": 1, "output_tokens": 1, "cost_usd": 0.0,
+        "tool_calls": [],
+    }
+
+
+def test_turn_runs_without_nameerror_on_refresh_block(
+    engine: Engine, monkeypatch,
+) -> None:
+    """Smoke test: the per-turn config refresh must not reference an undefined name. A typo here used to crash every turn before any tool ran."""
+    monkeypatch.setattr(
+        "alpi.llm.stream", lambda *a, **kw: _stream_one("ok"),
+    )
+    engine.run_turn("ping", emit=lambda _e: None)
+
+
+def test_tools_deny_refreshes_from_disk_each_turn(
+    engine: Engine, monkeypatch,
+) -> None:
+    schema_names: list[set[str]] = []
+
+    def capturing_stream(messages, tools, **kwargs):
+        schema_names.append({s["function"]["name"] for s in tools})
+        yield from _stream_one("ok")
+
+    monkeypatch.setattr("alpi.llm.stream", capturing_stream)
+
+    engine.run_turn("first", emit=lambda _e: None)
+    assert "write_file" not in schema_names[0]
+    assert "terminal" in schema_names[0]
+
+    (engine.home / "config.yaml").write_text(yaml.safe_dump({
+        "model": "gpt-5.4-mini",
+        "tools": {"deny": ["terminal"]},
+    }))
+
+    engine.run_turn("second", emit=lambda _e: None)
+    assert "terminal" not in schema_names[1]
+    assert "write_file" in schema_names[1]

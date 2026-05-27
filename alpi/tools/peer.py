@@ -45,7 +45,13 @@ class PeerTool(Tool):
             },
             "prompt": {
                 "type": "string",
-                "description": "The prompt to send. Single-shot — no session resume.",
+                "description": (
+                    "The prompt to send. The receiver hydrates up to 20 "
+                    "prior @-mention turns from you, so follow-ups have "
+                    "context. This is not session resume: each call starts "
+                    "a fresh Engine, live tool state/todos do not carry "
+                    "over, and only the final reply text comes back."
+                ),
             },
         },
         "required": ["peer_id", "prompt"],

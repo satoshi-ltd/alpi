@@ -50,9 +50,13 @@ def get(name: str) -> type[Tool] | None:
     return _TOOLS.get(name)
 
 
-def schemas() -> list[dict]:
-    """Schemas the LLM sees. Unavailable tools (TL.1 probe failed) are filtered so the model can't reach for a broken capability."""
-    return [cls.schema() for cls in _TOOLS.values() if is_available(cls)[0]]
+def schemas(deny: frozenset[str] | set[str] | None = None) -> list[dict]:
+    """Schemas the LLM sees. Unavailable tools (TL.1 probe failed) are filtered so the model can't reach for a broken capability. ``deny`` (per-profile ``tools.deny`` from config) is applied on top — denied tools are simply absent from the schema."""
+    deny = deny or frozenset()
+    return [
+        cls.schema() for cls in _TOOLS.values()
+        if is_available(cls)[0] and cls.name not in deny
+    ]
 
 
 def availability_report() -> list[tuple[str, bool, str]]:
@@ -61,8 +65,12 @@ def availability_report() -> list[tuple[str, bool, str]]:
     return [(cls.name, *is_available(cls)) for cls in _TOOLS.values()]
 
 
-def execute(name: str, arguments: dict) -> ToolResult:
-    """Execute a tool by name. Unknown or currently-unavailable names return an error result instead of calling .run()."""
+def execute(
+    name: str,
+    arguments: dict,
+    deny: frozenset[str] | set[str] | None = None,
+) -> ToolResult:
+    """Execute a tool by name. Unknown or currently-unavailable names return an error result instead of calling .run(). When ``deny`` includes ``name``, the call is refused — defence in depth against a stale LLM context or prompt injection that names a tool the schema no longer advertises."""
     cls = _TOOLS.get(name)
     if cls is None:
         available = ", ".join(sorted(_TOOLS.keys()))
@@ -70,6 +78,11 @@ def execute(name: str, arguments: dict) -> ToolResult:
             ok=False,
             output="",
             error=f"unknown tool: {name}. Available tools: {available}",
+        )
+    if deny and name in deny:
+        return ToolResult(
+            ok=False, output="",
+            error=f"tool denied for this profile: {name} (see tools.deny in config.yaml)",
         )
     ok, reason = is_available(cls)
     if not ok:
