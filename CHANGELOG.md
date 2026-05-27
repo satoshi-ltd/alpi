@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.6.25 — 2026-05-27 — device revoke is idempotent
+
+Same UX fix as `host.peers.remove` (v0.6.23), extended to paired
+devices: clicking Revoke on a row that's already gone no longer
+errors out — the user's intent is "be gone", the end state is the
+same either way.
+
+- `host.devices.revoke` returns `{ok: true, existed: <bool>}` instead
+  of raising `-32004 not-found` when the token_id no longer matches a
+  pinned device. `host.devices.{rename,promote,demote}` still raise
+  because they mutate state of an existing row.
+
 ## v0.6.24 — 2026-05-27 — local peer routing + safer reads
 
 Two classes of peer bug closed without adding any hidden state: local

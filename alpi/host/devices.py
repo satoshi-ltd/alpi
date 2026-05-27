@@ -315,12 +315,9 @@ async def _revoke(
         )
     target = next((d for d in load() if (d["token"] or "")[-8:] == token_id), None)
     if target is None:
-        raise host_server.HandlerError(
-            -32004, "not-found",
-            data={"detail": f"no device matching token_id {token_id!r}"},
-        )
-    revoke(target["token"])
-    return {"ok": True}
+        return {"ok": True, "existed": False}
+    existed = revoke(target["token"])
+    return {"ok": True, "existed": existed}
 
 
 async def _rename(

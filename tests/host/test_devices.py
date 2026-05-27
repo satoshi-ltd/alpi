@@ -189,12 +189,13 @@ async def test_revoke_verb(short_tmp: Path) -> None:
         "method": "host.devices.revoke",
         "params": {"token_id": row["token"][-8:]},
     })
-    assert resp["result"]["ok"]
+    assert resp["result"] == {"ok": True, "existed": True}
     assert devices.load() == []
 
 
 @pytest.mark.asyncio
-async def test_revoke_unknown_returns_not_found(short_tmp: Path) -> None:
+async def test_revoke_unknown_is_idempotent(short_tmp: Path) -> None:
+    # Same UX rationale as host.peers.remove: the user's intent is "be gone".
     srv = host_server.Server(home=short_tmp)
     devices.register(srv)
     resp = await srv._dispatch({
@@ -202,7 +203,24 @@ async def test_revoke_unknown_returns_not_found(short_tmp: Path) -> None:
         "method": "host.devices.revoke",
         "params": {"token_id": "deadbeef"},
     })
-    assert resp["error"]["code"] == -32004
+    assert resp["result"] == {"ok": True, "existed": False}
+
+
+@pytest.mark.asyncio
+async def test_revoke_idempotent_retry(short_tmp: Path) -> None:
+    row = devices.add(label="x")
+    srv = host_server.Server(home=short_tmp)
+    devices.register(srv)
+    first = await srv._dispatch({
+        "id": "1", "method": "host.devices.revoke",
+        "params": {"token_id": row["token"][-8:]},
+    })
+    second = await srv._dispatch({
+        "id": "2", "method": "host.devices.revoke",
+        "params": {"token_id": row["token"][-8:]},
+    })
+    assert first["result"] == {"ok": True, "existed": True}
+    assert second["result"] == {"ok": True, "existed": False}
 
 
 def test_check_token_fail_closed_when_store_empty(short_tmp: Path) -> None:

@@ -637,7 +637,9 @@ Verb namespaces in current shape:
 - **`host.devices.{list,generate,revoke,rename}`** — pairing-token
   management for the WebSocket transport. `list` redacts the full
   token to `token_id` (last 8 chars); `generate` returns the fresh
-  full token exactly once.
+  full token exactly once. `revoke` is idempotent — `{ok: true,
+  existed: <bool>}` instead of `-32004` when the token_id is already
+  gone, same rationale as `host.peers.remove`.
 - **`host.gateway.probe`**, **`host.peers.ping`**,
   **`host.model.ctx_window`** — diagnostic probes the desktop / TUI
   used to invoke via `alpi gateway probe`, `alpi peers ping`, and
