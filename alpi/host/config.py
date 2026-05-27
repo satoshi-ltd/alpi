@@ -302,12 +302,10 @@ async def _peers_remove(
             -32602, "invalid-params", data={"detail": "id required"},
         )
     home = _resolve_home(profile)
-    if not peers_mod.remove(home, peer_id):
-        raise host_server.HandlerError(
-            -32004, "not-found", data={"detail": f"no peer @{peer_id}"},
-        )
-    _emit_peers_changed(home, "removed", peer_id)
-    return {"ok": True}
+    existed = peers_mod.remove(home, peer_id)
+    if existed:
+        _emit_peers_changed(home, "removed", peer_id)
+    return {"ok": True, "existed": existed}
 
 
 async def _peers_pending_list(

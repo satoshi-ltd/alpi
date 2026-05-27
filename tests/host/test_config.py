@@ -115,14 +115,26 @@ async def test_peers_add_remove(tmp_path: Path, monkeypatch) -> None:
 
     rm = {"id": "2", "method": "host.peers.remove",
           "params": {"profile": "default", "id": "alice"}}
-    assert (await srv._dispatch(rm))["result"]["ok"] is True
+    rm_resp = (await srv._dispatch(rm))["result"]
+    assert rm_resp["ok"] is True
+    assert rm_resp["existed"] is True
     assert peers_mod.get_by_id(home, "alice") is None
 
-    miss = await srv._dispatch({
+    # Removing again must be idempotent — the desired end state ("peer gone")
+    # is already true. The UI should not surface this as an error.
+    miss_resp = (await srv._dispatch({
         "id": "3", "method": "host.peers.remove",
+        "params": {"profile": "default", "id": "alice"},
+    }))["result"]
+    assert miss_resp["ok"] is True
+    assert miss_resp["existed"] is False
+
+    # Same idempotent contract for a peer that was never pinned in the first place.
+    ghost_resp = (await srv._dispatch({
+        "id": "4", "method": "host.peers.remove",
         "params": {"profile": "default", "id": "ghost"},
-    })
-    assert miss["error"]["code"] == -32004
+    }))["result"]
+    assert ghost_resp == {"ok": True, "existed": False}
 
 
 @pytest.mark.asyncio

@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.6.23 — 2026-05-27 — peer remove is idempotent
+
+Removing a peer no longer fails when the peer is already gone — the
+user's intent (peer unpinned) is the same end state either way, so a
+stale UI, a half-succeeded retry or a parallel client should not block
+the click.
+
+- `host.peers.remove` returns `{ok: true, existed: <bool>}` in every
+  case instead of raising `-32004 not-found` when the peer is missing.
+  `peers_changed` only fires when the row was actually dropped.
+- CLI `alpi peers remove` is unchanged — typo suggestions still help
+  when you mistype an id at the terminal.
+
 ## v0.6.22 — 2026-05-27 — per-profile tool denylist
 
 You can now hide individual tools from a profile so the LLM never
