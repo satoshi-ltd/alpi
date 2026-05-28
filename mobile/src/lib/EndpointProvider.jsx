@@ -11,6 +11,7 @@ export function EndpointProvider({ children }) {
   const [activeId, setActiveId] = useState(null);
   const [probeState, setProbeState] = useState(() => new Map());
   const [versionState, setVersionState] = useState(() => new Map());
+  const [roleState, setRoleState] = useState(() => new Map());
   const [ready, setReady] = useState(false);
 
   const activeEndpoint = useMemo(
@@ -26,7 +27,7 @@ export function EndpointProvider({ children }) {
       next.set(id, 'probing');
       return next;
     });
-    const { status, version, deviceId } = await probe(target);
+    const { status, version, deviceId, role } = await probe(target);
     setProbeState((m) => {
       const next = new Map(m);
       next.set(id, status);
@@ -35,6 +36,12 @@ export function EndpointProvider({ children }) {
     setVersionState((m) => {
       const next = new Map(m);
       if (version) next.set(id, version);
+      else next.delete(id);
+      return next;
+    });
+    setRoleState((m) => {
+      const next = new Map(m);
+      if (role) next.set(id, role);
       else next.delete(id);
       return next;
     });
@@ -61,9 +68,10 @@ export function EndpointProvider({ children }) {
     setConnections(state.connections);
     setActiveId(state.active_id);
     setReady(true);
-    const { status, versions, deviceIds } = await probeAll(state.connections);
+    const { status, versions, deviceIds, roles = new Map() } = await probeAll(state.connections);
     setProbeState(status);
     setVersionState(versions);
+    setRoleState(roles);
     if (deviceIds.size > 0) {
       const next = await setDeviceIds(deviceIds);
       setConnections(next.connections);
@@ -149,6 +157,7 @@ export function EndpointProvider({ children }) {
     [activeEndpoint],
   );
 
+  const activeRole = activeId ? (roleState.get(activeId) ?? null) : null;
   const value = useMemo(
     () => ({
       ready,
@@ -157,6 +166,8 @@ export function EndpointProvider({ children }) {
       endpoint: activeEndpoint,
       probeState,
       versionState,
+      roleState,
+      activeRole,
       setActive,
       addConnection,
       forget,
@@ -166,7 +177,7 @@ export function EndpointProvider({ children }) {
       call,
       callStream,
     }),
-    [ready, connections, activeId, activeEndpoint, probeState, versionState, setActive, addConnection, forget, unpair, probeOne, probeAllConnections, call, callStream],
+    [ready, connections, activeId, activeEndpoint, probeState, versionState, roleState, activeRole, setActive, addConnection, forget, unpair, probeOne, probeAllConnections, call, callStream],
   );
 
   return <EndpointContext.Provider value={value}>{children}</EndpointContext.Provider>;

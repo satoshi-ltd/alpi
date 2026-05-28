@@ -75,19 +75,21 @@ export function ChatHeader({ kind, accent, title, meta, onBack, onMore, onPickSe
             <Icon name="clock" size={20} color={colors.ink2} strokeWidth={1.8} />
           </Pressable>
         ) : null}
-        <Pressable
-          onPress={onMore}
-          style={({ pressed }) => ({
-            width: 36,
-            height: 36,
-            borderRadius: radii.sm,
-            alignItems: 'center',
-            justifyContent: 'center',
-            backgroundColor: pressed ? colors.selected : 'transparent',
-          })}
-        >
-          <Icon name="more" size={22} color={colors.ink2} strokeWidth={1.7} />
-        </Pressable>
+        {onMore ? (
+          <Pressable
+            onPress={onMore}
+            style={({ pressed }) => ({
+              width: 36,
+              height: 36,
+              borderRadius: radii.sm,
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: pressed ? colors.selected : 'transparent',
+            })}
+          >
+            <Icon name="more" size={22} color={colors.ink2} strokeWidth={1.7} />
+          </Pressable>
+        ) : null}
       </View>
     </View>
   );

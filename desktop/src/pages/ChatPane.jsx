@@ -97,7 +97,7 @@ export default function ChatPane({
             profile={activeProfile}
             sessionData={sessionData}
             activeSessionId={view.sessionId}
-            onOpenSettings={() => onConfigureProfile?.(activeProfile)}
+            onOpenSettings={onConfigureProfile ? () => onConfigureProfile(activeProfile) : null}
             onRefresh={() => {
               setRefreshBeat((b) => b + 1);
               onRefreshSession?.();
@@ -121,18 +121,22 @@ export default function ChatPane({
                   : `@${profileLabel(activeProfile.name)} needs a provider`}
               </h1>
               <p className={styles.emptyHint}>
-                {hasProviders
-                  ? "Pick from one of the providers you've already connected."
-                  : "Add an LLM provider (cloud or local Ollama) to start chatting."}
+                {onConfigureProfile
+                  ? hasProviders
+                    ? "Pick from one of the providers you've already connected."
+                    : "Add an LLM provider (cloud or local Ollama) to start chatting."
+                  : "Ask the host admin to finish setting up this profile."}
               </p>
             </div>
-            <Button
-              variant="primary"
-              size="hero"
-              onClick={() => onConfigureProfile?.(activeProfile)}
-            >
-              {hasProviders ? "Pick a model" : "Set up provider"}
-            </Button>
+            {onConfigureProfile && (
+              <Button
+                variant="primary"
+                size="hero"
+                onClick={() => onConfigureProfile(activeProfile)}
+              >
+                {hasProviders ? "Pick a model" : "Set up provider"}
+              </Button>
+            )}
           </div>
         </div>
       </>
@@ -176,7 +180,7 @@ export default function ChatPane({
           profile={activeProfile}
           sessionData={sessionData}
           activeSessionId={view.sessionId}
-          onOpenSettings={() => onConfigureProfile?.(activeProfile)}
+          onOpenSettings={onConfigureProfile ? () => onConfigureProfile(activeProfile) : null}
           onRefresh={() => {
             setRefreshBeat((b) => b + 1);
             onRefreshSession?.();
@@ -928,7 +932,7 @@ function ChatComposer({
               defaultModel={activeProfile.model ?? null}
               value={modelOverride}
               onChange={onModelChange}
-              onSetDefault={() => onConfigureProfile?.(activeProfile)}
+              onSetDefault={onConfigureProfile ? () => onConfigureProfile(activeProfile) : null}
               accent={activeProfile.accent ?? null}
             />
           )}

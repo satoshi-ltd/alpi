@@ -19,8 +19,17 @@ import { useProfile } from '../../src/hooks/useSubject';
 import { useEndpoint } from '../../src/lib/EndpointContext';
 import { accentForProfile } from '../../src/theme/accents';
 import { useTheme } from '../../src/theme/ThemeContext';
+import { AdminGuard } from '../../src/components/AdminGuard';
 
-export default function NewWorkgroup() {
+export default function NewWorkgroupRoute() {
+  return (
+    <AdminGuard>
+      <NewWorkgroup />
+    </AdminGuard>
+  );
+}
+
+function NewWorkgroup() {
   const router = useRouter();
   const toast = useToast();
   const { call } = useEndpoint();

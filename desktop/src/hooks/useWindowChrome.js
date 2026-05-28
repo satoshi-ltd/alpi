@@ -105,8 +105,8 @@ export function useWindowChrome({
       if (key === ",") {
         e.preventDefault();
         e.stopPropagation();
+        // No fallback: member devices pass null intentionally to disable the shortcut.
         if (onOpenSettings) onOpenSettings();
-        else setView({ kind: "settings" });
         return;
       }
       if (key === "f") {

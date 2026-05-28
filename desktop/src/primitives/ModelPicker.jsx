@@ -123,16 +123,18 @@ export default function ModelPicker({
           {mode === "override" && (
             <div className={`row between ${styles.modelPickerFooter}`}>
               <span>Override for this message only</span>
-              <button
-                type="button"
-                className={styles.modelPickerFooterLink}
-                onClick={() => {
-                  setOpen(false);
-                  onSetDefault?.();
-                }}
-              >
-                Set default…
-              </button>
+              {onSetDefault && (
+                <button
+                  type="button"
+                  className={styles.modelPickerFooterLink}
+                  onClick={() => {
+                    setOpen(false);
+                    onSetDefault();
+                  }}
+                >
+                  Set default…
+                </button>
+              )}
             </div>
           )}
         </div>

@@ -53,14 +53,16 @@ export function useCommands({
       }
     });
 
-    cmds.push({
-      id: "view:settings",
-      group: "View",
-      label: view.kind === "settings" ? "Close settings" : "Open settings",
-      hint: "⌘,",
-      action: () =>
-        view.kind === "settings" ? onCloseSettings?.() : onOpenSettings?.(),
-    });
+    if (view.kind === "settings" ? Boolean(onCloseSettings) : Boolean(onOpenSettings)) {
+      cmds.push({
+        id: "view:settings",
+        group: "View",
+        label: view.kind === "settings" ? "Close settings" : "Open settings",
+        hint: "⌘,",
+        action: () =>
+          view.kind === "settings" ? onCloseSettings?.() : onOpenSettings?.(),
+      });
+    }
 
     if (view.kind !== "settings") {
       cmds.push({
@@ -116,21 +118,25 @@ export function useCommands({
       });
     }
 
-    cmds.push({
-      id: "create:profile",
-      group: "Create",
-      label: "New profile",
-      hint: "⇧⌘N",
-      action: () => onNewProfile?.(),
-    });
+    if (onNewProfile) {
+      cmds.push({
+        id: "create:profile",
+        group: "Create",
+        label: "New profile",
+        hint: "⇧⌘N",
+        action: () => onNewProfile(),
+      });
+    }
 
-    cmds.push({
-      id: "create:workgroup",
-      group: "Create",
-      label: "New workgroup",
-      hint: "⇧⌘W",
-      action: () => onNewWorkgroup?.(),
-    });
+    if (onNewWorkgroup) {
+      cmds.push({
+        id: "create:workgroup",
+        group: "Create",
+        label: "New workgroup",
+        hint: "⇧⌘W",
+        action: () => onNewWorkgroup(),
+      });
+    }
 
     return cmds;
   }, [

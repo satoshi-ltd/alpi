@@ -35,15 +35,21 @@ _ADMIN_METHODS = frozenset({
     "host.providers.remove_openrouter_model",
     "host.peers.add",
     "host.peers.remove",
+    "host.peers.pending_list",
     "host.peers.pending_accept",
     "host.peers.pending_discard",
+    "host.peers.ping",
     "host.identity.draft",
     "host.profile.create",
     "host.profile.delete",
+    "host.profile.storage",
     "host.config.set_field",
     "host.config.unset_field",
     "host.mcp.add",
     "host.mcp.remove",
+    "host.gateway.status",
+    "host.gateway.config",
+    "host.gateway.probe",
     "host.gateway.remove",
     "host.gateway.gmail.begin",
     "host.gateway.gmail.exchange",
@@ -70,6 +76,9 @@ _ADMIN_METHODS = frozenset({
     "host.devices.demote",
     "host.devices.set_profiles",
 })
+
+# host.profile.detail leaks Settings-only fields (providers, mcps, peers, sandbox, workspace path…) inside its result blob. Members hit it from ChatPane for `models` + `voice_id`, so we can't gate the whole verb — instead redact the result down to the chat-essential fields when role != admin.
+_MEMBER_DETAIL_KEEP = frozenset({"models", "voice_id"})
 
 # Methods that don't operate on a single profile — exempt from the scope gate. New profile-handling RPCs MUST default to denied for scoped members; add here only when the verb is truly profile-agnostic (or aggregates across profiles and the response gets scope-filtered downstream).
 _SCOPE_FREE_METHODS = frozenset({
@@ -329,13 +338,18 @@ class Server:
             })
             return
         scoped = require_token and role != "admin" and bool(profile_scope)
-        if scoped:
-            async def send_scoped(payload: dict[str, Any]) -> None:
-                filtered = _filter_payload_by_scope(method, payload, profile_scope)
-                if filtered is None:
-                    return
-                await send(filtered)
-            delivery = send_scoped
+        member = require_token and role != "admin"
+        if scoped or member:
+            async def send_filtered(payload: dict[str, Any]) -> None:
+                out = payload
+                if scoped:
+                    out = _filter_payload_by_scope(method, out, profile_scope)
+                    if out is None:
+                        return
+                if member:
+                    out = _redact_payload_by_role(method, out)
+                await send(out)
+            delivery = send_filtered
         else:
             delivery = send
         if method in self.stream_handlers:
@@ -423,6 +437,19 @@ def _is_safe_bind(addr: str) -> bool:
     if ip.is_loopback or ip.is_unspecified:
         return False
     return any(ip in net for net in _PRIVATE_RANGES)
+
+
+def _redact_payload_by_role(method: str, payload: dict[str, Any]) -> dict[str, Any]:
+    # Strip Settings-only fields from rich profile.detail blob; admin role bypasses this wrapper entirely so the redaction only kicks in for member tokens.
+    if not isinstance(payload, dict):
+        return payload
+    result = payload.get("result")
+    if not isinstance(result, dict):
+        return payload
+    if method == "host.profile.detail":
+        redacted = {k: v for k, v in result.items() if k in _MEMBER_DETAIL_KEEP}
+        return {**payload, "result": redacted}
+    return payload
 
 
 def _filter_payload_by_scope(

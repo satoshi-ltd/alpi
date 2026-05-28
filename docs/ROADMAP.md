@@ -45,7 +45,6 @@ sovereignty depends on.
 
 | ID | Item | Status |
 |---|---|---|
-| UX.5 | Mobile admin parity — full device pairing / role / scope management in mobile, matching desktop. | 🟡 |
 | UX.7 | Restart daemon button — explicit, user-visible restart from `Settings → Daemon` in desktop and mobile, with reconnect feedback. | 🟡 |
 
 ### UX.2 / UX.3. Owned client experience
@@ -88,28 +87,6 @@ baseline prompt.
 Promotion condition: `alpi digest` or LLM test traces show repeated,
 family-specific failures such as under-calling tools, skipping
 verification, or closing turns early despite open commitments.
-
-### UX.5. Mobile admin parity (devices)
-
-Mobile today is read-only on the devices surface. Pairing tokens, role
-flips, revokes all happen from desktop. Per-device profile scope is
-now wired host-side, which widens the gap — an admin away from their
-desktop can't reshape access.
-
-Bring mobile to desktop parity on the device flow:
-
-- `Settings → Devices` lists every paired device with role + scope
-  chips;
-- `+ Pair device` generates a token (admin-only), with the
-  profile-scope picker if scope ≠ all;
-- promote / demote / rename / revoke as inline row actions;
-- the token-reveal modal copies once and never again, matching desktop.
-
-The host plane already exposes everything; this is pure mobile UI
-work.
-
-**Non-goals.** No mobile-side network configuration (Tailscale / TCP
-host stays in desktop / `alpi setup`).
 
 ### UX.7. Restart daemon button
 

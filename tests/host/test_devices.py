@@ -1288,3 +1288,102 @@ async def test_network_status_stays_local_only_for_remote_token(
     await srv._handle_request(json.dumps(body), send, require_token=True)
     assert sent[0]["error"]["code"] == -32001
     assert sent[0]["error"]["data"]["detail"] == "method is local-only"
+
+
+@pytest.mark.asyncio
+async def test_profile_detail_redacts_settings_fields_for_member(
+    short_tmp: Path,
+) -> None:
+    row = devices.add(label="phone", role="member")
+    srv = host_server.Server(home=short_tmp)
+
+    async def handler(_params, _server):
+        return {
+            "models": ["openrouter/anthropic/claude-3-opus"],
+            "voice_id": "shimmer",
+            "workspace": "/secret/workspace",
+            "tcp_host": "10.0.0.1",
+            "provider_keys": {"OPENAI": "sk-…"},
+            "mcps": [{"name": "fs"}],
+            "peers": [{"id": "@partner"}],
+            "sandbox": "deny",
+        }
+
+    srv.register("host.profile.detail", handler)
+
+    sent: list[dict] = []
+    async def send(p): sent.append(p)
+    body = {
+        "id": "r", "method": "host.profile.detail",
+        "params": {"auth_token": row["token"], "profile": "x"},
+    }
+    await srv._handle_request(json.dumps(body), send, require_token=True)
+
+    assert "error" not in sent[0]
+    result = sent[0]["result"]
+    assert set(result.keys()) == {"models", "voice_id"}
+    assert result["models"] == ["openrouter/anthropic/claude-3-opus"]
+    assert result["voice_id"] == "shimmer"
+
+
+@pytest.mark.asyncio
+async def test_profile_detail_full_for_admin(short_tmp: Path) -> None:
+    row = devices.add(label="laptop", role="admin")
+    srv = host_server.Server(home=short_tmp)
+
+    async def handler(_params, _server):
+        return {
+            "models": ["m"],
+            "voice_id": "shimmer",
+            "workspace": "/secret/workspace",
+            "provider_keys": {"OPENAI": "sk-…"},
+            "peers": [{"id": "@partner"}],
+        }
+
+    srv.register("host.profile.detail", handler)
+
+    sent: list[dict] = []
+    async def send(p): sent.append(p)
+    body = {
+        "id": "r", "method": "host.profile.detail",
+        "params": {"auth_token": row["token"], "profile": "x"},
+    }
+    await srv._handle_request(json.dumps(body), send, require_token=True)
+
+    result = sent[0]["result"]
+    assert "workspace" in result
+    assert "provider_keys" in result
+    assert "peers" in result
+
+
+@pytest.mark.asyncio
+async def test_ollama_models_callable_by_scoped_member(short_tmp: Path) -> None:
+    # Chat needs runtime model switching, so ollama_models is intentionally NOT in _ADMIN_METHODS. Scoped members still go through the per-call scope gate (host.providers.ollama_models takes a `profile` param).
+    row = devices.add(label="phone", role="member", profile_scope=["work"])
+    srv = host_server.Server(home=short_tmp)
+
+    async def handler(_params, _server):
+        return {"models": ["llama3:8b"], "errors": []}
+
+    srv.register("host.providers.ollama_models", handler)
+
+    sent: list[dict] = []
+    async def send(p): sent.append(p)
+
+    # In-scope: allowed
+    body_ok = {
+        "id": "ok", "method": "host.providers.ollama_models",
+        "params": {"auth_token": row["token"], "profile": "work"},
+    }
+    await srv._handle_request(json.dumps(body_ok), send, require_token=True)
+    assert "error" not in sent[0]
+    assert sent[0]["result"]["models"] == ["llama3:8b"]
+
+    # Out-of-scope: forbidden by HOST.1 gate
+    body_blocked = {
+        "id": "blocked", "method": "host.providers.ollama_models",
+        "params": {"auth_token": row["token"], "profile": "secret"},
+    }
+    await srv._handle_request(json.dumps(body_blocked), send, require_token=True)
+    assert sent[1]["error"]["code"] == -32001
+    assert sent[1]["error"]["data"]["detail"] == "profile not in device scope"

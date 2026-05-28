@@ -20,13 +20,22 @@ import { useEndpoint } from '../../../src/lib/EndpointContext';
 import { EditBudgetSheet } from '../../../src/features/sheets/EditBudgetSheet';
 import { accentForProfile } from '../../../src/theme/accents';
 import { useTheme } from '../../../src/theme/ThemeContext';
+import { AdminGuard } from '../../../src/components/AdminGuard';
 
 function shortPubkey(pk) {
   if (!pk) return '—';
   return `${pk.slice(0, 6)}…${pk.slice(-4)}`;
 }
 
-export default function WorkgroupSettings() {
+export default function WorkgroupSettingsRoute() {
+  return (
+    <AdminGuard>
+      <WorkgroupSettings />
+    </AdminGuard>
+  );
+}
+
+function WorkgroupSettings() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
   const toast = useToast();

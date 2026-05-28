@@ -20,12 +20,16 @@ export function RowContextSheet({ target, onClose, onPin, onOpenSettings }) {
           icon: <Icon name="plus" size={20} color={colors.ink2} />,
           onPress: () => onPin?.(target),
         },
-        {
-          id: 'settings',
-          label: 'Settings',
-          icon: <Icon name="gear" size={20} color={colors.ink2} />,
-          onPress: () => onOpenSettings?.(target),
-        },
+        ...(onOpenSettings
+          ? [
+              {
+                id: 'settings',
+                label: 'Settings',
+                icon: <Icon name="gear" size={20} color={colors.ink2} />,
+                onPress: () => onOpenSettings(target),
+              },
+            ]
+          : []),
       ]
     : [];
 

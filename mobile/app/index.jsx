@@ -24,10 +24,12 @@ import { useEndpoint } from '../src/lib/EndpointContext';
 import { useFireOnce } from '../src/lib/useFireOnce';
 import { usePins } from '../src/lib/pins';
 import { useTheme } from '../src/theme/ThemeContext';
+import { useCanAdminEarly } from '../src/hooks/useActiveRole';
 
 export default function Inbox() {
   const { colors, fonts, fontSizes } = useTheme();
   const router = useRouter();
+  const canAdmin = useCanAdminEarly();
   const { endpoint, probeState } = useEndpoint();
   const { items, loading, refresh } = useInbox();
   const pins = usePins();
@@ -266,10 +268,10 @@ export default function Inbox() {
         target={ctxTarget}
         onClose={() => setCtxTarget(null)}
         onPin={togglePin}
-        onOpenSettings={(t) => {
+        onOpenSettings={canAdmin ? (t) => {
           setCtxTarget(null);
           router.push(t.kind === 'workgroup' ? `/wg/${t.id}/settings` : `/profile/${t.id}/settings`);
-        }}
+        } : null}
       />
     </SafeAreaView>
   );

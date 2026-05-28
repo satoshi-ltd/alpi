@@ -12,6 +12,7 @@ import { useToast } from '../../src/components/Toast';
 import { useProfileSummaries } from '../../src/hooks/useDaemonData';
 import { useEndpoint } from '../../src/lib/EndpointContext';
 import { useTheme } from '../../src/theme/ThemeContext';
+import { AdminGuard } from '../../src/components/AdminGuard';
 
 const PROVIDERS = [
   { id: 'ollama', label: 'Ollama' },
@@ -24,7 +25,15 @@ const PROVIDERS = [
 const RESERVED = new Set(['default', 'alpi', 'new']);
 const NAME_RE = /^[a-z0-9_-]{2,}$/;
 
-export default function NewProfile() {
+export default function NewProfileRoute() {
+  return (
+    <AdminGuard>
+      <NewProfile />
+    </AdminGuard>
+  );
+}
+
+function NewProfile() {
   const router = useRouter();
   const toast = useToast();
   const { call } = useEndpoint();

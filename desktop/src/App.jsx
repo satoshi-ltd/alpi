@@ -215,6 +215,12 @@ export default function App() {
   useEffect(() => {
     setSearchOpen(false);
   }, [view.kind, view.profile, view.sessionId, view.id]);
+  // Member devices have no Settings surface — snap back to empty if state ever points there (deeplink, nav event, ⌘, race).
+  useEffect(() => {
+    if (!canAdminEarly && view.kind === "settings") {
+      setView({ kind: "empty" });
+    }
+  }, [canAdminEarly, view.kind]);
   const onOpenSettings = useCallback(() => {
     const v = viewRef.current;
     if (v?.kind === "settings") {
@@ -250,13 +256,14 @@ export default function App() {
     }
     setView({ kind: "settings" });
   }, []);
+  const adminOnOpenSettings = canAdminEarly ? onOpenSettings : null;
   useWindowChrome({
     viewRef,
     setView,
     onJumpToProfile,
     onNewProfile: adminOnNewProfile,
     onNewWorkgroup: adminOnNewWorkgroup,
-    onOpenSettings,
+    onOpenSettings: adminOnOpenSettings,
     onToggleSearch,
     onTogglePalette,
     paletteOpenRef,
@@ -865,7 +872,7 @@ export default function App() {
     searchOpen,
     onSelectProfile: onOpenProfile,
     onSelectWorkgroup,
-    onOpenSettings,
+    onOpenSettings: adminOnOpenSettings,
     onCloseSettings: closeSettings,
     onToggleSearch,
     onNewProfile: adminOnNewProfile,
@@ -893,7 +900,7 @@ export default function App() {
         onNewChat={onNewChat}
         onOpenProfile={onOpenProfile}
         onOpenWorkgroup={onOpenWorkgroup}
-        onOpenSettings={onOpenSettings}
+        onOpenSettings={adminOnOpenSettings}
         onOpenPalette={onTogglePalette}
         onNewProfile={adminOnNewProfile}
         onNewWorkgroup={adminOnNewWorkgroup}
@@ -909,7 +916,7 @@ export default function App() {
         notificationsUnread={notificationsUnread}
       />
       <main className={styles.main}>
-          {view.kind === "settings" ? (
+          {view.kind === "settings" && canAdminEarly ? (
             <Settings
               profiles={profiles}
               workgroups={workgroups}
@@ -964,10 +971,10 @@ export default function App() {
                       prev[key] === task ? prev : { ...prev, [key]: task },
                     );
                   }}
-                  onOpenSettings={(wg) => {
+                  onOpenSettings={canAdminEarly ? (wg) => {
                     setSettingsTarget({ kind: "workgroup", id: wg.id, profile: wg.profile });
                     setView({ kind: "settings" });
-                  }}
+                  } : null}
                   searchOpen={searchOpen}
                   onCloseSearch={onCloseSearch}
                 />
@@ -987,10 +994,10 @@ export default function App() {
                   }
                   onSend={onSend}
                   onCancel={onCancelTurn}
-                  onConfigureProfile={(p) => {
+                  onConfigureProfile={canAdminEarly ? (p) => {
                     setSettingsTarget({ kind: "profile", id: p.name });
                     setView({ kind: "settings" });
-                  }}
+                  } : null}
                   onSelectProfile={(name) => {
                     setPickerAlpi(name);
                     if (view.kind === "profile") {

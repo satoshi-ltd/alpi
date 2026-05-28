@@ -12,8 +12,17 @@ import { useDirtyBack } from '../../../src/hooks/useDirtyBack';
 import { useWorkgroup } from '../../../src/hooks/useSubject';
 import { useEndpoint } from '../../../src/lib/EndpointContext';
 import { useTheme } from '../../../src/theme/ThemeContext';
+import { AdminGuard } from '../../../src/components/AdminGuard';
 
-export default function EditBriefing() {
+export default function EditBriefingRoute() {
+  return (
+    <AdminGuard>
+      <EditBriefing />
+    </AdminGuard>
+  );
+}
+
+function EditBriefing() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
   const toast = useToast();

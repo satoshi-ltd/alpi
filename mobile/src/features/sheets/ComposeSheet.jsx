@@ -8,6 +8,7 @@ import { Glyph } from '../../components/Glyph';
 import { Icon } from '../../components/Icon';
 import { Sheet } from '../../components/Sheet';
 import { useProfileSummaries, useWorkgroups } from '../../hooks/useDaemonData';
+import { useCanAdminEarly } from '../../hooks/useActiveRole';
 import { profileReadyToChat } from '../../lib/profileReady';
 import { accentForProfile } from '../../theme/accents';
 import { useTheme } from '../../theme/ThemeContext';
@@ -15,6 +16,7 @@ import { useTheme } from '../../theme/ThemeContext';
 export function ComposeSheet({ open, onClose }) {
   const { colors, fonts, fontSizes } = useTheme();
   const router = useRouter();
+  const canAdmin = useCanAdminEarly();
   const summaries = useProfileSummaries();
   const wgs = useWorkgroups();
   const [q, setQ] = useState('');
@@ -83,10 +85,10 @@ export function ComposeSheet({ open, onClose }) {
       onClose={handleClose}
       title="New chat"
       subtitle="who do you want to talk to"
-      primaryAction={[
+      primaryAction={canAdmin ? [
         { id: 'profile', label: '+ New profile', variant: 'ghost', onPress: createProfile },
         { id: 'wg', label: '+ New workgroup', variant: 'ghost', onPress: createWorkgroup },
-      ]}
+      ] : null}
     >
       <View
         style={{

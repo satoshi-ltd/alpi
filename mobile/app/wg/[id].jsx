@@ -8,6 +8,7 @@ import { Dot } from '../../src/components/Dot';
 import { useToast } from '../../src/components/Toast';
 import { WorkgroupMessage } from '../../src/features/chat/Bubble';
 import { ChatHeader } from '../../src/features/chat/ChatHeader';
+import { useCanAdminEarly } from '../../src/hooks/useActiveRole';
 import { ChatSkeleton } from '../../src/features/chat/ChatSkeleton';
 import { Composer } from '../../src/features/chat/Composer';
 import { MarkerCard } from '../../src/features/chat/MarkerCard';
@@ -240,6 +241,7 @@ export default function WorkgroupChat() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
   const { colors, fonts, fontSizes } = useTheme();
+  const canAdmin = useCanAdminEarly();
   const { endpoint, call } = useEndpoint();
   const summaries = useProfileSummaries();
   const wgs = useWorkgroups();
@@ -396,7 +398,7 @@ export default function WorkgroupChat() {
         title={wg.name || wg.id}
         meta={meta}
         onBack={() => router.back()}
-        onMore={() => router.push(`/wg/${wg.id}/settings`)}
+        onMore={canAdmin ? () => router.push(`/wg/${wg.id}/settings`) : null}
         right={tasks.length ? <TasksHeaderButton tasks={tasks} accent={accent} onPress={() => setTasksOpen(true)} /> : null}
       />
       {paused ? (

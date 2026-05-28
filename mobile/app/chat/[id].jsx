@@ -26,6 +26,7 @@ import { useEndpoint } from '../../src/lib/EndpointContext';
 import { profileEmptyState } from '../../src/lib/profileReady';
 import { markProfileRead } from '../../src/lib/readState';
 import { useTheme } from '../../src/theme/ThemeContext';
+import { useCanAdminEarly } from '../../src/hooks/useActiveRole';
 
 function relativeTime(ms) {
   if (!ms) return '';
@@ -248,6 +249,7 @@ function ChatList({ turns, pendingTurn, loading, hydrating, profileName, model, 
 function NeedsSetup({ name, accent, state, onSetupProvider, onPickModel }) {
   const { colors, fonts, fontSizes, lineHeights } = useTheme();
   const isModel = state === 'needs-model';
+  const action = isModel ? onPickModel : onSetupProvider;
   return (
     <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: space.s10, gap: space.s6 }}>
       <AlpiMark size={80} color={accent} />
@@ -263,17 +265,21 @@ function NeedsSetup({ name, accent, state, onSetupProvider, onPickModel }) {
           lineHeight: fontSizes.md * lineHeights.normal,
         }}
       >
-        {isModel
-          ? "Pick from one of the providers you've already connected."
-          : 'Add an LLM provider (cloud or local Ollama) to start chatting.'}
+        {action
+          ? isModel
+            ? "Pick from one of the providers you've already connected."
+            : 'Add an LLM provider (cloud or local Ollama) to start chatting.'
+          : 'Ask the host admin to finish setting up this profile.'}
       </Text>
-      <View style={{ marginTop: space.s4 }}>
-        <Button
-          title={isModel ? 'Pick a model' : 'Set up provider'}
-          size="lg"
-          onPress={isModel ? onPickModel : onSetupProvider}
-        />
-      </View>
+      {action ? (
+        <View style={{ marginTop: space.s4 }}>
+          <Button
+            title={isModel ? 'Pick a model' : 'Set up provider'}
+            size="lg"
+            onPress={action}
+          />
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -282,6 +288,7 @@ export default function ProfileChat() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
   const { colors, fonts, fontSizes } = useTheme();
+  const canAdmin = useCanAdminEarly();
   const { endpoint, call } = useEndpoint();
   const summaries = useProfileSummaries();
   const sessionsList = useSessionsList(id);
@@ -456,7 +463,7 @@ export default function ProfileChat() {
         title={profile.name}
         meta={headerMeta}
         onBack={() => router.back()}
-        onMore={() => router.push(`/profile/${profile.name}/settings`)}
+        onMore={canAdmin ? () => router.push(`/profile/${profile.name}/settings`) : null}
         onPickSession={() => setSessionsOpen(true)}
       />
       {blocked ? (
@@ -464,8 +471,8 @@ export default function ProfileChat() {
           name={profile.name}
           accent={accent}
           state={emptyState}
-          onSetupProvider={() => router.push(`/profile/${profile.name}/providers`)}
-          onPickModel={() => router.push(`/profile/${profile.name}/settings`)}
+          onSetupProvider={canAdmin ? () => router.push(`/profile/${profile.name}/providers`) : null}
+          onPickModel={canAdmin ? () => router.push(`/profile/${profile.name}/settings`) : null}
         />
       ) : (
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>

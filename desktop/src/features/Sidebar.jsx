@@ -248,20 +248,21 @@ function Sidebar({
 
   const [ctxMenu, setCtxMenu] = useState(null);
   const closeCtxMenu = useCallback(() => setCtxMenu(null), []);
+  const canOpenSettings = Boolean(onOpenSettings);
 
   const openProfileCtx = useCallback(
     (e, profile) => {
       e.preventDefault();
       const pinned = pinnedProfileNames.includes(profile.name);
-      setCtxMenu({
-        x: e.clientX,
-        y: e.clientY,
-        items: [
-          {
-            label: pinned ? "Unpin from top" : "Pin to top",
-            icon: pinned ? <PinOffIcon /> : <PinIcon />,
-            onClick: () => onTogglePin?.("profiles", profile.name),
-          },
+      const items = [
+        {
+          label: pinned ? "Unpin from top" : "Pin to top",
+          icon: pinned ? <PinOffIcon /> : <PinIcon />,
+          onClick: () => onTogglePin?.("profiles", profile.name),
+        },
+      ];
+      if (canOpenSettings) {
+        items.push(
           { kind: "separator" },
           {
             label: "Open settings",
@@ -276,10 +277,11 @@ function Sidebar({
             kind: "danger",
             onClick: () => onSetSettingsTarget?.({ kind: "profile", id: profile.name }),
           },
-        ],
-      });
+        );
+      }
+      setCtxMenu({ x: e.clientX, y: e.clientY, items });
     },
-    [pinnedProfileNames, onTogglePin, onSetSettingsTarget],
+    [pinnedProfileNames, onTogglePin, onSetSettingsTarget, canOpenSettings],
   );
 
   const openWorkgroupCtx = useCallback(
@@ -287,15 +289,15 @@ function Sidebar({
       e.preventDefault();
       const key = `${workgroup.profile}/${workgroup.id}`;
       const pinned = pinnedWorkgroupKeys.includes(key);
-      setCtxMenu({
-        x: e.clientX,
-        y: e.clientY,
-        items: [
-          {
-            label: pinned ? "Unpin from top" : "Pin to top",
-            icon: pinned ? <PinOffIcon /> : <PinIcon />,
-            onClick: () => onTogglePin?.("workgroups", key),
-          },
+      const items = [
+        {
+          label: pinned ? "Unpin from top" : "Pin to top",
+          icon: pinned ? <PinOffIcon /> : <PinIcon />,
+          onClick: () => onTogglePin?.("workgroups", key),
+        },
+      ];
+      if (canOpenSettings) {
+        items.push(
           { kind: "separator" },
           {
             label: "Open settings",
@@ -325,10 +327,11 @@ function Sidebar({
                 profile: workgroup.profile,
               }),
           },
-        ],
-      });
+        );
+      }
+      setCtxMenu({ x: e.clientX, y: e.clientY, items });
     },
-    [pinnedWorkgroupKeys, onTogglePin, onSetSettingsTarget],
+    [pinnedWorkgroupKeys, onTogglePin, onSetSettingsTarget, canOpenSettings],
   );
 
   const renderProfileRow = (p, keyPrefix = "") => (
@@ -482,7 +485,7 @@ function Sidebar({
 
       <SidebarFooter
         inSettings={inSettings}
-        onOpenSettings={() => onOpenSettings?.()}
+        onOpenSettings={onOpenSettings ? () => onOpenSettings() : null}
         onOpenPalette={() => onOpenPalette?.()}
         onOpenNotifications={onOpenNotifications}
         notificationsUnread={notificationsUnread}
@@ -506,26 +509,29 @@ function SidebarFooter({
   onOpenNotifications,
   notificationsUnread = 0,
 }) {
+  const showSettings = inSettings || Boolean(onOpenSettings);
   return (
     <div className={`${styles.footer} ${inSettings ? styles.footerSettings : ""}`}>
-      <Tip text={inSettings ? "Command palette · ⌘K" : "Settings · ⌘,"} side="up">
-        <button
-          type="button"
-          className={`ds-sb-row ${styles.footerButton}`}
-          onClick={inSettings ? onOpenPalette : onOpenSettings}
-        >
-          {inSettings ? <SearchIcon /> : <GearIcon />}
-          <span className={styles.rowLabel}>
-            {inSettings ? "Command…" : "Settings"}
-          </span>
-          {inSettings ? (
-            <span className={styles.footerKbds} aria-hidden>
-              <Kbd>⌘</Kbd>
-              <Kbd>K</Kbd>
+      {showSettings && (
+        <Tip text={inSettings ? "Command palette · ⌘K" : "Settings · ⌘,"} side="up">
+          <button
+            type="button"
+            className={`ds-sb-row ${styles.footerButton}`}
+            onClick={inSettings ? onOpenPalette : onOpenSettings}
+          >
+            {inSettings ? <SearchIcon /> : <GearIcon />}
+            <span className={styles.rowLabel}>
+              {inSettings ? "Command…" : "Settings"}
             </span>
-          ) : null}
-        </button>
-      </Tip>
+            {inSettings ? (
+              <span className={styles.footerKbds} aria-hidden>
+                <Kbd>⌘</Kbd>
+                <Kbd>K</Kbd>
+              </span>
+            ) : null}
+          </button>
+        </Tip>
+      )}
       {!inSettings && (
         <NotificationsBellButton
           unread={notificationsUnread}
