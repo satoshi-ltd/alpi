@@ -1,5 +1,17 @@
 const TASK_RE = /^(?:@\S+\s+)*#task\s+(.+?)\s*$/m;
 const DONE_RE = /^(?:@\S+\s+)*#done\s*(.*)$/m;
+const TASK_LINE_RE = /^(?:@\S+\s+)*#task\s+(.+?)\s*$/i;
+
+export function parseTaskOpen(body) {
+  const lines = String(body || "").split("\n");
+  for (let i = 0; i < lines.length; i += 1) {
+    const m = TASK_LINE_RE.exec(lines[i]);
+    if (m) {
+      return { title: m[1].trim(), body: lines.slice(i + 1).join("\n").trim() };
+    }
+  }
+  return null;
+}
 
 export function findLatestTask(messages, hubPubkey = null) {
   if (!messages || messages.length === 0) return null;

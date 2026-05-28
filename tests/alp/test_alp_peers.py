@@ -174,3 +174,29 @@ def test_local_socket_path_resolves_alias_by_pubkey_under_alpi_home(
         allow=["link.ping"],
     )
     assert peers_mod.local_socket_path(peer) == real_target / "alp" / "alp.sock"
+
+
+def test_local_socket_path_when_alpi_home_is_a_profile(
+    tmp_path, monkeypatch,
+) -> None:
+    # The daemon dispatches workgroup turns with ALPI_HOME set to the *profile* home (e.g. ~/.alpi/profiles/vera). Peer routing must still see siblings under .../profiles/, not nest under self. Regression for v0.6.27 → v0.6.28: vera posting to prism would resolve to <vera>/profiles/prism/alp/alp.sock → ENOENT.
+    from alpi import home as home_mod
+    from alpi.alp import keys as keys_mod
+
+    root = tmp_path / ".alpi"
+    vera_home = root / "profiles" / "vera"
+    prism_home = root / "profiles" / "prism"
+    vera_home.mkdir(parents=True)
+    prism_home.mkdir(parents=True)
+    prism_kp = keys_mod.generate(prism_home)
+
+    monkeypatch.setenv("ALPI_HOME", str(vera_home))
+    monkeypatch.setattr(home_mod, "_ROOT", tmp_path / "noise-default")
+    monkeypatch.setattr(Path, "home", staticmethod(lambda: tmp_path / "noise"))
+
+    peer = Peer(id="prism", pubkey=prism_kp.pubkey_b64(), allow=["link.ping"])
+    assert peers_mod.local_socket_path(peer) == prism_home / "alp" / "alp.sock"
+
+    # Fallback (unknown pubkey) also resolves to the sibling, not nested under self.
+    peer_unknown = Peer(id="zeta", pubkey="UNKNOWN", allow=["link.ping"])
+    assert peers_mod.local_socket_path(peer_unknown) == root / "profiles" / "zeta" / "alp" / "alp.sock"

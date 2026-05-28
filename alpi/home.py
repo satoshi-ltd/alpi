@@ -66,10 +66,13 @@ def home_for(name: str) -> Path:
 
 
 def alpi_root() -> Path:
-    """Return the alpi home root, honoring ``ALPI_HOME`` — ignores any profile selection."""
+    """Return the alpi home root, honoring ``ALPI_HOME`` — ignores any profile selection. When ``ALPI_HOME`` points at a profile dir (``…/profiles/<name>``) — as the daemon sets it for dispatched turns — climb two levels so peer scans see siblings, not nest under self."""
     override = os.environ.get("ALPI_HOME")
     if override:
-        return Path(override).expanduser()
+        p = Path(override).expanduser()
+        if p.parent.name == "profiles":
+            return p.parent.parent
+        return p
     return _ROOT
 
 

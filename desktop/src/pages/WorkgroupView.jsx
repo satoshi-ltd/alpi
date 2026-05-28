@@ -9,7 +9,7 @@ import Message from "../primitives/Message.jsx";
 import SearchBar from "../primitives/SearchBar.jsx";
 import { renderMarkdown, renderMarkdownInline } from "../lib/markdown.js";
 import { useTranscriptSearch } from "../hooks/useTranscriptSearch.js";
-import { findLatestTask } from "../lib/workgroup-tasks.js";
+import { findLatestTask, parseTaskOpen } from "../lib/workgroup-tasks.js";
 import { playTts, subscribeTts, voiceForPubkey } from "../lib/tts.js";
 import { useOnline } from "../lib/useOnline.js";
 import {
@@ -369,7 +369,16 @@ export default function WorkgroupView({
                         title={task.title}
                         meta={meta}
                         footer={footer}
-                      />
+                      >
+                        {task.body ? (
+                          <div
+                            className="alpi-md"
+                            dangerouslySetInnerHTML={{
+                              __html: renderMarkdown(task.body),
+                            }}
+                          />
+                        ) : null}
+                      </MarkerCard>
                     );
                   }
 
@@ -484,11 +493,6 @@ function findMarkerLine(body, re) {
     if (m) return m;
   }
   return null;
-}
-
-function parseTaskOpen(body) {
-  const m = findMarkerLine(body, /^(?:@\S+\s+)*#task\s+(.+?)\s*$/i);
-  return m ? { title: m[1].trim() } : null;
 }
 
 function parseWorking(body) {

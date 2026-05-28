@@ -19,6 +19,21 @@ def test_alpi_home_env_overrides(monkeypatch, tmp_path: Path) -> None:
     assert home.get_home() == tmp_path
 
 
+def test_alpi_root_strips_profile_suffix(monkeypatch, tmp_path: Path) -> None:
+    # Daemon dispatch sets ALPI_HOME to the profile dir. alpi_root() must return the real root so peer scans see siblings.
+    root = tmp_path / ".alpi"
+    profile = root / "profiles" / "vera"
+    profile.mkdir(parents=True)
+    monkeypatch.setenv("ALPI_HOME", str(profile))
+    assert home.alpi_root() == root
+
+
+def test_alpi_root_passthrough_when_not_profile(monkeypatch, tmp_path: Path) -> None:
+    # Relocated installs (containers, custom roots) still work.
+    monkeypatch.setenv("ALPI_HOME", str(tmp_path))
+    assert home.alpi_root() == tmp_path
+
+
 def test_named_profile_goes_to_subdir(monkeypatch) -> None:
     monkeypatch.delenv("ALPI_HOME", raising=False)
     monkeypatch.delenv("ALPI_PROFILE", raising=False)

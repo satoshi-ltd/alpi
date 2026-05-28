@@ -11,6 +11,17 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.3.28 — 2026-05-28 — workgroup `#task` shows the full briefing
+
+The task card in a workgroup transcript was showing only the headline.
+The body (context, role asks, deliverable) was dropped on the floor.
+
+- `#task` cards now render the full briefing under the title with
+  block-level Markdown — paragraphs, lists, emphasis — matching
+  regular workgroup posts.
+- `parseTaskOpen` moved to `lib/workgroup-tasks.js` so it has unit
+  coverage; previously it lived inline in the view with none.
+
 ## v0.3.27 — 2026-05-28 — per-device profile scope pair modal
 
 Pair modal restricts a non-admin device to a subset of profiles and

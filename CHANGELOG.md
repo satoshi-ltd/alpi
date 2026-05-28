@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.6.29 — 2026-05-28 — workgroup posts reach the hub again
+
+Members on `~/.alpi/profiles/*` could not post into workgroups after
+v0.6.27. The hub opened a `#task`, members were woken by the poller,
+and every `workgroup_post` failed silently with
+`No such file or directory` — transcripts stayed at seq 1.
+
+- `home.alpi_root()` now strips the `…/profiles/<name>` suffix when
+  the daemon sets `ALPI_HOME` to a profile dir for a dispatched turn.
+  Peer scans (`find_home_by_pubkey`, `local_socket_path`) see siblings
+  again instead of nesting under self. Containers/relocated installs
+  with a real root in `ALPI_HOME` are unchanged.
+
 ## v0.6.28 — 2026-05-28 — per-device profile scope
 
 Pairing a non-admin device can now restrict it to a subset of profiles
