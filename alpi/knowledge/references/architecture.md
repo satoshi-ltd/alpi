@@ -116,6 +116,13 @@ Important host contracts:
 - `host.sessions.delete` bulk-deletes chat sessions by id. It is
   admin-only, refuses active/busy sessions, and removes both
   `sessions/<id>.json` and `_events_<id>.jsonl`.
+- Device records carry `role` + optional `profile_scope`. The
+  dispatcher gates non-scope-free verbs on
+  `params.profile in device.profile_scope or role == "admin"`,
+  returning `-32001 forbidden` otherwise. `host.devices.generate`
+  takes `profiles=[…]` for scoped tokens; `host.devices.set_profiles`
+  retunes scope without re-pairing. See `security` for the scope-free
+  verb allowlist and list-payload filtering rules.
 
 ## Doctor and cleanup
 

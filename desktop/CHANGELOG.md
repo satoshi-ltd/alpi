@@ -11,6 +11,29 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.3.27 — 2026-05-28 — per-device profile scope pair modal
+
+Pair modal restricts a non-admin device to a subset of profiles and
+auto-revokes the placeholder token if the admin cancels or closes the
+modal before pairing completes.
+
+- **Profiles access dropdown** (`All profiles` / `Restrict to…`) with
+  filter + checkbox rows per local profile, accent diamond, mono
+  name. Built on the design system: `Dropdown`, `Field`, `Diamond`,
+  plus new `Checkbox` / `Radio` primitives (inline check SVG;
+  CSS-only sizing — no inline `style`).
+- **Pair button is disabled** when **Restrict** is selected with zero
+  profiles — empty selection would land at the daemon as `[]`, which
+  means unrestricted. The form prevents that state from leaving the
+  client.
+- **Cancel / close auto-revokes the pending token** via an unmount
+  cleanup, and the daemon prunes 24h-old `pending` rows that never
+  paired as belt-and-braces.
+- **Admin banner** uses the new `Checkbox` primitive + caption + `?`
+  tooltip for the rationale.
+- Wires `devices_set_profiles` on top of `host.devices.set_profiles`.
+  Pairs with alpi 0.6.28; older daemons ignore the scope param.
+
 ## v0.3.26 — 2026-05-27 — peers panel refreshes on every action
 
 The peers dropdown no longer keeps showing a stale peer after you

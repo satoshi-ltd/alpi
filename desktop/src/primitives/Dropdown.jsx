@@ -86,6 +86,7 @@ export default function Dropdown({
   const dir = resolved.ready ? resolved.direction : direction;
   const al = resolved.ready ? resolved.align : align;
 
+  const menuWidth = fullWidth ? "100%" : width;
   const menu =
     open && (
       <div
@@ -100,7 +101,7 @@ export default function Dropdown({
                 visibility: resolved.ready ? "visible" : "hidden",
               }
             : {
-                width,
+                width: menuWidth,
                 [dir === "up" ? "bottom" : "top"]: "calc(100% + 6px)",
                 [al]: 0,
                 visibility: resolved.ready ? "visible" : "hidden",

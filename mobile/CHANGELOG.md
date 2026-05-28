@@ -14,6 +14,20 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.1.21 — 2026-05-28 — alpi 0.6.28 pairing surface
+
+Cosmetic alignment with the alpi 0.6.28 per-device profile scope
+rollout. Mobile's role on this surface stays as token consumer —
+admin / scope management lives in the TUI and desktop until `UX.5`
+brings parity to mobile.
+
+- Pairing URL `v=2` placeholder dropped from the input field hint
+  and parser comment; the parser was already version-agnostic so
+  existing paired devices keep working.
+- A scoped-member token receives `-32001 forbidden` on out-of-scope
+  RPCs via the daemon-side gate. No mobile UI change needed; the
+  existing error path surfaces it as a toast.
+
 ## v0.1.20 — 2026-05-27 — peers screen refreshes on every action
 
 Same fix as desktop 0.3.26 — the peers screen no longer needs a daemon

@@ -634,15 +634,32 @@ Verb namespaces in current shape:
   Tauri layer used to shell out to `alpi workgroup …` for these;
   v0.5 routes them through the host plane so mobile reuses the same
   contract.
-- **`host.devices.{list,generate,revoke,rename,promote,demote}`** —
-  pairing-token management for the WebSocket transport. `list`
+- **`host.devices.{list,generate,revoke,rename,promote,demote,set_profiles}`**
+  — pairing-token management for the WebSocket transport. `list`
   redacts the full token to `token_id` (last 8 chars); `generate`
-  returns the fresh full token exactly once. `revoke` is idempotent
-  — `{ok: true, existed: <bool>}` instead of `-32004` when the
-  token_id is already gone, same rationale as `host.peers.remove`.
-  `rename` / `promote` / `demote` still raise `-32004` when the
-  device is missing — they mutate state of an existing row, so a
-  silent no-op would hide user mistakes.
+  returns the fresh full token exactly once. Each device record
+  carries a `profile_scope: list[str]` — empty means unrestricted
+  (back-compat for devices paired before v0.6.28). `generate` accepts
+  an optional `profiles` param; `set_profiles` tightens/loosens scope
+  post-pairing without re-issuing the token. The server requires
+  scoped members to pass `params.profile` explicitly on every
+  profile-aware RPC (a small allowlist of profile-agnostic verbs is
+  exempt) and returns `-32001 forbidden` if missing or out of scope;
+  admin role bypasses by design. `revoke` is idempotent — `{ok: true, existed:
+  <bool>}` instead of `-32004` when the token_id is already gone,
+  same rationale as `host.peers.remove`. `rename` / `promote` /
+  `demote` / `set_profiles` still raise `-32004` when the device is
+  missing — they mutate state of an existing row. List-style RPCs
+  that aggregate across profiles (`host.profiles.list`,
+  `host.profile.summaries`, `host.workgroups.list`,
+  `host.approval.pending`, `host.clarification.pending`,
+  `host.events.history`) are filtered to the device's scope before
+  delivery; the event-subscribe stream drops out-of-scope frames
+  the same way. Same host with two distinct devices (e.g. one
+  scoped to `[work]`, one admin) is a supported topology — each
+  device gets its own pairing token, so the desktop / mobile
+  connection switcher sees them as independent connections
+  pointing at the same daemon.
 - **`host.gateway.probe`**, **`host.peers.ping`**,
   **`host.model.ctx_window`** — diagnostic probes the desktop / TUI
   used to invoke via `alpi gateway probe`, `alpi peers ping`, and

@@ -8,9 +8,11 @@ secrets, host pairing, and threat model questions.
 - alpi is local-first and has no hosted control plane.
 - Secrets go in profile `.env` or skill `secrets/`.
 - The workspace is a default path, not a hard sandbox boundary.
-- Paired devices carry a role (`admin` or `member`); the dispatcher
-  blocks sensitive verbs from member tokens. Network admin is still
-  local-only over the Unix socket.
+- Paired devices carry a role (`admin` or `member`) and an optional
+  `profile_scope` (a list of profile names, empty = unrestricted); the
+  dispatcher blocks sensitive verbs from member tokens and out-of-scope
+  profiles from scoped members. Network admin is still local-only over
+  the Unix socket.
 
 ## Short answer
 
@@ -41,9 +43,11 @@ Suggested pattern:
 ## Host pairing and device roles
 
 Desktop/mobile WebSocket transport uses per-device tokens from
-`~/.alpi/host/devices.yaml`. Each entry carries a `role`: `admin` or
-`member` (older entries without the field read back as `member`). The
-listener binds Tailscale or RFC1918 LAN, not public addresses.
+`~/.alpi/host/devices.yaml`. Each entry carries a `role` (`admin` or
+`member`; older entries without the field read back as `member`) and
+an optional `profile_scope` (list of profile names; empty = no
+restriction). The listener binds Tailscale or RFC1918 LAN, not public
+addresses.
 
 Three trust tiers:
 
@@ -51,7 +55,8 @@ Three trust tiers:
   recovers from a lost admin token. Bypasses all role checks.
 - **WS admin** — can manage profiles, gateways, providers, MCP,
   workgroups, peers, sandbox, schedules, daemon restart, and other
-  devices (add / promote / demote / revoke).
+  devices (add / promote / demote / revoke / set_profiles). Admin
+  always bypasses `profile_scope`.
 - **WS member** — chat, events, read-only views, schedule listing,
   workgroup posting and reading, voice preview. Sensitive **host
   control plane** mutations reject with `-32001 forbidden / admin
@@ -60,6 +65,25 @@ Three trust tiers:
   do (workspace writes, memory edits, network calls) is still
   reachable. Use the OS sandbox flag or separate profiles for that
   boundary, not the device role.
+
+Per-device profile scope (HOST.1):
+
+- A scoped member must pass `params.profile` and the value must be in
+  `device.profile_scope`; out-of-scope returns `-32001 forbidden`.
+- A small allowlist of profile-agnostic verbs is exempt from the
+  per-call `profile` requirement: `host.version`,
+  `host.profiles.list`, `host.profile.summaries`,
+  `host.workgroups.list`, `host.tools.list`,
+  `host.events.subscribe`, `host.events.history`,
+  `host.approval.pending`, `host.clarification.pending`,
+  `host.approval.respond`, `host.clarification.respond`. List
+  payloads for these verbs are filtered to scope before dispatch;
+  event frames carrying a `data.profile` outside the scope are
+  dropped.
+- `host.devices.generate` accepts `profiles: [<name>]` to mint a
+  scoped token in one call. `host.devices.set_profiles(token_id,
+  profiles)` retunes scope on an existing device without re-pairing.
+  Promoting a device to `admin` clears its scope.
 
 Local-only verbs (admin role does not unlock them):
 

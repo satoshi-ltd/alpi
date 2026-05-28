@@ -282,7 +282,7 @@ async def test_devices_mutations_require_admin_role(
 
 
 @pytest.mark.asyncio
-async def test_devices_list_open_to_members(short_tmp: Path) -> None:
+async def test_devices_list_blocked_for_members(short_tmp: Path) -> None:
     member = devices.add(label="phone", role="member")
     devices.add(label="laptop", role="admin")
     srv = host_server.Server(home=short_tmp)
@@ -300,11 +300,32 @@ async def test_devices_list_open_to_members(short_tmp: Path) -> None:
     await srv._handle_request(json.dumps(body), send, require_token=True)
 
     assert len(sent) == 1
+    assert sent[0]["error"]["code"] == -32001
+    assert sent[0]["error"]["data"]["detail"] == "admin role required"
+
+
+@pytest.mark.asyncio
+async def test_devices_list_allowed_for_admins(short_tmp: Path) -> None:
+    admin = devices.add(label="laptop", role="admin")
+    devices.add(label="phone", role="member")
+    srv = host_server.Server(home=short_tmp)
+    devices.register(srv)
+
+    sent: list[dict] = []
+
+    async def send(payload):
+        sent.append(payload)
+
+    body = {
+        "id": "r", "method": "host.devices.list",
+        "params": {"auth_token": admin["token"]},
+    }
+    await srv._handle_request(json.dumps(body), send, require_token=True)
+
+    assert len(sent) == 1
     assert "error" not in sent[0]
     rows = sent[0]["result"]["devices"]
     assert {r["label"] for r in rows} == {"phone", "laptop"}
-    assert {r["role"] for r in rows} == {"member", "admin"}
-    # Full tokens stay server-side regardless of who's asking.
     assert all("token" not in r for r in rows)
 
 
@@ -707,3 +728,563 @@ async def test_devices_verbs_allowed_over_local_unix_transport(
     assert len(sent) == 1
     assert "result" in sent[0]
     assert "devices" in sent[0]["result"]
+
+
+# Per-device profile scope
+
+
+def test_add_default_scope_is_empty_list(short_tmp: Path) -> None:
+    row = devices.add(label="x")
+    assert row["profile_scope"] == []
+
+
+def test_add_with_explicit_scope_preserves_names(short_tmp: Path) -> None:
+    row = devices.add(label="phone", profile_scope=["work", "home"])
+    assert row["profile_scope"] == ["work", "home"]
+
+
+def test_add_normalises_scope_dedup_and_safe_chars(short_tmp: Path) -> None:
+    row = devices.add(
+        label="x",
+        profile_scope=["work", "work", "bad name!", "", "valid_one-2"],
+    )
+    assert row["profile_scope"] == ["work", "valid_one-2"]
+
+
+def test_set_profile_scope_round_trip(short_tmp: Path) -> None:
+    row = devices.add(label="x")
+    assert devices.set_profile_scope(row["token"], ["work"]) is True
+    reloaded = next(d for d in devices.load() if d["token"] == row["token"])
+    assert reloaded["profile_scope"] == ["work"]
+    assert devices.set_profile_scope(row["token"], ["work"]) is False
+
+
+def test_legacy_yaml_without_scope_defaults_to_empty(short_tmp: Path) -> None:
+    devices._store_path().parent.mkdir(parents=True, exist_ok=True)
+    devices._store_path().write_text(
+        "- token: tok-legacy\n  label: pre-host-1\n  created: 100\n  role: member\n",
+    )
+    rows = devices.load()
+    assert rows == [{
+        "token": "tok-legacy", "label": "pre-host-1", "created": 100,
+        "last_seen": None, "role": "member", "profile_scope": [],
+    }]
+
+
+def test_validate_and_lookup_returns_scope(short_tmp: Path) -> None:
+    row = devices.add(label="x", role="member", profile_scope=["work"])
+    valid, role, scope = devices.validate_and_lookup(row["token"])
+    assert valid is True
+    assert role == "member"
+    assert scope == ["work"]
+
+
+def test_validate_and_lookup_empty_for_unknown(short_tmp: Path) -> None:
+    valid, role, scope = devices.validate_and_lookup("never-seen")
+    assert (valid, role, scope) == (False, "", [])
+
+
+@pytest.mark.asyncio
+async def test_set_profiles_verb_updates_scope(short_tmp: Path) -> None:
+    row = devices.add(label="phone", role="member")
+    srv = host_server.Server(home=short_tmp)
+    devices.register(srv)
+    resp = await srv._dispatch({
+        "id": "r", "method": "host.devices.set_profiles",
+        "params": {"token_id": row["token"][-8:], "profiles": ["work", "home"]},
+    })
+    assert resp["result"] == {"ok": True, "profile_scope": ["work", "home"]}
+    reloaded = next(d for d in devices.load() if d["token"] == row["token"])
+    assert reloaded["profile_scope"] == ["work", "home"]
+
+
+@pytest.mark.asyncio
+async def test_set_profiles_refuses_admin_devices(short_tmp: Path) -> None:
+    row = devices.add(label="laptop", role="admin")
+    srv = host_server.Server(home=short_tmp)
+    devices.register(srv)
+    resp = await srv._dispatch({
+        "id": "r", "method": "host.devices.set_profiles",
+        "params": {"token_id": row["token"][-8:], "profiles": ["work"]},
+    })
+    assert resp["error"]["code"] == -32001
+    assert "admin" in resp["error"]["data"]["detail"].lower()
+
+
+@pytest.mark.asyncio
+async def test_set_profiles_unknown_token_returns_404(short_tmp: Path) -> None:
+    srv = host_server.Server(home=short_tmp)
+    devices.register(srv)
+    resp = await srv._dispatch({
+        "id": "r", "method": "host.devices.set_profiles",
+        "params": {"token_id": "deadbeef", "profiles": ["work"]},
+    })
+    assert resp["error"]["code"] == -32004
+
+
+@pytest.mark.asyncio
+async def test_promote_to_admin_clears_scope(short_tmp: Path) -> None:
+    row = devices.add(label="phone", role="member", profile_scope=["work"])
+    srv = host_server.Server(home=short_tmp)
+    devices.register(srv)
+    resp = await srv._dispatch({
+        "id": "r", "method": "host.devices.promote",
+        "params": {"token_id": row["token"][-8:]},
+    })
+    assert resp["result"]["role"] == "admin"
+    reloaded = next(d for d in devices.load() if d["token"] == row["token"])
+    assert reloaded["profile_scope"] == []
+
+
+@pytest.mark.asyncio
+async def test_scope_gate_allows_in_scope_profile(short_tmp: Path) -> None:
+    row = devices.add(label="phone", role="member", profile_scope=["work"])
+    srv = host_server.Server(home=short_tmp)
+    devices.register(srv)
+
+    async def send(payload):
+        sent.append(payload)
+
+    sent: list[dict] = []
+    body = {
+        "id": "r", "method": "host.profile.detail",
+        "params": {"auth_token": row["token"], "profile": "work"},
+    }
+    await srv._handle_request(json.dumps(body), send, require_token=True)
+    assert sent, "handler should have sent a response"
+    err = sent[0].get("error") or {}
+    assert err.get("message") != "forbidden", sent[0]
+
+
+@pytest.mark.asyncio
+async def test_scope_gate_blocks_out_of_scope_profile(short_tmp: Path) -> None:
+    row = devices.add(label="phone", role="member", profile_scope=["work"])
+    srv = host_server.Server(home=short_tmp)
+    devices.register(srv)
+
+    sent: list[dict] = []
+
+    async def send(payload):
+        sent.append(payload)
+
+    body = {
+        "id": "r", "method": "host.profile.detail",
+        "params": {"auth_token": row["token"], "profile": "personal"},
+    }
+    await srv._handle_request(json.dumps(body), send, require_token=True)
+    assert sent[0]["error"]["code"] == -32001
+    assert "scope" in sent[0]["error"]["data"]["detail"]
+
+
+@pytest.mark.asyncio
+async def test_scope_gate_admin_bypasses_scope(short_tmp: Path) -> None:
+    row = devices.add(label="laptop", role="admin")
+    devices.set_profile_scope(row["token"], ["work"])
+    srv = host_server.Server(home=short_tmp)
+    devices.register(srv)
+
+    sent: list[dict] = []
+
+    async def send(payload):
+        sent.append(payload)
+
+    body = {
+        "id": "r", "method": "host.profile.detail",
+        "params": {"auth_token": row["token"], "profile": "personal"},
+    }
+    await srv._handle_request(json.dumps(body), send, require_token=True)
+    err = sent[0].get("error") or {}
+    assert err.get("message") != "forbidden", sent[0]
+
+
+@pytest.mark.asyncio
+async def test_scope_gate_empty_scope_allows_everything(short_tmp: Path) -> None:
+    row = devices.add(label="phone", role="member")
+    srv = host_server.Server(home=short_tmp)
+    devices.register(srv)
+
+    sent: list[dict] = []
+
+    async def send(payload):
+        sent.append(payload)
+
+    body = {
+        "id": "r", "method": "host.profile.detail",
+        "params": {"auth_token": row["token"], "profile": "anything"},
+    }
+    await srv._handle_request(json.dumps(body), send, require_token=True)
+    err = sent[0].get("error") or {}
+    assert err.get("message") != "forbidden", sent[0]
+
+
+@pytest.mark.asyncio
+async def test_generate_accepts_profiles_param(short_tmp: Path, monkeypatch) -> None:
+    monkeypatch.setattr(
+        "alpi.host.network.resolve_host_endpoint",
+        lambda root: ("100.1.2.3", "tailscale"),
+    )
+    srv = host_server.Server(home=short_tmp)
+    devices.register(srv)
+    resp = await srv._dispatch({
+        "id": "r", "method": "host.devices.generate",
+        "params": {"label": "phone", "role": "member", "profiles": ["work"]},
+    })
+    assert resp["result"]["profile_scope"] == ["work"]
+    row = next(d for d in devices.load() if d["token"] == resp["result"]["token"])
+    assert row["profile_scope"] == ["work"]
+
+
+@pytest.mark.asyncio
+async def test_generate_admin_ignores_profiles_param(short_tmp: Path, monkeypatch) -> None:
+    monkeypatch.setattr(
+        "alpi.host.network.resolve_host_endpoint",
+        lambda root: ("100.1.2.3", "tailscale"),
+    )
+    srv = host_server.Server(home=short_tmp)
+    devices.register(srv)
+    resp = await srv._dispatch({
+        "id": "r", "method": "host.devices.generate",
+        "params": {"label": "laptop", "role": "admin", "profiles": ["work"]},
+    })
+    assert resp["result"]["profile_scope"] == []
+    row = next(d for d in devices.load() if d["token"] == resp["result"]["token"])
+    assert row["profile_scope"] == []
+
+
+@pytest.mark.asyncio
+async def test_scope_filters_profile_summaries(short_tmp: Path, monkeypatch) -> None:
+    row = devices.add(label="phone", role="member", profile_scope=["work"])
+    monkeypatch.setattr(
+        "alpi.host.device_state._profiles",
+        lambda: [{"name": "work", "home": "/x"}, {"name": "personal", "home": "/y"}],
+    )
+    monkeypatch.setattr(
+        "alpi.host.device_state._profile_summary",
+        lambda p: {"name": p["name"]},
+    )
+    from alpi.host import device_state as ds
+    srv = host_server.Server(home=short_tmp)
+    ds.register(srv)
+
+    sent: list[dict] = []
+    async def send(payload):
+        sent.append(payload)
+
+    body = {
+        "id": "r", "method": "host.profile.summaries",
+        "params": {"auth_token": row["token"]},
+    }
+    await srv._handle_request(json.dumps(body), send, require_token=True)
+    names = {p["name"] for p in sent[0]["result"]["profiles"]}
+    assert names == {"work"}
+
+
+@pytest.mark.asyncio
+async def test_scope_filters_profiles_list(short_tmp: Path, monkeypatch) -> None:
+    row = devices.add(label="phone", role="member", profile_scope=["work"])
+    monkeypatch.setattr(
+        "alpi.host.device_state._profiles",
+        lambda: [{"name": "work"}, {"name": "personal"}],
+    )
+    from alpi.host import device_state as ds
+    srv = host_server.Server(home=short_tmp)
+    ds.register(srv)
+
+    sent: list[dict] = []
+    async def send(payload):
+        sent.append(payload)
+
+    # _profiles_list returns the raw list; only run if call works.
+    body = {
+        "id": "r", "method": "host.profiles.list",
+        "params": {"auth_token": row["token"]},
+    }
+    await srv._handle_request(json.dumps(body), send, require_token=True)
+    out = sent[0]["result"]["profiles"]
+    if out and isinstance(out[0], dict):
+        names = {p.get("name") for p in out}
+    else:
+        names = set(out)
+    assert names == {"work"}
+
+
+def test_filter_helper_drops_out_of_scope_event_frame() -> None:
+    from alpi.host.server import _filter_payload_by_scope
+    frame = {"event": "chat.turn_done", "data": {"profile": "personal"}, "at": 1, "seq": 5}
+    assert _filter_payload_by_scope("host.events.subscribe", frame, ["work"]) is None
+
+
+def test_filter_helper_passes_in_scope_event_frame() -> None:
+    from alpi.host.server import _filter_payload_by_scope
+    frame = {"event": "chat.turn_done", "data": {"profile": "work"}, "at": 1, "seq": 5}
+    assert _filter_payload_by_scope("host.events.subscribe", frame, ["work"]) == frame
+
+
+def test_filter_helper_drops_out_of_scope_history_events() -> None:
+    from alpi.host.server import _filter_payload_by_scope
+    payload = {"id": "r", "result": {"events": [
+        {"event": "x", "data": {"profile": "work"}},
+        {"event": "y", "data": {"profile": "personal"}},
+        {"event": "z", "data": {}},  # no profile → not dropped
+    ], "next_seq": 10}}
+    out = _filter_payload_by_scope("host.events.history", payload, ["work"])
+    kept = [e["event"] for e in out["result"]["events"]]
+    assert kept == ["x", "z"]
+
+
+def test_filter_helper_filters_workgroups_list() -> None:
+    from alpi.host.server import _filter_payload_by_scope
+    payload = {"id": "r", "result": {"workgroups": [
+        {"id": "1", "profile": "work"},
+        {"id": "2", "profile": "personal"},
+    ]}}
+    out = _filter_payload_by_scope("host.workgroups.list", payload, ["work"])
+    assert [w["id"] for w in out["result"]["workgroups"]] == ["1"]
+
+
+def test_filter_helper_filters_pending_requests() -> None:
+    from alpi.host.server import _filter_payload_by_scope
+    payload = {"id": "r", "result": {"requests": [
+        {"id": "a", "profile": "work"},
+        {"id": "b", "profile": "personal"},
+    ]}}
+    out = _filter_payload_by_scope("host.approval.pending", payload, ["work"])
+    assert [r["id"] for r in out["result"]["requests"]] == ["a"]
+
+
+# Pending-orphan pruning
+
+
+def test_prune_orphans_removes_old_pending(short_tmp: Path) -> None:
+    import time
+    now = int(time.time())
+    devices.save([
+        {"token": "old-pending", "label": "pending", "created": now - 48*3600,
+         "last_seen": None, "role": "member", "profile_scope": []},
+        {"token": "fresh-pending", "label": "pending", "created": now - 60,
+         "last_seen": None, "role": "member", "profile_scope": []},
+        {"token": "real-device", "label": "iPhone", "created": now - 48*3600,
+         "last_seen": now - 100, "role": "member", "profile_scope": []},
+    ])
+    dropped = devices.prune_orphans(now=now)
+    assert dropped == 1
+    surviving = {d["token"] for d in devices.load()}
+    assert surviving == {"fresh-pending", "real-device"}
+
+
+def test_prune_orphans_keeps_pending_that_did_pair(short_tmp: Path) -> None:
+    import time
+    now = int(time.time())
+    devices.save([
+        # label is still "pending" but last_seen IS set → device did connect once; keep it.
+        {"token": "ghost", "label": "pending", "created": now - 48*3600,
+         "last_seen": now - 10000, "role": "member", "profile_scope": []},
+    ])
+    assert devices.prune_orphans(now=now) == 0
+    assert len(devices.load()) == 1
+
+
+def test_prune_orphans_no_op_when_clean(short_tmp: Path) -> None:
+    devices.add(label="Phone")
+    assert devices.prune_orphans() == 0
+    assert len(devices.load()) == 1
+
+
+@pytest.mark.asyncio
+async def test_list_verb_prunes_orphans_lazily(short_tmp: Path) -> None:
+    import time
+    now = int(time.time())
+    devices.save([
+        {"token": "orphan", "label": "pending", "created": now - 48*3600,
+         "last_seen": None, "role": "member", "profile_scope": []},
+        {"token": "iphone", "label": "iPhone", "created": now - 100,
+         "last_seen": now - 10, "role": "member", "profile_scope": []},
+    ])
+    srv = host_server.Server(home=short_tmp)
+    devices.register(srv)
+    resp = await srv._dispatch({
+        "id": "r", "method": "host.devices.list", "params": {},
+    })
+    labels = [d["label"] for d in resp["result"]["devices"]]
+    assert labels == ["iPhone"]
+    # Underlying store mutated, not just the response.
+    assert len(devices.load()) == 1
+
+
+@pytest.mark.asyncio
+async def test_scoped_member_blocked_when_profile_missing(short_tmp: Path) -> None:
+    row = devices.add(label="phone", role="member", profile_scope=["work"])
+    srv = host_server.Server(home=short_tmp)
+    devices.register(srv)
+
+    sent: list[dict] = []
+    async def send(payload):
+        sent.append(payload)
+
+    body = {
+        "id": "r", "method": "host.profile.detail",
+        "params": {"auth_token": row["token"]},  # no profile field!
+    }
+    await srv._handle_request(json.dumps(body), send, require_token=True)
+    assert sent[0]["error"]["code"] == -32001
+    assert "explicit profile" in sent[0]["error"]["data"]["detail"]
+
+
+@pytest.mark.asyncio
+async def test_scoped_member_blocked_when_profile_empty(short_tmp: Path) -> None:
+    row = devices.add(label="phone", role="member", profile_scope=["work"])
+    srv = host_server.Server(home=short_tmp)
+    devices.register(srv)
+
+    sent: list[dict] = []
+    async def send(payload):
+        sent.append(payload)
+
+    body = {
+        "id": "r", "method": "host.profile.detail",
+        "params": {"auth_token": row["token"], "profile": ""},
+    }
+    await srv._handle_request(json.dumps(body), send, require_token=True)
+    assert sent[0]["error"]["code"] == -32001
+
+
+@pytest.mark.asyncio
+async def test_scope_free_methods_allowed_for_scoped_member(short_tmp: Path) -> None:
+    row = devices.add(label="phone", role="member", profile_scope=["work"])
+    srv = host_server.Server(home=short_tmp)
+    devices.register(srv)
+
+    sent: list[dict] = []
+    async def send(payload):
+        sent.append(payload)
+
+    body = {
+        "id": "r", "method": "host.version",
+        "params": {"auth_token": row["token"]},
+    }
+    await srv._handle_request(json.dumps(body), send, require_token=True)
+    err = sent[0].get("error") or {}
+    assert err.get("message") != "forbidden", sent[0]
+
+
+@pytest.mark.asyncio
+async def test_generate_rejects_invalid_profile_name(short_tmp: Path, monkeypatch) -> None:
+    monkeypatch.setattr(
+        "alpi.host.network.resolve_host_endpoint",
+        lambda root: ("100.1.2.3", "tailscale"),
+    )
+    srv = host_server.Server(home=short_tmp)
+    devices.register(srv)
+    resp = await srv._dispatch({
+        "id": "r", "method": "host.devices.generate",
+        "params": {
+            "label": "phone", "role": "member",
+            "profiles": ["work", "bad name!"],
+        },
+    })
+    assert resp["error"]["code"] == -32602
+    assert "invalid profile name" in resp["error"]["data"]["detail"]
+    assert devices.load() == []  # no device persisted
+
+
+@pytest.mark.asyncio
+async def test_generate_rejects_non_list_profiles(short_tmp: Path, monkeypatch) -> None:
+    monkeypatch.setattr(
+        "alpi.host.network.resolve_host_endpoint",
+        lambda root: ("100.1.2.3", "tailscale"),
+    )
+    srv = host_server.Server(home=short_tmp)
+    devices.register(srv)
+    resp = await srv._dispatch({
+        "id": "r", "method": "host.devices.generate",
+        "params": {"label": "phone", "role": "member", "profiles": "work"},
+    })
+    assert resp["error"]["code"] == -32602
+
+
+@pytest.mark.asyncio
+async def test_set_profiles_rejects_invalid_profile_name(short_tmp: Path) -> None:
+    row = devices.add(label="phone", role="member")
+    srv = host_server.Server(home=short_tmp)
+    devices.register(srv)
+    resp = await srv._dispatch({
+        "id": "r", "method": "host.devices.set_profiles",
+        "params": {"token_id": row["token"][-8:], "profiles": ["bad name!"]},
+    })
+    assert resp["error"]["code"] == -32602
+    # scope was not changed
+    reloaded = next(d for d in devices.load() if d["token"] == row["token"])
+    assert reloaded["profile_scope"] == []
+
+
+@pytest.mark.asyncio
+async def test_scoped_member_can_call_workgroups_list_filtered(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    row = devices.add(label="phone", role="member", profile_scope=["work"])
+    monkeypatch.setattr(
+        "alpi.host.device_state._aggregate_workgroups",
+        lambda profile: [
+            {"id": "1", "profile": "work", "name": "ops"},
+            {"id": "2", "profile": "personal", "name": "home"},
+        ],
+    )
+    from alpi.host import device_state as ds
+    srv = host_server.Server(home=short_tmp)
+    ds.register(srv)
+
+    sent: list[dict] = []
+    async def send(payload):
+        sent.append(payload)
+
+    body = {
+        "id": "r", "method": "host.workgroups.list",
+        "params": {"auth_token": row["token"], "profile": None},
+    }
+    await srv._handle_request(json.dumps(body), send, require_token=True)
+
+    assert "error" not in sent[0]
+    rows = sent[0]["result"]["workgroups"]
+    assert {w["id"] for w in rows} == {"1"}
+
+
+@pytest.mark.asyncio
+async def test_scoped_member_can_call_tools_list(short_tmp: Path) -> None:
+    row = devices.add(label="phone", role="member", profile_scope=["work"])
+    from alpi.host import tools as tools_mod
+    srv = host_server.Server(home=short_tmp)
+    tools_mod.register(srv)
+
+    sent: list[dict] = []
+    async def send(payload):
+        sent.append(payload)
+
+    body = {
+        "id": "r", "method": "host.tools.list",
+        "params": {"auth_token": row["token"]},
+    }
+    await srv._handle_request(json.dumps(body), send, require_token=True)
+
+    assert "error" not in sent[0]
+    assert isinstance(sent[0]["result"]["tools"], list)
+
+
+@pytest.mark.asyncio
+async def test_network_status_stays_local_only_for_remote_token(
+    short_tmp: Path,
+) -> None:
+    # host.network.status is in _LOCAL_ONLY_METHODS; HOST.1 must not promote it through the scope-free allowlist.
+    row = devices.add(label="phone", role="member")
+    srv = host_server.Server(home=short_tmp)
+
+    sent: list[dict] = []
+    async def send(payload):
+        sent.append(payload)
+
+    body = {
+        "id": "r", "method": "host.network.status",
+        "params": {"auth_token": row["token"]},
+    }
+    await srv._handle_request(json.dumps(body), send, require_token=True)
+    assert sent[0]["error"]["code"] == -32001
+    assert sent[0]["error"]["data"]["detail"] == "method is local-only"

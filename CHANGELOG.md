@@ -1,5 +1,46 @@
 # Changelog
 
+## v0.6.28 — 2026-05-28 — per-device profile scope
+
+Pairing a non-admin device can now restrict it to a subset of profiles
+instead of the whole host. A shared phone reaches `@home` only; a
+partner's laptop reaches `@finance` only.
+
+- New device field `profile_scope: list[str]`. Empty list means
+  unrestricted, so devices paired before this version keep their
+  current behavior on upgrade — no migration needed.
+- `host.devices.generate` accepts a `profiles` param; new
+  `host.devices.set_profiles` RPC tightens/loosens scope post-pairing
+  without re-issuing the token. Both reject invalid profile names
+  with `-32602 invalid-params` (strict on the wire; lenient `[]`
+  fallback stays for legacy YAML so a corrupt store can't widen
+  permissions).
+- Host server gates every profile-aware RPC against the calling
+  device's scope. Scoped members **must** pass `params.profile`
+  explicitly — missing/empty profile is rejected with `-32001
+  forbidden` instead of silently falling through to the daemon's
+  default profile. List-style responses (`host.profiles.list`,
+  `host.profile.summaries`, `host.workgroups.list`,
+  `host.approval.pending`, `host.clarification.pending`,
+  `host.events.history`) and the event-subscribe stream are filtered
+  to the device's scope before delivery. A small allowlist of
+  scope-free methods (`host.version`, the filtered list verbs, the
+  approval/clarification respond verbs) is exempt. Admin role
+  bypasses everything by design.
+- `host.devices.list` is now admin-only — listing other devices'
+  labels and scopes is admin-scoped information.
+- `alpi setup → Devices → add` and the desktop pair modal expose a
+  profile picker when the new device is not admin. The desktop modal
+  applies the final role and scope at "Pair" click and auto-revokes
+  the placeholder token if the admin cancels or closes the modal
+  before pairing completes; a 24h server-side TTL prunes any orphan
+  `pending` rows that bypass the client cleanup. Mobile keeps
+  receiving the `-32001` correctly; mobile admin parity lives in
+  `UX.5`.
+- Pairing URL drops the `v=2` placeholder — never had a `v=1` and no
+  parser validated it. Mobile/desktop parsers ignore the field if
+  present, so already-paired devices are unaffected.
+
 ## v0.6.27 — 2026-05-27 — local peer routing centralised
 
 Two more code paths still resolved co-located peer sockets by

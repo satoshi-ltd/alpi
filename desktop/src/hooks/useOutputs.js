@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { safeUnlisten } from "../lib/tauri-listen.js";
 
 const DEFAULT_LIMIT = 100;
 
@@ -71,11 +72,14 @@ export function useOutputs({ profiles, connectionId, status } = {}) {
       const frame = payload.frame ?? payload;
       if (frame?.event === "output.created" || frame?.event === "output.updated") refresh();
     })
-      .then((fn) => { if (cancelled) fn?.(); else unlisten = fn; })
+      .then((fn) => {
+        if (cancelled) safeUnlisten(fn);
+        else unlisten = fn;
+      })
       .catch(() => {});
     return () => {
       cancelled = true;
-      unlisten?.();
+      safeUnlisten(unlisten);
     };
   }, [refresh, connectionId]);
 

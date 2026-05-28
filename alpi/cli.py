@@ -2057,18 +2057,38 @@ def _device_add(h: Path, endpoint) -> None:
     if label is None:
         return ui.cancelled()
 
-    ui.dim(
-        "Admin devices can manage profiles, gateways, workgroups, providers,\n"
-        "and other devices over WebSocket — full remote control plane. Member\n"
-        "devices keep chat / read / post-in-workgroups but cannot mutate config.\n"
-        "Either role can still drive the agent (member can call chat), so this\n"
-        "is NOT a sandbox boundary on the agent's tools — only on host setup.\n"
-        "Leave as 'No' for shared, lost-prone, or read-only devices."
+    grant_admin = ui.confirm(
+        "Grant admin access? — can manage profiles, gateways, devices",
+        default=False,
     )
-    grant_admin = ui.confirm("Grant admin access?", default=False)
     role = "admin" if grant_admin else "member"
 
-    row = devices_mod.add(label=label or "device", role=role)
+    profile_scope: list[str] = []
+    if role == "member":
+        from alpi import home as home_mod
+        available = home_mod.list_profiles(h)
+        available_set = set(available)
+        while True:
+            ui.dim(
+                "Restrict this device to a subset of profiles, or leave blank for\n"
+                f"all (available: {', '.join(available)})."
+            )
+            raw = ui.text(
+                "Profiles (comma-separated, blank = all):", default="",
+            )
+            if raw is None:
+                return ui.cancelled()
+            candidates = [p.strip() for p in raw.split(",") if p.strip()]
+            unknown = [p for p in candidates if p not in available_set]
+            if unknown:
+                ui.fail(f"unknown profile(s): {', '.join(unknown)}")
+                continue
+            profile_scope = list(dict.fromkeys(candidates))
+            break
+
+    row = devices_mod.add(
+        label=label or "device", role=role, profile_scope=profile_scope,
+    )
 
     import io
     import json
@@ -2079,14 +2099,12 @@ def _device_add(h: Path, endpoint) -> None:
     pairing_name = resolve_host_pairing_name(h)
 
     payload = {
-        "v": 2,
         "i": host,
         "p": port,
         "n": pairing_name,
         "t": row["token"],
     }
     link = "alpi://device?" + urlencode({
-        "v": payload["v"],
         "host": payload["i"],
         "port": payload["p"],
         "name": payload["n"],
@@ -2212,25 +2230,40 @@ def _device_detail(token_id: str) -> None:
             return
 
         current_role = target.get("role") or "member"
+        current_scope = target.get("profile_scope") or []
         flip_label = "Demote to member" if current_role == "admin" else "Promote to admin"
         flip_hint = (
             "member can still chat, see events, post in workgroups"
             if current_role == "admin"
             else "admin unlocks profile/gateway/device management over WS"
         )
+        if current_role == "admin":
+            profiles_display = "all (admin bypass)"
+        else:
+            profiles_display = ", ".join(current_scope) if current_scope else "all"
+
+        entries = [
+            ("Label", "label", target["label"] or "(none)"),
+            ("Role", "noop", current_role),
+            ("Profiles", "noop", profiles_display),
+            ("Token id", "noop", f"…{token_id}"),
+            ("Last seen", "noop", _format_last_seen(target.get("last_seen"))),
+            None,
+            ("Rename", "rename", ""),
+        ]
+        if current_role == "member":
+            entries.append((
+                "Edit profiles", "scope",
+                "restrict access to a subset; blank = all",
+            ))
+        entries.extend([
+            (flip_label, "flip_role", flip_hint),
+            ("Revoke", "revoke", "the device will lose access immediately"),
+        ])
 
         choice = ui.menu(
             ui.crumb("setup", "devices", target["label"] or token_id),
-            [
-                ("Label", "label", target["label"] or "(none)"),
-                ("Role", "noop", current_role),
-                ("Token id", "noop", f"…{token_id}"),
-                ("Last seen", "noop", _format_last_seen(target.get("last_seen"))),
-                None,
-                ("Rename", "rename", ""),
-                (flip_label, "flip_role", flip_hint),
-                ("Revoke", "revoke", "the device will lose access immediately"),
-            ],
+            entries,
             subtitle="device detail",
             home=None,
             close="Back",
@@ -2245,6 +2278,24 @@ def _device_detail(token_id: str) -> None:
                 continue
             devices_mod.rename(target["token"], new_label)
             continue
+        if choice == "scope":
+            from alpi import home as home_mod
+            available = home_mod.list_profiles(h)
+            ui.dim(
+                f"Available: {', '.join(available)}.\n"
+                "Comma-separated list; blank means all profiles.",
+            )
+            raw = ui.text(
+                "Profiles:", default=", ".join(current_scope),
+            )
+            if raw is None:
+                continue
+            new_scope = [p.strip() for p in raw.split(",") if p.strip()]
+            devices_mod.set_profile_scope(target["token"], new_scope)
+            ui.ok_and_wait(
+                f"profiles updated to {', '.join(new_scope) or 'all'}",
+            )
+            continue
         if choice == "flip_role":
             new_role = "member" if current_role == "admin" else "admin"
             if not ui.confirm(
@@ -2253,6 +2304,8 @@ def _device_detail(token_id: str) -> None:
             ):
                 continue
             devices_mod.set_role(target["token"], new_role)
+            if new_role == "admin":
+                devices_mod.set_profile_scope(target["token"], [])
             ui.ok_and_wait(f"role updated to {new_role}")
             continue
         if choice == "revoke":

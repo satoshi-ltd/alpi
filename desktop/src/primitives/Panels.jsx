@@ -151,7 +151,7 @@ export function ConnectionPanel({
               className={`field field-mono ${styles.pairInput}`}
               value={pairing}
               onChange={(e) => setPairing(e.target.value)}
-              placeholder="alpi://device?v=2&host=100.64.0.1&port=49200&name=home&token=…"
+              placeholder="alpi://device?host=100.64.0.1&port=49200&name=home&token=…"
             />
             <button
               type="button"

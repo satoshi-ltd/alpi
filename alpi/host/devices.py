@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 import secrets
 import threading
 import time
@@ -13,6 +14,58 @@ from alpi.host import server as host_server
 
 
 _VALID_ROLES = frozenset({"member", "admin"})
+_SAFE_PROFILE = re.compile(r"^[A-Za-z0-9_-]+$")
+# Sentinel for corrupt on-disk scope: matches no real profile (regex rejects `<>`), so the gate denies every call.
+_CORRUPT_SCOPE = "<corrupt>"
+
+
+def _normalise_profile_scope(value: Any) -> list[str]:
+    # YAML loader: missing key -> [] (legacy unrestricted; admin or pre-HOST.1 device). Non-list or list with non-empty input that drops to empty after sanitisation -> [_CORRUPT_SCOPE], denying every profile. Partial-valid lists narrow to the valid subset — safe direction.
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        return [_CORRUPT_SCOPE]
+    out: list[str] = []
+    seen: set[str] = set()
+    had_input = False
+    for entry in value:
+        had_input = True
+        name = str(entry or "").strip()
+        if not name or not _SAFE_PROFILE.match(name) or name in seen:
+            continue
+        seen.add(name)
+        out.append(name)
+    if had_input and not out:
+        return [_CORRUPT_SCOPE]
+    return out
+
+
+def _validate_profile_scope_rpc(value: Any) -> list[str]:
+    # Strict RPC validator: malformed input over the wire is a -32602 error, never a silent widen.
+    if not isinstance(value, list):
+        raise host_server.HandlerError(
+            -32602, "invalid-params",
+            data={"detail": "profiles must be a list of profile names"},
+        )
+    out: list[str] = []
+    seen: set[str] = set()
+    for entry in value:
+        if not isinstance(entry, str):
+            raise host_server.HandlerError(
+                -32602, "invalid-params",
+                data={"detail": f"profile name must be a string, got {type(entry).__name__}"},
+            )
+        name = entry.strip()
+        if not name or not _SAFE_PROFILE.match(name):
+            raise host_server.HandlerError(
+                -32602, "invalid-params",
+                data={"detail": f"invalid profile name: {entry!r}"},
+            )
+        if name in seen:
+            continue
+        seen.add(name)
+        out.append(name)
+    return out
 
 
 def _normalise_role(value: Any) -> str:
@@ -28,6 +81,7 @@ def register(server: host_server.Server) -> None:
     server.register("host.devices.rename", _rename)
     server.register("host.devices.promote", _promote)
     server.register("host.devices.demote", _demote)
+    server.register("host.devices.set_profiles", _set_profiles)
 
 
 def _store_path() -> Path:
@@ -95,6 +149,7 @@ def load() -> list[dict[str, Any]]:
             "created": int(row.get("created") or 0),
             "last_seen": int(row.get("last_seen")) if row.get("last_seen") else None,
             "role": _normalise_role(row.get("role")),
+            "profile_scope": _normalise_profile_scope(row.get("profile_scope")),
         })
     return out
 
@@ -160,11 +215,19 @@ def validate_and_lookup_role(
     token: str, min_interval: float = 60.0,
 ) -> tuple[bool, str]:
     """Returns ``(valid, role)``; empty role string when invalid. Fail-closed for every WS path: an empty/missing store still rejects every token. The local Unix socket bootstraps the first device by bypassing token auth entirely (``require_token=False``) — no remote needs the empty-store backdoor."""
+    valid, role, _ = validate_and_lookup(token, min_interval=min_interval)
+    return valid, role
+
+
+def validate_and_lookup(
+    token: str, min_interval: float = 60.0,
+) -> tuple[bool, str, list[str]]:
+    """``(valid, role, profile_scope)``; same fail-closed semantics as ``validate_and_lookup_role``. Empty scope list means the device is unrestricted (admin or pre-HOST.1 paired device)."""
     if not token:
-        return False, ""
+        return False, "", []
     devices = _load_cached()
     if not devices:
-        return False, ""
+        return False, "", []
     now = int(time.time())
     match_idx = -1
     for i, d in enumerate(devices):
@@ -172,8 +235,9 @@ def validate_and_lookup_role(
             match_idx = i
             break
     if match_idx < 0:
-        return False, ""
+        return False, "", []
     role = _normalise_role(devices[match_idx].get("role"))
+    scope = _normalise_profile_scope(devices[match_idx].get("profile_scope"))
     last = devices[match_idx].get("last_seen") or 0
     if now - int(last) >= min_interval:
         # Reload fresh to avoid writing a stale snapshot when the cache is older than the file.
@@ -183,10 +247,13 @@ def validate_and_lookup_role(
                 d["last_seen"] = now
                 break
         save(fresh)
-    return True, role
+    return True, role, scope
 
 
-def add(label: str = "", role: str = "member") -> dict[str, Any]:
+def add(
+    label: str = "", role: str = "member",
+    profile_scope: list[str] | None = None,
+) -> dict[str, Any]:
     devices = load()
     # 24 bytes urlsafe = 32 chars, 192 bits entropy — keeps the QR small.
     row = {
@@ -195,6 +262,7 @@ def add(label: str = "", role: str = "member") -> dict[str, Any]:
         "created": int(time.time()),
         "last_seen": None,
         "role": _normalise_role(role),
+        "profile_scope": _normalise_profile_scope(profile_scope),
     }
     devices.append(row)
     save(devices)
@@ -228,6 +296,41 @@ def revoke(token: str) -> bool:
     return True
 
 
+_ORPHAN_TTL_S = 24 * 3600
+
+
+def prune_orphans(now: int | None = None, ttl_seconds: int = _ORPHAN_TTL_S) -> int:
+    # Drop tokens that never connected (last_seen is None) and are older than the TTL — handles modal-close / crash mid-pair leaving the row behind. last_seen is the only signal that survives label rename.
+    cutoff = (now if now is not None else int(time.time())) - ttl_seconds
+    devices = load()
+    kept = [
+        d for d in devices
+        if not (
+            d.get("last_seen") is None
+            and int(d.get("created") or 0) <= cutoff
+        )
+    ]
+    dropped = len(devices) - len(kept)
+    if dropped:
+        save(kept)
+    return dropped
+
+
+def set_profile_scope(token: str, profile_scope: list[str]) -> bool:
+    devices = load()
+    normalised = _normalise_profile_scope(profile_scope)
+    changed = False
+    for d in devices:
+        if d["token"] == token:
+            if d.get("profile_scope") != normalised:
+                d["profile_scope"] = normalised
+                changed = True
+            break
+    if changed:
+        save(devices)
+    return changed
+
+
 def rename(token: str, label: str) -> bool:
     devices = load()
     changed = False
@@ -251,10 +354,12 @@ def _redacted(d: dict[str, Any]) -> dict[str, Any]:
         "created": d.get("created") or 0,
         "last_seen": d.get("last_seen"),
         "role": _normalise_role(d.get("role")),
+        "profile_scope": _normalise_profile_scope(d.get("profile_scope")),
     }
 
 
 async def _list(_params: dict[str, Any], _server: host_server.Server) -> dict[str, Any]:
+    prune_orphans()
     return {"devices": [_redacted(d) for d in load()]}
 
 
@@ -289,7 +394,14 @@ async def _generate(
 
     label = str((params or {}).get("label") or "")
     role = _normalise_role((params or {}).get("role"))
-    row = add(label, role=role)
+    raw_profiles = (params or {}).get("profiles")
+    profile_scope = (
+        [] if raw_profiles is None
+        else _validate_profile_scope_rpc(raw_profiles)
+    )
+    if role == "admin":
+        profile_scope = []
+    row = add(label, role=role, profile_scope=profile_scope)
     host, raw_scope = endpoint
     from alpi.host.network import classify_scope
     return {
@@ -297,6 +409,7 @@ async def _generate(
         "label": row["label"],
         "created": row["created"],
         "role": row["role"],
+        "profile_scope": row["profile_scope"],
         "host": host,
         "scope": classify_scope(host, raw_scope),
         "is_override": raw_scope == "configured",
@@ -364,10 +477,39 @@ async def _set_role_handler(params: dict[str, Any], role: str) -> dict[str, Any]
             data={"detail": f"no device matching token_id {token_id!r}"},
         )
     set_role(target["token"], role)
+    if role == "admin":
+        set_profile_scope(target["token"], [])
     return {"ok": True, "role": role}
+
+
+async def _set_profiles(
+    params: dict[str, Any], _server: host_server.Server,
+) -> dict[str, Any]:
+    token_id = str((params or {}).get("token_id") or "")
+    profiles = (params or {}).get("profiles")
+    if not token_id:
+        raise host_server.HandlerError(
+            -32602, "invalid-params", data={"detail": "token_id required"},
+        )
+    validated = _validate_profile_scope_rpc(profiles)
+    target = next((d for d in load() if (d["token"] or "")[-8:] == token_id), None)
+    if target is None:
+        raise host_server.HandlerError(
+            -32004, "not-found",
+            data={"detail": f"no device matching token_id {token_id!r}"},
+        )
+    if _normalise_role(target.get("role")) == "admin":
+        raise host_server.HandlerError(
+            -32001, "forbidden",
+            data={"detail": "admin role ignores profile_scope; demote first"},
+        )
+    set_profile_scope(target["token"], validated)
+    return {"ok": True, "profile_scope": validated}
 
 
 __all__ = [
     "register", "load", "save", "is_valid", "touch", "validate_and_touch",
-    "validate_and_lookup_role", "add", "revoke", "rename", "set_role",
+    "validate_and_lookup_role", "validate_and_lookup",
+    "add", "revoke", "rename", "set_role", "set_profile_scope",
+    "prune_orphans",
 ]

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { safeUnlisten } from "../lib/tauri-listen.js";
 
 const DELTA_FLUSH_MS = 50;
 // Tools that finish faster than this snap visually; floor it for legibility.
@@ -214,7 +215,9 @@ export function useChatStream({
   }, [pendingTurn, runReplay]);
 
   useEffect(() => {
-    const off = listen("chat-event", (event) => {
+    let cancelled = false;
+    let unlisten = null;
+    listen("chat-event", (event) => {
       const p = event.payload;
       if (p.request_id && p.request_id !== activeRequestIdRef.current) return;
       markActivity();
@@ -370,9 +373,15 @@ export function useChatStream({
         toolEndTimersRef.current.clear();
         setPendingTurn((prev) => (prev?.error ? prev : null));
       }
-    });
+    })
+      .then((fn) => {
+        if (cancelled) safeUnlisten(fn);
+        else unlisten = fn;
+      })
+      .catch(() => {});
     return () => {
-      off.then((fn) => fn());
+      cancelled = true;
+      safeUnlisten(unlisten);
     };
   }, [markActivity, scheduleDeltaFlush, setSessionData, setView, setRewriteDraft, reloadRef, notify]);
 

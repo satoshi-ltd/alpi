@@ -817,6 +817,94 @@
   margin-top: 3px;
   cursor: pointer;
 }
+.checkboxTitleRow {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+.checkboxTitle {
+  font-weight: 500;
+}
+
+.adminBanner {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+  background: var(--bg-side);
+  border-radius: var(--r-md);
+  cursor: pointer;
+  user-select: none;
+}
+.adminBannerBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  flex: 1;
+}
+.adminBannerTitle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--fs-md);
+  font-weight: 500;
+  color: var(--ink);
+  line-height: 1;
+}
+.adminBannerCaption {
+  font-size: var(--fs-sm);
+  color: var(--ink-3);
+}
+.helpDot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1px solid var(--line-2);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--ink-3);
+  background: var(--bg-1);
+  cursor: help;
+}
+.visuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  border: 0;
+}
+
+.scopeFilter {
+  padding: var(--space-2);
+  border-top: 1px solid var(--line-2);
+}
+.lockedValue {
+  padding: var(--space-3) var(--space-5);
+  font-size: var(--fs-md);
+  color: var(--ink-2);
+  background: var(--bg-side);
+  border-radius: var(--r-md);
+}
+.linkPill {
+  padding: var(--space-3) var(--space-5);
+  background: var(--bg-side);
+  border-radius: var(--r-md);
+}
+.devicePairMetaSpacer {
+  margin-top: var(--space-3);
+}
+.scopeRowName {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding-left: var(--space-1);
+}
 
 .gmailPasteInput {
   width: 100%;

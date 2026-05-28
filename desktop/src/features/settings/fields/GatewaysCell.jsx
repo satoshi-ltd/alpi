@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { safeUnlisten } from "../../../lib/tauri-listen.js";
 import Chip from "../../../primitives/Chip.jsx";
 import Modal from "../../../primitives/Modal.jsx";
 import { useNotify } from "../../../primitives/Notification.jsx";
@@ -165,7 +166,7 @@ function GmailAuthModal({ profile, config, onClose, onSaved }) {
     });
     return () => {
       mounted.current = false;
-      unlistenPromise.then((f) => f()).catch(() => {});
+      unlistenPromise.then(safeUnlisten).catch(() => {});
     };
   }, [notify, onSaved]);
 

@@ -6,6 +6,7 @@ import {
   isPermissionGranted,
   requestPermission,
 } from "@tauri-apps/plugin-notification";
+import { safeUnlisten } from "../lib/tauri-listen.js";
 
 const DEEPLINK_TTL_MS = 30_000;
 
@@ -67,27 +68,31 @@ export function useNotificationDeeplink({ setView, setSettingsTarget, openNotifi
         // unsigned dev bundle: silently degrade.
       }
       if (cancelled) return;
-      unlistenFired = await listen("notification-fired", (ev) => {
-        const payload = ev?.payload || {};
-        pendingRef.current = {
-          firedAt: Number(payload.fired_at) || Date.now(),
-          deeplink: payload.deeplink || {},
-        };
-      });
+      try {
+        unlistenFired = await listen("notification-fired", (ev) => {
+          const payload = ev?.payload || {};
+          pendingRef.current = {
+            firedAt: Number(payload.fired_at) || Date.now(),
+            deeplink: payload.deeplink || {},
+          };
+        });
+      } catch { /* tauri race */ }
       if (cancelled) {
-        unlistenFired?.();
+        safeUnlisten(unlistenFired);
         return;
       }
-      const win = getCurrentWebviewWindow();
-      unlistenFocus = await win.onFocusChanged(({ payload: focused }) => {
-        if (focused) consume();
-      });
+      try {
+        const win = getCurrentWebviewWindow();
+        unlistenFocus = await win.onFocusChanged(({ payload: focused }) => {
+          if (focused) consume();
+        });
+      } catch { /* tauri race */ }
     })();
 
     return () => {
       cancelled = true;
-      unlistenFired?.();
-      unlistenFocus?.();
+      safeUnlisten(unlistenFired);
+      safeUnlisten(unlistenFocus);
     };
   }, [setView, setSettingsTarget]);
 }

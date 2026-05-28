@@ -62,11 +62,28 @@ _ADMIN_METHODS = frozenset({
     "host.workgroup.action",
     "host.approval.respond",
     "host.daemon.restart",
+    "host.devices.list",
     "host.devices.generate",
     "host.devices.revoke",
     "host.devices.rename",
     "host.devices.promote",
     "host.devices.demote",
+    "host.devices.set_profiles",
+})
+
+# Methods that don't operate on a single profile — exempt from the scope gate. New profile-handling RPCs MUST default to denied for scoped members; add here only when the verb is truly profile-agnostic (or aggregates across profiles and the response gets scope-filtered downstream).
+_SCOPE_FREE_METHODS = frozenset({
+    "host.version",
+    "host.profiles.list",
+    "host.profile.summaries",
+    "host.workgroups.list",
+    "host.tools.list",
+    "host.events.subscribe",
+    "host.events.history",
+    "host.approval.pending",
+    "host.clarification.pending",
+    "host.approval.respond",
+    "host.clarification.respond",
 })
 
 
@@ -230,8 +247,9 @@ class Server:
             return
         # Unix socket is the source of trust; treat as admin-equivalent.
         role = "admin"
+        profile_scope: list[str] = []
         if require_token:
-            valid, role = _check_token_role(body)
+            valid, role, profile_scope = _check_token_meta(body)
             if not valid:
                 await send({
                     "id": body.get("id"),
@@ -261,6 +279,43 @@ class Server:
                 },
             })
             return
+        # Empty profile_scope = unrestricted; admin role bypasses by design. For scoped members, REQUIRE params.profile explicit + in scope on every profile-aware method (default would otherwise let a missing/empty profile fall through to the daemon's "default" profile).
+        if (
+            require_token
+            and role != "admin"
+            and profile_scope
+            and method not in _SCOPE_FREE_METHODS
+        ):
+            params = body.get("params") if isinstance(body.get("params"), dict) else {}
+            target = params.get("profile")
+            if not isinstance(target, str) or not target:
+                log.warning(
+                    "host forbidden: %s requires explicit profile for scoped token",
+                    method,
+                )
+                await send({
+                    "id": body.get("id"),
+                    "error": {
+                        "code": -32001,
+                        "message": "forbidden",
+                        "data": {"detail": "method requires an explicit profile for scoped device"},
+                    },
+                })
+                return
+            if target not in profile_scope:
+                log.warning(
+                    "host forbidden: %s blocked for token, profile=%r not in scope=%s",
+                    method, target, profile_scope,
+                )
+                await send({
+                    "id": body.get("id"),
+                    "error": {
+                        "code": -32001,
+                        "message": "forbidden",
+                        "data": {"detail": "profile not in device scope"},
+                    },
+                })
+                return
         # Normalise `params` to dict up front — handlers assume `(params or {}).get(...)` shape; an array/string body otherwise surfaces as a confusing internal-error.
         raw_params = body.get("params")
         if raw_params is not None and not isinstance(raw_params, dict):
@@ -273,12 +328,22 @@ class Server:
                 },
             })
             return
+        scoped = require_token and role != "admin" and bool(profile_scope)
+        if scoped:
+            async def send_scoped(payload: dict[str, Any]) -> None:
+                filtered = _filter_payload_by_scope(method, payload, profile_scope)
+                if filtered is None:
+                    return
+                await send(filtered)
+            delivery = send_scoped
+        else:
+            delivery = send
         if method in self.stream_handlers:
-            await self._dispatch_stream(body, send)
+            await self._dispatch_stream(body, delivery)
             return
         response = await self._dispatch(body)
         if response is not None:
-            await send(response)
+            await delivery(response)
 
     async def _dispatch(self, body: dict[str, Any]) -> dict[str, Any] | None:
         request_id = body.get("id")
@@ -360,17 +425,80 @@ def _is_safe_bind(addr: str) -> bool:
     return any(ip in net for net in _PRIVATE_RANGES)
 
 
+def _filter_payload_by_scope(
+    method: str, payload: dict[str, Any], scope: list[str],
+) -> dict[str, Any] | None:
+    if not isinstance(payload, dict):
+        return payload
+    # Event-stream frame: {event, data: {profile, …}, at, seq}. Drop entirely when out of scope.
+    if "event" in payload and "data" in payload:
+        target = (payload.get("data") or {}).get("profile")
+        if target and target not in scope:
+            return None
+        return payload
+    result = payload.get("result")
+    if not isinstance(result, dict):
+        return payload
+    if method == "host.profiles.list":
+        rows = result.get("profiles")
+        if isinstance(rows, list):
+            result["profiles"] = [
+                r for r in rows
+                if (isinstance(r, str) and r in scope)
+                or (isinstance(r, dict) and r.get("name") in scope)
+            ]
+    elif method == "host.profile.summaries":
+        rows = result.get("profiles")
+        if isinstance(rows, list):
+            result["profiles"] = [
+                r for r in rows
+                if isinstance(r, dict) and r.get("name") in scope
+            ]
+    elif method == "host.workgroups.list":
+        rows = result.get("workgroups")
+        if isinstance(rows, list):
+            result["workgroups"] = [
+                w for w in rows
+                if isinstance(w, dict) and w.get("profile") in scope
+            ]
+    elif method in ("host.approval.pending", "host.clarification.pending"):
+        rows = result.get("requests")
+        if isinstance(rows, list):
+            result["requests"] = [
+                r for r in rows
+                if isinstance(r, dict) and r.get("profile") in scope
+            ]
+    elif method == "host.events.history":
+        events = result.get("events")
+        if isinstance(events, list):
+            result["events"] = [
+                ev for ev in events
+                if not (
+                    isinstance(ev, dict)
+                    and isinstance(ev.get("data"), dict)
+                    and ev["data"].get("profile")
+                    and ev["data"]["profile"] not in scope
+                )
+            ]
+    return payload
+
+
 def _check_token(body: dict[str, Any]) -> bool:
-    return _check_token_role(body)[0]
+    return _check_token_meta(body)[0]
 
 
 def _check_token_role(body: dict[str, Any]) -> tuple[bool, str]:
+    valid, role, _ = _check_token_meta(body)
+    return valid, role
+
+
+def _check_token_meta(body: dict[str, Any]) -> tuple[bool, str, list[str]]:
     from alpi.host import devices as devices_mod
 
     params = body.get("params") or {}
     token = str(params.get("auth_token") or "")
     method = str(body.get("method") or "?")
-    valid, role = devices_mod.validate_and_lookup_role(token)
+    valid, role, scope = devices_mod.validate_and_lookup(token)
     if not valid:
         if not token:
             log.warning("host auth-failed: no token sent (method=%s)", method)
@@ -379,5 +507,5 @@ def _check_token_role(body: dict[str, Any]) -> tuple[bool, str]:
                 "host auth-failed: token …%s not in store (method=%s)",
                 token[-8:], method,
             )
-        return False, ""
-    return True, role
+        return False, "", []
+    return True, role, scope

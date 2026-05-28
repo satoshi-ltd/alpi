@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { safeUnlisten } from "../lib/tauri-listen.js";
 
 export function useActiveRole() {
   const [role, setRole] = useState(null);
@@ -19,11 +20,17 @@ export function useActiveRole() {
     };
 
     refresh();
-    const off = listen("connection-status", refresh);
+    let unlisten = null;
+    listen("connection-status", refresh)
+      .then((fn) => {
+        if (cancelled) safeUnlisten(fn);
+        else unlisten = fn;
+      })
+      .catch(() => {});
 
     return () => {
       cancelled = true;
-      off.then((f) => f()).catch(() => {});
+      safeUnlisten(unlisten);
     };
   }, []);
 

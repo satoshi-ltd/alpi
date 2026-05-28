@@ -9,7 +9,12 @@ import sys
 import time
 from pathlib import Path
 
+# Make `alpi` importable when invoked as `python organization/setup.py` (without `uv run` from the repo root).
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 import yaml
+
+from alpi.providers.reasoning import supports_reasoning
 
 ROOT = Path.home() / ".alpi"
 PROFILES_DIR = ROOT / "profiles"
@@ -331,7 +336,6 @@ def bootstrap_profiles(agents: list[dict], workgroups: list[dict], env_lines: st
         cfg.setdefault("budget", {})["daily_usd"] = agent["daily_usd"]
 
         # Persist reasoning effort only on models that can use it; otherwise drop the key (matches host.config.set_field invariant — no dead state in config).
-        from alpi.providers.reasoning import supports_reasoning
         if agent["reasoning_effort"] and supports_reasoning(agent["model"]):
             cfg["model_reasoning"] = {"effort": agent["reasoning_effort"]}
         else:
@@ -351,7 +355,6 @@ def bootstrap_profiles(agents: list[dict], workgroups: list[dict], env_lines: st
         (mem_dir / "USER.md").write_text(_make_user_md(agent, workgroups))
 
         mcp_note = f"  mcps={','.join(mcps)}" if mcps else ""
-        from alpi.providers.reasoning import supports_reasoning
         applied_effort = agent["reasoning_effort"] if (agent["reasoning_effort"] and supports_reasoning(agent["model"])) else ""
         reasoning_note = f"  reasoning={applied_effort}" if applied_effort else ""
         ok(f"{agent['name']:<10}  model={agent['model']}  daily=${agent['daily_usd']:.1f}{reasoning_note}{mcp_note}")

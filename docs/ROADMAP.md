@@ -41,12 +41,6 @@ sovereignty depends on.
 |---|---|---|
 | BD | Model-family conditional prompt guidance — inject heavier tool-use/verification guidance only for model families that real logs show need it. | 🔵 |
 
-### Sovereignty controls
-
-| ID | Item | Status |
-|---|---|---|
-| HOST.1 | Per-device profile scope — at pairing time the admin chooses which profiles a member device can reach; host RPCs gate on `device.profile_scope` before serving. | 🟡 |
-
 ### Operator UX
 
 | ID | Item | Status |
@@ -95,52 +89,24 @@ Promotion condition: `alpi digest` or LLM test traces show repeated,
 family-specific failures such as under-calling tools, skipping
 verification, or closing turns early despite open commitments.
 
-### HOST.1. Per-device profile scope
-
-Today a paired device is either `admin` (full access to every profile
-on the host) or `member` (read + chat across every profile, no
-mutations). The role is global. Operationally that's too coarse: a
-shared phone should reach only `@home`, a partner's laptop only
-`@finance`, etc.
-
-Shape:
-
-- `host.devices.generate` accepts an optional `profiles: [<name>]`
-  list. Empty means "all", same as today.
-- `device.profile_scope` lands in the device record; `list` exposes it
-  (admin-only).
-- Host RPCs that take a `profile` param check
-  `profile in device.profile_scope or device.role == "admin"` before
-  dispatching. Out-of-scope calls return `-32008 forbidden`.
-- `host.devices.set_profiles(token_id, profiles)` lets the admin
-  tighten or loosen scope post-pairing without re-issuing the token.
-
-Admin keeps the bypass — that's the management role. Member without
-scope (the default after migration) keeps current behavior. Member
-with explicit scope gets the new gate.
-
-**Non-goals.** No per-tool scope inside a profile (the `tools.deny`
-list at config level covers that). No per-method scope inside a
-profile (admin vs member already differentiate mutating vs reading).
-
 ### UX.5. Mobile admin parity (devices)
 
 Mobile today is read-only on the devices surface. Pairing tokens, role
-flips, revokes all happen from desktop. With `HOST.1` adding granular
-scope, the gap widens — an admin away from their desktop can't reshape
-access.
+flips, revokes all happen from desktop. Per-device profile scope is
+now wired host-side, which widens the gap — an admin away from their
+desktop can't reshape access.
 
 Bring mobile to desktop parity on the device flow:
 
 - `Settings → Devices` lists every paired device with role + scope
   chips;
-- `+ Pair device` generates a token (admin-only), with the new
+- `+ Pair device` generates a token (admin-only), with the
   profile-scope picker if scope ≠ all;
 - promote / demote / rename / revoke as inline row actions;
 - the token-reveal modal copies once and never again, matching desktop.
 
 The host plane already exposes everything; this is pure mobile UI
-work, plus the new HOST.1 verbs once they land.
+work.
 
 **Non-goals.** No mobile-side network configuration (Tailscale / TCP
 host stays in desktop / `alpi setup`).

@@ -3,6 +3,7 @@ import { useStickyScroll } from "../lib/useStickyScroll.js";
 import { useScrollProgress } from "../lib/useScrollProgress.js";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { safeUnlisten } from "../lib/tauri-listen.js";
 import Composer from "../primitives/Composer.jsx";
 import Message from "../primitives/Message.jsx";
 import SearchBar from "../primitives/SearchBar.jsx";
@@ -204,17 +205,25 @@ export default function WorkgroupView({
   }, [workgroup.id, workgroup.profile, refreshTick, connectionId]);
 
   useEffect(() => {
+    let cancelled = false;
+    let unlistenFs = null;
+    let unlistenDaemon = null;
     const bump = () => setRefreshTick((t) => t + 1);
-    const offFs = listen("fs-change", (event) => {
+    listen("fs-change", (event) => {
       const ev = event.payload;
       if (
         ev.kind === "workgroup_transcript" &&
         ev.profile === workgroup.profile &&
         ev.wg_id === workgroup.id
       ) bump();
-    });
+    })
+      .then((fn) => {
+        if (cancelled) safeUnlisten(fn);
+        else unlistenFs = fn;
+      })
+      .catch(() => {});
     // Remote daemons have no local fs watcher — daemon-event is the canonical refresh signal for the transcript.
-    const offDaemon = listen("daemon-event", (event) => {
+    listen("daemon-event", (event) => {
       const payload = event.payload ?? {};
       // Drop frames from a daemon that's not the active one (late arrival after switch).
       if (payload.connection_id && payload.connection_id !== connectionId) return;
@@ -226,10 +235,16 @@ export default function WorkgroupView({
         data.profile === workgroup.profile &&
         data.wg_id === workgroup.id
       ) bump();
-    });
+    })
+      .then((fn) => {
+        if (cancelled) safeUnlisten(fn);
+        else unlistenDaemon = fn;
+      })
+      .catch(() => {});
     return () => {
-      offFs.then((fn) => fn());
-      offDaemon.then((fn) => fn());
+      cancelled = true;
+      safeUnlisten(unlistenFs);
+      safeUnlisten(unlistenDaemon);
     };
   }, [workgroup.id, workgroup.profile, connectionId]);
 

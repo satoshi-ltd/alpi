@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { safeUnlisten } from "./lib/tauri-listen.js";
 import Sidebar from "./features/Sidebar.jsx";
 import ChatPane from "./pages/ChatPane.jsx";
 import WorkgroupView from "./pages/WorkgroupView.jsx";
@@ -315,11 +316,21 @@ export default function App() {
   }, [notificationsUnread]);
 
   useEffect(() => {
-    const off = listen("tray:notifications-clicked", () => {
+    let cancelled = false;
+    let unlisten = null;
+    listen("tray:notifications-clicked", () => {
       setNotificationsTarget(null);
       setNotificationsOpen(true);
-    });
-    return () => { off.then((fn) => fn()); };
+    })
+      .then((fn) => {
+        if (cancelled) safeUnlisten(fn);
+        else unlisten = fn;
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+      safeUnlisten(unlisten);
+    };
   }, []);
 
   const { pinned, onTogglePin } = usePinned(hostConnections.active_id);
@@ -523,8 +534,16 @@ export default function App() {
   // fromDaemonFrame lives in lib/daemon-frame.js (pure, unit-tested).
 
   useEffect(() => {
-    const offFs = listen("fs-change", (e) => applyChange(e.payload));
-    const offDaemon = listen("daemon-event", (e) => {
+    let cancelled = false;
+    let unlistenFs = null;
+    let unlistenDaemon = null;
+    listen("fs-change", (e) => applyChange(e.payload))
+      .then((fn) => {
+        if (cancelled) safeUnlisten(fn);
+        else unlistenFs = fn;
+      })
+      .catch(() => {});
+    listen("daemon-event", (e) => {
       const payload = e.payload ?? {};
       // Drop frames from a non-active daemon.
       if (
@@ -555,10 +574,16 @@ export default function App() {
       }
       const mapped = fromDaemonFrame(frame);
       if (mapped) applyChange(mapped);
-    });
+    })
+      .then((fn) => {
+        if (cancelled) safeUnlisten(fn);
+        else unlistenDaemon = fn;
+      })
+      .catch(() => {});
     return () => {
-      offFs.then((fn) => fn());
-      offDaemon.then((fn) => fn());
+      cancelled = true;
+      safeUnlisten(unlistenFs);
+      safeUnlisten(unlistenDaemon);
     };
   }, [applyChange, hostConnectionsRef, mergeApprovalRequest, mergeClarificationRequest]);
 

@@ -520,12 +520,32 @@ fn devices_list() -> serde_json::Value {
 async fn devices_generate(
     label: String,
     role: Option<String>,
+    profiles: Option<Vec<String>>,
 ) -> Result<serde_json::Value, String> {
     let role = role.unwrap_or_else(|| "member".into());
+    let profiles = profiles.unwrap_or_default();
     let value = tauri::async_runtime::spawn_blocking(move || {
         host_client::call(
             "host.devices.generate",
-            serde_json::json!({"label": label, "role": role}),
+            serde_json::json!({
+                "label": label, "role": role, "profiles": profiles,
+            }),
+        )
+    })
+    .await
+    .map_err(|e| format!("join: {e}"))??;
+    Ok(value)
+}
+
+#[tauri::command]
+async fn devices_set_profiles(
+    token_id: String,
+    profiles: Vec<String>,
+) -> Result<serde_json::Value, String> {
+    let value = tauri::async_runtime::spawn_blocking(move || {
+        host_client::call(
+            "host.devices.set_profiles",
+            serde_json::json!({"token_id": token_id, "profiles": profiles}),
         )
     })
     .await
@@ -2410,6 +2430,7 @@ pub fn run() {
             probe_gateways,
             devices_list,
             devices_generate,
+            devices_set_profiles,
             devices_promote,
             devices_demote,
             devices_revoke,

@@ -19,6 +19,47 @@
   flex-shrink: 0;
 }
 
+.ds-radio {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1.5px solid var(--ink-4);
+  background: transparent;
+  flex-shrink: 0;
+}
+.ds-radio-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ink);
+}
+
+.ds-checkbox {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 16px;
+  height: 16px;
+  border-radius: var(--r-xs);
+  border: 1.5px solid var(--ink-4);
+  background: transparent;
+  color: var(--bg-pane);
+  flex-shrink: 0;
+}
+.ds-checkbox.on {
+  background: var(--ink);
+  border-color: var(--ink);
+}
+.ds-checkbox > svg {
+  width: 12px;
+  height: 12px;
+}
+
 .ds-dot, .dot {
   display: inline-block;
   width: 7px;
@@ -325,7 +366,10 @@ textarea.ds-field, textarea.field { resize: vertical; min-height: 88px; height: 
   font-weight: var(--fw-medium);
   letter-spacing: 0.02em;
   border-radius: 5px;
-  white-space: nowrap;
+  width: max-content;
+  max-width: 280px;
+  white-space: normal;
+  text-align: left;
   pointer-events: none;
   opacity: 0;
   transition: opacity var(--dur-1), transform var(--dur-1);

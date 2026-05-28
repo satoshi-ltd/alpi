@@ -1,4 +1,4 @@
-// alpi://device?v=2&host=…&port=…&name=…&token=…  →  endpoint shape used by lib/store.
+// alpi://device?host=…&port=…&name=…&token=…  →  endpoint shape used by lib/store.
 
 export class PairingError extends Error {}
 

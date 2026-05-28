@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { check } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
+import { safeUnlisten } from "./tauri-listen.js";
 
 const SIX_HOURS_MS = 6 * 60 * 60 * 1000;
 
@@ -99,14 +100,22 @@ export function installUpdater() {
   if (typeof window !== "undefined") {
     window.addEventListener("online", onOnline);
   }
-  const off = listen("tray:update-clicked", () => {
+  let cancelled = false;
+  let unlisten = null;
+  listen("tray:update-clicked", () => {
     applyPendingUpdate();
-  });
+  })
+    .then((fn) => {
+      if (cancelled) safeUnlisten(fn);
+      else unlisten = fn;
+    })
+    .catch(() => {});
   return () => {
+    cancelled = true;
     clearInterval(id);
     if (typeof window !== "undefined") {
       window.removeEventListener("online", onOnline);
     }
-    off.then((fn) => fn());
+    safeUnlisten(unlisten);
   };
 }

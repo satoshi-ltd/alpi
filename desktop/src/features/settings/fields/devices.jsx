@@ -6,9 +6,10 @@ import Dropdown from "../../../primitives/Dropdown.jsx";
 import Modal from "../../../primitives/Modal.jsx";
 import Skeleton from "../../../primitives/Skeleton.jsx";
 import { CopyIcon } from "../../../primitives/icons.jsx";
+import { Checkbox, Diamond, Radio } from "../../../primitives/index.js";
+import Tip from "../../../primitives/Tip.jsx";
 import useAutoPosition from "../../../primitives/useAutoPosition.js";
 import { useNotify } from "../../../primitives/Notification.jsx";
-import { resolveCancelAction } from "../../../lib/device-pair.js";
 import { useDismissOnOutside } from "../../../hooks/useDismissOnOutside.js";
 import { Row } from "../primitives.jsx";
 import { Btn } from "../../../primitives/index.js";
@@ -300,31 +301,104 @@ function PairDeviceModal({ onClose, onPaired }) {
   const [warn, setWarn] = useState(null);
   const [busy, setBusy] = useState(false);
   const [grantAdmin, setGrantAdmin] = useState(false);
+  const [profiles, setProfiles] = useState([]);
+  const [scope, setScope] = useState([]);
+  const [scopeMode, setScopeMode] = useState("all");
+  const [scopeQuery, setScopeQuery] = useState("");
   const generatedRef = useRef(false);
+  const pendingTokenIdRef = useRef(null);
+  const pairedRef = useRef(false);
 
   useEffect(() => {
-    if (generatedRef.current) return;
+    invoke("profile_summaries")
+      .then((rows) => setProfiles(
+        Array.isArray(rows)
+          ? rows.filter((r) => r && r.name).map((r) => ({
+              name: r.name,
+              accent: r.accent || null,
+            }))
+          : [],
+      ))
+      .catch(() => setProfiles([]));
+  }, []);
+
+  const filteredProfiles = useMemo(() => {
+    const q = scopeQuery.trim().toLowerCase();
+    if (!q) return profiles;
+    return profiles.filter((p) => p.name.toLowerCase().includes(q));
+  }, [profiles, scopeQuery]);
+
+  function toggleScope(name) {
+    setScope((curr) =>
+      curr.includes(name) ? curr.filter((x) => x !== name) : [...curr, name],
+    );
+  }
+
+  function selectMode(mode) {
+    setScopeMode(mode);
+    if (mode === "all") setScope([]);
+  }
+
+  const effectiveScope = scopeMode === "restrict" ? scope : [];
+  const scopeTriggerLabel = scopeMode === "all"
+    ? "All profiles"
+    : `Restrict · ${scope.length} of ${profiles.length}`;
+
+  useEffect(() => {
+    if (grantAdmin) {
+      setScopeMode("all");
+      setScope([]);
+      setScopeQuery("");
+    }
+  }, [grantAdmin]);
+
+  useEffect(() => () => {
+    const tokenId = pendingTokenIdRef.current;
+    if (tokenId && !pairedRef.current) {
+      invoke("devices_revoke", { tokenId }).catch(() => {});
+    }
+  }, []);
+
+  const scopeValid = grantAdmin || scopeMode === "all" || scope.length > 0;
+  const canGenerate = (
+    label.trim().length > 0
+    && !busy
+    && scopeValid
+    && !payload
+  );
+
+  async function generate() {
+    if (!canGenerate || generatedRef.current) return;
     generatedRef.current = true;
-    invoke("devices_generate", { label: "", role: "member" })
-      .then((p) => {
-        const token = p?.token || "";
-        setPayload({ ...p, token_id: token.slice(-8) });
-      })
-      .catch((e) => {
-        const msg = String(e);
-        if (msg.includes("no-advertised-host")) {
-          const hint = msg.split("—").slice(1).join("—").trim();
-          setWarn(
-            "Cannot pair — no Tailscale or LAN address detected. " +
-            (hint ? `Detected: ${hint}. ` : "") +
-            "Connect to Wi-Fi / Ethernet, install Tailscale, " +
-            "or set host.tcp_host in config.yaml.",
-          );
-        } else {
-          notify({ message: `generate: ${msg}`, variant: "error", duration: 4000 });
-        }
+    setBusy(true);
+    try {
+      const p = await invoke("devices_generate", {
+        label: label.trim(),
+        role: grantAdmin ? "admin" : "member",
+        profiles: grantAdmin ? [] : (scopeMode === "restrict" ? scope : []),
       });
-  }, [notify]);
+      const token = p?.token || "";
+      const tokenId = token.slice(-8);
+      pendingTokenIdRef.current = tokenId;
+      setPayload({ ...p, token_id: tokenId });
+    } catch (e) {
+      generatedRef.current = false;
+      const msg = String(e);
+      if (msg.includes("no-advertised-host")) {
+        const hint = msg.split("—").slice(1).join("—").trim();
+        setWarn(
+          "Cannot pair — no Tailscale or LAN address detected. " +
+          (hint ? `Detected: ${hint}. ` : "") +
+          "Connect to Wi-Fi / Ethernet, install Tailscale, " +
+          "or set host.tcp_host in config.yaml.",
+        );
+      } else {
+        notify({ message: `generate: ${msg}`, variant: "error", duration: 4000 });
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
 
   const trimmed = label.trim();
   const ready = Boolean(payload?.host && payload?.port);
@@ -332,7 +406,6 @@ function PairDeviceModal({ onClose, onPaired }) {
   const desktopLink = useMemo(() => {
     if (!ready) return "";
     const params = new URLSearchParams({
-      v: "2",
       host: payload.host,
       port: String(payload.port),
       name: trimmed || "device",
@@ -345,7 +418,7 @@ function PairDeviceModal({ onClose, onPaired }) {
     if (!ready || !trimmed) { setQrSvg(""); return; }
     let cancelled = false;
     const qrPayload = JSON.stringify({
-      v: 2, i: payload.host, p: payload.port, n: trimmed, t: payload.token,
+      i: payload.host, p: payload.port, n: trimmed, t: payload.token,
     });
     import("qrcode").then(({ default: QRCode }) =>
       QRCode.toString(qrPayload, { type: "svg", margin: 1, errorCorrectionLevel: "L" })
@@ -364,55 +437,44 @@ function PairDeviceModal({ onClose, onPaired }) {
   }
 
   async function pair() {
-    if (!ready || !trimmed || busy) return;
-    setBusy(true);
-    try {
-      await invoke("devices_rename", { tokenId: payload.token_id, label: trimmed });
-      if (grantAdmin) {
-        await invoke("devices_promote", { tokenId: payload.token_id });
-      }
-      const roleSuffix = grantAdmin ? " (admin)" : "";
-      notify({ message: `Device "${trimmed}"${roleSuffix} paired`, variant: "success" });
-      onPaired?.();
-    } catch (e) {
-      notify({ message: `pair: ${String(e)}`, variant: "error", duration: 4000 });
-      setBusy(false);
-    }
+    if (!payload || busy) return;
+    pairedRef.current = true;
+    const roleSuffix = grantAdmin ? " (admin)" : "";
+    notify({ message: `Device "${trimmed}"${roleSuffix} paired`, variant: "success" });
+    onPaired?.();
   }
 
   async function cancel() {
-    let action = { kind: payload?.token_id ? "revoke" : "noop" };
     if (payload?.token_id) {
       try {
-        const devices = await invoke("devices_list");
-        action = resolveCancelAction(devices, payload.token_id, label);
+        const list = await invoke("devices_list");
+        const row = (Array.isArray(list) ? list : [])
+          .find((d) => d && d.token_id === payload.token_id);
+        if (row && row.last_seen) {
+          pairedRef.current = true;
+          notify({
+            message: `Device "${row.label || trimmed}" paired`,
+            variant: "success",
+          });
+          onPaired?.();
+          return;
+        }
       } catch {
-        // list rpc failed — keep the conservative default (revoke the orphan token)
+        // list rpc failed — fall through to revoke; on revoke failure unmount cleanup retries.
       }
-    }
-    if (action.kind === "keep") {
       try {
-        await invoke("devices_rename", { tokenId: payload.token_id, label: action.label });
-      } catch { /* rename is best-effort — list still gets the row */ }
-      if (grantAdmin) {
-        try {
-          await invoke("devices_promote", { tokenId: payload.token_id });
-        } catch { /* same best-effort — user can promote later from Devices list */ }
+        await invoke("devices_revoke", { tokenId: payload.token_id });
+        pairedRef.current = true;
+      } catch {
+        // leave pairedRef false so unmount cleanup retries the revoke.
       }
-      const roleSuffix = grantAdmin ? " (admin)" : "";
-      notify({ message: `Device "${action.label}"${roleSuffix} paired`, variant: "success" });
-      onPaired?.();
-      return;
-    }
-    if (action.kind === "revoke") {
-      invoke("devices_revoke", { tokenId: payload.token_id }).catch(() => {});
     }
     onClose?.();
   }
 
   if (warn) {
     return (
-      <Modal title="Pair a new device" onClose={onClose}>
+      <Modal title="Pair a new device" onClose={onClose} width="var(--modal-md)">
         <div className={styles.warn}>{warn}</div>
         <DialogFooter onCancel={onClose} cancelLabel="Close" />
       </Modal>
@@ -420,7 +482,7 @@ function PairDeviceModal({ onClose, onPaired }) {
   }
 
   return (
-    <Modal title="Pair a new device" onClose={cancel}>
+    <Modal title="Pair a new device" onClose={cancel} width="var(--modal-md)">
       <div className={styles.field}>
         <label className={styles.label}>Label</label>
         <Field
@@ -429,86 +491,174 @@ function PairDeviceModal({ onClose, onPaired }) {
           value={label}
           autoFocus
           onChange={(e) => setLabel(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter") pair(); }}
+          onKeyDown={(e) => { if (e.key === "Enter" && !payload) generate(); }}
           placeholder="MacBook Pro · Phone · …"
           spellCheck={false}
-          disabled={busy}
+          disabled={busy || Boolean(payload)}
         />
       </div>
 
-      <div className={styles.field}>
-        <label className={styles.checkboxRow}>
-          <input
-            type="checkbox"
-            checked={grantAdmin}
-            onChange={(e) => setGrantAdmin(e.target.checked)}
-            disabled={busy}
-          />
-          <span>
+      <label className={styles.adminBanner}>
+        <input
+          type="checkbox"
+          className={styles.visuallyHidden}
+          checked={grantAdmin}
+          onChange={(e) => setGrantAdmin(e.target.checked)}
+          disabled={busy || Boolean(payload)}
+        />
+        <Checkbox on={grantAdmin} />
+        <span className={styles.adminBannerBody}>
+          <span className={styles.adminBannerTitle}>
             Grant admin access
-            <span className={styles.muted}>
-              {" "}— this device will be able to manage profiles, gateways,
-              and other devices over the network. Either role can still drive
-              the agent via chat, so this is NOT a sandbox on the agent's
-              tools, only on host setup. Leave unchecked for shared,
-              lost-prone, or read-only devices.
-            </span>
+            <Tip
+              side="up"
+              text="Member can still chat and post to workgroups; only host setup is gated. Not a sandbox on the agent's tools."
+            >
+              <span className={styles.helpDot} aria-label="more info">?</span>
+            </Tip>
           </span>
-        </label>
-      </div>
+          <span className={styles.adminBannerCaption}>
+            Can manage profiles, gateways, devices. Sees all profiles.
+          </span>
+        </span>
+      </label>
 
-      <div className={`${styles.inlineRow} ${styles.devicePairBody}`}>
-        <div className={`${styles.deviceQr} ${trimmed ? "" : styles.deviceQrEmpty}`}>
-          {trimmed && qrSvg
-            ? <span dangerouslySetInnerHTML={{ __html: qrSvg }} />
-            : <span className={styles.deviceQrHint}>Type a label to generate</span>}
+      {!grantAdmin && profiles.length > 0 && payload && (
+        <div className={styles.field}>
+          <label className={styles.label}>Profiles access</label>
+          <div className={styles.lockedValue}>{scopeTriggerLabel}</div>
         </div>
-        <div
-          className={`${styles.devicePairMeta} ${trimmed ? "" : styles.muted}`}
-          aria-hidden={!trimmed}
-        >
-          <div className={styles.label}>Host</div>
-          <div className={styles.mono}>
-            {ready && payload.scope ? (
-              <span className={scopeChipClass(payload.scope, styles)}>{payload.scope}</span>
-            ) : null}
-            {ready ? `${payload.host}:${payload.port}` : "…"}
-          </div>
-          <div className={styles.label} style={{ marginTop: "var(--space-3)" }}>
-            Token
-          </div>
-          <div className={styles.mono}>
-            {payload?.token ? `…${payload.token.slice(-8)}` : "…"}
-          </div>
-          <div className={styles.muted} style={{ marginTop: "var(--space-3)" }}>
-            {scopeHint(payload?.scope)}
-          </div>
+      )}
+      {!grantAdmin && profiles.length > 0 && !payload && (
+        <div className={styles.field}>
+          <label className={styles.label}>Profiles access</label>
+          <Dropdown
+            trigger={{ label: scopeTriggerLabel }}
+            direction="down"
+            align="left"
+            variant="field"
+            fullWidth
+          >
+            {() => (
+              <>
+                <Dropdown.Row
+                  active={scopeMode === "all"}
+                  leading={<Radio on={scopeMode === "all"} />}
+                  trailing={
+                    <span className={styles.muted}>
+                      default · admin sees everything
+                    </span>
+                  }
+                  onClick={() => selectMode("all")}
+                >
+                  All profiles
+                </Dropdown.Row>
+                <Dropdown.Row
+                  active={scopeMode === "restrict"}
+                  leading={<Radio on={scopeMode === "restrict"} />}
+                  trailing={
+                    <span className={styles.muted}>
+                      pick specific profiles below
+                    </span>
+                  }
+                  onClick={() => selectMode("restrict")}
+                >
+                  Restrict to…
+                </Dropdown.Row>
+                {scopeMode === "restrict" && (
+                  <>
+                    <div className={styles.scopeFilter}>
+                      <Field
+                        className={styles.input}
+                        placeholder="filter…"
+                        value={scopeQuery}
+                        onChange={(e) => setScopeQuery(e.target.value)}
+                      />
+                    </div>
+                    {filteredProfiles.map((p) => (
+                      <Dropdown.Row
+                        key={p.name}
+                        leading={<Checkbox on={scope.includes(p.name)} />}
+                        onClick={() => toggleScope(p.name)}
+                      >
+                        <span className={styles.scopeRowName}>
+                          <Diamond color={p.accent || "var(--accent)"} />
+                          <span className={styles.mono}>@{p.name}</span>
+                        </span>
+                      </Dropdown.Row>
+                    ))}
+                    {filteredProfiles.length === 0 && (
+                      <Dropdown.Empty>no matches</Dropdown.Empty>
+                    )}
+                  </>
+                )}
+              </>
+            )}
+          </Dropdown>
         </div>
-      </div>
+      )}
 
-      <div className={`${styles.inlineRow} ${styles.inlineRowNoWrap}`}>
-        <code
-          className={`${styles.mono} ${styles.muted} ${styles.truncate} ${styles.flexFill}`}
-        >
-          {desktopLink || "alpi://device?…"}
-        </code>
-        <Button
-          size="sm"
-          icon={<CopyIcon />}
-          onClick={copyLink}
-          disabled={!desktopLink}
-          title="Copy pairing link"
-          tooltipAlign="end"
+      {payload && (
+        <>
+          <div className={`${styles.inlineRow} ${styles.devicePairBody}`}>
+            <div className={styles.deviceQr}>
+              {qrSvg ? <span dangerouslySetInnerHTML={{ __html: qrSvg }} /> : null}
+            </div>
+            <div className={styles.devicePairMeta}>
+              <div className={styles.label}>Host</div>
+              <div className={styles.mono}>
+                {payload.scope ? (
+                  <span className={scopeChipClass(payload.scope, styles)}>{payload.scope}</span>
+                ) : null}
+                {ready ? `${payload.host}:${payload.port}` : "…"}
+              </div>
+              <div className={`${styles.label} ${styles.devicePairMetaSpacer}`}>
+                Token
+              </div>
+              <div className={styles.mono}>
+                {payload.token ? `…${payload.token.slice(-8)}` : "…"}
+              </div>
+              <div className={`${styles.muted} ${styles.devicePairMetaSpacer}`}>
+                {scopeHint(payload.scope)}
+              </div>
+            </div>
+          </div>
+
+          <div className={`${styles.inlineRow} ${styles.inlineRowNoWrap} ${styles.linkPill}`}>
+            <span
+              className={`${styles.mono} ${styles.muted} ${styles.truncate} ${styles.flexFill}`}
+            >
+              {desktopLink}
+            </span>
+            <Button
+              size="sm"
+              icon={<CopyIcon />}
+              onClick={copyLink}
+              disabled={!desktopLink}
+              title="Copy pairing link"
+              tooltipAlign="end"
+            />
+          </div>
+        </>
+      )}
+
+      {payload ? (
+        <DialogFooter
+          onCancel={cancel}
+          primaryLabel="Pair"
+          primaryDisabled={!ready}
+          primaryLoading={busy}
+          onPrimary={pair}
         />
-      </div>
-
-      <DialogFooter
-        onCancel={cancel}
-        primaryLabel="Pair"
-        primaryDisabled={!ready || !trimmed}
-        primaryLoading={busy}
-        onPrimary={pair}
-      />
+      ) : (
+        <DialogFooter
+          onCancel={cancel}
+          primaryLabel="Generate pairing code"
+          primaryDisabled={!canGenerate}
+          primaryLoading={busy}
+          onPrimary={generate}
+        />
+      )}
     </Modal>
   );
 }

@@ -181,7 +181,7 @@ export default function Pair() {
             <TextInput
               value={text}
               onChangeText={setText}
-              placeholder="alpi://device?v=2&host=…&port=…&name=…&token=…"
+              placeholder="alpi://device?host=…&port=…&name=…&token=…"
               placeholderTextColor={colors.ink4}
               multiline
               numberOfLines={3}
