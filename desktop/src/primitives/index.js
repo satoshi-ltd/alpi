@@ -18,6 +18,7 @@ export { default as ConnPill } from "./ConnPill.jsx";
 export { default as ContextMenu, ContextMenuMount } from "./ContextMenu.jsx";
 export { default as DialogFooter } from "./DialogFooter.jsx";
 export { default as Diamond } from "./Diamond.jsx";
+export { default as DiamondStack } from "./DiamondStack.jsx";
 export { default as DisplayHeading } from "./DisplayHeading.jsx";
 export { default as Dot } from "./Dot.jsx";
 export { default as Dropdown } from "./Dropdown.jsx";

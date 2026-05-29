@@ -745,6 +745,7 @@ a:focus-visible,
   position: relative;
   overflow: hidden;
 }
+.ds-marker.task    { background: color-mix(in srgb, var(--c) 18%, var(--bg-pane)); }
 .ds-marker.done    { background: color-mix(in srgb, var(--c) 18%, var(--bg-pane)); }
 .ds-marker.working { background: color-mix(in srgb, var(--c) 14%, var(--bg-pane)); }
 .ds-marker.skip    { background: color-mix(in srgb, var(--c) 11%, var(--bg-pane)); }
@@ -759,6 +760,7 @@ a:focus-visible,
   align-items: center;
   margin-bottom: var(--space-2);
 }
+.ds-marker.task .ey,
 .ds-marker.done .ey,
 .ds-marker.working .ey,
 .ds-marker.skip .ey { color: color-mix(in srgb, var(--c) 75%, var(--ink)); }

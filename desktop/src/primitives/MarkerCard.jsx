@@ -1,13 +1,15 @@
-import { Activity, CheckIcon, SkipIcon } from "./index.js";
+import { CheckIcon, Diamond, SkipIcon } from "./index.js";
 import styles from "./MarkerCard.module.css";
 
 const LABELS = { task: "TASK", working: "WORKING", skip: "SKIP", done: "DONE" };
 
-function MarkerIcon({ variant }) {
+function MarkerIcon({ variant, stale }) {
   if (variant === "done") {
     return <CheckIcon style={{ width: 11, height: 11, strokeWidth: 2.2 }} />;
   }
-  if (variant === "working") return <Activity size="lg" />;
+  if (variant === "working") {
+    return stale ? <span className={styles.bullet} /> : <Diamond pulse />;
+  }
   if (variant === "skip") {
     return <SkipIcon style={{ width: 11, height: 11, strokeWidth: 2 }} />;
   }
@@ -23,6 +25,8 @@ export default function MarkerCard({
   children,
   meta,
   footer,
+  label,
+  stale = false,
 }) {
   const isRight = side === "right";
   return (
@@ -39,8 +43,8 @@ export default function MarkerCard({
       )}
       <div className={`ds-marker ${variant}`} style={{ "--c": hubColor }}>
         <div className="ey">
-          <MarkerIcon variant={variant} />
-          <span>{LABELS[variant] || variant.toUpperCase()}</span>
+          <MarkerIcon variant={variant} stale={stale} />
+          <span>{label || LABELS[variant] || variant.toUpperCase()}</span>
         </div>
         {title && <div className="ttl">{title}</div>}
         <div className="body">{children}</div>

@@ -11,6 +11,22 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.3.30 — 2026-05-29 — workgroup transcript polish
+
+- `#task` posts with a `#slug` (e.g. `#task #onboarding-friction-top3 ...`)
+  show the slug bolded inline; the same slug feeds the task navigator
+  caption.
+- `#done`, `#working`, `#skip` cards render the full post body in
+  markdown — paragraphs, lists, bold — instead of just the first line.
+- Stale `#working` posts (superseded by a later message from the same
+  peer **or** by a `#done`/`#skip` closing the task) collapse to a `WORK`
+  badge with a static dot. Active `#working` shows the hub-colored
+  diamond pulsing.
+- `TASK` cards now tint with the hub color (same treatment as `DONE`).
+- Sidebar workgroup rows lose the hash glyph in favour of a small
+  stacked diamond in the hub color; `#name` label stays mono and one
+  size below the profile label so the two columns finally line up.
+
 ## v0.3.29 — 2026-05-28 — restart daemon button + approval label cleanup
 
 - New **Restart daemon** row in `Settings → Service` (admin-only).

@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { parseTaskOpen, findLatestTask } from "./workgroup-tasks.js";
+import {
+  findLatestTask,
+  parseDone,
+  parseSkip,
+  parseTaskOpen,
+  parseWorking,
+} from "./workgroup-tasks.js";
 
 describe("parseTaskOpen", () => {
   it("returns null on bodies without a #task marker", () => {
@@ -8,26 +14,100 @@ describe("parseTaskOpen", () => {
     expect(parseTaskOpen(null)).toBeNull();
   });
 
-  it("extracts title-only when there is no body", () => {
+  it("title-only post: content equals the title", () => {
     expect(parseTaskOpen("#task Ship ADR")).toEqual({
+      slug: null,
       title: "Ship ADR",
-      body: "",
+      content: "Ship ADR",
     });
   });
 
-  it("extracts title and trims the multi-line body", () => {
+  it("joins the title and the multi-line body into content", () => {
     const post = "#task Ship ADR\n\nContext: signing-key custody.\n\nDeliverable: ADR merged.";
     expect(parseTaskOpen(post)).toEqual({
+      slug: null,
       title: "Ship ADR",
-      body: "Context: signing-key custody.\n\nDeliverable: ADR merged.",
+      content: "Ship ADR\n\nContext: signing-key custody.\n\nDeliverable: ADR merged.",
     });
   });
 
   it("allows @mentions before the #task marker", () => {
     const post = "@forge @sentinel #task Audit pipeline\n\nBody here.";
     expect(parseTaskOpen(post)).toEqual({
+      slug: null,
       title: "Audit pipeline",
-      body: "Body here.",
+      content: "Audit pipeline\n\nBody here.",
+    });
+  });
+
+  it("extracts an explicit #slug and bolds it in content", () => {
+    const post = "#task #onboarding-friction-top3 Top three onboarding friction points\n\nBody here.";
+    expect(parseTaskOpen(post)).toEqual({
+      slug: "onboarding-friction-top3",
+      title: "Top three onboarding friction points",
+      content: "**#onboarding-friction-top3** Top three onboarding friction points\n\nBody here.",
+    });
+  });
+
+  it("accepts a slug without dashes", () => {
+    expect(parseTaskOpen("#task #simple Title here")).toEqual({
+      slug: "simple",
+      title: "Title here",
+      content: "**#simple** Title here",
+    });
+  });
+
+  it("slug normalised to lowercase", () => {
+    expect(parseTaskOpen("#task #Mixed-Case Title")).toEqual({
+      slug: "mixed-case",
+      title: "Title",
+      content: "**#mixed-case** Title",
+    });
+  });
+
+  it("slug-only post (no title text) renders just the bold slug", () => {
+    expect(parseTaskOpen("#task #icp-v2")).toEqual({
+      slug: "icp-v2",
+      title: "",
+      content: "**#icp-v2**",
+    });
+  });
+});
+
+describe("parseDone / parseWorking / parseSkip", () => {
+  it("returns null when the marker is absent", () => {
+    expect(parseDone("plain text")).toBeNull();
+    expect(parseWorking("plain text")).toBeNull();
+    expect(parseSkip("plain text")).toBeNull();
+  });
+
+  it("keeps the full multi-line content after the marker", () => {
+    const post = "#done Quórum completo. Síntesis y decisión:\n\n**1.** ORG.2 sube a #1.\n**2.** MEM.3 se mantiene.";
+    expect(parseDone(post)).toEqual({
+      content: "Quórum completo. Síntesis y decisión:\n\n**1.** ORG.2 sube a #1.\n**2.** MEM.3 se mantiene.",
+    });
+  });
+
+  it("strips @mentions before the marker", () => {
+    expect(parseWorking("@hub #working fetching benchmarks")).toEqual({
+      content: "fetching benchmarks",
+    });
+  });
+
+  it("accepts marker with no trailing summary", () => {
+    expect(parseSkip("#skip")).toEqual({ content: "" });
+  });
+
+  it("detects #done at the end of a multi-line synthesis (regression: hub closes with synthesis above)", () => {
+    const post = "Synthesis before closing.\n\n**Bet 1** — SplitPass.\n\n#done H2 bets framed as three hypotheses.";
+    expect(parseDone(post)).toEqual({
+      content: "Synthesis before closing.\n\n**Bet 1** — SplitPass.\n\nH2 bets framed as three hypotheses.",
+    });
+  });
+
+  it("strips the #done keyword on its line but keeps the rest of the body intact", () => {
+    expect(parseDone("Top text.\n#done result.\nbottom text.")).toEqual({
+      content: "Top text.\nresult.\nbottom text.",
     });
   });
 });

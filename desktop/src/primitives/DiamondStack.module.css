@@ -1,0 +1,21 @@
+.root {
+  position: relative;
+  display: inline-block;
+  width: var(--glyph-size-md);
+  height: var(--glyph-size-md);
+  flex-shrink: 0;
+}
+
+.dot {
+  position: absolute;
+  width: var(--glyph-size);
+  height: var(--glyph-size);
+  border-radius: 1.5px;
+  background: var(--c, var(--ink-3));
+  transform: rotate(45deg);
+  top: 50%;
+  margin-top: calc(-1 * var(--glyph-size) / 2);
+}
+
+.front { left: 0;                            z-index: 2; background: var(--c, var(--ink-3)); }
+.back  { left: calc(var(--glyph-size) / 2);  z-index: 1; background: color-mix(in srgb, var(--c, var(--ink-3)) 35%, var(--bg-side)); }

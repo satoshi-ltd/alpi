@@ -44,18 +44,31 @@ export function ChatHeader({ kind, accent, title, meta, onBack, onMore, onPickSe
           </Text>
         </View>
         {meta ? (
-          <Text
-            numberOfLines={1}
-            style={{
-              fontFamily: fonts.mono,
-              fontSize: fontSizes.xs,
-              lineHeight: fontSizes.xs * lineHeights.cozy,
-              color: colors.ink3,
-              marginTop: 1,
-            }}
-          >
-            {meta}
-          </Text>
+          typeof meta === 'string' ? (
+            <Text
+              numberOfLines={1}
+              style={{
+                fontFamily: fonts.mono,
+                fontSize: fontSizes.xs,
+                lineHeight: fontSizes.xs * lineHeights.cozy,
+                color: colors.ink3,
+                marginTop: 1,
+              }}
+            >
+              {meta}
+            </Text>
+          ) : (
+            <View
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: space.s2,
+                marginTop: 1,
+              }}
+            >
+              {meta}
+            </View>
+          )
         ) : null}
       </View>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 0, flexShrink: 0 }}>

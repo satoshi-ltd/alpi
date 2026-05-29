@@ -14,6 +14,24 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.1.23 — 2026-05-29 — workgroup transcript polish
+
+Brings the workgroup transcript to parity with desktop and fixes the
+"WORKING that never ages" bug on mobile.
+
+- `#task` cards now show the full briefing under the title; `#done`,
+  `#working`, and `#skip` render the entire body in markdown
+  (paragraphs, lists, bold) instead of clipping to the marker line.
+- Slug-aware tasks: `#task #my-slug ...` highlights the slug in bold
+  and uses it as the task id in the tasks sheet.
+- Stale `#working` (later post from same peer **or** a `#done`/`#skip`
+  closure) shows a `WORK` label with a static dot; active `#working`
+  pulses the hub-colored diamond.
+- Workgroup header now puts a hub-colored diamond next to `@hub_id` in
+  the meta line.
+- Workgroup messages: borderless bubbles, equal tint for hub and
+  members, body rendered with markdown — same look as desktop.
+
 ## v0.1.22 — 2026-05-28 — member role surface + restart daemon
 
 Closes the member role on mobile and brings the daemon restart button

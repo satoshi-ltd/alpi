@@ -28,8 +28,13 @@ const S = StyleSheet.create({
     paddingVertical: space.s5,
     borderRadius: radii.xl,
   },
-  bubbleBorder: { borderWidth: 0.5 },
   bubbleText: { fontSize: fontSizes.lg, lineHeight: fontSizes.lg * 1.45 },
+  wgBubble: {
+    maxWidth: '90%',
+    paddingHorizontal: space.s7,
+    paddingVertical: space.s6,
+    borderRadius: 14,
+  },
   meta: { fontSize: fontSizes.xs, lineHeight: fontSizes.xs },
   speakerRow: { flexDirection: 'row', alignItems: 'center', gap: space.s2 },
   wgRowLeft: { alignItems: 'flex-start', paddingHorizontal: space.s7, gap: space.s1 },
@@ -76,8 +81,7 @@ export function ProfileAssistantMessage({ text, onLongPress }) {
 
 export function WorkgroupMessage({ body, speakerName, speakerAccent, isFromHub, seq, cost, onLongPress }) {
   const { colors, fonts } = useTheme();
-  const tintPct = isFromHub ? 0.14 : 0.12;
-  const bg = mixHex(speakerAccent ?? colors.ink3, tintPct, colors.bgPane);
+  const bg = mixHex(speakerAccent ?? colors.ink3, 0.11, colors.bgPane);
   const right = isFromHub;
 
   const seqStr = seq != null ? `#${seq}` : null;
@@ -103,11 +107,10 @@ export function WorkgroupMessage({ body, speakerName, speakerAccent, isFromHub, 
 
   const bubbleStyle = useCallback(
     ({ pressed }) => [
-      S.bubble,
-      S.bubbleBorder,
-      { backgroundColor: bg, borderColor: colors.line, opacity: pressed ? 0.85 : 1 },
+      S.wgBubble,
+      { backgroundColor: bg, opacity: pressed ? 0.85 : 1 },
     ],
-    [bg, colors.line],
+    [bg],
   );
 
   return (
@@ -128,9 +131,9 @@ export function WorkgroupMessage({ body, speakerName, speakerAccent, isFromHub, 
         )}
       </View>
       <Pressable onLongPress={onLongPress} delayLongPress={350} style={bubbleStyle}>
-        <Text style={[S.bubbleText, { fontFamily: fonts.sans.regular, color: colors.ink }]}>
+        <RichText size={fontSizes.md} color={colors.ink}>
           {body}
-        </Text>
+        </RichText>
       </Pressable>
     </View>
   );

@@ -4,6 +4,7 @@ import { ActivityIndicator, FlatList, KeyboardAvoidingView, Platform, Pressable,
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { radii, space , fontSizes} from '../../src/theme/tokens';
 
+import { Diamond } from '../../src/components/Diamond';
 import { Dot } from '../../src/components/Dot';
 import { useToast } from '../../src/components/Toast';
 import { WorkgroupMessage } from '../../src/features/chat/Bubble';
@@ -63,31 +64,21 @@ const WgItem = memo(function WgItem({ m, hubPubkey, ownPubkey, workingStale, acc
         variant="task"
         side={isFromHub ? 'right' : 'left'}
         hubColor={speakerAccent}
-        title={c.task?.title || ''}
         speakerName={speakerName}
         isFromHub={isFromHub}
         seq={m.seq}
         cost={m.cost}
-      />
-    );
-  }
-  if (c.variant === 'working' && isStaleWorking) {
-    return (
-      <WorkgroupMessage
-        body={c.text || ''}
-        speakerName={speakerName}
-        speakerAccent={speakerAccent}
-        isFromHub={isFromHub}
-        seq={m.seq}
-        cost={m.cost}
-        onLongPress={() => setActionTarget(makeTarget())}
-      />
+      >
+        {c.task?.content || ''}
+      </MarkerCard>
     );
   }
   if (c.variant === 'working' || c.variant === 'done' || c.variant === 'skip') {
     return (
       <MarkerCard
         variant={c.variant}
+        label={isStaleWorking ? 'WORK' : undefined}
+        stale={isStaleWorking}
         side={isFromHub ? 'right' : 'left'}
         hubColor={speakerAccent}
         speakerName={speakerName}
@@ -293,14 +284,22 @@ export default function WorkgroupChat() {
     setOptimistic([]);
   });
 
+  // A #working is stale once superseded — by a later post from the same author, or by a #done/#skip that closes the task. Scope resets when crossing a #task boundary going backwards.
   const workingStale = useMemo(() => {
     const stale = new Set();
     if (!messages.length) return stale;
-    const seenAuthor = new Set();
+    let seenAuthor = new Set();
+    let taskClosed = false;
     for (let i = messages.length - 1; i >= 0; i--) {
       const m = messages[i];
-      if (classifyMessage(m.body).variant === 'working') {
-        if (seenAuthor.has(m.from_pubkey)) stale.add(m.seq);
+      const variant = classifyMessage(m.body).variant;
+      if (variant === 'done' || variant === 'skip') taskClosed = true;
+      if (variant === 'working') {
+        if (seenAuthor.has(m.from_pubkey) || taskClosed) stale.add(m.seq);
+      }
+      if (variant === 'task') {
+        seenAuthor = new Set();
+        taskClosed = false;
       }
       seenAuthor.add(m.from_pubkey);
     }
@@ -371,7 +370,21 @@ export default function WorkgroupChat() {
     );
   }
 
-  const meta = `hub @${wg.hub_id} · ${members.length || wg.members?.length || 0} members${paused ? ' · paused' : ''}`;
+  const memberCount = members.length || wg.members?.length || 0;
+  const metaTextStyle = {
+    fontFamily: fonts.mono,
+    fontSize: fontSizes.xs,
+    color: colors.ink3,
+  };
+  const meta = (
+    <>
+      <Text style={metaTextStyle}>hub</Text>
+      <Diamond color={accent} />
+      <Text style={metaTextStyle}>
+        {`@${wg.hub_id} · ${memberCount} members${paused ? ' · paused' : ''}`}
+      </Text>
+    </>
+  );
 
   const mentionSource = (needle) => {
     const n = needle.toLowerCase();

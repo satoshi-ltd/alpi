@@ -46,15 +46,13 @@ export default function SidebarRow({
         ...(muted && !isNeedsProvider ? { opacity: "var(--alpha-muted)" } : {}),
       }}
     >
-      {leading !== undefined
-        ? leading
-        : kind === "workgroup"
-          ? (
-              <span className={styles.glyphSlot}>
-                <Hash />
-              </span>
-            )
-          : <Diamond color={color} />}
+      {leading !== undefined ? (
+        leading
+      ) : (
+        <span className={styles.glyphSlot}>
+          {kind === "workgroup" ? <Hash /> : <Diamond color={color} />}
+        </span>
+      )}
       <span
         className={`${labelClass}${stateMod} ${styles.label}`.trim()}
         style={tintedColor ? { color: "inherit" } : undefined}

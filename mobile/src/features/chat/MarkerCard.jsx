@@ -2,10 +2,10 @@ import { StyleSheet, Text, View } from 'react-native';
 import { space , fontSizes, lineHeights} from '../../theme/tokens';
 
 import { Diamond } from '../../components/Diamond';
+import { RichText } from '../../components/RichText';
 import { useTheme } from '../../theme/ThemeContext';
-import { ThinkingDots } from './ThinkingDots';
 
-const TINTS = { task: 0.11, working: 0.14, done: 0.18, skip: 0.12 };
+const TINTS = { task: 0.18, working: 0.14, done: 0.18, skip: 0.12 };
 const LABELS = { task: 'TASK', working: 'WORKING', done: 'DONE', skip: 'SKIP' };
 
 const S = StyleSheet.create({
@@ -43,8 +43,12 @@ function mixHex(hex, pct, base) {
   return `rgb(${r},${g},${b})`;
 }
 
-function MarkerIcon({ variant, color }) {
-  if (variant === 'working') return <ThinkingDots color={color} />;
+function MarkerIcon({ variant, color, stale }) {
+  if (variant === 'working') {
+    return stale
+      ? <View style={[S.taskDot, { backgroundColor: color }]} />
+      : <Diamond color={color} pulse />;
+  }
   if (variant === 'done') {
     return <Text style={[S.doneTick, { color }]}>✓</Text>;
   }
@@ -58,7 +62,7 @@ function MarkerIcon({ variant, color }) {
   return <View style={[S.taskDot, { backgroundColor: color }]} />;
 }
 
-export function MarkerCard({ variant = 'task', side = 'left', hubColor, speakerName, isFromHub, seq, cost, title, children }) {
+export function MarkerCard({ variant = 'task', side = 'left', hubColor, speakerName, isFromHub, seq, cost, title, children, label, stale = false }) {
   const { colors, fonts, shadow , fontSizes} = useTheme();
   const pct = TINTS[variant] ?? 0.11;
   const baseAccent = variant === 'skip' ? colors.warning : hubColor ?? colors.ink3;
@@ -106,10 +110,10 @@ export function MarkerCard({ variant = 'task', side = 'left', hubColor, speakerN
       <View style={[S.card, { backgroundColor: tint }, shadow.sm]}>
         <View style={S.eyebrowRow}>
           <View style={S.iconSlot}>
-            <MarkerIcon variant={variant} color={baseAccent} />
+            <MarkerIcon variant={variant} color={baseAccent} stale={stale} />
           </View>
-          <Text style={[S.eyebrowText, { fontFamily: fonts.monoSemibold, color: colors.ink3 }]}>
-            {LABELS[variant]}
+          <Text style={[S.eyebrowText, { fontFamily: fonts.monoSemibold, color: baseAccent }]}>
+            {label || LABELS[variant]}
           </Text>
         </View>
         {title ? (
@@ -118,9 +122,9 @@ export function MarkerCard({ variant = 'task', side = 'left', hubColor, speakerN
           </Text>
         ) : null}
         {children ? (
-          <Text style={[S.body, { fontFamily: fonts.sans.regular, color: colors.ink2 }]}>
-            {children}
-          </Text>
+          typeof children === 'string'
+            ? <RichText size={fontSizes.md} color={colors.ink}>{children}</RichText>
+            : children
         ) : null}
       </View>
     </View>

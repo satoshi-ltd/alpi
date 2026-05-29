@@ -12,10 +12,23 @@ import {
 import { Popover } from "./index.js";
 import styles from "./TasksButton.module.css";
 
+const TASK_SLUG_RE = /^#([A-Za-z0-9][A-Za-z0-9_-]*)(?:\s+(.+))?$/;
+
 function readMarker(body) {
   for (const line of String(body || "").split("\n")) {
     let m = /^(?:@\S+\s+)*#task\s+(.+?)\s*$/i.exec(line);
-    if (m) return { kind: "task", text: m[1].trim() };
+    if (m) {
+      const first = m[1].trim();
+      const slugMatch = TASK_SLUG_RE.exec(first);
+      if (slugMatch) {
+        return {
+          kind: "task",
+          slug: slugMatch[1].toLowerCase(),
+          text: (slugMatch[2] ?? "").trim(),
+        };
+      }
+      return { kind: "task", slug: null, text: first };
+    }
     m = /^(?:@\S+\s+)*#working(?:\s+(.+?))?\s*$/i.exec(line);
     if (m) return { kind: "working", text: (m[1] ?? "").trim() };
     m = /^(?:@\S+\s+)*#skip(?:\s+(.+?))?\s*$/i.exec(line);
@@ -43,7 +56,7 @@ function deriveTasks(thread = []) {
     if (mk?.kind === "task") {
       active = {
         seq: msg.seq,
-        slug: slugifyTitle(mk.text, msg.seq),
+        slug: mk.slug ?? slugifyTitle(mk.text, msg.seq),
         title: mk.text,
         status: "open",
         contributions: 0,

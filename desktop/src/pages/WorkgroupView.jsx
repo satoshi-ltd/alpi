@@ -7,9 +7,15 @@ import { safeUnlisten } from "../lib/tauri-listen.js";
 import Composer from "../primitives/Composer.jsx";
 import Message from "../primitives/Message.jsx";
 import SearchBar from "../primitives/SearchBar.jsx";
-import { renderMarkdown, renderMarkdownInline } from "../lib/markdown.js";
+import { renderMarkdown } from "../lib/markdown.js";
 import { useTranscriptSearch } from "../hooks/useTranscriptSearch.js";
-import { findLatestTask, parseTaskOpen } from "../lib/workgroup-tasks.js";
+import {
+  findLatestTask,
+  parseDone,
+  parseSkip,
+  parseTaskOpen,
+  parseWorking,
+} from "../lib/workgroup-tasks.js";
 import { playTts, subscribeTts, voiceForPubkey } from "../lib/tts.js";
 import { useOnline } from "../lib/useOnline.js";
 import {
@@ -107,15 +113,21 @@ export default function WorkgroupView({
     () => findLatestTask(messages, hubPubkey),
     [messages, hubPubkey],
   );
-  // Only the last `#working` per author counts as live; earlier ones are superseded by any later post from that author.
+  // A `#working` is stale once superseded — either by a later post from the same author, or by a `#done`/`#skip` that closes the task. Scope resets when we cross a `#task` boundary going backwards.
   const workingStale = useMemo(() => {
     const set = new Set();
     if (!messages || messages.length === 0) return set;
-    const seenAuthor = new Set();
+    let seenAuthor = new Set();
+    let taskClosed = false;
     for (let i = messages.length - 1; i >= 0; i--) {
       const m = messages[i];
+      if (parseDone(m.body) || parseSkip(m.body)) taskClosed = true;
       if (parseWorking(m.body)) {
-        if (seenAuthor.has(m.from_pubkey)) set.add(m.seq);
+        if (seenAuthor.has(m.from_pubkey) || taskClosed) set.add(m.seq);
+      }
+      if (parseTaskOpen(m.body)) {
+        seenAuthor = new Set();
+        taskClosed = false;
       }
       seenAuthor.add(m.from_pubkey);
     }
@@ -345,8 +357,8 @@ export default function WorkgroupView({
                     styles,
                   });
                   const speakableText = task
-                    ? task.title
-                    : (working?.reason || skip?.reason || done?.result || m.body);
+                    ? task.content
+                    : (working?.content || skip?.content || done?.content || m.body);
                   const footer = renderWgFooter({
                     plainText: speakableText,
                     styles,
@@ -366,15 +378,14 @@ export default function WorkgroupView({
                         side={isFromHub ? "right" : "left"}
                         taskId={m.seq}
                         hubColor={speaker.accent}
-                        title={task.title}
                         meta={meta}
                         footer={footer}
                       >
-                        {task.body ? (
+                        {task.content ? (
                           <div
                             className="alpi-md"
                             dangerouslySetInnerHTML={{
-                              __html: renderMarkdown(task.body),
+                              __html: renderMarkdown(task.content),
                             }}
                           />
                         ) : null}
@@ -382,29 +393,27 @@ export default function WorkgroupView({
                     );
                   }
 
-                  if (working && workingStale.has(m.seq)) {
-                  } else if (working || skip || done) {
+                  if (working || skip || done) {
                     const variant = working ? "working" : skip ? "skip" : "done";
-                    const text = working
-                      ? working.reason
-                      : skip
-                        ? skip.reason
-                        : done.result;
+                    const isStale = working && workingStale.has(m.seq);
+                    const content = (working || skip || done).content;
                     return (
                       <MarkerCard
                         key={m.seq}
                         variant={variant}
+                        label={isStale ? "WORK" : undefined}
+                        stale={isStale}
                         side={isFromHub ? "right" : "left"}
                         taskId={m.seq}
                         hubColor={speaker.accent}
                         meta={meta}
                         footer={footer}
                       >
-                        {text ? (
-                          <span
+                        {content ? (
+                          <div
                             className="alpi-md"
                             dangerouslySetInnerHTML={{
-                              __html: renderMarkdownInline(text),
+                              __html: renderMarkdown(content),
                             }}
                           />
                         ) : null}
@@ -423,11 +432,7 @@ export default function WorkgroupView({
                       <span
                         className="alpi-md"
                         dangerouslySetInnerHTML={{
-                          __html: renderMarkdown(
-                            working && workingStale.has(m.seq)
-                              ? working.reason || ""
-                              : m.body,
-                          ),
+                          __html: renderMarkdown(m.body),
                         }}
                       />
                     </MessageBubble>
@@ -485,29 +490,6 @@ export default function WorkgroupView({
       />
     </>
   );
-}
-
-function findMarkerLine(body, re) {
-  for (const line of String(body || "").split("\n")) {
-    const m = re.exec(line);
-    if (m) return m;
-  }
-  return null;
-}
-
-function parseWorking(body) {
-  const m = findMarkerLine(body, /^(?:@\S+\s+)*#working(?:\s+([^\n]+))?\s*$/i);
-  return m ? { reason: (m[1] ?? "").trim() } : null;
-}
-
-function parseSkip(body) {
-  const m = findMarkerLine(body, /^(?:@\S+\s+)*#skip(?:\s+([^\n]+))?\s*$/i);
-  return m ? { reason: (m[1] ?? "").trim() } : null;
-}
-
-function parseDone(body) {
-  const m = findMarkerLine(body, /^(?:@\S+\s+)*#done\s+(.+?)\s*$/i);
-  return m ? { result: m[1].trim() } : null;
 }
 
 function formatCost(cost) {

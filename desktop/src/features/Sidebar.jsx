@@ -13,8 +13,8 @@ import {
   Tip,
   ArrowLeftIcon,
   Diamond,
+  DiamondStack,
   GearIcon,
-  Hash,
   PauseIcon,
   PinIcon,
   PinOffIcon,
@@ -756,13 +756,13 @@ const WorkgroupRow = memo(function WorkgroupRow({
         state={paused ? "paused" : undefined}
         leading={
           <span className={styles.workgroupLeading} style={{ color: hubAccent || "var(--ink-4)" }}>
-            {working
-              ? (
-                  <Tip text={stateLabel} side="up-l">
-                    <Diamond color={hubAccent || undefined} pulse />
-                  </Tip>
-                )
-              : <Hash />}
+            {working ? (
+              <Tip text={stateLabel} side="up-l">
+                <Diamond color={hubAccent || undefined} pulse />
+              </Tip>
+            ) : (
+              <DiamondStack color={hubAccent || undefined} />
+            )}
           </span>
         }
         trailing={trailing}
