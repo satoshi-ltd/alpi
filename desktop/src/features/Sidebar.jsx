@@ -661,6 +661,7 @@ const ProfileRow = memo(function ProfileRow({
   const label = profileLabel(profile.name);
   const incompleteHint = `@${label}, needs provider — tap to set up`;
   const leadingDiamond = <Diamond color={profile.accent || undefined} pulse={pending} />;
+  const bio = (profile.bio || profile.public_bio || "").trim();
 
   return (
     <div className={styles.rowWrap}>
@@ -676,7 +677,9 @@ const ProfileRow = memo(function ProfileRow({
         leading={
           pending
             ? <Tip text="thinking…" side="up-l">{leadingDiamond}</Tip>
-            : leadingDiamond
+            : bio
+              ? <Tip text={bio} side="l" escape>{leadingDiamond}</Tip>
+              : leadingDiamond
         }
         trailing={trailing}
         onClick={handleClick}
@@ -758,7 +761,7 @@ const WorkgroupRow = memo(function WorkgroupRow({
           <span className={styles.workgroupLeading} style={{ color: hubAccent || "var(--ink-4)" }}>
             {working ? (
               <Tip text={stateLabel} side="up-l">
-                <Diamond color={hubAccent || undefined} pulse />
+                <DiamondStack color={hubAccent || undefined} pulse />
               </Tip>
             ) : (
               <DiamondStack color={hubAccent || undefined} />

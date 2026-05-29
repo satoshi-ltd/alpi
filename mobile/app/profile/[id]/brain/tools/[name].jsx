@@ -57,8 +57,31 @@ export default function ToolDetail() {
         onBack={() => router.back()}
       />
       <ScrollView contentContainerStyle={{ padding: space.s8, gap: space.s6, paddingBottom: space.s10 }}>
+        {tool.denied ? (
+          <View
+            style={{
+              padding: space.s5,
+              backgroundColor: `${colors.warning}1f`,
+              borderRadius: radii.md,
+              borderWidth: 0.5,
+              borderColor: `${colors.warning}66`,
+            }}
+          >
+            <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, color: colors.warning, lineHeight: fontSizes.sm * 1.5 }}>
+              Denied for this profile via tools.deny in config.yaml. The agent does not see this tool.
+            </Text>
+          </View>
+        ) : null}
         {tool.description ? (
-          <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.md, color: colors.ink2, lineHeight: fontSizes.md * 1.5 }}>
+          <Text
+            style={{
+              fontFamily: fonts.sans.regular,
+              fontSize: fontSizes.md,
+              color: colors.ink2,
+              lineHeight: fontSizes.md * 1.5,
+              opacity: tool.denied ? 0.6 : 1,
+            }}
+          >
             {tool.description}
           </Text>
         ) : null}

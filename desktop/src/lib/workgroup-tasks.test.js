@@ -5,6 +5,7 @@ import {
   parseSkip,
   parseTaskOpen,
   parseWorking,
+  validateTaskShape,
 } from "./workgroup-tasks.js";
 
 describe("parseTaskOpen", () => {
@@ -14,30 +15,9 @@ describe("parseTaskOpen", () => {
     expect(parseTaskOpen(null)).toBeNull();
   });
 
-  it("title-only post: content equals the title", () => {
-    expect(parseTaskOpen("#task Ship ADR")).toEqual({
-      slug: null,
-      title: "Ship ADR",
-      content: "Ship ADR",
-    });
-  });
-
-  it("joins the title and the multi-line body into content", () => {
-    const post = "#task Ship ADR\n\nContext: signing-key custody.\n\nDeliverable: ADR merged.";
-    expect(parseTaskOpen(post)).toEqual({
-      slug: null,
-      title: "Ship ADR",
-      content: "Ship ADR\n\nContext: signing-key custody.\n\nDeliverable: ADR merged.",
-    });
-  });
-
-  it("allows @mentions before the #task marker", () => {
-    const post = "@forge @sentinel #task Audit pipeline\n\nBody here.";
-    expect(parseTaskOpen(post)).toEqual({
-      slug: null,
-      title: "Audit pipeline",
-      content: "Audit pipeline\n\nBody here.",
-    });
+  it("slug-less #task is no longer a task", () => {
+    expect(parseTaskOpen("#task Ship ADR")).toBeNull();
+    expect(parseTaskOpen("@forge #task Audit pipeline\n\nBody here.")).toBeNull();
   });
 
   it("extracts an explicit #slug and bolds it in content", () => {
@@ -71,6 +51,31 @@ describe("parseTaskOpen", () => {
       title: "",
       content: "**#icp-v2**",
     });
+  });
+});
+
+describe("validateTaskShape", () => {
+  it("passes through bodies without a #task marker", () => {
+    expect(validateTaskShape("plain text")).toEqual({ ok: true });
+    expect(validateTaskShape("")).toEqual({ ok: true });
+    expect(validateTaskShape(null)).toEqual({ ok: true });
+  });
+
+  it("accepts well-formed #task #slug posts", () => {
+    expect(validateTaskShape("#task #onboarding-friction-top3 …")).toEqual({ ok: true });
+    expect(validateTaskShape("#task #icp-v2")).toEqual({ ok: true });
+    expect(validateTaskShape("@hub #task #x title")).toEqual({ ok: true });
+  });
+
+  it("rejects #task without a slug", () => {
+    const v = validateTaskShape("#task no slug here");
+    expect(v.ok).toBe(false);
+    expect(v.error).toMatch(/#<slug>/);
+  });
+
+  it("rejects #task # with malformed slug", () => {
+    expect(validateTaskShape("#task #-leading-hyphen Title").ok).toBe(false);
+    expect(validateTaskShape("#task # bare hash").ok).toBe(false);
   });
 });
 
@@ -120,12 +125,13 @@ describe("findLatestTask", () => {
 
   it("returns the latest #task and folds in a later #done", () => {
     const msgs = [
-      { seq: 1, body: "#task First", from_pubkey: "HUB" },
+      { seq: 1, body: "#task #first First", from_pubkey: "HUB" },
       { seq: 2, body: "noise", from_pubkey: "M" },
       { seq: 3, body: "#done shipped", from_pubkey: "HUB" },
     ];
     expect(findLatestTask(msgs, "HUB")).toEqual({
       state: "done",
+      slug: "first",
       text: "First",
       seq: 1,
       result: "shipped",

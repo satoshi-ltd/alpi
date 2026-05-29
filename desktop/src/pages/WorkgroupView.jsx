@@ -15,6 +15,7 @@ import {
   parseSkip,
   parseTaskOpen,
   parseWorking,
+  validateTaskShape,
 } from "../lib/workgroup-tasks.js";
 import { playTts, subscribeTts, voiceForPubkey } from "../lib/tts.js";
 import { useOnline } from "../lib/useOnline.js";
@@ -271,6 +272,7 @@ export default function WorkgroupView({
         workgroup={workgroup}
         hubAccent={ownerProfile?.accent}
         hubName={hubName}
+        hubBio={ownerProfile?.bio || ownerProfile?.public_bio}
         memberCount={members.length || workgroup.members || 0}
         budget={
           workgroup.budget_usd > 0
@@ -553,11 +555,15 @@ function renderWgFooter({
 }
 
 function renderWgMeta({ seq, cost, speaker, isFromHub, styles }) {
+  const rawDiamond = <Diamond color={speaker.accent} />;
+  const diamond = speaker.bio
+    ? <Tip text={speaker.bio} side={isFromHub ? "up-r" : "up-l"}>{rawDiamond}</Tip>
+    : rawDiamond;
   const peer = (
     <span className={styles.metaGroup}>
-      {!isFromHub && <Diamond color={speaker.accent} />}
+      {!isFromHub && diamond}
       <span className={styles.speakerName}>{speaker.name}</span>
-      {isFromHub && <Diamond color={speaker.accent} />}
+      {isFromHub && diamond}
     </span>
   );
   const seqEl = <Mono className="tnum">{`#${seq}`}</Mono>;
@@ -590,23 +596,28 @@ function paletteFor(seed) {
 
 function resolveSpeaker(msg, profiles, peers, members) {
   const pubkey = msg.from_pubkey || "";
+  const memberBio = pubkey
+    ? (members.find((m) => m.pubkey === pubkey)?.bio || "").trim() || null
+    : null;
   if (pubkey) {
     const matchProfile = profiles.find((p) => p.pubkey_b64 === pubkey);
     if (matchProfile) {
+      const localBio = (matchProfile.bio || matchProfile.public_bio || "").trim() || null;
       return {
         name: matchProfile.name,
         accent: matchProfile.accent ?? paletteFor(matchProfile.name),
+        bio: memberBio || localBio,
       };
     }
     const peer = peers.find((p) => p.pubkey === pubkey);
-    if (peer) return { name: peer.id, accent: paletteFor(peer.id) };
+    if (peer) return { name: peer.id, accent: paletteFor(peer.id), bio: memberBio };
     const member = members.find((m) => m.pubkey === pubkey);
     if (member?.bio) {
-      return { name: member.bio, accent: paletteFor(member.bio) };
+      return { name: member.bio, accent: paletteFor(member.bio), bio: null };
     }
   }
   const handle = String(msg.from || "").replace(/^@/, "");
-  return { name: handle, accent: paletteFor(handle) };
+  return { name: handle, accent: paletteFor(handle), bio: null };
 }
 
 function mentionsForWorkgroup(members, peers, profiles, ownPubkey) {
@@ -628,12 +639,13 @@ function WorkgroupComposer({ paused, mentions, onSend, hubName, hubAccent }) {
   const [text, setText] = useState("");
   const [posting, setPosting] = useState(false);
   const hasText = text.trim().length > 0;
-  const canSend = hasText && !paused && !posting;
+  const taskShape = validateTaskShape(text);
+  const canSend = hasText && !paused && !posting && taskShape.ok;
   const placeholder = paused
     ? "Workgroup is paused"
     : posting
       ? "Posting…"
-      : "Send a message — use @<peer> or #task to address";
+      : "Send a message — use @<peer> or #task #<slug> to open";
 
   async function trySend() {
     if (!canSend) return;
@@ -647,7 +659,11 @@ function WorkgroupComposer({ paused, mentions, onSend, hubName, hubAccent }) {
     }
   }
 
-  const hint = (
+  const hint = !taskShape.ok ? (
+    <span className={styles.metaGroup} style={{ color: "var(--c-warning)" }}>
+      {taskShape.error}
+    </span>
+  ) : (
     <>
       <span className={styles.metaGroup}>
         <span className={styles.hintArrow}>→</span>
@@ -655,7 +671,7 @@ function WorkgroupComposer({ paused, mentions, onSend, hubName, hubAccent }) {
         <span>
           <Mono className={styles.hintMono}>@{hubName}</Mono>
           {" formulates as "}
-          <Mono className={styles.hintMono}>#task</Mono>
+          <Mono className={styles.hintMono}>#task #&lt;slug&gt;</Mono>
         </span>
       </span>
       <span className={styles.kbdGroup}>
@@ -676,7 +692,9 @@ function WorkgroupComposer({ paused, mentions, onSend, hubName, hubAccent }) {
       accent={hubAccent ?? null}
       placeholder={placeholder}
       sendTitle={paused ? "Workgroup is paused" : "Send (⌘↵)"}
-      disabledTitle="Type a message"
+      disabledTitle={
+        taskShape.ok ? "Type a message" : "#task needs a #<slug>"
+      }
       mentions={mentions}
       hint={hint}
     />

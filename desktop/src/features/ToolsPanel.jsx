@@ -26,7 +26,12 @@ export default function ToolsPanel({ open, onClose, profile }) {
       .then((rows) => {
         if (cancelled) return;
         const arr = Array.isArray(rows) ? rows : [];
-        setTools(arr);
+        const decorated = arr.map((t) => ({
+          ...t,
+          muted: !!t.denied,
+          tag: t.denied ? "denied" : t.tag,
+        }));
+        setTools(decorated);
       })
       .catch(() => !cancelled && setTools([]));
     return () => {
@@ -55,6 +60,12 @@ function ToolDetail({ tool }) {
 
   return (
     <BrowseDetail name={tool.name} description={tool.description}>
+      {tool.denied ? (
+        <div className={styles.denyBanner}>
+          Denied for this profile via <code>tools.deny</code> in
+          {" "}<code>config.yaml</code>. The agent does not see this tool.
+        </div>
+      ) : null}
       {rows.length > 0 ? (
         <table className={styles.params}>
           <thead>

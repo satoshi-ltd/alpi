@@ -13,12 +13,20 @@ export default function SettingsHero({
   kind = "profile",
   id,
   accent,
+  bio,
   meta,
   onOpenChat,
   onTogglePause,
   paused = false,
 }) {
   const isWg = kind === "workgroup";
+  const trimmedBio = (bio || "").trim();
+  const glyph = isWg
+    ? <Hash size="md" />
+    : <Diamond color={accent} size="md" />;
+  const titleGlyph = !isWg && trimmedBio
+    ? <Tip text={trimmedBio} side="l" escape>{glyph}</Tip>
+    : glyph;
   return (
     <header
       className={`ds-chat-header ${styles.header}`}
@@ -28,7 +36,7 @@ export default function SettingsHero({
       <div className={`row between ${styles.topRow}`}>
         <div className={`col ${styles.titleCol}`}>
           <div className="title-row">
-            {isWg ? <Hash size="md" /> : <Diamond color={accent} size="md" />}
+            {titleGlyph}
             <h1>{id}</h1>
             <span className="kicker">
               {isWg ? "workgroup · settings" : "profile · settings"}

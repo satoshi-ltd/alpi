@@ -48,9 +48,17 @@ def register(server: host_server.Server) -> None:
 
 
 async def _tools_list(
-    _params: dict[str, Any], _server: host_server.Server,
+    params: dict[str, Any], _server: host_server.Server,
 ) -> dict[str, Any]:
-    from alpi import tools as tools_mod
+    from alpi import config as cfg_mod, home as home_mod, tools as tools_mod
+
+    profile = str((params or {}).get("profile") or "").strip() or "default"
+    deny: frozenset[str] = frozenset()
+    try:
+        cfg = cfg_mod.load(home_mod.home_for(profile))
+        deny = frozenset(cfg.tools.deny or ())
+    except Exception:  # noqa: BLE001 — config absent / malformed → no deny filter, list everything
+        deny = frozenset()
 
     items: list[dict[str, Any]] = []
     for cls in tools_mod.all_tools():
@@ -61,5 +69,6 @@ async def _tools_list(
             "category": _category_for(cls.name),
             "description": cls.description,
             "parameters": cls.parameters,
+            "denied": cls.name in deny,
         })
     return {"tools": items}

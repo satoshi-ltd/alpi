@@ -65,7 +65,7 @@ def test_active_task_surfaces_in_block(short_tmp: Path) -> None:
         wg_id="wg_x", name="x", hub_id="h", hub_pubkey="hubkey",
     )
     sub.append_recent([
-        {"seq": 1, "text": "#task research peptides", "from": "hubkey"},
+        {"seq": 1, "text": "#task #peptides research peptides", "from": "hubkey"},
         {"seq": 2, "text": "@alice you take lit angle", "from": "hubkey"},
     ])
     sub_mod.upsert(home, sub)

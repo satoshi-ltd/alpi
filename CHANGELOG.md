@@ -1,5 +1,28 @@
 # Changelog
 
+## v0.6.30 — 2026-05-29 — `#task #<slug>`, `tools.deny` visibility, opus 4.8
+
+Three protocol / catalog tweaks bundled together.
+
+- **Task slugs are mandatory.** Every `#task` opener must now carry a
+  stable kebab-case `#<slug>` identifier: `#task #<slug> <description>`.
+  Slug pattern `[A-Za-z0-9][A-Za-z0-9_-]{0,63}`, normalised to lowercase;
+  description is optional. The SDK rejects slug-less attempts with
+  `task-missing-slug` before encryption, and the parser treats them as
+  plain prose. New error code `-32011 task-missing-slug` documented;
+  the hub stays zero-knowledge and does not re-validate on the wire.
+  `WORKGROUP_GUARDRAILS` updated so hubs see the new shape.
+- **`tools.deny` shows up in introspection.** `host.tools.list` now
+  reads the requested profile's `config.yaml` and emits `denied: true`
+  on each entry listed under `tools.deny`. Apps render those rows
+  muted instead of pretending the agent has access. Returning the
+  entry (rather than dropping it) is deliberate — the operator wants
+  to see what's been switched off, not have it silently vanish.
+- **Claude Opus 4.8 in the curated catalog.** `claude-opus-4-8` is now
+  the flagship choice in the setup wizard's model picker; Opus 4.7
+  stays as a fallback. The reasoning regex already covered the
+  `opus-[4-9]` family, so thinking support works out of the box.
+
 ## v0.6.29 — 2026-05-28 — workgroup posts reach the hub again
 
 Members on `~/.alpi/profiles/*` could not post into workgroups after

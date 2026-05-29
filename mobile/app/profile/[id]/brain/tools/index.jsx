@@ -75,11 +75,41 @@ export default function ToolsList() {
                       backgroundColor: pressed ? colors.selected : 'transparent',
                     })}
                   >
-                    <Text style={{ fontFamily: fonts.monoMedium, fontSize: fontSizes.lg, color: colors.ink }}>
-                      {t.name}
-                    </Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s3 }}>
+                      <Text
+                        style={{
+                          fontFamily: fonts.monoMedium,
+                          fontSize: fontSizes.lg,
+                          color: t.denied ? colors.ink3 : colors.ink,
+                          textDecorationLine: t.denied ? 'line-through' : 'none',
+                        }}
+                      >
+                        {t.name}
+                      </Text>
+                      {t.denied ? (
+                        <Text
+                          style={{
+                            fontFamily: fonts.monoMedium,
+                            fontSize: fontSizes.xs,
+                            color: colors.warning,
+                            textTransform: 'uppercase',
+                            letterSpacing: 0.6,
+                          }}
+                        >
+                          denied
+                        </Text>
+                      ) : null}
+                    </View>
                     {t.description ? (
-                      <Text numberOfLines={2} style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, color: colors.ink3 }}>
+                      <Text
+                        numberOfLines={2}
+                        style={{
+                          fontFamily: fonts.sans.regular,
+                          fontSize: fontSizes.sm,
+                          color: colors.ink3,
+                          opacity: t.denied ? 0.6 : 1,
+                        }}
+                      >
                         {t.description}
                       </Text>
                     ) : null}

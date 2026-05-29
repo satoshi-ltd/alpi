@@ -37,7 +37,12 @@ from typing import Iterable
 # tasks: ``@alice @bob #task <description>``). Single space required
 # after the marker keyword, the rest of the line is the payload.
 _TASK_RE = re.compile(
-    r"^(?:@\S+\s+)*#task\s+(.+?)\s*$", re.MULTILINE,
+    r"^(?:@\S+\s+)*#task\s+#([A-Za-z0-9][A-Za-z0-9_-]{0,63})(?:\s+(.+?))?\s*$",
+    re.MULTILINE,
+)
+# Matches any ``#task`` opener line regardless of slug — used for "this post tried to open a task" detection so the SDK can reject slug-less attempts with a clear error before encryption.
+_TASK_INTENT_RE = re.compile(
+    r"^(?:@\S+\s+)*#task\b.*$", re.MULTILINE,
 )
 _DONE_RE = re.compile(
     r"^(?:@\S+\s+)*#done\s+(.+?)\s*$", re.MULTILINE,
@@ -69,6 +74,7 @@ class TaskEvent:
     text: str          # description (task) or result (done)
     seq: int           # post seq this marker came from
     by: str            # author pubkey b64
+    slug: str = ""     # stable identifier for `#task` events ("" for `#done`)
 
 
 @dataclass(frozen=True)
@@ -77,6 +83,7 @@ class Task:
     description: str
     opened_seq: int
     opened_by: str
+    slug: str = ""                   # stable identifier captured at open time
     closed_seq: int | None = None    # None while open
     closed_by: str | None = None
     result: str | None = None        # None while open
@@ -154,9 +161,11 @@ def parse_post(
         return []
     out: list[TaskEvent] = []
     for m in tasks:
-        desc = m.group(1).strip()
-        if desc:
-            out.append(TaskEvent(kind="task", text=desc, seq=seq, by=by))
+        slug = m.group(1).lower()
+        desc = (m.group(2) or "").strip()
+        out.append(TaskEvent(
+            kind="task", text=desc, seq=seq, by=by, slug=slug,
+        ))
     for m in dones:
         result = m.group(1).strip()
         if result:
@@ -181,14 +190,16 @@ def fold_tasks(events: Iterable[TaskEvent]) -> list[Task]:
                     description=active.description,
                     opened_seq=active.opened_seq,
                     opened_by=active.opened_by,
+                    slug=active.slug,
                     closed_seq=ev.seq,
                     closed_by=ev.by,
-                    result=f"preempted by {ev.text}",
+                    result=f"preempted by #{ev.slug}" if ev.slug else "preempted",
                 ))
             active = Task(
                 description=ev.text,
                 opened_seq=ev.seq,
                 opened_by=ev.by,
+                slug=ev.slug,
             )
         elif ev.kind == "done":
             if active is None:
@@ -197,6 +208,7 @@ def fold_tasks(events: Iterable[TaskEvent]) -> list[Task]:
                 description=active.description,
                 opened_seq=active.opened_seq,
                 opened_by=active.opened_by,
+                slug=active.slug,
                 closed_seq=ev.seq,
                 closed_by=ev.by,
                 result=ev.text,
@@ -237,3 +249,13 @@ _MENTION_RE = re.compile(r"(?:^|\s)@([A-Za-z0-9_-]+)\b")
 def mentions_in(text: str) -> list[str]:
     """Return every peer-id mentioned in ``text``, in order, no dedup."""
     return [m.group(1) for m in _MENTION_RE.finditer(text or "")]
+
+
+def has_task_intent(text: str) -> bool:
+    """``True`` when any line of the post starts a `#task` opener attempt — regardless of whether the slug is valid. Used by the SDK to distinguish "the author tried to open a task but messed up" from "this is plain prose"."""
+    return _TASK_INTENT_RE.search(text or "") is not None
+
+
+def is_valid_task_open(text: str) -> bool:
+    """``True`` when the post contains a properly-formed `#task #<slug>` opener line."""
+    return _TASK_RE.search(text or "") is not None

@@ -154,6 +154,7 @@ export default function ProfileChatHeader({
       kind="profile"
       id={profile?.name || ""}
       accent={accent}
+      bio={profile?.bio || profile?.public_bio}
       meta={meta}
       right={right}
     />

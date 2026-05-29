@@ -14,6 +14,20 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.1.24 — 2026-05-29 — task slugs + denied tools
+
+- **Composer enforces `#task #<slug>`.** Workgroup composer validates
+  as you type: Send button disabled and an inline warning shows
+  until a valid `#<slug>` follows. `#task` without a slug is no
+  longer treated as a task anywhere in the workgroup UI — parser and
+  `buildTasks` match the new alpi protocol gate. TasksSheet reads
+  the slug straight from the post.
+- **Denied tools shown muted.** Tools blocked by `tools.deny` in the
+  profile's `config.yaml` now show up struck-through with a `DENIED`
+  label in the profile's tools list. Opening one shows a banner
+  explaining the agent doesn't have access. Previously every
+  registered tool looked available regardless.
+
 ## v0.1.23 — 2026-05-29 — workgroup transcript polish
 
 Brings the workgroup transcript to parity with desktop and fixes the

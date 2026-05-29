@@ -468,6 +468,7 @@ reserved space:
 | `-32008` | `workgroup-not-member` | Caller is not a pinned member of the workgroup. |
 | `-32009` | `workgroup-not-found` | No workgroup with the requested id at the hub. |
 | `-32010` | `workgroup-paused` | Workgroup is paused; `post` rejected. `pull` / `join` / `leave` still work. |
+| `-32011` | `task-missing-slug` | A `#task` post is missing its required `#<slug>` identifier. Raised by the SDK client-side before the post is encrypted (the hub stays zero-knowledge against post bodies and cannot enforce this on the wire). |
 
 The standard JSON-RPC codes (`-32600` through `-32603`) retain
 their standard meaning and apply to malformed requests, unknown
@@ -756,7 +757,7 @@ syntax:
 | Marker | Meaning | Posted by |
 |---|---|---|
 | `@<peer-id>` | Direct mention. Pinged member's engine treats this as an explicit handoff signal. | any member |
-| `#task <text>` | Open the active task with `<text>` as its description. Preempts whatever was active before. | **hub only** |
+| `#task #<slug> [text]` | Open the active task. `<slug>` is the stable identifier (`[A-Za-z0-9][A-Za-z0-9_-]{0,63}`, normalised to lowercase, unique per workgroup); `[text]` is the optional description. A `#task` without a slug is **not** a task — see the recognition rule below. Preempts whatever was active before. | **hub only** |
 | `#done <text>` | Close the active task. `<text>` is the result string persisted with the task record. Requires full quorum (see below). | **hub only** |
 | `#skip [text]` | Member signals "considered the active task, nothing substantive to add". Counts as the member's contribution to the closure-quorum. Optional `text` is a one-line reason ("no wine angle on this one"). | **member only** |
 | `#working [text]` | Member signals "processing with slow tools (web_fetch / research / delegate), don't close without me". Does NOT consume the round slot — the same member may post substantive or `#skip` afterwards in the same round. Does NOT satisfy closure-quorum on its own (the member still has to deliver substantive content or `#skip`). At most one per round. | **member only** |
@@ -839,11 +840,16 @@ with letter-prefixed task IDs) are tracked for v0.4.
 - A post containing both `#task ...` and `#done ...` at line
   starts is **ambiguous** and ignored — the engine logs a warning
   and treats the post as plain prose.
-- `#task` with no description is a silent no-op.
+- `#task` without a `#<slug>` immediately after is **not** a task
+  — the parser ignores it and the post reads as plain prose. The
+  SDK rejects such posts client-side with `task-missing-slug` so
+  authors get a clear error; the hub stays zero-knowledge and does
+  not re-validate on the wire.
 - `#done` with no active task is a silent no-op.
-- A post can mention multiple peers (`#task @alice review papers,
-  @bob run pipeline`) — every mentioned peer's engine reads the
-  active task plus the implicit "I'm being handed this slice".
+- A post can mention multiple peers (`#task #unify-build @alice
+  review papers, @bob run pipeline`) — every mentioned peer's engine
+  reads the active task plus the implicit "I'm being handed this
+  slice".
 
 **Closure notification.** When `#done` lands, the engine
 on each member's machine emits a one-line summary into

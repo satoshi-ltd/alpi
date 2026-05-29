@@ -19,3 +19,16 @@
 
 .front { left: 0;                            z-index: 2; background: var(--c, var(--ink-3)); }
 .back  { left: calc(var(--glyph-size) / 2);  z-index: 1; background: color-mix(in srgb, var(--c, var(--ink-3)) 35%, var(--bg-side)); }
+
+.pulsing .front {
+  animation: stackPulse 1.6s ease-in-out infinite;
+}
+.pulsing .back {
+  animation: stackPulse 1.6s ease-in-out infinite;
+  animation-delay: 0.4s;
+}
+
+@keyframes stackPulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.5; }
+}

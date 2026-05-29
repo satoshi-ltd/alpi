@@ -168,6 +168,7 @@ export default function ProfileDetail({
         kind="profile"
         id={profile.name}
         accent={profile.accent || "var(--accent)"}
+        bio={profile.bio || profile.public_bio}
         meta={heroMeta}
         onOpenChat={onOpenChat ? () => onOpenChat(profile) : undefined}
       />

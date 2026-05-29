@@ -51,3 +51,23 @@
   color: var(--ink-3);
   font-style: italic;
 }
+
+.denyBanner {
+  font-family: var(--font-sans);
+  font-size: var(--fs-sm);
+  color: var(--c-warning, var(--ink-2));
+  background: color-mix(in srgb, var(--c-warning, var(--ink-3)) 12%, var(--bg-elev));
+  border: .5px solid color-mix(in srgb, var(--c-warning, var(--line-2)) 35%, var(--line));
+  border-radius: var(--r-md);
+  padding: var(--space-4) var(--space-5);
+  margin: var(--space-3) 0 var(--space-5);
+  line-height: var(--lh-normal);
+}
+
+.denyBanner code {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  background: var(--hover);
+  padding: 0 var(--space-2);
+  border-radius: var(--r-xs);
+}

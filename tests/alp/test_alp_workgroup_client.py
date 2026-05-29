@@ -191,7 +191,7 @@ async def test_post_rejects_non_hub_marker(short_tmp: Path) -> None:
         await wc.post(bob_home, "wg_test", b"#done unilateral close")
 
     with pytest.raises(ValueError, match="only the workgroup hub"):
-        await wc.post(bob_home, "wg_test", b"#task spawn sub-task")
+        await wc.post(bob_home, "wg_test", b"#task #sub-task spawn sub-task")
 
     try:
         await wc.post(bob_home, "wg_test", b"converge with #done eventually")
@@ -282,6 +282,18 @@ async def test_post_without_subscription_raises(short_tmp: Path) -> None:
     load_or_generate(home)
     with pytest.raises(ValueError, match="not subscribed"):
         await wc.post(home, "wg_unknown", b"hello")
+
+
+@pytest.mark.asyncio
+async def test_post_rejects_task_without_slug(short_tmp: Path) -> None:
+    """SDK gate: `#task` posts must carry a `#<slug>` or the SDK refuses to encrypt them, regardless of whether the caller is the hub or a member."""
+    home = short_tmp / "bob"; home.mkdir()
+    load_or_generate(home)
+    with pytest.raises(ValueError, match="task-missing-slug"):
+        await wc.post(home, "wg_unknown", b"#task no slug here")
+    # Slug present → falls through to the subscription check (not the shape check).
+    with pytest.raises(ValueError, match="not subscribed"):
+        await wc.post(home, "wg_unknown", b"#task #valid-slug with title")
 
 
 def test_resolve_hub_rejects_unpinned_peer(short_tmp: Path) -> None:
@@ -591,7 +603,7 @@ def test_last_hub_seq_returns_zero_when_no_hub_post() -> None:
 
 def test_last_hub_seq_returns_highest_hub_seq() -> None:
     posts = [
-        _post(1, "HUB", "#task X"),
+        _post(1, "HUB", "#task #x X"),
         _post(2, "BOB", "answer"),
         _post(3, "HUB", "follow-up"),
         _post(4, "CAROL", "comment"),
@@ -601,7 +613,7 @@ def test_last_hub_seq_returns_highest_hub_seq() -> None:
 
 def test_current_round_posts_excludes_hub_opener() -> None:
     posts = [
-        _post(1, "HUB", "#task X"),
+        _post(1, "HUB", "#task #x X"),
         _post(2, "BOB", "first"),
         _post(3, "CAROL", "second"),
     ]
@@ -621,13 +633,13 @@ def test_current_round_resets_on_each_hub_post() -> None:
 
 
 def test_member_rotation_first_post_allowed() -> None:
-    posts = [_post(1, "HUB", "#task X")]
+    posts = [_post(1, "HUB", "#task #x X")]
     wc._check_member_rotation(posts, "BOB", "HUB", "my take")
 
 
 def test_member_rotation_blocks_second_substantive_in_same_round() -> None:
     posts = [
-        _post(1, "HUB", "#task X"),
+        _post(1, "HUB", "#task #x X"),
         _post(2, "BOB", "first take"),
     ]
     with pytest.raises(ValueError, match="turn-rotation"):
@@ -636,7 +648,7 @@ def test_member_rotation_blocks_second_substantive_in_same_round() -> None:
 
 def test_member_rotation_allows_substantive_after_own_working() -> None:
     posts = [
-        _post(1, "HUB", "#task X"),
+        _post(1, "HUB", "#task #x X"),
         _post(2, "BOB", "#working researching"),
     ]
     wc._check_member_rotation(posts, "BOB", "HUB", "my findings")
@@ -644,7 +656,7 @@ def test_member_rotation_allows_substantive_after_own_working() -> None:
 
 def test_member_rotation_blocks_double_working_in_same_round() -> None:
     posts = [
-        _post(1, "HUB", "#task X"),
+        _post(1, "HUB", "#task #x X"),
         _post(2, "BOB", "#working researching"),
     ]
     with pytest.raises(ValueError, match="already posted `#working`"):
@@ -653,7 +665,7 @@ def test_member_rotation_blocks_double_working_in_same_round() -> None:
 
 def test_member_rotation_resets_after_hub_speaks() -> None:
     posts = [
-        _post(1, "HUB", "#task X"),
+        _post(1, "HUB", "#task #x X"),
         _post(2, "BOB", "first round answer"),
         _post(3, "HUB", "follow-up question"),
     ]
@@ -662,7 +674,7 @@ def test_member_rotation_resets_after_hub_speaks() -> None:
 
 def test_member_round_fresh_no_op_without_env_var(monkeypatch) -> None:
     monkeypatch.delenv("ALPI_WORKGROUP_ROUND_HUB_SEQ", raising=False)
-    posts = [_post(1, "HUB", "#task X"), _post(2, "HUB", "follow")]
+    posts = [_post(1, "HUB", "#task #x X"), _post(2, "HUB", "follow")]
     wc._check_member_round_fresh(posts, "HUB")
 
 
@@ -693,14 +705,14 @@ def test_hub_rotation_allows_speaking_after_member() -> None:
 
 
 def test_hub_rotation_blocks_back_to_back_content() -> None:
-    posts = [_post(1, "HUB", "#task X")]
+    posts = [_post(1, "HUB", "#task #x X")]
     with pytest.raises(ValueError, match="turn-rotation"):
         wc._check_hub_rotation(posts, "HUB", "more content", ["BOB"])
 
 
 def test_hub_rotation_ignores_working_when_computing_last_poster() -> None:
     posts = [
-        _post(1, "HUB", "#task X"),
+        _post(1, "HUB", "#task #x X"),
         _post(2, "BOB", "#working researching"),
     ]
     with pytest.raises(ValueError, match="turn-rotation"):
@@ -711,7 +723,7 @@ def test_hub_rotation_ignores_working_when_computing_last_poster() -> None:
 
 def test_hub_rotation_allows_done_after_member_substantive() -> None:
     posts = [
-        _post(1, "HUB", "#task X"),
+        _post(1, "HUB", "#task #x X"),
         _post(2, "BOB", "substantive answer"),
         _post(3, "CAROL", "#skip no angle"),
     ]
@@ -720,7 +732,7 @@ def test_hub_rotation_allows_done_after_member_substantive() -> None:
 
 def test_hub_rotation_blocks_done_when_member_pending() -> None:
     posts = [
-        _post(1, "HUB", "#task X"),
+        _post(1, "HUB", "#task #x X"),
         _post(2, "BOB", "answer"),
     ]
     with pytest.raises(ValueError, match="closure-quorum"):
@@ -729,7 +741,7 @@ def test_hub_rotation_blocks_done_when_member_pending() -> None:
 
 def test_hub_rotation_blocks_done_when_only_working_from_member() -> None:
     posts = [
-        _post(1, "HUB", "#task X"),
+        _post(1, "HUB", "#task #x X"),
         _post(2, "BOB", "answer"),
         _post(3, "CAROL", "#working researching"),
     ]
@@ -739,7 +751,7 @@ def test_hub_rotation_blocks_done_when_only_working_from_member() -> None:
 
 def test_hub_rotation_blocks_done_when_all_skip_no_substantive() -> None:
     posts = [
-        _post(1, "HUB", "#task X"),
+        _post(1, "HUB", "#task #x X"),
         _post(2, "BOB", "#skip"),
         _post(3, "CAROL", "#skip"),
     ]
@@ -752,7 +764,7 @@ def test_hub_rotation_done_allowed_after_timeout_even_when_pending() -> None:
         _dt.datetime.now(tz=_dt.timezone.utc) - _dt.timedelta(minutes=11)
     ).strftime("%Y-%m-%dT%H:%M:%SZ")
     posts = [
-        _post(1, "HUB", "#task X", ts=eleven_min_ago),
+        _post(1, "HUB", "#task #x X", ts=eleven_min_ago),
         _post(2, "BOB", "answer", ts=eleven_min_ago),
     ]
     wc._check_hub_rotation(
@@ -761,9 +773,9 @@ def test_hub_rotation_done_allowed_after_timeout_even_when_pending() -> None:
 
 
 def test_hub_rotation_task_always_allowed_even_back_to_back() -> None:
-    posts = [_post(1, "HUB", "#task original")]
+    posts = [_post(1, "HUB", "#task #original original")]
     wc._check_hub_rotation(
-        posts, "HUB", "#task new direction", ["BOB", "CAROL"],
+        posts, "HUB", "#task #new-direction new direction", ["BOB", "CAROL"],
     )
 
 

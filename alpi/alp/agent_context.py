@@ -109,8 +109,12 @@ own identity plus the briefing's problem statement.
 THE PROTOCOL RULES (the SDK enforces all of them; violating any
 gets your post rejected before it goes on the wire):
 
-  1. ONLY THE HUB OPENS. The hub posts `#task <problem>` to open
-     work. Member `#task` markers are rejected.
+  1. ONLY THE HUB OPENS, WITH A SLUG. The hub posts
+     `#task #<slug> <problem>` to open work — the slug is a stable
+     kebab-case identifier (e.g. `#task #onboarding-friction-top3
+     top three onboarding friction points`). A `#task` without a
+     `#<slug>` is rejected by the SDK with `task-missing-slug`.
+     Member `#task` markers are rejected regardless of slug.
   2. ONLY THE HUB CLOSES, WITH FULL QUORUM. The hub posts
      `#done <result>` to close. Member `#done` markers are
      rejected. A hub `#done` requires:

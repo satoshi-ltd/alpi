@@ -18,6 +18,7 @@ export default function WorkgroupChatHeader({
   workgroup,
   hubAccent,
   hubName,
+  hubBio,
   memberCount = 0,
   budget,           // { used, cap } in USD
   paused = false,
@@ -27,12 +28,17 @@ export default function WorkgroupChatHeader({
   tasksButton,
 }) {
   const accent = hubAccent || "var(--accent)";
+  const bio = (hubBio || "").trim();
+  const rawDiamond = <Diamond color={accent} />;
+  const diamond = bio
+    ? <Tip text={bio} side="l">{rawDiamond}</Tip>
+    : rawDiamond;
 
   const meta = (
     <>
       <span className={`row row-gap ${styles.hubRow}`}>
         <span className={styles.label}>hub</span>
-        <Diamond color={accent} />
+        {diamond}
         <Mono className={styles.ink2}>{`@${hubName}`}</Mono>
       </span>
       <span className="sep" aria-hidden />

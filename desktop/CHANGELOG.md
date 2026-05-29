@@ -11,6 +11,30 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.3.31 — 2026-05-29 — task slugs, denied tools, profile bio tooltips
+
+- **Composer enforces `#task #<slug>`.** Workgroup composer validates
+  as you type: the Send button stays disabled until a valid `#<slug>`
+  follows, with a warning line showing the expected shape. `#task`
+  without a slug is no longer treated as a task anywhere in the UI —
+  parser and `findLatestTask` reject them in lockstep with the new
+  alpi protocol gate. `TasksButton` reads the slug straight from the
+  post; the `slugifyTitle` fallback is gone.
+- **Denied tools shown muted.** Tools blocked by `tools.deny` in the
+  profile's `config.yaml` now show up struck-through with a `denied`
+  tag in the tools panel, with a detail-view banner explaining the
+  agent can't see them. Previously every registered tool looked
+  available regardless.
+- **Profile bios on hover.** Hovering a profile's diamond reveals
+  its `public_bio` — sidebar rows, workgroup chat header (hub),
+  profile chat header title, profile settings hero, and workgroup
+  speaker rows. Bios escape the sidebar's scroll container via a
+  portaled tooltip so long text doesn't get clipped.
+- **DiamondStack pulses while working.** Workgroup sidebar rows in
+  the `working` state now pulse the stacked diamond (front + back,
+  staggered) instead of swapping to a single pulsing diamond — the
+  stack identity stays consistent across states.
+
 ## v0.3.30 — 2026-05-29 — workgroup transcript polish
 
 - `#task` posts with a `#slug` (e.g. `#task #onboarding-friction-top3 ...`)

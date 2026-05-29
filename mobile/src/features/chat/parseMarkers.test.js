@@ -6,6 +6,7 @@ import {
   parseSkip,
   parseTaskOpen,
   parseWorking,
+  validateTaskShape,
 } from './parseMarkers.js';
 
 describe('parseTaskOpen', () => {
@@ -15,29 +16,9 @@ describe('parseTaskOpen', () => {
     expect(parseTaskOpen(null)).toBeNull();
   });
 
-  it('title-only post: content equals the title', () => {
-    expect(parseTaskOpen('#task Ship ADR')).toEqual({
-      slug: null,
-      title: 'Ship ADR',
-      content: 'Ship ADR',
-    });
-  });
-
-  it('joins title and multi-line body into content', () => {
-    const post = '#task Ship ADR\n\nContext: signing-key custody.';
-    expect(parseTaskOpen(post)).toEqual({
-      slug: null,
-      title: 'Ship ADR',
-      content: 'Ship ADR\n\nContext: signing-key custody.',
-    });
-  });
-
-  it('allows @mentions before the #task marker', () => {
-    expect(parseTaskOpen('@forge #task Audit pipeline\n\nBody.')).toEqual({
-      slug: null,
-      title: 'Audit pipeline',
-      content: 'Audit pipeline\n\nBody.',
-    });
+  it('slug-less #task is no longer a task', () => {
+    expect(parseTaskOpen('#task Ship ADR')).toBeNull();
+    expect(parseTaskOpen('@forge #task Audit pipeline')).toBeNull();
   });
 
   it('extracts an explicit #slug and bolds it in content', () => {
@@ -63,6 +44,25 @@ describe('parseTaskOpen', () => {
       title: '',
       content: '**#icp-v2**',
     });
+  });
+});
+
+describe('validateTaskShape', () => {
+  it('passes through bodies without a #task marker', () => {
+    expect(validateTaskShape('plain text')).toEqual({ ok: true });
+    expect(validateTaskShape('')).toEqual({ ok: true });
+    expect(validateTaskShape(null)).toEqual({ ok: true });
+  });
+
+  it('accepts well-formed #task #slug posts', () => {
+    expect(validateTaskShape('#task #onboarding-friction-top3 …')).toEqual({ ok: true });
+    expect(validateTaskShape('#task #icp-v2')).toEqual({ ok: true });
+  });
+
+  it('rejects #task without a slug', () => {
+    const v = validateTaskShape('#task no slug here');
+    expect(v.ok).toBe(false);
+    expect(v.error).toMatch(/#<slug>/);
   });
 });
 
@@ -99,10 +99,16 @@ describe('parseDone / parseWorking / parseSkip', () => {
 });
 
 describe('classifyMessage', () => {
-  it('routes #task to the task branch', () => {
-    const c = classifyMessage('#task Ship ADR\n\nbody');
+  it('routes #task with slug to the task branch', () => {
+    const c = classifyMessage('#task #adr Ship ADR\n\nbody');
     expect(c.variant).toBe('task');
-    expect(c.task?.content).toBe('Ship ADR\n\nbody');
+    expect(c.task?.slug).toBe('adr');
+    expect(c.task?.content).toBe('**#adr** Ship ADR\n\nbody');
+  });
+
+  it('treats slug-less #task as plain prose', () => {
+    const c = classifyMessage('#task Ship ADR');
+    expect(c.variant).toBe('message');
   });
 
   it('routes #done with text content', () => {
@@ -116,13 +122,14 @@ describe('classifyMessage', () => {
 describe('buildTasks', () => {
   it('produces one entry per #task and reflects later #done', () => {
     const msgs = [
-      { seq: 1, body: '#task First' },
+      { seq: 1, body: '#task #first First' },
       { seq: 2, body: 'noise' },
       { seq: 3, body: '#done all good' },
     ];
     const tasks = buildTasks(msgs);
     expect(tasks).toHaveLength(1);
     expect(tasks[0].title).toBe('First');
+    expect(tasks[0].slug).toBe('first');
     expect(tasks[0].status).toBe('done');
     expect(tasks[0].msgs).toBe(3);
   });

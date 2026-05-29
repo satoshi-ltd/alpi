@@ -1,24 +1,20 @@
 // 1:1 port of WorkgroupView.jsx marker parsers — anchored to body lines, mentions allowed as prefix.
 
-const TASK_LINE_RE = /^(?:@\S+\s+)*#task\s+(.+?)\s*$/im;
+const TASK_OPEN_LINE_RE = /^(?:@\S+\s+)*#task\s+#([A-Za-z0-9][A-Za-z0-9_-]{0,63})(?:\s+(.+?))?\s*$/im;
+const TASK_INTENT_LINE_RE = /^(?:@\S+\s+)*#task\b.*$/im;
 const DONE_LINE_RE = /^(?:@\S+\s+)*#done[ \t]*/im;
 const WORKING_LINE_RE = /^(?:@\S+\s+)*#working[ \t]*/im;
 const SKIP_LINE_RE = /^(?:@\S+\s+)*#skip[ \t]*/im;
-const TASK_SLUG_RE = /^#([A-Za-z0-9][A-Za-z0-9_-]*)(?:\s+(.+))?$/;
 
 export function parseTaskOpen(body) {
   const lines = String(body || '').split('\n');
   for (let i = 0; i < lines.length; i += 1) {
-    const m = TASK_LINE_RE.exec(lines[i]);
+    const m = TASK_OPEN_LINE_RE.exec(lines[i]);
     if (m) {
-      const firstLine = m[1].trim();
-      const slugMatch = TASK_SLUG_RE.exec(firstLine);
-      const slug = slugMatch ? slugMatch[1].toLowerCase() : null;
-      const title = slugMatch ? (slugMatch[2] ?? '').trim() : firstLine;
+      const slug = m[1].toLowerCase();
+      const title = (m[2] ?? '').trim();
       const rest = lines.slice(i + 1).join('\n').trim();
-      const headline = slug
-        ? (title ? `**#${slug}** ${title}` : `**#${slug}**`)
-        : title;
+      const headline = title ? `**#${slug}** ${title}` : `**#${slug}**`;
       return {
         slug,
         title,
@@ -27,6 +23,16 @@ export function parseTaskOpen(body) {
     }
   }
   return null;
+}
+
+export function validateTaskShape(body) {
+  const text = String(body || '');
+  if (!TASK_INTENT_LINE_RE.test(text)) return { ok: true };
+  if (TASK_OPEN_LINE_RE.test(text)) return { ok: true };
+  return {
+    ok: false,
+    error: '`#task` must be followed by `#<slug>` (e.g. `#task #onboarding-friction-top3 …`).',
+  };
 }
 
 function stripMarker(body, markerRe) {
@@ -62,6 +68,7 @@ export function buildTasks(messages) {
       current = {
         id: c.task?.slug || `t-${m.seq ?? tasks.length + 1}`,
         seq: m.seq,
+        slug: c.task?.slug || null,
         title: c.task?.title || '',
         status: 'open',
         msgs: 1,

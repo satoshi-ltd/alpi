@@ -204,7 +204,7 @@ async def test_wg_done_emits_through_real_post_path(
     hub_home, wg, _ = _wg_with_hub(tmp_path)
     monkeypatch.setattr(wc, "_FULL_QUORUM_TIMEOUT_SECONDS", 0)
 
-    await wc.post(hub_home, wg.meta.id, b"#task draft the v0.6 cycle scope")
+    await wc.post(hub_home, wg.meta.id, b"#task #cycle-scope draft the v0.6 cycle scope")
     assert not [k for k, _ in captured if k == "wg.done"]
 
     result = await wc.post(

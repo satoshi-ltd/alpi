@@ -99,6 +99,16 @@ def _check_substantive(plaintext: str) -> None:
         )
 
 
+def _check_task_shape(plaintext: str) -> None:
+    """Reject `#task` posts missing the required `#<slug>` identifier."""
+    if tasks_mod.has_task_intent(plaintext) and not tasks_mod.is_valid_task_open(plaintext):
+        raise ValueError(
+            "task-missing-slug: `#task` must be followed by `#<slug>`, "
+            "e.g. `#task #adr-7 unify build pipeline`. Slug pattern: "
+            "[A-Za-z0-9][A-Za-z0-9_-]{0,63}."
+        )
+
+
 _FULL_QUORUM_TIMEOUT_SECONDS = 10 * 60
 
 
@@ -331,6 +341,7 @@ async def post(
     except Exception:  # noqa: BLE001
         _plaintext = ""
     _check_substantive(_plaintext)
+    _check_task_shape(_plaintext)
 
     wg = wg_mod.load(home, wg_id)
     if wg is not None and wg.meta.hub_pubkey == kp.pubkey_b64():

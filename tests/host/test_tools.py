@@ -68,3 +68,50 @@ async def test_tools_list_filters_subaction_variants(short_tmp: Path) -> None:
     names = [t["name"] for t in resp["result"]["tools"]]
     for name in names:
         assert ":" not in name, f"sub-action variant leaked into list: {name}"
+
+
+@pytest.mark.asyncio
+async def test_tools_list_marks_denied_tools(short_tmp: Path, monkeypatch) -> None:
+    """Tools listed in ``tools.deny`` of the profile config are returned with ``denied: true`` so the UI can mute / strike them — they are NOT removed (operator wants to see what's been switched off)."""
+    from alpi import home as home_mod
+
+    root = short_tmp / ".alpi"
+    profile = "workhorse"
+    phome = root / "profiles" / profile
+    phome.mkdir(parents=True)
+    (phome / "config.yaml").write_text(
+        "model: openai/gpt-5.4-mini\n"
+        "tools:\n"
+        "  deny:\n"
+        "    - terminal\n"
+        "    - web_fetch\n"
+    )
+    monkeypatch.setattr(home_mod, "_ROOT", root)
+
+    srv = host_server.Server(home=short_tmp / "h")
+    (short_tmp / "h").mkdir()
+    host_tools_mod.register(srv)
+    resp = await srv._dispatch({
+        "id": "r",
+        "method": "host.tools.list",
+        "params": {"profile": profile},
+    })
+    by_name = {t["name"]: t for t in resp["result"]["tools"]}
+    assert by_name["terminal"]["denied"] is True
+    assert by_name["web_fetch"]["denied"] is True
+    assert by_name["read_file"]["denied"] is False
+
+
+@pytest.mark.asyncio
+async def test_tools_list_default_when_no_profile_config(short_tmp: Path) -> None:
+    """No config file = no deny filter; every tool is returned with ``denied: false``."""
+    srv = host_server.Server(home=short_tmp / "h")
+    (short_tmp / "h").mkdir()
+    host_tools_mod.register(srv)
+    resp = await srv._dispatch({
+        "id": "r",
+        "method": "host.tools.list",
+        "params": {"profile": "nonexistent"},
+    })
+    for t in resp["result"]["tools"]:
+        assert t["denied"] is False

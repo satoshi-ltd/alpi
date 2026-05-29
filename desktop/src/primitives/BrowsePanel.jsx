@@ -144,12 +144,17 @@ export default function BrowsePanel({
                     {list.map((it) => {
                       const k = keyOf(it);
                       const active = k === selectedKey;
+                      const cls = [
+                        styles.row,
+                        active ? styles.rowActive : "",
+                        it.muted ? styles.rowMuted : "",
+                      ].filter(Boolean).join(" ");
                       return (
                         <button
                           key={k}
                           type="button"
                           data-key={k}
-                          className={`${styles.row} ${active ? styles.rowActive : ""}`}
+                          className={cls}
                           onClick={() => setSelectedKey(k)}
                         >
                           <span className={styles.rowName}>{it.name}</span>

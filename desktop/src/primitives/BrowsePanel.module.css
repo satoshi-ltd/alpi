@@ -192,6 +192,13 @@
   background: var(--selected);
 }
 
+.rowMuted .rowName {
+  color: var(--ink-3);
+  text-decoration: line-through;
+  text-decoration-thickness: .5px;
+  text-decoration-color: var(--ink-4);
+}
+
 .rowName {
   flex: 1;
   overflow: hidden;

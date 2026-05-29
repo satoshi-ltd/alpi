@@ -18,8 +18,11 @@ openai:
     note: heavy reasoning
     reasoning: true
 anthropic:
-  - id: claude-opus-4-7
+  - id: claude-opus-4-8
     note: flagship
+    reasoning: true
+  - id: claude-opus-4-7
+    note: previous flagship
     reasoning: true
   - id: claude-sonnet-4-6
     note: balanced

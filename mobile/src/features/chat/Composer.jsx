@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
-import { Platform, Pressable, TextInput, View } from 'react-native';
+import { Platform, Pressable, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { radii, space , fontSizes} from '../../theme/tokens';
 
 import { Icon } from '../../components/Icon';
 import { useTheme } from '../../theme/ThemeContext';
 import { MentionPopover } from './MentionPopover';
+import { validateTaskShape } from './parseMarkers';
 
 export function Composer({
   placeholder = 'Message…',
@@ -28,6 +29,8 @@ export function Composer({
     }
   }, [seedKey, seedText]);
   const hasText = text.trim().length > 0;
+  const taskShape = validateTaskShape(text);
+  const canSend = hasText && taskShape.ok;
 
   const mentionMatch = mentionSource && text.length > 0
     ? /(^|\s)@([a-zA-Z0-9_-]*)$/.exec(text)
@@ -40,7 +43,7 @@ export function Composer({
   };
 
   const submit = () => {
-    if (!hasText) return;
+    if (!canSend) return;
     const trimmed = text.trim();
     setText('');
     onSend?.(trimmed);
@@ -57,6 +60,25 @@ export function Composer({
       }}
     >
       {candidates.length ? <MentionPopover candidates={candidates} onPick={(c) => completeMention(c.id)} /> : null}
+      {hasText && !taskShape.ok ? (
+        <View
+          style={{
+            paddingHorizontal: space.s7,
+            paddingTop: space.s2,
+            paddingBottom: space.s2,
+          }}
+        >
+          <Text
+            style={{
+              fontFamily: fonts.sans.regular,
+              fontSize: fontSizes.xs,
+              color: colors.warning,
+            }}
+          >
+            {taskShape.error}
+          </Text>
+        </View>
+      ) : null}
       <View
         style={{
           flexDirection: 'row',
@@ -103,13 +125,15 @@ export function Composer({
         {hasText ? (
           <Pressable
             onPress={submit}
+            disabled={!canSend}
             style={({ pressed }) => ({
               width: 44,
               height: 44,
               borderRadius: radii["2xl"],
-              backgroundColor: pressed ? colors.ink2 : actionBg,
+              backgroundColor: !canSend ? colors.ink3 : pressed ? colors.ink2 : actionBg,
               alignItems: 'center',
               justifyContent: 'center',
+              opacity: canSend ? 1 : 0.6,
             })}
             accessibilityLabel="Send"
           >

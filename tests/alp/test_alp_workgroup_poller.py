@@ -37,7 +37,7 @@ def test_self_mention_wakes() -> None:
 def test_collective_task_with_no_mentions_wakes() -> None:
     """An untagged `#task` should wake everyone."""
     posts = [
-        {"seq": 1, "text": "#task research peptides", "from": "user_pk"},
+        {"seq": 1, "text": "#task #peptides research peptides", "from": "user_pk"},
     ]
     reason, _ = service._should_dispatch("bob", "bob_pk", posts, 0)
     assert reason and "collective" in reason
@@ -46,7 +46,7 @@ def test_collective_task_with_no_mentions_wakes() -> None:
 def test_targeted_task_does_not_wake_unmentioned_peer() -> None:
     """A task aimed at @alice must not wake bob."""
     posts = [
-        {"seq": 1, "text": "#task @alice take lit review", "from": "user_pk"},
+        {"seq": 1, "text": "#task #lit @alice take lit review", "from": "user_pk"},
     ]
     reason, _ = service._should_dispatch("bob", "bob_pk", posts, 0)
     assert reason is None
@@ -65,7 +65,7 @@ def test_uninteresting_traffic_silent() -> None:
 
 def test_targeted_task_wakes_named_peer() -> None:
     posts = [
-        {"seq": 1, "text": "#task @alice take lit review", "from": "user_pk"},
+        {"seq": 1, "text": "#task #lit @alice take lit review", "from": "user_pk"},
     ]
     reason, _ = service._should_dispatch("alice", "alice_pk", posts, 0)
     assert reason and "@alice mentioned" in reason
@@ -74,7 +74,7 @@ def test_targeted_task_wakes_named_peer() -> None:
 def test_participant_in_active_task_wakes_on_latest_other_post() -> None:
     """Named tasks keep waking on later peer replies."""
     posts = [
-        {"seq": 1, "text": "#task @alice @bob analyze the stack", "from": "user_pk"},
+        {"seq": 1, "text": "#task #stack @alice @bob analyze the stack", "from": "user_pk"},
         {"seq": 2, "text": "I'd lean toward FastAPI + SQLite", "from": "alice_pk"},
     ]
     # seq 1 is already consumed; seq 2 should wake Bob.
@@ -86,7 +86,7 @@ def test_participant_in_active_task_wakes_on_latest_other_post() -> None:
 def test_collective_task_wakes_any_member_on_peer_reply() -> None:
     """Collective tasks wake any member on peer replies."""
     posts = [
-        {"seq": 1, "text": "#task pick stack for our tracker", "from": "alice_pk"},
+        {"seq": 1, "text": "#task #pick-stack pick stack for our tracker", "from": "alice_pk"},
         {"seq": 2, "text": "FastAPI + SQLite", "from": "alice_pk"},
     ]
     reason, new_seq = service._should_dispatch("bob", "bob_pk", posts, 1)
@@ -97,7 +97,7 @@ def test_collective_task_wakes_any_member_on_peer_reply() -> None:
 def test_participant_silent_when_not_named_in_task() -> None:
     """Bob stays silent if he was not named."""
     posts = [
-        {"seq": 1, "text": "#task @alice take lit review", "from": "user_pk"},
+        {"seq": 1, "text": "#task #lit @alice take lit review", "from": "user_pk"},
         {"seq": 2, "text": "starting now", "from": "alice_pk"},
     ]
     reason, _ = service._should_dispatch("bob", "bob_pk", posts, 0)
@@ -116,7 +116,7 @@ def test_participant_trigger_silent_with_no_active_task() -> None:
 def test_silent_when_already_responded_to_latest() -> None:
     """Already-responded content does not refire."""
     posts = [
-        {"seq": 1, "text": "#task @alice @bob analyze the stack", "from": "user_pk"},
+        {"seq": 1, "text": "#task #stack @alice @bob analyze the stack", "from": "user_pk"},
         {"seq": 2, "text": "I'd lean toward FastAPI + SQLite", "from": "alice_pk"},
     ]
     # Bob already handled seq 2, so no re-dispatch.
@@ -128,7 +128,7 @@ def test_silent_when_already_responded_to_latest() -> None:
 def test_re_fires_when_new_content_arrives_after_response() -> None:
     """New peer content wakes us again."""
     posts = [
-        {"seq": 1, "text": "#task @alice @bob analyze", "from": "user_pk"},
+        {"seq": 1, "text": "#task #analyze @alice @bob analyze", "from": "user_pk"},
         {"seq": 2, "text": "FastAPI + SQLite", "from": "alice_pk"},
         {"seq": 3, "text": "I'd push back on Postgres later", "from": "bob_pk"},
     ]
@@ -323,7 +323,7 @@ async def test_dispatch_timeout_kills_and_records(
 def test_collective_task_silent_after_hub_done() -> None:
     """A `#task` already closed by the hub does not re-trigger dispatch."""
     posts = [
-        {"seq": 1, "text": "#task analyze the architecture", "from": "hub_pk"},
+        {"seq": 1, "text": "#task #arch analyze the architecture", "from": "hub_pk"},
         {"seq": 2, "text": "#done synthesis: pick option A", "from": "hub_pk"},
     ]
     reason, _ = service._should_dispatch("alice", "alice_pk", posts, 0)
@@ -334,7 +334,7 @@ def test_mention_silent_when_inside_done_post() -> None:
     """A `@<peer>` mention buried in a `#done` body is not a handoff —
     the task is closed; the mention is just part of the synthesis."""
     posts = [
-        {"seq": 1, "text": "#task analyze", "from": "hub_pk"},
+        {"seq": 1, "text": "#task #analyze analyze", "from": "hub_pk"},
         {"seq": 2, "text": "#done @alice owns the writeup", "from": "hub_pk"},
     ]
     reason, _ = service._should_dispatch("alice", "alice_pk", posts, 0)
@@ -346,7 +346,7 @@ def test_collective_task_still_wakes_when_open_after_substantive() -> None:
     keep waking peers even when there are intermediate substantive
     posts. The closed-task gate must not over-shoot."""
     posts = [
-        {"seq": 1, "text": "#task analyze the architecture", "from": "hub_pk"},
+        {"seq": 1, "text": "#task #arch analyze the architecture", "from": "hub_pk"},
         {"seq": 2, "text": "first thoughts on the stack", "from": "bob_pk"},
     ]
     reason, _ = service._should_dispatch("alice", "alice_pk", posts, 0)

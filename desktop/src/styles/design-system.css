@@ -360,11 +360,7 @@ textarea.ds-field, textarea.field { resize: vertical; min-height: 88px; height: 
   position: relative;
   display: inline-flex;
 }
-.ds-tip > .ds-tip-body {
-  position: absolute;
-  left: 50%;
-  top: calc(100% + 6px);
-  transform: translateX(-50%) translateY(2px);
+.ds-tip-body {
   padding: var(--space-1) var(--space-3);
   background: var(--ink);
   color: var(--bg-pane);
@@ -378,11 +374,17 @@ textarea.ds-field, textarea.field { resize: vertical; min-height: 88px; height: 
   white-space: normal;
   text-align: left;
   pointer-events: none;
-  opacity: 0;
-  transition: opacity var(--dur-1), transform var(--dur-1);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
   z-index: 100;
   line-height: var(--lh-cozy);
+}
+.ds-tip > .ds-tip-body {
+  position: absolute;
+  left: 50%;
+  top: calc(100% + 6px);
+  transform: translateX(-50%) translateY(2px);
+  opacity: 0;
+  transition: opacity var(--dur-1), transform var(--dur-1);
 }
 .ds-tip > .ds-tip-body::before {
   content: '';

@@ -1,9 +1,12 @@
 import styles from "./DiamondStack.module.css";
 
-export default function DiamondStack({ color, className = "", style }) {
+export default function DiamondStack({ color, pulse = false, className = "", style }) {
+  const rootClass = [styles.root, pulse ? styles.pulsing : "", className]
+    .filter(Boolean)
+    .join(" ");
   return (
     <span
-      className={`${styles.root} ${className}`.trim()}
+      className={rootClass}
       aria-hidden
       style={{ "--c": color || undefined, ...style }}
     >
