@@ -117,6 +117,11 @@ describe('classifyMessage', () => {
       text: 'shipped\n\nmore detail',
     });
   });
+
+  it('treats a post with both #task and #done as prose (ambiguity rule)', () => {
+    const c = classifyMessage('#task #combined Wrap\n#done shipped already');
+    expect(c.variant).toBe('message');
+  });
 });
 
 describe('buildTasks', () => {
@@ -141,5 +146,50 @@ describe('buildTasks', () => {
     ];
     const tasks = buildTasks(msgs);
     expect(tasks[0].id).toBe('onboarding-friction-top3');
+  });
+
+  it('a peer #skip never closes the hub task', () => {
+    const msgs = [
+      { seq: 1, from_pubkey: 'hub', body: '#task #opener-voice Openers?' },
+      { seq: 2, from_pubkey: 'peer', body: '#skip waiting on FX data' },
+    ];
+    const tasks = buildTasks(msgs, 'hub');
+    expect(tasks).toHaveLength(1);
+    expect(tasks[0].slug).toBe('opener-voice');
+    expect(tasks[0].status).toBe('working');
+  });
+
+  it('a new hub #task preempts the previous one as skip', () => {
+    const msgs = [
+      { seq: 1, from_pubkey: 'hub', body: '#task #first First' },
+      { seq: 2, from_pubkey: 'peer', body: 'some input' },
+      { seq: 3, from_pubkey: 'hub', body: '#task #second Second' },
+    ];
+    const tasks = buildTasks(msgs, 'hub');
+    expect(tasks).toHaveLength(2);
+    expect(tasks[0].status).toBe('skip');
+    expect(tasks[1].status).toBe('working');
+  });
+
+  it('only the hub closes with #done', () => {
+    const msgs = [
+      { seq: 1, from_pubkey: 'hub', body: '#task #cite-cwv Cite?' },
+      { seq: 2, from_pubkey: 'peer', body: '#done not the hub' },
+      { seq: 3, from_pubkey: 'hub', body: '#done yes' },
+    ];
+    const tasks = buildTasks(msgs, 'hub');
+    expect(tasks).toHaveLength(1);
+    expect(tasks[0].status).toBe('done');
+  });
+
+  it('a combined #task+#done post is prose — never opens or closes a task', () => {
+    const msgs = [
+      { seq: 1, from_pubkey: 'hub', body: '#task #live In progress' },
+      { seq: 2, from_pubkey: 'hub', body: '#task #other Other\n#done both markers' },
+    ];
+    const tasks = buildTasks(msgs, 'hub');
+    expect(tasks).toHaveLength(1);
+    expect(tasks[0].slug).toBe('live');
+    expect(tasks[0].status).toBe('working');
   });
 });

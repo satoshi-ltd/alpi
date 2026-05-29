@@ -509,7 +509,11 @@ textarea.ds-field, textarea.field { resize: vertical; min-height: 88px; height: 
 .anim-pop  { animation: ds-pop-in var(--dur-3) var(--ease) both; }
 .anim-fade { animation: ds-fade-in var(--dur-2) var(--ease) both; }
 .anim-up   { animation: ds-slide-up var(--dur-4) var(--ease) both; }
-.pulse-dot { animation: ds-pulse-dot 1.6s ease-in-out infinite; }
+.pulse-dot { animation: ds-pulse-ring 1.6s ease-out infinite; }
+@keyframes ds-pulse-ring {
+  0%   { box-shadow: 0 0 0 0 color-mix(in srgb, var(--c, var(--ink-3)) 40%, transparent); }
+  100% { box-shadow: 0 0 0 4px transparent; }
+}
 .pulse-glyph { animation: ds-pulse-glyph 1.6s ease-in-out infinite; }
 @keyframes ds-pulse-glyph {
   0%, 100% { opacity: 1; }
@@ -747,6 +751,8 @@ a:focus-visible,
   position: relative;
   overflow: hidden;
 }
+.ds-marker.compact { padding: var(--space-5) var(--space-7); }
+.ds-marker.compact .ey { margin-bottom: 0; }
 .ds-marker.task    { background: color-mix(in srgb, var(--c) 18%, var(--bg-pane)); }
 .ds-marker.done    { background: color-mix(in srgb, var(--c) 18%, var(--bg-pane)); }
 .ds-marker.working { background: color-mix(in srgb, var(--c) 14%, var(--bg-pane)); }

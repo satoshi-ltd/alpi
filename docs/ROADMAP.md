@@ -46,6 +46,7 @@ sovereignty depends on.
 | ID | Item | Status |
 |---|---|---|
 | ALP.3+ | Multi-task workgroups — opt-in `multitask: true` with letter-prefixed task IDs (`#task A`, `#done A`), per-task roster filters, dispatch gating, and budget headroom. | 🟡 |
+| ALP.3.H | Workgroup hardening — single-source the marker parser (front/back conformance), per-workgroup closure/poll timeouts, rekey-while-task-open fix, hub-served task ledger. Surfaced by the protocol lab. | 🟡 |
 
 ### UX.2 / UX.3. Owned client experience
 
@@ -115,6 +116,57 @@ perfectly and shouldn't change.
 - UI for showing N concurrent threads adds surface area
 - Per-task budget headroom needs careful accounting against the
   workgroup lifetime cap
+
+### ALP.3.H. Workgroup hardening
+
+Surfaced by the protocol lab (`organizations/lab/`), which exercises
+every workgroup invariant deterministically plus a live all-skip
+closure. The core invariants hold cleanly — these are the rough edges
+the harness exposed, all bounded, none a design fault.
+
+- **Single-source the marker parser.** `#task` / `#done` / `#skip` /
+  `#working` recognition is implemented twice — `alpi/alp/tasks.py`
+  (backend, authoritative) and the JS apps
+  (`mobile/src/features/chat/parseMarkers.js`, desktop
+  `lib/workgroup-tasks.js`). They already diverge: a post with BOTH
+  `#task` and `#done` at line starts is **prose** to the backend
+  (ambiguous → ignored) but renders as a `#task` card in the apps.
+  Define one spec plus a shared conformance fixture both sides run.
+  Cheapest, highest-value item here.
+
+- **Per-workgroup closure / poll timeouts.**
+  `_FULL_QUORUM_TIMEOUT_SECONDS` is hardcoded at 10 min; the poller
+  (30s), hub watchdog (60s grace) and preempt watcher (5s) are fixed
+  too. The lab's all-skip task closed at ~700s — the 600s quorum gate
+  plus ~100s of dispatch + LLM latency before the hub re-woke and
+  posted its `#done`. Correct behaviour, but the layered timers make
+  autonomous closure hard to reason about (it reads as a hang while it
+  is merely waiting). Make the quorum timeout configurable in
+  `meta.yaml`; document the gate+dispatch latency so "still open past
+  10 min" isn't mistaken for a stall.
+
+- **Rekey while a task is open.** A `leave` / `kick` mid-task rotates
+  the group key; the open `#task` post stays encrypted under the old
+  version. The hub, holding only the new key, blanks other-version
+  entries when it folds (`_post_as_hub`) → the task drops out of the
+  hub's ledger and can't be closed hub-side. Remaining members keep the
+  old key in their version map and still see it, so it's a hub-side
+  blind spot, not data loss. Fix: persist a hub-side key history so the
+  hub can fold the full transcript, or auto-close / re-pin active tasks
+  on rekey.
+
+- **Hub-served task ledger.** Task state is re-derived client-side by
+  folding the decrypted transcript on every `pull`; there is no
+  canonical ledger to read, so inspection and debugging mean
+  decrypt-and-fold by hand. The hub already recomputes task state for
+  the closure-quorum check — expose it (via `workgroup.show` / `pull`)
+  so clients and operators don't each refold.
+
+**Explicitly not in scope.** Author-declared post cost (the honour-system
+budget gate) and hub-anchored availability (cold workgroup when the hub
+is offline) are deliberate design choices for a closed, trusted,
+one-org-per-machine deployment — not defects. Single-task → multi-task
+is tracked above as ALP.3+.
 
 ## v0.8 cycle (planned)
 
@@ -195,7 +247,7 @@ Items worth doing, but not part of the next two cycles.
 |---|---|---|
 | TERM.2 | Docker / SSH terminal backends — isolated or remote command execution for unattended profiles once local sandboxing is no longer enough. | 🔵 |
 | ALP.5 | Blob transfer — `link.put_blob` / `link.get_blob`, content-addressed, chunked AEAD. Depends on real workgroup usage to justify the protocol complexity. | 🔵 |
-| ORG.2 | Organization workspace overlay / first-class org entity — shared filesystem roots, roles, and shared RAG once convention-only org workspaces prove insufficient. | 🔵 |
+| ORG.2.B/C | Workspace overlay (`cfg.workspace_path` as list) + first-class runtime org entity (`~/.alpi/orgs/<id>/`) with roles, event fan-out, and shared RAG. Deferred — see entry below. | ⏸ |
 
 ### TERM.2. Docker / SSH terminal backends
 
@@ -223,24 +275,35 @@ signature so the receiver can verify end-to-end.
 **Why it waits.** ALP.5 is only worth the protocol complexity if
 workgroups are heavily used and blobs are a real bottleneck.
 
-### ORG.2. Organization workspace overlay / first-class org entity
+### ORG.2.B/C. Workspace overlay + first-class runtime org entity
 
-The "Archive owns the shared workspace" convention shipped with the
-organization scaffold ([organization/agent-organization.md →
-Shared workspace convention](../organization/agent-organization.md#shared-workspace-convention))
-covers single-keeper read paths today. If that convention stops being
-enough — non-Archive writers, concurrent scans on the hot path, or
-enforced access roles across humans — two heavier designs remain
-available:
+ORG.2 is a three-layer plan. **Layer A — convention** — shipped as the
+`organizations/` source tree with per-org `org.yaml`, default workspace
+at `~/alpi/organizations/<name>/`, and a unified `organizations/setup.py`
+that bootstraps any org from its YAML. Each profile carries
+`cfg.org = <name>` after bootstrap so it knows which org it belongs
+to. See [`organizations/README.md`](../organizations/README.md) and
+[`docs/ORGANIZATION.md`](ORGANIZATION.md).
 
-1. **Workspace overlay.** `cfg.workspace_path` becomes a list:
-   `[profile_workspace, org_workspace]`. File tools read both and write
-   to the profile root by default, with an explicit shared scope.
-2. **First-class org entity.** `~/.alpi/orgs/<id>/workspace/` with
-   member profiles, roles, event fan-out, and a shared RAG index.
+Layers B and C remain deferred. They're only worth building if the
+convention proves insufficient — non-Archive writers in `company`,
+concurrent scans on the hot path, or enforced access roles across
+humans.
 
-Both add a real trust model, so they stay out of v0.7 unless users hit a
-specific organization-sharing wall.
+1. **Layer B · Workspace overlay.** `cfg.workspace` (a single string
+   today) becomes a list: `[profile_workspace, org_workspace]`. File
+   tools read both and write to the profile root by default, with an
+   explicit shared scope when the agent intends to touch org-shared
+   files. Adds a real ownership model without inventing a new runtime
+   primitive.
+2. **Layer C · First-class runtime org entity.**
+   `~/.alpi/orgs/<id>/workspace/` with member profiles, per-member
+   roles, event fan-out across the org, and a shared RAG index.
+   Heaviest option — only land if the overlay also proves insufficient.
+
+Promotion condition for B: a user reports that the convention forces
+awkward duplication or coordination between two profiles in the same
+org. Promotion condition for C: B itself proves insufficient.
 
 ---
 

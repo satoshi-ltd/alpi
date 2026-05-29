@@ -1,4 +1,4 @@
-import { CheckIcon, Diamond, SkipIcon } from "./index.js";
+import { CheckIcon, Dot, SkipIcon } from "./index.js";
 import styles from "./MarkerCard.module.css";
 
 const LABELS = { task: "TASK", working: "WORKING", skip: "SKIP", done: "DONE" };
@@ -8,7 +8,7 @@ function MarkerIcon({ variant, stale }) {
     return <CheckIcon style={{ width: 11, height: 11, strokeWidth: 2.2 }} />;
   }
   if (variant === "working") {
-    return stale ? <span className={styles.bullet} /> : <Diamond pulse />;
+    return stale ? <span className={styles.bullet} /> : <Dot pulse color="currentColor" />;
   }
   if (variant === "skip") {
     return <SkipIcon style={{ width: 11, height: 11, strokeWidth: 2 }} />;
@@ -29,6 +29,8 @@ export default function MarkerCard({
   stale = false,
 }) {
   const isRight = side === "right";
+  const hasBody = Boolean(children);
+  const compact = !title && !hasBody;
   return (
     <div
       id={taskId ? `task-${taskId}` : undefined}
@@ -41,13 +43,13 @@ export default function MarkerCard({
           {meta}
         </div>
       )}
-      <div className={`ds-marker ${variant}`} style={{ "--c": hubColor }}>
+      <div className={`ds-marker ${variant}${compact ? " compact" : ""}`} style={{ "--c": hubColor }}>
         <div className="ey">
           <MarkerIcon variant={variant} stale={stale} />
           <span>{label || LABELS[variant] || variant.toUpperCase()}</span>
         </div>
         {title && <div className="ttl">{title}</div>}
-        <div className="body">{children}</div>
+        {hasBody && <div className="body">{children}</div>}
       </div>
       {footer && (
         <div className={`msg-actions ${styles.footer} ${isRight ? styles.footerRight : ""}`.trim()}>

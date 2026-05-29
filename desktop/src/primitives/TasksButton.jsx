@@ -3,6 +3,7 @@ import {
   Btn,
   CheckIcon,
   ChevDownIcon,
+  Dot,
   Eyebrow,
   Mono,
   SkipIcon,
@@ -13,9 +14,15 @@ import { Popover } from "./index.js";
 import styles from "./TasksButton.module.css";
 
 const TASK_OPEN_RE = /^(?:@\S+\s+)*#task\s+#([A-Za-z0-9][A-Za-z0-9_-]{0,63})(?:\s+(.+?))?\s*$/i;
+const DONE_LINE_RE = /^(?:@\S+\s+)*#done\s+(.+?)\s*$/i;
 
 function readMarker(body) {
-  for (const line of String(body || "").split("\n")) {
+  const lines = String(body || "").split("\n");
+  // Both #task and #done in one post → prose, no lifecycle event (mirrors alpi parse_post ambiguity rule).
+  if (lines.some((l) => TASK_OPEN_RE.test(l)) && lines.some((l) => DONE_LINE_RE.test(l))) {
+    return null;
+  }
+  for (const line of lines) {
     let m = TASK_OPEN_RE.exec(line);
     if (m) {
       return {
@@ -28,35 +35,34 @@ function readMarker(body) {
     if (m) return { kind: "working", text: (m[1] ?? "").trim() };
     m = /^(?:@\S+\s+)*#skip(?:\s+(.+?))?\s*$/i.exec(line);
     if (m) return { kind: "skip", text: (m[1] ?? "").trim() };
-    m = /^(?:@\S+\s+)*#done\s+(.+?)\s*$/i.exec(line);
+    m = DONE_LINE_RE.exec(line);
     if (m) return { kind: "done", text: m[1].trim() };
   }
   return null;
 }
 
-function deriveTasks(thread = []) {
+// Only the hub opens (`#task`) and closes (`#done`) tasks. A member's `#skip`/`#working` are round signals that never touch task lifecycle. "skip" status here means preempted: the hub opened a new `#task` before closing this one with `#done` (alpi/alp/tasks.py fold_tasks).
+export function deriveTasks(thread = [], hubPubkey = null) {
   const tasks = [];
   let active = null;
   for (const msg of thread) {
     const mk = readMarker(msg.body);
-    if (mk?.kind === "task") {
+    const fromHub = !hubPubkey || msg.from_pubkey === hubPubkey;
+    if (mk?.kind === "task" && fromHub) {
+      if (active) active.status = "skip";
       active = {
         seq: msg.seq,
         slug: mk.slug,
         title: mk.text,
-        status: "open",
+        status: "working",
         contributions: 0,
       };
       tasks.push(active);
       continue;
     }
     if (!active) continue;
-    if (mk?.kind === "working") {
-      active.status = "working";
-      continue;
-    }
-    if (mk?.kind === "done" || mk?.kind === "skip") {
-      active.status = mk.kind;
+    if (mk?.kind === "done" && fromHub) {
+      active.status = "done";
       active = null;
       continue;
     }
@@ -69,7 +75,6 @@ const STATE_LABEL = {
   done: "done",
   skip: "skipped",
   working: "working",
-  open: "open",
 };
 
 function StatusGlyph({ status, color }) {
@@ -85,22 +90,13 @@ function StatusGlyph({ status, color }) {
       />
     );
   }
-  if (status === "working") {
-    return (
-      <span className={styles.glyphDots} style={{ "--c": color }} aria-hidden>
-        <span className={styles.glyphDot} />
-        <span className={styles.glyphDot} />
-        <span className={styles.glyphDot} />
-      </span>
-    );
-  }
-  return <span className={styles.openRing} style={{ borderColor: color }} aria-hidden />;
+  return <Dot pulse color={color} />;
 }
 
-export default function TasksButton({ thread = [], hubColor, onJump }) {
+export default function TasksButton({ thread = [], hubColor, hubPubkey = null, onJump }) {
   const [open, setOpen] = useState(false);
 
-  const tasks = useMemo(() => deriveTasks(thread), [thread]);
+  const tasks = useMemo(() => deriveTasks(thread, hubPubkey), [thread, hubPubkey]);
   const total = tasks.length;
   const closed = tasks.filter((t) => t.status === "done" || t.status === "skip")
     .length;
@@ -136,11 +132,7 @@ export default function TasksButton({ thread = [], hubColor, onJump }) {
       <Tip text={tipText} side="r">
         <Btn variant="ghost" onClick={() => setOpen((o) => !o)} className={styles.trigger}>
           {active ? (
-            <span
-              className={styles.activeDot}
-              style={{ "--c": hubColor }}
-              aria-hidden
-            />
+            <Dot pulse color={hubColor} />
           ) : total > 0 ? (
             <CheckIcon
               style={{ width: 13, height: 13, strokeWidth: 2.2, color: hubColor || "var(--c-success)" }}

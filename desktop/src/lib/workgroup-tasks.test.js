@@ -137,4 +137,25 @@ describe("findLatestTask", () => {
       result: "shipped",
     });
   });
+
+  it("ignores a post carrying both #task and #done (ambiguity rule)", () => {
+    const msgs = [
+      { seq: 1, body: "#task #combined Wrap\n#done shipped already", from_pubkey: "HUB" },
+    ];
+    expect(findLatestTask(msgs, "HUB")).toBeNull();
+  });
+
+  it("a combined #task+#done post never closes an open task", () => {
+    const msgs = [
+      { seq: 1, body: "#task #live In progress", from_pubkey: "HUB" },
+      { seq: 2, body: "#task #other Other\n#done both markers", from_pubkey: "HUB" },
+    ];
+    expect(findLatestTask(msgs, "HUB")).toEqual({
+      state: "open",
+      slug: "live",
+      text: "In progress",
+      seq: 1,
+      result: null,
+    });
+  });
 });

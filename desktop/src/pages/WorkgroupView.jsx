@@ -114,7 +114,7 @@ export default function WorkgroupView({
     () => findLatestTask(messages, hubPubkey),
     [messages, hubPubkey],
   );
-  // A `#working` is stale once superseded — either by a later post from the same author, or by a `#done`/`#skip` that closes the task. Scope resets when we cross a `#task` boundary going backwards.
+  // A `#working` is stale once superseded — either by a later post from the same author, or by the hub's `#done` that closes the task. A member `#skip` is a per-peer pass, not a close, so it never marks others' `#working` stale. Scope resets when we cross a `#task` boundary going backwards.
   const workingStale = useMemo(() => {
     const set = new Set();
     if (!messages || messages.length === 0) return set;
@@ -122,11 +122,12 @@ export default function WorkgroupView({
     let taskClosed = false;
     for (let i = messages.length - 1; i >= 0; i--) {
       const m = messages[i];
-      if (parseDone(m.body) || parseSkip(m.body)) taskClosed = true;
+      const fromHub = !hubPubkey || m.from_pubkey === hubPubkey;
+      if (fromHub && parseDone(m.body)) taskClosed = true;
       if (parseWorking(m.body)) {
         if (seenAuthor.has(m.from_pubkey) || taskClosed) set.add(m.seq);
       }
-      if (parseTaskOpen(m.body)) {
+      if (fromHub && parseTaskOpen(m.body)) {
         seenAuthor = new Set();
         taskClosed = false;
       }
@@ -299,6 +300,7 @@ export default function WorkgroupView({
           <TasksButton
             thread={messages ?? []}
             hubColor={ownerProfile?.accent}
+            hubPubkey={hubPubkey}
             onJump={(taskId) => {
               const el = document.getElementById(`task-${taskId}`);
               if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -567,7 +569,8 @@ function renderWgMeta({ seq, cost, speaker, isFromHub, styles }) {
     </span>
   );
   const seqEl = <Mono className="tnum">{`#${seq}`}</Mono>;
-  const costEl = <Mono className="tnum">{formatCost(cost)}</Mono>;
+  const hasCost = (cost?.tokens ?? 0) > 0 || (cost?.usd ?? 0) > 0;
+  const costEl = hasCost ? <Mono className="tnum">{formatCost(cost)}</Mono> : null;
   return isFromHub ? (
     <>
       {costEl}

@@ -2,6 +2,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { space , fontSizes, lineHeights} from '../../theme/tokens';
 
 import { Diamond } from '../../components/Diamond';
+import { Dot } from '../../components/Dot';
 import { RichText } from '../../components/RichText';
 import { useTheme } from '../../theme/ThemeContext';
 
@@ -18,6 +19,7 @@ const S = StyleSheet.create({
     paddingHorizontal: space.s7,
     paddingVertical: space.s6,
   },
+  cardCompact: { paddingVertical: space.s4 },
   eyebrowRow: { flexDirection: 'row', alignItems: 'center', gap: space.s2, marginBottom: space.s2 },
   iconSlot: { width: 14, alignItems: 'center', justifyContent: 'center' },
   eyebrowText: { fontSize: fontSizes.xxs, lineHeight: 10, letterSpacing: 1 },
@@ -47,7 +49,7 @@ function MarkerIcon({ variant, color, stale }) {
   if (variant === 'working') {
     return stale
       ? <View style={[S.taskDot, { backgroundColor: color }]} />
-      : <Diamond color={color} pulse />;
+      : <Dot color={color} pulse />;
   }
   if (variant === 'done') {
     return <Text style={[S.doneTick, { color }]}>✓</Text>;
@@ -68,11 +70,13 @@ export function MarkerCard({ variant = 'task', side = 'left', hubColor, speakerN
   const baseAccent = variant === 'skip' ? colors.warning : hubColor ?? colors.ink3;
   const tint = mixHex(baseAccent, pct, colors.bgPane);
   const isRight = side === 'right';
+  const hasBody = Boolean(children);
+  const compact = !title && !hasBody;
 
   let costStr = null;
-  if (cost) {
-    const tok = typeof cost.tokens === 'number' ? cost.tokens : 0;
-    const usd = typeof cost.usd === 'number' ? cost.usd : 0;
+  const tok = typeof cost?.tokens === 'number' ? cost.tokens : 0;
+  const usd = typeof cost?.usd === 'number' ? cost.usd : 0;
+  if (tok > 0 || usd > 0) {
     const tokFmt = tok >= 1000 ? `${(tok / 1000).toFixed(1)}K` : `${tok}`;
     const usdFmt = usd >= 0.01 ? `$${usd.toFixed(2)}` : `$${usd.toFixed(4)}`;
     costStr = `${tokFmt} · ${usdFmt}`;
@@ -107,8 +111,8 @@ export function MarkerCard({ variant = 'task', side = 'left', hubColor, speakerN
           )}
         </View>
       ) : null}
-      <View style={[S.card, { backgroundColor: tint }, shadow.sm]}>
-        <View style={S.eyebrowRow}>
+      <View style={[S.card, compact && S.cardCompact, { backgroundColor: tint }, shadow.sm]}>
+        <View style={[S.eyebrowRow, compact && { marginBottom: 0 }]}>
           <View style={S.iconSlot}>
             <MarkerIcon variant={variant} color={baseAccent} stale={stale} />
           </View>

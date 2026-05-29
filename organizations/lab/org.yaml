@@ -1,0 +1,19 @@
+name: lab
+display_name: Protocol Lab
+
+# No workspace key → defaults to ~/alpi/organizations/lab. The lab produces
+# nothing on disk; it exists to exercise the ALP workgroup protocol end-to-end.
+# No scaffold, no sync.
+
+models:
+  default: openai/gpt-5.4-mini
+  strong: anthropic/claude-sonnet-4-6
+  # Reasoning is per-agent — declared in agents/<name>/agent.md frontmatter.
+
+budgets:
+  daily_default: 1.0
+  daily_strong: 2.0
+  workgroup: 20.0
+
+agent_voices: {}
+common_skills: {}

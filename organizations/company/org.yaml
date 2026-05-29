@@ -1,0 +1,48 @@
+name: company
+display_name: Company
+
+# Where the org's agents do their work. "~" keeps the user's home dir untouched.
+workspace: "~"
+
+# Subdirs to mkdir -p inside the workspace at bootstrap time. Empty for company.
+workspace_scaffold: []
+
+# Source dirs (relative to this org) to copy into the workspace at bootstrap. Empty for company.
+sync: []
+
+models:
+  default: openai/gpt-5.4-mini
+  strong: anthropic/claude-sonnet-4-6
+  # Reasoning is per-agent — declared in agents/<name>/agent.md frontmatter
+  # (`reasoning_effort: off | low | medium | high`). No org-level default;
+  # missing declarations fail validation. Lives with the agent's identity,
+  # not with the org's economics.
+
+budgets:
+  daily_default: 2.0
+  daily_strong: 5.0
+  workgroup: 50.0
+
+# Per-agent voice id (Azure neural). Must be in alpi/cli.py _VOICE_SHORTLIST + desktop/src/components/settings/util.js.
+agent_voices:
+  vera:     en-US-AriaNeural
+  echo:     en-GB-SoniaNeural
+  fern:     en-AU-NatashaNeural
+  canvas:   en-US-JennyNeural
+  lumen:    fr-FR-DeniseNeural
+  archive:  de-DE-KatjaNeural
+  quill:    it-IT-ElsaNeural
+  hub:      pt-BR-FranciscaNeural
+  atlas:    en-US-GuyNeural
+  rex:      en-AU-WilliamNeural
+  forge:    es-ES-AlvaroNeural
+  zeta:     en-GB-RyanNeural
+  prism:    fr-FR-HenriNeural
+  ledger:   en-US-GuyNeural
+  sentinel: en-AU-WilliamNeural
+  flux:     en-GB-RyanNeural
+  lex:      es-ES-AlvaroNeural
+
+# Skills installed across multiple agents from `common/skills/<path>/`. Path → list of recipient agent names.
+common_skills:
+  finance/unit-economics: [echo, ledger]

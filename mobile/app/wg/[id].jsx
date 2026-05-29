@@ -220,7 +220,7 @@ function TasksHeaderButton({ tasks, accent, onPress }) {
         borderRadius: radii.md,
       })}
     >
-      <Dot color={dotColor}  />
+      <Dot color={dotColor} pulse={last?.status === 'working'} />
       <Text style={{ fontFamily: fonts.monoSemibold, fontSize: fontSizes.xs, color: colors.ink }}>
         {closed}/{total}
       </Text>
@@ -284,7 +284,7 @@ export default function WorkgroupChat() {
     setOptimistic([]);
   });
 
-  // A #working is stale once superseded — by a later post from the same author, or by a #done/#skip that closes the task. Scope resets when crossing a #task boundary going backwards.
+  // A #working is stale once superseded — by a later post from the same author, or by the hub's #done that closes the task. A member #skip is a per-peer pass, not a close, so it never marks others' #working stale. Scope resets when crossing a #task boundary going backwards.
   const workingStale = useMemo(() => {
     const stale = new Set();
     if (!messages.length) return stale;
@@ -293,11 +293,12 @@ export default function WorkgroupChat() {
     for (let i = messages.length - 1; i >= 0; i--) {
       const m = messages[i];
       const variant = classifyMessage(m.body).variant;
-      if (variant === 'done' || variant === 'skip') taskClosed = true;
+      const fromHub = hubPubkey == null || m.from_pubkey === hubPubkey;
+      if (fromHub && variant === 'done') taskClosed = true;
       if (variant === 'working') {
         if (seenAuthor.has(m.from_pubkey) || taskClosed) stale.add(m.seq);
       }
-      if (variant === 'task') {
+      if (fromHub && variant === 'task') {
         seenAuthor = new Set();
         taskClosed = false;
       }
@@ -306,7 +307,7 @@ export default function WorkgroupChat() {
     return stale;
   }, [messages]);
 
-  const tasks = useMemo(() => buildTasks(messages), [messages]);
+  const tasks = useMemo(() => buildTasks(messages, hubPubkey), [messages, hubPubkey]);
 
   // Workgroups borrow hub profile's accent — daemon shape has no wg.accent.
   const accent = hub?.accent ?? accentForProfile(wg?.hub_id) ?? colors.ink3;

@@ -14,6 +14,17 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.1.25 — 2026-05-29 — task sheet reads skips correctly
+
+- **Skips read correctly.** One member passing on a round no longer
+  marks the whole task as skipped or counts it resolved — the task
+  stays active until the hub closes it.
+- **No phantom tasks.** A message that both opens and closes a task is
+  shown as plain text instead of a stray entry in the sheet.
+- **Cleaner working indicator.** Active tasks show a single pulsing dot
+  — tasks sheet, header, and `#working` posts — so tasks read as just
+  working, done, or skipped.
+
 ## v0.1.24 — 2026-05-29 — task slugs + denied tools
 
 - **Composer enforces `#task #<slug>`.** Workgroup composer validates

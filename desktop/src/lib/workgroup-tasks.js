@@ -63,12 +63,14 @@ export function findLatestTask(messages, hubPubkey = null) {
   let latest = null;
   for (const m of messages) {
     if (hubPubkey && m.from_pubkey !== hubPubkey) continue;
-    const doneMatch = DONE_RE.exec(m.body || "");
+    const body = m.body || "";
+    const taskMatch = TASK_RE.exec(body);
+    const doneMatch = DONE_RE.exec(body);
+    if (taskMatch && doneMatch) continue; // both markers in one post → prose (mirrors alpi parse_post ambiguity rule)
     if (doneMatch && latest) {
       latest = { ...latest, state: "done", result: doneMatch[1].trim() };
       continue;
     }
-    const taskMatch = TASK_RE.exec(m.body || "");
     if (taskMatch) {
       const slug = taskMatch[1].toLowerCase();
       const title = (taskMatch[2] ?? "").trim();

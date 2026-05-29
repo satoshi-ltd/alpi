@@ -2,7 +2,7 @@ import { Pressable, ScrollView, Text, View } from 'react-native';
 import { fonts, radii, space , fontSizes} from '../../theme/tokens';
 
 import { Sheet } from '../../components/Sheet';
-import { ThinkingDots } from '../chat/ThinkingDots';
+import { Dot } from '../../components/Dot';
 import { useTheme } from '../../theme/ThemeContext';
 
 function mix(hex, pct, base) {
@@ -49,20 +49,7 @@ function StatusIcon({ status, accent, colors }) {
       </View>
     );
   }
-  if (status === 'working') {
-    return <ThinkingDots color={accent} />;
-  }
-  return (
-    <View
-      style={{
-        width: 11,
-        height: 11,
-        borderRadius: radii.sm,
-        borderWidth: 1.5,
-        borderColor: colors.ink3,
-      }}
-    />
-  );
+  return <Dot color={accent ?? colors.ink3} pulse />;
 }
 
 export function TasksSheet({ open, onClose, tasks = [], workgroupId, accent, onPick }) {
@@ -100,12 +87,8 @@ export function TasksSheet({ open, onClose, tasks = [], workgroupId, accent, onP
           tasks.map((t) => {
             const isDone = t.status === 'done';
             const isSkip = t.status === 'skip';
-            const isWorking = t.status === 'working';
-            const statusLabel = isDone ? 'done' : isSkip ? 'skipped' : isWorking ? 'working' : 'open';
-            const statusColor =
-              isSkip ? colors.warning
-              : isDone || isWorking ? mix(accent ?? colors.ink3, 0.7, colors.ink3)
-              : colors.ink3;
+            const statusLabel = isDone ? 'done' : isSkip ? 'skipped' : 'working';
+            const statusColor = isSkip ? colors.warning : mix(accent ?? colors.ink3, 0.7, colors.ink3);
             return (
               <Pressable
                 key={t.id}
@@ -123,7 +106,7 @@ export function TasksSheet({ open, onClose, tasks = [], workgroupId, accent, onP
                   backgroundColor: pressed ? colors.selected : 'transparent',
                 })}
               >
-                <View style={{ width: 24, alignItems: 'center', paddingTop: space.s1 }}>
+                <View style={{ width: 24, height: fontSizes.md * 1.3, alignItems: 'center', justifyContent: 'center' }}>
                   <StatusIcon status={t.status} accent={accent} colors={colors} />
                 </View>
                 <View style={{ flex: 1, gap: space.s1 }}>

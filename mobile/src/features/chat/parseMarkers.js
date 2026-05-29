@@ -57,34 +57,32 @@ export function parseSkip(body) {
   return content === null ? null : { content };
 }
 
-// Walks a transcript and produces one entry per `#task` opener — status reflects whether a subsequent `#done`/`#skip` closed it; msgs counts every post inside the range.
-export function buildTasks(messages) {
+// Walks a transcript, one entry per hub `#task` opener. Only the hub opens (`#task`) and closes (`#done`); a member's `#skip`/`#working` are round signals that never touch lifecycle. "skip" status means preempted: the hub opened a new `#task` before closing this one with `#done` (alpi/alp/tasks.py fold_tasks). msgs counts every post inside the range.
+export function buildTasks(messages, hubPubkey = null) {
   const tasks = [];
   let current = null;
   for (const m of messages || []) {
     const c = classifyMessage(m.body);
-    if (c.variant === 'task') {
-      if (current) tasks.push(current);
+    const fromHub = !hubPubkey || m.from_pubkey === hubPubkey;
+    if (c.variant === 'task' && fromHub) {
+      if (current) {
+        current.status = 'skip';
+        tasks.push(current);
+      }
       current = {
         id: c.task?.slug || `t-${m.seq ?? tasks.length + 1}`,
         seq: m.seq,
         slug: c.task?.slug || null,
         title: c.task?.title || '',
-        status: 'open',
+        status: 'working',
         msgs: 1,
       };
     } else if (current) {
       current.msgs += 1;
-      if (c.variant === 'done') {
+      if (c.variant === 'done' && fromHub) {
         current.status = 'done';
         tasks.push(current);
         current = null;
-      } else if (c.variant === 'skip') {
-        current.status = 'skip';
-        tasks.push(current);
-        current = null;
-      } else if (current.status === 'open') {
-        current.status = 'working';
       }
     }
   }
@@ -94,10 +92,12 @@ export function buildTasks(messages) {
 
 export function classifyMessage(body) {
   const task = parseTaskOpen(body);
+  const done = parseDone(body);
+  // Both #task and #done in one post → prose, no lifecycle event (mirrors alpi parse_post ambiguity rule).
+  if (task && done) return { variant: 'message', text: body };
   if (task) return { variant: 'task', task };
   const working = parseWorking(body);
   if (working) return { variant: 'working', text: working.content };
-  const done = parseDone(body);
   if (done) return { variant: 'done', text: done.content };
   const skip = parseSkip(body);
   if (skip) return { variant: 'skip', text: skip.content };

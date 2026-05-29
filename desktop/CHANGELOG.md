@@ -11,6 +11,17 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.3.32 — 2026-05-29 — task history reads skips correctly
+
+- **Skips read correctly.** One member passing on a round no longer
+  marks the whole task as skipped or counts it resolved — the task
+  stays active until the hub closes it.
+- **No phantom tasks.** A message that both opens and closes a task is
+  shown as plain text instead of a stray entry in the history.
+- **Cleaner working indicator.** Active tasks show a single pulsing dot
+  — task list, header, and `#working` posts — so tasks read as just
+  working, done, or skipped.
+
 ## v0.3.31 — 2026-05-29 — task slugs, denied tools, profile bio tooltips
 
 - **Composer enforces `#task #<slug>`.** Workgroup composer validates
