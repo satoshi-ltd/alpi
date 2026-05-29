@@ -49,6 +49,11 @@ export const space = {
   s11: 36,
 };
 
+export const dotSize = 7;
+export const glyphSize = 8;
+export const glyphSizeMd = 14;
+export const pulseDuration = 1600;
+
 export const radii = {
   xs: 4,
   sm: 8,

@@ -32,7 +32,7 @@ export function ChatHeader({ kind, accent, title, meta, onBack, onMore, onPickSe
       <View style={{ flex: 1, minWidth: 0, flexDirection: 'column' }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s2 }}>
           {kind === 'profile' ? (
-            <Diamond color={accent} size={11} />
+            <Diamond color={accent} size="md" />
           ) : (
             <Text style={{ fontFamily: fonts.monoMedium, fontSize: fontSizes.lg, color: colors.ink3 }}>#</Text>
           )}

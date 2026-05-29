@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Activity, Dot, Tip, Mono, CheckIcon } from "../primitives/index.js";
+import { Dot, Tip, Mono, CheckIcon } from "../primitives/index.js";
 import {
   applyPendingUpdate,
   checkForUpdates,
@@ -94,7 +94,7 @@ function VersionPanel({ state, current, onInstall, onClose }) {
     return (
       <div className={`col ${styles.panel} ${styles.panelGap4}`}>
         <div className={`row row-gap ${styles.rowGap4}`}>
-          <Activity size="md" />
+          <Dot pulse color="var(--ink-3)" />
           <span className={styles.label}>Checking for updates…</span>
         </div>
         <Mono className={styles.metaXs}>v{current}</Mono>
@@ -107,7 +107,7 @@ function VersionPanel({ state, current, onInstall, onClose }) {
       <div className={`col ${styles.panel} ${styles.panelGap5}`}>
         <div className={`col ${styles.colGap1}`}>
           <div className={`row row-gap ${styles.rowGap3}`}>
-            <Dot color="var(--c-success)" size={8} pulse />
+            <Dot color="var(--c-success)" pulse />
             <span className={styles.labelStrong}>Update available</span>
           </div>
           <Mono className={styles.metaSm}>
@@ -141,7 +141,7 @@ function VersionPanel({ state, current, onInstall, onClose }) {
     return (
       <div className={`col ${styles.panel} ${styles.panelGap3}`}>
         <div className={`row row-gap ${styles.rowGap3}`}>
-          <Dot color="var(--c-danger)" size={8} />
+          <Dot color="var(--c-danger)" />
           <span className={styles.labelStrong}>{friendly}</span>
         </div>
         <Mono className={styles.metaSm}>v{current}</Mono>

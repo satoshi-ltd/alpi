@@ -352,6 +352,10 @@
 .thinking {
   padding: var(--space-3) 0;
   align-self: flex-start;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: min(80%, 480px);
 }
 
 .userActionTime {

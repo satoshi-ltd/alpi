@@ -11,6 +11,7 @@ export { SubsystemsCell } from "./SubsystemsCell.jsx";
 export { GatewaysCell } from "./GatewaysCell.jsx";
 export { SchedulesSection } from "./SchedulesSection.jsx";
 export { DevicesField } from "./devices.jsx";
+export { DaemonField } from "./DaemonField.jsx";
 export {
   AccentField,
   BudgetField,

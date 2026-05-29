@@ -1,10 +1,10 @@
-// Hash — workgroup identity glyph. Mono `#` with optional size override.
-export default function Hash({ size, color, className = "", style, children = "#" }) {
+export default function Hash({ size, color, pulse = false, className = "", style, children = "#" }) {
+  const sizeClass = size === "md" ? "md" : "";
   return (
     <span
-      className={`ds-hash ${className}`.trim()}
+      className={`ds-hash ${sizeClass} ${pulse ? "pulse-glyph" : ""} ${className}`.trim()}
       aria-hidden
-      style={{ fontSize: size, color: color || undefined, ...style }}
+      style={{ color: color || undefined, ...style }}
     >
       {children}
     </span>

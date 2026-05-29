@@ -14,7 +14,7 @@ export default function ChatHeader({
       <div className={`row between ${styles.topRow}`}>
         <div className={`col ${styles.titleCol}`}>
           <div className="title-row">
-            {isWg ? <Hash size={28} /> : <Diamond color={accent} size={14} />}
+            {isWg ? <Hash size="md" /> : <Diamond color={accent} size="md" />}
             <h1>{id}</h1>
             <span className="kicker">{isWg ? "workgroup" : "profile"}</span>
           </div>

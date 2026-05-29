@@ -573,9 +573,9 @@ function renderWgFooter({
 function renderWgMeta({ seq, cost, speaker, isFromHub, styles }) {
   const peer = (
     <span className={styles.metaGroup}>
-      {!isFromHub && <Diamond color={speaker.accent} size={8} />}
+      {!isFromHub && <Diamond color={speaker.accent} />}
       <span className={styles.speakerName}>{speaker.name}</span>
-      {isFromHub && <Diamond color={speaker.accent} size={8} />}
+      {isFromHub && <Diamond color={speaker.accent} />}
     </span>
   );
   const seqEl = <Mono className="tnum">{`#${seq}`}</Mono>;
@@ -669,7 +669,7 @@ function WorkgroupComposer({ paused, mentions, onSend, hubName, hubAccent }) {
     <>
       <span className={styles.metaGroup}>
         <span className={styles.hintArrow}>→</span>
-        <Diamond color={hubAccent} size={7} />
+        <Diamond color={hubAccent} />
         <span>
           <Mono className={styles.hintMono}>@{hubName}</Mono>
           {" formulates as "}

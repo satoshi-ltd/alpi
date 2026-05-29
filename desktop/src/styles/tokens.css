@@ -62,6 +62,10 @@
 
   --titlebar-h: 38px;
 
+  --dot-size: 7px;
+  --glyph-size: 8px;
+  --glyph-size-md: 14px;
+
   --ctrl-2xs: 18px;
   --ctrl-xs: 22px;
   --ctrl-sm: 28px;

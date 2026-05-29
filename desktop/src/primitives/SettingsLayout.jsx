@@ -139,7 +139,7 @@ export function AccentPicker({ value, onChange }) {
         onClick={() => setOpen((o) => !o)}
         className={`row row-gap ${styles.selectish}`}
       >
-        <Diamond color={value} size={12} />
+        <Diamond color={value} />
         <span>{value}</span>
         <I.ChevDown className={styles.chev} />
       </button>
@@ -156,7 +156,7 @@ export function AccentPicker({ value, onChange }) {
                   title={c}
                   className={`${styles.swatchChip} ${sel ? styles.swatchChipSelected : ""}`}
                 >
-                  <Diamond color={c} size={22} className={styles.swatchDiamond} />
+                  <Diamond color={c} size="md" className={styles.swatchDiamond} />
                 </button>
               );
             })}

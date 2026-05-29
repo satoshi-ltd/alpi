@@ -14,7 +14,7 @@ import { MessageActionsSheet } from '../../src/features/chat/MessageActionsSheet
 import { retryTextFor } from '../../src/features/chat/messageActions';
 import { mergeStreamingTurn } from '../../src/features/chat/chatTurns';
 import { ChatSkeleton } from '../../src/features/chat/ChatSkeleton';
-import { ThinkingDots } from '../../src/features/chat/ThinkingDots';
+import { MessageSkeleton } from '../../src/components/MessageSkeleton';
 import { ToolCallGroup, groupConsecutiveTools } from '../../src/features/chat/ToolCallRow';
 import { askUserNoAnswerTag } from '../../src/features/chat/askUserAnswer';
 import { Diamond } from '../../src/components/Diamond';
@@ -106,7 +106,7 @@ const TurnBlock = memo(function TurnBlock({ turn, turnIndex, accent, colors, fon
         />
       ) : turn.pending && !otherTools.length && !askUsers.length ? (
         <View style={TURN_STYLES.thinkingHolder}>
-          <ThinkingDots color={accent} />
+          <MessageSkeleton />
         </View>
       ) : null}
       {turn.error ? (
@@ -148,7 +148,7 @@ function AskUserAnswer({ result, question, accent, colors, fonts, fontSizes }) {
   }
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s3, paddingHorizontal: space.s7 }}>
-      <Diamond color={accent ?? colors.ink3} size={11} />
+      <Diamond color={accent ?? colors.ink3} size="md" />
       <Text
         style={{
           flex: 1,

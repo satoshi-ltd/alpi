@@ -229,7 +229,7 @@ function TasksHeaderButton({ tasks, accent, onPress }) {
         borderRadius: radii.md,
       })}
     >
-      <Dot color={dotColor} size={8} />
+      <Dot color={dotColor}  />
       <Text style={{ fontFamily: fonts.monoSemibold, fontSize: fontSizes.xs, color: colors.ink }}>
         {closed}/{total}
       </Text>
@@ -403,7 +403,7 @@ export default function WorkgroupChat() {
       />
       {paused ? (
         <View style={[WG_STYLES.pausedBanner, { backgroundColor: `${colors.warning}22` }]}>
-          <Dot color={colors.warning} size={8} />
+          <Dot color={colors.warning}  />
           <Text style={{ fontFamily: fonts.sans.medium, fontSize: fontSizes.md, color: colors.ink2 }}>
             This workgroup is paused. New messages won't fire.
           </Text>

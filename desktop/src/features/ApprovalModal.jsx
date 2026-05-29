@@ -68,10 +68,10 @@ export default function ApprovalModal({ requests, onResolved }) {
       <div className={styles.head}>
         <div className={styles.headText}>
           <div className={styles.eyebrow}>
-            <span className={styles[`sev_${eyebrow.severity}`]}>SANDBOX</span>
+            <span className={styles.alertLabel}>ALERT</span>
             <span className={styles.sep}> · </span>
             <span className={styles.diamondWrap}>
-              <Diamond color={`var(--c-danger)`} size={8} />
+              <Diamond color={`var(--c-danger)`} />
             </span>
             {current.profile ? (
               <span className={styles.profile}>@{current.profile.toUpperCase()}</span>

@@ -39,7 +39,7 @@ export default function NewChatHero({
                       className={styles.recentRow}
                       onClick={() => onOpenRecent?.(s.profile, s.id)}
                     >
-                      <Diamond color={accent} size={9} />
+                      <Diamond color={accent} />
                       <Mono className={styles.recentHandle}>@{s.profile}</Mono>
                       <span className={styles.recentText}>{s.first_user}</span>
                       <span className={styles.recentTime}>

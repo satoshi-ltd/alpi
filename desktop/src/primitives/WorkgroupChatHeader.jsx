@@ -32,7 +32,7 @@ export default function WorkgroupChatHeader({
     <>
       <span className={`row row-gap ${styles.hubRow}`}>
         <span className={styles.label}>hub</span>
-        <Diamond color={accent} size={7} />
+        <Diamond color={accent} />
         <Mono className={styles.ink2}>{`@${hubName}`}</Mono>
       </span>
       <span className="sep" aria-hidden />

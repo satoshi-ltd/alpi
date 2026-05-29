@@ -39,7 +39,7 @@ function PeerDetail({ peer, onBack, onRemove }) {
             <ArrowLeftIcon />
           </IconBtn>
         </Tip>
-        <Diamond color={peer.accent} size={11} />
+        <Diamond color={peer.accent} />
         <span className={styles.detailHandle}>@{peer.id}</span>
         <span className={styles.detailStatusSlot}>
           <Pill state={peer.online ? "on" : "off"}>

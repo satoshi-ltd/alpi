@@ -145,7 +145,7 @@ function WorkgroupSettings() {
           label="Hub"
           value={
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s2 }}>
-              <Diamond color={accentForProfile(wg.hub_id)} size={10} />
+              <Diamond color={accentForProfile(wg.hub_id)} />
               <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.ink2 }}>
                 @{wg.hub_id}
               </Text>
@@ -229,7 +229,7 @@ function WorkgroupSettings() {
             <View key={pk ?? i}>
               {i > 0 ? <RowSeparator /> : null}
               <Row
-                leading={<Diamond color={isHubMember ? accent : resolved.accent} size={12} />}
+                leading={<Diamond color={isHubMember ? accent : resolved.accent} size="md" />}
                 label={resolved.label}
                 helper={m.bio || resolved.bio || (m.joined ? 'joined' : 'invited')}
                 value={

@@ -34,6 +34,7 @@ import {
   SubsystemsCell,
 } from "./fields/services.jsx";
 import { DevicesField } from "./fields/devices.jsx";
+import { DaemonField } from "./fields/DaemonField.jsx";
 import { NetworkField } from "./fields/network.jsx";
 import {
   DeleteProfileAction,
@@ -226,7 +227,12 @@ export default function ProfileDetail({
           </Row>
         </Section>
 
-        <Section title="Services">
+        <Section title="Service">
+          {(activeConnection?.kind === "local" || activeConnection?.role === "admin") && (
+            <Row label="daemon">
+              <DaemonField />
+            </Row>
+          )}
           <Row label="subsystems">
             <SubsystemsCell profile={profile} onSaved={onSaved} />
           </Row>

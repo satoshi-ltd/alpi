@@ -11,7 +11,7 @@ import { useStickyScroll } from "../lib/useStickyScroll.js";
 import { useScrollProgress } from "../lib/useScrollProgress.js";
 import { relativeTime } from "../lib/time.js";
 import { profileLabel } from "../lib/profile-display.js";
-import Skeleton from "../primitives/Skeleton.jsx";
+import MessageSkeleton from "../primitives/MessageSkeleton.jsx";
 import SearchBar from "../primitives/SearchBar.jsx";
 import { useTranscriptSearch } from "../hooks/useTranscriptSearch.js";
 import { useNotify } from "../primitives/Notification.jsx";
@@ -20,7 +20,6 @@ import { renderMarkdown } from "../lib/markdown.js";
 import { JumpToLatest, NewChatHero, ProfileChatHeader } from "../primitives/index.js";
 import { ProfileMessage } from "../primitives/index.js";
 import {
-  Activity,
   AlpiSilhouette,
   CopyIcon as DSCopyIcon,
   Diamond,
@@ -307,7 +306,7 @@ const Transcript = memo(function Transcript({
   const [showSkeleton, setShowSkeleton] = useState(false);
   useEffect(() => {
     setShowSkeleton(false);
-    const t = setTimeout(() => setShowSkeleton(true), 150);
+    const t = setTimeout(() => setShowSkeleton(true), 450);
     return () => clearTimeout(t);
   }, [profileName, sessionId]);
 
@@ -331,14 +330,11 @@ const Transcript = memo(function Transcript({
       <div className={styles.loading}>
         <div className={styles.loadingUser}>
           <div className={styles.loadingUserBubble}>
-            <Skeleton width="95%" height="1em" />
-            <Skeleton width="62%" height="1em" />
+            <MessageSkeleton />
           </div>
         </div>
         <div className={styles.loadingAssistant}>
-          <Skeleton width="78%" height="1em" />
-          <Skeleton width="92%" height="1em" />
-          <Skeleton width="55%" height="1em" />
+          <MessageSkeleton />
         </div>
       </div>
     );
@@ -613,7 +609,7 @@ function AskUserAnswer({ result, question, accent }) {
   }
   return (
     <div className={styles.askUserAnswer}>
-      <Diamond color={accent || undefined} size={11} className={styles.askUserDiamond} />
+      <Diamond color={accent || undefined} className={styles.askUserDiamond} />
       <span className={styles.askUserAnswerLabel}>{result}</span>
     </div>
   );
@@ -686,7 +682,7 @@ const ToolGroupCard = memo(function ToolGroupCard({ group, accent }) {
         onClick={() => setExpanded((v) => !v)}
         aria-label={expanded ? "Collapse tool group" : `Expand ${group.tools.length} ${group.name} calls`}
       >
-        <Diamond color={diamondColor} size={8} className={styles.toolIcon} />
+        <Diamond color={diamondColor} className={styles.toolIcon} />
         <span className={styles.toolName}>{group.name}</span>
         <span className={styles.toolGroupBadge}>×{group.tools.length}</span>
         <span className={styles.toolGroupDots}>
@@ -762,7 +758,7 @@ function PendingTurn({ turn, accent }) {
         <div className={styles.toolError}>{turn.error}</div>
       )}
       {!turn.error && !turn.assistantPreview && allTools.length === 0 && (
-        <Activity size="lg" tint={accent} className={styles.thinking} />
+        <MessageSkeleton className={styles.thinking} />
       )}
     </div>
   );
@@ -780,7 +776,7 @@ const ToolCard = memo(function ToolCard({ name, preview, ok, accent }) {
       className={`${styles.tool} ${styles[`tool_${status}`]}`}
       style={rootStyle}
     >
-      <Diamond color={diamondColor} size={8} className={styles.toolIcon} />
+      <Diamond color={diamondColor} className={styles.toolIcon} />
       <span className={styles.toolName}>{name}</span>
       {preview && (
         <span className={styles.toolPreview}>{renderPreview(preview)}</span>

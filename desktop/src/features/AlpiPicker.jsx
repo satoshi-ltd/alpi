@@ -53,7 +53,7 @@ export default function AlpiPicker({ profiles, activeAlpi, onChange, variant = "
           className={`btn btn-ghost ${styles.trigger}`}
           onClick={() => setOpen((o) => !o)}
         >
-          {active && <Diamond color={active.accent} size={9} />}
+          {active && <Diamond color={active.accent} />}
           <Mono>{active ? profileLabel(active.name) : "—"}</Mono>
           <ChevDownIcon style={{ width: 12, height: 12 }} />
         </button>

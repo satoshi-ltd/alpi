@@ -78,9 +78,9 @@ export function MarkerCard({ variant = 'task', side = 'left', hubColor, speakerN
 
   const SpeakerEl = speakerName ? (
     <View style={S.row}>
-      {!isRight ? <Diamond color={baseAccent} size={7} /> : null}
+      {!isRight ? <Diamond color={baseAccent} /> : null}
       <Text style={metaStyle}>{speakerName}</Text>
-      {isRight ? <Diamond color={baseAccent} size={7} /> : null}
+      {isRight ? <Diamond color={baseAccent} /> : null}
     </View>
   ) : null;
 

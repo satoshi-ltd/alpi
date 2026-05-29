@@ -91,7 +91,7 @@ export function ToolCallRow({ name, status = 'success', args, accent }) {
           shadowOffset: { width: 0, height: 0 },
         }}
       >
-        <Diamond color={tone.diamond} size={7} />
+        <Diamond color={tone.diamond} />
         <Text
           style={{
             fontFamily: fonts.monoMedium,
@@ -182,7 +182,7 @@ export function ToolCallGroup({ group, accent }) {
             maxWidth: '100%',
           })}
         >
-          <Diamond color={tone.diamond} size={7} />
+          <Diamond color={tone.diamond} />
           <Text style={{ fontFamily: fonts.monoMedium, fontSize: fontSizes.sm, color: colors.ink }}>
             {group.name}
           </Text>

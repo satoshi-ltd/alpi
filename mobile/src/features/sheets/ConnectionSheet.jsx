@@ -80,7 +80,7 @@ export function ConnectionSheet({ open, onClose }) {
                     >
                       <Icon name="wifi" size={20} color={colors.ink2} />
                       <View style={{ position: 'absolute', bottom: 2, right: 2 }}>
-                        <Dot color={statusColor(status, colors)} size={8} />
+                        <Dot color={statusColor(status, colors)} />
                       </View>
                     </View>
                   }

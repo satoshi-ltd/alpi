@@ -58,6 +58,21 @@ export default function ProfileSettings() {
   const [sheet, setSheet] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [busySubsystem, setBusySubsystem] = useState(null);
+  const [restartBusy, setRestartBusy] = useState(false);
+  const [confirmRestart, setConfirmRestart] = useState(false);
+
+  const handleRestart = async () => {
+    setConfirmRestart(false);
+    setRestartBusy(true);
+    try {
+      await call('host.daemon.restart', {});
+      toast({ title: 'Daemon restarting…', duration: 2400 });
+    } catch (e) {
+      toast({ title: 'Restart failed', message: String(e), duration: 4000 });
+    } finally {
+      setRestartBusy(false);
+    }
+  };
 
   if (loading && !profile) {
     return (
@@ -159,7 +174,7 @@ export default function ProfileSettings() {
         title={profile.name}
         subtitle="PROFILE · SETTINGS"
         onBack={() => router.back()}
-        leadingGlyph={<Diamond color={accent} size={12} />}
+        leadingGlyph={<Diamond color={accent} size="md" />}
       />
       <ScrollView contentContainerStyle={{ paddingBottom: space.s10 }}>
         <SectionHeader>Overview</SectionHeader>
@@ -228,7 +243,15 @@ export default function ProfileSettings() {
           onPress={() => router.push(`/profile/${id}/identity`)}
         />
 
-        <SectionHeader>Services</SectionHeader>
+        <SectionHeader>Service</SectionHeader>
+        <Row
+          label={restartBusy ? 'Restarting…' : 'Daemon'}
+          helper="exits the daemon · supervisor relaunches · reconnects automatically"
+          value={restartBusy ? null : 'Restart'}
+          onPress={restartBusy ? undefined : () => setConfirmRestart(true)}
+          chevron={false}
+        />
+        <RowSeparator />
         <Row
           label="Subsystems"
           helper="tap to enable / disable · daemon restart applies"
@@ -435,6 +458,21 @@ export default function ProfileSettings() {
           setConfirmDelete(false);
           deleteProfile();
         }}
+      />
+
+      <TypedConfirm
+        open={confirmRestart}
+        onClose={() => setConfirmRestart(false)}
+        title="Restart the daemon"
+        body={
+          <>
+            Every connected client briefly loses its socket. Agent loops mid-turn stop and
+            resume on the next request. <Bold>Type restart to confirm.</Bold>
+          </>
+        }
+        expected="restart"
+        confirmLabel="Restart"
+        onConfirm={handleRestart}
       />
     </SafeAreaView>
   );

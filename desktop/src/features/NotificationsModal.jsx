@@ -342,7 +342,7 @@ function NotificationRow({ row, accent, active, onSelect, onDelete }) {
       <div className={styles.rowBody}>
         <div className={styles.rowMeta}>
           <span className={styles.rowMetaLead}>
-            <Diamond color={accent} size={7} />
+            <Diamond color={accent} />
             <Mono>@{label}</Mono>
             <Mono>· {sourceTag(row)}</Mono>
           </span>
@@ -380,7 +380,7 @@ function DetailPane({ row, accent, onCopy, onAction, action }) {
         <Mono className={styles.detailMetaPart}>{row.source === "schedule" ? "SCHEDULE" : "SEND MSG"}</Mono>
         <span className={styles.detailMetaDot}>·</span>
         <span className={styles.detailMetaProfile}>
-          <Diamond color={accent} size={7} />
+          <Diamond color={accent} />
           <Mono>@{label.toUpperCase()}</Mono>
         </span>
         <span className={styles.detailMetaDot}>·</span>

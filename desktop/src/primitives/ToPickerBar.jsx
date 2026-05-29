@@ -11,7 +11,7 @@ export default function ToPickerBar({ profile, model, onClick, open }) {
       aria-expanded={open || undefined}
     >
       <span className={`eyebrow ${styles.label}`}>To</span>
-      <Diamond color={accent} size={9} />
+      <Diamond color={accent} />
       <Mono className={styles.handle}>@{profile?.name ?? "—"}</Mono>
       {model && (
         <>

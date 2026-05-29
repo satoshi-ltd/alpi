@@ -46,7 +46,7 @@ export function Glyph({ kind, color, size = 36, needsProvider = false }) {
       }}
     >
       {kind === 'profile' ? (
-        <Diamond color={color} size={needsProvider ? 13 : 14} outlined={needsProvider} />
+        <Diamond color={color} size="md" outlined={needsProvider} />
       ) : (
         <Hash color={color} size={18} />
       )}

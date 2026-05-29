@@ -39,7 +39,7 @@ export function PickerRow({
     <View style={right ? S.wrapWithRight : S.wrap}>
       <Pressable onPress={onPress} android_ripple={{ color: colors.selected }} style={pressStyle}>
         <View style={S.dotSlot}>
-          {selected ? <Dot color={dotColor} size={8} /> : null}
+          {selected ? <Dot color={dotColor} /> : null}
         </View>
         <View style={S.body}>
           {typeof label === 'string' ? (

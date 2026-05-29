@@ -25,7 +25,7 @@ export function Banner({ kind = 'info', children, action, onAction, pulse }) {
         backgroundColor: `${tint}1f`,
       }}
     >
-      <Dot color={tint} size={8} />
+      <Dot color={tint} />
       <Text
         style={{
           flex: 1,

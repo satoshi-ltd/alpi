@@ -96,7 +96,7 @@ export const InboxRow = memo(function InboxRow({ item, onPress, onLongPress }) {
       </View>
       <View style={STATIC.meta}>
         {item.ts ? <Text style={[STATIC.ts, tsVariant]}>{item.ts}</Text> : null}
-        {unread ? <Dot color={accent} size={7} /> : null}
+        {unread ? <Dot color={colors.accent} /> : null}
       </View>
     </Pressable>
   );

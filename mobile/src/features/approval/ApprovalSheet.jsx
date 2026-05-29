@@ -52,14 +52,14 @@ export function ApprovalSheet() {
           <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: space.s5 }}>
             <View style={{ flex: 1, gap: space.s2 }}>
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center' }}>
-                <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: severityColor, letterSpacing: 0.6 }}>
-                  SANDBOX
+                <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.danger, letterSpacing: 0.6 }}>
+                  ALERT
                 </Text>
                 <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.ink4, letterSpacing: 0.6 }}>
                   {' · '}
                 </Text>
                 <View style={{ paddingRight: space.s2 }}>
-                  <Diamond color={colors.danger} size={9} />
+                  <Diamond color={colors.danger} />
                 </View>
                 {current.profile ? (
                   <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.ink2, letterSpacing: 0.6 }}>

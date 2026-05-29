@@ -41,11 +41,11 @@ sovereignty depends on.
 |---|---|---|
 | BD | Model-family conditional prompt guidance — inject heavier tool-use/verification guidance only for model families that real logs show need it. | 🔵 |
 
-### Operator UX
+### Protocol
 
 | ID | Item | Status |
 |---|---|---|
-| UX.7 | Restart daemon button — explicit, user-visible restart from `Settings → Daemon` in desktop and mobile, with reconnect feedback. | 🟡 |
+| ALP.3+ | Multi-task workgroups — opt-in `multitask: true` with letter-prefixed task IDs (`#task A`, `#done A`), per-task roster filters, dispatch gating, and budget headroom. | 🟡 |
 
 ### UX.2 / UX.3. Owned client experience
 
@@ -88,30 +88,33 @@ Promotion condition: `alpi digest` or LLM test traces show repeated,
 family-specific failures such as under-calling tools, skipping
 verification, or closing turns early despite open commitments.
 
-### UX.7. Restart daemon button
+### ALP.3+. Multi-task workgroups
 
-`host.daemon.restart` already exists (called by `SubsystemsCell` on
-subsystem toggle). What's missing is a deliberate, user-visible
-button — today the only way to restart from inside a client is to
-flip and re-flip a subsystem chip, which is an awful affordance.
+v0.3 ships a strict single-task model: posting a new `#task` while one
+is open auto-closes the previous with `"preempted by …"`. The constraint
+forces convergence and keeps agent context narrow. ALP.3+ lifts it for
+workgroups that **need** parallel streams — long-lived ops surfaces
+where members collaborate on several independent improvement threads
+at once rather than converging on one.
 
-`Settings → Daemon` adds a `Restart` button (desktop + mobile) that:
+**Shape.** Workgroups opt in with `multitask: true` in `meta.yaml`.
+Markers extend with letter-prefixed IDs: `#task A research the
+peptide`, `#task B audit the contract`, closures match prefix
+(`#done A: shortlist of 5`). Each task carries its own active state,
+its own `last_responded_seq` per member, its own dispatch gating, its
+own budget headroom against the workgroup pool.
 
-- calls `host.daemon.restart`;
-- shows "restarting…" until the client's `host.events.subscribe`
-  stream reconnects to the new daemon;
-- toasts success or transport error.
+**Single-task remains the default** — `multitask: true` is opt-in to
+keep simple workgroups simple. The flag belongs on workgroups whose
+mission is *maintain a surface over time*, not on workgroups whose
+mission is *converge on one decision* — single-task fits the latter
+perfectly and shouldn't change.
 
-On Mac/Linux the daemon is supervised by launchd / systemd / manual
-foreground; on Umbrel it's the entrypoint with `restart: on-failure`.
-Both paths converge: the daemon process exits, the supervisor
-re-launches it, the client reconnects. The button needs to handle the
-reconnect race, nothing more.
-
-**Non-goals.** No "force kill" mode — if the daemon hangs through
-`restart`, the user reaches for SSH (Umbrel) or
-`alpi daemon stop --force` (local). Hiding a force kill behind a UI
-button invites users to use it as a first resort.
+**Risks to manage**:
+- Per-task roster filters complicate the closure-quorum check
+- UI for showing N concurrent threads adds surface area
+- Per-task budget headroom needs careful accounting against the
+  workgroup lifetime cap
 
 ## v0.8 cycle (planned)
 
@@ -250,7 +253,6 @@ already analysed; the "why now?" question is the open one.
 
 | ID | Item | Reason it waits |
 |---|---|---|
-| ALP.3+ | Multi-task workgroups (`multitask: true`, letter-prefixed task IDs) | Single-task model has not yet proven insufficient |
 | ALP.7 | Pinned shared memory per workgroup (hub-anchored `wiki.md`) | Heavy new surface (concurrency, history, roles) only justified if workgroups become heavily used |
 | Signal | Signal gateway via signal-cli | Strong privacy fit, but new gateways are out of scope now that Alpi-owned clients are the primary mobile surface |
 | AY | Skills marketplace — federated, signed, never centralised | Presupposes an active author community + adoption for discovery to matter |
@@ -272,27 +274,6 @@ already analysed; the "why now?" question is the open one.
 Promotion criteria: real user demand, or concrete blocker for
 a v0.x feature that depends on it. None of these items
 graduate "because we feel like it".
-
-### ALP.3+. Multi-task workgroups
-
-v0.3 ships a strict single-task model: posting a new `#task`
-while one is open auto-closes the previous with `"preempted by
-…"`. The constraint is a feature — it forces convergence and
-keeps the agent context narrow. ALP.3+ would lift it for
-workgroups that **need** parallel streams.
-
-Workgroups would opt in with `multitask: true` in `meta.yaml`.
-Markers extend with letter-prefixed IDs: `#task A research the
-peptide`, `#task B audit the contract`, closures match prefix
-(`#done A: shortlist of 5`). Each task carries its own active
-state, its own `last_responded_seq` per member, its own
-dispatch gating.
-
-**Why it waits.** The single-task model has not yet proven
-insufficient in real use. Multi-task adds real complexity
-(per-task roster filters, per-task budget headroom, UI for
-showing N concurrent threads). Promote when a real workgroup
-outgrows single-task, not before.
 
 ### ALP.7. Pinned shared memory per workgroup
 

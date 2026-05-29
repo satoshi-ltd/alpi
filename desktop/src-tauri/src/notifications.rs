@@ -289,9 +289,8 @@ pub fn dispatch_daemon_frame(app: &AppHandle, frame: &serde_json::Value) {
 }
 
 pub fn dispatch_session_done(app: &AppHandle, profile: &str, session_id: &str) {
-    if window_focused(app)
-        && (is_active("chat", session_id) || is_active("chat-new", profile))
-    {
+    // Skip when focused — emitting a deeplink here yanks the user back on next focus change.
+    if window_focused(app) {
         return;
     }
     let title = format!("{} · reply ready", profile);

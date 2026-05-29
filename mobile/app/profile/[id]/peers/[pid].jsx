@@ -50,7 +50,7 @@ export default function PeerDetail() {
         title={`@${pid}`}
         subtitle={`@${id} · PEER`}
         onBack={() => router.back()}
-        leadingGlyph={<Diamond color={accentForProfile(pid)} size={12} />}
+        leadingGlyph={<Diamond color={accentForProfile(pid)} size="md" />}
       />
       <ScrollView>
         <SectionHeader>Identity</SectionHeader>

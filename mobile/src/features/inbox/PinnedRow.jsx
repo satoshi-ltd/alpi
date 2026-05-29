@@ -146,8 +146,7 @@ export function PinnedRow({ items, onPress, onLongPress }) {
                 )}
                 {it.state === 'working' ? <Pip kind="working" color={accent} bg={colors.bg} /> : null}
                 {it.unread && it.state !== 'working' ? (
-                  // Pip in the row's accent — same color as the diamond/hash glyph, so the unread cue feels like part of the avatar instead of an unrelated red badge.
-                  <Pip kind="unread" count={it.unread} color={accent} bg={colors.bg} />
+                  <Pip kind="unread" count={it.unread} color={colors.accent} bg={colors.bg} />
                 ) : null}
               </View>
               <Text

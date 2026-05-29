@@ -1,12 +1,11 @@
-export default function Diamond({ color, size = 9, className = "", style }) {
+export default function Diamond({ color, size, pulse = false, className = "", style }) {
+  const sizeClass = size === "md" ? "md" : "";
   return (
     <span
-      className={`ds-diamond ${className}`.trim()}
+      className={`ds-diamond ${sizeClass} ${pulse ? "pulse-glyph" : ""} ${className}`.trim()}
       aria-hidden
       style={{
         "--c": color || undefined,
-        width: size,
-        height: size,
         ...style,
       }}
     />

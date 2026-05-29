@@ -178,9 +178,15 @@ export function useChatStream({
             profile: turn.profile,
             id: sid,
           });
-          setSessionData(newData);
           setRewriteDraft(null);
-          setView({ kind: "profile", profile: turn.profile, sessionId: sid });
+          // Mirror the reply-path guard — no view yank if user switched profile.
+          setView((cur) => {
+            if (cur?.kind === "profile" && cur.profile === turn.profile) {
+              setSessionData(newData);
+              return { kind: "profile", profile: turn.profile, sessionId: sid };
+            }
+            return cur;
+          });
           reloadRef.current?.();
         } catch (e) {
           notify({ message: String(e), variant: "error" });
@@ -355,12 +361,14 @@ export function useChatStream({
             id: p.session_id,
           })
             .then((newData) => {
-              setSessionData(newData);
               setRewriteDraft(null);
-              setView({
-                kind: "profile",
-                profile: profileName,
-                sessionId: p.session_id,
+              // No view yank if the user switched profile mid-turn — sidebar unread does the surfacing.
+              setView((cur) => {
+                if (cur?.kind === "profile" && cur.profile === profileName) {
+                  setSessionData(newData);
+                  return { kind: "profile", profile: profileName, sessionId: p.session_id };
+                }
+                return cur;
               });
               reloadRef.current?.();
             })

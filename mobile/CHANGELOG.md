@@ -14,6 +14,27 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.1.22 — 2026-05-28 — member role surface + restart daemon
+
+Closes the member role on mobile and brings the daemon restart button
+that landed on desktop. No device management on mobile — that stays a
+desktop-only admin console by design.
+
+- New `useActiveRole` / `useCanAdminEarly` / `useIsAdmin` hooks on top
+  of `host.version.role`. AdminGuard wraps every host-settings route
+  (`profile/[id]/*` layout + `wg/[id]/{settings,briefing,member}` +
+  `/profile/new` + `/wg/new`). Pending probe state renders null so
+  admin RPCs don't fire on first mount.
+- Member visual gates: gear icons in chat headers, "+ New profile / +
+  New workgroup" in ComposeSheet, the inbox row Settings action, and
+  the chat empty-state CTA all hide. Empty hero swaps copy to "Ask
+  the host admin…".
+- New **Restart daemon** row in profile `Settings → Service`
+  (admin-only), typed-confirm sheet asking for the word `restart`.
+- Approval sheet eyebrow renamed `SANDBOX` → `ALERT` in danger red.
+
+Requires alpi ≥ 0.6.29.
+
 ## v0.1.21 — 2026-05-28 — alpi 0.6.28 pairing surface
 
 Cosmetic alignment with the alpi 0.6.28 per-device profile scope

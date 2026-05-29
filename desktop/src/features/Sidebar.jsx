@@ -12,13 +12,14 @@ import {
   SunIcon,
   Tip,
   ArrowLeftIcon,
+  Diamond,
   GearIcon,
+  Hash,
   PauseIcon,
   PinIcon,
   PinOffIcon,
   PlusIcon,
   SearchIcon,
-  StatusIcon,
   TrashIcon,
   ArchiveIcon,
 } from "../primitives/index.js";
@@ -513,7 +514,7 @@ function SidebarFooter({
   return (
     <div className={`${styles.footer} ${inSettings ? styles.footerSettings : ""}`}>
       {showSettings && (
-        <Tip text={inSettings ? "Command palette · ⌘K" : "Settings · ⌘,"} side="up">
+        <Tip text={inSettings ? "Command palette · ⌘K" : "Settings · ⌘,"} side="up-l">
           <button
             type="button"
             className={`ds-sb-row ${styles.footerButton}`}
@@ -550,7 +551,7 @@ function NotificationsBellButton({ unread = 0, onClick }) {
     ? `Notifications · ${unread} unread · ⌘O`
     : "Notifications · ⌘O";
   return (
-    <Tip text={tip} side="up">
+    <Tip text={tip} side="up-l">
       <IconBtn aria-label={tip} onClick={onClick}>
         <span className={styles.bellWrap}>
           <BellIcon />
@@ -573,7 +574,7 @@ function ThemeButton() {
       ? <MoonIcon />
       : <AutoIcon />;
   return (
-    <Tip text={`Theme: ${theme} · click for ${nextTheme(theme)}`} side="up">
+    <Tip text={`Theme: ${theme} · click for ${nextTheme(theme)}`} side="up-l">
       <IconBtn
         aria-label={`Theme: ${theme}`}
         onClick={() => cycleTheme()}
@@ -652,25 +653,14 @@ const ProfileRow = memo(function ProfileRow({
   }, [active, connId, profile.name, sessionRecency]);
   const unread =
     !incomplete && !active && checkUnread?.(profile.name, sessionRecency);
-  const trailing = pending
-    ? (
-        <Tip text="thinking…" side="r">
-          <StatusIcon kind="working" />
-        </Tip>
-      )
-    : unread
-      ? (
-          <span
-            className="sb-unread-dot"
-            style={{ "--c": profile.accent || "var(--accent)" }}
-            aria-label="unread"
-          />
-        )
-      : sessionRecency > 0
-        ? <span className="tnum sb-ts">{relativeTime(sessionRecency)}</span>
-        : null;
+  const trailing = unread
+    ? <span className="sb-unread-dot" aria-label="unread" />
+    : sessionRecency > 0
+      ? <span className="tnum sb-ts">{relativeTime(sessionRecency)}</span>
+      : null;
   const label = profileLabel(profile.name);
   const incompleteHint = `@${label}, needs provider — tap to set up`;
+  const leadingDiamond = <Diamond color={profile.accent || undefined} pulse={pending} />;
 
   return (
     <div className={styles.rowWrap}>
@@ -683,6 +673,11 @@ const ProfileRow = memo(function ProfileRow({
         state={incomplete ? "needs-provider" : undefined}
         ariaLabel={incomplete ? incompleteHint : undefined}
         title={incomplete ? incompleteHint : undefined}
+        leading={
+          pending
+            ? <Tip text="thinking…" side="up-l">{leadingDiamond}</Tip>
+            : leadingDiamond
+        }
         trailing={trailing}
         onClick={handleClick}
         onContextMenu={handleContextMenu}
@@ -738,25 +733,14 @@ const WorkgroupRow = memo(function WorkgroupRow({
     stateLabel = "Idle";
   }
 
-  const leading = (
-    <span className={styles.workgroupLeading} style={{ color: hubAccent || "var(--ink-4)" }}>
-      <StatusIcon kind={stateKind} />
-    </span>
-  );
-
   useEffect(() => {
     if (active && mtime > 0) markWorkgroupRead(connId, workgroup.profile, workgroup.id, mtime);
   }, [active, connId, workgroup.profile, workgroup.id, mtime]);
   const unread =
     !paused && !active && checkUnread?.(workgroup.profile, workgroup.id, mtime);
+  const working = stateKind === "working";
   const trailing = unread
-    ? (
-        <span
-          className="sb-unread-dot"
-          style={{ "--c": hubAccent || "var(--accent)" }}
-          aria-label="unread"
-        />
-      )
+    ? <span className="sb-unread-dot" aria-label="unread" />
     : mtime > 0
       ? <span className="tnum sb-ts">{relativeTime(mtime)}</span>
       : null;
@@ -770,7 +754,17 @@ const WorkgroupRow = memo(function WorkgroupRow({
         sel={active}
         unread={unread}
         state={paused ? "paused" : undefined}
-        leading={leading}
+        leading={
+          <span className={styles.workgroupLeading} style={{ color: hubAccent || "var(--ink-4)" }}>
+            {working
+              ? (
+                  <Tip text={stateLabel} side="up-l">
+                    <Diamond color={hubAccent || undefined} pulse />
+                  </Tip>
+                )
+              : <Hash />}
+          </span>
+        }
         trailing={trailing}
         onClick={handleClick}
         onContextMenu={handleContextMenu}

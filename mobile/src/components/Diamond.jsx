@@ -1,21 +1,36 @@
-import { View } from 'react-native';
+import { useEffect, useRef } from 'react';
+import { Animated, Easing } from 'react-native';
 
+import { glyphSize, glyphSizeMd, pulseDuration } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeContext';
 
-// Spec: 11×11 default, transform rotate 45, border-radius 2, color via --c fallback ink-3.
-export function Diamond({ color, size = 11, outlined = false }) {
+export function Diamond({ color, size, outlined = false, pulse = false }) {
   const { colors } = useTheme();
   const tint = color ?? colors.ink3;
+  const dimension = size === 'md' ? glyphSizeMd : glyphSize;
+  const opacity = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    if (!pulse) return;
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(opacity, { toValue: 0.55, duration: pulseDuration / 2, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.timing(opacity, { toValue: 1, duration: pulseDuration / 2, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [pulse, opacity]);
   return (
-    <View
+    <Animated.View
       style={{
-        width: size,
-        height: size,
+        width: dimension,
+        height: dimension,
         borderRadius: 2,
         transform: [{ rotate: '45deg' }],
         backgroundColor: outlined ? 'transparent' : tint,
         borderWidth: outlined ? 1.5 : 0,
         borderColor: outlined ? tint : 'transparent',
+        opacity: pulse ? opacity : 1,
       }}
     />
   );

@@ -44,6 +44,7 @@
 .sev_caution   { color: var(--c-warning); }
 .sev_dangerous { color: var(--c-danger); }
 .sev_safe      { color: var(--ink-3); }
+.alertLabel    { color: var(--c-danger); }
 
 .title {
   font-family: var(--font-sans);

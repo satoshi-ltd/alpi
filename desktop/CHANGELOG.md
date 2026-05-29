@@ -11,6 +11,14 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.3.29 — 2026-05-28 — restart daemon button + approval label cleanup
+
+- New **Restart daemon** row in `Settings → Service` (admin-only).
+  Typed-confirm modal — same pattern as delete profile, expects the
+  word `restart`. The host SIGTERMs itself; launchd / systemd respawn.
+- Approval modal eyebrow renamed `SANDBOX` → `ALERT` in danger red,
+  so the label matches what users actually read.
+
 ## v0.3.28 — 2026-05-28 — workgroup `#task` shows the full briefing
 
 The task card in a workgroup transcript was showing only the headline.

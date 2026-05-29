@@ -113,7 +113,7 @@ export default function OutputDetailScreen() {
 
   const subtitleNode = row ? (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s2 }}>
-      <Diamond color={accent} size={9} />
+      <Diamond color={accent} />
       <Text
         style={{
           fontFamily: fonts.mono,

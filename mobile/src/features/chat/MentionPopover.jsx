@@ -47,7 +47,7 @@ export function MentionPopover({ candidates = [], onPick }) {
               borderTopColor: colors.line,
             })}
           >
-            <Diamond color={accent} size={10} />
+            <Diamond color={accent} />
             <Text style={{ flex: 1, fontFamily: fonts.mono, fontSize: fontSizes.md, color: colors.ink }}>
               @{c.id}
             </Text>

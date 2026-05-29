@@ -1,4 +1,5 @@
 import Activity from "./Activity.jsx";
+import Dot from "./Dot.jsx";
 import Icon from "./Icon.jsx";
 import iconStyles from "./Icon.module.css";
 
@@ -181,7 +182,7 @@ export function StatusIcon({ kind, className = "", style }) {
     );
   }
   if (kind === "working") {
-    return <Activity size="sm" className={className} style={style} />;
+    return <Dot pulse color="var(--c-accent, var(--accent))" className={className} style={style} />;
   }
   return (
     <span

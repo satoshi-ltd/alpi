@@ -183,7 +183,7 @@ export default function WorkgroupDetail({ workgroup, profiles, connectionId = nu
       </span>
       <span aria-hidden className={styles.heroMetaSep} />
       <span className={styles.heroMetaGroup}>
-        <Dot color={statusDotColor} size={6} pulse />
+        <Dot color={statusDotColor} pulse />
         <span className={styles.heroMetaValue}>{statusKind}</span>
       </span>
       <span aria-hidden className={styles.heroMetaSep} />

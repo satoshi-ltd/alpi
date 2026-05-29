@@ -92,7 +92,7 @@ function AddMember() {
                   opacity: busy && !isBusy ? 0.4 : 1,
                 })}
               >
-                <Diamond color={accentForProfile(item.id) ?? colors.ink3} size={12} />
+                <Diamond color={accentForProfile(item.id) ?? colors.ink3} size="md" />
                 <View style={{ flex: 1 }}>
                   <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.md, color: colors.ink }}>
                     @{item.alias || item.id}

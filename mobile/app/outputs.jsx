@@ -119,7 +119,7 @@ export default function OutputsScreen() {
         <View style={{ flex: 1, minWidth: 0, gap: space.s2 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s3 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s2, flex: 1, minWidth: 0 }}>
-              <Diamond color={accent} size={9} />
+              <Diamond color={accent} />
               <Text
                 numberOfLines={1}
                 style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3 }}

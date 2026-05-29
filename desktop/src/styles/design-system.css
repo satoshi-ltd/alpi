@@ -11,12 +11,16 @@
 
 .ds-diamond, .diamond {
   display: inline-block;
-  width: 9px;
-  height: 9px;
+  width: var(--glyph-size);
+  height: var(--glyph-size);
   transform: rotate(45deg);
   background: var(--c, var(--ink-3));
   border-radius: 1.5px;
   flex-shrink: 0;
+}
+.ds-diamond.md, .diamond.md {
+  width: var(--glyph-size-md);
+  height: var(--glyph-size-md);
 }
 
 .ds-radio {
@@ -62,8 +66,8 @@
 
 .ds-dot, .dot {
   display: inline-block;
-  width: 7px;
-  height: 7px;
+  width: var(--dot-size);
+  height: var(--dot-size);
   border-radius: 50%;
   background: var(--c, var(--ink-3));
   flex-shrink: 0;
@@ -73,6 +77,9 @@
   font-family: var(--font-mono);
   color: var(--ink-3);
   font-weight: var(--fw-medium);
+}
+.ds-hash.md, .hash.md {
+  font-size: 28px;
 }
 
 .eyebrow {
@@ -501,6 +508,11 @@ textarea.ds-field, textarea.field { resize: vertical; min-height: 88px; height: 
 .anim-fade { animation: ds-fade-in var(--dur-2) var(--ease) both; }
 .anim-up   { animation: ds-slide-up var(--dur-4) var(--ease) both; }
 .pulse-dot { animation: ds-pulse-dot 1.6s ease-in-out infinite; }
+.pulse-glyph { animation: ds-pulse-glyph 1.6s ease-in-out infinite; }
+@keyframes ds-pulse-glyph {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.55; }
+}
 
 .refresh-bar {
   position: absolute;
@@ -629,18 +641,13 @@ a:focus-visible,
   color: var(--ink-3);
 }
 
-/* Unread indicator: small accent dot with pulse, replaces the timestamp. */
+/* Brand-accent only — identity color lives on the row's diamond/hash; per-row tinting here is noise. */
 .sb-unread-dot {
   display: inline-block;
-  width: 8px;
-  height: 8px;
+  width: var(--dot-size);
+  height: var(--dot-size);
   border-radius: 50%;
-  background: var(--c, var(--ink-3));
-  animation: sbUnreadPulse 1.6s ease-in-out infinite;
-}
-@keyframes sbUnreadPulse {
-  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--c, var(--ink-3)) 50%, transparent); }
-  50%      { box-shadow: 0 0 0 4px color-mix(in srgb, var(--c, var(--ink-3)) 0%, transparent); }
+  background: var(--accent);
 }
 
 /* Workgroup paused: pause glyph already signals it via leading icon, so just dim the row. */

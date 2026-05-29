@@ -93,9 +93,9 @@ export function WorkgroupMessage({ body, speakerName, speakerAccent, isFromHub, 
   const metaStyle = [S.meta, { fontFamily: fonts.monoMedium, color: colors.ink3 }];
   const SpeakerEl = (
     <View style={S.speakerRow}>
-      {!isFromHub ? <Diamond color={speakerAccent} size={7} /> : null}
+      {!isFromHub ? <Diamond color={speakerAccent} /> : null}
       <Text style={metaStyle}>{speakerName}</Text>
-      {isFromHub ? <Diamond color={speakerAccent} size={7} /> : null}
+      {isFromHub ? <Diamond color={speakerAccent} /> : null}
     </View>
   );
   const SeqEl = seqStr ? <Text style={metaStyle}>{seqStr}</Text> : null;

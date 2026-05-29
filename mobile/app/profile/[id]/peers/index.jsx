@@ -75,7 +75,7 @@ export default function PeersList() {
                     paddingVertical: space.s6,
                   }}
                 >
-                  <Diamond color={accentForProfile(p.pubkey.slice(0, 8))} size={12} />
+                  <Diamond color={accentForProfile(p.pubkey.slice(0, 8))} size="md" />
                   <View style={{ flex: 1, gap: space.s1 }}>
                     <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.md, color: colors.ink }} numberOfLines={1}>
                       {p.local_profile ? `@${p.local_profile}` : shortPubkey(p.pubkey)}
@@ -137,7 +137,7 @@ export default function PeersList() {
             <View key={p.id ?? i}>
               {i > 0 ? <RowSeparator /> : null}
               <Row
-                leading={<Diamond color={accentForProfile(p.id)} size={12} />}
+                leading={<Diamond color={accentForProfile(p.id)} size="md" />}
                 label={`@${p.id}`}
                 helper={p.alias || p.address || 'intra-machine'}
                 value={

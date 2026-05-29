@@ -147,7 +147,7 @@ function NewWorkgroup() {
             >
               {hubSummary ? (
                 <>
-                  <Diamond color={hubSummary.accent ?? accentForProfile(hubSummary.name)} size={10} />
+                  <Diamond color={hubSummary.accent ?? accentForProfile(hubSummary.name)}  />
                   <Text style={{ flex: 1, fontFamily: fonts.mono, fontSize: fontSizes.md, color: colors.ink }}>
                     @{hubSummary.name}
                   </Text>
@@ -204,7 +204,7 @@ function NewWorkgroup() {
                         borderColor: on ? peerAccent : 'transparent',
                       }}
                     >
-                      <Diamond color={peerAccent} size={8} />
+                      <Diamond color={peerAccent} />
                       <Text
                         style={{
                           fontFamily: fonts.mono,
@@ -239,7 +239,7 @@ function NewWorkgroup() {
         subtitle="WORKGROUP HUB"
         actions={eligibleHubs.map((p) => ({
           id: p.name,
-          icon: <Diamond color={p.accent ?? accentForProfile(p.name)} size={12} />,
+          icon: <Diamond color={p.accent ?? accentForProfile(p.name)} size="md" />,
           label: `@${p.name}`,
           detail: p.model || undefined,
           onPress: () => setHub(p.name),
