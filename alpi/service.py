@@ -1195,19 +1195,42 @@ async def _run_preempt_watcher(home: Path, profile: str) -> None:
         await asyncio.sleep(_PREEMPT_TICK_SECONDS)
 
 
+def _resolve_alp_tcp(
+    cfg_alp: dict[str, Any], managed: bool,
+) -> tuple[str | None, int | None]:
+    # ALPI_ALP_TCP_{HOST,PORT} env override config so a container sets its
+    # mapped port without editing config; managed+port+no-host → bind 0.0.0.0.
+    tcp_host = cfg_alp.get("tcp_host")
+    tcp_port = cfg_alp.get("tcp_port")
+    env_host = str(os.environ.get("ALPI_ALP_TCP_HOST") or "").strip()
+    if env_host:
+        tcp_host = env_host
+    env_port = str(os.environ.get("ALPI_ALP_TCP_PORT") or "").strip()
+    if env_port:
+        try:
+            tcp_port = int(env_port)
+        except ValueError:
+            pass
+    if managed and tcp_port and not tcp_host:
+        tcp_host = "0.0.0.0"
+    return tcp_host, tcp_port
+
+
 async def _run_alp(home: Path, profile: str) -> None:
     from alpi import config as cfg_mod
+    from alpi import runtime
     from alpi.alp import handlers as alp_handlers
     from alpi.alp import workgroup as alp_workgroup
     from alpi.alp.server import Server
 
     cfg = cfg_mod.load(home)
     cfg_alp = cfg.alp or {}
+    tcp_host, tcp_port = _resolve_alp_tcp(cfg_alp, runtime.is_docker())
     server = Server(
         home=home,
         agent_name=profile,
-        tcp_host=cfg_alp.get("tcp_host"),
-        tcp_port=cfg_alp.get("tcp_port"),
+        tcp_host=tcp_host,
+        tcp_port=tcp_port,
     )
     alp_handlers.register_link_ask(server, home)
     alp_workgroup.register(server, home)
@@ -1237,6 +1260,7 @@ async def _run_host(home: Path, profile: str) -> None:
     from alpi.host import probes as host_probes
     from alpi.host import schedule as host_schedule
     from alpi.host import tools as host_tools
+    from alpi import runtime
     from alpi.host import workgroup_admin as host_wg_admin
     from alpi.host.network import resolve_host_tcp_bind
     from alpi.host.server import Server as HostServer
@@ -1249,7 +1273,7 @@ async def _run_host(home: Path, profile: str) -> None:
         )
     else:
         host, port = tcp_bind
-        detail = "umbrel" if os.environ.get("ALPI_PLATFORM") == "umbrel" else "auto"
+        detail = runtime.platform_id() or "auto"
         log.info("host TCP bind chosen: %s:%d (%s)", host, port, detail)
 
     server = HostServer(home=home, tcp_bind=tcp_bind)

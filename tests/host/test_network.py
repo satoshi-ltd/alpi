@@ -44,27 +44,61 @@ def test_resolve_host_endpoint_prefers_configured_host(tmp_path: Path) -> None:
     assert endpoint == ("100.123.17.103", "configured")
 
 
-def test_resolve_host_endpoint_uses_umbrel_domain_hint(
+def test_resolve_host_tcp_bind_binds_all_interfaces_in_docker(
     tmp_path: Path, monkeypatch,
 ) -> None:
     home = tmp_path / "h"
     home.mkdir()
     cfg_mod.save(cfg_mod.Config(home=home, model=""))
-    monkeypatch.setenv("ALPI_PLATFORM", "umbrel")
-    monkeypatch.setenv("DEVICE_DOMAIN_NAME", "umbrel.local")
-
-    assert network.resolve_host_endpoint(home) == ("umbrel.local", "umbrel")
-
-
-def test_resolve_host_tcp_bind_uses_unspecified_inside_umbrel(
-    tmp_path: Path, monkeypatch,
-) -> None:
-    home = tmp_path / "h"
-    home.mkdir()
-    cfg_mod.save(cfg_mod.Config(home=home, model=""))
-    monkeypatch.setenv("ALPI_PLATFORM", "umbrel")
+    monkeypatch.setenv("ALPI_PLATFORM", "docker")
 
     assert network.resolve_host_tcp_bind(home) == ("0.0.0.0", 49200)
+
+
+def test_resolve_host_endpoint_uses_advertise_env_in_docker(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    home = tmp_path / "h"
+    home.mkdir()
+    cfg_mod.save(cfg_mod.Config(home=home, model=""))
+    monkeypatch.setenv("ALPI_PLATFORM", "docker")
+    monkeypatch.setenv("ALPI_HOST_ADVERTISE_HOST", "100.86.43.12")
+
+    assert network.resolve_host_endpoint(home) == ("100.86.43.12", "docker")
+
+
+def test_resolve_host_endpoint_none_in_docker_without_advertise(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    home = tmp_path / "h"
+    home.mkdir()
+    cfg_mod.save(cfg_mod.Config(home=home, model=""))
+    monkeypatch.setenv("ALPI_PLATFORM", "docker")
+    monkeypatch.delenv("ALPI_HOST_ADVERTISE_HOST", raising=False)
+    monkeypatch.delenv("DEVICE_DOMAIN_NAME", raising=False)
+    monkeypatch.delenv("DEVICE_HOSTNAME", raising=False)
+
+    assert network.resolve_host_endpoint(home) is None
+
+
+def test_resolve_host_tcp_port_env_override(tmp_path: Path, monkeypatch) -> None:
+    home = tmp_path / "h"
+    home.mkdir()
+    cfg_mod.save(cfg_mod.Config(home=home, model=""))
+    monkeypatch.setenv("ALPI_HOST_TCP_PORT", "49201")
+
+    assert network.resolve_host_tcp_port(home) == 49201
+    monkeypatch.setenv("ALPI_PLATFORM", "docker")
+    assert network.resolve_host_tcp_bind(home) == ("0.0.0.0", 49201)
+
+
+def test_resolve_host_tcp_port_ignores_garbage_env(tmp_path: Path, monkeypatch) -> None:
+    home = tmp_path / "h"
+    home.mkdir()
+    cfg_mod.save(cfg_mod.Config(home=home, model=""))
+    monkeypatch.setenv("ALPI_HOST_TCP_PORT", "not-a-port")
+
+    assert network.resolve_host_tcp_port(home) == 49200
 
 
 def test_resolve_host_pairing_name_prefers_configured_value(

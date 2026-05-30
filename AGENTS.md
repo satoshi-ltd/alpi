@@ -107,10 +107,10 @@ every ``host.*`` verb the UI calls.
 - **`host.network.*` is the canonical network config surface for
   desktop/mobile.** `host.network.status` returns
   `{scope_in_use, host_in_use, is_override, port, device_name,
-  candidates: {tailscale, lan, configured}, diagnosis}` so clients can
-  show the live pairing endpoint AND let the user pick a different one
+  candidates: {tailscale, lan, configured, docker}, diagnosis}` so clients
+  can show the live pairing endpoint AND let the user pick a different one
   without dropping to `alpi setup`. `scope_in_use` is the network
-  character of the host (`tailscale | lan | custom | umbrel`) computed
+  character of the host (`tailscale | lan | custom | docker`) computed
   via `network.classify_scope` — NOT the resolution path. `is_override`
   carries the "this came from `cfg.host.tcp_host`" bit separately.
   `host.network.set_advertised({host, device_name})` persists

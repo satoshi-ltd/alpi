@@ -1,1 +1,0 @@
-export APP_ALPI_TTYD_PORT="8080"

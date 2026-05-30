@@ -49,8 +49,8 @@ The current release ships the full local-to-network shape:
 
 - Textual TUI with streaming replies, slash commands, live tool cards,
   interrupt, session resume, model switching, and cost/token display.
-- Umbrel app package for an always-on home-server deployment through
-  the existing TUI, with persistent profile storage under `/data/.alpi`.
+- Docker image (`satoshiltd/alpi`) for an always-on home-server
+  deployment, with persistent profile storage under `/data/.alpi`.
 - Telegram, IMAP, Gmail, and Matrix gateways hosted by the unified
   per-machine daemon.
 - Inline-learning memory: `USER.md`, `MEMORY.md`, and `AGENT.md`.

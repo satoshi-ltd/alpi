@@ -56,14 +56,14 @@ def _probe_endpoints() -> dict[str, Any]:
 
 
 async def _status(_params: dict[str, Any], server: host_server.Server) -> dict[str, Any]:
-    # Resolution order: configured → umbrel → tailscale → lan. Probes run once off-loop.
+    # Resolution order: configured → managed-runtime hint → tailscale → lan. Probes run once off-loop.
     import asyncio
-    import os
 
     from alpi import config as cfg_mod
+    from alpi import runtime
     from alpi.host.network import (
+        _advertise_host_hint,
         _is_private_lan,
-        _umbrel_host_hint,
         resolve_host_pairing_name,
         resolve_host_tcp_port,
     )
@@ -71,8 +71,8 @@ async def _status(_params: dict[str, Any], server: host_server.Server) -> dict[s
     home = server.home
     cfg = cfg_mod.load(home)
     configured = str((cfg.host or {}).get("tcp_host") or "").strip() or None
-    is_umbrel = os.environ.get("ALPI_PLATFORM") == "umbrel"
-    umbrel_hint = _umbrel_host_hint() if is_umbrel else None
+    is_docker = runtime.is_docker()
+    advertise_hint = _advertise_host_hint() if is_docker else None
 
     probes = await asyncio.to_thread(_probe_endpoints)
 
@@ -80,8 +80,10 @@ async def _status(_params: dict[str, Any], server: host_server.Server) -> dict[s
     raw_scope: str | None
     if configured:
         host_in_use, raw_scope = configured, "configured"
-    elif is_umbrel:
-        host_in_use, raw_scope = (umbrel_hint, "umbrel") if umbrel_hint else (None, None)
+    elif is_docker:
+        host_in_use, raw_scope = (
+            (advertise_hint, "docker") if advertise_hint else (None, None)
+        )
     elif probes["tailscale"]:
         host_in_use, raw_scope = probes["tailscale"], "tailscale"
     elif probes["lan"]:
@@ -99,7 +101,7 @@ async def _status(_params: dict[str, Any], server: host_server.Server) -> dict[s
             "tailscale": probes["tailscale"],
             "lan": probes["lan"],
             "configured": configured,
-            "umbrel": umbrel_hint,
+            "docker": advertise_hint,
         },
         "diagnosis": {
             "tailscale": probes["tailscale"],

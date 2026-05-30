@@ -49,7 +49,7 @@ def run(home: Path) -> None:
         ui._console.print("")
 
     url = ui.text(
-        "Homeserver URL (e.g. http://umbrel.local:8008):",
+        "Homeserver URL (e.g. http://matrix.example.org:8008):",
         default=current_url,
     )
     if not url:

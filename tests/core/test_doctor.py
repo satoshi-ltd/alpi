@@ -141,8 +141,8 @@ def test_cli_doctor_command_exits_zero_when_healthy(tmp_path: Path, monkeypatch)
     assert result.exit_code == 0
 
 
-def test_doctor_reports_umbrel_managed_daemon(tmp_path: Path, monkeypatch) -> None:
-    monkeypatch.setenv("ALPI_PLATFORM", "umbrel")
+def test_doctor_reports_docker_managed_daemon(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("ALPI_PLATFORM", "docker")
     _write_cfg(tmp_path, workspace=str(tmp_path))
     _write_env(tmp_path, OPENROUTER_API_KEY="x")
     from alpi import service
@@ -152,7 +152,7 @@ def test_doctor_reports_umbrel_managed_daemon(tmp_path: Path, monkeypatch) -> No
     checks = doctor.run_all(tmp_path, "default")
     daemon = next(c for c in checks if c.group == "Services" and c.name == "Daemon")
     assert daemon.status == "ok"
-    assert daemon.detail == "managed by Umbrel (pid 4321)"
+    assert daemon.detail == "managed by Docker (pid 4321)"
 
 
 def test_doctor_tools_group_summary_when_all_available(

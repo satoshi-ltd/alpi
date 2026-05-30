@@ -133,10 +133,10 @@ def test_server_refuses_unsafe_bind(tmp_path: Path, addr: str) -> None:
         host_server.Server(home=home, tcp_bind=(addr, 49200))
 
 
-def test_server_allows_unspecified_bind_on_umbrel(
+def test_server_allows_unspecified_bind_on_docker(
     tmp_path: Path, monkeypatch,
 ) -> None:
-    monkeypatch.setenv("ALPI_PLATFORM", "umbrel")
+    monkeypatch.setenv("ALPI_PLATFORM", "docker")
     home = tmp_path / "h"
     home.mkdir()
     srv = host_server.Server(home=home, tcp_bind=("0.0.0.0", 49200))

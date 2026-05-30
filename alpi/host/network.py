@@ -7,6 +7,7 @@ import subprocess
 import socket
 from pathlib import Path
 
+from alpi import runtime
 from alpi.host.tailscale import detect_tailscale_ip, is_tailscale_ip
 from alpi.host.server import DEFAULT_TCP_PORT
 
@@ -56,17 +57,19 @@ def resolve_host_endpoint(home: Path) -> tuple[str, str] | None:
     configured = _configured_host(home)
     if configured:
         return (configured, "configured")
-    if os.environ.get("ALPI_PLATFORM") == "umbrel":
-        hinted = _umbrel_host_hint()
+    if runtime.is_docker():
+        # Container can't see host interfaces — endpoint comes from env.
+        hinted = _advertise_host_hint()
         if hinted:
-            return (hinted, "umbrel")
+            return (hinted, runtime.platform_id())
         return None
     return detect_bind_ip()
 
 
 def resolve_host_tcp_bind(home: Path) -> tuple[str, int] | None:
     port = resolve_host_tcp_port(home)
-    if os.environ.get("ALPI_PLATFORM") == "umbrel":
+    if runtime.is_docker():
+        # Bind every container interface; the runtime maps a host port to it.
         return ("0.0.0.0", port)
     detected = detect_bind_ip()
     if detected is None:
@@ -78,8 +81,22 @@ def resolve_host_tcp_bind(home: Path) -> tuple[str, int] | None:
 def resolve_host_tcp_port(home: Path) -> int:
     from alpi import config as cfg_mod
 
+    env_port = _env_port("ALPI_HOST_TCP_PORT")
+    if env_port is not None:
+        return env_port
     cfg = cfg_mod.load(home)
     return int((cfg.host or {}).get("tcp_port") or DEFAULT_TCP_PORT)
+
+
+def _env_port(name: str) -> int | None:
+    raw = str(os.environ.get(name) or "").strip()
+    if not raw:
+        return None
+    try:
+        port = int(raw)
+    except ValueError:
+        return None
+    return port if 1 <= port <= 65535 else None
 
 
 def resolve_host_pairing_name(home: Path) -> str:
@@ -103,12 +120,9 @@ def _configured_host(home: Path) -> str | None:
     return host or None
 
 
-def _umbrel_host_hint() -> str | None:
-    for key in ("ALPI_HOST_ADVERTISE_HOST", "DEVICE_DOMAIN_NAME", "DEVICE_HOSTNAME"):
-        value = str(os.environ.get(key) or "").strip()
-        if value:
-            return value
-    return None
+def _advertise_host_hint() -> str | None:
+    # Reachable endpoint clients dial (Tailscale IP / MagicDNS / LAN host).
+    return str(os.environ.get("ALPI_HOST_ADVERTISE_HOST") or "").strip() or None
 
 
 def _detect_lan_ip() -> str | None:
@@ -170,8 +184,8 @@ def classify_scope(host: str | None, raw_scope: str | None) -> str | None:
     # User-facing scope = network character of the host, not where it came from. A configured Tailscale IP reads as "tailscale", a configured hostname reads as "custom".
     if raw_scope is None or host is None:
         return raw_scope
-    if raw_scope == "umbrel":
-        return "umbrel"
+    if raw_scope == "docker":
+        return "docker"
     if is_tailscale_ip(host):
         return "tailscale"
     try:

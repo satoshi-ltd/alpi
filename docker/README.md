@@ -1,0 +1,66 @@
+# Alpi on Docker
+
+A single image (`satoshiltd/alpi`) that runs the Alpi daemon for a normal
+Linux host. The container entrypoint supervises the daemon as PID 1 — there is
+no install/start/stop inside the container, and no web terminal: reach an
+agent's TUI with `docker exec`.
+
+## Quick start (compose)
+
+From the repo root, create a `.env` with the address clients use to reach this
+machine, then bring it up:
+
+```sh
+echo "HOST_IP=192.168.1.50" > .env     # a LAN IP, or a Tailscale IP for remote
+docker compose up -d
+docker compose exec alpi alpi          # open the TUI for the agent
+```
+
+`HOST_IP` is the address a desktop/mobile client dials. On a trusted LAN use the
+host's LAN IP; for off-network access use a Tailscale IP/MagicDNS name.
+**Tailscale is optional** — just one way to reach the host from outside the LAN.
+
+Pair a client to `HOST_IP:49200`.
+
+## Quick start (docker run)
+
+```sh
+docker run -d --name alpi \
+  -e ALPI_HOST_ADVERTISE_HOST=192.168.1.50 \
+  -p 192.168.1.50:49200:49200 \
+  -p 192.168.1.50:7423:7423 \
+  -v "$PWD/data/alpi:/data" \
+  satoshiltd/alpi:latest
+docker exec -it alpi alpi
+```
+
+## Ports
+
+| Port    | Purpose                                            |
+|---------|----------------------------------------------------|
+| `49200` | Host control plane — desktop/mobile pairing.       |
+| `7423`  | ALP peer network — cross-machine workgroups (opt). |
+
+Map only what you need. Pairing needs `49200`; `7423` only if this agent talks
+to peers on other machines.
+
+## Environment
+
+| Var                        | Default  | Meaning                                              |
+|----------------------------|----------|------------------------------------------------------|
+| `ALPI_HOST_ADVERTISE_HOST` | —        | Address clients dial (LAN IP / Tailscale IP / host). Required for pairing — the container can't see the host's interfaces. |
+| `ALPI_HOST_TCP_PORT`       | `49200`  | Control-plane port (bind + advertised; map 1:1).     |
+| `ALPI_ALP_TCP_PORT`        | unset    | ALP peer-network port. Set to enable cross-machine ALP. |
+| `ALPI_ALP_TCP_HOST`        | `0.0.0.0`| ALP bind host (defaults to all interfaces in Docker).|
+
+State (profiles, keys, config, sessions) lives under `/data` — mount a volume
+so it survives restarts.
+
+## Several agents on one host
+
+Each agent is identified by its keypair (its `/data` volume), not its IP — so
+many agents share one host behind one address on **distinct ports**. Give each
+its own ports (`ALPI_HOST_TCP_PORT` / `ALPI_ALP_TCP_PORT`, mapped 1:1) and its
+own volume. See the commented `alpi-2` service in the root `docker-compose.yml`.
+
+Clients then pair to `HOST_IP:49200`, `HOST_IP:49201`, … one per agent.

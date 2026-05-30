@@ -1,4 +1,8 @@
 .git
+.github
+.venv
+venv
+.uv
 .pytest_cache
 .ruff_cache
 __pycache__
@@ -10,7 +14,12 @@ dist
 *.egg-info
 alpi.egg-info
 alpi_agent.egg-info
-desktop/node_modules
-desktop/dist
-desktop/src-tauri/target
+desktop
+mobile
 site
+docs
+tests
+organizations
+assets
+claude-design-v4
+tmp

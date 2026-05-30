@@ -94,7 +94,7 @@ class Telegram(Platform):
                             log.warning(
                                 "Telegram bot already polled by another process (409 Conflict). "
                                 "Inbound paused; outbound still works. "
-                                "Stop the other instance (other machine / Umbrel) or rotate the bot token to recover."
+                                "Stop the other instance (other machine / container) or rotate the bot token to recover."
                             )
                             conflict_announced = True
                         await asyncio.sleep(60)

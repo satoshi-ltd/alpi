@@ -1,0 +1,47 @@
+# Run one or more Alpi agents on a Linux host with Docker.
+#
+# Each container binds 0.0.0.0 internally; you map a DISTINCT host port per
+# container to the host address clients dial. An agent's identity is its own
+# keypair (its /data volume), not its IP — so many agents can share one host
+# on different ports. Pair a desktop/mobile client to  <HOST_IP>:<agent port>.
+#
+# HOST_IP = the address clients use to reach THIS machine. Set it in a .env
+# file next to this compose:
+#   HOST_IP=192.168.1.50     # a LAN IP for same-network clients, OR
+#   HOST_IP=100.x.y.z        # a Tailscale IP for remote access (optional)
+# Tailscale is just one option for off-LAN/secure access — not required.
+#
+# Then:  docker compose up -d
+# A TUI for an agent:  docker compose exec alpi alpi
+
+services:
+  alpi:
+    image: satoshiltd/alpi:latest
+    restart: unless-stopped
+    stop_grace_period: 1m
+    environment:
+      # Reachable endpoint advertised to clients (LAN IP, Tailscale IP, or host).
+      ALPI_HOST_ADVERTISE_HOST: ${HOST_IP}
+      ALPI_HOST_TCP_PORT: 49200   # control plane (desktop/mobile pairing)
+      ALPI_ALP_TCP_PORT: 7423     # ALP peer network (cross-machine workgroups)
+    ports:
+      - "${HOST_IP}:49200:49200"
+      - "${HOST_IP}:7423:7423"
+    volumes:
+      - ./data/alpi:/data
+
+  # A second agent on the same host — distinct ports, same HOST_IP, own volume.
+  # Uncomment to enable; copy the block (bump ports + volume) for more.
+  # alpi-2:
+  #   image: satoshiltd/alpi:latest
+  #   restart: unless-stopped
+  #   stop_grace_period: 1m
+  #   environment:
+  #     ALPI_HOST_ADVERTISE_HOST: ${HOST_IP}
+  #     ALPI_HOST_TCP_PORT: 49201
+  #     ALPI_ALP_TCP_PORT: 7424
+  #   ports:
+  #     - "${HOST_IP}:49201:49201"
+  #     - "${HOST_IP}:7424:7424"
+  #   volumes:
+  #     - ./data/alpi-2:/data

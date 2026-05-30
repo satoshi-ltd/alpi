@@ -11,7 +11,7 @@ from typing import Any
 
 import click
 
-from alpi import __version__, config, home, memory
+from alpi import __version__, config, home, memory, runtime
 from alpi.alp import client as alp_client
 from alpi.engine import AgentEvent, Engine
 
@@ -1350,7 +1350,7 @@ def setup_cmd(ctx: click.Context) -> None:
 
             ui.Heading("Services"),
         ]
-        if profile_name == "default" and not _is_umbrel():
+        if profile_name == "default" and not runtime.is_docker():
             items.append(("Daemon", "daemon", _daemon_lifecycle_status()))
         items += [
             ("Subsystems", "subsystems", _subsystems_summary(h)),
@@ -1425,10 +1425,6 @@ def _setup_farewell(profile: str, h: Path) -> None:
 
     prefix = f"alpi -p {profile}" if profile != "default" else "alpi"
     ui_mod._console.print(f"\n[dim]next:[/dim] {prefix}\n")
-
-
-def _is_umbrel() -> bool:
-    return os.environ.get("ALPI_PLATFORM") == "umbrel"
 
 
 _GATEWAY_ENV_KEYS = {
@@ -1594,14 +1590,17 @@ def _daemon_lifecycle_wizard(h: Path) -> None:
     from alpi import service as svc
     from alpi import ui
 
-    if _is_umbrel():
-        ui.banner(ui.crumb("setup", "daemon"), subtitle="managed by Umbrel", home=h)
+    if runtime.is_docker():
+        label = "Docker"
+        ui.banner(
+            ui.crumb("setup", "daemon"), subtitle=f"managed by {label}", home=h,
+        )
         ui.dim(
-            "On Umbrel the container entrypoint starts and supervises the "
-            "daemon. Use the Umbrel app restart or update flow instead of "
+            f"On {label} the container entrypoint starts and supervises the "
+            "daemon. Use the container restart or update flow instead of "
             "systemd or launchd controls here.",
         )
-        ui.ok_and_wait("daemon lifecycle is managed by Umbrel")
+        ui.ok_and_wait(f"daemon lifecycle is managed by {label}")
         return
 
     root = home._ROOT
@@ -1718,7 +1717,7 @@ def _ensure_daemon_installed(root: Path) -> None:
     """First-run hook: install the daemon if it is missing."""
     from alpi import service as svc
 
-    if os.environ.get("ALPI_PLATFORM") == "umbrel":
+    if runtime.is_docker():
         return
 
     try:
@@ -1736,8 +1735,9 @@ def _service_status(h: Path, profile: str) -> str:
 
     root = home._ROOT
     pid = svc.daemon_running_pid(root)
-    if _is_umbrel():
-        return f"managed by Umbrel · pid {pid}" if pid is not None else "managed by Umbrel"
+    if runtime.is_docker():
+        label = "Docker"
+        return f"managed by {label} · pid {pid}" if pid is not None else f"managed by {label}"
     installed = svc.daemon_installed()
     running = f"running (pid {pid})" if pid is not None else "stopped"
     return (
@@ -1753,9 +1753,9 @@ _SERVICES_WIZARD_COPY = (
     "picks up changes: `alpi daemon restart`."
 )
 
-_SERVICES_WIZARD_COPY_UMBREL = (
+_SERVICES_WIZARD_COPY_MANAGED = (
     "Which services the Alpi daemon runs for THIS profile.\n"
-    "On Umbrel the container entrypoint manages the daemon itself;\n"
+    "In a container the entrypoint manages the daemon itself;\n"
     "these flags only decide what it activates here."
 )
 
@@ -1769,12 +1769,13 @@ def _subsystems_wizard(h: Path, profile: str) -> None:
     while True:
         on_subsystems = svc.enabled_subsystems(h)
         running_pid = svc.daemon_running_pid(home._ROOT)
-        if _is_umbrel():
+        if runtime.is_docker():
+            label = "Docker"
             head = (
-                f"daemon: managed by Umbrel · pid {running_pid}" if running_pid
-                else "daemon: managed by Umbrel"
+                f"daemon: managed by {label} · pid {running_pid}" if running_pid
+                else f"daemon: managed by {label}"
             )
-            copy = _SERVICES_WIZARD_COPY_UMBREL
+            copy = _SERVICES_WIZARD_COPY_MANAGED
         else:
             head = (
                 f"daemon: running · pid {running_pid}" if running_pid
@@ -1987,8 +1988,8 @@ def _devices_subtitle(h: Path, endpoint) -> str:
     from alpi.host.network import resolve_host_tcp_port
 
     if endpoint is None:
-        if _is_umbrel():
-            return "remote access not configured — set a LAN or Tailscale address"
+        if runtime.is_docker():
+            return "remote access not configured — set ALPI_HOST_ADVERTISE_HOST"
         return "no network — install Tailscale or connect to a LAN"
     host, scope = endpoint
     return f"{scope} · {host}:{resolve_host_tcp_port(h)}"
@@ -1998,8 +1999,8 @@ def _network_row_status(h: Path, endpoint) -> str:
     from alpi.host.network import resolve_host_tcp_port
 
     if endpoint is None:
-        if _is_umbrel():
-            return "set a LAN hostname or Tailscale address"
+        if runtime.is_docker():
+            return "set ALPI_HOST_ADVERTISE_HOST"
         return "auto-detect Tailscale or LAN"
     host, _scope = endpoint
     return f"{host}:{resolve_host_tcp_port(h)}"
@@ -2030,11 +2031,11 @@ def _device_add(h: Path, endpoint) -> None:
             subtitle="cannot pair — no network",
             home=h,
         )
-        if _is_umbrel():
+        if runtime.is_docker():
             ui.fail(
                 "Set the advertised host first.\n"
-                "Use Umbrel's `.local` hostname for LAN access, or enter a\n"
-                "Tailscale IP / MagicDNS name for remote pairing."
+                "Set ALPI_HOST_ADVERTISE_HOST to the host's Tailscale IP /\n"
+                "MagicDNS name (or a LAN hostname) so clients can reach the container."
             )
         else:
             ui.fail(
@@ -2143,24 +2144,29 @@ def _device_add(h: Path, endpoint) -> None:
 def _devices_network_setup(h: Path) -> None:
     from alpi import config as cfg_mod
     from alpi import ui
-    from alpi.host.network import detect_bind_ip
+    from alpi.host.network import (
+        _advertise_host_hint,
+        detect_bind_ip,
+        resolve_host_tcp_port,
+    )
 
     cfg = cfg_mod.load(h)
     host_cfg = dict(cfg.host or {})
     current = str(host_cfg.get("tcp_host") or "").strip()
     current_name = str(host_cfg.get("device_name") or "").strip()
     detected = detect_bind_ip()
+    managed = runtime.is_docker()
     auto_host = (
-        str(os.environ.get("DEVICE_DOMAIN_NAME") or "").strip()
-        if _is_umbrel()
+        (_advertise_host_hint() or "")
+        if managed
         else (detected[0] if detected else "")
     )
     default = current or auto_host
-    port = int(host_cfg.get("tcp_port") or 49200)
+    port = resolve_host_tcp_port(h)
 
     subtitle = (
-        "how mobile clients reach this Umbrel"
-        if _is_umbrel()
+        "how mobile and desktop clients reach this container"
+        if managed
         else "how mobile and desktop clients reach this machine"
     )
     ui.banner(
@@ -2168,13 +2174,13 @@ def _devices_network_setup(h: Path) -> None:
         subtitle=subtitle,
         home=h,
     )
-    if _is_umbrel():
+    if managed:
         ui.dim(
-            "The mobile companion talks to the host API on TCP/WS.\n"
-            "Inside Umbrel, Alpi cannot see the host Tailscale interface directly,\n"
-            "so you set the address clients should dial here.\n"
-            "Use `umbrel.local` for LAN access, or a 100.x Tailscale IP / MagicDNS name\n"
-            f"for remote pairing. Port {port} is published by the Umbrel package."
+            "Clients talk to the host API on TCP/WS.\n"
+            "Inside a container, Alpi cannot see the host's Tailscale interface\n"
+            "directly, so set the address clients should dial here (a 100.x\n"
+            f"Tailscale IP / MagicDNS name, or a LAN hostname). Port {port} is\n"
+            "published by the container."
         )
     else:
         ui.dim(

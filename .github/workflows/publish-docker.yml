@@ -1,15 +1,19 @@
-name: publish-umbrel
+name: publish-docker
 
 on:
+  push:
+    tags:
+      - "v*"
   workflow_dispatch:
     inputs:
       tag:
-        description: Docker image tag (leave empty to use pyproject.toml version)
+        description: Image tag (leave empty to use pyproject.toml version)
         required: false
         default: ""
 
 permissions:
   contents: read
+  packages: write
 
 jobs:
   docker:
@@ -26,11 +30,21 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Resolve image tag
         id: image
         shell: bash
         run: |
           tag="${{ inputs.tag }}"
+          if [ -z "$tag" ]; then
+            ref="${GITHUB_REF#refs/tags/}"
+            tag="${ref#v}"
+          fi
           if [ -z "$tag" ]; then
             tag=$(grep '^version = ' pyproject.toml | head -1 | cut -d'"' -f2)
           fi
@@ -44,7 +58,11 @@ jobs:
       - uses: docker/build-push-action@v7
         with:
           context: .
-          file: deploy/umbrel/alpi/Dockerfile
+          file: docker/Dockerfile
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: satoshiltd/alpi-umbrel:${{ steps.image.outputs.tag }}
+          tags: |
+            satoshiltd/alpi:${{ steps.image.outputs.tag }}
+            satoshiltd/alpi:latest
+            ghcr.io/${{ github.repository_owner }}/alpi:${{ steps.image.outputs.tag }}
+            ghcr.io/${{ github.repository_owner }}/alpi:latest

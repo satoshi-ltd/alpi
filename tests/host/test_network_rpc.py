@@ -172,51 +172,33 @@ async def test_status_probes_each_endpoint_once(
 
 
 @pytest.mark.asyncio
-async def test_status_resolves_umbrel_when_platform_is_umbrel(
+async def test_status_resolves_docker_advertise_host(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     home = _bootstrap(tmp_path)
-    monkeypatch.setenv("ALPI_PLATFORM", "umbrel")
-    monkeypatch.setenv("DEVICE_DOMAIN_NAME", "umbrel.local")
-    monkeypatch.delenv("ALPI_HOST_ADVERTISE_HOST", raising=False)
+    monkeypatch.setenv("ALPI_PLATFORM", "docker")
+    monkeypatch.setenv("ALPI_HOST_ADVERTISE_HOST", "alpi.tailnet.ts.net")
     _stub_probes(monkeypatch)
 
     srv = host_server.Server(home=home)
     network_rpc.register(srv)
     resp = await srv._dispatch({"id": "n", "method": "host.network.status", "params": {}})
     r = resp["result"]
-    assert r["host_in_use"] == "umbrel.local"
-    assert r["scope_in_use"] == "umbrel"
+    assert r["host_in_use"] == "alpi.tailnet.ts.net"
+    assert r["scope_in_use"] == "docker"
     assert r["is_override"] is False
-    assert r["candidates"]["umbrel"] == "umbrel.local"
+    assert r["candidates"]["docker"] == "alpi.tailnet.ts.net"
 
 
 @pytest.mark.asyncio
-async def test_status_umbrel_override_takes_priority_over_hint(
+async def test_status_docker_with_no_advertise_returns_none(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """The container can't reach the host's Tailscale/LAN interface, so a
+    probe hit must NOT be advertised — without the env it's unresolved."""
     home = _bootstrap(tmp_path)
-    monkeypatch.setenv("ALPI_PLATFORM", "umbrel")
-    monkeypatch.setenv("DEVICE_DOMAIN_NAME", "fallback.local")
-    monkeypatch.setenv("ALPI_HOST_ADVERTISE_HOST", "advertised.local")
-    _stub_probes(monkeypatch)
-
-    srv = host_server.Server(home=home)
-    network_rpc.register(srv)
-    resp = await srv._dispatch({"id": "n", "method": "host.network.status", "params": {}})
-    assert resp["result"]["host_in_use"] == "advertised.local"
-    assert resp["result"]["scope_in_use"] == "umbrel"
-
-
-@pytest.mark.asyncio
-async def test_status_umbrel_with_no_hint_returns_none(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    home = _bootstrap(tmp_path)
-    monkeypatch.setenv("ALPI_PLATFORM", "umbrel")
-    monkeypatch.delenv("DEVICE_DOMAIN_NAME", raising=False)
+    monkeypatch.setenv("ALPI_PLATFORM", "docker")
     monkeypatch.delenv("ALPI_HOST_ADVERTISE_HOST", raising=False)
-    monkeypatch.delenv("DEVICE_HOSTNAME", raising=False)
     _stub_probes(monkeypatch, tailscale="100.114.140.25", lan="192.168.1.10")
 
     srv = host_server.Server(home=home)
@@ -227,15 +209,15 @@ async def test_status_umbrel_with_no_hint_returns_none(
 
 
 @pytest.mark.asyncio
-async def test_status_configured_overrides_umbrel(
+async def test_status_configured_overrides_docker(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     home = _bootstrap(tmp_path)
     cfg = cfg_mod.load(home)
     cfg.host = {"tcp_host": "operator.set.example"}
     cfg_mod.save(cfg)
-    monkeypatch.setenv("ALPI_PLATFORM", "umbrel")
-    monkeypatch.setenv("DEVICE_DOMAIN_NAME", "umbrel.local")
+    monkeypatch.setenv("ALPI_PLATFORM", "docker")
+    monkeypatch.setenv("ALPI_HOST_ADVERTISE_HOST", "ignored.ts.net")
     _stub_probes(monkeypatch)
 
     srv = host_server.Server(home=home)

@@ -499,7 +499,7 @@ detected; mobile / remote desktop use this path).
 | Key | Default | Effect |
 |---|---|---|
 | `host.tcp_port` | `49200` | WebSocket port for the remote transport. |
-| `host.tcp_host` | `""` | Optional advertised host for `Devices`. Empty = auto-detect Tailscale CGNAT first, then first private LAN address. Set explicitly when clients should dial a stable hostname, MagicDNS name, VPN IP, or Umbrel hostname. |
+| `host.tcp_host` | `""` | Optional advertised host for `Devices`. Empty = auto-detect Tailscale CGNAT first, then first private LAN address. Set explicitly when clients should dial a stable hostname, MagicDNS name, VPN IP, or LAN hostname. |
 | `host.device_name` | `""` | Optional pairing name shown in `Devices`. Empty = auto, otherwise this value is embedded in the pairing QR and device list. |
 
 ```yaml
@@ -519,9 +519,10 @@ other alpis (`link.*`, `workgroup.*`).
 It is optional; when empty, alpi falls back to the platform hostname.
 
 On regular macOS/Linux installs, leaving `host.tcp_host` empty keeps the
-old auto mode: Tailscale first, then LAN. On Umbrel the daemon may bind
-inside Docker while advertising a different host externally, such as
-`umbrel.local`, a `100.x` Tailscale IP, or a MagicDNS hostname.
+old auto mode: Tailscale first, then LAN. In Docker the daemon binds
+`0.0.0.0` inside the container while clients dial the host address you
+advertise via `ALPI_HOST_ADVERTISE_HOST` — a LAN IP, a `100.x` Tailscale
+IP, or a MagicDNS hostname (see `docker/README.md`).
 
 Pairing tokens for the WS transport live at
 ``~/.alpi/host/devices.yaml`` (mode 0600). Manage them through

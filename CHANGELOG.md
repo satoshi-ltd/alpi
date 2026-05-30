@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.6.31 — 2026-05-30 — Docker deployment, Umbrel retired
+
+Alpi now ships as a plain Docker image for any Linux host; the Umbrel
+package is gone.
+
+- **Official Docker image.** `satoshiltd/alpi` runs the always-on daemon
+  on any Linux box — `docker compose up -d`, then `docker compose exec
+  alpi alpi` for the TUI. Multi-arch (amd64 + arm64); state persists in a
+  `/data` volume.
+- **Many agents per host.** Run several agents on one machine, each on its
+  own ports and data volume; clients pair to `<host>:<port>` over your LAN
+  or, optionally, Tailscale.
+- **Umbrel package removed.** Superseded by the generic image; the old
+  `satoshiltd/alpi-umbrel` is no longer maintained.
+
 ## v0.6.30 — 2026-05-29 — `#task #<slug>`, `tools.deny` visibility, opus 4.8
 
 Three protocol / catalog tweaks bundled together.

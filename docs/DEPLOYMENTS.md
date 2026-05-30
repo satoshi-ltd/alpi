@@ -77,49 +77,53 @@ but that'd just be two profiles — see topology 3).
   mini-server. Also: "I want scheduled jobs to run even when my
   laptop is closed."
 
-## 2a. Umbrel home server
+## 2a. Docker home server
 
-Umbrel is the packaged form of the home-server topology. The app runs
-inside Docker, stores the Alpi root on a persistent Umbrel volume, and
-opens the existing TUI through Umbrel's authenticated app proxy.
+The packaged form of the home-server topology. The daemon runs inside a
+container as PID 1, stores the Alpi root on a mounted volume, and exposes
+the host plane (and optionally the ALP peer port) so desktop / mobile
+clients pair to it. No web terminal — reach the TUI with `docker exec`.
 
 ```
 ┌──────────────────────────────────────┐
-│ Umbrel                               │
+│ Linux host (Docker)                  │
 │                                      │
-│  app_proxy                           │
-│      │                               │
-│      ▼                               │
-│  ttyd → alpi TUI                     │
+│  container: satoshiltd/alpi          │
+│    alpi daemon (PID 1)               │
+│      ├─ gateway: Telegram / IMAP /   │
+│      │           Gmail / Matrix      │
+│      ├─ scheduler                    │
+│      ├─ ALP listener (:7423)         │
+│      ├─ workgroups poller            │
+│      └─ host plane (:49200)          │
 │                                      │
-│  alpi daemon                         │
-│    ├─ gateway: Telegram / IMAP /     │
-│    │           Gmail / Matrix        │
-│    ├─ scheduler                      │
-│    ├─ ALP listener                   │
-│    └─ workgroups poller              │
-│                                      │
-│  /data/.alpi  (persistent volume)    │
+│  /data  (mounted volume → .alpi)     │
 └──────────────────────────────────────┘
+        │ :49200 pairing · :7423 ALP
+        ▼  bound to the host address clients dial
 ```
 
-- **Package:** `deploy/umbrel/alpi/`.
-- **Profiles:** starts with `default`, with the same multi-profile
-  layout as any Linux install.
-- **UI:** browser terminal running `alpi`; no separate web dashboard.
-- **Storage:** `${APP_DATA_DIR}/data` is mounted as `/data`, and
-  `HOME=/data` makes `/data/.alpi` the profile root.
-- **Security boundary:** Umbrel authentication protects the terminal
-  surface. The host Unix socket and raw profile files are not exposed
-  to the browser.
-- **Remote access split:** `Devices` configures the host-plane endpoint
-  used by paired desktop / mobile clients (`host.*`, TCP/WS, default
-  `49200`). `Peer TCP listener` is separate: it enables ALP peer
-  traffic between alpis (`link.*`, `workgroup.*`, Noise_XK).
-- **Backup:** `alpi backup` archives the entire alpi home
-  (every profile + global config) into a single passphrase-encrypted
-  file; `alpi restore` reverses it. Umbrel can also back up the
-  app volume.
+- **Image / package:** `satoshiltd/alpi`, built from `docker/`.
+  Compose and full instructions in [docker/README.md](../docker/README.md).
+- **Profiles:** starts with `default`, same multi-profile layout as any
+  Linux install. Several agents on one host = distinct ports per
+  container (see [§3](#3-one-machine-many-profiles) for the profile
+  model, `docker/README.md` for the port mapping).
+- **UI:** `docker exec -it <name> alpi` opens the TUI; no web dashboard.
+- **Storage:** the volume mounts at `/data`, and `HOME=/data` makes
+  `/data/.alpi` the profile root — state survives restarts.
+- **Reachability:** the container can't see the host's network
+  interfaces, so set `ALPI_HOST_ADVERTISE_HOST` to the address clients
+  dial — a LAN IP, or a Tailscale IP/MagicDNS for off-network access
+  (**Tailscale is optional**). The control plane binds `0.0.0.0`
+  inside the container; you map a host port to it.
+- **Remote access split:** `49200` is the host plane used by paired
+  desktop / mobile clients (`host.*`, TCP/WS). `7423` is separate — it
+  enables ALP peer traffic between alpis (`link.*`, `workgroup.*`,
+  Noise_XK) and is only needed for cross-machine peers.
+- **Backup:** `alpi backup` archives the entire alpi home (every profile
+  + global config) into a single passphrase-encrypted file; `alpi
+  restore` reverses it. You can also back up the mounted volume.
 
 ## 3. One machine, many profiles
 
