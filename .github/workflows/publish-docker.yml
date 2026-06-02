@@ -41,7 +41,8 @@ jobs:
         shell: bash
         run: |
           tag="${{ inputs.tag }}"
-          if [ -z "$tag" ]; then
+          # tag refs only — a branch ref would yield the invalid tag `refs/heads/main`
+          if [ -z "$tag" ] && [[ "$GITHUB_REF" == refs/tags/* ]]; then
             ref="${GITHUB_REF#refs/tags/}"
             tag="${ref#v}"
           fi
