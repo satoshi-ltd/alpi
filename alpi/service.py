@@ -359,6 +359,13 @@ async def _maybe_dispatch_for_sub(
     trigger, new_responded = _should_dispatch(
         profile, own_pubkey, sub.recent_posts or [], sub.last_responded_seq,
     )
+    if not trigger:
+        trigger = _working_redispatch_reason(
+            profile, own_pubkey, sub.recent_posts or [], sub.last_dispatch_at,
+            sub.hub_pubkey,
+        )
+        if trigger:
+            new_responded = sub.last_responded_seq
     # Advance the pointer when the latest post is ours.
     if not trigger:
         if new_responded > sub.last_responded_seq:
@@ -535,6 +542,33 @@ def _pipeline_continuation_due(wg, recent: list[dict], active) -> bool:
     return wg_tasks.is_done(str(last_post.get("text") or ""))
 
 
+def _canonical_pipeline_slug(slug: str, pipeline: list[str]) -> str | None:
+    # Map a closed task's slug to its pipeline phase: literal, or a `<phase>-*` fix/recheck variant.
+    if slug in pipeline:
+        return slug
+    # Longest phase first so `qa-final-recheck` maps to `qa-final`, not `qa`.
+    for phase in sorted(pipeline, key=len, reverse=True):
+        if slug.startswith(f"{phase}-"):
+            return phase
+    return None
+
+
+def _is_success_result(result: str) -> bool:
+    # Conservative pass-detector for a terminal-phase close; negatives win so "did
+    # not pass" / "FAIL: pass criteria not met" never read as success.
+    text = (result or "").strip().lower()
+    if any(w in text for w in ("fail", "blocked", "error", "not pass")):
+        return False
+    return (
+        "pass" in text
+        or "green" in text
+        or "verde" in text
+        or text.startswith("ok")
+        or text.startswith("verified")
+        or text.startswith("verificado")
+    )
+
+
 def _next_pipeline_phase(wg, recent: list[dict]) -> tuple[str | None, str, bool]:
     """Given a pipeline workgroup's ordered phase list and the transcript,
     return ``(next_slug, latest_closed_slug, known)``:
@@ -579,12 +613,18 @@ def _next_pipeline_phase(wg, recent: list[dict]) -> tuple[str | None, str, bool]
     idx = pipeline.index(latest)
     if idx + 1 < len(pipeline):
         return pipeline[idx + 1], latest, True
-    # Terminal phase closed. Guardrail: a terminal-phase FAIL doesn't complete
-    # the pipeline. If the terminal phase was superseded by a fix/recheck loop
-    # (an off-pipeline variant task opened AFTER it), it wasn't passed — the
-    # fix changed the source, so re-run the phase BEFORE the terminal (rebuild)
-    # so the terminal re-audits a fresh artifact. The continuation cap bounds
-    # the loop. With no predecessor, reopen the terminal itself.
+    # Terminal phase closed. The latest close mapping to it — canonical OR a
+    # `<phase>-*` fix/recheck variant — decides: a green recheck COMPLETES the
+    # pipeline (don't reopen build→qa after a passed qa-recheck). Only when the
+    # terminal's latest close still isn't a success AND a fix is in flight do we
+    # rebuild (re-run the phase before the terminal so it re-audits a fresh
+    # artifact); the continuation cap bounds the loop.
+    terminal_closes = [
+        t for t in closed if _canonical_pipeline_slug(t.slug, pipeline) == latest
+    ]
+    latest_terminal = max(terminal_closes, key=lambda t: t.closed_seq or 0)
+    if _is_success_result(latest_terminal.result or ""):
+        return None, latest, True
     fix_after = any(
         t.slug not in pipeline and (t.opened_seq or 0) > (term.opened_seq or 0)
         for t in closed
@@ -1175,6 +1215,60 @@ def _should_dispatch(
     return None, high_seq
 
 
+def _working_redispatch_reason(
+    profile: str, own_pubkey: str, recent_posts: list[dict],
+    last_dispatch_at: str, hub_pubkey: str = "",
+) -> str | None:
+    # #working is a heartbeat, not a handoff: the member's seq is consumed at first
+    # dispatch, so a child that exits after only #working never wakes again (recovery
+    # left to the hub watchdog). Re-dispatch it once per #working posted after last dispatch.
+    from alpi.alp import tasks as wg_tasks
+
+    # hub_pubkey so non-hub markers in the member transcript aren't folded as task events.
+    active = wg_tasks.active_task(recent_posts, hub_pubkey=hub_pubkey or None)
+    if active is None:
+        return None
+    if active.opened_by == own_pubkey:
+        return None
+    if active.participants and profile not in active.participants:
+        return None
+
+    own_posts = [
+        p for p in recent_posts
+        if int(p.get("seq", 0)) >= active.opened_seq
+        and str(p.get("from") or "") == own_pubkey
+    ]
+    if not own_posts:
+        return None
+    latest_own = max(own_posts, key=lambda p: int(p.get("seq", 0)))
+    text = str(latest_own.get("text") or "")
+    if not wg_tasks.is_working(text):
+        return None
+    working_ts = str(latest_own.get("ts") or "")
+    # >= not > : timestamps are second-granular, so a turn that posts #working in
+    # the same second its dispatch was stamped must still re-dispatch.
+    if (
+        working_ts and last_dispatch_at
+        and not _stamp_at_or_after(working_ts, last_dispatch_at)
+    ):
+        return None
+    return (
+        "resume after #working without handoff "
+        f"(seq #{int(latest_own.get('seq', 0))})"
+    )
+
+
+def _stamp_at_or_after(left: str, right: str) -> bool:
+    import datetime as _dt
+
+    try:
+        ldt = _dt.datetime.strptime(left, "%Y-%m-%dT%H:%M:%SZ")
+        rdt = _dt.datetime.strptime(right, "%Y-%m-%dT%H:%M:%SZ")
+    except ValueError:
+        return False
+    return ldt >= rdt
+
+
 _TURN_TIMEOUT_SECONDS = 300
 # Absolute wall-clock backstop (pipeline phases run longer than deliberation); idle kills sooner.
 _PIPELINE_TURN_TIMEOUT_SECONDS = 900
@@ -1512,12 +1606,13 @@ async def _dispatch_workgroup_turn(
     posts_after = _post_count_for_role(home, wg_id)
     posts_added = max(0, posts_after - posts_before)
     err_preview = ""
+    event_tail = ""
     try:
         stderr_tail = await stderr_task
     except Exception:  # noqa: BLE001
         stderr_tail = ""
     try:
-        await stdout_task  # drain to completion; tail discarded
+        event_tail = await stdout_task  # child `--emit-events` tail for post-mortem
     except Exception:  # noqa: BLE001
         pass
     if rc != 0:
@@ -1537,6 +1632,9 @@ async def _dispatch_workgroup_turn(
     else:
         event = "end"
         extra = {"error": err_preview} if err_preview else {}
+    if event_tail:
+        # Cap bytes too (drain caps lines): keep turns.jsonl small + avoid stashing a huge/sensitive payload.
+        extra["event_tail"] = event_tail[-2000:]
     _append_turn_event(home, {
         "ts": _utcnow_iso(),
         "event": event,

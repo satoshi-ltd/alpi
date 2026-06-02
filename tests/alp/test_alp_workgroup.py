@@ -1614,3 +1614,37 @@ def test_load_meta_tolerant_to_legacy_pipeline_bool(short_tmp: Path) -> None:
     reloaded = wg_mod.load(home, wg.meta.id)
     assert reloaded is not None
     assert reloaded.meta.pipeline == ()
+
+
+def test_meta_quorum_timeout_round_trips(short_tmp: Path) -> None:
+    home = short_tmp / "hub"; home.mkdir()
+    kp = load_or_generate(home)
+    wg = wg_mod.create(home, name="qt", hub_kp=kp, member_pubkeys=[])
+    d = home / "alp" / "workgroups" / wg.meta.id
+    wg.meta.quorum_timeout_seconds = 120
+    wg_mod._save_meta(d, wg.meta)
+    reloaded = wg_mod.load(home, wg.meta.id)
+    assert reloaded is not None
+    assert reloaded.meta.quorum_timeout_seconds == 120
+
+
+def test_coerce_positive_int_rejects_junk_and_negatives() -> None:
+    assert wg_mod._coerce_positive_int("bad") == 0
+    assert wg_mod._coerce_positive_int(-1) == 0
+    assert wg_mod._coerce_positive_int(0) == 0
+    assert wg_mod._coerce_positive_int(None) == 0
+    assert wg_mod._coerce_positive_int(120) == 120
+
+
+def test_load_meta_tolerant_to_bad_quorum_timeout(short_tmp: Path) -> None:
+    home = short_tmp / "hub"; home.mkdir()
+    kp = load_or_generate(home)
+    wg = wg_mod.create(home, name="qtbad", hub_kp=kp, member_pubkeys=[])
+    meta_path = home / "alp" / "workgroups" / wg.meta.id / "meta.yaml"
+    import yaml as _yaml
+    for junk in ("bad", -1):
+        raw = _yaml.safe_load(meta_path.read_text())
+        raw["quorum_timeout_seconds"] = junk
+        meta_path.write_text(_yaml.safe_dump(raw))
+        reloaded = wg_mod.load(home, wg.meta.id)
+        assert reloaded is not None and reloaded.meta.quorum_timeout_seconds == 0

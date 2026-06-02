@@ -69,8 +69,6 @@ def test_terminal_failure_surfaces_exit_code() -> None:
 
 
 def test_terminal_foreground_emits_heartbeat(monkeypatch) -> None:
-    """A blocking foreground command posts tool_state heartbeats while it runs,
-    so the daemon idle-turn timeout sees a live producer, not a hung one."""
     from alpi.tools import _state as tool_state_mod
     from alpi.tools import terminal as terminal_mod
 

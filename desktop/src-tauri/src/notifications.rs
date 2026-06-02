@@ -144,6 +144,10 @@ pub fn dispatch_daemon_frame(app: &AppHandle, frame: &serde_json::Value) {
                 .and_then(|v| v.as_str())
                 .unwrap_or("")
                 .to_string();
+            // Gate is_active on focus: ACTIVE_VIEW stays set after blur, so alone it's stale.
+            if window_focused(app) && is_active("workgroup", &wg_id) {
+                return;
+            }
             let summary = data
                 .get("summary")
                 .and_then(|v| v.as_str())
@@ -237,6 +241,9 @@ pub fn dispatch_daemon_frame(app: &AppHandle, frame: &serde_json::Value) {
                 .and_then(|v| v.as_str())
                 .unwrap_or("")
                 .to_string();
+            if window_focused(app) && !session_id.is_empty() && is_active("chat", &session_id) {
+                return;
+            }
             // output_id is the v0.6.11+ path; older daemons fall back to the chat/profile deeplink.
             let deeplink = if !output_id.is_empty() {
                 Deeplink {

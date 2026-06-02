@@ -175,6 +175,8 @@ class Meta:
     notify_on_close: str = "none"
     # Ordered phase slugs (empty = deliberation wg); lets continuation advance phases deterministically. Owners/deliverables live in the org, not here.
     pipeline: tuple[str, ...] = ()
+    # Closure-quorum grace (s) before the hub may `#done` with no substantive peer input; 0 = the _FULL_QUORUM_TIMEOUT_SECONDS default.
+    quorum_timeout_seconds: int = 0
 
 
 @dataclass
@@ -205,6 +207,15 @@ def _new_id() -> str:
     return "wg_" + base64.b32encode(secrets.token_bytes(10)).decode("ascii").lower().rstrip("=")
 
 
+def _coerce_positive_int(value: object) -> int:
+    """Non-negative int, else 0 (the default) — tolerant of junk/negatives in meta.yaml; a negative timeout would let the hub close instantly."""
+    try:
+        n = int(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return 0
+    return n if n > 0 else 0
+
+
 def _load_meta(d: Path) -> Meta | None:
     p = d / _META
     if not p.exists():
@@ -232,6 +243,7 @@ def _load_meta(d: Path) -> Meta | None:
             auto_kickoff=bool(raw.get("auto_kickoff", True)),
             notify_on_close=str(raw.get("notify_on_close") or "none"),
             pipeline=pipeline,
+            quorum_timeout_seconds=_coerce_positive_int(raw.get("quorum_timeout_seconds")),
         )
     except KeyError:
         return None
@@ -262,6 +274,8 @@ def _save_meta(d: Path, meta: Meta) -> None:
         payload["notify_on_close"] = meta.notify_on_close
     if meta.pipeline:
         payload["pipeline"] = list(meta.pipeline)
+    if meta.quorum_timeout_seconds:
+        payload["quorum_timeout_seconds"] = meta.quorum_timeout_seconds
     (d / _META).write_text(yaml.safe_dump(payload, sort_keys=False, allow_unicode=True))
 
 

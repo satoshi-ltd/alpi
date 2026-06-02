@@ -799,6 +799,35 @@ def test_hub_rotation_done_allowed_after_timeout_even_when_pending() -> None:
     )
 
 
+def test_hub_rotation_custom_quorum_timeout_allows_earlier_close() -> None:
+    two_min_ago = (
+        _dt.datetime.now(tz=_dt.timezone.utc) - _dt.timedelta(minutes=2)
+    ).strftime("%Y-%m-%dT%H:%M:%SZ")
+    posts = [
+        _post(1, "HUB", "#task #x X", ts=two_min_ago),
+        _post(2, "BOB", "answer", ts=two_min_ago),
+    ]
+    # Default 10-min timeout: CAROL still pending → blocked.
+    with pytest.raises(ValueError, match="closure-quorum"):
+        wc._check_hub_rotation(posts, "HUB", "#done foo", ["BOB", "CAROL"])
+    # 60s timeout: 2 min elapsed > 60s → close allowed.
+    wc._check_hub_rotation(posts, "HUB", "#done foo", ["BOB", "CAROL"], 60)
+
+
+def test_hub_rotation_custom_quorum_timeout_can_extend() -> None:
+    eleven_min_ago = (
+        _dt.datetime.now(tz=_dt.timezone.utc) - _dt.timedelta(minutes=11)
+    ).strftime("%Y-%m-%dT%H:%M:%SZ")
+    posts = [
+        _post(1, "HUB", "#task #x X", ts=eleven_min_ago),
+        _post(2, "BOB", "answer", ts=eleven_min_ago),
+    ]
+    with pytest.raises(ValueError, match="closure-quorum"):
+        wc._check_hub_rotation(
+            posts, "HUB", "#done foo", ["BOB", "CAROL"], 30 * 60,
+        )
+
+
 def test_hub_rotation_task_always_allowed_even_back_to_back() -> None:
     posts = [_post(1, "HUB", "#task #original original")]
     wc._check_hub_rotation(

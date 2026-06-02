@@ -145,6 +145,88 @@ def test_empty_cache_returns_no_trigger() -> None:
     assert new_seq == 0
 
 
+def test_working_redispatch_after_member_heartbeat() -> None:
+    posts = [
+        {
+            "seq": 1,
+            "ts": "2026-06-02T10:00:00Z",
+            "text": "@quill #task #content write content",
+            "from": "hub_pk",
+        },
+        {
+            "seq": 2,
+            "ts": "2026-06-02T10:01:00Z",
+            "text": "#working writing content files (write_file)",
+            "from": "quill_pk",
+        },
+    ]
+    reason = service._working_redispatch_reason(
+        "quill", "quill_pk", posts, "2026-06-02T10:00:30Z", "hub_pk",
+    )
+    assert reason and "resume after #working" in reason
+
+
+def test_working_redispatch_not_repeated_for_same_heartbeat() -> None:
+    posts = [
+        {
+            "seq": 1,
+            "ts": "2026-06-02T10:00:00Z",
+            "text": "@quill #task #content write content",
+            "from": "hub_pk",
+        },
+        {
+            "seq": 2,
+            "ts": "2026-06-02T10:01:00Z",
+            "text": "#working writing content files (write_file)",
+            "from": "quill_pk",
+        },
+    ]
+    reason = service._working_redispatch_reason(
+        "quill", "quill_pk", posts, "2026-06-02T10:02:00Z", "hub_pk",
+    )
+    assert reason is None
+
+
+def test_working_redispatch_ignores_nonparticipant() -> None:
+    posts = [
+        {
+            "seq": 1,
+            "ts": "2026-06-02T10:00:00Z",
+            "text": "@quill #task #content write content",
+            "from": "hub_pk",
+        },
+        {
+            "seq": 2,
+            "ts": "2026-06-02T10:01:00Z",
+            "text": "#working writing content files (write_file)",
+            "from": "quill_pk",
+        },
+    ]
+    reason = service._working_redispatch_reason(
+        "pixel", "pixel_pk", posts, "2026-06-02T10:00:30Z", "hub_pk",
+    )
+    assert reason is None
+
+
+def test_working_redispatch_allows_same_second_as_dispatch() -> None:
+    # #working in the SAME second the dispatch was stamped must still re-dispatch
+    # (second-granular timestamps; a strict > would wrongly suppress it).
+    posts = [
+        {
+            "seq": 1, "ts": "2026-06-02T10:00:00Z",
+            "text": "@quill #task #content write content", "from": "hub_pk",
+        },
+        {
+            "seq": 2, "ts": "2026-06-02T10:00:30Z",
+            "text": "#working writing content files (write_file)", "from": "quill_pk",
+        },
+    ]
+    reason = service._working_redispatch_reason(
+        "quill", "quill_pk", posts, "2026-06-02T10:00:30Z", "hub_pk",
+    )
+    assert reason and "resume after #working" in reason
+
+
 # Cooldown — `_in_cooldown_str`
 
 
@@ -250,10 +332,10 @@ async def test_dispatch_records_start_and_end_events(short_tmp: Path) -> None:
     real_create = service.asyncio.create_subprocess_exec
 
     async def fake_create(*argv, **kw):
-        # Use a trivial `python -c "pass"` command.
+        # Use a trivial process that emits one event line.
         return await real_create(
-            _sys.executable, "-c", "pass",
-            stdout=service.asyncio.subprocess.DEVNULL,
+            _sys.executable, "-c", "print('{\"kind\":\"tool_start\"}')",
+            stdout=service.asyncio.subprocess.PIPE,
             stderr=service.asyncio.subprocess.PIPE,
         )
 
@@ -279,6 +361,7 @@ async def test_dispatch_records_start_and_end_events(short_tmp: Path) -> None:
     assert events[1]["rc"] == 0
     assert "duration_s" in events[1]
     assert events[1]["posts_added"] == 0
+    assert events[1]["event_tail"] == '{"kind":"tool_start"}'
 
 
 @pytest.mark.asyncio
@@ -300,8 +383,9 @@ async def test_dispatch_timeout_kills_and_records(
     async def fake_create(*argv, **kw):
         # Sleep past the ceiling to force timeout.
         return await real_create(
-            _sys.executable, "-c", "import time; time.sleep(30)",
-            stdout=service.asyncio.subprocess.DEVNULL,
+            _sys.executable, "-c",
+            "import time; print('{\"kind\":\"tool_state\"}', flush=True); time.sleep(30)",
+            stdout=service.asyncio.subprocess.PIPE,
             stderr=service.asyncio.subprocess.PIPE,
         )
 
@@ -320,6 +404,7 @@ async def test_dispatch_timeout_kills_and_records(
     assert events[1]["event"] == "timeout"
     assert events[1]["killed"] is True
     assert events[1]["duration_s"] >= 0.5
+    assert events[1]["event_tail"] == '{"kind":"tool_state"}'
 
 
 def test_collective_task_silent_after_hub_done() -> None:
@@ -808,6 +893,47 @@ def test_next_pipeline_phase_terminal_fail_reopens_rebuild() -> None:
     assert (nxt, latest, known) == ("build", "qa", True)
 
 
+def test_next_pipeline_phase_terminal_recheck_green_completes() -> None:
+    wg = _pipe_wg(["intake", "content", "translation", "build", "qa"])
+    recent = [
+        {"seq": 1, "from": "HUB", "text": "@pixel #task #build wire it"},
+        {"seq": 2, "from": "HUB", "text": "#done build green"},
+        {"seq": 3, "from": "HUB", "text": "@lens #task #qa audit dist"},
+        {"seq": 4, "from": "LENS", "text": "FAIL placeholder content"},
+        {"seq": 5, "from": "HUB", "text": "@quill #task #content-fix remove placeholders"},
+        {"seq": 6, "from": "HUB", "text": "#done content-fix verified"},
+        {"seq": 7, "from": "HUB", "text": "@pixel #task #build-recheck rebuild"},
+        {"seq": 8, "from": "HUB", "text": "#done build-recheck verified"},
+        {"seq": 9, "from": "HUB", "text": "@lens #task #qa-recheck re-audit"},
+        {"seq": 10, "from": "HUB", "text": "#done QA green / PASS"},
+    ]
+    nxt, latest, known = service._next_pipeline_phase(wg, recent)
+    assert (nxt, latest, known) == (None, "qa", True)
+
+
+def test_canonical_pipeline_slug_maps_variants() -> None:
+    pipe = ["intake", "content", "build", "qa"]
+    assert service._canonical_pipeline_slug("qa", pipe) == "qa"
+    assert service._canonical_pipeline_slug("qa-recheck", pipe) == "qa"
+    assert service._canonical_pipeline_slug("content-fix", pipe) == "content"
+    assert service._canonical_pipeline_slug("design", pipe) is None
+    # Longest-prefix wins so a `qa-final` phase isn't shadowed by `qa`.
+    assert service._canonical_pipeline_slug("qa-final-recheck", ["qa", "qa-final"]) == "qa-final"
+
+
+def test_is_success_result() -> None:
+    assert service._is_success_result("QA green / PASS")
+    assert service._is_success_result("verde")
+    assert service._is_success_result("verified · dist ok")
+    # Negatives win even when "pass"/"green" appear in the text.
+    assert not service._is_success_result("FAIL placeholder content")
+    assert not service._is_success_result("preempted by #content-fix")
+    assert not service._is_success_result("did not pass")
+    assert not service._is_success_result("not passing yet")
+    assert not service._is_success_result("FAIL: pass criteria not met")
+    assert not service._is_success_result("BLOCKED · qa · green build missing")
+
+
 def test_next_pipeline_phase_terminal_pass_completes() -> None:
     """A clean terminal pass (qa #done, no fix-loop after) completes — no reopen."""
     wg = _pipe_wg(["intake", "content", "translation", "build", "qa"])
@@ -857,8 +983,6 @@ def test_next_pipeline_phase_blocked_on_variant_halts_over_fixloop() -> None:
 
 
 class _FakeProc:
-    """Stands in for an asyncio subprocess: a single resolvable `wait()`, plus
-    terminate/kill that resolve it (the OS would reap the child on signal)."""
 
     def __init__(self) -> None:
         self.pid = 4321
@@ -885,8 +1009,6 @@ class _FakeProc:
 
 @pytest.mark.asyncio
 async def test_supervise_turn_active_survives_to_natural_exit() -> None:
-    """A turn that keeps emitting activity within the idle window is never
-    killed — it runs to its own clean exit."""
     proc = _FakeProc()
     start = time.monotonic()
     last = [start]
@@ -908,7 +1030,6 @@ async def test_supervise_turn_active_survives_to_natural_exit() -> None:
 
 @pytest.mark.asyncio
 async def test_supervise_turn_idle_kills_silent_turn() -> None:
-    """A turn that emits nothing is killed at the idle window, not the backstop."""
     proc = _FakeProc()
     start = time.monotonic()
     last = [start]
@@ -922,8 +1043,6 @@ async def test_supervise_turn_idle_kills_silent_turn() -> None:
 
 @pytest.mark.asyncio
 async def test_supervise_turn_backstop_caps_noisy_turn() -> None:
-    """Continuous activity resets the idle timer, but the absolute backstop
-    still caps a turn that never finishes."""
     proc = _FakeProc()
     start = time.monotonic()
     last = [start]
@@ -948,7 +1067,6 @@ async def test_supervise_turn_backstop_caps_noisy_turn() -> None:
 
 @pytest.mark.asyncio
 async def test_kill_proc_escalates_to_sigkill(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A child that ignores SIGTERM is SIGKILLed after the grace window."""
     monkeypatch.setattr(service, "_TURN_SIGTERM_GRACE_SECONDS", 0.1)
     proc = _FakeProc()
     proc.terminate = lambda: proc.signals.append("term")  # swallow SIGTERM
@@ -960,9 +1078,6 @@ async def test_kill_proc_escalates_to_sigkill(monkeypatch: pytest.MonkeyPatch) -
 
 @pytest.mark.asyncio
 async def test_stdout_activity_keeps_turn_alive_via_drain() -> None:
-    """Integration of the real wiring: drain_tail(on_activity=…) → last_activity
-    → _supervise_turn. A child emitting a stdout line within the idle window is
-    never idle-killed; it exits on its own when its output stream closes."""
     from alpi._proc_io import drain_tail
 
     reader = asyncio.StreamReader()
@@ -991,7 +1106,6 @@ async def test_stdout_activity_keeps_turn_alive_via_drain() -> None:
 
 
 def test_turn_idle_timeout_for_pipeline_is_wider() -> None:
-    """Pipeline phases get a wider idle window than deliberation turns."""
     assert service._turn_idle_timeout_for(True) > service._turn_idle_timeout_for(False)
 
 
@@ -1018,7 +1132,6 @@ def _fake_hub_wg(paused: bool):
 
 @pytest.mark.asyncio
 async def test_watchdog_skips_paused_workgroup(short_tmp: Path, monkeypatch) -> None:
-    """A paused workgroup must not wake the hub via the watchdog — no dispatch, no burn."""
     calls: list = []
     monkeypatch.setattr(service, "_spawn_dispatch", lambda *a, **k: calls.append(a))
     wg = _fake_hub_wg(paused=True)
@@ -1029,7 +1142,6 @@ async def test_watchdog_skips_paused_workgroup(short_tmp: Path, monkeypatch) -> 
 
 @pytest.mark.asyncio
 async def test_hub_dispatch_skips_paused_workgroup(short_tmp: Path, monkeypatch) -> None:
-    """A paused workgroup must not dispatch the hub on new activity."""
     calls: list = []
     monkeypatch.setattr(service, "_spawn_dispatch", lambda *a, **k: calls.append(a))
     wg = _fake_hub_wg(paused=True)
@@ -1040,7 +1152,6 @@ async def test_hub_dispatch_skips_paused_workgroup(short_tmp: Path, monkeypatch)
 
 @pytest.mark.asyncio
 async def test_member_dispatch_skips_paused_sub(short_tmp: Path, monkeypatch) -> None:
-    """A member whose hub paused the workgroup must not be dispatched."""
     from types import SimpleNamespace
     calls: list = []
     monkeypatch.setattr(service, "_spawn_dispatch", lambda *a, **k: calls.append(a))
@@ -1053,8 +1164,6 @@ async def test_member_dispatch_skips_paused_sub(short_tmp: Path, monkeypatch) ->
 
 
 def test_resume_resets_poller_state_for_wg(short_tmp: Path) -> None:
-    """resume drops the 'already handled' guards for that wg so the next tick
-    re-evaluates — without touching other workgroups' state."""
     home = short_tmp / "mira"; home.mkdir()
     service._set_hub_watchdog_seq(home, "wg_x", 7)
     service._bump_hub_watchdog_count(home, "wg_x", 7)

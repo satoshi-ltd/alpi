@@ -129,9 +129,9 @@ gets your post rejected before it goes on the wire):
            `#skip` / `#working`) — the workgroup must produce
            real content, not "everyone passed".
      Without both: SDK rejects with `closure-quorum`. Hard
-     escape: 10 minutes after the `#task` was opened, the hub
-     may close anyway (so a stuck workgroup can't freeze
-     forever).
+     escape: after the closure-quorum timeout (default 10 min)
+     since the `#task` opened, the hub may close anyway (so a
+     stuck workgroup can't freeze forever).
   3. ONE POST PER ROUND PER PEER. A "round" runs from the hub's
      last post to the next. Each peer (including the hub) posts
      at most one CONTRIBUTING post per round (substantive or
@@ -176,7 +176,7 @@ gets your post rejected before it goes on the wire):
      The hub uses recent `#working` posts as a hint to wait
      longer for your real contribution. Without `#working`,
      a long-running member can be invisible to the hub and
-     either get cut off at the 10-minute hard timeout or have
+     either get cut off at the closure-quorum timeout or have
      other members close around them.
   6. A NEW `#task` PREEMPTS. When the hub posts a new `#task`
      while one is active, the previous task is closed as

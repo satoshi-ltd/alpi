@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.6.34 — 2026-06-02 — workgroup turns recover and pipelines stop cleanly
+
+- **Pipeline rechecks now stop at green.** A terminal phase variant such as
+  `#qa-recheck` now maps back to its canonical pipeline phase (`qa`), so a
+  green/PASS recheck completes the pipeline instead of reopening `build → qa`
+  after launch. Negative results (`FAIL`, `BLOCKED`, `not pass`, etc.) still
+  win and keep the repair/blocking path intact.
+- **A member that heartbeats then dies is retried.** When a workgroup member
+  posts `#working` (the "still busy" heartbeat) but its turn ends without
+  delivering, the hub now re-dispatches that member instead of leaving the task
+  to stall until the watchdog escalates — bounded to one retry per heartbeat.
+- **Killed turns leave a trail.** Each turn now records the tail of its activity
+  (and why it was stopped — idle vs hard cap) in the workgroup turn log, so a
+  turn that died mid-tool is diagnosable instead of vanishing silently.
+- **Per-workgroup closure deadline.** The wait before a hub may close a task
+  with no peer input (default 10 minutes) is now configurable per workgroup.
+
 ## v0.6.33 — 2026-06-02 — workgroup turns die only when truly stuck
 
 - **A productive turn is no longer killed by the clock.** A workgroup turn

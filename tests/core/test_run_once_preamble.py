@@ -97,8 +97,6 @@ def test_no_tool_calls_keeps_full_reply(tmp_home: Path, monkeypatch) -> None:
 
 
 def test_emit_events_serializes_tool_state(tmp_home: Path, monkeypatch) -> None:
-    """`--emit-events` must serialize mid-tool `tool_state` to stdout — it is the
-    daemon idle-timeout's sign-of-life for a long-running tool (e.g. a build)."""
     import json
 
     monkeypatch.setattr(_cli_mod, "_bootstrap", lambda _h: None)

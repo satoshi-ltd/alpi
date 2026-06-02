@@ -1,23 +1,75 @@
 name: publish-docker
 
+# Release pipeline for the Docker image. Chained off the alpi release like
+# publish-site: when `publish` (PyPI) completes successfully on main, build +
+# push the image for that version. The workflow_run success gate ensures a
+# failed release never ships an image. The image builds from local source
+# (docker/Dockerfile COPYs alpi/ + pip install .), so it needs no PyPI wheel.
+#
+#   alpi (CLI) → `vX.Y.Z`         → PyPI + GitHub release   (publish.yml)
+#   docker     → `docker-vX.Y.Z`  → Docker Hub + ghcr image (this workflow)
+
 on:
-  push:
-    tags:
-      - "v*"
   workflow_dispatch:
     inputs:
-      tag:
-        description: Image tag (leave empty to use pyproject.toml version)
-        required: false
-        default: ""
+      force:
+        description: "publish even if docker-v<version> already exists"
+        type: boolean
+        default: false
+  workflow_run:
+    workflows: ["publish"]
+    types: [completed]
+    branches: [main]
 
-permissions:
-  contents: read
-  packages: write
+permissions: {}
 
 jobs:
-  docker:
+  # Cheap probe: should we publish? Only on a successful parent release (or a
+  # manual run). Skip if `docker-v$version` already tagged on origin — that
+  # version's image is already out; force=true overrides.
+  check-version:
+    name: should we publish?
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      should_publish: ${{ steps.gate.outputs.should_publish }}
+      version: ${{ steps.gate.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: gate
+        run: |
+          version=$(python3 -c "import tomllib, pathlib; print(tomllib.loads(pathlib.Path('pyproject.toml').read_text())['project']['version'])")
+          tag="docker-v$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "pyproject version: $version  implied tag: $tag"
+
+          if [ "${{ github.event.inputs.force }}" = "true" ]; then
+            echo "should_publish=true" >> "$GITHUB_OUTPUT"
+            echo "manual force=true — proceeding"
+            exit 0
+          fi
+          if git ls-remote --tags origin "refs/tags/$tag" | grep -q "$tag"; then
+            echo "should_publish=false" >> "$GITHUB_OUTPUT"
+            echo "tag $tag already exists on origin — skipping"
+          else
+            echo "should_publish=true" >> "$GITHUB_OUTPUT"
+            echo "tag $tag is new — will publish"
+          fi
+
+  docker:
+    name: build + push image
+    needs: check-version
+    if: needs.check-version.outputs.should_publish == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # push the docker-v<version> tag
+      packages: write   # push to ghcr
+    env:
+      VERSION: ${{ needs.check-version.outputs.version }}
     steps:
       - uses: actions/checkout@v5
 
@@ -36,26 +88,6 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Resolve image tag
-        id: image
-        shell: bash
-        run: |
-          tag="${{ inputs.tag }}"
-          # tag refs only — a branch ref would yield the invalid tag `refs/heads/main`
-          if [ -z "$tag" ] && [[ "$GITHUB_REF" == refs/tags/* ]]; then
-            ref="${GITHUB_REF#refs/tags/}"
-            tag="${ref#v}"
-          fi
-          if [ -z "$tag" ]; then
-            tag=$(grep '^version = ' pyproject.toml | head -1 | cut -d'"' -f2)
-          fi
-          if [ -z "$tag" ]; then
-            echo "::error::could not resolve image tag"
-            exit 1
-          fi
-          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
-          echo "Resolved tag: ${tag}"
-
       - uses: docker/build-push-action@v7
         with:
           context: .
@@ -63,7 +95,20 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
-            satoshiltd/alpi:${{ steps.image.outputs.tag }}
+            satoshiltd/alpi:${{ env.VERSION }}
             satoshiltd/alpi:latest
-            ghcr.io/${{ github.repository_owner }}/alpi:${{ steps.image.outputs.tag }}
+            ghcr.io/${{ github.repository_owner }}/alpi:${{ env.VERSION }}
             ghcr.io/${{ github.repository_owner }}/alpi:latest
+
+      # Mark this version as published so a later parent run for the same
+      # version skips instead of rebuilding an identical image.
+      - name: tag commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git rev-parse "docker-v$VERSION" >/dev/null 2>&1; then
+            echo "tag docker-v$VERSION already exists — skipping"
+          else
+            git tag -a "docker-v$VERSION" -m "docker-v$VERSION"
+            git push origin "docker-v$VERSION"
+          fi

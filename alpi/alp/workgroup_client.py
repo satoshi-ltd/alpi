@@ -206,6 +206,7 @@ def _validate_task_participants(home: Path, wg, plaintext: str) -> None:
 def _check_hub_rotation(
     posts: list[dict], own_pubkey: str, plaintext: str,
     member_pubkeys: list[str] | None = None,
+    quorum_timeout: int = _FULL_QUORUM_TIMEOUT_SECONDS,
 ) -> None:
     """Reject hub back-to-back content or premature `#done`."""
     if not posts:
@@ -247,10 +248,14 @@ def _check_hub_rotation(
             for p in in_task
         )
         age = _opener_age_seconds(opener)
-        if not non_hub_substantive and age < _FULL_QUORUM_TIMEOUT_SECONDS:
+        window = (
+            f"{quorum_timeout}s" if quorum_timeout < 60
+            else f"{quorum_timeout // 60}-minute"
+        )
+        if not non_hub_substantive and age < quorum_timeout:
             raise ValueError(
                 "closure-quorum: no substantive peer input yet. "
-                f"Wait for content or the {_FULL_QUORUM_TIMEOUT_SECONDS // 60}-minute timeout "
+                f"Wait for content or the {window} timeout "
                 f"({int(age)}s elapsed)."
             )
         expected = [
@@ -266,7 +271,7 @@ def _check_hub_rotation(
                 )
             }
             pending = [pk for pk in expected if pk not in spoken]
-            if pending and age < _FULL_QUORUM_TIMEOUT_SECONDS:
+            if pending and age < quorum_timeout:
                 short = [f"{pk[:12]}…" for pk in pending]
                 raise ValueError(
                     f"closure-quorum: {len(pending)} member(s) still "
@@ -591,6 +596,7 @@ def _post_as_hub(
     quorum_roster = _quorum_roster(home, wg, existing, member_pubkeys)
     _check_hub_rotation(
         existing, kp.pubkey_b64(), plaintext, quorum_roster,
+        wg.meta.quorum_timeout_seconds or _FULL_QUORUM_TIMEOUT_SECONDS,
     )
 
     group_key = wg_mod.open_sealed_group_key(own.sealed_key, kp)

@@ -1006,13 +1006,13 @@ post (the hub's post itself opens the round). With that:
      the hub's `#done` would be a solo synthesis with zero
      peer input — degenerate. Rejected.
 
-   **Hard timeout escape.** Both checks soft-fail after 10
-   minutes from `#task` open: the hub may `#done` anyway. This
-   covers stuck workgroups (offline member, all-skip
-   degenerate) without freezing forever. Window is generous
-   enough for a peer doing heavy `web_fetch` + analysis. The
-   10-minute ceiling is fixed in the reference implementation;
-   per-workgroup configuration is on the roadmap.
+   **Hard timeout escape.** Both checks soft-fail after the
+   closure-quorum timeout (default 10 minutes) from `#task`
+   open: the hub may `#done` anyway. This covers stuck
+   workgroups (offline member, all-skip degenerate) without
+   freezing forever. Window is generous enough for a peer doing
+   heavy `web_fetch` + analysis, and is per-workgroup
+   configurable via `meta.quorum_timeout_seconds`.
 
    **`#skip` marker.** Members' explicit pass. Counts toward
    full participation but not toward substantive. Reserved for
@@ -1027,8 +1027,8 @@ post (the hub's post itself opens the round). With that:
    research). Exempt from rotation (member can still post
    substantive in same round) and from quorum (the member must
    come back to deliver). The hub uses recent `#working` posts
-   as a signal to extend its waiting window — but the 10-minute
-   hard timeout still applies as a ceiling. Without `#working`,
+   as a signal to extend its waiting window — but the
+   closure-quorum timeout still applies as a ceiling. Without `#working`,
    a long-running peer is invisible to the hub and may get
    closed-around or hit the timeout.
 3. **Stale round.** If the dispatcher woke a member against round
@@ -1255,7 +1255,7 @@ Humans intervene through their alpi, not directly:
 - **Force-close stuck workgroups**: post `#done` from the hub
   when the operator decides the workgroup has produced enough
   (or when an offline peer is keeping it stalled past the
-  10-minute closure-quorum timeout).
+  closure-quorum timeout, default 10 minutes).
 - **Pause / resume** as hub when work needs to halt outside
   budget exhaustion (e.g., the operator wants to inspect
   before more spend).

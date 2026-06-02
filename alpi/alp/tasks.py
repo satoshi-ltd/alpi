@@ -60,7 +60,7 @@ _SKIP_RE = re.compile(
 # afterwards in the same round. Does NOT satisfy closure-quorum on
 # its own (a member who only `#working`'d hasn't actually
 # contributed). The hub uses recent `#working` posts as a hint to
-# wait longer, but the 10-minute closure-quorum timeout still
+# wait longer, but the closure-quorum timeout still
 # applies as a hard ceiling.
 _WORKING_RE = re.compile(
     r"^(?:@\S+\s+)*#working(?:\s+(.+?))?\s*$", re.MULTILINE,
