@@ -370,6 +370,7 @@ async def join(home: Path, peer_id: str, wg_id: str) -> sub_mod.Subscription:
         sub.name = str(result.get("name") or "")
     sub.briefing = str(result.get("briefing") or "")
     sub.pipeline = sub_mod.coerce_pipeline(result.get("pipeline"))
+    sub.paused = bool(result.get("paused", False))
     sub.upsert_key(int(result.get("key_version", 1)), str(result["sealed_key"]))
     _absorb_roster(sub, result.get("members"))
     sub_mod.upsert(home, sub)
@@ -647,6 +648,7 @@ async def pull(
     # Refresh the pipeline phase list every pull so a hub-side change after
     # join propagates to already-subscribed members (default: keep current).
     sub.pipeline = sub_mod.coerce_pipeline(raw.get("pipeline", sub.pipeline))
+    sub.paused = bool(raw.get("paused", sub.paused))
     sub.append_recent(decrypted)
     _absorb_roster(sub, raw.get("members"))
     sub_mod.upsert(home, sub)
@@ -737,6 +739,15 @@ async def _set_paused(home: Path, wg_id: str, paused: bool) -> dict[str, Any]:
             wg.meta.paused_at = wg_mod._utcnow() if paused else ""
             wg.meta.paused_by = own_pubkey if paused else ""
             wg_mod._save_meta(wg_mod._wg_dir(home, wg_id), wg.meta)
+            if not paused:
+                # Resume: clear the poller's "already handled" guards so the
+                # next tick re-evaluates instead of staying silent on counters
+                # consumed before the pause.
+                try:
+                    from alpi import service as _service
+                    _service.reset_workgroup_poller_state(home, wg_id)
+                except Exception:  # noqa: BLE001
+                    pass
         return {
             "workgroup_id": wg_id,
             "paused": paused,

@@ -68,6 +68,23 @@ def test_terminal_failure_surfaces_exit_code() -> None:
     assert "[exit 1]" in r.output
 
 
+def test_terminal_foreground_emits_heartbeat(monkeypatch) -> None:
+    """A blocking foreground command posts tool_state heartbeats while it runs,
+    so the daemon idle-turn timeout sees a live producer, not a hung one."""
+    from alpi.tools import _state as tool_state_mod
+    from alpi.tools import terminal as terminal_mod
+
+    monkeypatch.setattr(terminal_mod, "_FG_HEARTBEAT_SECONDS", 0.1)
+    beats: list[str] = []
+    tool_state_mod.set_emit(lambda label, is_err=False: beats.append(label))
+    try:
+        r = Terminal().run(command="sleep 0.35")
+    finally:
+        tool_state_mod.set_emit(None)
+    assert r.ok
+    assert any("running" in b for b in beats)
+
+
 def test_terminal_background_and_kill(
     tmp_home_no_env: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:

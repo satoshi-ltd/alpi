@@ -816,6 +816,7 @@ def register(server: alp_server.Server, home: Path) -> None:
             "name": wg.meta.name,
             "briefing": wg.meta.briefing,
             "pipeline": list(wg.meta.pipeline),
+            "paused": wg.meta.paused,
             "sealed_key": member.sealed_key,
             "key_version": member.key_version,
             "current_key_version": wg.meta.current_key_version,
@@ -941,6 +942,7 @@ def register(server: alp_server.Server, home: Path) -> None:
             "head": all_posts[-1]["seq"] if all_posts else 0,
             "current_key_version": wg.meta.current_key_version,
             "pipeline": list(wg.meta.pipeline),
+            "paused": wg.meta.paused,
             "sealed_key": member.sealed_key,
             "members": [
                 {
@@ -1036,6 +1038,14 @@ def register(server: alp_server.Server, home: Path) -> None:
             wg.meta.paused_at = ""
             wg.meta.paused_by = ""
             _save_meta(_wg_dir(home, wg_id), wg.meta)
+            # Clear the poller's "already handled" guards so the next tick
+            # re-evaluates the transcript instead of staying silent on counters
+            # consumed before the pause.
+            try:
+                from alpi import service as _service
+                _service.reset_workgroup_poller_state(home, wg_id)
+            except Exception:  # noqa: BLE001
+                pass
         return {"workgroup_id": wg.meta.id, "paused": False}
 
     server.register("workgroup.join", workgroup_join)

@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
 import datetime as _dt
 import shutil
 import tempfile
+import time
 from pathlib import Path
 
 import pytest
@@ -849,3 +851,226 @@ def test_next_pipeline_phase_blocked_on_variant_halts_over_fixloop() -> None:
         {"seq": 9, "from": "HUB", "text": "#done BLOCKED · template · zh-Hans chrome leak"},
     ]
     assert service._next_pipeline_phase(wg, recent) == (None, "qa-recheck", True)
+
+
+# `_supervise_turn` — idle-based kill (ALP.3.I-a).
+
+
+class _FakeProc:
+    """Stands in for an asyncio subprocess: a single resolvable `wait()`, plus
+    terminate/kill that resolve it (the OS would reap the child on signal)."""
+
+    def __init__(self) -> None:
+        self.pid = 4321
+        self.signals: list[str] = []
+        self._exit: asyncio.Future[int] = asyncio.Future()
+
+    async def wait(self) -> int:
+        return await self._exit
+
+    def terminate(self) -> None:
+        self.signals.append("term")
+        if not self._exit.done():
+            self._exit.set_result(-15)
+
+    def kill(self) -> None:
+        self.signals.append("kill")
+        if not self._exit.done():
+            self._exit.set_result(-9)
+
+    def exit(self, rc: int = 0) -> None:
+        if not self._exit.done():
+            self._exit.set_result(rc)
+
+
+@pytest.mark.asyncio
+async def test_supervise_turn_active_survives_to_natural_exit() -> None:
+    """A turn that keeps emitting activity within the idle window is never
+    killed — it runs to its own clean exit."""
+    proc = _FakeProc()
+    start = time.monotonic()
+    last = [start]
+
+    async def driver() -> None:
+        for _ in range(8):  # bump every 50ms < idle(300ms) for ~0.4s
+            await asyncio.sleep(0.05)
+            last[0] = time.monotonic()
+        proc.exit(0)
+
+    drv = asyncio.ensure_future(driver())
+    rc, timed_out, reason = await service._supervise_turn(
+        proc, last, idle_timeout=0.3, backstop=5.0, started_at=start,
+    )
+    await drv
+    assert (rc, timed_out, reason) == (0, False, None)
+    assert proc.signals == []  # never signalled
+
+
+@pytest.mark.asyncio
+async def test_supervise_turn_idle_kills_silent_turn() -> None:
+    """A turn that emits nothing is killed at the idle window, not the backstop."""
+    proc = _FakeProc()
+    start = time.monotonic()
+    last = [start]
+    rc, timed_out, reason = await service._supervise_turn(
+        proc, last, idle_timeout=0.2, backstop=5.0, started_at=start,
+    )
+    assert timed_out and reason == "idle"
+    assert "term" in proc.signals
+    assert time.monotonic() - start < 1.0  # prompt, well before backstop
+
+
+@pytest.mark.asyncio
+async def test_supervise_turn_backstop_caps_noisy_turn() -> None:
+    """Continuous activity resets the idle timer, but the absolute backstop
+    still caps a turn that never finishes."""
+    proc = _FakeProc()
+    start = time.monotonic()
+    last = [start]
+    stop = asyncio.Event()
+
+    async def noisy() -> None:
+        while not stop.is_set():
+            await asyncio.sleep(0.05)
+            last[0] = time.monotonic()
+
+    drv = asyncio.ensure_future(noisy())
+    try:
+        rc, timed_out, reason = await service._supervise_turn(
+            proc, last, idle_timeout=1.0, backstop=0.4, started_at=start,
+        )
+    finally:
+        stop.set()
+        await drv
+    assert timed_out and reason == "backstop"
+    assert 0.3 < time.monotonic() - start < 1.0  # killed at backstop, not idle
+
+
+@pytest.mark.asyncio
+async def test_kill_proc_escalates_to_sigkill(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A child that ignores SIGTERM is SIGKILLed after the grace window."""
+    monkeypatch.setattr(service, "_TURN_SIGTERM_GRACE_SECONDS", 0.1)
+    proc = _FakeProc()
+    proc.terminate = lambda: proc.signals.append("term")  # swallow SIGTERM
+    wait_task: asyncio.Future[int] = asyncio.ensure_future(proc.wait())
+    rc = await service._kill_proc(proc, wait_task)
+    assert proc.signals == ["term", "kill"]
+    assert rc == -9
+
+
+@pytest.mark.asyncio
+async def test_stdout_activity_keeps_turn_alive_via_drain() -> None:
+    """Integration of the real wiring: drain_tail(on_activity=…) → last_activity
+    → _supervise_turn. A child emitting a stdout line within the idle window is
+    never idle-killed; it exits on its own when its output stream closes."""
+    from alpi._proc_io import drain_tail
+
+    reader = asyncio.StreamReader()
+    proc = _FakeProc()
+    start = time.monotonic()
+    last = [start]
+    drain = asyncio.ensure_future(
+        drain_tail(reader, on_activity=lambda: last.__setitem__(0, time.monotonic())),
+    )
+
+    async def feeder() -> None:
+        for i in range(8):  # a line every 50ms < idle(0.3) for ~0.4s
+            await asyncio.sleep(0.05)
+            reader.feed_data(f"{{\"kind\": \"tool_state\", \"name\": \"terminal\"}} {i}\n".encode())
+        reader.feed_eof()
+        proc.exit(0)
+
+    feed = asyncio.ensure_future(feeder())
+    rc, timed_out, reason = await service._supervise_turn(
+        proc, last, idle_timeout=0.3, backstop=5.0, started_at=start,
+    )
+    await feed
+    await drain
+    assert (rc, timed_out, reason) == (0, False, None)
+    assert proc.signals == []  # never killed — stdout activity kept it alive
+
+
+def test_turn_idle_timeout_for_pipeline_is_wider() -> None:
+    """Pipeline phases get a wider idle window than deliberation turns."""
+    assert service._turn_idle_timeout_for(True) > service._turn_idle_timeout_for(False)
+
+
+# Paused workgroups run no automatic turns (control-plane gate).
+
+
+def test_subscription_paused_round_trips(short_tmp: Path) -> None:
+    home = short_tmp / "mira"; home.mkdir()
+    (home / "alp").mkdir()
+    sub = sub_mod.Subscription(
+        wg_id="wg_x", name="x", hub_id="h", hub_pubkey="k", paused=True,
+    )
+    sub_mod.upsert(home, sub)
+    reloaded = sub_mod.get(home, "wg_x")
+    assert reloaded is not None and reloaded.paused is True
+
+
+def _fake_hub_wg(paused: bool):
+    from types import SimpleNamespace
+    return SimpleNamespace(meta=SimpleNamespace(
+        paused=paused, hub_pubkey="hub_pk", id="wg_x", name="proj-x", pipeline=(),
+    ))
+
+
+@pytest.mark.asyncio
+async def test_watchdog_skips_paused_workgroup(short_tmp: Path, monkeypatch) -> None:
+    """A paused workgroup must not wake the hub via the watchdog — no dispatch, no burn."""
+    calls: list = []
+    monkeypatch.setattr(service, "_spawn_dispatch", lambda *a, **k: calls.append(a))
+    wg = _fake_hub_wg(paused=True)
+    recent = [{"seq": 1, "from": "hub_pk", "text": "#task #x do it"}]  # open task → would normally nudge
+    await service._maybe_watchdog_close(short_tmp, "mira", wg, recent)
+    assert calls == []
+
+
+@pytest.mark.asyncio
+async def test_hub_dispatch_skips_paused_workgroup(short_tmp: Path, monkeypatch) -> None:
+    """A paused workgroup must not dispatch the hub on new activity."""
+    calls: list = []
+    monkeypatch.setattr(service, "_spawn_dispatch", lambda *a, **k: calls.append(a))
+    wg = _fake_hub_wg(paused=True)
+    recent = [{"seq": 1, "from": "peer_pk", "text": "@mira please act"}]
+    await service._maybe_dispatch_for_hub(short_tmp, "mira", wg, recent)
+    assert calls == []
+
+
+@pytest.mark.asyncio
+async def test_member_dispatch_skips_paused_sub(short_tmp: Path, monkeypatch) -> None:
+    """A member whose hub paused the workgroup must not be dispatched."""
+    from types import SimpleNamespace
+    calls: list = []
+    monkeypatch.setattr(service, "_spawn_dispatch", lambda *a, **k: calls.append(a))
+    sub = SimpleNamespace(
+        paused=True, wg_id="wg_x", hub_pubkey="hub_pk", last_responded_seq=0,
+        recent_posts=[{"seq": 1, "from": "hub_pk", "text": "@quill #task #content go"}],
+    )
+    await service._maybe_dispatch_for_sub(short_tmp, "quill", sub)
+    assert calls == []
+
+
+def test_resume_resets_poller_state_for_wg(short_tmp: Path) -> None:
+    """resume drops the 'already handled' guards for that wg so the next tick
+    re-evaluates — without touching other workgroups' state."""
+    home = short_tmp / "mira"; home.mkdir()
+    service._set_hub_watchdog_seq(home, "wg_x", 7)
+    service._bump_hub_watchdog_count(home, "wg_x", 7)
+    service._set_hub_responded_seq(home, "wg_x", 7)
+    service._bump_hub_continuation_count(home, "wg_x", 5)
+    service._mark_hub_dispatched(home, "wg_x")
+    service._set_hub_watchdog_seq(home, "wg_y", 3)  # bystander
+
+    service.reset_workgroup_poller_state(home, "wg_x")
+
+    st = service._load_poller_state(home)
+    for table in service._RESUMABLE_POLLER_TABLES:
+        assert "wg_x" not in st.get(table, {}), table
+    # re-fireable on the same seq after resume
+    assert service._get_hub_watchdog_seq(home, "wg_x") == 0
+    assert service._get_hub_responded_seq(home, "wg_x") == 0
+    # other workgroup untouched
+    assert st.get("hub_watchdog_fired_seq", {}).get("wg_y") == 3
+    assert service._get_hub_watchdog_seq(home, "wg_y") == 3

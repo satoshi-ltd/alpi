@@ -6,15 +6,19 @@ import os
 import re
 import subprocess
 import tempfile
+import threading
 import time
 from pathlib import Path
 
 from alpi.home import get_home
+from alpi.tools import _state as tool_state_mod
 from alpi.tools._approval import check as approval_check
 from alpi.tools._sandbox import SandboxUnavailable, wrap_command
 from alpi.tools.base import Tool, ToolResult
 
 _ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[a-zA-Z]|\x1b\][^\x07]*\x07|\x1b[@-_]")
+# Heartbeat for a blocking fg command (npm build): posts tool_state so the daemon idle-timeout sees a live producer.
+_FG_HEARTBEAT_SECONDS = 15
 
 
 def _strip_ansi(s: str) -> str:
@@ -184,6 +188,21 @@ class Terminal(Tool):
         except SandboxUnavailable as e:
             return ToolResult(ok=False, output="", error=str(e))
         use_shell = isinstance(popen_args, str)
+        # Capture here: _state's ContextVar doesn't propagate to the heartbeat thread, so it calls emit_cb directly.
+        emit_cb = tool_state_mod.get_emit()
+        stop_beat = threading.Event()
+        beat_thread: threading.Thread | None = None
+        if emit_cb is not None:
+            def _heartbeat() -> None:
+                elapsed = 0
+                while not stop_beat.wait(_FG_HEARTBEAT_SECONDS):
+                    elapsed += _FG_HEARTBEAT_SECONDS
+                    try:
+                        emit_cb(f"running… {elapsed}s", False)
+                    except Exception:  # noqa: BLE001
+                        return
+            beat_thread = threading.Thread(target=_heartbeat, daemon=True)
+            beat_thread.start()
         try:
             proc = subprocess.run(
                 popen_args, shell=use_shell, capture_output=True, text=True,
@@ -192,6 +211,10 @@ class Terminal(Tool):
             )
         except subprocess.TimeoutExpired:
             return ToolResult(ok=False, output="", error=f"Timed out after {timeout}s")
+        finally:
+            stop_beat.set()
+            if beat_thread is not None:
+                beat_thread.join(timeout=1)
         output = _strip_ansi(proc.stdout)
         if proc.stderr:
             output += "\n[stderr]\n" + _strip_ansi(proc.stderr)

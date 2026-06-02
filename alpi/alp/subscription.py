@@ -67,6 +67,8 @@ class Subscription:
     briefing: str = ""
     # Mirror of hub's `meta.pipeline` (join/pull); non-empty → member uses the longer production turn budget.
     pipeline: tuple[str, ...] = ()
+    # Mirror of hub's `meta.paused` (join/pull); True → the member poller skips dispatch (no wasted turns on a paused wg).
+    paused: bool = False
     # Decoupled from ``last_seq`` so a tick that pulls a new post but skips on cooldown doesn't lose the trigger — next tick re-evaluates against the cache.
     last_responded_seq: int = 0
     roster: dict[str, str] = field(default_factory=dict)
@@ -134,6 +136,7 @@ def load(home: Path) -> list[Subscription]:
                 last_dispatch_at=str(entry.get("last_dispatch_at") or ""),
                 briefing=str(entry.get("briefing") or ""),
                 pipeline=coerce_pipeline(entry.get("pipeline")),
+                paused=bool(entry.get("paused", False)),
                 last_responded_seq=int(entry.get("last_responded_seq", 0)),
                 roster=dict(entry.get("roster") or {}),
                 roster_bios=dict(entry.get("roster_bios") or {}),
@@ -182,6 +185,8 @@ def save(home: Path, subs: list[Subscription]) -> None:
             entry["briefing"] = s.briefing
         if s.pipeline:
             entry["pipeline"] = list(s.pipeline)
+        if s.paused:
+            entry["paused"] = True
         if s.last_responded_seq:
             entry["last_responded_seq"] = s.last_responded_seq
         if s.roster:

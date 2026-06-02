@@ -260,6 +260,9 @@ def _run_once(
                 }
         elif ev.kind == "tool_end":
             payload = {"kind": "tool_end", "name": ev.name, "ok": ev.ok}
+        elif ev.kind == "tool_state":
+            # Mid-tool progress = sign-of-life for the daemon idle-turn timeout (a long tool ≠ a hung one).
+            payload = {"kind": "tool_state", "name": ev.name}
         elif ev.kind == "error":
             payload = {"kind": "error", "text": ev.text}
         elif ev.kind == "interrupted":

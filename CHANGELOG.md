@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.6.33 — 2026-06-02 — workgroup turns die only when truly stuck
+
+- **A productive turn is no longer killed by the clock.** A workgroup turn
+  used to be capped at a fixed wall-clock budget, so an agent still working —
+  reading files, running a build, posting — could be cut off mid-task. Now a
+  turn is stopped only after it goes quiet (no activity for a while) or hits a
+  hard backstop; one that keeps making progress runs to completion. The turn
+  log tags each kill as idle vs backstop so a stuck producer is easy to spot.
+- **Pausing a workgroup actually stops it.** Pause used to reject new posts but
+  left the engine running — agents kept waking and burning budget against a
+  paused workgroup, only to have their work rejected. Now pause halts all
+  automatic turns (dispatch, watchdog, repair, continuation) on the hub and its
+  members. Resume re-evaluates cleanly: a workgroup left mid-task picks back up
+  on the next tick instead of staying silent on counters spent before the pause.
+
 ## v0.6.32 — 2026-06-01 — workgroup handoffs survive, blocks halt cleanly
 
 ALP workgroups got sturdier under autonomous, multi-phase pipelines.

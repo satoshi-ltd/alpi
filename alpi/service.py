@@ -353,6 +353,8 @@ async def _maybe_dispatch_for_sub(
     from alpi.alp import keys as _keys
     from alpi.alp import subscription as sub_mod
 
+    if getattr(sub, "paused", False):  # paused hub → no automatic member turns
+        return
     own_pubkey = _keys.load_or_generate(home).pubkey_b64()
     trigger, new_responded = _should_dispatch(
         profile, own_pubkey, sub.recent_posts or [], sub.last_responded_seq,
@@ -466,6 +468,8 @@ async def _maybe_dispatch_for_hub(
     """Decide whether a hub-side workgroup should dispatch."""
     from alpi.alp import keys as _keys
 
+    if getattr(wg.meta, "paused", False):  # paused → no activity dispatch, no watchdog, no burn
+        return
     own_pubkey = _keys.load_or_generate(home).pubkey_b64()
     last_responded = _get_hub_responded_seq(home, wg.meta.id)
     trigger, new_responded = _should_dispatch(
@@ -619,6 +623,8 @@ async def _maybe_watchdog_close(
     """
     from alpi.alp import tasks as wg_tasks
 
+    if getattr(wg.meta, "paused", False):  # paused workgroups run no watchdog/repair/continuation
+        return
     if not recent:
         return
     active = wg_tasks.active_task(recent, hub_pubkey=wg.meta.hub_pubkey)
@@ -976,6 +982,30 @@ def _set_hub_watchdog_seq(home: Path, wg_id: str, seq: int) -> None:
     _save_poller_state(home, state)
 
 
+# wg_id-keyed poller guards that mean "already handled this seq" — cleared on
+# resume so a paused-then-resumed workgroup is re-evaluated from scratch next
+# tick. NOT hub_cursors (the read cursor; clearing it would re-process the
+# whole transcript).
+_RESUMABLE_POLLER_TABLES = (
+    "hub_last_responded_seq", "hub_watchdog_fired_seq", "hub_watchdog_fire_count",
+    "hub_continuation_fire_count", "hub_last_dispatch_at",
+)
+
+
+def reset_workgroup_poller_state(home: Path, wg_id: str) -> None:
+    """Drop the per-wg poller guards for ``wg_id`` so resume re-opens normal
+    dispatch/watchdog evaluation. No auto-post — the next tick decides."""
+    state = _load_poller_state(home)
+    changed = False
+    for table in _RESUMABLE_POLLER_TABLES:
+        t = state.get(table)
+        if isinstance(t, dict) and wg_id in t:
+            del t[wg_id]
+            changed = True
+    if changed:
+        _save_poller_state(home, state)
+
+
 # Continuation gets a few bounded retries per `#done` seq — enough to
 # recover from a wake that whiffed (read/searched but didn't open the next
 # task), never the unbounded every-5-min re-fire of the original bug.
@@ -1146,17 +1176,71 @@ def _should_dispatch(
 
 
 _TURN_TIMEOUT_SECONDS = 300
-# Pipeline workgroups (`meta.pipeline`) give producers a longer wall-clock
-# ceiling: a phase turn writes files, researches, runs a build — it needs
-# more than a deliberation turn's convergence budget. Deliberation stays at
-# 300s (converge fast or stay silent).
+# Absolute wall-clock backstop (pipeline phases run longer than deliberation); idle kills sooner.
 _PIPELINE_TURN_TIMEOUT_SECONDS = 900
 _TURN_SIGTERM_GRACE_SECONDS = 5
+# Idle (no-progress) kill. Activity = child's `--emit-events` stdout (tool start/end + mid-tool
+# `tool_state`, incl. terminal's foreground heartbeat) + stderr; a lone LLM generation > idle trips it.
+_TURN_IDLE_TIMEOUT_SECONDS = 180
+_PIPELINE_TURN_IDLE_TIMEOUT_SECONDS = 300
 
 
 def _turn_timeout_for(pipeline: bool) -> int:
-    """Wall-clock turn budget: longer for pipeline (production) workgroups."""
     return _PIPELINE_TURN_TIMEOUT_SECONDS if pipeline else _TURN_TIMEOUT_SECONDS
+
+
+def _turn_idle_timeout_for(pipeline: bool) -> int:
+    return _PIPELINE_TURN_IDLE_TIMEOUT_SECONDS if pipeline else _TURN_IDLE_TIMEOUT_SECONDS
+
+
+async def _kill_proc(proc: Any, wait_task: "asyncio.Future[int]") -> int:
+    # wait_task is shielded so our own timeout/cancel can't cancel the single in-flight proc.wait().
+    try:
+        proc.terminate()
+    except ProcessLookupError:
+        pass
+    try:
+        return await asyncio.wait_for(
+            asyncio.shield(wait_task), timeout=_TURN_SIGTERM_GRACE_SECONDS,
+        )
+    except asyncio.TimeoutError:
+        pass
+    try:
+        proc.kill()
+    except ProcessLookupError:
+        pass
+    try:
+        return await asyncio.shield(wait_task)
+    except Exception:  # noqa: BLE001
+        return -9
+
+
+async def _supervise_turn(
+    proc: Any,
+    last_activity: list[float],
+    *,
+    idle_timeout: float,
+    backstop: float,
+    started_at: float,
+) -> tuple[int, bool, str | None]:
+    # Kill on idle (now - last_activity[0] > idle_timeout) or backstop; returns (rc, timed_out, "idle"|"backstop"|None).
+    wait_task: "asyncio.Future[int]" = asyncio.ensure_future(proc.wait())
+    try:
+        while True:
+            now = time.monotonic()
+            idle_deadline = last_activity[0] + idle_timeout
+            abs_deadline = started_at + backstop
+            slice_s = min(idle_deadline, abs_deadline) - now
+            if slice_s <= 0:
+                reason = "idle" if idle_deadline <= abs_deadline else "backstop"
+                rc = await _kill_proc(proc, wait_task)
+                return rc, True, reason
+            done, _ = await asyncio.wait({wait_task}, timeout=slice_s)
+            if wait_task in done:
+                return wait_task.result(), False, None
+    except asyncio.CancelledError:
+        await _kill_proc(proc, wait_task)
+        raise
 
 
 def turn_log_path(home: Path) -> Path:
@@ -1357,9 +1441,10 @@ async def _dispatch_workgroup_turn(
         **({"ALPI_WORKGROUP_ROUND_HUB_SEQ": str(round_hub_seq)} if (round_hub_seq is not None and round_hub_seq > 0) else {}),
         **env_extra,
     })
+    # `--emit-events`: child prints JSON event lines to stdout = the idle-timeout's sign-of-life (tail discarded).
     argv = [
         sys.executable, "-m", "alpi", "-p", profile,
-        "chat", "--once", prompt,
+        "chat", "--emit-events", "--once", prompt,
     ]
     posts_before = _post_count_for_role(home, wg_id)
     started_at = time.monotonic()
@@ -1367,7 +1452,7 @@ async def _dispatch_workgroup_turn(
         proc = await asyncio.create_subprocess_exec(
             *argv,
             env=env,
-            stdout=asyncio.subprocess.DEVNULL,
+            stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
     except OSError as e:
@@ -1378,8 +1463,14 @@ async def _dispatch_workgroup_turn(
             "reason": reason, "error": str(e),
         })
         return
-    # Bounded drain — full pipe + memory cap.
-    stderr_task = asyncio.create_task(drain_tail(proc.stderr))
+    last_activity = [started_at]
+
+    def _bump() -> None:
+        last_activity[0] = time.monotonic()
+
+    # Bounded drain (full pipe + memory cap); every line bumps last_activity.
+    stdout_task = asyncio.create_task(drain_tail(proc.stdout, on_activity=_bump))
+    stderr_task = asyncio.create_task(drain_tail(proc.stderr, on_activity=_bump))
 
     _append_turn_event(home, {
         "ts": _utcnow_iso(), "event": "start",
@@ -1398,55 +1489,20 @@ async def _dispatch_workgroup_turn(
     }
 
     timed_out = False
+    kill_reason: str | None = None
     try:
-        try:
-            rc = await asyncio.wait_for(
-                proc.wait(), timeout=turn_timeout,
-            )
-        except asyncio.TimeoutError:
-            timed_out = True
-            try:
-                proc.terminate()  # SIGTERM
-            except ProcessLookupError:
-                pass
-            try:
-                rc = await asyncio.wait_for(
-                    proc.wait(), timeout=_TURN_SIGTERM_GRACE_SECONDS,
-                )
-            except asyncio.TimeoutError:
-                try:
-                    proc.kill()  # SIGKILL
-                except ProcessLookupError:
-                    pass
-                try:
-                    rc = await proc.wait()
-                except Exception:  # noqa: BLE001
-                    rc = -9
+        idle_timeout = _turn_idle_timeout_for(pipeline)
+        rc, timed_out, kill_reason = await _supervise_turn(
+            proc, last_activity,
+            idle_timeout=idle_timeout,
+            backstop=turn_timeout,
+            started_at=started_at,
+        )
+        if timed_out:
             log.warning(
-                "wg poller: turn for %s exceeded %ss — killed",
-                wg_id, turn_timeout,
+                "wg poller: turn for %s killed (%s) — idle>%ss or backstop>%ss",
+                wg_id, kill_reason, idle_timeout, turn_timeout,
             )
-        except asyncio.CancelledError:
-            # Cancellation doesn't kill the child — terminate explicitly to avoid orphan.
-            try:
-                proc.terminate()
-            except ProcessLookupError:
-                pass
-            try:
-                # Use a bounded shielded wait because we're already cancelled.
-                rc = await asyncio.shield(asyncio.wait_for(
-                    proc.wait(), timeout=_TURN_SIGTERM_GRACE_SECONDS,
-                ))
-            except (asyncio.TimeoutError, asyncio.CancelledError):
-                try:
-                    proc.kill()
-                except ProcessLookupError:
-                    pass
-                try:
-                    rc = await asyncio.shield(proc.wait())
-                except Exception:  # noqa: BLE001
-                    rc = -9
-            raise
     finally:
         info = _INFLIGHT.pop((wg_id, profile), {})
     preempted = bool(info.get("preempted"))
@@ -1460,6 +1516,10 @@ async def _dispatch_workgroup_turn(
         stderr_tail = await stderr_task
     except Exception:  # noqa: BLE001
         stderr_tail = ""
+    try:
+        await stdout_task  # drain to completion; tail discarded
+    except Exception:  # noqa: BLE001
+        pass
     if rc != 0:
         err_preview = stderr_tail[-300:]
         if not (timed_out or preempted):
@@ -1473,7 +1533,7 @@ async def _dispatch_workgroup_turn(
         extra = {"preempted_by_seq": preempted_by_seq, "killed": True}
     elif timed_out:
         event = "timeout"
-        extra = {"killed": True}
+        extra = {"killed": True, "kill_reason": kill_reason}
     else:
         event = "end"
         extra = {"error": err_preview} if err_preview else {}

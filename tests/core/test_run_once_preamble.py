@@ -94,3 +94,40 @@ def test_no_tool_calls_keeps_full_reply(tmp_home: Path, monkeypatch) -> None:
 
     output = buf.getvalue().strip()
     assert output == "Aquí tienes la respuesta directa."
+
+
+def test_emit_events_serializes_tool_state(tmp_home: Path, monkeypatch) -> None:
+    """`--emit-events` must serialize mid-tool `tool_state` to stdout — it is the
+    daemon idle-timeout's sign-of-life for a long-running tool (e.g. a build)."""
+    import json
+
+    monkeypatch.setattr(_cli_mod, "_bootstrap", lambda _h: None)
+    monkeypatch.setattr(
+        "alpi.config.load",
+        lambda _h: Config(home=tmp_home, model="stub", raw={}),
+    )
+    monkeypatch.setattr("alpi.engine.Engine.save_session", lambda self: None)
+    monkeypatch.setattr("alpi.engine._maybe_load_mcps", lambda _cfg: [])
+    monkeypatch.setattr("alpi.engine.Engine._build_system_prompt", lambda self: "stub")
+    monkeypatch.setattr("alpi.ctx_window.resolve", lambda _h, _c, _m: 200_000)
+    monkeypatch.setattr("alpi.ledger.check", lambda *a, **kw: None)
+    monkeypatch.setattr("alpi.ledger.record", lambda *a, **kw: None)
+
+    events = [
+        AgentEvent(kind="tool_start", name="terminal", args={"command": "npm run build"}),
+        AgentEvent(kind="tool_state", name="terminal", text="running… 15s"),
+        AgentEvent(kind="tool_end", name="terminal", ok=True),
+        AgentEvent(kind="assistant_done", text="build green", final=True),
+    ]
+    monkeypatch.setattr("alpi.engine.Engine.run_turn", _make_run_turn(events))
+
+    buf = io.StringIO()
+    monkeypatch.setattr(sys, "stdout", buf)
+    _cli_mod._run_once(tmp_home, "build it", emit_events=True, persist=False)
+
+    kinds = [
+        json.loads(line)["kind"]
+        for line in buf.getvalue().splitlines() if line.strip().startswith("{")
+    ]
+    assert "tool_state" in kinds
+    assert kinds.index("tool_state") > kinds.index("tool_start")
