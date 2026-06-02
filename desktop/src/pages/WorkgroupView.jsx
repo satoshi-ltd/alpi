@@ -12,6 +12,7 @@ import { relativeTime } from "../lib/time.js";
 import { useTranscriptSearch } from "../hooks/useTranscriptSearch.js";
 import {
   classifyMessage,
+  findBlocked,
   findLatestTask,
   parseDone,
   parseSkip,
@@ -116,6 +117,7 @@ export default function WorkgroupView({
     () => findLatestTask(messages, hubPubkey),
     [messages, hubPubkey],
   );
+  const blocked = useMemo(() => findBlocked(messages, hubPubkey), [messages, hubPubkey]);
   // A `#working` is stale once superseded — either by a later post from the same author, or by the hub's `#done` that closes the task. A member `#skip` is a per-peer pass, not a close, so it never marks others' `#working` stale. Scope resets when we cross a `#task` boundary going backwards.
   const workingStale = useMemo(() => {
     const set = new Set();
@@ -332,6 +334,14 @@ export default function WorkgroupView({
           accent={ownerProfile?.accent ?? null}
         />
         {error && <div className={styles.error}>{error}</div>}
+
+        {blocked && (
+          <div className={styles.blocked} role="status">
+            <span className={styles.blockedTag}>blocked</span>
+            <code className={styles.blockedSlug}>#{blocked.slug}</code>
+            <span className={styles.blockedReason}>{blocked.reason}</span>
+          </div>
+        )}
 
         {messages && (
           <>

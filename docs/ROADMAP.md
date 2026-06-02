@@ -45,7 +45,6 @@ sovereignty depends on.
 
 | ID | Item | Status |
 |---|---|---|
-| ALP.3.J | Workgroup state ledger — hub-served task state (no client-side refold/decrypt); `wg.blocked` card rendering. | 🔵 |
 | ALP.3.K | Rekey edge cases — leave/kick/rekey while a task is open (hub-side key history, or auto-close / re-pin). | 🔵 |
 | ALP.3+ | Multi-task workgroups — opt-in `multitask: true`, letter-prefixed task IDs, per-task roster/dispatch/budget. **Deferred**: targeted tasks + pipeline continuation cover sequential per-project pipelines; revisit only if the persistent workgroups (`template`/`quality`/`brand-library`) prove real parallelism. | 🔵 |
 
@@ -108,14 +107,6 @@ the default and fits per-project pipelines (one owner per phase via targeted
 tasks); multitask earns its complexity — per-task quorum filters, N-thread UI,
 per-task budget accounting — only when the persistent workgroups (`template`,
 `quality`, `brand-library`) show sustained parallelism.
-
-### ALP.3.J — Workgroup state ledger
-
-Task state is re-derived client-side by folding the decrypted transcript on
-every `pull` — no canonical ledger, so inspection means decrypt-and-fold by
-hand. The hub already recomputes task state for the closure-quorum check;
-expose it (via `workgroup.show` / `pull`) so clients and operators don't each
-refold. Includes `wg.blocked` card rendering in the clients.
 
 ### ALP.3.K — Rekey edge cases
 

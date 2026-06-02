@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.6.35 — 2026-06-02 — the hub serves workgroup task state
+
+- **Task state is computed once, by the hub.** A workgroup's current task, its
+  recent closed tasks, and whether it's blocked are now folded on the hub and
+  exposed for operators, scripts, and future clients — no decrypting and
+  re-folding the whole transcript by hand. Desktop and mobile also surface a
+  blocked workgroup from the transcript they already render.
+
 ## v0.6.34 — 2026-06-02 — workgroup turns recover and pipelines stop cleanly
 
 - **Pipeline rechecks now stop at green.** A terminal phase variant such as

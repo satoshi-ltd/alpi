@@ -74,6 +74,14 @@ export function classifyMessage(body) {
   return { variant: "message", text: body };
 }
 
+// Halted: the latest task closed `#done BLOCKED · …` and nothing re-tasked after.
+export function findBlocked(messages, hubPubkey = null) {
+  const t = findLatestTask(messages, hubPubkey);
+  if (!t || t.state !== "done") return null;
+  const reason = t.result || "";
+  return /^\s*blocked\b/i.test(reason) ? { slug: t.slug, reason } : null;
+}
+
 export function findLatestTask(messages, hubPubkey = null) {
   if (!messages || messages.length === 0) return null;
   let latest = null;

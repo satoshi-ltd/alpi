@@ -14,7 +14,7 @@ import { ChatSkeleton } from '../../src/features/chat/ChatSkeleton';
 import { Composer } from '../../src/features/chat/Composer';
 import { MarkerCard } from '../../src/features/chat/MarkerCard';
 import { MessageActionsSheet } from '../../src/features/chat/MessageActionsSheet';
-import { buildTasks, classifyMessage } from '../../src/features/chat/parseMarkers';
+import { buildTasks, classifyMessage, findBlocked } from '../../src/features/chat/parseMarkers';
 import { TasksSheet } from '../../src/features/sheets/TasksSheet';
 import {
   useProfileSummaries,
@@ -44,6 +44,17 @@ const WG_STYLES = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.s3,
+  },
+  blockedBanner: {
+    paddingHorizontal: space.s7,
+    paddingVertical: space.s4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.s3,
+  },
+  blockedText: {
+    flex: 1,
+    fontSize: fontSizes.sm,
   },
 });
 
@@ -308,6 +319,7 @@ export default function WorkgroupChat() {
   }, [messages]);
 
   const tasks = useMemo(() => buildTasks(messages, hubPubkey), [messages, hubPubkey]);
+  const blocked = useMemo(() => findBlocked(messages, hubPubkey), [messages, hubPubkey]);
 
   // Workgroups borrow hub profile's accent — daemon shape has no wg.accent.
   const accent = hub?.accent ?? accentForProfile(wg?.hub_id) ?? colors.ink3;
@@ -420,6 +432,14 @@ export default function WorkgroupChat() {
           <Dot color={colors.warning}  />
           <Text style={{ fontFamily: fonts.sans.medium, fontSize: fontSizes.md, color: colors.ink2 }}>
             This workgroup is paused. New messages won't fire.
+          </Text>
+        </View>
+      ) : null}
+      {blocked ? (
+        <View style={[WG_STYLES.blockedBanner, { backgroundColor: `${colors.danger}1f` }]}>
+          <Dot color={colors.danger} />
+          <Text numberOfLines={2} style={[WG_STYLES.blockedText, { fontFamily: fonts.sans.medium, color: colors.ink2 }]}>
+            Blocked · #{blocked.slug} — {blocked.reason}
           </Text>
         </View>
       ) : null}

@@ -268,3 +268,60 @@ def test_register_rejects_non_data_namespace(short_tmp: Path) -> None:
     srv = host_server.Server(home=home)
     with pytest.raises(ValueError):
         srv.register("link.something", lambda *_: {})
+
+
+def _seed_workgroup_with_posts(home: Path, bodies: list[bytes]) -> str:
+    home.mkdir(exist_ok=True)
+    kp = load_or_generate(home)
+    wg = wg_mod.create(
+        home, name="test-wg", hub_kp=kp, member_pubkeys=[], briefing="",
+    )
+    me = wg.member(kp.pubkey_b64())
+    assert me is not None
+    group_key = wg_mod.open_sealed_group_key(me.sealed_key, kp)
+    d = home / "alp" / "workgroups" / wg.meta.id
+    lines = []
+    for i, body in enumerate(bodies, start=1):
+        nonce_b64, ct_b64 = wg_mod.encrypt_post(group_key, body)
+        lines.append(json.dumps({
+            "seq": i, "ts": "2026-05-01T00:00:00Z", "from": kp.pubkey_b64(),
+            "key_version": me.key_version, "nonce": nonce_b64, "ciphertext": ct_b64,
+        }, separators=(",", ":")))
+    (d / "transcript.jsonl").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return wg.meta.id
+
+
+def test_fold_task_state_active(short_tmp: Path) -> None:
+    home = short_tmp / "hub"
+    wg_id = _seed_workgroup_with_posts(home, [b"@quill #task #content write the copy"])
+    state = data_workgroup.fold_task_state(home, wg_id)
+    assert state["active"] == {"slug": "content", "title": "write the copy", "opened_seq": 1}
+    assert state["closed"] == []
+    assert state["blocked"] is None
+
+
+def test_fold_task_state_blocked(short_tmp: Path) -> None:
+    home = short_tmp / "hub"
+    wg_id = _seed_workgroup_with_posts(home, [
+        b"@pixel #task #build wire it",
+        b"#done BLOCKED build \xc2\xb7 deps missing",
+    ])
+    state = data_workgroup.fold_task_state(home, wg_id)
+    assert state["active"] is None
+    assert len(state["closed"]) == 1
+    assert state["closed"][0]["slug"] == "build"
+    assert state["closed"][0]["blocked"] is True
+    assert state["blocked"]["slug"] == "build"
+    assert state["blocked"]["reason"].startswith("BLOCKED build")
+
+
+def test_fold_task_state_retask_clears_blocked(short_tmp: Path) -> None:
+    home = short_tmp / "hub"
+    wg_id = _seed_workgroup_with_posts(home, [
+        b"@pixel #task #build wire it",
+        b"#done BLOCKED build",
+        b"@pixel #task #build-recheck retry",
+    ])
+    state = data_workgroup.fold_task_state(home, wg_id)
+    assert state["active"]["slug"] == "build-recheck"
+    assert state["blocked"] is None

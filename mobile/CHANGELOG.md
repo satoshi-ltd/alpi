@@ -14,6 +14,14 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.1.27 — 2026-06-02 — blocked workgroups show it
+
+Requires alpi v0.6.35+.
+
+- **A blocked workgroup shows it.** When a workgroup's pipeline halts (a `#done
+  BLOCKED · …` close), the workgroup screen shows a banner with the phase +
+  reason instead of looking idle.
+
 ## v0.1.26 — 2026-06-02 — assign a workgroup pipeline
 
 Requires alpi v0.6.32+.

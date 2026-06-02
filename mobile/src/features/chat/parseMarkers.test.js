@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildTasks,
   classifyMessage,
+  findBlocked,
   parseDone,
   parseSkip,
   parseTaskOpen,
@@ -191,5 +192,32 @@ describe('buildTasks', () => {
     expect(tasks).toHaveLength(1);
     expect(tasks[0].slug).toBe('live');
     expect(tasks[0].status).toBe('working');
+  });
+});
+
+describe('findBlocked', () => {
+  it('flags a #done BLOCKED close as blocked', () => {
+    const msgs = [
+      { seq: 1, from_pubkey: 'hub', body: '@pixel #task #build wire it' },
+      { seq: 2, from_pubkey: 'hub', body: '#done BLOCKED build · deps missing' },
+    ];
+    expect(findBlocked(msgs, 'hub')).toEqual({ slug: 'build', reason: 'BLOCKED build · deps missing' });
+  });
+
+  it('a green close is not blocked', () => {
+    const msgs = [
+      { seq: 1, from_pubkey: 'hub', body: '#task #qa audit' },
+      { seq: 2, from_pubkey: 'hub', body: '#done qa green' },
+    ];
+    expect(findBlocked(msgs, 'hub')).toBeNull();
+  });
+
+  it('a re-task after the block clears the banner', () => {
+    const msgs = [
+      { seq: 1, from_pubkey: 'hub', body: '#task #build go' },
+      { seq: 2, from_pubkey: 'hub', body: '#done BLOCKED build' },
+      { seq: 3, from_pubkey: 'hub', body: '@pixel #task #build-recheck retry' },
+    ];
+    expect(findBlocked(msgs, 'hub')).toBeNull();
   });
 });

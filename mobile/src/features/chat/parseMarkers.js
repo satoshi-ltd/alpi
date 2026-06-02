@@ -81,6 +81,7 @@ export function buildTasks(messages, hubPubkey = null) {
       current.msgs += 1;
       if (c.variant === 'done' && fromHub) {
         current.status = 'done';
+        current.result = c.text || '';
         tasks.push(current);
         current = null;
       }
@@ -88,6 +89,16 @@ export function buildTasks(messages, hubPubkey = null) {
   }
   if (current) tasks.push(current);
   return tasks;
+}
+
+// Halted: the latest task closed `#done BLOCKED · …` and nothing re-tasked after.
+export function findBlocked(messages, hubPubkey = null) {
+  const tasks = buildTasks(messages, hubPubkey);
+  const last = tasks[tasks.length - 1];
+  if (!last || last.status !== 'done') return null;
+  return /^\s*blocked\b/i.test(last.result || '')
+    ? { slug: last.slug, reason: last.result }
+    : null;
 }
 
 export function classifyMessage(body) {

@@ -51,6 +51,50 @@ def decrypt_transcript(
     return []
 
 
+def _hub_pubkey(home: Path, wg_id: str) -> str:
+    wg = wg_mod.load(home, wg_id)
+    if wg is not None:
+        return wg.meta.hub_pubkey
+    sub = sub_mod.get(home, wg_id)
+    return sub.hub_pubkey if sub is not None else ""
+
+
+def fold_task_state(home: Path, wg_id: str) -> dict[str, Any]:
+    # Canonical hub-side fold (active/closed/blocked) so clients don't each refold the transcript.
+    from alpi.alp import tasks as wg_tasks
+
+    posts = decrypt_transcript(home, wg_id)
+    if not posts:
+        return {"active": None, "closed": [], "blocked": None}
+    hub_pubkey = _hub_pubkey(home, wg_id)
+    events: list = []
+    for p in posts:
+        events += wg_tasks.parse_post(
+            str(p.get("body") or ""), int(p.get("seq", 0)),
+            str(p.get("from_pubkey") or ""), hub_pubkey=hub_pubkey or None,
+        )
+    active: dict[str, Any] | None = None
+    closed: list[dict[str, Any]] = []
+    for t in wg_tasks.fold_tasks(events):
+        if t.is_open:
+            active = {"slug": t.slug, "title": t.description, "opened_seq": t.opened_seq}
+        else:
+            closed.append({
+                "slug": t.slug,
+                "result": t.result or "",
+                "closed_seq": t.closed_seq,
+                "blocked": (t.result or "").strip().upper().startswith("BLOCKED"),
+            })
+    # Only blocked when nothing was re-tasked after the BLOCKED close — a later
+    # #task (active) means a human moved it on (matches mobile findBlocked).
+    blocked = None
+    if active is None and closed:
+        latest = max(closed, key=lambda c: c["closed_seq"] or 0)
+        if latest["blocked"]:
+            blocked = {"slug": latest["slug"], "reason": latest["result"]}
+    return {"active": active, "closed": closed[-20:], "blocked": blocked}
+
+
 def _read_jsonl(home: Path, wg_id: str) -> list[dict[str, Any]]:
     p = home / "alp" / "workgroups" / wg_id / "transcript.jsonl"
     if not p.exists():

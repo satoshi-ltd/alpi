@@ -11,6 +11,17 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.3.34 — 2026-06-02 — blocked workgroups show it, quieter notifications
+
+Requires alpi v0.6.35+.
+
+- **A blocked workgroup shows it.** When a workgroup's pipeline halts (a `#done
+  BLOCKED · …` close), the workgroup view shows a banner with the phase + reason
+  instead of looking idle.
+- **No banner for the view you're looking at.** A workgroup `#done` or an agent
+  message no longer fires a native notification when you're already focused on
+  that workgroup or chat — only when it's in the background.
+
 ## v0.3.33 — 2026-06-02 — assign a workgroup pipeline
 
 Requires alpi v0.6.32+.

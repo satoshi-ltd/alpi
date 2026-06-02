@@ -36,6 +36,39 @@
   user-select: text;
 }
 
+.blocked {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+  border-radius: var(--r-md);
+  background: color-mix(in srgb, var(--c-danger) 10%, transparent);
+  border: .5px solid color-mix(in srgb, var(--c-danger) 26%, transparent);
+  font-size: var(--fs-sm);
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.blockedTag {
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--c-danger);
+}
+
+.blockedSlug {
+  font-family: var(--font-mono);
+  color: var(--c-danger);
+}
+
+.blockedReason {
+  color: var(--ink-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .empty {
   display: flex;
   flex-direction: column;

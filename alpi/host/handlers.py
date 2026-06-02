@@ -16,6 +16,7 @@ _SAFE_ID = re.compile(r"^[A-Za-z0-9_-]+$")
 
 def register(server: host_server.Server) -> None:
     server.register("host.workgroup.transcript", _workgroup_transcript)
+    server.register("host.workgroup.tasks", _workgroup_tasks)
     server.register("host.sessions.list", _sessions_list)
     server.register("host.session.read", _session_read)
     server.register("host.sessions.delete", _sessions_delete)
@@ -63,6 +64,17 @@ async def _workgroup_transcript(
     )
     next_seq = posts[-1]["seq"] if posts else (after_seq or 0)
     return {"posts": posts, "next_seq": next_seq, "limit": limit}
+
+
+async def _workgroup_tasks(
+    params: dict[str, Any], _server: host_server.Server,
+) -> dict[str, Any]:
+    profile = str((params or {}).get("profile") or "")
+    wg_id = str((params or {}).get("wg_id") or "").strip()
+    _check_id(wg_id, "wg_id")
+    home = _resolve_home(profile)
+    # Decrypt + fold is CPU-bound; keep it off the event loop.
+    return await asyncio.to_thread(host_workgroup.fold_task_state, home, wg_id)
 
 
 async def _sessions_list(
