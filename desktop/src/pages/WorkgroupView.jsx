@@ -8,8 +8,10 @@ import Composer from "../primitives/Composer.jsx";
 import Message from "../primitives/Message.jsx";
 import SearchBar from "../primitives/SearchBar.jsx";
 import { renderMarkdown } from "../lib/markdown.js";
+import { relativeTime } from "../lib/time.js";
 import { useTranscriptSearch } from "../hooks/useTranscriptSearch.js";
 import {
+  classifyMessage,
   findLatestTask,
   parseDone,
   parseSkip,
@@ -348,10 +350,11 @@ export default function WorkgroupView({
                   const isFromHub = Boolean(
                     hubPubkey && m.from_pubkey === hubPubkey,
                   );
-                  const task = parseTaskOpen(m.body);
-                  const working = parseWorking(m.body);
-                  const skip = parseSkip(m.body);
-                  const done = parseDone(m.body);
+                  const cls = classifyMessage(m.body);
+                  const task = cls.variant === "task" ? cls.task : null;
+                  const working = cls.variant === "working" ? { content: cls.text } : null;
+                  const skip = cls.variant === "skip" ? { content: cls.text } : null;
+                  const done = cls.variant === "done" ? { content: cls.text } : null;
 
                   const meta = renderWgMeta({
                     seq: m.seq,
@@ -365,6 +368,7 @@ export default function WorkgroupView({
                     : (working?.content || skip?.content || done?.content || m.body);
                   const footer = renderWgFooter({
                     plainText: speakableText,
+                    at: m.at,
                     styles,
                     ttsKey: `wg:${workgroup.id}:${m.seq}`,
                     profile: workgroup.profile,
@@ -511,7 +515,7 @@ async function copyText(text) {
 }
 
 function renderWgFooter({
-  plainText, styles, ttsKey, profile, voice, ttsState, online,
+  plainText, at, styles, ttsKey, profile, voice, ttsState, online,
 }) {
   const ttsKind = ttsState?.key === ttsKey ? ttsState.kind : null;
   const isLoading = ttsKind === "loading";
@@ -520,6 +524,8 @@ function renderWgFooter({
   const tipText = !online && !isPlaying
     ? "Offline — TTS unavailable"
     : isLoading ? "Loading…" : isPlaying ? "Stop" : "Read aloud";
+  // Workgroup `at` is an ISO string; relativeTime expects unix seconds.
+  const stamp = at ? relativeTime(Date.parse(at) / 1000) : "";
   return (
     <>
       <Tip text="Copy" side="up">
@@ -552,6 +558,7 @@ function renderWgFooter({
           )}
         </IconBtn>
       </Tip>
+      {stamp && <Mono className={`tnum ${styles.footerTime}`}>{stamp}</Mono>}
     </>
   );
 }

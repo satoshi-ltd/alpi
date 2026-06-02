@@ -1,5 +1,31 @@
 # Changelog
 
+## v0.6.32 — 2026-06-01 — workgroup handoffs survive, blocks halt cleanly
+
+ALP workgroups got sturdier under autonomous, multi-phase pipelines.
+
+- **A member's handoff is never lost.** A non-hub member that ended a turn
+  with `#done <result>` used to have the whole post rejected; now the
+  hub-only marker is stripped and the substantive handoff text is kept and
+  delivered. Only the hub still closes the task — but the member's
+  deliverable always reaches it.
+- **A hub can stop cleanly.** Closing with `#done BLOCKED · <reason>` now
+  halts a pipeline (no auto-advance, no reopen) instead of leaving a task
+  open and the workgroup looking hung — the project waits, blocked, until a
+  human re-tasks it.
+- **Stuck tasks get one last deterministic repair.** Before the watchdog
+  abandons a stalled pipeline task, it wakes the hub once more to verify the
+  work and either close it or post a concrete `BLOCKED`.
+- **A working member isn't mistaken for a stalled one.** A `#working`
+  heartbeat earns the full turn timeout before silence counts as a stall, so
+  a long local job (writing many files, a build) isn't cut short.
+- **Assign a pipeline when you create a workgroup.** A workgroup can now
+  carry an ordered list of phase slugs (e.g. `intake → content → build →
+  qa`); the hub advances phases in order and a `#done BLOCKED` halts cleanly.
+  Set it from the CLI (`workgroup create --pipeline …`) or the new pipeline
+  field in the desktop + mobile create forms; empty = a normal deliberation
+  workgroup.
+
 ## v0.6.31 — 2026-05-30 — Docker deployment, Umbrel retired
 
 Alpi now ships as a plain Docker image for any Linux host; the Umbrel

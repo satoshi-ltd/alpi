@@ -1,5 +1,6 @@
-// Daemon: host.workgroup.create({profile, name, members, briefing}). `members` =
-// peer ids resolved via the hub's peers.yaml. Hubs need counts.peers > 0.
+// Daemon: host.workgroup.create({profile, name, members, briefing, pipeline}).
+// `members` = peer ids resolved via the hub's peers.yaml; hubs need counts.peers > 0.
+// `pipeline` = comma-separated phase slugs (empty = deliberation workgroup).
 
 import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
@@ -39,6 +40,7 @@ function NewWorkgroup() {
   const [name, setName] = useState('');
   const [members, setMembers] = useState(new Set());
   const [briefing, setBriefing] = useState('');
+  const [pipeline, setPipeline] = useState('');
   const [busy, setBusy] = useState(false);
   const [hubPickerOpen, setHubPickerOpen] = useState(false);
 
@@ -78,6 +80,7 @@ function NewWorkgroup() {
         name: name.trim(),
         members: Array.from(members),
         briefing: briefing.trim() || undefined,
+        pipeline: pipeline.trim() || undefined,
       });
       const wgId = result?.wg_id ?? result?.id;
       toast({ title: 'Workgroup created', message: `#${name.trim()}` });
@@ -228,6 +231,14 @@ function NewWorkgroup() {
             multiline
             rows={4}
             placeholder="what is this workgroup about? who does what?"
+          />
+
+          <Field
+            label="Pipeline (optional)"
+            value={pipeline}
+            onChangeText={setPipeline}
+            autoCapitalize="none"
+            placeholder="intake, content, build, qa"
           />
         </ScrollView>
       </KeyboardAvoidingView>

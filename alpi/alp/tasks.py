@@ -75,6 +75,7 @@ class TaskEvent:
     seq: int           # post seq this marker came from
     by: str            # author pubkey b64
     slug: str = ""     # stable identifier for `#task` events ("" for `#done`)
+    participants: tuple[str, ...] = ()  # peer-ids mentioned before `#task` on the opener line
 
 
 @dataclass(frozen=True)
@@ -87,6 +88,7 @@ class Task:
     closed_seq: int | None = None    # None while open
     closed_by: str | None = None
     result: str | None = None        # None while open
+    participants: tuple[str, ...] = ()  # task roster from opener-line mentions; () = collective (whole workgroup)
 
     @property
     def is_open(self) -> bool:
@@ -112,6 +114,18 @@ def is_done(text: str) -> bool:
     the rotation enforcement to allow the hub one back-to-back post
     when (and only when) it is closing the active task."""
     return _DONE_RE.search(text or "") is not None
+
+
+def strip_done_marker(text: str) -> str:
+    """Drop hub-only ``#done`` close markers from a member's post, keeping the
+    handoff summary: ``#done build green · dist`` → ``build green · dist``.
+
+    Only the hub closes a task, so a member must never carry a ``#done``.
+    Rather than reject the whole post (and lose a real deliverable handoff),
+    the SDK strips the marker and preserves the substantive text. Leading
+    ``@mentions`` before the marker are dropped with it — a member handoff
+    addresses no one and opens nothing."""
+    return _DONE_RE.sub(lambda m: m.group(1), text or "")
 
 
 def is_task(text: str) -> bool:
@@ -163,8 +177,11 @@ def parse_post(
     for m in tasks:
         slug = m.group(1).lower()
         desc = (m.group(2) or "").strip()
+        # Participants = @mentions on the `#task` opener LINE only; other lines are body.
+        participants = tuple(mentions_in(m.group(0)))
         out.append(TaskEvent(
             kind="task", text=desc, seq=seq, by=by, slug=slug,
+            participants=participants,
         ))
     for m in dones:
         result = m.group(1).strip()
@@ -194,12 +211,14 @@ def fold_tasks(events: Iterable[TaskEvent]) -> list[Task]:
                     closed_seq=ev.seq,
                     closed_by=ev.by,
                     result=f"preempted by #{ev.slug}" if ev.slug else "preempted",
+                    participants=active.participants,
                 ))
             active = Task(
                 description=ev.text,
                 opened_seq=ev.seq,
                 opened_by=ev.by,
                 slug=ev.slug,
+                participants=ev.participants,
             )
         elif ev.kind == "done":
             if active is None:
@@ -212,6 +231,7 @@ def fold_tasks(events: Iterable[TaskEvent]) -> list[Task]:
                 closed_seq=ev.seq,
                 closed_by=ev.by,
                 result=ev.text,
+                participants=active.participants,
             ))
             active = None
     return closed + ([active] if active is not None else [])

@@ -101,7 +101,7 @@ def test_effective_profile_env_profile_overlays_base(tmp_path: Path) -> None:
 
     env = home.effective_profile_env(tmp_path, base=base)
 
-    assert env["PATH"] == "/usr/bin"           # base passes through
+    assert env["PATH"].split(":")[-1] == "/usr/bin"  # base passes through (node bins may prepend)
     assert env["OPENAI_API_KEY"] == "from-profile"  # profile wins
     assert env["ALPI_TEST_X"] == "yes"
 

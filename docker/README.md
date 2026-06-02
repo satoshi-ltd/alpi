@@ -56,6 +56,20 @@ to peers on other machines.
 State (profiles, keys, config, sessions) lives under `/data` — mount a volume
 so it survives restarts.
 
+## Updating
+
+Pull the latest image and recreate only the containers whose image changed:
+
+```sh
+docker compose pull && docker compose up -d
+```
+
+Agent state (profiles, keys, sessions) is in the `/data` volume and is
+untouched by the update. Run this on each host whenever a new release is out.
+
+Avoid auto-update tools that require mounting `/var/run/docker.sock` (e.g.
+Watchtower) — socket access is equivalent to root on the host.
+
 ## Several agents on one host
 
 Each agent is identified by its keypair (its `/data` volume), not its IP — so

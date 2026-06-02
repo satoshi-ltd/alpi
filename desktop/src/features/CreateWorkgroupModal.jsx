@@ -32,6 +32,7 @@ export default function CreateWorkgroupModal({
   const [name, setName] = useState("");
   const [memberIds, setMemberIds] = useState([]);
   const [briefing, setBriefing] = useState("");
+  const [pipeline, setPipeline] = useState("");
   const [busy, setBusy] = useState(false);
   const notify = useNotify();
 
@@ -41,6 +42,7 @@ export default function CreateWorkgroupModal({
     setName("");
     setMemberIds([]);
     setBriefing("");
+    setPipeline("");
     setBusy(false);
   }, [open, eligibleHubs]);
 
@@ -78,6 +80,7 @@ export default function CreateWorkgroupModal({
         memberPeerIds: memberIds,
         budgetUsd: null,
         briefing: briefing.trim() || null,
+        pipeline: pipeline.trim() || null,
       });
       notify({ message: `Workgroup #${name.trim()} created`, variant: "success" });
       onCreated?.(wgId, hubProfile);
@@ -200,6 +203,15 @@ export default function CreateWorkgroupModal({
             value={briefing}
             onChange={(e) => setBriefing(e.target.value)}
             placeholder="what is this workgroup about?"
+          />
+        </div>
+
+        <div className={styles.field}>
+          <Eyebrow>PIPELINE (OPTIONAL)</Eyebrow>
+          <Field
+            value={pipeline}
+            onChange={(e) => setPipeline(e.target.value)}
+            placeholder="intake, content, build, qa"
           />
         </div>
 

@@ -176,29 +176,56 @@ async def test_join_persists_subscription_and_pull_decrypts(
         await server.stop()
 
 
-@pytest.mark.asyncio
-async def test_post_rejects_non_hub_marker(short_tmp: Path) -> None:
-    bob_home = short_tmp / "bob"; bob_home.mkdir()
-    load_or_generate(bob_home)
+def _stub_member_sub(home: Path) -> None:
+    load_or_generate(home)
     sub = sub_mod.Subscription(
         wg_id="wg_test", name="x", hub_id="alice",
         hub_pubkey="a" * 44,
     )
     sub.upsert_key(1, "sealed-stub")
-    sub_mod.upsert(bob_home, sub)
+    sub_mod.upsert(home, sub)
 
-    with pytest.raises(ValueError, match="only the workgroup hub"):
-        await wc.post(bob_home, "wg_test", b"#done unilateral close")
+
+@pytest.mark.asyncio
+async def test_post_rejects_non_hub_task(short_tmp: Path) -> None:
+    """A member never opens tasks: `#task` (and the ambiguous
+    `#task`+`#done` open-and-close combo) is rejected before encryption."""
+    bob_home = short_tmp / "bob"; bob_home.mkdir()
+    _stub_member_sub(bob_home)
 
     with pytest.raises(ValueError, match="only the workgroup hub"):
         await wc.post(bob_home, "wg_test", b"#task #sub-task spawn sub-task")
 
-    try:
+    with pytest.raises(ValueError, match="only the workgroup hub"):
+        await wc.post(
+            bob_home, "wg_test", b"#task #x do it\n#done already did it",
+        )
+
+
+@pytest.mark.asyncio
+async def test_post_strips_non_hub_done_marker(short_tmp: Path) -> None:
+    """A member's `#done <handoff>` is NOT dropped — the hub-only close marker
+    is stripped and the substantive handoff survives (so the hub still sees the
+    deliverable). The stub key makes it fail downstream at encryption, but
+    crucially NOT at the marker gate."""
+    bob_home = short_tmp / "bob"; bob_home.mkdir()
+    _stub_member_sub(bob_home)
+
+    with pytest.raises(Exception) as exc:
+        await wc.post(
+            bob_home, "wg_test", b"#done build green \xc2\xb7 dist generated",
+        )
+    assert "only the workgroup hub" not in str(exc.value)
+
+    # A `#done` whose payload strips to nothing carries no handoff → rejected.
+    with pytest.raises(ValueError, match="no handoff text"):
+        await wc.post(bob_home, "wg_test", b"#done    ")
+
+    # A line-internal `#done` was never a marker; it posts as plain prose
+    # (fails only downstream on the stub key, not at the marker gate).
+    with pytest.raises(Exception) as exc2:
         await wc.post(bob_home, "wg_test", b"converge with #done eventually")
-    except ValueError as e:
-        assert "only the workgroup hub" not in str(e)
-    except Exception:
-        pass
+    assert "only the workgroup hub" not in str(exc2.value)
 
 
 @pytest.mark.integration
@@ -779,6 +806,45 @@ def test_hub_rotation_task_always_allowed_even_back_to_back() -> None:
     )
 
 
+def test_hub_rotation_done_allowed_when_unnamed_member_absent() -> None:
+    """Targeted task: the close is allowed on the named participant's
+    substantive post even though other members never posted — they were
+    not on the task roster, so they don't block the quorum."""
+    posts = [
+        _post(1, "HUB", "@scout #task #intake produce intake"),
+        _post(2, "SCOUT_PK", "intake.md + info.json on disk"),
+    ]
+    wc._check_hub_rotation(posts, "HUB", "#done verified", ["SCOUT_PK"])
+
+
+def _fake_wg(hub_pubkey: str, member_pubkeys: list[str], pipeline: tuple = ()):
+    import types
+    return types.SimpleNamespace(
+        meta=types.SimpleNamespace(hub_pubkey=hub_pubkey, pipeline=pipeline),
+        members=[types.SimpleNamespace(pubkey=pk) for pk in member_pubkeys],
+    )
+
+
+def test_quorum_roster_narrows_to_named_participants(short_tmp: Path) -> None:
+    home = short_tmp / "hub"; home.mkdir()
+    _pin(home, "scout", "SCOUT_PK", ["workgroup.post"])
+    _pin(home, "canvas", "CANVAS_PK", ["workgroup.post"])
+    wg = _fake_wg("HUB", ["SCOUT_PK", "CANVAS_PK"])
+    posts = [{"seq": 1, "from": "HUB", "text": "@scout #task #intake produce"}]
+    roster = wc._quorum_roster(home, wg, posts, ["SCOUT_PK", "CANVAS_PK"])
+    assert roster == ["SCOUT_PK"]
+
+
+def test_quorum_roster_full_for_collective_task(short_tmp: Path) -> None:
+    home = short_tmp / "hub2"; home.mkdir()
+    _pin(home, "scout", "SCOUT_PK", ["workgroup.post"])
+    _pin(home, "canvas", "CANVAS_PK", ["workgroup.post"])
+    wg = _fake_wg("HUB", ["SCOUT_PK", "CANVAS_PK"])
+    posts = [{"seq": 1, "from": "HUB", "text": "#task #intake produce"}]
+    roster = wc._quorum_roster(home, wg, posts, ["SCOUT_PK", "CANVAS_PK"])
+    assert roster == ["SCOUT_PK", "CANVAS_PK"]
+
+
 def test_leave_purges_local_subscription_when_hub_unreachable(
     short_tmp: Path,
 ) -> None:
@@ -1155,3 +1221,120 @@ async def test_hub_emits_wg_mention_when_member_post_targets_hub_profile(
     m = hub_mentions[0]
     assert m["wg_id"] == wg.meta.id
     assert "@alice" in m["summary"]
+
+
+def test_validate_task_participants_rejects_unknown_member(short_tmp: Path) -> None:
+    home = short_tmp / "hubv"; home.mkdir()
+    _pin(home, "scout", "SCOUT_PK", ["workgroup.post"])
+    wg = _fake_wg("HUB", ["SCOUT_PK"])
+    # Naming a real member is fine.
+    wc._validate_task_participants(home, wg, "@scout #task #intake go")
+    # A typo / non-member must be rejected before it lands.
+    with pytest.raises(ValueError, match="unknown-participant"):
+        wc._validate_task_participants(home, wg, "@sout #task #intake go")
+
+
+def test_validate_task_participants_allows_collective(short_tmp: Path) -> None:
+    home = short_tmp / "hubv2"; home.mkdir()
+    _pin(home, "scout", "SCOUT_PK", ["workgroup.post"])
+    wg = _fake_wg("HUB", ["SCOUT_PK"])
+    # No mention on the opener line = collective task = always allowed.
+    wc._validate_task_participants(home, wg, "#task #intake go")
+
+
+def test_validate_task_participants_ignores_non_task(short_tmp: Path) -> None:
+    home = short_tmp / "hubv3"; home.mkdir()
+    _pin(home, "scout", "SCOUT_PK", ["workgroup.post"])
+    wg = _fake_wg("HUB", ["SCOUT_PK"])
+    # A mention in plain prose (not a #task opener) is not validated.
+    wc._validate_task_participants(home, wg, "thanks @sout for the help")
+
+
+def test_subscription_pipeline_flag_persists(short_tmp: Path) -> None:
+    """The `pipeline` flag (propagated from the hub on join) survives
+    save/load so the member dispatch can pick the longer turn budget."""
+    home = short_tmp / "m"; home.mkdir()
+    sub = sub_mod.Subscription(
+        wg_id="wg_p", name="proj", hub_id="mira", hub_pubkey="x" * 44,
+        pipeline=("intake", "design"),
+    )
+    sub_mod.upsert(home, sub)
+    loaded = sub_mod.get(home, "wg_p")
+    assert loaded is not None
+    assert loaded.pipeline == ("intake", "design")
+
+
+def test_validate_pipeline_task_requires_participants(short_tmp: Path) -> None:
+    """In a pipeline workgroup a `#task` must be targeted (≥1 owner);
+    a collective task (no mentions) is rejected before it lands."""
+    home = short_tmp / "hubpipe"; home.mkdir()
+    _pin(home, "pixel", "PIXEL_PK", ["workgroup.post"])
+    wg = _fake_wg("HUB", ["PIXEL_PK"], pipeline=["build"])
+    with pytest.raises(ValueError, match="pipeline-task-untargeted"):
+        wc._validate_task_participants(home, wg, "#task #build do the build")
+    # Targeted is fine.
+    wc._validate_task_participants(home, wg, "@pixel #task #build do the build")
+
+
+def test_validate_non_pipeline_collective_task_allowed(short_tmp: Path) -> None:
+    """A non-pipeline (deliberation) workgroup still allows collective tasks."""
+    home = short_tmp / "hubdelib"; home.mkdir()
+    _pin(home, "pixel", "PIXEL_PK", ["workgroup.post"])
+    wg = _fake_wg("HUB", ["PIXEL_PK"], pipeline=())
+    wc._validate_task_participants(home, wg, "#task #adr decide the thing")
+
+
+def test_quorum_roster_multi_participant(short_tmp: Path) -> None:
+    """A multi-owner pipeline task scopes the quorum to all named peers."""
+    home = short_tmp / "hubm"; home.mkdir()
+    _pin(home, "pixel", "PIXEL_PK", ["workgroup.post"])
+    _pin(home, "atlas", "ATLAS_PK", ["workgroup.post"])
+    _pin(home, "quill", "QUILL_PK", ["workgroup.post"])
+    wg = _fake_wg("HUB", ["PIXEL_PK", "ATLAS_PK", "QUILL_PK"], pipeline=["build"])
+    posts = [{"seq": 1, "from": "HUB", "text": "@pixel @atlas #task #build go"}]
+    roster = wc._quorum_roster(home, wg, posts, ["PIXEL_PK", "ATLAS_PK", "QUILL_PK"])
+    assert set(roster) == {"PIXEL_PK", "ATLAS_PK"}  # quill not named → not in quorum
+
+
+@pytest.mark.asyncio
+async def test_pull_updates_subscription_pipeline(short_tmp: Path, monkeypatch) -> None:
+    """A hub-side pipeline toggle after join propagates to the member on pull."""
+    home = short_tmp / "m"; home.mkdir()
+    load_or_generate(home)
+    sub = sub_mod.Subscription(
+        wg_id="wg_p", name="proj", hub_id="hub", hub_pubkey="x" * 44,
+        pipeline=(),
+    )
+    sub.upsert_key(1, "sealed")
+    sub_mod.upsert(home, sub)
+
+    async def fake_call(*a, **k):
+        return {"posts": [], "head": 0, "current_key_version": 1, "pipeline": ["intake", "design"]}
+
+    monkeypatch.setattr(wc, "_call", fake_call)
+    await wc.pull(home, "wg_p")
+    assert sub_mod.get(home, "wg_p").pipeline == ("intake", "design")
+
+
+def test_effective_profile_env_adds_node_when_missing(short_tmp: Path, monkeypatch) -> None:
+    """When `npm` isn't on the inherited PATH, the agent env gets node bins
+    prepended (so a terminal tool's `npm run build` resolves)."""
+    from alpi import home as home_mod
+    home = short_tmp / "p"; home.mkdir()
+    monkeypatch.setattr(home_mod, "_node_bin_dirs", lambda: ["/fake/node/bin"])
+    env = home_mod.effective_profile_env(home, base={"PATH": "/usr/bin:/bin"})
+    assert "/fake/node/bin" in env["PATH"].split(":")
+    # Idempotent / no-op when npm is already resolvable on PATH.
+    import shutil
+    monkeypatch.setattr(shutil, "which", lambda *a, **k: "/somewhere/npm")
+    env2 = home_mod.effective_profile_env(home, base={"PATH": "/usr/bin:/bin"})
+    assert "/fake/node/bin" not in env2["PATH"].split(":")
+
+
+def test_coerce_pipeline_tolerates_legacy_and_garbage() -> None:
+    """A list/tuple passes through; legacy bool / None / garbage → ()."""
+    assert sub_mod.coerce_pipeline(["intake", "design"]) == ("intake", "design")
+    assert sub_mod.coerce_pipeline(("a", "b")) == ("a", "b")
+    assert sub_mod.coerce_pipeline(True) == ()      # legacy pipeline: true
+    assert sub_mod.coerce_pipeline(None) == ()
+    assert sub_mod.coerce_pipeline("nope") == ()

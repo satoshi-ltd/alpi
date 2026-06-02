@@ -112,7 +112,44 @@ def effective_profile_env(
     out.update(read_profile_env(home))
     if extra:
         out.update(extra)
+    _ensure_node_on_path(out)
     return out
+
+
+_NODE_BIN_DIRS: list[str] | None = None
+
+
+def _node_bin_dirs() -> list[str]:
+    """Node/npm bin dirs to make available to agent subprocesses. The daemon
+    is often launched without the user's interactive PATH (nvm sourced in
+    .zshrc), so an agent terminal tool's ``npm run build`` fails with
+    ``command not found``. Detected once, newest nvm version first."""
+    global _NODE_BIN_DIRS
+    if _NODE_BIN_DIRS is None:
+        import glob
+        h = os.path.expanduser("~")
+        cands = sorted(
+            glob.glob(os.path.join(h, ".nvm/versions/node/*/bin")),
+            reverse=True,
+        )
+        cands += ["/opt/homebrew/bin", "/usr/local/bin"]
+        _NODE_BIN_DIRS = [
+            d for d in cands if os.path.exists(os.path.join(d, "npm"))
+        ]
+    return _NODE_BIN_DIRS
+
+
+def _ensure_node_on_path(env: dict[str, str]) -> None:
+    """Prepend node bin dirs to ``env['PATH']`` only when ``npm`` isn't
+    already resolvable there — conservative, no-op on a system that already
+    has node on PATH."""
+    import shutil
+    path = env.get("PATH") or os.environ.get("PATH", "")
+    if shutil.which("npm", path=path or None):
+        return
+    dirs = [d for d in _node_bin_dirs() if d not in path.split(os.pathsep)]
+    if dirs:
+        env["PATH"] = os.pathsep.join(dirs + ([path] if path else []))
 
 
 def telegram_token_owner(

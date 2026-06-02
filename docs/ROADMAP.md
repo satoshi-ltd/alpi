@@ -45,8 +45,11 @@ sovereignty depends on.
 
 | ID | Item | Status |
 |---|---|---|
-| ALP.3+ | Multi-task workgroups — opt-in `multitask: true` with letter-prefixed task IDs (`#task A`, `#done A`), per-task roster filters, dispatch gating, and budget headroom. | 🟡 |
-| ALP.3.H | Workgroup hardening — single-source the marker parser (front/back conformance), per-workgroup closure/poll timeouts, rekey-while-task-open fix, hub-served task ledger. Surfaced by the protocol lab. | 🟡 |
+| ALP.3.H | Workgroup orchestration — targeted tasks (opener-line mentions → scoped dispatch + closure-quorum), ordered `meta.pipeline` continuation (core computes the next phase after `#done`; hub can't skip/misorder), participant validation, `#done BLOCKED` (halts the pipeline), bounded repair watchdog, 900s pipeline turn budget, and `pipeline` controls in CLI/host/setup + desktop/mobile. | ✅ |
+| ALP.3.I | Turn runtime hardening — idle-based turn timeout, `#working` continuation/re-dispatch, dead-turn telemetry, configurable closure-quorum timeout. | 🔵 |
+| ALP.3.J | Workgroup state ledger — hub-served task state (no client-side refold/decrypt); `wg.blocked` card rendering. | 🔵 |
+| ALP.3.K | Rekey edge cases — leave/kick/rekey while a task is open (hub-side key history, or auto-close / re-pin). | 🔵 |
+| ALP.3+ | Multi-task workgroups — opt-in `multitask: true`, letter-prefixed task IDs, per-task roster/dispatch/budget. **Deferred**: targeted tasks + pipeline continuation cover sequential per-project pipelines; revisit only if the persistent workgroups (`template`/`quality`/`brand-library`) prove real parallelism. | 🔵 |
 
 ### UX.2 / UX.3. Owned client experience
 
@@ -89,78 +92,136 @@ Promotion condition: `alpi digest` or LLM test traces show repeated,
 family-specific failures such as under-calling tools, skipping
 verification, or closing turns early despite open commitments.
 
-### ALP.3+. Multi-task workgroups
+### ALP.3+ — Multi-task workgroups (deferred)
 
-v0.3 ships a strict single-task model: posting a new `#task` while one
-is open auto-closes the previous with `"preempted by …"`. The constraint
-forces convergence and keeps agent context narrow. ALP.3+ lifts it for
-workgroups that **need** parallel streams — long-lived ops surfaces
-where members collaborate on several independent improvement threads
-at once rather than converging on one.
+> **Deferred to future (out of v0.7).** Targeted tasks + pipeline
+> continuation (ALP.3.H) give sequential per-project workflows everything
+> they need without multitask's extra state, partial-closure, quorum, and
+> UI edge cases. Multitask only earns its complexity if the *persistent*
+> workgroups (`template`, `quality`, `brand-library`) show real, sustained
+> parallelism. Until then this stays backlog.
 
-**Shape.** Workgroups opt in with `multitask: true` in `meta.yaml`.
-Markers extend with letter-prefixed IDs: `#task A research the
-peptide`, `#task B audit the contract`, closures match prefix
-(`#done A: shortlist of 5`). Each task carries its own active state,
-its own `last_responded_seq` per member, its own dispatch gating, its
-own budget headroom against the workgroup pool.
+v0.3 ships strict single-task: a new `#task` preempts the open one
+(`"preempted by …"`), which forces convergence and keeps context narrow.
+ALP.3+ would lift it via `multitask: true` + letter-prefixed IDs (`#task A …`,
+`#done A: …`), each task carrying its own active state, per-member
+`last_responded_seq`, dispatch gating, and budget headroom. Single-task stays
+the default and fits per-project pipelines (one owner per phase via targeted
+tasks); multitask earns its complexity — per-task quorum filters, N-thread UI,
+per-task budget accounting — only when the persistent workgroups (`template`,
+`quality`, `brand-library`) show sustained parallelism.
 
-**Single-task remains the default** — `multitask: true` is opt-in to
-keep simple workgroups simple. The flag belongs on workgroups whose
-mission is *maintain a surface over time*, not on workgroups whose
-mission is *converge on one decision* — single-task fits the latter
-perfectly and shouldn't change.
+### ALP.3.H — Workgroup orchestration
 
-**Risks to manage**:
-- Per-task roster filters complicate the closure-quorum check
-- UI for showing N concurrent threads adds surface area
-- Per-task budget headroom needs careful accounting against the
-  workgroup lifetime cap
+Targeted, ordered pipelines run under single-task: the core owns phase
+ordering, the hub owns closing. Surfaced + exercised by the protocol lab
+(`organizations/lab/`). Core invariants hold cleanly; the items below are
+shipped, with operational follow-ups split into ALP.3.I/J/K.
 
-### ALP.3.H. Workgroup hardening
-
-Surfaced by the protocol lab (`organizations/lab/`), which exercises
-every workgroup invariant deterministically plus a live all-skip
-closure. The core invariants hold cleanly — these are the rough edges
-the harness exposed, all bounded, none a design fault.
-
-- **Single-source the marker parser.** `#task` / `#done` / `#skip` /
-  `#working` recognition is implemented twice — `alpi/alp/tasks.py`
-  (backend, authoritative) and the JS apps
-  (`mobile/src/features/chat/parseMarkers.js`, desktop
-  `lib/workgroup-tasks.js`). They already diverge: a post with BOTH
+- **Front/back marker recognition aligned (done).** A post with BOTH
   `#task` and `#done` at line starts is **prose** to the backend
-  (ambiguous → ignored) but renders as a `#task` card in the apps.
-  Define one spec plus a shared conformance fixture both sides run.
-  Cheapest, highest-value item here.
+  (`tasks.parse_post` ambiguity → ignored). Mobile already matched this
+  (`classifyMessage`); the desktop renderer was rendering it as a `#task`
+  card. Fixed by giving desktop a `classifyMessage` that mirrors mobile's
+  rule and using it in `WorkgroupView`. Backend untouched.
 
-- **Per-workgroup closure / poll timeouts.**
-  `_FULL_QUORUM_TIMEOUT_SECONDS` is hardcoded at 10 min; the poller
-  (30s), hub watchdog (60s grace) and preempt watcher (5s) are fixed
-  too. The lab's all-skip task closed at ~700s — the 600s quorum gate
-  plus ~100s of dispatch + LLM latency before the hub re-woke and
-  posted its `#done`. Correct behaviour, but the layered timers make
-  autonomous closure hard to reason about (it reads as a hang while it
-  is merely waiting). Make the quorum timeout configurable in
-  `meta.yaml`; document the gate+dispatch latency so "still open past
-  10 min" isn't mistaken for a stall.
+- **Targeted task orchestration via mentions (done).** A `#task` opener
+  can name its participants with `@`-mentions on the opener line
+  (`@scout #task #intake …`, or `#task #lit @alice …`); `tasks.parse_post`
+  captures them as `Task.participants`. Dispatch (`_should_dispatch`) wakes
+  only the named peers, and the closure-quorum (`_quorum_roster` →
+  `_check_hub_rotation`) is computed over just those participants — unnamed
+  members neither wake nor block the close. A `#task` with no mentions
+  stays **collective** (whole roster), as before. This lets a per-project
+  pipeline run single-task with one owner per phase: the hub opens
+  `@<owner> #task #<phase>`, the owner produces, the hub closes on the
+  owner's substantive post and opens the next phase — no full-roster
+  skip-round, no 10-min quorum-timeout wait. With this, ALP.3+ multitask is
+  deferred further: well-segmented targeted tasks make single-task viable
+  for per-project workgroups long-term; multitask is reserved for the
+  persistent workgroups (`template`, `quality`, `brand-library`).
 
-- **Rekey while a task is open.** A `leave` / `kick` mid-task rotates
-  the group key; the open `#task` post stays encrypted under the old
-  version. The hub, holding only the new key, blanks other-version
-  entries when it folds (`_post_as_hub`) → the task drops out of the
-  hub's ledger and can't be closed hub-side. Remaining members keep the
-  old key in their version map and still see it, so it's a hub-side
-  blind spot, not data loss. Fix: persist a hub-side key history so the
-  hub can fold the full transcript, or auto-close / re-pin active tasks
-  on rekey.
+- **Pipeline = ordered phase slugs + deterministic continuation (done).**
+  `meta.pipeline` is an ordered slug list (e.g. `[intake, design, content,
+  translation, seo, build, qa]`); empty = normal deliberation workgroup.
+  The **core owns the ordering**; owners + deliverables stay in the org
+  (briefing/souls). After a `#done` closes a phase with no successor, the
+  continuation watchdog reads the closed slug, finds it in the list, and
+  wakes the hub in NORMAL mode telling it the EXACT next slug to open
+  (`@<owner> #task #<next>`), so the hub can't skip a phase or mis-pick the
+  next. Last phase → no wake (complete); closed slug not in the list →
+  `wg.blocked` once, never guess. Bounded retry (`_CONTINUATION_MAX_FIRES`, read-first so a
+  capped tick writes no state) recovers a whiffed wake without the
+  every-5-min loop. Propagated to members via join/pull → `sub.pipeline`.
+  Slugs validated (lowercase, `[a-z0-9][a-z0-9_-]*`, no duplicates).
 
-- **Hub-served task ledger.** Task state is re-derived client-side by
-  folding the decrypted transcript on every `pull`; there is no
-  canonical ledger to read, so inspection and debugging mean
-  decrypt-and-fold by hand. The hub already recomputes task state for
-  the closure-quorum check — expose it (via `workgroup.show` / `pull`)
-  so clients and operators don't each refold.
+- **Participant validation (done).** A hub `#task` that names a
+  non-member (`@sout` typo, or a peer who never joined) is rejected at
+  post time (`_validate_task_participants`) before it enters the
+  transcript — otherwise it opens a task that wakes nobody and can never
+  reach quorum. Collective tasks (no mentions) are always allowed.
+
+- **Pipeline blocked-detection + repair (done).** On the 2nd closure
+  nudge on the same stalled `seq` with no progress, the watchdog emits a
+  persisted `wg.blocked` host event (same family as `wg.post`/`wg.done` —
+  durable in the event history for clients to surface; card rendering is
+  follow-up) and, for `pipeline` workgroups, escalates to **repair mode**:
+  a NORMAL hub wake that can re-task or preempt (re-verify on-disk state,
+  re-task the owner with the correct path/spec) rather than only
+  `#done`-or-silence. **Repair is one-shot per `seq`** — after the closure
+  nudge + the repair attempt, the hub is not woken again on that seq;
+  `wg.blocked` stays the visible state until the transcript moves (a new
+  post resets the seq). Stronger hub-side orchestration rules (read canon +
+  phase order before opening a phase) remain org-side soul/skill work.
+
+- **`#done BLOCKED`, final repair, pipeline budget, assignable everywhere
+  (done).** A `#done` whose result starts with `BLOCKED` closes the task and
+  halts the pipeline (no advance, no reopen) until a human re-tasks — plain
+  `BLOCKED` prose has no protocol effect. A stalled pipeline gets a one-shot
+  **final repair** (verify on disk → close-or-`BLOCKED`) before the watchdog
+  abandons it. Pipeline workgroups get a 900s turn budget (300s for
+  deliberation). A member's `#done` is stripped (not dropped) so its handoff
+  text survives. Pipelines are assignable end-to-end: `workgroup create
+  --pipeline`, the `host.workgroup.create/update` RPC, and the desktop +
+  mobile create/settings UIs.
+
+The items below don't block ALP.3.H — they're separate follow-ups.
+
+### ALP.3.I — Turn runtime hardening
+
+- **Idle-based turn timeout.** The turn budget is a fixed wall-clock
+  (300s deliberation / 900s pipeline). Replace it with kill-on-inactivity
+  (reset on the child's tool/stderr activity, with an absolute backstop) so a
+  slow-but-producing turn survives and only a hung one dies. Make the value
+  per-org / per-workgroup configurable.
+- **`#working` continuation.** A peer that posts `#working` then ends with no
+  output isn't re-dispatched, and the timeout ignores `#working` — the
+  heartbeat neither protects its turn nor guarantees a follow-up. `#working`
+  should refresh the (idle) budget and/or schedule a re-dispatch of that owner.
+- **Dead-turn telemetry.** A turn killed before posting leaves no tool trace
+  (empty `sessions/` stub, child tool calls absent from the log). Persist
+  per-turn tool telemetry even on kill so a stuck producer is diagnosable.
+- **Configurable closure-quorum timeout.** `_FULL_QUORUM_TIMEOUT_SECONDS` is
+  fixed at 10 min (plus dispatch latency); make it `meta.yaml`-configurable and
+  document the gate+dispatch latency so "still open past 10 min" doesn't read
+  as a stall.
+
+### ALP.3.J — Workgroup state ledger
+
+Task state is re-derived client-side by folding the decrypted transcript on
+every `pull` — no canonical ledger, so inspection means decrypt-and-fold by
+hand. The hub already recomputes task state for the closure-quorum check;
+expose it (via `workgroup.show` / `pull`) so clients and operators don't each
+refold. Includes `wg.blocked` card rendering in the clients.
+
+### ALP.3.K — Rekey edge cases
+
+A `leave` / `kick` mid-task rotates the group key; the open `#task` post stays
+under the old version, so the hub (holding only the new key) blanks it on fold
+(`_post_as_hub`) → the task drops from the hub's ledger and can't be closed
+hub-side. Remaining members keep the old key and still see it — a hub-side
+blind spot, not data loss. Fix: persist a hub-side key history so the hub folds
+the full transcript, or auto-close / re-pin active tasks on rekey.
 
 **Explicitly not in scope.** Author-declared post cost (the honour-system
 budget gate) and hub-anchored availability (cold workgroup when the hub

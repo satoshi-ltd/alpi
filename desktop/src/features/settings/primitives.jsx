@@ -1,30 +1,12 @@
 import Button from "../../primitives/Button.jsx";
 import { useNotify } from "../../primitives/Notification.jsx";
 import { Section as DSSection, Field as DSField } from "../../primitives/SettingsLayout.jsx";
-import { Tip } from "../../primitives/index.js";
 import styles from "./Settings.module.css";
 
-export function Section({ title, tooltip, children }) {
-  const inner = (
-    <>
-      {title}
-      {tooltip && (
-        <span className={styles.sectionHelpMark} aria-label="help">
-          ?
-        </span>
-      )}
-    </>
-  );
-  const label = tooltip ? (
-    <Tip text={tooltip} side="down">
-      <span style={{ display: "inline-flex", alignItems: "center", gap: "var(--space-3)", cursor: "help" }}>
-        {inner}
-      </span>
-    </Tip>
-  ) : (
-    inner
-  );
-  return <DSSection label={label}>{children}</DSSection>;
+// Section description renders inline beside the heading (the `kicker` slot),
+// not as a `?` hover — `tooltip` is kept as an alias so existing callers work.
+export function Section({ title, tooltip, kicker, children }) {
+  return <DSSection label={title} kicker={kicker ?? tooltip}>{children}</DSSection>;
 }
 
 export function Row({ label, alignTop, children }) {

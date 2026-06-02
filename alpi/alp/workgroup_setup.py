@@ -105,6 +105,8 @@ def _hub_detail_view(home: Path, wg_id: str) -> None:
              f"{len(wg.members)} pinned"),
             ("Briefing",        "briefing",
              _preview(wg.meta.briefing) if wg.meta.briefing else "(empty)"),
+            ("Pipeline",        "pipeline",
+             " → ".join(wg.meta.pipeline) if wg.meta.pipeline else "deliberation"),
             ("Budget",          "budget", _budget_summary(home, wg)),
             ui.Heading("Maintenance"),
             ("Pause" if not wg.meta.paused else "Resume",
@@ -126,6 +128,8 @@ def _hub_detail_view(home: Path, wg_id: str) -> None:
             _edit_budget(home, wg)
         elif choice == "briefing":
             _edit_briefing(home, wg)
+        elif choice == "pipeline":
+            _edit_pipeline(home, wg)
         elif choice == "pause":
             wg.meta.paused = True
             from alpi.alp.workgroup import _utcnow, _save_meta, _wg_dir
@@ -434,6 +438,14 @@ def _create_flow(home: Path) -> None:
         return ui.cancelled()
     briefing = (briefing or "").strip()
 
+    pipeline_raw = ui.text(
+        "Pipeline phases, comma-separated (ENTER for deliberation):",
+        default="",
+    )
+    if pipeline_raw is None:
+        return ui.cancelled()
+    pipeline = [p.strip() for p in (pipeline_raw or "").split(",") if p.strip()]
+
     pinned = peers_mod.load(home)
     if not pinned:
         ui.fail_and_wait("no peers pinned — add some in setup → Peers first")
@@ -463,6 +475,7 @@ def _create_flow(home: Path) -> None:
             home, name=name, hub_kp=kp,
             member_pubkeys=member_pks, budget=budget or {},
             briefing=briefing, auto_kickoff=bool(auto_kickoff),
+            pipeline=pipeline,
             hub_bio=hub_bio, hub_voice=hub_voice,
         )
     except ValueError as e:
@@ -572,6 +585,39 @@ def _edit_briefing(home: Path, wg) -> None:
     wg.meta.briefing = (raw or "").strip()
     _save_meta(_wg_dir(home, wg.meta.id), wg.meta)
     ui.ok_and_wait("briefing updated")
+
+
+def _edit_pipeline(home: Path, wg) -> None:
+    """Edit the ordered pipeline phase slugs. Empty means normal deliberation."""
+    from alpi.alp.workgroup import _normalize_pipeline, _save_meta, _wg_dir
+
+    current = ", ".join(wg.meta.pipeline)
+    ui.banner(
+        ui.crumb("setup", "workgroups", wg.meta.name, "pipeline"),
+        subtitle="ordered phase slugs",
+        home=home,
+    )
+    ui.dim(
+        "Pipeline workgroups auto-continue after each `#done` by moving\n"
+        "through these slugs in order. Leave empty for a normal deliberation\n"
+        "workgroup."
+    )
+    ui._console.print("")
+    raw = ui.text(
+        f"Pipeline (current: {current or 'deliberation'}):",
+        default=current,
+    )
+    if raw is None:
+        return ui.cancelled()
+    try:
+        wg.meta.pipeline = _normalize_pipeline(
+            [p.strip() for p in (raw or "").split(",") if p.strip()],
+        )
+    except ValueError as e:
+        ui.fail_and_wait(str(e))
+        return
+    _save_meta(_wg_dir(home, wg.meta.id), wg.meta)
+    ui.ok_and_wait("pipeline updated")
 
 
 def _preview(text: str, limit: int = 60) -> str:

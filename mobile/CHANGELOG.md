@@ -14,6 +14,16 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.1.26 — 2026-06-02 — assign a workgroup pipeline
+
+Requires alpi v0.6.32+.
+
+- **Assign a pipeline to a workgroup.** Workgroup settings shows the ordered
+  stages as read-only chips with an "Edit pipeline" row that opens a dedicated
+  full-screen editor — add, remove, and reorder stages with ↑/↓ (no drag, so
+  it never fights the scroll). The create screen takes a pipeline too. Empty =
+  a normal deliberation workgroup; the hub then runs the stages in order.
+
 ## v0.1.25 — 2026-05-29 — task sheet reads skips correctly
 
 - **Skips read correctly.** One member passing on a round no longer

@@ -46,6 +46,13 @@ RECENT_POSTS_CACHE = 20  # last N posts cached locally for engine context
 DISPATCH_COOLDOWN_SECONDS = 60  # min gap between auto-dispatches per workgroup
 
 
+def coerce_pipeline(value: Any) -> tuple[str, ...]:
+    """Normalise a pipeline value from disk or the wire to a tuple of phase
+    slugs. Anything that isn't a list/tuple — legacy ``True``, ``None``,
+    garbage — degrades to ``()`` instead of raising (no crash on old data)."""
+    return tuple(value) if isinstance(value, (list, tuple)) else ()
+
+
 @dataclass
 class Subscription:
     """One workgroup we are a remote member of (we are NOT the hub)."""
@@ -58,6 +65,8 @@ class Subscription:
     joined_at: str = ""
     # Hub-side anchor cached locally so the engine pre-turn hook gives the member's agent the same briefing the hub's agent sees. Refreshed on every successful ``workgroup.join``.
     briefing: str = ""
+    # Mirror of hub's `meta.pipeline` (join/pull); non-empty → member uses the longer production turn budget.
+    pipeline: tuple[str, ...] = ()
     # Decoupled from ``last_seq`` so a tick that pulls a new post but skips on cooldown doesn't lose the trigger — next tick re-evaluates against the cache.
     last_responded_seq: int = 0
     roster: dict[str, str] = field(default_factory=dict)
@@ -124,6 +133,7 @@ def load(home: Path) -> list[Subscription]:
                 joined_at=str(entry.get("joined_at") or ""),
                 last_dispatch_at=str(entry.get("last_dispatch_at") or ""),
                 briefing=str(entry.get("briefing") or ""),
+                pipeline=coerce_pipeline(entry.get("pipeline")),
                 last_responded_seq=int(entry.get("last_responded_seq", 0)),
                 roster=dict(entry.get("roster") or {}),
                 roster_bios=dict(entry.get("roster_bios") or {}),
@@ -170,6 +180,8 @@ def save(home: Path, subs: list[Subscription]) -> None:
             entry["last_dispatch_at"] = s.last_dispatch_at
         if s.briefing:
             entry["briefing"] = s.briefing
+        if s.pipeline:
+            entry["pipeline"] = list(s.pipeline)
         if s.last_responded_seq:
             entry["last_responded_seq"] = s.last_responded_seq
         if s.roster:

@@ -666,6 +666,7 @@ async fn workgroup_create(
     member_peer_ids: Vec<String>,
     budget_usd: Option<f64>,
     briefing: Option<String>,
+    pipeline: Option<String>,
 ) -> Result<String, String> {
     let mut params = serde_json::json!({
         "profile": profile,
@@ -677,6 +678,10 @@ async fn workgroup_create(
     }
     if let Some(b) = briefing.filter(|s| !s.is_empty()) {
         params["briefing"] = serde_json::Value::String(b);
+    }
+    // Comma-separated phase slugs; the host splits + validates. Empty → none.
+    if let Some(p) = pipeline.filter(|s| !s.trim().is_empty()) {
+        params["pipeline"] = serde_json::Value::String(p);
     }
     let result = tauri::async_runtime::spawn_blocking(move || {
         host_client::call("host.workgroup.create", params)
@@ -697,10 +702,15 @@ async fn workgroup_update(
     briefing: Option<String>,
     budget_usd: Option<f64>,
     clear_budget: Option<bool>,
+    pipeline: Option<String>,
 ) -> Result<(), String> {
     let mut params = serde_json::json!({ "profile": profile, "wg_id": wg_id });
     if let Some(b) = briefing {
         params["briefing"] = serde_json::Value::String(b);
+    }
+    // Comma-separated phase slugs; empty string clears the pipeline.
+    if let Some(p) = pipeline {
+        params["pipeline"] = serde_json::Value::String(p);
     }
     if clear_budget.unwrap_or(false) {
         params["clear_budget"] = serde_json::json!(true);

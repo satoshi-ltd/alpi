@@ -93,6 +93,12 @@ async def _create(
 
     briefing = str(params.get("briefing") or "").strip()
 
+    # Ordered pipeline phase slugs — a list, or a comma-separated string from
+    # a UI field. Empty = a normal deliberation workgroup.
+    pipeline_raw = params.get("pipeline") or []
+    if isinstance(pipeline_raw, str):
+        pipeline_raw = [p.strip() for p in pipeline_raw.split(",") if p.strip()]
+
     from alpi import config as cfg_mod
     from alpi.alp import workgroup as wg_mod
     from alpi.alp.keys import load_or_generate
@@ -108,6 +114,7 @@ async def _create(
             member_pubkeys=pubkeys,
             budget=budget,
             briefing=briefing,
+            pipeline=pipeline_raw,
             hub_bio=hub_bio,
             hub_voice=hub_voice,
         )
@@ -149,6 +156,16 @@ async def _update(
     if briefing is not None:
         wg.meta.briefing = str(briefing).strip()
         changes.append("briefing")
+    pipeline = params.get("pipeline")
+    if pipeline is not None:
+        # List, or a comma-separated string from a UI field. Empty clears it.
+        if isinstance(pipeline, str):
+            pipeline = [p.strip() for p in pipeline.split(",") if p.strip()]
+        try:
+            wg.meta.pipeline = wg_mod._normalize_pipeline(pipeline)
+        except ValueError as e:
+            raise host_server.HandlerError(-32602, "invalid-params", data={"detail": str(e)})
+        changes.append("pipeline")
     if clear_budget:
         wg.meta.budget = {}
         changes.append("budget cleared")
@@ -168,7 +185,7 @@ async def _update(
     if not changes:
         raise host_server.HandlerError(
             -32602, "invalid-params",
-            data={"detail": "nothing to update — pass briefing, budget_usd or clear_budget"},
+            data={"detail": "nothing to update — pass briefing, pipeline, budget_usd or clear_budget"},
         )
 
     wg_mod._save_meta(wg_mod._wg_dir(home, wg_id), wg.meta)

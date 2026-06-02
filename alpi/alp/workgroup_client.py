@@ -132,6 +132,77 @@ def _opener_post(
     return opener
 
 
+def _quorum_roster(
+    home: Path, wg, posts: list[dict], member_pubkeys: list[str],
+) -> list[str]:
+    """Closure-quorum roster for the active task. When the task named
+    participants (opener-line mentions like ``@scout #task #intake``),
+    the quorum is just those peers — members the task didn't name don't
+    block the close. A collective task (no mentions) keeps the full
+    roster, as before."""
+    active = tasks_mod.active_task(posts, hub_pubkey=wg.meta.hub_pubkey)
+    if active is None or not active.participants:
+        return member_pubkeys
+    wanted = {p.lower() for p in active.participants}
+    roster: list[str] = []
+    for pk in member_pubkeys:
+        peer = peers_mod.get_by_pubkey(home, pk)
+        name = (peer.id if peer else "").lower()
+        if name and name in wanted:
+            roster.append(pk)
+    return roster or member_pubkeys
+
+
+def _validate_task_participants(home: Path, wg, plaintext: str) -> None:
+    """Validate a hub `#task` opener before it lands in the transcript:
+
+    - **Unknown mention** (typo / never-joined peer) → reject; it would
+      open a task that wakes nobody and can never reach quorum.
+    - **Pipeline workgroup, no participants** → reject; a pipeline phase
+      must be targeted at its owner(s) (`@pixel #task #build …`), not
+      collective. Collective tasks stay allowed in non-pipeline (delib)
+      workgroups.
+    """
+    events = tasks_mod.parse_post(
+        plaintext, 0, wg.meta.hub_pubkey, hub_pubkey=wg.meta.hub_pubkey,
+    )
+    task_events = [ev for ev in events if ev.kind == "task"]
+    if not task_events:
+        return
+    parts = [p for ev in task_events for p in ev.participants]
+    if not parts:
+        if getattr(wg.meta, "pipeline", False):
+            raise ValueError(
+                "pipeline-task-untargeted: in a pipeline workgroup every "
+                "`#task` must name its owner(s) with `@`-mentions on the "
+                "opener line (e.g. `@pixel #task #build …`, or "
+                "`@pixel @atlas #task …`). A collective task would wake the "
+                "whole roster — not allowed in a pipeline."
+            )
+        return
+    member_ids: set[str] = set()
+    for m in wg.members:
+        peer = peers_mod.get_by_pubkey(home, m.pubkey)
+        if peer and peer.id:
+            member_ids.add(peer.id.lower())
+    try:
+        from alpi.home import profile_name
+        own = (profile_name(home) or "").lower()
+        if own:
+            member_ids.add(own)
+    except Exception:  # noqa: BLE001
+        pass
+    unknown = [p for p in parts if p.lower() not in member_ids]
+    if unknown:
+        raise ValueError(
+            "unknown-participant: "
+            + ", ".join(f"@{u}" for u in unknown)
+            + " not in this workgroup. A `#task` may only name joined "
+            "members — an unknown mention opens a task that wakes nobody. "
+            "Fix the handle, or omit mentions for a collective task."
+        )
+
+
 def _check_hub_rotation(
     posts: list[dict], own_pubkey: str, plaintext: str,
     member_pubkeys: list[str] | None = None,
@@ -298,6 +369,7 @@ async def join(home: Path, peer_id: str, wg_id: str) -> sub_mod.Subscription:
     if not sub.name:
         sub.name = str(result.get("name") or "")
     sub.briefing = str(result.get("briefing") or "")
+    sub.pipeline = sub_mod.coerce_pipeline(result.get("pipeline"))
     sub.upsert_key(int(result.get("key_version", 1)), str(result["sealed_key"]))
     _absorb_roster(sub, result.get("members"))
     sub_mod.upsert(home, sub)
@@ -371,12 +443,24 @@ async def post(
     except Exception:  # noqa: BLE001
         plaintext = ""
     found_markers = tasks_mod.has_markers(plaintext)
-    if found_markers:
+    if "task" in found_markers:
+        # Members never open tasks; a `#task`+`#done` combo is ambiguous too.
         raise ValueError(
             "only the workgroup hub may post #"
             + "/#".join(found_markers)
             + " markers — non-hub members must stay silent."
         )
+    if "done" in found_markers:
+        # Strip the hub-only marker, keep the handoff text — don't drop a real
+        # deliverable (the parser ignores member markers regardless).
+        stripped = tasks_mod.strip_done_marker(plaintext)
+        if not stripped.strip():
+            raise ValueError(
+                "a member `#done` with no handoff text is rejected — post a "
+                "plain status line; only the hub closes the task."
+            )
+        plaintext = stripped
+        text = stripped.encode("utf-8")
 
     try:
         await pull(home, wg_id)
@@ -500,9 +584,12 @@ def _post_as_hub(
             "the transcript."
         )
 
+    _validate_task_participants(home, wg, plaintext)
+
     member_pubkeys = [m.pubkey for m in wg.members]
+    quorum_roster = _quorum_roster(home, wg, existing, member_pubkeys)
     _check_hub_rotation(
-        existing, kp.pubkey_b64(), plaintext, member_pubkeys,
+        existing, kp.pubkey_b64(), plaintext, quorum_roster,
     )
 
     group_key = wg_mod.open_sealed_group_key(own.sealed_key, kp)
@@ -557,6 +644,9 @@ async def pull(
     head = int(raw.get("head", cursor))
     if head > sub.last_seq:
         sub.last_seq = head
+    # Refresh the pipeline phase list every pull so a hub-side change after
+    # join propagates to already-subscribed members (default: keep current).
+    sub.pipeline = sub_mod.coerce_pipeline(raw.get("pipeline", sub.pipeline))
     sub.append_recent(decrypted)
     _absorb_roster(sub, raw.get("members"))
     sub_mod.upsert(home, sub)

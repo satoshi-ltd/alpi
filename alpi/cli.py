@@ -3605,11 +3605,15 @@ def _read_local_transcript(h: Path, wg_id: str) -> list[dict]:
               help="Lifetime token cap (local / free models).")
 @click.option("--briefing", default="",
               help="Initial briefing text. Hub can edit later via set-briefing.")
+@click.option("--pipeline", default="",
+              help="Ordered pipeline phase slugs, comma-separated "
+                   "(e.g. 'intake,content,build,qa'). Empty = a normal "
+                   "deliberation workgroup.")
 @click.pass_context
 def workgroup_create(
     ctx: click.Context, name: str,
     members: tuple[str, ...], budget_usd: float | None,
-    budget_tokens: int | None, briefing: str,
+    budget_tokens: int | None, briefing: str, pipeline: str,
 ) -> None:
     """Create a workgroup as hub; members are pubkeys or pinned peer ids."""
     from alpi.alp import peers as peers_mod
@@ -3636,16 +3640,19 @@ def workgroup_create(
     hub_cfg = config.load(h)
     hub_bio = (hub_cfg.public_bio or "").strip()
     hub_voice = (hub_cfg.tools.tts.voice or "").strip()
+    phases = [p.strip() for p in pipeline.split(",") if p.strip()]
     try:
         wg = wg_mod.create(
             h, name=name, hub_kp=load_or_generate(h),
             member_pubkeys=pubkeys, budget=budget,
             briefing=(briefing or "").strip(),
+            pipeline=phases,
             hub_bio=hub_bio, hub_voice=hub_voice,
         )
     except ValueError as e:
         raise click.ClickException(str(e))
-    click.echo(f"created {wg.meta.id} · {len(wg.members)} members")
+    pipe_note = f" · pipeline {'→'.join(wg.meta.pipeline)}" if wg.meta.pipeline else ""
+    click.echo(f"created {wg.meta.id} · {len(wg.members)} members{pipe_note}")
 
 
 @workgroup.command("join")
@@ -3851,10 +3858,13 @@ def workgroup_remove(ctx: click.Context, wg_id: str, yes: bool) -> None:
               help="Set the lifetime USD cap.")
 @click.option("--clear-budget", is_flag=True, default=False,
               help="Remove any lifetime budget.")
+@click.option("--pipeline", default=None,
+              help="Replace ordered pipeline phase slugs, comma-separated. "
+                   "Pass an empty string to clear.")
 @click.pass_context
 def workgroup_update(
     ctx: click.Context, wg_id: str, briefing: str | None,
-    budget_usd: float | None, clear_budget: bool,
+    budget_usd: float | None, clear_budget: bool, pipeline: str | None,
 ) -> None:
     """Hub-only: edit a workgroup's mutable metadata."""
     from alpi.alp import workgroup as wg_mod
@@ -3875,6 +3885,16 @@ def workgroup_update(
     if briefing is not None:
         wg.meta.briefing = (briefing or "").strip()
         changes.append(f"briefing={len(wg.meta.briefing)} chars")
+    if pipeline is not None:
+        try:
+            wg.meta.pipeline = wg_mod._normalize_pipeline(
+                [p.strip() for p in pipeline.split(",") if p.strip()],
+            )
+        except ValueError as e:
+            raise click.ClickException(str(e))
+        changes.append(
+            "pipeline=" + ("→".join(wg.meta.pipeline) if wg.meta.pipeline else "cleared"),
+        )
     if clear_budget:
         wg.meta.budget = {}
         changes.append("budget cleared")
@@ -3885,7 +3905,7 @@ def workgroup_update(
         changes.append(f"budget=${budget_usd:.2f}")
     if not changes:
         raise click.ClickException(
-            "nothing to update — pass --briefing, --budget-usd or --clear-budget"
+            "nothing to update — pass --briefing, --pipeline, --budget-usd or --clear-budget"
         )
     wg_mod._save_meta(wg_mod._wg_dir(h, wg_id), wg.meta)
     click.echo(f"updated {wg_id} · {' · '.join(changes)}")

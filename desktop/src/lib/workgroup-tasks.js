@@ -58,6 +58,22 @@ export const parseSkip = (body) => {
   return content === null ? null : { content };
 };
 
+// Single resolved classification for a post body. A post with BOTH a #task
+// and a #done at line starts is prose (mirrors alpi parse_post ambiguity) —
+// this is the one place the desktop renderer must agree with the backend.
+export function classifyMessage(body) {
+  const task = parseTaskOpen(body);
+  const done = parseDone(body);
+  if (task && done) return { variant: "message", text: body };
+  if (task) return { variant: "task", task };
+  const working = parseWorking(body);
+  if (working) return { variant: "working", text: working.content };
+  if (done) return { variant: "done", text: done.content };
+  const skip = parseSkip(body);
+  if (skip) return { variant: "skip", text: skip.content };
+  return { variant: "message", text: body };
+}
+
 export function findLatestTask(messages, hubPubkey = null) {
   if (!messages || messages.length === 0) return null;
   let latest = null;

@@ -115,12 +115,16 @@ gets your post rejected before it goes on the wire):
      top three onboarding friction points`). A `#task` without a
      `#<slug>` is rejected by the SDK with `task-missing-slug`.
      Member `#task` markers are rejected regardless of slug.
-  2. ONLY THE HUB CLOSES, WITH FULL QUORUM. The hub posts
-     `#done <result>` to close. Member `#done` markers are
-     rejected. A hub `#done` requires:
-       (a) every member listed in the workgroup has CONTRIBUTED
-           in the active task (substantive content OR `#skip`;
-           a bare `#working` heartbeat does NOT count), AND
+  2. ONLY THE HUB CLOSES, WITH QUORUM OF THE PARTICIPANTS. The
+     hub posts `#done <result>` to close. Member `#done` markers
+     are rejected. A hub `#done` requires:
+       (a) every PARTICIPANT in the active task has CONTRIBUTED
+           (substantive content OR `#skip`; a bare `#working`
+           heartbeat does NOT count). Participants = the members
+           the opener `@`-mentioned — a TARGETED task closes on
+           just those named, NOT the whole roster. A COLLECTIVE
+           task (no `@`-mentions) has every member as a
+           participant. AND
        (b) at least one non-hub post is SUBSTANTIVE (not just
            `#skip` / `#working`) — the workgroup must produce
            real content, not "everyone passed".
@@ -141,12 +145,28 @@ gets your post rejected before it goes on the wire):
      round. Reflexive skipping defeats the purpose of the
      workgroup — the SDK additionally rejects a hub `#done` if
      zero non-hub posts were substantive.
-  5. `#WORKING` IS MEMBER-ONLY (heartbeat for slow tools). Only
+  5. `#WORKING` IS MEMBER-ONLY (heartbeat — your sign of life). Only
      members may post `#working` (the hub orchestrates — they
-     don't signal processing; SDK rejects hub `#working`). When
-     you (member) are about to use slow tools (web_fetch,
-     research, multi-step delegate), post
-     `#working <one-line reason>` BEFORE starting. Properties:
+     don't signal processing; SDK rejects hub `#working`). Post
+     `#working` BEFORE starting whenever you expect to take more
+     than ~30s before your substantive post — this covers BOTH
+     slow external tools (web_fetch, research, multi-step delegate)
+     AND, when you are the named participant on a production task,
+     a long pass of LOCAL file work (writing/translating many
+     files, an `npm` build). Writing 20 JSON files locally takes
+     minutes; without a `#working` the hub reads your silence as a
+     stall and re-tasks you. Make the reason SAY WHAT YOU'RE DOING
+     — it is the ONLY thing the hub and the human see while they
+     wait — naming the concrete deliverable AND the tool(s):
+       `#working <concrete action> (<tool>)`
+     Good:
+       `#working comparing ECB vs Fed rate paths across 3 sources (web_fetch)`
+       `#working writing Spanish source content under src/content/** (write_file)`
+       `#working installing deps + building dist/ (terminal)`
+       `#working delegating the SQL audit to a sub-agent (delegate)`
+     Spartan reasons waste the signal — do NOT post a bare
+     `#working`, `#working on it`, or `#working give me a sec`.
+     Write the reason in the active task's language. Properties:
        - Does NOT consume your round slot — you can post
          substantive or `#skip` afterwards in the same round.
        - Does NOT count toward the closure-quorum — you must
@@ -307,6 +327,21 @@ budget; your profile's daily cap applies on top.
 """
 
 
+def _participants_line(active: tasks.Task, own_id: str) -> str:
+    """One line: the active task's participant roster and whether the
+    local profile is on it. Collective tasks (no participants) name no
+    one — the whole workgroup may engage."""
+    if not active.participants:
+        return "task participants: everyone (collective task)"
+    roster = " ".join(f"@{p}" for p in active.participants)
+    if own_id in active.participants:
+        return f"task participants: {roster} (you are on it — this task is yours)"
+    return (
+        f"task participants: {roster} "
+        f"(NOT you, @{own_id} — `#skip` unless you're @-mentioned)"
+    )
+
+
 def _format_subscription_block(
     sub: sub_mod.Subscription, own_id: str, aliases: dict[str, str],
 ) -> str:
@@ -334,6 +369,7 @@ def _format_subscription_block(
             f"  active task: {active.description}  "
             f"(opened by {opener} at seq #{active.opened_seq})",
         )
+        lines.append("  " + _participants_line(active, own_id))
     else:
         lines.append("  no active task")
     if last:
@@ -435,6 +471,7 @@ def _format_hub_block(
             f"  active task: {active.description}  "
             f"(opened by {opener} at seq #{active.opened_seq})",
         )
+        lines.append("  " + _participants_line(active, own_id))
     elif decrypted:
         lines.append("  no active task")
     if last:

@@ -228,7 +228,7 @@ export default function ProfileDetail({
           </Row>
         </Section>
 
-        <Section title="Service">
+        <Section title="Service" tooltip="always-on subsystems">
           {(activeConnection?.kind === "local" || activeConnection?.role === "admin") && (
             <Row label="daemon">
               <DaemonField />
@@ -242,7 +242,7 @@ export default function ProfileDetail({
           </Row>
         </Section>
 
-        <Section title="ALP (Alpi Link Protocol)">
+        <Section title="ALP" tooltip="peers + workgroups">
           {profile.pubkey_b64 && (
             <Row label="pubkey">
               <span className={styles.inlineRow}>
@@ -354,7 +354,7 @@ export default function ProfileDetail({
         </Section>
 
         {profile.name === "default" && (activeConnection?.kind === "local" || activeConnection?.role === "admin") && (
-          <Section title="Devices">
+          <Section title="Devices" tooltip="paired apps">
             {activeConnection?.kind === "local" && <NetworkField />}
             <DevicesField />
           </Section>
@@ -364,20 +364,20 @@ export default function ProfileDetail({
 
         <Section
           title="Sandbox"
-          tooltip="Wraps shell commands in sandbox-exec (macOS) or bubblewrap (Linux). Recommended for unattended profiles (gateway, scheduler, sub-agents). Trade-offs: SSH push, Homebrew on Apple Silicon, and docker may break — keep off in your main dev profile."
+          tooltip="isolate shell commands"
         >
           <SandboxField profile={profile} onSaved={onSaved} />
         </Section>
 
-        <Section title="Voice">
+        <Section title="Voice" tooltip="text-to-speech voice">
           <VoiceField profile={profile} onSaved={onSaved} />
         </Section>
 
-        <Section title="MCP Servers">
+        <Section title="MCP Servers" tooltip="external tool servers">
           <McpField profile={profile} onSaved={onSaved} />
         </Section>
 
-        <Section title="Storage">
+        <Section title="Storage" tooltip="disk + data usage">
           <StorageField profile={profile} activeConnection={activeConnection} />
         </Section>
 

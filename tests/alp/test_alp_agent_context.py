@@ -147,6 +147,19 @@ def test_block_contains_engagement_guardrails(short_tmp: Path) -> None:
     assert "ONLY THE HUB CLOSES" in block
 
 
+def test_working_guardrail_requires_naming_the_tool(short_tmp: Path) -> None:
+    """`#working` must carry a concrete action + tool, not a bare heartbeat —
+    the reason is the only signal the hub/human see while a peer works."""
+    home = short_tmp / "alice"; home.mkdir()
+    kp = load_or_generate(home)
+    wg_mod.create(home, name="x", hub_kp=kp, member_pubkeys=[])
+    block = agent_context.build(home)
+    assert block is not None
+    assert "#working <concrete action> (<tool>)" in block
+    assert "SAY WHAT YOU'RE DOING" in block
+    assert "(web_fetch)" in block
+
+
 def test_roster_renders_bios_when_present(short_tmp: Path) -> None:
     """Members in the roster with a self-published bio render as
     ``@alice (online, "product engineer — velocity")``; members

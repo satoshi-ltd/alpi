@@ -50,6 +50,54 @@ def test_parse_post_task_slug_lowercased() -> None:
     assert events[0].slug == "mixed-case-slug"
 
 
+def test_parse_post_participants_from_leading_mention() -> None:
+    events = tasks.parse_post("@scout #task #intake produce intake", 1, "HUB")
+    assert events[0].slug == "intake"
+    assert events[0].participants == ("scout",)
+
+
+def test_parse_post_participants_after_slug() -> None:
+    """A mention after the slug on the opener line is still a participant."""
+    events = tasks.parse_post("#task #lit @alice take lit review", 1, "HUB")
+    assert events[0].participants == ("alice",)
+
+
+def test_parse_post_multiple_participants_in_order() -> None:
+    events = tasks.parse_post("@canvas @quill #task #content write copy", 1, "HUB")
+    assert events[0].participants == ("canvas", "quill")
+
+
+def test_parse_post_collective_task_has_no_participants() -> None:
+    events = tasks.parse_post("#task #intake produce intake", 1, "HUB")
+    assert events[0].participants == ()
+
+
+def test_parse_post_body_mention_is_not_a_participant() -> None:
+    """Mentions on other lines of the post are body, not task roster."""
+    events = tasks.parse_post(
+        "#task #design produce starter.css\nthen ping @forge later", 1, "HUB",
+    )
+    assert events[0].participants == ()
+
+
+def test_fold_tasks_preserves_participants() -> None:
+    events = tasks.parse_post("@scout #task #intake go", 1, "HUB")
+    [task] = tasks.fold_tasks(events)
+    assert task.participants == ("scout",)
+    assert task.is_open
+
+
+def test_fold_tasks_preempted_task_keeps_its_participants() -> None:
+    events = (
+        tasks.parse_post("@scout #task #intake go", 1, "HUB")
+        + tasks.parse_post("@canvas #task #design go", 2, "HUB")
+    )
+    closed = tasks.fold_tasks(events)
+    by_slug = {t.slug: t for t in closed}
+    assert by_slug["intake"].participants == ("scout",)
+    assert by_slug["design"].participants == ("canvas",)
+
+
 def test_parse_post_task_slug_only_no_text() -> None:
     """A `#task #slug` with no description is still a valid task open."""
     events = tasks.parse_post("#task #icp-v2", 1, "alice")
@@ -362,6 +410,35 @@ def test_is_done_recognizes_anchored_marker() -> None:
 
 def test_is_done_ignores_inline_word() -> None:
     assert tasks.is_done("we're not #done yet") is False
+
+
+def test_strip_done_marker_keeps_summary() -> None:
+    assert tasks.strip_done_marker(
+        "#done build green · dist generated",
+    ) == "build green · dist generated"
+
+
+def test_strip_done_marker_drops_leading_mentions() -> None:
+    assert tasks.strip_done_marker("@mira #done content complete") == (
+        "content complete"
+    )
+
+
+def test_strip_done_marker_noop_without_marker() -> None:
+    assert tasks.strip_done_marker("plain handoff line") == "plain handoff line"
+    # A line-internal `#done` was never a marker — left untouched.
+    assert tasks.strip_done_marker("we're not #done yet") == "we're not #done yet"
+
+
+def test_strip_done_marker_only_touches_done_line() -> None:
+    text = "first line\n#done shipped it\nthird line"
+    assert tasks.strip_done_marker(text) == "first line\nshipped it\nthird line"
+
+
+def test_strip_done_marker_empty_payload_strips_to_blank() -> None:
+    # A `#done` with only whitespace payload leaves nothing substantive — the
+    # SDK uses this to reject a handoff-less member close.
+    assert tasks.strip_done_marker("#done   ").strip() == ""
 
 
 def test_is_skip_recognizes_with_or_without_payload() -> None:

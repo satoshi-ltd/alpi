@@ -39,14 +39,14 @@ def test_requirements_filters_bad_bin_names() -> None:
 
 
 def test_missing_bin_blocks(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("shutil.which", lambda _: None)
+    monkeypatch.setattr("shutil.which", lambda *a, **k: None)
     ok, missing = skill_eligibility({"requires_bins": "['definitely_not_a_real_binary_xyz']"})
     assert not ok
     assert any("binary definitely_not_a_real_binary_xyz" in m for m in missing)
 
 
 def test_present_bin_passes(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("shutil.which", lambda b: f"/usr/bin/{b}")
+    monkeypatch.setattr("shutil.which", lambda b, **k: f"/usr/bin/{b}")
     ok, missing = skill_eligibility({"requires_bins": "['gh']"})
     assert ok and missing == []
 
@@ -129,7 +129,7 @@ def test_platform_match_passes(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_compound_misses_listed_together(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("shutil.which", lambda _: None)
+    monkeypatch.setattr("shutil.which", lambda *a, **k: None)
     monkeypatch.setattr(sys, "platform", "linux")
     ok, missing = skill_eligibility(
         {
@@ -182,7 +182,7 @@ def test_create_persists_new_eligibility_fields(isolated_home: Path) -> None:
 def test_index_block_hides_skill_with_unmet_bin(
     isolated_home: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr("shutil.which", lambda _: None)
+    monkeypatch.setattr("shutil.which", lambda *a, **k: None)
     _make_skill(isolated_home, name="needs-gh", requires_bins=["gh"])
     block = skills_index_block(isolated_home)
     assert "needs-gh" not in block
@@ -210,7 +210,7 @@ def test_index_block_hides_skill_with_missing_config(isolated_home: Path) -> Non
 def test_keyword_match_hint_filters_inactive_skills(
     isolated_home: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr("shutil.which", lambda _: None)
+    monkeypatch.setattr("shutil.which", lambda *a, **k: None)
     r = Skill().run(
         action="create",
         name="needs-gh-kw",
@@ -231,7 +231,7 @@ def test_keyword_match_hint_filters_inactive_skills(
 def test_run_fails_fast_on_inactive_skill(
     isolated_home: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr("shutil.which", lambda _: None)
+    monkeypatch.setattr("shutil.which", lambda *a, **k: None)
     _make_skill(isolated_home, name="needs-gh-run", requires_bins=["gh"])
     r = Skill().run(action="run", name="needs-gh-run")
     assert not r.ok
@@ -242,7 +242,7 @@ def test_run_fails_fast_on_inactive_skill(
 def test_test_fails_fast_on_inactive_skill(
     isolated_home: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr("shutil.which", lambda _: None)
+    monkeypatch.setattr("shutil.which", lambda *a, **k: None)
     _make_skill(isolated_home, name="needs-gh-test", requires_bins=["gh"])
     r = Skill().run(action="test", name="needs-gh-test")
     assert not r.ok
@@ -255,7 +255,7 @@ def test_test_fails_fast_on_inactive_skill(
 def test_list_shows_compound_inactive_reason(
     isolated_home: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr("shutil.which", lambda _: None)
+    monkeypatch.setattr("shutil.which", lambda *a, **k: None)
     monkeypatch.delenv("ZTOKEN", raising=False)
     r = Skill().run(
         action="create",

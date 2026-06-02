@@ -173,6 +173,8 @@ class Meta:
     auto_kickoff: bool = True
     # Push target on ``#done`` landing: ``"none"`` (silent), ``"telegram"`` (user's configured gateway DM).
     notify_on_close: str = "none"
+    # Ordered phase slugs (empty = deliberation wg); lets continuation advance phases deterministically. Owners/deliverables live in the org, not here.
+    pipeline: tuple[str, ...] = ()
 
 
 @dataclass
@@ -210,6 +212,11 @@ def _load_meta(d: Path) -> Meta | None:
     raw = yaml.safe_load(p.read_text()) or {}
     if not isinstance(raw, dict):
         return None
+    # Tolerant load: a legacy/corrupt `pipeline` degrades to a normal wg, never crashes the poll (strict validation is on create/update).
+    try:
+        pipeline = _normalize_pipeline(raw.get("pipeline"))
+    except ValueError:
+        pipeline = ()
     try:
         return Meta(
             id=str(raw["id"]),
@@ -224,6 +231,7 @@ def _load_meta(d: Path) -> Meta | None:
             briefing=str(raw.get("briefing") or ""),
             auto_kickoff=bool(raw.get("auto_kickoff", True)),
             notify_on_close=str(raw.get("notify_on_close") or "none"),
+            pipeline=pipeline,
         )
     except KeyError:
         return None
@@ -252,6 +260,8 @@ def _save_meta(d: Path, meta: Meta) -> None:
         payload["auto_kickoff"] = False
     if meta.notify_on_close and meta.notify_on_close != "none":
         payload["notify_on_close"] = meta.notify_on_close
+    if meta.pipeline:
+        payload["pipeline"] = list(meta.pipeline)
     (d / _META).write_text(yaml.safe_dump(payload, sort_keys=False, allow_unicode=True))
 
 
@@ -336,6 +346,7 @@ def create(
     briefing: str = "",
     auto_kickoff: bool = True,
     notify_on_close: str = "none",
+    pipeline: tuple[str, ...] | list[str] = (),
     hub_bio: str = "",
     hub_voice: str = "",
 ) -> Workgroup:
@@ -375,6 +386,7 @@ def create(
         briefing=(briefing or "").strip(),
         auto_kickoff=bool(auto_kickoff),
         notify_on_close=str(notify_on_close or "none"),
+        pipeline=_normalize_pipeline(pipeline),
     )
     _save_meta(d, meta)
 
@@ -682,6 +694,35 @@ def _save_ledger(d: Path, ledger: dict[str, Any]) -> None:
     ))
 
 
+import re as _re
+
+_PIPELINE_SLUG_RE = _re.compile(r"^[a-z0-9][a-z0-9_-]*$")
+
+
+def _normalize_pipeline(raw: Any) -> tuple[str, ...]:
+    """Validate + normalise an ordered pipeline phase list. Empty/absent →
+    ``()`` (normal workgroup). Slugs are lowercased; each must match
+    ``[a-z0-9][a-z0-9_-]*``; duplicates are rejected (order is identity)."""
+    if not raw:
+        return ()
+    if not isinstance(raw, (list, tuple)):
+        raise ValueError(f"pipeline must be a list of phase slugs, got {type(raw).__name__}")
+    out: list[str] = []
+    seen: set[str] = set()
+    for item in raw:
+        slug = str(item).strip().lower()
+        if not _PIPELINE_SLUG_RE.match(slug):
+            raise ValueError(
+                f"invalid pipeline phase slug {item!r}: must match "
+                "[a-z0-9][a-z0-9_-]*"
+            )
+        if slug in seen:
+            raise ValueError(f"duplicate pipeline phase slug {slug!r}")
+        seen.add(slug)
+        out.append(slug)
+    return tuple(out)
+
+
 def _validate_budget(budget: dict[str, Any]) -> dict[str, Any]:
     """Normalise the workgroup budget; empty dict = no cap, non-positive raises."""
     if not budget:
@@ -774,6 +815,7 @@ def register(server: alp_server.Server, home: Path) -> None:
             "workgroup_id": wg.meta.id,
             "name": wg.meta.name,
             "briefing": wg.meta.briefing,
+            "pipeline": list(wg.meta.pipeline),
             "sealed_key": member.sealed_key,
             "key_version": member.key_version,
             "current_key_version": wg.meta.current_key_version,
@@ -898,6 +940,7 @@ def register(server: alp_server.Server, home: Path) -> None:
             "posts": fresh,
             "head": all_posts[-1]["seq"] if all_posts else 0,
             "current_key_version": wg.meta.current_key_version,
+            "pipeline": list(wg.meta.pipeline),
             "sealed_key": member.sealed_key,
             "members": [
                 {

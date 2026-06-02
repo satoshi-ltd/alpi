@@ -982,3 +982,84 @@
 .budgetSpacer {
   flex: 1;
 }
+
+/* Pipeline stage chips */
+.stagesWrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+.stagesRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+.stageChip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 3px 4px 3px 8px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-md);
+  background: var(--bg-elev);
+}
+.stageMove {
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--ink-3);
+  font-size: var(--fs-md);
+  line-height: 1;
+  padding: 0 2px;
+}
+.stageMove:hover:not(:disabled) {
+  color: var(--ink);
+}
+.stageMove:disabled {
+  opacity: 0.25;
+  cursor: default;
+}
+.stageNum {
+  font-size: var(--fs-2xs);
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.stageSlug {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--ink);
+}
+.stageRemove {
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--ink-3);
+  font-size: var(--fs-sm);
+  line-height: 1;
+  padding: 0 1px;
+}
+.stageRemove:hover {
+  color: var(--ink);
+}
+.stageArrow {
+  color: var(--ink-3);
+  font-size: var(--fs-xs);
+}
+.stageAdd {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+.stageAdd > :first-child {
+  flex: 1;
+}
+.stageHint {
+  margin: 0;
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+  line-height: var(--lh-normal);
+}
+.stageHint code {
+  font-family: var(--font-mono);
+}

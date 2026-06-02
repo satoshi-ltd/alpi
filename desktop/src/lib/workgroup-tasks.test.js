@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  classifyMessage,
   findLatestTask,
   parseDone,
   parseSkip,
@@ -7,6 +8,28 @@ import {
   parseWorking,
   validateTaskShape,
 } from "./workgroup-tasks.js";
+
+describe("classifyMessage", () => {
+  it("routes #task with slug to the task branch", () => {
+    const c = classifyMessage("#task #adr Ship ADR\n\nbody");
+    expect(c.variant).toBe("task");
+    expect(c.task?.slug).toBe("adr");
+  });
+
+  it("slug-less #task is prose", () => {
+    expect(classifyMessage("#task Ship ADR").variant).toBe("message");
+  });
+
+  it("routes #done / #skip / #working", () => {
+    expect(classifyMessage("#done shipped").variant).toBe("done");
+    expect(classifyMessage("#skip no angle").variant).toBe("skip");
+    expect(classifyMessage("#working fetching").variant).toBe("working");
+  });
+
+  it("treats a post with both #task and #done as prose (ambiguity rule, mirrors backend)", () => {
+    expect(classifyMessage("#task #combined Wrap\n#done shipped already").variant).toBe("message");
+  });
+});
 
 describe("parseTaskOpen", () => {
   it("returns null on bodies without a #task marker", () => {

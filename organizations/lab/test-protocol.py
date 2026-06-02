@@ -158,6 +158,45 @@ def _closed_result(slug: str) -> str | None:
     return None
 
 
+def _latest_text() -> str:
+    """Decrypted plaintext of the last transcript entry (current key version)."""
+    from alpi.alp import workgroup as wg_mod
+    from alpi.alp.keys import load_or_generate
+    from alpi.alp.workgroup import _read_transcript, _wg_dir
+
+    home = PROFILES_DIR / HUB
+    wg = wg_mod.load(home, WG_ID)
+    kp = load_or_generate(home)
+    own = wg.member(kp.pubkey_b64())
+    group_key = wg_mod.open_sealed_group_key(own.sealed_key, kp)
+    for entry in reversed(_read_transcript(_wg_dir(home, WG_ID))):
+        if int(entry.get("key_version", 1)) != own.key_version:
+            continue
+        try:
+            return wg_mod.decrypt_post(
+                group_key, entry["nonce"], entry["ciphertext"],
+            ).decode("utf-8", errors="replace")
+        except Exception:  # noqa: BLE001
+            continue
+    return ""
+
+
+def member_done_stripped(label: str, profile: str, text: str) -> None:
+    """A member `#done`+handoff lands with the hub-only marker stripped, the
+    handoff text preserved — the post is never a close (parser ignores it)."""
+    from alpi.alp import tasks as tasks_mod
+    r = post(profile, text)
+    if r.returncode != 0:
+        rec(label, False, f"rejected: {(r.stderr + r.stdout).strip()[:90]}")
+        return
+    stored = _latest_text()
+    handoff = tasks_mod.strip_done_marker(text).strip()
+    ok = "#done" not in stored and handoff and handoff in stored
+    rec(label, bool(ok),
+        f"stored {stored[:46]!r} · #done stripped" if ok
+        else f"marker survived or handoff lost: {stored[:70]!r}")
+
+
 def await_done(slug: str, timeout: int, tick: float, heartbeat: bool) -> tuple[bool, str | None]:
     """Read the workgroup until a hub #done closes `slug` (result != preempted)."""
     deadline = time.time() + timeout
@@ -209,7 +248,6 @@ def run_suite() -> int:
     reject("empty-post-rejected", HUB, "   ", "empty post")
     reject("task-slug-required", HUB, "#task plain text with no slug", "task-missing-slug")
     reject("member-cannot-open-task", "scribe", "#task #sneaky member opens a task", "only the workgroup hub")
-    reject("member-cannot-close", "scribe", "#done member tries to close", "only the workgroup hub")
     reject("hub-cannot-skip", HUB, "#skip not my job as hub", "hub-cannot-skip")
     reject("hub-cannot-working", HUB, "#working hub doesn't heartbeat", "hub-cannot-working")
 
@@ -250,6 +288,16 @@ def run_suite() -> int:
     reject("#working alone blocks #done", HUB, "#done probe only signalled working", "closure-quorum")
     accept("probe substantive after #working", "probe", "Confirmed: LCP 'good' ≤ 2.5s — cite it, refresh quarterly.")
     done_then_listen("cite-cwv", "#done locked: cite the number, refresh quarterly")
+
+    log("Task 5 · #done from a member is a handoff, never a close (marker stripped)")
+    accept("open #adr-9", HUB, "#task #adr-9 ratify the build-pipeline ADR")
+    member_done_stripped("member #done kept as handoff", "scribe",
+                         "#done my section is ready — handing the build notes to mind")
+    rec("member #done left the task open", _active_slug() == "adr-9",
+        f"active={_active_slug()!r} (member can't close)")
+    accept("tally substantive", "tally", SUB2)
+    accept("probe substantive", "probe", SUB3)
+    done_then_listen("adr-9", "#done locked: ADR-9 ratified — the handoff never closed it")
 
     passed, total = sum(RESULTS), len(RESULTS)
     color = GREEN if passed == total else RED

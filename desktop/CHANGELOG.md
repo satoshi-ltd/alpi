@@ -11,6 +11,17 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.3.33 — 2026-06-02 — assign a workgroup pipeline
+
+Requires alpi v0.6.32+.
+
+- **Assign a pipeline to a workgroup.** Workgroup settings has a Pipeline
+  section: add, remove, and reorder (`◀ ▶`) the ordered stage chips the hub
+  runs (`intake → content → build → qa`), then Save. The create dialog takes a
+  pipeline field too. Empty = a normal deliberation workgroup.
+- **Section descriptions read inline.** Each settings heading shows its short
+  description beside the title instead of behind a `?` tooltip.
+
 ## v0.3.32 — 2026-05-29 — task history reads skips correctly
 
 - **Skips read correctly.** One member passing on a round no longer

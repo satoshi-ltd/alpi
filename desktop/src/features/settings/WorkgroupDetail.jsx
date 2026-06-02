@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import Button from "../../primitives/Button.jsx";
 import Chip from "../../primitives/Chip.jsx";
@@ -36,13 +36,16 @@ export default function WorkgroupDetail({ workgroup, profiles, connectionId = nu
   const [members, setMembers] = useState(null);
   const [busyAction, setBusyAction] = useState(null);
   const [briefing, setBriefing] = useState(workgroup.briefing ?? "");
+  const [stages, setStages] = useState(workgroup.pipeline ?? []);
+  const [newStage, setNewStage] = useState("");
   const [deleteOpen, setDeleteOpen] = useState(false);
   const briefingTimer = useRef(null);
   const notify = useNotify();
 
   useEffect(() => {
     setBriefing(workgroup.briefing ?? "");
-  }, [workgroup.id]);
+    setStages(workgroup.pipeline ?? []);
+  }, [workgroup.id, workgroup.briefing, workgroup.pipeline]);
 
   useEffect(() => {
     return () => {
@@ -103,6 +106,49 @@ export default function WorkgroupDetail({ workgroup, profiles, connectionId = nu
         variant: "error",
         duration: 4000,
       });
+    }
+  }
+
+  // Local edits; reorder with ◀ ▶; persist on Save (comma-joined, host splits +
+  // validates; empty clears). Same draft→Save pattern as the briefing above.
+  function addStage() {
+    const slug = newStage.trim().replace(/^#/, "").toLowerCase();
+    if (!slug) return;
+    if (!/^[a-z0-9][a-z0-9_-]*$/.test(slug)) {
+      notify({ message: `invalid stage slug "${slug}"`, variant: "error" });
+      return;
+    }
+    if (stages.includes(slug)) {
+      notify({ message: `"${slug}" is already a stage`, variant: "error" });
+      return;
+    }
+    setStages([...stages, slug]);
+    setNewStage("");
+  }
+  function removeStage(i) {
+    setStages(stages.filter((_, j) => j !== i));
+  }
+  function moveStage(i, dir) {
+    const j = i + dir;
+    if (j < 0 || j >= stages.length) return;
+    const next = [...stages];
+    [next[i], next[j]] = [next[j], next[i]];
+    setStages(next);
+  }
+  const pipelineDirty = stages.join(",") !== (workgroup.pipeline ?? []).join(",");
+  function discardPipeline() {
+    setStages(workgroup.pipeline ?? []);
+  }
+  async function savePipeline() {
+    try {
+      await invoke("workgroup_update", {
+        profile: workgroup.profile,
+        wgId: workgroup.id,
+        pipeline: stages.join(","),
+      });
+      await onSaved?.();
+    } catch (e) {
+      notify({ message: `pipeline: ${String(e)}`, variant: "error", duration: 4000 });
     }
   }
 
@@ -368,6 +414,93 @@ export default function WorkgroupDetail({ workgroup, profiles, connectionId = nu
           </Row>
         </Section>
 
+        {/* Pipeline — ordered stage chips the hub advances in order. */}
+        <Section title="Pipeline" tooltip="task order the hub runs">
+          <Row label="stages" alignTop>
+            {workgroup.is_hub ? (
+              <div className={styles.stagesWrap}>
+                {stages.length > 0 && (
+                  <div className={styles.stagesRow}>
+                    {stages.map((s, i) => (
+                      <span key={s} className={styles.stageChip}>
+                        <span className={styles.stageNum}>{i + 1}</span>
+                        <code className={styles.stageSlug}>#{s}</code>
+                        <button
+                          type="button"
+                          className={styles.stageMove}
+                          disabled={i === 0}
+                          onClick={() => moveStage(i, -1)}
+                          aria-label={`move ${s} left`}
+                        >
+                          ‹
+                        </button>
+                        <button
+                          type="button"
+                          className={styles.stageMove}
+                          disabled={i === stages.length - 1}
+                          onClick={() => moveStage(i, 1)}
+                          aria-label={`move ${s} right`}
+                        >
+                          ›
+                        </button>
+                        <button
+                          type="button"
+                          className={styles.stageRemove}
+                          onClick={() => removeStage(i)}
+                          aria-label={`remove ${s}`}
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <div className={styles.stageAdd}>
+                  <input
+                    className="ds-field"
+                    value={newStage}
+                    onChange={(e) => setNewStage(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addStage(); } }}
+                    placeholder="add a stage slug — e.g. research"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                  />
+                  <Button size="sm" onClick={addStage}>Add</Button>
+                </div>
+                {pipelineDirty && (
+                  <div className={styles.draftRow}>
+                    <span className={styles.draftTag}>draft</span>
+                    <button type="button" className="alink" onClick={discardPipeline}>
+                      Discard
+                    </button>
+                    <button type="button" className="alink" onClick={savePipeline}>
+                      Save
+                    </button>
+                  </div>
+                )}
+                <p className={styles.stageHint}>
+                  Stages run in order. When <code>#{stages[0] ?? "research"} #done</code> fires,
+                  the hub opens the next stage automatically.
+                </p>
+              </div>
+            ) : stages.length ? (
+              <div className={styles.stagesRow}>
+                {stages.map((s, i) => (
+                  <Fragment key={s}>
+                    <span className={styles.stageChip}>
+                      <span className={styles.stageNum}>{i + 1}</span>
+                      <code className={styles.stageSlug}>#{s}</code>
+                    </span>
+                    {i < stages.length - 1 && <span className={styles.stageArrow}>→</span>}
+                  </Fragment>
+                ))}
+              </div>
+            ) : (
+              <span className={styles.muted}>no pipeline (deliberation workgroup)</span>
+            )}
+          </Row>
+        </Section>
+
         <Section title="Members" kicker={members ? `${members.filter((m) => m.joined).length} alpis` : null} alignTop>
           {members === null ? (
             <>
@@ -430,7 +563,7 @@ export default function WorkgroupDetail({ workgroup, profiles, connectionId = nu
         </Section>
 
         {members && members.some((m) => !m.joined) && (
-          <Section title="Invitations" alignTop>
+          <Section title="Invitations" tooltip="pending member invites" alignTop>
             {workgroup.is_hub && (
               <Row label="join command" alignTop>
                 <span className={styles.inlineRow}>

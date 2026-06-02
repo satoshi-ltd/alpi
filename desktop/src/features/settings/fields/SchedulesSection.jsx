@@ -64,7 +64,7 @@ export function SchedulesSection({ profile }) {
 
   if (jobs === null || jobs.length === 0) return null;
   return (
-    <Section title="Schedule">
+    <Section title="Schedule" tooltip="recurring agent tasks">
       <div className="col" style={{ gap: 0 }}>
         {jobs.map((j) => (
           <DsScheduleRow

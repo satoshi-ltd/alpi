@@ -397,6 +397,7 @@ async def _maybe_dispatch_for_sub(
         sub.wg_id,
         _dispatch_workgroup_turn(
             home, profile, sub.wg_id, sub.name, trigger,
+            pipeline=bool(getattr(sub, "pipeline", None)),
             round_hub_seq=round_seq,
             hub_pubkey=sub.hub_pubkey,
             started_against_task_seq=started_against,
@@ -502,6 +503,7 @@ async def _maybe_dispatch_for_hub(
         wg.meta.id,
         _dispatch_workgroup_turn(
             home, profile, wg.meta.id, wg.meta.name, trigger,
+            pipeline=bool(getattr(wg.meta, "pipeline", ())),
             hub_pubkey=wg.meta.hub_pubkey,
             started_against_task_seq=started_against,
         ),
@@ -511,23 +513,136 @@ async def _maybe_dispatch_for_hub(
 _HUB_WATCHDOG_REFIRE_SECONDS = 5 * 60  # 5 min between re-fires
 
 
+def _pipeline_continuation_due(wg, recent: list[dict], active) -> bool:
+    """True when a `pipeline` workgroup just closed a phase — the hub's
+    own `#done` is the last post and no successor task is open — so the
+    hub should get one continuation wake to open the next phase. False
+    for non-pipeline workgroups (a `#done` there is terminal), or when a
+    member spoke last, or when the last post wasn't a `#done`."""
+    from alpi.alp import tasks as wg_tasks
+
+    if active is not None or not recent:
+        return False
+    if not getattr(wg.meta, "pipeline", False):
+        return False
+    last_post = recent[-1]
+    if str(last_post.get("from") or "") != wg.meta.hub_pubkey:
+        return False
+    return wg_tasks.is_done(str(last_post.get("text") or ""))
+
+
+def _next_pipeline_phase(wg, recent: list[dict]) -> tuple[str | None, str, bool]:
+    """Given a pipeline workgroup's ordered phase list and the transcript,
+    return ``(next_slug, latest_closed_slug, known)``:
+
+    - ``("<slug>", latest, True)`` — the phase after the most recently
+      closed one; the hub should open `#task #<slug>`.
+    - ``(None, latest, True)`` — the last phase just closed; pipeline
+      complete, nothing to open.
+    - ``(None, latest, False)`` — the closed slug isn't in the pipeline
+      (misconfigured); the core must NOT guess a next phase.
+    """
+    from alpi.alp import tasks as wg_tasks
+
+    pipeline = list(getattr(wg.meta, "pipeline", ()) or ())
+    if not pipeline:
+        return None, "", True
+    events: list = []
+    for p in recent:
+        events += wg_tasks.parse_post(
+            str(p.get("text") or ""), int(p.get("seq", 0)),
+            str(p.get("from") or ""), hub_pubkey=wg.meta.hub_pubkey,
+        )
+    closed = [t for t in wg_tasks.fold_tasks(events) if not t.is_open]
+    if not closed:
+        return None, "", True
+    # A `#done BLOCKED · …` halts the pipeline — no advance, no reopen. Check the
+    # latest close (by seq) regardless of slug: a block usually lands on a variant (`#qa-recheck`), not the canonical phase. A later normal close supersedes it.
+    latest_closed = max(closed, key=lambda t: t.closed_seq or 0)
+    if (latest_closed.result or "").strip().upper().startswith("BLOCKED"):
+        return None, latest_closed.slug, True
+    # Drive ordering off the latest closed task whose slug is a CANONICAL
+    # pipeline phase — ignore off-pipeline re-task variants (e.g. the hub
+    # re-tasking `#build-recheck` while the phase is `#build`). Continuation
+    # only fires when no task is open, so the canonical phase is genuinely
+    # finished by the time we advance.
+    in_pipeline = [t for t in closed if t.slug in pipeline]
+    if not in_pipeline:
+        latest_any = max(closed, key=lambda t: t.closed_seq or 0).slug
+        return None, latest_any, False
+    term = max(in_pipeline, key=lambda t: t.closed_seq or 0)
+    latest = term.slug
+    idx = pipeline.index(latest)
+    if idx + 1 < len(pipeline):
+        return pipeline[idx + 1], latest, True
+    # Terminal phase closed. Guardrail: a terminal-phase FAIL doesn't complete
+    # the pipeline. If the terminal phase was superseded by a fix/recheck loop
+    # (an off-pipeline variant task opened AFTER it), it wasn't passed — the
+    # fix changed the source, so re-run the phase BEFORE the terminal (rebuild)
+    # so the terminal re-audits a fresh artifact. The continuation cap bounds
+    # the loop. With no predecessor, reopen the terminal itself.
+    fix_after = any(
+        t.slug not in pipeline and (t.opened_seq or 0) > (term.opened_seq or 0)
+        for t in closed
+    )
+    if fix_after:
+        return (pipeline[idx - 1] if idx >= 1 else latest), latest, True
+    return None, latest, True
+
+
+# Per-(wg, slug) dedup so a misconfigured pipeline emits `wg.blocked` once,
+# not every poll. Daemon-lifetime only — fine for an operator alert.
+_BLOCKED_EMITTED: set[tuple[str, str]] = set()
+
+
+def _emit_wg_blocked_once(home: Path, wg_id: str, slug: str, nudges: int) -> None:
+    key = (wg_id, slug)
+    if key in _BLOCKED_EMITTED:
+        return
+    _BLOCKED_EMITTED.add(key)
+    _emit_wg_blocked(home, wg_id, 0, nudges)
+
+
 async def _maybe_watchdog_close(
     home: Path, profile: str, wg, recent: list[dict],
 ) -> None:
-    """Re-poke stalled hub workgroups so they can close or keep waiting."""
+    """Re-poke stalled hub workgroups.
+
+    Two modes:
+    - **closure** (a task is open): nudge the hub to `#done` or stay
+      silent — never re-task. The deliberation default.
+    - **continuation** (no open task, non-empty `meta.pipeline` slug list):
+      after a `#done` with no successor, give the hub a bounded number of
+      normal wakes to open the next phase's `#task` — the next slug is
+      computed from the ordered list. Off for non-pipeline workgroups
+      (empty `pipeline`), where a `#done` is terminal.
+    """
     from alpi.alp import tasks as wg_tasks
 
     if not recent:
         return
     active = wg_tasks.active_task(recent, hub_pubkey=wg.meta.hub_pubkey)
-    if active is None:
-        return
-    posts_in_task = [
-        p for p in recent if int(p.get("seq", 0)) >= active.opened_seq
-    ]
-    if not posts_in_task:
-        return
-    last_post = posts_in_task[-1]
+    continuation = active is None
+    next_phase = ""
+    if continuation:
+        if not _pipeline_continuation_due(wg, recent, active):
+            return
+        nxt, latest_slug, known = _next_pipeline_phase(wg, recent)
+        if not known:
+            # Closed a phase the pipeline doesn't list → don't guess.
+            _emit_wg_blocked_once(home, wg.meta.id, latest_slug, 0)
+            return
+        if nxt is None:
+            return  # last phase done — pipeline complete, nothing to open
+        next_phase = nxt
+        last_post = recent[-1]
+    else:
+        posts_in_task = [
+            p for p in recent if int(p.get("seq", 0)) >= active.opened_seq
+        ]
+        if not posts_in_task:
+            return
+        last_post = posts_in_task[-1]
     last_seq = int(last_post.get("seq", 0))
 
     last_post_ts = str(last_post.get("ts", "")).strip()
@@ -540,10 +655,27 @@ async def _maybe_watchdog_close(
     except ValueError:
         return
     age = (_dt.datetime.now(tz=_dt.timezone.utc) - last_dt).total_seconds()
-    if age < _HUB_FOLLOWUP_STALE_SECONDS:
+    # A member `#working` is a sign-of-life: it earns the full turn-timeout of
+    # grace before the hub treats silence as a stall (a long local write posts
+    # nothing while it runs). Any other last post uses the short threshold.
+    last_is_member_working = (
+        str(last_post.get("from") or "") != wg.meta.hub_pubkey
+        and "#working" in str(last_post.get("text") or "")
+    )
+    stale_threshold = (
+        _turn_timeout_for(bool(getattr(wg.meta, "pipeline", ())))
+        if last_is_member_working
+        else _HUB_FOLLOWUP_STALE_SECONDS
+    )
+    if age < stale_threshold:
         return
 
-    fired_seq = _get_hub_watchdog_seq(home, wg.meta.id)
+    if continuation:
+        cont_seq, cont_count = _continuation_state(home, wg.meta.id)
+        fired_seq = cont_seq if cont_count >= 1 else 0
+    else:
+        cont_seq = cont_count = 0
+        fired_seq = _get_hub_watchdog_seq(home, wg.meta.id)
     state = _load_poller_state(home)
     last_dispatch_str = state.get("hub_last_dispatch_at", {}).get(
         wg.meta.id, ""
@@ -568,22 +700,111 @@ async def _maybe_watchdog_close(
         return
     if (wg.meta.id, profile) in _INFLIGHT:
         return
+
+    started_against = _latest_hub_task_seq_for(
+        home, wg.meta.id, wg.meta.hub_pubkey,
+    )
+
+    if continuation:
+        # Bounded retry per `#done` seq: the hub gets a few continuation
+        # wakes (refire-interval apart) to open the next phase, recovering
+        # from a wake that whiffed (searched but didn't post). Read the
+        # count FIRST — once at the cap, return without writing (no
+        # per-tick `poller_state.json` churn) until the transcript moves.
+        cur = cont_count if cont_seq == last_seq else 0
+        if cur >= _CONTINUATION_MAX_FIRES:
+            # All attempts spent on this `#done` seq and the transcript
+            # never moved (a new post would reset the seq). NOW we know it's
+            # stuck — surface `wg.blocked` once, then return without writing.
+            _emit_wg_blocked_once(home, wg.meta.id, f"seq{last_seq}", cur)
+            return
+        cnt = _bump_hub_continuation_count(home, wg.meta.id, last_seq)
+        reason = (
+            f"watchdog: task closed (seq #{last_seq}), open next phase "
+            f"`#{next_phase}` — pipeline continuation (attempt {cnt})"
+        )
+        log.info(
+            "wg poller: %s dispatching continuation (reason=%s)",
+            wg.meta.id, reason,
+        )
+        _mark_hub_dispatched(home, wg.meta.id)
+        _spawn_dispatch(
+            wg.meta.id,
+            _dispatch_workgroup_turn(
+                home, profile, wg.meta.id, wg.meta.name, reason,
+                continuation=True, next_phase=next_phase,
+                pipeline=bool(getattr(wg.meta, "pipeline", ())),
+                hub_pubkey=wg.meta.hub_pubkey,
+                started_against_task_seq=started_against,
+            ),
+        )
+        return
+
     last_author_is_hub = str(
         last_post.get("from") or ""
     ) == wg.meta.hub_pubkey
-    stall_kind = (
-        "hub talked last" if last_author_is_hub else "member talked last"
-    )
-    reason = (
-        f"watchdog: {stall_kind} (seq #{last_seq}), nothing new for "
-        f"{int(age)}s — closure-or-silence only"
-    )
+    count = _bump_hub_watchdog_count(home, wg.meta.id, last_seq)
+    is_pipeline = bool(getattr(wg.meta, "pipeline", False))
+    repair = is_pipeline and count == 2
+    final_repair = is_pipeline and count == 3
+    if count == 2:
+        _emit_wg_blocked(home, wg.meta.id, last_seq, count)
+    if count >= 2:
+        log.warning(
+            "wg poller: %s task stalled — %d closure nudges on seq #%d, "
+            "no progress%s", wg.meta.id, count, last_seq,
+            " → final repair" if final_repair
+            else (" → repair mode" if repair else " → blocked alert"),
+        )
+    # Pipeline hub gets TWO recovery wakes — REPAIR then a close-or-BLOCK FINAL
+    # REPAIR — before abandon (the final one recovers a lost-handoff: green
+    # artifact on disk, member's handoff missing). Non-pipeline stops after one.
+    if (is_pipeline and count >= 4) or (not is_pipeline and count >= 3):
+        # All recovery attempts spent and the transcript never moved.
+        # `wg.blocked` stays the visible state until a new post resets the
+        # seq. Stop waking the hub — repeating burns turns for nothing.
+        return
+    if final_repair:
+        # Last automatic wake on this seq. Force a deterministic resolution
+        # rather than another soft nudge: verify disk, close if the
+        # deliverable is there (handoff or not), else post BLOCKED.
+        reason = (
+            f"watchdog: task open (seq #{last_seq}), {count} nudges no "
+            f"progress for {int(age)}s — FINAL REPAIR (last automatic wake "
+            "on this task): verify the on-disk artifact YOURSELF. If the "
+            "phase deliverable exists (e.g. a green `dist/` with every "
+            "declared locale), CLOSE it now with `#done`. If it genuinely "
+            "cannot pass without human/factory help, CLOSE it with "
+            "`#done BLOCKED · <phase> · <reason>` — a `#done` whose result "
+            "starts with BLOCKED closes the task and halts the pipeline "
+            "cleanly (plain `BLOCKED` text leaves the task open and hung). "
+            "Either way, do not end the turn silent — this task will not be "
+            "woken again."
+        )
+    elif repair:
+        # A pipeline hub that nudged twice with no progress is likely
+        # stuck on its own bad task (wrong path/spec/order). Wake it in
+        # NORMAL mode so it can re-verify on-disk state and re-task or
+        # preempt — not just `#done`-or-silence.
+        reason = (
+            f"watchdog: task open (seq #{last_seq}), {count} nudges no "
+            f"progress for {int(age)}s — REPAIR: re-verify the on-disk "
+            "state, then re-task the owner with the correct path/spec, "
+            "or close if it's actually done"
+        )
+    else:
+        stall_kind = (
+            "hub talked last" if last_author_is_hub else "member talked last"
+        )
+        reason = (
+            f"watchdog: {stall_kind} (seq #{last_seq}), nothing new for "
+            f"{int(age)}s — closure-or-silence only"
+        )
     log.info(
-        "wg poller: %s dispatching watchdog (reason=%s)",
-        wg.meta.id, reason,
-    )
-    started_against = _latest_hub_task_seq_for(
-        home, wg.meta.id, wg.meta.hub_pubkey,
+        "wg poller: %s dispatching %s (reason=%s)",
+        wg.meta.id,
+        "final-repair" if final_repair else ("repair" if repair else "watchdog"),
+        reason,
     )
     _set_hub_watchdog_seq(home, wg.meta.id, last_seq)
     _mark_hub_dispatched(home, wg.meta.id)
@@ -591,7 +812,8 @@ async def _maybe_watchdog_close(
         wg.meta.id,
         _dispatch_workgroup_turn(
             home, profile, wg.meta.id, wg.meta.name, reason,
-            closure_only=True,
+            closure_only=not (repair or final_repair),
+            pipeline=bool(getattr(wg.meta, "pipeline", ())),
             hub_pubkey=wg.meta.hub_pubkey,
             started_against_task_seq=started_against,
         ),
@@ -754,6 +976,70 @@ def _set_hub_watchdog_seq(home: Path, wg_id: str, seq: int) -> None:
     _save_poller_state(home, state)
 
 
+# Continuation gets a few bounded retries per `#done` seq — enough to
+# recover from a wake that whiffed (read/searched but didn't open the next
+# task), never the unbounded every-5-min re-fire of the original bug.
+_CONTINUATION_MAX_FIRES = 3
+
+
+def _continuation_state(home: Path, wg_id: str) -> tuple[int, int]:
+    """``(seq, count)`` of continuation wakes already fired for the most
+    recent `#done` close, or ``(0, 0)``. Single source of truth for
+    continuation: ``seq`` doubles as the 'already fired' marker for the
+    refire guard; ``count`` enforces the bounded-retry cap. Read-only."""
+    state = _load_poller_state(home)
+    entry = state.get("hub_continuation_fire_count", {}).get(wg_id)
+    if not entry:
+        return 0, 0
+    return int(entry[0]), int(entry[1])
+
+
+def _bump_hub_continuation_count(home: Path, wg_id: str, seq: int) -> int:
+    """Increment and persist the continuation fire count for `seq` (resets
+    to 1 when the closed seq changes). Call ONLY when under the cap — the
+    capped path must not write `poller_state.json` on every poll tick."""
+    state = _load_poller_state(home)
+    table = state.setdefault("hub_continuation_fire_count", {})
+    entry = table.get(wg_id)
+    if not entry or int(entry[0]) != int(seq):
+        table[wg_id] = [int(seq), 1]
+    else:
+        table[wg_id] = [int(seq), int(entry[1]) + 1]
+    _save_poller_state(home, state)
+    return int(table[wg_id][1])
+
+
+def _bump_hub_watchdog_count(home: Path, wg_id: str, seq: int) -> int:
+    """Increment and return how many times the closure watchdog has fired
+    on this stalled `seq`. Resets to 1 when the stalled seq changes."""
+    state = _load_poller_state(home)
+    table = state.setdefault("hub_watchdog_fire_count", {})
+    entry = table.get(wg_id)
+    if not entry or int(entry[0]) != int(seq):
+        table[wg_id] = [int(seq), 1]
+    else:
+        table[wg_id] = [int(seq), int(entry[1]) + 1]
+    _save_poller_state(home, state)
+    return int(table[wg_id][1])
+
+
+def _emit_wg_blocked(home: Path, wg_id: str, seq: int, nudges: int) -> None:
+    """Emit ``wg.blocked`` for a stuck task (repeated closure nudges, no
+    progress). Same host-event family as ``wg.post``/``wg.done``: appended
+    to the durable event history AND pushed to live subscribers, so a
+    client/operator can surface or replay it. Desktop/mobile card
+    rendering for it is follow-up — the persisted event is the contract."""
+    try:
+        from alpi.home import profile_name
+        from alpi.host import events as host_events
+        host_events.emit("wg.blocked", {
+            "profile": profile_name(home), "wg_id": wg_id,
+            "seq": seq, "nudges": nudges,
+        })
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def _utcnow_iso() -> str:
     import datetime as _dt
     return _dt.datetime.now(tz=_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -848,15 +1134,9 @@ def _should_dispatch(
                     f"new content in active task we opened (seq #{seq})",
                     high_seq,
                 )
-            opener_mentions: list[str] = []
-            for p in recent_posts:
-                if int(p.get("seq", 0)) != active.opened_seq:
-                    continue
-                opener_mentions = wg_tasks.mentions_in(
-                    str(p.get("text") or "")
-                )
-                break
-            if not opener_mentions or profile in opener_mentions:
+            # Targeted task (opener named participants) wakes only those
+            # peers; a collective task (no participants) wakes everyone.
+            if not active.participants or profile in active.participants:
                 return (
                     f"new content in active task (seq #{seq})",
                     high_seq,
@@ -866,7 +1146,17 @@ def _should_dispatch(
 
 
 _TURN_TIMEOUT_SECONDS = 300
+# Pipeline workgroups (`meta.pipeline`) give producers a longer wall-clock
+# ceiling: a phase turn writes files, researches, runs a build — it needs
+# more than a deliberation turn's convergence budget. Deliberation stays at
+# 300s (converge fast or stay silent).
+_PIPELINE_TURN_TIMEOUT_SECONDS = 900
 _TURN_SIGTERM_GRACE_SECONDS = 5
+
+
+def _turn_timeout_for(pipeline: bool) -> int:
+    """Wall-clock turn budget: longer for pipeline (production) workgroups."""
+    return _PIPELINE_TURN_TIMEOUT_SECONDS if pipeline else _TURN_TIMEOUT_SECONDS
 
 
 def turn_log_path(home: Path) -> Path:
@@ -927,11 +1217,35 @@ def _post_count_for_role(home: Path, wg_id: str) -> int:
 
 async def _dispatch_workgroup_turn(
     home: Path, profile: str, wg_id: str, wg_name: str, reason: str,
-    *, closure_only: bool = False, round_hub_seq: int | None = None,
+    *, closure_only: bool = False, continuation: bool = False,
+    next_phase: str = "",
+    pipeline: bool = False,
+    round_hub_seq: int | None = None,
     hub_pubkey: str = "", started_against_task_seq: int = 0,
 ) -> None:
     """Spawn a background ``chat --once`` turn for a workgroup."""
-    if closure_only:
+    turn_timeout = _turn_timeout_for(pipeline)
+    if continuation:
+        nxt = next_phase or "<next>"
+        prompt = (
+            f"[workgroup-continuation] '#{wg_name or wg_id}' "
+            f"(wg_id={wg_id}). {reason}.\n\n"
+            "You just closed a phase with `#done`. The pipeline order is "
+            f"fixed and the NEXT phase is `#{nxt}`. The `#done` already "
+            "verified the finished phase — do NOT re-verify or re-read "
+            "files. Your one job this turn is to OPEN THE NEXT PHASE.\n\n"
+            f"Open EXACTLY ONE targeted task for `#{nxt}`'s owner — a single "
+            f"`workgroup_post(wg_id=\"{wg_id}\", text=\"@<owner> #task "
+            f"#{nxt} <what to produce>\")`. You know which agent owns "
+            f"`#{nxt}` from your role/skill. If your briefing tracks any "
+            "project/org state, update it in the same turn. Then you're "
+            "done.\n\n"
+            "Posting anything other than that one targeted `#task` — "
+            "searching, re-reading, prose, another `#done` — is a FAILED "
+            "turn that leaves the pipeline stuck. Open the task and stop."
+        )
+        env_extra: dict[str, str] = {}
+    elif closure_only:
         prompt = (
             f"[workgroup-watchdog] '#{wg_name or wg_id}' "
             f"(wg_id={wg_id}). {reason}.\n\n"
@@ -975,25 +1289,47 @@ async def _dispatch_workgroup_turn(
             "\n\nFollow your `Workgroup engagement rules` exactly. "
             "Valid actions, in priority:"
             "\n  1. [hub only] If the deliverable is in the "
-            "transcript AND full quorum is reached (every member "
-            "has posted substantive content or `#skip`; at least "
-            "one member's post is substantive), post "
+            "transcript AND quorum is reached, post "
             f"`workgroup_post(wg_id=\"{wg_id}\", "
-            "text=\"#done <one-line result summary>\")` to close.\n"
-            "  2. [member, you'll use slow tools next] If your "
-            "next step is web_fetch / research / multi-step "
-            "delegate that will take >30s, FIRST post "
+            "text=\"#done <one-line result summary>\")` to close. "
+            "QUORUM IS SCOPED TO THE TASK'S PARTICIPANTS: for a "
+            "TARGETED task (the opener `@`-mentioned specific "
+            "members) only those named participants need to have "
+            "posted (substantive or `#skip`, ≥1 substantive) — do "
+            "NOT wait on the rest of the roster; `@canvas #task "
+            "#design` closes the moment canvas delivers. For a "
+            "COLLECTIVE task (no `@`-mentions) every member must "
+            "have posted.\n"
+            "  2. [member, >30s before your handoff] If your next "
+            "step will take more than ~30s before you can post "
+            "something substantive — slow tools (web_fetch / "
+            "research / delegate) OR, as the named participant on a "
+            "production task, a long pass of LOCAL file work "
+            "(writing/translating many files, an npm build) — FIRST "
+            "post "
             f"`workgroup_post(wg_id=\"{wg_id}\", text=\"#working "
-            "<one-line reason>\")` to signal the hub to wait, then "
-            "do the tools, then come back and post substantive. "
-            "Without this, the hub may close around you.\n"
+            "<concrete deliverable> (<tool>)\")` to signal the hub "
+            "to wait. The reason MUST name what you're producing and "
+            "the tool, e.g. \"#working writing Spanish source "
+            "content under src/content/** (write_file)\". A bare "
+            "\"#working\" wastes the only signal the hub has. Then "
+            "do the work and come back to post substantive. Without "
+            "this, the hub reads your silence as a stall and "
+            "re-tasks you.\n"
             "  3. [member, your FIRST post on this active task] "
             "Find your angle from YOUR role's identity (your "
             "public_bio + memories) and post substantive content. "
             "Even a single concrete sentence is value. The hub "
             "assembled this workgroup specifically for the listed "
             "members — if you're here, your lens applies. Default "
-            "to substantive, NOT to `#skip`.\n"
+            "to substantive, NOT to `#skip`. When your deliverable is "
+            "ready, hand off with a PLAIN status line (e.g. \"content "
+            "complete · 5 rooms + page copy\", \"build green · dist/ "
+            "generated\"). NEVER post `#done` or `#task` — those are "
+            "hub-only markers; the hub reads your plain handoff and "
+            "closes the task. A member `#task` is rejected and a member "
+            "`#done` is stripped to plain text, so the marker is wasted "
+            "effort either way.\n"
             "  4. [member, follow-up rounds] Post a NEW "
             "contribution (fact, evidence, blocker not raised "
             "yet). Paraphrase of earlier content is NOT a "
@@ -1007,7 +1343,8 @@ async def _dispatch_workgroup_turn(
             "(genuine silence — not your turn, no slot left, or "
             "still working from a prior `#working`)."
             "\n\nLANGUAGE: write every post — your contribution, "
-            "`#working` reasons, `#skip` reasons, `#done` results — "
+            "`#working` reasons, `#skip` reasons, handoff and result "
+            "summaries — "
             "in the same language as the active `#task`. If the "
             "task is in Spanish, post in Spanish. If French, French. "
             "Match the user, do not default to English."
@@ -1064,7 +1401,7 @@ async def _dispatch_workgroup_turn(
     try:
         try:
             rc = await asyncio.wait_for(
-                proc.wait(), timeout=_TURN_TIMEOUT_SECONDS,
+                proc.wait(), timeout=turn_timeout,
             )
         except asyncio.TimeoutError:
             timed_out = True
@@ -1087,7 +1424,7 @@ async def _dispatch_workgroup_turn(
                     rc = -9
             log.warning(
                 "wg poller: turn for %s exceeded %ss — killed",
-                wg_id, _TURN_TIMEOUT_SECONDS,
+                wg_id, turn_timeout,
             )
         except asyncio.CancelledError:
             # Cancellation doesn't kill the child — terminate explicitly to avoid orphan.

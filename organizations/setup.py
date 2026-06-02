@@ -32,6 +32,7 @@ WORKSPACE: str = ""
 WORKSPACE_PATH: Path = Path()
 WORKSPACE_SCAFFOLD: list[str] = []
 SYNC_ITEMS: list[dict] = []
+PEER_EDGES: object = []
 MODEL_DEFAULT: str = ""
 MODEL_STRONG: str = ""
 BUDGET_DAILY_DEFAULT: float = 0.0
@@ -52,7 +53,7 @@ def discover_orgs() -> list[str]:
 def init_org(name: str) -> None:
     global ORG_NAME, ORG_DIR, AGENTS_DIR, WORKGROUPS_DIR, COMMON_SKILLS_DIR
     global USER_MEMORY_TEMPLATE, WORKSPACE, WORKSPACE_PATH
-    global WORKSPACE_SCAFFOLD, SYNC_ITEMS
+    global WORKSPACE_SCAFFOLD, SYNC_ITEMS, PEER_EDGES
     global MODEL_DEFAULT, MODEL_STRONG
     global BUDGET_DAILY_DEFAULT, BUDGET_DAILY_STRONG, BUDGET_WG
     global AGENT_VOICES, COMMON_SKILLS, ORG_DISPLAY_NAME
@@ -95,6 +96,7 @@ def init_org(name: str) -> None:
 
     WORKSPACE_SCAFFOLD = list(cfg.get("workspace_scaffold", []))
     SYNC_ITEMS = list(cfg.get("sync", []))
+    PEER_EDGES = cfg.get("peer_edges", [])
 
     models = cfg.get("models", {}) or {}
     MODEL_DEFAULT = str(models.get("default", "openai/gpt-5.4-mini"))
@@ -240,6 +242,7 @@ def report_validation(errors: list[str], warnings: list[str]) -> bool:
 def derive_edges(
     agents: list[dict],
     workgroups: list[dict],
+    peer_edges=None,
 ) -> list[tuple[str, str]]:
     existing = {a["name"] for a in agents}
     seen: set[frozenset[str]] = set()
@@ -253,14 +256,31 @@ def derive_edges(
             seen.add(key)
             edges.append((a, b))
 
+    # Per-agent `peers:` in agent.md is legacy back-compat (still honoured for
+    # orgs that declare it). Preferred source is org.yaml `peer_edges` below —
+    # peers are network infrastructure, not agent identity.
     for agent in agents:
         for peer in agent.get("peers", []):
             _add(agent["name"], peer)
 
+    # Workgroup membership implies a hub↔member edge.
     for wg in workgroups:
         hub = wg["hub"]
         for member in wg["members"]:
             _add(hub, member)
+
+    # Permanent peer edges from org.yaml: "all" → complete graph (every agent a
+    # mutual peer); a list of [a, b] pairs → just those links.
+    pe = peer_edges or []
+    if pe == "all" or pe == ["all"]:
+        names = sorted(existing)
+        for i in range(len(names)):
+            for j in range(i + 1, len(names)):
+                _add(names[i], names[j])
+    elif isinstance(pe, list):
+        for pair in pe:
+            if isinstance(pair, (list, tuple)) and len(pair) == 2:
+                _add(str(pair[0]), str(pair[1]))
 
     return edges
 
@@ -871,7 +891,7 @@ def main() -> int:
         if not (COMMON_SKILLS_DIR / skill_path).exists():
             warn(f"common_skills '{skill_path}' source missing: {COMMON_SKILLS_DIR / skill_path}")
 
-    edges = derive_edges(agents, workgroups)
+    edges = derive_edges(agents, workgroups, PEER_EDGES)
 
     if args.check:
         print(f"{BLUE}=== {ORG_DISPLAY_NAME} · validation check ==={RESET}")

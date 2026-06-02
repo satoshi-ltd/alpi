@@ -219,6 +219,34 @@ function WorkgroupSettings() {
           onPress={isHub ? () => router.push(`/wg/${id}/briefing`) : undefined}
           chevron={isHub}
         />
+        <SectionHeader>Pipeline · task order the hub runs</SectionHeader>
+        {(wg.pipeline ?? []).length > 0 ? (
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space.s3, paddingHorizontal: space.s8, paddingVertical: space.s4 }}>
+            {wg.pipeline.map((s, i) => (
+              <View
+                key={s}
+                style={{
+                  flexDirection: 'row', alignItems: 'center', gap: space.s2,
+                  paddingHorizontal: space.s4, paddingVertical: space.s2,
+                  borderWidth: 0.5, borderColor: colors.line2, borderRadius: radii.md,
+                  backgroundColor: colors.bgInput,
+                }}
+              >
+                <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink4 }}>{i + 1}</Text>
+                <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.ink }}>#{s}</Text>
+              </View>
+            ))}
+          </View>
+        ) : (
+          <View style={{ paddingHorizontal: space.s8, paddingVertical: space.s4 }}>
+            <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, color: colors.ink3 }}>
+              No pipeline · deliberation workgroup
+            </Text>
+          </View>
+        )}
+        {isHub ? (
+          <Row label="Edit pipeline" onPress={() => router.push(`/wg/${id}/pipeline`)} chevron />
+        ) : null}
 
         <SectionHeader>Members · {memberRows.length || wg.members || 0}</SectionHeader>
         {memberRows.map((m, i) => {

@@ -27,7 +27,7 @@ def test_safelist_keys_pass_through(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("HOME", "/tmp/h")
     _state.reset_skill_env()
     env = _build_subprocess_env()
-    assert env.get("PATH") == "/usr/bin:/bin"
+    assert env.get("PATH", "").endswith("/usr/bin:/bin")  # safelisted PATH passes through (node bins may prepend)
     assert env.get("HOME") == "/tmp/h"
 
 

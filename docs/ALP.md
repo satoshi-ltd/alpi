@@ -775,11 +775,21 @@ member roster. Lifecycle markers (`#task`, `#done`) are added to
 that authority list: only the hub may open or close tasks. This
 is enforced at two layers:
 
-1. **Client-side rejection.** The member SDK
-   (`workgroup_client.post`) scans the plaintext for `#task` /
-   `#done` markers before encryption and refuses to send if the
-   sender is not the hub of the target workgroup. The agent gets
-   a clear error and a hint to stay silent.
+1. **Client-side handling.** The member SDK
+   (`workgroup_client.post`) scans the plaintext before encryption
+   and treats the two markers differently:
+   - **`#task` → rejected.** A member never opens a task; the SDK
+     refuses with a clear error. A post carrying *both* `#task` and
+     `#done` is ambiguous (open-and-close) and is rejected too.
+   - **`#done` → stripped, not dropped.** The hub-only close marker
+     is removed and the substantive handoff text is preserved and
+     sent (`#done build green · dist ready` → `build green · dist
+     ready`; leading `@mentions` go with the marker). A member's
+     deliverable handoff is real coordination — discarding the whole
+     post to enforce a marker the parser already ignores (point 2)
+     loses more than it protects. A `#done` that strips to nothing
+     (no handoff text) is rejected. Only the hub closes a task; the
+     member's text simply survives as a plain post the hub reads.
 2. **Semantic filter.** Even if a member crafts a raw post that
    bypasses the SDK, the parser (`tasks.parse_post(...,
    hub_pubkey=...)`) ignores markers whose author is not the
@@ -1122,20 +1132,35 @@ does not, and operators should pick models with eyes open:
   These are operational levers, not protocol changes. The
   protocol is uniform; quality scales with the model.
 
-**Stale-task watchdog (one-shot).** When the hub itself was the
-last to post the standard "new content from another peer" trigger
-never fires for the hub — without intervention the workgroup would
-stall indefinitely. The watchdog wakes the hub exactly **once**
-per "hub talked last" stretch (keyed on the seq of the hub's last
-post in `poller_state.json → hub_watchdog_fired_seq`) after a
-60-second grace window. The dispatched turn carries a
-`closure-or-silence` flag that collapses the synthetic prompt to
-two valid outcomes: post `#done <synthesis>` or end the turn
-without posting. No new content is permitted in a watchdog turn —
-that would be back-to-back hub content, which the rotation rule
-already forbids. If the hub doesn't close on the watchdog turn,
-the task simply waits for a real member post (which advances the
-seq and re-arms the watchdog for the next stale stretch).
+**Stale-task watchdog (escalating).** When the hub itself posted
+last, the standard "new content from another peer" trigger never
+fires for the hub — without intervention the workgroup would
+stall. The watchdog re-wakes the hub on a stalled task, keyed on
+the hub's last seq (`poller_state.json → hub_watchdog_fired_seq`),
+with escalation:
+
+- **A member `#working` is a sign of life** — it earns the full
+  turn timeout of grace before silence counts as a stall (a long
+  local job posts nothing while it runs). Any other last post uses
+  the short 60-second grace.
+- **Non-pipeline workgroups** get the `closure-or-silence` nudge
+  (post `#done` or stay silent — no new content, which the rotation
+  rule forbids anyway), then a `wg.blocked` alert; a `#done` is
+  terminal there.
+- **Pipeline workgroups** (ordered `meta.pipeline` slugs) escalate
+  across spaced re-fires: a `closure` nudge → a normal-mode
+  **repair** (re-verify the on-disk state and re-task or close) → a
+  one-shot **final repair** (the last automatic wake: verify the
+  artifact and either `#done` it or post a concrete `#done BLOCKED ·
+  <reason>`). After that the task is abandoned — the `wg.blocked`
+  alert stays the visible state until the transcript moves.
+
+**`#done BLOCKED` halts a pipeline.** A `#done` whose result string
+begins with `BLOCKED` closes the task but does NOT advance to the
+next phase or reopen a prior one — the pipeline stops cleanly until
+a human re-tasks it. Plain `BLOCKED` prose (no `#done`) carries no
+protocol effect and leaves the task open. This is how a hub stops a
+pipeline that genuinely can't pass without human/upstream help.
 
 **Turn telemetry + timeout.** Each dispatched turn is bracketed
 with append-only events written to `~/.alpi/profiles/<x>/alp/

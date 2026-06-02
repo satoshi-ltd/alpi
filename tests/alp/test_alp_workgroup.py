@@ -1576,3 +1576,41 @@ async def test_workgroup_verbs_bypass_peer_allow_list(short_tmp: Path) -> None:
         assert result["workgroup_id"] == wg.meta.id
     finally:
         await server.stop()
+
+
+def test_create_persists_pipeline_phases(short_tmp: Path) -> None:
+    """`create(pipeline=[...])` persists the ordered phase list; default is ()."""
+    home = short_tmp / "hub"; home.mkdir()
+    kp = load_or_generate(home)
+    wg = wg_mod.create(
+        home, name="proj", hub_kp=kp, member_pubkeys=[],
+        pipeline=["intake", "design", "content"],
+    )
+    assert wg_mod.load(home, wg.meta.id).meta.pipeline == ("intake", "design", "content")
+    wg2 = wg_mod.create(home, name="delib", hub_kp=kp, member_pubkeys=[])
+    assert wg_mod.load(home, wg2.meta.id).meta.pipeline == ()
+
+
+def test_create_rejects_invalid_and_duplicate_pipeline_slugs(short_tmp: Path) -> None:
+    home = short_tmp / "hub"; home.mkdir()
+    kp = load_or_generate(home)
+    with pytest.raises(ValueError, match="invalid pipeline phase slug"):
+        wg_mod.create(home, name="x", hub_kp=kp, member_pubkeys=[], pipeline=["Bad Slug"])
+    with pytest.raises(ValueError, match="duplicate pipeline phase slug"):
+        wg_mod.create(home, name="y", hub_kp=kp, member_pubkeys=[], pipeline=["seo", "seo"])
+
+
+def test_load_meta_tolerant_to_legacy_pipeline_bool(short_tmp: Path) -> None:
+    """A legacy `pipeline: true` meta loads as a normal workgroup (() ) instead
+    of crashing the poll — strict validation only applies on create/update."""
+    home = short_tmp / "hub"; home.mkdir()
+    kp = load_or_generate(home)
+    wg = wg_mod.create(home, name="legacy", hub_kp=kp, member_pubkeys=[])
+    meta_path = home / "alp" / "workgroups" / wg.meta.id / "meta.yaml"
+    import yaml as _yaml
+    raw = _yaml.safe_load(meta_path.read_text())
+    raw["pipeline"] = True  # legacy bool
+    meta_path.write_text(_yaml.safe_dump(raw))
+    reloaded = wg_mod.load(home, wg.meta.id)
+    assert reloaded is not None
+    assert reloaded.meta.pipeline == ()
