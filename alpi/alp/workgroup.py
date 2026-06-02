@@ -57,6 +57,7 @@ _META = "meta.yaml"
 _MEMBERS = "members.yaml"
 _TRANSCRIPT = "transcript.jsonl"
 _LEDGER = "ledger.json"
+_HUB_KEYS = "hub_keys.json"  # hub-only history: past group keys (sealed for the hub) across rekeys
 
 _BIO_MAX = 200
 _VOICE_MAX = 64
@@ -543,6 +544,53 @@ def _resolve_hub_alias(
     return None
 
 
+def _record_hub_key(home: Path, wg_id: str, version: int, sealed: str) -> None:
+    # Stash the hub's sealed group key for `version` before a rekey overwrites it,
+    # so the hub can still fold posts written under the rotated-out version.
+    if not sealed:
+        return
+    p = _wg_dir(home, wg_id) / _HUB_KEYS
+    hist: dict[str, str] = {}
+    if p.exists():
+        try:
+            hist = json.loads(p.read_text()) or {}
+        except json.JSONDecodeError:
+            hist = {}
+    hist[str(int(version))] = sealed
+    p.write_text(json.dumps(hist, separators=(",", ":")))
+
+
+def hub_group_keys(home: Path, wg: "Workgroup", kp: Keypair) -> dict[int, bytes]:
+    # version -> group key for every version the hub can still open: its current
+    # member sealed_key plus the hub_keys.json history. Lets a hub decrypt the
+    # full transcript across rekeys instead of blanking rotated-out posts.
+    out: dict[int, bytes] = {}
+    me = wg.member(kp.pubkey_b64())
+    if me is not None and me.sealed_key:
+        try:
+            out[int(me.key_version)] = open_sealed_group_key(me.sealed_key, kp)
+        except Exception:  # noqa: BLE001
+            pass
+    p = _wg_dir(home, wg.meta.id) / _HUB_KEYS
+    if p.exists():
+        try:
+            hist = json.loads(p.read_text()) or {}
+        except json.JSONDecodeError:
+            hist = {}
+        for v, sealed in hist.items():
+            try:
+                vi = int(v)
+            except (TypeError, ValueError):
+                continue
+            if vi in out:
+                continue
+            try:
+                out[vi] = open_sealed_group_key(sealed, kp)
+            except Exception:  # noqa: BLE001
+                pass
+    return out
+
+
 def _rekey(home: Path, wg_id: str, dropped_pubkey: str) -> Workgroup:
     """Drop pubkey, mint fresh group key, re-seal for remaining members, bump version. Hub cannot be dropped."""
     wg = load(home, wg_id)
@@ -554,6 +602,9 @@ def _rekey(home: Path, wg_id: str, dropped_pubkey: str) -> Workgroup:
         raise ValueError(f"pubkey {dropped_pubkey!r} not in roster")
 
     remaining = [m for m in wg.members if m.pubkey != dropped_pubkey]
+    hub_member = wg.member(wg.meta.hub_pubkey)
+    if hub_member is not None:
+        _record_hub_key(home, wg_id, hub_member.key_version, hub_member.sealed_key)
     new_key = secrets.token_bytes(GROUP_KEY_BYTES)
     new_version = wg.meta.current_key_version + 1
     for m in remaining:
@@ -589,6 +640,9 @@ def add_member(home: Path, wg_id: str, target_pubkey: str) -> Workgroup:
     if wg.member(pk) is not None:
         raise ValueError(f"pubkey {pk!r} already in roster")
 
+    hub_member = wg.member(wg.meta.hub_pubkey)
+    if hub_member is not None:
+        _record_hub_key(home, wg_id, hub_member.key_version, hub_member.sealed_key)
     new_key = secrets.token_bytes(GROUP_KEY_BYTES)
     new_version = wg.meta.current_key_version + 1
     for m in wg.members:

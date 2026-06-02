@@ -876,9 +876,10 @@ def _all_hub_posts_decrypted(home: Path, wg) -> list[dict]:
     own = wg.member(kp.pubkey_b64())
     if own is None:
         return []
-    try:
-        group_key = wg_mod.open_sealed_group_key(own.sealed_key, kp)
-    except Exception:  # noqa: BLE001
+    # All versions the hub can open (current + rekey history) so a task opened
+    # before a leave/kick rotation isn't blanked out of the fold.
+    keys = wg_mod.hub_group_keys(home, wg, kp)
+    if not keys:
         return []
     transcript_path = home / "alp" / "workgroups" / wg.meta.id / "transcript.jsonl"
     if not transcript_path.exists():
@@ -892,7 +893,8 @@ def _all_hub_posts_decrypted(home: Path, wg) -> list[dict]:
             entry = json.loads(line)
         except json.JSONDecodeError:
             continue
-        if int(entry.get("key_version", 1)) != own.key_version:
+        group_key = keys.get(int(entry.get("key_version", 1)))
+        if group_key is None:
             continue
         try:
             text = wg_mod.decrypt_post(

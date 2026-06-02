@@ -632,6 +632,15 @@ by version. Decryption of an old post selects the matching version
 from that map, so past traffic stays readable while new traffic is
 locked away from ex-members.
 
+The hub keeps the symmetric counterpart: each rotation also stashes
+the group key it held for the previous version — re-sealed for
+itself — in `hub_keys.json`. The hub folds the transcript across
+all the versions it can still open (current + history), so a task
+opened before a `leave` / `kick` / `add_member` rotation stays
+readable and closable. Without it, the older `#task` / `#done`
+would blank out of the hub's fold and the open task could never be
+closed hub-side.
+
 ### Group-key sealing
 
 The hub seals the group key separately for every member using
@@ -671,6 +680,13 @@ The hub persists each workgroup under
 - `ledger.json` — cumulative `{usd, tokens, posts}` across the
   workgroup's lifetime; the gate for the `max_usd` /
   `max_tokens` budget below.
+- `hub_keys.json` — hub-only sealed-key history, `{key_version:
+  sealed_key}`. On every rekey (`leave` / `kick` / `add_member`)
+  the hub stashes the group key it held for the outgoing version,
+  re-sealed for itself, before rotating. It stores **sealed** keys
+  (openable only by the hub's own private key), never plaintext
+  group keys, so it can still fold and close a task opened under a
+  rotated-out version.
 
 The hub stores **ciphertext only**. A workgroup operator who
 inspects the transcript file on disk sees nothing without a

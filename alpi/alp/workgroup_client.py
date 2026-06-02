@@ -541,25 +541,18 @@ def _post_as_hub(
 
     existing_raw = _read_transcript(d)
 
-    try:
-        group_key_for_check = wg_mod.open_sealed_group_key(
-            own.sealed_key, kp,
-        )
-    except Exception:  # noqa: BLE001
-        group_key_for_check = None
+    # All openable versions (current + rekey history) so the closure-quorum gate
+    # still sees a task opened before a leave/kick rotation.
+    keys_for_check = wg_mod.hub_group_keys(home, wg, kp)
     existing: list[dict[str, Any]] = []
     for entry in existing_raw:
-        if (
-            group_key_for_check is None
-            or int(entry.get("key_version", 1)) != own.key_version
-        ):
+        gk = keys_for_check.get(int(entry.get("key_version", 1)))
+        if gk is None:
             existing.append({**entry, "text": ""})
             continue
         try:
             decrypted_bytes = wg_mod.decrypt_post(
-                group_key_for_check,
-                entry["nonce"],
-                entry["ciphertext"],
+                gk, entry["nonce"], entry["ciphertext"],
             )
             existing.append({
                 **entry,

@@ -45,7 +45,6 @@ sovereignty depends on.
 
 | ID | Item | Status |
 |---|---|---|
-| ALP.3.K | Rekey edge cases — leave/kick/rekey while a task is open (hub-side key history, or auto-close / re-pin). | 🔵 |
 | ALP.3+ | Multi-task workgroups — opt-in `multitask: true`, letter-prefixed task IDs, per-task roster/dispatch/budget. **Deferred**: targeted tasks + pipeline continuation cover sequential per-project pipelines; revisit only if the persistent workgroups (`template`/`quality`/`brand-library`) prove real parallelism. | 🔵 |
 
 ### UX.2 / UX.3. Owned client experience
@@ -107,15 +106,6 @@ the default and fits per-project pipelines (one owner per phase via targeted
 tasks); multitask earns its complexity — per-task quorum filters, N-thread UI,
 per-task budget accounting — only when the persistent workgroups (`template`,
 `quality`, `brand-library`) show sustained parallelism.
-
-### ALP.3.K — Rekey edge cases
-
-A `leave` / `kick` mid-task rotates the group key; the open `#task` post stays
-under the old version, so the hub (holding only the new key) blanks it on fold
-(`_post_as_hub`) → the task drops from the hub's ledger and can't be closed
-hub-side. Remaining members keep the old key and still see it — a hub-side
-blind spot, not data loss. Fix: persist a hub-side key history so the hub folds
-the full transcript, or auto-close / re-pin active tasks on rekey.
 
 **Explicitly not in scope.** Author-declared post cost (the honour-system
 budget gate) and hub-anchored availability (cold workgroup when the hub

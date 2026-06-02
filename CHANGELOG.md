@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.6.36 — 2026-06-02 — a task survives a member leaving mid-task
+
+- **Removing a member no longer strands an open task.** Kicking a member (or a
+  member leaving) rotates the workgroup's encryption key. A task opened before
+  that rotation used to become unreadable to the hub — it dropped from the hub's
+  view and could never be closed. The hub now keeps the prior keys, so it reads
+  the whole transcript across rotations and a mid-task departure leaves the task
+  intact and closable.
+
 ## v0.6.35 — 2026-06-02 — the hub serves workgroup task state
 
 - **Task state is computed once, by the hub.** A workgroup's current task, its

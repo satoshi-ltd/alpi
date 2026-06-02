@@ -325,3 +325,25 @@ def test_fold_task_state_retask_clears_blocked(short_tmp: Path) -> None:
     state = data_workgroup.fold_task_state(home, wg_id)
     assert state["active"]["slug"] == "build-recheck"
     assert state["blocked"] is None
+
+
+def test_fold_survives_rekey_midtask(short_tmp: Path) -> None:
+    home = short_tmp / "hub"; home.mkdir()
+    kp = load_or_generate(home)
+    other_home = short_tmp / "member"; other_home.mkdir()
+    other_pk = load_or_generate(other_home).pubkey_b64()
+    wg = wg_mod.create(
+        home, name="rk", hub_kp=kp, member_pubkeys=[other_pk], briefing="",
+    )
+    me = wg.member(kp.pubkey_b64())
+    gk_v1 = wg_mod.open_sealed_group_key(me.sealed_key, kp)
+    nonce_b64, ct_b64 = wg_mod.encrypt_post(gk_v1, b"@x #task #build wire it")
+    d = home / "alp" / "workgroups" / wg.meta.id
+    (d / "transcript.jsonl").write_text(json.dumps({
+        "seq": 1, "ts": "2026-05-01T00:00:00Z", "from": kp.pubkey_b64(),
+        "key_version": me.key_version, "nonce": nonce_b64, "ciphertext": ct_b64,
+    }, separators=(",", ":")) + "\n", encoding="utf-8")
+    # Kick the member → group key rotates to v2; the v1 #task must survive the fold.
+    wg_mod.kick(home, wg.meta.id, other_pk)
+    state = data_workgroup.fold_task_state(home, wg.meta.id)
+    assert state["active"] == {"slug": "build", "title": "wire it", "opened_seq": 1}

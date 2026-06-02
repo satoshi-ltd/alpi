@@ -60,7 +60,7 @@ def _hub_pubkey(home: Path, wg_id: str) -> str:
 
 
 def fold_task_state(home: Path, wg_id: str) -> dict[str, Any]:
-    # Canonical hub-side fold (active/closed/blocked) so clients don't each refold the transcript.
+    # Canonical host-side fold (active/closed/blocked) for operators + future clients; the apps still refold locally.
     from alpi.alp import tasks as wg_tasks
 
     posts = decrypt_transcript(home, wg_id)
@@ -122,27 +122,18 @@ def _decrypt_as_hub(
     me = wg.member(kp.pubkey_b64())
     if me is None:
         return []
-    cur_version = me.key_version
-    # Open the sealed group key ONCE outside the loop — used to be reopened per-post (O(N) Curve25519 unseals on every transcript fetch, ~10ms each on a busy hub).
-    try:
-        group_key = wg_mod.open_sealed_group_key(me.sealed_key, kp)
-    except Exception as e:  # noqa: BLE001
-        # Hub cannot unseal its own key — degrade gracefully, never return half-decrypted state.
-        group_key = None
-        unseal_error = str(e)
-    else:
-        unseal_error = ""
+    # All versions the hub can open (current + rekey history): unsealed once each,
+    # so posts written before a leave/kick rotation still decrypt instead of blanking.
+    keys = wg_mod.hub_group_keys(home, wg, kp)
 
     handles = _handle_map(home, wg)
     out: list[dict[str, Any]] = []
     for post in raw:
         v = int(post.get("key_version", 1))
         sender_pk = str(post.get("from") or "")
-        body: str
-        if v != cur_version:
+        group_key = keys.get(v)
+        if group_key is None:
             body = f"[v{v} key rotated out of hub state]"
-        elif group_key is None:
-            body = f"[decrypt failed: {unseal_error}]"
         else:
             try:
                 body = wg_mod.decrypt_post(
