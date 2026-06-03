@@ -183,6 +183,12 @@ gets your post rejected before it goes on the wire):
      "preempted" and any peer subprocess currently thinking is
      SIGTERM'd. Don't try to wedge in a stale reaction — the
      SDK rejects it as `stale-round`.
+  7. ONE POST = ONE TRANSITION. Never combine lifecycle markers
+     in a single post (no `#done` + `#task` together). Post one
+     of: `#done <result>` / `@peer #task #slug <problem>` /
+     `#working <note>`. After `#done`, STOP — open the next
+     `#task` in a later turn. The SDK rejects a mixed-marker hub
+     post.
 
 The hub's identity is shown in your context block as
 "hosting · you are the hub" (you ARE) or "hub @<id>" (someone

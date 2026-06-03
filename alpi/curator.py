@@ -19,7 +19,10 @@ What this phase does NOT do:
 
 - No upstream-update checks on imported skills (no import system yet).
 - No session-scoped narrowness detection (telemetry lacks session ids).
-- No mutation, archive move, or ``absorbed_into:`` metadata write.
+
+``review()`` stays pure: it emits apply-able ``archive`` actions in the
+report but mutates nothing. ``alpi curator apply`` (see ``curator_apply``)
+executes them. Consolidation (``absorbed_into``, reference copy) is AC.3.
 """
 
 from __future__ import annotations
@@ -37,7 +40,7 @@ from alpi import skills_usage
 
 _PREFIX_RE = re.compile(r"^([a-z][a-z0-9]+)[-_]")
 _MIN_CLUSTER_SIZE = 3
-_REPORT_VERSION = 1
+_REPORT_VERSION = 2
 
 
 def _frontmatter(skill_dir: Path) -> dict[str, str]:
@@ -130,6 +133,14 @@ def review(
     stale.sort(key=lambda r: r["last_seen_days_ago"], reverse=True)
     cold.sort(key=lambda r: r["on_disk_days_ago"], reverse=True)
 
+    # Mechanical, apply-able actions. Only archive of stale/cold non-pinned
+    # skills — never clusters (no umbrella target the heuristic can pick).
+    actions = [
+        {"type": "archive", "skill": r["name"], "category": r["category"], "reason": reason}
+        for reason, rows in (("stale", stale), ("cold", cold))
+        for r in rows
+    ]
+
     return {
         "version": _REPORT_VERSION,
         "generated_at": nowt,
@@ -140,10 +151,12 @@ def review(
             "stale": len(stale),
             "cold": len(cold),
             "prefix_clusters": len(clusters),
+            "actions": len(actions),
         },
         "stale": stale,
         "cold": cold,
         "prefix_clusters": clusters,
+        "actions": actions,
     }
 
 
@@ -198,7 +211,8 @@ def _render_markdown(findings: dict[str, Any]) -> str:
         f"- Cold candidates: {s['cold']}",
         f"- Prefix clusters: {s['prefix_clusters']}",
         "",
-        "_Report-only. No skills are modified by this run; apply suggestions manually._",
+        "_This run modifies nothing. Archive the stale/cold candidates with "
+        "`alpi curator apply` (preview + confirm), or act on them manually._",
         "",
     ]
 
@@ -239,6 +253,20 @@ def _render_markdown(findings: dict[str, Any]) -> str:
             "If these are variants of the same workflow, consider folding them "
             "into a single umbrella skill with the variants under "
             "`references/`."
+        )
+        out.append("")
+
+    actions = findings.get("actions") or []
+    if actions:
+        out.append("## Apply — `alpi curator apply`")
+        out.append("")
+        for a in actions:
+            out.append(f"- archive **{a['skill']}** ({a['category']}) — {a['reason']}")
+        out.append("")
+        out.append(
+            "`alpi curator apply` previews these and, after confirmation, "
+            "moves each to `skills/.archive/`. Pinned skills are never touched; "
+            "re-running is idempotent."
         )
         out.append("")
 

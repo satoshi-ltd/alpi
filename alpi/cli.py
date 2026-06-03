@@ -1202,7 +1202,7 @@ def release_notes(since: str | None, output: str | None) -> None:
 
 @main.group()
 def curator() -> None:
-    """Post-hoc skill curator (review-only). See ``alpi curator review --help``."""
+    """Review and apply skill-library cleanup. See ``alpi curator review|apply --help``."""
 
 
 @curator.command("review")
@@ -1257,6 +1257,48 @@ def curator_list(ctx: click.Context, profile_name: str | None) -> None:
         return
     for p in reports:
         click.echo(str(p / "report.md"))
+
+
+@curator.command("apply")
+@click.option("--report", "report_id", default=None,
+              help="Report dir name to apply (defaults to the latest).")
+@click.option("--yes", "-y", is_flag=True, help="Apply without the confirmation prompt.")
+@click.option("--dry-run", is_flag=True, help="Show what would be archived without moving anything.")
+@click.option("--profile", "profile_name", default=None,
+              help="Profile to inspect (defaults to the active alpi home).")
+@click.pass_context
+def curator_apply(
+    ctx: click.Context,
+    report_id: str | None,
+    yes: bool,
+    dry_run: bool,
+    profile_name: str | None,
+) -> None:
+    """Archive the stale/cold skills a curator report flagged, after preview + confirm."""
+    from alpi import curator_apply as _apply
+    h = home.home_for(profile_name) if profile_name else ctx.obj["home"]
+    try:
+        report_dir, report = _apply.load_report(h, report_id)
+    except FileNotFoundError as e:
+        raise click.ClickException(str(e))
+    actions = _apply.archive_actions(report)
+    if not actions:
+        click.echo("nothing to apply (no archive actions in report)")
+        return
+    click.echo(f"report: {report_dir.name}")
+    for a in actions:
+        click.echo(f"  archive {a['skill']} ({a.get('category', '?')}) — {a.get('reason', '')}")
+    if dry_run:
+        result = _apply.apply_report(h, report, dry_run=True)
+        c = result["counts"]
+        click.echo(f"dry-run: would archive {c.get('would-archive', 0)}, skip {c.get('skipped', 0)}")
+        return
+    if not yes:
+        click.confirm(f"Archive {len(actions)} skill(s) to skills/.archive/?", abort=True)
+    result = _apply.apply_report(h, report, dry_run=False)
+    out_path = _apply.write_apply_report(report_dir, result)
+    c = result["counts"]
+    click.echo(f"archived={c.get('archived', 0)} skipped={c.get('skipped', 0)} → {out_path}")
 
 
 @main.command("doctor")

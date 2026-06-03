@@ -1296,6 +1296,23 @@ def _patch(
     )
 
 
+# Move to skills/.archive/<category>/<name>__<UTC>/ rather than destroy.
+# Recoverable via `mv` back. Shared by the delete action and curator apply.
+def archive_skill_dir(home: Path, skill_dir: Path) -> Path:
+    category = skill_dir.parent.name
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    archive_dir = home / "skills" / ".archive" / category
+    archive_dir.mkdir(parents=True, exist_ok=True)
+    base = f"{skill_dir.name}__{timestamp}"
+    dest = archive_dir / base
+    n = 2
+    while dest.exists():
+        dest = archive_dir / f"{base}-{n}"
+        n += 1
+    shutil.move(str(skill_dir), str(dest))
+    return dest
+
+
 def _delete(
     home: Path,
     name: str,
@@ -1318,14 +1335,7 @@ def _delete(
                 f"fields={{'pinned': False}})."
             ),
         )
-    # Auto-archive: move to skills/.archive/<category>/<name>__<UTC>/ rather
-    # than destroy. Recoverable via `mv` back to skills/<category>/<name>/.
-    category = skill_dir.parent.name
-    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    archive_dir = home / "skills" / ".archive" / category
-    archive_dir.mkdir(parents=True, exist_ok=True)
-    dest = archive_dir / f"{name}__{timestamp}"
-    shutil.move(str(skill_dir), str(dest))
+    dest = archive_skill_dir(home, skill_dir)
     return ToolResult(
         ok=True,
         output=(

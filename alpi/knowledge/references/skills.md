@@ -96,6 +96,9 @@ Notes:
 - User-origin skills need `confirm_user_skill=true` for mutation.
 - `delete` archives to `skills/.archive/...`.
 - Pinned skills refuse delete until unpinned.
+- Bulk cleanup is CLI-only: `alpi curator review` flags stale/cold skills,
+  `alpi curator apply` archives the non-pinned ones after preview + confirm
+  (idempotent; pinned untouched).
 - `reset_state` wipes only `<skill>/state/`.
 - `view(file=...)` returns `absolute_path`; use that path to run scripts.
 

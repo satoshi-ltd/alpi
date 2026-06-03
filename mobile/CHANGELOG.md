@@ -14,6 +14,14 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.1.29 — 2026-06-03 — cleaner pipeline strip
+
+Requires alpi v0.6.35+.
+
+- **Quieter pipeline strip.** Upcoming stages show just their name (no hollow
+  circle), the active stage is a pulsing dot in the hub's accent, and only a
+  blocked stage gets a filled pill — matching desktop.
+
 ## v0.1.28 — 2026-06-03 — pipeline at a glance
 
 Requires alpi v0.6.35+.

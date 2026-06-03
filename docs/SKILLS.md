@@ -327,6 +327,9 @@ skill(action="invoke", name=..., [args])
 `delete` archives to `skills/.archive/<category>/<name>__<UTC>/`
 (recoverable) instead of removing. Skills with `pinned: true` in
 their frontmatter refuse `delete` until unpinned via `set_meta`.
+For bulk cleanup, `alpi curator review` flags stale/cold skills and
+`alpi curator apply` moves the non-pinned ones to that same archive
+after a preview + confirmation (idempotent; pinned skills untouched).
 `reset_state` wipes everything under `<skill>/state/` (db.sqlite,
 JSONL logs, anything else) but preserves `SKILL.md`, `scripts/`,
 `references/`, `assets/`, and `secrets/`. `set_meta` surgically

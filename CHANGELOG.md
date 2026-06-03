@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.7.0 — 2026-06-03 — curator can apply its own cleanup
+
+- **`alpi curator apply` archives stale skills for you.** The curator already
+  flags skills that have gone stale or were never used; now it can act on that.
+  `alpi curator apply` previews the archive list, asks for confirmation, and
+  moves each skill to `skills/.archive/` (recoverable with a plain `mv`). Pinned
+  skills are never touched, and re-running is safe — already-archived skills are
+  skipped. Consolidating related skills into one is left for a later release.
+- **A workgroup phase can't silently half-transition anymore.** The hub could
+  post a single message that both closed one task and opened the next (`#done …`
+  + `#task …`); that post was treated as plain prose, so a phase looked
+  "launched" in the conversation but never moved in the canonical task ledger.
+  The hub must now use one lifecycle marker per post — a mixed post is rejected
+  with a clear instruction to close first, then open next turn.
+- **Cost shows up for brand-new OpenRouter models.** OpenRouter calls now
+  request provider-side usage/cost, and when a model is too new to be in the
+  pricing catalog the per-call cost falls back to OpenRouter's own published
+  per-token prices — so spend is tracked instead of logged as $0.
+
 ## v0.6.37 — 2026-06-03 — prompt guidance adapts to the model
 
 - **Smaller models get the reminders they need.** Less capable model families —

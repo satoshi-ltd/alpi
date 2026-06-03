@@ -109,6 +109,20 @@ def _check_task_shape(plaintext: str) -> None:
         )
 
 
+def _check_hub_single_marker(plaintext: str) -> None:
+    """One post = one transition. A hub post carrying more than one lifecycle
+    marker — `#done` + `#task`, two `#task` openers, or two `#done` closers — is
+    ambiguous: parse_post drops a mixed open+close to prose, so the phase
+    silently never moves and the canonical task ledger drifts from the
+    transcript. Reject so the model self-corrects in the same turn."""
+    if tasks_mod.marker_count(plaintext) > 1:
+        raise ValueError(
+            "use only one lifecycle marker per post — post a single `#done` or "
+            "a single `@peer #task #slug`, then stop; open the next task in a "
+            "later turn."
+        )
+
+
 _FULL_QUORUM_TIMEOUT_SECONDS = 10 * 60
 
 
@@ -423,6 +437,7 @@ async def post(
 
     wg = wg_mod.load(home, wg_id)
     if wg is not None and wg.meta.hub_pubkey == kp.pubkey_b64():
+        _check_hub_single_marker(_plaintext)
         result = _post_as_hub(home, wg, kp, text, cost)
         _emit_wg_post(home, wg_id, result)
         if tasks_mod.is_done(_plaintext):

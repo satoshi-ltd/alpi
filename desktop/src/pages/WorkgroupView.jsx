@@ -35,6 +35,7 @@ import {
   Chip,
   CopyIcon,
   Diamond,
+  Dot,
   Icon,
   IconBtn,
   Kbd,
@@ -356,10 +357,9 @@ export default function WorkgroupView({
               {i > 0 && <span className={styles.pipelineSep} aria-hidden>›</span>}
               <Chip
                 size="sm"
-                ghost={p.state === "completed" || p.state === "pending"}
+                ghost={p.state !== "blocked"}
                 state={p.state === "blocked" ? "error" : undefined}
-                accent={p.state === "current" ? ownerProfile?.accent || undefined : undefined}
-                icon={<PhaseIcon state={p.state} />}
+                icon={p.state === "pending" ? undefined : <PhaseIcon state={p.state} accent={ownerProfile?.accent} />}
                 tooltip={p.seq != null ? `Jump to #${p.slug}` : undefined}
                 onClick={p.seq != null ? () => jumpToSeq(p.seq) : undefined}
                 disabled={p.seq == null}
@@ -626,13 +626,12 @@ function renderWgFooter({
 const PHASE_ICON = {
   completed: { name: "check", color: "var(--c-success)" },
   blocked: { name: "ban", color: "var(--c-danger)" },
-  current: { name: "dot", color: "var(--accent)" },
-  pending: { name: "circle", color: "var(--ink-3)" },
 };
 
-function PhaseIcon({ state }) {
-  const { name, color } = PHASE_ICON[state] || PHASE_ICON.pending;
-  return <Icon name={name} size="xs" color={color} />;
+function PhaseIcon({ state, accent }) {
+  if (state === "current") return <Dot pulse color={accent || "var(--accent)"} />;
+  const def = PHASE_ICON[state];
+  return def ? <Icon name={def.name} size="xs" color={def.color} /> : null;
 }
 
 function renderWgMeta({ seq, cost, speaker, isFromHub, styles }) {

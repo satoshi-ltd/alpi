@@ -11,6 +11,14 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.3.36 — 2026-06-03 — cleaner pipeline strip
+
+Requires alpi v0.6.35+.
+
+- **Quieter pipeline strip.** Upcoming stages now show just their name (no
+  hollow circle), the active stage is a pulsing dot in the hub's accent, and
+  done stages keep the green check — only a blocked stage gets a filled pill.
+
 ## v0.3.35 — 2026-06-03 — pipeline at a glance
 
 Requires alpi v0.6.35+.

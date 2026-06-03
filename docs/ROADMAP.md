@@ -12,41 +12,10 @@ Legend: 🔵 backlog · 🟡 next up · ⏸ blocked · 🔴 gate.
 
 ---
 
-## v0.7 cycle (active)
-
-**Theme: owned-client UX + self-improving library + prompt reliability
-+ operator surfaces.**
-v0.6 makes the system observable and reliable. v0.7 uses that evidence
-to improve the agent's long-term assets, move richer interaction
-patterns into Alpi-owned clients rather than gateways, and tighten the
-operator surfaces (device scope, mobile parity, daemon restart) that
-sovereignty depends on.
-
-### Self-improving skills
-
-| ID | Item | Status |
-|---|---|---|
-| AC.2 | Curator apply flow — after preview, archive stale skills, add `absorbed_into:` metadata, and move detail into umbrella skill `references/` when consolidation is accepted. | 🟡 |
-
-### AC.2. Skill curator apply flow
-
-AC.1 (shipped) writes a recommendations report. AC.2 closes the loop by
-applying those recommendations after explicit preview:
-
-- archive stale skills through the existing `.archive/` path;
-- mark consolidating archives with `absorbed_into: <skill>`;
-- preserve original bodies in `references/`;
-- never mutate pinned skills.
-
-The curator reconciles its LLM summary against the actual tool-call log
-of the curator run. If the summary says a skill was absorbed but no tool
-call did that, the report marks a mismatch instead of trusting prose.
-
-## v0.8 cycle (planned)
+## v0.8 cycle (active)
 
 **Theme: multimodal input + RAG ingestion.**
-v0.7 sharpens owned clients and operator surfaces. v0.8 opens the
-agent to non-text content (PDFs, images) and closes the
+v0.8 opens the agent to non-text content (PDFs, images) and closes the
 durable-knowledge loop ("learn this file") so workspace + RAG become
 the agent's long-term memory of documents.
 

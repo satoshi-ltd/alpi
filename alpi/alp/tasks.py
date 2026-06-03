@@ -108,6 +108,14 @@ def has_markers(text: str) -> list[str]:
     return out
 
 
+def marker_count(text: str) -> int:
+    """Count lifecycle-marker lines — each ``#task`` opener and each ``#done``
+    closer is one transition. Unlike ``has_markers`` (distinct types), this
+    counts occurrences, so two ``#task`` lines (or two ``#done`` lines) in one
+    post are both caught."""
+    return len(_TASK_RE.findall(text or "")) + len(_DONE_RE.findall(text or ""))
+
+
 def is_done(text: str) -> bool:
     """``True`` when the post contains a valid ``#done <…>`` marker
     (start of line, line-anchored, with a non-empty payload). Used by

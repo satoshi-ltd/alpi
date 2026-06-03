@@ -62,6 +62,89 @@ _silence_litellm()
 DEBUG = bool(__import__("os").environ.get("ALPI_DEBUG"))
 
 
+# Prefer the provider-reported cost. litellm.completion_cost() raises for models
+# not in its pricing map (every new OpenRouter model), so without this alpi logs
+# $0 for them. OpenRouter returns the real cost in usage.cost when usage.include
+# is requested; litellm surfaces it as _hidden_params.response_cost.
+def _reported_cost(resp) -> float | None:
+    hp = getattr(resp, "_hidden_params", None) or {}
+    rc = hp.get("response_cost")
+    if rc is not None:
+        return float(rc)
+    u = getattr(resp, "usage", None)
+    if u is not None:
+        c = getattr(u, "cost", None)
+        if c is None and hasattr(u, "model_dump"):
+            c = (u.model_dump() or {}).get("cost")
+        if c is not None:
+            return float(c)
+    return None
+
+
+def _with_openrouter_usage(kwargs: dict[str, Any], model: str) -> dict[str, Any]:
+    if not str(model).startswith("openrouter/"):
+        return kwargs
+    from alpi.providers.reasoning import merge_into_kwargs
+    return merge_into_kwargs(kwargs, {"extra_body": {"usage": {"include": True}}})
+
+
+_OR_PRICING: "dict[str, tuple[float, float]] | None" = None
+
+
+# Best-effort: fetched at most once per process (cached in _OR_PRICING) and only
+# when a turn produced no reported cost and litellm couldn't price the model. A
+# 2s timeout caps the worst case; on any failure cost is just 0.0 for that turn.
+def _openrouter_pricing() -> "dict[str, tuple[float, float]]":
+    global _OR_PRICING
+    if _OR_PRICING is not None:
+        return _OR_PRICING
+    import json as _json
+    import os as _os
+    import urllib.request as _u
+    out: dict[str, tuple[float, float]] = {}
+    try:
+        key = _os.environ.get("OPENROUTER_API_KEY", "")
+        headers = {"Authorization": f"Bearer {key}"} if key else {}
+        req = _u.Request("https://openrouter.ai/api/v1/models", headers=headers)
+        with _u.urlopen(req, timeout=2) as resp:
+            data = _json.load(resp)
+        for m in data.get("data", []):
+            p = m.get("pricing") or {}
+            try:
+                out[m["id"]] = (float(p.get("prompt", 0)), float(p.get("completion", 0)))
+            except (TypeError, ValueError, KeyError):
+                continue
+        _OR_PRICING = out
+        return out
+    except Exception:  # noqa: BLE001
+        return {}  # leave cache unset → retry on a later turn
+
+
+# litellm prices the models in its catalog (most providers, incl. the OpenRouter
+# models it already knows) — that path works in streaming and is why older
+# OpenRouter models reported cost. Brand-new OpenRouter models aren't mapped yet,
+# so fall back to OpenRouter's own published per-token pricing.
+def _compute_cost(resp, model: str) -> float:
+    c = _reported_cost(resp)
+    if c is not None:
+        return c
+    import litellm
+    try:
+        c = litellm.completion_cost(completion_response=resp)
+        if c is not None:
+            return float(c or 0.0)
+    except Exception:  # noqa: BLE001
+        pass
+    if str(model).startswith("openrouter/"):
+        price = _openrouter_pricing().get(model.split("/", 1)[1])
+        u = getattr(resp, "usage", None)
+        if price and u is not None:
+            pin = getattr(u, "prompt_tokens", 0) or 0
+            pout = getattr(u, "completion_tokens", 0) or 0
+            return pin * price[0] + pout * price[1]
+    return 0.0
+
+
 def stream(
     model: str,
     messages: list[dict[str, Any]],
@@ -80,6 +163,7 @@ def stream(
         "stream": True,
         "stream_options": {"include_usage": True},
     }
+    kwargs = _with_openrouter_usage(kwargs, model)
     if tools:
         kwargs["tools"] = tools
         kwargs["tool_choice"] = "auto"
@@ -157,10 +241,7 @@ def stream(
 
     # Final tool calls + usage (on the last chunk)
     usage = getattr(last_chunk, "usage", None) if last_chunk else None
-    try:
-        cost = litellm.completion_cost(completion_response=last_chunk) or 0.0
-    except Exception:
-        cost = 0.0
+    cost = _compute_cost(last_chunk, model)
 
     final_tool_calls = [
         {"id": v["id"], "name": v["name"], "arguments": v["arguments"]}
@@ -192,6 +273,7 @@ def complete(
         "model": model,
         "messages": messages,
     }
+    kwargs = _with_openrouter_usage(kwargs, model)
     if tools:
         kwargs["tools"] = tools
         kwargs["tool_choice"] = "auto"
@@ -217,10 +299,7 @@ def complete(
     choice = response.choices[0].message
     usage = getattr(response, "usage", None)
 
-    try:
-        cost = litellm.completion_cost(completion_response=response) or 0.0
-    except Exception:
-        cost = 0.0
+    cost = _compute_cost(response, model)
 
     raw_calls = getattr(choice, "tool_calls", None) or []
     tool_calls = [

@@ -237,29 +237,24 @@ function PipelinePhase({ phase, colors, fonts, accent, onPress }) {
   const icon =
     state === 'completed' ? <Icon name="check" size={12} color={colors.success} />
     : state === 'blocked' ? <Icon name="ban" size={12} color={colors.danger} />
-    : state === 'current' ? <Dot color={accent ?? colors.ink} />
-    : <Icon name="circle" size={12} color={colors.ink3} />;
+    : state === 'current' ? <Dot color={accent ?? colors.ink} pulse />
+    : null;
   const textColor =
     state === 'blocked' ? colors.danger
     : state === 'current' ? accent
     : state === 'pending' ? colors.ink3
     : colors.ink2;
-  const bg =
-    state === 'blocked' ? `${colors.danger}17`
-    : state === 'current' ? `${accent}1f`
-    : 'transparent';
-  const padded = state === 'blocked' || state === 'current';
   const Wrapper = onPress ? Pressable : View;
   return (
     <Wrapper
       onPress={onPress}
       style={[
         WG_STYLES.phase,
-        {
-          backgroundColor: bg,
+        state === 'blocked' && {
+          backgroundColor: `${colors.danger}17`,
           borderRadius: 999,
-          paddingHorizontal: padded ? space.s3 : 0,
-          paddingVertical: padded ? 2 : 0,
+          paddingHorizontal: space.s3,
+          paddingVertical: 2,
         },
       ]}
     >
