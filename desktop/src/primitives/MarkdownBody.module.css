@@ -82,23 +82,5 @@
   text-decoration: underline;
 }
 
-.body table {
-  width: 100%;
-  border-collapse: collapse;
-  font-family: var(--font-mono);
-  font-size: var(--fs-sm);
-  margin: var(--space-5) 0;
-}
-
-.body th {
-  text-align: left;
-  padding: var(--space-2) var(--space-4);
-  color: var(--ink-3);
-  font-weight: var(--fw-medium);
-  border-bottom: .5px solid var(--line-2);
-}
-
-.body td {
-  padding: var(--space-2) var(--space-4);
-  border-bottom: .5px solid var(--line);
-}
+/* Tables and fenced code blocks are styled globally on `.alpi-md`
+   (src/styles/design-system.css) so chat messages and MarkdownBody match. */

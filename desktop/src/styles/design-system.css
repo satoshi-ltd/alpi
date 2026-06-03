@@ -494,6 +494,60 @@ textarea.ds-field, textarea.field { resize: vertical; min-height: 88px; height: 
   margin: var(--space-5) 0;
 }
 
+/* GFM tables — renderMarkdown wraps them in .md-table for a clean rounded,
+   scrollable frame; the inner <table> draws the rows. */
+.alpi-md .md-table {
+  margin: var(--space-5) 0;
+  border: .5px solid var(--line-2);
+  border-radius: var(--r-md);
+  overflow-x: auto;
+}
+.alpi-md table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-base);
+}
+.alpi-md th,
+.alpi-md td {
+  text-align: left;
+  padding: var(--space-5) var(--space-6);
+}
+.alpi-md th[align="center"], .alpi-md td[align="center"] { text-align: center; }
+.alpi-md th[align="right"],  .alpi-md td[align="right"]  { text-align: right; }
+.alpi-md thead th {
+  background: color-mix(in srgb, var(--ink) 3%, var(--bg-pane));
+  color: var(--ink-2);
+  font-weight: var(--fw-semibold);
+  white-space: nowrap;
+  border-bottom: .5px solid var(--line);
+}
+.alpi-md tbody td {
+  border-top: .5px solid var(--line);
+}
+
+/* Fenced code — header strip (language label) wrapping a reset <pre>. */
+.alpi-md .md-code {
+  margin: var(--space-5) 0;
+  border: .5px solid var(--line);
+  border-radius: var(--r-md);
+  overflow: hidden;
+}
+.alpi-md .md-code-head {
+  padding: var(--space-2) var(--space-4);
+  background: color-mix(in srgb, var(--ink) 4%, var(--bg-pane));
+  border-bottom: .5px solid var(--line);
+}
+.alpi-md .md-code-lang {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+}
+.alpi-md .md-code pre {
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+}
+
 @keyframes ds-pop-in   { from { opacity: 0; transform: translateY(4px) scale(0.98); } to { opacity: 1; transform: none; } }
 @keyframes ds-fade-in  { from { opacity: 0; } to { opacity: 1; } }
 @keyframes ds-slide-up { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
@@ -639,6 +693,18 @@ a:focus-visible,
 
 
 /* Brand-accent only — identity color lives on the row's diamond/hash; per-row tinting here is noise. */
+/* Trailing slot (unread dot or timestamp) — right-aligned, never squished,
+   and animates out on row hover like the time/tag do (see Sidebar.module.css). */
+.sb-row-trailing {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  margin-left: var(--space-2);
+  transition:
+    opacity 160ms var(--ease),
+    transform 160ms var(--ease);
+}
+
 .sb-unread-dot {
   display: inline-block;
   width: var(--dot-size);

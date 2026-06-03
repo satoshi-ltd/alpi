@@ -35,6 +35,7 @@ import { usePinned } from "./hooks/usePinned.js";
 import { useLastView } from "./hooks/useLastView.js";
 import { useActiveRole } from "./hooks/useActiveRole.js";
 import { useWorkgroupTasks } from "./hooks/useWorkgroupTasks.js";
+import { markWorkgroupRead } from "./hooks/useReadState.js";
 import { useWindowChrome } from "./hooks/useWindowChrome.js";
 import {
   useActiveViewPing,
@@ -1070,6 +1071,8 @@ export default function App() {
           setCreateWorkgroupOpen(false);
           await reload();
           if (wgId) {
+            // The creator just made it — it's not "unread".
+            markWorkgroupRead(hostConnections.active_id, hubName, wgId);
             setSettingsTarget({ kind: "workgroup", id: wgId, profile: hubName });
             setView({ kind: "settings" });
           }

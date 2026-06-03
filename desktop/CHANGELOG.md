@@ -11,6 +11,18 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.3.38 — 2026-06-03 — tables & code in messages
+
+Requires alpi v0.7.1+.
+
+- **Tables and code blocks render now.** Markdown tables show as clean tables
+  (subtle header, aligned columns, row separators) instead of flattened text,
+  and fenced code blocks get a language label and their own framed block.
+- **Tidier profile header.** Dropped the redundant per-session cost that sat
+  between the token and budget meters — the budget meter already shows spend.
+- **A workgroup you just created is no longer flagged unread**, and the
+  sidebar's unread dot sits consistently aligned.
+
 ## v0.3.37 — 2026-06-03 — one accessible address
 
 Requires alpi v0.7.1+.

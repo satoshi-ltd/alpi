@@ -42,7 +42,6 @@ export default function ProfileChatHeader({
 }) {
   const accent = profile?.accent || "var(--accent)";
   const ctxTokens = sessionData?.last_ctx_tokens ?? 0;
-  const cost = sessionData?.cost_usd ?? 0;
   const ctxPct = contextWindow > 0 ? Math.min(1, ctxTokens / contextWindow) : 0;
 
   const capUsd = profile?.budget_daily_usd;
@@ -92,12 +91,6 @@ export default function ProfileChatHeader({
           color={accent}
           tip={`Context window — ${fmtCount(ctxTokens)} of ${fmtCount(contextWindow)} tokens in use`}
         />
-      )}
-      {cost > 0 && (
-        <>
-          <span className="sep" aria-hidden />
-          <Mono className={`tnum ${styles.ink2}`}>{fmtCost(cost)}</Mono>
-        </>
       )}
       {budgetSeg && (
         <>

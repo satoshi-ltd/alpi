@@ -14,6 +14,14 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.1.30 — 2026-06-03 — tables & code in messages
+
+Requires alpi v0.6.35+.
+
+- **Tables and code blocks render now.** Markdown tables show as native tables
+  (header, columns, row separators) instead of raw `|` text, and fenced code
+  blocks get a language label and their own framed block.
+
 ## v0.1.29 — 2026-06-03 — cleaner pipeline strip
 
 Requires alpi v0.6.35+.
