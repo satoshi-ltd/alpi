@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.6.37 — 2026-06-03 — prompt guidance adapts to the model
+
+- **Smaller models get the reminders they need.** Less capable model families —
+  local/Ollama models, OpenAI mini variants, and Gemini Flash — now receive
+  extra operational guidance (reach for tools before answering; verify work
+  before calling it done). Stronger families keep a leaner prompt without the
+  redundant reminders.
+
 ## v0.6.36 — 2026-06-02 — a task survives a member leaving mid-task
 
 - **Removing a member no longer strands an open task.** Kicking a member (or a

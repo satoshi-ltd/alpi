@@ -30,6 +30,7 @@ def test_part_order_is_stable_contract() -> None:
         "env",
         "system_time",
         "surface",
+        "guidance",
         "knowledge_rule",
         "skills_index",
         "user_md",

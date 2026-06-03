@@ -26,13 +26,7 @@ sovereignty depends on.
 
 | ID | Item | Status |
 |---|---|---|
-| AC.2 | Curator apply flow — after preview, archive stale skills, add `absorbed_into:` metadata, and move detail into umbrella skill `references/` when consolidation is accepted. | 🔵 |
-
-### Cost and model behavior
-
-| ID | Item | Status |
-|---|---|---|
-| BD | Model-family conditional prompt guidance — inject heavier tool-use/verification guidance only for model families that real logs show need it. | 🟡 |
+| AC.2 | Curator apply flow — after preview, archive stale skills, add `absorbed_into:` metadata, and move detail into umbrella skill `references/` when consolidation is accepted. | 🟡 |
 
 ### AC.2. Skill curator apply flow
 
@@ -47,17 +41,6 @@ applying those recommendations after explicit preview:
 The curator reconciles its LLM summary against the actual tool-call log
 of the curator run. If the summary says a skill was absorbed but no tool
 call did that, the report marks a mismatch instead of trusting prose.
-
-### BD. Model-family conditional prompt guidance
-
-Different model families need different operational guidance. BD adds a
-small routing table so heavy enforcement blocks are injected only for
-families that real logs show need them. Other families keep the shorter
-baseline prompt.
-
-Promotion condition: `alpi digest` or LLM test traces show repeated,
-family-specific failures such as under-calling tools, skipping
-verification, or closing turns early despite open commitments.
 
 ## v0.8 cycle (planned)
 

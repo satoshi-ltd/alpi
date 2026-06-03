@@ -27,6 +27,7 @@ PART_ORDER: tuple[str, ...] = (
     "env",
     "system_time",
     "surface",
+    "guidance",
     "knowledge_rule",
     "skills_index",
     "user_md",
@@ -109,6 +110,7 @@ def build_parts(home: Path, cfg) -> dict[str, str]:
     from importlib import resources
 
     from alpi import clock, memory
+    from alpi.prompts import guidance
     from alpi.tools.knowledge import PROMPT_RULE as _ALPI_KNOWLEDGE_RULE
     from alpi.tools.skill import skills_index_block
 
@@ -124,6 +126,7 @@ def build_parts(home: Path, cfg) -> dict[str, str]:
     parts["env"] = _env_block(home, cfg.workspace_path)
     parts["system_time"] = clock.system_time_section()
     parts["surface"] = _platform_hint()
+    parts["guidance"] = guidance.render_guidance(cfg.model, cfg.providers)
     parts["knowledge_rule"] = _ALPI_KNOWLEDGE_RULE
 
     skills_block = skills_index_block(home, cfg_raw=cfg.raw)
