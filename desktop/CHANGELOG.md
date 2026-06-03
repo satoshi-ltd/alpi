@@ -11,6 +11,18 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.3.35 — 2026-06-03 — pipeline at a glance
+
+Requires alpi v0.6.35+.
+
+- **Pipeline strip under the header.** A workgroup with a pipeline now shows its
+  stages as a row of chips — done, current, blocked, or pending — so you can see
+  where the work stands without scrolling the transcript.
+- **Jump to a stage.** Click a stage chip to jump straight to that phase's
+  message in the transcript.
+- **Calmer status banners.** Blocked and paused banners sit just below the header
+  with a single, consistent style.
+
 ## v0.3.34 — 2026-06-02 — blocked workgroups show it, quieter notifications
 
 Requires alpi v0.6.35+.

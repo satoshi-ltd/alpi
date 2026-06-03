@@ -82,6 +82,51 @@ export function findBlocked(messages, hubPubkey = null) {
   return /^\s*blocked\b/i.test(reason) ? { slug: t.slug, reason } : null;
 }
 
+export function canonicalPhase(slug, pipeline) {
+  if (!slug || !pipeline) return null;
+  if (pipeline.includes(slug)) return slug;
+  for (const p of [...pipeline].sort((a, b) => b.length - a.length)) {
+    if (slug.startsWith(`${p}-`)) return p;
+  }
+  return null;
+}
+
+export function pipelineState(pipeline, messages, hubPubkey = null) {
+  if (!pipeline || pipeline.length === 0) return [];
+  const completed = new Set();
+  const seqByPhase = {};
+  let openSlug = null;
+  let cur = null;
+  for (const m of messages || []) {
+    const fromHub = !hubPubkey || m.from_pubkey === hubPubkey;
+    const cls = classifyMessage(m.body);
+    if (cls.variant === "task" && fromHub) {
+      cur = { slug: cls.task.slug, result: null };
+      openSlug = cls.task.slug;
+      const ph = canonicalPhase(cls.task.slug, pipeline);
+      if (ph) seqByPhase[ph] = m.seq;
+    } else if (cur && fromHub && cls.variant === "done") {
+      const ph = canonicalPhase(cur.slug, pipeline);
+      if (ph) {
+        seqByPhase[ph] = m.seq;
+        if (!/^\s*blocked\b/i.test(cls.text || "")) completed.add(ph);
+      }
+      cur = null;
+      openSlug = null;
+    }
+  }
+  const blocked = findBlocked(messages, hubPubkey);
+  const blockedPhase = blocked ? canonicalPhase(blocked.slug, pipeline) : null;
+  const currentPhase = openSlug ? canonicalPhase(openSlug, pipeline) : null;
+  return pipeline.map((slug) => {
+    let state = "pending";
+    if (slug === blockedPhase) state = "blocked";
+    else if (slug === currentPhase) state = "current";
+    else if (completed.has(slug)) state = "completed";
+    return { slug, state, seq: seqByPhase[slug] ?? null };
+  });
+}
+
 export function findLatestTask(messages, hubPubkey = null) {
   if (!messages || messages.length === 0) return null;
   let latest = null;

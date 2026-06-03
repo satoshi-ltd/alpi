@@ -14,6 +14,18 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.1.28 — 2026-06-03 — pipeline at a glance
+
+Requires alpi v0.6.35+.
+
+- **Pipeline strip under the header.** A workgroup with a pipeline shows its
+  stages as a horizontal row of chips — done, current, blocked, or pending — and
+  auto-scrolls to the active stage.
+- **Tap to jump.** Tap a stage chip to jump to that phase's message in the
+  transcript.
+- **Calmer status banners.** Blocked and paused banners share one consistent
+  style under the header.
+
 ## v0.1.27 — 2026-06-02 — blocked workgroups show it
 
 Requires alpi v0.6.35+.

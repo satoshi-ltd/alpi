@@ -5,7 +5,6 @@ import {
   IconBtn,
   Mono,
   MeterChip,
-  Pill,
   RefreshButton,
   Tip,
   GearIcon,
@@ -60,12 +59,6 @@ export default function WorkgroupChatHeader({
             color={accent}
             tip={`Workgroup budget — spent $${budget.used.toFixed(2)} of $${budget.cap.toFixed(2)} cap`}
           />
-        </>
-      )}
-      {paused && (
-        <>
-          <span className="sep" aria-hidden />
-          <Pill state="warn">paused</Pill>
         </>
       )}
     </>

@@ -21,6 +21,8 @@ const PATHS = {
   edit: 'M16.5 3.75l3.75 3.75L9 18.75H5.25V15z',
   // Clock — circle outline (in EXTRAS) + two hands at 12 + 4 to read as "recent / sessions".
   clock: 'M12 7v5l3 2',
+  check: 'M5 12l4 4L19 7',
+  ban: 'M7.05 7.05l9.9 9.9',
 };
 
 const EXTRAS = {
@@ -38,6 +40,8 @@ const EXTRAS = {
   </>,
   wifi: <Circle cx="12" cy="20" r="1" />,
   clock: <Circle cx="12" cy="12" r="9" />,
+  ban: <Circle cx="12" cy="12" r="7" />,
+  circle: <Circle cx="12" cy="12" r="7" />,
 };
 
 export function Icon({ name, size = 22, color, strokeWidth = 1.7 }) {

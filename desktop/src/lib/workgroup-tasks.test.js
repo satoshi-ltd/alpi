@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  canonicalPhase,
   classifyMessage,
   findBlocked,
   findLatestTask,
@@ -7,6 +8,7 @@ import {
   parseSkip,
   parseTaskOpen,
   parseWorking,
+  pipelineState,
   validateTaskShape,
 } from "./workgroup-tasks.js";
 
@@ -209,5 +211,46 @@ describe("findBlocked", () => {
       { seq: 3, from_pubkey: hub, body: "@pixel #task #build-recheck retry" },
     ];
     expect(findBlocked(msgs, hub)).toBeNull();
+  });
+});
+
+describe("pipelineState", () => {
+  const hub = "hub";
+  const pipe = ["interview", "synthesize", "recommend"];
+
+  it("marks completed / blocked / pending (mockup case)", () => {
+    const msgs = [
+      { seq: 1, from_pubkey: hub, body: "@a #task #interview do it" },
+      { seq: 2, from_pubkey: hub, body: "#done interview green" },
+      { seq: 3, from_pubkey: hub, body: "@a #task #synthesize do it" },
+      { seq: 4, from_pubkey: hub, body: "#done BLOCKED synthesize · no transcripts" },
+    ];
+    expect(pipelineState(pipe, msgs, hub)).toEqual([
+      { slug: "interview", state: "completed", seq: 2 },
+      { slug: "synthesize", state: "blocked", seq: 4 },
+      { slug: "recommend", state: "pending", seq: null },
+    ]);
+  });
+
+  it("marks the open phase as current and points at its opener seq", () => {
+    const msgs = [
+      { seq: 1, from_pubkey: hub, body: "#done interview green" },
+      { seq: 2, from_pubkey: hub, body: "@a #task #synthesize go" },
+    ];
+    const st = pipelineState(pipe, msgs, hub);
+    expect(st[1]).toEqual({ slug: "synthesize", state: "current", seq: 2 });
+  });
+
+  it("empty pipeline → []", () => {
+    expect(pipelineState([], [{ seq: 1, from_pubkey: hub, body: "#task #x" }], hub)).toEqual([]);
+  });
+});
+
+describe("canonicalPhase", () => {
+  const pipe = ["interview", "synthesize", "recommend"];
+  it("maps literal + variant + null", () => {
+    expect(canonicalPhase("synthesize", pipe)).toBe("synthesize");
+    expect(canonicalPhase("synthesize-recheck", pipe)).toBe("synthesize");
+    expect(canonicalPhase("nope", pipe)).toBeNull();
   });
 });

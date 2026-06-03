@@ -7,6 +7,7 @@
   flex-direction: column;
 }
 
+
 .body {
   flex: 1;
   overflow: auto;
@@ -36,34 +37,34 @@
   user-select: text;
 }
 
-.blocked {
+.pipeline {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: var(--space-3);
-  padding: var(--space-4) var(--space-5);
-  border-radius: var(--r-md);
-  background: color-mix(in srgb, var(--c-danger) 10%, transparent);
-  border: .5px solid color-mix(in srgb, var(--c-danger) 26%, transparent);
+  padding: var(--space-3) var(--pane-pad-x);
   font-size: var(--fs-sm);
-  -webkit-user-select: text;
-  user-select: text;
+  border-bottom: .5px solid var(--line);
+  -webkit-user-select: none;
+  user-select: none;
 }
 
-.blockedTag {
+.pipelineLabel {
+  font-family: var(--font-mono);
   text-transform: uppercase;
   letter-spacing: .08em;
   font-size: var(--fs-xs);
-  font-weight: 600;
-  color: var(--c-danger);
+  font-weight: var(--fw-medium);
+  color: var(--ink-3);
+  margin-right: var(--space-2);
 }
 
-.blockedSlug {
-  font-family: var(--font-mono);
-  color: var(--c-danger);
+.pipelineSep {
+  color: var(--ink-4);
 }
 
-.blockedReason {
-  color: var(--ink-2);
+.blockedLine {
+  display: block;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

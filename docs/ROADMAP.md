@@ -22,13 +22,6 @@ patterns into Alpi-owned clients rather than gateways, and tighten the
 operator surfaces (device scope, mobile parity, daemon restart) that
 sovereignty depends on.
 
-### Owned client experience
-
-| ID | Item | Status |
-|---|---|---|
-| UX.2 | Rich tool cards parity — desktop/mobile render approvals, file mutations, memory promotions, and workgroup events as first-class cards. | 🔵 |
-| UX.3 | Gateway migration nudges — gateway replies can point users back to Alpi clients for flows that need approvals, files, workgroups, or rich UI. | 🔵 |
-
 ### Self-improving skills
 
 | ID | Item | Status |
@@ -39,29 +32,7 @@ sovereignty depends on.
 
 | ID | Item | Status |
 |---|---|---|
-| BD | Model-family conditional prompt guidance — inject heavier tool-use/verification guidance only for model families that real logs show need it. | 🔵 |
-
-### Protocol
-
-| ID | Item | Status |
-|---|---|---|
-| ALP.3+ | Multi-task workgroups — opt-in `multitask: true`, letter-prefixed task IDs, per-task roster/dispatch/budget. **Deferred**: targeted tasks + pipeline continuation cover sequential per-project pipelines; revisit only if the persistent workgroups (`template`/`quality`/`brand-library`) prove real parallelism. | 🔵 |
-
-### UX.2 / UX.3. Owned client experience
-
-Desktop and mobile are the primary product surfaces. Gateways stay
-text-first by design. v0.7 should make the owned clients materially
-better than any chat bridge:
-
-- approvals, file mutations, memory promotions, and workgroup events
-  become stable cards with state, actions, and replay;
-- gateway replies can include a lightweight "open in Alpi" pointer when
-  the flow needs rich UI.
-
-**Non-goals.** No Telegram/Discord/Slack button framework, no
-gateway-specific onboarding, no attempt to turn chat apps into Alpi
-clients. Gateways remain useful because they are ubiquitous and
-automation-friendly, but they are not where new product UX goes.
+| BD | Model-family conditional prompt guidance — inject heavier tool-use/verification guidance only for model families that real logs show need it. | 🟡 |
 
 ### AC.2. Skill curator apply flow
 
@@ -87,31 +58,6 @@ baseline prompt.
 Promotion condition: `alpi digest` or LLM test traces show repeated,
 family-specific failures such as under-calling tools, skipping
 verification, or closing turns early despite open commitments.
-
-### ALP.3+ — Multi-task workgroups (deferred)
-
-> **Deferred to future (out of v0.7).** Targeted tasks + pipeline
-> continuation give sequential per-project workflows everything
-> they need without multitask's extra state, partial-closure, quorum, and
-> UI edge cases. Multitask only earns its complexity if the *persistent*
-> workgroups (`template`, `quality`, `brand-library`) show real, sustained
-> parallelism. Until then this stays backlog.
-
-v0.3 ships strict single-task: a new `#task` preempts the open one
-(`"preempted by …"`), which forces convergence and keeps context narrow.
-ALP.3+ would lift it via `multitask: true` + letter-prefixed IDs (`#task A …`,
-`#done A: …`), each task carrying its own active state, per-member
-`last_responded_seq`, dispatch gating, and budget headroom. Single-task stays
-the default and fits per-project pipelines (one owner per phase via targeted
-tasks); multitask earns its complexity — per-task quorum filters, N-thread UI,
-per-task budget accounting — only when the persistent workgroups (`template`,
-`quality`, `brand-library`) show sustained parallelism.
-
-**Explicitly not in scope.** Author-declared post cost (the honour-system
-budget gate) and hub-anchored availability (cold workgroup when the hub
-is offline) are deliberate design choices for a closed, trusted,
-one-org-per-machine deployment — not defects. Single-task → multi-task
-is tracked above as ALP.3+.
 
 ## v0.8 cycle (planned)
 
@@ -262,6 +208,7 @@ already analysed; the "why now?" question is the open one.
 | ID | Item | Reason it waits |
 |---|---|---|
 | ALP.7 | Pinned shared memory per workgroup (hub-anchored `wiki.md`) | Heavy new surface (concurrency, history, roles) only justified if workgroups become heavily used |
+| ALP.3+ | Multi-task workgroups — opt-in `multitask`, letter-prefixed task IDs, per-task roster/dispatch/budget | Targeted tasks + pipeline continuation already cover sequential per-project pipelines; revisit only if the persistent workgroups (`template`/`quality`/`brand-library`) show real, sustained parallelism |
 | Signal | Signal gateway via signal-cli | Strong privacy fit, but new gateways are out of scope now that Alpi-owned clients are the primary mobile surface |
 | AY | Skills marketplace — federated, signed, never centralised | Presupposes an active author community + adoption for discovery to matter |
 | SK.2 | Safe skill import (`alpi skill import <dir\|zip>` — preview, scan, install) | Pulls toward marketplace/import-ecosystem mental model without a concrete user pull. Promote when somebody actually needs to migrate a batch of skills from another stack. |
@@ -282,6 +229,30 @@ already analysed; the "why now?" question is the open one.
 Promotion criteria: real user demand, or concrete blocker for
 a v0.x feature that depends on it. None of these items
 graduate "because we feel like it".
+
+### ALP.3+ — Multi-task workgroups
+
+Deferred out of v0.7: targeted tasks + pipeline continuation give sequential
+per-project workflows everything they need without multitask's extra state,
+partial-closure, quorum, and UI edge cases. It only earns its complexity if the
+*persistent* workgroups (`template`, `quality`, `brand-library`) show real,
+sustained parallelism.
+
+v0.3 ships strict single-task: a new `#task` preempts the open one
+(`"preempted by …"`), which forces convergence and keeps context narrow.
+ALP.3+ would lift it via `multitask: true` + letter-prefixed IDs (`#task A …`,
+`#done A: …`), each task carrying its own active state, per-member
+`last_responded_seq`, dispatch gating, and budget headroom. Single-task stays
+the default and fits per-project pipelines (one owner per phase via targeted
+tasks); multitask earns its complexity — per-task quorum filters, N-thread UI,
+per-task budget accounting — only when those persistent workgroups show
+sustained parallelism.
+
+**Explicitly not in scope.** Author-declared post cost (the honour-system
+budget gate) and hub-anchored availability (cold workgroup when the hub
+is offline) are deliberate design choices for a closed, trusted,
+one-org-per-machine deployment — not defects. Single-task → multi-task
+is tracked above as ALP.3+.
 
 ### ALP.7. Pinned shared memory per workgroup
 
@@ -638,6 +609,10 @@ Not planned. Research-grade, irrelevant for everyday personal use.
 
 **Rejected behaviours:**
 
+- **UX.3 — gateway "open in Alpi" nudges.** Appending an "open in Alpi"
+  pointer to gateway replies (for file/approval/workgroup flows) would
+  incentivise gateway usage; we don't want to. Gateways stay text-first and
+  are not a surface we grow. Discarded.
 - **Auto-reflect on Ctrl+C.** Dangerous.
 - **Post-session `/reflect` loop.** Tried it — removed because the TUI
   implementation was broken and inline memory writes are cleaner.

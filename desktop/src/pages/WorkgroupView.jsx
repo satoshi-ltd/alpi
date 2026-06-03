@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { useStickyScroll } from "../lib/useStickyScroll.js";
 import { useScrollProgress } from "../lib/useScrollProgress.js";
 import { invoke } from "@tauri-apps/api/core";
@@ -14,6 +14,7 @@ import {
   classifyMessage,
   findBlocked,
   findLatestTask,
+  pipelineState,
   parseDone,
   parseSkip,
   parseTaskOpen,
@@ -31,8 +32,10 @@ import { WorkgroupChatHeader, TasksButton } from "../primitives/index.js";
 import { JumpToLatest, MarkerCard, MessageBubble } from "../primitives/index.js";
 import {
   Banner,
+  Chip,
   CopyIcon,
   Diamond,
+  Icon,
   IconBtn,
   Kbd,
   Mono,
@@ -118,6 +121,19 @@ export default function WorkgroupView({
     [messages, hubPubkey],
   );
   const blocked = useMemo(() => findBlocked(messages, hubPubkey), [messages, hubPubkey]);
+  const blockedReason = useMemo(() => {
+    if (!blocked) return "";
+    const slug = blocked.slug || "";
+    return (blocked.reason || "")
+      .replace(/^\s*blocked\b/i, "")
+      .replace(new RegExp(`^\\s*${slug}\\b`, "i"), "")
+      .replace(/^[\s·:—-]+/, "")
+      .trim();
+  }, [blocked]);
+  const phases = useMemo(
+    () => pipelineState(workgroup.pipeline || [], messages, hubPubkey),
+    [workgroup.pipeline, messages, hubPubkey],
+  );
   // A `#working` is stale once superseded — either by a later post from the same author, or by the hub's `#done` that closes the task. A member `#skip` is a per-peer pass, not a close, so it never marks others' `#working` stale. Scope resets when we cross a `#task` boundary going backwards.
   const workingStale = useMemo(() => {
     const set = new Set();
@@ -266,13 +282,32 @@ export default function WorkgroupView({
     };
   }, [workgroup.id, workgroup.profile, connectionId]);
 
-  return (
+  const jumpToSeq = (seq) => {
+    if (seq == null) return;
+    const el = document.getElementById(`task-${seq}`);
+    if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+  };
+
+  const banners = (blocked || workgroup.paused) && (
     <>
-      {workgroup.paused && (
-        <Banner kind="warning" pulsing>
-          This workgroup is paused. New messages won't fire. Resume from the header.
+      {blocked && (
+        <Banner kind="danger" pulsing>
+          <span className={styles.blockedLine}>
+            <strong>Blocked at #{blocked.slug}.</strong>
+            {blockedReason ? ` ${blockedReason}` : ""}
+          </span>
         </Banner>
       )}
+      {workgroup.paused && (
+        <Banner kind="warning" pulsing>
+          <strong>This workgroup is paused.</strong> New messages won't fire. Resume from the header.
+        </Banner>
+      )}
+    </>
+  );
+
+  return (
+    <>
       <WorkgroupChatHeader
         workgroup={workgroup}
         hubAccent={ownerProfile?.accent}
@@ -312,6 +347,29 @@ export default function WorkgroupView({
           />
         }
       />
+      {banners}
+      {phases.length > 0 && (
+        <div className={styles.pipeline}>
+          <span className={styles.pipelineLabel}>pipeline</span>
+          {phases.map((p, i) => (
+            <Fragment key={p.slug}>
+              {i > 0 && <span className={styles.pipelineSep} aria-hidden>›</span>}
+              <Chip
+                size="sm"
+                ghost={p.state === "completed" || p.state === "pending"}
+                state={p.state === "blocked" ? "error" : undefined}
+                accent={p.state === "current" ? ownerProfile?.accent || undefined : undefined}
+                icon={<PhaseIcon state={p.state} />}
+                tooltip={p.seq != null ? `Jump to #${p.slug}` : undefined}
+                onClick={p.seq != null ? () => jumpToSeq(p.seq) : undefined}
+                disabled={p.seq == null}
+              >
+                #{p.slug}
+              </Chip>
+            </Fragment>
+          ))}
+        </div>
+      )}
       {searchOpen && (
         <SearchBar
           query={search.query}
@@ -334,14 +392,6 @@ export default function WorkgroupView({
           accent={ownerProfile?.accent ?? null}
         />
         {error && <div className={styles.error}>{error}</div>}
-
-        {blocked && (
-          <div className={styles.blocked} role="status">
-            <span className={styles.blockedTag}>blocked</span>
-            <code className={styles.blockedSlug}>#{blocked.slug}</code>
-            <span className={styles.blockedReason}>{blocked.reason}</span>
-          </div>
-        )}
 
         {messages && (
           <>
@@ -571,6 +621,18 @@ function renderWgFooter({
       {stamp && <Mono className={`tnum ${styles.footerTime}`}>{stamp}</Mono>}
     </>
   );
+}
+
+const PHASE_ICON = {
+  completed: { name: "check", color: "var(--c-success)" },
+  blocked: { name: "ban", color: "var(--c-danger)" },
+  current: { name: "dot", color: "var(--accent)" },
+  pending: { name: "circle", color: "var(--ink-3)" },
+};
+
+function PhaseIcon({ state }) {
+  const { name, color } = PHASE_ICON[state] || PHASE_ICON.pending;
+  return <Icon name={name} size="xs" color={color} />;
 }
 
 function renderWgMeta({ seq, cost, speaker, isFromHub, styles }) {

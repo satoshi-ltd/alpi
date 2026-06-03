@@ -1,6 +1,6 @@
 import styles from "./Icon.module.css";
 
-const SIZES = { sm: 12, md: 14, lg: 18, xl: 24 };
+const SIZES = { xs: 9, sm: 12, md: 14, lg: 18, xl: 24 };
 
 const PATHS = {
   search: { vb: "0 0 16 16", body: <><circle cx="7" cy="7" r="4.5" /><path d="M10.5 10.5l3 3" /></> },
@@ -38,6 +38,9 @@ const PATHS = {
   archive: { vb: "0 0 16 16", body: <><rect x="2" y="3.5" width="12" height="3" rx=".5" /><path d="M3 6.5v6a1 1 0 001 1h8a1 1 0 001-1v-6M6.5 9h3" /></> },
   bell: { vb: "0 0 16 16", body: <><path d="M4 11V7a4 4 0 018 0v4l1 1.5H3z" /><path d="M6.5 13a1.5 1.5 0 003 0" /></> },
   skip: { vb: "0 0 16 16", body: <><circle cx="8" cy="8" r="6" /><path d="M4 12L12 4" /></> },
+  ban: { vb: "0 0 16 16", body: <><circle cx="8" cy="8" r="5" /><path d="M4.46 4.46 11.54 11.54" /></> },
+  circle: { vb: "0 0 16 16", body: <circle cx="8" cy="8" r="5" /> },
+  dot: { vb: "0 0 16 16", body: <circle cx="8" cy="8" r="4" fill="currentColor" stroke="none" /> },
   stop: { vb: "0 0 16 16", body: <rect x="4" y="4" width="8" height="8" rx="1.5" fill="currentColor" stroke="none" /> },
   volume: { vb: "0 0 16 16", body: <><path d="M3 6v4h2l3 2.5V3.5L5 6H3z" /><path d="M10.5 5.5a3 3 0 010 5M12.5 3.5a5.5 5.5 0 010 9" /></> },
   edit: { vb: "0 0 16 16", body: <path d="M11 2.5l2.5 2.5L6 12.5H3.5V10z" /> },

@@ -6,6 +6,8 @@ export default function Chip({
   size = "md",
   accent,
   activity,
+  icon,
+  ghost = false,
   tooltip,
   onClick,
   disabled,
@@ -16,6 +18,7 @@ export default function Chip({
   const className = [
     styles.chip,
     size === "sm" ? styles.sm : null,
+    ghost ? styles.ghost : null,
     accent ? styles.tinted : null,
     !accent && state === "on" ? styles.on : null,
     !accent && state === "off" ? styles.off : null,
@@ -28,13 +31,15 @@ export default function Chip({
     .filter(Boolean)
     .join(" ");
 
-  const indicator = accent
-    ? null
-    : activity
-      ? <span className={styles.spinner} aria-hidden />
-      : state
-        ? <span className={styles.dot} />
-        : null;
+  const indicator = activity
+    ? <span className={styles.spinner} aria-hidden />
+    : icon
+      ? icon
+      : accent
+        ? null
+        : state
+          ? <span className={styles.dot} />
+          : null;
 
   const inlineStyle = accent
     ? {

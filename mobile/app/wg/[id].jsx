@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, FlatList, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { radii, space , fontSizes} from '../../src/theme/tokens';
 
@@ -14,7 +14,8 @@ import { ChatSkeleton } from '../../src/features/chat/ChatSkeleton';
 import { Composer } from '../../src/features/chat/Composer';
 import { MarkerCard } from '../../src/features/chat/MarkerCard';
 import { MessageActionsSheet } from '../../src/features/chat/MessageActionsSheet';
-import { buildTasks, classifyMessage, findBlocked } from '../../src/features/chat/parseMarkers';
+import { buildTasks, classifyMessage, findBlocked, pipelineState } from '../../src/features/chat/parseMarkers';
+import { Icon } from '../../src/components/Icon';
 import { TasksSheet } from '../../src/features/sheets/TasksSheet';
 import {
   useProfileSummaries,
@@ -38,23 +39,46 @@ const WG_STYLES = StyleSheet.create({
   rowPad: { paddingTop: space.s6 },
   emptyHero: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   emptyText: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: space.s9 },
-  pausedBanner: {
+  banner: {
     paddingHorizontal: space.s7,
     paddingVertical: space.s4,
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.s3,
   },
-  blockedBanner: {
-    paddingHorizontal: space.s7,
-    paddingVertical: space.s4,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.s3,
-  },
-  blockedText: {
+  bannerText: {
     flex: 1,
     fontSize: fontSizes.sm,
+    lineHeight: fontSizes.sm * 1.4,
+  },
+  pipeline: {
+    flexGrow: 0,
+    flexShrink: 0,
+  },
+  pipelineContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.s3,
+    paddingHorizontal: space.s7,
+    paddingVertical: space.s4,
+  },
+  pipelineLabel: {
+    fontSize: fontSizes.xs,
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+  },
+  pipelineSep: {
+    fontSize: fontSizes.sm,
+    marginRight: space.s3,
+  },
+  phaseWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  phase: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.s1,
   },
 });
 
@@ -208,6 +232,43 @@ const WgList = forwardRef(function WgList(
   );
 });
 
+function PipelinePhase({ phase, colors, fonts, accent, onPress }) {
+  const { slug, state } = phase;
+  const icon =
+    state === 'completed' ? <Icon name="check" size={12} color={colors.success} />
+    : state === 'blocked' ? <Icon name="ban" size={12} color={colors.danger} />
+    : state === 'current' ? <Dot color={accent ?? colors.ink} />
+    : <Icon name="circle" size={12} color={colors.ink3} />;
+  const textColor =
+    state === 'blocked' ? colors.danger
+    : state === 'current' ? accent
+    : state === 'pending' ? colors.ink3
+    : colors.ink2;
+  const bg =
+    state === 'blocked' ? `${colors.danger}17`
+    : state === 'current' ? `${accent}1f`
+    : 'transparent';
+  const padded = state === 'blocked' || state === 'current';
+  const Wrapper = onPress ? Pressable : View;
+  return (
+    <Wrapper
+      onPress={onPress}
+      style={[
+        WG_STYLES.phase,
+        {
+          backgroundColor: bg,
+          borderRadius: 999,
+          paddingHorizontal: padded ? space.s3 : 0,
+          paddingVertical: padded ? 2 : 0,
+        },
+      ]}
+    >
+      {icon}
+      <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: textColor }}>#{slug}</Text>
+    </Wrapper>
+  );
+}
+
 function TasksHeaderButton({ tasks, accent, onPress }) {
   const { colors, fonts, fontSizes } = useTheme();
   const closed = tasks.filter((t) => t.status === 'done' || t.status === 'skip').length;
@@ -320,6 +381,30 @@ export default function WorkgroupChat() {
 
   const tasks = useMemo(() => buildTasks(messages, hubPubkey), [messages, hubPubkey]);
   const blocked = useMemo(() => findBlocked(messages, hubPubkey), [messages, hubPubkey]);
+  const phases = useMemo(
+    () => pipelineState(wg?.pipeline || [], messages, hubPubkey),
+    [wg?.pipeline, messages, hubPubkey],
+  );
+  const activePhase = useMemo(() => {
+    if (!phases.length) return 0;
+    const b = phases.findIndex((p) => p.state === 'blocked');
+    if (b >= 0) return b;
+    const c = phases.findIndex((p) => p.state === 'current');
+    if (c >= 0) return c;
+    let last = 0;
+    phases.forEach((p, i) => { if (p.state === 'completed') last = i; });
+    return last;
+  }, [phases]);
+  const pipelineScrollRef = useRef(null);
+  const blockedReason = useMemo(() => {
+    if (!blocked) return '';
+    const slug = blocked.slug || '';
+    return (blocked.reason || '')
+      .replace(/^\s*blocked\b/i, '')
+      .replace(new RegExp(`^\\s*${slug}\\b`, 'i'), '')
+      .replace(/^[\s·:—-]+/, '')
+      .trim();
+  }, [blocked]);
 
   // Workgroups borrow hub profile's accent — daemon shape has no wg.accent.
   const accent = hub?.accent ?? accentForProfile(wg?.hub_id) ?? colors.ink3;
@@ -394,7 +479,7 @@ export default function WorkgroupChat() {
       <Text style={metaTextStyle}>hub</Text>
       <Diamond color={accent} />
       <Text style={metaTextStyle}>
-        {`@${wg.hub_id} · ${memberCount} members${paused ? ' · paused' : ''}`}
+        {`@${wg.hub_id} · ${memberCount} members`}
       </Text>
     </>
   );
@@ -427,21 +512,57 @@ export default function WorkgroupChat() {
         onMore={canAdmin ? () => router.push(`/wg/${wg.id}/settings`) : null}
         right={tasks.length ? <TasksHeaderButton tasks={tasks} accent={accent} onPress={() => setTasksOpen(true)} /> : null}
       />
-      {paused ? (
-        <View style={[WG_STYLES.pausedBanner, { backgroundColor: `${colors.warning}22` }]}>
-          <Dot color={colors.warning}  />
-          <Text style={{ fontFamily: fonts.sans.medium, fontSize: fontSizes.md, color: colors.ink2 }}>
-            This workgroup is paused. New messages won't fire.
+      {blocked ? (
+        <View style={[WG_STYLES.banner, { backgroundColor: `${colors.danger}1f` }]}>
+          <Dot color={colors.danger} pulse />
+          <Text numberOfLines={2} style={[WG_STYLES.bannerText, { fontFamily: fonts.sans.medium, color: colors.ink2 }]}>
+            <Text style={{ fontFamily: fonts.sans.semibold ?? fonts.sans.medium, color: colors.ink }}>Blocked at #{blocked.slug}.</Text>
+            {blockedReason ? ` ${blockedReason}` : ''}
           </Text>
         </View>
       ) : null}
-      {blocked ? (
-        <View style={[WG_STYLES.blockedBanner, { backgroundColor: `${colors.danger}1f` }]}>
-          <Dot color={colors.danger} />
-          <Text numberOfLines={2} style={[WG_STYLES.blockedText, { fontFamily: fonts.sans.medium, color: colors.ink2 }]}>
-            Blocked · #{blocked.slug} — {blocked.reason}
+      {paused ? (
+        <View style={[WG_STYLES.banner, { backgroundColor: `${colors.warning}22` }]}>
+          <Dot color={colors.warning} pulse />
+          <Text numberOfLines={2} style={[WG_STYLES.bannerText, { fontFamily: fonts.sans.medium, color: colors.ink2 }]}>
+            <Text style={{ fontFamily: fonts.sans.semibold ?? fonts.sans.medium, color: colors.ink }}>This workgroup is paused.</Text>
+            {' '}New messages won't fire. Resume from the header.
           </Text>
         </View>
+      ) : null}
+      {phases.length ? (
+        <ScrollView
+          ref={pipelineScrollRef}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={WG_STYLES.pipeline}
+          contentContainerStyle={WG_STYLES.pipelineContent}
+        >
+          <Text style={[WG_STYLES.pipelineLabel, { fontFamily: fonts.mono, color: colors.ink3 }]}>
+            PIPELINE
+          </Text>
+          {phases.map((p, i) => (
+            <View
+              key={p.slug}
+              style={WG_STYLES.phaseWrap}
+              onLayout={(e) => {
+                if (i === activePhase) {
+                  const x = Math.max(0, e.nativeEvent.layout.x - 24);
+                  pipelineScrollRef.current?.scrollTo?.({ x, animated: false });
+                }
+              }}
+            >
+              {i > 0 ? <Text style={[WG_STYLES.pipelineSep, { color: colors.ink4 ?? colors.ink3 }]}>›</Text> : null}
+              <PipelinePhase
+                phase={p}
+                colors={colors}
+                fonts={fonts}
+                accent={accent}
+                onPress={p.seq != null ? () => listApiRef.current?.scrollToSeq?.(p.seq) : undefined}
+              />
+            </View>
+          ))}
+        </ScrollView>
       ) : null}
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         <WgList

@@ -21,11 +21,7 @@ export default function Banner({
       <Dot color={color} pulse={pulsing} className={styles.dot} />
       <span className={styles.body}>{children}</span>
       {action && (
-        <button
-          type="button"
-          onClick={onAction}
-          className={`alink ${styles.action}`}
-        >
+        <button type="button" onClick={onAction} className={`alink ${styles.action}`}>
           {action}
         </button>
       )}

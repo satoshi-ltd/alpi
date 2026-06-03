@@ -9,6 +9,14 @@
 .body {
   flex: 1;
   min-width: 0;
+  font-family: var(--font-sans);
+  font-size: var(--fs-sm);
+  line-height: 1.45;
+  color: var(--ink-2);
+}
+.body strong {
+  font-weight: var(--fw-semibold);
+  color: var(--ink);
 }
 
 .action {
