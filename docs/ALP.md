@@ -138,7 +138,7 @@ before any `id`-based routing occurs.
 - id: home-server
   alias: nas
   pubkey: <base64>
-  address: nas.tailnet.ts.net:7423
+  address: home-server.internal:7423   # any reachable host:port
   allow:
     - link.ping
     - link.ask
@@ -152,7 +152,7 @@ before any `id`-based routing occurs.
 | `id` | yes | Human handle. Unique within this profile's peer list. Not transmitted on the wire and not used to locate the target — the daemon resolves intra-machine peers by `pubkey` against the other local profiles' keypairs, so naming a local peer under an arbitrary `id` is fine. |
 | `alias` | no | Optional display label. |
 | `pubkey` | yes | Base64-encoded Ed25519 public key. The sole routing key for intra-machine dispatch. |
-| `address` | for inter-machine | `host:port`. Omit for intra-profile peers — see the `id` row for how the local socket is resolved. |
+| `address` | for inter-machine | `host:port`, opaque to ALP — resolved by the OS at dial time. Any reachable host works: a LAN IP, a private hostname, a Docker/compose DNS name, a VPN / Tailscale / WireGuard address, or a public IP. ALP does no discovery, NAT traversal, or relay — you supply the address. Omit for intra-profile peers (the local Unix socket is resolved by `pubkey`). |
 | `allow` | yes | Fail-closed list of methods the peer may invoke. `workgroup.*` methods bypass this list — workgroup membership (enforced per-handler with `-32008 workgroup-not-member`) is the real gate. |
 | `rate_limit.requests_per_minute` | no | Throttle. Default allows 10/min/peer. Enforced before handler dispatch. |
 
@@ -238,9 +238,22 @@ Filesystem permissions gate access to the socket file; every
 envelope on the socket is still signed as a second, orthogonal
 layer of defence.
 
-### Inter-machine — Noise_XK over TCP
+### TCP transport — Noise_XK
 
-Each alpi listens on a user-chosen TCP port (default `7423`).
+The second transport is a TCP listener, used whenever two agents are not on the
+same Unix socket — a different machine, a VM, another container, or across a
+LAN / overlay. ALP defines identity, envelope, Noise, verbs, and workgroups; the
+**underlay is the operator's choice** (LAN, WireGuard, Tailscale, a private
+hostname, a Docker network, or a public address if they accept the exposure).
+ALP itself does no discovery, NAT traversal, or relay.
+
+Each alpi listens on a TCP port (default `7423`). The listener is on whenever
+the machine has a reachable address — the profile's shared accessible address
+(`network.host` — see `CONFIG.md → network`), an auto-detected overlay/LAN
+address, or `0.0.0.0` in Docker; with no reachable address it stays Unix-only.
+A profile is configured once and both the ALP peer listener and the
+device-pairing host plane use the same address, on their own ports. (`service.alp:
+false` disables ALP for a profile entirely.)
 Connection establishment uses the **Noise_XK** handshake pattern
 from the Noise Protocol Framework [NOISE], where the responder's
 static public key is known to the initiator in advance and the
@@ -518,9 +531,11 @@ The goal of ALP's security design is to ensure that:
   (existing end-to-end-encrypted messenger, in person, signed
   email). Pasting a pubkey from an unverified source defeats
   the pinned-key model.
-- **Front inter-machine deployments with a VPN.** Tailscale or
-  WireGuard adds an independent layer of authenticated
-  encryption and conceals the ALP port from internet scanners.
+- **Prefer a private network for TCP ALP.** A private LAN or an
+  overlay (Tailscale, WireGuard, or similar) keeps the ALP port off
+  the public internet and adds an independent layer of authenticated
+  encryption. Public exposure is supported (Noise + pinned keys hold
+  on their own) but is not the blessed path.
 - **Rotate long-term keys after suspected compromise.** The
   setup wizard generates a new keypair on request; peers must
   be informed out of band and must update their pinned pubkey.

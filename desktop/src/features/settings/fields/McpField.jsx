@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import Button from "../../../primitives/Button.jsx";
+import Eyebrow from "../../../primitives/Eyebrow.jsx";
 import Chip from "../../../primitives/Chip.jsx";
 import Modal from "../../../primitives/Modal.jsx";
 import Textarea from "../../../primitives/Textarea.jsx";
@@ -73,11 +74,11 @@ function McpDetailModal({ profile, mcp, onClose, onRemoved }) {
   return (
     <Modal title={`MCP · ${mcp.name}`} onClose={onClose}>
       <div className={styles.field}>
-        <label className={styles.label}>command</label>
+        <Eyebrow as="label">command</Eyebrow>
         <span className={styles.mono}>{mcp.command || "(none)"}</span>
       </div>
       <div className={styles.field}>
-        <label className={styles.label}>args</label>
+        <Eyebrow as="label">args</Eyebrow>
         <span className={styles.mono}>
           {(mcp.args ?? []).length === 0
             ? "(none)"
@@ -85,7 +86,7 @@ function McpDetailModal({ profile, mcp, onClose, onRemoved }) {
         </span>
       </div>
       <div className={styles.field}>
-        <label className={styles.label}>env</label>
+        <Eyebrow as="label">env</Eyebrow>
         <span className={styles.inlineRow}>
           {(mcp.env_keys ?? []).length === 0 ? (
             <span className={styles.muted}>none</span>
@@ -162,7 +163,7 @@ function McpAddModal({ profile, existingNames, onClose, onSaved }) {
         <code>GITHUB_TOKEN=ghp_…</code>.
       </div>
       <div className={styles.field}>
-        <label className={styles.label}>name</label>
+        <Eyebrow as="label">name</Eyebrow>
         <Field
           className={`${styles.input} ${styles.inputFull}`}
           value={name}
@@ -178,7 +179,7 @@ function McpAddModal({ profile, existingNames, onClose, onSaved }) {
         )}
       </div>
       <div className={styles.field}>
-        <label className={styles.label}>command</label>
+        <Eyebrow as="label">command</Eyebrow>
         <Field
           className={`${styles.input} ${styles.inputFull}`}
           value={command}
@@ -188,7 +189,7 @@ function McpAddModal({ profile, existingNames, onClose, onSaved }) {
         />
       </div>
       <div className={styles.field}>
-        <label className={styles.label}>args</label>
+        <Eyebrow as="label">args</Eyebrow>
         <Field
           className={`${styles.input} ${styles.inputFull}`}
           value={args}
@@ -198,7 +199,7 @@ function McpAddModal({ profile, existingNames, onClose, onSaved }) {
         />
       </div>
       <div className={styles.field}>
-        <label className={styles.label}>env (KEY=VALUE per line)</label>
+        <Eyebrow as="label">env (KEY=VALUE per line)</Eyebrow>
         <Textarea
           className={`${styles.textarea} ${styles.inputFull}`}
           rows={3}

@@ -617,13 +617,22 @@ async fn network_status() -> Result<serde_json::Value, String> {
 
 #[tauri::command]
 async fn network_set_advertised(
-    host: String,
-    device_name: String,
+    host: Option<String>,
+    device_name: Option<String>,
 ) -> Result<serde_json::Value, String> {
+    // Only forward the fields the caller actually set — omitted keys are
+    // preserved by the host RPC (host = network.host, device_name = host.device_name).
+    let mut params = serde_json::Map::new();
+    if let Some(h) = host {
+        params.insert("host".into(), serde_json::json!(h));
+    }
+    if let Some(n) = device_name {
+        params.insert("device_name".into(), serde_json::json!(n));
+    }
     let value = tauri::async_runtime::spawn_blocking(move || {
         host_client::call(
             "host.network.set_advertised",
-            serde_json::json!({"host": host, "device_name": device_name}),
+            serde_json::Value::Object(params),
         )
     })
     .await

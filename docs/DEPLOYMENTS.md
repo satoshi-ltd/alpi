@@ -113,7 +113,7 @@ clients pair to it. No web terminal — reach the TUI with `docker exec`.
 - **Storage:** the volume mounts at `/data`, and `HOME=/data` makes
   `/data/.alpi` the profile root — state survives restarts.
 - **Reachability:** the container can't see the host's network
-  interfaces, so set `ALPI_HOST_ADVERTISE_HOST` to the address clients
+  interfaces, so set `ALPI_NETWORK_HOST` to the address clients
   dial — a LAN IP, or a Tailscale IP/MagicDNS for off-network access
   (**Tailscale is optional**). The control plane binds `0.0.0.0`
   inside the container; you map a host port to it.

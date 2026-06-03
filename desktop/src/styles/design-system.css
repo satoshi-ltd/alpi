@@ -637,15 +637,6 @@ a:focus-visible,
 .sb-ts          { font-family: var(--font-mono); font-size: var(--fs-xs); font-weight: var(--fw-medium); line-height: var(--lh-tight); color: var(--ink-3); }
 .sb-ts.is-unr   { font-weight: var(--fw-semibold); color: var(--ink); }
 
-.sb-eyebrow     {
-  font-family: var(--font-sans);
-  font-size: 10px;
-  font-weight: var(--fw-medium);
-  line-height: var(--lh-tight);
-  letter-spacing: .12em;
-  text-transform: uppercase;
-  color: var(--ink-3);
-}
 
 /* Brand-accent only — identity color lives on the row's diamond/hash; per-row tinting here is noise. */
 .sb-unread-dot {

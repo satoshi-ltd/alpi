@@ -73,9 +73,7 @@ export default function ConnectionSwitcher({
 
   return (
     <div className={`${styles.root} ${className}`}>
-      <Eyebrow style={{ padding: "var(--space-6) var(--space-4) var(--space-2) var(--space-1)" }}>
-        Connection
-      </Eyebrow>
+      <Eyebrow className={styles.label}>Connection</Eyebrow>
       <ConnPill
         kind={active?.kind === "remote" ? "remote" : "local"}
         name={label}

@@ -1,15 +1,10 @@
 # Deployments answer pack
 
-Use this for "where should I run alpi?", laptops, home servers, many
-profiles, teams, and service topology.
+## Answer directly
 
-## Main rule
+Deployment shape follows trust boundary + availability needs. Profiles separate identities; the daemon runs where an inbound gateway or scheduled work must keep running while the TUI is closed.
 
-Deployment shape follows trust boundary and availability needs. Use
-profiles to separate identities; use the daemon where inbound gateway
-or scheduled work must run while the TUI is closed.
-
-## Common shapes
+## Shapes
 
 | Shape | Use when | Notes |
 |---|---|---|
@@ -17,8 +12,9 @@ or scheduled work must run while the TUI is closed.
 | Laptop + daemon | Telegram/email/schedules on same machine. | `alpi daemon start`. |
 | Home server | Always-on gateway/scheduler/host plane. | Pair desktop/mobile over host-plane WebSocket. |
 | One machine, many profiles | Work/personal/client separation. | One daemon supervises all profiles. |
-| Multi-device personal | Laptop plus trusted server/peer. | Use ALP for alpi-to-alpi links. |
-| Small team/family | Multiple identities with explicit trust. | Separate profiles and ALP peers. |
+| Multi-device personal | Laptop + trusted server/peer. | ALP for alpi-to-alpi links. |
+| Small team/family | Multiple identities, explicit trust. | Separate profiles + ALP peers. |
+| Docker home server | Packaged always-on daemon on a Linux host. | See Docker shape below. |
 
 ## Commands
 
@@ -28,30 +24,27 @@ alpi daemon status
 alpi daemon restart
 ```
 
-## Desktop/mobile rule
+## Docker shape
 
-Desktop/mobile clients should talk to the daemon through `host.*`.
-Desktop supports local socket plus paired remote host-plane endpoints;
-mobile starts from one paired endpoint. They should not read profile
-files directly and should not spawn `alpi`.
+- Image `satoshiltd/alpi`; daemon is PID 1. UI via `docker exec -it <name> alpi` (no web terminal).
+- Volume mounts at `/data`; `HOME=/data` makes `/data/.alpi` the profile root, surviving restarts.
+- Container binds `0.0.0.0`; set `ALPI_NETWORK_HOST` to the address clients dial (LAN IP, or Tailscale IP/MagicDNS for off-network). It can't see the host's interfaces, so this knob carries the advertised address.
+- Ports: `49200` = host plane for paired desktop/mobile (`host.*`, TCP/WS); `7423` = ALP peer traffic (`link.*`, `workgroup.*`, Noise_XK), only for cross-machine peers.
 
-## Gateway rule
+## Decision rules
 
-Gateways need a running daemon. If a gateway does not respond, check:
-
-- profile,
-- daemon status,
-- gateway config,
-- logs,
-- provider/platform credentials.
-
-## ALP rule
-
-Use ALP for trusted alpi-to-alpi communication across machines. ALP is
-not the local desktop host API.
+- **Desktop/mobile clients** talk to the daemon through `host.*`. Desktop supports a local socket plus paired remote host-plane endpoints; mobile starts from one paired endpoint. They never read profile files directly and never spawn `alpi`.
+- **Gateways** need a running daemon. If one doesn't respond, check: profile, daemon status, gateway config, logs, provider/platform credentials.
+- **ALP** is for trusted alpi-to-alpi communication across machines — not the local desktop host API.
 
 ## What not to promise
 
-- No hosted control plane is required.
-- No automatic enterprise fleet manager is shipped.
+- No hosted control plane required.
+- No automatic enterprise fleet manager shipped.
 - No global trust across profiles; trust is profile/identity scoped.
+
+## Related topics
+
+- profiles — identity + isolation
+- alp — wire protocol, capabilities, peers
+- operations — daemon unit (launchd/systemd), KeepAlive/Restart, log paths

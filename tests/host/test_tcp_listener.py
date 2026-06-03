@@ -1,6 +1,7 @@
-"""Host TCP listener (WebSocket) — only binds to a Tailscale CGNAT
-address, never to loopback / LAN / 0.0.0.0. Mobile / desktop clients
-reach ``host.*`` over the user's tailnet, not over the local network."""
+"""Host TCP listener (WebSocket) bind policy. Auto-detect prefers
+Tailscale then private LAN; the operator may override with a private
+hostname / VPN name, and a public IP only with an explicit opt-in.
+Loopback / unspecified are always refused."""
 
 from __future__ import annotations
 
@@ -124,19 +125,18 @@ def test_detect_tailscale_ip_falls_back_to_ifconfig_when_cli_unusable() -> None:
         assert ts.detect_tailscale_ip() == "100.114.140.25"
 
 
-@pytest.mark.parametrize("addr", ["0.0.0.0", "127.0.0.1", "::", ""])
+@pytest.mark.parametrize("addr", ["127.0.0.1", "::", ""])
 def test_server_refuses_unsafe_bind(tmp_path: Path, addr: str) -> None:
-    """Loopback, 0.0.0.0, IPv6 unspecified, empty — all rejected."""
+    """Loopback, IPv6 unspecified, empty — all rejected."""
     home = tmp_path / "h"
     home.mkdir()
     with pytest.raises(ValueError, match="Tailscale|private LAN"):
         host_server.Server(home=home, tcp_bind=(addr, 49200))
 
 
-def test_server_allows_unspecified_bind_on_docker(
-    tmp_path: Path, monkeypatch,
-) -> None:
-    monkeypatch.setenv("ALPI_PLATFORM", "docker")
+def test_server_accepts_unspecified_bind(tmp_path: Path) -> None:
+    """0.0.0.0 is resolve_bind_host's safe default (docker, hostname/custom):
+    all interfaces, accepted everywhere — not docker-gated."""
     home = tmp_path / "h"
     home.mkdir()
     srv = host_server.Server(home=home, tcp_bind=("0.0.0.0", 49200))
@@ -153,6 +153,31 @@ def test_server_accepts_tailscale_or_lan_bind(tmp_path: Path, addr: str) -> None
     home.mkdir()
     srv = host_server.Server(home=home, tcp_bind=(addr, 49200))
     assert srv._tcp_bind == (addr, 49200)
+
+
+@pytest.mark.parametrize("addr", ["home-server.internal", "nas.tailnet.ts.net", "my-vpn-box"])
+def test_server_accepts_custom_hostname_bind(tmp_path: Path, addr: str) -> None:
+    """A private hostname / VPN / MagicDNS name is the operator's explicit choice."""
+    home = tmp_path / "h"
+    home.mkdir()
+    srv = host_server.Server(home=home, tcp_bind=(addr, 49200))
+    assert srv._tcp_bind == (addr, 49200)
+
+
+def test_server_refuses_public_ip_without_optin(tmp_path: Path) -> None:
+    home = tmp_path / "h"
+    home.mkdir()
+    with pytest.raises(ValueError, match="public IP|allow_public_bind"):
+        host_server.Server(home=home, tcp_bind=("203.0.113.5", 49200))
+
+
+def test_server_accepts_public_ip_with_optin(tmp_path: Path) -> None:
+    home = tmp_path / "h"
+    home.mkdir()
+    srv = host_server.Server(
+        home=home, tcp_bind=("203.0.113.5", 49200), allow_public_bind=True,
+    )
+    assert srv._tcp_bind == ("203.0.113.5", 49200)
 
 
 def test_server_refuses_invalid_port(tmp_path: Path) -> None:
@@ -191,7 +216,7 @@ async def test_server_accepts_calls_over_websocket_when_bound(
 
     with patch.object(
         host_server.Server, "_validate_tcp_bind",
-        staticmethod(lambda b: b),
+        staticmethod(lambda b, allow_public_bind=False: b),
     ):
         srv = host_server.Server(home=home, tcp_bind=("127.0.0.1", 0))
 
@@ -230,7 +255,7 @@ async def test_server_accepts_multiple_calls_on_one_websocket(
 
     with patch.object(
         host_server.Server, "_validate_tcp_bind",
-        staticmethod(lambda b: b),
+        staticmethod(lambda b, allow_public_bind=False: b),
     ):
         srv = host_server.Server(home=home, tcp_bind=("127.0.0.1", 0))
 
@@ -272,7 +297,7 @@ async def test_ws_rejects_request_without_token_once_paired(
     devices.add(label="ipad")  # store no longer empty → enforcement on
 
     with patch.object(host_server.Server, "_validate_tcp_bind",
-                      staticmethod(lambda b: b)):
+                      staticmethod(lambda b, allow_public_bind=False: b)):
         srv = host_server.Server(home=home, tcp_bind=("127.0.0.1", 0))
 
         async def handler(_p, _s):
@@ -305,7 +330,7 @@ async def test_ws_accepts_request_with_valid_token(
     row = devices.add(label="iphone")
 
     with patch.object(host_server.Server, "_validate_tcp_bind",
-                      staticmethod(lambda b: b)):
+                      staticmethod(lambda b, allow_public_bind=False: b)):
         srv = host_server.Server(home=home, tcp_bind=("127.0.0.1", 0))
 
         async def handler(_p, _s):

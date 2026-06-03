@@ -26,7 +26,7 @@ Pair a client to `HOST_IP:49200`.
 
 ```sh
 docker run -d --name alpi \
-  -e ALPI_HOST_ADVERTISE_HOST=192.168.1.50 \
+  -e ALPI_NETWORK_HOST=192.168.1.50 \
   -p 192.168.1.50:49200:49200 \
   -p 192.168.1.50:7423:7423 \
   -v "$PWD/data/alpi:/data" \
@@ -46,12 +46,15 @@ to peers on other machines.
 
 ## Environment
 
-| Var                        | Default  | Meaning                                              |
-|----------------------------|----------|------------------------------------------------------|
-| `ALPI_HOST_ADVERTISE_HOST` | —        | Address clients dial (LAN IP / Tailscale IP / host). Required for pairing — the container can't see the host's interfaces. |
-| `ALPI_HOST_TCP_PORT`       | `49200`  | Control-plane port (bind + advertised; map 1:1).     |
-| `ALPI_ALP_TCP_PORT`        | unset    | ALP peer-network port. Set to enable cross-machine ALP. |
-| `ALPI_ALP_TCP_HOST`        | `0.0.0.0`| ALP bind host (defaults to all interfaces in Docker).|
+| Var                  | Default | Meaning                                              |
+|----------------------|---------|------------------------------------------------------|
+| `ALPI_NETWORK_HOST`  | —       | The one address clients/peers dial (LAN IP / Tailscale IP / hostname). **Shared by both planes** — control-plane pairing and ALP advertise the same host. Required for pairing: the container can't see the host's interfaces. |
+| `ALPI_HOST_TCP_PORT` | `49200` | Control-plane port (desktop/mobile pairing). Map 1:1. |
+| `ALPI_ALP_TCP_PORT`  | `7423`  | ALP peer-network port. ALP TCP is always-on in the container; this only changes the port. |
+
+There is one host knob: `ALPI_NETWORK_HOST`. The container always binds
+`0.0.0.0` (Docker maps the published ports); `ALPI_NETWORK_HOST` is just what
+clients and peers are told to dial. Ports are per-plane.
 
 State (profiles, keys, config, sessions) lives under `/data` — mount a volume
 so it survives restarts.

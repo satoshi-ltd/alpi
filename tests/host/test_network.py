@@ -31,17 +31,85 @@ def test_falls_back_to_lan() -> None:
         assert scope == "lan"
 
 
+def test_resolve_bind_host_docker_is_all_interfaces() -> None:
+    assert network.resolve_bind_host("home.example.com", is_docker=True, allow_public=False) == "0.0.0.0"
+
+
+def test_resolve_bind_host_auto_uses_detected_ip() -> None:
+    with patch("alpi.host.network.detect_bind_ip", return_value=("100.64.0.9", "tailscale")):
+        assert network.resolve_bind_host(None, is_docker=False, allow_public=False) == "100.64.0.9"
+
+
+def test_resolve_bind_host_auto_none_when_undetectable() -> None:
+    with patch("alpi.host.network.detect_bind_ip", return_value=None):
+        assert network.resolve_bind_host(None, is_docker=False, allow_public=False) is None
+
+
+def test_resolve_bind_host_private_ip_binds_itself() -> None:
+    assert network.resolve_bind_host("192.168.1.5", is_docker=False, allow_public=False) == "192.168.1.5"
+    assert network.resolve_bind_host("100.64.0.9", is_docker=False, allow_public=False) == "100.64.0.9"
+
+
+def test_resolve_bind_host_hostname_binds_all_interfaces() -> None:
+    # Advertised as the hostname, but a name is not a local interface → 0.0.0.0.
+    assert network.resolve_bind_host("nas.tailnet.ts.net", is_docker=False, allow_public=False) == "0.0.0.0"
+
+
+def test_resolve_bind_host_public_ip_gated() -> None:
+    assert network.resolve_bind_host("8.8.8.8", is_docker=False, allow_public=False) is None
+    assert network.resolve_bind_host("8.8.8.8", is_docker=False, allow_public=True) == "0.0.0.0"
+
+
+def test_resolve_bind_host_loopback_is_none() -> None:
+    assert network.resolve_bind_host("127.0.0.1", is_docker=False, allow_public=True) is None
+
+
+def test_resolve_host_tcp_bind_hostname_binds_all_interfaces(tmp_path: Path) -> None:
+    home = tmp_path / "h"
+    home.mkdir()
+    cfg = cfg_mod.Config(home=home, model="")
+    cfg.network = {"host": "home-server.internal"}
+    cfg_mod.save(cfg)
+    assert network.resolve_host_tcp_bind(home) == ("0.0.0.0", 49200)
+
+
+def test_resolve_host_tcp_bind_public_ip_refused_without_optin(tmp_path: Path) -> None:
+    home = tmp_path / "h"
+    home.mkdir()
+    cfg = cfg_mod.Config(home=home, model="")
+    cfg.network = {"host": "8.8.8.8"}
+    cfg_mod.save(cfg)
+    assert network.resolve_host_tcp_bind(home) is None
+
+
+def test_resolve_host_tcp_bind_public_ip_with_optin(tmp_path: Path) -> None:
+    home = tmp_path / "h"
+    home.mkdir()
+    cfg = cfg_mod.Config(home=home, model="")
+    cfg.network = {"host": "8.8.8.8"}
+    cfg.host = {"allow_public_bind": True}
+    cfg_mod.save(cfg)
+    assert network.resolve_host_tcp_bind(home) == ("0.0.0.0", 49200)
+
+
 def test_resolve_host_endpoint_prefers_configured_host(tmp_path: Path) -> None:
     home = tmp_path / "h"
     home.mkdir()
     cfg = cfg_mod.Config(home=home, model="")
-    cfg.host = {"tcp_host": "100.123.17.103"}
+    cfg.network = {"host": "100.123.17.103"}
     cfg_mod.save(cfg)
 
     with patch("alpi.host.network.detect_bind_ip", return_value=("192.168.1.10", "lan")):
         endpoint = network.resolve_host_endpoint(home)
 
     assert endpoint == ("100.123.17.103", "configured")
+
+
+def test_network_host_env_is_the_container_address(monkeypatch) -> None:
+    # ALPI_NETWORK_HOST is the single container address knob — the host plane's
+    # docker advertise hint reads it (ALP reads it in service._resolve_alp_tcp).
+    monkeypatch.setenv("ALPI_NETWORK_HOST", "100.64.7.7")
+    assert network._advertise_host_hint() == "100.64.7.7"
 
 
 def test_resolve_host_tcp_bind_binds_all_interfaces_in_docker(
@@ -62,7 +130,7 @@ def test_resolve_host_endpoint_uses_advertise_env_in_docker(
     home.mkdir()
     cfg_mod.save(cfg_mod.Config(home=home, model=""))
     monkeypatch.setenv("ALPI_PLATFORM", "docker")
-    monkeypatch.setenv("ALPI_HOST_ADVERTISE_HOST", "100.86.43.12")
+    monkeypatch.setenv("ALPI_NETWORK_HOST", "100.86.43.12")
 
     assert network.resolve_host_endpoint(home) == ("100.86.43.12", "docker")
 
@@ -74,7 +142,7 @@ def test_resolve_host_endpoint_none_in_docker_without_advertise(
     home.mkdir()
     cfg_mod.save(cfg_mod.Config(home=home, model=""))
     monkeypatch.setenv("ALPI_PLATFORM", "docker")
-    monkeypatch.delenv("ALPI_HOST_ADVERTISE_HOST", raising=False)
+    monkeypatch.delenv("ALPI_NETWORK_HOST", raising=False)
     monkeypatch.delenv("DEVICE_DOMAIN_NAME", raising=False)
     monkeypatch.delenv("DEVICE_HOSTNAME", raising=False)
 

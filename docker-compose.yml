@@ -21,7 +21,7 @@ services:
     stop_grace_period: 1m
     environment:
       # Reachable endpoint advertised to clients (LAN IP, Tailscale IP, or host).
-      ALPI_HOST_ADVERTISE_HOST: ${HOST_IP}
+      ALPI_NETWORK_HOST: ${HOST_IP}
       ALPI_HOST_TCP_PORT: 49200   # control plane (desktop/mobile pairing)
       ALPI_ALP_TCP_PORT: 7423     # ALP peer network (cross-machine workgroups)
     ports:
@@ -37,7 +37,7 @@ services:
   #   restart: unless-stopped
   #   stop_grace_period: 1m
   #   environment:
-  #     ALPI_HOST_ADVERTISE_HOST: ${HOST_IP}
+  #     ALPI_NETWORK_HOST: ${HOST_IP}
   #     ALPI_HOST_TCP_PORT: 49201
   #     ALPI_ALP_TCP_PORT: 7424
   #   ports:

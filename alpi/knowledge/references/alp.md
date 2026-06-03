@@ -1,101 +1,104 @@
 # ALP answer pack
 
-Use this for Alpi Link Protocol, peer identity, link methods,
-workgroups, budgets, and ALP vs local host API.
-
 ## Answer directly
 
-- Desktop/mobile should not use ALP; they use `host.*`.
-- ALP is for trusted alpi-to-alpi peers and workgroups.
-- Trust is explicit and profile-scoped, not machine-scoped.
-- For workgroups, answer in terms of hub, members, transcript, budget, and group key.
+- Desktop/mobile do NOT use ALP; they use `host.*`.
+- ALP is the peer-to-peer plane for trusted alpi-to-alpi peers and workgroups; separate from the local desktop/mobile host API.
+- Trust is explicit, identity-based, and profile-scoped — not machine-scoped. Separate concerns → separate profiles.
+- Network reachability is never authorization.
+- Answer workgroup questions concretely: identity, membership, briefing, budget, liveness, cancellation.
 
-## Short answer
-
-ALP is the peer-to-peer plane for trusted alpi instances. It is used
-for cross-machine agent links and workgroups. It is separate from the
-local desktop/mobile host API.
-
-## ALP vs host API
+## Planes
 
 | Plane | Purpose |
 |---|---|
-| `host.*` | Device client-to-daemon API over local Unix socket or paired WebSocket. Desktop/mobile should use this. |
+| `host.*` | Device client↔daemon API over local Unix socket or paired WebSocket. Desktop/mobile use this. |
 | `link.*`, `workgroup.*` | ALP peer-to-peer methods for trusted alpi instances. |
 
 ## Identity
 
-Each profile owns its own ALP identity. Trust is profile-scoped, not
-machine-scoped. If work and personal should not trust the same peers,
-use separate profiles.
+Each profile owns its own ALP identity (a long-term keypair); trust is profile-scoped, not machine-scoped. If work and personal must not trust the same peers, use separate profiles.
 
 ## Peer list
 
-Peers are explicit. A peer record binds identity and reachability
-metadata. Do not treat arbitrary network callers as trusted just
-because they can reach a socket/port.
+Peers are explicit; a peer record binds identity and reachability. Don't treat arbitrary network callers as trusted just because they can reach a socket/port.
 
-The peer `id` is a **local label** for human/UI use only — never sent
-on the wire and never used to locate a co-located peer. Intra-machine
-peers are resolved by `pubkey` against the other local profiles'
-keypairs, so a peer pinned under any alias different from the real
-profile name still routes correctly. The `id` only fallback applies
-when the pubkey doesn't match any local profile.
+Peer `id` is a **local label** for human/UI use only — never on the wire, never used to locate a co-located peer. Intra-machine peers resolve by `pubkey` against other local profiles' keypairs, so a peer pinned under any alias still routes; the `id`-only fallback applies when the pubkey matches no local profile.
 
 ## Transports
 
 - Same machine: Unix-domain socket.
-- Cross machine: authenticated encrypted transport.
+- Cross machine: authenticated encrypted transport (Noise over TCP, default port `7423`). The operator supplies the address; ALP does no discovery, NAT traversal, or relay.
 
-The exact transport details are implementation internals unless the
-user is debugging ALP itself.
+`network.host` is the profile's advertised/accessible address (CONFIG.md → network) — distinct from the derived bind. The TCP listener is on whenever the machine has a reachable address (`network.host`, an auto-detected overlay/LAN address, or `0.0.0.0` in Docker); with none it stays Unix-only. One profile config drives both the ALP peer listener and the device-pairing host plane, on their own ports.
+
+Transport internals are implementation detail unless debugging ALP itself.
 
 ## Core methods
 
 | Method | Purpose |
 |---|---|
-| `link.ping` | Check peer reachability/identity. |
-| `link.ask` | Ask a peer to handle a task/question. |
+| `link.ping` | Check peer reachability/identity. Answers immediately (5s timeout), independent of engine/turn state; does NOT feed the workgroup roster. |
+| `link.ask` | Run a full agent turn on a peer (its memory/skills/tools). Sole read path into a peer. |
 | `link.cancel` | Cancel an in-flight peer task. |
-| `workgroup.*` | Manage group coordination and shared context. |
+| `workgroup.*` | Group coordination and shared context. |
 
 ## Workgroups
 
-Workgroups coordinate multiple alpi profiles/peers around a shared
-task space. They involve:
+Workgroups coordinate multiple alpi profiles/peers around a shared task space hosted by a **hub** (authoritative transcript + group key). They involve: member identities, shared briefing/context, group key/versioning, hub state, liveness, budget controls, human participation rules. Answer concretely: identity, membership, briefing, budget, liveness, or cancellation.
 
-- member identities,
-- shared briefing/context,
-- group key/versioning,
-- hub state,
-- liveness,
-- budget controls,
-- human participation rules.
+Over-the-wire verbs: `workgroup.join`, `.post`, `.pull`, `.leave`, `.pause`, `.resume`. `workgroup.create` is a local hub primitive (TUI/CLI), not on the wire.
 
-Answer workgroup questions concretely: identity, membership, briefing,
-budget, liveness, or cancellation.
+- `join(workgroup_id, bio?)` → `{workgroup_id, name, briefing, sealed_key, key_version, current_key_version, members[]}`. Caller must already be in the roster else `-32008`. `bio` (≤200 bytes) is the caller's self-published role tag-line.
+- `post(workgroup_id, key_version, nonce, ciphertext, cost?)` → `{seq, ts}`. Author encrypts client-side (ChaCha20-Poly1305); the hub stays zero-knowledge. `cost {usd, tokens}` is the author's declared LLM spend, gating the workgroup lifetime budget.
+- `pull(workgroup_id, since)` → `{posts[], head, current_key_version, sealed_key, members[]}`. Canonical fan-out; also stamps `last_seen_at` and refreshes the roster.
+
+Roster entry shape: `{pubkey, last_seen_at, bio}`. Group key is a 32-byte key sealed per member; `current_key_version` is monotonic (starts at 1), rotated and bumped on `leave`/`kick`/`add_member` for forward secrecy on new traffic (past transcript stays decryptable). Transcript entries record the `key_version` they were encrypted under.
+
+`#task` / `#done` are **hub-only** lifecycle markers; `#skip` / `#working` are **member-only**. Markers count only at the start of a decrypted line; `#task` requires a `#<slug>` (`[A-Za-z0-9][A-Za-z0-9_-]{0,63}`, lowercased). Single active task at a time; a new `#task` preempts the prior. `#done` needs full + substantive closure quorum (or hard-timeout escape). `#done BLOCKED` halts a pipeline without advancing.
+
+## Liveness vs presence
+
+Roster "online/offline" is **NOT** a reachability probe. It is computed from `last_seen_at`, a traffic-recency stamp the **hub** writes only when it receives a `workgroup.pull` or `workgroup.post` from a member. Three distinct signals, easy to conflate:
+
+- `last_seen_at` — **presence**. Advances solely on inbound workgroup traffic at the hub. Thresholds: `<90s` → online (≈3 poll ticks at the 30s `WORKGROUP_TICK_SECONDS`), `<30m` → "last seen Nm ago", `≥30m` → "offline >30m".
+- `link.ping` — **liveness/reachability**. Answers immediately (5s timeout), independent of engine/turn state. Does NOT feed the roster.
+- `#working` — **busy/rotation marker**. The peer is mid-turn and asking the hub for more time; alive and reachable; orthogonal to presence.
+
+So roster "offline" means "no recent workgroup pull/post", not "unreachable". A peer can pass `link.ping` instantly yet show stale because workgroup *traffic* stalled — a briefly busy hub event loop, a serial pull backlog across many subscriptions, or a transient hiccup. Members dispatch turns as background tasks, so a long turn alone does not stall the member's own polling.
+
+Debugging an intra-machine "flap": confirm reachability with `link.ping` before trusting roster status, and check daemon logs for `wg poller pull(...) failed`. No hysteresis today — three consecutive missed pulls cross the 90s window. Tighten (ping-driven presence or a grace tick) only from real timeout logs, not assumption.
 
 ## Budget
 
-ALP/workgroup tasks must respect profile budget settings. If a peer or
-hub runs out of budget, the correct behavior is to stop or synthesize a
-bounded result rather than silently retrying expensive work.
+ALP/workgroup tasks respect profile budget settings (`budget.daily_usd` / `budget.daily_tokens`, CONFIG.md → Budget). On exhaustion, stop or synthesize a bounded result rather than silently retrying. A workgroup may add a separate optional **lifetime** cap (`max_usd` / `max_tokens`) that double-gates `workgroup.post` on top of the daily profile cap.
+
+## Error codes
+
+| Code | Name | Meaning |
+|---|---|---|
+| `-32001` | `capability-denied` | Method not in peer's `allow`. |
+| `-32002` | `replay` | `(from, nonce)` seen within window. |
+| `-32003` | `bad-signature` | Signature verification failed. |
+| `-32004` | `target-offline` | Resolvable peer, connection refused. |
+| `-32005` | `budget-exceeded` | Profile (daily) or workgroup (lifetime) cap. `data.cap_kind`: `usd`/`tokens` (profile) or `workgroup_usd`/`workgroup_tokens`. |
+| `-32006` | `version-mismatch` | Incompatible `alp.v`. |
+| `-32007` | `target-busy` | Session already running a turn. |
+| `-32008` | `workgroup-not-member` (`workgroup-not-hub` for hub-only verbs) | Not a pinned member / not the hub. |
+| `-32009` | `workgroup-not-found` | No workgroup with that id at the hub. |
+| `-32010` | `workgroup-paused` | Paused; `post` rejected (`pull`/`join`/`leave` still work). |
+| `-32011` | `task-missing-slug` | `#task` post lacks its `#<slug>` (SDK-side; hub stays zero-knowledge). |
 
 ## Security posture
 
-- Trust is explicit and identity-based.
-- Network reachability is not authorization.
-- Profiles isolate ALP identities.
-- Prompt/tool safety still matters inside ALP tasks.
+- Trust is explicit and identity-based; network reachability is not authorization; profiles isolate ALP identities; prompt/tool safety still applies inside ALP tasks.
 
 ## Common questions
 
-- "Should desktop/mobile use ALP?" -> no, use `host.*`; ALP is for
-  alpi-to-alpi peers.
-- "Can two profiles on one machine be separate peers?" -> yes, each
-  profile has its own identity.
-- "How do I debug a peer?" -> check identity, peer list, transport
-  reachability, logs, and budget.
+- "Desktop/mobile use ALP?" → no, `host.*`; ALP is alpi-to-alpi.
+- "Two profiles on one machine as separate peers?" → yes, each profile has its own identity.
+- "Debug a peer?" → check identity, peer list, transport reachability, logs, budget.
+- "Peer shows offline but is running?" → roster tracks workgroup traffic recency (`last_seen_at`), not reachability; probe with `link.ping`. See "Liveness vs presence".
 
 ## Related topics
 

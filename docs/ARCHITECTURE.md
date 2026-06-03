@@ -481,12 +481,16 @@ Two transports, one dispatcher:
 1. **Unix socket** (`~/.alpi/host/host.sock`, mode 0600). Local
    trust = filesystem perms. Used by desktop on the same machine.
    No token required.
-2. **WebSocket on Tailscale or LAN** (`ws://<bind>:49200` by
-   default). Used by mobile and any remote desktop. Bind address
-   is auto-detected: Tailscale CGNAT (`100.64.0.0/10`) first, else
-   first private RFC1918 LAN address. The listener never binds to
-   `0.0.0.0`, loopback, or public IPs — that would leak the pairing
-   token over plaintext on any sniffed path. **Per-device pairing
+2. **WebSocket** (`ws://<bind>:49200` by default). Used by mobile
+   and any remote desktop. `network.host` is the *advertised* address;
+   the *bind* is derived from it (see `config` / `security`): empty →
+   auto-detected Tailscale CGNAT (`100.64.0.0/10`) then private RFC1918
+   LAN; a private/Tailscale IP → that IP; a hostname or an opted-in
+   public IP → `0.0.0.0` (all interfaces); a public IP without
+   `host.allow_public_bind` → refused (no TCP); Docker → `0.0.0.0`.
+   Loopback is never a bind target. A `0.0.0.0` bind leans on the
+   pairing token (and a firewall/NAT) for access control, so `alpi
+   doctor` warns whenever the listener binds `0.0.0.0`. **Per-device pairing
    token required** in every request's `params.auth_token`.
    `permessage-deflate` is negotiated by default
    (`ws_serve(compression="deflate")`); JSON-RPC payloads drop
@@ -502,7 +506,7 @@ The daemon chooses where the host-plane server listens; `Devices →
 Network` chooses what the paired client should dial. On a normal Mac or
 Linux install those often collapse to the same Tailscale or LAN address.
 In Docker they do not: the daemon binds `0.0.0.0` inside the container
-while the QR advertises `ALPI_HOST_ADVERTISE_HOST` — a LAN IP, a Tailscale
+while the QR advertises `ALPI_NETWORK_HOST` — a LAN IP, a Tailscale
 `100.x` address, or a MagicDNS hostname that resolves to the host machine
 outside the container.
 
@@ -590,7 +594,7 @@ Verb namespaces in current shape:
   `name`, `model`, `accent`, `latest_session`, `counts`, `budget_*`,
   `pubkey_b64`, `has_any_provider`, `subsystems`. No peers/models/
   mcps/provider_keys/sandbox/voice — those live in **`host.profile.detail`**
-  (`{workspace, tcp_port, tcp_host, provider_keys, provider_ollama,
+  (`{workspace, tcp_port, advertise_host, provider_keys, provider_ollama,
   sandbox*, voice_*, mcps, peers, models}`), fetched lazily by
   settings/profile screens. The summaries verb is the hot poll; the
   detail verb is on-demand.

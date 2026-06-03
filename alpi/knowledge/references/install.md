@@ -1,97 +1,70 @@
 # Install answer pack
 
-Use this for install, update, uninstall, dev install, and supported
-install paths.
-
 ## Answer directly
 
 - Default install: `uv tool install alpi-agent`.
-- First run after install: `alpi setup`, then `alpi`.
-- Update: `uv tool upgrade alpi-agent`, then restart the daemon if it is running.
+- First run: `alpi setup` (auto-installs + starts the daemon), then `alpi`.
+- Update: `uv tool upgrade alpi-agent`, then restart the daemon if running.
 - Uninstalling the binary does not delete `~/.alpi`.
+- Platforms: Linux + macOS; Windows via WSL2 only.
 
-## Recommended install
+## Recommended — `uv tool install`
 
 ```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh   # only if uv missing
 uv tool install alpi-agent
 alpi setup
 alpi
 ```
 
-If `uv` is missing:
+Pin a version with `uv tool install alpi-agent==0.3.0`.
 
-```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh
-```
-
-## Alternative install
+## Alternative — `pipx install`
 
 ```bash
 pipx install alpi-agent
 alpi setup
 ```
 
-Use `uv tool install` as the default recommendation. Mention `pipx`
-only when the user already uses pipx or cannot use uv.
+Recommend `uv tool` by default; offer `pipx` only when the user already uses pipx or can't use uv.
 
 ## Update
 
 ```bash
-uv tool upgrade alpi-agent
+uv tool upgrade alpi-agent   # or: alpi update (checks PyPI, upgrades on confirm)
+alpi update --check          # check only, no install
 alpi daemon restart
 alpi --version
 ```
 
-Check whether a newer release exists:
-
-```bash
-alpi update --check
-```
+Pin older: `uv tool install alpi-agent==0.2.99 --force`.
 
 ## Uninstall
 
 ```bash
-uv tool uninstall alpi-agent
+uv tool uninstall alpi-agent   # or: pipx uninstall alpi
+rm -rf ~/.alpi                 # only for a full wipe of profile data
 ```
 
-This removes the installed binary, not the user's profile data under
-`~/.alpi`. Tell the user to back up or remove `~/.alpi` separately if
-they want a full wipe.
+Removes the binary, not `~/.alpi`.
 
 ## Development install
 
-From a checkout:
-
 ```bash
-uv sync
+uv sync                            # from a checkout; venv from lock file
 uv run alpi
+uv tool install -e . --reinstall   # editable into tool env, matches end-user daemon
 ```
 
-Or install the editable build into the user's tool env (matches how
-end users run the daemon):
-
-```bash
-uv tool install -e . --reinstall
-```
-
-Run tests with:
-
-```bash
-pytest -q
-pytest --integration -q
-pytest --llm
-```
+Tests: `pytest -q`, `pytest --integration -q`, `pytest --llm`.
 
 ## Troubleshooting
 
-- `alpi: command not found`: ensure the uv/pipx bin directory is on
-  `PATH`.
-- Provider auth fails: rerun `alpi setup` or inspect the profile
-  `.env`/config.
+- `alpi: command not found`: uv/pipx bin dir not on `PATH`.
+- Provider auth fails: rerun `alpi setup` or inspect the profile `.env`/config.
 - Tools fail in a project: check the configured workspace.
-- Daemon-backed features do not respond: run `alpi doctor` and `alpi daemon status`.
+- Daemon features unresponsive: `alpi doctor` and `alpi daemon status`.
 
-## Not supported as primary paths
+## Not supported
 
-Do not recommend random install scripts, global editable installs, or
-copying source files into a profile. Use uv/pipx or the dev workflow.
+No `curl | bash` installers, Homebrew, Docker, platform installers (.pkg/.msi), or global editable/source-copy installs. Use uv/pipx or the dev workflow.

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import Button from "../../../primitives/Button.jsx";
+import Eyebrow from "../../../primitives/Eyebrow.jsx";
 import Chip from "../../../primitives/Chip.jsx";
 import Dropdown from "../../../primitives/Dropdown.jsx";
 import Modal from "../../../primitives/Modal.jsx";
@@ -223,7 +224,7 @@ function DeviceDetailPopover({
       }}
     >
       <div className={styles.field}>
-        <label className={styles.label}>label</label>
+        <Eyebrow as="label">label</Eyebrow>
         <Field
           className={`${styles.input} ${styles.inputFull}`}
           type="text"
@@ -234,7 +235,7 @@ function DeviceDetailPopover({
         />
       </div>
       <div className={styles.field}>
-        <label className={styles.label}>role</label>
+        <Eyebrow as="label">role</Eyebrow>
         <span>
           <Chip size="sm">{role}</Chip>
           {canManage && (
@@ -256,11 +257,11 @@ function DeviceDetailPopover({
         </span>
       </div>
       <div className={styles.field}>
-        <label className={styles.label}>token id</label>
+        <Eyebrow as="label">token id</Eyebrow>
         <span className={styles.mono}>…{device.token_id}</span>
       </div>
       <div className={styles.field}>
-        <label className={styles.label}>last seen</label>
+        <Eyebrow as="label">last seen</Eyebrow>
         <span>{formatLastSeen(device.last_seen)}</span>
       </div>
       <div className={styles.popoverFooter}>
@@ -390,7 +391,7 @@ function PairDeviceModal({ onClose, onPaired }) {
           "Cannot pair — no Tailscale or LAN address detected. " +
           (hint ? `Detected: ${hint}. ` : "") +
           "Connect to Wi-Fi / Ethernet, install Tailscale, " +
-          "or set host.tcp_host in config.yaml.",
+          "or set network.host in config.yaml.",
         );
       } else {
         notify({ message: `generate: ${msg}`, variant: "error", duration: 4000 });
@@ -484,7 +485,7 @@ function PairDeviceModal({ onClose, onPaired }) {
   return (
     <Modal title="Pair a new device" onClose={cancel} width="var(--modal-md)">
       <div className={styles.field}>
-        <label className={styles.label}>Label</label>
+        <Eyebrow as="label">Label</Eyebrow>
         <Field
           className={`${styles.input} ${styles.inputFull}`}
           type="text"
@@ -525,13 +526,13 @@ function PairDeviceModal({ onClose, onPaired }) {
 
       {!grantAdmin && profiles.length > 0 && payload && (
         <div className={styles.field}>
-          <label className={styles.label}>Profiles access</label>
+          <Eyebrow as="label">Profiles access</Eyebrow>
           <div className={styles.lockedValue}>{scopeTriggerLabel}</div>
         </div>
       )}
       {!grantAdmin && profiles.length > 0 && !payload && (
         <div className={styles.field}>
-          <label className={styles.label}>Profiles access</label>
+          <Eyebrow as="label">Profiles access</Eyebrow>
           <Dropdown
             trigger={{ label: scopeTriggerLabel }}
             direction="down"
@@ -605,16 +606,16 @@ function PairDeviceModal({ onClose, onPaired }) {
               {qrSvg ? <span dangerouslySetInnerHTML={{ __html: qrSvg }} /> : null}
             </div>
             <div className={styles.devicePairMeta}>
-              <div className={styles.label}>Host</div>
+              <Eyebrow as="div">Host</Eyebrow>
               <div className={styles.mono}>
                 {payload.scope ? (
                   <span className={scopeChipClass(payload.scope, styles)}>{payload.scope}</span>
                 ) : null}
                 {ready ? `${payload.host}:${payload.port}` : "…"}
               </div>
-              <div className={`${styles.label} ${styles.devicePairMetaSpacer}`}>
+              <Eyebrow as="div" className={styles.devicePairMetaSpacer}>
                 Token
-              </div>
+              </Eyebrow>
               <div className={styles.mono}>
                 {payload.token ? `…${payload.token.slice(-8)}` : "…"}
               </div>

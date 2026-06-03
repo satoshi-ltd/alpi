@@ -1,7 +1,6 @@
-// Eyebrow — mono uppercase section / category label. 10 px / 500 / 0.06em.
-export default function Eyebrow({ children, className = "", style, as: Tag = "span" }) {
+export default function Eyebrow({ children, className = "", as: Tag = "span", ...rest }) {
   return (
-    <Tag className={`eyebrow ${className}`.trim()} style={style}>
+    <Tag className={`eyebrow ${className}`.trim()} {...rest}>
       {children}
     </Tag>
   );

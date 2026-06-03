@@ -1849,6 +1849,8 @@ def _subsystems_wizard(h: Path, profile: str) -> None:
                 "toggle-host",
                 "control plane for desktop / mobile clients",
             ))
+        items.append(ui.Heading("Network"))
+        items.append(("Accessible address", "network", _network_host_label(h)))
         items.append(ui.Heading("ALP"))
         items.append(("Peer TCP listener", "tcp",
                       _alp_tcp_label(h)))
@@ -1869,6 +1871,8 @@ def _subsystems_wizard(h: Path, profile: str) -> None:
                 cfg_mod.save(cfg)
                 msg = _restart_daemon_for_apply(home._ROOT)
                 ui.ok_and_wait(f"{key}: {_on_off(svc_cfg[key])}{msg}")
+            elif choice == "network":
+                _network_host_setup(h)
             elif choice == "tcp":
                 _alp_tcp_port_setup(h)
         except Exception as e:  # noqa: BLE001
@@ -1884,28 +1888,39 @@ def _on_off(b: bool) -> str:
 
 def _alp_subsystem_status(h: Path) -> str:
     from alpi import config as cfg_mod
+    from alpi.service import DEFAULT_ALP_TCP_PORT
     cfg = cfg_mod.load(h)
-    port = (cfg.alp or {}).get("tcp_port")
-    return f"unix + tcp :{port}" if port else "unix socket only"
+    port = (cfg.alp or {}).get("tcp_port") or DEFAULT_ALP_TCP_PORT
+    return f"unix + tcp :{port}"
 
 
 def _alp_tcp_label(h: Path) -> str:
     from alpi import config as cfg_mod
+    from alpi.service import DEFAULT_ALP_TCP_PORT
     cfg = cfg_mod.load(h)
-    cfg_alp = cfg.alp or {}
-    port = cfg_alp.get("tcp_port")
-    host = cfg_alp.get("tcp_host") or "127.0.0.1"
-    return f"{host}:{port} (Noise_XK)" if port else "not bound (Unix only)"
+    port = (cfg.alp or {}).get("tcp_port") or DEFAULT_ALP_TCP_PORT
+    host = str((cfg.network or {}).get("host") or "").strip() or "auto"
+    return f"{host}:{port} (Noise_XK)"
+
+
+def _network_host_label(h: Path) -> str:
+    from alpi import config as cfg_mod
+    cfg = cfg_mod.load(h)
+    host = str((cfg.network or {}).get("host") or "").strip()
+    return host or "auto-detect (Tailscale → LAN)"
 
 
 def _alp_tcp_port_setup(h: Path) -> None:
-    """Configure the optional TCP listener used by remote ALP peers."""
+    """Set the ALP peer TCP port. ALP TCP is always-on (default 7423) whenever a
+    safe address resolves; the address is the shared accessible address
+    (Network). To turn ALP off entirely, disable it in Services."""
     from alpi import config as cfg_mod
     from alpi import ui
+    from alpi.service import DEFAULT_ALP_TCP_PORT
 
     cfg = cfg_mod.load(h)
-    current_port = (cfg.alp or {}).get("tcp_port")
-    current_host = (cfg.alp or {}).get("tcp_host") or "127.0.0.1"
+    current_port = (cfg.alp or {}).get("tcp_port") or DEFAULT_ALP_TCP_PORT
+    net_host = str((cfg.network or {}).get("host") or "").strip() or "auto-detect"
 
     ui.banner(
         ui.crumb("setup", "alp-tcp", "tcp"),
@@ -1913,64 +1928,85 @@ def _alp_tcp_port_setup(h: Path) -> None:
         home=h,
     )
     ui.dim(
-        "Sets the TCP listener used by remote Alpi peers (Noise_XK,\n"
-        "peers.yaml-pinned only). Host 127.0.0.1 = loopback; set a Tailscale\n"
-        "/ VPN IP for remote peers. Avoid 0.0.0.0 without a VPN in front.\n"
-        "Empty port = disable TCP, keep the Unix socket only."
+        "Remote Alpi peers reach this profile over Noise_XK TCP\n"
+        "(peers.yaml-pinned only). The address is the shared accessible\n"
+        f"address (Network · {net_host}); here you set only the port.\n"
+        f"Empty = default {DEFAULT_ALP_TCP_PORT}. ALP TCP is always on when an\n"
+        "address resolves — to turn ALP off, disable it in Services."
     )
     ui._console.print("")
 
-    host = ui.text(
-        f"Bind host — e.g. 127.0.0.1, a Tailscale IP, or 0.0.0.0 [{current_host}]:",
-        default=current_host,
-    )
-    if host is None:
-        return ui.cancelled()
-    host = (host or current_host).strip() or "127.0.0.1"
-
-    if host == "0.0.0.0":
-        if not ui.confirm(
-            "0.0.0.0 exposes the port to every interface. Continue?",
-            default=False,
-        ):
-            return ui.cancelled()
-
-    port_default = str(current_port) if current_port else ""
-    port_hint = f"[{port_default}]" if port_default else "[empty = disable TCP]"
-    port_s = ui.text(
-        f"Port number (1-65535) {port_hint}:",
-        default=port_default,
-    )
+    port_hint = f"[empty = {DEFAULT_ALP_TCP_PORT}]"
+    port_s = ui.text(f"Port number (1-65535) {port_hint}:", default=str(current_port))
     if port_s is None:
         return ui.cancelled()
     port_s = (port_s or "").strip()
 
     alp_cfg = dict(cfg.alp or {})
+    alp_cfg.pop("tcp_host", None)  # legacy — address is network.host now
 
-    if not port_s:
+    if not port_s or port_s == str(DEFAULT_ALP_TCP_PORT):
+        # Default → drop the key (config stays minimal); still binds the default.
         alp_cfg.pop("tcp_port", None)
-        alp_cfg.pop("tcp_host", None)
         cfg.alp = alp_cfg
         cfg_mod.save(cfg)
         msg = _restart_daemon_for_apply(home._ROOT)
-        ui.ok_and_wait(f"TCP disabled — Unix socket only{msg}")
+        ui.ok_and_wait(f"ALP TCP on {net_host}:{DEFAULT_ALP_TCP_PORT} (default){msg}")
         return
 
     try:
         port = int(port_s)
     except ValueError:
-        ui.fail_and_wait(f"not a valid port: {port_s!r} (did you mean to set it as host?)")
+        ui.fail_and_wait(f"not a valid port: {port_s!r}")
         return
     if not (1 <= port <= 65535):
         ui.fail_and_wait(f"port out of range: {port} (expected 1-65535)")
         return
 
     alp_cfg["tcp_port"] = port
-    alp_cfg["tcp_host"] = host
     cfg.alp = alp_cfg
     cfg_mod.save(cfg)
     msg = _restart_daemon_for_apply(home._ROOT)
-    ui.ok_and_wait(f"TCP bound to {host}:{port}{msg}")
+    ui.ok_and_wait(f"ALP TCP on {net_host}:{port}{msg}")
+
+
+def _network_host_setup(h: Path) -> None:
+    """Set the shared accessible address (network.host) — the address other
+    machines/devices reach this profile at, for both device pairing and ALP."""
+    from alpi import config as cfg_mod
+    from alpi import ui
+
+    cfg = cfg_mod.load(h)
+    current = str((cfg.network or {}).get("host") or "").strip()
+
+    ui.banner(ui.crumb("setup", "network"), subtitle="accessible address", home=h)
+    ui.dim(
+        "The address other machines and your devices use to reach this\n"
+        "profile — shared by device pairing and ALP peers. Empty = auto-detect\n"
+        "(Tailscale, then LAN). Any reachable host works: Tailscale / LAN IP,\n"
+        "private hostname, VPN address, or 0.0.0.0. A public IP also needs\n"
+        "host.allow_public_bind: true, set by hand in config.yaml (not here) —\n"
+        "without it neither plane binds TCP. Ports stay per-plane."
+    )
+    ui._console.print("")
+
+    host = ui.text(
+        f"Accessible address (empty = auto-detect) [{current or 'auto'}]:",
+        default=current,
+    )
+    if host is None:
+        return ui.cancelled()
+    host = (host or "").strip()
+
+    net_cfg = dict(cfg.network or {})
+    if host:
+        net_cfg["host"] = host
+    else:
+        net_cfg.pop("host", None)
+    cfg.network = net_cfg
+    cfg_mod.save(cfg)
+    msg = _restart_daemon_for_apply(home._ROOT)
+    ui.ok_and_wait(f"accessible address: {host or 'auto-detect'}{msg}")
 
 
 def _devices_status(h: Path) -> str:
@@ -2034,7 +2070,7 @@ def _devices_subtitle(h: Path, endpoint) -> str:
 
     if endpoint is None:
         if runtime.is_docker():
-            return "remote access not configured — set ALPI_HOST_ADVERTISE_HOST"
+            return "remote access not configured — set ALPI_NETWORK_HOST"
         return "no network — install Tailscale or connect to a LAN"
     host, scope = endpoint
     return f"{scope} · {host}:{resolve_host_tcp_port(h)}"
@@ -2045,7 +2081,7 @@ def _network_row_status(h: Path, endpoint) -> str:
 
     if endpoint is None:
         if runtime.is_docker():
-            return "set ALPI_HOST_ADVERTISE_HOST"
+            return "set ALPI_NETWORK_HOST"
         return "auto-detect Tailscale or LAN"
     host, _scope = endpoint
     return f"{host}:{resolve_host_tcp_port(h)}"
@@ -2079,7 +2115,7 @@ def _device_add(h: Path, endpoint) -> None:
         if runtime.is_docker():
             ui.fail(
                 "Set the advertised host first.\n"
-                "Set ALPI_HOST_ADVERTISE_HOST to the host's Tailscale IP /\n"
+                "Set ALPI_NETWORK_HOST to the host's Tailscale IP /\n"
                 "MagicDNS name (or a LAN hostname) so clients can reach the container."
             )
         else:
@@ -2197,7 +2233,8 @@ def _devices_network_setup(h: Path) -> None:
 
     cfg = cfg_mod.load(h)
     host_cfg = dict(cfg.host or {})
-    current = str(host_cfg.get("tcp_host") or "").strip()
+    net_cfg = dict(cfg.network or {})
+    current = str(net_cfg.get("host") or "").strip()
     current_name = str(host_cfg.get("device_name") or "").strip()
     detected = detect_bind_ip()
     managed = runtime.is_docker()
@@ -2245,9 +2282,9 @@ def _devices_network_setup(h: Path) -> None:
     host = (host or "").strip()
 
     if host:
-        host_cfg["tcp_host"] = host
+        net_cfg["host"] = host  # shared accessible address (network.host)
     else:
-        host_cfg.pop("tcp_host", None)
+        net_cfg.pop("host", None)
 
     pairing_name = ui.text(
         "Pairing name [blank = auto]:",
@@ -2263,6 +2300,7 @@ def _devices_network_setup(h: Path) -> None:
         host_cfg.pop("device_name", None)
 
     cfg.host = host_cfg
+    cfg.network = net_cfg
     cfg_mod.save(cfg)
     msg = _restart_daemon_for_apply(home._ROOT)
     target = host or auto_host or "auto-detect"

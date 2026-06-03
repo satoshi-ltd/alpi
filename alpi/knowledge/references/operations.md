@@ -1,14 +1,11 @@
 # Operations answer pack
 
-Use this for logs, daemon lifecycle, upgrades, backup/restore,
-diagnostics, monitoring, and failure modes.
-
 ## Answer directly
 
-- First diagnostic command: `alpi doctor`.
-- Evidence rollup: `alpi digest` or `alpi -p <profile> digest`.
-- Daemon control: `alpi daemon status|restart|stop`.
-- Durable memory promotion is CLI-only through `alpi memory promote`.
+- First diagnostic command: `alpi doctor` (exits non-zero on any failed live check; flags stale binary).
+- Evidence rollup: `alpi digest` / `alpi -p <profile> digest`.
+- Daemon control: `alpi daemon status|restart|stop` — one daemon supervises every profile on the machine.
+- Durable memory promotion is CLI-only via `alpi memory promote`.
 
 ## Diagnostics
 
@@ -20,30 +17,26 @@ alpi digest --json
 alpi -p <profile> digest --since 7d
 ```
 
-`doctor` checks common setup problems. `digest` is read-only evidence:
-tool availability, gateway breaker state, skill telemetry, memory
-promotion backlog/pressure, and compaction rate.
+- `doctor`: live checks for common setup problems.
+- `digest`: read-only evidence — tool availability, gateway breaker state, skill telemetry, memory promotion backlog/pressure, compaction rate.
 
 ## Daemon
 
 ```bash
-alpi daemon start
-alpi daemon status
-alpi daemon restart
-alpi daemon stop
+alpi daemon start|status|restart|stop
 ```
 
-One daemon supervises every profile on the machine.
+One daemon supervises every profile on the machine. `restart` after `uv tool install --reinstall` (or when `doctor` flags a stale binary) to drop old in-memory code.
 
 ## Logs
 
-Per-profile under `{home}/logs/`:
+Per-profile under `{home}/logs/`. Rotated text caps at **1 MB** (`.log.1` = previous gen); `compaction.jsonl` does not rotate (read with `jq`).
 
 | File | Content |
 |---|---|
 | `service.log` | daemon supervisor + per-profile services |
 | `agent.log` | one line per turn |
-| `approval.log` | terminal approval decisions |
+| `approval.log` | terminal approval decisions (audit trail with `agent.log`) |
 | `compaction.jsonl` | compaction/truncation records |
 
 ```bash
@@ -64,8 +57,7 @@ alpi memory promote --discard-all
 alpi memory promote --apply-all
 ```
 
-Apply routes through `memory(action="add")`, so safety scan and dedup
-still apply.
+Apply routes through `memory(action="add")`, so safety scan and dedup still apply.
 
 ## Upgrade
 
@@ -77,8 +69,8 @@ alpi --version
 alpi doctor
 ```
 
-Use the same installer family originally used for install (`uv`, `pipx`,
-etc.).
+- Use the same installer family as the original install (`uv`, `pipx`, …).
+- No silent migrations: if a CHANGELOG entry calls for file moves, apply them for **every profile**.
 
 ## Backup / restore
 
@@ -89,13 +81,9 @@ alpi restore ~/vault/alpi.alpi-backup
 alpi restore ~/vault/alpi.alpi-backup --force
 ```
 
-`alpi backup` writes one passphrase-encrypted archive for the whole
-`~/.alpi/` tree: all profiles, memories, sessions, skills, state,
-secrets, config, `.env`, ALP identity, peers, gateway state, and host
-state. Excluded recursively: `cache/`, `logs/`, `.trash/`, `*.sock`,
-`*.pid`.
-
-Stop daemon before restore; run `alpi doctor` and restart afterward.
+- One passphrase-encrypted archive of the whole `~/.alpi/` tree: all profiles, memories, sessions, skills, state, secrets, config, `.env`, ALP identity, peers, gateway + host state.
+- Excluded recursively: `cache/`, `logs/`, `.trash/`, `*.sock`, `*.pid`.
+- Stop daemon before restore; run `alpi doctor` and restart afterward.
 
 ## Common failure modes
 

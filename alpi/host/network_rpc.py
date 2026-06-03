@@ -70,7 +70,7 @@ async def _status(_params: dict[str, Any], server: host_server.Server) -> dict[s
 
     home = server.home
     cfg = cfg_mod.load(home)
-    configured = str((cfg.host or {}).get("tcp_host") or "").strip() or None
+    configured = str((cfg.network or {}).get("host") or "").strip() or None
     is_docker = runtime.is_docker()
     advertise_hint = _advertise_host_hint() if is_docker else None
 
@@ -141,15 +141,18 @@ async def _set_advertised(
     home = server.home
     cfg = cfg_mod.load(home)
     host_cfg = dict(cfg.host or {})
+    net_cfg = dict(cfg.network or {})
     changed = False
 
+    # The accessible address is shared (network.host); the pairing name is
+    # host-plane only.
     if host_in is not _SENTINEL:
         if host_in:
-            if host_cfg.get("tcp_host") != host_in:
-                host_cfg["tcp_host"] = host_in
+            if net_cfg.get("host") != host_in:
+                net_cfg["host"] = host_in
                 changed = True
-        elif "tcp_host" in host_cfg:
-            host_cfg.pop("tcp_host", None)
+        elif "host" in net_cfg:
+            net_cfg.pop("host", None)
             changed = True
 
     if name_in is not _SENTINEL:
@@ -163,6 +166,7 @@ async def _set_advertised(
 
     if changed:
         cfg.host = host_cfg
+        cfg.network = net_cfg
         cfg_mod.save(cfg)
 
     return {"ok": True, "restart_needed": changed}
@@ -171,13 +175,13 @@ async def _set_advertised(
 async def _restart_host_server(
     _params: dict[str, Any], server: host_server.Server,
 ) -> dict[str, Any]:
-    # Full daemon restart via SIGTERM; supervisor respawns with fresh config. Matches `alpi setup`'s `_restart_daemon_for_apply`.
     from alpi import service as svc
+    from alpi.host.daemon import schedule_self_terminate
 
     home = server.home
     if svc.daemon_running_pid(home) is None:
         return {"ok": True, "restarted": False}
-    svc.stop_daemon(home, timeout=2.0)
+    schedule_self_terminate()
     return {"ok": True, "restarted": True}
 
 

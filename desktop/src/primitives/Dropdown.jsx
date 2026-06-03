@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { CaretIcon } from "./icons.jsx";
+import Eyebrow from "./Eyebrow.jsx";
 import styles from "./Dropdown.module.css";
 
 export default function Dropdown({
@@ -158,7 +159,7 @@ export default function Dropdown({
 function Group({ label, children }) {
   return (
     <div className={styles.group}>
-      {label && <div className={styles.groupLabel}>{label}</div>}
+      {label && <Eyebrow as="div" className={styles.groupLabel}>{label}</Eyebrow>}
       {children}
     </div>
   );

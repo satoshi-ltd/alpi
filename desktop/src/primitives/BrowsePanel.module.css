@@ -57,12 +57,6 @@
 }
 
 .kicker {
-  font-family: var(--font-mono);
-  font-size: var(--fs-xs);
-  font-weight: var(--fw-medium);
-  letter-spacing: .06em;
-  text-transform: uppercase;
-  color: var(--ink-3);
   margin-left: var(--space-1);
 }
 
@@ -145,12 +139,6 @@
 
 .groupLabel {
   padding: var(--space-4) var(--space-5) var(--space-2);
-  font-family: var(--font-mono);
-  font-size: var(--fs-xs);
-  font-weight: var(--fw-medium);
-  text-transform: uppercase;
-  letter-spacing: .06em;
-  color: var(--ink-3);
   position: sticky;
   top: 0;
   background: var(--bg-side);

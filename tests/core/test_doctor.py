@@ -122,6 +122,31 @@ def test_sandbox_enabled_without_backend_fails(tmp_path: Path, monkeypatch) -> N
     assert sb.status == "fail"
 
 
+def _cfg_with_network(home: Path, host: str, *, allow_public: bool = False):
+    from alpi import config as cfg_mod
+    cfg = cfg_mod.Config(home=home, model="")
+    cfg.network = {"host": host}
+    if allow_public:
+        cfg.host = {"allow_public_bind": True}
+    return cfg
+
+
+def test_network_exposure_warns_on_public_with_optin(tmp_path: Path) -> None:
+    checks = doctor._check_network_exposure(_cfg_with_network(tmp_path, "8.8.8.8", allow_public=True))
+    assert [c.status for c in checks] == ["warn"]
+    assert "public" in checks[0].detail
+
+
+def test_network_exposure_warns_on_hostname(tmp_path: Path) -> None:
+    checks = doctor._check_network_exposure(_cfg_with_network(tmp_path, "home-server.internal"))
+    assert [c.status for c in checks] == ["warn"]
+    assert "all interfaces" in checks[0].detail
+
+
+def test_network_exposure_silent_on_private_ip(tmp_path: Path) -> None:
+    assert doctor._check_network_exposure(_cfg_with_network(tmp_path, "192.168.1.5")) == []
+
+
 def test_cli_doctor_command_exits_nonzero_on_fail(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("ALPI_HOME", str(tmp_path))
     (tmp_path / "config.yaml").write_text("model: \n")

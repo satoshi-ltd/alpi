@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import Button from "../../../primitives/Button.jsx";
+import Eyebrow from "../../../primitives/Eyebrow.jsx";
 import useAutoPosition from "../../../primitives/useAutoPosition.js";
 import { useNotify } from "../../../primitives/Notification.jsx";
 import { useDismissOnOutside } from "../../../hooks/useDismissOnOutside.js";
@@ -157,7 +158,7 @@ function ProviderEditor({ profile, onClose, onSaved }) {
     <>
       {hasAnyConfigured && (
         <div className={styles.field}>
-          <label className={styles.label}>configured</label>
+          <Eyebrow as="label">configured</Eyebrow>
           <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-2)" }}>
             {PAID_PROVIDERS.filter((p) => configuredEnvs.has(p.env)).map((p) => {
               const preview =
@@ -221,7 +222,7 @@ function ProviderEditor({ profile, onClose, onSaved }) {
       )}
 
       <div className={styles.field}>
-        <label className={styles.label}>add new</label>
+        <Eyebrow as="label">add new</Eyebrow>
         <ProviderPickerForm
           value={providerValue}
           onChange={setProviderValue}

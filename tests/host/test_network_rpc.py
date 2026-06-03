@@ -177,7 +177,7 @@ async def test_status_resolves_docker_advertise_host(
 ) -> None:
     home = _bootstrap(tmp_path)
     monkeypatch.setenv("ALPI_PLATFORM", "docker")
-    monkeypatch.setenv("ALPI_HOST_ADVERTISE_HOST", "alpi.tailnet.ts.net")
+    monkeypatch.setenv("ALPI_NETWORK_HOST", "alpi.tailnet.ts.net")
     _stub_probes(monkeypatch)
 
     srv = host_server.Server(home=home)
@@ -198,7 +198,7 @@ async def test_status_docker_with_no_advertise_returns_none(
     probe hit must NOT be advertised — without the env it's unresolved."""
     home = _bootstrap(tmp_path)
     monkeypatch.setenv("ALPI_PLATFORM", "docker")
-    monkeypatch.delenv("ALPI_HOST_ADVERTISE_HOST", raising=False)
+    monkeypatch.delenv("ALPI_NETWORK_HOST", raising=False)
     _stub_probes(monkeypatch, tailscale="100.114.140.25", lan="192.168.1.10")
 
     srv = host_server.Server(home=home)
@@ -214,10 +214,10 @@ async def test_status_configured_overrides_docker(
 ) -> None:
     home = _bootstrap(tmp_path)
     cfg = cfg_mod.load(home)
-    cfg.host = {"tcp_host": "operator.set.example"}
+    cfg.network = {"host": "operator.set.example"}
     cfg_mod.save(cfg)
     monkeypatch.setenv("ALPI_PLATFORM", "docker")
-    monkeypatch.setenv("ALPI_HOST_ADVERTISE_HOST", "ignored.ts.net")
+    monkeypatch.setenv("ALPI_NETWORK_HOST", "ignored.ts.net")
     _stub_probes(monkeypatch)
 
     srv = host_server.Server(home=home)
@@ -238,7 +238,7 @@ async def test_status_classifies_override_by_host_character(
 
     # Case 1: override IS the Tailscale IP → scope_in_use is "tailscale".
     cfg = cfg_mod.load(home)
-    cfg.host = {"tcp_host": "100.114.140.25"}
+    cfg.network = {"host": "100.114.140.25"}
     cfg_mod.save(cfg)
     srv = host_server.Server(home=home)
     network_rpc.register(srv)
@@ -250,7 +250,7 @@ async def test_status_classifies_override_by_host_character(
     assert r["candidates"]["configured"] == "100.114.140.25"
 
     # Case 2: override IS a private LAN IP → "lan".
-    cfg.host = {"tcp_host": "192.168.1.10"}
+    cfg.network = {"host": "192.168.1.10"}
     cfg_mod.save(cfg)
     resp = await srv._dispatch({"id": "n", "method": "host.network.status", "params": {}})
     r = resp["result"]
@@ -258,7 +258,7 @@ async def test_status_classifies_override_by_host_character(
     assert r["is_override"] is True
 
     # Case 3: override is a hostname → "custom" (real custom, not a network IP).
-    cfg.host = {"tcp_host": "myhost.local"}
+    cfg.network = {"host": "myhost.local"}
     cfg_mod.save(cfg)
     resp = await srv._dispatch({"id": "n", "method": "host.network.status", "params": {}})
     r = resp["result"]
@@ -287,7 +287,7 @@ async def test_set_advertised_persists_host_and_device_name(
     assert resp["result"] == {"ok": True, "restart_needed": True}
 
     cfg = cfg_mod.load(home)
-    assert cfg.host["tcp_host"] == "myhost.local"
+    assert cfg.network["host"] == "myhost.local"
     assert cfg.host["device_name"] == "javi-mbp"
 
 
@@ -297,7 +297,7 @@ async def test_set_advertised_empty_host_unsets(
 ) -> None:
     home = _bootstrap(tmp_path)
     cfg = cfg_mod.load(home)
-    cfg.host = {"tcp_host": "myhost.local"}
+    cfg.network = {"host": "myhost.local"}
     cfg_mod.save(cfg)
 
     srv = host_server.Server(home=home)
@@ -310,7 +310,7 @@ async def test_set_advertised_empty_host_unsets(
     assert resp["result"]["restart_needed"] is True
 
     cfg2 = cfg_mod.load(home)
-    assert "tcp_host" not in (cfg2.host or {})
+    assert "host" not in (cfg2.network or {})
 
 
 @pytest.mark.asyncio
@@ -319,7 +319,8 @@ async def test_set_advertised_no_op_when_unchanged(
 ) -> None:
     home = _bootstrap(tmp_path)
     cfg = cfg_mod.load(home)
-    cfg.host = {"tcp_host": "myhost.local", "device_name": "x"}
+    cfg.network = {"host": "myhost.local"}
+    cfg.host = {"device_name": "x"}
     cfg_mod.save(cfg)
 
     srv = host_server.Server(home=home)
@@ -393,10 +394,10 @@ async def test_restart_when_daemon_running(
 ) -> None:
     home = _bootstrap(tmp_path)
     monkeypatch.setattr("alpi.service.daemon_running_pid", lambda root: 4242)
-    stop_calls: list[Any] = []
+    term_calls: list[Any] = []
     monkeypatch.setattr(
-        "alpi.service.stop_daemon",
-        lambda root, timeout: stop_calls.append((root, timeout)),
+        "alpi.host.daemon.schedule_self_terminate",
+        lambda *a, **k: term_calls.append(True),
     )
 
     srv = host_server.Server(home=home)
@@ -405,7 +406,7 @@ async def test_restart_when_daemon_running(
         "id": "n", "method": "host.network.restart_host_server", "params": {},
     })
     assert resp["result"] == {"ok": True, "restarted": True}
-    assert len(stop_calls) == 1
+    assert len(term_calls) == 1
 
 
 @pytest.mark.asyncio
@@ -414,10 +415,10 @@ async def test_restart_when_daemon_not_running(
 ) -> None:
     home = _bootstrap(tmp_path)
     monkeypatch.setattr("alpi.service.daemon_running_pid", lambda root: None)
-    stop_calls: list[Any] = []
+    term_calls: list[Any] = []
     monkeypatch.setattr(
-        "alpi.service.stop_daemon",
-        lambda root, timeout: stop_calls.append((root, timeout)),
+        "alpi.host.daemon.schedule_self_terminate",
+        lambda *a, **k: term_calls.append(True),
     )
 
     srv = host_server.Server(home=home)
@@ -426,7 +427,7 @@ async def test_restart_when_daemon_not_running(
         "id": "n", "method": "host.network.restart_host_server", "params": {},
     })
     assert resp["result"] == {"ok": True, "restarted": False}
-    assert stop_calls == []
+    assert term_calls == []
 
 
 # --------------------------------------------------------------------
@@ -441,7 +442,8 @@ async def test_set_advertised_partial_call_with_only_host_preserves_device_name(
     """Caller supplies only `host` → `device_name` stays untouched. Earlier the missing key was conflated with empty-string and silently wiped the other field."""
     home = _bootstrap(tmp_path)
     cfg = cfg_mod.load(home)
-    cfg.host = {"tcp_host": "old.local", "device_name": "keep-me"}
+    cfg.network = {"host": "old.local"}
+    cfg.host = {"device_name": "keep-me"}
     cfg_mod.save(cfg)
 
     srv = host_server.Server(home=home)
@@ -453,7 +455,7 @@ async def test_set_advertised_partial_call_with_only_host_preserves_device_name(
     assert resp["result"]["ok"] is True
 
     cfg2 = cfg_mod.load(home)
-    assert cfg2.host["tcp_host"] == "new.local"
+    assert cfg2.network["host"] == "new.local"
     assert cfg2.host["device_name"] == "keep-me"
 
 
@@ -463,7 +465,8 @@ async def test_set_advertised_partial_call_with_only_device_name_preserves_host(
 ) -> None:
     home = _bootstrap(tmp_path)
     cfg = cfg_mod.load(home)
-    cfg.host = {"tcp_host": "keep.me", "device_name": "old-name"}
+    cfg.network = {"host": "keep.me"}
+    cfg.host = {"device_name": "old-name"}
     cfg_mod.save(cfg)
 
     srv = host_server.Server(home=home)
@@ -475,7 +478,7 @@ async def test_set_advertised_partial_call_with_only_device_name_preserves_host(
     assert resp["result"]["ok"] is True
 
     cfg2 = cfg_mod.load(home)
-    assert cfg2.host["tcp_host"] == "keep.me"
+    assert cfg2.network["host"] == "keep.me"
     assert cfg2.host["device_name"] == "new-name"
 
 
@@ -485,7 +488,8 @@ async def test_set_advertised_explicit_empty_unsets_only_that_field(
 ) -> None:
     home = _bootstrap(tmp_path)
     cfg = cfg_mod.load(home)
-    cfg.host = {"tcp_host": "x.local", "device_name": "keep-me"}
+    cfg.network = {"host": "x.local"}
+    cfg.host = {"device_name": "keep-me"}
     cfg_mod.save(cfg)
 
     srv = host_server.Server(home=home)
@@ -497,7 +501,7 @@ async def test_set_advertised_explicit_empty_unsets_only_that_field(
     assert resp["result"]["ok"] is True
 
     cfg2 = cfg_mod.load(home)
-    assert "tcp_host" not in (cfg2.host or {})
+    assert "host" not in (cfg2.network or {})
     assert cfg2.host["device_name"] == "keep-me"
 
 

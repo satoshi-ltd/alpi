@@ -28,7 +28,7 @@ import {
   saveCachedMessages,
 } from "../lib/workgroup-cache.js";
 import { fetchWorkgroupTranscript } from "../lib/workgroup-fetch.js";
-import { WorkgroupChatHeader, TasksButton } from "../primitives/index.js";
+import { WorkgroupChatHeader, TasksButton, Eyebrow } from "../primitives/index.js";
 import { JumpToLatest, MarkerCard, MessageBubble } from "../primitives/index.js";
 import {
   Banner,
@@ -351,7 +351,7 @@ export default function WorkgroupView({
       {banners}
       {phases.length > 0 && (
         <div className={styles.pipeline}>
-          <span className={styles.pipelineLabel}>pipeline</span>
+          <Eyebrow className={styles.pipelineLabel}>pipeline</Eyebrow>
           {phases.map((p, i) => (
             <Fragment key={p.slug}>
               {i > 0 && <span className={styles.pipelineSep} aria-hidden>›</span>}

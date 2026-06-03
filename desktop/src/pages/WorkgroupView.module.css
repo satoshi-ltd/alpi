@@ -50,12 +50,6 @@
 }
 
 .pipelineLabel {
-  font-family: var(--font-mono);
-  text-transform: uppercase;
-  letter-spacing: .08em;
-  font-size: var(--fs-xs);
-  font-weight: var(--fw-medium);
-  color: var(--ink-3);
   margin-right: var(--space-2);
 }
 

@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { safeUnlisten } from "../../../lib/tauri-listen.js";
 import Chip from "../../../primitives/Chip.jsx";
+import Eyebrow from "../../../primitives/Eyebrow.jsx";
 import Modal from "../../../primitives/Modal.jsx";
 import { useNotify } from "../../../primitives/Notification.jsx";
 import { Btn } from "../../../primitives/index.js";
@@ -228,7 +229,7 @@ function GmailAuthModal({ profile, config, onClose, onSaved }) {
   return (
     <Modal title="Gmail gateway" onClose={onClose}>
       <div className={styles.field}>
-        <label className={styles.label}>Client ID</label>
+        <Eyebrow as="label">Client ID</Eyebrow>
         <Field
           className={`${styles.input} ${styles.inputFull}`}
           type="text"
@@ -240,7 +241,7 @@ function GmailAuthModal({ profile, config, onClose, onSaved }) {
         />
       </div>
       <div className={styles.field}>
-        <label className={styles.label}>Client Secret</label>
+        <Eyebrow as="label">Client Secret</Eyebrow>
         <Field
           className={`${styles.input} ${styles.inputFull}`}
           type="password"
@@ -256,7 +257,7 @@ function GmailAuthModal({ profile, config, onClose, onSaved }) {
         />
       </div>
       <div className={styles.field}>
-        <label className={styles.label}>Allowed senders</label>
+        <Eyebrow as="label">Allowed senders</Eyebrow>
         <Field
           className={`${styles.input} ${styles.inputFull}`}
           type="text"
@@ -458,10 +459,10 @@ function GatewayEditorModal({ profile, gateway, onClose, onSaved }) {
         const preview = f.secret ? config?.[f.env] : null;
         return (
           <div key={f.env} className={styles.field}>
-            <label className={styles.label}>
+            <Eyebrow as="label">
               {f.label}
               {f.required && <span aria-hidden="true"> *</span>}
-            </label>
+            </Eyebrow>
             <Field
               className={`${styles.input} ${styles.inputFull}`}
               type={f.secret ? "password" : "text"}

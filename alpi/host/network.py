@@ -66,16 +66,43 @@ def resolve_host_endpoint(home: Path) -> tuple[str, str] | None:
     return detect_bind_ip()
 
 
+def resolve_bind_host(
+    configured: str | None, *, is_docker: bool, allow_public: bool,
+) -> str | None:
+    # Advertised network.host -> a local-safe bind (not used verbatim: a
+    # hostname / public IP isn't a local interface). docker -> 0.0.0.0;
+    # empty -> detected IP else None; private/overlay IP -> itself; hostname
+    # -> 0.0.0.0; public IP -> 0.0.0.0 iff allow_public else None.
+    if is_docker:
+        return "0.0.0.0"
+    if not configured:
+        detected = detect_bind_ip()
+        return detected[0] if detected else None
+    try:
+        ip = ipaddress.ip_address(configured)
+    except ValueError:
+        return "0.0.0.0"
+    if ip.is_loopback or ip.is_unspecified:
+        return None
+    if is_tailscale_ip(configured) or any(ip in net for net in _PRIVATE_RANGES):
+        return configured
+    return "0.0.0.0" if allow_public else None
+
+
 def resolve_host_tcp_bind(home: Path) -> tuple[str, int] | None:
     port = resolve_host_tcp_port(home)
-    if runtime.is_docker():
-        # Bind every container interface; the runtime maps a host port to it.
-        return ("0.0.0.0", port)
-    detected = detect_bind_ip()
-    if detected is None:
-        return None
-    ip, _scope = detected
-    return (ip, port)
+    bind = resolve_bind_host(
+        _configured_host(home),
+        is_docker=runtime.is_docker(),
+        allow_public=host_allow_public_bind(home),
+    )
+    return (bind, port) if bind is not None else None
+
+
+def host_allow_public_bind(home: Path) -> bool:
+    from alpi import config as cfg_mod
+    cfg = cfg_mod.load(home)
+    return bool((cfg.host or {}).get("allow_public_bind") or False)
 
 
 def resolve_host_tcp_port(home: Path) -> int:
@@ -115,14 +142,19 @@ def resolve_host_pairing_name(home: Path) -> str:
 def _configured_host(home: Path) -> str | None:
     from alpi import config as cfg_mod
 
+    # Shared accessible address from config, used by BOTH the host plane and the
+    # ALP listener. Empty = auto-detect (Tailscale then LAN). Containers set the
+    # address via the ALPI_NETWORK_HOST env instead (see `_advertise_host_hint`
+    # and `service._resolve_alp_tcp`).
     cfg = cfg_mod.load(home)
-    host = str((cfg.host or {}).get("tcp_host") or "").strip()
+    host = str((cfg.network or {}).get("host") or "").strip()
     return host or None
 
 
 def _advertise_host_hint() -> str | None:
-    # Reachable endpoint clients dial (Tailscale IP / MagicDNS / LAN host).
-    return str(os.environ.get("ALPI_HOST_ADVERTISE_HOST") or "").strip() or None
+    # Reachable endpoint clients dial — the shared accessible address, set by
+    # env in containers (ALPI_NETWORK_HOST).
+    return str(os.environ.get("ALPI_NETWORK_HOST") or "").strip() or None
 
 
 def _detect_lan_ip() -> str | None:
@@ -200,6 +232,7 @@ def classify_scope(host: str | None, raw_scope: str | None) -> str | None:
 __all__ = [
     "classify_scope",
     "detect_bind_ip",
+    "resolve_bind_host",
     "resolve_host_endpoint",
     "resolve_host_pairing_name",
     "resolve_host_tcp_bind",

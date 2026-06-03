@@ -113,7 +113,7 @@ async def test_generate_verb_returns_full_token_with_network(
 async def test_generate_verb_classifies_configured_override_by_host_character(
     short_tmp: Path, monkeypatch,
 ) -> None:
-    """A cfg.host.tcp_host override that happens to be a Tailscale IP must still surface as scope='tailscale', not 'configured'. The user cares about network character; the override path is bookkeeping (`is_override=true`)."""
+    """A network.host override that happens to be a Tailscale IP must still surface as scope='tailscale', not 'configured'. The user cares about network character; the override path is bookkeeping (`is_override=true`)."""
     from alpi.host import network as net
 
     monkeypatch.setattr(net, "resolve_host_endpoint", lambda h: ("100.114.140.25", "configured"))
@@ -1302,7 +1302,7 @@ async def test_profile_detail_redacts_settings_fields_for_member(
             "models": ["openrouter/anthropic/claude-3-opus"],
             "voice_id": "shimmer",
             "workspace": "/secret/workspace",
-            "tcp_host": "10.0.0.1",
+            "advertise_host": "10.0.0.1",
             "provider_keys": {"OPENAI": "sk-…"},
             "mcps": [{"name": "fs"}],
             "peers": [{"id": "@partner"}],

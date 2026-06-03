@@ -15,11 +15,14 @@ def register(server: host_server.Server) -> None:
 async def _daemon_restart(
     _params: dict[str, Any], _server: host_server.Server,
 ) -> dict[str, Any]:
-    # Schedule the SIGTERM AFTER returning so the client gets a clean
-    # response — launchd / systemd ``KeepAlive`` respawns the unit.
-    loop = asyncio.get_running_loop()
-    loop.call_later(0.2, _self_terminate)
+    schedule_self_terminate()
     return {"ok": True, "respawn": True}
+
+
+def schedule_self_terminate(delay: float = 0.2) -> None:
+    # Deferred so the RPC returns before we SIGTERM ourselves; synchronous self-kill blocks the loop. Respawn: launchd/systemd on a host, restart policy in docker (daemon is PID 1).
+    loop = asyncio.get_running_loop()
+    loop.call_later(delay, _self_terminate)
 
 
 def _self_terminate() -> None:
@@ -29,4 +32,4 @@ def _self_terminate() -> None:
         pass
 
 
-__all__ = ["register"]
+__all__ = ["register", "schedule_self_terminate"]

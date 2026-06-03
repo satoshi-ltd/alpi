@@ -146,6 +146,11 @@ class Config:
     gateway: dict[str, Any] = field(default_factory=dict)
     alp: dict[str, Any] = field(default_factory=dict)
     host: dict[str, Any] = field(default_factory=dict)
+    # Shared "address other machines reach this profile at" — feeds both the
+    # host control plane (device pairing) and the ALP peer listener. Empty =
+    # auto-detect (Tailscale then LAN). Ports stay per-plane (host.tcp_port,
+    # alp.tcp_port). See docs/ALP.md → Transport and docs/CONFIG.md → network.
+    network: dict[str, Any] = field(default_factory=dict)
     budget: dict[str, Any] = field(default_factory=dict)
     service: dict[str, Any] = field(default_factory=dict)
     workspace: str = ""  # "" → fall back to cwd
@@ -282,6 +287,7 @@ def load(home: Path) -> Config:
         gateway=data.get("gateway", DEFAULT_CONFIG["gateway"]),
         alp=dict(data.get("alp") or {}),
         host=dict(data.get("host") or {}),
+        network=dict(data.get("network") or {}),
         budget=dict(data.get("budget") or {}),
         service=dict(data.get("service") or {}),
         workspace=str(data.get("workspace", "") or ""),
@@ -321,6 +327,9 @@ def save(cfg: Config) -> None:
 
     if cfg.host:
         data["host"] = cfg.host
+
+    if cfg.network:
+        data["network"] = cfg.network
 
     if cfg.budget:
         data["budget"] = cfg.budget

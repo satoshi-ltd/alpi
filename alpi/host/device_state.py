@@ -222,7 +222,7 @@ def _profile_detail_payload(home: Path) -> dict[str, Any]:
     return {
         "workspace": cfg.workspace or None,
         "tcp_port": cfg.alp.get("tcp_port"),
-        "tcp_host": cfg.alp.get("tcp_host"),
+        "advertise_host": (cfg.network or {}).get("host"),  # shared accessible address
         "provider_keys": _provider_keys(home),
         "provider_ollama": _ollama_providers(cfg),
         "sandbox": cfg.tools.terminal.sandbox,

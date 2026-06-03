@@ -35,7 +35,7 @@ import {
 } from "./fields/services.jsx";
 import { DevicesField } from "./fields/devices.jsx";
 import { DaemonField } from "./fields/DaemonField.jsx";
-import { NetworkField } from "./fields/network.jsx";
+import { NetworkAddressField, PairingNameField, HostPortField } from "./fields/network.jsx";
 import {
   DeleteProfileAction,
   StorageField,
@@ -234,6 +234,7 @@ export default function ProfileDetail({
               <DaemonField />
             </Row>
           )}
+          {activeConnection?.kind === "local" && <NetworkAddressField />}
           <Row label="subsystems">
             <SubsystemsCell profile={profile} onSaved={onSaved} />
           </Row>
@@ -355,7 +356,8 @@ export default function ProfileDetail({
 
         {profile.name === "default" && (activeConnection?.kind === "local" || activeConnection?.role === "admin") && (
           <Section title="Devices" tooltip="paired apps">
-            {activeConnection?.kind === "local" && <NetworkField />}
+            {activeConnection?.kind === "local" && <PairingNameField />}
+            {activeConnection?.kind === "local" && <HostPortField profile={profile} onSaved={onSaved} />}
             <DevicesField />
           </Section>
         )}

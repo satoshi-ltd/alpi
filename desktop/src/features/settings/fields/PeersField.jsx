@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import Button from "../../../primitives/Button.jsx";
+import Eyebrow from "../../../primitives/Eyebrow.jsx";
 import Chip from "../../../primitives/Chip.jsx";
 import Dropdown from "../../../primitives/Dropdown.jsx";
 import Textarea from "../../../primitives/Textarea.jsx";
@@ -316,28 +317,28 @@ function PeerDetailPopover({ peer, status, reason, anchorRef, onClose, onRemove 
       }}
     >
       <div className={styles.field}>
-        <label className={styles.label}>peer</label>
+        <Eyebrow as="label">peer</Eyebrow>
         <span className={styles.peerRowName}>@{peer.alias || peer.id}</span>
       </div>
       <div className={styles.field}>
-        <label className={styles.label}>status</label>
+        <Eyebrow as="label">status</Eyebrow>
         <span>{renderPeerStatusChip(status, reason)}</span>
         {reason && status !== "on" && (
           <span className={styles.muted} style={{ marginTop: "var(--space-2)" }}>{reason}</span>
         )}
       </div>
       <div className={styles.field}>
-        <label className={styles.label}>pubkey</label>
+        <Eyebrow as="label">pubkey</Eyebrow>
         <span className={styles.mono}>{peer.pubkey}</span>
       </div>
       {peer.address && (
         <div className={styles.field}>
-          <label className={styles.label}>address</label>
+          <Eyebrow as="label">address</Eyebrow>
           <span className={styles.mono}>{peer.address}</span>
         </div>
       )}
       <div className={styles.field}>
-        <label className={styles.label}>allow</label>
+        <Eyebrow as="label">allow</Eyebrow>
         <span className={styles.inlineRow}>
           {(peer.allow ?? []).length === 0 ? (
             <span className={styles.muted}>none</span>
@@ -435,7 +436,7 @@ function AddPeerPopover({ profile, existingIds, anchorRef, onClose, onAdded }) {
       }}
     >
       <div className={styles.field}>
-        <label className={styles.label}>id</label>
+        <Eyebrow as="label">id</Eyebrow>
         <Field
           className={styles.input}
           value={peerId}
@@ -446,7 +447,7 @@ function AddPeerPopover({ profile, existingIds, anchorRef, onClose, onAdded }) {
         />
       </div>
       <div className={styles.field}>
-        <label className={styles.label}>pubkey</label>
+        <Eyebrow as="label">pubkey</Eyebrow>
         <Textarea
           className={styles.textarea}
           rows={2}
@@ -457,7 +458,7 @@ function AddPeerPopover({ profile, existingIds, anchorRef, onClose, onAdded }) {
         />
       </div>
       <div className={styles.field}>
-        <label className={styles.label}>address (optional)</label>
+        <Eyebrow as="label">address (optional)</Eyebrow>
         <Field
           className={styles.input}
           value={address}
@@ -467,7 +468,7 @@ function AddPeerPopover({ profile, existingIds, anchorRef, onClose, onAdded }) {
         />
       </div>
       <div className={styles.field}>
-        <label className={styles.label}>alias (optional)</label>
+        <Eyebrow as="label">alias (optional)</Eyebrow>
         <Field
           className={styles.input}
           value={alias}
@@ -477,7 +478,7 @@ function AddPeerPopover({ profile, existingIds, anchorRef, onClose, onAdded }) {
         />
       </div>
       <div className={styles.field}>
-        <label className={styles.label}>allow</label>
+        <Eyebrow as="label">allow</Eyebrow>
         <span className={styles.inlineRow}>
           {ALLOW_METHODS.map((m) => (
             <Chip

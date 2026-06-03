@@ -13,6 +13,7 @@ right now?" answer.
 
 from __future__ import annotations
 
+import ipaddress
 import os
 import shutil
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -739,7 +740,33 @@ def _check_security(cfg: cfg_mod.Config) -> list[Check]:
                          f"{len(allow)} entry(ies)"))
     else:
         out.append(Check("Security", "Approval allowlist", "info", "empty"))
+
+    out.extend(_check_network_exposure(cfg))
     return out
+
+
+def _check_network_exposure(cfg: cfg_mod.Config) -> list[Check]:
+    # An IP literal only binds 0.0.0.0 (outside docker) via allow_public_bind
+    # — a private IP binds itself — so that case is public-internet exposure.
+    from alpi import runtime
+    from alpi.host.network import resolve_bind_host
+
+    configured = str((cfg.network or {}).get("host") or "").strip() or None
+    if not configured or runtime.is_docker():
+        return []
+    allow_public = bool((cfg.host or {}).get("allow_public_bind"))
+    bind = resolve_bind_host(configured, is_docker=False, allow_public=allow_public)
+    if bind != "0.0.0.0":
+        return []
+    try:
+        ipaddress.ip_address(configured)
+    except ValueError:
+        return [Check("Security", "Network exposure", "warn",
+                      f"network.host {configured!r} binds all interfaces (0.0.0.0) — "
+                      "pairing token + firewall/NAT are the only access control")]
+    return [Check("Security", "Network exposure", "warn",
+                  f"network.host {configured} is public (allow_public_bind on) — "
+                  "the pairing port and ALP listener face the public internet")]
 
 
 # Helpers

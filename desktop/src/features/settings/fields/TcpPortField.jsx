@@ -1,89 +1,66 @@
 import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import Button from "../../../primitives/Button.jsx";
+import Eyebrow from "../../../primitives/Eyebrow.jsx";
 import Chip from "../../../primitives/Chip.jsx";
 import Field from "../../../primitives/Field.jsx";
 import { useNotify } from "../../../primitives/Notification.jsx";
 import { useDismissOnOutside } from "../../../hooks/useDismissOnOutside.js";
-import { formatTcpLabel } from "../util.js";
+import { scopeLabel } from "../util.js";
 import styles from "../Settings.module.css";
 
+const DEFAULT_ALP_PORT = 7423;
+
+// ALP peer TCP listener — always-on; only the port is editable here.
 export function TcpPortField({ profile, onSaved }) {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef(null);
   const notify = useNotify();
-  const [host, setHost] = useState(profile.tcp_host || "127.0.0.1");
-  const [port, setPort] = useState(
-    profile.tcp_port ? String(profile.tcp_port) : "",
-  );
+  const effective = profile.tcp_port || DEFAULT_ALP_PORT;
+  const [port, setPort] = useState(String(effective));
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    setHost(profile.tcp_host || "127.0.0.1");
-    setPort(profile.tcp_port ? String(profile.tcp_port) : "");
-  }, [profile.tcp_host, profile.tcp_port]);
+  const scope = scopeLabel(profile.advertise_host);
 
+  useEffect(() => { setPort(String(profile.tcp_port || DEFAULT_ALP_PORT)); }, [profile.tcp_port]);
   useDismissOnOutside({ open, onClose: () => setOpen(false), wrapRef });
 
   const portTrim = port.trim();
-  const portValid = portTrim === "" || /^[0-9]+$/.test(portTrim);
-  const portNum = portTrim === "" ? 0 : Number(portTrim);
-  const portInRange = portTrim === "" || (portNum >= 1 && portNum <= 65535);
-  const dirty =
-    host.trim() !== (profile.tcp_host || "127.0.0.1") ||
-    portTrim !== (profile.tcp_port ? String(profile.tcp_port) : "");
+  const portNum = Number(portTrim);
+  const portValid = /^[0-9]+$/.test(portTrim) && portNum >= 1 && portNum <= 65535;
+  const dirty = portValid && portNum !== effective;
 
   const [portFree, setPortFree] = useState(null);
   useEffect(() => {
-    if (!open || !portInRange || portTrim === "") {
-      setPortFree(null);
-      return;
-    }
-    if (portNum === profile.tcp_port) {
-      setPortFree(true);
-      return;
-    }
+    if (!open || !portValid || portNum === profile.tcp_port) { setPortFree(null); return; }
     let cancelled = false;
     const id = setTimeout(() => {
-      invoke("port_available", {
-        host: host.trim() || "127.0.0.1",
-        port: portNum,
-      })
+      invoke("port_available", { host: (profile.advertise_host || "").trim() || "0.0.0.0", port: portNum })
         .then((ok) => { if (!cancelled) setPortFree(ok); })
         .catch(() => { if (!cancelled) setPortFree(null); });
     }, 350);
     return () => { cancelled = true; clearTimeout(id); };
-  }, [open, portTrim, portNum, host, portInRange, profile.tcp_port]);
+  }, [open, portTrim, portNum, portValid, profile.tcp_port, profile.advertise_host]);
 
   async function save() {
-    if (!portValid || !portInRange || saving) return;
-    if (portTrim !== "" && portFree === false) return;
+    if (!dirty || saving || (portFree === false)) return;
     setSaving(true);
     try {
-      if (portTrim === "") {
+      if (portNum === DEFAULT_ALP_PORT) {
         await invoke("unset_config_field", { profile: profile.name, key: "alp.tcp_port" });
-        await invoke("unset_config_field", { profile: profile.name, key: "alp.tcp_host" });
       } else {
-        await invoke("set_config_field", {
-          profile: profile.name,
-          key: "alp.tcp_host",
-          value: host.trim() || "127.0.0.1",
-        });
-        await invoke("set_config_field", {
-          profile: profile.name,
-          key: "alp.tcp_port",
-          value: portTrim,
-        });
+        await invoke("set_config_field", { profile: profile.name, key: "alp.tcp_port", value: String(portNum) });
       }
-      invoke("daemon_restart").catch(() => {});
+      try {
+        await invoke("daemon_restart");
+      } catch (e) {
+        await onSaved?.();
+        notify({ message: `Port ${portNum} saved · restart failed: ${String(e)}`, variant: "warn", duration: 4500 });
+        setOpen(false);
+        return;
+      }
       await onSaved?.();
-      notify({
-        message: portTrim
-          ? `TCP listener ${host.trim()}:${portTrim} · daemon restarting`
-          : "TCP listener disabled · daemon restarting",
-        variant: "success",
-        duration: 3000,
-      });
+      notify({ message: `ALP TCP port ${portNum} · daemon restarting`, variant: "success", duration: 3000 });
       setOpen(false);
     } catch (e) {
       notify({ message: `tcp: ${String(e)}`, variant: "error", duration: 4000 });
@@ -95,71 +72,36 @@ export function TcpPortField({ profile, onSaved }) {
   return (
     <span ref={wrapRef} className={styles.popoverAnchor}>
       <Chip
-        state={profile.tcp_port ? "on" : "off"}
+        state="on"
         onClick={() => setOpen((o) => !o)}
         tooltip={
           <>
-            <div>ALP TCP listener</div>
-            <div className={styles.tooltipStatus}>
-              {profile.tcp_port
-                ? `${profile.tcp_host || "127.0.0.1"}:${profile.tcp_port} · click to edit`
-                : "disabled · click to enable"}
-            </div>
+            <div>ALP peer TCP listener</div>
+            <div className={styles.tooltipStatus}>{scope}:{effective} · click to edit port</div>
           </>
         }
       >
-        {profile.tcp_port
-          ? formatTcpLabel(profile.tcp_host, profile.tcp_port)
-          : "tcp off"}
+        {scope}:{effective}
       </Chip>
       {open && (
         <div className={styles.popover}>
           <div className={styles.field}>
-            <label className={styles.label}>host</label>
-            <Field
-              className={styles.input}
-              value={host}
-              onChange={(e) => setHost(e.target.value)}
-              placeholder="127.0.0.1"
-              spellCheck={false}
-            />
-          </div>
-          <div className={styles.field}>
-            <label className={styles.label}>port</label>
+            <Eyebrow as="label">tcp port</Eyebrow>
             <Field
               className={styles.input}
               value={port}
               onChange={(e) => setPort(e.target.value)}
-              placeholder="empty to disable"
+              placeholder={String(DEFAULT_ALP_PORT)}
               spellCheck={false}
             />
           </div>
-          {host.trim() === "0.0.0.0" && (
-            <div className={styles.warn}>
-              0.0.0.0 exposes the port to all interfaces. Use only behind a VPN.
-            </div>
-          )}
-          {!portInRange && (
-            <div className={styles.warn}>Port must be 1-65535.</div>
-          )}
-          {portInRange && portTrim !== "" && portFree === false && (
-            <div className={styles.warn}>
-              Port {portTrim} is in use on {host.trim() || "127.0.0.1"}.
-            </div>
+          {!portValid && <div className={styles.warn}>Port must be 1-65535.</div>}
+          {portValid && portFree === false && (
+            <div className={styles.warn}>Port {portNum} is in use.</div>
           )}
           <div className={styles.actions}>
-            <Button
-              size="sm"
-              onClick={save}
-              disabled={
-                !dirty ||
-                !portInRange ||
-                (portTrim !== "" && portFree === false)
-              }
-              loading={saving}
-              variant="primary"
-            >
-              Save
+            <Button size="sm" variant="primary" onClick={save} disabled={!dirty || portFree === false} loading={saving}>
+              Save and restart
             </Button>
           </div>
         </div>

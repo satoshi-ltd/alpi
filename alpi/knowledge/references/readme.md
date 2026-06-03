@@ -1,79 +1,64 @@
 # alpi answer pack
 
-Use this file for "what is alpi?", "what can it do?", and "how is it
-different from a generic assistant?"
-
 ## Short answer
 
-alpi is a profile-based personal AI agent for the terminal, messaging
-gateways, and private peer-to-peer agent networks. It keeps persistent
-memory, can use tools, can build reusable skills, and can run through
-a per-machine daemon for Telegram/IMAP/Gmail/Matrix inbound messages.
+alpi is a profile-based personal AI agent for the terminal, messaging gateways, and private peer-to-peer agent networks. It keeps persistent memory, uses tools, builds reusable skills, and runs a per-machine daemon for Telegram/IMAP/Gmail/Matrix inbound. Goal: a lighter, tighter personal-agent system. Not a hosted SaaS, not browser-only; it does not make weak models reliable (tool discipline still tracks model quality).
 
-## Positioning
-
-- Package: `alpi-agent`.
-- Import path, binary, and home directory: `alpi`, `alpi`, `~/.alpi`.
-- Goal: a lighter, tighter personal-agent system.
-- Main surfaces: TUI/CLI, daemon-hosted gateways/scheduler/host plane,
-  ALP peer links, tools, memory, and skills.
+- Package `alpi-agent`. Import path / binary / home dir: `alpi` / `alpi` / `~/.alpi`.
+- Surfaces: TUI/CLI, daemon-hosted gateways/scheduler/host plane, ALP peer links, tools, memory, skills.
 
 ## Common commands
 
 ```bash
-alpi setup
-alpi
-alpi -p work
-alpi doctor
-alpi daemon status
-alpi daemon restart
+alpi setup           # model, gateways, MCPs, sandbox, daemon
+alpi                 # interactive TUI
+alpi -p work         # named profile
+alpi doctor          # live health checks
+alpi daemon status | restart
 alpi update --check
 alpi --version
 ```
 
 ## Core concepts
 
-- **Profile**: isolated config, memory, sessions, skills, ALP identity,
-  logs, and service state.
-- **Workspace**: default root for project-relative file tools and
-  terminal commands.
-- **Memory**: persistent user/project facts, written through the
-  `memory` tool.
-- **Skills**: reusable workflows stored under `~/.alpi/skills/...`,
-  entirely user-owned.
-- **Gateway**: daemon-hosted inbound surface for Telegram, IMAP,
-  Gmail, and Matrix.
-- **Schedule**: recurring jobs that run through the same agent loop.
-- **ALP**: Alpi Link Protocol for trusted alpi-to-alpi communication.
+- **Profile**: isolation unit — one config, memory, sessions, skills, ALP identity, logs, service state. Default `~/.alpi/`; named `~/.alpi/profiles/<name>/`.
+- **Memory**: plain Markdown written inline via `memory` tool, no post-session reflection. `USER.md` (user facts), `MEMORY.md` (env/operational), `AGENT.md` (response shaping).
+- **Skills**: reusable workflows under `~/.alpi/skills/<category>/<name>/`, user-owned; mutations pass validation + security scanner; secrets in `.env` or per-skill `secrets/`. see skills
+- **Workspace**: default root for relative paths, not a security wall. Absolute paths allowed except a sensitive-path denylist; real isolation is the opt-in OS sandbox.
+- **Gateway**: daemon-hosted inbound for Telegram, IMAP, Gmail, Matrix.
+- **Schedule**: cron + one-shot jobs through the same agent loop.
+
+## ALP vs host plane
+
+- **ALP** (Alpi Link Protocol): each profile owns an Ed25519 keypair; peers pin pubkeys out of band and grant explicit capabilities (`link.ping`, `link.ask`, `workgroup.post`). Fail-closed; no discovery service, shared account, or central broker.
+  - ALP.1: same-machine profiles over Unix sockets.
+  - ALP.2: inter-machine over Noise_XK TCP, per-peer budget + rate limits.
+  - ALP.3: hub-anchored shared workgroups (multiple alpis + optional humans).
+- **Host plane** (separate from ALP): device control surface for paired desktop/mobile clients to reach their own daemon — `host.*` over local Unix socket or remote WebSocket, per-device pairing tokens. `Devices` sets the companion endpoint; `Peer TCP listener` sets ALP peer traffic.
 
 ## What ships today
 
-- Tool-calling agent loop through LiteLLM-compatible providers.
-- TUI and slash commands.
-- Profile isolation.
-- File, terminal, browser/search, memory, schedule, research, and
-  delegate tools.
-- `alpi_knowledge` tool backed by packaged references.
-- Optional OS sandbox for terminal/file isolation.
-- Gateway, scheduler, and host-plane daemon.
-- ALP identity and peer/workgroup features.
-- Desktop/mobile companion state behind `host.*`.
+- Tool-calling agent loop over LiteLLM-compatible providers (first-class Ollama); fresh profiles ship no default model.
+- TUI: streaming, slash commands, live tool cards, interrupt, session resume, model switching, cost/token display.
+- Tools: file, terminal, browser/search, memory, schedule, MCP client, plus:
+  - `research(brief, depth)`: read-only sub-agent, tiers `quick`/`normal`/`deep`.
+  - `delegate`: write-capable sub-agent for focused file/web/terminal tasks.
+  - `alpi_knowledge`: packaged references (shipped behavior, not roadmap).
+- Profile isolation; optional macOS/Linux OS sandbox per profile.
+- Unified per-machine daemon (gateway + scheduler + ALP + workgroups + host plane); one launchd/systemd user unit.
+- ALP identity + peer/workgroup features; desktop/mobile companion state behind `host.*`.
+- Docker image `satoshiltd/alpi`, persistent storage under `/data/.alpi`.
 
-## Boundaries
+## Security posture
 
-- alpi is not a hosted SaaS.
-- alpi is not a browser-only assistant.
-- alpi does not make weak models reliable; tool discipline still
-  depends on model quality.
-- The packaged knowledge references describe shipped behavior, not
-  the unreleased roadmap.
+LLM is treated as powerful, fallible, next to user credentials. Layered local guardrails:
 
-## Where to look next
+- safe / caution / dangerous command classification; dangerous blocked with no config escape hatch; caution needs interactive approval or configured allowlist;
+- sensitive-path denylist shared across file + terminal;
+- SSRF protection on web tools; prompt-injection warnings on fetched web/email content;
+- OSV malware checks before skill or MCP install;
+- audit via `approval.log` and `agent.log`. see security
 
-- First setup: `quickstart.md`
-- Install/update/uninstall: `install.md`
-- Config fields: `config.md`
-- Profiles: `profiles.md`
-- Skills: `skills.md`
-- Security: `security.md`
-- Operations: `operations.md`
+## Related topics
+
+quickstart (first setup) · install (install/update/uninstall) · config (fields) · profiles · skills · security · operations

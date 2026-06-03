@@ -11,6 +11,18 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.3.37 — 2026-06-03 — one accessible address
+
+Requires alpi v0.7.1+.
+
+- **Simpler network settings.** Set one accessible address in Service; the ALP
+  and Devices sections now show just their ports, each tagged with the detected
+  network type (`tailscale:` / `lan:` / `tcp:`). Saving an address or a port
+  reliably restarts the daemon and tells you if the restart didn't take, and
+  warns when an address would expose the daemon on every interface.
+- **Consistent labels.** Section labels across the sidebar, the pipeline bar,
+  and settings now share one typographic style.
+
 ## v0.3.36 — 2026-06-03 — cleaner pipeline strip
 
 Requires alpi v0.6.35+.

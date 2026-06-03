@@ -100,7 +100,7 @@
 
 .sortLabel {
   font-family: var(--font-mono);
-  font-size: var(--fs-xxs, 9px);
+  font-size: var(--fs-xxs);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--ink-3);

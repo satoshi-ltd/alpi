@@ -121,6 +121,7 @@ class Server:
         self,
         home: Path,
         tcp_bind: tuple[str, int] | None = None,
+        allow_public_bind: bool = False,
     ) -> None:
         self.home = home
         self.handlers: dict[str, Handler] = {}
@@ -128,20 +129,32 @@ class Server:
         self._server: asyncio.AbstractServer | None = None
         self._ws_server: Any | None = None
         self._tcp_bind: tuple[str, int] | None = (
-            self._validate_tcp_bind(tcp_bind) if tcp_bind else None
+            self._validate_tcp_bind(tcp_bind, allow_public_bind) if tcp_bind else None
         )
 
     @staticmethod
-    def _validate_tcp_bind(bind: tuple[str, int]) -> tuple[str, int]:
+    def _validate_tcp_bind(
+        bind: tuple[str, int], allow_public_bind: bool = False
+    ) -> tuple[str, int]:
         host, port = bind
-        if not _is_safe_bind(host):
-            raise ValueError(
-                f"host TCP listener refuses to bind to {host!r}: "
-                "must be a Tailscale (100.64.0.0/10) or private LAN "
-                "(10/8, 172.16/12, 192.168/16) address"
-            )
         if not (0 < port < 65536):
             raise ValueError(f"invalid host TCP port {port!r}")
+        if not _is_safe_bind(host, allow_public_bind):
+            raise ValueError(
+                f"host TCP listener refuses to bind to {host!r}: a public IP "
+                "exposes the host control plane. Set `host.allow_public_bind: "
+                "true` to override (or use a Tailscale / private-LAN / private "
+                "hostname address)."
+            )
+        # Auto-detected binds are Tailscale/private-LAN (and 0.0.0.0 in docker);
+        # anything else here is the operator's explicit choice (public IP or
+        # custom hostname) — flag it.
+        if host != "0.0.0.0" and not _is_private_or_overlay(host):
+            log.warning(
+                "host TCP listener bound to %r — this is outside Tailscale/"
+                "private LAN; ensure device-pairing is your only access control.",
+                host,
+            )
         return host, port
 
     def socket_path(self) -> Path:
@@ -424,19 +437,34 @@ _PRIVATE_RANGES = (
 )
 
 
-def _is_safe_bind(addr: str) -> bool:
-    from alpi import runtime
-    if addr == "0.0.0.0" and runtime.is_docker():
-        return True
+def _is_private_or_overlay(addr: str) -> bool:
     if is_tailscale_ip(addr):
         return True
     try:
         ip = ipaddress.ip_address(addr)
     except ValueError:
         return False
-    if ip.is_loopback or ip.is_unspecified:
-        return False
     return any(ip in net for net in _PRIVATE_RANGES)
+
+
+def _is_safe_bind(addr: str, allow_public: bool = False) -> bool:
+    # Inputs come from resolve_bind_host: 0.0.0.0, a local IP, or a hostname —
+    # public IPs are already gated there. This is defence-in-depth.
+    if not str(addr).strip():
+        return False
+    if addr == "0.0.0.0":  # all interfaces; resolve_bind_host's safe default
+        return True
+    if is_tailscale_ip(addr):
+        return True
+    try:
+        ip = ipaddress.ip_address(addr)
+    except ValueError:
+        return True  # hostname — resolved at bind time, a bad one fails there
+    if ip.is_loopback:
+        return False
+    if any(ip in net for net in _PRIVATE_RANGES):
+        return True
+    return allow_public  # a public IP only with the explicit opt-in
 
 
 def _redact_payload_by_role(method: str, payload: dict[str, Any]) -> dict[str, Any]:

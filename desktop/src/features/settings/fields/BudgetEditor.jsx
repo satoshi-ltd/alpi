@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import Button from "../../../primitives/Button.jsx";
+import Eyebrow from "../../../primitives/Eyebrow.jsx";
 import Field from "../../../primitives/Field.jsx";
 import useAutoPosition from "../../../primitives/useAutoPosition.js";
 import { useDismissOnOutside } from "../../../hooks/useDismissOnOutside.js";
@@ -66,7 +67,7 @@ export function BudgetEditor({ current, onSave }) {
           }}
         >
           <div className={styles.field}>
-            <label className={styles.label}>USD lifetime cap</label>
+            <Eyebrow as="label">USD lifetime cap</Eyebrow>
             <Field
               className={styles.input}
               value={value}

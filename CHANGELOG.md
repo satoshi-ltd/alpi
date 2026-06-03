@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.7.1 — 2026-06-03 — one network address
+
+- **One accessible address instead of two.** A profile now has a single
+  `network.host` — the address your devices and trusted peers reach it at —
+  shared by both device pairing and ALP peer links. Leave it empty to
+  auto-detect (Tailscale, then your LAN) or set anything: a Tailscale/VPN IP, a
+  LAN IP, a hostname, or a public IP. Each plane keeps its own port. The old
+  separate per-plane host addresses are gone.
+- **ALP peer links work out of the box.** The ALP listener is now on by default
+  (port 7423) whenever your machine has a reachable address — no switch to flip
+  first. Don't want it? Turn ALP off entirely from Services; the local socket
+  keeps working regardless.
+- **The advertised address and the bind are separate now.** Pointing
+  `network.host` at a hostname or a public address no longer stops the daemon
+  from starting — alpi advertises what you typed and listens on an address it
+  can actually bind. A public address still needs the explicit
+  `host.allow_public_bind` opt-in (which now covers both pairing and ALP), and
+  `alpi doctor` warns when the listener is exposed on every interface.
+
 ## v0.7.0 — 2026-06-03 — curator can apply its own cleanup
 
 - **`alpi curator apply` archives stale skills for you.** The curator already

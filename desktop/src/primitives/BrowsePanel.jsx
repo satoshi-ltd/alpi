@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { IconBtn, Tip, XIcon } from "./index.js";
+import { IconBtn, Tip, XIcon, Eyebrow } from "./index.js";
 import styles from "./BrowsePanel.module.css";
 
 export default function BrowsePanel({
@@ -110,7 +110,7 @@ export default function BrowsePanel({
         <div className={styles.header}>
           <span className={styles.title}>{title}</span>
           <span className={styles.counter}>{counter}</span>
-          {kicker && <span className={styles.kicker}>{kicker}</span>}
+          {kicker && <Eyebrow className={styles.kicker}>{kicker}</Eyebrow>}
           <span style={{ flex: 1 }} />
           <Tip text="Close" side="r">
             <IconBtn onClick={() => onClose?.()} aria-label="Close">
@@ -139,7 +139,7 @@ export default function BrowsePanel({
                 grouped.map(([cat, list]) => (
                   <div key={cat} className={styles.group}>
                     {(alwaysShowGroups || grouped.length > 1) && (
-                      <div className={styles.groupLabel}>{cat}</div>
+                      <Eyebrow as="div" className={styles.groupLabel}>{cat}</Eyebrow>
                     )}
                     {list.map((it) => {
                       const k = keyOf(it);

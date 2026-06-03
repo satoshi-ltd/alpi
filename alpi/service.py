@@ -1692,24 +1692,30 @@ async def _run_preempt_watcher(home: Path, profile: str) -> None:
         await asyncio.sleep(_PREEMPT_TICK_SECONDS)
 
 
-def _resolve_alp_tcp(
-    cfg_alp: dict[str, Any], managed: bool,
-) -> tuple[str | None, int | None]:
-    # ALPI_ALP_TCP_{HOST,PORT} env override config so a container sets its
-    # mapped port without editing config; managed+port+no-host → bind 0.0.0.0.
-    tcp_host = cfg_alp.get("tcp_host")
-    tcp_port = cfg_alp.get("tcp_port")
-    env_host = str(os.environ.get("ALPI_ALP_TCP_HOST") or "").strip()
+DEFAULT_ALP_TCP_PORT = 7423
+
+
+def _resolve_alp_tcp(cfg, managed: bool) -> tuple[str | None, int | None]:
+    # ALP TCP (bind_host, port) or (None, None) for Unix-only. Always-on:
+    # binds whenever resolve_bind_host yields a local-safe address from the
+    # advertised network.host (env ALPI_NETWORK_HOST wins).
+    from alpi.host.network import resolve_bind_host
+
+    configured = str((cfg.network or {}).get("host") or "").strip() or None
+    env_host = str(os.environ.get("ALPI_NETWORK_HOST") or "").strip()
     if env_host:
-        tcp_host = env_host
+        configured = env_host
+    tcp_port = (cfg.alp or {}).get("tcp_port") or DEFAULT_ALP_TCP_PORT
     env_port = str(os.environ.get("ALPI_ALP_TCP_PORT") or "").strip()
     if env_port:
         try:
             tcp_port = int(env_port)
         except ValueError:
             pass
-    if managed and tcp_port and not tcp_host:
-        tcp_host = "0.0.0.0"
+    allow_public = bool((getattr(cfg, "host", None) or {}).get("allow_public_bind") or False)
+    tcp_host = resolve_bind_host(configured, is_docker=managed, allow_public=allow_public)
+    if tcp_host is None:
+        return None, None
     return tcp_host, tcp_port
 
 
@@ -1721,8 +1727,7 @@ async def _run_alp(home: Path, profile: str) -> None:
     from alpi.alp.server import Server
 
     cfg = cfg_mod.load(home)
-    cfg_alp = cfg.alp or {}
-    tcp_host, tcp_port = _resolve_alp_tcp(cfg_alp, runtime.is_docker())
+    tcp_host, tcp_port = _resolve_alp_tcp(cfg, runtime.is_docker())
     server = Server(
         home=home,
         agent_name=profile,
@@ -1759,21 +1764,25 @@ async def _run_host(home: Path, profile: str) -> None:
     from alpi.host import tools as host_tools
     from alpi import runtime
     from alpi.host import workgroup_admin as host_wg_admin
-    from alpi.host.network import resolve_host_tcp_bind
+    from alpi.host.network import host_allow_public_bind, resolve_host_tcp_bind
     from alpi.host.server import Server as HostServer
 
     tcp_bind = resolve_host_tcp_bind(home)
     if tcp_bind is None:
         log.info(
-            "no Tailscale or LAN address found; "
-            "host TCP listener disabled (Unix socket still up)",
+            "no reachable address auto-detected; host TCP listener disabled "
+            "(Unix socket still up). Set network.host to expose it explicitly.",
         )
     else:
         host, port = tcp_bind
         detail = runtime.platform_id() or "auto"
         log.info("host TCP bind chosen: %s:%d (%s)", host, port, detail)
 
-    server = HostServer(home=home, tcp_bind=tcp_bind)
+    server = HostServer(
+        home=home,
+        tcp_bind=tcp_bind,
+        allow_public_bind=host_allow_public_bind(home),
+    )
     host_handlers.register(server)
     host_chat.register(server)
     host_config.register(server)

@@ -421,24 +421,41 @@ budget:
 Edit interactively via `alpi setup → Budget` or the desktop app's
 profile detail.
 
+### Network (shared accessible address)
+
+One address, shared by every network listener this profile runs — the
+device-pairing host plane and the ALP peer listener both bind/advertise on it,
+each on its own port. Configure it once.
+
+| Key | Default | Effect |
+|---|---|---|
+| `network.host` | `""` | The address other machines and your devices reach this profile at. Empty = auto-detect (Tailscale first, then a private LAN address). Any reachable host works: a Tailscale / WireGuard / VPN address, a private hostname or MagicDNS name, a LAN IP, `0.0.0.0`, or a public IP. A public IP additionally needs `host.allow_public_bind: true`; that gate applies to the shared bind used by **both** planes (host control plane + ALP listener), so without it neither binds TCP. |
+
+```yaml
+network:
+  host: ""        # empty = auto-detect Tailscale → LAN
+```
+
+Set it via `alpi setup → Network → Accessible address` or the desktop app
+(`Devices → pairing`). Ports stay per-plane (`host.tcp_port`, `alp.tcp_port`).
+A public IP is `config.yaml`-only: the desktop rejects it, and it also requires
+`host.allow_public_bind: true` — set both keys by hand.
+
 ### ALP
 
-ALP always serves the per-profile Unix socket for same-machine peers.
-Inter-machine ALP.2 is opt-in per profile: set a TCP port in YAML or
-pass `--port` when starting the listener. Bind the port to a Tailscale
-/ WireGuard address where possible; `0.0.0.0` is supported, but public
-internet exposure is not the recommended shape.
+ALP always serves the per-profile Unix socket for same-machine peers, and the
+Noise_XK TCP listener is **on too** whenever the machine has a reachable
+address — bound to the shared `network.host` (above), or an auto-detected
+overlay/LAN address, or `0.0.0.0` in Docker. With no reachable address (no
+`network.host`, no Tailscale/LAN, not Docker) it stays Unix-only. Turn ALP off
+entirely with `service.alp: false`.
 
 | Key | Default | Notes |
 |---|---|---|
-| `alp.tcp_port` | unset | Enables ALP.2 Noise_XK-over-TCP for this profile. The daemon's `alp` service picks it up when it boots this profile's listener. |
-| `alp.tcp_host` | `127.0.0.1` when `tcp_port` is set | TCP bind host. Use a VPN IP or `0.0.0.0` when remote peers need to dial in. |
-
-Example:
+| `alp.tcp_port` | `7423` | The ALP peer TCP port. Always on (the address gate is the only "off"). Set it only to move off the default port. The address is `network.host`. |
 
 ```yaml
 alp:
-  tcp_host: 100.64.12.34
   tcp_port: 7423
 ```
 
@@ -493,36 +510,36 @@ on each verb).
 ### Host (control plane)
 
 The host plane serves `host.*` verbs over a Unix socket (always)
-and a WebSocket on a Tailscale or RFC1918 LAN address (when one is
-detected; mobile / remote desktop use this path).
+and a WebSocket on the shared `network.host` (see Network above);
+mobile / remote desktop use this path.
 
 | Key | Default | Effect |
 |---|---|---|
-| `host.tcp_port` | `49200` | WebSocket port for the remote transport. |
-| `host.tcp_host` | `""` | Optional advertised host for `Devices`. Empty = auto-detect Tailscale CGNAT first, then first private LAN address. Set explicitly when clients should dial a stable hostname, MagicDNS name, VPN IP, or LAN hostname. |
-| `host.device_name` | `""` | Optional pairing name shown in `Devices`. Empty = auto, otherwise this value is embedded in the pairing QR and device list. |
+| `host.tcp_port` | `49200` | WebSocket port for device pairing (the host plane's own port). |
+| `host.device_name` | `""` | Optional pairing name shown in `Devices`. Empty = auto, otherwise embedded in the pairing QR and device list. |
+| `host.allow_public_bind` | `false` | Opt-in to let the shared network bind use a **public IP**. Affects **both** the host control plane and the ALP listener — both derive their bind from `network.host`, so without it neither binds TCP on a public address. A Tailscale / private-LAN / hostname address needs no opt-in; only a public IP does. |
 
 ```yaml
 host:
   tcp_port: 49200
-  tcp_host: ""
   device_name: ""
 ```
 
-`host.tcp_host` controls the **companion endpoint** shown in `alpi setup
-→ Devices → Network` and embedded in pairing QRs. It does not configure
-ALP peer transport. `Peer TCP listener` under `alpi setup → Services`
-controls the separate `alp.tcp_host` / `alp.tcp_port` listener used by
-other alpis (`link.*`, `workgroup.*`).
-
-`host.device_name` controls the visible pairing label for new devices.
+The address itself lives in `network.host` (shared with the ALP listener),
+not here — this section is just the host plane's port, pairing name, and the
+public-bind opt-in. `host.device_name` controls the visible pairing label for
+new devices.
 It is optional; when empty, alpi falls back to the platform hostname.
 
-On regular macOS/Linux installs, leaving `host.tcp_host` empty keeps the
-old auto mode: Tailscale first, then LAN. In Docker the daemon binds
-`0.0.0.0` inside the container while clients dial the host address you
-advertise via `ALPI_HOST_ADVERTISE_HOST` — a LAN IP, a `100.x` Tailscale
-IP, or a MagicDNS hostname (see `docker/README.md`).
+On regular macOS/Linux installs, leaving `network.host` empty keeps auto
+mode: Tailscale first, then LAN, used as both the advertised address and the
+bind. Setting it advertises that address to clients/peers; the bind is
+derived separately — a private/Tailscale IP binds itself, a hostname or an
+opted-in public IP binds `0.0.0.0`, and a public IP without
+`host.allow_public_bind` refuses to bind at all. In Docker the daemon binds
+`0.0.0.0` inside the container while clients dial the address you advertise
+via `ALPI_NETWORK_HOST` — a LAN IP, a `100.x` Tailscale IP, or a MagicDNS
+hostname (see `docker/README.md`).
 
 Pairing tokens for the WS transport live at
 ``~/.alpi/host/devices.yaml`` (mode 0600). Manage them through

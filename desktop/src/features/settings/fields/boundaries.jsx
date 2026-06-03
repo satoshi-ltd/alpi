@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import Button from "../../../primitives/Button.jsx";
+import Eyebrow from "../../../primitives/Eyebrow.jsx";
 import Chip from "../../../primitives/Chip.jsx";
 import Dropdown from "../../../primitives/Dropdown.jsx";
 import useAutoPosition from "../../../primitives/useAutoPosition.js";
@@ -152,7 +153,7 @@ function ProfileBudgetEditor({ currentUsd, currentTokens, onSave }) {
           }}
         >
           <div className={styles.field}>
-            <label className={styles.label}>cap type</label>
+            <Eyebrow as="label">cap type</Eyebrow>
             <span className={styles.inlineRow}>
               <Chip
                 size="sm"
@@ -173,9 +174,9 @@ function ProfileBudgetEditor({ currentUsd, currentTokens, onSave }) {
             </span>
           </div>
           <div className={styles.field}>
-            <label className={styles.label}>
+            <Eyebrow as="label">
               {kind === "usd" ? "daily USD" : "daily tokens"}
-            </label>
+            </Eyebrow>
             <Field
               className={styles.input}
               value={value}

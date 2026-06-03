@@ -1,93 +1,49 @@
 # Quickstart answer pack
 
-Use this for "how do I start?", "first run", or "what commands do I
-type after installing?"
-
 ## Answer directly
 
-- New user path: install, run `alpi setup`, then run `alpi`.
-- Project-specific work: set `workspace` during setup or in config.
-- More than one identity: create a named profile and run setup for it.
-- Gateways, schedules, desktop, and mobile need the daemon.
+- New-user path: `uv tool install alpi-agent` → `alpi setup` → `alpi`.
+- Project work: pin `workspace` in setup/config so file/terminal tools default there.
+- Second identity: `alpi profile create <name>`, then setup + run with `-p <name>`.
+- Gateways, schedules, desktop, mobile all require the daemon.
 
-## Minimal first run
+## Commands
 
-```bash
-uv tool install alpi-agent
-alpi setup
-alpi
-```
+| Goal | Command |
+| --- | --- |
+| Install (recommended) | `uv tool install alpi-agent` |
+| Install uv first | `curl -LsSf https://astral.sh/uv/install.sh \| sh` |
+| First setup wizard | `alpi setup` |
+| Start / send first message | `alpi` |
+| Resume latest session | `alpi -c` |
+| Run named profile | `alpi -p work` |
+| Create profile | `alpi profile create work` |
+| Health check | `alpi doctor` |
+| Daemon | `alpi daemon {status,start,restart}` |
 
-If `uv` is not installed:
+PyPI package is `alpi-agent`; binary/import/home dir is `alpi`. Install details → see install.
 
-```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh
-```
+## Setup wizard
 
-## First setup flow
+`alpi setup` collects: model/provider, API key or local endpoint, workspace path, optional gateway/daemon settings. Writes config to `~/.alpi/` (default profile) or `~/.alpi/profiles/<name>/` (named). Config keys → see config.
 
-`alpi setup` asks for:
+## Profiles
 
-- model/provider,
-- API key or local endpoint,
-- workspace path,
-- optional gateway/daemon settings.
-
-The setup writes profile config under `~/.alpi/` for the default
-profile, or under `~/.alpi/profiles/<name>/` for named profiles.
-
-## Send the first message
-
-Run:
-
-```bash
-alpi
-```
-
-Then ask a normal question or task. For a project-specific task, pin a
-workspace first through setup or config so file/terminal tools default
-to the intended directory.
+`alpi -p <name>` selects a profile. Each isolates config, memory, sessions, skills, logs, gateway state, and ALP identity.
 
 ## Resume
 
-alpi persists sessions per profile. Reopen with:
+Sessions persist per profile. `alpi -c` reopens the latest; set `tui.auto_resume` so bare `alpi` does the same.
 
-```bash
-alpi -c
-alpi -p work
-```
+## Daemon
 
-Use `tui.auto_resume` if bare `alpi` should reopen the latest session.
+One per-machine daemon supervises every profile; required for gateways, schedules, desktop, mobile. `alpi setup` auto-installs and starts it.
 
-## Add another profile
+## doctor
 
-```bash
-alpi profile create work
-alpi -p work setup
-alpi -p work
-```
+Run `alpi doctor` when setup succeeds but messages, tools, service, or provider auth misbehave; output names the missing piece and the wizard step that fixes it.
 
-Profiles isolate config, memory, sessions, skills, logs, gateway
-state, and ALP identity.
+## Related topics
 
-## Check health
-
-```bash
-alpi doctor
-```
-
-Use `doctor` when setup works but messages, tools, service, or provider
-auth behave strangely.
-
-## Optional daemon
-
-Use the per-machine daemon when using gateways, schedules, desktop, or
-mobile:
-
-```bash
-alpi daemon status
-alpi daemon start
-alpi daemon restart
-```
-
-One daemon supervises every profile on the machine.
+- install — install paths, daemon backends, updating, troubleshooting
+- config — config keys, workspace, profiles layout

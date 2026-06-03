@@ -1,11 +1,5 @@
 .label {
   padding: var(--space-6) var(--space-4) var(--space-2) var(--space-1);
-  font-family: var(--font-mono);
-  font-size: var(--fs-xs);
-  font-weight: var(--fw-medium);
-  letter-spacing: .06em;
-  text-transform: uppercase;
-  color: var(--ink-3);
 }
 
 .root > div {
