@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{IpAddr, SocketAddr, TcpStream};
-use std::os::unix::fs::OpenOptionsExt;
+#[cfg(unix)]
 use std::os::unix::net::UnixStream;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -12,7 +12,12 @@ use std::time::Duration;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
+#[cfg(unix)]
 use crate::home::resolve_root;
+
+#[cfg(not(unix))]
+const LOCAL_UNSUPPORTED: &str =
+    "local daemon connections aren't supported on Windows yet — pair a remote daemon over Tailscale";
 
 const READ_TIMEOUT_LOCAL_SECS: u64 = 8;
 const READ_TIMEOUT_REMOTE_SECS: u64 = 20;
@@ -438,6 +443,26 @@ fn persist_device_id(connection_id: &str, device_id: &str) {
     }
 }
 
+#[cfg(unix)]
+fn open_private(path: &std::path::Path) -> std::io::Result<fs::File> {
+    use std::os::unix::fs::OpenOptionsExt;
+    fs::OpenOptions::new()
+        .create(true)
+        .truncate(true)
+        .write(true)
+        .mode(0o600)
+        .open(path)
+}
+
+#[cfg(not(unix))]
+fn open_private(path: &std::path::Path) -> std::io::Result<fs::File> {
+    fs::OpenOptions::new()
+        .create(true)
+        .truncate(true)
+        .write(true)
+        .open(path)
+}
+
 fn save_connections(state: &ConnectionsState) -> Result<(), String> {
     invalidate_active_id_cache();
     let dir = connections_dir()?;
@@ -445,12 +470,7 @@ fn save_connections(state: &ConnectionsState) -> Result<(), String> {
     let path = connections_path()?;
     let tmp = path.with_extension("json.tmp");
     let text = serde_json::to_string_pretty(state).map_err(|e| format!("encode: {e}"))?;
-    let mut f = fs::OpenOptions::new()
-        .create(true)
-        .truncate(true)
-        .write(true)
-        .mode(0o600)
-        .open(&tmp)
+    let mut f = open_private(&tmp)
         .map_err(|e| format!("open {}: {e}", tmp.display()))?;
     f.write_all(text.as_bytes())
         .map_err(|e| format!("write {}: {e}", tmp.display()))?;
@@ -596,6 +616,7 @@ fn active_connection() -> HostConnection {
         })
 }
 
+#[cfg(unix)]
 fn socket_path() -> Result<PathBuf, String> {
     let root = resolve_root().ok_or_else(|| "cannot resolve ~/.alpi".to_string())?;
     Ok(root.join("host").join("host.sock"))
@@ -641,6 +662,12 @@ pub fn call(method: &str, params: Value) -> Result<Value, String> {
     result
 }
 
+#[cfg(not(unix))]
+fn call_local_inner(_method: &str, _params: Value, _timeout: Duration) -> Result<Value, String> {
+    Err(LOCAL_UNSUPPORTED.to_string())
+}
+
+#[cfg(unix)]
 fn call_local_inner(method: &str, params: Value, timeout: Duration) -> Result<Value, String> {
     let path = socket_path()?;
     if !path.exists() {
@@ -733,6 +760,20 @@ where
     result
 }
 
+#[cfg(not(unix))]
+fn call_stream_local<F>(
+    _id: &str,
+    _method: &str,
+    _params: Value,
+    _on_frame: F,
+) -> Result<(), String>
+where
+    F: FnMut(Value) -> bool,
+{
+    Err(LOCAL_UNSUPPORTED.to_string())
+}
+
+#[cfg(unix)]
 fn call_stream_local<F>(
     id: &str,
     method: &str,
