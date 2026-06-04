@@ -19,6 +19,10 @@ _turn_usage: ContextVar[Optional[dict]] = ContextVar("alpi_turn_usage", default=
 _active_skills_env: ContextVar[Optional[set]] = ContextVar(
     "alpi_active_skills_env", default=None,
 )
+# Current-turn attachments ({name, path, mime}); runtime-only, never persisted.
+_turn_attachments: ContextVar[Optional[list]] = ContextVar(
+    "alpi_turn_attachments", default=None,
+)
 
 
 def get_emit() -> Optional[EmitFn]:
@@ -112,6 +116,18 @@ def add_skill_env(names: list[str]) -> None:
 def get_active_skills_env() -> set[str]:
     current = _active_skills_env.get()
     return set(current) if current else set()
+
+
+def reset_turn_attachments() -> None:
+    _turn_attachments.set([])
+
+
+def set_turn_attachments(items: Optional[list]) -> None:
+    _turn_attachments.set(list(items) if items else [])
+
+
+def get_turn_attachments() -> list:
+    return list(_turn_attachments.get() or [])
 
 
 def emit_state(label: str, *, error: bool = False) -> None:

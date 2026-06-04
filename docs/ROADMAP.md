@@ -15,48 +15,18 @@ Legend: ✅ shipped · 🔵 backlog · 🟡 next up · ⏸ blocked · 🔴 gate.
 ## v0.8 cycle (active)
 
 **Theme: multimodal input + knowledge retrieval.**
-v0.8 opened the agent to non-text content (PDFs, images — shipped as
-MM.1) and now builds the durable-knowledge spine on a single retrieval
-layer: ingest documents into `workspace/` + RAG (RAG.2), then reuse the
-same embedding / sqlite-vec primitives for semantic recall over past
-sessions (CM.4) and workgroup transcripts (ALP.6). One store, three
-surfaces.
+v0.8 opened the agent to non-text content (MM.1) and made attachments
+durable, searchable workspace documents (RAG.2) — both shipped. What
+remains is reusing that same embedding / sqlite-vec retrieval layer for
+semantic recall over past sessions (CM.4) and workgroup transcripts
+(ALP.6). One store, three surfaces.
 
 ### Ingestion & retrieval
 
 | ID | Item | Status |
 |---|---|---|
-| RAG.2 | Document ingestion — "learn this file" flow drops the attachment into `workspace/`, reindexes the per-profile RAG store, and exposes it through `search_workspace` like any other workspace content. | 🟡 |
-| CM.4 | Semantic recall over past sessions — opt-in vector indexing + explicit recall tools, sharing the embedding/sqlite-vec layer with RAG.2. | 🔵 |
+| CM.4 | Semantic recall over past sessions — opt-in vector indexing + explicit recall tools, sharing the embedding/sqlite-vec layer with RAG.2. | 🟡 |
 | ALP.6 | Workgroup transcript search — hub-owned `workgroup.search(workgroup_id, query)` over indexed transcript history, implemented on CM.4's retrieval layer. | 🔵 |
-
-### RAG.2. Document ingestion ("learn this file")
-
-MM.1 ships per-turn multimodal — the file lives only in the message it
-arrived with. RAG.2 closes the loop for the durable case: "remember
-this document forever, treat it as a knowledge source."
-
-Flow:
-
-1. user drops the file in chat with an intent ("learn this", or an
-   explicit button in desktop/mobile);
-2. the daemon moves the file into `workspace/<filename>` (the agent's
-   long-term storage root, already present);
-3. reindexes the per-profile `rag/store.sqlite` via the existing
-   `core/embed.py` + sqlite-vec primitives;
-4. the agent reaches it through `search_workspace`, the same surface as
-   every other workspace document.
-
-**Why funnel through `workspace/`.** Single storage model: the agent's
-long-term knowledge lives in `workspace/`, and the RAG index is a
-derived view of it. No second store, no orphan vectors that don't map
-back to a file, backups already cover `workspace/` in the per-profile
-snapshot.
-
-**Non-goals.** No auto-ingestion of every attached file
-(predictability matters; users decide what becomes permanent). No
-external corpus crawl ("ingest this URL deep-walk"). No cross-profile
-shared RAG — that's an org concern (`ORG.2`).
 
 ### CM.4. Semantic recall over past sessions
 
@@ -66,7 +36,7 @@ the first, cheap layer; CM.4 adds the semantic layer for "when did we
 discuss X?" queries that lexical match misses.
 
 It lands on the same `core/embed.py` + sqlite-vec primitives RAG.2
-builds — just indexing session transcripts instead of workspace
+shipped — just indexing session transcripts instead of workspace
 documents. First shape: opt-in indexing plus explicit recall tools, with
 a clear policy for what gets indexed and how it's deleted (recall must be
 forgettable). Automatic per-turn injection only comes later if manual

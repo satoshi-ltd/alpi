@@ -208,7 +208,10 @@ def _iter_files(root: Path, glob: str) -> Iterable[Path]:
         suffix = p.suffix.lower()
         if suffix not in _SUPPORTED_SUFFIXES:
             continue
-        if any(part in _SKIP_DIRS for part in p.relative_to(root).parts[:-1]):
+        rel_dirs = p.relative_to(root).parts[:-1]
+        # Learned docs live under .alpi/documents and are first-class workspace content.
+        under_documents = rel_dirs[:2] == (".alpi", "documents")
+        if not under_documents and any(part in _SKIP_DIRS for part in rel_dirs):
             continue
         try:
             if p.stat().st_size > _size_limit_for(suffix):
@@ -493,6 +496,91 @@ def _index(
         conn.close()
 
 
+def index_files(
+    home: Path,
+    files: list[Path],
+    *,
+    ocr: bool = False,
+    embedder: embed_mod.Embedder | None = None,
+) -> dict[str, Any]:
+    embedder = embedder or embed_mod.default()
+    root_str = str(_workspace_root_for(home).resolve())
+    conn = open_store(home)
+    try:
+        _ensure_schema(conn, embedder.dim, embedder.name, root=root_str, force=False)
+        indexed_files = skipped_files = removed_files = added_chunks = 0
+        failed_files: list[dict[str, str]] = []
+        for path in files:
+            path = Path(path)
+            rel = str(path.resolve())
+            if not path.is_file():
+                _delete_file(conn, rel)
+                removed_files += 1
+                continue
+            suffix = path.suffix.lower()
+            if suffix not in _SUPPORTED_SUFFIXES:
+                failed_files.append({"path": rel, "reason": "unsupported file type"})
+                continue
+            stat = path.stat()
+            mtime, size = stat.st_mtime, stat.st_size
+            if size > _size_limit_for(suffix):
+                failed_files.append({"path": rel, "reason": "file exceeds size limit"})
+                continue
+            existing = conn.execute(
+                "SELECT mtime, size FROM workspace_files WHERE source_path = ?", (rel,),
+            ).fetchone()
+            if existing and abs(existing["mtime"] - mtime) < 1e-6 and existing["size"] == size:
+                skipped_files += 1
+                continue
+            try:
+                text = _reader_for(suffix, ocr=ocr)(path)
+            except OcrRequired as e:
+                failed_files.append({"path": rel, "reason": str(e)})
+                continue
+            except Exception as e:  # noqa: BLE001
+                failed_files.append({"path": rel, "reason": str(e)[:200]})
+                continue
+            chunks = _chunk_lines(text)
+            if not chunks:
+                failed_files.append({"path": rel, "reason": "no extractable text"})
+                continue
+            _delete_file(conn, rel)
+            conn.execute(
+                "INSERT INTO workspace_files(source_path, mtime, size) VALUES(?, ?, ?)",
+                (rel, mtime, size),
+            )
+            bodies = [c[2] for c in chunks]
+            vectors: list[list[float]] = []
+            for i in range(0, len(bodies), _EMBED_BATCH):
+                vectors.extend(embedder.embed(bodies[i:i + _EMBED_BATCH]))
+            for chunk_idx, ((line_start, line_end, body), vec) in enumerate(
+                zip(chunks, vectors, strict=True)
+            ):
+                cur = conn.execute(
+                    "INSERT INTO workspace_chunks(source_path, chunk_index, "
+                    "content, line_start, line_end) VALUES(?, ?, ?, ?, ?)",
+                    (rel, chunk_idx, body, line_start, line_end),
+                )
+                conn.execute(
+                    "INSERT INTO workspace_vec(chunk_id, embedding) VALUES(?, ?)",
+                    (cur.lastrowid, _vec_blob(vec)),
+                )
+                added_chunks += 1
+            indexed_files += 1
+        conn.commit()
+        return {
+            "indexed_files": indexed_files,
+            "skipped_files": skipped_files,
+            "removed_files": removed_files,
+            "added_chunks": added_chunks,
+            "failed_files": failed_files,
+            "embedder": embedder.name,
+            "dim": embedder.dim,
+        }
+    finally:
+        conn.close()
+
+
 def _search(
     query: str,
     k: int,
@@ -673,6 +761,15 @@ def _workspace_root() -> Path:
     from alpi.tools._paths import _workspace_root as _wr
 
     return _wr()
+
+
+def _workspace_root_for(home: Path) -> Path:
+    try:
+        from alpi import config as cfg_mod
+        wp = cfg_mod.load(home.resolve()).workspace_path
+    except Exception:
+        wp = None
+    return wp if wp is not None else Path.cwd().resolve()
 
 
 TOOL_INDEX = IndexWorkspace

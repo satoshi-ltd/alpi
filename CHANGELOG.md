@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.7.3 — 2026-06-04 — learn a file into the workspace
+
+- **"Learn this file" makes an attachment permanent.** Attach a file and ask the
+  agent to learn, remember, or save it: it copies the file into your workspace
+  and indexes it, so `search_workspace` can find it in later conversations — not
+  just the turn you sent it in.
+- **You stay in control.** Nothing is learned automatically — only when you ask.
+  Learned files land under `.alpi/documents/`, dated, never overwriting an
+  existing one.
+- **What it learns.** Text and source files, and PDFs with a text layer; images
+  and scanned PDFs only when you ask for OCR. Anything else is declined with a
+  clear message.
+
 ## v0.7.2 — 2026-06-03 — attach files to chat
 
 - **A message can carry files now.** Attach images, PDFs, and text/source files

@@ -92,6 +92,14 @@ Each tool exposes `name`, `description`, JSON schema `parameters`, `run(...) -> 
 - `safe_write_secret(...)` — canonical path for credential files.
 - `search_workspace` — semantic local RAG over the user's workspace.
 - `index_workspace(path?, glob?, force?, ocr?)` — incremental by default (mtime-skip, deleted files purged); auto-rebuilds on workspace-root or embedder change; `force=true` drops + vacuums.
+- `learn_file(name?, source_path?, folder?, ocr?)` (RAG.2) — promote a file to durable workspace knowledge: copy under `<workspace>/.alpi/documents/YYYY/MM/`, never overwriting; append a `manifest.jsonl` line (metadata only); index just that file via `workspace.index_files()`. Source resolves from `source_path`, a current-turn attachment by `name`, or the single current-turn attachment. Explicit user intent only — no auto-learn. Images need `ocr=true`.
+
+## Attachments (MM.1 + RAG.2)
+
+- `host.chat.send` takes `attachments: [{path, mime?, name?}]`; the engine validates (magic bytes, binary-as-text guard, allowlist: images/PDF/text+source) and builds multimodal content-parts. Allowed text/source incl. `py`/`js`/`ts`/`tsx`/`go`/`rs`/`sh`/`sql`.
+- Per-turn only: bytes live in the in-memory message; the session persists `{name, mime, size}` — **no paths**. Validated turn attachments go to a runtime-only ContextVar (`tools/_state`) so tools resolve them without persisting paths.
+- Remote clients upload via `host.attachments.stage` (caps + validation), getting a daemon-side path.
+- Storage contract: documents live in the **workspace** (`.alpi/documents/`, source of truth); the RAG index lives in the **profile** (`rag/store.sqlite`); `manifest.jsonl` is metadata only. `.alpi/documents/` is the one `.alpi` subtree `index_workspace` does NOT skip, so learned docs survive a full reindex.
 
 ## Skills and knowledge
 

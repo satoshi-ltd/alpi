@@ -49,6 +49,10 @@ The current release ships the full local-to-network shape:
 
 - Textual TUI with streaming replies, slash commands, live tool cards,
   interrupt, session resume, model switching, and cost/token display.
+- Multimodal chat input: attach images, PDFs, and text/source files to a
+  turn (TUI `/attach`, desktop/mobile paperclip). Per-turn by default;
+  `learn_file` promotes an attachment into a durable workspace document,
+  indexed for semantic recall via `search_workspace` in later sessions.
 - Docker image (`satoshiltd/alpi`) for an always-on home-server
   deployment, with persistent profile storage under `/data/.alpi`.
 - Telegram, IMAP, Gmail, and Matrix gateways hosted by the unified

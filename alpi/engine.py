@@ -195,6 +195,7 @@ class Engine:
         from alpi.tools import _state as _wg_state
         _wg_state.reset_turn_usage()
         _wg_state.reset_skill_env()
+        _wg_state.reset_turn_attachments()
 
         # MM.1: image/PDF attachments → multimodal content parts (kept in the
         # in-memory message only; session persists bytes-free metadata).
@@ -213,6 +214,9 @@ class Engine:
                 emit(AgentEvent(kind="error", text=str(e)))
                 return
             att_meta = att_mod.session_metadata(validated)
+            _wg_state.set_turn_attachments(
+                [{"name": a.name, "path": str(a.path), "mime": a.mime} for a in validated]
+            )
             user_content = parts
             if vstatus == "unknown" and any(att_mod.is_image(a.mime) for a in validated):
                 import logging

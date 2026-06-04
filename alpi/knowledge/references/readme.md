@@ -40,7 +40,10 @@ alpi --version
 
 - Tool-calling agent loop over LiteLLM-compatible providers (first-class Ollama); fresh profiles ship no default model.
 - TUI: streaming, slash commands, live tool cards, interrupt, session resume, model switching, cost/token display.
+- Multimodal input: attach images/PDFs/text+source files per turn (TUI `/attach`, desktop/mobile paperclip); `learn_file` makes one durable — copied into the workspace, indexed for `search_workspace`.
 - Tools: file, terminal, browser/search, memory, schedule, MCP client, plus:
+  - `search_workspace` / `index_workspace`: local semantic RAG over the workspace.
+  - `learn_file`: promote an attachment (or any file) to a durable, indexed workspace document; explicit user intent only.
   - `research(brief, depth)`: read-only sub-agent, tiers `quick`/`normal`/`deep`.
   - `delegate`: write-capable sub-agent for focused file/web/terminal tasks.
   - `alpi_knowledge`: packaged references (shipped behavior, not roadmap).
