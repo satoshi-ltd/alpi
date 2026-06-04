@@ -271,6 +271,11 @@ async def _remove(
         raise host_server.HandlerError(-32001, "forbidden", data={"detail": "only the hub can remove this workgroup"})
 
     shutil.rmtree(home / "alp" / "workgroups" / wg_id, ignore_errors=True)
+    try:
+        from alpi.tools.workgroup_search import forget_workgroup
+        forget_workgroup(home, wg_id)
+    except Exception:  # noqa: BLE001
+        pass
 
     purged: list[str] = []
     profiles_root = _ROOT / "profiles"

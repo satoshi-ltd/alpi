@@ -63,6 +63,12 @@ Session-specific behavior to keep in mind:
   (semantic). If `recall_sessions` reports an empty index, call
   `index_sessions` once (opt-in build — sessions aren't auto-indexed),
   then retry. The active session is excluded from both.
+- **Recalling old workgroup history.** When the user asks what happened or
+  what was decided in a specific workgroup and the answer needs older
+  history (not the live visible transcript), use
+  `workgroup_search(workgroup_id, query)`. If it reports an empty index,
+  call `index_workgroups(workgroup_id=…)` once and retry. Hub-owned only;
+  no automatic injection into workgroup turns.
 - If a memory tool response reports ≥80% usage, prefer `replace` or
   `remove` over `add` — consolidate obsolete or redundant entries
   before adding more.

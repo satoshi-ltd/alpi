@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.8.0 — 2026-06-04 — search a workgroup's history by meaning
+
+- **Find old workgroup decisions by meaning.** `workgroup_search` does semantic
+  search over a workgroup's past transcript, so you can recall what was decided
+  even when you don't remember the exact words or who said them.
+- **Hub-owned and private.** Only the hub indexes its own workgroups, on its own
+  machine — there's no search across other people's workgroups. Opt-in
+  (`index_workgroups`), and deleting a workgroup drops it from search.
+- Built on the same local index as document and conversation recall — nothing
+  leaves the machine, and the encrypted transcript on disk is untouched.
+
 ## v0.7.4 — 2026-06-04 — recall past conversations by meaning
 
 - **"When did we discuss…" now works by meaning, not just keywords.**

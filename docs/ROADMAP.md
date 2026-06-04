@@ -12,33 +12,65 @@ Legend: ✅ shipped · 🔵 backlog · 🟡 next up · ⏸ blocked · 🔴 gate.
 
 ---
 
-## v0.8 cycle (active)
+## v0.8 cycle (shipped)
 
-**Theme: multimodal input + knowledge retrieval.**
+**Theme: multimodal input + knowledge retrieval — complete.**
 v0.8 opened the agent to non-text content (MM.1), made attachments durable,
-searchable workspace documents (RAG.2), and added semantic recall over past
-sessions (CM.4) — all shipped on one embedding / sqlite-vec retrieval layer.
-The last surface on that layer is workgroup transcripts (ALP.6).
+searchable workspace documents (RAG.2), added semantic recall over past
+sessions (CM.4), and semantic search over workgroup transcripts (ALP.6) — all
+shipped on one local embedding / sqlite-vec retrieval layer. One store, three
+surfaces: workspace documents, conversation history, workgroup transcripts.
+Per-feature detail lives in [CHANGELOG.md](../CHANGELOG.md).
 
-### Ingestion & retrieval
+## v0.9 cycle (open)
+
+**Theme: safer unattended runtime.**
+The retrieval spine is done. v0.9 focuses on letting profiles run longer,
+farther away from the user's main machine, and with better failure evidence —
+without turning Alpi into a broad orchestration platform.
 
 | ID | Item | Status |
 |---|---|---|
-| ALP.6 | Workgroup transcript search — hub-owned `workgroup.search(workgroup_id, query)` over indexed transcript history, implemented on CM.4's retrieval layer. | 🟡 |
+| OPS.1 | Turn / process run ledger — compact per-turn records for long-running agent, schedule, terminal, and workgroup turns: pid, backend, start/end, timeout reason, last tool, output tail. | 🟡 |
+| RT.1 | Provider stale-call hardening — first-byte / stream-idle watchdogs, jittered retries, and clearer terminal-failure surfacing for slow or stuck LLM providers. | 🟡 |
 
-### ALP.6. Workgroup transcript search
+v0.9 should stay narrow: improve observability and failure handling on
+surfaces Alpi already owns. No new execution backend, no worker-lane
+marketplace, no cloud sandbox abstraction, and no automatic file migration.
 
-`workgroup.search(workgroup_id, query)` returns top matching posts from a
-workgroup transcript. **Hub-owned**: the hub is the source of truth for
-its workgroup, indexes its own local transcript, and answers searches —
-members reach it through existing host/workgroup surfaces, no new
-protocol family. A specific consumer of CM.4's retrieval engine, not a
-second index.
+### OPS.1. Turn / process run ledger
 
-Scope is the hub/workgroup permission boundary. This is **not** global
-semantic search across peers — cross-peer transcript search would raise
-privacy, encryption, and ownership questions that the hub-anchored model
-deliberately sidesteps. Lands once CM.4's session recall is stable.
+Long-running work today leaves evidence in several places: session events,
+schedule events, terminal output, workgroup transcript posts, and daemon logs.
+OPS.1 would add one compact per-turn run ledger so failures are diagnosable
+without spelunking every surface.
+
+The record should stay operational, not product analytics: profile,
+session/workgroup/job id when present, process id, terminal backend, start/end,
+exit code, timeout reason, last tool, and a capped output tail. It should help
+answer "what was running, where did it stop, and why?" for schedules,
+workgroup poller turns, terminal commands, and unattended agent turns.
+
+**Why now.** The retrieval and workgroup layers are productive enough that
+Alpi is doing more unattended work. Before adding a new backend, the existing
+runtime needs one reliable evidence trail for hangs, timeouts, and silent
+turns.
+
+### RT.1. Provider stale-call hardening
+
+Alpi already hardened workgroup turns with idle/backstop timeouts. RT.1
+applies the same discipline to LLM provider calls: first-byte watchdogs,
+stream-idle watchdogs, jittered retries, and clearer surfaced failure reasons
+when a provider accepts a request and then stalls.
+
+Scope stays runtime-only. No provider marketplace, no automatic model
+switching beyond the existing fallback policy, and no telemetry upload. The
+deliverable is predictable failure and retry behaviour for slow or flaky
+providers.
+
+**Why now.** Provider stalls are one of the few failure modes that can make
+Alpi look frozen while the daemon is otherwise healthy. This is hardening of
+the existing loop, not a new product surface.
 
 ## Future releases
 
@@ -46,21 +78,80 @@ Items worth doing, but not part of the next two cycles.
 
 | ID | Item | Status |
 |---|---|---|
+| SEC.1 | Context injection hardening — shared scanner for recalled memory, learned documents, workgroup transcript snippets, and tool results before they enter model context. | 🔵 |
+| FS.1 | Credential file denylist audit — defense-in-depth read/write blocks for provider keys, profile control files, `.env*`, SSH/cloud creds, and project-local secret stores. | 🔵 |
+| AUDIT.1 | `alpi audit` — local dependency / config / security posture scan: stale deps, known CVEs, exposed binds, risky permissions, and missing hardening warnings. | 🔵 |
+| CM.5 | Exact session browse / scroll — cheap lexical session navigation that complements CM.4 semantic recall when the user needs the original message window. | 🔵 |
 | TERM.2 | Docker / SSH terminal backends — isolated or remote command execution for unattended profiles once local sandboxing is no longer enough. | 🔵 |
 | ALP.5 | Blob transfer — `link.put_blob` / `link.get_blob`, content-addressed, chunked AEAD. Depends on real workgroup usage to justify the protocol complexity. | 🔵 |
+| Notify.ntfy | ntfy gateway — accountless self-hostable notification gateway, opt-in only. Lower priority because Alpi-owned apps + outputs remain the primary notification surface. | 🔵 |
 | ORG.2.B/C | Workspace overlay (`cfg.workspace_path` as list) + first-class runtime org entity (`~/.alpi/orgs/<id>/`) with roles, event fan-out, and shared RAG. Deferred — see entry below. | ⏸ |
 
 ### TERM.2. Docker / SSH terminal backends
 
 Local terminal execution plus optional OS sandboxing is enough for the
-current product. Docker and SSH become worthwhile when unattended
-profiles need stronger isolation, reproducibility, or a remote machine
-that the agent can damage without touching its own code or the user's
-main workstation.
+current product. Docker and SSH become worthwhile only when a real
+unattended profile needs stronger isolation, reproducibility, or a remote
+machine that the agent can damage without touching its own code or the
+user's main workstation.
 
 The first implementation should be conservative: one configured backend
 per profile, no provider zoo, no cloud sandbox abstraction, and no
 automatic migration of local files.
+
+**Promotion condition.** A real profile needs isolation or a remote machine
+that the local terminal + OS sandbox cannot provide. Until then, TERM.2 stays
+backlog; hardening the existing runtime comes first.
+
+### SEC.1. Context injection hardening
+
+RAG.2, CM.4, and ALP.6 made Alpi better at remembering: learned files,
+past sessions, and workgroup transcripts can now return text into future
+model context. That also makes poisoned recalled content more relevant.
+SEC.1 adds a shared scanner for content that enters model context from
+memory, learned documents, transcript search, session recall, and tool
+results.
+
+The first version should be warning-first except for clearly dangerous
+write/install paths. It should detect classic prompt injection, hidden
+unicode, system-prompt exfiltration requests, and obvious credential
+exfiltration. The goal is a single small library used consistently, not a
+security product or a moderation layer.
+
+### FS.1. Credential file denylist audit
+
+Alpi's tools should not casually read or write obvious credential stores.
+FS.1 is a defense-in-depth audit across file tools, attachment learning, and
+terminal-adjacent helpers for `.env*`, SSH keys/config, cloud credentials,
+profile control files, provider key stores, and project-local secret files.
+
+This is not a hard security boundary while terminal access exists. It is a
+model-facing guardrail and audit signal: tools should return clear denials for
+paths the agent normally has no legitimate reason to inspect directly.
+
+### AUDIT.1. `alpi audit`
+
+`alpi doctor` explains whether the current install is healthy. AUDIT.1 is the
+deeper, explicit security / maintenance pass: dependency CVEs, stale pinned
+versions, risky host binds, world-readable control files, bad permissions,
+disabled hardening, and config combinations that are valid but unsafe for an
+unattended profile.
+
+The first version should stay local and report-only. No cloud telemetry, no
+auto-upgrades, no package-manager writes. It can call public vulnerability
+databases only when the user explicitly runs the command and network is
+available; otherwise it reports what can be checked offline.
+
+### CM.5. Exact session browse / scroll
+
+CM.4 gives semantic recall over past sessions. Sometimes the right answer is
+not another embedding hit, but the exact message window around a remembered
+conversation. CM.5 adds a cheap lexical/browse layer: list recent sessions,
+search exact text, and scroll around a message window without extra LLM calls.
+
+This complements `recall_sessions`; it does not replace it. The semantic tool
+finds "that conversation about pricing thresholds", while CM.5 lets the agent
+open the original surrounding turns once it has a session id or anchor.
 
 ### ALP.5. Blob transfer
 
@@ -75,6 +166,17 @@ signature so the receiver can verify end-to-end.
 
 **Why it waits.** ALP.5 is only worth the protocol complexity if
 workgroups are heavily used and blobs are a real bottleneck.
+
+### Notify.ntfy. ntfy gateway
+
+An optional gateway for users who already run or trust ntfy and want a
+simple notification overlap path. It should be opt-in, accountless where
+possible, and clearly secondary to Alpi-owned apps plus persistent outputs.
+
+**Why it waits.** Native app notifications are the primary product path.
+Adding another gateway is only justified if users explicitly ask for ntfy,
+or if self-hosted homelab users need a notification bridge while mobile app
+delivery remains local/poll-based.
 
 ### ORG.2.B/C. Workspace overlay + first-class runtime org entity
 
@@ -128,11 +230,11 @@ already analysed; the "why now?" question is the open one.
 | AJ | Browser realism — Cloudflare / captcha / fingerprint depth | Cat-and-mouse perpetuo; without concrete failing use case, scope can't close |
 | AQ | Continuous voice mode (push-to-talk, hotword loops) | Niche unless voice becomes a real surface for users |
 | Webhook | Inbound HTTP triggers (HMAC-signed) | Automation bridge, not product UX; needs repeated real demand before adding another inbound surface |
-| Cost telemetry | Cost split per-skill / per-tool | Only pays off with many skills + notably different costs; today neither holds |
 | BG re-audit | LiteLLM quarterly review — bump pin, run LLM probe, swap if better alternative emerges | Standing maintenance task; cadence + procedure documented in `OPERATIONS.md → Dependencies` |
 | Matrix E2EE | Olm/Megolm sessions, encryption store, SAS device verification, encrypted-room send/read tests | MVP intentionally unencrypted; promote when an external user runs the bot against a non-self-hosted homeserver |
 | TTS.1 | Local TTS engine + daemon-served voice — single host-served voice catalog, deprecate desktop-local synthesis | Current cloud TTS path works; promote alongside `AQ` (continuous voice) or when desktop/daemon catalog drift becomes a real operator burden |
 | UX.6 | Desktop `.env` manager — per-profile environment editor (mask/reveal/audit) for keys other than provider keys | Provider keys already have a first-class flow; promote when editing other `.env` entries by hand becomes a real friction reported by users |
+| External secrets | Bitwarden / external secret manager resolver for provider keys | Useful in managed fleets, but likely too much setup for the current solo/local product. Promote only if users ask for central rotation instead of local `.env` files. |
 
 Promotion criteria: real user demand, or concrete blocker for
 a v0.x feature that depends on it. None of these items
@@ -209,7 +311,7 @@ catalog big enough that discovery matters. The runtime no longer
 ships skills — capabilities the agent needs to self-describe live
 as first-class tools (e.g. ``alpi_knowledge``), and skills are
 entirely user-owned. BF skills v2 primitives make third-party
-skills shippable through user-controlled imports (see CM.2 above),
+skills shippable through user-controlled imports (see SK.2 above),
 so domain-specific work belongs in user-published skills.
 Marketplace promotes only when there's evidence that real authors
 want to publish for real users.
@@ -271,18 +373,6 @@ swiss-army-knife trap the project deliberately avoids. Need
 evidence the use cases are real before building the surface.
 Promote when several users describe the *same* webhook source
 they want to wire, not on speculative coverage.
-
-### Cost telemetry per-skill / per-tool
-
-The daily ledger today is per-day per-profile. Splitting by
-skill / tool would surface "which skill costs me $14/mo, which
-tool costs $2/turn" — input for pruning.
-
-**Why it waits.** Only pays off with many skills + notably
-different costs per skill — neither holds today (skills are
-entirely user-owned, with a handful at most per profile). The
-dimension explosion is dead weight until the catalog grows. May
-be discarded entirely if no demand emerges by v0.6.
 
 ### TTS.1. Local TTS engine + daemon-served voice
 
@@ -357,33 +447,6 @@ repo.
 
 ---
 
-## Long-term / stretch
-
-### N. Image generation
-
-`generate_image(prompt, style)` using the active vision model or a
-dedicated endpoint (DALL-E, SD). Useful for "make me a quick
-logo" prompts. Low priority unless a concrete use case appears.
-
-### Σ.1. Mixture-of-agents (stretch goal)
-
-Spawn multiple LLMs on the same prompt, aggregate answers with a
-final synthesizer. Use case: hard decisions where one model is weak
-and you want "wisdom of crowds" at 3× cost.
-
-Not planned — tracked here because it's a known technique and
-might become useful if we hit a ceiling on single-model research
-quality.
-
-### Σ.2. RL training / fine-tuning hooks (stretch goal)
-
-If we ever want to fine-tune a smaller local model on real conversation
-patterns, the dataset-collection scaffold would live here.
-
-Not planned. Research-grade, irrelevant for everyday personal use.
-
----
-
 ## Decisions discarded — don't relitigate
 
 **Rejected integrations / providers:**
@@ -429,6 +492,21 @@ Not planned. Research-grade, irrelevant for everyday personal use.
   server** that Alpi consumes, or wrap it in a **scripted skill**.
   ALP stays the protocol for sovereign profile-to-profile
   collaboration; MCP stays the interop layer for external runtimes.
+- **Image generation as a core tool.** Alpi can consume image generators
+  through MCP or user-owned skills when somebody needs them. A built-in
+  provider surface would pull the product toward a creative-tool platform
+  and add provider/cost policy without strengthening the personal-agent core.
+- **Mixture-of-agents as a core runtime.** Spawning multiple models on one
+  prompt and synthesising the answer is an expensive research pattern, not
+  a daily personal-agent primitive. Workgroups already cover explicit
+  multi-profile collaboration when it has a real shape.
+- **RL / fine-tuning hooks.** Dataset collection and model training are
+  research infrastructure, not an Alpi product surface. Local-first memory
+  and retrieval remain the path for personalisation.
+- **Cost telemetry split per skill / tool.** The per-profile daily ledger is
+  enough while skills are user-owned and sparse. Splitting cost by every
+  tool adds schema and UI weight before there is a real catalog or budget
+  problem to solve.
 
 **Rejected architecture attempts:**
 

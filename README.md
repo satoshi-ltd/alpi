@@ -57,6 +57,9 @@ The current release ships the full local-to-network shape:
   session by meaning (keyword `session_search` stays the quick first pass).
   Opt-in (`index_sessions`), profile-local, and forgettable — deleting a
   session drops it from recall.
+- Semantic search over workgroup history: `workgroup_search` finds old
+  decisions in a workgroup transcript by meaning. Hub-owned and profile-local
+  (no cross-peer search), opt-in (`index_workgroups`), and forgettable.
 - Docker image (`satoshiltd/alpi`) for an always-on home-server
   deployment, with persistent profile storage under `/data/.alpi`.
 - Telegram, IMAP, Gmail, and Matrix gateways hosted by the unified

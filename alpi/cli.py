@@ -3921,6 +3921,11 @@ def workgroup_remove(ctx: click.Context, wg_id: str, yes: bool) -> None:
     ):
         raise click.ClickException("aborted")
     shutil.rmtree(h / "alp" / "workgroups" / wg_id, ignore_errors=True)
+    try:
+        from alpi.tools.workgroup_search import forget_workgroup
+        forget_workgroup(h, wg_id)
+    except Exception:  # noqa: BLE001
+        pass
 
     # Hub removal orphans local subscriptions; cross-machine peers must `leave` themselves.
     profiles_root = _ROOT / "profiles"

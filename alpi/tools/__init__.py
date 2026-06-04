@@ -17,6 +17,7 @@ from alpi.tools import (
     learn_file as learn_file_tool,
     memory as memory_tool,
     recall as recall_tool,
+    workgroup_search as workgroup_search_tool,
     read_file,
     read_image,
     schedule as schedule_tool,
@@ -108,6 +109,8 @@ register(workspace_tool.TOOL_SEARCH)
 register(workspace_tool.TOOL_INDEX)
 register(recall_tool.TOOL_RECALL)
 register(recall_tool.TOOL_INDEX)
+register(workgroup_search_tool.TOOL_SEARCH)
+register(workgroup_search_tool.TOOL_INDEX)
 for _mod in (
     read_file,
     read_image,

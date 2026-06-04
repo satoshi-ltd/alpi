@@ -710,6 +710,19 @@ meaningful: re-sealing the new group key cuts off ex-members
 from new traffic without having to also re-encrypt past
 posts.
 
+### Transcript search (ALP.6)
+
+Because the hub holds the authoritative, decryptable transcript, semantic
+search over old workgroup history is a **hub-local** capability, not a
+protocol extension. The `index_workgroups` / `workgroup_search` tools decrypt
+the hub's own transcript (through the existing key-history-aware decrypt path),
+embed it locally, and store a derived index in the profile's `rag/store.sqlite`
+— the same `fastembed + sqlite-vec` layer as workspace RAG and session recall.
+This stays inside the ALP trust model: a profile only ever indexes workgroups
+it hubs, there is **no cross-peer or federated search**, and removing a
+workgroup purges its index. No new ALP verbs, no change to the wire or the
+ciphertext-only on-disk format.
+
 ### Hub availability
 
 Workgroups are **hub-anchored**: when the hub's machine is
