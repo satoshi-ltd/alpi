@@ -135,6 +135,7 @@ class AlpiApp(App):
         self._active_tools: dict[str, ToolCard] = {}
         self._thinking: ThinkingIndicator | None = None
         self._turn_worker = None  # Worker returned by _run_turn
+        self._pending_attachments: list[dict] = []  # MM.1: /attach staging for the next turn
 
 
     def compose(self) -> ComposeResult:
@@ -143,6 +144,7 @@ class AlpiApp(App):
         slash_commands = [
             "/help", "/memory", "/tools", "/mcps", "/status", "/clear", "/new",
             "/compact", "/skills", "/model", "/peers", "/diff",
+            "/attach", "/attachments", "/clear-attachments",
             "/exit", "/quit",
         ]
         # Peer mentions share the same popup — typing ``@`` surfaces pinned
@@ -328,7 +330,7 @@ class AlpiApp(App):
     def on_input_submitted(self, event: Input.Submitted) -> None:
         text = event.value.strip()
         event.input.value = ""
-        if not text:
+        if not text and not self._pending_attachments:
             return
         if text.startswith("/"):
             self._handle_slash(text)
@@ -336,6 +338,9 @@ class AlpiApp(App):
         from alpi.alp import mention as alp_mention
         parsed = alp_mention.parse(text, home=self.home)
         if parsed is not None:
+            if self._pending_attachments:
+                self._mount_message(ErrorLine("attachments aren't supported with @mentions — clear them first"))
+                return
             self._handle_mention(text, parsed=parsed)
             return
         # @work(exclusive=True) replaces the old worker; we still set the
@@ -343,14 +348,17 @@ class AlpiApp(App):
         if self._turn_in_progress():
             self._interrupt_current_turn()
         self._scroll_end()
-        self._mount_message(UserMessage(text))
+        if text:
+            self._mount_message(UserMessage(text))
         self._thinking = ThinkingIndicator()
         self._mount_message(self._thinking)
         # Defer so the UserMessage paints before the LLM round-trip starts.
         self.call_after_refresh(self._kickoff_turn, text)
 
     def _kickoff_turn(self, text: str) -> None:
-        self._turn_worker = self._run_turn(text)
+        attachments = self._pending_attachments or None
+        self._pending_attachments = []
+        self._turn_worker = self._run_turn(text, attachments)
 
     def _turn_in_progress(self) -> bool:
         from textual.worker import WorkerState
@@ -366,11 +374,11 @@ class AlpiApp(App):
             self._active_tools.pop(tid, None)
 
     @work(thread=True, exclusive=True, name="_run_turn")
-    def _run_turn(self, text: str) -> None:
+    def _run_turn(self, text: str, attachments: list[dict] | None = None) -> None:
         def sink(ev: AgentEvent) -> None:
             self.post_message(EngineEvent(ev))
         try:
-            self.engine.run_turn(text, emit=sink)
+            self.engine.run_turn(text, emit=sink, attachments=attachments)
         except Exception as e:  # noqa: BLE001
             self.post_message(EngineEvent(AgentEvent(kind="error", text=str(e))))
         self._after_turn()
@@ -570,6 +578,9 @@ class AlpiApp(App):
             "model": lambda _a: self._cmd_model(),
             "peers": lambda _a: self._show_panel(PeersPanel(self.home)),
             "diff": lambda a: self._show_panel(DiffPanel(self.home, since=a or "24h")),
+            "attach": lambda a: self._cmd_attach(a),
+            "attachments": lambda _a: self._cmd_attachments(),
+            "clear-attachments": lambda _a: self._cmd_clear_attachments(),
             "exit": lambda _a: self.action_quit(),
             "quit": lambda _a: self.action_quit(),
         }
@@ -586,6 +597,36 @@ class AlpiApp(App):
             m for m in self.engine.session.messages if m.get("role") == "system"
         ]
         chat.mount(DimLine("(chat cleared)"))
+
+    def _cmd_attach(self, arg: str) -> None:
+        from pathlib import Path
+        from alpi import attachments as att
+        if not arg.strip():
+            self._mount_message(ErrorLine("usage: /attach <path>"))
+            return
+        p = str(Path(arg.strip()).expanduser().resolve())
+        try:
+            validated = att.validate([{"path": p}])
+        except att.AttachmentError as e:
+            self._mount_message(ErrorLine(str(e)))
+            return
+        a = validated[0]
+        self._pending_attachments.append({"path": str(a.path), "mime": a.mime, "name": a.name})
+        self._mount_message(DimLine(
+            f"📎 {a.name} ({a.mime}) · {len(self._pending_attachments)} pending — send a message to include"
+        ))
+
+    def _cmd_attachments(self) -> None:
+        if not self._pending_attachments:
+            self._mount_message(DimLine("no pending attachments"))
+            return
+        lines = "\n".join(f"  • {a['name']} ({a['mime']})" for a in self._pending_attachments)
+        self._mount_message(DimLine(f"pending attachments:\n{lines}"))
+
+    def _cmd_clear_attachments(self) -> None:
+        n = len(self._pending_attachments)
+        self._pending_attachments = []
+        self._mount_message(DimLine(f"cleared {n} pending attachment(s)"))
 
     def _cmd_new(self) -> None:
         # Reload cfg from disk so any session-only `/model` switch is

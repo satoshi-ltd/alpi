@@ -14,6 +14,14 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.1.31 — 2026-06-03 — attach files to chat
+
+Requires alpi v0.7.2+.
+
+- **Attach files.** A paperclip in the composer opens the file picker; images,
+  PDFs, and text files upload to the daemon and the model reads them. Pick,
+  review the chip, remove if needed, then send.
+
 ## v0.1.30 — 2026-06-03 — tables & code in messages
 
 Requires alpi v0.6.35+.

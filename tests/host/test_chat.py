@@ -33,7 +33,7 @@ class _FakeEngine:
         self.session = SimpleNamespace(id="fake-session-id", subdir="sessions")
         self._interrupted = False
 
-    def run_turn(self, text: str, emit) -> None:  # noqa: ANN001
+    def run_turn(self, text, emit, **kwargs) -> None:  # noqa: ANN001
         from alpi.engine import AgentEvent
 
         emit(AgentEvent(
@@ -88,7 +88,7 @@ async def test_data_chat_send_rewrite_truncates_hydrated_session(
                 last_ctx_tokens=77,
             )
 
-        def run_turn(self, text: str, emit) -> None:  # noqa: ANN001
+        def run_turn(self, text, emit, **kwargs) -> None:  # noqa: ANN001
             from alpi.engine import AgentEvent
 
             seen["text"] = text
@@ -234,7 +234,7 @@ async def test_data_chat_cancel_interrupts_active_turn(
             self.session = NS(id="slow-id", subdir="sessions")
             self._stop = False
 
-        def run_turn(self, text, emit) -> None:  # noqa: ANN001
+        def run_turn(self, text, emit, **kwargs) -> None:  # noqa: ANN001
             from alpi.engine import AgentEvent
             import time as _t
 
@@ -326,7 +326,7 @@ async def test_engine_exception_emits_error_frame_before_done(
             self.home = home
             self.session = SimpleNamespace(id="crash-sid", subdir="sessions")
 
-        def run_turn(self, text: str, emit) -> None:  # noqa: ANN001
+        def run_turn(self, text, emit, **kwargs) -> None:  # noqa: ANN001
             from alpi.engine import AgentEvent
 
             emit(AgentEvent(kind="assistant_delta", text="partial"))
@@ -400,7 +400,7 @@ async def test_data_chat_send_concurrent_same_session_interrupts_previous(
             self._stop = False
             self._idx = 0
 
-        def run_turn(self, text, emit) -> None:  # noqa: ANN001
+        def run_turn(self, text, emit, **kwargs) -> None:  # noqa: ANN001
             from alpi.engine import AgentEvent
             import time as _t
 

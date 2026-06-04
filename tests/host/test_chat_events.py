@@ -102,7 +102,7 @@ class _FakeEngine:
         self.home = home
         self.session = SimpleNamespace(id="sess-stream", subdir="sessions")
 
-    def run_turn(self, text: str, emit) -> None:  # noqa: ANN001
+    def run_turn(self, text, emit, **kwargs) -> None:  # noqa: ANN001
         from alpi.engine import AgentEvent
 
         emit(AgentEvent(kind="assistant_delta", text="hi "))
@@ -245,7 +245,7 @@ async def test_sidecar_finishes_turn_even_when_client_disconnects_mid_stream(
             self.session = SimpleNamespace(id="sess-disconnect", subdir="sessions")
             self._stop = False
 
-        def run_turn(self, text: str, emit) -> None:  # noqa: ANN001
+        def run_turn(self, text, emit, **kwargs) -> None:  # noqa: ANN001
             from alpi.engine import AgentEvent
             import time as _t
 

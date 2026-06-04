@@ -47,10 +47,11 @@ async def _data_chat_send(
     session_id = params.get("session_id")
     rewrite_from_turn = params.get("rewrite_from_turn")
     model_override = params.get("model")
-    if not text or not request_id:
+    attachments = params.get("attachments") or None
+    if (not text and not attachments) or not request_id:
         await send_frame({
             "event": "error",
-            "text": "text and request_id required",
+            "text": "text (or attachments) and request_id required",
         })
         return
 
@@ -60,6 +61,12 @@ async def _data_chat_send(
     from alpi.alp import mention as alp_mention
     parsed = alp_mention.parse(text, home=home)
     if parsed is not None:
+        if attachments:
+            await send_frame({
+                "event": "error",
+                "text": "attachments aren't supported with @mentions",
+            })
+            return
         await _send_mention(home, parsed, request_id, session_id, send_frame)
         return
 
@@ -135,7 +142,7 @@ async def _data_chat_send(
 
     def run_engine() -> None:
         try:
-            engine.run_turn(text, emit=sink)
+            engine.run_turn(text, emit=sink, attachments=attachments)
             try:
                 engine.save_session()
             except Exception:  # noqa: BLE001

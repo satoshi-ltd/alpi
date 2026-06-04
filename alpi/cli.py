@@ -146,8 +146,11 @@ def _hydrate_from_path(engine: Engine, path: Path, console=None) -> bool:
         }
     )
     for t in turns:
-        if t.user:
-            engine.session.messages.append({"role": "user", "content": t.user})
+        if t.user or t.attachments:
+            from alpi import attachments as _att
+            marker = _att.describe_meta(t.attachments)
+            text = f"{t.user}\n{marker}".strip() if marker else t.user
+            engine.session.messages.append({"role": "user", "content": text})
         if t.assistant:
             engine.session.messages.append({"role": "assistant", "content": t.assistant})
     engine.session.turns = list(turns)
@@ -2997,6 +3000,11 @@ def _cleanup_categories(h: Path) -> list[dict]:
     rag_files: list[Path] = (
         [store_mod.store_path(h)] if rag_reclaimable > 0 else []
     )
+    att_root = _dir("host/attachments/tmp")
+    att_dirs: list[Path] = (
+        [p for p in att_root.iterdir() if p.is_dir()] if att_root.exists() else []
+    )
+    att_size = sum(_dir_size(d) for d in att_dirs)
 
     return [
         {
@@ -3061,6 +3069,14 @@ def _cleanup_categories(h: Path) -> list[dict]:
             "desc": "past skill curator reviews under `logs/curator/<timestamp>/`",
             "files": curator_dirs,
             "size": curator_size,
+            "action": "rmtree",
+        },
+        {
+            "key": "attachments",
+            "label": "Attachment staging",
+            "desc": "uploaded chat attachments staged in `host/attachments/tmp/`",
+            "files": att_dirs,
+            "size": att_size,
             "action": "rmtree",
         },
         {

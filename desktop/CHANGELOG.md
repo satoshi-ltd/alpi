@@ -11,6 +11,15 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.3.39 — 2026-06-03 — attach files to chat
+
+Requires alpi v0.7.2+.
+
+- **Attach files.** A paperclip next to Send opens a native file picker, and
+  you can drag files straight onto the window. Images, PDFs, and text files
+  show as cards (icon + name + size) you can remove before sending; the model
+  reads them.
+
 ## v0.3.38 — 2026-06-03 — tables & code in messages
 
 Requires alpi v0.7.1+.

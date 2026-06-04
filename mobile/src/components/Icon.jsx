@@ -23,7 +23,15 @@ const PATHS = {
   clock: 'M12 7v5l3 2',
   check: 'M5 12l4 4L19 7',
   ban: 'M7.05 7.05l9.9 9.9',
+  paperclip: 'm16 6-8.414 8.586a2 2 0 0 0 2.829 2.829l8.414-8.586a4 4 0 1 0-5.657-5.657l-8.379 8.551a6 6 0 1 0 8.485 8.485l8.379-8.551',
 };
+
+const FILE_BODY = (
+  <>
+    <Path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z" />
+    <Path d="M14 2v5a1 1 0 0 0 1 1h5" />
+  </>
+);
 
 const EXTRAS = {
   gear: <Circle cx="12" cy="12" r="3" />,
@@ -42,6 +50,9 @@ const EXTRAS = {
   clock: <Circle cx="12" cy="12" r="9" />,
   ban: <Circle cx="12" cy="12" r="7" />,
   circle: <Circle cx="12" cy="12" r="7" />,
+  file: FILE_BODY,
+  'file-text': <>{FILE_BODY}<Path d="M10 9H8" /><Path d="M16 13H8" /><Path d="M16 17H8" /></>,
+  'file-code': <>{FILE_BODY}<Path d="M10 12.5 8 15l2 2.5" /><Path d="m14 12.5 2 2.5-2 2.5" /></>,
 };
 
 export function Icon({ name, size = 22, color, strokeWidth = 1.7 }) {

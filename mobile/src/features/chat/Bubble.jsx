@@ -5,6 +5,7 @@ import { fontSizes, radii, space } from '../../theme/tokens';
 import { Diamond } from '../../components/Diamond';
 import { RichText } from '../../components/RichText';
 import { useTheme } from '../../theme/ThemeContext';
+import { AttachmentCards } from './AttachmentCards';
 
 function mixHex(hex, pct, base) {
   const fromHex = (h) => {
@@ -41,7 +42,7 @@ const S = StyleSheet.create({
   wgRowRight: { alignItems: 'flex-end', paddingHorizontal: space.s7, gap: space.s1 },
 });
 
-export function ProfileUserMessage({ text, ts, accent, onLongPress }) {
+export function ProfileUserMessage({ text, ts, accent, attachments, onLongPress }) {
   const { colors, fonts } = useTheme();
   const bubbleStyle = useCallback(
     ({ pressed }) => [
@@ -52,11 +53,16 @@ export function ProfileUserMessage({ text, ts, accent, onLongPress }) {
   );
   return (
     <View style={S.userWrap}>
-      <Pressable onLongPress={onLongPress} delayLongPress={350} style={bubbleStyle}>
-        <Text style={[S.bubbleText, { fontFamily: fonts.sans.regular, color: '#ffffff' }]}>
-          {text}
-        </Text>
-      </Pressable>
+      {attachments?.length ? (
+        <AttachmentCards items={attachments} variant="message" />
+      ) : null}
+      {text ? (
+        <Pressable onLongPress={onLongPress} delayLongPress={350} style={bubbleStyle}>
+          <Text style={[S.bubbleText, { fontFamily: fonts.sans.regular, color: '#ffffff' }]}>
+            {text}
+          </Text>
+        </Pressable>
+      ) : null}
       {ts ? (
         <Text style={[S.meta, { fontFamily: fonts.monoMedium, color: colors.ink3 }]}>{ts}</Text>
       ) : null}

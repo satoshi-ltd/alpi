@@ -23,6 +23,19 @@ def test_mentions_category_lists_thread_files(tmp_path: Path) -> None:
     assert mentions["size"] > 0
 
 
+def test_attachments_category_lists_staged_dirs(tmp_path: Path) -> None:
+    d = tmp_path / "host" / "attachments" / "tmp" / "abc123"
+    d.mkdir(parents=True)
+    (d / "scan.pdf").write_bytes(b"%PDF-1.4 staged")
+
+    cats = _cleanup_categories(tmp_path)
+    att = next(c for c in cats if c["key"] == "attachments")
+
+    assert [p.name for p in att["files"]] == ["abc123"]
+    assert att["size"] > 0
+    assert att["action"] == "rmtree"
+
+
 def test_gateway_category_only_lists_session_files_not_state(
     tmp_path: Path,
 ) -> None:

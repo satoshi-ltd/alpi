@@ -69,7 +69,8 @@ export function useChatSend({ profile, sessionId, onCompleted }) {
   const send = useCallback(
     (text, options = {}) => {
       const trimmed = (text ?? '').trim();
-      if (!trimmed || !profile) return null;
+      const attachments = options.attachments?.length ? options.attachments : null;
+      if ((!trimmed && !attachments) || !profile) return null;
       handleRef.current?.cancel?.();
       deltaBufRef.current = '';
       if (rafRef.current) {
@@ -86,6 +87,7 @@ export function useChatSend({ profile, sessionId, onCompleted }) {
         assistant: '',
         tools: [],
         pending: true,
+        attachments: attachments ?? undefined,
       });
       const params = {
         profile,
@@ -94,6 +96,9 @@ export function useChatSend({ profile, sessionId, onCompleted }) {
       };
       if (sessionId) params.session_id = sessionId;
       if (options.model) params.model = options.model;
+      if (attachments) {
+        params.attachments = attachments.map((a) => ({ path: a.path, name: a.name, mime: a.mime }));
+      }
       if (Number.isInteger(options.rewriteFromTurn)) {
         params.rewrite_from_turn = options.rewriteFromTurn;
       }

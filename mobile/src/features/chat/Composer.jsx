@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { Platform, Pressable, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { radii, space , fontSizes} from '../../theme/tokens';
+import { radii, space } from '../../theme/tokens';
 
 import { Icon } from '../../components/Icon';
 import { useTheme } from '../../theme/ThemeContext';
+import { AttachmentCards } from './AttachmentCards';
 import { MentionPopover } from './MentionPopover';
 import { validateTaskShape } from './parseMarkers';
 
@@ -17,6 +18,9 @@ export function Composer({
   mentionSource,
   seedText,
   seedKey,
+  attachments = [],
+  onPickAttachment,
+  onRemoveAttachment,
 }) {
   const { colors, fonts , fontSizes} = useTheme();
   const insets = useSafeAreaInsets();
@@ -30,7 +34,8 @@ export function Composer({
   }, [seedKey, seedText]);
   const hasText = text.trim().length > 0;
   const taskShape = validateTaskShape(text);
-  const canSend = hasText && taskShape.ok;
+  const hasAttachments = attachments.length > 0;
+  const canSend = (hasText || hasAttachments) && taskShape.ok;
 
   const mentionMatch = mentionSource && text.length > 0
     ? /(^|\s)@([a-zA-Z0-9_-]*)$/.exec(text)
@@ -46,7 +51,7 @@ export function Composer({
     if (!canSend) return;
     const trimmed = text.trim();
     setText('');
-    onSend?.(trimmed);
+    onSend?.(trimmed, attachments);
   };
 
   const actionBg = accent ?? colors.ink;
@@ -79,6 +84,11 @@ export function Composer({
           </Text>
         </View>
       ) : null}
+      {hasAttachments ? (
+        <View style={{ paddingHorizontal: space.s7, paddingTop: space.s3 }}>
+          <AttachmentCards items={attachments} onRemove={onRemoveAttachment} variant="composer" />
+        </View>
+      ) : null}
       <View
         style={{
           flexDirection: 'row',
@@ -89,6 +99,16 @@ export function Composer({
           gap: space.s3,
         }}
       >
+        {onPickAttachment ? (
+          <Pressable
+            onPress={onPickAttachment}
+            hitSlop={8}
+            accessibilityLabel="Attach file"
+            style={({ pressed }) => ({ width: 36, height: 44, alignItems: 'center', justifyContent: 'center', opacity: pressed ? 0.5 : 1 })}
+          >
+            <Icon name="paperclip" size={20} color={colors.ink3} />
+          </Pressable>
+        ) : null}
         <View
           style={{
             flex: 1,
@@ -122,7 +142,7 @@ export function Composer({
             }}
           />
         </View>
-        {hasText ? (
+        {hasText || hasAttachments ? (
           <Pressable
             onPress={submit}
             disabled={!canSend}

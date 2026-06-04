@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.7.2 — 2026-06-03 — attach files to chat
+
+- **A message can carry files now.** Attach images, PDFs, and text/source files
+  (`txt` / `md` / `csv` / `json` / `yaml` / `html`, plus `py` / `js` / `ts` /
+  `tsx` / `go` / `rs` / `sh` / `sql`) to a chat turn and the model sees them. In the TUI, `/attach <path>` stages a file for your next
+  message (`/attachments` lists pending, `/clear-attachments` drops them);
+  desktop and mobile get a paperclip and drag-and-drop. Text PDFs are read as
+  text, scanned PDFs are rendered to page images for vision models, and a model
+  without vision support fails with a clear message instead of silently.
+- **Remote clients can upload attachments.** A new `host.attachments.stage`
+  call lets a phone (or any remote client) hand the daemon a file's bytes and
+  get back a path to send. Size caps and a type allowlist
+  (`png` / `jpeg` / `webp` / `pdf`, plus the text types) apply.
+- The model sees a file in the turn it's attached. The session log keeps
+  bytes-free metadata (name, type, size) so you can see which turn carried
+  which file — but a later turn doesn't re-read the bytes. Durable, cross-turn
+  multimodal context is a separate step (RAG.2).
+
 ## v0.7.1 — 2026-06-03 — one network address
 
 - **One accessible address instead of two.** A profile now has a single

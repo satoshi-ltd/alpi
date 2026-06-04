@@ -111,7 +111,7 @@ class Engine:
 
     def run_turn(
         self, user_text: str, emit: EventSink, *, source: str = "user",
-        persist_inflight: bool = True,
+        persist_inflight: bool = True, attachments: list[dict] | None = None,
     ) -> None:
         """Run a full turn and bind ``self.home`` for the duration. ``source`` tags the trigger ("user" from desktop/mobile/TUI/CLI, "peer" from ALP link, etc.) and gates the ``chat.turn_done`` ambient-notification emit so peer-driven turns don't notify the local user. ``persist_inflight`` controls the early stub write; CLI ``--no-save`` callers must disable it."""
         from alpi.home import (
@@ -125,7 +125,7 @@ class Engine:
             with self._turn_lock:
                 self._run_turn_locked(
                     user_text, emit, source=source,
-                    persist_inflight=persist_inflight,
+                    persist_inflight=persist_inflight, attachments=attachments,
                 )
         finally:
             reset_active_session(session_token)
@@ -133,7 +133,7 @@ class Engine:
 
     def _run_turn_locked(
         self, user_text: str, emit: EventSink, *, source: str = "user",
-        persist_inflight: bool = True,
+        persist_inflight: bool = True, attachments: list[dict] | None = None,
     ) -> None:
         from alpi import config as _cfg_mod
         from alpi import ledger
@@ -196,13 +196,38 @@ class Engine:
         _wg_state.reset_turn_usage()
         _wg_state.reset_skill_env()
 
-        self.session.messages.append({"role": "user", "content": user_text})
+        # MM.1: image/PDF attachments → multimodal content parts (kept in the
+        # in-memory message only; session persists bytes-free metadata).
+        att_meta: list[dict] = []
+        user_content: Any = user_text
+        if attachments:
+            from alpi import attachments as att_mod
+            try:
+                validated = att_mod.validate(attachments)
+                model_name = _cfg_mod.resolve_model(self.cfg).get("model", "")
+                vstatus = att_mod.vision_status(model_name)
+                parts = att_mod.build_content_parts(
+                    user_text, validated, vision=(vstatus != "no"),
+                )
+            except att_mod.AttachmentError as e:
+                emit(AgentEvent(kind="error", text=str(e)))
+                return
+            att_meta = att_mod.session_metadata(validated)
+            user_content = parts
+            if vstatus == "unknown" and any(att_mod.is_image(a.mime) for a in validated):
+                import logging
+                logging.getLogger("alpi.engine").warning(
+                    "model %r vision capability unknown; provider may reject image input",
+                    model_name,
+                )
+
+        self.session.messages.append({"role": "user", "content": user_content})
         emit(AgentEvent(kind="user", text=user_text))
 
         # In-flight stub turn: paired clients reading session.json see the user message before the LLM replies; the finally block replaces it with the completed turn.
         self.session.log_turn(
             user=user_text, assistant="", tools=[],
-            started_at=turn_started,
+            started_at=turn_started, attachments=att_meta,
         )
         if persist_inflight:
             try:
@@ -471,6 +496,7 @@ class Engine:
             final_turn = session.Turn(
                 at=turn_started, user=user_text,
                 tools=turn_tools, assistant=final_assistant,
+                attachments=att_meta,
             )
             if self.session.turns and self.session.turns[-1].at == turn_started:
                 self.session.turns[-1] = final_turn

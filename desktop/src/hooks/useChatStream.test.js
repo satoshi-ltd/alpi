@@ -166,6 +166,19 @@ describe("useChatStream stall watchdog", () => {
     expect(result.current.pendingTurn.assistantPreview).toBe("Hel");
   });
 
+  it("never replays an errored turn (no recovery-toast flood)", async () => {
+    const { result, notify } = mount();
+    await waitForListen();
+    seedTurn(result, { sessionId: "sess-1", error: "model does not support image input" });
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(12_000); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+
+    expect(invoke).not.toHaveBeenCalledWith("chat_events_since", expect.anything());
+    expect(notify).not.toHaveBeenCalled();
+    expect(result.current.pendingTurn.error).toBeTruthy();
+  });
+
   it("watchdog stays quiet if no sessionId yet (pre session_start)", async () => {
     const { result } = mount();
     await waitForListen();

@@ -1,5 +1,7 @@
-import { memo, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import AttachmentChips from "../primitives/AttachmentChips.jsx";
+import { PaperclipIcon } from "../primitives/icons.jsx";
 import { useProfileDetail } from "../hooks/useProfileDetail.js";
 import AlpiPicker from "../features/AlpiPicker.jsx";
 import ToPickerBar from "../primitives/ToPickerBar.jsx";
@@ -10,6 +12,7 @@ import Message from "../primitives/Message.jsx";
 import { useStickyScroll } from "../lib/useStickyScroll.js";
 import { useScrollProgress } from "../lib/useScrollProgress.js";
 import { relativeTime } from "../lib/time.js";
+import { attachmentMimeFor } from "../lib/fileKind.js";
 import { profileLabel } from "../lib/profile-display.js";
 import MessageSkeleton from "../primitives/MessageSkeleton.jsx";
 import SearchBar from "../primitives/SearchBar.jsx";
@@ -492,6 +495,9 @@ const Turn = memo(function Turn({
             </>
           }
         >
+          {turn.attachments?.length > 0 && (
+            <AttachmentChips items={turn.attachments} variant="message" />
+          )}
           {turn.user}
         </ProfileMessage>
       )}
@@ -726,6 +732,9 @@ function PendingTurn({ turn, accent }) {
     <div className={styles.turn}>
       {turn.user && (
         <ProfileMessage role="user" accent={accent || "var(--accent)"}>
+          {turn.attachments?.length > 0 && (
+            <AttachmentChips items={turn.attachments} variant="message" />
+          )}
           {turn.user}
         </ProfileMessage>
       )}
@@ -803,8 +812,59 @@ function ChatComposer({
   onRewriteDraftApplied,
   minHeight = null,
 }) {
+  const notify = useNotify();
   const [text, setText] = useState("");
   const [baseMentions, setBaseMentions] = useState([]);
+  const [attachments, setAttachments] = useState([]);
+
+  const addPaths = useCallback(async (paths) => {
+    if (!paths?.length) return;
+    let metas = [];
+    try {
+      metas = await invoke("attachment_meta", { paths });
+    } catch {
+      return;
+    }
+    setAttachments((prev) => {
+      const seen = new Set(prev.map((a) => a.path));
+      const rejected = [];
+      const add = [];
+      for (const m of metas) {
+        if (!m || seen.has(m.path)) continue;
+        const mime = attachmentMimeFor(m.name);
+        if (!mime) {
+          rejected.push(m.name);
+          continue;
+        }
+        add.push({ path: m.path, name: m.name, size: m.size, mime });
+      }
+      if (rejected.length) {
+        notify({
+          message: `Unsupported attachment type: ${rejected.join(", ")}`,
+          variant: "error",
+        });
+      }
+      return [...prev, ...add];
+    });
+  }, [notify]);
+
+  // Native (Tauri) file drop anywhere on the window adds to the composer.
+  useEffect(() => {
+    let unlisten;
+    (async () => {
+      try {
+        const { getCurrentWebview } = await import("@tauri-apps/api/webview");
+        unlisten = await getCurrentWebview().onDragDropEvent((e) => {
+          if (e.payload?.type === "drop" && Array.isArray(e.payload.paths)) {
+            addPaths(e.payload.paths);
+          }
+        });
+      } catch {
+        // not in a tauri webview (e.g. tests) — no drag-drop
+      }
+    })();
+    return () => { try { unlisten?.(); } catch {} };
+  }, [addPaths]);
   useEffect(() => {
     if (!rewriteDraft?.text || rewriteDraft.consumed) return;
     setText(rewriteDraft.text);
@@ -860,13 +920,17 @@ function ChatComposer({
   );
 
   const hasText = text.trim().length > 0;
-  const canSend = hasText && !!activeProfile && !daemonOffline;
+  const canSend = (hasText || attachments.length > 0) && !!activeProfile && !daemonOffline;
 
   function trySend() {
     if (!canSend) return;
     const payload = text.trim();
+    const atts = attachments;
     setText("");
-    onSend?.(payload, modelOverride ?? null);
+    setAttachments([]);
+    onSend?.(payload, modelOverride ?? null, {
+      attachments: atts.map((a) => ({ path: a.path, name: a.name, mime: a.mime, size: a.size })),
+    });
   }
 
   const placeholder = daemonOffline
@@ -909,18 +973,41 @@ function ChatComposer({
         </>
       }
       topBar={
-        showPicker ? (
-          <AlpiPicker
-            profiles={profiles}
-            activeAlpi={activeProfile?.name ?? null}
-            onChange={onSelectProfile}
-            variant="bar"
-            modelLabel={activeProfile?.model}
-          />
+        (showPicker || attachments.length > 0) ? (
+          <>
+            {showPicker ? (
+              <AlpiPicker
+                profiles={profiles}
+                activeAlpi={activeProfile?.name ?? null}
+                onChange={onSelectProfile}
+                variant="bar"
+                modelLabel={activeProfile?.model}
+              />
+            ) : null}
+            <AttachmentChips
+              items={attachments}
+              onRemove={(i) => setAttachments((p) => p.filter((_, j) => j !== i))}
+            />
+          </>
         ) : null
       }
       leftActions={
         <>
+          <IconBtn
+            aria-label="Attach files"
+            title="Attach image, PDF, or text file"
+            disabled={disabled || daemonOffline}
+            onClick={async () => {
+              try {
+                const paths = await invoke("pick_files");
+                await addPaths(paths);
+              } catch (e) {
+                notify({ message: String(e), variant: "error" });
+              }
+            }}
+          >
+            <PaperclipIcon />
+          </IconBtn>
           {!showPicker && activeProfile && (
             <ModelPicker
               profile={activeProfile.name}
@@ -937,6 +1024,7 @@ function ChatComposer({
     />
   );
 }
+
 
 function parsePeerMentions(text) {
   if (!text) return [];

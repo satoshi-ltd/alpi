@@ -1749,6 +1749,7 @@ async def _run_host(home: Path, profile: str) -> None:
         return
 
     from alpi.host import approval as host_approval
+    from alpi.host import attachments_rpc as host_attachments
     from alpi.host import chat as host_chat
     from alpi.host import clarification as host_clarification
     from alpi.host import config as host_config
@@ -1798,6 +1799,7 @@ async def _run_host(home: Path, profile: str) -> None:
     host_network.register(server)
     host_outputs.register(server)
     host_tools.register(server)
+    host_attachments.register(server)
     await server.start()
     try:
         await server.serve_forever()

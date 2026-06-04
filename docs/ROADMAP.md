@@ -8,51 +8,27 @@ technical reference of what currently ships, see
 Audience: the creator ([@soyjavi](https://github.com/soyjavi)) and
 any future contributor reading the repo cold.
 
-Legend: 🔵 backlog · 🟡 next up · ⏸ blocked · 🔴 gate.
+Legend: ✅ shipped · 🔵 backlog · 🟡 next up · ⏸ blocked · 🔴 gate.
 
 ---
 
 ## v0.8 cycle (active)
 
-**Theme: multimodal input + RAG ingestion.**
-v0.8 opens the agent to non-text content (PDFs, images) and closes the
-durable-knowledge loop ("learn this file") so workspace + RAG become
-the agent's long-term memory of documents.
+**Theme: multimodal input + knowledge retrieval.**
+v0.8 opened the agent to non-text content (PDFs, images — shipped as
+MM.1) and now builds the durable-knowledge spine on a single retrieval
+layer: ingest documents into `workspace/` + RAG (RAG.2), then reuse the
+same embedding / sqlite-vec primitives for semantic recall over past
+sessions (CM.4) and workgroup transcripts (ALP.6). One store, three
+surfaces.
 
-### Multimodal + ingestion
+### Ingestion & retrieval
 
 | ID | Item | Status |
 |---|---|---|
-| MM.1 | Multimodal chat input — `host.chat.send` accepts attachments; TUI/desktop/mobile let users attach images and PDFs; engine forwards them through the model's multimodal payload. | 🔵 |
-| RAG.2 | Document ingestion — "learn this file" flow drops the attachment into `workspace/`, reindexes the per-profile RAG store, and exposes it through `search_workspace` like any other workspace content. | 🔵 |
-
-### MM.1. Multimodal chat input
-
-The chat protocol is text-only today: `host.chat.send` carries a `text`
-field, and the model never sees binary content unless a tool (e.g.
-`read_file`) extracts it as text first. That works for code, logs and
-markdown. It breaks for the two most common operator inputs that
-**aren't** text: PDF documents and screenshots / photos.
-
-litellm already speaks vision against most modern providers (OpenAI 4o,
-Claude 3.5+, Gemini, OpenRouter vision routes). The missing pieces are
-wire format and surfaces:
-
-- `host.chat.send` accepts `attachments: [{path, mime, …}]`. The daemon
-  reads the bytes and embeds images as base64 in the multimodal
-  payload. Text-bearing PDFs go through `pypdf` (already in deps);
-  scanned PDFs get rendered to images via `pypdfium2` (also in deps)
-  and treated as image attachments so the model's vision can read them
-  — no separate OCR step.
-- TUI gets a `/attach <path>` slash command; desktop gets a paperclip
-  in the composer; mobile reuses the OS file/photo picker.
-- Engine logs attachments in the session JSON so resume/replay
-  reconstructs the full multimodal turn, not just the text.
-
-**Non-goals.** No image generation (that's `N` long-term). No OCR tool
-exposed to the agent — scanned PDFs become rendered pages routed
-through the same vision path as any other image. No video or audio
-attachments — voice has its own path via gateway audio + STT.
+| RAG.2 | Document ingestion — "learn this file" flow drops the attachment into `workspace/`, reindexes the per-profile RAG store, and exposes it through `search_workspace` like any other workspace content. | 🟡 |
+| CM.4 | Semantic recall over past sessions — opt-in vector indexing + explicit recall tools, sharing the embedding/sqlite-vec layer with RAG.2. | 🔵 |
+| ALP.6 | Workgroup transcript search — hub-owned `workgroup.search(workgroup_id, query)` over indexed transcript history, implemented on CM.4's retrieval layer. | 🔵 |
 
 ### RAG.2. Document ingestion ("learn this file")
 
@@ -81,6 +57,36 @@ snapshot.
 (predictability matters; users decide what becomes permanent). No
 external corpus crawl ("ingest this URL deep-walk"). No cross-profile
 shared RAG — that's an org concern (`ORG.2`).
+
+### CM.4. Semantic recall over past sessions
+
+CM.4 is the **base retrieval layer for conversational memory**, the peer
+of RAG.2 (durable documents/workspace): lexical `session_search` stays
+the first, cheap layer; CM.4 adds the semantic layer for "when did we
+discuss X?" queries that lexical match misses.
+
+It lands on the same `core/embed.py` + sqlite-vec primitives RAG.2
+builds — just indexing session transcripts instead of workspace
+documents. First shape: opt-in indexing plus explicit recall tools, with
+a clear policy for what gets indexed and how it's deleted (recall must be
+forgettable). Automatic per-turn injection only comes later if manual
+retrieval proves valuable. Promoted into v0.8 to amortise the retrieval
+infra while it's warm rather than rebuild it cold. ALP.6 then consumes
+this layer rather than standing up a parallel index.
+
+### ALP.6. Workgroup transcript search
+
+`workgroup.search(workgroup_id, query)` returns top matching posts from a
+workgroup transcript. **Hub-owned**: the hub is the source of truth for
+its workgroup, indexes its own local transcript, and answers searches —
+members reach it through existing host/workgroup surfaces, no new
+protocol family. A specific consumer of CM.4's retrieval engine, not a
+second index.
+
+Scope is the hub/workgroup permission boundary. This is **not** global
+semantic search across peers — cross-peer transcript search would raise
+privacy, encryption, and ownership questions that the hub-anchored model
+deliberately sidesteps. Lands once CM.4's session recall is stable.
 
 ## Future releases
 
@@ -173,8 +179,6 @@ already analysed; the "why now?" question is the open one.
 | Cost telemetry | Cost split per-skill / per-tool | Only pays off with many skills + notably different costs; today neither holds |
 | BG re-audit | LiteLLM quarterly review — bump pin, run LLM probe, swap if better alternative emerges | Standing maintenance task; cadence + procedure documented in `OPERATIONS.md → Dependencies` |
 | Matrix E2EE | Olm/Megolm sessions, encryption store, SAS device verification, encrypted-room send/read tests | MVP intentionally unencrypted; promote when an external user runs the bot against a non-self-hosted homeserver |
-| CM.4 | Semantic recall over past sessions — opt-in vector retrieval when lexical `session_search` starts missing real queries | Lexical layer hasn't visibly failed yet; promote on the first "I know we discussed X, where is it?" miss |
-| ALP.6 | Workgroup search — semantic search over workgroup transcripts | Depends on CM.4 being stable; promotes with it, not before |
 | TTS.1 | Local TTS engine + daemon-served voice — single host-served voice catalog, deprecate desktop-local synthesis | Current cloud TTS path works; promote alongside `AQ` (continuous voice) or when desktop/daemon catalog drift becomes a real operator burden |
 | UX.6 | Desktop `.env` manager — per-profile environment editor (mask/reveal/audit) for keys other than provider keys | Provider keys already have a first-class flow; promote when editing other `.env` entries by hand becomes a real friction reported by users |
 
@@ -327,34 +331,6 @@ different costs per skill — neither holds today (skills are
 entirely user-owned, with a handful at most per profile). The
 dimension explosion is dead weight until the catalog grows. May
 be discarded entirely if no demand emerges by v0.6.
-
-### CM.4. Semantic recall over past sessions
-
-Lexical `session_search` stays the first layer: cheap, explicit,
-easy to reason about. Semantic recall becomes worthwhile when
-session volume grows and users ask "when did we discuss X?" but
-cannot find it.
-
-When promoted, reuse the existing local embedding / store
-primitives. The first shape is opt-in indexing plus an explicit
-recall/search tool. Automatic injection only comes later if
-manual retrieval proves valuable.
-
-**Why it waits.** The promotion signal — lexical search visibly
-failing on real queries — has not materialised. Promote on the
-first concrete "I know we discussed X, where is it?" miss, not
-on speculative scale.
-
-### ALP.6. Workgroup search
-
-`workgroup.search(workgroup_id, query)` returns top matching
-posts from a workgroup transcript. The hub indexes its local
-transcript; members search through existing host/workgroup
-surfaces rather than receiving a new protocol family.
-
-**Why it waits.** Depends on `CM.4`'s retrieval layer being
-stable. If semantic session recall is not reliable enough,
-workgroup search waits — they promote together.
 
 ### TTS.1. Local TTS engine + daemon-served voice
 

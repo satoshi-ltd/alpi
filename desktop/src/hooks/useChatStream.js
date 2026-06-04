@@ -210,6 +210,8 @@ export function useChatStream({
       const turn = pendingTurnRef.current;
       if (!turn) return;
       if (replayingRef.current) return;
+      // Errored turn is terminal but stays pending to show the error — replaying floods recovery toasts.
+      if (turn.error) return;
       // Pre-session_start: nothing to replay yet (sidecar key is the session id, daemon emits it as the first frame).
       if (!turn.sessionId) return;
       const silentFor = Date.now() - (lastEventAtRef.current || 0);

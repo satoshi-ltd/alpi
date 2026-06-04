@@ -31,6 +31,7 @@ class Turn:
     user: str
     tools: list[ToolLog]
     assistant: str        # alpi's final text reply (last no-tool-calls message)
+    attachments: list[dict[str, Any]] = field(default_factory=list)  # MM.1: bytes-free metadata only
 
 
 @dataclass
@@ -72,6 +73,7 @@ class Session:
         assistant: str,
         tools: list[ToolLog],
         started_at: float | None = None,
+        attachments: list[dict[str, Any]] | None = None,
     ) -> None:
         """Append a completed user turn to the persistent log."""
         self.turns.append(Turn(
@@ -79,6 +81,7 @@ class Session:
             user=user,
             tools=tools,
             assistant=assistant,
+            attachments=list(attachments or []),
         ))
 
     def status_line(self) -> str:
@@ -123,6 +126,7 @@ class Session:
                         }
                         for tl in t.tools
                     ],
+                    **({"attachments": t.attachments} if t.attachments else {}),
                 }
                 for t in self.turns
             ],
@@ -152,6 +156,7 @@ def load_turns(data: dict[str, Any]) -> list[Turn]:
             user=str(t.get("user", "")),
             tools=tools,
             assistant=str(t.get("assistant", "")),
+            attachments=list(t.get("attachments") or []),
         ))
     return out
 

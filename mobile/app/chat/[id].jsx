@@ -20,6 +20,7 @@ import { askUserNoAnswerTag } from '../../src/features/chat/askUserAnswer';
 import { Diamond } from '../../src/components/Diamond';
 import { SessionsSheet } from '../../src/features/sheets/SessionsSheet';
 import { useChatSend } from '../../src/hooks/useChatSend';
+import { stageAttachment } from '../../src/lib/attachments';
 import { useProfileSummaries, useSession, useSessionsList } from '../../src/hooks/useDaemonData';
 import { useEventEffect } from '../../src/hooks/useEvents';
 import { useEndpoint } from '../../src/lib/EndpointContext';
@@ -73,6 +74,7 @@ const TurnBlock = memo(function TurnBlock({ turn, turnIndex, accent, colors, fon
           text={turn.user}
           ts={ts}
           accent={accent}
+          attachments={turn.attachments}
           onLongPress={() => onActionTarget({ kind: 'user', text: turn.user, turnIndex })}
         />
       ) : null}
@@ -390,9 +392,38 @@ export default function ProfileChat() {
     const opts = Number.isInteger(target.turnIndex) ? { rewriteFromTurn: target.turnIndex } : undefined;
     sendMessage(text, opts);
   };
-  const onComposerSend = (text) => {
-    const opts = Number.isInteger(pendingRewriteIndex) ? { rewriteFromTurn: pendingRewriteIndex } : undefined;
+  const [attachments, setAttachments] = useState([]);
+  const pickAttachment = async () => {
+    if (!profile?.name || !endpoint) return;
+    try {
+      const DocumentPicker = await import('expo-document-picker');
+      const res = await DocumentPicker.getDocumentAsync({
+        type: [
+          'image/png', 'image/jpeg', 'image/webp', 'application/pdf',
+          'text/plain', 'text/markdown', 'text/csv', 'application/json',
+          'application/yaml', 'text/html',
+        ],
+        multiple: false,
+        copyToCacheDirectory: true,
+      });
+      if (res.canceled) return;
+      const asset = res.assets?.[0];
+      if (!asset) return;
+      const { readAsStringAsync } = await import('expo-file-system/legacy').catch(() => import('expo-file-system'));
+      const base64 = await readAsStringAsync(asset.uri, { encoding: 'base64' });
+      const staged = await stageAttachment(call, endpoint, {
+        profile: profile.name, name: asset.name, mime: asset.mimeType, base64,
+      });
+      setAttachments((prev) => [...prev, { ...staged, localUri: asset.uri }]);
+    } catch (e) {
+      toast({ title: 'Attachment failed', message: String(e?.message || e) });
+    }
+  };
+  const onComposerSend = (text, atts) => {
+    const opts = Number.isInteger(pendingRewriteIndex) ? { rewriteFromTurn: pendingRewriteIndex } : {};
+    if (atts?.length) opts.attachments = atts;
     setPendingRewriteIndex(null);
+    setAttachments([]);
     sendMessage(text, opts);
   };
 
@@ -497,6 +528,9 @@ export default function ProfileChat() {
             onMicLongPress={micUnavailable}
             seedText={composerSeed?.text}
             seedKey={composerSeed?.key}
+            attachments={attachments}
+            onPickAttachment={pickAttachment}
+            onRemoveAttachment={(i) => setAttachments((p) => p.filter((_, j) => j !== i))}
           />
         </KeyboardAvoidingView>
       )}

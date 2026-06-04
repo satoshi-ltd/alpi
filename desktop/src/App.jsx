@@ -641,7 +641,8 @@ export default function App() {
 
   const onSend = useCallback(
     async (text, model, opts) => {
-      if (!text.trim() || !activeProfile) return;
+      const attachments = opts?.attachments?.length ? opts.attachments : null;
+      if ((!text.trim() && !attachments) || !activeProfile) return;
       if (sendingRef.current) return;
       sendingRef.current = true;
       try {
@@ -676,7 +677,30 @@ export default function App() {
           profile: profileName,
           sessionId: startSessionId,
           requestId,
+          attachments,
         });
+
+        let wireAttachments = attachments;
+        if (attachments) {
+          const conns = hostConnectionsRef.current;
+          const conn = conns?.connections?.find((c) => c.id === conns.active_id);
+          if (conn && conn.kind !== "local") {
+            try {
+              wireAttachments = await Promise.all(
+                attachments.map(async (a) => {
+                  const staged = await invoke("attachment_stage", {
+                    profile: profileName, path: a.path, mime: a.mime,
+                  });
+                  return { path: staged.path, name: staged.name, mime: staged.mime };
+                }),
+              );
+            } catch (e) {
+              notify({ message: `Attachment upload failed: ${e}`, variant: "error" });
+              setPendingTurn(null);
+              return;
+            }
+          }
+        }
 
         try {
           await invoke("chat_send_stream", {
@@ -686,6 +710,7 @@ export default function App() {
             text,
             model: model ?? null,
             requestId,
+            attachments: wireAttachments,
           });
         } catch (e) {
           notify({ message: String(e), variant: "error" });

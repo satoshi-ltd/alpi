@@ -1680,6 +1680,92 @@ async fn pick_folder() -> Result<Option<String>, String> {
     }
 }
 
+#[derive(serde::Serialize)]
+struct AttachmentMeta {
+    path: String,
+    name: String,
+    size: u64,
+}
+
+// Native multi-file picker (macOS osascript, same approach as pick_folder).
+// Returns absolute POSIX paths; the daemon validates type/size.
+#[tauri::command]
+async fn pick_files() -> Result<Vec<String>, String> {
+    let script = "set theFiles to choose file with prompt \"Attach files\" with multiple selections allowed\nset out to \"\"\nrepeat with f in theFiles\nset out to out & POSIX path of f & linefeed\nend repeat\nreturn out";
+    let out = tauri::async_runtime::spawn_blocking(move || {
+        Command::new("osascript").args(["-e", script]).output()
+    })
+    .await
+    .map_err(|e| format!("join: {e}"))?
+    .map_err(|e| format!("osascript: {e}"))?;
+    if !out.status.success() {
+        return Ok(vec![]); // user cancelled
+    }
+    let s = String::from_utf8_lossy(&out.stdout);
+    Ok(s.lines().map(|l| l.trim().to_string()).filter(|l| !l.is_empty()).collect())
+}
+
+// Stat the given paths (used by the picker + drag-drop) so the composer can
+// render file chips with name + size before sending.
+#[tauri::command]
+fn attachment_meta(paths: Vec<String>) -> Vec<AttachmentMeta> {
+    paths
+        .into_iter()
+        .filter_map(|p| {
+            let path = std::path::Path::new(&p);
+            let md = std::fs::metadata(path).ok()?;
+            if !md.is_file() {
+                return None;
+            }
+            let name = path.file_name()?.to_string_lossy().to_string();
+            Some(AttachmentMeta { path: p.clone(), name, size: md.len() })
+        })
+        .collect()
+}
+
+#[tauri::command]
+fn attachment_thumb(path: String, mime: String) -> Option<String> {
+    use base64::Engine;
+    const MAX_THUMB_BYTES: u64 = 6 * 1024 * 1024;
+    let p = std::path::Path::new(&path);
+    let md = std::fs::metadata(p).ok()?;
+    if !md.is_file() || md.len() > MAX_THUMB_BYTES || !mime.starts_with("image/") {
+        return None;
+    }
+    let bytes = std::fs::read(p).ok()?;
+    let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
+    Some(format!("data:{mime};base64,{b64}"))
+}
+
+// Remote daemon can't read local paths — upload bytes, return the daemon-side path.
+#[tauri::command]
+async fn attachment_stage(
+    profile: String, path: String, mime: String,
+) -> Result<serde_json::Value, String> {
+    use base64::Engine;
+    if mime.trim().is_empty() {
+        return Err("unsupported attachment type".to_string());
+    }
+    let p = std::path::Path::new(&path);
+    let name = p
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .ok_or_else(|| format!("invalid path: {path}"))?;
+    let bytes = std::fs::read(p).map_err(|e| format!("read {path}: {e}"))?;
+    let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
+    let res = tauri::async_runtime::spawn_blocking(move || {
+        host_client::call(
+            "host.attachments.stage",
+            serde_json::json!({"profile": profile, "name": name, "mime": mime, "data_base64": b64}),
+        )
+    })
+    .await
+    .map_err(|e| format!("join: {e}"))??;
+    res.get("attachment")
+        .cloned()
+        .ok_or_else(|| "stage: response missing attachment".to_string())
+}
+
 #[tauri::command]
 fn reveal_in_finder(path: String) -> Result<(), String> {
     Command::new("open")
@@ -1732,9 +1818,10 @@ fn chat_send_stream(
     text: String,
     model: Option<String>,
     request_id: Option<String>,
+    attachments: Option<serde_json::Value>,
 ) {
     thread::spawn(move || {
-        stream_chat(app, profile, session_id, rewrite_from_turn, text, model, request_id)
+        stream_chat(app, profile, session_id, rewrite_from_turn, text, model, request_id, attachments)
     });
 }
 
@@ -1746,6 +1833,7 @@ fn stream_chat(
     text: String,
     model: Option<String>,
     request_id_opt: Option<String>,
+    attachments: Option<serde_json::Value>,
 ) {
     let request_id = request_id_opt.unwrap_or_else(|| format!(
         "tauri-{}-{}",
@@ -1773,6 +1861,11 @@ fn stream_chat(
     }
     if let Some(m) = model {
         params["model"] = serde_json::Value::String(m);
+    }
+    if let Some(a) = attachments {
+        if !a.is_null() {
+            params["attachments"] = a;
+        }
     }
 
     let mut got_error = false;
@@ -2408,6 +2501,10 @@ pub fn run() {
             reveal_in_finder,
             gateway_status,
             pick_folder,
+            pick_files,
+            attachment_meta,
+            attachment_thumb,
+            attachment_stage,
             probe_peers,
             peer_add,
             peer_remove,
