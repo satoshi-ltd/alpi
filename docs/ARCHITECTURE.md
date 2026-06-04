@@ -288,6 +288,15 @@ Supported formats: markdown / text / source / configs (stdlib read), HTML (`html
 
 **Embedder (`alpi/core/embed.py`)**. `Embedder` Protocol; default `FastembedEmbedder` wraps the ONNX export of `sentence-transformers/all-MiniLM-L6-v2` (384-dim, ~90 MB, no torch). Numerically equivalent to the original sentence-transformers checkpoint but ~10× lighter at runtime. Lazy-loaded under a `threading.Lock` so concurrent first-touch calls serialize on a single model instance instead of racing.
 
+### Session recall (`alpi/tools/recall.py`, CM.4)
+
+Semantic recall over **past conversations**, the conversational-memory peer of the workspace RAG. Lexical `session_search` stays the cheap first layer (term counts over `sessions/*.json`); CM.4 adds the semantic layer for "when did we discuss X / what did we decide about Y" when the wording is fuzzy. Two tools:
+
+- `index_sessions(force?)` — **opt-in** (sessions are never auto-indexed): walks `<home>/sessions/*.json`, builds a per-turn transcript (`user:`/`alpi:` lines), chunks + embeds with the same `core/embed.py` + sqlite-vec primitives as the workspace index, into a **separate table family** (`session_files` / `session_chunks` / `session_vec` / `session_meta`) in the same `rag/store.sqlite`. Incremental (mtime/size skip); the active session is excluded.
+- `recall_sessions(query, k=5)` — cosine MATCH → `[{session_id, when, snippet, score}]`, active session excluded.
+
+**Forgettable.** Recall is a derived view, so forgetting is real: deleting a session (`host.sessions.delete` → `host/sessions.py::delete_session`) purges its rows via `recall.forget_session`, and `index_sessions` orphan-sweeps any tracked session whose file is gone. No auto per-turn injection — retrieval is explicit, like the workspace tools. ALP.6 (workgroup transcript search) is designed to consume this same layer.
+
 **Asset prefetch (`service.py::_prefetch_assets`)**. A daemon thread, scheduled 5 s into the event loop (after socket bind) by `_main_all`. Pre-loads the fastembed model into the ONNX runtime cache via `embed.ensure_weights_cached()` (~100 MB resident — vs ~600 MB the torch path would cost) and ensures the Chromium binary via `ensure_chromium()`. RapidOCR is skipped at startup because its constructor downloads-and-loads in one step; that cost lands on the first `ocr=true` call. Concurrent loaders use double-checked locking (`_load`, `_ocr_reader`, `ensure_chromium`) so a user-triggered call mid-prefetch waits on the same lock instead of racing the same network fetch.
 
 ### Skills

@@ -15,34 +15,16 @@ Legend: ✅ shipped · 🔵 backlog · 🟡 next up · ⏸ blocked · 🔴 gate.
 ## v0.8 cycle (active)
 
 **Theme: multimodal input + knowledge retrieval.**
-v0.8 opened the agent to non-text content (MM.1) and made attachments
-durable, searchable workspace documents (RAG.2) — both shipped. What
-remains is reusing that same embedding / sqlite-vec retrieval layer for
-semantic recall over past sessions (CM.4) and workgroup transcripts
-(ALP.6). One store, three surfaces.
+v0.8 opened the agent to non-text content (MM.1), made attachments durable,
+searchable workspace documents (RAG.2), and added semantic recall over past
+sessions (CM.4) — all shipped on one embedding / sqlite-vec retrieval layer.
+The last surface on that layer is workgroup transcripts (ALP.6).
 
 ### Ingestion & retrieval
 
 | ID | Item | Status |
 |---|---|---|
-| CM.4 | Semantic recall over past sessions — opt-in vector indexing + explicit recall tools, sharing the embedding/sqlite-vec layer with RAG.2. | 🟡 |
-| ALP.6 | Workgroup transcript search — hub-owned `workgroup.search(workgroup_id, query)` over indexed transcript history, implemented on CM.4's retrieval layer. | 🔵 |
-
-### CM.4. Semantic recall over past sessions
-
-CM.4 is the **base retrieval layer for conversational memory**, the peer
-of RAG.2 (durable documents/workspace): lexical `session_search` stays
-the first, cheap layer; CM.4 adds the semantic layer for "when did we
-discuss X?" queries that lexical match misses.
-
-It lands on the same `core/embed.py` + sqlite-vec primitives RAG.2
-shipped — just indexing session transcripts instead of workspace
-documents. First shape: opt-in indexing plus explicit recall tools, with
-a clear policy for what gets indexed and how it's deleted (recall must be
-forgettable). Automatic per-turn injection only comes later if manual
-retrieval proves valuable. Promoted into v0.8 to amortise the retrieval
-infra while it's warm rather than rebuild it cold. ALP.6 then consumes
-this layer rather than standing up a parallel index.
+| ALP.6 | Workgroup transcript search — hub-owned `workgroup.search(workgroup_id, query)` over indexed transcript history, implemented on CM.4's retrieval layer. | 🟡 |
 
 ### ALP.6. Workgroup transcript search
 

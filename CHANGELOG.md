@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.7.4 — 2026-06-04 — recall past conversations by meaning
+
+- **"When did we discuss…" now works by meaning, not just keywords.**
+  `recall_sessions` does semantic search over your past conversations, so you
+  can find an old session even when you don't remember the exact words.
+  `session_search` (keyword) stays as the quick first pass.
+- **Opt-in and forgettable.** Sessions are only indexed when you ask
+  (`index_sessions`); the index lives in your profile and never leaves the
+  machine. Delete a session and it drops out of recall — nothing lingers.
+- The active conversation is never indexed or recalled, and nothing is
+  injected automatically — recall happens only when it's actually useful.
+
 ## v0.7.3 — 2026-06-04 — learn a file into the workspace
 
 - **"Learn this file" makes an attachment permanent.** Attach a file and ask the

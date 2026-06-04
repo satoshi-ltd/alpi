@@ -93,6 +93,7 @@ Each tool exposes `name`, `description`, JSON schema `parameters`, `run(...) -> 
 - `search_workspace` — semantic local RAG over the user's workspace.
 - `index_workspace(path?, glob?, force?, ocr?)` — incremental by default (mtime-skip, deleted files purged); auto-rebuilds on workspace-root or embedder change; `force=true` drops + vacuums.
 - `learn_file(name?, source_path?, folder?, ocr?)` (RAG.2) — promote a file to durable workspace knowledge: copy under `<workspace>/.alpi/documents/YYYY/MM/`, never overwriting; append a `manifest.jsonl` line (metadata only); index just that file via `workspace.index_files()`. Source resolves from `source_path`, a current-turn attachment by `name`, or the single current-turn attachment. Explicit user intent only — no auto-learn. Images need `ocr=true`.
+- `recall_sessions(query, k=5)` / `index_sessions(force?)` (CM.4) — semantic recall over past conversations. `session_search` stays the lexical first layer; CM.4 adds the semantic layer on the same embed/sqlite-vec store, separate `session_*` table family. Opt-in indexing (never automatic), active session excluded, no per-turn injection. Forgettable: deleting a session purges its index rows (`recall.forget_session`), reindex orphan-sweeps gone sessions.
 
 ## Attachments (MM.1 + RAG.2)
 

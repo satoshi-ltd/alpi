@@ -16,6 +16,7 @@ from alpi.tools import (
     knowledge as knowledge_tool,
     learn_file as learn_file_tool,
     memory as memory_tool,
+    recall as recall_tool,
     read_file,
     read_image,
     schedule as schedule_tool,
@@ -105,6 +106,8 @@ def execute(
 # in the schema list the LLM sees.
 register(workspace_tool.TOOL_SEARCH)
 register(workspace_tool.TOOL_INDEX)
+register(recall_tool.TOOL_RECALL)
+register(recall_tool.TOOL_INDEX)
 for _mod in (
     read_file,
     read_image,

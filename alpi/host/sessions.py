@@ -124,6 +124,11 @@ def delete_session(home: Path, session_id: str) -> bool:
         pass
     except OSError:
         pass
+    try:
+        from alpi.tools.recall import forget_session
+        forget_session(home, session_id)
+    except Exception:  # noqa: BLE001
+        pass
     return existed
 
 

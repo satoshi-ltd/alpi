@@ -53,6 +53,10 @@ The current release ships the full local-to-network shape:
   turn (TUI `/attach`, desktop/mobile paperclip). Per-turn by default;
   `learn_file` promotes an attachment into a durable workspace document,
   indexed for semantic recall via `search_workspace` in later sessions.
+- Semantic recall over past conversations: `recall_sessions` finds an old
+  session by meaning (keyword `session_search` stays the quick first pass).
+  Opt-in (`index_sessions`), profile-local, and forgettable — deleting a
+  session drops it from recall.
 - Docker image (`satoshiltd/alpi`) for an always-on home-server
   deployment, with persistent profile storage under `/data/.alpi`.
 - Telegram, IMAP, Gmail, and Matrix gateways hosted by the unified
