@@ -1,4 +1,4 @@
-import { CpuIcon, Dot, WifiIcon, ChevDownIcon, Tip } from "./index.js";
+import { CpuIcon, Dot, ServerIcon, ChevDownIcon, Tip } from "./index.js";
 import styles from "./ConnPill.module.css";
 
 const STATUS_COLORS = {
@@ -28,7 +28,7 @@ export default function ConnPill({
     >
       <button type="button" className="ds-conn-pill" onClick={onClick}>
         <span className={styles.iconWrap}>
-          {kind === "local" ? <CpuIcon /> : <WifiIcon />}
+          {kind === "local" ? <CpuIcon /> : <ServerIcon />}
           <Dot color={statusColor} pulse={isOffline} className={styles.dot} />
         </span>
         <span className={`col ${styles.col}`}>

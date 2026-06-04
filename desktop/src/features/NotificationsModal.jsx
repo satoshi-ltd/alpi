@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
-  BellIcon,
   Btn,
   CopyIcon,
   Diamond,
@@ -242,7 +241,6 @@ export default function NotificationsModal({
       <div ref={wrapRef} className={styles.modal} role="dialog" aria-modal="true">
         <header className={styles.header}>
           <span className={styles.headerLead}>
-            <BellIcon className={styles.bell} />
             <span className={styles.title}>Notifications</span>
           </span>
           {unread > 0 ? (

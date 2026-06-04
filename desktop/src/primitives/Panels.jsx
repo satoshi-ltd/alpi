@@ -94,7 +94,7 @@ export function ConnectionPanel({
                 className={`row row-gap ${styles.connRow} ${active ? styles.connRowActive : ""}`}
               >
                 <span className={styles.connIcon}>
-                  {isLocal ? <I.Cpu /> : <I.Wifi />}
+                  {isLocal ? <I.Cpu /> : <I.Server />}
                   <span
                     className={styles.connDot}
                     style={{ background: dotColor }}

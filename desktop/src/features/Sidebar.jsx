@@ -617,7 +617,7 @@ function PinAction({ isPinned, onClick }) {
     <span className={`${styles.pinWrap} ${isPinned ? styles.pinWrapPinned : ""}`}>
       <Tip text={isPinned ? "Unpin" : "Pin"} side="up">
         <IconBtn onClick={onClick} aria-label={isPinned ? "Unpin" : "Pin"} style={{ width: 22, height: 22 }}>
-          <PinIcon filled={isPinned} />
+          {isPinned ? <PinOffIcon /> : <PinIcon />}
         </IconBtn>
       </Tip>
     </span>

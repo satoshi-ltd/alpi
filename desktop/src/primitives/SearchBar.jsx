@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { I, Tip } from "./index.js";
+import { I, Icon, Tip } from "./index.js";
 import styles from "./SearchBar.module.css";
 
 export default function SearchBar({
@@ -58,9 +58,7 @@ export default function SearchBar({
           disabled={total === 0}
           aria-label="Previous match"
         >
-          <svg viewBox="0 0 16 16" className={`icon ${styles.chev}`}>
-            <path d="M4 10l4-4 4 4" />
-          </svg>
+          <Icon name="chevron-up" className={styles.chev} />
         </button>
       </Tip>
       <Tip text="Next · ↵" side="r">
@@ -71,9 +69,7 @@ export default function SearchBar({
           disabled={total === 0}
           aria-label="Next match"
         >
-          <svg viewBox="0 0 16 16" className={`icon ${styles.chev}`}>
-            <path d="M4 6l4 4 4-4" />
-          </svg>
+          <Icon name="chevron-down" className={styles.chev} />
         </button>
       </Tip>
       <Tip text="Close · esc" side="r">

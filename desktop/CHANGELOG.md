@@ -11,6 +11,19 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.3.40 — 2026-06-04 — consistent iconography
+
+Requires alpi v0.7.2+.
+
+- **One icon set.** Every glyph now shares the same weight and grid, so
+  toolbars, menus, and settings read evenly instead of mixing thin and heavy
+  lines.
+- **Clearer labels.** Model shows a sparkle, skills a blocks glyph, tools a
+  wrench, memory a chip, and auto-theme a sun/moon — each easier to tell apart.
+  Remote daemons use a server icon, local ones a chip.
+- **Stop button fixed.** The stop-generation square is centered and sized to
+  match the surrounding controls.
+
 ## v0.3.39 — 2026-06-03 — attach files to chat
 
 Requires alpi v0.7.2+.

@@ -14,6 +14,15 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.1.32 — 2026-06-04 — consistent iconography
+
+Requires alpi v0.7.2+.
+
+- **One icon set.** Icons now share a single stroke weight and grid across the
+  app, so sheets and rows read evenly.
+- **Connection icons.** Remote daemons show a server glyph, local ones a chip —
+  matching the desktop app.
+
 ## v0.1.31 — 2026-06-03 — attach files to chat
 
 Requires alpi v0.7.2+.

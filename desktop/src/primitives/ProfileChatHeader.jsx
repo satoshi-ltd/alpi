@@ -5,10 +5,10 @@ import {
   MeterChip,
   RefreshButton,
   Tip,
+  BlocksIcon,
   CpuIcon,
-  FolderIcon,
   GearIcon,
-  SparkIcon,
+  WrenchIcon,
 } from "./index.js";
 import SessionsButton from "./SessionsButton.jsx";
 import styles from "./ProfileChatHeader.module.css";
@@ -117,17 +117,17 @@ export default function ProfileChatHeader({
       <span className={styles.divider} aria-hidden />
       {onOpenSkills && (
         <Tip text="Skills" side="r">
-          <IconBtn onClick={onOpenSkills} aria-label="Skills"><SparkIcon /></IconBtn>
+          <IconBtn onClick={onOpenSkills} aria-label="Skills"><BlocksIcon /></IconBtn>
         </Tip>
       )}
       {onOpenMemory && (
         <Tip text="Memory" side="r">
-          <IconBtn onClick={onOpenMemory} aria-label="Memory"><FolderIcon /></IconBtn>
+          <IconBtn onClick={onOpenMemory} aria-label="Memory"><CpuIcon /></IconBtn>
         </Tip>
       )}
       {onOpenTools && (
         <Tip text="Tools" side="r">
-          <IconBtn onClick={onOpenTools} aria-label="Tools"><CpuIcon /></IconBtn>
+          <IconBtn onClick={onOpenTools} aria-label="Tools"><WrenchIcon /></IconBtn>
         </Tip>
       )}
       <span className={styles.divider} aria-hidden />

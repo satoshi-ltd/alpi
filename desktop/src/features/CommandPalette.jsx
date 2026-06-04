@@ -5,10 +5,9 @@ import { I } from "../primitives/icons.jsx";
 const GLYPH_BY_PREFIX = {
   "view:settings": () => <I.Gear />,
   "view:find": () => <I.Search />,
-  "view:sidebar": () => <I.Sidebar />,
-  "browse:tools": () => <I.Cpu />,
-  "browse:skills": () => <I.Spark />,
-  "browse:memory": () => <I.Folder />,
+  "browse:tools": () => <I.Wrench />,
+  "browse:skills": () => <I.Blocks />,
+  "browse:memory": () => <I.Cpu />,
   "create:chat": () => <I.Plus />,
   "create:profile": () => <I.Plus />,
   "create:workgroup": () => <I.Plus />,

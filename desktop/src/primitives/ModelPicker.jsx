@@ -49,7 +49,7 @@ export default function ModelPicker({
           onClick={() => setOpen((o) => !o)}
           aria-expanded={open}
         >
-          <I.Spark style={{ width: 12, height: 12, color: "var(--ink-3)" }} />
+          <I.Sparkle style={{ width: 12, height: 12, color: "var(--ink-3)" }} />
           <span className={styles.modelPickerLabel}>{label}</span>
           <I.ChevDown style={{ width: 12, height: 12 }} />
         </button>

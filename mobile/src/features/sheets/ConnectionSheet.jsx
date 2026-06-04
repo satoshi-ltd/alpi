@@ -78,7 +78,7 @@ export function ConnectionSheet({ open, onClose }) {
                         justifyContent: 'center',
                       }}
                     >
-                      <Icon name="wifi" size={20} color={colors.ink2} />
+                      <Icon name={c.kind === 'remote' ? 'server' : 'cpu'} size={20} color={colors.ink2} />
                       <View style={{ position: 'absolute', bottom: 2, right: 2 }}>
                         <Dot color={statusColor(status, colors)} />
                       </View>

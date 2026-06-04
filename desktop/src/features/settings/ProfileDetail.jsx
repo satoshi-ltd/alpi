@@ -7,7 +7,7 @@ import { useNotify } from "../../primitives/Notification.jsx";
 import { useProfileDetail } from "../../hooks/useProfileDetail.js";
 import { Section, Row, CopyButton } from "./primitives.jsx";
 import { SettingsHero } from "../../primitives/index.js";
-import { Mono } from "../../primitives/index.js";
+import { CopyIcon, Mono } from "../../primitives/index.js";
 import { FIELD_KEYS } from "./util.js";
 import { mergeProfileDraft } from "../../lib/profile-draft.js";
 import {
@@ -265,14 +265,7 @@ export default function ProfileDetail({
                     }
                   }}
                 >
-                  <svg
-                    viewBox="0 0 16 16"
-                    className="ds-icon"
-                    style={{ width: 12, height: 12 }}
-                  >
-                    <rect x="5" y="5" width="8" height="8" rx="1.5" />
-                    <path d="M3 11V4a1 1 0 011-1h7" />
-                  </svg>{" "}
+                  <CopyIcon style={{ width: 12, height: 12 }} />{" "}
                   Copy
                 </button>
               </span>
