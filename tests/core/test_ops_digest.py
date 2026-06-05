@@ -269,6 +269,7 @@ def test_run_digest_returns_complete_report_shape(home: Path) -> None:
     assert isinstance(report.skills, ops_digest.SkillsSection)
     assert isinstance(report.memory, ops_digest.MemorySection)
     assert isinstance(report.compaction, ops_digest.CompactionSection)
+    assert isinstance(report.runs, ops_digest.RunsSection)
 
 
 def test_run_digest_is_read_only(home: Path) -> None:
@@ -291,6 +292,38 @@ def test_run_digest_is_read_only(home: Path) -> None:
     assert snapshot == after
 
 
+# ---------- runs section ----------
+
+
+def test_runs_section_empty_without_ledger(home: Path) -> None:
+    report = ops_digest.run_digest(home, now=1_700_000_000.0)
+    assert report.runs.total == 0
+    assert report.runs.recent_failures == []
+    assert report.runs.slowest == []
+
+
+def test_runs_section_aggregates_ledger(home: Path) -> None:
+    from alpi import run_ledger
+    run_ledger.record(home, kind="agent", outcome="ok", elapsed_s=1.0, at=1.0)
+    run_ledger.record(home, kind="schedule", outcome="timeout", elapsed_s=600.0,
+                      at=2.0, timeout_reason="timeout_600s")
+    run_ledger.record(home, kind="terminal", outcome="error", elapsed_s=40.0, at=3.0)
+    report = ops_digest.run_digest(home, now=1_700_000_000.0)
+    runs = report.runs
+    assert runs.total == 3
+    assert runs.by_kind == {"agent": 1, "schedule": 1, "terminal": 1}
+    assert {f["outcome"] for f in runs.recent_failures} == {"timeout", "error"}
+    # Slowest first.
+    assert runs.slowest[0]["kind"] == "schedule"
+
+
+def test_runs_section_tolerates_corrupt_ledger(home: Path) -> None:
+    (home / "logs").mkdir(parents=True, exist_ok=True)
+    (home / "logs" / "runs.jsonl").write_text("not json\n{\"kind\":\"agent\",\"outcome\":\"ok\",\"elapsed_s\":1}\n")
+    report = ops_digest.run_digest(home, now=1_700_000_000.0)
+    assert report.runs.total == 1  # bad line skipped, valid one kept
+
+
 # ---------- CLI contract ----------
 
 
@@ -311,12 +344,13 @@ def test_cli_digest_json_emits_stable_schema(tmp_path: Path, monkeypatch) -> Non
     payload = json.loads(result.output)
     assert payload["window_days"] == 7.0
     assert "generated_at" in payload
-    for section in ("tools", "gateways", "skills", "memory", "compaction"):
+    for section in ("tools", "gateways", "skills", "memory", "compaction", "runs"):
         assert section in payload, f"missing section: {section}"
     assert "unavailable" in payload["tools"]
     assert "by_state" in payload["gateways"]
     assert "promotion_pending" in payload["memory"]
     assert "events_in_window" in payload["compaction"]
+    assert "by_kind" in payload["runs"] and "recent_failures" in payload["runs"]
 
 
 def test_cli_digest_human_render_includes_each_section(
@@ -336,7 +370,7 @@ def test_cli_digest_human_render_includes_each_section(
     out = result.output
     assert "digest" in out
     assert "window:" in out
-    for heading in ("Tools", "Gateways", "Skills", "Memory", "Compaction"):
+    for heading in ("Tools", "Gateways", "Skills", "Memory", "Compaction", "Runs"):
         assert heading in out, f"missing section heading: {heading}"
 
 

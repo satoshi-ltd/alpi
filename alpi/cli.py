@@ -4445,6 +4445,30 @@ def _render_digest(report, console) -> None:
             f"avg ratio after/before={ratio} · fired={fired}"
         )
 
+    # Runs
+    r = report.runs
+    console.print("")
+    console.print("[dim]Runs[/dim]")
+    if r.total == 0:
+        console.print("  [dim]no run records yet[/dim]")
+    else:
+        by_kind = ", ".join(f"{k}={v}" for k, v in sorted(r.by_kind.items()))
+        not_ok = sum(v for o, v in r.by_outcome.items() if o != "ok")
+        console.print(f"  {r.total} recorded · {by_kind} · {not_ok} not-ok")
+        for f in r.recent_failures:
+            reason = f.get("timeout_reason") or f.get("last_tool") or f.get("output_tail") or ""
+            console.print(
+                f"  [red]·[/red] {f.get('kind')} {f.get('outcome')}"
+                f"{(' — ' + reason) if reason else ''}"
+            )
+        for sl in r.slowest:
+            tail = sl.get("last_tool") or sl.get("timeout_reason") or ""
+            console.print(
+                f"  [yellow]·[/yellow] slow {sl.get('kind')} "
+                f"{float(sl.get('elapsed_s') or 0.0):.0f}s"
+                f"{(' — ' + tail) if tail else ''}"
+            )
+
 
 if __name__ == "__main__":
     main(obj={})

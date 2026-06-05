@@ -38,6 +38,7 @@ Per-profile under `{home}/logs/`. Rotated text caps at **1 MB** (`.log.1` = prev
 | `agent.log` | one line per turn |
 | `approval.log` | terminal approval decisions (audit trail with `agent.log`) |
 | `compaction.jsonl` | compaction/truncation records |
+| `runs.jsonl` | run ledger: one line per long-running turn (agent/schedule/workgroup/terminal); surfaced by `alpi digest` |
 
 ```bash
 alpi logs --source agent -n 100

@@ -9,6 +9,7 @@ import shlex
 import signal
 import subprocess
 import sys
+import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -28,6 +29,8 @@ class JobOutcome:
     reply: str = ""
     delivered_to: str = ""
     silent: bool = False
+    exit_code: int | None = None
+    timeout_reason: str | None = None
 
     def __iter__(self):
         # Back-compat tuple unpack `ok, msg, reply = run_job(...)`.
@@ -252,13 +255,16 @@ def _run_script_only(job: dict, home: Path) -> JobOutcome:
             argv, env=env, capture_output=True, text=True, timeout=600,
         )
     except subprocess.TimeoutExpired:
-        return JobOutcome(False, "script timed out")
+        return JobOutcome(False, "script timed out", timeout_reason="timeout_600s")
     except FileNotFoundError:
         return JobOutcome(False, f"executable not found: {argv[0]!r}")
 
     if proc.returncode != 0:
         err = (proc.stderr or "").strip()
-        return JobOutcome(False, f"script rc={proc.returncode}: {err[:300]}")
+        return JobOutcome(
+            False, f"script rc={proc.returncode}: {err[:300]}",
+            exit_code=proc.returncode,
+        )
 
     reply = (proc.stdout or "").strip()
     has_platform = bool(job.get("platform"))
@@ -346,9 +352,12 @@ def run_job(job: dict, home: Path) -> JobOutcome:
             env=env, capture_output=True, text=True, timeout=600,
         )
     except subprocess.TimeoutExpired:
-        return JobOutcome(False, "agent timed out")
+        return JobOutcome(False, "agent timed out", timeout_reason="timeout_600s")
     if proc.returncode != 0:
-        return JobOutcome(False, f"agent rc={proc.returncode}: {proc.stderr[:300]}")
+        return JobOutcome(
+            False, f"agent rc={proc.returncode}: {proc.stderr[:300]}",
+            exit_code=proc.returncode,
+        )
 
     parsed = _parse_events(proc.stdout or "")
     _emit_agent_messages(home, parsed.agent_messages)
@@ -539,6 +548,30 @@ def _emit_schedule_event(home: Path, job: dict, outcome: JobOutcome) -> None:
         pass
 
 
+def _record_schedule_run(
+    home: Path, job: dict, outcome: JobOutcome, *, started: float, elapsed: float,
+) -> None:
+    try:
+        from alpi import run_ledger
+        from alpi.home import profile_name
+        if outcome.ok:
+            result = "ok"
+        elif outcome.timeout_reason:
+            result = "timeout"
+        else:
+            result = "error"
+        run_ledger.record(
+            home, kind="schedule", outcome=result, elapsed_s=elapsed, at=started,
+            profile=profile_name(home),
+            job_id=str(job.get("id") or "") or None,
+            backend=("script" if job.get("no_agent") else "agent-subprocess"),
+            exit_code=outcome.exit_code, timeout_reason=outcome.timeout_reason,
+            output_tail=(outcome.reply or outcome.message),
+        )
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def tick(home: Path, now: datetime | None = None) -> list[tuple[str, bool, str]]:
     """Run one pass: fire every due job, persist ``last_run_at`` on success."""
     now = now or _now()
@@ -553,10 +586,13 @@ def tick(home: Path, now: datetime | None = None) -> list[tuple[str, bool, str]]
             continue
         job_id = job.get("id", "?")
         log.info("firing job %s (%s)", job_id, job.get("kind", "cron"))
+        _started = time.time()
         outcome = run_job(job, home)
+        _elapsed = time.time() - _started
         log.info("job %s %s — %s", job_id,
                  "OK" if outcome.ok else "FAIL", outcome.message)
         _emit_schedule_event(home, job, outcome)
+        _record_schedule_run(home, job, outcome, started=_started, elapsed=_elapsed)
         # Update last_run_at even on failure to avoid a tight re-fire loop.
         job["last_run_at"] = now.isoformat()
         changed = True

@@ -51,7 +51,7 @@ LangChain helps with the first list. Alpi is designed around the second.
 | Workgroup history | Encrypted transcript + hub-local semantic search | App-specific storage |
 | Notifications | App notifications + optional gateways | App-specific implementation |
 | Security posture | Host pairing, ALP crypto, local filesystem posture, roadmap hardening | Boundary is application-defined |
-| Operations | Daemon, schedules, logs, doctor, planned run ledger | Application-defined or external observability |
+| Operations | Daemon, schedules, logs, doctor, run ledger (`alpi digest`) | Application-defined or external observability |
 
 ## Example: Web Factory
 
@@ -134,10 +134,11 @@ The v0.8 retrieval cycle gave Alpi the memory spine:
 - semantic recall over sessions;
 - workgroup transcript search.
 
-The v0.9 hardening cycle is what makes the comparison stronger for real
-operation:
+The run ledger already ships — every long-running turn (agent, schedule,
+workgroup, terminal) leaves a compact, diagnosable record surfaced by
+`alpi digest`. The rest of the v0.9 hardening cycle makes the comparison stronger
+for real operation:
 
-- `OPS.1` gives every long-running turn a compact run ledger;
 - `RT.1` makes provider stalls visible and recoverable;
 - `SEC.1` scans recalled context before it reaches the model;
 - `FS.1` audits credential-file guardrails;

@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.8.1 — 2026-06-05 — a run ledger for unattended turns
+
+- **Every long-running turn now leaves a record.** Agent turns, scheduled jobs,
+  workgroup turns, and terminal commands each append one compact line — start,
+  duration, outcome, exit code, timeout reason, last tool — so when something
+  runs unattended you can see what it was doing and where it stopped without
+  piecing it together from separate logs.
+- **Operational, private, bounded.** It's a capped rolling log inside your
+  profile; captured output is scrubbed for secrets and commands are never
+  stored in the ledger.
+- **See it in `alpi digest`.** The evidence digest has a new *Runs* section —
+  totals by kind, the most recent failures and timeouts, and the slowest runs —
+  so a quick `alpi digest` tells you what's been going wrong unattended.
+
 ## v0.8.0 — 2026-06-04 — search a workgroup's history by meaning
 
 - **Find old workgroup decisions by meaning.** `workgroup_search` does semantic

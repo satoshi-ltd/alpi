@@ -112,6 +112,28 @@ def _pid_alive(pid: int) -> bool:
         return False
 
 
+def _record_terminal_run(
+    *, outcome: str, at: float, elapsed: float,
+    exit_code: int | None = None, timeout_reason: str | None = None,
+    pid: int | None = None, output_tail: str | None = None,
+) -> None:
+    # Never persist the command (secrets in args); output_tail is the redacted output.
+    try:
+        from alpi import run_ledger
+        from alpi.home import get_home, profile_name
+        sandbox_enabled, _ = _sandbox_config()
+        home = get_home()
+        run_ledger.record(
+            home, kind="terminal", outcome=outcome, elapsed_s=elapsed, at=at,
+            profile=profile_name(home),
+            backend=("sandbox" if sandbox_enabled else "local"),
+            exit_code=exit_code, timeout_reason=timeout_reason, pid=pid,
+            output_tail=output_tail,
+        )
+    except Exception:  # noqa: BLE001
+        pass
+
+
 class Terminal(Tool):
     name = "terminal"
     description = (
@@ -203,6 +225,7 @@ class Terminal(Tool):
                         return
             beat_thread = threading.Thread(target=_heartbeat, daemon=True)
             beat_thread.start()
+        _started = time.time()
         try:
             proc = subprocess.run(
                 popen_args, shell=use_shell, capture_output=True, text=True,
@@ -210,6 +233,10 @@ class Terminal(Tool):
                 env=_build_subprocess_env(),
             )
         except subprocess.TimeoutExpired:
+            _record_terminal_run(
+                outcome="timeout", at=_started,
+                elapsed=time.time() - _started, timeout_reason=f"timeout_{timeout}s",
+            )
             return ToolResult(ok=False, output="", error=f"Timed out after {timeout}s")
         finally:
             stop_beat.set()
@@ -219,10 +246,19 @@ class Terminal(Tool):
         if proc.stderr:
             output += "\n[stderr]\n" + _strip_ansi(proc.stderr)
         output += f"\n[exit {proc.returncode}]"
+        _elapsed = time.time() - _started
         if proc.returncode == 0:
+            _record_terminal_run(
+                outcome="ok", at=_started,
+                elapsed=_elapsed, exit_code=0, output_tail=output,
+            )
             return ToolResult(ok=True, output=output)
         stderr_first = (_strip_ansi(proc.stderr).strip().splitlines() or [""])[0]
         short_err = stderr_first or f"command failed (exit {proc.returncode})"
+        _record_terminal_run(
+            outcome="error", at=_started,
+            elapsed=_elapsed, exit_code=proc.returncode, output_tail=output,
+        )
         return ToolResult(ok=False, output=output, error=short_err)
 
     def _run_bg(self, command: str, cwd: str | None) -> ToolResult:
@@ -254,6 +290,9 @@ class Terminal(Tool):
         registry = _bg_dir() / f"{proc.pid}.meta"
         registry.write_text(
             f"command={command}\nlog={log.name}\nstarted={int(time.time())}\n"
+        )
+        _record_terminal_run(
+            outcome="ok", at=time.time(), elapsed=0.0, pid=proc.pid,
         )
         return ToolResult(ok=True, output=(
             f"started pid={proc.pid}\nlog={log.name}\n"

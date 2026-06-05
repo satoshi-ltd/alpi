@@ -153,6 +153,7 @@ class Engine:
 
         # Clear any lingering interrupt request before starting.
         self.interrupt_requested = False
+        self._interrupted_this_turn = False
 
         # Accumulate this turn's state for the persistent log.
         turn_started = time.time()
@@ -511,6 +512,11 @@ class Engine:
                 user_text, final_assistant, turn_tools,
                 elapsed=elapsed,
             )
+            self._record_run(
+                elapsed=elapsed,
+                turn_completed=turn_completed, turn_tools=turn_tools,
+                assistant=final_assistant,
+            )
             if turn_completed:
                 self._maybe_emit_chat_turn_done(
                     source=source, elapsed=elapsed,
@@ -587,10 +593,49 @@ class Engine:
         except Exception:  # noqa: BLE001
             pass
 
+    def _record_run(
+        self, *, elapsed: float,
+        turn_completed: bool, turn_tools: list, assistant: str,
+    ) -> None:
+        # kind comes from dispatch env: workgroup poller sets ALPI_WORKGROUP_DISPATCH, scheduler sets ALPI_SCHEDULE_CHILD.
+        try:
+            import os
+            from alpi import run_ledger
+            from alpi.home import profile_name
+            if turn_completed:
+                outcome = "ok"
+            elif getattr(self, "_interrupted_this_turn", False) or self.interrupt_requested:
+                outcome = "interrupted"
+            else:
+                outcome = "error"
+            wg_id = os.environ.get("ALPI_WORKGROUP_DISPATCH") or None
+            if wg_id:
+                kind, backend = "workgroup", None
+            elif os.environ.get("ALPI_SCHEDULE_CHILD"):
+                kind, backend = "agent", "scheduled-child"
+            else:
+                kind, backend = "agent", None
+            run_ledger.record(
+                self.home,
+                kind=kind,
+                outcome=outcome,
+                elapsed_s=elapsed,
+                profile=profile_name(self.home),
+                session_id=self.session.id,
+                workgroup_id=wg_id,
+                backend=backend,
+                last_tool=(turn_tools[-1].name if turn_tools else None),
+                tool_count=len(turn_tools),
+                output_tail=assistant,
+            )
+        except Exception:  # noqa: BLE001
+            pass
+
     def _finalize_interrupt(self, emit: EventSink) -> None:
         emit(AgentEvent(kind="interrupted",
                         text="Turn interrupted by new user input."))
         self.interrupt_requested = False
+        self._interrupted_this_turn = True
 
     def compact_now(self, emit: EventSink) -> None:
         """Manually drive the same auto-compact pipeline (used by ``/compact``).

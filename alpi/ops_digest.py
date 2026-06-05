@@ -105,6 +105,15 @@ class CompactionSection:
 
 
 @dataclass
+class RunsSection:
+    total: int
+    by_kind: dict[str, int] = field(default_factory=dict)
+    by_outcome: dict[str, int] = field(default_factory=dict)
+    recent_failures: list[dict[str, Any]] = field(default_factory=list)
+    slowest: list[dict[str, Any]] = field(default_factory=list)
+
+
+@dataclass
 class DigestReport:
     window_days: float
     generated_at: float
@@ -113,6 +122,7 @@ class DigestReport:
     skills: SkillsSection
     memory: MemorySection
     compaction: CompactionSection
+    runs: RunsSection
 
 
 # ---------- entry point ----------
@@ -134,6 +144,28 @@ def run_digest(
         skills=_skills_section(home, nowt),
         memory=_memory_section(home, nowt),
         compaction=_compaction_section(home, nowt, window_days),
+        runs=_runs_section(home),
+    )
+
+
+def _runs_section(home: Path) -> RunsSection:
+    try:
+        from alpi import run_ledger
+        s = run_ledger.summarize(home, limit=50)
+    except Exception:  # noqa: BLE001
+        return RunsSection(total=0)
+    slowest = sorted(
+        s.get("slow") or [],
+        key=lambda r: float(r.get("elapsed_s") or 0.0),
+        reverse=True,
+    )[:5]
+    counts = s.get("counts") or {}
+    return RunsSection(
+        total=int(s.get("total") or 0),
+        by_kind=dict(counts.get("by_kind") or {}),
+        by_outcome=dict(counts.get("by_outcome") or {}),
+        recent_failures=list(s.get("problematic") or [])[:5],
+        slowest=slowest,
     )
 
 
@@ -345,6 +377,7 @@ __all__ = [
     "DigestReport",
     "GatewaysSection",
     "MemorySection",
+    "RunsSection",
     "SkillsSection",
     "ToolsSection",
     "parse_window",

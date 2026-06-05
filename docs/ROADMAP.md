@@ -8,7 +8,7 @@ technical reference of what currently ships, see
 Audience: the creator ([@soyjavi](https://github.com/soyjavi)) and
 any future contributor reading the repo cold.
 
-Legend: ✅ shipped · 🔵 backlog · 🟡 next up · ⏸ blocked · 🔴 gate.
+Legend: ✅ shipped · 🟢 active · 🟡 next up · 🔵 backlog · ⏸ blocked · 🔴 gate.
 
 ---
 
@@ -33,8 +33,7 @@ For the product framing behind this cycle, see
 
 | ID | Item | Status |
 |---|---|---|
-| OPS.1 | Turn / process run ledger — compact per-turn records for long-running agent, schedule, terminal, and workgroup turns: pid, backend, start/end, timeout reason, last tool, output tail. | 🟡 |
-| RT.1 | Provider stale-call hardening — first-byte / stream-idle watchdogs, jittered retries, and clearer terminal-failure surfacing for slow or stuck LLM providers. | 🟡 |
+| RT.1 | Provider stale-call hardening — first-byte / stream-idle watchdogs, jittered retries, and clearer terminal-failure surfacing for slow or stuck LLM providers. | 🟢 |
 | SEC.1 | Context injection hardening — shared scanner for recalled memory, learned documents, workgroup transcript snippets, and tool results before they enter model context. | 🔵 |
 | FS.1 | Credential file denylist audit — defense-in-depth read/write blocks for provider keys, profile control files, `.env*`, SSH/cloud creds, and project-local secret stores. | 🔵 |
 | AUDIT.1 | `alpi audit` — local dependency / config / security posture scan: stale deps, known CVEs, exposed binds, risky permissions, and missing hardening warnings. | 🔵 |
@@ -42,27 +41,8 @@ For the product framing behind this cycle, see
 v0.9 should stay narrow: improve observability and failure handling on
 surfaces Alpi already owns. No new execution backend, no worker-lane
 marketplace, no cloud sandbox abstraction, and no automatic file migration.
-`OPS.1` + `RT.1` are first because they make failures visible and recoverable;
-`SEC.1` + `FS.1` + `AUDIT.1` close the safety posture once the runtime
-evidence layer is in place.
-
-### OPS.1. Turn / process run ledger
-
-Long-running work today leaves evidence in several places: session events,
-schedule events, terminal output, workgroup transcript posts, and daemon logs.
-OPS.1 would add one compact per-turn run ledger so failures are diagnosable
-without spelunking every surface.
-
-The record should stay operational, not product analytics: profile,
-session/workgroup/job id when present, process id, terminal backend, start/end,
-exit code, timeout reason, last tool, and a capped output tail. It should help
-answer "what was running, where did it stop, and why?" for schedules,
-workgroup poller turns, terminal commands, and unattended agent turns.
-
-**Why now.** The retrieval and workgroup layers are productive enough that
-Alpi is doing more unattended work. Before adding a new backend, the existing
-runtime needs one reliable evidence trail for hangs, timeouts, and silent
-turns.
+`RT.1` is active — making provider stalls visible and recoverable;
+`SEC.1` + `FS.1` + `AUDIT.1` then close the safety posture.
 
 ### RT.1. Provider stale-call hardening
 

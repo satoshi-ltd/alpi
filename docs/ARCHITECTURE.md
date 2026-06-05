@@ -214,7 +214,8 @@ that live at `{home}/skills/<category>/<name>/`.
 ├── outputs/                persistent inbox for proactive agent messages + schedule failures
 │   └── outputs.jsonl       JSONL store (≤500 rows, atomic compaction)
 └── logs/                   service.log, agent.log, approval.log, ledger.json,
-                            plus subsystem logs such as gateway.log / schedule.log / alp.log
+                            compaction.jsonl, runs.jsonl (run ledger), plus
+                            subsystem logs such as gateway.log / schedule.log / alp.log
 
 ~/.alpi/profiles/<name>/     same layout, isolated per profile
 ```

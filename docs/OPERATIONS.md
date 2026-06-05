@@ -20,8 +20,9 @@ Every profile writes to `{home}/logs/` with the same format so
 ```
 
 Rotating text logs cap at **1 MB**; `.log.1` holds the previous
-generation. The JSONL telemetry feed does not rotate (small append-
-only records, expected to be read with `jq`).
+generation. JSONL telemetry feeds are append-only, read with `jq` (or
+`alpi digest`) — `compaction.jsonl` is unbounded; `runs.jsonl` is capped
+and rolling.
 
 | File | Format | What it answers | Who writes it |
 |---|---|---|---|
@@ -29,6 +30,7 @@ only records, expected to be read with `jq`).
 | `agent.log` | rotated text | What has the agent *been doing*? One line per turn: session id, elapsed, tools called, reply length, cost, user prompt preview. Cross-session grep index. | the engine (every turn on every surface) |
 | `approval.log` | rotated text | Security audit of every non-safe shell command the LLM tried to run: caution (pending / once / session / always / deny) or dangerous (always denied). | the approval system |
 | `compaction.jsonl` | append-only JSONL | Did auto-compact run this turn? Tokens before/after, summarized-message count, tool-truncation count, manual vs auto, `fired` (true when the LLM summarized; false when only oversized tool outputs were truncated). Feeds the v0.6 audit baseline (`CM.1`). | the engine (one line whenever compaction *or* tool truncation ran) |
+| `runs.jsonl` | capped rolling JSONL | What ran and where it stopped: one record per long-running turn (agent, schedule, workgroup, terminal) — outcome, exit code, timeout reason, pid, backend, last tool, and a secret-redacted output tail. Surfaced by `alpi digest`. | the engine, scheduler, and terminal tool (one line per finished run) |
 
 **Tail one or all:**
 
@@ -308,9 +310,11 @@ alpi -p work digest --json
 ```
 
 The report covers unavailable tools, gateway breaker state, skill usage
-telemetry, memory promotion backlog / pressure, and compaction rate over
-the window. It does not run an LLM, write new state, make
-recommendations, or send telemetry anywhere.
+telemetry, memory promotion backlog / pressure, compaction rate over the
+window, and a **Runs** section folding the run ledger (`runs.jsonl`) — totals
+by kind/outcome, recent failures and timeouts, and the slowest recent runs. It
+does not run an LLM, write new state, make recommendations, or send telemetry
+anywhere.
 
 Use it before roadmap or ops decisions: if a proposed improvement has no
 evidence in the digest, it probably belongs in "listening first" until a
