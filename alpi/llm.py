@@ -2,8 +2,28 @@
 
 from __future__ import annotations
 
+import queue
+import random
+import threading
+import time
 from dataclasses import dataclass
 from typing import Any
+
+# RT.1 provider stale-call hardening — defaults, overridable via cfg.runtime.
+DEFAULT_FIRST_BYTE_TIMEOUT_S = 300.0
+DEFAULT_STREAM_IDLE_TIMEOUT_S = 120.0
+DEFAULT_MAX_RETRIES = 2
+DEFAULT_RETRY_BACKOFF_S = 1.5
+
+# litellm exception class names that mean "the request produced nothing usable — retry".
+_TRANSIENT_EXC_NAMES = frozenset({
+    "Timeout", "APITimeoutError", "APIConnectionError", "APIError",
+    "RateLimitError", "ServiceUnavailableError", "InternalServerError",
+})
+
+
+class ProviderStalled(RuntimeError):
+    pass
 
 
 @dataclass
@@ -145,18 +165,137 @@ def _compute_cost(resp, model: str) -> float:
     return 0.0
 
 
+def _is_transient(exc: Exception) -> bool:
+    if isinstance(exc, ProviderStalled):
+        return True
+    name = type(exc).__name__
+    code = getattr(exc, "status_code", None)
+    # A 4xx (bad request / auth / not-found) is permanent; 429 is the rate-limit exception.
+    if name == "APIError" and isinstance(code, int) and 400 <= code < 500 and code != 429:
+        return False
+    if name in _TRANSIENT_EXC_NAMES:
+        return True
+    return isinstance(code, int) and (code == 429 or code >= 500)
+
+
+def _backoff_sleep(base: float, attempt: int) -> None:
+    time.sleep(base * (2 ** (attempt - 1)) * random.uniform(0.8, 1.2))
+
+
+def _completion_silenced(kwargs: dict[str, Any]):
+    # FD-level silence only while litellm resolves the provider (the banner escapes sys.stdout).
+    import os
+    import litellm
+    save_out, save_err = os.dup(1), os.dup(2)
+    devnull = os.open(os.devnull, os.O_WRONLY)
+    os.dup2(devnull, 1)
+    os.dup2(devnull, 2)
+    try:
+        return litellm.completion(**kwargs)
+    finally:
+        os.dup2(save_out, 1)
+        os.dup2(save_err, 2)
+        for fd in (save_out, save_err, devnull):
+            os.close(fd)
+
+
+def _iter_with_watchdog(stream_iter, first_byte_timeout: float, idle_timeout: float):
+    # Pump the blocking provider iterator on a worker thread; the main thread reads
+    # with per-chunk deadlines so a provider that accepts then goes silent can't hang the turn.
+    q: queue.Queue = queue.Queue()
+
+    def _pump():
+        try:
+            for chunk in stream_iter:
+                q.put(("chunk", chunk))
+            q.put(("done", None))
+        except Exception as exc:  # noqa: BLE001
+            q.put(("error", exc))
+
+    threading.Thread(target=_pump, daemon=True).start()
+    first = True
+    while True:
+        timeout = first_byte_timeout if first else idle_timeout
+        try:
+            if timeout and timeout > 0:
+                kind, payload = q.get(timeout=timeout)
+            else:
+                kind, payload = q.get()
+        except queue.Empty:
+            raise ProviderStalled(
+                f"provider sent no {'first token' if first else 'further output'} "
+                f"within {timeout:.0f}s"
+            ) from None
+        first = False
+        if kind == "done":
+            return
+        if kind == "error":
+            raise payload
+        yield payload
+
+
+def _normalize_chunk(chunk, tool_calls_accum: dict) -> dict | None:
+    if not getattr(chunk, "choices", None):
+        return None
+    choice = chunk.choices[0]
+    delta = getattr(choice, "delta", None)
+    text_delta = ""
+    reasoning_delta = ""
+    tc_deltas = []
+    if delta is not None:
+        text_delta = getattr(delta, "content", "") or ""
+        reasoning_delta = (
+            getattr(delta, "reasoning_content", None)
+            or getattr(delta, "reasoning", None)
+            or ""
+        )
+        raw_tcs = getattr(delta, "tool_calls", None) or []
+        for tc in raw_tcs:
+            idx = getattr(tc, "index", 0) or 0
+            entry = tool_calls_accum.setdefault(idx, {"id": "", "name": "", "arguments": ""})
+            if getattr(tc, "id", None):
+                entry["id"] = tc.id
+            fn = getattr(tc, "function", None)
+            if fn is not None:
+                if getattr(fn, "name", None):
+                    entry["name"] += fn.name
+                if getattr(fn, "arguments", None):
+                    entry["arguments"] += fn.arguments
+            tc_deltas.append(entry)
+    return {
+        "text_delta": text_delta,
+        "reasoning_delta": reasoning_delta,
+        "tool_calls_delta": tc_deltas,
+        "finish_reason": getattr(choice, "finish_reason", None),
+    }
+
+
+def _final_chunk(last_chunk, tool_calls_accum: dict, model: str) -> dict:
+    usage = getattr(last_chunk, "usage", None) if last_chunk else None
+    cost = _compute_cost(last_chunk, model)
+    final_tool_calls = [
+        {"id": v["id"], "name": v["name"], "arguments": v["arguments"]}
+        for _, v in sorted(tool_calls_accum.items())
+    ]
+    return {
+        "final": True,
+        "tool_calls": final_tool_calls,
+        "input_tokens": getattr(usage, "prompt_tokens", 0) if usage else 0,
+        "output_tokens": getattr(usage, "completion_tokens", 0) if usage else 0,
+        "cost_usd": float(cost),
+    }
+
+
 def stream(
     model: str,
     messages: list[dict[str, Any]],
     tools: list[dict[str, Any]] | None = None,
     api_base: str | None = None,
     api_key: str | None = None,
+    rt: Any = None,
     **extra: Any,
 ):
-    """Yield streaming chunks from the LLM."""
-    import os
-    import litellm
-
+    """Yield streaming chunks, with first-byte / idle watchdogs and jittered retries (RT.1)."""
     kwargs: dict[str, Any] = {
         "model": model,
         "messages": messages,
@@ -184,77 +323,37 @@ def stream(
         from alpi.providers.reasoning import merge_into_kwargs
         kwargs = merge_into_kwargs(kwargs, extra)
 
-    # FD-level silence only while litellm resolves the provider (first chunk).
-    save_out, save_err = os.dup(1), os.dup(2)
-    devnull = os.open(os.devnull, os.O_WRONLY)
-    os.dup2(devnull, 1)
-    os.dup2(devnull, 2)
-    try:
-        stream_iter = litellm.completion(**kwargs)
-    finally:
-        os.dup2(save_out, 1)
-        os.dup2(save_err, 2)
-        for fd in (save_out, save_err, devnull):
-            os.close(fd)
+    first_byte = float(getattr(rt, "first_byte_timeout_s", DEFAULT_FIRST_BYTE_TIMEOUT_S))
+    idle = float(getattr(rt, "stream_idle_timeout_s", DEFAULT_STREAM_IDLE_TIMEOUT_S))
+    max_retries = int(getattr(rt, "max_retries", DEFAULT_MAX_RETRIES))
+    backoff = float(getattr(rt, "retry_backoff_s", DEFAULT_RETRY_BACKOFF_S))
+    if first_byte > 0:
+        kwargs.setdefault("timeout", first_byte)  # litellm HTTP backstop for connect stalls
 
-    # Accumulate tool_calls across chunks (they stream by index).
-    tool_calls_accum: dict[int, dict[str, str]] = {}
-    last_chunk = None
-
-    for chunk in stream_iter:
-        last_chunk = chunk
-        if not getattr(chunk, "choices", None):
-            continue
-        choice = chunk.choices[0]
-        delta = getattr(choice, "delta", None)
-        text_delta = ""
-        reasoning_delta = ""
-        tc_deltas = []
-        if delta is not None:
-            text_delta = getattr(delta, "content", "") or ""
-            reasoning_delta = (
-                getattr(delta, "reasoning_content", None)
-                or getattr(delta, "reasoning", None)
-                or ""
-            )
-            raw_tcs = getattr(delta, "tool_calls", None) or []
-            for tc in raw_tcs:
-                idx = getattr(tc, "index", 0) or 0
-                entry = tool_calls_accum.setdefault(
-                    idx, {"id": "", "name": "", "arguments": ""}
-                )
-                if getattr(tc, "id", None):
-                    entry["id"] = tc.id
-                fn = getattr(tc, "function", None)
-                if fn is not None:
-                    if getattr(fn, "name", None):
-                        entry["name"] += fn.name
-                    if getattr(fn, "arguments", None):
-                        entry["arguments"] += fn.arguments
-                tc_deltas.append(entry)
-        yield {
-            "text_delta": text_delta,
-            "reasoning_delta": reasoning_delta,
-            "tool_calls_delta": tc_deltas,
-            "finish_reason": getattr(choice, "finish_reason", None),
-        }
-
-    # Final tool calls + usage (on the last chunk)
-    usage = getattr(last_chunk, "usage", None) if last_chunk else None
-    cost = _compute_cost(last_chunk, model)
-
-    final_tool_calls = [
-        {"id": v["id"], "name": v["name"], "arguments": v["arguments"]}
-        for _, v in sorted(tool_calls_accum.items())
-    ]
-
-    yield {
-        "final": True,
-        "tool_calls": final_tool_calls,
-        "input_tokens": getattr(usage, "prompt_tokens", 0) if usage else 0,
-        "output_tokens": getattr(usage, "completion_tokens", 0) if usage else 0,
-        "cost_usd": float(cost),
-    }
+    attempt = 0
+    while True:
+        produced = False
+        tool_calls_accum: dict[int, dict[str, str]] = {}
+        last_chunk = None
+        try:
+            stream_iter = _completion_silenced(kwargs)
+            for chunk in _iter_with_watchdog(stream_iter, first_byte, idle):
+                last_chunk = chunk
+                norm = _normalize_chunk(chunk, tool_calls_accum)
+                if norm is None:
+                    continue
+                produced = True
+                yield norm
+            yield _final_chunk(last_chunk, tool_calls_accum, model)
+            return
+        except Exception as exc:  # noqa: BLE001
+            # Retry only before any output reached the consumer — a partially-streamed
+            # turn can't be safely replayed; surface it instead.
+            if not produced and _is_transient(exc) and attempt < max_retries:
+                attempt += 1
+                _backoff_sleep(backoff, attempt)
+                continue
+            raise
 
 
 def complete(
@@ -266,7 +365,6 @@ def complete(
     **extra: Any,
 ) -> Completion:
     """Call the LLM and return a normalized Completion."""
-    import os
     import litellm
 
     kwargs: dict[str, Any] = {

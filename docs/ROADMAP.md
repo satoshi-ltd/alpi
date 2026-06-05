@@ -8,7 +8,7 @@ technical reference of what currently ships, see
 Audience: the creator ([@soyjavi](https://github.com/soyjavi)) and
 any future contributor reading the repo cold.
 
-Legend: ✅ shipped · 🟢 active · 🟡 next up · 🔵 backlog · ⏸ blocked · 🔴 gate.
+Legend: ✅ shipped · 🔵 backlog · 🟡 next up · ⏸ blocked · 🔴 gate.
 
 ---
 
@@ -33,32 +33,15 @@ For the product framing behind this cycle, see
 
 | ID | Item | Status |
 |---|---|---|
-| RT.1 | Provider stale-call hardening — first-byte / stream-idle watchdogs, jittered retries, and clearer terminal-failure surfacing for slow or stuck LLM providers. | 🟢 |
-| SEC.1 | Context injection hardening — shared scanner for recalled memory, learned documents, workgroup transcript snippets, and tool results before they enter model context. | 🔵 |
+| SEC.1 | Context injection hardening — shared scanner for recalled memory, learned documents, workgroup transcript snippets, and tool results before they enter model context. | 🟡 |
 | FS.1 | Credential file denylist audit — defense-in-depth read/write blocks for provider keys, profile control files, `.env*`, SSH/cloud creds, and project-local secret stores. | 🔵 |
 | AUDIT.1 | `alpi audit` — local dependency / config / security posture scan: stale deps, known CVEs, exposed binds, risky permissions, and missing hardening warnings. | 🔵 |
 
 v0.9 should stay narrow: improve observability and failure handling on
 surfaces Alpi already owns. No new execution backend, no worker-lane
 marketplace, no cloud sandbox abstraction, and no automatic file migration.
-`RT.1` is active — making provider stalls visible and recoverable;
-`SEC.1` + `FS.1` + `AUDIT.1` then close the safety posture.
-
-### RT.1. Provider stale-call hardening
-
-Alpi already hardened workgroup turns with idle/backstop timeouts. RT.1
-applies the same discipline to LLM provider calls: first-byte watchdogs,
-stream-idle watchdogs, jittered retries, and clearer surfaced failure reasons
-when a provider accepts a request and then stalls.
-
-Scope stays runtime-only. No provider marketplace, no automatic model
-switching beyond the existing fallback policy, and no telemetry upload. The
-deliverable is predictable failure and retry behaviour for slow or flaky
-providers.
-
-**Why now.** Provider stalls are one of the few failure modes that can make
-Alpi look frozen while the daemon is otherwise healthy. This is hardening of
-the existing loop, not a new product surface.
+`SEC.1` is next — scanning recalled content before it reaches the model;
+`FS.1` + `AUDIT.1` then close the safety posture.
 
 ### SEC.1. Context injection hardening
 

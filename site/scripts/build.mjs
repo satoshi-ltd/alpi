@@ -35,6 +35,7 @@ const VERSION = (pyproject.match(/^version\s*=\s*"([^"]+)"/m) || [null, '0.0.0']
 const tauriConf = readFileSync(join(REPO, 'desktop/src-tauri/tauri.conf.json'), 'utf8');
 const DESKTOP_VERSION = JSON.parse(tauriConf).version;
 const DESKTOP_DOWNLOAD_URL = 'https://github.com/satoshi-ltd/alpi/releases/download/desktop-latest/alpi-latest.dmg';
+const DESKTOP_RELEASES_URL = `https://github.com/satoshi-ltd/alpi/releases/tag/desktop-v${DESKTOP_VERSION}`;
 
 // ── doc metadata ─────────────────────────────────────────────────────────────
 // Order drives prev/next pager and the docs index.
@@ -132,7 +133,7 @@ function renderJsonLd({ kind, title, description, canonical }) {
         '@type': 'SoftwareApplication',
         name: 'alpi',
         applicationCategory: 'DeveloperApplication',
-        operatingSystem: 'macOS, Linux',
+        operatingSystem: 'macOS, Linux, Windows',
         description: SITE_DESCRIPTION,
         url: SITE_URL,
         softwareVersion: VERSION,
@@ -500,8 +501,9 @@ const landing = readFileSync(join(TPL, 'landing.html'), 'utf8')
   .replace('src="demo.js"', `src="demo.js?v=${VERSION}"`)
   // Desktop version goes AFTER the alpi-version sweep so the regex
   // above doesn't clobber it (desktop ships on its own track).
-  .replace('<!-- DESKTOP_DOWNLOAD_URL -->', DESKTOP_DOWNLOAD_URL)
-  .replace('<!-- DESKTOP_VERSION -->', `v${DESKTOP_VERSION}`);
+  .replaceAll('<!-- DESKTOP_DOWNLOAD_URL -->', DESKTOP_DOWNLOAD_URL)
+  .replaceAll('<!-- DESKTOP_RELEASES_URL -->', DESKTOP_RELEASES_URL)
+  .replaceAll('<!-- DESKTOP_VERSION -->', `v${DESKTOP_VERSION}`);
 write(join(DIST, 'index.html'), landing);
 
 // Apps page — same head/nav infra as landing, but its own template + CSS
@@ -518,8 +520,9 @@ const apps = readFileSync(join(TPL, 'apps.html'), 'utf8')
   .replace('<!-- NAV (injected by build.mjs) -->', renderNav('apps'))
   .replace('<!-- THEME_CONTROL (injected by build.mjs — same component used by docs) -->', themeControlHtml)
   .replace(/\bv\d+\.\d+\.\d+\b/g, `v${VERSION}`)
-  .replace('<!-- DESKTOP_DOWNLOAD_URL -->', DESKTOP_DOWNLOAD_URL)
-  .replace('<!-- DESKTOP_VERSION -->', `v${DESKTOP_VERSION}`)
+  .replaceAll('<!-- DESKTOP_DOWNLOAD_URL -->', DESKTOP_DOWNLOAD_URL)
+  .replaceAll('<!-- DESKTOP_RELEASES_URL -->', DESKTOP_RELEASES_URL)
+  .replaceAll('<!-- DESKTOP_VERSION -->', `v${DESKTOP_VERSION}`)
   // cache-bust shared assets so a Cloudflare edge copy of an older bundle can't crash against new HTML markup.
   .replace('href="doc.css"', `href="doc.css?v=${VERSION}"`)
   .replace('href="apps.css"', `href="apps.css?v=${VERSION}"`)

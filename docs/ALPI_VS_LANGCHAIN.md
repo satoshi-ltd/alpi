@@ -134,12 +134,12 @@ The v0.8 retrieval cycle gave Alpi the memory spine:
 - semantic recall over sessions;
 - workgroup transcript search.
 
-The run ledger already ships — every long-running turn (agent, schedule,
-workgroup, terminal) leaves a compact, diagnosable record surfaced by
-`alpi digest`. The rest of the v0.9 hardening cycle makes the comparison stronger
-for real operation:
+The run ledger already ships (every long-running turn leaves a compact,
+diagnosable record surfaced by `alpi digest`), and so does provider stale-call
+hardening (first-byte / idle watchdogs + retries so a stuck LLM can't hang a
+turn). The rest of the v0.9 hardening cycle makes the comparison stronger for
+real operation:
 
-- `RT.1` makes provider stalls visible and recoverable;
 - `SEC.1` scans recalled context before it reaches the model;
 - `FS.1` audits credential-file guardrails;
 - `AUDIT.1` checks local posture explicitly.

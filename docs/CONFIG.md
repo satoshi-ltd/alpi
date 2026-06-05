@@ -242,6 +242,25 @@ The daemon never plays audio itself — the `tts` tool returns the cached file p
 
 The Telegram gateway auto-transcribes inbound voice notes and audio files through the same `stt` pipeline: when a user sends a voice message, the gateway downloads it via `getFile`, caches under `~/.alpi/cache/inbound/`, runs `stt`, and feeds the transcript to the agent as text (`[voice note] <transcription>`). The agent sees a normal text turn — nothing surface-specific to handle.
 
+### Runtime
+
+Provider stale-call hardening for LLM streaming turns: watchdogs that fail a
+slow/stuck provider instead of hanging the turn, plus jittered retries before
+any output reaches the consumer. A timeout of `0` disables that watchdog.
+
+| Key | Default | Type | Takes effect |
+|---|---|---|---|
+| `runtime.first_byte_timeout_s` | `300` | seconds (`0` = off) | next turn |
+| `runtime.stream_idle_timeout_s` | `120` | seconds (`0` = off) | next turn |
+| `runtime.max_retries` | `2` | int | next turn |
+| `runtime.retry_backoff_s` | `1.5` | seconds (base; exponential + jitter) | next turn |
+
+`first_byte_timeout_s` is generous so slow reasoning models aren't killed before
+their first token; bump it for very slow local Ollama or long-thinking models.
+Retries fire only for transient failures (timeouts, connection drops, 429/5xx)
+and only before any token has streamed — a partially-streamed turn is surfaced,
+not silently replayed.
+
 ### Memory
 
 | Field | Default | Notes |

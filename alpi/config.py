@@ -55,6 +55,12 @@ DEFAULT_CONFIG: dict[str, Any] = {
             "mark_as_read": True,
         },
     },
+    "runtime": {
+        "first_byte_timeout_s": 300,
+        "stream_idle_timeout_s": 120,
+        "max_retries": 2,
+        "retry_backoff_s": 1.5,
+    },
 }
 
 
@@ -134,6 +140,16 @@ class ModelReasoningConfig:
 
 
 @dataclass
+class RuntimeConfig:
+    # LLM provider stale-call hardening (RT.1). A timeout of 0 disables that watchdog.
+    # first_byte is generous so slow reasoning models aren't killed before their first token.
+    first_byte_timeout_s: float = 300.0
+    stream_idle_timeout_s: float = 120.0
+    max_retries: int = 2
+    retry_backoff_s: float = 1.5
+
+
+@dataclass
 class Config:
     home: Path
     model: str
@@ -142,6 +158,7 @@ class Config:
     tools: ToolsConfig = field(default_factory=ToolsConfig)
     memory: MemoryConfig = field(default_factory=MemoryConfig)
     model_reasoning: ModelReasoningConfig = field(default_factory=ModelReasoningConfig)
+    runtime: RuntimeConfig = field(default_factory=RuntimeConfig)
     tui: dict[str, Any] = field(default_factory=dict)
     gateway: dict[str, Any] = field(default_factory=dict)
     alp: dict[str, Any] = field(default_factory=dict)
@@ -183,6 +200,22 @@ class Config:
     @property
     def config_path(self) -> Path:
         return self.home / "config.yaml"
+
+
+def _non_negative_float(value: Any, default: float) -> float:
+    try:
+        n = float(value)
+    except (TypeError, ValueError):
+        return float(default)
+    return n if n >= 0 else float(default)
+
+
+def _non_negative_int(value: Any, default: int) -> int:
+    try:
+        n = int(value)
+    except (TypeError, ValueError):
+        return int(default)
+    return n if n >= 0 else int(default)
 
 
 def _normalize_deny(raw: Any) -> list[str]:
@@ -275,6 +308,15 @@ def load(home: Path) -> Config:
         effort=effort_in if effort_in in {"low", "medium", "high"} else "",
     )
 
+    rt_raw = data.get("runtime") or {}
+    rt_defaults = DEFAULT_CONFIG["runtime"]
+    runtime_cfg = RuntimeConfig(
+        first_byte_timeout_s=_non_negative_float(rt_raw.get("first_byte_timeout_s"), rt_defaults["first_byte_timeout_s"]),
+        stream_idle_timeout_s=_non_negative_float(rt_raw.get("stream_idle_timeout_s"), rt_defaults["stream_idle_timeout_s"]),
+        max_retries=_non_negative_int(rt_raw.get("max_retries"), rt_defaults["max_retries"]),
+        retry_backoff_s=_non_negative_float(rt_raw.get("retry_backoff_s"), rt_defaults["retry_backoff_s"]),
+    )
+
     return Config(
         home=home,
         model=data.get("model", DEFAULT_CONFIG["model"]),
@@ -283,6 +325,7 @@ def load(home: Path) -> Config:
         tools=tools_cfg,
         memory=memory_cfg,
         model_reasoning=reasoning_cfg,
+        runtime=runtime_cfg,
         tui=data.get("tui", DEFAULT_CONFIG["tui"]),
         gateway=data.get("gateway", DEFAULT_CONFIG["gateway"]),
         alp=dict(data.get("alp") or {}),
@@ -336,6 +379,15 @@ def save(cfg: Config) -> None:
 
     if cfg.service:
         data["service"] = cfg.service
+
+    rt_defaults = RuntimeConfig()
+    runtime_delta = {
+        k: getattr(cfg.runtime, k)
+        for k in ("first_byte_timeout_s", "stream_idle_timeout_s", "max_retries", "retry_backoff_s")
+        if getattr(cfg.runtime, k) != getattr(rt_defaults, k)
+    }
+    if runtime_delta:
+        data["runtime"] = runtime_delta
 
     atomic_write_yaml(cfg.config_path, data)
 

@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.8.2 — 2026-06-05 — stop stalled providers from hanging a turn
+
+- **A stuck LLM no longer freezes the turn.** If a provider accepts a request
+  and then goes silent — no first token, or a long gap mid-answer — the turn
+  now fails with a clear reason instead of hanging indefinitely.
+- **Automatic retry on transient hiccups.** Connection drops, timeouts, and
+  rate limits retry a couple of times with backoff before giving up — but only
+  before any text has streamed, so a half-written answer is never replayed.
+- **Tunable, reasoning-friendly.** `runtime.first_byte_timeout_s`,
+  `stream_idle_timeout_s`, and `max_retries` are configurable; defaults are
+  generous so slow reasoning models aren't cut off, and `0` disables a watchdog.
+
 ## v0.8.1 — 2026-06-05 — a run ledger for unattended turns
 
 - **Every long-running turn now leaves a record.** Agent turns, scheduled jobs,

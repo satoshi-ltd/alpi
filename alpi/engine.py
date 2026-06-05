@@ -159,6 +159,7 @@ class Engine:
         turn_started = time.time()
         turn_tools: list[ToolLog] = []
         final_assistant = ""
+        turn_error = ""  # provider/abort reason for the run ledger when nothing was produced
         # Only natural completion (LLM produced a final reply with no further
         # tool calls) flips this. Interrupts, max-step aborts, provider
         # errors, and budget exhaustion leave it False so the post-turn
@@ -262,7 +263,8 @@ class Engine:
                 final: dict = {}
                 try:
                     for chunk in llm.stream(
-                        messages=self.session.messages, tools=schemas, **call_kwargs
+                        messages=self.session.messages, tools=schemas,
+                        rt=self.cfg.runtime, **call_kwargs,
                     ):
                         if self.interrupt_requested:
                             break
@@ -277,7 +279,8 @@ class Engine:
                             accumulated_text.append(text_delta)
                             emit(AgentEvent(kind="assistant_delta", text=text_delta))
                 except Exception as e:  # noqa: BLE001
-                    emit(AgentEvent(kind="error", text=str(e)))
+                    turn_error = str(e)
+                    emit(AgentEvent(kind="error", text=turn_error))
                     return
 
                 if self.interrupt_requested:
@@ -494,7 +497,8 @@ class Engine:
                     emit(AgentEvent(kind="done"))
                     return
 
-            emit(AgentEvent(kind="error", text="Reached max tool steps; stopping."))
+            turn_error = "Reached max tool steps; stopping."
+            emit(AgentEvent(kind="error", text=turn_error))
         finally:
             todo_mod.reset_store(todo_token)
             # Replace the in-flight stub from turn-start, or append if an early exception aborted before it was logged.
@@ -515,7 +519,7 @@ class Engine:
             self._record_run(
                 elapsed=elapsed,
                 turn_completed=turn_completed, turn_tools=turn_tools,
-                assistant=final_assistant,
+                assistant=final_assistant or turn_error,
             )
             if turn_completed:
                 self._maybe_emit_chat_turn_done(
