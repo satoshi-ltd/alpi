@@ -185,6 +185,9 @@ jobs:
           - os: ubuntu-22.04
             rust_targets: "x86_64-unknown-linux-gnu"
             args: "--bundles appimage,deb"
+          - os: windows-latest
+            rust_targets: "x86_64-pc-windows-msvc"
+            args: "--bundles nsis"
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -356,6 +359,21 @@ jobs:
           includeUpdaterJson: true
           args: ${{ matrix.args }}
 
+      # NSIS installer is unsigned (no Authenticode cert) — SmartScreen warns on
+      # first run. The minisign key still signs the updater artifact.
+      - name: build Windows installer
+        if: matrix.os == 'windows-latest'
+        uses: tauri-apps/tauri-action@v0.6.2
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: desktop
+          releaseId: ${{ needs.check-version.outputs.release_id }}
+          includeUpdaterJson: true
+          args: ${{ matrix.args }}
+
   # 3. Publish the draft release that the matrix uploaded assets to.
   publish-release:
     name: publish release
@@ -430,20 +448,27 @@ jobs:
           fi
           cp "$dmg" latest-assets/alpi-latest.dmg
 
+          # Windows is best-effort — don't fail the rolling alias if its build was skipped.
+          exe=$(find latest-assets -maxdepth 1 -type f -name '*-setup.exe' | head -1)
+          if [ -n "$exe" ]; then
+            cp "$exe" latest-assets/alpi-latest-setup.exe
+          fi
+
           python3 - <<'PY'
           import json, os
 
           version = os.environ["VERSION"]
           base = "https://github.com/satoshi-ltd/alpi/releases/download/desktop-latest"
+          downloads = {"macos_dmg": f"{base}/alpi-latest.dmg"}
+          if os.path.exists("latest-assets/alpi-latest-setup.exe"):
+              downloads["windows_exe"] = f"{base}/alpi-latest-setup.exe"
           payload = {
               "version": version,
               "tag": f"desktop-v{version}",
               "notes_url": "https://github.com/satoshi-ltd/alpi/blob/main/desktop/CHANGELOG.md",
               "release_url": "https://github.com/satoshi-ltd/alpi/releases/tag/desktop-latest",
               "updater_manifest_url": f"{base}/latest.json",
-              "downloads": {
-                  "macos_dmg": f"{base}/alpi-latest.dmg",
-              },
+              "downloads": downloads,
           }
           with open("latest-assets/desktop-release.json", "w", encoding="utf-8") as fh:
               json.dump(payload, fh, indent=2)
