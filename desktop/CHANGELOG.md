@@ -11,6 +11,17 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.3.41 — 2026-06-06 — model picker stops sticking to a stale override
+
+Requires alpi v0.7.2+.
+
+- **The model picker no longer keeps a stale choice.** When a profile's model
+  changes, the per-message override resets — so you won't keep silently sending
+  a model you picked earlier (which could, e.g., break image input on a profile
+  that's since switched to a vision model).
+- **Clearer when you're overriding.** The model control now highlights when the
+  active model is an override, not the profile's configured default.
+
 ## v0.3.40 — 2026-06-04 — consistent iconography
 
 Requires alpi v0.7.2+.

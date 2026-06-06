@@ -74,9 +74,12 @@ export default function ChatPane({
   const [modelOverride, setModelOverride] = useState(null);
   const [refreshBeat, setRefreshBeat] = useState(0);
 
+  // Clear the picker override on a new session AND when the profile's configured
+  // model changes — otherwise a stale override keeps overriding the live config
+  // (e.g. an old text-only pick masking a profile now set to a vision model).
   useEffect(() => {
     setModelOverride(null);
-  }, [sessionKey]);
+  }, [sessionKey, activeProfile?.model]);
 
   // Lazy heavy fields — voice_id / models / mcps. Scoped per connection so two daemons with the same profile name never share state.
   const { detail: activeDetail } = useProfileDetail(connectionId ?? null, activeProfile?.name ?? null);

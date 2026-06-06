@@ -17,6 +17,7 @@ export default function ModelPicker({
   models = {},
   onPick,
   onSetDefault,
+  override = false,
   mode = "override",
   variant = "ghost",
 }) {
@@ -39,7 +40,9 @@ export default function ModelPicker({
         text={
           mode === "default"
             ? "Model — default for this profile"
-            : "Model — overrides for this message"
+            : override
+              ? "Model — override active (not this profile's configured model)"
+              : "Model — overrides for this message"
         }
         side="up"
       >
@@ -49,7 +52,11 @@ export default function ModelPicker({
           onClick={() => setOpen((o) => !o)}
           aria-expanded={open}
         >
-          <I.Sparkle style={{ width: 12, height: 12, color: "var(--ink-3)" }} />
+          <I.Sparkle
+            size="sm"
+            className={override ? styles.modelPickerIconOverride : styles.modelPickerIcon}
+            style={override && accent ? { "--c": accent } : undefined}
+          />
           <span className={styles.modelPickerLabel}>{label}</span>
           <I.ChevDown style={{ width: 12, height: 12 }} />
         </button>

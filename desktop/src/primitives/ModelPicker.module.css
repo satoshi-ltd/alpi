@@ -16,6 +16,9 @@
   border-color: color-mix(in srgb, var(--ink) 24%, transparent);
 }
 
+.modelPickerIcon { color: var(--ink-3); }
+.modelPickerIconOverride { color: var(--c, var(--accent)); }
+
 .modelPickerLabel {
   font-family: var(--font-mono);
   font-size: var(--fs-sm);

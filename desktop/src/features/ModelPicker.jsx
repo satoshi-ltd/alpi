@@ -58,6 +58,7 @@ export default function ModelPicker({
   }, [models, ollamaModels, ollamaModelSet]);
 
   const active = value ?? defaultModel ?? null;
+  const isOverride = mode === "override" && value != null && value !== defaultModel;
   const flatCount = Object.values(groupedModels).reduce(
     (n, list) => n + list.length,
     0,
@@ -68,6 +69,7 @@ export default function ModelPicker({
   return (
     <DsModelPicker
       currentModel={active}
+      override={isOverride}
       accent={accent ?? null}
       models={groupedModels}
       mode={mode}

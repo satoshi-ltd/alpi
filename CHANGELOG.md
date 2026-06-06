@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.8.3 — 2026-06-06 — chat reports the model it used
+
+- **Easier to tell which model ran.** Each chat send now reports the effective
+  model — after any per-message override — in its opening event, so a wrong or
+  stale model shows up in the trace instead of being a guessing game.
+
 ## v0.8.2 — 2026-06-05 — stop stalled providers from hanging a turn
 
 - **A stuck LLM no longer freezes the turn.** If a provider accepts a request

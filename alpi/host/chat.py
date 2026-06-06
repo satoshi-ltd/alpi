@@ -121,7 +121,7 @@ async def _data_chat_send(
         except Exception:  # noqa: BLE001
             stream_alive = False
 
-    await emit({"event": "session_start", "session_id": persisted_sid})
+    await emit({"event": "session_start", "session_id": persisted_sid, "model_used": cfg.model})
 
     loop = asyncio.get_running_loop()
     queue: asyncio.Queue = asyncio.Queue()

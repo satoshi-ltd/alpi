@@ -214,9 +214,64 @@ async def test_data_chat_send_streams_events_in_order(
     # session_start must arrive first so the client can pin the id and replay via host.chat.events_since if the stream dies mid-turn.
     start = events[0]
     assert start["session_id"] == "fake-session-id"
+    assert start["model_used"] == "x"
     reply = next(e for e in events if e["event"] == "reply")
     assert reply["text"] == "echo: hello"
     assert reply["session_id"] == "fake-session-id"
+
+
+@pytest.mark.asyncio
+async def test_data_chat_send_reports_overridden_model(
+    monkeypatch, short_tmp: Path,
+) -> None:
+    home = short_tmp / "h"
+    home.mkdir()
+    load_or_generate(home)
+
+    from alpi import config as cfg_mod
+    monkeypatch.setattr(
+        cfg_mod, "load",
+        lambda h: SimpleNamespace(model="x", model_reasoning=SimpleNamespace(effort="high")),
+    )
+    import alpi.engine
+    monkeypatch.setattr(alpi.engine, "Engine", _FakeEngine)
+    from alpi.host import chat as dc
+    monkeypatch.setattr(dc, "_resolve_home", lambda profile: home)
+
+    srv = host_server.Server(home=home)
+    data_handlers.register(srv)
+    dc.register(srv)
+    await srv.start()
+
+    try:
+        reader, writer = await asyncio.open_unix_connection(str(srv.socket_path()))
+        writer.write((json.dumps({
+            "id": "req-ov",
+            "method": "host.chat.send",
+            "params": {
+                "profile": "default",
+                "text": "hello",
+                "request_id": "req-ov",
+                "model": "override-model",
+            },
+        }) + "\n").encode("utf-8"))
+        await writer.drain()
+
+        events: list[dict] = []
+        while True:
+            line = await reader.readline()
+            if not line:
+                break
+            events.append(json.loads(line))
+
+        writer.close()
+        await writer.wait_closed()
+    finally:
+        await srv.stop()
+
+    start = events[0]
+    assert start["event"] == "session_start"
+    assert start["model_used"] == "override-model"
 
 
 @pytest.mark.asyncio
