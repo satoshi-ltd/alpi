@@ -107,3 +107,18 @@ workgroups closed.` once both have hit `#done`.
 - Cost climbing past the budget → guardrails not biasing toward
   silence. Check `WORKGROUP_GUARDRAILS` in
   `alpi/alp/agent_context.py`.
+
+## Quick check — inline images across clients (v0.8.5)
+
+Not a script; a one-shot to verify agent-made images render inline (and
+the attachment → `--input` path reaches the agent). Pick a profile whose
+image skill is active (e.g. a `muse`-style profile):
+
+```
+alpi -p muse chat --once "Reshoot this room, more Airbnb, new angle, keep its identity. Save to /tmp/x.png and show it." --attach ~/Desktop/room.jpg
+```
+
+Success: the reply contains `![...](/tmp/x.png "…")`, the file exists, and
+it's a real transformation (not the input echoed). In the desktop/mobile
+chat the same reply renders as a captioned card; tap/click opens the
+lightbox. Reads stay within workspace/home/temp (see `docs/SECURITY.md`).

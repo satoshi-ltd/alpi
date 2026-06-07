@@ -407,6 +407,25 @@ Risk profile of the runtime set:
 - **New runtime deps require justification.** A line in `ARCHITECTURE.md → Dependencies` and a row in the table above. No drift.
 - **Reverse-engineered integrations carry a fallback plan.** `edge-tts` (Microsoft), `playwright-stealth` (detection vendors), `ddgs` (DuckDuckGo HTML) are all at the mercy of third parties. When they break we swap, we don't patch around them forever.
 
+## Inline image reads (host plane)
+
+Agent-made images render inline in chat across clients. The image bytes
+are read by path, scoped to a fixed root set: the active profile's
+**workspace**, its **home** (`~/.alpi/...`), and **temp** dirs. Same roots
+on every client:
+
+- **Desktop** reads the file directly (Tauri `attachment_thumb` / `save_file_as`);
+  the workspace root is supplied by the UI from the profile's config.
+- **Mobile** is remote, so the daemon serves the bytes via `host.attachments.fetch`
+  (base64), gated to the same roots.
+
+Implication: a client authorised for a profile can fetch any image under
+those roots by path — broader than "an image that appeared in this chat".
+This is intentional (it's what inline rendering needs and the device is
+already trusted for the profile), but it is a real read surface. A future
+tightening would restrict reads to paths that appear in the session
+transcript or an output manifest; not implemented today.
+
 ## Known gaps
 
 - Writes to `/tmp` are allowed by both layers. A process could drop

@@ -164,6 +164,7 @@ alpi/
 │   ├── chat.py            host.chat.send (streaming) + host.chat.cancel
 │   ├── config.py          mutation verbs (host.providers.*, host.peers.*, host.profile.*, host.mcp.*, host.gateway.*, host.sandbox.*, host.voice.*)
 │   ├── devices.py         host.devices.* pairing-token lifecycle
+│   ├── attachments_rpc.py host.attachments.{stage,fetch} — stage uploads in, fetch serves an agent-made image's bytes out (scoped to the profile's workspace/home/temp) so remote clients render inline images
 │   ├── network_rpc.py     host.network.{status,set_advertised,restart_host_server} — pairing endpoint query + override (parity with `alpi setup → devices → network`); scope classified by host character via network.classify_scope (tailscale / lan / custom / docker) so clients don't surface the "configured" resolution-path detail
 │   ├── probes.py          host.gateway.probe, host.peers.ping, host.model.ctx_window
 │   ├── schedule.py        host.schedule.{list,remove,set_paused,fire}

@@ -175,6 +175,7 @@ def _run_once(
     emit_events: bool = False,
     resume_chat_id: str | None = None,
     persist: bool = True,
+    attach: tuple[str, ...] = (),
 ) -> None:
     import json
     from alpi import session_map
@@ -182,6 +183,11 @@ def _run_once(
     _bootstrap(h)
     cfg = config.load(h)
     engine = Engine(home=h, cfg=cfg)
+
+    attachments = (
+        [{"path": str(Path(p).expanduser().resolve()), "name": Path(p).name} for p in attach]
+        or None
+    )
 
     if resume_chat_id:
         engine.session.subdir = "gateway/sessions"
@@ -294,7 +300,8 @@ def _run_once(
     prev_clarify = _clar.get_handler()
     _clar.set_handler(_inline_clarify)
     try:
-        engine.run_turn(user_text, emit=sink, persist_inflight=persist)
+        extra = {"attachments": attachments} if attachments else {}
+        engine.run_turn(user_text, emit=sink, persist_inflight=persist, **extra)
     finally:
         _signal.signal(_signal.SIGINT, prev_handler)
         _clar.set_handler(prev_clarify)
@@ -408,6 +415,10 @@ def cmd_ctx(ctx: click.Context, model: str) -> None:
 @click.option(
     "-c", "--continue", "continue_last", is_flag=True, help="Resume from the last session."
 )
+@click.option(
+    "--attach", "attach", multiple=True, type=click.Path(exists=True, dir_okay=False),
+    help="Attach a file to the --once turn (repeatable). Images/PDFs/text the model can read.",
+)
 @click.pass_context
 def chat(
     ctx: click.Context,
@@ -416,16 +427,18 @@ def chat(
     no_save: bool,
     resume_chat: str | None,
     continue_last: bool,
+    attach: tuple[str, ...],
 ) -> None:
     """Launch the TUI, or run one turn with ``--once "text"``."""
     h: Path = ctx.obj["home"]
-    if input_text is not None:
+    if input_text is not None or attach:
         _run_once(
             h,
-            input_text,
+            input_text or "",
             emit_events=emit_events,
             resume_chat_id=resume_chat,
             persist=not no_save,
+            attach=attach,
         )
     else:
         _run_chat(h, continue_last=continue_last)

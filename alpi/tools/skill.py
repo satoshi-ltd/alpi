@@ -1509,11 +1509,21 @@ def _run_or_test(home: Path, name: str, args: list[str], *, mode: str) -> ToolRe
         )
 
     from alpi.home import effective_profile_env
-    env = effective_profile_env(home, extra={
+    extra_env = {
         "ALPI_HOME": str(home),
         "ALPI_SKILL_NAME": name,
         "ALPI_SKILL_DIR": str(skill_dir),
-    })
+    }
+    # Scripts run with cwd=skill dir; expose the workspace so they can resolve
+    # project-relative output paths the way write_file does (not against cwd).
+    try:
+        from alpi import config as _cfg_mod
+        ws = _cfg_mod.load(home).workspace_path
+        if ws:
+            extra_env["ALPI_WORKSPACE"] = str(ws)
+    except Exception:  # noqa: BLE001
+        pass
+    env = effective_profile_env(home, extra=extra_env)
 
     missing = [v for v in declared_env if v and not env.get(v)]
     if missing:

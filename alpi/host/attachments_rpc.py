@@ -14,8 +14,16 @@ from alpi.host import server as host_server
 _STAGE_TTL_SECONDS = 6 * 3600
 
 
+_FETCH_IMG_MIME = {
+    "png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg",
+    "webp": "image/webp", "gif": "image/gif",
+}
+_MAX_FETCH_BYTES = 8 * 1024 * 1024
+
+
 def register(server: host_server.Server) -> None:
     server.register("host.attachments.stage", _stage)
+    server.register("host.attachments.fetch", _fetch)
 
 
 def _resolve_home(profile: str) -> Path:
@@ -96,6 +104,53 @@ async def _stage(params: dict[str, Any], server: host_server.Server) -> dict[str
             "mime": mime,
             "size": len(data),
         },
+    }
+
+
+# Allowed read roots for serving image bytes to remote clients: workspace + home + temp.
+def _fetch_allowed(home: Path, real: Path) -> bool:
+    import tempfile
+
+    roots = [Path("/tmp"), Path("/private/tmp"), Path(tempfile.gettempdir()), home]
+    try:
+        from alpi import config as cfg_mod
+        ws = cfg_mod.load(home).workspace_path
+        if ws:
+            roots.append(ws)
+    except Exception:  # noqa: BLE001
+        pass
+    for r in roots:
+        try:
+            rc = r.resolve()
+        except OSError:
+            continue
+        if rc == real or rc in real.parents:
+            return True
+    return False
+
+
+async def _fetch(params: dict[str, Any], server: host_server.Server) -> dict[str, Any]:
+    profile = str(params.get("profile") or "")
+    path = str(params.get("path") or "")
+    ext = path.rsplit(".", 1)[-1].lower() if "." in path else ""
+    mime = _FETCH_IMG_MIME.get(ext)
+    if not mime:
+        raise host_server.HandlerError(-32602, "unsupported image type")
+    home = _resolve_home(profile)
+    try:
+        real = Path(path).resolve(strict=True)
+    except OSError:
+        raise host_server.HandlerError(-32004, "not-found") from None
+    if not real.is_file() or not _fetch_allowed(home, real):
+        raise host_server.HandlerError(-32001, "forbidden", {"detail": "path not readable"})
+    data = real.read_bytes()
+    if len(data) > _MAX_FETCH_BYTES:
+        raise host_server.HandlerError(-32602, f"image exceeds {_MAX_FETCH_BYTES}-byte cap")
+    return {
+        "name": real.name,
+        "mime": mime,
+        "size": len(data),
+        "data_base64": base64.b64encode(data).decode(),
     }
 
 

@@ -35,6 +35,40 @@ def test_chat_help_does_not_expose_emit_events() -> None:
     assert "--emit-events" not in result.output
 
 
+def test_chat_help_exposes_attach() -> None:
+    result = CliRunner().invoke(cli.main, ["chat", "--help"])
+    assert "--attach" in result.output
+
+
+def test_run_once_forwards_attachments(tmp_path, monkeypatch) -> None:
+    from types import SimpleNamespace
+
+    captured = {}
+
+    class FakeEngine:
+        def __init__(self, *, home, cfg):  # noqa: ANN001
+            self.session = SimpleNamespace(id="x", subdir="sessions")
+
+        def run_turn(self, text, emit, *, persist_inflight=True, attachments=None, **kw):  # noqa: ANN001
+            captured["text"] = text
+            captured["attachments"] = attachments
+
+        def request_interrupt(self):
+            return None
+
+    monkeypatch.setattr(cli, "Engine", FakeEngine)
+    monkeypatch.setattr(cli, "_bootstrap", lambda h: None)
+    monkeypatch.setattr(cli.config, "load", lambda h: SimpleNamespace(model="x"))
+    img = tmp_path / "room.png"
+    img.write_bytes(b"\x89PNG\r\n\x1a\n")
+
+    cli._run_once(tmp_path, "improve it", attach=(str(img),))
+
+    assert captured["text"] == "improve it"
+    assert captured["attachments"][0]["path"].endswith("room.png")
+    assert captured["attachments"][0]["name"] == "room.png"
+
+
 def test_daemon_help_lists_lifecycle_verbs() -> None:
     result = CliRunner().invoke(cli.main, ["daemon", "--help"])
     assert result.exit_code == 0

@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.8.5 — 2026-06-07 — serve agent-made images to remote clients
+
+- **Mobile can now show images an agent produced.** A new daemon endpoint
+  streams an image's bytes to a paired device so generated/restored photos
+  render in the mobile chat, not just as a file path. Reads are scoped to the
+  profile's workspace, its home, and temp dirs — a device authorised for a
+  profile can fetch an image under those roots by path (see SECURITY.md).
+- **Attach files from the CLI.** `alpi chat --once "…" --attach photo.jpg`
+  (repeatable) sends a file with the turn, so the terminal can hand the agent
+  an image to read or restore — parity with desktop/mobile.
+
 ## v0.8.4 — 2026-06-07 — skill API spend counts toward your budget
 
 - **Paid calls inside a skill now show up in your spend.** When a skill runs a
