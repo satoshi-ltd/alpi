@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.8.4 — 2026-06-07 — skill API spend counts toward your budget
+
+- **Paid calls inside a skill now show up in your spend.** When a skill runs a
+  script that hits a metered API (e.g. image generation), its cost is added to
+  the day's total and counts against the profile's daily limit — no more
+  invisible spend slipping past the budget.
+- **Attached files work with file-based skills.** An image (or file) you attach
+  to a message now exposes its path to the agent, so skills that take a file —
+  like photo restore/enhance — can act on what you attached, not just describe it.
+
 ## v0.8.3 — 2026-06-06 — chat reports the model it used
 
 - **Easier to tell which model ran.** Each chat send now reports the effective

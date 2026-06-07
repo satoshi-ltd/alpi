@@ -237,6 +237,43 @@ def test_invoke_requires_output_schema(isolated_home: Path) -> None:
     assert "invoke requires a structured contract" in r.error
 
 
+def test_run_records_cost_usd_to_ledger(isolated_home: Path) -> None:
+    # cost_usd in a skill's JSON stdout must reach the daily ledger.
+    from alpi import ledger
+
+    _create(
+        name="paid-api",
+        body="hits a paid API and reports cost",
+        output_schema='{"type":"object","properties":{"out":{"type":"string"},"cost_usd":{"type":"number"}},"required":["out"]}',
+    )
+    Skill().run(
+        action="add_file", name="paid-api", subdir="scripts", filename="run.py",
+        content="print('{\"out\": \"/tmp/x.png\", \"cost_usd\": 0.04}')\n",
+    )
+    before = float(ledger.load(isolated_home).get("profile", {}).get("usd", 0.0))
+    r = Skill().run(action="run", name="paid-api")
+    assert r.ok, r.error
+    after = float(ledger.load(isolated_home).get("profile", {}).get("usd", 0.0))
+    assert round(after - before, 4) == 0.04
+    assert "ledger" in r.output.lower()
+
+
+def test_run_ignores_absent_cost(isolated_home: Path) -> None:
+    from alpi import ledger
+
+    _create(name="free-skill", body="reports no cost")
+    Skill().run(
+        action="add_file", name="free-skill", subdir="scripts", filename="run.py",
+        content="print('{\"out\": \"/tmp/x.png\"}')\n",
+    )
+    before = float(ledger.load(isolated_home).get("profile", {}).get("usd", 0.0))
+    r = Skill().run(action="run", name="free-skill")
+    assert r.ok, r.error
+    after = float(ledger.load(isolated_home).get("profile", {}).get("usd", 0.0))
+    assert after == before
+    assert "ledger" not in r.output.lower()
+
+
 def test_invoke_returns_structured_json_for_scripted_skill(isolated_home: Path) -> None:
     _create(
         name="invoke-json",

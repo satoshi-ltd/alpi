@@ -253,10 +253,13 @@ def build_content_parts(
     if text:
         parts.append(_text_part(text))
     if attachments:
+        listing = "\n".join(f"  - {a.name} → {a.path}" for a in attachments)
         parts.append(_text_part(
             f"[{len(attachments)} file(s) are attached to this message; the available "
             "attachment content is included below. Use it directly — do NOT call "
-            "search_workspace or index_workspace to look for them.]"
+            "search_workspace or index_workspace to look for them. If a tool or skill "
+            "needs a file path on disk (e.g. image restore/enhance via --input), use "
+            f"these absolute paths:\n{listing}]"
         ))
     budget = [max_image_bytes]  # boxed so add_image can mutate it
 

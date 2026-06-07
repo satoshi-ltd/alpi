@@ -187,6 +187,20 @@ def test_image_without_vision_errors(tmp_path):
         att.build_content_parts("hi", a, vision=False)
 
 
+def test_attachment_notice_surfaces_absolute_path(tmp_path):
+    # File-based skills (image restore via --input) need the staged path, not just pixels.
+    png = _png(tmp_path, "garden.png")
+    a = att.validate([{"path": str(png), "mime": "image/png"}])
+    parts = att.build_content_parts("enhance it", a, vision=True)
+    notice = next(
+        p["text"] for p in parts
+        if p["type"] == "text" and "attached" in p["text"]
+    )
+    assert str(png) in notice
+    assert "garden.png" in notice
+    assert "--input" in notice
+
+
 def test_text_pdf_becomes_text_part(tmp_path, monkeypatch):
     body = "Quarterly revenue grew 12 percent across every region this year."
     monkeypatch.setattr(att, "_pdf_extract_text", lambda p, n: (body, False))

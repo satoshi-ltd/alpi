@@ -1397,6 +1397,31 @@ def _invoke(home: Path, name: str, args: list[str]) -> ToolResult:
     return _run_or_test(home, name, args, mode="invoke")
 
 
+# Folds a scripted skill's self-reported `cost_usd` (JSON stdout) into the daily ledger.
+def _record_skill_cost(home: Path, out: str) -> float:
+    try:
+        data = json.loads(out)
+    except (json.JSONDecodeError, TypeError):
+        return 0.0
+    if not isinstance(data, dict):
+        return 0.0
+    cost = data.get("cost_usd")
+    if not isinstance(cost, (int, float)) or isinstance(cost, bool) or cost <= 0:
+        return 0.0
+    cost = float(cost)
+    try:
+        from alpi import ledger as _ledger
+        _ledger.record(home, usd=cost, tokens=0, cfg_budget=_load_cfg_raw(home).get("budget"))
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        from alpi.tools import _state as _wg_state
+        _wg_state.bump_turn_usage(0, 0, cost)
+    except Exception:  # noqa: BLE001
+        pass
+    return cost
+
+
 def _run_or_test(home: Path, name: str, args: list[str], *, mode: str) -> ToolResult:
     import subprocess
     import sys
@@ -1547,6 +1572,10 @@ def _run_or_test(home: Path, name: str, args: list[str], *, mode: str) -> ToolRe
                 output=combined,
                 error="output_schema mismatch:\n" + "\n".join(findings),
             )
+
+    spent = _record_skill_cost(home, out)
+    if spent:
+        combined = f"{combined}\n[cost ${spent:.4f} added to today's ledger]"
 
     if mode == "test":
         if output_schema is not None:
