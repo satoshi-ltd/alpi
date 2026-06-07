@@ -82,7 +82,7 @@ const WG_STYLES = StyleSheet.create({
   },
 });
 
-const WgItem = memo(function WgItem({ m, hubPubkey, ownPubkey, workingStale, accent, accentFor, setActionTarget, colors, fonts, fontSizes }) {
+const WgItem = memo(function WgItem({ m, hubPubkey, ownPubkey, workingStale, accent, accentFor, setActionTarget, colors, fonts, fontSizes, imageProfile }) {
   const speakerName = m.from?.startsWith('@') ? m.from.slice(1) : m.from || '';
   const speakerAccent = accentFor(speakerName, accent);
   const isFromHub = hubPubkey != null && m.from_pubkey === hubPubkey;
@@ -134,6 +134,7 @@ const WgItem = memo(function WgItem({ m, hubPubkey, ownPubkey, workingStale, acc
         isFromHub={isFromHub}
         seq={m.seq > 0 ? m.seq : null}
         cost={m.cost}
+        profile={imageProfile}
         onLongPress={() => setActionTarget(makeTarget())}
       />
       {m.error ? (
@@ -146,7 +147,7 @@ const WgItem = memo(function WgItem({ m, hubPubkey, ownPubkey, workingStale, acc
 });
 
 const WgList = forwardRef(function WgList(
-  { messages, hubPubkey, ownPubkey, workingStale, accent, accentFor, setActionTarget, hubLabel, colors, fonts, fontSizes, loading },
+  { messages, hubPubkey, ownPubkey, workingStale, accent, accentFor, setActionTarget, hubLabel, colors, fonts, fontSizes, loading, imageProfile },
   ref,
 ) {
   const [pageSize, setPageSize] = useState(INITIAL_PAGE);
@@ -183,10 +184,11 @@ const WgList = forwardRef(function WgList(
           colors={colors}
           fonts={fonts}
           fontSizes={fontSizes}
+          imageProfile={imageProfile}
         />
       </View>
     ),
-    [hubPubkey, ownPubkey, workingStale, accent, accentFor, setActionTarget, colors, fonts, fontSizes],
+    [hubPubkey, ownPubkey, workingStale, accent, accentFor, setActionTarget, colors, fonts, fontSizes, imageProfile],
   );
 
   if (loading && messages.length === 0) {
@@ -574,6 +576,7 @@ export default function WorkgroupChat() {
           fonts={fonts}
           fontSizes={fontSizes}
           loading={transcript.loading}
+          imageProfile={profile}
         />
         <Composer
           placeholder={`Direct @${wg.hub_id} — your input becomes a #task`}

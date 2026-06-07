@@ -1,8 +1,77 @@
-import { ScrollView, Text, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, Image, Modal, Pressable, ScrollView, Text, View } from 'react-native';
 import { space, fontSizes, lineHeights, radii } from '../theme/tokens';
 
 import { segmentBlocks } from '../lib/markdownBlocks';
+import { useEndpoint } from '../lib/EndpointContext';
 import { useTheme } from '../theme/ThemeContext';
+
+const imageCache = new Map();
+
+function MarkdownImage({ path, alt, note, profile, theme }) {
+  const { colors, fonts } = theme;
+  const { call, endpoint } = useEndpoint();
+  const cacheKey = `${profile || ''}:${path}`;
+  const [uri, setUri] = useState(() => imageCache.get(cacheKey) || null);
+  const [aspect, setAspect] = useState(16 / 9);
+  const [open, setOpen] = useState(false);
+  const filename = path.split('/').pop();
+  const caption = note ? `${filename} · ${note}` : filename;
+
+  useEffect(() => {
+    if (uri || !endpoint || !profile) return undefined;
+    let alive = true;
+    call(endpoint, 'host.attachments.fetch', { profile, path })
+      .then((r) => {
+        const u = r?.data_base64 ? `data:${r.mime};base64,${r.data_base64}` : null;
+        if (u) imageCache.set(cacheKey, u);
+        if (alive && u) setUri(u);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [cacheKey, endpoint, profile]);
+
+  useEffect(() => {
+    if (uri) Image.getSize(uri, (w, h) => h && setAspect(w / h), () => {});
+  }, [uri]);
+
+  return (
+    <View style={{ marginVertical: space.s3 }}>
+      <Pressable onPress={() => uri && setOpen(true)} disabled={!uri}>
+        {uri ? (
+          <Image
+            source={{ uri }}
+            style={{ width: '100%', aspectRatio: aspect, borderRadius: radii.md, borderWidth: 0.5, borderColor: colors.line, backgroundColor: colors.hover }}
+            resizeMode="cover"
+            accessibilityLabel={alt}
+          />
+        ) : (
+          <View style={{ height: 160, borderRadius: radii.md, borderWidth: 0.5, borderColor: colors.line, backgroundColor: colors.hover, alignItems: 'center', justifyContent: 'center' }}>
+            <ActivityIndicator color={colors.ink3} />
+          </View>
+        )}
+      </Pressable>
+      <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3, marginTop: space.s2 }}>
+        {caption}
+      </Text>
+      <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
+        <Pressable
+          onPress={() => setOpen(false)}
+          style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', alignItems: 'center', justifyContent: 'center', padding: space.s5 }}
+        >
+          {uri ? <Image source={{ uri }} style={{ width: '100%', height: '80%' }} resizeMode="contain" /> : null}
+          {caption ? (
+            <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: 'rgba(255,255,255,0.82)', marginTop: space.s4 }}>
+              {caption}
+            </Text>
+          ) : null}
+        </Pressable>
+      </Modal>
+    </View>
+  );
+}
 
 function parseInline(text, key, theme) {
   const out = [];
@@ -135,7 +204,7 @@ function MdTable({ header, rows, theme }) {
   );
 }
 
-export function RichText({ children, color, size }) {
+export function RichText({ children, color, size, imageProfile }) {
   const theme = useTheme();
   const { colors, fonts } = theme;
   const fg = color ?? colors.ink;
@@ -147,6 +216,7 @@ export function RichText({ children, color, size }) {
       {segmentBlocks(children).map((b, i) => {
         if (b.type === 'code') return <CodeBlock key={`code-${i}`} lang={b.lang} code={b.code} theme={theme} />;
         if (b.type === 'table') return <MdTable key={`tbl-${i}`} header={b.header} rows={b.rows} theme={theme} />;
+        if (b.type === 'image') return <MarkdownImage key={`img-${i}`} path={b.path} alt={b.alt} note={b.note} profile={imageProfile} theme={theme} />;
         if (b.type === 'space') return <View key={`s-${i}`} style={{ height: 8 }} />;
         if (b.type === 'heading') {
           return (

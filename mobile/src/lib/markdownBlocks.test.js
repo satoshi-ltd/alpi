@@ -28,6 +28,20 @@ describe('segmentBlocks', () => {
     expect(blocks[0].type).toBe('p');
   });
 
+  it('parses a standalone local image into an image block with note', () => {
+    const blocks = segmentBlocks('![a room](/tmp/room.png "generated")');
+    expect(blocks[0]).toEqual({ type: 'image', path: '/tmp/room.png', alt: 'a room', note: 'generated' });
+  });
+
+  it('ignores remote/relative images (stays a paragraph)', () => {
+    expect(segmentBlocks('![x](https://e.test/a.png)')[0].type).toBe('p');
+    expect(segmentBlocks('![x](room.png)')[0].type).toBe('p');
+  });
+
+  it('does not inline svg (logos are linked, not rendered)', () => {
+    expect(segmentBlocks('![logo](/tmp/logo.svg)')[0].type).toBe('p');
+  });
+
   it('still segments headings, lists and paragraphs', () => {
     const blocks = segmentBlocks('# Title\n\n- one\n- two\n\nbody');
     expect(blocks.map((b) => b.type)).toEqual(['heading', 'space', 'list', 'space', 'p']);

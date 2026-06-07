@@ -1723,10 +1723,43 @@ fn attachment_meta(paths: Vec<String>) -> Vec<AttachmentMeta> {
         .collect()
 }
 
+// Allowed read/copy roots; `extra` is the active profile's workspace (UI-supplied, trusted).
+fn path_within_allowed(path: &str, extra: &[String]) -> bool {
+    let canon = match std::fs::canonicalize(path) {
+        Ok(c) => c,
+        Err(_) => return false,
+    };
+    let mut roots: Vec<std::path::PathBuf> = vec![
+        std::env::temp_dir(),
+        std::path::PathBuf::from("/tmp"),
+        std::path::PathBuf::from("/private/tmp"),
+    ];
+    if let Ok(h) = std::env::var("ALPI_HOME") {
+        if !h.is_empty() {
+            roots.push(std::path::PathBuf::from(h));
+        }
+    }
+    if let Some(home) = dirs::home_dir() {
+        roots.push(home.join(".alpi"));
+    }
+    for r in extra {
+        if !r.is_empty() {
+            roots.push(std::path::PathBuf::from(r));
+        }
+    }
+    roots
+        .iter()
+        .filter_map(|r| std::fs::canonicalize(r).ok())
+        .any(|rc| canon.starts_with(&rc))
+}
+
 #[tauri::command]
-fn attachment_thumb(path: String, mime: String) -> Option<String> {
+fn attachment_thumb(path: String, mime: String, roots: Option<Vec<String>>) -> Option<String> {
     use base64::Engine;
     const MAX_THUMB_BYTES: u64 = 6 * 1024 * 1024;
+    if !path_within_allowed(&path, &roots.unwrap_or_default()) {
+        return None;
+    }
     let p = std::path::Path::new(&path);
     let md = std::fs::metadata(p).ok()?;
     if !md.is_file() || md.len() > MAX_THUMB_BYTES || !mime.starts_with("image/") {
@@ -1773,6 +1806,48 @@ fn reveal_in_finder(path: String) -> Result<(), String> {
         .spawn()
         .map(|_| ())
         .map_err(|e| format!("open: {e}"))
+}
+
+// Save-a-copy-as via osascript; copies the original so the saved file isn't re-encoded.
+// macOS-only for now (osascript) — other platforms get a clear error, not a silent no-op.
+#[cfg(target_os = "macos")]
+#[tauri::command]
+async fn save_file_as(path: String, roots: Option<Vec<String>>) -> Result<bool, String> {
+    let src = std::path::Path::new(&path);
+    if !src.is_file() {
+        return Err(format!("not a file: {path}"));
+    }
+    if !path_within_allowed(&path, &roots.unwrap_or_default()) {
+        return Err("refused: path outside the allowed roots".into());
+    }
+    let default_name = src
+        .file_name()
+        .map(|n| n.to_string_lossy().replace('"', ""))
+        .unwrap_or_else(|| "download".into());
+    let script = format!(
+        "set f to choose file name with prompt \"Save image\" default name \"{default_name}\"\nreturn POSIX path of f"
+    );
+    let out = tauri::async_runtime::spawn_blocking(move || {
+        Command::new("osascript").args(["-e", &script]).output()
+    })
+    .await
+    .map_err(|e| format!("join: {e}"))?
+    .map_err(|e| format!("osascript: {e}"))?;
+    if !out.status.success() {
+        return Ok(false); // user cancelled
+    }
+    let dest = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    if dest.is_empty() {
+        return Ok(false);
+    }
+    std::fs::copy(&path, &dest).map_err(|e| format!("copy: {e}"))?;
+    Ok(true)
+}
+
+#[cfg(not(target_os = "macos"))]
+#[tauri::command]
+async fn save_file_as(_path: String, _roots: Option<Vec<String>>) -> Result<bool, String> {
+    Err("download is only supported on macOS for now".into())
 }
 
 // Returns the full {models, errors} envelope so the UI can show *which*
@@ -2499,6 +2574,7 @@ pub fn run() {
             port_available,
             service_action,
             reveal_in_finder,
+            save_file_as,
             gateway_status,
             pick_folder,
             pick_files,
@@ -2566,6 +2642,23 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod path_allow_tests {
+    use super::path_within_allowed;
+
+    #[test]
+    fn allows_temp_refuses_outside_and_missing() {
+        let f = std::env::temp_dir().join("alpi_pwa_test.txt");
+        std::fs::write(&f, b"x").unwrap();
+        assert!(path_within_allowed(f.to_str().unwrap(), &[]));
+        let _ = std::fs::remove_file(&f);
+        assert!(!path_within_allowed("/tmp/alpi-does-not-exist-zzz.png", &[]));
+        // Outside default roots → refused; a passed (workspace) root extends the allowlist.
+        assert!(!path_within_allowed("/etc/hosts", &[]));
+        assert!(path_within_allowed("/etc/hosts", &["/etc".to_string()]));
+    }
 }
 
 #[cfg(test)]

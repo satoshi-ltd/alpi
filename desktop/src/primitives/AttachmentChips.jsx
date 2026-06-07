@@ -12,9 +12,11 @@ function Thumb({ kind, path, mime, name }) {
     let alive = true;
     setSrc(null);
     if (kind !== "image" || !path) return;
+    // User-picked file: its own directory is the allowed root (the user chose it).
+    const dir = path.replace(/[/\\][^/\\]*$/, "");
     (async () => {
       try {
-        const url = await invoke("attachment_thumb", { path, mime: mime || "" });
+        const url = await invoke("attachment_thumb", { path, mime: mime || "", roots: dir ? [dir] : [] });
         if (alive) setSrc(url || null);
       } catch {
         if (alive) setSrc(null);

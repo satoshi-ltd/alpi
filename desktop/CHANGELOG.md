@@ -11,6 +11,16 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.3.42 — 2026-06-07 — images show inline in chat
+
+Requires alpi v0.7.2+.
+
+- **Images now appear in the conversation.** When an agent produces an image, it
+  renders right in the reply as a captioned card instead of just a file path.
+- **Click to enlarge.** Open any chat image full-size in a lightbox; close with
+  Esc or by clicking outside.
+- **Download (macOS).** Save a copy of an image from its caption or the lightbox.
+
 ## v0.3.41 — 2026-06-06 — model picker stops sticking to a stale override
 
 Requires alpi v0.7.2+.

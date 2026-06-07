@@ -19,7 +19,8 @@ import SearchBar from "../primitives/SearchBar.jsx";
 import { useTranscriptSearch } from "../hooks/useTranscriptSearch.js";
 import { useNotify } from "../primitives/Notification.jsx";
 import Logo from "../primitives/Logo.jsx";
-import { renderMarkdown } from "../lib/markdown.js";
+import Markdown from "../primitives/Markdown.jsx";
+import { setImageRoots } from "../lib/imageRoots.js";
 import { JumpToLatest, NewChatHero, ProfileChatHeader } from "../primitives/index.js";
 import { ProfileMessage } from "../primitives/index.js";
 import {
@@ -84,6 +85,11 @@ export default function ChatPane({
   // Lazy heavy fields — voice_id / models / mcps. Scoped per connection so two daemons with the same profile name never share state.
   const { detail: activeDetail } = useProfileDetail(connectionId ?? null, activeProfile?.name ?? null);
   const activeModels = activeProfile?.models ?? activeDetail?.models ?? [];
+
+  // Let chat images resolve from the active profile's workspace (project assets), not just ~/.alpi.
+  useEffect(() => {
+    setImageRoots([activeDetail?.workspace]);
+  }, [activeDetail?.workspace]);
 
   const noModel = !!activeProfile && !activeProfile.model;
   // Pre-split: needed full provider lists from summary to decide "is the profile chat-ready?". Post-split: the daemon precomputes `has_any_provider` so we don't drag the heavy detail down the hot poll.
@@ -580,7 +586,7 @@ const Turn = memo(function Turn({
             </>
           }
         >
-          <span className="alpi-md" dangerouslySetInnerHTML={{ __html: renderMarkdown(turn.assistant) }} />
+          <Markdown as="div" source={turn.assistant} className="alpi-md" />
         </ProfileMessage>
       )}
     </div>
@@ -758,12 +764,7 @@ function PendingTurn({ turn, accent }) {
       ))}
       {turn.assistantPreview && (
         <ProfileMessage role="assistant">
-          <span
-            className="alpi-md"
-            dangerouslySetInnerHTML={{
-              __html: renderMarkdown(turn.assistantPreview),
-            }}
-          />
+          <Markdown as="div" source={turn.assistantPreview} className="alpi-md" />
         </ProfileMessage>
       )}
       {turn.error && (

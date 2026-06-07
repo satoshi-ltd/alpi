@@ -14,6 +14,15 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.1.33 — 2026-06-07 — images show inline in chat
+
+Requires alpi v0.8.5+.
+
+- **Images now appear in the conversation.** When an agent produces an image, it
+  renders right in the reply as a captioned card instead of just a file path —
+  in both direct chats and workgroups.
+- **Tap to enlarge.** Open any chat image full-screen; tap anywhere to close.
+
 ## v0.1.32 — 2026-06-04 — consistent iconography
 
 Requires alpi v0.7.2+.

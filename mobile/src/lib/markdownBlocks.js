@@ -58,6 +58,17 @@ export function segmentBlocks(text) {
       continue;
     }
 
+    // Standalone agent image: ![alt](/abs/path.png "note"). Local absolute paths only.
+    const img = /^!\[([^\]]*)\]\((\/[^\s)]+\.(?:png|jpe?g|webp|gif))(?:\s+"([^"]*)")?\)$/i.exec(
+      line.trim(),
+    );
+    if (img) {
+      flush();
+      blocks.push({ type: 'image', path: img[2], alt: img[1], note: img[3] || '' });
+      i += 1;
+      continue;
+    }
+
     const h = /^#{1,3} (.+)$/.exec(line);
     if (h) {
       flush();

@@ -7,7 +7,9 @@ import { safeUnlisten } from "../lib/tauri-listen.js";
 import Composer from "../primitives/Composer.jsx";
 import Message from "../primitives/Message.jsx";
 import SearchBar from "../primitives/SearchBar.jsx";
-import { renderMarkdown } from "../lib/markdown.js";
+import Markdown from "../primitives/Markdown.jsx";
+import { setImageRoots } from "../lib/imageRoots.js";
+import { useProfileDetail } from "../hooks/useProfileDetail.js";
 import { relativeTime } from "../lib/time.js";
 import { useTranscriptSearch } from "../hooks/useTranscriptSearch.js";
 import {
@@ -106,6 +108,12 @@ export default function WorkgroupView({
     search.reset();
     onCloseSearch?.();
   };
+
+  // Resolve inline images against the workgroup profile's workspace (project assets).
+  const { detail: wgDetail } = useProfileDetail(connectionId ?? null, workgroup.profile ?? null);
+  useEffect(() => {
+    setImageRoots([wgDetail?.workspace]);
+  }, [wgDetail?.workspace]);
 
   const hubName = workgroup.hub_id ?? workgroup.profile;
   const hubPubkey = useMemo(
@@ -450,12 +458,7 @@ export default function WorkgroupView({
                         footer={footer}
                       >
                         {task.content ? (
-                          <div
-                            className="alpi-md"
-                            dangerouslySetInnerHTML={{
-                              __html: renderMarkdown(task.content),
-                            }}
-                          />
+                          <Markdown as="div" className="alpi-md" source={task.content} />
                         ) : null}
                       </MarkerCard>
                     );
@@ -478,12 +481,7 @@ export default function WorkgroupView({
                         footer={footer}
                       >
                         {content ? (
-                          <div
-                            className="alpi-md"
-                            dangerouslySetInnerHTML={{
-                              __html: renderMarkdown(content),
-                            }}
-                          />
+                          <Markdown as="div" className="alpi-md" source={content} />
                         ) : null}
                       </MarkerCard>
                     );
@@ -497,12 +495,7 @@ export default function WorkgroupView({
                       meta={meta}
                       footer={footer}
                     >
-                      <span
-                        className="alpi-md"
-                        dangerouslySetInnerHTML={{
-                          __html: renderMarkdown(m.body),
-                        }}
-                      />
+                      <Markdown as="div" className="alpi-md" source={m.body} />
                     </MessageBubble>
                   );
                 })}

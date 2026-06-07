@@ -48,3 +48,43 @@ describe("renderMarkdown sanitization", () => {
     expect(html).not.toContain("onerror");
   });
 });
+
+describe("renderMarkdown images", () => {
+  it("renders a local image as a figure with data-src and a filename caption", () => {
+    const html = renderMarkdown("![a serene room](/tmp/room-muse.png)");
+    expect(html).toContain('<figure class="md-figure">');
+    expect(html).toContain('data-src="/tmp/room-muse.png"');
+    expect(html).toContain('alt="a serene room"');
+    expect(html).not.toMatch(/\ssrc=/);
+    expect(html).toContain('<figcaption class="md-figcaption">');
+    expect(html).toContain("room-muse.png · a serene room");
+    expect(html).toContain('class="md-figdl"');
+    expect(html).not.toContain("data-dl");
+  });
+
+  it("uses the markdown title as the caption note when present", () => {
+    const html = renderMarkdown('![alt](/tmp/recovery-7d.png "generado de COROS")');
+    expect(html).toContain("recovery-7d.png · generado de COROS");
+  });
+
+  it("drops remote and protocol-relative image srcs (no figure, no img)", () => {
+    for (const md of [
+      "![x](https://evil.test/t.png)",
+      "![x](//evil.test/t.png)",
+      "![x](data:image/png;base64,AAAA)",
+    ]) {
+      const html = renderMarkdown(md);
+      expect(html).not.toContain("<img");
+      expect(html).not.toContain("md-figure");
+    }
+  });
+
+  it("drops relative paths and non-image extensions", () => {
+    expect(renderMarkdown("![x](room.png)")).not.toContain("<img");
+    expect(renderMarkdown("![x](/tmp/notes.txt)")).not.toContain("<img");
+  });
+
+  it("does not inline svg (logos are linked, not rendered)", () => {
+    expect(renderMarkdown("![logo](/tmp/logo.svg)")).not.toContain("md-figure");
+  });
+});

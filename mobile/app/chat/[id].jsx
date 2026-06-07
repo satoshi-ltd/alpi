@@ -99,6 +99,7 @@ const TurnBlock = memo(function TurnBlock({ turn, turnIndex, accent, colors, fon
       {showAssistant ? (
         <ProfileAssistantMessage
           text={turn.assistant}
+          profile={profileName}
           onLongPress={() => onActionTarget({
             kind: 'agent',
             text: turn.assistant,

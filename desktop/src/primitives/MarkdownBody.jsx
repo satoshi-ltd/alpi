@@ -1,12 +1,9 @@
-import { renderMarkdown } from "../lib/markdown.js";
+import Markdown from "./Markdown.jsx";
 import styles from "./MarkdownBody.module.css";
 
 export default function MarkdownBody({ source, className = "" }) {
   if (!source) return null;
   return (
-    <div
-      className={`${styles.body} alpi-md ${className}`.trim()}
-      dangerouslySetInnerHTML={{ __html: renderMarkdown(source) }}
-    />
+    <Markdown as="div" source={source} className={`${styles.body} alpi-md ${className}`.trim()} />
   );
 }

@@ -70,7 +70,7 @@ export function ProfileUserMessage({ text, ts, accent, attachments, onLongPress 
   );
 }
 
-export function ProfileAssistantMessage({ text, onLongPress }) {
+export function ProfileAssistantMessage({ text, onLongPress, profile }) {
   const { colors } = useTheme();
   const wrapStyle = useCallback(
     ({ pressed }) => [S.agentWrap, pressed && { opacity: 0.85 }],
@@ -78,14 +78,14 @@ export function ProfileAssistantMessage({ text, onLongPress }) {
   );
   return (
     <Pressable onLongPress={onLongPress} delayLongPress={350} style={wrapStyle}>
-      <RichText size={16} color={colors.ink}>
+      <RichText size={16} color={colors.ink} imageProfile={profile}>
         {text}
       </RichText>
     </Pressable>
   );
 }
 
-export function WorkgroupMessage({ body, speakerName, speakerAccent, isFromHub, seq, cost, onLongPress }) {
+export function WorkgroupMessage({ body, speakerName, speakerAccent, isFromHub, seq, cost, onLongPress, profile }) {
   const { colors, fonts } = useTheme();
   const bg = mixHex(speakerAccent ?? colors.ink3, 0.11, colors.bgPane);
   const right = isFromHub;
@@ -137,7 +137,7 @@ export function WorkgroupMessage({ body, speakerName, speakerAccent, isFromHub, 
         )}
       </View>
       <Pressable onLongPress={onLongPress} delayLongPress={350} style={bubbleStyle}>
-        <RichText size={fontSizes.md} color={colors.ink}>
+        <RichText size={fontSizes.md} color={colors.ink} imageProfile={profile}>
           {body}
         </RichText>
       </Pressable>

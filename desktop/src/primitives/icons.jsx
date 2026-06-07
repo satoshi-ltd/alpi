@@ -48,6 +48,8 @@ export const RefreshIcon = Refresh;
 export const GearIcon = Gear;
 export const CheckIcon = Check;
 export const XIcon = X;
+export const Download = (p) => <Icon name="download" {...p} />;
+export const DownloadIcon = Download;
 export const PauseIcon = Pause;
 export const PlayIcon = Play;
 export const CopyIcon = Copy;

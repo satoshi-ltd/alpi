@@ -1,5 +1,5 @@
 import { memo } from "react";
-import { renderMarkdown } from "../lib/markdown.js";
+import Markdown from "./Markdown.jsx";
 import styles from "./Message.module.css";
 
 function MessageImpl({
@@ -62,10 +62,11 @@ function MessageImpl({
         )}
         {typeof body === "string" ? (
           markdown ? (
-            <div
+            <Markdown
+              as="div"
+              source={body}
               className={`${bodyClass} alpi-md`}
               style={bubbleStyle}
-              dangerouslySetInnerHTML={{ __html: renderMarkdown(body) }}
             />
           ) : (
             <div className={bodyClass} style={bubbleStyle}>

@@ -14,7 +14,17 @@ function escapeHtml(s) {
     .replace(/"/g, "&quot;");
 }
 
-// Tables get a wrapper (rounded border + scroll); code blocks a language header.
+// Local absolute Unix paths only (macOS/Linux) → data-src; remote/data/relative dropped.
+const LOCAL_IMG = /^\/(?!\/)[^\0]*\.(png|jpe?g|webp|gif)$/i;
+
+function basename(p) {
+  const s = String(p);
+  const i = s.lastIndexOf("/");
+  return i >= 0 ? s.slice(i + 1) : s;
+}
+
+// Tables get a wrapper (rounded border + scroll); code blocks a language header;
+// images become a capped figure with a filename + note caption.
 marked.use({
   renderer: {
     table(token) {
@@ -35,7 +45,31 @@ marked.use({
         `</div>`
       );
     },
+    image({ href, title, text }) {
+      if (!LOCAL_IMG.test(href || "")) return escapeHtml(text || "");
+      const note = (title || text || "").trim();
+      const cap = note
+        ? `${escapeHtml(basename(href))} · ${escapeHtml(note)}`
+        : escapeHtml(basename(href));
+      return (
+        `<figure class="md-figure">` +
+        `<img src="${escapeHtml(href)}" alt="${escapeHtml(text || "")}">` +
+        `<figcaption class="md-figcaption">` +
+        `<span class="md-figcap">${cap}</span>` +
+        `<button type="button" class="md-figdl" aria-label="Download image"></button>` +
+        `</figcaption>` +
+        `</figure>`
+      );
+    },
   },
+});
+
+DOMPurify.addHook("afterSanitizeAttributes", (node) => {
+  if (node.nodeName !== "IMG") return;
+  const src = node.getAttribute("src") || "";
+  node.removeAttribute("src");
+  if (LOCAL_IMG.test(src)) node.setAttribute("data-src", src);
+  else node.remove();
 });
 
 const PURIFY_OPTS = {
@@ -47,9 +81,9 @@ const PURIFY_OPTS = {
     "ul", "ol", "li",
     "blockquote", "hr",
     "table", "thead", "tbody", "tr", "th", "td",
-    "div", "span",
+    "div", "span", "img", "figure", "figcaption", "button",
   ],
-  ALLOWED_ATTR: ["class", "align"],
+  ALLOWED_ATTR: ["class", "align", "src", "alt", "data-src", "type", "aria-label"],
 };
 
 const cache = new Map();
