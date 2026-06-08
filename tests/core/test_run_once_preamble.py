@@ -129,3 +129,29 @@ def test_emit_events_serializes_tool_state(tmp_home: Path, monkeypatch) -> None:
     ]
     assert "tool_state" in kinds
     assert kinds.index("tool_state") > kinds.index("tool_start")
+
+
+def test_run_once_prints_attachment_listing_without_text(tmp_home: Path, monkeypatch) -> None:
+    """An attachment-only final event still prints the textual listing (MM.2)."""
+    monkeypatch.setattr(_cli_mod, "_bootstrap", lambda _h: None)
+    monkeypatch.setattr("alpi.config.load", lambda _h: Config(home=tmp_home, model="stub", raw={}))
+    monkeypatch.setattr("alpi.engine.Engine.save_session", lambda self: None)
+    monkeypatch.setattr("alpi.engine._maybe_load_mcps", lambda _cfg: [])
+    monkeypatch.setattr("alpi.engine.Engine._build_system_prompt", lambda self: "stub")
+    monkeypatch.setattr("alpi.ctx_window.resolve", lambda _h, _c, _m: 200_000)
+    monkeypatch.setattr("alpi.ledger.check", lambda *a, **kw: None)
+    monkeypatch.setattr("alpi.ledger.record", lambda *a, **kw: None)
+
+    events = [AgentEvent(
+        kind="assistant_done", text="", final=True,
+        attachments=[{"mime": "image/jpeg", "name": "hero.jpg", "path": "/p/out/hero.jpg"}],
+    )]
+    monkeypatch.setattr("alpi.engine.Engine.run_turn", _make_run_turn(events))
+
+    buf = io.StringIO()
+    monkeypatch.setattr(sys, "stdout", buf)
+    _cli_mod._run_once(tmp_home, "make a hero", emit_events=False, persist=False)
+
+    output = buf.getvalue().strip()
+    assert output.startswith("Attachments:")
+    assert "image/jpeg hero.jpg /p/out/hero.jpg" in output

@@ -1,5 +1,30 @@
 # Changelog
 
+## v0.8.6 — 2026-06-08 — agents can hand you the files they make
+
+- **Files an agent produces are now first-class output attachments.** When a
+  skill makes a file — a generated image, a PDF, a spreadsheet, a document — Alpi
+  emits it on the turn and persists it with the session, so it's no longer just a
+  path buried in the reply text. Works whether the agent writes a sentence or
+  only hands over the file.
+- **Every text surface lists them.** The terminal (`chat --once`), the TUI, the
+  messaging gateways, and ALP peers all print the produced files, so a file-only
+  reply is never silently lost. Rich inline rendering (image previews, etc.)
+  lands separately in the desktop and mobile app releases.
+- **Only real files, never guessed from text.** Only a file a tool actually
+  wrote — validated by type and content, inside the profile's own folders — is
+  surfaced; a chat can't smuggle in or mislabel a file by writing a path.
+
+- **What concurrency you actually get is now spelled out.** Pointing the same
+  profile at several workgroups does not spin up parallel workers: the runtime
+  overlaps turns opportunistically for latency, but a profile stays one shared
+  identity — single home, memory, skills, budget, provider credentials, and rate
+  limits. Ask an agent about ALP concurrency and it now says this plainly instead
+  of over-promising parallelism.
+- **Guidance for throughput.** For predictable high-volume production, add more
+  profiles/workers or run fewer active workgroups at once — not an ALP protocol
+  change. Capacity scheduling is tracked as a future roadmap item.
+
 ## v0.8.5 — 2026-06-07 — serve agent-made images to remote clients
 
 - **Mobile can now show images an agent produced.** A new daemon endpoint

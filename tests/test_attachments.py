@@ -290,3 +290,79 @@ def test_supports_vision_blocks_only_when_litellm_is_sure(monkeypatch):
     assert att.supports_vision("some/text-only-model") is False
     monkeypatch.setattr(litellm, "supports_vision", lambda model: (_ for _ in ()).throw(Exception("unknown")))
     assert att.supports_vision("mystery/model") is True
+
+
+def test_produced_attachment_image_with_trailer(tmp_path):
+    img = tmp_path / "hero-main.jpg"
+    img.write_bytes(b"\xff\xd8\xff\xe0fake-jpeg")
+    out = f'{{"out": "{img}", "bytes": 9, "cost_usd": 0.04}}\n[cost $0.04 added]'
+    assert att.produced_attachment("generate-image", out, roots=[tmp_path]) == {
+        "name": "hero-main.jpg", "mime": "image/jpeg", "size": img.stat().st_size,
+        "path": str(img.resolve()), "kind": "image", "source": "tool", "producer": "generate-image",
+    }
+
+
+_XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+_PPTX = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+
+
+@pytest.mark.parametrize("name,data,kind,mime", [
+    ("report.csv", b"a,b\n1,2\n", "text", "text/csv"),
+    ("notes.md", b"# hi", "text", "text/markdown"),
+    ("sheet.xlsx", b"PK\x03\x04zip", "sheet", _XLSX),
+    ("deck.pptx", b"PK\x03\x04zip", "deck", _PPTX),
+])
+def test_produced_attachment_kinds_incl_office_unlike_inbound(tmp_path, name, data, kind, mime):
+    f = tmp_path / name
+    f.write_bytes(data)
+    a = att.produced_attachment("skill", f'{{"out": "{f}"}}', roots=[tmp_path])
+    assert a["kind"] == kind and a["mime"] == mime and a["path"] == str(f.resolve())
+
+
+def test_produced_attachment_rejects_bad_file(tmp_path):
+    assert att.produced_attachment("skill", f'{{"out": "{tmp_path / "ghost.png"}"}}', roots=[tmp_path]) is None
+    bad = tmp_path / "fake.png"
+    bad.write_bytes(b"not a png")
+    assert att.produced_attachment("skill", f'{{"out": "{bad}"}}', roots=[tmp_path]) is None
+    binmd = tmp_path / "evil.md"
+    binmd.write_bytes(b"text\x00\x00binary")
+    assert att.produced_attachment("skill", f'{{"out": "{binmd}"}}', roots=[tmp_path]) is None
+    zipf = tmp_path / "a.zip"
+    zipf.write_bytes(b"PK\x03\x04")
+    assert att.produced_attachment("skill", f'{{"out": "{zipf}"}}', roots=[tmp_path]) is None
+    fake_xlsx = tmp_path / "fake.xlsx"
+    fake_xlsx.write_bytes(b"not a zip container")  # office must start with PK\x03\x04
+    assert att.produced_attachment("skill", f'{{"out": "{fake_xlsx}"}}', roots=[tmp_path]) is None
+    assert att.produced_attachment("skill", "not json", roots=[tmp_path]) is None
+    assert att.produced_attachment("skill", '{"no_out": 1}', roots=[tmp_path]) is None
+
+
+def test_produced_attachment_enforces_roots(tmp_path):
+    img = tmp_path / "ok.png"
+    img.write_bytes(b"\x89PNG\r\n\x1a\nx")
+    assert att.produced_attachment("skill", f'{{"out": "{img}"}}', roots=[tmp_path / "other"]) is None
+    assert att.produced_attachment("skill", '{"out": "out/x.png"}', roots=[tmp_path]) is None
+    assert att.produced_attachment("skill", f'{{"out": "{img}"}}', roots=[tmp_path]) is not None
+
+
+def test_produced_attachment_schema(tmp_path):
+    img = tmp_path / "x.png"
+    img.write_bytes(b"\x89PNG\r\n\x1a\nx")
+    a = att.produced_attachment("gen", f'{{"out": "{img}"}}', roots=[tmp_path])
+    assert set(a) == set(att.OUTPUT_ATTACHMENT_FIELDS)
+    assert a["kind"] in att.OUTPUT_ATTACHMENT_KINDS
+    assert all(isinstance(v, (str, int)) for v in a.values())  # JSON-serialisable, no Paths
+
+
+def test_render_output_attachments():
+    assert att.render_output_attachments(None) == ""
+    assert att.render_output_attachments([]) == ""
+    out = att.render_output_attachments([
+        {"mime": "image/jpeg", "name": "hero.jpg", "path": "/p/out/hero.jpg"},
+        {"mime": "application/pdf", "name": "r.pdf", "path": "/p/out/r.pdf"},
+    ])
+    assert out.splitlines() == [
+        "Attachments:",
+        "- image/jpeg hero.jpg /p/out/hero.jpg",
+        "- application/pdf r.pdf /p/out/r.pdf",
+    ]

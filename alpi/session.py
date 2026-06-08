@@ -31,7 +31,8 @@ class Turn:
     user: str
     tools: list[ToolLog]
     assistant: str        # alpi's final text reply (last no-tool-calls message)
-    attachments: list[dict[str, Any]] = field(default_factory=list)  # MM.1: bytes-free metadata only
+    attachments: list[dict[str, Any]] = field(default_factory=list)  # bytes-free metadata only
+    output_attachments: list[dict[str, Any]] = field(default_factory=list)  # bytes-free metadata only
 
 
 @dataclass
@@ -127,6 +128,7 @@ class Session:
                         for tl in t.tools
                     ],
                     **({"attachments": t.attachments} if t.attachments else {}),
+                    **({"output_attachments": t.output_attachments} if t.output_attachments else {}),
                 }
                 for t in self.turns
             ],
@@ -157,6 +159,7 @@ def load_turns(data: dict[str, Any]) -> list[Turn]:
             tools=tools,
             assistant=str(t.get("assistant", "")),
             attachments=list(t.get("attachments") or []),
+            output_attachments=list(t.get("output_attachments") or []),
         ))
     return out
 

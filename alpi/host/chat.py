@@ -131,6 +131,7 @@ async def _data_chat_send(
         loop.call_soon_threadsafe(queue.put_nowait, ev)
 
     parts: list[str] = []
+    produced: list[dict] = []
     heartbeat_task: asyncio.Task | None = None
 
     async def _heartbeat_loop() -> None:
@@ -201,13 +202,17 @@ async def _data_chat_send(
                     "tokens_before": ev.tokens_in,
                     "tokens_after": ev.tokens_out,
                 })
-            elif ev.kind == "assistant_done" and ev.final and ev.text.strip():
-                parts.append(ev.text)
+            elif ev.kind == "assistant_done" and ev.final:
+                if ev.attachments:
+                    produced.extend(ev.attachments)
+                if ev.text.strip():
+                    parts.append(ev.text)
         final = "\n\n".join(parts).strip()
         await emit({
             "event": "reply",
             "text": final,
             "session_id": engine.session.id,
+            **({"attachments": produced} if produced else {}),
         })
         await emit({"event": "done", "session_id": engine.session.id})
     finally:

@@ -249,6 +249,7 @@ def _run_once(
         return
 
     parts: list[str] = []
+    produced: list[dict] = []
 
     from alpi.tui.formatting import arg_hint
 
@@ -284,8 +285,11 @@ def _run_once(
     def sink(ev: AgentEvent) -> None:
         if emit_events:
             _emit_event_line(ev)
-        if ev.kind == "assistant_done" and ev.final and ev.text.strip():
-            parts.append(ev.text)
+        if ev.kind == "assistant_done" and ev.final:
+            if ev.attachments:
+                produced.extend(ev.attachments)
+            if ev.text.strip():
+                parts.append(ev.text)
         elif ev.kind == "error" and not emit_events:
             parts.append(f"[error] {ev.text}")
 
@@ -321,9 +325,15 @@ def _run_once(
     if emit_events:
         import json as _json
 
-        sys.stdout.write(_json.dumps({"kind": "reply", "text": final}) + "\n")
+        payload = {"kind": "reply", "text": final}
+        if produced:
+            payload["attachments"] = produced
+        sys.stdout.write(_json.dumps(payload, ensure_ascii=False) + "\n")
     else:
-        sys.stdout.write(final + "\n")
+        from alpi.attachments import render_output_attachments
+        listing = render_output_attachments(produced)
+        out = "\n\n".join(x for x in (final, listing) if x)
+        sys.stdout.write(out + "\n")
     sys.stdout.flush()
 
 

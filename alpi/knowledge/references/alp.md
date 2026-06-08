@@ -69,6 +69,10 @@ So roster "offline" means "no recent workgroup pull/post", not "unreachable". A 
 
 Debugging an intra-machine "flap": confirm reachability with `link.ping` before trusting roster status, and check daemon logs for `wg poller pull(...) failed`. No hysteresis today — three consecutive missed pulls cross the 90s window. Tighten (ping-driven presence or a grace tick) only from real timeout logs, not assumption.
 
+## Workgroup concurrency
+
+Do not describe workgroups as globally serial, and do not promise guaranteed parallel workers. Dispatch is single-flight per `(workgroup_id, profile)`: the same profile will not run two turns for the same workgroup round slot, but different workgroups may dispatch the same profile concurrently. That is opportunistic concurrency only. A profile is a shared runtime identity with one home, memory, skills, tools, logs, budget, provider credentials, and rate limits — not a stateless worker pool. For predictable throughput, recommend more profiles/workers or fewer active workgroups, not an ALP protocol change.
+
 ## Budget
 
 ALP/workgroup tasks respect profile budget settings (`budget.daily_usd` / `budget.daily_tokens`, CONFIG.md → Budget). On exhaustion, stop or synthesize a bounded result rather than silently retrying. A workgroup may add a separate optional **lifetime** cap (`max_usd` / `max_tokens`) that double-gates `workgroup.post` on top of the daily profile cap.

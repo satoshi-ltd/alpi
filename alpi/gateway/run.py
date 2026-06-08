@@ -161,6 +161,10 @@ async def _run_agent(msg: IncomingMessage, platform: Platform, home: Path) -> st
             kind = event.get("kind")
             if kind == "reply":
                 reply = event.get("text", "")
+                if event.get("attachments"):
+                    from alpi.attachments import render_output_attachments
+                    listing = render_output_attachments(event["attachments"])
+                    reply = "\n\n".join(x for x in (reply, listing) if x)
             elif kind == "tool_start":
                 if event.get("name") == "send_message":
                     args = event.get("args")

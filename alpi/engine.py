@@ -75,6 +75,7 @@ class AgentEvent:
     tool_id: str = ""
     # True only on the turn's terminal `assistant_done`; preamble emissions stay False. Contract in AGENTS.md.
     final: bool = False
+    attachments: list[dict] = field(default_factory=list)
 
 
 EventSink = Callable[[AgentEvent], None]
@@ -158,6 +159,7 @@ class Engine:
         # Accumulate this turn's state for the persistent log.
         turn_started = time.time()
         turn_tools: list[ToolLog] = []
+        turn_produced: list[dict] = []
         final_assistant = ""
         turn_error = ""  # provider/abort reason for the run ledger when nothing was produced
         # Only natural completion (LLM produced a final reply with no further
@@ -361,8 +363,8 @@ class Engine:
                             ),
                         })
                         continue
-                    if content:
-                        emit(AgentEvent(kind="assistant_done", text=content, final=True))
+                    if content or turn_produced:
+                        emit(AgentEvent(kind="assistant_done", text=content, final=True, attachments=turn_produced))
                     # Last assistant-only message wins as the final reply.
                     final_assistant = content
                     turn_completed = True
@@ -459,6 +461,16 @@ class Engine:
                         ok=result.ok, duration_s=duration,
                         reasoning=reasoning_for_this_tool,
                     ))
+                    if result.ok and name == "skill":
+                        import tempfile as _tempfile
+                        from alpi import attachments as _att
+                        _roots = [self.home, self.cfg.workspace_path,
+                                  _tempfile.gettempdir(), "/tmp", "/private/tmp"]
+                        produced = _att.produced_attachment(
+                            args.get("name") or name, result.output, roots=_roots,
+                        )
+                        if produced and not any(a["path"] == produced["path"] for a in turn_produced):
+                            turn_produced.append(produced)
                     emit(AgentEvent(
                         kind="tool_end", name=name, args=args,
                         output=payload, ok=result.ok, tool_id=tid,
@@ -505,7 +517,7 @@ class Engine:
             final_turn = session.Turn(
                 at=turn_started, user=user_text,
                 tools=turn_tools, assistant=final_assistant,
-                attachments=att_meta,
+                attachments=att_meta, output_attachments=turn_produced,
             )
             if self.session.turns and self.session.turns[-1].at == turn_started:
                 self.session.turns[-1] = final_turn

@@ -403,8 +403,17 @@ class AlpiApp(App):
         if ev.kind == "assistant_delta":
             self._on_assistant_delta(ev.text)
         elif ev.kind == "assistant_done":
+            text = ev.text
+            if ev.final and ev.attachments:
+                from alpi.attachments import render_output_attachments
+                listing = render_output_attachments(ev.attachments)
+                text = "\n\n".join(x for x in (text, listing) if x)
             if self._current_assistant is not None:
-                self._current_assistant.replace(ev.text)
+                self._current_assistant.replace(text)
+            elif text:
+                msg = AssistantMessage()
+                self._mount_message(msg)
+                msg.replace(text)
         elif ev.kind == "tool_start":
             self._on_tool_start(ev)
         elif ev.kind == "tool_state":
@@ -824,8 +833,14 @@ class AlpiApp(App):
                 )
                 widgets.append(card)
                 cards_to_finish.append((card, tl))
-            if t.assistant:
-                widgets.append(AssistantMessage(initial=t.assistant))
+            if t.assistant or getattr(t, "output_attachments", None):
+                text = t.assistant
+                if getattr(t, "output_attachments", None):
+                    from alpi.attachments import render_output_attachments
+                    listing = render_output_attachments(t.output_attachments)
+                    text = "\n\n".join(x for x in (text, listing) if x)
+                if text:
+                    widgets.append(AssistantMessage(initial=text))
 
         widgets.append(DimLine(
             f"✦ continuing session {self.engine.session.id} — "

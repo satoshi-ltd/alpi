@@ -115,6 +115,7 @@ async def _run_turn_stream(
 
         state = {
             "parts": [],
+            "produced": [],
             "tokens_in": 0,
             "tokens_out": 0,
             "cost": 0.0,
@@ -124,8 +125,11 @@ async def _run_turn_stream(
         def sink(ev: AgentEvent) -> None:
             if ev.kind == "assistant_delta" and ev.text:
                 loop.call_soon_threadsafe(queue.put_nowait, ("delta", ev.text))
-            elif ev.kind == "assistant_done" and ev.final and ev.text.strip():
-                state["parts"].append(ev.text)
+            elif ev.kind == "assistant_done" and ev.final:
+                if ev.attachments:
+                    state["produced"].extend(ev.attachments)
+                if ev.text.strip():
+                    state["parts"].append(ev.text)
             elif ev.kind == "usage":
                 state["tokens_in"] += ev.tokens_in
                 state["tokens_out"] += ev.tokens_out
@@ -159,6 +163,11 @@ async def _run_turn_stream(
         full = "\n\n".join(state["parts"]).strip()
         if state["interrupted"] and not full:
             full = "[cancelled]"
+        if not state["interrupted"]:
+            from alpi.attachments import render_output_attachments
+            listing = render_output_attachments(state["produced"])
+            if listing:
+                full = "\n\n".join(x for x in (full, listing) if x)
         if full and not state["interrupted"]:
             mention_thread.append(home, peer_id, prompt, full)
         yield {
@@ -191,6 +200,7 @@ def _run_turn(
     active.session_id = engine.session.id
 
     parts: list[str] = []
+    produced: list[dict] = []
     tokens_in = 0
     tokens_out = 0
     cost = 0.0
@@ -198,8 +208,11 @@ def _run_turn(
 
     def sink(ev: AgentEvent) -> None:
         nonlocal tokens_in, tokens_out, cost, interrupted
-        if ev.kind == "assistant_done" and ev.final and ev.text.strip():
-            parts.append(ev.text)
+        if ev.kind == "assistant_done" and ev.final:
+            if ev.attachments:
+                produced.extend(ev.attachments)
+            if ev.text.strip():
+                parts.append(ev.text)
         elif ev.kind == "usage":
             tokens_in += ev.tokens_in
             tokens_out += ev.tokens_out
@@ -214,18 +227,21 @@ def _run_turn(
 
         with ledger.peer_context(peer_id):
             engine.run_turn(prompt, emit=sink, source="peer")
-        # Mention threads live in ``mentions/<sender>.json``, not
-        # ``sessions/``, so ``alpi -p <peer> --continue`` stays clean.
-        reply_text = "\n\n".join(parts).strip()
-        if reply_text and not interrupted:
-            mention_thread.append(home, peer_id, prompt, reply_text)
     finally:
         active.engine = None
         active.session_id = ""
 
     text = "\n\n".join(parts).strip()
+    if not interrupted:
+        from alpi.attachments import render_output_attachments
+        listing = render_output_attachments(produced)
+        if listing:
+            text = "\n\n".join(x for x in (text, listing) if x)
     if interrupted and not text:
         text = "[cancelled]"
+    # Mention threads live in ``mentions/<sender>.json``, not ``sessions/``.
+    if text and not interrupted:
+        mention_thread.append(home, peer_id, prompt, text)
 
     return {
         "text": text,

@@ -50,6 +50,96 @@ class Attachment:
     size: int
 
 
+_PRODUCED_EXT_MIME = {
+    ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp",
+    ".pdf": "application/pdf",
+    ".txt": "text/plain", ".md": "text/markdown", ".markdown": "text/markdown",
+    ".csv": "text/csv", ".json": "application/json",
+    ".yaml": "application/yaml", ".yml": "application/yaml",
+    ".html": "text/html", ".htm": "text/html",
+    ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+}
+_PRODUCED_KIND = {
+    "application/pdf": "pdf",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "sheet",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "doc",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation": "deck",
+}
+_OFFICE_MIMES = frozenset(m for m in _PRODUCED_KIND if m != "application/pdf")
+
+
+def produced_attachment(producer: str, output: str, *, roots: list) -> dict | None:
+    import json
+    if not isinstance(output, str):
+        return None
+    try:  # output is `{json}` + a trailing line; decode the leading object only
+        data, _ = json.JSONDecoder().raw_decode(output.lstrip())
+    except json.JSONDecodeError:
+        return None
+    out = data.get("out") if isinstance(data, dict) else None
+    if not isinstance(out, str) or not out:
+        return None
+    p = Path(out)
+    if not p.is_absolute():
+        return None
+    mime = _PRODUCED_EXT_MIME.get(p.suffix.lower())
+    if not mime:
+        return None
+    try:
+        rp = p.resolve()
+    except OSError:
+        return None
+    allowed = []
+    for r in roots or []:
+        try:
+            allowed.append(Path(r).resolve())
+        except (OSError, TypeError):
+            pass
+    if not any(rp == a or rp.is_relative_to(a) for a in allowed):
+        return None
+    is_text = mime in TEXT_MIMES
+    cap = MAX_TEXT_FILE_BYTES if is_text else MAX_FILE_BYTES
+    try:
+        st = rp.stat()
+        if not rp.is_file() or st.st_size > cap:
+            return None
+        if mime in IMAGE_MIMES or mime == PDF_MIME or is_text or mime in _OFFICE_MIMES:
+            with rp.open("rb") as f:
+                head = f.read(1024)
+            if is_text:
+                if _looks_binary(head):
+                    return None
+            elif mime in _OFFICE_MIMES:
+                if not head.startswith(b"PK\x03\x04"):
+                    return None
+            elif _detect_magic(head) != mime:
+                return None
+    except OSError:
+        return None
+    kind = "image" if mime in IMAGE_MIMES else "text" if is_text else _PRODUCED_KIND.get(mime, "file")
+    return {
+        "name": rp.name, "mime": mime, "size": int(st.st_size),
+        "path": str(rp), "kind": kind, "source": "tool", "producer": producer,
+    }
+
+
+OUTPUT_ATTACHMENT_FIELDS = ("name", "mime", "size", "path", "kind", "source", "producer")
+OUTPUT_ATTACHMENT_KINDS = frozenset({"image", "pdf", "text", "sheet", "doc", "deck", "file"})
+
+
+def render_output_attachments(attachments: list | None) -> str:
+    """One textual rendering of output attachments for every non-rich surface
+    (CLI/TUI/gateway/ALP) so no surface loses or reinvents the list."""
+    if not attachments:
+        return ""
+    lines = ["Attachments:"]
+    for a in attachments:
+        lines.append(f"- {a.get('mime', '')} {a.get('name', '')} {a.get('path', '')}".rstrip())
+    return "\n".join(lines)
+
+
 def is_image(mime: str) -> bool:
     return mime in IMAGE_MIMES
 

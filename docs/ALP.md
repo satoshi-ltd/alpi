@@ -1137,6 +1137,20 @@ dispatches from the same profile that would both consume the
 same round slot. Different profiles inside the same workgroup,
 and different workgroups, can dispatch concurrently.
 
+**Concurrency is opportunistic, not a worker-pool guarantee.**
+The single-flight key is `(workgroup_id, profile)`, not just
+`profile`: the runtime does not impose a global queue where one
+profile must finish every other workgroup before reacting to the
+next. A profile may therefore have turns running in different
+workgroups at the same time. That is useful for latency, but it
+does not make a profile a stateless parallel worker. The profile
+still shares one home directory, memory, skills, logs, budgets,
+provider credentials, model limits, and any local tool resources.
+Operators should treat this as best-effort concurrency rather
+than a throughput SLA or a fairness scheduler. For predictable
+high-throughput production, add more profiles/workers or run
+fewer active workgroups at once.
+
 **Model tier expectations.** The protocol invariants — rotation,
 closure quorum, preemption, watchdog, hub-only `#task`/`#done` —
 are mechanical and fire identically regardless of which model

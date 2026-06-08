@@ -28,8 +28,6 @@ Per-feature detail lives in [CHANGELOG.md](../CHANGELOG.md).
 The retrieval spine is done. v0.9 focuses on letting profiles run longer,
 farther away from the user's main machine, and with better failure evidence —
 without turning Alpi into a broad orchestration platform.
-For the product framing behind this cycle, see
-[Alpi vs LangChain for Agentic Organizations](ALPI_VS_LANGCHAIN.md).
 
 | ID | Item | Status |
 |---|---|---|
@@ -188,6 +186,7 @@ already analysed; the "why now?" question is the open one.
 | ID | Item | Reason it waits |
 |---|---|---|
 | ALP.7 | Pinned shared memory per workgroup (hub-anchored `wiki.md`) | Heavy new surface (concurrency, history, roles) only justified if workgroups become heavily used |
+| ALP.8 | Workgroup capacity scheduling — optional profile capacity, queue/defer telemetry, or worker-pool assignment for high-throughput orgs | Current dispatch already allows opportunistic concurrency across workgroups; promote only if real users need guaranteed throughput, dynamic worker pools, or capacity negotiation beyond adding more profiles |
 | ALP.3+ | Multi-task workgroups — opt-in `multitask`, letter-prefixed task IDs, per-task roster/dispatch/budget | Targeted tasks + pipeline continuation already cover sequential per-project pipelines; revisit only if the persistent workgroups (`template`/`quality`/`brand-library`) show real, sustained parallelism |
 | Signal | Signal gateway via signal-cli | Strong privacy fit, but new gateways are out of scope now that Alpi-owned clients are the primary mobile surface |
 | AY | Skills marketplace — federated, signed, never centralised | Presupposes an active author community + adoption for discovery to matter |
@@ -248,7 +247,7 @@ repo.
 | Gateway sprawl: WhatsApp, Discord, Slack, XMPP | High token/blast-radius or operational cost; Alpi-owned apps are the primary surface. |
 | Gateway "open in Alpi" nudges | Would incentivise gateway usage; gateways stay text-first and secondary. |
 | Smart-home orchestration | Device protocols and physical-world policy belong in Home Assistant / MCP / user skills, not core. |
-| LangGraph / CrewAI / AutoGen as core | Graph frameworks do not match Alpi's profile/workgroup runtime and pull toward hosted observability. See `ALPI_VS_LANGCHAIN.md`. |
+| LangGraph / CrewAI / AutoGen as core | Graph frameworks do not match Alpi's profile/workgroup runtime and pull toward hosted observability. |
 | Image generation as a core tool | Useful via MCP or user skills, but a built-in provider surface would turn Alpi into a creative-tool platform. |
 | Mixture-of-agents runtime | Expensive research pattern; workgroups cover explicit multi-profile collaboration. |
 | RL / fine-tuning hooks | Research infrastructure, not a personal-agent product surface. |
