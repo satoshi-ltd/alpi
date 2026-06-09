@@ -109,15 +109,19 @@ def _with_openrouter_usage(kwargs: dict[str, Any], model: str) -> dict[str, Any]
 
 
 _OR_PRICING: "dict[str, tuple[float, float]] | None" = None
+_OR_PRICING_RETRY_AT: float = 0.0
 
 
-# Best-effort: fetched at most once per process (cached in _OR_PRICING) and only
-# when a turn produced no reported cost and litellm couldn't price the model. A
-# 2s timeout caps the worst case; on any failure cost is just 0.0 for that turn.
+# Best-effort: fetched at most once per process (cached in _OR_PRICING). A 2s
+# timeout caps the worst case; a failed fetch backs off for 5 min so per-turn
+# free-model classification can't hammer a down /models on every turn.
 def _openrouter_pricing() -> "dict[str, tuple[float, float]]":
-    global _OR_PRICING
+    global _OR_PRICING, _OR_PRICING_RETRY_AT
     if _OR_PRICING is not None:
         return _OR_PRICING
+    import time as _time
+    if _time.time() < _OR_PRICING_RETRY_AT:
+        return {}
     import json as _json
     import os as _os
     import urllib.request as _u
@@ -137,7 +141,8 @@ def _openrouter_pricing() -> "dict[str, tuple[float, float]]":
         _OR_PRICING = out
         return out
     except Exception:  # noqa: BLE001
-        return {}  # leave cache unset → retry on a later turn
+        _OR_PRICING_RETRY_AT = _time.time() + 300.0
+        return {}
 
 
 # litellm prices the models in its catalog (most providers, incl. the OpenRouter
@@ -163,6 +168,14 @@ def _compute_cost(resp, model: str) -> float:
             pout = getattr(u, "completion_tokens", 0) or 0
             return pin * price[0] + pout * price[1]
     return 0.0
+
+
+def is_free_model(model: str) -> bool:
+    m = str(model or "")
+    if m.startswith("openrouter/"):
+        price = _openrouter_pricing().get(m.split("/", 1)[1])
+        return price is not None and price[0] == 0.0 and price[1] == 0.0
+    return False
 
 
 def _is_transient(exc: Exception) -> bool:

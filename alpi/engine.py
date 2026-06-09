@@ -27,6 +27,9 @@ def _strip_cache_noise(text: str) -> str:
     return _CACHE_NOISE_RE.sub("", text).strip()
 
 
+_FREE_MODEL_MAX_STEPS = 1000
+
+
 from alpi.prompt_cache import PLATFORM_HINTS as _PLATFORM_HINTS
 
 
@@ -254,6 +257,11 @@ class Engine:
         from alpi import prompt_cache as _pc
         call_kwargs.update(_pc.cache_kwargs_for_model(call_kwargs.get("model", "")))
         max_steps = self.cfg.tools.max_steps_per_turn
+        _explicit_cap = (self.cfg.raw.get("tools") or {}).get("max_steps_per_turn") is not None
+        if max_steps == cfg_mod.DEFAULT_CONFIG["tools"]["max_steps_per_turn"] and not _explicit_cap:
+            from alpi.providers.ollama import is_ollama
+            if llm.is_free_model(call_kwargs.get("model", "")) or is_ollama(call_kwargs.get("api_base") or ""):
+                max_steps = _FREE_MODEL_MAX_STEPS
 
         self._maybe_auto_compact(emit, call_kwargs)
 

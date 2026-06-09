@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.8.9 — 2026-06-09 — free models get a higher per-turn step ceiling
+
+- **A free model (zero per-token pricing) or a local one gets a much higher
+  per-turn step ceiling by default (1000 instead of 40)** — long agentic tasks on
+  a no-cost model aren't cut short. Paid models keep the regular cost guard, and
+  an explicit `tools.max_steps_per_turn` you set is always respected.
+
 ## v0.8.8 — 2026-06-09 — turns record how long the agent reasoned
 
 - **Each turn now records the time the agent spent reasoning before it answered**,

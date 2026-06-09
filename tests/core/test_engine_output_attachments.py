@@ -192,3 +192,68 @@ def test_reasoned_s_excludes_final_answer_streaming(bootstrapped_home, monkeypat
     turn = engine.session.turns[-1]
     assert turn.reasoned_s == 5.0
     assert turn.reasoning == "thinking"
+
+
+def _k_tools_then_reply(k: int):
+    steps = []
+    for i in range(k):
+        steps.append([
+            {"text_delta": "", "reasoning_delta": "", "tool_calls_delta": []},
+            {"final": True, "tool_calls": [{"id": f"t{i}", "name": "noop", "arguments": "{}"}],
+             "input_tokens": 1, "output_tokens": 1, "cost_usd": 0.0},
+        ])
+    steps.append([
+        {"text_delta": "done", "reasoning_delta": "", "tool_calls_delta": []},
+        {"final": True, "tool_calls": [], "input_tokens": 1, "output_tokens": 1, "cost_usd": 0.0},
+    ])
+    call = {"i": 0}
+
+    def _stream(*_a, **_kw):
+        idx = call["i"]
+        call["i"] += 1
+        yield from steps[idx]
+    return _stream
+
+
+def test_free_model_lifts_tool_call_ceiling(bootstrapped_home, monkeypatch):
+    from alpi import engine as engine_mod
+    cfg = config.load(bootstrapped_home)
+    assert cfg.tools.max_steps_per_turn == 40
+    monkeypatch.setattr(engine_mod.llm, "is_free_model", lambda _m: True)
+    monkeypatch.setattr(engine_mod.llm, "stream", _k_tools_then_reply(42))
+    monkeypatch.setattr(engine_mod.tools, "execute", lambda *_a, **_k: ToolResult(ok=True, output="ok"))
+
+    engine = Engine(home=bootstrapped_home, cfg=cfg)
+    engine.run_turn("do it", lambda _e: None)
+
+    assert len(engine.session.turns[-1].tools) == 42
+
+
+def test_explicit_cap_respected_even_for_free_model(bootstrapped_home, monkeypatch):
+    from alpi import engine as engine_mod
+    cfg = config.load(bootstrapped_home)
+    cfg.tools.max_steps_per_turn = 3
+    cfg.raw["tools"] = {"max_steps_per_turn": 3}
+    monkeypatch.setattr(engine_mod.llm, "is_free_model", lambda _m: True)
+    monkeypatch.setattr(engine_mod.llm, "stream", _k_tools_then_reply(10))
+    monkeypatch.setattr(engine_mod.tools, "execute", lambda *_a, **_k: ToolResult(ok=True, output="ok"))
+
+    engine = Engine(home=bootstrapped_home, cfg=cfg)
+    engine.run_turn("do it", lambda _e: None)
+
+    assert len(engine.session.turns[-1].tools) == 3
+
+
+def test_non_default_cap_with_empty_raw_is_not_lifted(bootstrapped_home, monkeypatch):
+    from alpi import engine as engine_mod
+    cfg = config.load(bootstrapped_home)
+    cfg.tools.max_steps_per_turn = 3
+    cfg.raw = {}
+    monkeypatch.setattr(engine_mod.llm, "is_free_model", lambda _m: True)
+    monkeypatch.setattr(engine_mod.llm, "stream", _k_tools_then_reply(10))
+    monkeypatch.setattr(engine_mod.tools, "execute", lambda *_a, **_k: ToolResult(ok=True, output="ok"))
+
+    engine = Engine(home=bootstrapped_home, cfg=cfg)
+    engine.run_turn("do it", lambda _e: None)
+
+    assert len(engine.session.turns[-1].tools) == 3

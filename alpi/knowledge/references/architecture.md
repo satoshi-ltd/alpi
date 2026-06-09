@@ -50,6 +50,7 @@ live at `{home}/skills/<category>/<name>/`.
 - `assistant_done` may be pre-tool narration or final output. Consumers delivering a canonical reply must filter `final=True`.
 - Chat history lives in `sessions/`. Scheduler/gateway/workgroup/system turns must not appear as ordinary profile chats.
 - A final assistant message with pending/in-progress todos is rejected; the model is re-prompted inside the same turn.
+- Tool calls per turn are capped at `tools.max_steps_per_turn` (default 40). When left at the default, a free model (zero per-token OpenRouter pricing) or a local/ollama one raises the ceiling to 1000; an explicitly configured value is always respected (it also bounds loops / refusals / the TODO guard, not just cost).
 
 ## Scheduler
 

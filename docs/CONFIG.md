@@ -88,6 +88,8 @@ Three options:
 | `tools.stt.language` | `""` (auto) | ISO code (`en`, `es`, ...) | next turn |
 | `tools.<name>.max_result_chars` | `—` (unset) | int (-1 = unlimited) | next turn |
 
+`max_steps_per_turn` is a cost guard. **When left at the default**, a **free** model (zero per-token pricing) or a **local/ollama** one raises the effective ceiling to 1000 (no runaway cost to bound). An explicit value you set is always respected — it also bounds loops, refusals, and the TODO guard, not just cost.
+
 `tools.budget.per_result_chars` caps the size of any tool output the LLM
 sees in-context, with a `… [N chars elided by tool budget]` suffix when
 hit. Prevents a single `read_file` on a 5 MB log from blowing up a turn.
