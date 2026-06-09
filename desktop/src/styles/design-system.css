@@ -522,6 +522,7 @@ textarea.ds-field, textarea.field { resize: vertical; min-height: 88px; height: 
   border-bottom: .5px solid var(--line);
 }
 .alpi-md tbody td {
+  background: var(--bg-pane);
   border-top: .5px solid var(--line);
 }
 

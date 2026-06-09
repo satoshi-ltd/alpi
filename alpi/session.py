@@ -31,6 +31,8 @@ class Turn:
     user: str
     tools: list[ToolLog]
     assistant: str        # alpi's final text reply (last no-tool-calls message)
+    reasoning: str = ""
+    reasoned_s: float = 0.0
     attachments: list[dict[str, Any]] = field(default_factory=list)  # bytes-free; carries a best-effort local path (may be unfetchable cross-client / post-TTL)
     output_attachments: list[dict[str, Any]] = field(default_factory=list)  # bytes-free; carries a best-effort local path (may be unfetchable cross-client / post-TTL)
 
@@ -127,6 +129,8 @@ class Session:
                         }
                         for tl in t.tools
                     ],
+                    **({"reasoning": redact(t.reasoning)} if t.reasoning else {}),
+                    **({"reasoned_s": round(t.reasoned_s, 1)} if t.reasoned_s else {}),
                     **({"attachments": t.attachments} if t.attachments else {}),
                     **({"output_attachments": t.output_attachments} if t.output_attachments else {}),
                 }
@@ -158,6 +162,8 @@ def load_turns(data: dict[str, Any]) -> list[Turn]:
             user=str(t.get("user", "")),
             tools=tools,
             assistant=str(t.get("assistant", "")),
+            reasoning=str(t.get("reasoning", "")),
+            reasoned_s=float(t.get("reasoned_s", 0)),
             attachments=list(t.get("attachments") or []),
             output_attachments=list(t.get("output_attachments") or []),
         ))

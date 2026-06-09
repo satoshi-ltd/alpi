@@ -5,6 +5,7 @@ import { Diamond } from '../../components/Diamond';
 import { Pill } from '../../components/Pill';
 import { useProfileSummaries } from '../../hooks/useDaemonData';
 import { accentForProfile } from '../../theme/accents';
+import { profileLabel } from '../../lib/profileLabel';
 import { useTheme } from '../../theme/ThemeContext';
 
 export function MentionPopover({ candidates = [], onPick }) {
@@ -49,7 +50,7 @@ export function MentionPopover({ candidates = [], onPick }) {
           >
             <Diamond color={accent} />
             <Text style={{ flex: 1, fontFamily: fonts.mono, fontSize: fontSizes.md, color: colors.ink }}>
-              @{c.id}
+              @{profileLabel(c.id)}
             </Text>
             {isHub ? <Pill tone="on">hub</Pill> : null}
             {profile?.model ? (

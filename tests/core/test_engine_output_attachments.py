@@ -119,3 +119,76 @@ def test_chat_turn_persists_inbound_attachment_path(bootstrapped_home, monkeypat
     att = engine.session.turns[-1].attachments
     assert att and att[0]["path"] == str(img)
     assert att[0]["name"] == "shot.png" and "size" in att[0]
+
+
+def _reasoning_then_reply(reasoning: str, reply: str):
+    frames = [
+        {"text_delta": "", "reasoning_delta": reasoning, "tool_calls_delta": []},
+        {"text_delta": reply, "reasoning_delta": "", "tool_calls_delta": []},
+        {"final": True, "tool_calls": [], "input_tokens": 1, "output_tokens": 1, "cost_usd": 0.0},
+    ]
+
+    def _stream(*_a, **_kw):
+        yield from frames
+    return _stream
+
+
+def test_reasoning_delta_persisted_for_no_tool_turn(bootstrapped_home, monkeypatch):
+    from alpi import engine as engine_mod
+    monkeypatch.setattr(engine_mod.llm, "stream",
+                        _reasoning_then_reply("I will reason step by step.", "The answer."))
+
+    engine = Engine(home=bootstrapped_home, cfg=config.load(bootstrapped_home))
+    engine.run_turn("think hard", lambda _e: None)
+
+    turn = engine.session.turns[-1]
+    assert turn.reasoning == "I will reason step by step."
+    assert turn.assistant == "The answer."
+    assert turn.reasoned_s >= 0
+
+    engine.session.save()
+    import json
+    data = session_mod.load_turns(
+        json.loads((bootstrapped_home / "sessions" / f"{engine.session.id}.json").read_text())
+    )
+    assert data[-1].reasoning == "I will reason step by step."
+
+
+def test_reasoned_s_excludes_tool_execution(bootstrapped_home, monkeypatch):
+    from alpi import engine as engine_mod
+    clock = {"t": 1000.0}
+    monkeypatch.setattr(engine_mod.time, "time", lambda: clock["t"])
+    monkeypatch.setattr(engine_mod.llm, "stream",
+                        _tool_then_reply("write_file", '{"path": "x", "content": "y"}'))
+
+    def jumpy_execute(_name, _args, **_kw):
+        clock["t"] += 100.0
+        return ToolResult(ok=True, output="ok")
+    monkeypatch.setattr(engine_mod.tools, "execute", jumpy_execute)
+
+    engine = Engine(home=bootstrapped_home, cfg=config.load(bootstrapped_home))
+    engine.run_turn("do it", lambda _e: None)
+
+    assert engine.session.turns[-1].reasoned_s == 0.0
+
+
+def test_reasoned_s_excludes_final_answer_streaming(bootstrapped_home, monkeypatch):
+    from alpi import engine as engine_mod
+    clock = {"t": 1000.0}
+    monkeypatch.setattr(engine_mod.time, "time", lambda: clock["t"])
+
+    def _stream(*_a, **_kw):
+        clock["t"] = 1000.0
+        yield {"text_delta": "", "reasoning_delta": "thinking", "tool_calls_delta": []}
+        clock["t"] = 1005.0
+        yield {"text_delta": "the long final answer", "reasoning_delta": "", "tool_calls_delta": []}
+        clock["t"] = 1020.0
+        yield {"final": True, "tool_calls": [], "input_tokens": 1, "output_tokens": 1, "cost_usd": 0.0}
+    monkeypatch.setattr(engine_mod.llm, "stream", _stream)
+
+    engine = Engine(home=bootstrapped_home, cfg=config.load(bootstrapped_home))
+    engine.run_turn("think", lambda _e: None)
+
+    turn = engine.session.turns[-1]
+    assert turn.reasoned_s == 5.0
+    assert turn.reasoning == "thinking"

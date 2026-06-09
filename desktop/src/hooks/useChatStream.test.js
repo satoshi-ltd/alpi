@@ -166,6 +166,33 @@ describe("useChatStream stall watchdog", () => {
     expect(result.current.pendingTurn.assistantPreview).toBe("Hel");
   });
 
+  it("folds inter-tool prose into reasoning, keeps the final answer as the reply", async () => {
+    invoke.mockImplementation(async (cmd) => {
+      if (cmd === "chat_events_since") {
+        return {
+          exists: true,
+          events: [
+            { frame: { event: "session_start", session_id: "sess-1" } },
+            { frame: { event: "assistant_delta", text: "Voy a investigar." } },
+            { frame: { event: "tool_start", tool_id: "t1", name: "research" } },
+            { frame: { event: "tool_end", tool_id: "t1", ok: true, output: "done" } },
+            { frame: { event: "assistant_delta", text: "La respuesta final." } },
+          ],
+        };
+      }
+      return null;
+    });
+    const { result } = mount();
+    await waitForListen();
+    seedTurn(result, { sessionId: "sess-1" });
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(12_000); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+
+    expect(result.current.pendingTurn.reasoningPreview).toBe("Voy a investigar.");
+    expect(result.current.pendingTurn.assistantPreview).toBe("La respuesta final.");
+  });
+
   it("never replays an errored turn (no recovery-toast flood)", async () => {
     const { result, notify } = mount();
     await waitForListen();

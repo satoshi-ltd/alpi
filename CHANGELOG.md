@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.8.8 — 2026-06-09 — turns record how long the agent reasoned
+
+- **Each turn now records the time the agent spent reasoning before it answered**,
+  persisted with the session — so a client can surface it (e.g. a collapsible
+  "Reasoned for 12s"). Rich rendering lands in the desktop/mobile releases.
+
 ## v0.8.7 — 2026-06-09 — files you attach keep a preview in history
 
 - **A file you attach now keeps its thumbnail in the conversation, not just a

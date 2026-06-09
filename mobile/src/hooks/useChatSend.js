@@ -19,6 +19,7 @@ export function useChatSend({ profile, sessionId, onCompleted }) {
   const requestIdRef = useRef(null);
   // assistant_delta arrives ~30-80/s; rAF buffer caps re-renders at ≤60Hz.
   const deltaBufRef = useRef('');
+  const reasoningBufRef = useRef('');
   const rafRef = useRef(null);
   // Last frame timestamp (live or recovered) — watchdog pivot.
   const lastFrameAtRef = useRef(0);
@@ -43,11 +44,17 @@ export function useChatSend({ profile, sessionId, onCompleted }) {
   const flushDeltas = useCallback(() => {
     rafRef.current = null;
     const chunk = deltaBufRef.current;
-    if (!chunk) return;
+    const rchunk = reasoningBufRef.current;
+    if (!chunk && !rchunk) return;
     deltaBufRef.current = '';
-    setPendingTurn((cur) =>
-      cur ? { ...cur, assistant: (cur.assistant ?? '') + chunk } : cur,
-    );
+    reasoningBufRef.current = '';
+    setPendingTurn((cur) => {
+      if (!cur) return cur;
+      const next = { ...cur };
+      if (chunk) next.assistant = (cur.assistant ?? '') + chunk;
+      if (rchunk) next.reasoning = (cur.reasoning ?? '') + rchunk;
+      return next;
+    });
   }, []);
 
   const cancel = useCallback(() => {
@@ -55,6 +62,7 @@ export function useChatSend({ profile, sessionId, onCompleted }) {
     handleRef.current = null;
     requestIdRef.current = null;
     deltaBufRef.current = '';
+    reasoningBufRef.current = '';
     if (rafRef.current) {
       cancelAnimationFrame(rafRef.current);
       rafRef.current = null;
@@ -73,6 +81,7 @@ export function useChatSend({ profile, sessionId, onCompleted }) {
       if ((!trimmed && !attachments) || !profile) return null;
       handleRef.current?.cancel?.();
       deltaBufRef.current = '';
+      reasoningBufRef.current = '';
       if (rafRef.current) {
         cancelAnimationFrame(rafRef.current);
         rafRef.current = null;
@@ -85,6 +94,7 @@ export function useChatSend({ profile, sessionId, onCompleted }) {
         at: Math.floor(Date.now() / 1000),
         user: trimmed,
         assistant: '',
+        reasoning: '',
         tools: [],
         pending: true,
         attachments: attachments ?? undefined,
@@ -122,7 +132,16 @@ export function useChatSend({ profile, sessionId, onCompleted }) {
           if (rafRef.current == null) {
             rafRef.current = requestAnimationFrame(flushDeltas);
           }
+        } else if (event === 'reasoning_delta') {
+          reasoningBufRef.current += frame.text ?? '';
+          if (rafRef.current == null) {
+            rafRef.current = requestAnimationFrame(flushDeltas);
+          }
         } else if (event === 'tool_start') {
+          // Prose written before a tool is inter-tool reasoning, not the answer —
+          // fold it into the reasoning stream and clear the answer buffer.
+          const pendingProse = deltaBufRef.current;
+          deltaBufRef.current = '';
           setPendingTurn((cur) => {
             if (!cur) return cur;
             const tools = [...(cur.tools ?? [])];
@@ -135,7 +154,14 @@ export function useChatSend({ profile, sessionId, onCompleted }) {
             };
             if (existing >= 0) tools[existing] = { ...tools[existing], ...next };
             else tools.push(next);
-            return { ...cur, tools };
+            const prose = `${cur.assistant ?? ''}${pendingProse}`.trim();
+            if (!prose) return { ...cur, tools };
+            return {
+              ...cur,
+              tools,
+              reasoning: cur.reasoning ? `${cur.reasoning}\n\n${prose}` : prose,
+              assistant: '',
+            };
           });
         } else if (event === 'tool_state') {
           setPendingTurn((cur) => {
@@ -159,6 +185,7 @@ export function useChatSend({ profile, sessionId, onCompleted }) {
           });
         } else if (event === 'reply') {
           deltaBufRef.current = '';
+          reasoningBufRef.current = '';
           setPendingTurn((cur) =>
             cur ? { ...cur, assistant: frame.text ?? cur.assistant ?? '' } : cur,
           );
@@ -184,7 +211,7 @@ export function useChatSend({ profile, sessionId, onCompleted }) {
             rafRef.current = null;
           }
           setPendingTurn((cur) =>
-            cur ? { ...cur, assistant: '', tools: [], error: null } : cur,
+            cur ? { ...cur, assistant: '', reasoning: '', tools: [], error: null } : cur,
           );
           let sawDone = false;
           for (const rec of records) {

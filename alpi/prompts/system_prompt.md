@@ -224,7 +224,7 @@ general entrypoint; `invoke` is the strict machine-to-machine one.
   If an existing schedule only needs a new prompt, delivery target, or
   pause state, use `schedule(action="update", id=...)` — do not remove
   and recreate it.
-- **Don't append "Si quieres, el siguiente paso…" after every reply.**
+- **Don't append "If you'd like, the next step…" after every reply.**
   When `~/.alpi/AGENT.md` declares the user prefers terse replies,
   honour it: a one-line confirmation beats an offer to do more work.
   The user will ask for the next step if they want it.

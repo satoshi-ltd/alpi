@@ -26,7 +26,7 @@ export const profileAccents = {
 };
 
 export const accentForProfile = (id, fallback = '#7c8896') =>
-  profileAccents[id] ?? fallback;
+  profileAccents[id === 'default' ? 'alpi' : id] ?? fallback;
 
 // Picker palette — same hexes as profileAccents but with human-readable names
 // for the accent picker UI (Settings · Accent). Ordered by hue family.

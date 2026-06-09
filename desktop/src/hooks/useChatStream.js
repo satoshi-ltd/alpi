@@ -89,6 +89,11 @@ export function useChatStream({
       if (kind === "session_start") {
         if (f.session_id) finalSessionId = f.session_id;
       } else if (kind === "tool_start") {
+        const prose = assistant.trim();
+        if (prose) {
+          reasoning = reasoning ? `${reasoning}\n\n${prose}` : prose;
+          assistant = "";
+        }
         const existing = nextTools.findIndex((t) => t.tool_id === f.tool_id);
         const entry = {
           tool_id: f.tool_id,
@@ -242,8 +247,13 @@ export function useChatStream({
         return;
       }
       if (p.kind === "tool_start") {
+        // Prose the model wrote before a tool is inter-tool reasoning, not the
+        // answer — fold it into the reasoning stream and clear the answer buffer.
+        const pendingProse = deltaBufferRef.current.assistant;
+        deltaBufferRef.current.assistant = "";
         setPendingTurn((prev) => {
           if (!prev) return prev;
+          const prose = `${prev.assistantPreview ?? ""}${pendingProse}`.trim();
           const existing = prev.tools.findIndex((t) => t.tool_id === p.tool_id);
           const entry = {
             tool_id: p.tool_id,
@@ -258,7 +268,13 @@ export function useChatStream({
           const tools = existing >= 0
             ? prev.tools.map((t, i) => (i === existing ? entry : t))
             : [...prev.tools, entry];
-          return { ...prev, tools };
+          if (!prose) return { ...prev, tools };
+          return {
+            ...prev,
+            tools,
+            reasoningPreview: prev.reasoningPreview ? `${prev.reasoningPreview}\n\n${prose}` : prose,
+            assistantPreview: "",
+          };
         });
       } else if (p.kind === "tool_state") {
         setPendingTurn((prev) => {

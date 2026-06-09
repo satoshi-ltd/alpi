@@ -160,6 +160,9 @@ class Engine:
         turn_started = time.time()
         turn_tools: list[ToolLog] = []
         turn_produced: list[dict] = []
+        turn_reasoning_parts: list[str] = []
+        first_tool_at: float | None = None
+        first_text_delta_at: float | None = None
         final_assistant = ""
         turn_error = ""  # provider/abort reason for the run ledger when nothing was produced
         # Only natural completion (LLM produced a final reply with no further
@@ -264,6 +267,7 @@ class Engine:
                     self._finalize_interrupt(emit)
                     return
                 accumulated_text: list[str] = []
+                reasoning_text: list[str] = []
                 final: dict = {}
                 try:
                     for chunk in llm.stream(
@@ -277,9 +281,12 @@ class Engine:
                             continue
                         reasoning_delta = chunk.get("reasoning_delta") or ""
                         if reasoning_delta:
+                            reasoning_text.append(reasoning_delta)
                             emit(AgentEvent(kind="reasoning_delta", text=reasoning_delta))
                         text_delta = chunk.get("text_delta") or ""
                         if text_delta:
+                            if first_text_delta_at is None:
+                                first_text_delta_at = time.time()
                             accumulated_text.append(text_delta)
                             emit(AgentEvent(kind="assistant_delta", text=text_delta))
                 except Exception as e:  # noqa: BLE001
@@ -300,6 +307,15 @@ class Engine:
 
                 content = _strip_cache_noise("".join(accumulated_text))
                 tool_calls = final.get("tool_calls", [])
+
+                _rd = "".join(reasoning_text).strip()
+                if _rd:
+                    turn_reasoning_parts.append(_rd)
+                if tool_calls:
+                    if content.strip():
+                        turn_reasoning_parts.append(content.strip())
+                    if first_tool_at is None:
+                        first_tool_at = time.time()
 
                 # Bookkeeping
                 self.session.record(
@@ -516,9 +532,16 @@ class Engine:
         finally:
             todo_mod.reset_store(todo_token)
             # Replace the in-flight stub from turn-start, or append if an early exception aborted before it was logged.
+            reasoned_until = (
+                first_tool_at if first_tool_at is not None
+                else first_text_delta_at if first_text_delta_at is not None
+                else time.time()
+            )
             final_turn = session.Turn(
                 at=turn_started, user=user_text,
                 tools=turn_tools, assistant=final_assistant,
+                reasoning="\n\n".join(p for p in turn_reasoning_parts if p),
+                reasoned_s=max(0.0, reasoned_until - turn_started),
                 attachments=att_meta, output_attachments=turn_produced,
             )
             if self.session.turns and self.session.turns[-1].at == turn_started:

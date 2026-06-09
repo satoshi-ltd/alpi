@@ -184,6 +184,7 @@ function MdTable({ header, rows, theme }) {
               key={r}
               style={{
                 flexDirection: 'row',
+                backgroundColor: colors.bg,
                 borderBottomWidth: r < rows.length - 1 ? 0.5 : 0,
                 borderBottomColor: colors.line,
               }}

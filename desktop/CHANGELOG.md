@@ -11,6 +11,17 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.3.45 — 2026-06-09 — reasoning is its own collapsible block
+
+Requires alpi v0.8.8+.
+
+- **The agent's reasoning is now a collapsible block, not a blob.** While it
+  thinks you see "Reasoning…"; once it answers it collapses to "Reasoned for 12s"
+  (click to expand), split into paragraphs. It no longer vanishes when the final
+  answer arrives.
+- **Tables read cleanly again.** Body rows use the chat-panel background (only the
+  header is shaded), instead of a grey fill.
+
 ## v0.3.44 — 2026-06-09 — image previews land in the conversation
 
 Requires alpi v0.8.7+.

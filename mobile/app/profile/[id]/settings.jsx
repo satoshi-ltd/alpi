@@ -9,6 +9,7 @@ import { OnOff } from '../../../src/components/OnOff';
 import { Pill } from '../../../src/components/Pill';
 import { Row, RowSeparator, SectionHeader } from '../../../src/components/Row';
 import { ScreenHeader } from '../../../src/components/ScreenHeader';
+import { profileLabel } from '../../../src/lib/profileLabel';
 import { useToast } from '../../../src/components/Toast';
 import { Bold, Code, TypedConfirm } from '../../../src/components/TypedConfirm';
 import {
@@ -77,7 +78,7 @@ export default function ProfileSettings() {
   if (loading && !profile) {
     return (
       <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
-        <ScreenHeader title={`@${id}`} subtitle="PROFILE · LOADING" onBack={() => router.back()} />
+        <ScreenHeader title={`@${profileLabel(id)}`} subtitle="PROFILE · LOADING" onBack={() => router.back()} />
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
           <ActivityIndicator color={colors.ink3} />
         </View>
@@ -88,7 +89,7 @@ export default function ProfileSettings() {
   if (!profile) {
     return (
       <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
-        <ScreenHeader title={`@${id}`} subtitle="PROFILE · NOT FOUND" onBack={() => router.back()} />
+        <ScreenHeader title={`@${profileLabel(id)}`} subtitle="PROFILE · NOT FOUND" onBack={() => router.back()} />
       </SafeAreaView>
     );
   }
@@ -171,7 +172,7 @@ export default function ProfileSettings() {
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
       <ScreenHeader
-        title={profile.name}
+        title={profileLabel(profile.name)}
         subtitle="PROFILE · SETTINGS"
         onBack={() => router.back()}
         leadingGlyph={<Diamond color={accent} size="md" />}

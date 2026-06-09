@@ -190,4 +190,19 @@ describe("useChatSend.send", () => {
     expect(result.current.pendingTurn.assistant).toBe("partial reply");
     expect(result.current.pendingTurn.error).toMatch(/ws died/);
   });
+
+  it("folds inter-tool prose into reasoning, keeps the final answer separate", () => {
+    const { result } = renderHook(() => useChatSend({ profile: "doc" }));
+    act(() => result.current.send("hi"));
+    act(() => lastStreamHandlers.onFrame({ event: "session_start", session_id: "sess-1" }));
+    // Prose the model writes before a tool is inter-tool reasoning, not the answer.
+    act(() => lastStreamHandlers.onFrame({ event: "assistant_delta", text: "Voy a investigar." }));
+    act(() => lastStreamHandlers.onFrame({ event: "tool_start", tool_id: "t1", name: "research" }));
+    expect(result.current.pendingTurn.reasoning).toBe("Voy a investigar.");
+    expect(result.current.pendingTurn.assistant).toBe("");
+    // The final answer (after the tool) stays as the reply, reasoning untouched.
+    act(() => lastStreamHandlers.onFrame({ event: "reply", text: "La respuesta." }));
+    expect(result.current.pendingTurn.assistant).toBe("La respuesta.");
+    expect(result.current.pendingTurn.reasoning).toBe("Voy a investigar.");
+  });
 });

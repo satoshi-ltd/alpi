@@ -1,0 +1,57 @@
+.wrap {
+  /* .timeline gives 24px above+below; trim the bottom to offset the answer's line-height leading so the gaps read even. */
+  margin: 0 0 calc(var(--space-2) * -1);
+}
+
+.head {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  color: var(--ink-3);
+  font-size: var(--fs-base);
+}
+
+.caret,
+.caretOpen {
+  flex: none;
+  transition: transform 120ms ease;
+}
+.caret {
+  transform: rotate(-90deg);
+}
+.caretOpen {
+  transform: rotate(0deg);
+}
+
+.label {
+  color: var(--ink-3);
+}
+.streaming {
+  opacity: 0.85;
+  animation: reasoningPulse 1.4s ease-in-out infinite;
+}
+
+@keyframes reasoningPulse {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 0.9; }
+}
+
+.body {
+  margin-top: var(--space-3);
+  padding-left: var(--space-5);
+  border-left: 1.5px solid var(--line);
+}
+
+.para {
+  margin: 0 0 var(--space-3);
+  color: var(--ink-3);
+  font-size: var(--fs-base);
+  line-height: var(--lh-normal);
+}
+.para:last-child {
+  margin-bottom: 0;
+}

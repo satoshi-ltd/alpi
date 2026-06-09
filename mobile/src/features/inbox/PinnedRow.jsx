@@ -93,7 +93,7 @@ export function PinnedRow({ items, onPress, onLongPress }) {
             ? 'transparent'
             : mixHex(accent, 0.18, colors.bgPane);
           const borderColor = needsProvider ? alpha(accent, 0.5) : alpha(accent, 0.3);
-          const labelText = isWg ? it.label ?? it.name ?? it.id : it.name ?? it.id;
+          const labelText = it.label ?? it.name ?? it.id;
 
           return (
             <Pressable

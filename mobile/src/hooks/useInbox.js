@@ -2,6 +2,7 @@ import { useCallback, useMemo } from 'react';
 
 import { useEndpoint } from '../lib/EndpointContext';
 import { profileEmptyState } from '../lib/profileReady';
+import { profileLabel } from '../lib/profileLabel';
 import { useReadState } from '../lib/readState';
 import { accentForProfile } from '../theme/accents';
 import { useProfileSummaries, useWorkgroups } from './useDaemonData';
@@ -53,7 +54,7 @@ export function useInbox() {
         kind: 'profile',
         id: p.name,
         name: p.name,
-        label: p.name,
+        label: profileLabel(p.name),
         accent: p.accent ?? accentForProfile(p.name),
         needsProvider: blocked,
         emptyState: state,

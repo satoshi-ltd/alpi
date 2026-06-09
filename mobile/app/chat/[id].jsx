@@ -8,11 +8,13 @@ import { AlpiMark } from '../../src/components/AlpiMark';
 import { Button } from '../../src/components/Button';
 import { useToast } from '../../src/components/Toast';
 import { ProfileAssistantMessage, ProfileUserMessage } from '../../src/features/chat/Bubble';
+import { Reasoning } from '../../src/features/chat/Reasoning';
 import { ChatHeader } from '../../src/features/chat/ChatHeader';
 import { Composer } from '../../src/features/chat/Composer';
 import { MessageActionsSheet } from '../../src/features/chat/MessageActionsSheet';
 import { retryTextFor } from '../../src/features/chat/messageActions';
 import { compactProducedTool } from '../../src/lib/producedAttachments';
+import { profileLabel } from '../../src/lib/profileLabel';
 import { mergeStreamingTurn } from '../../src/features/chat/chatTurns';
 import { ChatSkeleton } from '../../src/features/chat/ChatSkeleton';
 import { MessageSkeleton } from '../../src/components/MessageSkeleton';
@@ -70,6 +72,7 @@ const TurnBlock = memo(function TurnBlock({ turn, turnIndex, profileName, accent
   // Suppress only on exact echo; useful commentary after cancel/timeout/no-handler stays visible.
   const assistantEchoesAsk = lastAnswer && turn.assistant?.trim() === lastAnswer;
   const showAssistant = (!!turn.assistant || turn.output_attachments?.length > 0) && !assistantEchoesAsk;
+  const reasoning = turn.reasoning || (turn.tools ?? []).map((t) => t.reasoning).filter(Boolean).join('\n\n');
   return (
     <View style={TURN_STYLES.block}>
       {turn.user ? (
@@ -100,6 +103,9 @@ const TurnBlock = memo(function TurnBlock({ turn, turnIndex, profileName, accent
           fontSizes={fontSizes}
         />
       ))}
+      {reasoning ? (
+        <Reasoning text={reasoning} seconds={turn.reasoned_s} streaming={turn.pending} />
+      ) : null}
       {showAssistant ? (
         <ProfileAssistantMessage
           text={turn.assistant}
@@ -177,7 +183,7 @@ function EmptyThread({ profileName, model, accent, colors, fonts }) {
       <AlpiMark size={96} color={accent} />
       <View style={TURN_STYLES.emptyTextWrap}>
         <Text style={[TURN_STYLES.emptyHeading, { fontFamily: fonts.sans.semibold, color: colors.ink }]}>
-          start a thread with @{profileName}
+          start a thread with @{profileLabel(profileName)}
         </Text>
         {model ? (
           <Text
@@ -263,7 +269,7 @@ function NeedsSetup({ name, accent, state, onSetupProvider, onPickModel }) {
     <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: space.s10, gap: space.s6 }}>
       <AlpiMark size={80} color={accent} />
       <Text style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.xl, color: colors.ink, marginTop: space.s3 }}>
-        @{name} needs {isModel ? 'a model' : 'a provider'}
+        @{profileLabel(name)} needs {isModel ? 'a model' : 'a provider'}
       </Text>
       <Text
         style={{
@@ -437,7 +443,7 @@ export default function ProfileChat() {
   if (!endpoint) {
     return (
       <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
-        <ChatHeader kind="profile" accent={colors.ink3} title={`@${id}`} meta="not paired" onBack={() => router.back()} />
+        <ChatHeader kind="profile" accent={colors.ink3} title={`@${profileLabel(id)}`} meta="not paired" onBack={() => router.back()} />
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
           <Text style={{ color: colors.ink3 }}>Pair this phone to a daemon first.</Text>
         </View>
@@ -448,7 +454,7 @@ export default function ProfileChat() {
   if (summaries.loading && !profile) {
     return (
       <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
-        <ChatHeader kind="profile" accent={colors.ink3} title={`@${id}`} meta="loading…" onBack={() => router.back()} />
+        <ChatHeader kind="profile" accent={colors.ink3} title={`@${profileLabel(id)}`} meta="loading…" onBack={() => router.back()} />
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
           <ActivityIndicator color={colors.ink3} />
         </View>
@@ -459,7 +465,7 @@ export default function ProfileChat() {
   if (!profile) {
     return (
       <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
-        <ChatHeader kind="profile" accent={colors.ink3} title={`@${id}`} meta="profile · not found" onBack={() => router.back()} />
+        <ChatHeader kind="profile" accent={colors.ink3} title={`@${profileLabel(id)}`} meta="profile · not found" onBack={() => router.back()} />
       </SafeAreaView>
     );
   }
@@ -498,7 +504,7 @@ export default function ProfileChat() {
       <ChatHeader
         kind="profile"
         accent={accent}
-        title={profile.name}
+        title={profileLabel(profile.name)}
         meta={headerMeta}
         onBack={() => router.back()}
         onMore={canAdmin ? () => router.push(`/profile/${profile.name}/settings`) : null}
@@ -528,7 +534,7 @@ export default function ProfileChat() {
             fontSizes={fontSizes}
           />
           <Composer
-            placeholder={`Message @${profile.name}…`}
+            placeholder={`Message @${profileLabel(profile.name)}…`}
             accent={accent}
             onSend={onComposerSend}
             onMicPress={micUnavailable}

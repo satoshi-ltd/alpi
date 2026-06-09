@@ -14,6 +14,16 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.1.36 — 2026-06-09 — reasoning block + cleaner tables
+
+Requires alpi v0.8.8+.
+
+- **The agent's reasoning is now a collapsible block.** While it thinks you see
+  "Reasoning…"; once it answers it collapses to "Reasoned for 12s" (tap to
+  expand), split into paragraphs — instead of getting lost in the message.
+- **Tables read cleanly.** Body rows use the chat background (only the header is
+  shaded), instead of a grey fill.
+
 ## v0.1.35 — 2026-06-09 — images render in chat
 
 Requires alpi v0.8.7+.

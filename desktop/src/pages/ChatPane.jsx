@@ -1,6 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import AttachmentChips from "../primitives/AttachmentChips.jsx";
+import Reasoning from "../primitives/Reasoning.jsx";
 import { PaperclipIcon } from "../primitives/icons.jsx";
 import { useProfileDetail } from "../hooks/useProfileDetail.js";
 import AlpiPicker from "../features/AlpiPicker.jsx";
@@ -430,6 +431,7 @@ const Turn = memo(function Turn({
   const tools = allTools
     .filter((t) => t.name !== "ask_user")
     .map((t) => compactProducedTool(t, turn.output_attachments));
+  const reasoning = turn.reasoning || allTools.map((t) => t.reasoning).filter(Boolean).join("\n\n");
   const askUserAnswers = allTools
     .filter((t) => t.name === "ask_user")
     .map((t) => ({
@@ -528,6 +530,7 @@ const Turn = memo(function Turn({
           accent={accent}
         />
       ))}
+      {reasoning && <Reasoning text={reasoning} seconds={turn.reasoned_s} />}
       {(turn.assistant || turn.output_attachments?.length > 0) && !hideAssistant && (
         <ProfileMessage
           role="assistant"
@@ -741,6 +744,9 @@ function PendingTurn({ turn, accent }) {
   const tools = allTools
     .filter((t) => t.name !== "ask_user")
     .map((t) => compactProducedTool(t, turn.output_attachments));
+  const reasoning = [...allTools.map((t) => t.reasoning).filter(Boolean), turn.reasoningPreview]
+    .filter(Boolean)
+    .join("\n\n");
   const askUserAnswers = allTools
     .filter((t) => t.name === "ask_user")
     .map((t) => ({
@@ -774,6 +780,7 @@ function PendingTurn({ turn, accent }) {
           accent={accent}
         />
       ))}
+      {reasoning && <Reasoning text={reasoning} streaming />}
       {turn.assistantPreview && (
         <ProfileMessage role="assistant">
           <Markdown as="div" source={turn.assistantPreview} className="alpi-md" />
