@@ -1,15 +1,53 @@
-import { Image, Pressable, Text, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, Image, Pressable, Text, View } from 'react-native';
 
 import { Icon } from '../../components/Icon';
+import { useEndpoint } from '../../lib/EndpointContext';
 import { useTheme } from '../../theme/ThemeContext';
 import { radii, space } from '../../theme/tokens';
-import { fileKind, fileTypeLabel, fmtSize } from '../../lib/fileKind';
+import { fileKind, fileTypeLabel, fmtSize, shouldFetchPreview } from '../../lib/fileKind';
 
 const ICON = { code: 'file-code', text: 'file-text', file: 'file', image: 'file' };
 const BOX = 32;
 const MESSAGE_MAX = 4;
+const imageCache = new Map();
 
-function Glyph({ kind, localUri, mime, name, colors }) {
+function FetchedImage({ path, profile, name, colors }) {
+  const { call, endpoint } = useEndpoint();
+  const key = `${profile || ''}:${path}`;
+  const [uri, setUri] = useState(() => imageCache.get(key) || null);
+  const [aspect, setAspect] = useState(16 / 9);
+  useEffect(() => {
+    if (uri || !endpoint || !profile) return undefined;
+    let alive = true;
+    call(endpoint, 'host.attachments.fetch', { profile, path })
+      .then((r) => {
+        const u = r?.data_base64 ? `data:${r.mime};base64,${r.data_base64}` : null;
+        if (u) imageCache.set(key, u);
+        if (alive && u) setUri(u);
+      })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [key, endpoint, profile]);
+  useEffect(() => { if (uri) Image.getSize(uri, (w, h) => h && setAspect(w / h), () => {}); }, [uri]);
+  if (!uri) {
+    return (
+      <View style={{ height: 160, borderRadius: radii.md, borderWidth: 0.5, borderColor: colors.line, backgroundColor: colors.hover, alignItems: 'center', justifyContent: 'center' }}>
+        <ActivityIndicator color={colors.ink3} />
+      </View>
+    );
+  }
+  return (
+    <Image
+      source={{ uri }}
+      style={{ width: '100%', aspectRatio: aspect, borderRadius: radii.md, borderWidth: 0.5, borderColor: colors.line, backgroundColor: colors.hover }}
+      resizeMode="cover"
+      accessibilityLabel={name}
+    />
+  );
+}
+
+function Glyph({ kind, localUri, name, colors }) {
   if (kind === 'image' && localUri) {
     return <Image source={{ uri: localUri }} style={{ width: BOX, height: BOX, borderRadius: radii.sm }} accessibilityLabel={name} />;
   }
@@ -20,7 +58,7 @@ function Glyph({ kind, localUri, mime, name, colors }) {
   );
 }
 
-export function AttachmentCards({ items, onRemove, variant = 'composer' }) {
+export function AttachmentCards({ items, onRemove, variant = 'composer', profile }) {
   const { colors, fonts, fontSizes } = useTheme();
   if (!items?.length) return null;
   const message = variant === 'message';
@@ -36,6 +74,11 @@ export function AttachmentCards({ items, onRemove, variant = 'composer' }) {
     >
       {shown.map((a, i) => {
         const kind = fileKind(a.name, a.mime);
+        if (shouldFetchPreview(a, { message, profile })) {
+          return (
+            <FetchedImage key={a.path || a.name || i} path={a.path} profile={profile} name={a.name} colors={colors} />
+          );
+        }
         const subtitle = message
           ? `${fileTypeLabel(a.name, a.mime)} · ${fmtSize(a.size)}`
           : fmtSize(a.size);
@@ -53,7 +96,7 @@ export function AttachmentCards({ items, onRemove, variant = 'composer' }) {
               flexGrow: message ? 1 : 0,
             }}
           >
-            <Glyph kind={kind} localUri={a.localUri} mime={a.mime} name={a.name} colors={colors} />
+            <Glyph kind={kind} localUri={a.localUri} name={a.name} colors={colors} />
             <View style={{ flexShrink: 1, flexGrow: 1 }}>
               <Text numberOfLines={1} style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, color: colors.ink }}>{a.name}</Text>
               <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3 }}>{subtitle}</Text>

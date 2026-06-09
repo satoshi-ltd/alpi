@@ -14,6 +14,16 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.1.34 — 2026-06-08 — files an agent makes show up as attachments
+
+Requires alpi v0.8.6+.
+
+- **Generated files arrive as attachments.** An image an agent produces previews
+  inline (tap to enlarge); other files — PDF, spreadsheet, doc — show as a
+  labelled attachment, even when the agent sends no text.
+- **Cleaner tool output.** A step that produced a file shows a compact
+  "Generated · name" line instead of the raw result blob.
+
 ## v0.1.33 — 2026-06-07 — images show inline in chat
 
 Requires alpi v0.8.5+.

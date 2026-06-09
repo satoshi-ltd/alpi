@@ -70,17 +70,34 @@ export function ProfileUserMessage({ text, ts, accent, attachments, onLongPress 
   );
 }
 
-export function ProfileAssistantMessage({ text, onLongPress, profile }) {
+function stripProducedImageMarkdown(text, produced) {
+  if (!produced?.length || !text) return text;
+  let out = text;
+  for (const a of produced) {
+    if (a?.kind !== 'image' || !a?.path) continue;
+    const esc = a.path.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    out = out.replace(new RegExp(`!\\[[^\\]]*\\]\\(\\s*${esc}(?:\\s+"[^"]*")?\\s*\\)`, 'g'), '');
+  }
+  return out.replace(/\n{3,}/g, '\n\n').trim();
+}
+
+export function ProfileAssistantMessage({ text, attachments, onLongPress, profile }) {
   const { colors } = useTheme();
   const wrapStyle = useCallback(
     ({ pressed }) => [S.agentWrap, pressed && { opacity: 0.85 }],
     [],
   );
+  const body = stripProducedImageMarkdown(text, attachments);
   return (
     <Pressable onLongPress={onLongPress} delayLongPress={350} style={wrapStyle}>
-      <RichText size={16} color={colors.ink} imageProfile={profile}>
-        {text}
-      </RichText>
+      {body ? (
+        <RichText size={16} color={colors.ink} imageProfile={profile}>
+          {body}
+        </RichText>
+      ) : null}
+      {attachments?.length ? (
+        <AttachmentCards items={attachments} variant="message" profile={profile} />
+      ) : null}
     </Pressable>
   );
 }

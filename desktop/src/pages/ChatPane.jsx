@@ -41,6 +41,11 @@ import {
 import { playTts, subscribeTts, VOICE_POOL } from "../lib/tts.js";
 import { useOnline } from "../lib/useOnline.js";
 import styles from "./ChatPane.module.css";
+import {
+  assistantWithProducedImages,
+  compactProducedTool,
+  nonImageProduced,
+} from "../lib/producedAttachments.js";
 
 export default function ChatPane({
   view,
@@ -426,7 +431,9 @@ const Turn = memo(function Turn({
 }) {
   const notify = useNotify();
   const allTools = turn.tools ?? [];
-  const tools = allTools.filter((t) => t.name !== "ask_user");
+  const tools = allTools
+    .filter((t) => t.name !== "ask_user")
+    .map((t) => compactProducedTool(t, turn.output_attachments));
   const askUserAnswers = allTools
     .filter((t) => t.name === "ask_user")
     .map((t) => ({
@@ -525,7 +532,7 @@ const Turn = memo(function Turn({
           accent={accent}
         />
       ))}
-      {turn.assistant && !hideAssistant && (
+      {(turn.assistant || turn.output_attachments?.length > 0) && !hideAssistant && (
         <ProfileMessage
           role="assistant"
           footer={
@@ -586,7 +593,14 @@ const Turn = memo(function Turn({
             </>
           }
         >
-          <Markdown as="div" source={turn.assistant} className="alpi-md" />
+          <Markdown
+            as="div"
+            source={assistantWithProducedImages(turn.assistant, turn.output_attachments)}
+            className="alpi-md"
+          />
+          {nonImageProduced(turn.output_attachments).length > 0 && (
+            <AttachmentChips items={nonImageProduced(turn.output_attachments)} variant="message" />
+          )}
         </ProfileMessage>
       )}
     </div>
@@ -728,7 +742,9 @@ const ToolGroupCard = memo(function ToolGroupCard({ group, accent }) {
 
 function PendingTurn({ turn, accent }) {
   const allTools = turn.tools ?? [];
-  const tools = allTools.filter((t) => t.name !== "ask_user");
+  const tools = allTools
+    .filter((t) => t.name !== "ask_user")
+    .map((t) => compactProducedTool(t, turn.output_attachments));
   const askUserAnswers = allTools
     .filter((t) => t.name === "ask_user")
     .map((t) => ({

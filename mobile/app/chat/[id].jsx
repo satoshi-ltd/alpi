@@ -12,6 +12,7 @@ import { ChatHeader } from '../../src/features/chat/ChatHeader';
 import { Composer } from '../../src/features/chat/Composer';
 import { MessageActionsSheet } from '../../src/features/chat/MessageActionsSheet';
 import { retryTextFor } from '../../src/features/chat/messageActions';
+import { compactProducedTool } from '../../src/lib/producedAttachments';
 import { mergeStreamingTurn } from '../../src/features/chat/chatTurns';
 import { ChatSkeleton } from '../../src/features/chat/ChatSkeleton';
 import { MessageSkeleton } from '../../src/components/MessageSkeleton';
@@ -55,7 +56,9 @@ const TURN_STYLES = StyleSheet.create({
 const TurnBlock = memo(function TurnBlock({ turn, turnIndex, accent, colors, fonts, fontSizes, onActionTarget }) {
   const ts = turn.at ? relativeTime(turn.at * 1000) : '';
   const askUsers = (turn.tools ?? []).filter((t) => t.name === 'ask_user');
-  const otherTools = (turn.tools ?? []).filter((t) => t.name !== 'ask_user');
+  const otherTools = (turn.tools ?? [])
+    .filter((t) => t.name !== 'ask_user')
+    .map((t) => compactProducedTool(t, turn.output_attachments));
   const askUserAnswers = askUsers
     .map((t) => ({
       tool_id: t.tool_id,
@@ -66,7 +69,7 @@ const TurnBlock = memo(function TurnBlock({ turn, turnIndex, accent, colors, fon
   const lastAnswer = askUserAnswers[askUserAnswers.length - 1]?.result;
   // Suppress only on exact echo; useful commentary after cancel/timeout/no-handler stays visible.
   const assistantEchoesAsk = lastAnswer && turn.assistant?.trim() === lastAnswer;
-  const showAssistant = !!turn.assistant && !assistantEchoesAsk;
+  const showAssistant = (!!turn.assistant || turn.output_attachments?.length > 0) && !assistantEchoesAsk;
   return (
     <View style={TURN_STYLES.block}>
       {turn.user ? (
@@ -99,6 +102,7 @@ const TurnBlock = memo(function TurnBlock({ turn, turnIndex, accent, colors, fon
       {showAssistant ? (
         <ProfileAssistantMessage
           text={turn.assistant}
+          attachments={turn.output_attachments}
           profile={profileName}
           onLongPress={() => onActionTarget({
             kind: 'agent',

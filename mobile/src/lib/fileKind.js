@@ -14,6 +14,10 @@ export function fileKind(name, mime) {
   return 'file';
 }
 
+export function shouldFetchPreview(a, { message, profile }) {
+  return !!(message && fileKind(a?.name, a?.mime) === 'image' && !a?.localUri && a?.path && profile);
+}
+
 export function fileTypeLabel(name, mime) {
   const sub = String(mime || '').split('/').pop();
   if (sub) return sub;
