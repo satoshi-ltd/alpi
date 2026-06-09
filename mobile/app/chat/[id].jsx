@@ -53,7 +53,7 @@ const TURN_STYLES = StyleSheet.create({
   emptyModel: { fontSize: fontSizes.sm, textAlign: 'center' },
 });
 
-const TurnBlock = memo(function TurnBlock({ turn, turnIndex, accent, colors, fonts, fontSizes, onActionTarget }) {
+const TurnBlock = memo(function TurnBlock({ turn, turnIndex, profileName, accent, colors, fonts, fontSizes, onActionTarget }) {
   const ts = turn.at ? relativeTime(turn.at * 1000) : '';
   const askUsers = (turn.tools ?? []).filter((t) => t.name === 'ask_user');
   const otherTools = (turn.tools ?? [])
@@ -78,6 +78,7 @@ const TurnBlock = memo(function TurnBlock({ turn, turnIndex, accent, colors, fon
           ts={ts}
           accent={accent}
           attachments={turn.attachments}
+          profile={profileName}
           onLongPress={() => onActionTarget({ kind: 'user', text: turn.user, turnIndex })}
         />
       ) : null}
@@ -211,6 +212,7 @@ function ChatList({ turns, pendingTurn, loading, hydrating, profileName, model, 
       <TurnBlock
         turn={item.turn}
         turnIndex={item.turnIndex}
+        profileName={profileName}
         accent={accent}
         colors={colors}
         fonts={fonts}
@@ -218,7 +220,7 @@ function ChatList({ turns, pendingTurn, loading, hydrating, profileName, model, 
         onActionTarget={onActionTarget}
       />
     ),
-    [accent, colors, fonts, fontSizes, onActionTarget],
+    [profileName, accent, colors, fonts, fontSizes, onActionTarget],
   );
 
   if ((loading || hydrating) && full.length === 0) {

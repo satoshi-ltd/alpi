@@ -164,7 +164,7 @@ alpi/
 │   ├── chat.py            host.chat.send (streaming) + host.chat.cancel
 │   ├── config.py          mutation verbs (host.providers.*, host.peers.*, host.profile.*, host.mcp.*, host.gateway.*, host.sandbox.*, host.voice.*)
 │   ├── devices.py         host.devices.* pairing-token lifecycle
-│   ├── attachments_rpc.py host.attachments.{stage,fetch} — stage uploads in, fetch serves a tool-produced output attachment's bytes out (scoped to the profile's workspace/home/temp) so rich clients render images inline + other files as a metadata chip; text surfaces get a shared listing (MM.2)
+│   ├── attachments_rpc.py host.attachments.{stage,fetch} — stage uploads in, fetch serves a tool-produced output attachment's bytes out (scoped to the profile's workspace/home/temp) so rich clients render images inline + other files as a metadata chip; text surfaces get a shared listing
 │   ├── network_rpc.py     host.network.{status,set_advertised,restart_host_server} — pairing endpoint query + override (parity with `alpi setup → devices → network`); scope classified by host character via network.classify_scope (tailscale / lan / custom / docker) so clients don't surface the "configured" resolution-path detail
 │   ├── probes.py          host.gateway.probe, host.peers.ping, host.model.ctx_window
 │   ├── schedule.py        host.schedule.{list,remove,set_paused,fire}
@@ -280,26 +280,26 @@ Per-profile semantic search over the user's local files (BA). Two agent tools:
 
 - `index_workspace(path?, glob?, force?, ocr?)` — walks the workspace root, chunks supported files (30 lines / stride 25), embeds in batches of 64, upserts into a sqlite-vec virtual table. Incremental by default: mtime-skip avoids re-embedding unchanged files, deleted files are purged from the index. A workspace-root change or an embedder/dim change auto-triggers a full rebuild without needing `force` (the stored `workspace_root` in `workspace_meta` is the trigger). `force=true` drops + rebuilds the schema and `VACUUM`s after the rebuild commits so the SQLite freelist doesn't leave the file inflated past the new index's real size.
 - `search_workspace(query, k=5)` — cosine similarity via sqlite-vec MATCH, returns `[{path, snippet, line_start, line_end, score}]` ordered ascending.
-- `learn_file(name?, source_path?, folder?, ocr?)` (RAG.2) — promotes a file into durable workspace knowledge: copies it under `<workspace>/.alpi/documents/YYYY/MM/YYYY-MM-DD-<safe-name>` (never overwriting — `-2`/`-3` on collision; `folder` overrides the `YYYY/MM` subdir and is sanitised against `..`/absolute/traversal), appends a `manifest.jsonl` metadata line (`{path, original_name, mime, size, learned_at, source}` — metadata only, not authoritative), and indexes that one file via `index_files()`. Source resolution: explicit `source_path` → `name` matching a current-turn attachment → the single current-turn attachment → a clear "which file?" error. Validation reuses `attachments.validate` (allowlist + magic bytes + binary-as-text guard); images need `ocr=true`. Only fires on explicit user intent ("learn / remember / save this"). On index failure the copy is kept and `{ok:false, indexed:false}` returned.
+- `learn_file(name?, source_path?, folder?, ocr?)` — promotes a file into durable workspace knowledge: copies it under `<workspace>/.alpi/documents/YYYY/MM/YYYY-MM-DD-<safe-name>` (never overwriting — `-2`/`-3` on collision; `folder` overrides the `YYYY/MM` subdir and is sanitised against `..`/absolute/traversal), appends a `manifest.jsonl` metadata line (`{path, original_name, mime, size, learned_at, source}` — metadata only, not authoritative), and indexes that one file via `index_files()`. Source resolution: explicit `source_path` → `name` matching a current-turn attachment → the single current-turn attachment → a clear "which file?" error. Validation reuses `attachments.validate` (allowlist + magic bytes + binary-as-text guard); images need `ocr=true`. Only fires on explicit user intent ("learn / remember / save this"). On index failure the copy is kept and `{ok:false, indexed:false}` returned.
 
 `index_files(home, files, *, ocr)` is the shared per-file indexer that backs `learn_file`: same readers/chunker/embedder/tables as `index_workspace`, incremental (mtime/size skip), purges passed files that no longer exist, no global orphan sweep. `.alpi/documents/` is the **one `.alpi` subtree the index walk does NOT skip**, so a full `index_workspace` re-discovers learned docs and keeps them in sync instead of purging them as orphans.
 
 Supported formats: markdown / text / source / configs (stdlib read), HTML (`html2text`), PDF (`pypdf` for text-layer, RapidOCR fallback when `ocr=true` and pypdf extracts < 50 chars), DOCX (`python-docx`), EPUB (`ebooklib`), images (`PIL` + RapidOCR — only with `ocr=true`). OCR backend is `rapidocr-onnxruntime` (ONNX port of PaddleOCR, no torch dependency).
 
-**Shared store primitive (`alpi/core/store.py`)**. `open_store(home)` returns a `sqlite3.Connection` with the sqlite-vec extension loaded. Designed to host other shapes later (ALP.6 workgroup search, future entity memory) — they bring their own table schemas.
+**Shared store primitive (`alpi/core/store.py`)**. `open_store(home)` returns a `sqlite3.Connection` with the sqlite-vec extension loaded. Designed to host other shapes later (workgroup search, future entity memory) — they bring their own table schemas.
 
 **Embedder (`alpi/core/embed.py`)**. `Embedder` Protocol; default `FastembedEmbedder` wraps the ONNX export of `sentence-transformers/all-MiniLM-L6-v2` (384-dim, ~90 MB, no torch). Numerically equivalent to the original sentence-transformers checkpoint but ~10× lighter at runtime. Lazy-loaded under a `threading.Lock` so concurrent first-touch calls serialize on a single model instance instead of racing.
 
-### Session recall (`alpi/tools/recall.py`, CM.4)
+### Session recall (`alpi/tools/recall.py`)
 
-Semantic recall over **past conversations**, the conversational-memory peer of the workspace RAG. Lexical `session_search` stays the cheap first layer (term counts over `sessions/*.json`); CM.4 adds the semantic layer for "when did we discuss X / what did we decide about Y" when the wording is fuzzy. Two tools:
+Semantic recall over **past conversations**, the conversational-memory peer of the workspace RAG. Lexical `session_search` stays the cheap first layer (term counts over `sessions/*.json`); the semantic layer handles "when did we discuss X / what did we decide about Y" when the wording is fuzzy. Two tools:
 
 - `index_sessions(force?)` — **opt-in** (sessions are never auto-indexed): walks `<home>/sessions/*.json`, builds a per-turn transcript (`user:`/`alpi:` lines), chunks + embeds with the same `core/embed.py` + sqlite-vec primitives as the workspace index, into a **separate table family** (`session_files` / `session_chunks` / `session_vec` / `session_meta`) in the same `rag/store.sqlite`. Incremental (mtime/size skip); the active session is excluded.
 - `recall_sessions(query, k=5)` — cosine MATCH → `[{session_id, when, snippet, score}]`, active session excluded.
 
 **Forgettable.** Recall is a derived view, so forgetting is real: deleting a session (`host.sessions.delete` → `host/sessions.py::delete_session`) purges its rows via `recall.forget_session`, and `index_sessions` orphan-sweeps any tracked session whose file is gone. No auto per-turn injection — retrieval is explicit, like the workspace tools.
 
-### Workgroup transcript search (`alpi/tools/workgroup_search.py`, ALP.6)
+### Workgroup transcript search (`alpi/tools/workgroup_search.py`)
 
 The third retrieval surface on the same store: semantic search over **hub-owned** workgroup transcripts. Workgroups are hub-owned by design, so this is **profile-local and hub-only** — the hub decrypts its own transcript and indexes it; there is no cross-peer / federated search and no global "search all my peers' workgroups". Two tools:
 
@@ -344,13 +344,13 @@ Spawns a sub-agent with a read-only toolset (`web_search`, `web_fetch`, `web_ext
 
 **Batch mode** (v0.2.18): `tasks: [{brief, depth}]` up to 3 runs concurrently — see the Delegate section below for the shared ThreadPoolExecutor design (same pattern applies here).
 
-### Attachments (`alpi/attachments.py`, MM.1 + RAG.2)
+### Attachments (`alpi/attachments.py`)
 
 `host.chat.send` accepts `attachments: [{path, mime?, name?}]`. The engine validates them (`att.validate` — magic-byte sniff for image/PDF, NUL/control-ratio guard for binary-as-text, per-type size caps, allowlist: images `png`/`jpeg`/`webp`, PDF, and text/source incl. `py`/`js`/`ts`/`tsx`/`go`/`rs`/`sh`/`sql`) and turns them into OpenAI content-parts (`build_content_parts`): images → base64 `image_url` data parts, text/source → inline text parts, text-layer PDFs → extracted text, scanned PDFs → rendered page images for vision-capable models. A guidance text-part tells the model the files are inline so it doesn't reflexively `search_workspace`/`index_workspace` to "find" them.
 
-**Per-turn only (MM.1).** Bytes live only in the in-memory message; the session log persists bytes-free, **path-free** metadata (`session_metadata` → `{name, mime, size}`). The validated turn attachments (`{name, path, mime}`) are published to a runtime-only `ContextVar` (`tools/_state.set_turn_attachments`) so a tool can resolve a turn's files without ever persisting paths. Remote clients (mobile, or desktop pointed at a remote daemon) can't hand the daemon a local path, so they upload bytes via the `host.attachments.stage` RPC (type-aware caps, content validated 1:1 with send) which writes to a TTL-swept temp dir and returns a daemon-side path.
+**Per-turn only.** Bytes live only in the in-memory message. `session_metadata` is itself bytes- and **path-free** (`{name, mime, size}`), but the engine re-adds a **best-effort local `path`** to each persisted chat-turn attachment so clients can thumbnail history — the path may be unfetchable from another client (outside `host.attachments.fetch` roots) or after a staged file's TTL, so this is preview replay, not durable storage. The validated turn attachments (`{name, path, mime}`) are also published to a runtime-only `ContextVar` (`tools/_state.set_turn_attachments`) so a tool can resolve a turn's files. Remote clients (mobile, or desktop pointed at a remote daemon) can't hand the daemon a local path, so they upload bytes via the `host.attachments.stage` RPC (type-aware caps, content validated 1:1 with send) which writes to a TTL-swept temp dir and returns a daemon-side path.
 
-**Durable (RAG.2).** `learn_file` (see Local recall) is the bridge from per-turn to permanent: the **document** is copied into the user's **workspace** (`<workspace>/.alpi/documents/`, the source of truth), while the derived **RAG index** lives in the **profile home** (`rag/store.sqlite`). The `manifest.jsonl` beside the documents is metadata only — not authoritative; the files and the index are. There is **no auto-learn**: attachments stay one-turn unless the user explicitly asks to learn/remember/save one.
+**Durable.** `learn_file` (see Local recall) is the bridge from per-turn to permanent: the **document** is copied into the user's **workspace** (`<workspace>/.alpi/documents/`, the source of truth), while the derived **RAG index** lives in the **profile home** (`rag/store.sqlite`). The `manifest.jsonl` beside the documents is metadata only — not authoritative; the files and the index are. There is **no auto-learn**: attachments stay one-turn unless the user explicitly asks to learn/remember/save one.
 
 ### Vision (`alpi/tools/read_image.py`)
 
@@ -421,11 +421,11 @@ workgroups, host}` in each profile's `config.yaml`):
 - **schedule** — cron tick loop.
 - **alp** — ALP **listener** (inbound). Serves the full protocol
   on a Unix socket plus optional Noise_XK on TCP: `link.ping`,
-  `link.ask`, `link.cancel` (ALP.1/2) **and** every `workgroup.*`
-  verb (ALP.3). When this is off, no peer can reach you, no hub
+  `link.ask`, `link.cancel` **and** every `workgroup.*`
+  verb. When this is off, no peer can reach you, no hub
   can fan out workgroup posts to you, and no `@-mention` to this
   profile resolves.
-- **workgroups** — ALP.3 **poller** (outbound). Periodically calls
+- **workgroups** — the **poller** (outbound). Periodically calls
   `workgroup.pull` against the hubs of every workgroup this profile
   subscribes to, decrypts new posts, and dispatches an autonomous
   agent turn when a post mentions this profile or opens a `#task`.
@@ -956,9 +956,9 @@ Exit codes: `1` if any check returns `fail`, `0` for warn/info/ok. Warnings don'
 operator decisions. It deliberately does not own new state: each section
 reads the primitive owned by another subsystem.
 
-- **Tools** — current TL.1 availability report from `alpi.tools`.
-- **Gateways** — GW.1 breaker states from `<home>/gateway/.breaker-state.json`.
-- **Skills** — SK.1 summary from `skills_usage`.
+- **Tools** — current availability report from `alpi.tools`.
+- **Gateways** — breaker states from `<home>/gateway/.breaker-state.json`.
+- **Skills** — summary from `skills_usage`.
 - **Memory** — promotion queue counts plus memory-file pressure.
 - **Compaction** — event count and after/before ratios from
   `logs/compaction.jsonl` over the requested window.

@@ -2,9 +2,13 @@ export function stripProducedImageMarkdown(text, produced) {
   if (!produced?.length || !text) return text;
   let out = text;
   for (const a of produced) {
-    if (a?.kind !== "image" || !a?.path) continue;
+    if (!a?.path) continue;
     const esc = a.path.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    out = out.replace(new RegExp(`!\\[[^\\]]*\\]\\(\\s*${esc}(?:\\s+"[^"]*")?\\s*\\)`, "g"), "");
+    if (a.kind === "image") {
+      out = out.replace(new RegExp(`!\\[[^\\]]*\\]\\(\\s*${esc}(?:\\s+"[^"]*")?\\s*\\)`, "g"), "");
+    }
+    out = out.replace(new RegExp(`^\\s*Path:\\s*\`?${esc}\`?\\s*$`, "gim"), "");
+    out = out.replace(new RegExp(`^\\s*\`?${esc}\`?\\s*$`, "gm"), "");
   }
   return out.replace(/\n{3,}/g, "\n\n").trim();
 }
@@ -13,7 +17,7 @@ export function assistantWithProducedImages(text, produced) {
   const stripped = stripProducedImageMarkdown(text, produced);
   const imgs = (produced || [])
     .filter((a) => a?.kind === "image" && a?.path)
-    .map((a) => `![${a.name || ""}](${a.path})`)
+    .map((a) => `![](${a.path})`)
     .join("\n\n");
   return [stripped, imgs].filter(Boolean).join("\n\n");
 }

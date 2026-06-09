@@ -10,16 +10,29 @@ const img = { kind: "image", name: "hero.jpg", path: "/p/out/hero.jpg" };
 const pdf = { kind: "pdf", name: "r.pdf", path: "/p/out/r.pdf" };
 
 describe("producedAttachments", () => {
-  it("strips a produced image's markdown but leaves prose + other links", () => {
-    const text = 'Here:\n\n![h](/p/out/hero.jpg "generated")\n\nPath: `/p/out/hero.jpg`';
+  it("strips the markdown, the Path: line, and a bare path for a produced file", () => {
+    const text = 'Saved here:\n\n![h](/p/out/hero.jpg "generated")\n\nPath: `/p/out/hero.jpg`';
     const out = stripProducedImageMarkdown(text, [img]);
     expect(out).not.toContain("![");
-    expect(out).toContain("Path:");
+    expect(out).not.toContain("Path:");
+    expect(out).not.toContain("/p/out/hero.jpg");
+    expect(out).toContain("Saved here:");
+  });
+
+  it("strips a redundant Path line for a non-image produced file too", () => {
+    const out = stripProducedImageMarkdown("Done.\n\nPath: /p/out/r.pdf", [pdf]);
+    expect(out).not.toContain("/p/out/r.pdf");
+    expect(out).toContain("Done.");
+  });
+
+  it("only strips standalone Path: lines — prose before an inline Path: survives", () => {
+    const out = stripProducedImageMarkdown("Saved successfully. Path: /p/out/r.pdf", [pdf]);
+    expect(out).toContain("Saved successfully.");
   });
 
   it("re-emits image markdown from the structured attachment (model text dropped)", () => {
     const body = assistantWithProducedImages("done ![x](/p/out/hero.jpg)", [img]);
-    expect(body).toContain("![hero.jpg](/p/out/hero.jpg)");
+    expect(body).toContain("![](/p/out/hero.jpg)");  // empty alt → caption is just the filename
     expect(body.match(/!\[/g)).toHaveLength(1); // not doubled
   });
 

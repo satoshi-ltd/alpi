@@ -94,3 +94,28 @@ def test_final_event_emitted_with_attachments_and_no_text(bootstrapped_home, mon
     )
     final = [e for e in events if e.kind == "assistant_done" and e.final]
     assert final and final[-1].text == "" and len(final[-1].attachments) == 1
+
+
+def _reply_only(text="ok"):
+    frames = [{"text_delta": text, "reasoning_delta": "", "tool_calls_delta": []},
+              {"final": True, "tool_calls": [], "input_tokens": 1, "output_tokens": 1, "cost_usd": 0.0}]
+
+    def _stream(*_a, **_kw):
+        yield from frames
+    return _stream
+
+
+def test_chat_turn_persists_inbound_attachment_path(bootstrapped_home, monkeypatch):
+    from alpi import engine as engine_mod
+    img = bootstrapped_home / "shot.png"
+    img.write_bytes(b"\x89PNG\r\n\x1a\nfake-png-bytes")
+    monkeypatch.setattr(engine_mod.llm, "stream", _reply_only())
+    monkeypatch.setattr("alpi.attachments.vision_status", lambda _m: "yes")
+
+    engine = Engine(home=bootstrapped_home, cfg=config.load(bootstrapped_home))
+    engine.run_turn("look at this", lambda _e: None,
+                    attachments=[{"path": str(img), "mime": "image/png"}])
+
+    att = engine.session.turns[-1].attachments
+    assert att and att[0]["path"] == str(img)
+    assert att[0]["name"] == "shot.png" and "size" in att[0]

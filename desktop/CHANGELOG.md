@@ -11,6 +11,19 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.3.44 — 2026-06-09 — image previews land in the conversation
+
+Requires alpi v0.8.7+.
+
+- **Images preview inline in the conversation.** Both the images you attach and
+  the ones an agent generates show their thumbnail in the thread — not only while
+  composing, and not as a bare filename in history.
+- **No duplicate when you re-edit.** Editing a sent message and pressing enter no
+  longer leaves the old copy beside the new one.
+- **Tidier image captions.** The caption under an image stays on a single line.
+- **Cleaner replies.** The redundant file path an agent sometimes printed under a
+  saved image is hidden — the attachment already carries it.
+
 ## v0.3.43 — 2026-06-08 — files an agent makes show up as attachments
 
 Requires alpi v0.8.6+.

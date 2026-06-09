@@ -6,6 +6,7 @@ import { Diamond } from '../../components/Diamond';
 import { RichText } from '../../components/RichText';
 import { useTheme } from '../../theme/ThemeContext';
 import { AttachmentCards } from './AttachmentCards';
+import { stripProducedImageMarkdown } from '../../lib/producedAttachments';
 
 function mixHex(hex, pct, base) {
   const fromHex = (h) => {
@@ -42,7 +43,7 @@ const S = StyleSheet.create({
   wgRowRight: { alignItems: 'flex-end', paddingHorizontal: space.s7, gap: space.s1 },
 });
 
-export function ProfileUserMessage({ text, ts, accent, attachments, onLongPress }) {
+export function ProfileUserMessage({ text, ts, accent, attachments, onLongPress, profile }) {
   const { colors, fonts } = useTheme();
   const bubbleStyle = useCallback(
     ({ pressed }) => [
@@ -54,7 +55,7 @@ export function ProfileUserMessage({ text, ts, accent, attachments, onLongPress 
   return (
     <View style={S.userWrap}>
       {attachments?.length ? (
-        <AttachmentCards items={attachments} variant="message" />
+        <AttachmentCards items={attachments} variant="message" profile={profile} />
       ) : null}
       {text ? (
         <Pressable onLongPress={onLongPress} delayLongPress={350} style={bubbleStyle}>
@@ -68,17 +69,6 @@ export function ProfileUserMessage({ text, ts, accent, attachments, onLongPress 
       ) : null}
     </View>
   );
-}
-
-function stripProducedImageMarkdown(text, produced) {
-  if (!produced?.length || !text) return text;
-  let out = text;
-  for (const a of produced) {
-    if (a?.kind !== 'image' || !a?.path) continue;
-    const esc = a.path.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    out = out.replace(new RegExp(`!\\[[^\\]]*\\]\\(\\s*${esc}(?:\\s+"[^"]*")?\\s*\\)`, 'g'), '');
-  }
-  return out.replace(/\n{3,}/g, '\n\n').trim();
 }
 
 export function ProfileAssistantMessage({ text, attachments, onLongPress, profile }) {

@@ -1,6 +1,6 @@
 [package]
 name = "alpi-desktop"
-version = "0.3.43"
+version = "0.3.44"
 description = "alpi desktop — filesystem-level wizard for the local alpi profile"
 authors = ["@soyjavi"]
 edition = "2021"

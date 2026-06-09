@@ -1,3 +1,18 @@
+export function stripProducedImageMarkdown(text, produced) {
+  if (!produced?.length || !text) return text;
+  let out = text;
+  for (const a of produced) {
+    if (!a?.path) continue;
+    const esc = a.path.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    if (a.kind === 'image') {
+      out = out.replace(new RegExp(`!\\[[^\\]]*\\]\\(\\s*${esc}(?:\\s+"[^"]*")?\\s*\\)`, 'g'), '');
+    }
+    out = out.replace(new RegExp(`^\\s*Path:\\s*\`?${esc}\`?\\s*$`, 'gim'), '');
+    out = out.replace(new RegExp(`^\\s*\`?${esc}\`?\\s*$`, 'gm'), '');
+  }
+  return out.replace(/\n{3,}/g, '\n\n').trim();
+}
+
 export function compactProducedTool(t, produced) {
   if (!produced?.length) return t;
   const text = t.output || t.result || '';

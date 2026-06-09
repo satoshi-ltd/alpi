@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.8.7 — 2026-06-09 — files you attach keep a preview in history
+
+- **A file you attach now keeps its thumbnail in the conversation, not just a
+  filename.** Best-effort: a file attached on one device may not be reachable
+  from another, so there it falls back to a labelled chip instead.
+
 ## v0.8.6 — 2026-06-08 — agents can hand you the files they make
 
 - **Files an agent produces are now first-class output attachments.** When a

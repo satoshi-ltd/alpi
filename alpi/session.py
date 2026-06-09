@@ -31,8 +31,8 @@ class Turn:
     user: str
     tools: list[ToolLog]
     assistant: str        # alpi's final text reply (last no-tool-calls message)
-    attachments: list[dict[str, Any]] = field(default_factory=list)  # bytes-free metadata only
-    output_attachments: list[dict[str, Any]] = field(default_factory=list)  # bytes-free metadata only
+    attachments: list[dict[str, Any]] = field(default_factory=list)  # bytes-free; carries a best-effort local path (may be unfetchable cross-client / post-TTL)
+    output_attachments: list[dict[str, Any]] = field(default_factory=list)  # bytes-free; carries a best-effort local path (may be unfetchable cross-client / post-TTL)
 
 
 @dataclass

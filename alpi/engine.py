@@ -218,6 +218,8 @@ class Engine:
                 emit(AgentEvent(kind="error", text=str(e)))
                 return
             att_meta = att_mod.session_metadata(validated)
+            for _m, _a in zip(att_meta, validated):  # session_metadata omits path; re-add it for client thumbnails
+                _m["path"] = str(_a.path)
             _wg_state.set_turn_attachments(
                 [{"name": a.name, "path": str(a.path), "mime": a.mime} for a in validated]
             )

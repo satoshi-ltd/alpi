@@ -46,6 +46,7 @@ import {
   compactProducedTool,
   nonImageProduced,
 } from "../lib/producedAttachments.js";
+import { rewriteCut } from "../lib/rewriteCut.js";
 
 export default function ChatPane({
   view,
@@ -312,13 +313,8 @@ const Transcript = memo(function Transcript({
     onCloseSearch?.();
   };
   const allTurns = data?.turns ?? [];
-  const turns =
-    rewriteDraft &&
-    rewriteDraft.profile === profileName &&
-    rewriteDraft.sessionId === sessionId &&
-    Number.isInteger(rewriteDraft.turnIndex)
-      ? allTurns.slice(0, rewriteDraft.turnIndex)
-      : allTurns;
+  const cut = rewriteCut({ pendingTurn, rewriteDraft, profileName, sessionId });
+  const turns = cut != null ? allTurns.slice(0, cut) : allTurns;
 
   const [showSkeleton, setShowSkeleton] = useState(false);
   useEffect(() => {

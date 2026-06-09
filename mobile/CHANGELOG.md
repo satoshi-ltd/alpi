@@ -14,6 +14,17 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.1.35 — 2026-06-09 — images render in chat
+
+Requires alpi v0.8.7+.
+
+- **Images render in chat.** Both the images you attach and the ones an agent
+  generates now appear inline in the conversation.
+- **Fixed a crash opening a profile.** Tapping into a profile conversation no
+  longer crashes.
+- **Cleaner replies.** The redundant file path an agent sometimes printed under a
+  saved image is hidden — the attachment already carries it.
+
 ## v0.1.34 — 2026-06-08 — files an agent makes show up as attachments
 
 Requires alpi v0.8.6+.

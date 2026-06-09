@@ -17,6 +17,7 @@ function FetchedImage({ path, profile, name, colors }) {
   const key = `${profile || ''}:${path}`;
   const [uri, setUri] = useState(() => imageCache.get(key) || null);
   const [aspect, setAspect] = useState(16 / 9);
+  const [err, setErr] = useState(null);
   useEffect(() => {
     if (uri || !endpoint || !profile) return undefined;
     let alive = true;
@@ -24,16 +25,21 @@ function FetchedImage({ path, profile, name, colors }) {
       .then((r) => {
         const u = r?.data_base64 ? `data:${r.mime};base64,${r.data_base64}` : null;
         if (u) imageCache.set(key, u);
-        if (alive && u) setUri(u);
+        if (alive) (u ? setUri(u) : setErr('empty response'));
       })
-      .catch(() => {});
+      .catch((e) => {
+        if (alive) setErr(String(e?.message || e));
+      });
     return () => { alive = false; };
   }, [key, endpoint, profile]);
   useEffect(() => { if (uri) Image.getSize(uri, (w, h) => h && setAspect(w / h), () => {}); }, [uri]);
   if (!uri) {
     return (
-      <View style={{ height: 160, borderRadius: radii.md, borderWidth: 0.5, borderColor: colors.line, backgroundColor: colors.hover, alignItems: 'center', justifyContent: 'center' }}>
-        <ActivityIndicator color={colors.ink3} />
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s3, padding: space.s3, borderRadius: radii.md, backgroundColor: colors.hover }}>
+        {err ? <Icon name="file" size={16} color={colors.ink3} /> : <ActivityIndicator color={colors.ink3} />}
+        <Text numberOfLines={2} style={{ flexShrink: 1, color: colors.ink3 }}>
+          {name}{err ? `  ·  ${err}` : ''}
+        </Text>
       </View>
     );
   }

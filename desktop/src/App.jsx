@@ -678,6 +678,7 @@ export default function App() {
           sessionId: startSessionId,
           requestId,
           attachments,
+          rewriteFromTurn,
         });
 
         let wireAttachments = attachments;
