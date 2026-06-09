@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.8.11 — 2026-06-09 — recalled memory is checked for injection
+
+- **What an agent remembers about you — your `USER.md` profile and `MEMORY.md`
+  notes — is now scanned for prompt-injection when loaded into context.** If a
+  note looks like it carries a hidden instruction, a system-prompt leak attempt,
+  or invisible-unicode trickery, it's flagged as untrusted data the model must
+  not obey — closing the one path that reached the prompt without a check (tool
+  results, web pages, and email were already scanned). Warning-first: genuine
+  notes are never blocked, only marked when they look suspicious.
+- **Your agent's persona is left untouched.** `AGENT.md` is instruction by
+  design, not recalled data, so it's never marked untrusted.
+- **One shared scanner backs every check** — skills, memory, and inbound content
+  now run the same injection and danger detection, so coverage stays consistent.
+
 ## v0.8.10 — 2026-06-09 — agents know the host Python version
 
 - **When an agent writes a scripted skill's `scripts/run.py` it now knows the

@@ -31,30 +31,14 @@ without turning Alpi into a broad orchestration platform.
 
 | ID | Item | Status |
 |---|---|---|
-| SEC.1 | Context injection hardening — shared scanner for recalled memory, learned documents, workgroup transcript snippets, and tool results before they enter model context. | 🟡 |
-| FS.1 | Credential file denylist audit — defense-in-depth read/write blocks for provider keys, profile control files, `.env*`, SSH/cloud creds, and project-local secret stores. | 🔵 |
+| FS.1 | Credential file denylist audit — defense-in-depth read/write blocks for provider keys, profile control files, `.env*`, SSH/cloud creds, and project-local secret stores. | 🟡 |
 | AUDIT.1 | `alpi audit` — local dependency / config / security posture scan: stale deps, known CVEs, exposed binds, risky permissions, and missing hardening warnings. | 🔵 |
 
 v0.9 should stay narrow: improve observability and failure handling on
 surfaces Alpi already owns. No new execution backend, no worker-lane
 marketplace, no cloud sandbox abstraction, and no automatic file migration.
-`SEC.1` is next — scanning recalled content before it reaches the model;
-`FS.1` + `AUDIT.1` then close the safety posture.
-
-### SEC.1. Context injection hardening
-
-RAG.2, CM.4, and ALP.6 made Alpi better at remembering: learned files,
-past sessions, and workgroup transcripts can now return text into future
-model context. That also makes poisoned recalled content more relevant.
-SEC.1 adds a shared scanner for content that enters model context from
-memory, learned documents, transcript search, session recall, and tool
-results.
-
-The first version should be warning-first except for clearly dangerous
-write/install paths. It should detect classic prompt injection, hidden
-unicode, system-prompt exfiltration requests, and obvious credential
-exfiltration. The goal is a single small library used consistently, not a
-security product or a moderation layer.
+`FS.1` is next — denylisting credential stores across file tools;
+`AUDIT.1` then closes the safety posture.
 
 ### FS.1. Credential file denylist audit
 

@@ -276,7 +276,7 @@ Internal-only constants (in `alpi/memory.py` and `alpi/compaction.py`, not user 
 - `LOW_CONFIDENCE_MAX_AGE_DAYS = 30` — low-conf pruning age.
 - `trigger_ratio = 0.75`, `target_ratio = 0.40`, `keep_head = 2`, `keep_tail = 8` — auto-compaction policy.
 
-Calibration of these is an evidence-gated v0.6 item (`AI(1.c)` + `CM.1` reading `logs/compaction.jsonl`); they stay fixed until real session data justifies tuning.
+Calibration stays evidence-gated: these constants should not become user knobs unless real `logs/compaction.jsonl` / memory-review traces show repeated failures that a fixed default cannot solve.
 
 ### TUI
 

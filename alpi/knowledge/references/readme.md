@@ -66,4 +66,4 @@ LLM is treated as powerful, fallible, next to user credentials. Layered local gu
 
 ## Related topics
 
-quickstart (first setup) · install (install/update/uninstall) · config (fields) · profiles · skills · security · operations
+quickstart (first setup) · install (install/update/uninstall) · config (fields) · profiles · tools · skills · security · operations

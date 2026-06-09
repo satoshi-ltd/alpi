@@ -2,7 +2,7 @@
 
 Memory entries reload into the system prompt every session. Any text
 that lands here travels the same vector as a skill body, so the same
-``_DANGER_PATTERNS`` from ``alpi/tools/skill.py`` apply, plus a check
+``_DANGER_PATTERNS`` from ``alpi/scan.py`` apply, plus a check
 for invisible / bidi-override unicode (Trojan-Source).
 """
 

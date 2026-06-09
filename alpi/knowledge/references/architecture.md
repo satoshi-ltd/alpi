@@ -23,9 +23,12 @@ Local agent runtime, per turn:
 |---|---|
 | `alpi/engine.py` | Turn loop, tool loop, event emission, interrupt flag. |
 | `alpi/llm.py` | LiteLLM transport. |
+| `alpi/prompt_cache.py` | Stable cacheable system-prompt prefix assembly and platform/env hints. |
 | `alpi/config.py` | Config load/save, defaults, model resolution. |
+| `alpi/attachments.py` | Input/output attachment validation, mime/magic checks, text rendering for non-rich surfaces. |
 | `alpi/tools/` | Tool registry + implementations (registered via `__init__.py`). |
 | `alpi/tools/skill.py` | User skill management. |
+| `alpi/scan.py` | Shared scanner library — skill/code danger patterns, prompt-injection detection, invisible-unicode; used by skills, memory writes, and the recalled-memory guard. |
 | `alpi/tools/knowledge.py` | `alpi_knowledge` tool. |
 | `alpi/knowledge/references/` | Packaged Markdown answer packs. |
 | `alpi/memory.py` | `USER.md`, `MEMORY.md`, `AGENT.md`. |
@@ -36,6 +39,9 @@ Local agent runtime, per turn:
 | `alpi/host/` | Host-plane JSON-RPC for desktop/mobile. |
 | `alpi/gateway/` | Telegram, email, Matrix inbound gateways. |
 | `alpi/scheduler/` | Scheduled jobs. |
+| `alpi/outputs.py` | Persistent native inbox rows for proactive messages and schedule results. |
+| `alpi/run_ledger.py` | Capped JSONL run evidence for agent/schedule/workgroup/terminal runs. |
+| `alpi/ops_digest.py` | Human-readable operational digest over logs, runs, outputs, and stores. |
 | `alpi/alp/` | Alpi Link Protocol peers/workgroups. |
 | `alpi/mcp/` | MCP client support. |
 | `desktop/`, `mobile/` | Companion apps, if present. |

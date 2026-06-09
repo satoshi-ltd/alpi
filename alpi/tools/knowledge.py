@@ -15,6 +15,7 @@ _TOPIC_SUMMARIES: dict[str, str] = {
     "install": "Install methods (uv tool, pipx, dev install), update path, uninstall, troubleshooting, supported platforms.",
     "profiles": "Profiles — creating, switching, isolation, identity, keys, memory layout.",
     "skills": "Skills system — frontmatter, security scanner, where credentials live, the skill tool actions.",
+    "tools": "Tool selection and contracts — files, terminal, attachments, RAG, recall, outputs, approvals.",
     "models": "Picking a provider, tier guidance for tool-heavy use, local Ollama setup.",
     "alp": "ALP protocol — pinned identity, signed envelopes, peer capabilities, workgroups, group keys, transcript shape, error codes.",
     "architecture": "Internals — code structure, turn loop, gateway, scheduler, MCP, logging, env vars.",
@@ -30,7 +31,7 @@ class AlpiKnowledge(Tool):
     description = (
         "Read packaged documentation about alpi itself. CALL THIS "
         "BEFORE answering any question about alpi — install, profiles, "
-        "ALP protocol, skills, models, config, security, gateways, "
+        "ALP protocol, tools, skills, models, config, security, gateways, "
         "deployment, day-2 ops. The packaged references are "
         "authoritative; your training predates alpi and will be wrong "
         "about flags, paths, and behaviours.\n"
@@ -101,7 +102,7 @@ TOOL = AlpiKnowledge
 PROMPT_RULE = (
     "# ALPI SELF-KNOWLEDGE\n"
     "When the user asks about alpi itself (install, profiles, ALP "
-    "protocol, skills, config, security, deployment, day-2 ops), "
+    "protocol, tools, skills, config, security, deployment, day-2 ops), "
     "CALL ``alpi_knowledge`` BEFORE answering. The packaged "
     "references are authoritative; your training predates alpi."
 )

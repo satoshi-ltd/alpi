@@ -12,6 +12,7 @@ TOPICS: dict[str, str] = {
     "install": "install.md",
     "profiles": "profiles.md",
     "skills": "skills.md",
+    "tools": "tools.md",
     "models": "models.md",
     "alp": "alp.md",
     "architecture": "architecture.md",

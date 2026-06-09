@@ -10,32 +10,11 @@ from alpi.memory import (
     MemoryStore,
     _clean_entry,
     _is_duplicate,
-    fuzzy_contains,
     fuzzy_find_unique_entry,
     is_duplicate_stanza,
 )
 from alpi.tools.base import Tool, ToolResult
-from alpi.tools.skill import scan_skill_body
-
-
-# Memory loads into the system prompt every session — same injection vector
-# as skill bodies. Reuse the skill scanner's pattern library, plus a check
-# for invisible / bidi-override unicode (Trojan-Source style payloads that
-# can carry hidden instructions through ``web_extract`` → memory → next-session
-# system prompt).
-# Zero-width / LTR-RTL marks (200B-200F), bidi overrides (202A-202E,
-# the Trojan-Source vector), word joiner (2060), bidi isolates (2066-2069),
-# zero-width no-break / BOM (FEFF).
-_INVISIBLE_CHARS_RE = re.compile(
-    "[\u200B-\u200F\u202A-\u202E\u2060\u2066-\u2069\uFEFF]"
-)
-
-
-def _scan_memory_content(text: str) -> list[str]:
-    findings = scan_skill_body(text)
-    if _INVISIBLE_CHARS_RE.search(text):
-        findings.append("invisible / bidi-override unicode characters")
-    return findings
+from alpi.scan import scan_memory_content as _scan_memory_content
 
 
 def _safety_error(text: str) -> str | None:

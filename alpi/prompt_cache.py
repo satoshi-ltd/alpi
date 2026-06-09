@@ -22,6 +22,8 @@ import os
 import sys
 from pathlib import Path
 
+from alpi.scan import scan_injection
+
 PART_ORDER: tuple[str, ...] = (
     "agent_profile",
     "base_prompt",
@@ -112,6 +114,13 @@ def _env_block(home: Path, workspace) -> str:
     return "\n".join(parts)
 
 
+def _guard_recalled(text: str) -> str:
+    if not text:
+        return text
+    warning = scan_injection(text)
+    return f"{warning}\n\n{text}" if warning else text
+
+
 def build_parts(home: Path, cfg) -> dict[str, str]:
     """Assemble the cacheable system-prompt contributors as a name→content map. Mirrors ``Engine._build_system_prompt`` byte-for-byte after the ``"\\n\\n".join`` step."""
     from importlib import resources
@@ -147,8 +156,8 @@ def build_parts(home: Path, cfg) -> dict[str, str]:
     snap = mem.snapshot()
     user_md = snap["USER.md"].strip()
     memory_md = snap["MEMORY.md"].strip()
-    parts["user_md"] = ("# USER PROFILE\n" + user_md) if user_md else ""
-    parts["memory_md"] = ("# AGENT MEMORY\n" + memory_md) if memory_md else ""
+    parts["user_md"] = _guard_recalled(("# USER PROFILE\n" + user_md) if user_md else "")
+    parts["memory_md"] = _guard_recalled(("# AGENT MEMORY\n" + memory_md) if memory_md else "")
     return parts
 
 
