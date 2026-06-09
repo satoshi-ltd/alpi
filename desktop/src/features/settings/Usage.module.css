@@ -1,0 +1,217 @@
+.wrap {
+  --u-bar-w: 20px;
+}
+
+.stats {
+  display: flex;
+  align-items: flex-start;
+  padding-bottom: var(--space-6);
+  border-bottom: 0.5px solid var(--line-2);
+}
+
+.stat {
+  flex: 1;
+  min-width: 0;
+}
+
+.statLabel {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  margin-bottom: var(--space-2);
+}
+
+.today {
+  font-family: var(--font-sans);
+  font-size: var(--fs-display);
+  font-weight: 600;
+  letter-spacing: -0.018em;
+  line-height: var(--lh-tight);
+  color: var(--u-accent);
+}
+
+.statValue {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xl);
+  font-weight: 500;
+  line-height: var(--lh-tight);
+  color: var(--ink);
+}
+
+.unit {
+  margin-left: var(--space-1);
+  font-size: var(--fs-xs);
+  font-weight: 400;
+  color: var(--ink-3);
+}
+
+.chart {
+  margin-top: var(--space-8);
+}
+
+.track {
+  position: relative;
+  height: 104px;
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.col {
+  position: relative;
+  flex: 1;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+.bar {
+  width: 100%;
+  max-width: var(--u-bar-w);
+  border-radius: 3px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  transition: opacity var(--dur-2) var(--ease);
+}
+
+.barOut {
+  width: 100%;
+  flex-shrink: 0;
+  background: var(--u-accent);
+}
+
+.barIn {
+  width: 100%;
+  flex: 1;
+  background: color-mix(in srgb, var(--u-accent) 24%, transparent);
+}
+
+.barToday {
+  box-shadow:
+    0 0 0 1.5px var(--bg-pane),
+    0 0 0 2.5px var(--u-accent);
+}
+
+.dim {
+  opacity: 0.35;
+}
+
+.labels {
+  display: flex;
+  gap: 4px;
+  margin-top: var(--space-3);
+}
+
+.dayLabel {
+  flex: 1;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: var(--fs-xxs);
+  line-height: var(--lh-tight);
+  color: var(--ink-3);
+}
+
+.dayLabelToday {
+  color: var(--u-accent);
+  font-weight: 600;
+}
+
+.foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-top: var(--space-6);
+}
+
+.legend {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+}
+
+.legendSep::before {
+  content: "·";
+  color: var(--ink-4);
+}
+
+.totals {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+}
+
+.swatch {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.swatchIn {
+  background: color-mix(in srgb, var(--u-accent) 24%, transparent);
+}
+
+.swatchOut {
+  background: var(--u-accent);
+}
+
+.tip {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
+  pointer-events: none;
+  min-width: 132px;
+  padding: var(--space-4);
+  background: var(--bg-elev);
+  border: 0.5px solid var(--line-2);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+}
+
+.tipDay {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--ink-4);
+  margin-bottom: var(--space-1);
+}
+
+.tipToday {
+  color: var(--ink-3);
+}
+
+.tipCost {
+  font-family: var(--font-sans);
+  font-size: var(--fs-xl);
+  font-weight: 600;
+  line-height: var(--lh-tight);
+  color: var(--ink);
+  margin-bottom: var(--space-3);
+}
+
+.tipRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--fs-xs);
+  line-height: 1.4;
+  color: var(--ink-2);
+}
+
+.tipTok {
+  margin-left: auto;
+  padding-left: var(--space-4);
+  font-family: var(--font-mono);
+  color: var(--ink);
+}

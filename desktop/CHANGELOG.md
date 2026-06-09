@@ -11,6 +11,19 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.3.46 — 2026-06-09 — usage chart in Settings
+
+Requires alpi v0.8.12+.
+
+- **A Usage section charts your last 14 days of token activity.** In a profile's
+  Settings (after Overview) and a workgroup's (after Budget): today's cost,
+  input/output tokens, a per-day bar split input vs output, and the 14-day total
+  with cost. Hover a day for its breakdown. Works for free models too — the bars
+  track token volume, so a $0 model still shows real usage.
+- **Cost stays front and center in dollars** — today's spend (matching your daily
+  budget), the 14-day total, and for profiles the daily cap with how much is
+  left. Workgroups show the daily average instead.
+
 ## v0.3.45 — 2026-06-09 — reasoning is its own collapsible block
 
 Requires alpi v0.8.8+.

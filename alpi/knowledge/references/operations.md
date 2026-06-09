@@ -39,6 +39,7 @@ Per-profile under `{home}/logs/`. Rotated text caps at **1 MB** (`.log.1` = prev
 | `approval.log` | terminal approval decisions (audit trail with `agent.log`) |
 | `compaction.jsonl` | compaction/truncation records |
 | `runs.jsonl` | run ledger: one line per long-running turn (agent/schedule/workgroup/terminal); surfaced by `alpi digest` |
+| `ledger.json` | daily budget gate (live counters, UTC reset) + 30-day per-day spend history (usd + input/output tokens, ALL spend incl. non-token costs like image generation); served by `host.usage.daily` |
 
 ```bash
 alpi logs --source agent -n 100

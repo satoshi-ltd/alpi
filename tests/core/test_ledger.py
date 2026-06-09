@@ -138,6 +138,85 @@ def test_save_is_atomic_under_concurrent_records(home: Path) -> None:
     assert snap["profile"]["usd"] == pytest.approx(8 * 50 * 0.01)
 
 
+def test_record_populates_daily_history(home: Path) -> None:
+    ledger.record(home, usd=0.05, tokens=1500, tokens_in=1200, tokens_out=300)
+    ledger.record(home, usd=0.30, tokens=0)
+    snap = ledger.snapshot(home)
+    today = datetime.now(timezone.utc).date().isoformat()
+    assert snap["history"][today] == {
+        "usd": pytest.approx(0.35),
+        "tokens": 1500,
+        "tokens_in": 1200,
+        "tokens_out": 300,
+    }
+
+
+def test_free_model_usage_recorded_at_zero_cost(home: Path) -> None:
+    ledger.record(home, usd=0.0, tokens=5000, tokens_in=4800, tokens_out=200)
+    snap = ledger.snapshot(home)
+    today = datetime.now(timezone.utc).date().isoformat()
+    assert snap["history"][today] == {
+        "usd": 0.0, "tokens": 5000, "tokens_in": 4800, "tokens_out": 200,
+    }
+    assert snap["profile"]["tokens"] == 5000
+
+
+def test_history_today_mirrors_profile_total_after_prior_untracked_spend(home: Path) -> None:
+    today = datetime.now(timezone.utc).date().isoformat()
+    ledger.save(home, {
+        "day": today,
+        "profile": {"usd": 0.50, "tokens": 1_000_000},
+        "by_peer": {"__interactive__": {"usd": 0.50, "tokens": 1_000_000}},
+        "history": {},
+    })
+    ledger.record(home, usd=0.0, tokens=200, tokens_in=190, tokens_out=10)
+    snap = ledger.snapshot(home)
+    assert snap["history"][today]["usd"] == pytest.approx(0.50)
+    assert snap["history"][today]["tokens"] == 1_000_200
+    assert snap["history"][today]["tokens_in"] == 190
+    assert snap["history"][today]["tokens_out"] == 10
+
+
+def test_history_survives_day_rollover(home: Path) -> None:
+    yesterday = (datetime.now(timezone.utc).date() - timedelta(days=1)).isoformat()
+    ledger.save(home, {
+        "day": yesterday,
+        "profile": {"usd": 0.5, "tokens": 100},
+        "by_peer": {},
+        "history": {yesterday: {"usd": 0.5, "tokens": 100, "tokens_in": 80, "tokens_out": 20}},
+    })
+    snap = ledger.snapshot(home)
+    assert snap["profile"] == {"usd": 0.0, "tokens": 0}
+    assert snap["history"][yesterday]["usd"] == pytest.approx(0.5)
+
+
+def test_rollover_folds_stale_profile_lacking_history(home: Path) -> None:
+    yesterday = (datetime.now(timezone.utc).date() - timedelta(days=1)).isoformat()
+    ledger.save(home, {
+        "day": yesterday,
+        "profile": {"usd": 0.5, "tokens": 100},
+        "by_peer": {},
+    })
+    snap = ledger.snapshot(home)
+    assert snap["history"][yesterday]["usd"] == pytest.approx(0.5)
+    assert snap["history"][yesterday]["tokens"] == 100
+
+
+def test_history_prunes_days_beyond_window(home: Path) -> None:
+    today = datetime.now(timezone.utc).date().isoformat()
+    old = (datetime.now(timezone.utc).date() - timedelta(days=ledger.HISTORY_DAYS + 5)).isoformat()
+    ledger.save(home, {
+        "day": today,
+        "profile": {"usd": 0.0, "tokens": 0},
+        "by_peer": {},
+        "history": {old: {"usd": 9.0, "tokens": 1, "tokens_in": 1, "tokens_out": 0}},
+    })
+    ledger.record(home, usd=0.01, tokens=10, tokens_in=10, tokens_out=0)
+    snap = ledger.snapshot(home)
+    assert old not in snap["history"]
+    assert today in snap["history"]
+
+
 def test_peer_context_unwinds_on_exception(home: Path) -> None:
     try:
         with ledger.peer_context("alice"):

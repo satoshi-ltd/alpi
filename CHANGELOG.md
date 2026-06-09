@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.8.12 — 2026-06-09 — daily token usage and cost, per profile and workgroup
+
+- **The daemon now reports the last 14 days of token usage and cost** — per day,
+  split input vs output — for a profile and for a workgroup you host, so a client
+  can chart spend over time instead of recomputing it.
+- **Workgroup posts now carry their input/output token split**, not just a
+  combined total, so a workgroup's usage breaks down the same way as a profile's.
+  Posts from before this release keep their combined figure. The Usage chart
+  itself lands in the desktop release.
+
 ## v0.8.11 — 2026-06-09 — recalled memory is checked for injection
 
 - **What an agent remembers about you — your `USER.md` profile and `MEMORY.md`

@@ -533,7 +533,6 @@ def _post_as_hub(
 ) -> dict[str, Any]:
     """Write a hub post directly into the local transcript."""
     import datetime as _dt
-    import json
     from alpi.alp.workgroup import (
         _append_transcript, _gate_post, _load_ledger, _save_ledger,
         _read_transcript, _wg_dir,
@@ -618,8 +617,13 @@ def _post_as_hub(
     }
     declared_usd = float(cost_dict.get("usd", 0.0)) if cost_dict else 0.0
     declared_tokens = int(cost_dict.get("tokens", 0)) if cost_dict else 0
+    declared_in = int(cost_dict.get("tokens_in", 0)) if cost_dict else 0
+    declared_out = int(cost_dict.get("tokens_out", 0)) if cost_dict else 0
     if declared_usd or declared_tokens:
         entry["cost"] = {"usd": declared_usd, "tokens": declared_tokens}
+        if declared_in or declared_out:
+            entry["cost"]["tokens_in"] = declared_in
+            entry["cost"]["tokens_out"] = declared_out
     _append_transcript(d, entry)
 
     ledger["usd"] = float(ledger.get("usd", 0.0)) + declared_usd

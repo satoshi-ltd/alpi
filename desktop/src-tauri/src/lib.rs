@@ -138,6 +138,27 @@ fn profile_detail(profile: String) -> Result<serde_json::Value, String> {
 }
 
 #[tauri::command]
+fn usage_daily(profile: String) -> Result<serde_json::Value, String> {
+    host_client::call(
+        "host.usage.daily",
+        serde_json::json!({ "profile": profile }),
+    )
+    .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn workgroup_usage_daily(
+    profile: String,
+    wg_id: String,
+) -> Result<serde_json::Value, String> {
+    host_client::call(
+        "host.usage.workgroup.daily",
+        serde_json::json!({ "profile": profile, "wg_id": wg_id }),
+    )
+    .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 fn profile_memory(profile: String) -> Result<serde_json::Value, String> {
     let mut out = serde_json::Map::new();
     for name in ["USER.md", "MEMORY.md", "AGENT.md"] {
@@ -2545,6 +2566,8 @@ pub fn run() {
             profiles,
             profile_summaries,
             profile_detail,
+            usage_daily,
+            workgroup_usage_daily,
             profile_tools,
             profile_skills,
             profile_skill_read,

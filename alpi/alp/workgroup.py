@@ -29,6 +29,7 @@ import base64
 import datetime as _dt
 import json
 import os
+import re as _re
 import secrets
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -762,8 +763,6 @@ def _save_ledger(d: Path, ledger: dict[str, Any]) -> None:
     ))
 
 
-import re as _re
-
 _PIPELINE_SLUG_RE = _re.compile(r"^[a-z0-9][a-z0-9_-]*$")
 
 
@@ -950,8 +949,13 @@ def register(server: alp_server.Server, home: Path) -> None:
         }
         declared_usd = float(cost.get("usd", 0.0)) if cost else 0.0
         declared_tokens = int(cost.get("tokens", 0)) if cost else 0
+        declared_in = int(cost.get("tokens_in", 0)) if cost else 0
+        declared_out = int(cost.get("tokens_out", 0)) if cost else 0
         if declared_usd or declared_tokens:
             entry["cost"] = {"usd": declared_usd, "tokens": declared_tokens}
+            if declared_in or declared_out:
+                entry["cost"]["tokens_in"] = declared_in
+                entry["cost"]["tokens_out"] = declared_out
         _append_transcript(d, entry)
 
         ledger["usd"] = float(ledger.get("usd", 0.0)) + declared_usd

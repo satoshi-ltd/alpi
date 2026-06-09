@@ -45,7 +45,8 @@ def test_seal_and_open_group_key_roundtrip(short_tmp: Path) -> None:
 def test_sealed_key_unopenable_by_other_pubkey(short_tmp: Path) -> None:
     a = short_tmp / "a"
     b = short_tmp / "b"
-    a.mkdir(); b.mkdir()
+    a.mkdir()
+    b.mkdir()
     a_kp = load_or_generate(a)
     b_kp = load_or_generate(b)
     sealed = wg_mod.seal_group_key(b"\x02" * 32, a_kp.pubkey_b64())
@@ -104,10 +105,13 @@ def test_create_persists_meta_members_and_empty_transcript(short_tmp: Path) -> N
 
 
 def test_create_seals_the_same_group_key_for_every_member(short_tmp: Path) -> None:
-    home = short_tmp / "hub"; home.mkdir()
+    home = short_tmp / "hub"
+    home.mkdir()
     hub_kp = load_or_generate(home)
-    a_home = short_tmp / "a"; a_home.mkdir()
-    b_home = short_tmp / "b"; b_home.mkdir()
+    a_home = short_tmp / "a"
+    a_home.mkdir()
+    b_home = short_tmp / "b"
+    b_home.mkdir()
     a_kp = load_or_generate(a_home)
     b_kp = load_or_generate(b_home)
 
@@ -125,23 +129,27 @@ def test_create_seals_the_same_group_key_for_every_member(short_tmp: Path) -> No
 
 
 def test_create_rejects_empty_name(short_tmp: Path) -> None:
-    home = short_tmp / "hub"; home.mkdir()
+    home = short_tmp / "hub"
+    home.mkdir()
     kp = load_or_generate(home)
     with pytest.raises(ValueError):
         wg_mod.create(home, name="", hub_kp=kp, member_pubkeys=[])
 
 
 def test_create_rejects_invalid_member_pubkey(short_tmp: Path) -> None:
-    home = short_tmp / "hub"; home.mkdir()
+    home = short_tmp / "hub"
+    home.mkdir()
     kp = load_or_generate(home)
     with pytest.raises(ValueError):
         wg_mod.create(home, name="x", hub_kp=kp, member_pubkeys=["not-a-real-key"])
 
 
 def test_create_dedups_repeated_pubkeys(short_tmp: Path) -> None:
-    home = short_tmp / "hub"; home.mkdir()
+    home = short_tmp / "hub"
+    home.mkdir()
     hub_kp = load_or_generate(home)
-    bob_home = short_tmp / "b"; bob_home.mkdir()
+    bob_home = short_tmp / "b"
+    bob_home.mkdir()
     bob_kp = load_or_generate(bob_home)
     wg = wg_mod.create(
         home,
@@ -157,7 +165,8 @@ def test_create_dedups_repeated_pubkeys(short_tmp: Path) -> None:
 
 
 def test_load_and_list_workgroups(short_tmp: Path) -> None:
-    home = short_tmp / "hub"; home.mkdir()
+    home = short_tmp / "hub"
+    home.mkdir()
     hub_kp = load_or_generate(home)
     wg1 = wg_mod.create(home, name="one", hub_kp=hub_kp, member_pubkeys=[])
     wg2 = wg_mod.create(home, name="two", hub_kp=hub_kp, member_pubkeys=[])
@@ -168,7 +177,8 @@ def test_load_and_list_workgroups(short_tmp: Path) -> None:
 
 
 def test_load_returns_none_for_missing_workgroup(short_tmp: Path) -> None:
-    home = short_tmp / "hub"; home.mkdir()
+    home = short_tmp / "hub"
+    home.mkdir()
     assert wg_mod.load(home, "wg_nonexistent") is None
 
 
@@ -179,8 +189,10 @@ def test_load_returns_none_for_missing_workgroup(short_tmp: Path) -> None:
 @pytest.mark.asyncio
 async def test_join_post_pull_end_to_end(short_tmp: Path) -> None:
     """Alice is the hub and bob joins, posts, then pulls."""
-    alice_home = short_tmp / "alice"; alice_home.mkdir()
-    bob_home = short_tmp / "bob"; bob_home.mkdir()
+    alice_home = short_tmp / "alice"
+    alice_home.mkdir()
+    bob_home = short_tmp / "bob"
+    bob_home.mkdir()
     alice_kp = load_or_generate(alice_home)
     bob_kp = load_or_generate(bob_home)
 
@@ -258,8 +270,10 @@ async def test_join_post_pull_end_to_end(short_tmp: Path) -> None:
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_join_marks_member_as_joined(short_tmp: Path) -> None:
-    alice_home = short_tmp / "alice"; alice_home.mkdir()
-    bob_home = short_tmp / "bob"; bob_home.mkdir()
+    alice_home = short_tmp / "alice"
+    alice_home.mkdir()
+    bob_home = short_tmp / "bob"
+    bob_home.mkdir()
     alice_kp = load_or_generate(alice_home)
     bob_kp = load_or_generate(bob_home)
     _pin(alice_home, "bob", bob_kp.pubkey_b64(), ["workgroup.join"])
@@ -291,8 +305,10 @@ async def test_join_marks_member_as_joined(short_tmp: Path) -> None:
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_unknown_workgroup_returns_not_found(short_tmp: Path) -> None:
-    alice_home = short_tmp / "alice"; alice_home.mkdir()
-    bob_home = short_tmp / "bob"; bob_home.mkdir()
+    alice_home = short_tmp / "alice"
+    alice_home.mkdir()
+    bob_home = short_tmp / "bob"
+    bob_home.mkdir()
     alice_kp = load_or_generate(alice_home)
     bob_kp = load_or_generate(bob_home)
     _pin(alice_home, "bob", bob_kp.pubkey_b64(), ["workgroup.pull"])
@@ -318,8 +334,10 @@ async def test_unknown_workgroup_returns_not_found(short_tmp: Path) -> None:
 @pytest.mark.asyncio
 async def test_non_member_peer_rejected_with_not_member(short_tmp: Path) -> None:
     """A capable but non-member peer gets `-32008`."""
-    alice_home = short_tmp / "alice"; alice_home.mkdir()
-    bob_home = short_tmp / "bob"; bob_home.mkdir()
+    alice_home = short_tmp / "alice"
+    alice_home.mkdir()
+    bob_home = short_tmp / "bob"
+    bob_home.mkdir()
     alice_kp = load_or_generate(alice_home)
     bob_kp = load_or_generate(bob_home)
     _pin(alice_home, "bob", bob_kp.pubkey_b64(),
@@ -364,9 +382,12 @@ async def _pick_free_port() -> int:
 async def test_three_members_post_and_each_decrypts_each_other(short_tmp: Path) -> None:
     """Hub + 2 remote members. Each remote posts; both remotes plus
     the hub pull and decrypt the full transcript."""
-    hub_home = short_tmp / "hub"; hub_home.mkdir()
-    a_home = short_tmp / "a"; a_home.mkdir()
-    b_home = short_tmp / "b"; b_home.mkdir()
+    hub_home = short_tmp / "hub"
+    hub_home.mkdir()
+    a_home = short_tmp / "a"
+    a_home.mkdir()
+    b_home = short_tmp / "b"
+    b_home.mkdir()
     hub_kp = load_or_generate(hub_home)
     a_kp = load_or_generate(a_home)
     b_kp = load_or_generate(b_home)
@@ -450,8 +471,10 @@ async def test_concurrent_posts_assign_distinct_sequential_seqs(short_tmp: Path)
     the implicit lock — this test pins that guarantee."""
     import asyncio
 
-    hub_home = short_tmp / "hub"; hub_home.mkdir()
-    bob_home = short_tmp / "bob"; bob_home.mkdir()
+    hub_home = short_tmp / "hub"
+    hub_home.mkdir()
+    bob_home = short_tmp / "bob"
+    bob_home.mkdir()
     hub_kp = load_or_generate(hub_home)
     bob_kp = load_or_generate(bob_home)
     _pin(hub_home, "bob", bob_kp.pubkey_b64(),
@@ -507,8 +530,10 @@ async def test_concurrent_posts_assign_distinct_sequential_seqs(short_tmp: Path)
 @pytest.mark.asyncio
 async def test_workgroup_state_survives_server_restart(short_tmp: Path) -> None:
     """Restarting the server should preserve the workgroup on disk."""
-    hub_home = short_tmp / "hub"; hub_home.mkdir()
-    bob_home = short_tmp / "bob"; bob_home.mkdir()
+    hub_home = short_tmp / "hub"
+    hub_home.mkdir()
+    bob_home = short_tmp / "bob"
+    bob_home.mkdir()
     hub_kp = load_or_generate(hub_home)
     bob_kp = load_or_generate(bob_home)
     _pin(hub_home, "bob", bob_kp.pubkey_b64(),
@@ -566,8 +591,10 @@ async def test_workgroup_state_survives_server_restart(short_tmp: Path) -> None:
 @pytest.mark.asyncio
 async def test_workgroup_over_tcp_noise(short_tmp: Path) -> None:
     """Same cycle over TCP / Noise_XK."""
-    hub_home = short_tmp / "hub"; hub_home.mkdir()
-    bob_home = short_tmp / "bob"; bob_home.mkdir()
+    hub_home = short_tmp / "hub"
+    hub_home.mkdir()
+    bob_home = short_tmp / "bob"
+    bob_home.mkdir()
     hub_kp = load_or_generate(hub_home)
     bob_kp = load_or_generate(bob_home)
     port = await _pick_free_port()
@@ -625,9 +652,12 @@ async def test_workgroup_over_tcp_noise(short_tmp: Path) -> None:
 @pytest.mark.asyncio
 async def test_leave_rotates_group_key_and_drops_member(short_tmp: Path) -> None:
     """Leave rotates the key and drops the leaver."""
-    hub_home = short_tmp / "hub"; hub_home.mkdir()
-    a_home = short_tmp / "a"; a_home.mkdir()
-    b_home = short_tmp / "b"; b_home.mkdir()
+    hub_home = short_tmp / "hub"
+    hub_home.mkdir()
+    a_home = short_tmp / "a"
+    a_home.mkdir()
+    b_home = short_tmp / "b"
+    b_home.mkdir()
     hub_kp = load_or_generate(hub_home)
     a_kp = load_or_generate(a_home)
     b_kp = load_or_generate(b_home)
@@ -744,8 +774,10 @@ async def test_leave_rotates_group_key_and_drops_member(short_tmp: Path) -> None
 @pytest.mark.asyncio
 async def test_left_member_cannot_post_or_pull(short_tmp: Path) -> None:
     """After leave, the ex-member gets `-32008`."""
-    hub_home = short_tmp / "hub"; hub_home.mkdir()
-    bob_home = short_tmp / "b"; bob_home.mkdir()
+    hub_home = short_tmp / "hub"
+    hub_home.mkdir()
+    bob_home = short_tmp / "b"
+    bob_home.mkdir()
     hub_kp = load_or_generate(hub_home)
     bob_kp = load_or_generate(bob_home)
     _pin(hub_home, "b", bob_kp.pubkey_b64(),
@@ -781,10 +813,12 @@ async def test_left_member_cannot_post_or_pull(short_tmp: Path) -> None:
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_hub_cannot_leave_its_own_workgroup(short_tmp: Path) -> None:
-    hub_home = short_tmp / "hub"; hub_home.mkdir()
-    other_home = short_tmp / "h2"; other_home.mkdir()  # for envelope round-trip
+    hub_home = short_tmp / "hub"
+    hub_home.mkdir()
+    other_home = short_tmp / "h2"
+    other_home.mkdir()  # for envelope round-trip
     hub_kp = load_or_generate(hub_home)
-    other_kp = load_or_generate(other_home)
+    load_or_generate(other_home)
     # Pin the hub's own pubkey so its envelope passes the gate.
     _pin(hub_home, "self", hub_kp.pubkey_b64(), ["workgroup.leave"])
     wg = wg_mod.create(
@@ -808,9 +842,12 @@ async def test_hub_cannot_leave_its_own_workgroup(short_tmp: Path) -> None:
 
 
 def test_kick_local_primitive_drops_member_and_rekeys(short_tmp: Path) -> None:
-    hub_home = short_tmp / "hub"; hub_home.mkdir()
-    a_home = short_tmp / "a"; a_home.mkdir()
-    b_home = short_tmp / "b"; b_home.mkdir()
+    hub_home = short_tmp / "hub"
+    hub_home.mkdir()
+    a_home = short_tmp / "a"
+    a_home.mkdir()
+    b_home = short_tmp / "b"
+    b_home.mkdir()
     hub_kp = load_or_generate(hub_home)
     a_kp = load_or_generate(a_home)
     b_kp = load_or_generate(b_home)
@@ -834,7 +871,8 @@ def test_kick_local_primitive_drops_member_and_rekeys(short_tmp: Path) -> None:
 
 
 def test_kick_rejects_hub_pubkey(short_tmp: Path) -> None:
-    home = short_tmp / "hub"; home.mkdir()
+    home = short_tmp / "hub"
+    home.mkdir()
     hub_kp = load_or_generate(home)
     wg = wg_mod.create(home, name="x", hub_kp=hub_kp, member_pubkeys=[])
     with pytest.raises(ValueError, match="hub cannot leave"):
@@ -842,8 +880,10 @@ def test_kick_rejects_hub_pubkey(short_tmp: Path) -> None:
 
 
 def test_kick_rejects_unknown_pubkey(short_tmp: Path) -> None:
-    home = short_tmp / "hub"; home.mkdir()
-    other_home = short_tmp / "o"; other_home.mkdir()
+    home = short_tmp / "hub"
+    home.mkdir()
+    other_home = short_tmp / "o"
+    other_home.mkdir()
     hub_kp = load_or_generate(home)
     other_kp = load_or_generate(other_home)
     wg = wg_mod.create(home, name="x", hub_kp=hub_kp, member_pubkeys=[])
@@ -855,7 +895,8 @@ def test_kick_rejects_unknown_pubkey(short_tmp: Path) -> None:
 
 
 def test_create_validates_budget_shape(short_tmp: Path) -> None:
-    home = short_tmp / "hub"; home.mkdir()
+    home = short_tmp / "hub"
+    home.mkdir()
     kp = load_or_generate(home)
     # Both set is accepted; each gate is independent.
     wg = wg_mod.create(
@@ -880,8 +921,10 @@ def test_create_validates_budget_shape(short_tmp: Path) -> None:
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_post_admits_under_usd_cap_and_blocks_at_breach(short_tmp: Path) -> None:
-    hub_home = short_tmp / "hub"; hub_home.mkdir()
-    bob_home = short_tmp / "b"; bob_home.mkdir()
+    hub_home = short_tmp / "hub"
+    hub_home.mkdir()
+    bob_home = short_tmp / "b"
+    bob_home.mkdir()
     hub_kp = load_or_generate(hub_home)
     bob_kp = load_or_generate(bob_home)
     _pin(hub_home, "b", bob_kp.pubkey_b64(),
@@ -937,9 +980,63 @@ async def test_post_admits_under_usd_cap_and_blocks_at_breach(short_tmp: Path) -
 
 @pytest.mark.integration
 @pytest.mark.asyncio
+async def test_post_persists_token_split_in_transcript(short_tmp: Path) -> None:
+    import json
+
+    hub_home = short_tmp / "hub"
+    hub_home.mkdir()
+    bob_home = short_tmp / "b"
+    bob_home.mkdir()
+    hub_kp = load_or_generate(hub_home)
+    bob_kp = load_or_generate(bob_home)
+    _pin(hub_home, "b", bob_kp.pubkey_b64(), ["workgroup.join", "workgroup.post"])
+
+    wg = wg_mod.create(
+        hub_home, name="split", hub_kp=hub_kp,
+        member_pubkeys=[bob_kp.pubkey_b64()],
+    )
+    server = alp_server.Server(home=hub_home, agent_name="hub")
+    wg_mod.register(server, hub_home)
+    await server.start()
+    try:
+        join = await alp_client.call(
+            socket_path=server.socket_path(),
+            sender=bob_kp,
+            recipient_pubkey_b64=hub_kp.pubkey_b64(),
+            method="workgroup.join",
+            params={"workgroup_id": wg.meta.id},
+        )
+        key = wg_mod.open_sealed_group_key(join["sealed_key"], bob_kp)
+        nonce, ct = wg_mod.encrypt_post(key, b"x")
+        await alp_client.call(
+            socket_path=server.socket_path(),
+            sender=bob_kp,
+            recipient_pubkey_b64=hub_kp.pubkey_b64(),
+            method="workgroup.post",
+            params={
+                "workgroup_id": wg.meta.id,
+                "key_version": 1,
+                "nonce": nonce,
+                "ciphertext": ct,
+                "cost": {"usd": 0.05, "tokens": 1000, "tokens_in": 700, "tokens_out": 300},
+            },
+        )
+        d = hub_home / "alp" / "workgroups" / wg.meta.id
+        entry = json.loads((d / "transcript.jsonl").read_text().strip())
+        assert entry["cost"]["tokens_in"] == 700
+        assert entry["cost"]["tokens_out"] == 300
+        assert entry["cost"]["tokens"] == 1000
+    finally:
+        await server.stop()
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
 async def test_post_with_tokens_cap_blocks_at_breach(short_tmp: Path) -> None:
-    hub_home = short_tmp / "hub"; hub_home.mkdir()
-    bob_home = short_tmp / "b"; bob_home.mkdir()
+    hub_home = short_tmp / "hub"
+    hub_home.mkdir()
+    bob_home = short_tmp / "b"
+    bob_home.mkdir()
     hub_kp = load_or_generate(hub_home)
     bob_kp = load_or_generate(bob_home)
     _pin(hub_home, "b", bob_kp.pubkey_b64(),
@@ -1004,8 +1101,10 @@ async def test_post_with_tokens_cap_blocks_at_breach(short_tmp: Path) -> None:
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_no_budget_means_no_workgroup_cap(short_tmp: Path) -> None:
-    hub_home = short_tmp / "hub"; hub_home.mkdir()
-    bob_home = short_tmp / "b"; bob_home.mkdir()
+    hub_home = short_tmp / "hub"
+    hub_home.mkdir()
+    bob_home = short_tmp / "b"
+    bob_home.mkdir()
     hub_kp = load_or_generate(hub_home)
     bob_kp = load_or_generate(bob_home)
     _pin(hub_home, "b", bob_kp.pubkey_b64(),
@@ -1054,9 +1153,11 @@ def test_pr1_format_workgroup_loads_with_version_defaults(short_tmp: Path) -> No
     defaulting both to version 1. Backward-compat for any state on
     disk before this commit."""
     import yaml as _yaml
-    home = short_tmp / "hub"; home.mkdir()
+    home = short_tmp / "hub"
+    home.mkdir()
     hub_kp = load_or_generate(home)
-    other_home = short_tmp / "o"; other_home.mkdir()
+    other_home = short_tmp / "o"
+    other_home.mkdir()
     other_kp = load_or_generate(other_home)
 
     wg_id = "wg_legacy"
@@ -1095,9 +1196,12 @@ async def test_concurrent_post_and_leave_serialise_cleanly(short_tmp: Path) -> N
     catches the race."""
     import asyncio
 
-    hub_home = short_tmp / "hub"; hub_home.mkdir()
-    a_home = short_tmp / "a"; a_home.mkdir()
-    b_home = short_tmp / "b"; b_home.mkdir()
+    hub_home = short_tmp / "hub"
+    hub_home.mkdir()
+    a_home = short_tmp / "a"
+    a_home.mkdir()
+    b_home = short_tmp / "b"
+    b_home.mkdir()
     hub_kp = load_or_generate(hub_home)
     a_kp = load_or_generate(a_home)
     b_kp = load_or_generate(b_home)
@@ -1123,7 +1227,7 @@ async def test_concurrent_post_and_leave_serialise_cleanly(short_tmp: Path) -> N
                 params={"workgroup_id": wg.meta.id},
             )
             return wg_mod.open_sealed_group_key(r["sealed_key"], kp)
-        a_key = await _join(a_kp)
+        await _join(a_kp)
         b_key = await _join(b_kp)
 
         async def _b_post():
@@ -1174,8 +1278,10 @@ async def test_profile_budget_gate_fires_before_workgroup_gate(short_tmp: Path) 
     from alpi import config as cfg_mod
     from alpi import ledger
 
-    hub_home = short_tmp / "hub"; hub_home.mkdir()
-    bob_home = short_tmp / "b"; bob_home.mkdir()
+    hub_home = short_tmp / "hub"
+    hub_home.mkdir()
+    bob_home = short_tmp / "b"
+    bob_home.mkdir()
     hub_kp = load_or_generate(hub_home)
     bob_kp = load_or_generate(bob_home)
     _pin(hub_home, "b", bob_kp.pubkey_b64(),
@@ -1213,10 +1319,14 @@ async def test_profile_budget_gate_fires_before_workgroup_gate(short_tmp: Path) 
 
 def test_sequential_leaves_keep_bumping_versions(short_tmp: Path) -> None:
     """Two leaves in a row keep the latest sealed key on the survivors."""
-    hub_home = short_tmp / "hub"; hub_home.mkdir()
-    a_home = short_tmp / "a"; a_home.mkdir()
-    b_home = short_tmp / "b"; b_home.mkdir()
-    c_home = short_tmp / "c"; c_home.mkdir()
+    hub_home = short_tmp / "hub"
+    hub_home.mkdir()
+    a_home = short_tmp / "a"
+    a_home.mkdir()
+    b_home = short_tmp / "b"
+    b_home.mkdir()
+    c_home = short_tmp / "c"
+    c_home.mkdir()
     hub_kp = load_or_generate(hub_home)
     a_kp = load_or_generate(a_home)
     b_kp = load_or_generate(b_home)
@@ -1253,8 +1363,10 @@ def test_sequential_leaves_keep_bumping_versions(short_tmp: Path) -> None:
 def test_ledger_records_cumulative_spend(short_tmp: Path) -> None:
     """Ledger updates are atomic and increment all counters."""
     import json
-    hub_home = short_tmp / "hub"; hub_home.mkdir()
-    bob_home = short_tmp / "b"; bob_home.mkdir()
+    hub_home = short_tmp / "hub"
+    hub_home.mkdir()
+    bob_home = short_tmp / "b"
+    bob_home.mkdir()
     hub_kp = load_or_generate(hub_home)
     bob_kp = load_or_generate(bob_home)
 
@@ -1275,9 +1387,12 @@ def test_ledger_records_cumulative_spend(short_tmp: Path) -> None:
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_pause_blocks_post_but_allows_pull(short_tmp: Path) -> None:
-    hub_home = short_tmp / "hub"; hub_home.mkdir()
-    a_home = short_tmp / "a"; a_home.mkdir()
-    b_home = short_tmp / "b"; b_home.mkdir()
+    hub_home = short_tmp / "hub"
+    hub_home.mkdir()
+    a_home = short_tmp / "a"
+    a_home.mkdir()
+    b_home = short_tmp / "b"
+    b_home.mkdir()
     hub_kp = load_or_generate(hub_home)
     a_kp = load_or_generate(a_home)
     b_kp = load_or_generate(b_home)
@@ -1355,8 +1470,10 @@ async def test_pause_blocks_post_but_allows_pull(short_tmp: Path) -> None:
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_resume_re_admits_posts(short_tmp: Path) -> None:
-    hub_home = short_tmp / "hub"; hub_home.mkdir()
-    bob_home = short_tmp / "b"; bob_home.mkdir()
+    hub_home = short_tmp / "hub"
+    hub_home.mkdir()
+    bob_home = short_tmp / "b"
+    bob_home.mkdir()
     hub_kp = load_or_generate(hub_home)
     bob_kp = load_or_generate(bob_home)
     _pin(hub_home, "b", bob_kp.pubkey_b64(),
@@ -1407,8 +1524,10 @@ async def test_resume_re_admits_posts(short_tmp: Path) -> None:
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_wire_pause_resume_reject_non_hub_callers(short_tmp: Path) -> None:
-    hub_home = short_tmp / "hub"; hub_home.mkdir()
-    bob_home = short_tmp / "b"; bob_home.mkdir()
+    hub_home = short_tmp / "hub"
+    hub_home.mkdir()
+    bob_home = short_tmp / "b"
+    bob_home.mkdir()
     hub_kp = load_or_generate(hub_home)
     bob_kp = load_or_generate(bob_home)
     _pin(hub_home, "b", bob_kp.pubkey_b64(),
@@ -1439,7 +1558,8 @@ async def test_wire_pause_resume_reject_non_hub_callers(short_tmp: Path) -> None
 
 @pytest.mark.asyncio
 async def test_pause_and_resume_are_idempotent(short_tmp: Path) -> None:
-    hub_home = short_tmp / "hub"; hub_home.mkdir()
+    hub_home = short_tmp / "hub"
+    hub_home.mkdir()
     hub_kp = load_or_generate(hub_home)
     wg = wg_mod.create(
         hub_home, name="idem", hub_kp=hub_kp, member_pubkeys=[],
@@ -1458,8 +1578,10 @@ async def test_pause_and_resume_are_idempotent(short_tmp: Path) -> None:
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_pause_does_not_block_leave(short_tmp: Path) -> None:
-    hub_home = short_tmp / "hub"; hub_home.mkdir()
-    bob_home = short_tmp / "b"; bob_home.mkdir()
+    hub_home = short_tmp / "hub"
+    hub_home.mkdir()
+    bob_home = short_tmp / "b"
+    bob_home.mkdir()
     hub_kp = load_or_generate(hub_home)
     bob_kp = load_or_generate(bob_home)
     _pin(hub_home, "b", bob_kp.pubkey_b64(),
@@ -1497,8 +1619,10 @@ async def test_pause_does_not_block_leave(short_tmp: Path) -> None:
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_pause_persists_across_server_restart(short_tmp: Path) -> None:
-    hub_home = short_tmp / "hub"; hub_home.mkdir()
-    bob_home = short_tmp / "b"; bob_home.mkdir()
+    hub_home = short_tmp / "hub"
+    hub_home.mkdir()
+    bob_home = short_tmp / "b"
+    bob_home.mkdir()
     hub_kp = load_or_generate(hub_home)
     bob_kp = load_or_generate(bob_home)
     _pin(hub_home, "b", bob_kp.pubkey_b64(),
@@ -1549,8 +1673,10 @@ async def test_pause_persists_across_server_restart(short_tmp: Path) -> None:
 @pytest.mark.asyncio
 async def test_workgroup_verbs_bypass_peer_allow_list(short_tmp: Path) -> None:
     """`workgroup.*` bypasses the peer allow list; membership is the gate."""
-    alice_home = short_tmp / "alice"; alice_home.mkdir()
-    bob_home = short_tmp / "bob"; bob_home.mkdir()
+    alice_home = short_tmp / "alice"
+    alice_home.mkdir()
+    bob_home = short_tmp / "bob"
+    bob_home.mkdir()
     alice_kp = load_or_generate(alice_home)
     bob_kp = load_or_generate(bob_home)
     # Bob is pinned with no workgroup verbs; only link.ping.
@@ -1580,7 +1706,8 @@ async def test_workgroup_verbs_bypass_peer_allow_list(short_tmp: Path) -> None:
 
 def test_create_persists_pipeline_phases(short_tmp: Path) -> None:
     """`create(pipeline=[...])` persists the ordered phase list; default is ()."""
-    home = short_tmp / "hub"; home.mkdir()
+    home = short_tmp / "hub"
+    home.mkdir()
     kp = load_or_generate(home)
     wg = wg_mod.create(
         home, name="proj", hub_kp=kp, member_pubkeys=[],
@@ -1592,7 +1719,8 @@ def test_create_persists_pipeline_phases(short_tmp: Path) -> None:
 
 
 def test_create_rejects_invalid_and_duplicate_pipeline_slugs(short_tmp: Path) -> None:
-    home = short_tmp / "hub"; home.mkdir()
+    home = short_tmp / "hub"
+    home.mkdir()
     kp = load_or_generate(home)
     with pytest.raises(ValueError, match="invalid pipeline phase slug"):
         wg_mod.create(home, name="x", hub_kp=kp, member_pubkeys=[], pipeline=["Bad Slug"])
@@ -1603,7 +1731,8 @@ def test_create_rejects_invalid_and_duplicate_pipeline_slugs(short_tmp: Path) ->
 def test_load_meta_tolerant_to_legacy_pipeline_bool(short_tmp: Path) -> None:
     """A legacy `pipeline: true` meta loads as a normal workgroup (() ) instead
     of crashing the poll — strict validation only applies on create/update."""
-    home = short_tmp / "hub"; home.mkdir()
+    home = short_tmp / "hub"
+    home.mkdir()
     kp = load_or_generate(home)
     wg = wg_mod.create(home, name="legacy", hub_kp=kp, member_pubkeys=[])
     meta_path = home / "alp" / "workgroups" / wg.meta.id / "meta.yaml"
@@ -1617,7 +1746,8 @@ def test_load_meta_tolerant_to_legacy_pipeline_bool(short_tmp: Path) -> None:
 
 
 def test_meta_quorum_timeout_round_trips(short_tmp: Path) -> None:
-    home = short_tmp / "hub"; home.mkdir()
+    home = short_tmp / "hub"
+    home.mkdir()
     kp = load_or_generate(home)
     wg = wg_mod.create(home, name="qt", hub_kp=kp, member_pubkeys=[])
     d = home / "alp" / "workgroups" / wg.meta.id
@@ -1637,7 +1767,8 @@ def test_coerce_positive_int_rejects_junk_and_negatives() -> None:
 
 
 def test_load_meta_tolerant_to_bad_quorum_timeout(short_tmp: Path) -> None:
-    home = short_tmp / "hub"; home.mkdir()
+    home = short_tmp / "hub"
+    home.mkdir()
     kp = load_or_generate(home)
     wg = wg_mod.create(home, name="qtbad", hub_kp=kp, member_pubkeys=[])
     meta_path = home / "alp" / "workgroups" / wg.meta.id / "meta.yaml"

@@ -5,7 +5,9 @@ import Chip from "../../primitives/Chip.jsx";
 import Textarea from "../../primitives/Textarea.jsx";
 import { useNotify } from "../../primitives/Notification.jsx";
 import { useProfileDetail } from "../../hooks/useProfileDetail.js";
+import { useUsageDaily } from "../../hooks/useUsage.js";
 import { Section, Row, CopyButton } from "./primitives.jsx";
+import Usage from "./Usage.jsx";
 import { SettingsHero } from "../../primitives/index.js";
 import { CopyIcon, Mono } from "../../primitives/index.js";
 import { FIELD_KEYS } from "./util.js";
@@ -66,6 +68,7 @@ export default function ProfileDetail({
     () => ({ ...profileSummary, ...(detail || {}) }),
     [profileSummary, detail],
   );
+  const usage = useUsageDaily(profileSummary?.name ?? null);
   const baseline = useMemo(() => initialDraft(profile), [profile]);
   const [draft, setDraft] = useState(baseline);
   const notify = useNotify();
@@ -227,6 +230,16 @@ export default function ProfileDetail({
             />
           </Row>
         </Section>
+
+        {usage.days.length > 0 && (
+          <Section title="Usage" kicker="last 14 days">
+            <Usage
+              days={usage.days}
+              accent={profile.accent || "var(--accent)"}
+              capLine={capUsd}
+            />
+          </Section>
+        )}
 
         <Section title="Service" tooltip="always-on subsystems">
           {(activeConnection?.kind === "local" || activeConnection?.role === "admin") && (

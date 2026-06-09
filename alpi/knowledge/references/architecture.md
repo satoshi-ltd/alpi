@@ -40,6 +40,7 @@ Local agent runtime, per turn:
 | `alpi/gateway/` | Telegram, email, Matrix inbound gateways. |
 | `alpi/scheduler/` | Scheduled jobs. |
 | `alpi/outputs.py` | Persistent native inbox rows for proactive messages and schedule results. |
+| `alpi/ledger.py` | Daily spend ledger (`logs/ledger.json`): budget cap gate + 30-day per-day history. |
 | `alpi/run_ledger.py` | Capped JSONL run evidence for agent/schedule/workgroup/terminal runs. |
 | `alpi/ops_digest.py` | Human-readable operational digest over logs, runs, outputs, and stores. |
 | `alpi/alp/` | Alpi Link Protocol peers/workgroups. |
@@ -82,6 +83,7 @@ Contracts:
 - `host.skills.list` is metadata-only; `host.skill.read` returns a skill body.
 - `host.attachments.{stage,fetch}`: `stage` uploads a file in; `fetch` serves a tool-produced output attachment's bytes (base64) out by path, so rich clients render images inline and other files as a metadata chip; text surfaces (CLI/TUI/gateway/ALP) get a shared textual listing instead. `fetch` reads are scoped to the profile's workspace/home/temp (see `security`).
 - `host.network.*` controls companion pairing/network config; local-only.
+- `host.usage.daily` / `host.usage.workgroup.daily` (admin-only) = last 14 days of per-day token usage + cost. Profile usage reads the `ledger.json` 30-day history (authoritative for ALL spend, incl. non-token costs like image generation); workgroup usage reads the hub transcript's per-post declared cost. Both bucket by UTC day, so today matches the budget gate.
 - `host.outputs.{list,read,mark_read,mark_all_read,delete}` = persistent inbox (proactive messages + schedule results). Backed by `<home>/outputs/outputs.jsonl`, capped 500 rows, no archive (cap handles retention → two-state inbox). Row: `{id, profile, created_at, source (send_message|schedule), source_id, body, severity, kind, status (unread|read), session_id, delivered_to}`. Producers: `send_message` (alpi/both/gateway-only, non-empty text) and scheduler on `schedule.failed` (always) + `schedule.done` when delivered to a real gateway channel. Silent/stdout-only jobs file nothing. Daemon emits `output.created` for poll-free refresh.
 - `host.sessions.delete` bulk-deletes chat sessions by id; admin-only, refuses active/busy sessions, removes `sessions/<id>.json` + `_events_<id>.jsonl`.
 - Device records carry `role` + optional `profile_scope`. Dispatcher gates non-scope-free verbs on `params.profile in device.profile_scope or role == "admin"`, else `-32001 forbidden`. `host.devices.generate(profiles=[…])` mints scoped tokens; `host.devices.set_profiles` retunes scope without re-pairing. See `security` for scope-free allowlist + list-payload filtering.

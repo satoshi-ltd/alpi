@@ -245,9 +245,11 @@ observability, the signals to watch:
   `~/.alpi/<profile>/logs/ledger.json` is the in-process gate;
   every interactive turn, gateway reply, scheduled job, sub-agent
   spawn, and inbound ALP call admits against it before running and
-  records its actual spend after. For external alerting that
-  catches provider-side drift, `jq '.cost_usd' ~/.alpi/sessions/*.json`
-  still sums historical session spend.
+  records its actual spend after. The same file keeps a 30-day
+  `history` map of per-day totals (usd + input/output tokens) — the
+  authoritative spend record, including non-token costs like image
+  generation that session files never see; `host.usage.daily`
+  (admin-only) serves the last 14 days of it to clients.
 - **`approval.log` triggers.** Any line with a
   `caution always-approved` entry means the allowlist grew — a
   new command pattern is now auto-permitted for this profile. Put

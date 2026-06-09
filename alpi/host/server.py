@@ -74,6 +74,8 @@ _ADMIN_METHODS = frozenset({
     "host.devices.promote",
     "host.devices.demote",
     "host.devices.set_profiles",
+    "host.usage.daily",
+    "host.usage.workgroup.daily",
 })
 
 # host.profile.detail leaks Settings-only fields (providers, mcps, peers, sandbox, workspace path…) inside its result blob. Members hit it from ChatPane for `models` + `voice_id`, so we can't gate the whole verb — instead redact the result down to the chat-essential fields when role != admin.

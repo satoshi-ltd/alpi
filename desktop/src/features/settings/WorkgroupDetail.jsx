@@ -14,6 +14,8 @@ import { SettingsHero } from "../../primitives/index.js";
 import { Diamond, Dot, Mono } from "../../primitives/index.js";
 import { BudgetEditor } from "./fields/alp.jsx";
 import { useProfileDetail } from "../../hooks/useProfileDetail.js";
+import { useWorkgroupUsageDaily } from "../../hooks/useUsage.js";
+import Usage from "./Usage.jsx";
 import styles from "./Settings.module.css";
 
 function renderMemberRow(m, profiles, workgroup, hubPubkey, onRemove) {
@@ -84,6 +86,10 @@ export default function WorkgroupDetail({ workgroup, profiles, connectionId = nu
     ? { ...hubSummary, ...(hubDetail || {}) }
     : (hubDetail || null);
   const ownPubkey = profiles.find((p) => p.name === workgroup.profile)?.pubkey_b64;
+  const usage = useWorkgroupUsageDaily(
+    workgroup.is_hub ? workgroup.profile : null,
+    workgroup.id,
+  );
 
   function updateBriefing(text) {
     setBriefing(text);
@@ -373,6 +379,15 @@ export default function WorkgroupDetail({ workgroup, profiles, connectionId = nu
             </div>
           </Row>
         </Section>
+
+        {usage.days.length > 0 && (
+          <Section title="Usage" kicker="last 14 days">
+            <Usage
+              days={usage.days}
+              accent={hub?.accent || "var(--accent)"}
+            />
+          </Section>
+        )}
 
         {/* Briefing — textarea with draft tag pattern (v2 §12.5). */}
         <Section title="Briefing" tooltip="what this workgroup decides">

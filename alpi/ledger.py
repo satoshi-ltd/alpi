@@ -14,13 +14,14 @@ import logging
 import threading
 from contextlib import contextmanager
 from contextvars import ContextVar
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
 
 log = logging.getLogger("alpi.ledger")
 INTERACTIVE_BUCKET = "__interactive__"
+HISTORY_DAYS = 30
 
 
 class BudgetExceeded(Exception):
@@ -67,12 +68,48 @@ def _blank(day: str) -> dict[str, Any]:
         "day": day,
         "profile": {"usd": 0.0, "tokens": 0},
         "by_peer": {},
+        "history": {},
     }
+
+
+def _prune_history(history: dict[str, Any], today: str) -> dict[str, Any]:
+    try:
+        cutoff = date.fromisoformat(today) - timedelta(days=HISTORY_DAYS)
+    except ValueError:
+        return history
+    out: dict[str, Any] = {}
+    for d, v in history.items():
+        try:
+            if date.fromisoformat(d) >= cutoff:
+                out[d] = v
+        except (ValueError, TypeError):
+            continue
+    return out
+
+
+def _rollover(data: dict[str, Any], today: str) -> dict[str, Any]:
+    history = dict(data.get("history") or {})
+    old_day = data.get("day")
+    prof = data.get("profile") or {}
+    if old_day and old_day != today and old_day not in history and (
+        prof.get("usd") or prof.get("tokens")
+    ):
+        history[old_day] = {
+            "usd": float(prof.get("usd", 0.0)),
+            "tokens": int(prof.get("tokens", 0)),
+            "tokens_in": 0,
+            "tokens_out": 0,
+        }
+    fresh = _blank(today)
+    fresh["history"] = _prune_history(history, today)
+    return fresh
 
 
 def load(home: Path) -> dict[str, Any]:
     """Return today's ledger, rolling over (or creating fresh) on a stale or
-    corrupt file rather than letting it brick the profile."""
+    corrupt file rather than letting it brick the profile. The ``history``
+    map of past-day totals survives a day rollover; only the live counters
+    (``profile``/``by_peer``) reset."""
     today = _today_utc()
     p = _path(home)
     if not p.exists():
@@ -81,10 +118,13 @@ def load(home: Path) -> dict[str, Any]:
         data = json.loads(p.read_text())
     except (json.JSONDecodeError, OSError):
         return _blank(today)
-    if not isinstance(data, dict) or data.get("day") != today:
+    if not isinstance(data, dict):
         return _blank(today)
+    if data.get("day") != today:
+        return _rollover(data, today)
     data.setdefault("profile", {"usd": 0.0, "tokens": 0})
     data.setdefault("by_peer", {})
+    data.setdefault("history", {})
     return data
 
 
@@ -133,9 +173,11 @@ def record(
     *,
     usd: float,
     tokens: int,
+    tokens_in: int = 0,
+    tokens_out: int = 0,
     cfg_budget: dict[str, Any] | None = None,
 ) -> None:
-    """Add today's spend; emits ``budget.threshold`` once per crossing (highest threshold wins if a single record vaults past both)."""
+    """Add today's spend; emits ``budget.threshold`` once per crossing (highest threshold wins if a single record vaults past both). ``tokens_in``/``tokens_out`` feed the per-day ``history`` split (best-effort: non-token spend like image generation passes ``tokens=0`` and contributes ``usd`` only)."""
     if usd <= 0 and tokens <= 0:
         return
     peer_id = _peer_ctx.get() or INTERACTIVE_BUCKET
@@ -149,6 +191,16 @@ def record(
         bucket = buckets.setdefault(peer_id, {"usd": 0.0, "tokens": 0})
         bucket["usd"] = float(bucket.get("usd", 0)) + max(0.0, float(usd))
         bucket["tokens"] = int(bucket.get("tokens", 0)) + max(0, int(tokens))
+        today = str(data.get("day"))
+        history = data.setdefault("history", {})
+        hentry = history.setdefault(
+            today, {"usd": 0.0, "tokens": 0, "tokens_in": 0, "tokens_out": 0},
+        )
+        hentry["usd"] = float(profile["usd"])
+        hentry["tokens"] = int(profile["tokens"])
+        hentry["tokens_in"] = int(hentry.get("tokens_in", 0)) + max(0, int(tokens_in))
+        hentry["tokens_out"] = int(hentry.get("tokens_out", 0)) + max(0, int(tokens_out))
+        data["history"] = _prune_history(history, today)
         save(home, data)
         after_usd = profile["usd"]
     if cfg_budget is None:

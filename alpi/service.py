@@ -1763,6 +1763,7 @@ async def _run_host(home: Path, profile: str) -> None:
     from alpi.host import probes as host_probes
     from alpi.host import schedule as host_schedule
     from alpi.host import tools as host_tools
+    from alpi.host import usage as host_usage
     from alpi import runtime
     from alpi.host import workgroup_admin as host_wg_admin
     from alpi.host.network import host_allow_public_bind, resolve_host_tcp_bind
@@ -1799,6 +1800,7 @@ async def _run_host(home: Path, profile: str) -> None:
     host_network.register(server)
     host_outputs.register(server)
     host_tools.register(server)
+    host_usage.register(server)
     host_attachments.register(server)
     await server.start()
     try:

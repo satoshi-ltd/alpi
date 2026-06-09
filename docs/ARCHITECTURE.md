@@ -121,7 +121,7 @@ alpi/
 ├── config.py               YAML load/save, defaults, deep merge
 ├── ui.py                   shared wizard/menu primitives
 ├── service.py              unified orchestrator — runs every enabled subsystem on one asyncio loop; install/uninstall launchd / systemd unit per profile
-├── ledger.py               daily spend ledger (logs/ledger.json) + profile cap gate
+├── ledger.py               daily spend ledger (logs/ledger.json: live counters + 30-day per-day history) + profile cap gate
 ├── outputs.py              persistent inbox JSONL store (send_message + schedule failures)
 ├── status.py               canonical /status rows (TUI + Telegram share this)
 ├── prompts/
@@ -706,6 +706,12 @@ Verb namespaces in current shape:
   local `id`), so a co-located peer pinned under any alias still
   finds the right `alp.sock` — the alias never has to match the
   remote profile's name.
+- **`host.usage.daily`** / **`host.usage.workgroup.daily`** (admin-only) —
+  last 14 days of per-day token usage + cost. Profile usage reads the
+  `ledger.json` 30-day history (authoritative for ALL spend, including
+  non-token costs like image generation); workgroup usage reads the hub
+  transcript (per-post declared cost). Both bucket by UTC day, so the
+  today figure matches the budget gate / `budget_used_usd`.
 - **`host.outputs.{list,read,mark_read,mark_all_read,delete}`** —
   durable inbox for proactive agent messages and schedule
   results. Backed by `<home>/outputs/outputs.jsonl` (capped at

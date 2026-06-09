@@ -49,6 +49,8 @@ class WorkgroupPostTool(Tool):
             cost = {
                 "usd": float(tally.get("usd", 0.0)),
                 "tokens": int(tally.get("tokens_in", 0)) + int(tally.get("tokens_out", 0)),
+                "tokens_in": int(tally.get("tokens_in", 0)),
+                "tokens_out": int(tally.get("tokens_out", 0)),
             }
 
         try:
@@ -76,7 +78,6 @@ class WorkgroupPostTool(Tool):
 
 def _record_post_failure(wg_id: str, error: str, attempted_text: str) -> None:
     """Record a rejected post in ``turns.jsonl``."""
-    import json
     import os
     try:
         from alpi import service

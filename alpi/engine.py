@@ -8,10 +8,10 @@ import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable
+from typing import Any, Callable
 
 from alpi import clock, config as cfg_mod
-from alpi import llm, memory, session, tools
+from alpi import llm, session, tools
 from alpi.tools._budget import apply as _budget_apply
 from alpi.tools._sanitizer import sanitize_tool_payload
 from alpi.session import ToolLog, truncate_result
@@ -28,9 +28,6 @@ def _strip_cache_noise(text: str) -> str:
 
 
 _FREE_MODEL_MAX_STEPS = 1000
-
-
-from alpi.prompt_cache import PLATFORM_HINTS as _PLATFORM_HINTS
 
 
 def _last_peer_reply(turn_tools) -> str:
@@ -343,6 +340,8 @@ class Engine:
                     usd=float(final.get("cost_usd", 0.0)),
                     tokens=int(final.get("input_tokens", 0))
                           + int(final.get("output_tokens", 0)),
+                    tokens_in=int(final.get("input_tokens", 0)),
+                    tokens_out=int(final.get("output_tokens", 0)),
                     cfg_budget=self.cfg.budget,
                 )
                 self.session.last_ctx_tokens = int(final.get("input_tokens", 0))
@@ -411,6 +410,7 @@ class Engine:
                     _ledger.record(
                         self.home, usd=float(cost),
                         tokens=int(in_tok) + int(out_tok),
+                        tokens_in=int(in_tok), tokens_out=int(out_tok),
                         cfg_budget=self.cfg.budget,
                     )
                     emit(AgentEvent(
