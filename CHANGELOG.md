@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.8.10 — 2026-06-09 — agents know the host Python version
+
+- **When an agent writes a scripted skill's `scripts/run.py` it now knows the
+  host's Python version** — the script runs on exactly that interpreter — and
+  targets it, instead of guessing newer syntax that fails on an older one (e.g.
+  `X | Y` type unions or `match` on Python 3.9). Terminal `python3` comes from
+  PATH, so the prompt also nudges checking `python3 --version` when it matters.
+
 ## v0.8.9 — 2026-06-09 — free models get a higher per-turn step ceiling
 
 - **A free model (zero per-token pricing) or a local one gets a much higher

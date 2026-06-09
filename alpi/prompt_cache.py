@@ -19,6 +19,7 @@ as separate system messages by the engine and are NOT parts.
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 
 PART_ORDER: tuple[str, ...] = (
@@ -80,6 +81,12 @@ def _platform_hint() -> str:
 
 def _env_block(home: Path, workspace) -> str:
     parts = ["# ENVIRONMENT"]
+    parts.append(
+        f"- **host Python**: `{sys.version_info.major}.{sys.version_info.minor}` — a scripted "
+        "skill's `scripts/run.py` runs on exactly this interpreter, so target it (e.g. no "
+        "`X | Y` type unions or `match` below 3.10). A `terminal` `python3` is resolved from "
+        "PATH and may differ — check `python3 --version` when the exact version matters."
+    )
     if workspace is not None:
         parts.append(f"- **workspace** (default root for relative paths): `{workspace}`")
         parts.append(f"- **profile home** (memory/skills/config): `{home}`")

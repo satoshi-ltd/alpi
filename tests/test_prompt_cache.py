@@ -10,6 +10,7 @@ never enters ``render_cacheable``.
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 
 import pytest
@@ -21,6 +22,12 @@ from alpi import prompt_cache as pc
 def _make_cfg(home: Path, model: str = "openrouter/anthropic/claude-3.5-sonnet") -> cfg_mod.Config:
     (home / "config.yaml").write_text(f"model: {model}\n")
     return cfg_mod.load(home)
+
+
+def test_env_block_states_host_python_version() -> None:
+    block = pc._env_block(Path("/tmp/home"), Path("/tmp/ws"))
+    assert "host Python" in block
+    assert f"{sys.version_info.major}.{sys.version_info.minor}" in block
 
 
 def test_part_order_is_stable_contract() -> None:
