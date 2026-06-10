@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.8.20 — 2026-06-10 — heavy downloads only when they're needed
+
+- **The daemon no longer grabs ~600 MB at boot on machines that won't use it.**
+  Chromium and the embedding weights now download only when something actually
+  needs them: no semantic index → no embedder, browser denied everywhere → no
+  Chromium, and on Docker the prefetch is off by default (first use still
+  fetches on demand). When it does run, it waits out the startup rush instead
+  of competing with your apps reconnecting.
+- **~150 MB of memory back per daemon.** The embedding model no longer sits
+  loaded in every running daemon — it loads on the first semantic search.
+- **Old Chromium builds are cleaned up.** Each upgrade used to leave the
+  previous ~520 MB build behind forever; stale builds are now pruned after a
+  successful install.
+- **`alpi doctor` shows an Assets section** — what's downloaded, what will
+  fetch on first use, your prefetch mode, and stale builds wasting disk.
+- A failed Chromium install now logs a clear warning and is retried on the
+  next attempt instead of failing silently.
+
 ## v0.8.19 — 2026-06-10 — OpenRouter traffic is credited to alpi
 
 - **OpenRouter requests now identify as alpi.** Calls carry the app's name and

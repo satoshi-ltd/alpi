@@ -72,6 +72,7 @@ def run_all(home: Path, profile: str) -> list[Check]:
             "alp": _check_alp_integrity(home, cfg),
             "security": _check_security(cfg),
             "storage": _check_storage(home),
+            "assets": _check_assets(home),
         }
 
         for fut in as_completed(futures):
@@ -95,6 +96,52 @@ def run_all(home: Path, profile: str) -> list[Check]:
     out.extend(live.get("mcps", []))
     out.extend(sync_checks["security"])
     out.extend(sync_checks["storage"])
+    out.extend(sync_checks["assets"])
+    return out
+
+
+def _check_assets(home: Path) -> list[Check]:
+    from alpi import home as home_mod
+    from alpi.core._playwright import _browsers_cache_dir, _wanted_chromium_dirs
+    from alpi.service import _prefetch_mode
+
+    out: list[Check] = []
+    root = home_mod.alpi_root()
+    out.append(Check("Assets", "prefetch", "info", f"mode {_prefetch_mode(root)}"))
+    try:
+        wanted = _wanted_chromium_dirs()
+        cache = _browsers_cache_dir()
+        present = sorted(w for w in wanted if (cache / w).is_dir())
+        if present:
+            out.append(Check("Assets", "chromium", "ok", ", ".join(present)))
+        else:
+            out.append(Check(
+                "Assets", "chromium", "info",
+                "not installed — fetched on first browser use",
+            ))
+        stale = sorted(
+            e.name for e in cache.glob("chromium*")
+            if e.is_dir() and e.name not in wanted
+        ) if cache.is_dir() else []
+        if stale:
+            out.append(Check(
+                "Assets", "chromium", "warn",
+                f"stale builds wasting disk: {', '.join(stale)} — pruned on next successful install",
+            ))
+    except Exception:  # noqa: BLE001
+        pass
+    emb = root / "cache" / "fastembed"
+    try:
+        cached = emb.is_dir() and any(emb.iterdir())
+    except OSError:
+        cached = False
+    if cached:
+        out.append(Check("Assets", "embedder", "ok", "weights cached"))
+    else:
+        out.append(Check(
+            "Assets", "embedder", "info",
+            "not cached — fetched on first semantic search",
+        ))
     return out
 
 

@@ -57,7 +57,7 @@ async def test_tools_list_returns_registered_tools(short_tmp: Path) -> None:
 
 @pytest.mark.asyncio
 async def test_every_builtin_tool_has_a_real_category(short_tmp: Path) -> None:
-    """A tool rename silently rots the prefix map and the tool falls into "Other" — keep the fallback for genuinely unknown names but never for the builtin registry."""
+    # Guard against renamed tools silently rotting the category map into "Other".
     home = short_tmp / "h"
     home.mkdir()
     srv = host_server.Server(home=home)

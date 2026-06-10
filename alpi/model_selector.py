@@ -290,8 +290,8 @@ def model_prefix_for_env_key(key: str) -> str:
     return ""
 
 
+# Dual-write: edits .env AND saves config.yaml when the active model pointed at the removed provider (returns True in that case).
 def unset_provider_key(cfg: cfg_mod.Config, key: str) -> bool:
-    """Remove ``key`` from .env; clear ``cfg.model`` (and persist) when it pointed at the removed provider. Returns True when the model was cleared."""
     _remove_env_key(cfg.env_path, key)
     prefix = model_prefix_for_env_key(key)
     if prefix and cfg.model.split("/", 1)[0] == prefix:

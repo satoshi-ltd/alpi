@@ -496,3 +496,20 @@ def test_alp_integrity_ok_on_distinct_identities(tmp_path: Path, monkeypatch) ->
     checks = _alp_checks(tmp_path)
     assert checks == [c for c in checks if c.status == "ok"]
     assert any("2 peer(s)" in c.detail for c in checks)
+
+
+def test_assets_check_reports_missing_chromium_and_stale_builds(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    from alpi.core import _playwright
+
+    _write_cfg(tmp_path)
+    monkeypatch.delenv("ALPI_PLATFORM", raising=False)
+    cache = tmp_path / "ms-playwright"
+    (cache / "chromium-1100").mkdir(parents=True)
+    monkeypatch.setattr(_playwright, "_wanted_chromium_dirs", lambda: {"chromium-1217"})
+    monkeypatch.setattr(_playwright, "_browsers_cache_dir", lambda: cache)
+    checks = doctor._check_assets(tmp_path)
+    assert any(c.name == "chromium" and c.status == "info" for c in checks)
+    assert any(c.status == "warn" and "chromium-1100" in c.detail for c in checks)
+    assert any(c.name == "prefetch" for c in checks)

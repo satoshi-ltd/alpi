@@ -74,13 +74,9 @@ def set_default(embedder: Embedder | None) -> None:
     _DEFAULT = embedder
 
 
+# Throwaway instance on purpose: priming _DEFAULT would park the ONNX session (~150MB RSS) in every daemon forever — here the weights land on disk, the session is released, and the first real embed() lazy-loads from cache.
 def ensure_weights_cached() -> None:
-    """Pre-download embedder weights to the fastembed cache.
-
-    Instantiating ``TextEmbedding`` downloads the ONNX model files but
-    keeps the in-memory footprint tiny (~100 MB for the ONNX session)
-    compared to the torch-based variant (~600 MB). Pre-warming this
-    from the daemon makes the first ``search_workspace`` instant.
-    """
-    log.info("ensure_weights_cached: %s", default().name)
-    default()._load()
+    embedder = FastembedEmbedder()
+    log.info("ensure_weights_cached: %s", embedder.name)
+    embedder._load()
+    embedder._model = None

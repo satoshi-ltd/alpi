@@ -55,26 +55,54 @@ def test_ocr_reader_loads_once_under_concurrency(monkeypatch):
 
 
 def test_chromium_install_runs_once_under_concurrency(monkeypatch):
+    from types import SimpleNamespace
+
     pw_mod.reset_for_testing()
     calls = {"n": 0}
 
     def fake_run(*a, **kw):
         calls["n"] += 1
+        return SimpleNamespace(returncode=0, stderr=b"")
 
     monkeypatch.setattr("subprocess.run", fake_run)
+    # Never let the test reach the real browser cache.
+    monkeypatch.setattr(pw_mod, "_prune_stale_chromium", lambda *a, **kw: 0)
     _race(pw_mod.ensure_chromium, n=10)
     assert calls["n"] == 1
 
 
 def test_chromium_install_is_idempotent_after_success(monkeypatch):
+    from types import SimpleNamespace
+
     pw_mod.reset_for_testing()
     calls = {"n": 0}
 
     def fake_run(*a, **kw):
         calls["n"] += 1
+        return SimpleNamespace(returncode=0, stderr=b"")
 
     monkeypatch.setattr("subprocess.run", fake_run)
+    monkeypatch.setattr(pw_mod, "_prune_stale_chromium", lambda *a, **kw: 0)
     pw_mod.ensure_chromium()
     pw_mod.ensure_chromium()
     pw_mod.ensure_chromium()
     assert calls["n"] == 1
+
+
+def test_chromium_install_failure_keeps_retry_possible(monkeypatch):
+    from types import SimpleNamespace
+
+    pw_mod.reset_for_testing()
+    calls = {"n": 0}
+
+    def fake_run(*a, **kw):
+        calls["n"] += 1
+        rc = 1 if calls["n"] == 1 else 0
+        return SimpleNamespace(returncode=rc, stderr=b"network down")
+
+    monkeypatch.setattr("subprocess.run", fake_run)
+    monkeypatch.setattr(pw_mod, "_prune_stale_chromium", lambda *a, **kw: 0)
+    pw_mod.ensure_chromium()
+    # First attempt failed — a later call retries instead of trusting the flag.
+    pw_mod.ensure_chromium()
+    assert calls["n"] == 2

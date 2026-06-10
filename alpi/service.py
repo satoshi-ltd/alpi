@@ -147,27 +147,79 @@ def serve_all(root: Path) -> None:
         log.info("central service stopped")
 
 
-def _prefetch_assets() -> None:
-    """Spawn a daemon thread that pre-warms heavy assets.
+# Delayed past the boot reconnection storm on purpose: a chromium unzip + ONNX load at boot+5s starved small Docker hosts right while clients were re-pairing, which read as "the machine is blocked".
+_PREFETCH_DELAY_S = 600.0
 
-    Pre-loads the fastembed ONNX session and ensures the Chromium
-    binary so the first user-visible RAG/browser call doesn't pay the
-    cold-cache lag. Each step has its own try/except so one failure
-    doesn't take down the other.
-    """
+
+def _prefetch_mode(root: Path) -> str:
+    from alpi import config as cfg_mod
+    from alpi import runtime
+
+    try:
+        raw = str(((cfg_mod.load(root).service or {}).get("prefetch")) or "").strip().lower()
+    except Exception:  # noqa: BLE001
+        raw = ""
+    if raw in ("off", "all", "auto"):
+        return raw
+    return "off" if runtime.is_docker() else "auto"
+
+
+def _profile_homes(root: Path) -> list[Path]:
+    from alpi import home as home_mod
+
+    return [_profile_home(root, p) for p in home_mod.list_profiles(root)]
+
+
+def _any_profile_allows_browser(root: Path) -> bool:
+    from alpi import config as cfg_mod
+
+    for home in _profile_homes(root):
+        try:
+            if "browser" not in (cfg_mod.load(home).tools.deny or ()):
+                return True
+        except Exception:  # noqa: BLE001
+            continue
+    return False
+
+
+def _any_profile_uses_rag(root: Path) -> bool:
+    for home in _profile_homes(root):
+        rag = home / "rag"
+        try:
+            if rag.is_dir() and any(rag.iterdir()):
+                return True
+        except OSError:
+            continue
+    return False
+
+
+def _prefetch_assets(root: Path) -> None:
     import threading
+
+    mode = _prefetch_mode(root)
+    if mode == "off":
+        log.info("prefetch: off — heavy assets fetched on first use")
+        return
 
     def _run() -> None:
         from alpi.core import embed
         from alpi.core._playwright import ensure_chromium
 
-        for label, fn in (("embedder", embed.ensure_weights_cached),
-                           ("chromium", ensure_chromium)):
+        steps: list[tuple[str, Any]] = []
+        if mode == "all" or _any_profile_uses_rag(root):
+            steps.append(("embedder", embed.ensure_weights_cached))
+        if mode == "all" or _any_profile_allows_browser(root):
+            steps.append(("chromium", ensure_chromium))
+        if not steps:
+            log.info("prefetch: nothing to do (no RAG index, browser denied everywhere)")
+            return
+        for label, fn in steps:
+            started = time.monotonic()
             try:
                 fn()
-            except Exception:
+                log.info("prefetch %s: done in %.1fs", label, time.monotonic() - started)
+            except Exception:  # noqa: BLE001
                 log.exception("prefetch %s failed (non-fatal)", label)
-        log.info("prefetch: done")
 
     threading.Thread(target=_run, name="alpi-prefetch", daemon=True).start()
 
@@ -182,7 +234,7 @@ async def _main_all(root: Path, profiles: list[str]) -> None:
             loop.add_signal_handler(sig, stop.set)
         except NotImplementedError:
             pass
-    loop.call_later(5.0, _prefetch_assets)
+    loop.call_later(_PREFETCH_DELAY_S, _prefetch_assets, root)
 
     # Load only the root .env once for daemon-wide vars (ALPI_PLATFORM, telemetry). Per-profile secrets stay out of os.environ — read on-demand by resolve_model.
     _load_env(home_mod.alpi_root())
