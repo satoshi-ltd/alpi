@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.8.16 — 2026-06-10 — every tool in a meaningful group
+
+- **The tools browser lost its "Other" junk drawer.** A dozen tools (semantic
+  search, notifications, workgroup posting…) sat in a catch-all bucket; every
+  tool now lives in its domain group.
+- **Recall tools sit where you'd look for them.** Workspace gathers document
+  search, indexing and file learning; session recall joined Memory; workgroup
+  search joined Collab; notify and ask_user joined Comms.
+
 ## v0.8.15 — 2026-06-10 — removing a provider removes its models too
 
 - **Removing a provider takes its models with it.** Deleting an API key (or an

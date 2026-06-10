@@ -49,6 +49,28 @@ async def test_tools_list_returns_registered_tools(short_tmp: Path) -> None:
     assert by_name["web_fetch"]["category"] == "Web"
     assert by_name["memory"]["category"] == "Memory"
     assert by_name["terminal"]["category"] == "System"
+    assert by_name["search_workspace"]["category"] == "Workspace"
+    assert by_name["recall_sessions"]["category"] == "Memory"
+    assert by_name["workgroup_post"]["category"] == "Collab"
+    assert by_name["notify"]["category"] == "Comms"
+
+
+@pytest.mark.asyncio
+async def test_every_builtin_tool_has_a_real_category(short_tmp: Path) -> None:
+    """A tool rename silently rots the prefix map and the tool falls into "Other" — keep the fallback for genuinely unknown names but never for the builtin registry."""
+    home = short_tmp / "h"
+    home.mkdir()
+    srv = host_server.Server(home=home)
+    host_tools_mod.register(srv)
+    resp = await srv._dispatch({
+        "id": "r",
+        "method": "host.tools.list",
+        "params": {"profile": "default"},
+    })
+    uncategorized = [
+        t["name"] for t in resp["result"]["tools"] if t["category"] == "Other"
+    ]
+    assert not uncategorized, f"tools missing from _CATEGORIES: {uncategorized}"
 
 
 @pytest.mark.asyncio

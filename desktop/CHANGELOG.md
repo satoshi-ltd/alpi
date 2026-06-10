@@ -11,6 +11,14 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.3.48 — 2026-06-10 — tools panel without the "Other" pile
+
+Requires alpi v0.8.16+.
+
+- **Every tool shows under a meaningful group.** The dozen tools that piled up
+  in "Other" (semantic search, notify, workgroup posting…) now appear under
+  Workspace, Memory, Comms, Agent and Collab.
+
 ## v0.3.47 — 2026-06-10 — notifications always reach you
 
 Requires alpi v0.8.14+.

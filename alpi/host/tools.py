@@ -15,18 +15,18 @@ from alpi.host import server as host_server
 
 
 # UI-side categorisation. Tool names are stable identifiers, so a
-# prefix-based map is plenty without burdening every Tool class with
+# name-based map is plenty without burdening every Tool class with
 # metadata that only the UI consumes.
 _CATEGORIES: list[tuple[str, tuple[str, ...]]] = [
-    ("Filesystem", ("read_file", "write_file", "edit_file", "read_image")),
-    ("Workspace", ("workspace_search", "workspace_index")),
+    ("Filesystem", ("read_file", "write_file", "edit_file", "read_image", "search")),
+    ("Workspace", ("search_workspace", "index_workspace", "learn_file")),
     ("Web", ("web_search", "web_fetch", "web_extract", "browser")),
-    ("Memory", ("memory", "session_search")),
-    ("Comms", ("send_message", "email", "peer")),
-    ("Agent", ("skill", "schedule", "delegate", "research", "todo")),
+    ("Memory", ("memory", "session_search", "recall_sessions", "index_sessions")),
+    ("Comms", ("send_message", "email", "peer", "notify", "ask_user")),
+    ("Agent", ("skill", "schedule", "delegate", "research", "todo", "alpi_knowledge")),
     ("Media", ("tts", "stt")),
     ("System", ("terminal", "db")),
-    ("Collab", ("workgroup",)),
+    ("Collab", ("workgroup_post", "workgroup_search", "index_workgroups")),
 ]
 
 

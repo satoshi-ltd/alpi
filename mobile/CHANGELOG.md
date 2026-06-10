@@ -14,6 +14,14 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.1.38 — 2026-06-10 — tools list without the "Other" pile
+
+Requires alpi v0.8.16+.
+
+- **Every tool shows under a meaningful group.** The dozen tools that piled up
+  in "Other" (semantic search, notify, workgroup posting…) now appear under
+  Workspace, Memory, Comms, Agent and Collab.
+
 ## v0.1.37 — 2026-06-10 — notifications surface even with the app open
 
 Requires alpi v0.8.14+.
