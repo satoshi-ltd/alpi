@@ -14,6 +14,15 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.1.40 — 2026-06-10 — settings apply on their own
+
+Requires alpi v0.8.18+.
+
+- **Saving settings no longer asks you to restart the daemon.** Subsystem
+  toggles and gateway changes saved from the phone now take effect within
+  seconds on their own — the old "restart daemon for it to apply" note is
+  gone because the manual restart is no longer needed.
+
 ## v0.1.39 — 2026-06-10 — survives flaky links and backgrounding
 
 Requires alpi v0.8.17+.

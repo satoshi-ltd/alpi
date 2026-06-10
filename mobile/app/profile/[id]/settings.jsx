@@ -125,7 +125,7 @@ export default function ProfileSettings() {
       await refresh();
       toast({
         title: `${name} ${next ? 'enabled' : 'disabled'}`,
-        message: 'restart daemon for it to apply',
+        message: 'applying — takes a few seconds',
         duration: 2400,
       });
     } catch (e) {
@@ -255,7 +255,7 @@ export default function ProfileSettings() {
         <RowSeparator />
         <Row
           label="Subsystems"
-          helper="tap to enable / disable · daemon restart applies"
+          helper="tap to enable / disable · applies in seconds"
           value={
             <View style={{ flexDirection: 'row', gap: space.s1, flexWrap: 'wrap', justifyContent: 'flex-end', maxWidth: 220 }}>
               {SUBSYSTEMS.map((s) => {
