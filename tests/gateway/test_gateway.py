@@ -101,8 +101,7 @@ async def test_run_agent_reemits_child_agent_message(
                 "text": "Background task finished.",
                 "title": "Task done",
                 "channel": "alpi",
-                "severity": "important",
-                "kind": "result",
+                "type": "warning",
             },
         },
         {"kind": "tool_end", "name": "send_message", "ok": True},
@@ -137,8 +136,7 @@ async def test_run_agent_reemits_child_agent_message(
     assert msg_payload["profile"] == "default"
     assert msg_payload["title"] == "Task done"
     assert msg_payload["body"] == "Background task finished."
-    assert msg_payload["severity"] == "important"
-    assert msg_payload["kind"] == "result"
+    assert msg_payload["type"] == "warning"
     assert msg_payload["output_id"] == out["id"]
     assert msg_payload["deep_link"] == f"/outputs/default/{out['id']}"
 

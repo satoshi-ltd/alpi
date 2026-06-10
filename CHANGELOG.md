@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.8.14 — 2026-06-10 — notifications go to your own apps, not a gateway
+
+- **Alpi can now ping you directly.** Ask to be reminded, alerted, or told when
+  something finishes and the message arrives as a native notification on your
+  paired desktop / mobile apps — no Telegram, no chat id, no gateway setup.
+- **Scheduled jobs notify you the same way.** Set a job to notify you and its
+  reminder or daily summary lands in your app inbox; the old "no chat_id and no
+  default for alpi" failure is gone.
+- **Reaching other people is now explicit.** Sending to a third party (Telegram,
+  email, …) is a separate, deliberate step — so a job meant to remind *you*
+  never accidentally messages someone else.
+- **One way to set a notification's level.** A notification is `info` (default),
+  `warning`, or `error` — no more overlapping "severity" and "kind" knobs to
+  reason about. Your apps colour-code it accordingly.
+
 ## v0.8.13 — 2026-06-10 — security hardening pass
 
 - **Tighter terminal guardrails.** Commands that read credential files

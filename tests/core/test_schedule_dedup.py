@@ -18,7 +18,6 @@ def _add(**kw) -> object:
     kw.setdefault("kind", "cron")
     kw.setdefault("expression", "0 12 * * 1-5")
     kw.setdefault("prompt", "Send the daily summary for core, synapse, lobby")
-    kw.setdefault("chat_id", "12345")
     return Schedule().run(action="add", **kw)
 
 
@@ -104,26 +103,9 @@ def test_update_can_pause_existing_job(tmp_home_no_env: Path) -> None:
     assert jobs[0]["paused"] is True
 
 
-def test_add_rejects_explicit_delivery_to_configured_platform(
-    tmp_home_no_env: Path,
-) -> None:
+def test_add_allows_third_party_delivery_in_prompt(tmp_home_no_env: Path) -> None:
+    # The old auto-delivery guard is gone: a prompt may tell the agent to send
+    # to a third party via send_message (e.g. "post to Telegram") — that's an
+    # explicit action, not a double-send.
     r = _add(prompt="Generate the daily summary and send it to Telegram.")
-
-    assert not r.ok
-    assert "auto-delivered" in r.error
-
-
-def test_update_rejects_explicit_delivery_to_configured_platform(
-    tmp_home_no_env: Path,
-) -> None:
-    _add(prompt="Generate the daily summary")
-    jobs = json.loads((tmp_home_no_env / "schedule" / "jobs.json").read_text())
-
-    r = Schedule().run(
-        action="update",
-        id=jobs[0]["id"],
-        prompt="Generate the daily summary and post it to Telegram.",
-    )
-
-    assert not r.ok
-    assert "auto-delivered" in r.error
+    assert r.ok, r.error

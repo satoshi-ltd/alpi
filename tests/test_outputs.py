@@ -143,10 +143,9 @@ def test_append_rejects_unknown_source(home: Path) -> None:
         )
 
 
-def test_append_normalises_invalid_severity_and_kind(home: Path) -> None:
-    out = _append(home, severity="ULTRA", kind="wibble")
-    assert out["severity"] == "normal"
-    assert out["kind"] == "result"
+def test_append_normalises_invalid_type(home: Path) -> None:
+    out = _append(home, type="wibble")
+    assert out["type"] == "info"
 
 
 def test_delivered_to_round_trips(home: Path) -> None:

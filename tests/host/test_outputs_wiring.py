@@ -4,12 +4,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from alpi import outputs as outputs_mod
 from alpi.gateway import delivery
 from alpi.host import events as host_events
 from alpi.scheduler import run as sched_run
+from alpi.tools.notify import Notify
 from alpi.tools.send_message import SendMessage
 
 
@@ -28,11 +27,11 @@ def _profile_home(tmp_path: Path, name: str) -> Path:
     return h
 
 
-def test_send_message_alpi_creates_output(monkeypatch, tmp_path: Path) -> None:
+def test_notify_creates_output(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setenv("ALPI_HOME", str(tmp_path))
     events = _capture(monkeypatch)
 
-    result = SendMessage().run(text="ping", title="hi")
+    result = Notify().run(text="ping", title="hi")
     assert result.ok, result.error
 
     items = outputs_mod.list_outputs(tmp_path)
@@ -50,25 +49,6 @@ def test_send_message_alpi_creates_output(monkeypatch, tmp_path: Path) -> None:
     created = next(d for k, d in events if k == "output.created")
     assert created["id"] == out["id"]
     assert created["source"] == "send_message"
-
-
-def test_send_message_both_creates_one_output(
-    monkeypatch, tmp_path: Path,
-) -> None:
-    monkeypatch.setenv("ALPI_HOME", str(tmp_path))
-    monkeypatch.setenv("TELEGRAM_ALLOWED_CHAT_IDS", "42")
-    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "x")
-    _capture(monkeypatch)
-    monkeypatch.setattr(
-        delivery, "send_to",
-        lambda *a, **kw: None,
-    )
-
-    SendMessage().run(text="hi", channel="both", platform="telegram", chat_id="42")
-
-    items = outputs_mod.list_outputs(tmp_path)
-    assert len(items) == 1
-    assert sorted(items[0]["delivered_to"]) == ["alpi", "telegram"]
 
 
 def test_send_message_gateway_only_creates_output(
@@ -130,7 +110,7 @@ def test_send_message_failed_gateway_only_creates_no_output(
     assert outputs_mod.list_outputs(tmp_path) == []
 
 
-def test_send_message_suppressed_in_schedule_child_no_output(
+def test_notify_suppressed_in_schedule_child_no_output(
     monkeypatch, tmp_path: Path,
 ) -> None:
     """Schedule child defers output creation to the parent so output_id stays attached to the agent.message that actually reaches the user."""
@@ -139,7 +119,7 @@ def test_send_message_suppressed_in_schedule_child_no_output(
     monkeypatch.setenv("ALPI_PARENT_EMITS_AGENT_MESSAGE", "1")
     events = _capture(monkeypatch)
 
-    result = SendMessage().run(text="ping")
+    result = Notify().run(text="ping")
     assert result.ok
     assert [k for k, _ in events if k == "agent.message"] == []
     assert outputs_mod.list_outputs(tmp_path) == []
@@ -184,8 +164,7 @@ def test_scheduler_failed_creates_output(
     out = items[0]
     assert out["source"] == "schedule"
     assert out["source_id"] == "j-fail"
-    assert out["severity"] == "important"
-    assert out["kind"] == "alert"
+    assert out["type"] == "error"
     assert out["delivered_to"] == []
     assert out["body"] == "boom"
 
@@ -197,7 +176,7 @@ def test_scheduler_failed_creates_output(
 def test_scheduler_done_silent_maintenance_creates_no_output(
     tmp_path: Path, monkeypatch,
 ) -> None:
-    """Silent maintenance jobs (no platform, no stdout) leave no inbox row — they're true noise, not state worth revisiting."""
+    """Silent jobs (notify: false, no stdout) leave no inbox row — they're true noise, not state worth revisiting."""
     home = _profile_home(tmp_path, "ok")
     sched_dir = home / "schedule"
     sched_dir.mkdir()
@@ -217,23 +196,23 @@ def test_scheduler_done_silent_maintenance_creates_no_output(
     assert "output_id" not in done
 
 
-def test_scheduler_done_platform_delivery_creates_output(
+def test_scheduler_done_notify_creates_output(
     tmp_path: Path, monkeypatch,
 ) -> None:
-    """platform=telegram auto-delivers through the gateway path (not send_message); the reply still files an inbox row."""
+    """notify: true pushes the reply to the owner's apps — the scheduler files an inbox row (delivered_to=["alpi"]) and emits agent.message."""
     home = _profile_home(tmp_path, "mirai")
     sched_dir = home / "schedule"
     sched_dir.mkdir()
     (sched_dir / "jobs.json").write_text(
-        '[{"id":"daily","kind":"cron","expression":"* * * * *","prompt":"x","platform":"telegram"}]'
+        '[{"id":"daily","kind":"cron","expression":"* * * * *","prompt":"x","notify":true}]'
     )
     events = _capture(monkeypatch)
     monkeypatch.setattr(
         sched_run, "run_job",
         lambda job, h: sched_run.JobOutcome(
-            True, "delivered to telegram:1",
-            reply="Resumen diario · 5 PRs activos",
-            delivered_to="telegram",
+            True, "notified",
+            reply="Daily summary · 5 open PRs",
+            delivered_to="alpi",
         ),
     )
 
@@ -244,20 +223,23 @@ def test_scheduler_done_platform_delivery_creates_output(
     out = items[0]
     assert out["source"] == "schedule"
     assert out["source_id"] == "daily"
-    assert out["body"] == "Resumen diario · 5 PRs activos"
-    assert out["delivered_to"] == ["telegram"]
-    assert out["severity"] == "normal"
-    assert out["kind"] == "result"
+    assert out["body"] == "Daily summary · 5 open PRs"
+    assert out["delivered_to"] == ["alpi"]
+    assert out["type"] == "info"
 
     done = next(d for k, d in events if k == "schedule.done")
     assert done["output_id"] == out["id"]
     assert done["deep_link"] == f"/outputs/mirai/{out['id']}"
 
+    msg = next(d for k, d in events if k == "agent.message")
+    assert msg["output_id"] == out["id"]
+    assert msg["body"] == "Daily summary · 5 open PRs"
+
 
 def test_scheduler_done_stdout_only_creates_no_output(
     tmp_path: Path, monkeypatch,
 ) -> None:
-    """Stdout-only summary (no platform, no send_message) is not user-facing → no inbox row."""
+    """Stdout-only summary (notify: false, no send_message) is not user-facing → no inbox row."""
     home = _profile_home(tmp_path, "ops")
     sched_dir = home / "schedule"
     sched_dir.mkdir()
@@ -350,7 +332,7 @@ def test_scheduler_send_message_creates_one_output(
     def _run_job(job, h):
         sched_run._emit_agent_messages(h, [{
             "text": "hi", "title": "from cron",
-            "channel": "alpi", "severity": "normal", "kind": "result",
+            "channel": "alpi", "type": "info",
         }])
         return sched_run.JobOutcome(
             True, "agent delivered via send_message; no duplicate reply pushed",
@@ -378,7 +360,7 @@ def test_scheduler_send_message_creates_one_output(
 def test_normalize_gateway_only_send_message_args() -> None:
     """Gateway-only call: channel=telegram → delivered_to=["telegram"]."""
     msg = outputs_mod.normalize_send_message_args({
-        "text": "hola", "channel": "telegram", "chat_id": "1",
+        "text": "hi", "channel": "telegram", "chat_id": "1",
     })
     assert msg is not None
     assert msg["channel"] == "telegram"
@@ -412,13 +394,13 @@ def test_scheduler_gateway_only_creates_output_without_agent_message(
     events = _capture(monkeypatch)
 
     sched_run._emit_agent_messages(home, [{
-        "text": "hola", "channel": "telegram", "chat_id": "1",
+        "text": "hi", "channel": "telegram", "chat_id": "1",
     }])
 
     items = outputs_mod.list_outputs(home)
     assert len(items) == 1
     assert items[0]["delivered_to"] == ["telegram"]
-    assert items[0]["body"] == "hola"
+    assert items[0]["body"] == "hi"
     assert [k for k, _ in events if k == "agent.message"] == []
     assert [k for k, _ in events if k == "output.created"] == ["output.created"]
 

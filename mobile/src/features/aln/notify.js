@@ -1,5 +1,4 @@
 import * as Notifications from 'expo-notifications';
-import { AppState } from 'react-native';
 
 import { deepLinkFor, formatNotification } from './kinds';
 
@@ -31,10 +30,7 @@ export async function requestPermission() {
   }
 }
 
-export async function fireForEvent(event, connection, { force = false } = {}) {
-  if (!force && AppState.currentState === 'active') {
-    return false;
-  }
+export async function fireForEvent(event, connection) {
   const { title, body } = formatNotification(event, connection);
   const link = deepLinkFor(event, connection);
   try {

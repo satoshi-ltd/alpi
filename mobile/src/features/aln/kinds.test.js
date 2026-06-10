@@ -45,15 +45,14 @@ describe('formatNotification', () => {
     expect(body).toBe('rm -rf /');
   });
 
-  it('renders agent.message with custom title + body', () => {
+  it('renders agent.message with custom title + body (info adds no tag)', () => {
     const ev = {
       event: 'agent.message',
       data: {
         profile: 'abby',
         title: 'Meeting in 10 min',
         body: 'Standup with the design team at 10:30.',
-        severity: 'important',
-        kind: 'reminder',
+        type: 'info',
       },
     };
     const { title, body } = formatNotification(ev, conn);
@@ -61,15 +60,24 @@ describe('formatNotification', () => {
     expect(body).toBe('Standup with the design team at 10:30.');
   });
 
-  it('falls back to conn + profile + severity when agent.message has no title', () => {
+  it('appends the type to a custom title for warning/error', () => {
     const ev = {
       event: 'agent.message',
-      data: { profile: 'abby', body: 'hello', severity: 'urgent' },
+      data: { profile: 'abby', title: 'Meeting in 10 min', type: 'warning' },
+    };
+    const { title } = formatNotification(ev, conn);
+    expect(title).toBe('Meeting in 10 min · warning');
+  });
+
+  it('falls back to conn + profile + type when agent.message has no title', () => {
+    const ev = {
+      event: 'agent.message',
+      data: { profile: 'abby', body: 'hello', type: 'error' },
     };
     const { title } = formatNotification(ev, conn);
     expect(title).toContain('home');
     expect(title).toContain('abby');
-    expect(title).toContain('urgent');
+    expect(title).toContain('error');
   });
 
 });

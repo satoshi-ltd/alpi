@@ -3,10 +3,8 @@
 from __future__ import annotations
 
 import json
-import re
 import shlex
 import uuid
-from typing import Any
 
 from alpi.home import get_home
 from alpi.tools.base import Tool, ToolResult
@@ -42,20 +40,15 @@ class Schedule(Tool):
         "\n"
         "`prompt` is what alpi should do when the job fires.\n"
         "\n"
-        "Notification policy: a successful schedule does NOT wake the "
-        "user automatically. `schedule.done` is activity history, not an "
-        "interrupt. If the job is supposed to ping the user with a "
-        "result / reminder / alert, the prompt MUST tell the agent to "
-        "call `send_message(channel=\"alpi\", text=…, title=…)` — that "
-        "is the single explicit channel for proactive notifications "
-        "into the paired Alpi apps. Schedule failures DO notify "
-        "automatically (`schedule.failed`).\n"
+        "Notification: set `notify: true` and the fired reply is pushed "
+        "natively to the user's Alpi apps (use for reminders / alerts / "
+        "results). `notify: false` (default) = silent maintenance: "
+        "`schedule.done` is activity history, not an interrupt. Failures "
+        "always notify (`schedule.failed`).\n"
         "\n"
-        "`platform` is only for gateway delivery (Telegram / IMAP / "
-        "Gmail / Matrix). When set, the reply is AUTO-DELIVERED to "
-        "`platform` + `chat_id` — don't also include 'send to telegram' "
-        "in the prompt, that would send it twice. Leave `platform` "
-        "empty when the user just wants an Alpi-native notification.\n"
+        "To reach a THIRD PARTY (not the user) — e.g. email a report to "
+        "someone — the prompt should call `send_message` (a gateway); that "
+        "is separate from `notify` and not a schedule field.\n"
         "\n"
         "Language: write the `prompt` in ENGLISH, regardless of the "
         "chat language. Schedule prompts are persisted in jobs.json and "
@@ -106,23 +99,15 @@ class Schedule(Tool):
                 "type": "string",
                 "description": "What to ask alpi to do when the job fires.",
             },
-            "platform": {
-                "type": "string",
+            "notify": {
+                "type": "boolean",
                 "description": (
-                    "Gateway platform for auto-delivery of the agent's "
-                    "reply. Set to 'telegram' / 'matrix' / 'imap' / "
-                    "'gmail' only when the user explicitly asked for "
-                    "that gateway. Leave empty for the default "
-                    "Alpi-native flow — to notify the user the prompt "
-                    "should call `send_message(channel=\"alpi\", …)` "
-                    "explicitly; without that, the schedule runs "
-                    "silently."
+                    "true → push the fired reply to the user's Alpi apps "
+                    "(native notification: reminders, alerts, results). "
+                    "false (default) → silent run, activity history only. To "
+                    "message a third party, have the prompt call `send_message`."
                 ),
-                "default": "",
-            },
-            "chat_id": {
-                "type": "string",
-                "description": "Target chat id. Default: first allowlisted chat.",
+                "default": False,
             },
             "id": {"type": "string", "description": "Job id (for update / remove / fire)."},
             "paused": {
@@ -137,8 +122,8 @@ class Schedule(Tool):
                     "to the profile home; the profile's .env is loaded. "
                     "Use for deterministic skills (data sync, file "
                     "processors) where an agent invocation adds nothing. "
-                    "Empty stdout = silent ok. Non-empty stdout is "
-                    "delivered if `platform` is set, otherwise logged."
+                    "Empty stdout = silent ok. Non-empty stdout is pushed "
+                    "to the user's apps if `notify` is true, otherwise logged."
                 ),
                 "default": False,
             },
@@ -150,7 +135,7 @@ class Schedule(Tool):
 
     def run(self, action: str, kind: str = "", expression: str = "",
             after_hours: float | None = None, prompt: str = "",
-            platform: str = "", chat_id: str = "",
+            notify: bool | None = None,
             run_at: str = "", id: str | None = None,
             force: bool = False,
             paused: bool | None = None,
@@ -176,7 +161,7 @@ class Schedule(Tool):
                 if err:
                     return ToolResult(ok=False, output="", error=err)
             else:
-                err = _validate_prompt(prompt, platform)
+                err = _validate_prompt(prompt)
                 if err:
                     return ToolResult(ok=False, output="", error=err)
             if not force:
@@ -199,8 +184,7 @@ class Schedule(Tool):
                 "id": uuid.uuid4().hex[:8],
                 "kind": kind or "cron",
                 "prompt": prompt,
-                "platform": (platform or "").lower(),
-                "chat_id": chat_id or "",
+                "notify": bool(notify),
                 "last_run_at": now_iso if (kind or "cron") == "cron" else None,
             }
             if no_agent:
@@ -264,7 +248,6 @@ class Schedule(Tool):
                 return ToolResult(ok=False, output="", error=f"job {id} not found")
 
             changes: list[str] = []
-            next_platform = (platform or job.get("platform") or "").lower()
             # Snapshot before mutation: needed to detect on↔off transitions
             # and re-validate the inherited prompt with the right rule set.
             was_no_agent = bool(job.get("no_agent"))
@@ -276,21 +259,14 @@ class Schedule(Tool):
                     if err:
                         return ToolResult(ok=False, output="", error=err)
                 else:
-                    err = _validate_prompt(prompt, next_platform)
+                    err = _validate_prompt(prompt)
                     if err:
                         return ToolResult(ok=False, output="", error=err)
                 job["prompt"] = prompt
                 changes.append("prompt")
-            elif platform and not effective_no_agent:
-                err = _validate_prompt(job.get("prompt", ""), next_platform)
-                if err:
-                    return ToolResult(ok=False, output="", error=err)
-            if platform:
-                job["platform"] = next_platform
-                changes.append("platform")
-            if chat_id:
-                job["chat_id"] = chat_id
-                changes.append("chat_id")
+            if notify is not None:
+                job["notify"] = bool(notify)
+                changes.append("notify")
             if paused is not None:
                 job["paused"] = bool(paused)
                 changes.append("paused")
@@ -306,7 +282,7 @@ class Schedule(Tool):
                     # Off-transition: existing prompt was a shell command,
                     # re-run LLM-prompt validators before the agent path consumes it.
                     if was_no_agent:
-                        err = _validate_prompt(job.get("prompt", ""), next_platform)
+                        err = _validate_prompt(job.get("prompt", ""))
                         if err:
                             return ToolResult(ok=False, output="", error=err)
                     job.pop("no_agent", None)
@@ -377,13 +353,6 @@ def _prompt_fingerprint(text: str) -> str:
     return norm[:80]
 
 
-_AUTO_DELIVERY_RE = re.compile(
-    r"\b(?:send|post|deliver|forward)\b.{0,80}\b(?:to|via)\s+"
-    r"(?:telegram|matrix|email|mail|webhook)\b",
-    re.I | re.S,
-)
-
-
 def _looks_like_shell_command(prompt: str) -> bool:
     # Discriminator: shlex-parsed first non-flag arg after `python*` is path-like; `"python is a language"` must stay on the agent path.
     try:
@@ -402,19 +371,13 @@ def _looks_like_shell_command(prompt: str) -> bool:
     return False
 
 
-def _validate_prompt(prompt: str, platform: str) -> str | None:
+def _validate_prompt(prompt: str) -> str | None:
     from alpi.tools.skill import scan_skill_body
     flags = scan_skill_body(prompt)
     if flags:
         return (
             "threat scan blocked scheduled prompt "
             f"(runs unattended with full tool access): {', '.join(flags)}"
-        )
-    if _AUTO_DELIVERY_RE.search(prompt or ""):
-        return (
-            "scheduled job replies are auto-delivered to "
-            f"{(platform or 'telegram').lower()}; remove explicit delivery "
-            "instructions like 'send/post to Telegram' from the prompt"
         )
     return None
 

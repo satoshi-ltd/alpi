@@ -14,6 +14,16 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.1.37 — 2026-06-10 — notifications surface even with the app open
+
+Requires alpi v0.8.14+.
+
+- **Notifications no longer get suppressed in the foreground.** When the agent
+  notifies you, the banner now fires even while the app is open — not only when
+  it's backgrounded.
+- **Alert level in the title.** A notification's type (`warning` / `error`)
+  shows alongside the title; `info` stays clean.
+
 ## v0.1.36 — 2026-06-09 — reasoning block + cleaner tables
 
 Requires alpi v0.8.8+.

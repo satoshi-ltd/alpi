@@ -171,7 +171,7 @@ pub fn dispatch_daemon_frame(app: &AppHandle, frame: &serde_json::Value) {
             );
         }
         "schedule.failed" => {
-            // schedule.done success doesn't notify natively; jobs that want to interrupt call send_message(channel="alpi"). Only failures wake the user.
+            // schedule.done is history-only here; a job with notify:true re-emits as agent.message (handled above). Only failures wake the user from this branch.
             let profile = data
                 .get("profile")
                 .and_then(|v| v.as_str())
@@ -241,9 +241,7 @@ pub fn dispatch_daemon_frame(app: &AppHandle, frame: &serde_json::Value) {
                 .and_then(|v| v.as_str())
                 .unwrap_or("")
                 .to_string();
-            if window_focused(app) && !session_id.is_empty() && is_active("chat", &session_id) {
-                return;
-            }
+            // notify / send_message(channel=alpi) are deliberate pushes — always surface, even on the active chat.
             // output_id is the v0.6.11+ path; older daemons fall back to the chat/profile deeplink.
             let deeplink = if !output_id.is_empty() {
                 Deeplink {

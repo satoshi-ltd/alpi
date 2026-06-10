@@ -7,8 +7,7 @@ Row schema (one JSON object per line):
     source       ``send_message`` | ``schedule``
     source_id    job id when source=schedule, else ``""``
     body         message body
-    severity     ``normal`` | ``important`` | ``urgent``
-    kind         ``reminder`` | ``result`` | ``alert`` | ``ack``
+    type         ``info`` | ``warning`` | ``error``
     status       ``unread`` | ``read``
     session_id   originating chat session, or ``""``
     delivered_to channels the matching notification went out on
@@ -27,8 +26,7 @@ from typing import Any, Iterable
 MAX_OUTPUTS = 500
 
 VALID_SOURCE = frozenset({"send_message", "schedule"})
-VALID_SEVERITY = frozenset({"normal", "important", "urgent"})
-VALID_KIND = frozenset({"reminder", "result", "alert", "ack"})
+VALID_TYPE = frozenset({"info", "warning", "error"})
 VALID_STATUS = frozenset({"unread", "read"})
 
 _lock = threading.Lock()
@@ -89,18 +87,15 @@ def append(
     profile: str,
     source: str,
     body: str,
-    severity: str = "normal",
-    kind: str = "result",
+    type: str = "info",
     session_id: str = "",
     source_id: str = "",
     delivered_to: list[str] | None = None,
 ) -> dict[str, Any]:
     if source not in VALID_SOURCE:
         raise ValueError(f"invalid source: {source!r}")
-    if severity not in VALID_SEVERITY:
-        severity = "normal"
-    if kind not in VALID_KIND:
-        kind = "result"
+    if type not in VALID_TYPE:
+        type = "info"
 
     output = {
         "id": _new_id(),
@@ -109,8 +104,7 @@ def append(
         "source": source,
         "source_id": source_id or "",
         "body": body or "",
-        "severity": severity,
-        "kind": kind,
+        "type": type,
         "status": "unread",
         "session_id": session_id or "",
         "delivered_to": list(delivered_to or []),
@@ -214,12 +208,9 @@ def normalize_send_message_args(args: dict) -> dict | None:
     channel = str(args.get("channel") or "alpi").strip().lower()
     if channel not in _CHILD_VALID_CHANNELS:
         return None
-    severity = str(args.get("severity") or "normal").strip().lower()
-    if severity not in VALID_SEVERITY:
-        severity = "normal"
-    kind = str(args.get("kind") or "result").strip().lower()
-    if kind not in VALID_KIND:
-        kind = "result"
+    type = str(args.get("type") or "info").strip().lower()
+    if type not in VALID_TYPE:
+        type = "info"
     notification_title = str(args.get("title") or "").strip()
     gateway = ""
     if channel == "both":
@@ -236,8 +227,7 @@ def normalize_send_message_args(args: dict) -> dict | None:
     return {
         "notification_title": notification_title,
         "body": text,
-        "severity": severity,
-        "kind": kind,
+        "type": type,
         "channel": channel,
         "delivered_to": delivered_to,
     }
@@ -258,8 +248,7 @@ def record_child_send_message(home: Path, args: dict) -> str:
     profile = profile_name(home)
     body = record["body"]
     notification_title = record["notification_title"] or profile or "alpi"
-    severity = record["severity"]
-    kind = record["kind"]
+    type = record["type"]
     channel = record["channel"]
     delivered_to = list(record["delivered_to"])
 
@@ -269,8 +258,7 @@ def record_child_send_message(home: Path, args: dict) -> str:
             profile=profile,
             source="send_message",
             body=body,
-            severity=severity,
-            kind=kind,
+            type=type,
             delivered_to=delivered_to,
         )
     except Exception:  # noqa: BLE001
@@ -282,8 +270,7 @@ def record_child_send_message(home: Path, args: dict) -> str:
             "profile": profile,
             "id": output_id,
             "source": "send_message",
-            "severity": severity,
-            "kind": kind,
+            "type": type,
         })
     except Exception:  # noqa: BLE001
         pass
@@ -293,8 +280,7 @@ def record_child_send_message(home: Path, args: dict) -> str:
             "profile": profile,
             "title": notification_title,
             "body": body,
-            "severity": severity,
-            "kind": kind,
+            "type": type,
             "output_id": output_id,
             "deep_link": f"/outputs/{profile}/{output_id}",
         }
@@ -306,11 +292,80 @@ def record_child_send_message(home: Path, args: dict) -> str:
     return output_id
 
 
+def _suppress_native_emit() -> bool:
+    return (
+        os.environ.get("ALPI_SCHEDULE_CHILD") == "1"
+        or os.environ.get("ALPI_PARENT_EMITS_AGENT_MESSAGE") == "1"
+    )
+
+
+def create_output(
+    *, text: str, type: str, source: str, source_id: str,
+    delivered_to: list[str],
+) -> dict | None:
+    # Persistence is opportunistic — failures never block delivery.
+    try:
+        from alpi.home import get_active_session, get_home, profile_name
+    except Exception:  # noqa: BLE001
+        return None
+    try:
+        home = get_home()
+        prof = profile_name(home)
+    except Exception:  # noqa: BLE001
+        return None
+    try:
+        session_id = get_active_session() or ""
+    except Exception:  # noqa: BLE001
+        session_id = ""
+    try:
+        return append(
+            home, profile=prof, source=source, source_id=source_id,
+            body=text, type=type, session_id=session_id,
+            delivered_to=delivered_to,
+        )
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def create_output_and_emit_message(
+    *, text: str, title: str, type: str, source: str, source_id: str,
+    delivered_to: list[str],
+) -> str:
+    """Callers must guard with _suppress_native_emit() — schedule/gateway children defer to the parent."""
+    output = create_output(
+        text=text, type=type, source=source, source_id=source_id,
+        delivered_to=delivered_to,
+    )
+    if output is None:
+        return ""
+    payload: dict = {
+        "profile": output["profile"],
+        "title": title or output["profile"] or "alpi",
+        "body": output["body"],
+        "type": output["type"],
+        "output_id": output["id"],
+        "deep_link": f"/outputs/{output['profile']}/{output['id']}",
+    }
+    if output.get("session_id"):
+        payload["session_id"] = output["session_id"]
+    try:
+        from alpi.host import events as host_events
+        host_events.emit("agent.message", payload)
+        host_events.emit("output.created", {
+            "profile": output["profile"],
+            "id": output["id"],
+            "source": output["source"],
+            "type": output["type"],
+        })
+    except Exception:  # noqa: BLE001
+        pass
+    return output["id"]
+
+
 __all__ = [
     "MAX_OUTPUTS",
     "VALID_SOURCE",
-    "VALID_SEVERITY",
-    "VALID_KIND",
+    "VALID_TYPE",
     "VALID_STATUS",
     "append",
     "list_outputs",
@@ -320,4 +375,6 @@ __all__ = [
     "delete",
     "normalize_send_message_args",
     "record_child_send_message",
+    "create_output",
+    "create_output_and_emit_message",
 ]

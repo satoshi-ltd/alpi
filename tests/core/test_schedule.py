@@ -21,27 +21,26 @@ from alpi.tools.schedule import Schedule
 def test_cron_tool_add_cron_job_writes_jobs_json(tmp_home_no_env: Path) -> None:
     out = Schedule().run(action="add", kind="cron",
                      expression="*/5 * * * *", prompt="morning summary",
-                     platform="telegram", chat_id="12345")
+                     notify=True)
     assert out.ok
     data = json.loads((tmp_home_no_env / "schedule" / "jobs.json").read_text())
     assert len(data) == 1
     job = data[0]
     assert job["kind"] == "cron"
     assert job["expression"] == "*/5 * * * *"
-    assert job["chat_id"] == "12345"
-    assert job["platform"] == "telegram"
+    assert job["notify"] is True
+    assert "platform" not in job and "chat_id" not in job
     assert job["last_run_at"] is not None
     datetime.fromisoformat(job["last_run_at"])
 
 
-def test_cron_tool_add_cron_job_silent_when_no_platform(tmp_home_no_env: Path) -> None:
-    """Jobs without ``platform`` are silent maintenance jobs — no
-    gateway dispatch. Reflects the v0.4.28 inversion of the default."""
+def test_cron_tool_add_cron_job_silent_by_default(tmp_home_no_env: Path) -> None:
+    """Without `notify`, a job is silent maintenance — no native push."""
     out = Schedule().run(action="add", kind="cron",
                      expression="0 3 * * *", prompt="reindex workspace")
     assert out.ok
     data = json.loads((tmp_home_no_env / "schedule" / "jobs.json").read_text())
-    assert data[0]["platform"] == ""
+    assert data[0]["notify"] is False
 
 
 def test_cron_tool_add_inactivity_job(tmp_home_no_env: Path) -> None:
@@ -182,7 +181,7 @@ def test_tick_fires_due_jobs_and_updates_last_run(monkeypatch, tmp_home_no_env: 
     # Set up one always-due cron job.
     jobs = [{
         "id": "abc123", "kind": "cron", "expression": "* * * * *",
-        "prompt": "ping", "platform": "telegram", "chat_id": "1",
+        "prompt": "ping",
         "last_run_at": None,
     }]
     scheduler._save_jobs(tmp_home_no_env, jobs)
@@ -206,7 +205,7 @@ def test_tick_skips_not_due(monkeypatch, tmp_home_no_env: Path) -> None:
     now = datetime.now(timezone.utc)
     jobs = [{
         "id": "a", "kind": "cron", "expression": "0 0 1 1 *",  # yearly
-        "prompt": "x", "platform": "telegram", "chat_id": "1",
+        "prompt": "x",
         "last_run_at": now.isoformat(),
     }]
     scheduler._save_jobs(tmp_home_no_env, jobs)
@@ -224,7 +223,7 @@ def test_tick_skips_not_due(monkeypatch, tmp_home_no_env: Path) -> None:
 def test_tick_failure_still_updates_last_run(monkeypatch, tmp_home_no_env: Path) -> None:
     jobs = [{
         "id": "x", "kind": "cron", "expression": "* * * * *",
-        "prompt": "boom", "platform": "telegram", "chat_id": "1",
+        "prompt": "boom",
         "last_run_at": None,
     }]
     scheduler._save_jobs(tmp_home_no_env, jobs)
@@ -245,9 +244,7 @@ def _events_stdout(events: list[dict]) -> str:
     return "\n".join(json.dumps(e) for e in events)
 
 
-def test_run_job_delivers_reply(monkeypatch, tmp_home_no_env: Path) -> None:
-    monkeypatch.setenv("TELEGRAM_ALLOWED_CHAT_IDS", "1")
-    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "x")
+def test_run_job_notifies_when_notify_true(monkeypatch, tmp_home_no_env: Path) -> None:
     captured = {}
 
     class _FakeCompletedProcess:
@@ -262,23 +259,18 @@ def test_run_job_delivers_reply(monkeypatch, tmp_home_no_env: Path) -> None:
 
     monkeypatch.setattr(scheduler.subprocess, "run", fake_run)
 
-    sent = []
-    monkeypatch.setattr(delivery, "send_to",
-                        lambda p, c, t, **_: sent.append((p, c, t)))
-
-    job = {"id": "j", "kind": "cron", "prompt": "p",
-           "platform": "telegram", "chat_id": "1"}
-    ok, msg, _reply = scheduler.run_job(job, tmp_home_no_env)
-    assert ok
+    job = {"id": "j", "kind": "cron", "prompt": "p", "notify": True}
+    outcome = scheduler.run_job(job, tmp_home_no_env)
+    assert outcome.ok
     assert "--no-save" in captured["args"]
     assert captured["env"].get("ALPI_SCHEDULE_CHILD") == "1"
-    assert sent == [("telegram", "1", "hello world")]
-    assert "telegram:1" in msg
+    assert outcome.delivered_to == "alpi"
+    assert outcome.reply == "hello world"
 
 
-def test_run_job_silent_when_no_platform(monkeypatch, tmp_home_no_env: Path) -> None:
-    """Jobs without ``platform`` run silently — work happens, no
-    gateway dispatch, empty reply is success."""
+def test_run_job_silent_when_notify_false(monkeypatch, tmp_home_no_env: Path) -> None:
+    """Jobs without ``notify`` run silently — work happens, no native
+    push, empty reply is success."""
     class _FakeCompletedProcess:
         returncode = 0
         stdout = _events_stdout([])
@@ -295,58 +287,45 @@ def test_run_job_silent_when_no_platform(monkeypatch, tmp_home_no_env: Path) -> 
     monkeypatch.setattr(delivery, "send_to",
                         lambda p, c, t, **_: sent.append((p, c, t)))
 
-    job = {"id": "j", "kind": "cron", "prompt": "reindex", "platform": ""}
+    job = {"id": "j", "kind": "cron", "prompt": "reindex"}
     ok, msg, _reply = scheduler.run_job(job, tmp_home_no_env)
     assert ok
     assert sent == []
     assert "silent" in msg
     joined = " ".join(captured_args["cmd"])
-    # New contract: wrapper teaches the agent to call send_message(channel="alpi") if a notification is wanted; schedule.done alone doesn't wake the user.
+    # Silent-job wrapper teaches the agent: call notify(...) for a native push, send_message for a third party; schedule.done alone doesn't wake the user.
+    assert "notify" in joined
     assert "send_message" in joined
     assert "schedule.done" in joined
-    assert "alpi" in joined
 
 
-def test_run_job_uses_default_chat_id(monkeypatch, tmp_home_no_env: Path) -> None:
-    monkeypatch.setenv("TELEGRAM_ALLOWED_CHAT_IDS", "777")
-    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "x")
-
+def test_run_job_silent_does_not_notify(monkeypatch, tmp_home_no_env: Path) -> None:
     class _FakeCompletedProcess:
         returncode = 0
-        stdout = _events_stdout([{"kind": "reply", "text": "hi"}])
+        stdout = _events_stdout([{"kind": "reply", "text": "did some work"}])
         stderr = ""
 
     monkeypatch.setattr(
         scheduler.subprocess, "run",
         lambda *a, **kw: _FakeCompletedProcess(),
     )
-    sent = []
-    monkeypatch.setattr(delivery, "send_to",
-                        lambda p, c, t, **_: sent.append((p, c, t)))
-
-    job = {"id": "j", "kind": "cron", "prompt": "p",
-           "platform": "telegram", "chat_id": ""}
-    ok, msg, _reply = scheduler.run_job(job, tmp_home_no_env)
-    assert ok
-    assert sent == [("telegram", "777", "hi")]
+    job = {"id": "j", "kind": "cron", "prompt": "p", "notify": False}
+    outcome = scheduler.run_job(job, tmp_home_no_env)
+    assert outcome.ok
+    assert outcome.delivered_to == ""
+    assert "silent" in outcome.message
 
 
-def test_run_job_skips_delivery_when_send_message_used(
+def test_run_job_skips_auto_notify_when_agent_already_notified(
         monkeypatch, tmp_home_no_env: Path) -> None:
-    """If the sub-agent called ``send_message`` during the scheduled
-    turn, the daemon must NOT also push the assistant's reply — that
-    was the "Mirai's standup" + "Mensaje enviado" duplicate bug.
-    """
-    monkeypatch.setenv("TELEGRAM_ALLOWED_CHAT_IDS", "1")
-    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "x")
-
+    """If the sub-agent natively notified the user (notify), the daemon
+    must NOT also auto-notify the reply."""
     class _FakeCompletedProcess:
         returncode = 0
         stdout = _events_stdout([
-            {"kind": "tool_start", "name": "send_message",
-             "preview": "telegram · Mirai's standup"},
-            {"kind": "tool_end", "name": "send_message", "ok": True},
-            {"kind": "reply", "text": "Mensaje enviado"},
+            {"kind": "tool_start", "name": "notify", "preview": "standup"},
+            {"kind": "tool_end", "name": "notify", "ok": True},
+            {"kind": "reply", "text": "done"},
         ])
         stderr = ""
 
@@ -354,17 +333,11 @@ def test_run_job_skips_delivery_when_send_message_used(
         scheduler.subprocess, "run",
         lambda *a, **kw: _FakeCompletedProcess(),
     )
-    sent = []
-    monkeypatch.setattr(delivery, "send_to",
-                        lambda p, c, t, **_: sent.append((p, c, t)))
-
-    job = {"id": "j", "kind": "cron", "prompt": "send 'x' via telegram",
-           "platform": "telegram", "chat_id": "1"}
-    ok, msg, _reply = scheduler.run_job(job, tmp_home_no_env)
-    assert ok
-    assert sent == []
-    assert "send_message" in msg
-    assert "no duplicate" in msg
+    job = {"id": "j", "kind": "cron", "prompt": "p", "notify": True}
+    outcome = scheduler.run_job(job, tmp_home_no_env)
+    assert outcome.ok
+    assert outcome.delivered_to == "external"
+    assert "no duplicate" in outcome.message
 
 
 # --------------------------------------------------------------------
@@ -409,8 +382,7 @@ def test_no_agent_silent_when_no_stdout(monkeypatch, tmp_home_no_env: Path) -> N
                         lambda p, c, t, **_: sent.append((p, c, t)))
 
     job = {"id": "j", "kind": "cron", "no_agent": True,
-           "prompt": f"python3 {script}",
-           "platform": "", "chat_id": ""}
+           "prompt": f"python3 {script}"}
     ok, msg, _reply = scheduler.run_job(job, tmp_home_no_env)
 
     assert ok
@@ -419,30 +391,22 @@ def test_no_agent_silent_when_no_stdout(monkeypatch, tmp_home_no_env: Path) -> N
     assert spawn_calls == [["python3", script]]
 
 
-def test_no_agent_delivers_stdout_when_platform_set(
+def test_no_agent_notifies_stdout_when_notify_true(
         monkeypatch, tmp_home_no_env: Path) -> None:
-    """Non-empty stdout becomes the reply and is pushed via delivery
-    when the job has a platform configured."""
-    monkeypatch.setenv("TELEGRAM_ALLOWED_CHAT_IDS", "42")
-    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "x")
+    """Non-empty stdout becomes the reply and is pushed natively when notify=True."""
     script = _stub_skill_path(tmp_home_no_env)
 
     monkeypatch.setattr(
         scheduler.subprocess, "run",
         lambda *a, **kw: _fake_completed(rc=0, stdout="hello from script\n"),
     )
-    sent = []
-    monkeypatch.setattr(delivery, "send_to",
-                        lambda p, c, t, **_: sent.append((p, c, t)))
-
     job = {"id": "j", "kind": "cron", "no_agent": True,
-           "prompt": f"python3 {script}",
-           "platform": "telegram", "chat_id": "42"}
-    ok, msg, _reply = scheduler.run_job(job, tmp_home_no_env)
+           "prompt": f"python3 {script}", "notify": True}
+    outcome = scheduler.run_job(job, tmp_home_no_env)
 
-    assert ok
-    assert sent == [("telegram", "42", "hello from script")]
-    assert "telegram:42" in msg
+    assert outcome.ok
+    assert outcome.delivered_to == "alpi"
+    assert outcome.reply == "hello from script"
 
 
 def test_no_agent_nonzero_exit_fails_with_stderr(
@@ -456,7 +420,7 @@ def test_no_agent_nonzero_exit_fails_with_stderr(
     )
 
     job = {"id": "j", "kind": "cron", "no_agent": True,
-           "prompt": f"python3 {script}", "platform": "", "chat_id": ""}
+           "prompt": f"python3 {script}"}
     ok, msg, _reply = scheduler.run_job(job, tmp_home_no_env)
 
     assert not ok
@@ -480,8 +444,7 @@ def test_no_agent_expands_alpi_home_and_loads_dotenv(
     monkeypatch.setattr(scheduler.subprocess, "run", fake_run)
 
     job = {"id": "j", "kind": "cron", "no_agent": True,
-           "prompt": "python3 ${ALPI_HOME}/skills/personal/foo/scripts/run.py",
-           "platform": "", "chat_id": ""}
+           "prompt": "python3 ${ALPI_HOME}/skills/personal/foo/scripts/run.py"}
     ok, _, _ = scheduler.run_job(job, tmp_home_no_env)
 
     assert ok
@@ -542,7 +505,7 @@ def test_no_agent_run_rejects_command_outside_skills(
                         lambda *a, **kw: spawn_calls.append(a) or None)
 
     job = {"id": "j", "kind": "cron", "no_agent": True,
-           "prompt": "/bin/echo gotcha", "platform": "", "chat_id": ""}
+           "prompt": "/bin/echo gotcha"}
     ok, msg, _reply = scheduler.run_job(job, tmp_home_no_env)
 
     assert not ok
@@ -565,8 +528,7 @@ def test_no_agent_env_profile_wins_over_daemon_env(
 
     monkeypatch.setattr(scheduler.subprocess, "run", fake_run)
     job = {"id": "j", "kind": "cron", "no_agent": True,
-           "prompt": f"python3 {script}",
-           "platform": "", "chat_id": ""}
+           "prompt": f"python3 {script}"}
     ok, _, _ = scheduler.run_job(job, tmp_home_no_env)
 
     assert ok
@@ -589,8 +551,7 @@ def test_no_agent_skips_threat_scan(monkeypatch, tmp_home_no_env: Path) -> None:
     )
 
     job = {"id": "j", "kind": "cron", "no_agent": True,
-           "prompt": f"python3 {script}",
-           "platform": "", "chat_id": ""}
+           "prompt": f"python3 {script}"}
     ok, _, _ = scheduler.run_job(job, tmp_home_no_env)
 
     assert ok
@@ -654,12 +615,8 @@ def test_fire_by_id_runs_matching_job(monkeypatch, tmp_home_no_env: Path) -> Non
     jobs_path = scheduler.jobs_path(tmp_home_no_env)
     jobs_path.parent.mkdir(parents=True, exist_ok=True)
     jobs_path.write_text(json.dumps([
-        {"id": "alpha", "kind": "cron", "prompt": "hola",
-         "platform": "telegram", "chat_id": "1",
-         "expression": "0 9 * * *"},
-        {"id": "beta", "kind": "once", "prompt": "otro",
-         "platform": "telegram", "chat_id": "1",
-         "run_at": "2099-01-01T00:00:00"},
+        {"id": "alpha", "kind": "cron", "prompt": "hi", "expression": "0 9 * * *"},
+        {"id": "beta", "kind": "once", "prompt": "other", "run_at": "2099-01-01T00:00:00"},
     ], indent=2))
 
     called_with = {}
@@ -668,16 +625,16 @@ def test_fire_by_id_runs_matching_job(monkeypatch, tmp_home_no_env: Path) -> Non
         called_with["id"] = job["id"]
         called_with["prompt"] = job["prompt"]
         return scheduler.JobOutcome(
-            True, "delivered to telegram:1",
-            reply="hola world", delivered_to="telegram",
+            True, "ran alpha",
+            reply="hi world", delivered_to="alpi",
         )
 
     monkeypatch.setattr(scheduler, "run_job", fake_run_job)
 
     ok, msg = scheduler.fire_by_id(tmp_home_no_env, "alpha")
     assert ok, msg
-    assert called_with == {"id": "alpha", "prompt": "hola"}
-    assert "telegram:1" in msg
+    assert called_with == {"id": "alpha", "prompt": "hi"}
+    assert "ran alpha" in msg
 
 
 def test_fire_by_id_unknown_returns_error(tmp_home_no_env: Path) -> None:
@@ -696,9 +653,7 @@ def test_fire_by_id_does_not_consume_once_job(
     jobs_path = scheduler.jobs_path(tmp_home_no_env)
     jobs_path.parent.mkdir(parents=True, exist_ok=True)
     jobs_path.write_text(json.dumps([
-        {"id": "tomorrow", "kind": "once", "prompt": "remind me",
-         "platform": "telegram", "chat_id": "1",
-         "run_at": "2099-01-01T09:00:00"},
+        {"id": "tomorrow", "kind": "once", "prompt": "remind me",         "run_at": "2099-01-01T09:00:00"},
     ], indent=2))
 
     monkeypatch.setattr(scheduler, "run_job", lambda job, home: scheduler.JobOutcome(True, "ok"))
@@ -718,7 +673,7 @@ def test_schedule_tool_fire_action(monkeypatch, tmp_home_no_env: Path) -> None:
 
     # Seed one job.
     Schedule().run(action="add", kind="cron", expression="0 9 * * *",
-                   prompt="ping", chat_id="1")
+                   prompt="ping", notify=True)
 
     # Look up its id from jobs.json.
     jobs = json.loads((tmp_home_no_env / "schedule" / "jobs.json").read_text())
@@ -728,13 +683,13 @@ def test_schedule_tool_fire_action(monkeypatch, tmp_home_no_env: Path) -> None:
     monkeypatch.setattr(
         scheduler, "run_job",
         lambda job, home: scheduler.JobOutcome(
-            True, "delivered to telegram:1", reply="x", delivered_to="telegram",
+            True, "notified", reply="x", delivered_to="alpi",
         ),
     )
 
     r = Schedule().run(action="fire", id=jid)
     assert r.ok, r.error
-    assert "telegram:1" in r.output
+    assert "notified" in r.output
 
 
 def test_schedule_tool_fire_requires_id(tmp_home_no_env: Path,

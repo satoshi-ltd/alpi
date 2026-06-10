@@ -1,4 +1,4 @@
-"""Pin the structured payload of `schedule.done` / `schedule.failed`: `reply`, `delivered_to`, and `silent` are populated correctly across every branch (agent vs no_agent, platform vs silent, success vs failure, send_message dedup, oversized reply cap)."""
+"""Pin the structured payload of `schedule.done` / `schedule.failed`: `reply`, `delivered_to`, and `silent` across branches (agent vs no_agent, notify vs silent, success vs failure, native-notify dedup, oversized reply cap)."""
 from __future__ import annotations
 
 import json
@@ -6,7 +6,6 @@ from pathlib import Path
 
 import pytest
 
-from alpi.gateway import delivery
 from alpi.scheduler import run as scheduler
 
 
@@ -50,7 +49,7 @@ def test_event_carries_agent_reply_when_no_platform(
     emits = _capture_emit(monkeypatch)
     _seed_job(tmp_home_no_env, {
         "id": "reindex", "kind": "cron", "expression": "* * * * *",
-        "prompt": "reindex", "platform": "", "chat_id": "", "last_run_at": None,
+        "prompt": "reindex", "last_run_at": None,
     })
 
     scheduler.tick(tmp_home_no_env)
@@ -64,47 +63,43 @@ def test_event_carries_agent_reply_when_no_platform(
     assert payload["delivered_to"] == ""
 
 
-def test_event_carries_agent_reply_when_platform_delivered(
+def test_event_carries_agent_reply_when_notify_true(
     monkeypatch, tmp_home_no_env: Path,
 ) -> None:
-    """Platform-delivered job → `reply` mirrors the gateway text, `delivered_to` names the channel for client-side dedup."""
-    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "x")
-    monkeypatch.setenv("TELEGRAM_ALLOWED_CHAT_IDS", "1")
+    """notify:true job → reply mirrors the agent output, delivered_to='alpi', and a native push (agent.message) is emitted."""
 
     class _Proc:
         returncode = 0
-        stdout = _events_stdout([{"kind": "reply", "text": "hola"}])
+        stdout = _events_stdout([{"kind": "reply", "text": "hi there"}])
         stderr = ""
 
     monkeypatch.setattr(scheduler.subprocess, "run", lambda *a, **kw: _Proc())
-    monkeypatch.setattr(delivery, "send_to", lambda *a, **kw: None)
     emits = _capture_emit(monkeypatch)
 
     _seed_job(tmp_home_no_env, {
         "id": "greet", "kind": "cron", "expression": "* * * * *",
-        "prompt": "say hi", "platform": "telegram", "chat_id": "1",
-        "last_run_at": None,
+        "prompt": "say hi", "notify": True, "last_run_at": None,
     })
     scheduler.tick(tmp_home_no_env)
 
     payload = [e for e in emits if e[0] == "schedule.done"][0][1]
-    assert payload["reply"] == "hola"
-    assert "telegram:1" in payload["message"]
-    assert payload["delivered_to"] == "telegram"
+    assert payload["reply"] == "hi there"
+    assert payload["delivered_to"] == "alpi"
     assert payload["silent"] is False
+    assert any(k == "agent.message" for k, _ in emits)  # native push fired
 
 
-def test_event_reply_empty_when_send_message_handled_delivery(
+def test_event_reply_empty_when_agent_notified(
     monkeypatch, tmp_home_no_env: Path,
 ) -> None:
-    """Agent self-delivered via send_message → `reply` empty, `delivered_to`="external" so clients don't re-notify."""
+    """Agent natively notified (notify) → reply empty, delivered_to='external' so clients don't re-notify."""
 
     class _Proc:
         returncode = 0
         stdout = _events_stdout([
-            {"kind": "tool_start", "name": "send_message"},
-            {"kind": "tool_end", "name": "send_message", "ok": True},
-            {"kind": "reply", "text": "ya enviado"},
+            {"kind": "tool_start", "name": "notify"},
+            {"kind": "tool_end", "name": "notify", "ok": True},
+            {"kind": "reply", "text": "already sent"},
         ])
         stderr = ""
 
@@ -113,15 +108,14 @@ def test_event_reply_empty_when_send_message_handled_delivery(
 
     _seed_job(tmp_home_no_env, {
         "id": "self", "kind": "cron", "expression": "* * * * *",
-        "prompt": "post", "platform": "telegram", "chat_id": "1",
-        "last_run_at": None,
+        "prompt": "post", "notify": True, "last_run_at": None,
     })
     scheduler.tick(tmp_home_no_env)
 
     payload = [e for e in emits if e[0] == "schedule.done"][0][1]
     assert payload["reply"] == ""
-    assert "send_message" in payload["message"]
     assert payload["delivered_to"] == "external"
+    assert "no duplicate" in payload["message"]
     assert payload["silent"] is False
 
 
@@ -139,8 +133,7 @@ def test_send_message_from_schedule_reemits_agent_message_in_daemon(
                 "args": {
                     "text": "Research finished.",
                     "title": "Research done",
-                    "severity": "important",
-                    "kind": "result",
+                    "type": "warning",
                     "channel": "alpi",
                 },
             },
@@ -154,7 +147,7 @@ def test_send_message_from_schedule_reemits_agent_message_in_daemon(
 
     _seed_job(tmp_home_no_env, {
         "id": "research", "kind": "cron", "expression": "* * * * *",
-        "prompt": "notify when done", "platform": "", "chat_id": "",
+        "prompt": "notify when done",
         "last_run_at": None,
     })
     scheduler.tick(tmp_home_no_env)
@@ -165,8 +158,7 @@ def test_send_message_from_schedule_reemits_agent_message_in_daemon(
     assert msg["profile"] == "default"
     assert msg["title"] == "Research done"
     assert msg["body"] == "Research finished."
-    assert msg["severity"] == "important"
-    assert msg["kind"] == "result"
+    assert msg["type"] == "warning"
     assert msg["output_id"]
     assert msg["deep_link"] == f"/outputs/{msg['profile']}/{msg['output_id']}"
     done = [d for k, d in emits if k == "schedule.done"][0]
@@ -197,7 +189,7 @@ def test_failed_send_message_does_not_count_as_delivered(
 
     _seed_job(tmp_home_no_env, {
         "id": "fallback", "kind": "cron", "expression": "* * * * *",
-        "prompt": "notify when done", "platform": "", "chat_id": "",
+        "prompt": "notify when done",
         "last_run_at": None,
     })
     scheduler.tick(tmp_home_no_env)
@@ -223,7 +215,7 @@ def test_event_reply_empty_on_failure(
 
     _seed_job(tmp_home_no_env, {
         "id": "bad", "kind": "cron", "expression": "* * * * *",
-        "prompt": "fail", "platform": "", "chat_id": "", "last_run_at": None,
+        "prompt": "fail", "last_run_at": None,
     })
     scheduler.tick(tmp_home_no_env)
 
@@ -250,7 +242,7 @@ def test_event_reply_truncated_at_2000_chars(
 
     _seed_job(tmp_home_no_env, {
         "id": "big", "kind": "cron", "expression": "* * * * *",
-        "prompt": "verbose", "platform": "", "chat_id": "", "last_run_at": None,
+        "prompt": "verbose", "last_run_at": None,
     })
     scheduler.tick(tmp_home_no_env)
 
@@ -279,7 +271,7 @@ def _trivial_skill_script(tmp_home_no_env: Path) -> Path:
 def test_event_carries_script_stdout_as_reply(
     monkeypatch, tmp_home_no_env: Path, _trivial_skill_script: Path,
 ) -> None:
-    """no_agent + no platform → `reply` is the script's clean stdout (the abby reminder path)."""
+    """no_agent + notify false → `reply` is the script's clean stdout (the abby reminder path)."""
 
     class _Proc:
         returncode = 0
@@ -293,7 +285,7 @@ def test_event_carries_script_stdout_as_reply(
         "id": "rem", "kind": "cron", "expression": "* * * * *",
         "no_agent": True,
         "prompt": f"python3 {_trivial_skill_script}",
-        "platform": "", "chat_id": "", "last_run_at": None,
+        "last_run_at": None,
     })
     scheduler.tick(tmp_home_no_env)
 
@@ -319,7 +311,7 @@ def test_event_reply_empty_for_silent_script_with_no_stdout(
         "id": "rem", "kind": "cron", "expression": "* * * * *",
         "no_agent": True,
         "prompt": f"python3 {_trivial_skill_script}",
-        "platform": "", "chat_id": "", "last_run_at": None,
+        "last_run_at": None,
     })
     scheduler.tick(tmp_home_no_env)
 
@@ -328,3 +320,33 @@ def test_event_reply_empty_for_silent_script_with_no_stdout(
     assert payload["message"] == "silent run ok"
     assert payload["silent"] is True
     assert payload["delivered_to"] == ""
+
+
+def test_notify_true_delivers_native_inbox_without_gateway(
+    monkeypatch, tmp_home_no_env: Path,
+) -> None:
+    """`notify: true` delivers a native inbox notification — no gateway,
+    no chat_id, no "no chat_id and no default" failure."""
+
+    class _Proc:
+        returncode = 0
+        stdout = _events_stdout([{"kind": "reply", "text": "standup at 10"}])
+        stderr = ""
+
+    monkeypatch.setattr(scheduler.subprocess, "run", lambda *a, **kw: _Proc())
+    emits = _capture_emit(monkeypatch)
+    _seed_job(tmp_home_no_env, {
+        "id": "remind", "kind": "cron", "expression": "* * * * *",
+        "prompt": "remind me", "notify": True, "last_run_at": None,
+    })
+
+    scheduler.tick(tmp_home_no_env)
+
+    done = [p for k, p in emits if k == "schedule.done"]
+    assert len(done) == 1
+    payload = done[0]
+    assert payload["delivered_to"] == "alpi"
+    assert payload["reply"] == "standup at 10"
+    assert "no chat_id" not in payload["message"]
+    assert payload.get("output_id")  # a native inbox output was filed
+    assert any(k == "output.created" for k, _ in emits)

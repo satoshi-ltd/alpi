@@ -25,7 +25,7 @@
 | Web/browser | `web_search`, `web_fetch`, `web_extract`, `browser`, `research` | Web information; `research` is read-only sub-agent work. |
 | Memory | `memory`, `todo` | Durable profile memory and per-turn task tracking. |
 | Skills/state | `skill`, `db` | Create/run reusable skills; skill-local SQLite state. |
-| Communication | `send_message`, `email`, `schedule`, `peer`, `workgroup`, `ask_user` | Native messages, schedules, ALP peers/workgroups, clarification UI. |
+| Communication | `notify`, `send_message`, `email`, `schedule`, `peer`, `workgroup`, `ask_user` | Push to the owner's apps, send to third parties, schedules, ALP peers/workgroups, clarification UI. |
 | Media | `read_image`, `tts`, `stt` | Vision, speech synthesis, speech transcription. |
 | Delegation | `delegate` | Write-capable focused sub-agent. |
 | Self-knowledge | `alpi_knowledge` | Packaged docs about alpi. |
@@ -53,6 +53,22 @@ model actually sees.
   it as a pre-confirmation for terminal approvals.
 - **Reusable procedure**: make or update a skill with `skill`, not ad-hoc files
   under `skills/`.
+- **Alert the owner**: use `notify(text, title?, type?)` to push to the user's
+  own paired apps — a reminder, an alert, a finished result. `type` is the only
+  knob: `info` (default, neutral) | `warning` (prominent) | `error` (red alert
+  styling). Works in chat, skills, and scheduled jobs. If the user asks to be
+  notified / pinged / reminded — even mid-chat — that request IS an order to
+  call `notify`; don't just answer in text. Only skip it when you'd be firing it
+  purely to duplicate an answer the user is already reading and never asked to
+  be pushed.
+- **Reach a third party**: use `send_message(text, channel, chat_id?, attachment?)`
+  to deliver through a gateway (Telegram, email, matrix, webhook) to someone
+  other than the owner. `channel` is required and names the gateway. Sending to
+  a gateway is NOT notifying the owner, and it has no `type` axis — gateway
+  messages carry no badge. To reach the owner, use `notify`.
+- **Scheduled delivery**: a job pushes to the owner's apps when `notify: true`
+  (default silent). To also reach a third party, the job's prompt calls
+  `send_message` explicitly — it is an action, not a schedule field.
 
 ## Attachments
 

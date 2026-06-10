@@ -180,7 +180,7 @@ the behaviour, so the next session inherits the fix.
 Do not add `scripts/run.py` by default. Add it only when the skill can
 run as deterministic local Python (files, normal libraries, local
 state). If the skill depends on agent tools or MCP methods
-(`memory`, `schedule`, `send_message`, `bitbucket__...`, etc.), keep it
+(`memory`, `schedule`, `notify`, `send_message`, `bitbucket__...`, etc.), keep it
 prose-only in SKILL.md; `skill(action="run")` will return those
 instructions and you must call the real tools yourself. Tools/MCP
 methods are not importable Python APIs.

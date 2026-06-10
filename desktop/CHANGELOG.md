@@ -11,6 +11,16 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.3.47 — 2026-06-10 — notifications always reach you
+
+Requires alpi v0.8.14+.
+
+- **Notifications no longer get swallowed.** When the agent notifies you — a
+  reminder, an alert, a finished task — the banner now shows even if you're
+  looking at that very chat. Before, it was silently suppressed.
+- **Alerts are colour-coded.** Notifications carry a type: `error` shows a red
+  badge, `warning` an amber one, `info` stays neutral.
+
 ## v0.3.46 — 2026-06-09 — usage chart in Settings
 
 Requires alpi v0.8.12+.

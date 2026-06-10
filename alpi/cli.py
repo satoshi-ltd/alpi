@@ -200,7 +200,8 @@ def _run_once(
     from alpi.alp import mention as alp_mention
     parsed = alp_mention.parse(user_text, home=h)
     if parsed is not None:
-        import asyncio as _aio, time as _t
+        import asyncio as _aio
+        import time as _t
         from alpi.tui.formatting import arg_hint as _arg_hint
         from alpi.session import ToolLog as _ToolLog
         started = _t.time()
@@ -260,11 +261,11 @@ def _run_once(
                 "name": ev.name,
                 "preview": arg_hint(ev.name, ev.args or {}),
             }
-            if ev.name == "send_message":
+            if ev.name in ("send_message", "notify"):
                 args = ev.args or {}
                 payload["args"] = {
                     k: args[k] for k in (
-                        "text", "title", "severity", "kind",
+                        "text", "title", "type",
                         "channel", "platform",
                     ) if k in args
                 }
@@ -784,7 +785,6 @@ def gateway() -> None:
 def gateway_probe(ctx: click.Context, name: str) -> None:
     """Probe a gateway and print JSON ``{status, reason?}``."""
     import json
-    from alpi import home as home_mod
 
     h: Path = ctx.obj["home"]
     env = _read_profile_env(h)
@@ -1041,8 +1041,10 @@ def voice_test(ctx: click.Context, voice_override: str | None) -> None:
     except FileNotFoundError as e:
         reason = f"player missing: {e}"
     if not reason:
-        try: out.unlink()
-        except OSError: pass
+        try:
+            out.unlink()
+        except OSError:
+            pass
         click.echo(f"played: {phrase}")
         return
     click.echo(f"saved: {out} (player failed: {reason})")
@@ -2087,7 +2089,7 @@ def _devices_setup(h: Path) -> None:
             _devices_network_setup(h)
             continue
         if isinstance(choice, tuple) and choice[0] == "device":
-            _device_detail(choice[1])
+            _device_detail(h, choice[1])
             continue
 
 
@@ -2334,7 +2336,7 @@ def _devices_network_setup(h: Path) -> None:
     ui.ok_and_wait(f"remote access target: {target}:{port}, pairing name: {name_target}{msg}")
 
 
-def _device_detail(token_id: str) -> None:
+def _device_detail(h: Path, token_id: str) -> None:
     from alpi import ui
     from alpi.host import devices as devices_mod
 
@@ -3319,7 +3321,7 @@ def profile_create(name: str) -> None:
     )
     default_env = Path.home() / ".alpi" / ".env"
     if default_env.exists():
-        click.echo(f"  # — or, to reuse the default profile's setup:")
+        click.echo("  # — or, to reuse the default profile's setup:")
         click.echo(f"  cp {default_env} {h / '.env'}")
 
 
@@ -3331,9 +3333,8 @@ def profile_create(name: str) -> None:
               help="Uninstall an installed service first instead of refusing.")
 def profile_remove(name: str, yes: bool, force: bool) -> None:
     """Permanently remove a profile directory after safety checks."""
-    import shutil
 
-    from alpi import service, ui
+    from alpi import ui
 
     if name in {"default", ""}:
         raise click.ClickException("the default profile cannot be removed")
@@ -3386,13 +3387,12 @@ def _profile_summary(home_dir: Path) -> list[str]:
         lines.append(f"memories: {len(files)} file(s)")
     skills = home_dir / "skills"
     if skills.exists():
-        dirs = [p for p in skills.rglob("*") if p.is_dir() and p.parent == skills]
         count = sum(1 for p in skills.rglob("SKILL.md"))
         if count:
             lines.append(f"skills:   {count} user-created")
     env = home_dir / ".env"
     if env.exists():
-        lines.append(f".env:     present (credentials will be deleted)")
+        lines.append(".env:     present (credentials will be deleted)")
     if not lines:
         lines.append("empty profile — nothing to lose.")
     return lines
@@ -3404,7 +3404,6 @@ def _delete_profile_status(h: Path, profile_name: str) -> str:
 
 def _delete_profile_wizard(h: Path, profile_name: str) -> bool:
     """Return True if deleted; caller must exit the setup loop."""
-    import shutil
     from alpi import ui
 
     ui.banner(ui.crumb("setup", "danger", f"delete {profile_name}"), subtitle=str(h), home=h)
@@ -3630,7 +3629,6 @@ def workgroup() -> None:
 @click.pass_context
 def workgroup_list(ctx: click.Context) -> None:
     """Show workgroups this profile is hub of and member of."""
-    from alpi import ui as ui_mod
     from alpi.alp import subscription as sub_mod
     from alpi.alp import workgroup as wg_mod
 
@@ -3665,7 +3663,7 @@ def workgroup_show(ctx: click.Context, wg_id: str) -> None:
     if wg is not None:
         kp = load_or_generate(h)
         click.echo(f"{wg.meta.name}  ({wg.meta.id})")
-        click.echo(f"  role     hub")
+        click.echo("  role     hub")
         click.echo(f"  members  {len(wg.members)}")
         click.echo(f"  paused   {wg.meta.paused}")
         click.echo(f"  key v    {wg.meta.current_key_version}")
@@ -3694,7 +3692,7 @@ def workgroup_show(ctx: click.Context, wg_id: str) -> None:
     if s is None:
         raise click.ClickException(f"workgroup {wg_id!r} not found")
     click.echo(f"{s.name}  ({s.wg_id})")
-    click.echo(f"  role     member")
+    click.echo("  role     member")
     click.echo(f"  hub      @{s.hub_id}")
     click.echo(f"  cursor   seq {s.last_seq}")
     click.echo(f"  keys     v{s.latest_version()} cached")
@@ -4373,7 +4371,6 @@ def _digest_to_json(report) -> str:
 
 def _render_digest(report, console) -> None:
     """Rich-formatted digest, organised so the operator can decide what to act on in a single scan."""
-    from rich.table import Table
 
     console.print(f"[b]digest[/b] · window: {report.window_days:.1f}d")
     console.print("")

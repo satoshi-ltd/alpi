@@ -41,9 +41,10 @@ function sourceTag(row) {
 }
 
 
-function severityTag(row) {
-  if (!row?.severity || row.severity === "normal") return null;
-  return row.severity;
+function typeTag(row) {
+  const t = row?.type;
+  if (!t || t === "info") return null;
+  return t;
 }
 
 
@@ -169,7 +170,7 @@ export default function NotificationsModal({
         row.title,
         row.profile,
         sourceTag(row),
-        row.severity,
+        row.type,
       ].filter(Boolean).join(" ").toLowerCase();
       return hay.includes(q);
     });
@@ -364,14 +365,14 @@ function NotificationRow({ row, accent, active, onSelect, onDelete }) {
 
 function DetailPane({ row, accent, onCopy, onAction, action }) {
   const label = profileLabel(row.profile);
-  const sev = severityTag(row);
+  const tag = typeTag(row);
 
   return (
     <article className={styles.article}>
       <div className={styles.detailMeta}>
-        {sev === "important" || sev === "urgent" || row.kind === "alert" ? (
-          <span className={styles.detailMetaError}>
-            <Mono>{row.kind === "alert" ? "ERROR" : sev?.toUpperCase()}</Mono>
+        {tag ? (
+          <span className={tag === "error" ? styles.detailMetaError : styles.detailMetaWarning}>
+            <Mono>{tag.toUpperCase()}</Mono>
             <span className={styles.detailMetaDot}>·</span>
           </span>
         ) : null}

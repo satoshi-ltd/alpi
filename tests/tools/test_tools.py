@@ -31,9 +31,9 @@ def test_registry_has_all_expected_tools() -> None:
 
 def test_read_write_roundtrip(tmp_home_no_env: Path) -> None:
     target = tmp_home_no_env / "hello.txt"
-    assert WriteFile().run(path=str(target), content="hola alpi").ok
+    assert WriteFile().run(path=str(target), content="hi alpi").ok
     r = ReadFile().run(path=str(target))
-    assert r.ok and "hola alpi" in r.output
+    assert r.ok and "hi alpi" in r.output
 
 
 def test_edit_file_single_match(tmp_home_no_env: Path) -> None:
@@ -56,9 +56,9 @@ def test_edit_file_rejects_multi_match(tmp_home_no_env: Path) -> None:
 
 
 def test_terminal_success() -> None:
-    r = Terminal().run(command="echo hola")
+    r = Terminal().run(command="echo hi")
     assert r.ok
-    assert "hola" in r.output
+    assert "hi" in r.output
     assert "[exit 0]" in r.output
 
 
@@ -561,6 +561,7 @@ def test_delegate_resolves_toolsets_and_filters_blocked() -> None:
     assert not unknown
     assert {"read_file", "write_file", "edit_file", "search"} <= names
     assert {"web_search", "web_fetch", "web_extract"} <= names
+    assert {"notify", "send_message"} <= BLOCKED_FOR_DELEGATE
     assert names.isdisjoint(BLOCKED_FOR_DELEGATE)
 
 

@@ -16,14 +16,12 @@ from pathlib import Path
 
 from croniter import croniter
 
-from alpi.gateway import delivery
-
 log = logging.getLogger("alpi.schedule")
 
 
 @dataclass
 class JobOutcome:
-    # `delivered_to`: "" | "telegram" | "email" | "external" (send_message). `silent`: True only when ok AND no user-facing output AND no delivery. Contract referenced by host event consumers — see AGENTS.md.
+    # `delivered_to`: "" (silent) | "alpi" (native auto-notify) | "external" (agent notified itself). `silent`: True only when ok AND no user-facing output. Contract referenced by host event consumers — see AGENTS.md.
     ok: bool
     message: str
     reply: str = ""
@@ -41,7 +39,7 @@ class JobOutcome:
 
 @dataclass
 class ParsedEvents:
-    send_message_used: bool
+    notified_natively: bool
     reply: str
     agent_messages: list[dict]
 
@@ -74,7 +72,13 @@ def _load_jobs(home: Path) -> list[dict]:
     except json.JSONDecodeError:
         log.warning("jobs.json is malformed — treating as empty")
         return []
-    return data if isinstance(data, list) else []
+    if not isinstance(data, list):
+        return []
+    return data
+
+
+def _job_notifies(job: dict) -> bool:
+    return bool(job.get("notify"))
 
 
 def _save_jobs(home: Path, jobs: list[dict]) -> None:
@@ -267,31 +271,19 @@ def _run_script_only(job: dict, home: Path) -> JobOutcome:
         )
 
     reply = (proc.stdout or "").strip()
-    has_platform = bool(job.get("platform"))
 
     if not reply:
         return JobOutcome(True, "silent run ok", silent=True)
 
-    if not has_platform:
-        summary = (reply[:120] + "…") if len(reply) > 120 else reply
-        return JobOutcome(True, f"silent run ok: {summary}", reply=reply)
+    if _job_notifies(job):
+        return JobOutcome(True, "notified", reply=reply, delivered_to="alpi")
 
-    platform = job["platform"].lower()
-    chat_id = job.get("chat_id") or delivery.default_chat_id(platform, env=env)
-    if not chat_id:
-        return JobOutcome(False, f"no chat_id and no default for {platform}")
-    try:
-        delivery.send_to(platform, chat_id, reply, env=env)
-    except delivery.DeliveryError as e:
-        return JobOutcome(False, f"delivery failed: {e}")
-    return JobOutcome(
-        True, f"delivered to {platform}:{chat_id}",
-        reply=reply, delivered_to=platform,
-    )
+    summary = (reply[:120] + "…") if len(reply) > 120 else reply
+    return JobOutcome(True, f"silent run ok: {summary}", reply=reply)
 
 
 def run_job(job: dict, home: Path) -> JobOutcome:
-    # Jobs with no `platform` run silent (no gateway dispatch). With `platform` the agent reply auto-delivers — unless the agent already called `send_message`, in which case delivery is suppressed to avoid duplicates.
+    # `notify: false` (default) runs silent; `notify: true` pushes the reply to the owner's apps — unless the agent already notified itself, in which case the auto-notify is suppressed to avoid duplicates.
     if job.get("no_agent"):
         return _run_script_only(job, home)
 
@@ -304,28 +296,21 @@ def run_job(job: dict, home: Path) -> JobOutcome:
     if flags:
         return JobOutcome(False, f"threat scan blocked fire: {', '.join(flags)}")
 
-    has_platform = bool(job.get("platform"))
-    if has_platform:
+    notify_user = _job_notifies(job)
+    if notify_user:
         wrap_header = (
-            "[SCHEDULED: running from cron; user is not watching live. "
-            "Answer concisely; the reply is auto-delivered to the "
-            "configured gateway. If the job is purely to deliver text, "
-            "just write the text as the reply — do NOT also call "
-            "`send_message`; that would send it twice.]"
+            "[SCHEDULED: running from cron; the user is not watching live. "
+            "Answer concisely — your reply is auto-delivered to the user's "
+            "Alpi apps as a native notification. Do NOT also call `notify` "
+            "with the same content; that would notify twice.]"
         )
     else:
         wrap_header = (
-            "[SCHEDULED: running from cron; no user is watching live and "
-            "no gateway is wired to this job. Schedule success on its "
-            "own does NOT notify the user — Alpi apps treat "
-            "`schedule.done` as activity history, not as an interrupt.\n"
-            "\n"
-            "If this job is supposed to alert / remind / report something "
-            "to the user, call `send_message(channel=\"alpi\", text=…, "
-            "title=…)` explicitly — that is the only way the user gets a "
-            "native notification on their paired Alpi app.\n"
-            "\n"
-            "If the job is silent maintenance with nothing to report, "
+            "[SCHEDULED: running from cron; no user is watching live. This "
+            "job is silent — `schedule.done` is activity history, not an "
+            "interrupt. To alert the user, call `notify(text=…, title=…)` "
+            "explicitly (native push to their apps). To reach a third "
+            "party, use `send_message`. If there is nothing to report, "
             "finish with an empty reply.]"
         )
     wrapped = wrap_header + "\n\n" + prompt
@@ -361,47 +346,28 @@ def run_job(job: dict, home: Path) -> JobOutcome:
 
     parsed = _parse_events(proc.stdout or "")
     _emit_agent_messages(home, parsed.agent_messages)
-    already_delivered, reply = parsed.send_message_used, parsed.reply
+    reply = parsed.reply
 
-    if already_delivered:
+    if parsed.notified_natively:
+        # The agent already notified the user (called notify) — don't double-notify the reply.
         return JobOutcome(
-            True,
-            "agent delivered via send_message; no duplicate reply pushed",
-            delivered_to="external",
+            True, "agent notified the user; no duplicate", delivered_to="external",
         )
 
-    if not has_platform:
-        # Silent maintenance job — log a short summary if the agent provided one.
-        summary = (reply[:120] + "…") if len(reply) > 120 else reply
-        return JobOutcome(
-            True,
-            f"silent run ok{(': ' + summary) if summary else ''}",
-            reply=reply,
-            silent=(not reply),
-        )
+    if notify_user and reply:
+        return JobOutcome(True, "notified", reply=reply, delivered_to="alpi")
 
-    if not reply:
-        return JobOutcome(False, "agent produced no reply")
-
-    platform = job["platform"].lower()
-    chat_id = job.get("chat_id") or delivery.default_chat_id(platform, env=env)
-    if not chat_id:
-        return JobOutcome(False, f"no chat_id and no default for {platform}")
-
-    try:
-        delivery.send_to(platform, chat_id, reply, env=env)
-    except delivery.DeliveryError as e:
-        return JobOutcome(False, f"delivery failed: {e}")
+    summary = (reply[:120] + "…") if len(reply) > 120 else reply
     return JobOutcome(
-        True, f"delivered to {platform}:{chat_id}",
-        reply=reply, delivered_to=platform,
+        True, f"silent run ok{(': ' + summary) if summary else ''}",
+        reply=reply, silent=(not reply),
     )
 
 
 def _parse_events(stdout: str) -> ParsedEvents:
-    sent_via_tool = False
+    notified_natively = False
     reply = ""
-    pending_send_args: list[dict] = []
+    pending: dict[str, list[dict]] = {"send_message": [], "notify": []}
     agent_messages: list[dict] = []
     for line in stdout.splitlines():
         line = line.strip()
@@ -412,17 +378,21 @@ def _parse_events(stdout: str) -> ParsedEvents:
         except json.JSONDecodeError:
             continue
         kind = ev.get("kind")
-        if kind == "tool_start" and ev.get("name") == "send_message":
+        name = ev.get("name")
+        if kind == "tool_start" and name in ("send_message", "notify"):
             args = ev.get("args")
-            pending_send_args.append(args if isinstance(args, dict) else {})
-        elif kind == "tool_end" and ev.get("name") == "send_message":
-            args = pending_send_args.pop(0) if pending_send_args else {}
+            pending[name].append(args if isinstance(args, dict) else {})
+        elif kind == "tool_end" and name in ("send_message", "notify"):
+            args = pending[name].pop(0) if pending[name] else {}
             if ev.get("ok") is True:
-                sent_via_tool = True
+                if name == "notify":
+                    args = {**args, "channel": "alpi"}  # notify is always the native channel
+                if str(args.get("channel") or "alpi").strip().lower() in ("alpi", "both"):
+                    notified_natively = True
                 agent_messages.append(args)
         elif kind == "reply":
             reply = (ev.get("text") or "").strip()
-    return ParsedEvents(sent_via_tool, reply, agent_messages)
+    return ParsedEvents(notified_natively, reply, agent_messages)
 
 
 def _emit_agent_messages(home: Path, messages: list[dict]) -> None:
@@ -468,10 +438,10 @@ def fire_by_id(home: Path, job_id: str) -> tuple[bool, str]:
 
 def _emit_schedule_event(home: Path, job: dict, outcome: JobOutcome) -> None:
     """Output rules:
-    - failure → file an alert.
-    - success on a real gateway (telegram/email/…) → file the reply.
-    - success via send_message (delivered_to="external") → skip; the tool already filed it.
-    - success with no delivery channel → skip; stdout the user never saw isn't state.
+    - failure → file an alert (type=error).
+    - notify:true reply (delivered_to="alpi") → file the reply (type=info) + emit agent.message.
+    - agent self-notified (delivered_to="external") → skip; the notify call already filed it.
+    - no delivery (delivered_to="") → skip; stdout the user never saw isn't state.
     """
     try:
         from alpi import outputs as outputs_mod
@@ -491,8 +461,7 @@ def _emit_schedule_event(home: Path, job: dict, outcome: JobOutcome) -> None:
             "silent": outcome.silent,
         }
         output_id = ""
-        out_kind = ""
-        out_severity = ""
+        out_type = ""
         if not outcome.ok:
             try:
                 output = outputs_mod.append(
@@ -501,12 +470,11 @@ def _emit_schedule_event(home: Path, job: dict, outcome: JobOutcome) -> None:
                     source="schedule",
                     source_id=job_id,
                     body=outcome.message or "",
-                    severity="important",
-                    kind="alert",
+                    type="error",
                     delivered_to=[],
                 )
                 output_id = output["id"]
-                out_kind, out_severity = "alert", "important"
+                out_type = "error"
             except Exception:  # noqa: BLE001
                 output_id = ""
         elif (
@@ -524,12 +492,11 @@ def _emit_schedule_event(home: Path, job: dict, outcome: JobOutcome) -> None:
                     source="schedule",
                     source_id=job_id,
                     body=(outcome.reply or "")[:2000],
-                    severity="normal",
-                    kind="result",
+                    type="info",
                     delivered_to=delivered_to_list,
                 )
                 output_id = output["id"]
-                out_kind, out_severity = "result", "normal"
+                out_type = "info"
             except Exception:  # noqa: BLE001
                 output_id = ""
         if output_id:
@@ -541,8 +508,17 @@ def _emit_schedule_event(home: Path, job: dict, outcome: JobOutcome) -> None:
                 "profile": profile,
                 "id": output_id,
                 "source": "schedule",
-                "severity": out_severity,
-                "kind": out_kind,
+                "type": out_type,
+            })
+        # notify:true jobs push natively to the user's apps (agent.message is notifiable; schedule.done is not).
+        if output_id and outcome.delivered_to == "alpi":
+            host_events.emit("agent.message", {
+                "profile": profile,
+                "title": profile or "alpi",
+                "body": (outcome.reply or "")[:2000],
+                "type": out_type or "info",
+                "output_id": output_id,
+                "deep_link": f"/outputs/{profile}/{output_id}",
             })
     except Exception:  # noqa: BLE001
         pass

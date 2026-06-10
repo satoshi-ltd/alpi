@@ -15,9 +15,9 @@ export function formatNotification(event, connection) {
   const prefix = profile ? `${conn} · ${profile}` : conn;
   switch (kind) {
     case 'agent.message': {
-      const sev = data.severity && data.severity !== 'normal' ? ` · ${data.severity}` : '';
+      const tag = data.type && data.type !== 'info' ? ` · ${data.type}` : '';
       return {
-        title: data.title || `${prefix}${sev}`,
+        title: `${data.title || prefix}${tag}`,
         body: data.body || 'New message from your agent.',
       };
     }

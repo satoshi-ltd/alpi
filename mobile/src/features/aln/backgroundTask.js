@@ -69,7 +69,7 @@ export async function getRegistrationStatus() {
   }
 }
 
-export async function runPollOnce({ force = false } = {}) {
+export async function runPollOnce() {
   if (_runInFlight) {
     return { groups: 0, notifications: 0, skipped: 'in-flight' };
   }
@@ -99,7 +99,7 @@ export async function runPollOnce({ force = false } = {}) {
       if (pollResult.events.length === 0) continue;
       await commitDelivered(alnStateKey(winningRoute), pollResult.events);
       for (const ev of pollResult.events) {
-        const fired = await fireForEvent(ev, winningRoute, { force });
+        const fired = await fireForEvent(ev, winningRoute);
         if (fired) total += 1;
       }
     }

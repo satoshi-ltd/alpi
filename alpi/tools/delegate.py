@@ -27,6 +27,7 @@ BLOCKED_FOR_DELEGATE: frozenset[str] = frozenset({
     "delegate",
     "memory",
     "schedule",
+    "notify",
     "send_message",
     "skill",
     "session_search",

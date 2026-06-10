@@ -122,7 +122,7 @@ alpi/
 ├── ui.py                   shared wizard/menu primitives
 ├── service.py              unified orchestrator — runs every enabled subsystem on one asyncio loop; install/uninstall launchd / systemd unit per profile
 ├── ledger.py               daily spend ledger (logs/ledger.json: live counters + 30-day per-day history) + profile cap gate
-├── outputs.py              persistent inbox JSONL store (send_message + schedule failures)
+├── outputs.py              persistent inbox JSONL store (notify / send_message + schedule failures)
 ├── status.py               canonical /status rows (TUI + Telegram share this)
 ├── prompts/
 │   ├── default_agent.md
@@ -141,6 +141,7 @@ alpi/
 │   ├── search.py           content + filename search (rg + stdlib fallback)
 │   ├── research.py         read-only sub-agent (depth: quick/normal/deep)
 │   ├── terminal.py         run/background/status/output/kill
+│   ├── notify.py           native push to the owner's apps (delegates to send_message channel=alpi)
 │   └── … (read_file, write_file, edit_file, todo, web_*, schedule,
 │         memory, session_search, send_message, email, config)
 ├── tui/                    Textual app, widgets, screens, theme
@@ -373,7 +374,7 @@ Sibling to `research`, but can mutate: spawn a focused sub-agent with a chosen t
 - `terminal` → `terminal`
 - `web` → `web_search`, `web_fetch`, `web_extract`
 
-**Blocked for sub-agents**: `delegate` (no recursion), `memory`, `skill`, `schedule`, `send_message`, `email`, `session_search`, `todo` (shared global state). `research` is not in any preset either — if you need deep investigation inside a delegate task today, do it in the main agent first and pass findings via `context`.
+**Blocked for sub-agents**: `delegate` (no recursion), `memory`, `skill`, `schedule`, `notify`, `send_message`, `email`, `session_search`, `todo` (shared global state). `research` is not in any preset either — if you need deep investigation inside a delegate task today, do it in the main agent first and pass findings via `context`.
 
 **Budget**: hardcoded `MAX_STEPS = 30`. No config knob — it's a ceiling, not a target (sub-agent stops when done). If a real case needs more, bump the constant.
 
@@ -715,25 +716,32 @@ Verb namespaces in current shape:
 - **`host.outputs.{list,read,mark_read,mark_all_read,delete}`** —
   durable inbox for proactive agent messages and schedule
   results. Backed by `<home>/outputs/outputs.jsonl` (capped at
-  500 rows, atomic compaction). Producers:
-  - `send_message` files an output for every successful call
-    (`alpi`, `both`, gateway-only). Attachment-only deliveries
-    with no text body skip the row — the artifact lives in the
-    gateway, nothing to revisit.
+  500 rows, atomic compaction). Two intents feed it: `notify`
+  pushes to the OWNER's own apps (native, via the shared
+  `outputs.create_output_and_emit_message` helper) and carries the
+  row's single `type` axis (`info` | `warning` | `error`, default
+  `info`); `send_message` reaches a THIRD PARTY through a gateway
+  (`telegram` / `email` / `matrix` / `webhook`) — `channel` is
+  required, there is no owner channel, and its rows are always
+  `info`. Producers:
+  - `notify` / `send_message` file an output for every successful
+    call (owner push or gateway). Attachment-only
+    deliveries with no text body skip the row — the artifact lives
+    in the gateway, nothing to revisit.
   - `scheduler/run.py` files an output on `schedule.failed`
-    (always) AND on `schedule.done` when the job delivered its
-    reply through a real gateway channel (`telegram` / `email`
-    / `matrix` / …). Jobs that already routed through
-    `send_message` (`delivered_to="external"`) don't get a
-    duplicate row. Silent maintenance and stdout-only summaries
-    write nothing — operational noise the user never saw.
+    (always) AND on `schedule.done` when the job notified the
+    owner (`notify: true` → `delivered_to="alpi"`). Jobs where the
+    agent notified itself (`delivered_to="external"`) don't get a
+    duplicate row. Silent jobs (`notify: false`, the default) and
+    stdout-only summaries write nothing — operational noise the
+    user never saw.
   In schedule and gateway subprocesses the parent daemon is the
   single source of truth: the child's `send_message` is suppressed
   and the parent parses the `tool_end` args (via
   `alpi.outputs.record_child_send_message`) to file one canonical
   output with the full `delivered_to` list. Each row carries
   `{id, profile, created_at, source, source_id, body,
-  severity, kind, status: unread|read, session_id, delivered_to}`.
+  type: info|warning|error, status: unread|read, session_id, delivered_to}`.
   No `archive` action — the 500-row cap handles retention so
   clients only render a two-state inbox. `agent.message`,
   `schedule.done` and `schedule.failed` events ship `output_id`
@@ -783,14 +791,15 @@ queries those stores, not ``host.events.history``.
   - `schedule.done` / `schedule.failed` — `scheduler/run.py::tick`
     after each job dispatch. Carries `job_id`, `kind`, `message`,
     `reply`, `delivered_to`, and `silent`; clients use the explicit
-    fields instead of parsing the operational `message`. Successful
-    schedules are activity/history only; jobs that need to wake the
-    user call `send_message(channel="alpi")`, which is re-emitted as
-    `agent.message` from the scheduler daemon. `schedule.failed`
+    fields instead of parsing the operational `message`. Silent
+    jobs (`notify: false`) are activity/history only; a job with
+    `notify: true` (or one whose agent called `notify` itself) has
+    its reply re-emitted as `agent.message` from the scheduler
+    daemon so it wakes the owner's apps. `schedule.failed`
     remains an interrupt and carries `output_id` + `deep_link`
     (`/outputs/<profile>/<id>`) so clients can land on the persisted
     failure record.
-  - `agent.message` — `send_message(channel in {"alpi","both"})`. In
+  - `agent.message` — emitted by `notify` (the owner-push tool). In
     daemon turns it fires from the tool process; for scheduled jobs
     the parent re-emits after parsing the child subprocess events.
     Always carries `output_id` + `deep_link`
@@ -886,7 +895,7 @@ the agent calls `schedule(action='add', kind='once',
 after_hours=N)`, the engine resolves `now` from a single source so
 the agent doesn't drift.
 
-**Duplicate guard + in-place edits.** `add` rejects a job whose (`kind` + cron / `run_at` / `after_hours`) matches an existing one AND whose prompt fingerprint (lowercase + whitespace-collapsed first 80 chars) collides. Pass `force=true` to bypass when the second job is genuinely intentional. Use `update` to change prompt, cron, target, or pause state without remove/recreate churn. Schedule prompts must not tell the agent to send/post to Telegram when `platform=telegram`; delivery is automatic after the scheduled reply is produced.
+**Duplicate guard + in-place edits.** `add` rejects a job whose (`kind` + cron / `run_at` / `after_hours`) matches an existing one AND whose prompt fingerprint (lowercase + whitespace-collapsed first 80 chars) collides. Pass `force=true` to bypass when the second job is genuinely intentional. Use `update` to change prompt, cron, `notify`, or pause state without remove/recreate churn. A job carries a single delivery axis, `notify: bool` (default `false` = silent): `true` pushes the reply to the owner's apps. Legacy jobs with a `platform` field are migrated to `notify` on load (`platform` set → `notify: true`). Reaching a THIRD PARTY is an explicit `send_message` in the prompt — that's now allowed (the old auto-delivery guard that rejected such prompts is gone).
 
 Scheduled jobs execute through `alpi chat --once --emit-events
 --no-save` with `ALPI_PLATFORM=cron`. The scheduler consumes stdout
