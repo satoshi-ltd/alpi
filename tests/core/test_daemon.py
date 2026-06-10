@@ -52,7 +52,8 @@ def test_profile_tasks_respects_subsystem_flags(tmp_path: Path) -> None:
     }
 
     async def run() -> list[str]:
-        tasks = service._profile_tasks(home, "alice", subs)
+        task_map = service._profile_tasks(home, "alice", subs)
+        tasks = [t for ts in task_map.values() for t in ts]
         names = [t.get_name() for t in tasks]
         for t in tasks:
             t.cancel()
@@ -81,7 +82,8 @@ def test_profile_tasks_workgroups_includes_preempt_watcher(
     }
 
     async def run() -> list[str]:
-        tasks = service._profile_tasks(home, "alice", subs)
+        task_map = service._profile_tasks(home, "alice", subs)
+        tasks = [t for ts in task_map.values() for t in ts]
         names = [t.get_name() for t in tasks]
         for t in tasks:
             t.cancel()
@@ -102,7 +104,8 @@ def test_profile_tasks_host_only_for_default(tmp_path: Path) -> None:
     }
 
     async def run() -> list[str]:
-        tasks = service._profile_tasks(home, "default", subs)
+        task_map = service._profile_tasks(home, "default", subs)
+        tasks = [t for ts in task_map.values() for t in ts]
         names = [t.get_name() for t in tasks]
         for t in tasks:
             t.cancel()
@@ -252,20 +255,19 @@ def test_start_new_profiles_skips_already_active(
 
     def fake_profile_tasks(home, profile, subsystems):
         calls.append((home, profile))
-        return []
+        return {}
 
     monkeypatch.setattr(service, "_profile_tasks", fake_profile_tasks)
-    active: set[str] = set()
-    tasks: list = []
+    registry: dict = {}
 
-    service._start_new_profiles(root, ["default", "alfa"], active, tasks)
-    service._start_new_profiles(root, ["default", "alfa"], active, tasks)
+    service._start_new_profiles(root, ["default", "alfa"], registry)
+    service._start_new_profiles(root, ["default", "alfa"], registry)
 
     assert calls == [
         (root, "default"),
         (root / "profiles" / "alfa", "alfa"),
     ]
-    assert active == {"default", "alfa"}
+    assert set(registry) == {"default", "alfa"}
 
 
 def test_start_new_profiles_retries_on_config_error(
@@ -287,15 +289,14 @@ def test_start_new_profiles_retries_on_config_error(
         }
 
     monkeypatch.setattr(service, "enabled_subsystems", flaky)
-    monkeypatch.setattr(service, "_profile_tasks", lambda *_: [])
+    monkeypatch.setattr(service, "_profile_tasks", lambda *_: {})
 
-    active: set[str] = set()
-    tasks: list = []
-    service._start_new_profiles(root, ["alfa"], active, tasks)
-    assert "alfa" not in active
+    registry: dict = {}
+    service._start_new_profiles(root, ["alfa"], registry)
+    assert "alfa" not in registry
 
-    service._start_new_profiles(root, ["alfa"], active, tasks)
-    assert "alfa" in active
+    service._start_new_profiles(root, ["alfa"], registry)
+    assert "alfa" in registry
     assert seen_homes == [expected_home, expected_home]
 
 
@@ -309,15 +310,14 @@ def test_start_new_profiles_marks_zero_subsystem_profile_active(
         "gateway": False, "schedule": False, "alp": False,
         "host": False, "workgroups": False,
     })
-    monkeypatch.setattr(service, "_profile_tasks", lambda *_: [])
+    monkeypatch.setattr(service, "_profile_tasks", lambda *_: {})
 
-    active: set[str] = set()
-    tasks: list = []
-    service._start_new_profiles(root, ["alfa"], active, tasks)
-    service._start_new_profiles(root, ["alfa"], active, tasks)
+    registry: dict = {}
+    service._start_new_profiles(root, ["alfa"], registry)
+    service._start_new_profiles(root, ["alfa"], registry)
 
-    assert active == {"alfa"}
-    assert tasks == []
+    assert set(registry) == {"alfa"}
+    assert registry["alfa"]["tasks"] == {}
 
 
 @pytest.mark.asyncio
@@ -335,7 +335,7 @@ async def test_main_all_picks_up_runtime_profile(
     def fake_profile_tasks(home, profile, subsystems):
         started.append((home, profile))
         t = asyncio.create_task(asyncio.sleep(60), name=f"{profile}/fake")
-        return [t]
+        return {"fake": [t]}
 
     monkeypatch.setattr(service, "_profile_tasks", fake_profile_tasks)
 
@@ -366,3 +366,120 @@ async def test_main_all_picks_up_runtime_profile(
             await runner
         except (asyncio.CancelledError, Exception):
             pass
+
+
+def _fake_subsystem_tasks_factory(created: list):
+    def fake(home, profile, name):
+        t = asyncio.create_task(
+            asyncio.sleep(60), name=f"{profile}/{name}#{len(created)}",
+        )
+        created.append((name, t))
+        return [t]
+    return fake
+
+
+@pytest.mark.asyncio
+async def test_reconcile_restarts_gateway_on_gateway_env_change(
+    monkeypatch, tmp_path: Path,
+) -> None:
+    root = _make_root(tmp_path, [])
+    created: list = []
+    monkeypatch.setattr(service, "_subsystem_tasks", _fake_subsystem_tasks_factory(created))
+
+    registry: dict = {}
+    service._start_new_profiles(root, ["default"], registry)
+    gateway_before = registry["default"]["tasks"]["gateway"][0]
+    schedule_before = registry["default"]["tasks"]["schedule"][0]
+
+    (root / ".env").write_text("TELEGRAM_BOT_TOKEN=tg-new\n")
+    await service._reconcile_profiles(root, registry)
+
+    assert gateway_before.cancelled()
+    assert registry["default"]["tasks"]["gateway"][0] is not gateway_before
+    assert registry["default"]["tasks"]["schedule"][0] is schedule_before
+
+    for ts in registry["default"]["tasks"].values():
+        for t in ts:
+            t.cancel()
+    await asyncio.gather(
+        *[t for ts in registry["default"]["tasks"].values() for t in ts],
+        return_exceptions=True,
+    )
+
+
+@pytest.mark.asyncio
+async def test_reconcile_ignores_provider_key_changes(
+    monkeypatch, tmp_path: Path,
+) -> None:
+    root = _make_root(tmp_path, [])
+    created: list = []
+    monkeypatch.setattr(service, "_subsystem_tasks", _fake_subsystem_tasks_factory(created))
+
+    registry: dict = {}
+    service._start_new_profiles(root, ["default"], registry)
+    before = {k: v[0] for k, v in registry["default"]["tasks"].items()}
+
+    (root / ".env").write_text("OPENROUTER_API_KEY=sk-rotated\n")
+    await service._reconcile_profiles(root, registry)
+
+    after = {k: v[0] for k, v in registry["default"]["tasks"].items()}
+    assert after == before
+
+    for t in after.values():
+        t.cancel()
+    await asyncio.gather(*after.values(), return_exceptions=True)
+
+
+@pytest.mark.asyncio
+async def test_reconcile_applies_subsystem_toggle_without_restart(
+    monkeypatch, tmp_path: Path,
+) -> None:
+    root = _make_root(tmp_path, [])
+    created: list = []
+    monkeypatch.setattr(service, "_subsystem_tasks", _fake_subsystem_tasks_factory(created))
+
+    registry: dict = {}
+    service._start_new_profiles(root, ["default"], registry)
+    schedule_task = registry["default"]["tasks"]["schedule"][0]
+    gateway_task = registry["default"]["tasks"]["gateway"][0]
+
+    (root / "config.yaml").write_text("model: x\nservice:\n  schedule: false\n")
+    await service._reconcile_profiles(root, registry)
+
+    assert schedule_task.cancelled()
+    assert "schedule" not in registry["default"]["tasks"]
+    assert registry["default"]["tasks"]["gateway"][0] is gateway_task
+
+    (root / "config.yaml").write_text("model: x\nservice:\n  schedule: true\n")
+    await service._reconcile_profiles(root, registry)
+    assert "schedule" in registry["default"]["tasks"]
+
+    for ts in registry["default"]["tasks"].values():
+        for t in ts:
+            t.cancel()
+    await asyncio.gather(
+        *[t for ts in registry["default"]["tasks"].values() for t in ts],
+        return_exceptions=True,
+    )
+
+
+@pytest.mark.asyncio
+async def test_reconcile_stops_tasks_when_profile_home_disappears(
+    monkeypatch, tmp_path: Path,
+) -> None:
+    import shutil
+
+    root = _make_root(tmp_path, ["alfa"])
+    created: list = []
+    monkeypatch.setattr(service, "_subsystem_tasks", _fake_subsystem_tasks_factory(created))
+
+    registry: dict = {}
+    service._start_new_profiles(root, ["alfa"], registry)
+    tasks = [t for ts in registry["alfa"]["tasks"].values() for t in ts]
+    assert tasks
+
+    shutil.rmtree(root / "profiles" / "alfa")
+    await service._reconcile_profiles(root, registry)
+
+    assert "alfa" not in registry
+    assert all(t.cancelled() for t in tasks)

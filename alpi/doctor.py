@@ -69,6 +69,7 @@ def run_all(home: Path, profile: str) -> list[Check]:
             "skills": _check_skills(home),
             "gateway_state": _check_gateway_state(home),
             "services": _check_services(home, profile),
+            "alp": _check_alp_integrity(home, cfg),
             "security": _check_security(cfg),
             "storage": _check_storage(home),
         }
@@ -90,9 +91,75 @@ def run_all(home: Path, profile: str) -> list[Check]:
     out.extend(live.get("gateways", []))
     out.extend(sync_checks["gateway_state"])
     out.extend(sync_checks["services"])
+    out.extend(sync_checks["alp"])
     out.extend(live.get("mcps", []))
     out.extend(sync_checks["security"])
     out.extend(sync_checks["storage"])
+    return out
+
+
+# Fleet-integrity signatures: a /data volume cloned across machines shows up as the local pubkey inside peers.yaml, or one pubkey under several peer ids.
+def _check_alp_integrity(home: Path, cfg: cfg_mod.Config) -> list[Check]:
+    import os
+
+    from alpi import runtime
+    from alpi.alp import keys as keys_mod
+    from alpi.alp import peers as peers_mod
+
+    out: list[Check] = []
+    rows = peers_mod.load(home)
+
+    own = None
+    if keys_mod.exists(home):
+        try:
+            own = keys_mod.load(home).pubkey_b64()
+        except Exception:  # noqa: BLE001
+            own = None
+
+    by_pubkey: dict[str, list[str]] = {}
+    by_address: dict[str, list[str]] = {}
+    for p in rows:
+        by_pubkey.setdefault(p.pubkey, []).append(p.id)
+        if p.address:
+            by_address.setdefault(p.address, []).append(p.id)
+
+    clean = True
+    if own and by_pubkey.get(own):
+        clean = False
+        out.append(Check(
+            "ALP", "identity", "fail",
+            f"peer(s) {', '.join(by_pubkey[own])} carry THIS agent's pubkey — "
+            "cloned /data volume; regenerate keys on one machine",
+        ))
+    for pubkey, ids in by_pubkey.items():
+        if len(ids) > 1 and pubkey != own:
+            clean = False
+            out.append(Check(
+                "ALP", "peers", "fail",
+                f"{', '.join(ids)} share one pubkey — same identity under several "
+                "entries (volume cloned between machines?)",
+            ))
+    for addr, ids in by_address.items():
+        if len(ids) > 1:
+            clean = False
+            out.append(Check(
+                "ALP", "peers", "warn",
+                f"{addr} appears under {', '.join(ids)} — two handles dialing the same endpoint",
+            ))
+    if runtime.is_docker():
+        advertised = (
+            str(os.environ.get("ALPI_NETWORK_HOST") or "").strip()
+            or str((cfg.network or {}).get("host") or "").strip()
+        )
+        if not advertised:
+            clean = False
+            out.append(Check(
+                "ALP", "advertised address", "warn",
+                "ALPI_NETWORK_HOST / network.host unset — clients and peers "
+                "have no address to dial into this container",
+            ))
+    if clean and rows:
+        out.append(Check("ALP", "peers", "ok", f"{len(rows)} peer(s), identities distinct"))
     return out
 
 

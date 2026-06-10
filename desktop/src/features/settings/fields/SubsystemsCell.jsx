@@ -24,13 +24,11 @@ export function SubsystemsCell({ profile, onSaved }) {
         key: `service.${key}`,
         value: String(next),
       });
-      if (profile.running) {
-        invoke("daemon_restart").catch(() => {});
-      }
+      // The daemon applies subsystem toggles on its next config rescan (≤5s) — no restart.
       await onSaved?.();
       notify({
         message: profile.running
-          ? `${key} ${next ? "enabled" : "disabled"} · daemon restarting`
+          ? `${key} ${next ? "enabled" : "disabled"} · applying`
           : `${key} ${next ? "enabled" : "disabled"}`,
         variant: "success",
         duration: profile.running ? 3000 : 2400,

@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.8.18 — 2026-06-10 — settings apply without restarting the daemon
+
+- **Saving settings no longer drops your connections.** Gateway configs,
+  subsystem toggles and the ALP port now apply in place within seconds — the
+  daemon reloads just the affected piece instead of restarting whole. On
+  Docker this was the big one: every settings save used to restart the entire
+  container, knocking the agent off the peer network and disconnecting every
+  app mid-change.
+- **Profile changes apply live too.** Creating or deleting a profile is picked
+  up by the running daemon — no restart needed.
+- **MCP servers work out of the box in Docker.** The image now bundles Node 22,
+  so `npx`-launched MCP servers run without manual setup — and their downloads
+  persist in the volume, so they install once, not on every container start.
+- **`alpi doctor` now spots a corrupted fleet.** Running it on each machine
+  flags cloned `/data` volumes (a peer carrying this agent's own identity, or
+  one identity under several peers), two peers dialing the same address, and a
+  Docker container with no advertised address for clients to reach.
+- **Docs:** the Docker guide explains fleet identity (never copy a `/data`
+  volume between machines) and which settings hot-reload versus the two that
+  still need a container recreate (advertised address, pairing port).
+
 ## v0.8.17 — 2026-06-10 — event streams announce they're alive
 
 - **The daemon's event stream now sends a keepalive ping every 25 seconds.**

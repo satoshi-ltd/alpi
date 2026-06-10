@@ -11,6 +11,16 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.3.50 — 2026-06-10 — saving settings keeps you connected
+
+Requires alpi v0.8.18+.
+
+- **Gateways, subsystem toggles and the ALP port no longer restart the
+  daemon.** The daemon applies them in place within seconds (toasts now say
+  "applying") — your chat, your peers and other machines stay connected while
+  you change settings. Address and pairing-port changes still restart, as they
+  rebind the connection you're on.
+
 ## v0.3.49 — 2026-06-10 — stays responsive when the daemon dies
 
 Requires alpi v0.8.17+.

@@ -423,9 +423,9 @@ function GatewayEditorModal({ profile, gateway, onClose, onSaved }) {
           }
         }
       }
-      invoke("daemon_restart").catch(() => {});
+      // The daemon hot-reloads the gateway poller on its next config rescan (≤5s) — no restart, no dropped connections.
       notify({
-        message: `${gateway} saved · daemon restarting`,
+        message: `${gateway} saved · applying`,
         variant: "success",
         duration: 3000,
       });

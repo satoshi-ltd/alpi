@@ -1,3 +1,5 @@
+FROM node:22-slim AS node
+
 FROM python:3.11-slim
 
 ENV ALPI_PLATFORM=docker \
@@ -11,6 +13,13 @@ RUN apt-get update \
         ca-certificates \
         git \
     && rm -rf /var/lib/apt/lists/*
+
+# Node for npx-launched MCP servers — copied from the official image (same Debian base): apt ships Node 18 (EOL), NodeSource drags a toolchain; the npx cache lands in $HOME/.npm → persists in /data.
+COPY --from=node /usr/local/bin/node /usr/local/bin/node
+COPY --from=node /usr/local/lib/node_modules /usr/local/lib/node_modules
+RUN ln -s /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
+    && ln -s /usr/local/lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx \
+    && node --version && npm --version && npx --version
 
 WORKDIR /app
 # Only what the build needs — never the whole repo (a stray .venv / node_modules

@@ -51,16 +51,9 @@ export function TcpPortField({ profile, onSaved }) {
       } else {
         await invoke("set_config_field", { profile: profile.name, key: "alp.tcp_port", value: String(portNum) });
       }
-      try {
-        await invoke("daemon_restart");
-      } catch (e) {
-        await onSaved?.();
-        notify({ message: `Port ${portNum} saved · restart failed: ${String(e)}`, variant: "warn", duration: 4500 });
-        setOpen(false);
-        return;
-      }
+      // The daemon rebinds the ALP listener on its next config rescan (≤5s) — host plane stays up.
       await onSaved?.();
-      notify({ message: `ALP TCP port ${portNum} · daemon restarting`, variant: "success", duration: 3000 });
+      notify({ message: `ALP TCP port ${portNum} · applying`, variant: "success", duration: 3000 });
       setOpen(false);
     } catch (e) {
       notify({ message: `tcp: ${String(e)}`, variant: "error", duration: 4000 });
@@ -101,7 +94,7 @@ export function TcpPortField({ profile, onSaved }) {
           )}
           <div className={styles.actions}>
             <Button size="sm" variant="primary" onClick={save} disabled={!dirty || portFree === false} loading={saving}>
-              Save and restart
+              Save
             </Button>
           </div>
         </div>

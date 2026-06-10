@@ -434,3 +434,65 @@ def test_storage_check_points_sessions_at_desktop(
     row = next(c for c in checks if c.group == "Storage" and c.name == "Sessions")
     assert row.status == "warn"
     assert "Manage Sessions" in row.detail
+
+
+def _alp_checks(home: Path):
+    from alpi import config as cfg_mod
+    return doctor._check_alp_integrity(home, cfg_mod.load(home))
+
+
+def _add_peer(home: Path, peer_id: str, pubkey: str, address: str | None = None) -> None:
+    from alpi.alp import peers as peers_mod
+    peers_mod.add(home, peers_mod.Peer(id=peer_id, pubkey=pubkey, address=address))
+
+
+def test_alp_integrity_flags_own_pubkey_in_peers(tmp_path: Path) -> None:
+    from alpi.alp.keys import load_or_generate
+    _write_cfg(tmp_path)
+    own = load_or_generate(tmp_path).pubkey_b64()
+    _add_peer(tmp_path, "clone", own, "10.0.0.9:7423")
+    checks = _alp_checks(tmp_path)
+    assert any(c.status == "fail" and "cloned" in c.detail for c in checks)
+
+
+def test_alp_integrity_flags_duplicate_peer_pubkeys(tmp_path: Path) -> None:
+    _write_cfg(tmp_path)
+    # peers.add() dedupes by pubkey, so the corrupt state only exists in hand-copied or volume-cloned peers.yaml files — write it raw.
+    (tmp_path / "alp").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "alp" / "peers.yaml").write_text(
+        "- id: machine-a\n  pubkey: PKSAME\n  address: 10.0.0.1:7423\n"
+        "- id: machine-b\n  pubkey: PKSAME\n  address: 10.0.0.2:7423\n"
+    )
+    checks = _alp_checks(tmp_path)
+    assert any(
+        c.status == "fail" and "machine-a" in c.detail and "machine-b" in c.detail
+        for c in checks
+    )
+
+
+def test_alp_integrity_warns_on_shared_address(tmp_path: Path) -> None:
+    _write_cfg(tmp_path)
+    _add_peer(tmp_path, "a", "PK1", "10.0.0.1:7423")
+    _add_peer(tmp_path, "b", "PK2", "10.0.0.1:7423")
+    checks = _alp_checks(tmp_path)
+    assert any(c.status == "warn" and "10.0.0.1:7423" in c.detail for c in checks)
+
+
+def test_alp_integrity_warns_when_docker_has_no_advertised_host(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    _write_cfg(tmp_path)
+    monkeypatch.setenv("ALPI_PLATFORM", "docker")
+    monkeypatch.delenv("ALPI_NETWORK_HOST", raising=False)
+    checks = _alp_checks(tmp_path)
+    assert any(c.status == "warn" and "ALPI_NETWORK_HOST" in c.detail for c in checks)
+
+
+def test_alp_integrity_ok_on_distinct_identities(tmp_path: Path, monkeypatch) -> None:
+    _write_cfg(tmp_path)
+    monkeypatch.delenv("ALPI_PLATFORM", raising=False)
+    _add_peer(tmp_path, "a", "PK1", "10.0.0.1:7423")
+    _add_peer(tmp_path, "b", "PK2", "10.0.0.2:7423")
+    checks = _alp_checks(tmp_path)
+    assert checks == [c for c in checks if c.status == "ok"]
+    assert any("2 peer(s)" in c.detail for c in checks)

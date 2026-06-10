@@ -59,6 +59,30 @@ clients and peers are told to dial. Ports are per-plane.
 State (profiles, keys, config, sessions) lives under `/data` — mount a volume
 so it survives restarts.
 
+## MCP servers
+
+The image ships Node 22, so MCP servers launched with `npx …` work out of the
+box. The npx cache lives in `/data/.npm` and persists in the volume — a
+server's first launch downloads once per volume, not once per container start.
+
+## Fleets (several machines)
+
+An agent's identity is the keypair inside its `/data` volume. **Never copy a
+`/data` volume to another machine** — both daemons would hold the same
+identity, peers route to whichever answered last, and the agents appear to
+interfere with each other. Provision each machine with an empty volume and
+pair it fresh.
+
+`alpi doctor` (run it on every machine: `docker compose exec alpi alpi doctor`)
+verifies the fleet-integrity signatures: a peer entry carrying this agent's
+own pubkey, one pubkey shared by several peer entries, two peers dialing the
+same address, and a container with no advertised `ALPI_NETWORK_HOST`.
+
+Settings changes apply in place: gateways, subsystem toggles and the ALP port
+hot-reload within seconds — connections, peers and workgroups stay up. Only a
+change to `ALPI_NETWORK_HOST` or the pairing host port still needs a restart
+(in compose: edit the env/ports and `docker compose up -d` to recreate).
+
 ## Updating
 
 Pull the latest image and recreate only the containers whose image changed:
