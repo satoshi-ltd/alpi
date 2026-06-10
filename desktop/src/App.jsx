@@ -23,7 +23,11 @@ import { installUpdater } from "./lib/updater.js";
 import { findLatestTask } from "./lib/workgroup-tasks.js";
 import { saveCachedMessages } from "./lib/workgroup-cache.js";
 import { fetchWorkgroupTranscript, invalidateTranscriptCache } from "./lib/workgroup-fetch.js";
-import { fromDaemonFrame } from "./lib/daemon-frame.js";
+import {
+  classifyDaemonPayload,
+  fromDaemonFrame,
+  isActiveWorkgroupView,
+} from "./lib/daemon-frame.js";
 import { enqueueRequest as enqueueApprovalRequest } from "./lib/approval-queue.js";
 import { enqueueRequest as enqueueClarificationRequest } from "./lib/clarification-queue.js";
 import { invalidateProfileDetailCache } from "./hooks/useProfileDetail.js";
@@ -276,12 +280,14 @@ export default function App() {
   });
   useNavListener(setView);
 
+  const connectionOnlineRef = useRef(true);
   const { pendingTurn, setPendingTurn, activeRequestIdRef } = useChatStream({
     setSessionData,
     setView,
     setRewriteDraft,
     reloadRef,
     notify,
+    connectionOnlineRef,
   });
   useEffect(() => {
     pendingTurnRef.current = pendingTurn;
@@ -292,6 +298,7 @@ export default function App() {
     hostConnectionsRef,
     profiles,
     workgroups,
+    touchWorkgroup,
     pickerAlpi,
     setPickerAlpi,
     reload,
@@ -388,6 +395,14 @@ export default function App() {
     profilesRef.current = profiles;
   }, [profiles]);
   useEffect(() => {
+    const conn = hostConnections.connections.find(
+      (c) => c.id === hostConnections.active_id,
+    );
+    // Unknown/probing stay truthy — only a confirmed-dead daemon pauses pollers.
+    connectionOnlineRef.current =
+      conn?.status !== "offline" && conn?.status !== "auth-failed";
+  }, [hostConnections]);
+  useEffect(() => {
     workgroupsRef.current = workgroups;
   }, [workgroups]);
 
@@ -438,12 +453,17 @@ export default function App() {
   }, [view]);
 
   const reloadTimerRef = useRef(null);
+  const reloadDeadlineRef = useRef(0);
+  // Trailing-edge coalesce with a 5s max-wait: continuous event streams keep pushing the timer, the deadline stops them from starving the reload forever.
   const scheduleReload = useCallback((delay = 500) => {
+    const now = Date.now();
+    if (!reloadTimerRef.current) reloadDeadlineRef.current = now + 5000;
+    const fireIn = Math.min(delay, Math.max(0, reloadDeadlineRef.current - now));
     if (reloadTimerRef.current) clearTimeout(reloadTimerRef.current);
     reloadTimerRef.current = setTimeout(() => {
       reloadTimerRef.current = null;
       reloadRef.current?.();
-    }, delay);
+    }, fireIn);
   }, []);
 
   const sessionRefreshTimerRef = useRef(null);
@@ -504,7 +524,9 @@ export default function App() {
         const key = `${ev.profile}/${ev.wg_id}`;
         const connectionId = hostConnectionsRef.current?.active_id;
         setActivityByWorkgroup((prev) => ({ ...prev, [key]: Date.now() }));
-        scheduleReload(250);
+        // No reload and no fetch for background workgroups: the badge comes from the activity map, unread/ordering from the local mtime patch. Transcript work happens only for the open view.
+        touchWorkgroup(ev.profile, ev.wg_id);
+        if (!isActiveWorkgroupView(v, ev)) break;
         fetchWorkgroupTranscript(connectionId, ev.profile, ev.wg_id)
           .then((msgs) => {
             if (!Array.isArray(msgs)) return;
@@ -537,7 +559,7 @@ export default function App() {
       default:
         break;
     }
-  }, [scheduleReload, scheduleSessionRefresh, setActivityByWorkgroup, setTaskByWorkgroup, seenMtimesRef]);
+  }, [scheduleReload, scheduleSessionRefresh, setActivityByWorkgroup, setTaskByWorkgroup, seenMtimesRef, touchWorkgroup]);
 
   // fromDaemonFrame lives in lib/daemon-frame.js (pure, unit-tested).
 
@@ -553,14 +575,17 @@ export default function App() {
       .catch(() => {});
     listen("daemon-event", (e) => {
       const payload = e.payload ?? {};
-      // Drop frames from a non-active daemon.
-      if (
-        payload.connection_id &&
-        payload.connection_id !== hostConnectionsRef.current?.active_id
-      ) {
+      const cls = classifyDaemonPayload(
+        payload,
+        hostConnectionsRef.current?.active_id,
+      );
+      if (cls === "drop") return;
+      const frame = payload.frame ?? payload;
+      if (cls === "replay") {
+        // Reconnect backfill (up to 200 frames in a burst): one coalesced reload covers state catch-up; per-event fetch fan-out would hammer the freshly restarted daemon.
+        if (fromDaemonFrame(frame)) scheduleReload(800);
         return;
       }
-      const frame = payload.frame ?? payload;
       // approval.request: enqueue caution prompt. approval.resolved: pop in case another client answered first.
       if (frame?.event === "approval.request") {
         mergeApprovalRequest(frame.data ?? {});
@@ -593,7 +618,7 @@ export default function App() {
       safeUnlisten(unlistenFs);
       safeUnlisten(unlistenDaemon);
     };
-  }, [applyChange, hostConnectionsRef, mergeApprovalRequest, mergeClarificationRequest]);
+  }, [applyChange, hostConnectionsRef, mergeApprovalRequest, mergeClarificationRequest, scheduleReload]);
 
   // Cold-start recovery: subscribe anchors at next_seq so requests emitted before mount won't reach the stream. Fetch pending now and after any connection switch.
   // ALSO drop the previous connection's queue: a stale entry would route host.approval.respond through the NEW daemon and either return unknown or, worse, confuse the user.

@@ -52,6 +52,7 @@ def _next_seq() -> int:
 # even under hot emitters (session_changed, schedule fires, etc.).
 HISTORY_MAX = 500
 COMPACT_EVERY = 50
+PING_PERIOD_S = 25.0
 
 _history: deque[dict[str, Any]] = deque(maxlen=HISTORY_MAX)
 _history_lock = threading.Lock()
@@ -210,7 +211,15 @@ async def _subscribe_handler(
             anchor = _seq_counter
         await send_frame({"event": "subscribed", "next_seq": anchor})
         while True:
-            payload = await queue.get()
+            try:
+                payload = await asyncio.wait_for(queue.get(), timeout=PING_PERIOD_S)
+            except asyncio.TimeoutError:
+                # Keepalive so clients can run a finite stream read timeout and detect a dead daemon instead of hanging.
+                try:
+                    await send_frame({"event": "ping"})
+                except (ConnectionResetError, BrokenPipeError):
+                    return
+                continue
             try:
                 await send_frame(payload)
             except (ConnectionResetError, BrokenPipeError):

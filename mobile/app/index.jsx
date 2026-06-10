@@ -17,6 +17,7 @@ import { ComposeSheet } from '../src/features/sheets/ComposeSheet';
 import { ConnectionSheet } from '../src/features/sheets/ConnectionSheet';
 import { SettingsSheet } from '../src/features/sheets/SettingsSheet';
 import { useProfileSummaries } from '../src/hooks/useDaemonData';
+import { useDebouncedCallback } from '../src/hooks/useDebouncedCallback';
 import { useEventEffect } from '../src/hooks/useEvents';
 import { useInbox } from '../src/hooks/useInbox';
 import { useOutputs } from '../src/hooks/useOutputs';
@@ -99,6 +100,8 @@ export default function Inbox() {
     }
   }, [refresh]);
 
+  // Coalesced: a busy workgroup or a reconnect backfill emits bursts — one summaries+workgroups refresh per beat, not per event.
+  const debouncedRefresh = useDebouncedCallback(refresh, 800);
   useEventEffect(
     [
       'session_changed',
@@ -112,9 +115,7 @@ export default function Inbox() {
       'profile_changed',
       'peers_changed',
     ],
-    () => {
-      refresh();
-    },
+    debouncedRefresh,
   );
 
   const openItem = useCallback(

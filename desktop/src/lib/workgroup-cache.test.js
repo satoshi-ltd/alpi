@@ -1,12 +1,43 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import {
   loadCachedMessages,
   saveCachedMessages,
   pruneCachedMessages,
+  _resetPendingSaves,
 } from "./workgroup-cache.js";
 
 beforeEach(() => {
   localStorage.clear();
+  _resetPendingSaves();
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+});
+
+describe("debounced writes", () => {
+  it("coalesces rapid saves into one localStorage write with the last value", () => {
+    vi.useFakeTimers();
+    const setItem = vi.spyOn(Storage.prototype, "setItem");
+    for (let i = 1; i <= 20; i += 1) {
+      saveCachedMessages("conn-a", "doc", "wg-1", [{ seq: i }]);
+    }
+    expect(setItem).not.toHaveBeenCalled();
+    // Reads see the pending value before the flush lands.
+    expect(loadCachedMessages("conn-a", "doc", "wg-1")).toEqual([{ seq: 20 }]);
+    vi.advanceTimersByTime(1100);
+    expect(setItem).toHaveBeenCalledTimes(1);
+    expect(loadCachedMessages("conn-a", "doc", "wg-1")).toEqual([{ seq: 20 }]);
+    setItem.mockRestore();
+  });
+
+  it("prune cancels a pending save so it cannot resurrect a dropped workgroup", () => {
+    vi.useFakeTimers();
+    saveCachedMessages("conn-a", "doc", "wg-dead", [{ seq: 1 }]);
+    pruneCachedMessages("conn-a", []);
+    vi.advanceTimersByTime(2000);
+    expect(loadCachedMessages("conn-a", "doc", "wg-dead")).toEqual([]);
+  });
 });
 
 describe("save + load roundtrip", () => {

@@ -1,5 +1,58 @@
 import { describe, it, expect } from "vitest";
-import { fromDaemonFrame } from "./daemon-frame.js";
+import {
+  classifyDaemonPayload,
+  fromDaemonFrame,
+  isActiveWorkgroupView,
+} from "./daemon-frame.js";
+
+describe("classifyDaemonPayload", () => {
+  it("drops malformed payloads", () => {
+    expect(classifyDaemonPayload(null, "local")).toBe("drop");
+    expect(classifyDaemonPayload(undefined, "local")).toBe("drop");
+    expect(classifyDaemonPayload("nope", "local")).toBe("drop");
+  });
+
+  it("drops frames from a non-active daemon", () => {
+    const payload = { connection_id: "remote-1", frame: { event: "wg.post" } };
+    expect(classifyDaemonPayload(payload, "local")).toBe("drop");
+  });
+
+  it("classifies reconnect backfill frames as replay", () => {
+    const payload = {
+      connection_id: "local",
+      replay: true,
+      frame: { event: "wg.post", data: { profile: "doc", wg_id: "w1" } },
+    };
+    expect(classifyDaemonPayload(payload, "local")).toBe("replay");
+  });
+
+  it("classifies matching live frames as live", () => {
+    const payload = { connection_id: "local", frame: { event: "wg.post" } };
+    expect(classifyDaemonPayload(payload, "local")).toBe("live");
+  });
+
+  it("treats payloads without connection_id as live (legacy emitters)", () => {
+    expect(classifyDaemonPayload({ frame: { event: "x" } }, "local")).toBe("live");
+  });
+});
+
+describe("isActiveWorkgroupView", () => {
+  const ev = { profile: "doc", wg_id: "w1" };
+
+  it("matches when the workgroup view is open on the same profile + wg", () => {
+    expect(isActiveWorkgroupView({ kind: "workgroup", profile: "doc", id: "w1" }, ev)).toBe(true);
+  });
+
+  it("rejects a different workgroup or profile", () => {
+    expect(isActiveWorkgroupView({ kind: "workgroup", profile: "doc", id: "w2" }, ev)).toBe(false);
+    expect(isActiveWorkgroupView({ kind: "workgroup", profile: "muse", id: "w1" }, ev)).toBe(false);
+  });
+
+  it("rejects non-workgroup views and null view", () => {
+    expect(isActiveWorkgroupView({ kind: "profile", profile: "doc" }, ev)).toBe(false);
+    expect(isActiveWorkgroupView(null, ev)).toBe(false);
+  });
+});
 
 describe("fromDaemonFrame", () => {
   it("returns null for malformed input", () => {

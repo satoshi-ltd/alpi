@@ -1,6 +1,24 @@
 // Maps host.events.emit() kinds onto applyChange's fs-change vocabulary.
 // Forward-compatible: unknown kinds return null. Pure function — easy to unit-test.
 
+// "drop": foreign daemon. "replay": reconnect backfill — refresh once, never fan out per event.
+export function classifyDaemonPayload(payload, activeConnectionId) {
+  if (!payload || typeof payload !== "object") return "drop";
+  if (payload.connection_id && payload.connection_id !== activeConnectionId) {
+    return "drop";
+  }
+  if (payload.replay) return "replay";
+  return "live";
+}
+
+export function isActiveWorkgroupView(view, ev) {
+  return (
+    view?.kind === "workgroup" &&
+    view.id === ev?.wg_id &&
+    view.profile === ev?.profile
+  );
+}
+
 export function fromDaemonFrame(frame) {
   if (!frame || typeof frame !== "object") return null;
   const event = frame.event;

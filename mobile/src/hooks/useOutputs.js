@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useEndpoint } from '../lib/EndpointContext';
+import { useDebouncedCallback } from './useDebouncedCallback';
 import { useEventEffect } from './useEvents';
 
 const DEFAULT_LIMIT = 100;
@@ -51,9 +52,8 @@ export function useOutputs({ profile, status, profiles } = {}) {
     refresh();
   }, [refresh]);
 
-  useEventEffect(['output.created', 'output.updated'], () => {
-    refresh();
-  });
+  const debouncedRefresh = useDebouncedCallback(refresh, 500);
+  useEventEffect(['output.created', 'output.updated'], debouncedRefresh);
 
   return { rows, loading, refresh };
 }

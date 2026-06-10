@@ -16,6 +16,7 @@ export function useChatStream({
   setRewriteDraft,
   reloadRef,
   notify,
+  connectionOnlineRef,
 }) {
   const [pendingTurn, setPendingTurn] = useState(null);
 
@@ -215,6 +216,8 @@ export function useChatStream({
       const turn = pendingTurnRef.current;
       if (!turn) return;
       if (replayingRef.current) return;
+      // Confirmed-offline daemon: replaying would just queue invokes against a dead socket — resume on the first online tick.
+      if (connectionOnlineRef?.current === false) return;
       // Errored turn is terminal but stays pending to show the error — replaying floods recovery toasts.
       if (turn.error) return;
       // Pre-session_start: nothing to replay yet (sidecar key is the session id, daemon emits it as the first frame).
@@ -225,7 +228,7 @@ export function useChatStream({
       }
     }, STALL_POLL_INTERVAL_MS);
     return () => clearInterval(id);
-  }, [pendingTurn, runReplay]);
+  }, [pendingTurn, runReplay, connectionOnlineRef]);
 
   useEffect(() => {
     let cancelled = false;

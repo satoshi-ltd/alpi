@@ -94,3 +94,41 @@ async def test_subscribe_filters_by_kinds(short_tmp: Path) -> None:
         await writer.wait_closed()
     finally:
         await srv.stop()
+
+
+@pytest.mark.asyncio
+async def test_idle_subscriber_receives_keepalive_ping(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    monkeypatch.setattr(data_events, "PING_PERIOD_S", 0.05)
+    home = short_tmp / "h"
+    home.mkdir()
+    load_or_generate(home)
+
+    srv = host_server.Server(home=home)
+    data_events.register(srv)
+    await srv.start()
+
+    try:
+        reader, writer = await asyncio.open_unix_connection(str(srv.socket_path()))
+        writer.write(
+            (json.dumps({"id": "r", "method": "host.events.subscribe"}) + "\n").encode()
+        )
+        await writer.drain()
+
+        first = json.loads(await reader.readline())
+        assert first["event"] == "subscribed"
+
+        ping = json.loads(await asyncio.wait_for(reader.readline(), timeout=2.0))
+        assert ping["event"] == "ping"
+
+        data_events.emit("session_changed", {"id": "after-ping"})
+        nxt = json.loads(await asyncio.wait_for(reader.readline(), timeout=2.0))
+        while nxt["event"] == "ping":
+            nxt = json.loads(await asyncio.wait_for(reader.readline(), timeout=2.0))
+        assert nxt["event"] == "session_changed"
+
+        writer.close()
+        await writer.wait_closed()
+    finally:
+        await srv.stop()

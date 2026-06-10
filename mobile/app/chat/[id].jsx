@@ -25,6 +25,7 @@ import { SessionsSheet } from '../../src/features/sheets/SessionsSheet';
 import { useChatSend } from '../../src/hooks/useChatSend';
 import { stageAttachment } from '../../src/lib/attachments';
 import { useProfileSummaries, useSession, useSessionsList } from '../../src/hooks/useDaemonData';
+import { useDebouncedCallback } from '../../src/hooks/useDebouncedCallback';
 import { useEventEffect } from '../../src/hooks/useEvents';
 import { useEndpoint } from '../../src/lib/EndpointContext';
 import { profileEmptyState } from '../../src/lib/profileReady';
@@ -383,11 +384,12 @@ export default function ProfileChat() {
     },
   });
 
+  const refreshSession = useDebouncedCallback(() => {
+    sessionsList.refresh();
+    session.refresh();
+  }, 400);
   useEventEffect('session_changed', (ev) => {
-    if (ev.data?.profile === id) {
-      sessionsList.refresh();
-      session.refresh();
-    }
+    if (ev.data?.profile === id) refreshSession();
   });
 
   const sendMessage = (text, options) => streamSend(text, options);

@@ -23,6 +23,7 @@ import {
   useWorkgroupTranscript,
   useWorkgroups,
 } from '../../src/hooks/useDaemonData';
+import { useDebouncedCallback } from '../../src/hooks/useDebouncedCallback';
 import { useEventEffect } from '../../src/hooks/useEvents';
 import { useEndpoint } from '../../src/lib/EndpointContext';
 import { markWorkgroupRead } from '../../src/lib/readState';
@@ -347,10 +348,14 @@ export default function WorkgroupChat() {
   }, [persisted, optimistic, persistedBodies]);
 
   // session_changed excluded — fires on every profile chat turn, would cause wasted wg transcript fetch+decrypt over Tailscale.
-  useEventEffect(['wg.post', 'wg.done', 'workgroup_members'], (ev) => {
-    if (ev.data?.wg_id !== id) return;
+  // Coalesced: each refresh re-fetches and decrypts the 200-post tail, so post bursts must collapse into one.
+  const refreshTranscript = useDebouncedCallback(() => {
     transcript.refresh();
     setOptimistic([]);
+  }, 400);
+  useEventEffect(['wg.post', 'wg.done', 'workgroup_members'], (ev) => {
+    if (ev.data?.wg_id !== id) return;
+    refreshTranscript();
   });
 
   // A #working is stale once superseded — by a later post from the same author, or by the hub's #done that closes the task. A member #skip is a per-peer pass, not a close, so it never marks others' #working stale. Scope resets when crossing a #task boundary going backwards.

@@ -91,124 +91,160 @@ enum ChatEvent {
 }
 
 #[tauri::command]
-fn profiles() -> serde_json::Value {
-    host_array_value("host.profiles.list", serde_json::json!({}), "profiles")
+async fn profiles() -> serde_json::Value {
+    off_main(|| host_array_value("host.profiles.list", serde_json::json!({}), "profiles"))
+        .await
+        .unwrap_or(serde_json::Value::Array(vec![]))
 }
 
 #[tauri::command]
-fn profile_tools(profile: String) -> serde_json::Value {
-    host_array_value(
+async fn profile_tools(profile: String) -> serde_json::Value {
+    off_main(move || host_array_value(
         "host.tools.list",
         serde_json::json!({ "profile": profile }),
         "tools",
-    )
+    ))
+    .await
+    .unwrap_or(serde_json::Value::Array(vec![]))
 }
 
 #[tauri::command]
-fn profile_skills(profile: String) -> serde_json::Value {
-    host_array_value(
+async fn profile_skills(profile: String) -> serde_json::Value {
+    off_main(move || host_array_value(
         "host.skills.list",
         serde_json::json!({ "profile": profile }),
         "skills",
-    )
+    ))
+    .await
+    .unwrap_or(serde_json::Value::Array(vec![]))
 }
 
 #[tauri::command]
-fn profile_skill_read(
+async fn profile_skill_read(
     profile: String,
     name: String,
     category: Option<String>,
 ) -> Result<serde_json::Value, String> {
-    let mut params = serde_json::json!({ "profile": profile, "name": name });
-    if let Some(cat) = category {
-        params["category"] = serde_json::Value::String(cat);
-    }
-    host_client::call("host.skill.read", params)
-        .map(|v| v.get("skill").cloned().unwrap_or(serde_json::Value::Null))
+    off_main(move || {
+        let mut params = serde_json::json!({ "profile": profile, "name": name });
+        if let Some(cat) = category {
+            params["category"] = serde_json::Value::String(cat);
+        }
+        host_client::call("host.skill.read", params)
+            .map(|v| v.get("skill").cloned().unwrap_or(serde_json::Value::Null))
+            .map_err(|e| e.to_string())
+    })
+    .await?
+}
+
+#[tauri::command]
+async fn profile_detail(profile: String) -> Result<serde_json::Value, String> {
+    off_main(move || {
+        host_client::call(
+            "host.profile.detail",
+            serde_json::json!({ "profile": profile }),
+        )
         .map_err(|e| e.to_string())
+    })
+    .await?
 }
 
 #[tauri::command]
-fn profile_detail(profile: String) -> Result<serde_json::Value, String> {
-    host_client::call(
-        "host.profile.detail",
-        serde_json::json!({ "profile": profile }),
-    )
-    .map_err(|e| e.to_string())
+async fn usage_daily(profile: String) -> Result<serde_json::Value, String> {
+    off_main(move || {
+        host_client::call(
+            "host.usage.daily",
+            serde_json::json!({ "profile": profile }),
+        )
+        .map_err(|e| e.to_string())
+    })
+    .await?
 }
 
 #[tauri::command]
-fn usage_daily(profile: String) -> Result<serde_json::Value, String> {
-    host_client::call(
-        "host.usage.daily",
-        serde_json::json!({ "profile": profile }),
-    )
-    .map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-fn workgroup_usage_daily(
+async fn workgroup_usage_daily(
     profile: String,
     wg_id: String,
 ) -> Result<serde_json::Value, String> {
-    host_client::call(
-        "host.usage.workgroup.daily",
-        serde_json::json!({ "profile": profile, "wg_id": wg_id }),
-    )
-    .map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-fn profile_memory(profile: String) -> Result<serde_json::Value, String> {
-    let mut out = serde_json::Map::new();
-    for name in ["USER.md", "MEMORY.md", "AGENT.md"] {
-        let rel = format!("memories/{name}");
-        let text = host_client::call(
-            "host.profile.read_file",
-            serde_json::json!({ "profile": profile, "rel_path": rel }),
+    off_main(move || {
+        host_client::call(
+            "host.usage.workgroup.daily",
+            serde_json::json!({ "profile": profile, "wg_id": wg_id }),
         )
-        .ok()
-        .and_then(|v| v.get("text").and_then(|t| t.as_str()).map(String::from))
-        .unwrap_or_default();
-        out.insert(name.to_string(), serde_json::Value::String(text));
-    }
-    Ok(serde_json::Value::Object(out))
+        .map_err(|e| e.to_string())
+    })
+    .await?
 }
 
 #[tauri::command]
-fn profile_summaries() -> serde_json::Value {
-    host_array_value("host.profile.summaries", serde_json::json!({}), "profiles")
+async fn profile_memory(profile: String) -> Result<serde_json::Value, String> {
+    off_main(move || {
+        let mut out = serde_json::Map::new();
+        for name in ["USER.md", "MEMORY.md", "AGENT.md"] {
+            let rel = format!("memories/{name}");
+            let text = host_client::call(
+                "host.profile.read_file",
+                serde_json::json!({ "profile": profile, "rel_path": rel }),
+            )
+            .ok()
+            .and_then(|v| v.get("text").and_then(|t| t.as_str()).map(String::from))
+            .unwrap_or_default();
+            out.insert(name.to_string(), serde_json::Value::String(text));
+        }
+        Ok(serde_json::Value::Object(out))
+    })
+    .await?
 }
 
 #[tauri::command]
-fn host_connections() -> serde_json::Value {
-    host_client::connections_for_ui()
+async fn profile_summaries() -> serde_json::Value {
+    off_main(|| host_array_value("host.profile.summaries", serde_json::json!({}), "profiles"))
+        .await
+        .unwrap_or(serde_json::Value::Array(vec![]))
 }
 
 #[tauri::command]
-fn host_connection_set_active(id: String) -> Result<(), String> {
-    host_client::set_active_connection(id)
+async fn host_connections() -> serde_json::Value {
+    off_main(host_client::connections_for_ui)
+        .await
+        .unwrap_or(serde_json::Value::Null)
 }
 
 #[tauri::command]
-fn host_connection_forget(id: String) -> Result<(), String> {
-    host_client::forget_connection(id)
+async fn host_connection_set_active(id: String) -> Result<(), String> {
+    off_main(move || host_client::set_active_connection(id)).await?
 }
 
 #[tauri::command]
-fn host_connection_add_remote(
+async fn host_connection_forget(id: String) -> Result<(), String> {
+    off_main(move || host_client::forget_connection(id)).await?
+}
+
+#[tauri::command]
+async fn host_connection_add_remote(
     name: String,
     host: String,
     port: u16,
     token: String,
 ) -> Result<String, String> {
-    host_client::add_remote_connection(name, host, port, token)
+    off_main(move || host_client::add_remote_connection(name, host, port, token)).await?
 }
 
 fn spawn_background(name: &str, f: impl FnOnce() + Send + 'static) {
     if let Err(e) = thread::Builder::new().name(name.to_string()).spawn(f) {
         eprintln!("background task {name} not started: {e}");
     }
+}
+
+// Sync #[tauri::command]s run on the main thread — daemon I/O there freezes the whole window for the full read timeout, so every blocking call goes through here.
+async fn off_main<T, F>(f: F) -> Result<T, String>
+where
+    T: Send + 'static,
+    F: FnOnce() -> T + Send + 'static,
+{
+    tauri::async_runtime::spawn_blocking(f)
+        .await
+        .map_err(|e| format!("join: {e}"))
 }
 
 #[tauri::command]
@@ -243,14 +279,16 @@ async fn host_connection_probe(id: String) -> String {
 }
 
 #[tauri::command]
-fn sessions(profile: Option<String>, limit: Option<usize>) -> Vec<SessionEntry> {
-    match profile {
+async fn sessions(profile: Option<String>, limit: Option<usize>) -> Vec<SessionEntry> {
+    off_main(move || match profile {
         Some(p) => sessions_via_alp(&p, limit),
         None => host_profile_names()
             .into_iter()
             .flat_map(|p| sessions_via_alp(&p, limit))
             .collect(),
-    }
+    })
+    .await
+    .unwrap_or_default()
 }
 
 fn host_profile_names() -> Vec<String> {
@@ -365,12 +403,15 @@ fn sessions_via_alp(profile: &str, limit: Option<usize>) -> Vec<SessionEntry> {
 }
 
 #[tauri::command]
-fn session_detail(profile: String, id: String) -> Result<serde_json::Value, String> {
-    let result = host_client::call(
-        "host.session.read",
-        serde_json::json!({"profile": profile, "id": id}),
-    )?;
-    Ok(result.get("session").cloned().unwrap_or(serde_json::Value::Null))
+async fn session_detail(profile: String, id: String) -> Result<serde_json::Value, String> {
+    off_main(move || {
+        let result = host_client::call(
+            "host.session.read",
+            serde_json::json!({"profile": profile, "id": id}),
+        )?;
+        Ok(result.get("session").cloned().unwrap_or(serde_json::Value::Null))
+    })
+    .await?
 }
 
 #[tauri::command]
@@ -385,26 +426,33 @@ async fn sessions_delete(
 }
 
 #[tauri::command]
-fn workgroups(profile: Option<String>) -> serde_json::Value {
-    let params = match profile {
-        Some(p) => serde_json::json!({"profile": p}),
-        None => serde_json::json!({}),
-    };
-    host_array_value("host.workgroups.list", params, "workgroups")
+async fn workgroups(profile: Option<String>) -> serde_json::Value {
+    off_main(move || {
+        let params = match profile {
+            Some(p) => serde_json::json!({"profile": p}),
+            None => serde_json::json!({}),
+        };
+        host_array_value("host.workgroups.list", params, "workgroups")
+    })
+    .await
+    .unwrap_or(serde_json::Value::Array(vec![]))
 }
 
 #[tauri::command]
-fn read_file(profile: Option<String>, rel_path: String) -> Result<String, String> {
-    let mut params = serde_json::json!({"rel_path": rel_path});
-    if let Some(p) = profile {
-        params["profile"] = serde_json::Value::String(p);
-    }
-    let result = host_client::call("host.profile.read_file", params)?;
-    Ok(result
-        .get("text")
-        .and_then(|v| v.as_str())
-        .unwrap_or("")
-        .to_string())
+async fn read_file(profile: Option<String>, rel_path: String) -> Result<String, String> {
+    off_main(move || {
+        let mut params = serde_json::json!({"rel_path": rel_path});
+        if let Some(p) = profile {
+            params["profile"] = serde_json::Value::String(p);
+        }
+        let result = host_client::call("host.profile.read_file", params)?;
+        Ok(result
+            .get("text")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string())
+    })
+    .await?
 }
 
 #[tauri::command]
@@ -524,17 +572,21 @@ async fn service_action(profile: String, action: String) -> Result<String, Strin
 }
 
 #[tauri::command]
-fn gateway_status(profile: String) -> serde_json::Value {
-    host_array_value(
+async fn gateway_status(profile: String) -> serde_json::Value {
+    off_main(move || host_array_value(
         "host.gateway.status",
         serde_json::json!({"profile": profile}),
         "gateways",
-    )
+    ))
+    .await
+    .unwrap_or(serde_json::Value::Array(vec![]))
 }
 
 #[tauri::command]
-fn devices_list() -> serde_json::Value {
-    host_array_value("host.devices.list", serde_json::json!({}), "devices")
+async fn devices_list() -> serde_json::Value {
+    off_main(|| host_array_value("host.devices.list", serde_json::json!({}), "devices"))
+        .await
+        .unwrap_or(serde_json::Value::Array(vec![]))
 }
 
 #[tauri::command]
@@ -672,21 +724,25 @@ async fn network_restart_host_server() -> Result<serde_json::Value, String> {
 }
 
 #[tauri::command]
-fn profile_storage(profile: String) -> serde_json::Value {
-    host_array_value(
+async fn profile_storage(profile: String) -> serde_json::Value {
+    off_main(move || host_array_value(
         "host.profile.storage",
         serde_json::json!({"profile": profile}),
         "storage",
-    )
+    ))
+    .await
+    .unwrap_or(serde_json::Value::Array(vec![]))
 }
 
 #[tauri::command]
-fn workgroup_members(profile: String, wg_id: String) -> serde_json::Value {
-    host_array_value(
+async fn workgroup_members(profile: String, wg_id: String) -> serde_json::Value {
+    off_main(move || host_array_value(
         "host.workgroup.members",
         serde_json::json!({"profile": profile, "wg_id": wg_id}),
         "members",
-    )
+    ))
+    .await
+    .unwrap_or(serde_json::Value::Array(vec![]))
 }
 
 #[tauri::command]
@@ -921,14 +977,18 @@ async fn peer_add(
 }
 
 #[tauri::command]
-fn gateway_config(profile: String, name: String) -> std::collections::HashMap<String, String> {
-    host_client::call(
-        "host.gateway.config",
-        serde_json::json!({"profile": profile, "name": name}),
-    )
-    .ok()
-    .and_then(|v| v.get("config").cloned())
-    .and_then(|v| serde_json::from_value(v).ok())
+async fn gateway_config(profile: String, name: String) -> std::collections::HashMap<String, String> {
+    off_main(move || {
+        host_client::call(
+            "host.gateway.config",
+            serde_json::json!({"profile": profile, "name": name}),
+        )
+        .ok()
+        .and_then(|v| v.get("config").cloned())
+        .and_then(|v| serde_json::from_value(v).ok())
+        .unwrap_or_default()
+    })
+    .await
     .unwrap_or_default()
 }
 
@@ -1729,19 +1789,23 @@ async fn pick_files() -> Result<Vec<String>, String> {
 // Stat the given paths (used by the picker + drag-drop) so the composer can
 // render file chips with name + size before sending.
 #[tauri::command]
-fn attachment_meta(paths: Vec<String>) -> Vec<AttachmentMeta> {
-    paths
-        .into_iter()
-        .filter_map(|p| {
-            let path = std::path::Path::new(&p);
-            let md = std::fs::metadata(path).ok()?;
-            if !md.is_file() {
-                return None;
-            }
-            let name = path.file_name()?.to_string_lossy().to_string();
-            Some(AttachmentMeta { path: p.clone(), name, size: md.len() })
-        })
-        .collect()
+async fn attachment_meta(paths: Vec<String>) -> Vec<AttachmentMeta> {
+    off_main(move || {
+        paths
+            .into_iter()
+            .filter_map(|p| {
+                let path = std::path::Path::new(&p);
+                let md = std::fs::metadata(path).ok()?;
+                if !md.is_file() {
+                    return None;
+                }
+                let name = path.file_name()?.to_string_lossy().to_string();
+                Some(AttachmentMeta { path: p.clone(), name, size: md.len() })
+            })
+            .collect()
+    })
+    .await
+    .unwrap_or_default()
 }
 
 // Allowed read/copy roots; `extra` is the active profile's workspace (UI-supplied, trusted).
@@ -1775,20 +1839,25 @@ fn path_within_allowed(path: &str, extra: &[String]) -> bool {
 }
 
 #[tauri::command]
-fn attachment_thumb(path: String, mime: String, roots: Option<Vec<String>>) -> Option<String> {
-    use base64::Engine;
-    const MAX_THUMB_BYTES: u64 = 6 * 1024 * 1024;
-    if !path_within_allowed(&path, &roots.unwrap_or_default()) {
-        return None;
-    }
-    let p = std::path::Path::new(&path);
-    let md = std::fs::metadata(p).ok()?;
-    if !md.is_file() || md.len() > MAX_THUMB_BYTES || !mime.starts_with("image/") {
-        return None;
-    }
-    let bytes = std::fs::read(p).ok()?;
-    let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
-    Some(format!("data:{mime};base64,{b64}"))
+async fn attachment_thumb(path: String, mime: String, roots: Option<Vec<String>>) -> Option<String> {
+    off_main(move || {
+        use base64::Engine;
+        const MAX_THUMB_BYTES: u64 = 6 * 1024 * 1024;
+        if !path_within_allowed(&path, &roots.unwrap_or_default()) {
+            return None;
+        }
+        let p = std::path::Path::new(&path);
+        let md = std::fs::metadata(p).ok()?;
+        if !md.is_file() || md.len() > MAX_THUMB_BYTES || !mime.starts_with("image/") {
+            return None;
+        }
+        let bytes = std::fs::read(p).ok()?;
+        let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
+        Some(format!("data:{mime};base64,{b64}"))
+    })
+    .await
+    .ok()
+    .flatten()
 }
 
 // Remote daemon can't read local paths — upload bytes, return the daemon-side path.
@@ -2162,28 +2231,31 @@ fn stream_chat(
 }
 
 #[tauri::command]
-fn chat_events_since(
+async fn chat_events_since(
     profile: String,
     session_id: String,
     after_seq: Option<u64>,
     limit: Option<u64>,
 ) -> Result<serde_json::Value, String> {
     // Replay sidecar for the freeze case: when host.chat.send's stream socket dies mid-turn, the desktop polls this to backfill missed frames.
-    let mut params = serde_json::json!({
-        "profile": profile,
-        "session_id": session_id,
-    });
-    if let Some(s) = after_seq {
-        params["after_seq"] = serde_json::Value::from(s);
-    }
-    if let Some(l) = limit {
-        params["limit"] = serde_json::Value::from(l);
-    }
-    host_client::call("host.chat.events_since", params)
+    off_main(move || {
+        let mut params = serde_json::json!({
+            "profile": profile,
+            "session_id": session_id,
+        });
+        if let Some(s) = after_seq {
+            params["after_seq"] = serde_json::Value::from(s);
+        }
+        if let Some(l) = limit {
+            params["limit"] = serde_json::Value::from(l);
+        }
+        host_client::call("host.chat.events_since", params)
+    })
+    .await?
 }
 
 #[tauri::command]
-fn workgroup_transcript(
+async fn workgroup_transcript(
     profile: String,
     wg_id: String,
     after_seq: Option<u32>,
@@ -2191,6 +2263,16 @@ fn workgroup_transcript(
     tail: Option<bool>,
 ) -> Result<serde_json::Value, String> {
     // Default: tail=true, limit=200 — first-paint must be bounded so a workgroup with 10k posts doesn't ship megabytes over Tailscale. Subsequent fetches pass after_seq for incremental delta.
+    off_main(move || workgroup_transcript_blocking(profile, wg_id, after_seq, limit, tail)).await?
+}
+
+fn workgroup_transcript_blocking(
+    profile: String,
+    wg_id: String,
+    after_seq: Option<u32>,
+    limit: Option<u32>,
+    tail: Option<bool>,
+) -> Result<serde_json::Value, String> {
     let mut params = serde_json::json!({ "profile": profile, "wg_id": wg_id });
     if let Some(s) = after_seq {
         params["after_seq"] = serde_json::json!(s);
@@ -2287,6 +2369,8 @@ fn subscribe_daemon_events(app: AppHandle) {
     let states: Arc<Mutex<HashMap<String, SubscribeState>>> =
         Arc::new(Mutex::new(HashMap::new()));
 
+    // This loop doubles as the recovery detector for the active daemon — back off while it stays down (2,4,8,10s capped) so an offline remote isn't hammered, reset as soon as a stream lives.
+    let mut consecutive_failures: u32 = 0;
     loop {
         let starting_id = host_client::active_connection_id();
         let Some(sub_key) = host_client::active_subscription_key() else {
@@ -2300,7 +2384,7 @@ fn subscribe_daemon_events(app: AppHandle) {
         let starting_id_for_match = starting_id.clone();
         let key_for_loop = sub_key.clone();
 
-        let _ = host_client::call_stream_until(
+        let stream_result = host_client::call_stream_until(
             "host.events.subscribe",
             serde_json::json!({}),
             move |frame| {
@@ -2391,7 +2475,17 @@ fn subscribe_daemon_events(app: AppHandle) {
                 true
             },
         );
-        std::thread::sleep(std::time::Duration::from_secs(2));
+        let sleep_secs = match &stream_result {
+            Ok(()) => {
+                consecutive_failures = 0;
+                2
+            }
+            Err(_) => {
+                consecutive_failures = consecutive_failures.saturating_add(1);
+                (2u64 << consecutive_failures.min(3)).min(10)
+            }
+        };
+        std::thread::sleep(std::time::Duration::from_secs(sleep_secs));
     }
 }
 

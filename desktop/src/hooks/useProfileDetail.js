@@ -41,6 +41,19 @@ function load(connectionId, name, { force = false } = {}) {
 }
 
 let _eventListenerInstalled = false;
+const _invalidateTimers = new Map(); // key -> timeout
+
+// Per-key leading-edge coalesce: a reconnect backfill can replay dozens of config_changed frames per profile — one force-refetch 300ms later covers them all.
+function scheduleInvalidate(connectionId, profile) {
+  const key = makeKey(connectionId, profile);
+  if (_invalidateTimers.has(key)) return;
+  _invalidateTimers.set(key, setTimeout(() => {
+    _invalidateTimers.delete(key);
+    _cache.delete(key);
+    load(connectionId, profile, { force: true });
+  }, 300));
+}
+
 function ensureEventListener() {
   if (_eventListenerInstalled) return;
   _eventListenerInstalled = true;
@@ -57,11 +70,12 @@ function ensureEventListener() {
       || kind === "gateway_changed"
       || kind === "peers_changed"
     ) {
-      const key = makeKey(connectionId, profile);
-      _cache.delete(key);
-      load(connectionId, profile, { force: true });
+      scheduleInvalidate(connectionId, profile);
     }
-  }).catch(() => { /* listener install failure is non-fatal */ });
+  }).catch(() => {
+    // Re-arm on the next hook mount — a swallowed install failure would silently serve stale details forever.
+    _eventListenerInstalled = false;
+  });
 }
 
 // `connectionId` and `name` may be null/undefined — the hook stays idle.
@@ -108,5 +122,7 @@ export function invalidateProfileDetailCache(connectionId) {
 export function _clearProfileDetailCache() {
   _cache.clear();
   _inflight.clear();
+  for (const t of _invalidateTimers.values()) clearTimeout(t);
+  _invalidateTimers.clear();
   _eventListenerInstalled = false;
 }

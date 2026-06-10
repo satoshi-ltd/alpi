@@ -14,6 +14,19 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.1.39 — 2026-06-10 — survives flaky links and backgrounding
+
+Requires alpi v0.8.17+.
+
+- **Half-dead connections heal themselves.** If the event stream goes silent
+  (dropped Tailscale link, network switch), the app notices within a minute
+  and reconnects — before, it could stay deaf until you restarted it.
+- **Coming back from background resyncs immediately** instead of waiting for
+  the next event.
+- **Busy workgroups use less battery and data.** Event bursts collapse into
+  single refreshes — the inbox and open transcripts refresh once per beat,
+  not once per post.
+
 ## v0.1.38 — 2026-06-10 — tools list without the "Other" pile
 
 Requires alpi v0.8.16+.

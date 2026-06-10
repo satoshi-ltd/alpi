@@ -137,4 +137,29 @@ describe("useProfileDetail", () => {
     const { result } = renderHook(() => useProfileDetail("conn-a", "doc"));
     await waitFor(() => expect(result.current.detail).toEqual({}));
   });
+
+  it("coalesces a burst of config_changed events into ONE refetch (reconnect replay storm)", async () => {
+    invoke
+      .mockResolvedValueOnce({ peers: ["alice"] })
+      .mockResolvedValue({ peers: ["after-burst"] });
+    const { result } = renderHook(() => useProfileDetail("conn-a", "doc"));
+    await waitFor(() => expect(result.current.detail).toEqual({ peers: ["alice"] }));
+
+    await act(async () => {
+      for (let i = 0; i < 25; i += 1) {
+        daemonEventListener({
+          payload: {
+            connection_id: "conn-a",
+            replay: true,
+            frame: { event: "config_changed", data: { profile: "doc" } },
+          },
+        });
+      }
+    });
+    await waitFor(() => {
+      expect(result.current.detail).toEqual({ peers: ["after-burst"] });
+    });
+    // 1 initial + 1 debounced refetch — never 25.
+    expect(invoke).toHaveBeenCalledTimes(2);
+  });
 });

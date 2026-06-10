@@ -84,6 +84,10 @@ pub fn classify_frame(state: &mut SubscribeState, frame: &Value) -> SubscribeAct
         Some(s) => s,
         None => return SubscribeAction::Ignore,
     };
+    if event == "ping" {
+        // Transport keepalive — already did its job by resetting the read timeout.
+        return SubscribeAction::Ignore;
+    }
     if event == "subscribed" {
         let anchor = frame.get("next_seq").and_then(|v| v.as_u64());
         return if state.last_seq > 0 {
@@ -157,6 +161,15 @@ mod tests {
     }
 
     // classify_frame -----------------------------------------------------------
+
+    #[test]
+    fn keepalive_ping_is_ignored_and_does_not_touch_state() {
+        let mut s = fresh();
+        s.bump_seq(7);
+        let action = classify_frame(&mut s, &json!({"event": "ping", "id": "tauri-stream"}));
+        assert_eq!(action, SubscribeAction::Ignore);
+        assert_eq!(s.last_seq, 7);
+    }
 
     #[test]
     fn handshake_first_connect_anchors_at_next_seq() {

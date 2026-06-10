@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, memo, useEffect, useMemo, useState } from "react";
 import { useStickyScroll } from "../lib/useStickyScroll.js";
 import { useScrollProgress } from "../lib/useScrollProgress.js";
 import { invoke } from "@tauri-apps/api/core";
@@ -24,6 +24,7 @@ import {
   validateTaskShape,
 } from "../lib/workgroup-tasks.js";
 import { playTts, subscribeTts, voiceForPubkey } from "../lib/tts.js";
+import { buildSpeakerIndex, speakerFromIndex } from "../lib/wg-speakers.js";
 import { useOnline } from "../lib/useOnline.js";
 import {
   loadCachedMessages,
@@ -190,6 +191,10 @@ export default function WorkgroupView({
     }
     return out;
   }, [members]);
+  const speakerIndex = useMemo(
+    () => buildSpeakerIndex(profiles, peers, members),
+    [profiles, peers, members],
+  );
   const bumpRefresh = () => {
     setRefreshBeat((b) => b + 1);
     setRefreshTick((t) => t + 1);
@@ -251,7 +256,15 @@ export default function WorkgroupView({
     let cancelled = false;
     let unlistenFs = null;
     let unlistenDaemon = null;
-    const bump = () => setRefreshTick((t) => t + 1);
+    let bumpTimer = null;
+    // The refresh effect re-reads costs + members + peers + transcript; coalesce post bursts (and reconnect replay) so it runs once per beat, not once per post.
+    const bump = () => {
+      if (bumpTimer) return;
+      bumpTimer = setTimeout(() => {
+        bumpTimer = null;
+        if (!cancelled) setRefreshTick((t) => t + 1);
+      }, 200);
+    };
     listen("fs-change", (event) => {
       const ev = event.payload;
       if (
@@ -286,6 +299,7 @@ export default function WorkgroupView({
       .catch(() => {});
     return () => {
       cancelled = true;
+      if (bumpTimer) clearTimeout(bumpTimer);
       safeUnlisten(unlistenFs);
       safeUnlisten(unlistenDaemon);
     };
@@ -414,89 +428,28 @@ export default function WorkgroupView({
             {messages.length > 0 && (
               <div className={styles.timeline}>
                 {messages.map((m) => {
-                  const speaker = resolveSpeaker(m, profiles, peers, members);
-                  const isFromHub = Boolean(
-                    hubPubkey && m.from_pubkey === hubPubkey,
-                  );
-                  const cls = classifyMessage(m.body);
-                  const task = cls.variant === "task" ? cls.task : null;
-                  const working = cls.variant === "working" ? { content: cls.text } : null;
-                  const skip = cls.variant === "skip" ? { content: cls.text } : null;
-                  const done = cls.variant === "done" ? { content: cls.text } : null;
-
-                  const meta = renderWgMeta({
-                    seq: m.seq,
-                    cost: costs[m.seq],
-                    speaker,
-                    isFromHub,
-                    styles,
-                  });
-                  const speakableText = task
-                    ? task.content
-                    : (working?.content || skip?.content || done?.content || m.body);
-                  const footer = renderWgFooter({
-                    plainText: speakableText,
-                    at: m.at,
-                    styles,
-                    ttsKey: `wg:${workgroup.id}:${m.seq}`,
-                    profile: workgroup.profile,
-                    voice: voiceMap[m.from_pubkey]
-                      || voiceForPubkey(m.from_pubkey),
-                    ttsState,
-                    online,
-                  });
-
-                  if (task) {
-                    return (
-                      <MarkerCard
-                        key={m.seq}
-                        variant="task"
-                        side={isFromHub ? "right" : "left"}
-                        taskId={m.seq}
-                        hubColor={speaker.accent}
-                        meta={meta}
-                        footer={footer}
-                      >
-                        {task.content ? (
-                          <Markdown as="div" className="alpi-md" source={task.content} />
-                        ) : null}
-                      </MarkerCard>
-                    );
-                  }
-
-                  if (working || skip || done) {
-                    const variant = working ? "working" : skip ? "skip" : "done";
-                    const isStale = working && workingStale.has(m.seq);
-                    const content = (working || skip || done).content;
-                    return (
-                      <MarkerCard
-                        key={m.seq}
-                        variant={variant}
-                        label={isStale ? "WORK" : undefined}
-                        stale={isStale}
-                        side={isFromHub ? "right" : "left"}
-                        taskId={m.seq}
-                        hubColor={speaker.accent}
-                        meta={meta}
-                        footer={footer}
-                      >
-                        {content ? (
-                          <Markdown as="div" className="alpi-md" source={content} />
-                        ) : null}
-                      </MarkerCard>
-                    );
-                  }
-
+                  const speaker = speakerFromIndex(speakerIndex, m);
+                  const cost = costs[m.seq];
+                  const ttsKey = `wg:${workgroup.id}:${m.seq}`;
                   return (
-                    <MessageBubble
+                    <WgMessage
                       key={m.seq}
-                      side={isFromHub ? "right" : "left"}
-                      tint={speaker.accent}
-                      meta={meta}
-                      footer={footer}
-                    >
-                      <Markdown as="div" className="alpi-md" source={m.body} />
-                    </MessageBubble>
+                      seq={m.seq}
+                      body={m.body}
+                      at={m.at}
+                      isFromHub={Boolean(hubPubkey && m.from_pubkey === hubPubkey)}
+                      speakerName={speaker.name}
+                      speakerAccent={speaker.accent}
+                      speakerBio={speaker.bio}
+                      costTokens={cost?.tokens ?? 0}
+                      costUsd={cost?.usd ?? 0}
+                      stale={workingStale.has(m.seq)}
+                      ttsKey={ttsKey}
+                      ttsKind={ttsState?.key === ttsKey ? ttsState.kind : null}
+                      online={online}
+                      voice={voiceMap[m.from_pubkey] || voiceForPubkey(m.from_pubkey)}
+                      profile={workgroup.profile}
+                    />
                   );
                 })}
               </div>
@@ -568,9 +521,8 @@ async function copyText(text) {
 }
 
 function renderWgFooter({
-  plainText, at, styles, ttsKey, profile, voice, ttsState, online,
+  plainText, at, styles, ttsKey, profile, voice, ttsKind, online,
 }) {
-  const ttsKind = ttsState?.key === ttsKey ? ttsState.kind : null;
   const isLoading = ttsKind === "loading";
   const isPlaying = ttsKind === "playing";
   const ttsDisabled = !online && !isPlaying;
@@ -657,42 +609,99 @@ function renderWgMeta({ seq, cost, speaker, isFromHub, styles }) {
   );
 }
 
-const PEER_PALETTE = [
-  "#1877f2", "#e0245e", "#7a3ec3", "#0a84ff", "#ff6b35",
-  "#30d158", "#bf5af2", "#ff9f0a", "#5e5ce6", "#64d2ff",
-];
+// Scalar props only — every transcript refetch rebuilds the message objects, so the memo must survive identity churn.
+const WgMessage = memo(function WgMessage({
+  seq,
+  body,
+  at,
+  isFromHub,
+  speakerName,
+  speakerAccent,
+  speakerBio,
+  costTokens,
+  costUsd,
+  stale,
+  ttsKey,
+  ttsKind,
+  online,
+  voice,
+  profile,
+}) {
+  const speaker = { name: speakerName, accent: speakerAccent, bio: speakerBio };
+  const cls = classifyMessage(body);
+  const task = cls.variant === "task" ? cls.task : null;
+  const working = cls.variant === "working" ? { content: cls.text } : null;
+  const skip = cls.variant === "skip" ? { content: cls.text } : null;
+  const done = cls.variant === "done" ? { content: cls.text } : null;
 
-function paletteFor(seed) {
-  let h = 0;
-  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) | 0;
-  return PEER_PALETTE[Math.abs(h) % PEER_PALETTE.length];
-}
-
-function resolveSpeaker(msg, profiles, peers, members) {
-  const pubkey = msg.from_pubkey || "";
-  const memberBio = pubkey
-    ? (members.find((m) => m.pubkey === pubkey)?.bio || "").trim() || null
+  const cost = costTokens > 0 || costUsd > 0
+    ? { tokens: costTokens, usd: costUsd }
     : null;
-  if (pubkey) {
-    const matchProfile = profiles.find((p) => p.pubkey_b64 === pubkey);
-    if (matchProfile) {
-      const localBio = (matchProfile.bio || matchProfile.public_bio || "").trim() || null;
-      return {
-        name: matchProfile.name,
-        accent: matchProfile.accent ?? paletteFor(matchProfile.name),
-        bio: memberBio || localBio,
-      };
-    }
-    const peer = peers.find((p) => p.pubkey === pubkey);
-    if (peer) return { name: peer.id, accent: paletteFor(peer.id), bio: memberBio };
-    const member = members.find((m) => m.pubkey === pubkey);
-    if (member?.bio) {
-      return { name: member.bio, accent: paletteFor(member.bio), bio: null };
-    }
+  const meta = renderWgMeta({ seq, cost, speaker, isFromHub, styles });
+  const speakableText = task
+    ? task.content
+    : (working?.content || skip?.content || done?.content || body);
+  const footer = renderWgFooter({
+    plainText: speakableText,
+    at,
+    styles,
+    ttsKey,
+    profile,
+    voice,
+    ttsKind,
+    online,
+  });
+
+  if (task) {
+    return (
+      <MarkerCard
+        variant="task"
+        side={isFromHub ? "right" : "left"}
+        taskId={seq}
+        hubColor={speaker.accent}
+        meta={meta}
+        footer={footer}
+      >
+        {task.content ? (
+          <Markdown as="div" className="alpi-md" source={task.content} />
+        ) : null}
+      </MarkerCard>
+    );
   }
-  const handle = String(msg.from || "").replace(/^@/, "");
-  return { name: handle, accent: paletteFor(handle), bio: null };
-}
+
+  if (working || skip || done) {
+    const variant = working ? "working" : skip ? "skip" : "done";
+    const isStale = Boolean(working && stale);
+    const content = (working || skip || done).content;
+    return (
+      <MarkerCard
+        variant={variant}
+        label={isStale ? "WORK" : undefined}
+        stale={isStale}
+        side={isFromHub ? "right" : "left"}
+        taskId={seq}
+        hubColor={speaker.accent}
+        meta={meta}
+        footer={footer}
+      >
+        {content ? (
+          <Markdown as="div" className="alpi-md" source={content} />
+        ) : null}
+      </MarkerCard>
+    );
+  }
+
+  return (
+    <MessageBubble
+      side={isFromHub ? "right" : "left"}
+      tint={speaker.accent}
+      meta={meta}
+      footer={footer}
+    >
+      <Markdown as="div" className="alpi-md" source={body} />
+    </MessageBubble>
+  );
+});
 
 function mentionsForWorkgroup(members, peers, profiles, ownPubkey) {
   if (!Array.isArray(members) || members.length === 0) return [];

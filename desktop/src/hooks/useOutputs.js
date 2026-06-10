@@ -65,12 +65,19 @@ export function useOutputs({ profiles, connectionId, status } = {}) {
   useEffect(() => {
     let unlisten = null;
     let cancelled = false;
+    let refreshTimer = null;
     listen("daemon-event", (event) => {
       if (cancelled) return;
       const payload = event.payload ?? {};
       if (payload.connection_id && connectionId && payload.connection_id !== connectionId) return;
       const frame = payload.frame ?? payload;
-      if (frame?.event === "output.created" || frame?.event === "output.updated") refresh();
+      if (frame?.event !== "output.created" && frame?.event !== "output.updated") return;
+      // Coalesce bursts (output storms, reconnect replay) into one listing refresh.
+      if (refreshTimer) return;
+      refreshTimer = setTimeout(() => {
+        refreshTimer = null;
+        if (!cancelled) refresh();
+      }, 400);
     })
       .then((fn) => {
         if (cancelled) safeUnlisten(fn);
@@ -79,6 +86,7 @@ export function useOutputs({ profiles, connectionId, status } = {}) {
       .catch(() => {});
     return () => {
       cancelled = true;
+      if (refreshTimer) clearTimeout(refreshTimer);
       safeUnlisten(unlisten);
     };
   }, [refresh, connectionId]);

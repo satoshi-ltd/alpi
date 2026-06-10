@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { AppState } from 'react-native';
 
 import { useEndpoint } from '../lib/EndpointContext';
 
@@ -6,6 +7,10 @@ const EventsContext = createContext(null);
 
 const RECONNECT_MIN_MS = 1000;
 const RECONNECT_MAX_MS = 30000;
+// Daemon pings every 25s — a stream silent past three pings is a half-dead link (Tailscale drop without RST), not a quiet daemon.
+const STALE_STREAM_MS = 75000;
+const WATCHDOG_TICK_MS = 20000;
+const RESUME_STALE_MS = 30000;
 
 export function EventsProvider({ children }) {
   const { endpoint, call, callStream } = useEndpoint();
@@ -75,6 +80,8 @@ export function EventsProvider({ children }) {
       } catch { /* */ }
     };
 
+    let lastFrameAt = Date.now();
+
     const connect = () => {
       if (cancelled) return;
       handle = callStream(
@@ -83,6 +90,7 @@ export function EventsProvider({ children }) {
         {
           onFrame: (frame) => {
             if (cancelled) return;
+            lastFrameAt = Date.now();
             const event = frame?.event;
             if (!event) return;
             // `subscribed` handshake reply carries the daemon's seq cursor — anchor head on first connect, else backfill the gap.
@@ -96,6 +104,8 @@ export function EventsProvider({ children }) {
               }
               return;
             }
+            // 'ping' is the daemon's stream keepalive — transport-level, never fans out.
+            if (event === 'ping') return;
             if (event === 'done' || event === 'error' || event === 'interrupted') return;
             const at = typeof frame.at === 'number' ? frame.at : Date.now() / 1000;
             const seq = typeof frame.seq === 'number' ? frame.seq : null;
@@ -115,10 +125,36 @@ export function EventsProvider({ children }) {
       );
     };
 
+    const forceReconnect = () => {
+      if (cancelled) return;
+      lastFrameAt = Date.now();
+      if (retryTimer) {
+        clearTimeout(retryTimer);
+        retryTimer = null;
+      }
+      handle?.cancel?.();
+      handle = null;
+      attempt = 0;
+      connect();
+    };
+
+    const watchdog = setInterval(() => {
+      if (cancelled || !handle) return;
+      if (Date.now() - lastFrameAt > STALE_STREAM_MS) forceReconnect();
+    }, WATCHDOG_TICK_MS);
+
+    const appStateSub = AppState.addEventListener('change', (state) => {
+      if (cancelled || state !== 'active') return;
+      // Resume from background: the OS may have killed the socket without an error — reconnect now instead of waiting out the watchdog.
+      if (Date.now() - lastFrameAt > RESUME_STALE_MS) forceReconnect();
+    });
+
     connect();
 
     return () => {
       cancelled = true;
+      clearInterval(watchdog);
+      appStateSub?.remove?.();
       if (retryTimer) clearTimeout(retryTimer);
       handle?.cancel?.();
     };

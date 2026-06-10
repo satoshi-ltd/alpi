@@ -96,18 +96,29 @@ function Sidebar({
   const connId = hostConnections?.active_id ?? "local";
   const { checkProfile: checkUnread, checkWorkgroup: checkWorkgroupUnread } =
     useReadState(connId);
-  const openProfile = inSettings
-    ? (p) => onSetSettingsTarget?.({ kind: "profile", id: p.name })
-    : (p) => {
-        markProfileRead(connId, p.name);
-        onOpenProfile?.(p);
-      };
-  const openWorkgroup = inSettings
-    ? (w) => onSetSettingsTarget?.({ kind: "workgroup", id: w.id, profile: w.profile })
-    : (w) => {
-        markWorkgroupRead(connId, w.profile, w.id);
-        onOpenWorkgroup?.(w);
-      };
+  // Stable identities — these reach every memoized row; an inline closure here re-renders the whole list on each Sidebar render.
+  const openProfile = useCallback(
+    (p) => {
+      if (inSettings) {
+        onSetSettingsTarget?.({ kind: "profile", id: p.name });
+        return;
+      }
+      markProfileRead(connId, p.name);
+      onOpenProfile?.(p);
+    },
+    [inSettings, onSetSettingsTarget, connId, onOpenProfile],
+  );
+  const openWorkgroup = useCallback(
+    (w) => {
+      if (inSettings) {
+        onSetSettingsTarget?.({ kind: "workgroup", id: w.id, profile: w.profile });
+        return;
+      }
+      markWorkgroupRead(connId, w.profile, w.id);
+      onOpenWorkgroup?.(w);
+    },
+    [inSettings, onSetSettingsTarget, connId, onOpenWorkgroup],
+  );
   const activeProfileName = inSettings
     ? settingsTarget?.kind === "profile"
       ? settingsTarget.id

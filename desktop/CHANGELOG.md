@@ -11,6 +11,23 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.3.49 — 2026-06-10 — stays responsive when the daemon dies
+
+Requires alpi v0.8.17+.
+
+- **The app no longer freezes when the daemon stops or restarts.** Every daemon
+  call runs off the main thread now — a dead daemon means a banner and a quick
+  reconnect, not a locked-up window.
+- **Reconnecting is calm.** Catching up after a restart is one quiet refresh
+  instead of replaying every missed event against a cold daemon.
+- **Background workgroups stop stealing your UI.** Activity in a workgroup you
+  aren't viewing just lights its sidebar badge — no global reloads, no
+  transcript fetches, no disk writes until you open it.
+- **Long transcripts render lighter.** Messages re-render only when their
+  content changes, and post bursts coalesce their disk writes.
+- **Offline is detected fast and probed with backoff** — pollers pause while
+  the daemon is down and resume on the first sign of life.
+
 ## v0.3.48 — 2026-06-10 — tools panel without the "Other" pile
 
 Requires alpi v0.8.16+.

@@ -107,6 +107,30 @@ describe("useChatStream live frames", () => {
 });
 
 describe("useChatStream stall watchdog", () => {
+  it("skips replay while the connection is confirmed offline, resumes when it returns", async () => {
+    invoke.mockImplementation(async (cmd) => {
+      if (cmd === "chat_events_since") return { exists: true, events: [] };
+      return null;
+    });
+    const connectionOnlineRef = { current: false };
+    const { result } = mount({ connectionOnlineRef });
+    await waitForListen();
+    seedTurn(result, { sessionId: "sess-1" });
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
+    expect(invoke).not.toHaveBeenCalledWith(
+      "chat_events_since",
+      expect.anything(),
+    );
+
+    connectionOnlineRef.current = true;
+    await act(async () => { await vi.advanceTimersByTimeAsync(4_000); });
+    expect(invoke).toHaveBeenCalledWith(
+      "chat_events_since",
+      expect.objectContaining({ sessionId: "sess-1" }),
+    );
+  });
+
   it("after 10s of silence replays sidecar; on done clears pendingTurn", async () => {
     invoke.mockImplementation(async (cmd) => {
       if (cmd === "chat_events_since") {

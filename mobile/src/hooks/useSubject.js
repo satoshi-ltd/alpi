@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { useEndpoint } from '../lib/EndpointContext';
+import { useDebouncedCallback } from './useDebouncedCallback';
 import { useEventEffect } from './useEvents';
 import { useProfileSummaries, useWorkgroups } from './useDaemonData';
 
@@ -31,12 +32,16 @@ export function useProfile(name) {
     return () => { cancelled = true; };
   }, [name, call]);
 
-  useEventEffect(['config_changed', 'gateway_changed', 'peers_changed'], (ev) => {
-    if (!name) return;  // global events shouldn't fire a host.profile.detail("") roundtrip
-    if (ev?.data?.profile && ev.data.profile !== name) return;
+  const refetchDetail = useDebouncedCallback(() => {
+    if (!name) return;
     call('host.profile.detail', { profile: name })
       .then((d) => setDetail(d || null))
       .catch(() => { /* */ });
+  }, 300);
+  useEventEffect(['config_changed', 'gateway_changed', 'peers_changed'], (ev) => {
+    if (!name) return;  // global events shouldn't fire a host.profile.detail("") roundtrip
+    if (ev?.data?.profile && ev.data.profile !== name) return;
+    refetchDetail();
   });
 
   const profile = useMemo(

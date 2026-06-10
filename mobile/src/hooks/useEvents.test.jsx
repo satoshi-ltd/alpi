@@ -9,9 +9,23 @@ let mockCallStream;
 let lastStreamHandlers;
 let lastStreamHandle;
 let streamCallCount;
+let appStateListener;
 
 vi.mock("../lib/EndpointContext", () => ({
   useEndpoint: () => ({ endpoint: mockEndpoint, call: mockCall, callStream: mockCallStream }),
+}));
+
+// Overrides the setup-level shim: tests below need to fire AppState transitions.
+vi.mock("react-native", () => ({
+  Platform: { OS: "ios", select: (sel) => sel?.ios ?? sel?.default },
+  Linking: { openURL: vi.fn(async () => true) },
+  AppState: {
+    currentState: "active",
+    addEventListener: (_type, cb) => {
+      appStateListener = cb;
+      return { remove: () => { appStateListener = null; } };
+    },
+  },
 }));
 
 const { EventsProvider, useEventEffect } = await import("./useEvents.jsx");
@@ -35,6 +49,7 @@ function freshStream() {
 }
 
 beforeEach(() => {
+  appStateListener = null;
   mockEndpoint = { id: "alpha", ip: "10.0.0.1", port: 49200 };
   streamCallCount = 0;
   lastStreamHandlers = null;
@@ -229,5 +244,109 @@ describe("useEvents endpoint swap", () => {
     // Stale backfill must not leak into the new endpoint's listener.
     expect(sink).toHaveLength(1);
     expect(sink[0].seq).toBe(11);
+  });
+});
+
+describe("useEvents keepalive", () => {
+  it("never fans out 'ping' frames, even to a ping subscriber", async () => {
+    const sink = [];
+    mount("ping", sink);
+    await waitFor(() => expect(mockCallStream).toHaveBeenCalled());
+    await act(async () => {
+      lastStreamHandlers.onFrame({ event: "subscribed", next_seq: 1 });
+      lastStreamHandlers.onFrame({ event: "ping" });
+    });
+    expect(sink).toHaveLength(0);
+  });
+});
+
+describe("useEvents stream watchdog", () => {
+  it("a silent stream (no frames, no pings) is force-reconnected after ~75s", async () => {
+    vi.useFakeTimers();
+    mount("noise", []);
+    await vi.waitFor(() => expect(mockCallStream).toHaveBeenCalled());
+    await act(async () => {
+      lastStreamHandlers.onFrame({ event: "subscribed", next_seq: 1 });
+    });
+    expect(streamCallCount).toBe(1);
+    const firstHandle = lastStreamHandle;
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(85_000);
+    });
+    expect(firstHandle.cancel).toHaveBeenCalled();
+    expect(streamCallCount).toBe(2);
+  });
+
+  it("daemon pings keep the stream alive past the stale threshold", async () => {
+    vi.useFakeTimers();
+    mount("noise", []);
+    await vi.waitFor(() => expect(mockCallStream).toHaveBeenCalled());
+    await act(async () => {
+      lastStreamHandlers.onFrame({ event: "subscribed", next_seq: 1 });
+    });
+
+    for (let i = 0; i < 5; i += 1) {
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(25_000);
+        lastStreamHandlers.onFrame({ event: "ping" });
+      });
+    }
+    expect(streamCallCount).toBe(1);
+  });
+});
+
+describe("useEvents AppState resume", () => {
+  it("foreground resume past RESUME_STALE_MS reconnects immediately", async () => {
+    vi.useFakeTimers();
+    mount("noise", []);
+    await vi.waitFor(() => expect(mockCallStream).toHaveBeenCalled());
+    await act(async () => {
+      lastStreamHandlers.onFrame({ event: "subscribed", next_seq: 1 });
+    });
+    const firstHandle = lastStreamHandle;
+
+    // Past the 30s resume threshold but under the 75s watchdog one.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(40_000);
+    });
+    expect(streamCallCount).toBe(1);
+
+    await act(async () => {
+      appStateListener?.("active");
+    });
+    expect(firstHandle.cancel).toHaveBeenCalled();
+    expect(streamCallCount).toBe(2);
+  });
+
+  it("foreground resume with a fresh stream does NOT reconnect", async () => {
+    vi.useFakeTimers();
+    mount("noise", []);
+    await vi.waitFor(() => expect(mockCallStream).toHaveBeenCalled());
+    await act(async () => {
+      lastStreamHandlers.onFrame({ event: "subscribed", next_seq: 1 });
+      await vi.advanceTimersByTimeAsync(5_000);
+    });
+
+    await act(async () => {
+      appStateListener?.("active");
+    });
+    expect(streamCallCount).toBe(1);
+  });
+
+  it("non-active transitions never reconnect", async () => {
+    vi.useFakeTimers();
+    mount("noise", []);
+    await vi.waitFor(() => expect(mockCallStream).toHaveBeenCalled());
+    await act(async () => {
+      lastStreamHandlers.onFrame({ event: "subscribed", next_seq: 1 });
+      await vi.advanceTimersByTimeAsync(40_000);
+    });
+
+    await act(async () => {
+      appStateListener?.("background");
+      appStateListener?.("inactive");
+    });
+    expect(streamCallCount).toBe(1);
   });
 });

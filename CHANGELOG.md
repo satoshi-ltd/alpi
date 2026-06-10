@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.8.17 — 2026-06-10 — event streams announce they're alive
+
+- **The daemon's event stream now sends a keepalive ping every 25 seconds.**
+  Desktop and mobile apps use it to tell a quiet daemon apart from a dead
+  connection — they recover in seconds from daemon restarts and dropped
+  Tailscale links instead of hanging on a silent socket.
+
 ## v0.8.16 — 2026-06-10 — every tool in a meaningful group
 
 - **The tools browser lost its "Other" junk drawer.** A dozen tools (semantic

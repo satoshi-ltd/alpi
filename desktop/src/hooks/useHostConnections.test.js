@@ -166,3 +166,43 @@ describe("useHostConnections.onSetHostConnection", () => {
     ).toBe(false);
   });
 });
+
+describe("useHostConnections.touchWorkgroup", () => {
+  it("patches only the matching workgroup's mtime locally, without any RPC", async () => {
+    invoke.mockImplementation(async (cmd) => {
+      if (cmd === "host_connections") return makeConnections("local");
+      if (cmd === "profile_summaries") return [{ name: "doc", model: "a/b" }];
+      if (cmd === "workgroups")
+        return [
+          { id: "wg-1", profile: "doc", mtime: 100 },
+          { id: "wg-2", profile: "doc", mtime: 100 },
+        ];
+      return null;
+    });
+    const { result } = renderHostConnections();
+    await waitFor(() => expect(result.current.workgroups.length).toBe(2));
+
+    invoke.mockClear();
+    act(() => result.current.touchWorkgroup("doc", "wg-1"));
+
+    const w1 = result.current.workgroups.find((w) => w.id === "wg-1");
+    const w2 = result.current.workgroups.find((w) => w.id === "wg-2");
+    expect(w1.mtime).toBeGreaterThan(100);
+    expect(w2.mtime).toBe(100);
+    expect(invoke).not.toHaveBeenCalled();
+  });
+
+  it("is identity-stable when nothing matches (no spurious re-renders)", async () => {
+    invoke.mockImplementation(async (cmd) => {
+      if (cmd === "host_connections") return makeConnections("local");
+      if (cmd === "profile_summaries") return [];
+      if (cmd === "workgroups") return [{ id: "wg-1", profile: "doc", mtime: 100 }];
+      return null;
+    });
+    const { result } = renderHostConnections();
+    await waitFor(() => expect(result.current.workgroups.length).toBe(1));
+    const before = result.current.workgroups;
+    act(() => result.current.touchWorkgroup("other-profile", "wg-1"));
+    expect(result.current.workgroups).toBe(before);
+  });
+});

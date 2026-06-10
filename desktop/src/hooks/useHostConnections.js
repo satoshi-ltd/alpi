@@ -57,6 +57,21 @@ export function useHostConnections({
     } catch {}
   }, []);
 
+  // Local mtime patch for background workgroup activity — keeps the sidebar's unread dot and recency order truthful without a per-post workgroups RPC. Capped at one patch per second per workgroup.
+  const touchWorkgroup = useCallback((profile, wgId) => {
+    const now = Math.floor(Date.now() / 1000);
+    setWorkgroups((rows) => {
+      let changed = false;
+      const next = rows.map((w) => {
+        if (w.id !== wgId || w.profile !== profile) return w;
+        if ((w.mtime ?? 0) >= now) return w;
+        changed = true;
+        return { ...w, mtime: now };
+      });
+      return changed ? next : rows;
+    });
+  }, []);
+
   const applyProfilesAndWorkgroups = useCallback((ps, ws) => {
     setProfiles(ps);
     setWorkgroups(ws);
@@ -359,6 +374,7 @@ export function useHostConnections({
     hostConnectionsRef,
     profiles,
     workgroups,
+    touchWorkgroup,
     pickerAlpi,
     setPickerAlpi,
     reload,

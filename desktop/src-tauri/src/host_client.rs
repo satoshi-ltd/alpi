@@ -19,9 +19,10 @@ use crate::home::resolve_root;
 const LOCAL_UNSUPPORTED: &str =
     "local daemon connections aren't supported on Windows yet — pair a remote daemon over Tailscale";
 
+// RPC timeouts stay generous — a busy daemon or slow Tailscale hop must not fail falsely (calls run off the main thread, so nothing freezes); dead-daemon detection belongs to the probes (400ms/8s) and the stream keepalives (events ping 25s, chat heartbeat 5s → 75s = three missed pings).
 const READ_TIMEOUT_LOCAL_SECS: u64 = 8;
 const READ_TIMEOUT_REMOTE_SECS: u64 = 20;
-const STREAM_READ_TIMEOUT_SECS: u64 = 600;
+const STREAM_READ_TIMEOUT_SECS: u64 = 75;
 const WS_CONNECT_TIMEOUT_SECS: u64 = 4;
 const WS_KEEPALIVE_IDLE_SECS: u64 = 30;
 const WS_KEEPALIVE_INTERVAL_SECS: u64 = 10;
@@ -495,8 +496,14 @@ pub fn set_active_connection(id: String) -> Result<(), String> {
     if !state.connections.iter().any(|c| c.id() == id) {
         return Err(format!("unknown connection: {id}"));
     }
+    let previous = state.active_id.clone();
     state.active_id = id;
-    save_connections(&state)
+    save_connections(&state)?;
+    if previous != state.active_id {
+        // Pooled sockets of the outgoing connection would otherwise linger until their next failed use.
+        drop_remote_connections_for(&previous);
+    }
+    Ok(())
 }
 
 pub fn forget_connection(id: String) -> Result<(), String> {
