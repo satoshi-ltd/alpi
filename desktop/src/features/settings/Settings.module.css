@@ -305,7 +305,7 @@
   background: var(--bg-pane);
   cursor: pointer;
   text-align: left;
-  transition: border-color .12s ease, background .12s ease;
+  transition: border-color var(--dur-1) var(--ease), background var(--dur-1) var(--ease);
 }
 
 .modeOption:hover:not(:disabled) {
@@ -469,7 +469,7 @@
 .budgetBarFill {
   height: 100%;
   border-radius: var(--r-3xl);
-  transition: width 0.3s var(--ease);
+  transition: width var(--dur-3) var(--ease);
 }
 
 .briefingWrap {
@@ -610,7 +610,7 @@
   position: absolute;
   top: calc(100% + var(--space-3));
   left: 0;
-  z-index: 30;
+  z-index: var(--z-sticky);
   display: flex;
   flex-direction: column;
   gap: var(--space-4);

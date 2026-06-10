@@ -120,7 +120,7 @@
   width: max-content;
   min-width: 9rem;
   max-width: 18rem;
-  z-index: 20;
+  z-index: var(--z-chrome);
   background: var(--bg-elev);
   border: .5px solid var(--line-2);
   border-radius: var(--r-xl);

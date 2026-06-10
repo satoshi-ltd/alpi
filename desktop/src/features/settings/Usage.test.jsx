@@ -115,4 +115,26 @@ describe("Usage", () => {
     expect(screen.getByText("1.1M")).toBeTruthy();
     expect(screen.getByText("312K")).toBeTruthy();
   });
+
+  it("an empty day (no tokens, no cost) shows no tooltip on hover", () => {
+    const days = makeDays([
+      { day: "6/1", tokIn: 0, tokOut: 0 },
+      { day: "6/2", tokIn: 1_000_000, tokOut: 0, today: true },
+    ]);
+    const { container } = render(<Usage days={days} accent="#3fb37a" />);
+    fireEvent.mouseEnter(container.querySelector('[data-day="2026-06-01"]'));
+    // The tooltip day header is the only place d.day renders.
+    expect(screen.queryByText("6/1")).toBeNull();
+  });
+
+  it("a free-model day (tokens but $0) still gets its tooltip", () => {
+    const days = [
+      { iso: "2026-06-01", label: "M", day: "6/1", tokIn: 50_000, tokOut: 2_000, cost: 0, today: false },
+      { iso: "2026-06-02", label: "T", day: "6/2", tokIn: 0, tokOut: 0, cost: 0, today: true },
+    ];
+    const { container } = render(<Usage days={days} accent="#3fb37a" />);
+    fireEvent.mouseEnter(container.querySelector('[data-day="2026-06-01"]'));
+    expect(screen.getByText("6/1")).toBeTruthy();
+    expect(screen.getByText("50K")).toBeTruthy();
+  });
 });

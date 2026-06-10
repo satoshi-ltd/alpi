@@ -18,7 +18,7 @@
 .caret,
 .caretOpen {
   flex: none;
-  transition: transform 120ms ease;
+  transition: transform var(--dur-1) ease;
 }
 .caret {
   transform: rotate(-90deg);

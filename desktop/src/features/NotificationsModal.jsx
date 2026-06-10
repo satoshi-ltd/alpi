@@ -23,6 +23,7 @@ import {
   useOutputs,
 } from "../hooks/useOutputs.js";
 import styles from "./NotificationsModal.module.css";
+import { copyText } from "../lib/clipboard.js";
 
 
 function fmtAbsolute(ts) {
@@ -216,12 +217,8 @@ export default function NotificationsModal({
 
   const onCopy = useCallback(async () => {
     if (!detail) return;
-    try {
-      await navigator.clipboard.writeText(detail.body || "");
-      notify({ message: "Copied" });
-    } catch {
-      notify({ message: "Copy failed", variant: "error" });
-    }
+    if (await copyText(detail.body || "")) notify({ message: "Copied" });
+    else notify({ message: "Copy failed", variant: "error" });
   }, [detail, notify]);
 
   const onAction = useCallback(() => {

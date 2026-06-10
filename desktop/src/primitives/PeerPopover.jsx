@@ -14,6 +14,7 @@ import {
   Tip,
 } from "./index.js";
 import styles from "./PeerPopover.module.css";
+import { pubkeyTail } from "../lib/pubkey.js";
 
 function PeerRow({ peer, onOpen }) {
   return (
@@ -21,7 +22,7 @@ function PeerRow({ peer, onOpen }) {
       <Diamond color={peer.accent} />
       <span className={styles.rowId}>{peer.id}</span>
       <Mono className={styles.rowKey}>
-        …{(peer.pubkey || "").slice(-7)}
+        {pubkeyTail(peer.pubkey)}
       </Mono>
       <Pill state={peer.online ? "on" : "off"}>
         {peer.online ? "online" : "offline"}

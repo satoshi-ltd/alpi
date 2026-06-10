@@ -1,6 +1,7 @@
 import Popover from "./Popover.jsx";
 import { Diamond, Mono, Eyebrow } from "./index.js";
 import styles from "./AddMemberPopover.module.css";
+import { pubkeyTail } from "../lib/pubkey.js";
 
 export default function AddMemberPopover({
   open,
@@ -30,7 +31,7 @@ export default function AddMemberPopover({
             <Diamond color={c.accent} />
             <Mono className={styles.label}>@{c.id}</Mono>
             <Mono className={styles.suffix}>
-              …{(c.pubkey || "").slice(-7)}
+              {pubkeyTail(c.pubkey)}
             </Mono>
           </button>
         ))}

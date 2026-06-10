@@ -38,7 +38,7 @@
   border: .5px solid var(--line-2);
   border-radius: var(--r-xl);
   box-shadow: var(--shadow);
-  z-index: 60;
+  z-index: var(--z-panel);
 }
 
 .panel {

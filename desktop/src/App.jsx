@@ -31,6 +31,8 @@ import {
 import { enqueueRequest as enqueueApprovalRequest } from "./lib/approval-queue.js";
 import { enqueueRequest as enqueueClarificationRequest } from "./lib/clarification-queue.js";
 import { invalidateProfileDetailCache } from "./hooks/useProfileDetail.js";
+import { useCoalescedCallback } from "./hooks/useCoalescedCallback.js";
+import { usePendingQueue } from "./hooks/usePendingQueue.js";
 import { useChatStream } from "./hooks/useChatStream.js";
 import { useHostConnections } from "./hooks/useHostConnections.js";
 import { useOutputs } from "./hooks/useOutputs.js";
@@ -185,22 +187,6 @@ export default function App() {
   }, []);
   const onClosePalette = useCallback(() => setPaletteOpen(false), []);
 
-  const [approvalQueue, setApprovalQueue] = useState([]);
-  const onApprovalResolved = useCallback((requestId) => {
-    setApprovalQueue((q) => q.filter((r) => r.request_id !== requestId));
-  }, []);
-  const mergeApprovalRequest = useCallback((req) => {
-    setApprovalQueue((q) => enqueueApprovalRequest(q, req));
-  }, []);
-
-  const [clarificationQueue, setClarificationQueue] = useState([]);
-  const onClarificationResolved = useCallback((requestId) => {
-    setClarificationQueue((q) => q.filter((r) => r.request_id !== requestId));
-  }, []);
-  const mergeClarificationRequest = useCallback((req) => {
-    setClarificationQueue((q) => enqueueClarificationRequest(q, req));
-  }, []);
-
   const [browse, setBrowse] = useState(null);
   const onCloseBrowse = useCallback(() => setBrowse(null), []);
   const onBrowseTools = useCallback(() => setBrowse("tools"), []);
@@ -313,6 +299,17 @@ export default function App() {
     setActiveTask,
     setView,
     pendingTurnRef,
+  });
+
+  const approval = usePendingQueue({
+    command: "approval_pending",
+    connectionId: hostConnections.active_id,
+    enqueue: enqueueApprovalRequest,
+  });
+  const clarification = usePendingQueue({
+    command: "clarification_pending",
+    connectionId: hostConnections.active_id,
+    enqueue: enqueueClarificationRequest,
   });
 
   useEffect(() => {
@@ -452,34 +449,15 @@ export default function App() {
       .catch(() => {});
   }, [view]);
 
-  const reloadTimerRef = useRef(null);
-  const reloadDeadlineRef = useRef(0);
-  // Trailing-edge coalesce with a 5s max-wait: continuous event streams keep pushing the timer, the deadline stops them from starving the reload forever.
-  const scheduleReload = useCallback((delay = 500) => {
-    const now = Date.now();
-    if (!reloadTimerRef.current) reloadDeadlineRef.current = now + 5000;
-    const fireIn = Math.min(delay, Math.max(0, reloadDeadlineRef.current - now));
-    if (reloadTimerRef.current) clearTimeout(reloadTimerRef.current);
-    reloadTimerRef.current = setTimeout(() => {
-      reloadTimerRef.current = null;
-      reloadRef.current?.();
-    }, fireIn);
-  }, []);
+  const scheduleReload = useCoalescedCallback(() => reloadRef.current?.(), 500, 5000);
 
-  const sessionRefreshTimerRef = useRef(null);
-  const scheduleSessionRefresh = useCallback((profile, sessionId) => {
-    if (sessionRefreshTimerRef.current) {
-      clearTimeout(sessionRefreshTimerRef.current);
-    }
-    sessionRefreshTimerRef.current = setTimeout(() => {
-      sessionRefreshTimerRef.current = null;
-      invoke("session_detail", { profile, id: sessionId })
-        .then((data) => {
-          if (isChatSessionData(data)) setSessionData(data);
-        })
-        .catch(() => {});
-    }, 350);
-  }, []);
+  const scheduleSessionRefresh = useCoalescedCallback((profile, sessionId) => {
+    invoke("session_detail", { profile, id: sessionId })
+      .then((data) => {
+        if (isChatSessionData(data)) setSessionData(data);
+      })
+      .catch(() => {});
+  }, 350);
 
   const onRefreshSession = useCallback(() => {
     const v = viewRef.current;
@@ -492,16 +470,6 @@ export default function App() {
     }
     reloadRef.current?.();
   }, []);
-
-  useEffect(
-    () => () => {
-      if (reloadTimerRef.current) clearTimeout(reloadTimerRef.current);
-      if (sessionRefreshTimerRef.current) {
-        clearTimeout(sessionRefreshTimerRef.current);
-      }
-    },
-    [],
-  );
 
   // Same reducer for fs-change (local watcher) and daemon-event (works on remote too).
   const applyChange = useCallback((ev) => {
@@ -583,26 +551,26 @@ export default function App() {
       const frame = payload.frame ?? payload;
       if (cls === "replay") {
         // Reconnect backfill (up to 200 frames in a burst): one coalesced reload covers state catch-up; per-event fetch fan-out would hammer the freshly restarted daemon.
-        if (fromDaemonFrame(frame)) scheduleReload(800);
+        if (fromDaemonFrame(frame)) scheduleReload();
         return;
       }
       // approval.request: enqueue caution prompt. approval.resolved: pop in case another client answered first.
       if (frame?.event === "approval.request") {
-        mergeApprovalRequest(frame.data ?? {});
+        approval.merge(frame.data ?? {});
         return;
       }
       if (frame?.event === "approval.resolved") {
         const rid = frame.data?.request_id;
-        if (rid) setApprovalQueue((q) => q.filter((r) => r.request_id !== rid));
+        if (rid) approval.resolve(rid);
         return;
       }
       if (frame?.event === "clarification.request") {
-        mergeClarificationRequest(frame.data ?? {});
+        clarification.merge(frame.data ?? {});
         return;
       }
       if (frame?.event === "clarification.resolved") {
         const rid = frame.data?.request_id;
-        if (rid) setClarificationQueue((q) => q.filter((r) => r.request_id !== rid));
+        if (rid) clarification.resolve(rid);
         return;
       }
       const mapped = fromDaemonFrame(frame);
@@ -618,35 +586,7 @@ export default function App() {
       safeUnlisten(unlistenFs);
       safeUnlisten(unlistenDaemon);
     };
-  }, [applyChange, hostConnectionsRef, mergeApprovalRequest, mergeClarificationRequest, scheduleReload]);
-
-  // Cold-start recovery: subscribe anchors at next_seq so requests emitted before mount won't reach the stream. Fetch pending now and after any connection switch.
-  // ALSO drop the previous connection's queue: a stale entry would route host.approval.respond through the NEW daemon and either return unknown or, worse, confuse the user.
-  useEffect(() => {
-    setApprovalQueue([]);
-    let cancelled = false;
-    invoke("approval_pending")
-      .then((res) => {
-        if (cancelled) return;
-        const items = res?.requests || [];
-        for (const it of items) mergeApprovalRequest(it);
-      })
-      .catch(() => { /* daemon may be offline / older */ });
-    return () => { cancelled = true; };
-  }, [hostConnections.active_id, mergeApprovalRequest]);
-
-  useEffect(() => {
-    setClarificationQueue([]);
-    let cancelled = false;
-    invoke("clarification_pending")
-      .then((res) => {
-        if (cancelled) return;
-        const items = res?.requests || [];
-        for (const it of items) mergeClarificationRequest(it);
-      })
-      .catch(() => { /* daemon may be offline / older */ });
-    return () => { cancelled = true; };
-  }, [hostConnections.active_id, mergeClarificationRequest]);
+  }, [applyChange, hostConnectionsRef, approval.merge, approval.resolve, clarification.merge, clarification.resolve, scheduleReload]);
 
   const sendingRef = useRef(false);
   const activeProfile = useMemo(() => {
@@ -1129,8 +1069,8 @@ export default function App() {
           }
         }}
       />
-      <ApprovalModal requests={approvalQueue} onResolved={onApprovalResolved} />
-      <ClarificationModal requests={clarificationQueue} onResolved={onClarificationResolved} />
+      <ApprovalModal requests={approval.queue} onResolved={approval.resolve} />
+      <ClarificationModal requests={clarification.queue} onResolved={clarification.resolve} />
       <NotificationsModal
         open={notificationsOpen}
         onClose={onCloseNotifications}

@@ -1,7 +1,7 @@
 
 .sidebar {
   position: relative;
-  z-index: 20;
+  z-index: var(--z-chrome);
   display: flex;
   flex-direction: column;
   width: var(--sidebar-w);

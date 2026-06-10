@@ -43,6 +43,7 @@ import {
   StorageField,
 } from "./fields/maintenance.jsx";
 import styles from "./Settings.module.css";
+import { copyText } from "../../lib/clipboard.js";
 
 function initialDraft(profile) {
   return {
@@ -267,12 +268,11 @@ export default function ProfileDetail({
                   type="button"
                   className={`alink ${styles.copyBtn}`}
                   onClick={async () => {
-                    try {
-                      await navigator.clipboard.writeText(profile.pubkey_b64);
+                    if (await copyText(profile.pubkey_b64)) {
                       notify({ message: "Pubkey copied", variant: "success" });
-                    } catch (e) {
+                    } else {
                       notify({
-                        message: `Copy failed: ${String(e)}`,
+                        message: "Copy failed",
                         variant: "error",
                       });
                     }

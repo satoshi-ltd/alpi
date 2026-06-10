@@ -4,6 +4,9 @@ import { useScrollProgress } from "../lib/useScrollProgress.js";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { safeUnlisten } from "../lib/tauri-listen.js";
+import { copyText } from "../lib/clipboard.js";
+import { formatCostLine } from "../lib/format.js";
+import { shortPubkey } from "../lib/pubkey.js";
 import Composer from "../primitives/Composer.jsx";
 import Message from "../primitives/Message.jsx";
 import SearchBar from "../primitives/SearchBar.jsx";
@@ -506,20 +509,6 @@ export default function WorkgroupView({
   );
 }
 
-function formatCost(cost) {
-  const tok = typeof cost?.tokens === "number" ? cost.tokens : 0;
-  const usd = typeof cost?.usd === "number" ? cost.usd : 0;
-  const tokStr = tok >= 1000 ? `${(tok / 1000).toFixed(1)}K` : `${tok}`;
-  const usdStr = usd >= 0.01 ? `$${usd.toFixed(2)}` : `$${usd.toFixed(4)}`;
-  return `${tokStr} · ${usdStr}`;
-}
-
-async function copyText(text) {
-  try {
-    await navigator.clipboard.writeText(text || "");
-  } catch { /* */ }
-}
-
 function renderWgFooter({
   plainText, at, styles, ttsKey, profile, voice, ttsKind, online,
 }) {
@@ -593,7 +582,7 @@ function renderWgMeta({ seq, cost, speaker, isFromHub, styles }) {
   );
   const seqEl = <Mono className="tnum">{`#${seq}`}</Mono>;
   const hasCost = (cost?.tokens ?? 0) > 0 || (cost?.usd ?? 0) > 0;
-  const costEl = hasCost ? <Mono className="tnum">{formatCost(cost)}</Mono> : null;
+  const costEl = hasCost ? <Mono className="tnum">{formatCostLine(cost)}</Mono> : null;
   return isFromHub ? (
     <>
       {costEl}
@@ -709,7 +698,7 @@ function mentionsForWorkgroup(members, peers, profiles, ownPubkey) {
   for (const m of members) {
     if (!m.pubkey || m.pubkey === ownPubkey) continue;
     const peer = peers.find((p) => p.pubkey === m.pubkey);
-    const id = peer?.id ?? `${m.pubkey.slice(0, 12)}…`;
+    const id = peer?.id ?? shortPubkey(m.pubkey, 12);
     const profile = profiles.find(
       (p) => p.pubkey_b64 === m.pubkey || p.name === id,
     );

@@ -19,6 +19,7 @@ import { ConfirmDelete, DialogFooter } from "../../../primitives/index.js";
 import { formatLastSeen } from "../util.js";
 import { useActiveRole } from "../../../hooks/useActiveRole.js";
 import styles from "../Settings.module.css";
+import { copyText } from "../../../lib/clipboard.js";
 
 export function DevicesField() {
   const notify = useNotify();
@@ -429,12 +430,8 @@ function PairDeviceModal({ onClose, onPaired }) {
   }, [ready, payload, trimmed, notify]);
 
   async function copyLink() {
-    try {
-      await navigator.clipboard.writeText(desktopLink);
-      notify({ message: "Pairing link copied", variant: "success" });
-    } catch (e) {
-      notify({ message: `Copy failed: ${e}`, variant: "error" });
-    }
+    if (await copyText(desktopLink)) notify({ message: "Pairing link copied", variant: "success" });
+    else notify({ message: "Copy failed", variant: "error" });
   }
 
   async function pair() {

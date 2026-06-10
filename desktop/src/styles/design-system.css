@@ -139,7 +139,7 @@
   font-family: var(--font-sans);
   font-weight: var(--fw-medium);
   line-height: var(--lh-tight);
-  transition: background 0.15s var(--ease), transform 0.12s var(--ease);
+  transition: background var(--dur-1) var(--ease), transform var(--dur-1) var(--ease);
   border: 0;
   cursor: pointer;
   white-space: nowrap;
@@ -175,7 +175,7 @@
   background: transparent;
   border: 0;
   cursor: pointer;
-  transition: background 0.12s var(--ease), color 0.12s var(--ease), transform 0.12s var(--ease);
+  transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease), transform var(--dur-1) var(--ease);
 }
 .ds-iconbtn:hover,  .iconbtn:hover  { background: var(--hover); color: var(--ink); }
 .ds-iconbtn:active, .iconbtn:active { background: var(--line); transform: scale(0.96); }
@@ -194,7 +194,7 @@
   background: transparent;
   border: 0;
   cursor: pointer;
-  transition: background 0.12s var(--ease), color 0.12s var(--ease), transform 0.12s var(--ease);
+  transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease), transform var(--dur-1) var(--ease);
 }
 .ds-alink:hover,  .alink:hover  { background: var(--hover); color: var(--ink); }
 .ds-alink:active, .alink:active { background: var(--line); transform: translateY(0.5px); }
@@ -375,7 +375,7 @@ textarea.ds-field, textarea.field { resize: vertical; min-height: 88px; height: 
   text-align: left;
   pointer-events: none;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
-  z-index: 100;
+  z-index: var(--z-overlay);
   line-height: var(--lh-cozy);
 }
 .ds-tip > .ds-tip-body {

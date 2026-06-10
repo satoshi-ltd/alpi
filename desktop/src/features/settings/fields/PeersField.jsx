@@ -13,6 +13,7 @@ import { useDismissOnOutside } from "../../../hooks/useDismissOnOutside.js";
 import { ConfirmDeleteAction, DialogFooter } from "../../../primitives/index.js";
 import { ALLOW_METHODS, isValidEd25519Pubkey } from "../util.js";
 import styles from "../Settings.module.css";
+import { shortPubkey } from "../../../lib/pubkey.js";
 
 function renderPeerStatusChip(status, reason) {
   if (status === "on") {
@@ -76,7 +77,7 @@ export function PeersField({ profile, profiles, onSaved, onRefresh }) {
     let id = (suggestedId || "").trim();
     if (!id) {
       const entered = window.prompt(
-        `Pin this peer (pubkey ${pubkey.slice(0, 12)}…) under what id?`,
+        `Pin this peer (pubkey ${shortPubkey(pubkey, 12)}) under what id?`,
         "",
       );
       if (entered === null) return;
@@ -187,7 +188,7 @@ export function PeersField({ profile, profiles, onSaved, onRefresh }) {
                         setSelectedPeerId(p.id);
                       }}
                       leading={<Diamond color={accent} />}
-                      caption={(p.pubkey || "").slice(0, 16) + "…"}
+                      caption={shortPubkey(p.pubkey)}
                       trailing={renderPeerStatusChip(status, reasonById[p.id])}
                     >
                       @{p.alias || p.id}
@@ -246,7 +247,7 @@ export function PeersField({ profile, profiles, onSaved, onRefresh }) {
                 key={p.pubkey}
                 caption={
                   p.local_profile
-                    ? `${(p.pubkey || "").slice(0, 16)}… · first seen ${new Date(
+                    ? `${shortPubkey(p.pubkey)} · first seen ${new Date(
                         (p.first_seen ?? 0) * 1000,
                       ).toLocaleString()}`
                     : `first seen ${new Date(
@@ -278,7 +279,7 @@ export function PeersField({ profile, profiles, onSaved, onRefresh }) {
                   </span>
                 }
               >
-                {(p.pubkey || "").slice(0, 16)}…
+                {shortPubkey(p.pubkey)}
               </Dropdown.Row>
             ))
           }

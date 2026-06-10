@@ -93,10 +93,21 @@
   --r-pill: 999px;
 
   --ease: cubic-bezier(.2, .7, .2, 1);
-  --dur-1: var(--dur-1);
-  --dur-2: var(--dur-2);
-  --dur-3: var(--dur-3);
-  --dur-4: var(--dur-4);
+  --dur-1: 120ms;
+  --dur-2: 180ms;
+  --dur-3: 260ms;
+  --dur-4: 360ms;
+
+  /* Stacking tiers — values below 20 are intra-component and stay literal. */
+  --z-chrome: 20;
+  --z-sticky: 30;
+  --z-searchbar: 40;
+  --z-modal: 50;
+  --z-panel: 60;
+  --z-overlay: 100;
+  --z-toast: 200;
+  --z-menu: 1000;
+  --z-tooltip: 9999;
 
   --c-success: #3fb37a;
   --c-warning: #d4b443;

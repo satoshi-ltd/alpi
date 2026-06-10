@@ -17,7 +17,7 @@
   line-height: var(--lh-cozy);
   text-align: left;
   pointer-events: none;
-  z-index: 9999;
+  z-index: var(--z-tooltip);
   box-shadow: var(--shadow);
 }
 

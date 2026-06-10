@@ -2,7 +2,7 @@
   position: absolute;
   top: var(--space-5);
   right: var(--space-10);
-  z-index: 40;
+  z-index: var(--z-searchbar);
   background: var(--bg-elev);
   border: .5px solid var(--line-2);
   border-radius: var(--r-3xl);

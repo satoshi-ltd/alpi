@@ -17,6 +17,7 @@ import { useProfileDetail } from "../../hooks/useProfileDetail.js";
 import { useWorkgroupUsageDaily } from "../../hooks/useUsage.js";
 import Usage from "./Usage.jsx";
 import styles from "./Settings.module.css";
+import { shortPubkey } from "../../lib/pubkey.js";
 
 function renderMemberRow(m, profiles, workgroup, hubPubkey, onRemove) {
   const local = profiles.find((p) => p.pubkey_b64 === m.pubkey);
@@ -558,7 +559,7 @@ export default function WorkgroupDetail({ workgroup, profiles, connectionId = nu
                         return (
                           <Dropdown.Row
                             key={p.id}
-                            caption={(p.pubkey || "").slice(0, 16) + "…"}
+                            caption={shortPubkey(p.pubkey)}
                             leading={<Diamond color={local?.accent} />}
                             onClick={() => {
                               close();

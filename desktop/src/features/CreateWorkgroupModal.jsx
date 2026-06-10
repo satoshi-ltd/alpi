@@ -14,6 +14,7 @@ import { useNotify } from "../primitives/Notification.jsx";
 import { useProfileDetail } from "../hooks/useProfileDetail.js";
 import { profileLabel } from "../lib/profile-display.js";
 import styles from "./CreateWorkgroupModal.module.css";
+import { shortPubkey } from "../lib/pubkey.js";
 
 export default function CreateWorkgroupModal({
   open,
@@ -184,7 +185,7 @@ export default function CreateWorkgroupModal({
                   tooltip={
                     <>
                       <div>@{p.id}</div>
-                      <div>{(p.pubkey || "").slice(0, 16)}…</div>
+                      <div>{shortPubkey(p.pubkey)}</div>
                     </>
                   }
                 >

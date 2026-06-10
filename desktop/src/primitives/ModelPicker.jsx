@@ -3,13 +3,8 @@ import { useEffect, useRef, useState } from "react";
 import { useDismissOnOutside } from "../hooks/useDismissOnOutside.js";
 import { I } from "./icons.jsx";
 import Tip from "./Tip.jsx";
+import { fmtTok } from "../lib/format.js";
 import styles from "./ModelPicker.module.css";
-
-function formatTokens(n) {
-  if (n == null) return "";
-  if (n >= 1000) return `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}K`;
-  return String(n);
-}
 
 export default function ModelPicker({
   currentModel,
@@ -112,7 +107,7 @@ export default function ModelPicker({
                           <span
                             className={`mono ${styles.modelPickerOptionCtx}`}
                           >
-                            {formatTokens(m.ctx)} ctx
+                            {fmtTok(m.ctx)} ctx
                           </span>
                         )}
                       </span>

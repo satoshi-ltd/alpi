@@ -6,7 +6,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 60;
+  z-index: var(--z-panel);
   animation: backdropIn var(--dur-1) var(--ease) both;
 }
 

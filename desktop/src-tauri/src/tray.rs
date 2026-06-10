@@ -15,7 +15,6 @@ const TOGGLE_ACCELERATOR: &str = "CmdOrCtrl+Shift+A";
 struct TrayState {
     update_available: bool,
     update_version: Option<String>,
-    window_visible: bool,
     unread_outputs: u64,
 }
 
@@ -25,15 +24,10 @@ fn state() -> &'static Mutex<TrayState> {
 }
 
 fn build_menu(app: &AppHandle, s: &TrayState) -> tauri::Result<Menu<tauri::Wry>> {
-    let open_label = if s.window_visible {
-        "Hide Alpi"
-    } else {
-        "Open Alpi"
-    };
     let open_item = MenuItem::with_id(
         app,
         "open",
-        open_label,
+        "Open Alpi",
         true,
         Some(TOGGLE_ACCELERATOR),
     )?;
@@ -115,14 +109,6 @@ fn refresh_icon(app: &AppHandle) {
 }
 
 pub fn install(app: &mut App) -> tauri::Result<()> {
-    {
-        let mut s = state().lock().unwrap();
-        s.window_visible = app
-            .get_webview_window("main")
-            .and_then(|w| w.is_visible().ok())
-            .unwrap_or(true);
-    }
-
     let menu = build_menu(&app.handle().clone(), &state().lock().unwrap())?;
     let icon = Image::from_bytes(TRAY_ICON)?;
 
@@ -134,17 +120,10 @@ pub fn install(app: &mut App) -> tauri::Result<()> {
         .on_menu_event(|app, event| match event.id.as_ref() {
             "open" => {
                 if let Some(window) = app.get_webview_window("main") {
-                    let visible = window.is_visible().unwrap_or(false);
-                    if visible {
-                        let _ = window.hide();
-                        set_window_visible(app, false);
-                    } else {
-                        let _ = window.show();
-                        let _ = window.unminimize();
-                        let _ = window.set_focus();
-                        let _ = window.emit("nav", "home");
-                        set_window_visible(app, true);
-                    }
+                    let _ = window.show();
+                    let _ = window.unminimize();
+                    let _ = window.set_focus();
+                    let _ = window.emit("nav", "home");
                 }
             }
             "settings" => {
@@ -153,7 +132,6 @@ pub fn install(app: &mut App) -> tauri::Result<()> {
                     let _ = window.unminimize();
                     let _ = window.set_focus();
                     let _ = window.emit("nav", "settings");
-                    set_window_visible(app, true);
                 }
             }
             "update" => {
@@ -164,7 +142,6 @@ pub fn install(app: &mut App) -> tauri::Result<()> {
                     let _ = window.show();
                     let _ = window.unminimize();
                     let _ = window.set_focus();
-                    set_window_visible(app, true);
                 }
                 let _ = app.emit("tray:notifications-clicked", ());
             }
@@ -188,17 +165,6 @@ pub fn announce_update(app: &AppHandle, available: bool, version: Option<&str>) 
     }
     rebuild_menu(app);
     refresh_icon(app);
-}
-
-pub fn set_window_visible(app: &AppHandle, visible: bool) {
-    {
-        let mut s = state().lock().unwrap();
-        if s.window_visible == visible {
-            return;
-        }
-        s.window_visible = visible;
-    }
-    rebuild_menu(app);
 }
 
 pub fn announce_notifications(app: &AppHandle, unread: u64) {

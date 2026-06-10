@@ -1,26 +1,13 @@
 import { useState } from "react";
+import { fmtTok, formatUsd as usd } from "../../lib/format.js";
 import styles from "./Usage.module.css";
+
+export { fmtTok };
 
 const PRICE_IN = 0.15 / 1e6;
 const PRICE_OUT = 0.6 / 1e6;
 const CHART_H = 104;
 const SCALE_HEADROOM = 1.08;
-
-function round1(v) {
-  const r = v >= 100 ? Math.round(v) : Math.round(v * 10) / 10;
-  return String(r).replace(/\.0$/, "");
-}
-
-export function fmtTok(n) {
-  const v = Number(n) || 0;
-  if (v >= 1e6) return `${round1(v / 1e6)}M`;
-  if (v >= 1e3) return `${round1(v / 1e3)}K`;
-  return String(Math.round(v));
-}
-
-function usd(n) {
-  return `$${(Number(n) || 0).toFixed(2)}`;
-}
 
 function costOf(d) {
   if (d.cost != null) return d.cost;
@@ -85,30 +72,33 @@ export default function Usage({ days = [], accent = "var(--accent)", capLine = n
             const totalPx = (tok / scale) * CHART_H;
             const outPx = tok > 0 ? Math.min(totalPx, ((d.tokOut || 0) / scale) * CHART_H) : 0;
             const dim = hover != null && hover !== i;
+            const hasData = tok > 0 || costOf(d) > 0;
             return (
               <div
                 key={d.iso}
                 data-day={d.iso}
                 className={styles.col}
-                onMouseEnter={() => setHover(i)}
+                onMouseEnter={() => { if (hasData) setHover(i); }}
                 onMouseLeave={() => setHover(null)}
               >
                 {hover === i && (
-                  <div className={`anim-pop ${styles.tip}`}>
-                    <div className={styles.tipDay}>
-                      {d.day}
-                      {d.today && <span className={styles.tipToday}> · today</span>}
-                    </div>
-                    <div className={`${styles.tipCost} tnum`}>{usd(costOf(d))}</div>
-                    <div className={styles.tipRow}>
-                      <span className={`${styles.swatch} ${styles.swatchIn}`} />
-                      in
-                      <span className={`${styles.tipTok} tnum`}>{fmtTok(d.tokIn || 0)}</span>
-                    </div>
-                    <div className={styles.tipRow}>
-                      <span className={`${styles.swatch} ${styles.swatchOut}`} />
-                      out
-                      <span className={`${styles.tipTok} tnum`}>{fmtTok(d.tokOut || 0)}</span>
+                  <div className={styles.tipAnchor}>
+                    <div className={`anim-pop ${styles.tip}`}>
+                      <div className={styles.tipDay}>
+                        {d.day}
+                        {d.today && <span className={styles.tipToday}> · today</span>}
+                      </div>
+                      <div className={`${styles.tipCost} tnum`}>{usd(costOf(d))}</div>
+                      <div className={styles.tipRow}>
+                        <span className={`${styles.swatch} ${styles.swatchIn}`} />
+                        in
+                        <span className={`${styles.tipTok} tnum`}>{fmtTok(d.tokIn || 0)}</span>
+                      </div>
+                      <div className={styles.tipRow}>
+                        <span className={`${styles.swatch} ${styles.swatchOut}`} />
+                        out
+                        <span className={`${styles.tipTok} tnum`}>{fmtTok(d.tokOut || 0)}</span>
+                      </div>
                     </div>
                   </div>
                 )}

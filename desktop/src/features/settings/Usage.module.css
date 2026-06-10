@@ -165,13 +165,17 @@
   background: var(--u-accent);
 }
 
-.tip {
+/* Centering lives on the anchor, never on .tip — anim-pop animates `transform` to none, which erases any translate set on the animated element. Above the track on purpose: an overlay would hide the hovered column. */
+.tipAnchor {
   position: absolute;
   bottom: calc(100% + 6px);
   left: 50%;
   transform: translateX(-50%);
   z-index: 5;
   pointer-events: none;
+}
+
+.tip {
   min-width: 132px;
   padding: var(--space-4);
   background: var(--bg-elev);

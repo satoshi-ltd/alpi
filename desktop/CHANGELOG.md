@@ -11,6 +11,22 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.3.51 — 2026-06-10 — animations are back, text zoom, calmer shortcuts
+
+Requires alpi v0.8.18+.
+
+- **Every micro-animation works again.** A broken design token had silently
+  disabled all transitions and pop-ins since v0.3.29 — hovers, tooltips and
+  panels now ease the way they were designed to.
+- **Zoom the whole UI** with ⌘+ / ⌘- (and ⌘0 to reset), between 70% and 150%,
+  remembered across launches.
+- **⌘⇧A always brings Alpi to the front.** It no longer hides the window when
+  the app is visible but unfocused, and the tray menu drops the Open/Hide
+  toggle for a plain "Open Alpi". Closing the window still keeps Alpi in the
+  menu bar.
+- **Usage chart polish:** the day tooltip is properly centered over its bar,
+  and days with no activity no longer show an empty tooltip.
+
 ## v0.3.50 — 2026-06-10 — saving settings keeps you connected
 
 Requires alpi v0.8.18+.

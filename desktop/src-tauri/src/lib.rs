@@ -2592,19 +2592,12 @@ pub fn run() {
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(move |app, shortcut, event| {
+                    // Bring-to-front only — a toggle would hide the window when it's visible but unfocused, the exact moment the user is summoning it.
                     if event.state() == ShortcutState::Pressed && shortcut == &toggle_shortcut {
                         if let Some(window) = app.get_webview_window("main") {
-                            match window.is_visible() {
-                                Ok(true) => {
-                                    let _ = window.hide();
-                                    tray::set_window_visible(app, false);
-                                }
-                                _ => {
-                                    let _ = window.show();
-                                    let _ = window.set_focus();
-                                    tray::set_window_visible(app, true);
-                                }
-                            }
+                            let _ = window.show();
+                            let _ = window.unminimize();
+                            let _ = window.set_focus();
                         }
                     }
                 })
@@ -2650,10 +2643,10 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| {
+            // Close-to-tray keeps the process (and with it ⌘⇧A + tray notifications) alive — destroying the only window would exit the app.
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 let _ = window.hide();
                 api.prevent_close();
-                tray::set_window_visible(window.app_handle(), false);
             }
         })
         .invoke_handler(tauri::generate_handler![

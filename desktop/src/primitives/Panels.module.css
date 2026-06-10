@@ -3,7 +3,7 @@
   inset: 0;
   background: color-mix(in srgb, var(--ink) 20%, transparent);
   backdrop-filter: blur(2px);
-  z-index: 60;
+  z-index: var(--z-panel);
   display: flex;
   justify-content: center;
 }

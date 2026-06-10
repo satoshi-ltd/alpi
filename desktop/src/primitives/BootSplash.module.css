@@ -7,7 +7,7 @@
   justify-content: center;
   gap: var(--space-5);
   background: var(--bg-pane);
-  z-index: 100;
+  z-index: var(--z-overlay);
 }
 
 .glyph {
