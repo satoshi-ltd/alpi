@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.8.19 — 2026-06-10 — OpenRouter traffic is credited to alpi
+
+- **OpenRouter requests now identify as alpi.** Calls carry the app's name and
+  version, so your OpenRouter dashboard attributes the usage to `alpi/<version>`
+  instead of litellm.
+
 ## v0.8.18 — 2026-06-10 — settings apply without restarting the daemon
 
 - **Saving settings no longer drops your connections.** Gateway configs,

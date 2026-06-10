@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from alpi.llm import _reported_cost, _with_openrouter_usage
+from alpi.llm import _reported_cost, _with_openrouter_extras
 
 
 def test_reported_cost_prefers_hidden_response_cost() -> None:
@@ -28,13 +28,33 @@ def test_reported_cost_none_when_absent() -> None:
 
 def test_openrouter_gets_usage_include_flag() -> None:
     model = "openrouter/deepseek/deepseek-v4-flash"
-    k = _with_openrouter_usage({"model": model}, model)
+    k = _with_openrouter_extras({"model": model}, model)
     assert k["extra_body"]["usage"]["include"] is True
 
 
+def test_openrouter_gets_alpi_attribution_headers() -> None:
+    from alpi import __version__
+    model = "openrouter/deepseek/deepseek-v4-flash"
+    k = _with_openrouter_extras({"model": model}, model)
+    assert k["extra_headers"]["X-Title"] == f"alpi/{__version__}"
+    assert k["extra_headers"]["HTTP-Referer"] == "https://alpi.satoshi.ltd"
+
+
+def test_openrouter_keeps_caller_headers() -> None:
+    model = "openrouter/deepseek/deepseek-v4-flash"
+    k = _with_openrouter_extras(
+        {"model": model, "extra_headers": {"X-Title": "custom", "X-Other": "1"}},
+        model,
+    )
+    assert k["extra_headers"]["X-Title"] == "custom"
+    assert k["extra_headers"]["X-Other"] == "1"
+    assert "HTTP-Referer" in k["extra_headers"]
+
+
 def test_non_openrouter_kwargs_untouched() -> None:
-    k = _with_openrouter_usage({"model": "gpt-4"}, "gpt-4")
+    k = _with_openrouter_extras({"model": "gpt-4"}, "gpt-4")
     assert "extra_body" not in k
+    assert "extra_headers" not in k
 
 
 def test_compute_cost_prefers_reported() -> None:

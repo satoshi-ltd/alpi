@@ -101,11 +101,18 @@ def _reported_cost(resp) -> float | None:
     return None
 
 
-def _with_openrouter_usage(kwargs: dict[str, Any], model: str) -> dict[str, Any]:
+def _with_openrouter_extras(kwargs: dict[str, Any], model: str) -> dict[str, Any]:
     if not str(model).startswith("openrouter/"):
         return kwargs
+    from alpi import __version__
     from alpi.providers.reasoning import merge_into_kwargs
-    return merge_into_kwargs(kwargs, {"extra_body": {"usage": {"include": True}}})
+    # App attribution headers — without them OpenRouter's dashboard credits the traffic to litellm.
+    headers = dict(kwargs.get("extra_headers") or {})
+    headers.setdefault("HTTP-Referer", "https://alpi.satoshi.ltd")
+    headers.setdefault("X-Title", f"alpi/{__version__}")
+    out = merge_into_kwargs(kwargs, {"extra_body": {"usage": {"include": True}}})
+    out["extra_headers"] = headers
+    return out
 
 
 _OR_PRICING: "dict[str, tuple[float, float]] | None" = None
@@ -315,7 +322,7 @@ def stream(
         "stream": True,
         "stream_options": {"include_usage": True},
     }
-    kwargs = _with_openrouter_usage(kwargs, model)
+    kwargs = _with_openrouter_extras(kwargs, model)
     if tools:
         kwargs["tools"] = tools
         kwargs["tool_choice"] = "auto"
@@ -384,7 +391,7 @@ def complete(
         "model": model,
         "messages": messages,
     }
-    kwargs = _with_openrouter_usage(kwargs, model)
+    kwargs = _with_openrouter_extras(kwargs, model)
     if tools:
         kwargs["tools"] = tools
         kwargs["tool_choice"] = "auto"
