@@ -5,7 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-import yaml
 
 from alpi import config as cfg_mod
 from alpi.host import server as host_server
@@ -70,6 +69,85 @@ async def test_providers_add_remove_ollama(tmp_path: Path, monkeypatch) -> None:
     assert (await srv._dispatch(rm))["result"]["ok"] is True
     cfg = cfg_mod.load(home)
     assert cfg.providers.get("ollama", []) == []
+
+
+@pytest.mark.asyncio
+async def test_unset_key_clears_model_pointing_at_removed_provider(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    home = _bootstrap(tmp_path)
+    monkeypatch.setattr(data_handlers, "_resolve_home", lambda p: home)
+
+    srv = host_server.Server(home=home)
+    data_config.register(srv)
+
+    cfg = cfg_mod.load(home)
+    cfg.model = "anthropic/claude-sonnet-4-6"
+    cfg_mod.save(cfg)
+
+    await srv._dispatch({
+        "id": "1", "method": "host.providers.set_key",
+        "params": {"profile": "default", "key": "ANTHROPIC_API_KEY", "value": "abc"},
+    })
+    resp = await srv._dispatch({
+        "id": "2", "method": "host.providers.unset_key",
+        "params": {"profile": "default", "key": "ANTHROPIC_API_KEY"},
+    })
+    assert resp["result"]["model_cleared"] is True
+    assert cfg_mod.load(home).model == ""
+    assert "ANTHROPIC_API_KEY" not in (home / ".env").read_text()
+
+
+@pytest.mark.asyncio
+async def test_unset_key_keeps_model_of_other_provider(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    home = _bootstrap(tmp_path)
+    monkeypatch.setattr(data_handlers, "_resolve_home", lambda p: home)
+
+    srv = host_server.Server(home=home)
+    data_config.register(srv)
+
+    cfg = cfg_mod.load(home)
+    cfg.model = "openai/gpt-5.4-mini"
+    cfg_mod.save(cfg)
+
+    await srv._dispatch({
+        "id": "1", "method": "host.providers.set_key",
+        "params": {"profile": "default", "key": "ANTHROPIC_API_KEY", "value": "abc"},
+    })
+    resp = await srv._dispatch({
+        "id": "2", "method": "host.providers.unset_key",
+        "params": {"profile": "default", "key": "ANTHROPIC_API_KEY"},
+    })
+    assert resp["result"]["model_cleared"] is False
+    assert cfg_mod.load(home).model == "openai/gpt-5.4-mini"
+
+
+@pytest.mark.asyncio
+async def test_remove_ollama_clears_model_pointing_at_server(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    home = _bootstrap(tmp_path)
+    monkeypatch.setattr(data_handlers, "_resolve_home", lambda p: home)
+
+    srv = host_server.Server(home=home)
+    data_config.register(srv)
+
+    await srv._dispatch({
+        "id": "1", "method": "host.providers.add_ollama",
+        "params": {"profile": "default", "name": "local", "url": "http://x:11434"},
+    })
+    cfg = cfg_mod.load(home)
+    cfg.model = "local/llama3:8b"
+    cfg_mod.save(cfg)
+
+    resp = await srv._dispatch({
+        "id": "2", "method": "host.providers.remove_ollama",
+        "params": {"profile": "default", "name": "local"},
+    })
+    assert resp["result"]["model_cleared"] is True
+    assert cfg_mod.load(home).model == ""
 
 
 @pytest.mark.asyncio

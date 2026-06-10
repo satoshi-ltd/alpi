@@ -7,6 +7,7 @@ class Google(Provider):
     name = "google"
     display = "Google"
     api_key_env = "GEMINI_API_KEY"
+    model_prefix = "gemini"
     description = "Gemini models"
 
     def list_models(self) -> list[ModelInfo]:

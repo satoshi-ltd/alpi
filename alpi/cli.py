@@ -1111,12 +1111,14 @@ def providers_set_key(ctx: click.Context, key: str, value: str) -> None:
 @click.pass_context
 def providers_unset_key(ctx: click.Context, key: str) -> None:
     """Remove ``KEY`` from this profile's .env."""
-    from alpi.model_selector import _remove_env_key
+    from alpi.model_selector import unset_provider_key
 
     h: Path = ctx.obj["home"]
     cfg = config.load(h)
-    _remove_env_key(cfg.env_path, key.strip())
-    click.echo(f"unset {key}")
+    if unset_provider_key(cfg, key.strip()):
+        click.echo(f"unset {key}; cleared active model (pointed at this provider)")
+    else:
+        click.echo(f"unset {key}")
 
 
 @providers.command("add-ollama")
@@ -1154,6 +1156,8 @@ def providers_remove_ollama(ctx: click.Context, name: str) -> None:
     if len(remaining) == len(items):
         raise click.ClickException(f"no ollama server named {name!r}")
     cfg.providers["ollama"] = remaining
+    if cfg.model.startswith(f"{name}/"):
+        cfg.model = ""
     config.save(cfg)
     click.echo(f"removed ollama {name!r}")
 

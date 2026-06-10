@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.8.15 — 2026-06-10 — removing a provider removes its models too
+
+- **Removing a provider takes its models with it.** Deleting an API key (or an
+  Ollama server) now clears the profile's active model when it pointed at that
+  provider — before, the model lingered in pickers and made the removal look
+  like it never happened.
+- **Model lists only show what you can actually use.** Saved OpenRouter models
+  stay hidden while their key is missing (they come back if you re-add it),
+  and a selected model whose key was removed by hand no longer surfaces in the
+  apps.
+- **Consistent everywhere.** Desktop and mobile Settings, the `alpi providers`
+  CLI, and the setup TUI all apply the same cleanup.
+
 ## v0.8.14 — 2026-06-10 — notifications go to your own apps, not a gateway
 
 - **Alpi can now ping you directly.** Ask to be reminded, alerted, or told when

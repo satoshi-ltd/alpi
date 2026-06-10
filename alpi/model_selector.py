@@ -283,6 +283,24 @@ def _remove_env_key(env_path: Path, key: str) -> None:
     _atomic_write_env(env_path, "\n".join(lines) + ("\n" if lines else ""))
 
 
+def model_prefix_for_env_key(key: str) -> str:
+    for p in prov_mod.builtin():
+        if p.api_key_env == key:
+            return p.model_prefix or p.name
+    return ""
+
+
+def unset_provider_key(cfg: cfg_mod.Config, key: str) -> bool:
+    """Remove ``key`` from .env; clear ``cfg.model`` (and persist) when it pointed at the removed provider. Returns True when the model was cleared."""
+    _remove_env_key(cfg.env_path, key)
+    prefix = model_prefix_for_env_key(key)
+    if prefix and cfg.model.split("/", 1)[0] == prefix:
+        cfg.model = ""
+        cfg_mod.save(cfg)
+        return True
+    return False
+
+
 def _any_saved_keys(builtin: list[Provider], env: dict[str, str] | None = None) -> bool:
     return any(p.has_key(env) for p in builtin if p.api_key_env)
 
@@ -317,11 +335,15 @@ def _manage_saved(cfg: cfg_mod.Config) -> None:
         return
     kind, target = choice
     if kind == "key":
-        _remove_env_key(cfg.env_path, target)
-        ui.ok_and_wait(f"removed {target} from .env")
+        if unset_provider_key(cfg, target):
+            ui.ok_and_wait(f"removed {target} from .env; cleared active model")
+        else:
+            ui.ok_and_wait(f"removed {target} from .env")
     elif kind == "ollama":
         cfg.providers["ollama"] = [
             e for e in cfg.providers.get("ollama", [])
             if e.get("name") != target
         ]
+        if cfg.model.startswith(f"{target}/"):
+            cfg.model = ""
         ui.ok_and_wait(f"removed ollama server '{target}'")

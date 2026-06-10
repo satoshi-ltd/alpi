@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 import re
 import time
 from pathlib import Path
@@ -160,20 +159,20 @@ async def _providers_set_key(
 async def _providers_unset_key(
     params: dict[str, Any], _server: host_server.Server,
 ) -> dict[str, Any]:
-    from alpi.model_selector import _remove_env_key
+    from alpi.model_selector import unset_provider_key
 
     profile, key = _params(params, "profile", "key")
     key = _check_env_key(str(key or ""))
     home = _resolve_home(str(profile or ""))
     cfg = cfg_mod.load(home)
-    _remove_env_key(cfg.env_path, key)
+    model_cleared = unset_provider_key(cfg, key)
     for gw_name, keys in _GATEWAY_ENV_KEYS.items():
         if key in keys:
             _emit_gateway_changed(home, gw_name, "cleared")
             break
     else:
         _emit_config_changed(home, scope="env")
-    return {"ok": True}
+    return {"ok": True, "model_cleared": model_cleared}
 
 
 async def _providers_add_ollama(
@@ -213,9 +212,12 @@ async def _providers_remove_ollama(
             -32004, "not-found", data={"detail": f"no ollama server {name!r}"},
         )
     cfg.providers["ollama"] = keep
+    model_cleared = bool(name) and cfg.model.startswith(f"{name}/")
+    if model_cleared:
+        cfg.model = ""
     cfg_mod.save(cfg)
     _emit_config_changed(home, scope="providers")
-    return {"ok": True}
+    return {"ok": True, "model_cleared": model_cleared}
 
 
 async def _providers_add_or_model(

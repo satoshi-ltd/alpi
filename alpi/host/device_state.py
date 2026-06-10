@@ -4,7 +4,6 @@ import asyncio
 import base64
 import json
 import os
-import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -761,18 +760,30 @@ def _profile_peers(home: Path) -> list[dict[str, Any]]:
 
 
 def _models(cfg: cfg_mod.Config, home: Path) -> list[str]:
-    out = []
-    if cfg.model:
-        out.append(cfg.model)
     env = _env_keys(home)
+    out = []
+    if cfg.model and _model_provider_available(cfg.model, env):
+        out.append(cfg.model)
     if env.get("OPENAI_API_KEY"):
         out.extend(_curated_ids_for("openai"))
     if env.get("ANTHROPIC_API_KEY"):
         out.extend(_curated_ids_for("anthropic"))
-    for model in ((cfg.providers.get("openrouter") or {}).get("models") or []):
-        out.append(f"openrouter/{model}")
+    if env.get("OPENROUTER_API_KEY"):
+        for model in ((cfg.providers.get("openrouter") or {}).get("models") or []):
+            out.append(f"openrouter/{model}")
     seen = set()
     return [m for m in out if not (m in seen or seen.add(m))]
+
+
+def _model_provider_available(model: str, env: dict[str, str]) -> bool:
+    # Ollama ids are "<server>/<model>" — no builtin prefix matches, so they stay visible.
+    from alpi import providers as prov_mod
+
+    head = model.split("/", 1)[0]
+    for p in prov_mod.builtin():
+        if (p.model_prefix or p.name) == head:
+            return bool(p.api_key_env) and bool(env.get(p.api_key_env))
+    return True
 
 
 def _curated_ids_for(provider: str) -> list[str]:

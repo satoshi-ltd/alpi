@@ -213,6 +213,8 @@ async def test_device_profile_summaries_are_served_by_host(
 def test_daemon_running_uses_os_signal_not_external_kill(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    import subprocess
+
     home = tmp_path / "h"
     home.mkdir()
     (home / "service.pid").write_text("123\n")
@@ -224,7 +226,7 @@ def test_daemon_running_uses_os_signal_not_external_kill(
 
     monkeypatch.setattr(host_device_state.os, "kill", fake_kill)
     monkeypatch.setattr(
-        host_device_state.subprocess,
+        subprocess,
         "run",
         lambda *_args, **_kwargs: pytest.fail("subprocess.run should not be used"),
     )
@@ -246,6 +248,40 @@ def test_daemon_running_reads_new_pidfile_format(
     monkeypatch.setattr(service, "_proc_starttime", lambda pid: "99999999")
     assert host_device_state._daemon_pid() == 123
     assert host_device_state._daemon_running() is True
+
+
+def test_models_hides_entries_of_providers_without_keys(tmp_path: Path) -> None:
+    home = tmp_path / "h"
+    home.mkdir()
+    cfg = cfg_mod.Config(home=home, model="anthropic/claude-sonnet-4-6")
+    cfg.providers = {"openrouter": {"models": ["meta/llama-3"]}}
+    (home / ".env").write_text("OPENAI_API_KEY=sk-test\n")
+
+    models = host_device_state._models(cfg, home)
+    assert "anthropic/claude-sonnet-4-6" not in models
+    assert "openrouter/meta/llama-3" not in models
+    assert any(m.startswith("openai/") for m in models)
+
+
+def test_models_lists_entries_when_provider_keys_present(tmp_path: Path) -> None:
+    home = tmp_path / "h"
+    home.mkdir()
+    cfg = cfg_mod.Config(home=home, model="anthropic/claude-sonnet-4-6")
+    cfg.providers = {"openrouter": {"models": ["meta/llama-3"]}}
+    (home / ".env").write_text(
+        "ANTHROPIC_API_KEY=sk-a\nOPENROUTER_API_KEY=sk-or\n",
+    )
+
+    models = host_device_state._models(cfg, home)
+    assert models[0] == "anthropic/claude-sonnet-4-6"
+    assert "openrouter/meta/llama-3" in models
+
+
+def test_models_keeps_ollama_selected_model_without_any_key(tmp_path: Path) -> None:
+    home = tmp_path / "h"
+    home.mkdir()
+    cfg = cfg_mod.Config(home=home, model="local/llama3:8b")
+    assert host_device_state._models(cfg, home) == ["local/llama3:8b"]
 
 
 @pytest.mark.asyncio
