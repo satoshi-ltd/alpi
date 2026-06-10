@@ -12,7 +12,7 @@ import httpx
 
 from alpi.gateway import breaker as _breaker
 from alpi.gateway.base import IncomingMessage, OutgoingMessage, Platform
-from alpi.gateway.delivery import format_for_telegram
+from alpi.gateway.delivery import format_for_telegram, sender_allowed
 
 
 log = logging.getLogger("alpi.gateway.telegram")
@@ -278,6 +278,11 @@ class Telegram(Platform):
                     await c.post(f"{base}/editMessageText", json=payload)
             except Exception as e:  # noqa: BLE001
                 log.warning("editMessageText failed: %s", e)
+
+        # Callback buttons bypass the inbound-message path, so re-apply the sender pin here.
+        if not sender_allowed("telegram", str((cq.get("from") or {}).get("id", "")), env=self.env):
+            await _ack("not authorized")
+            return
 
         if data == "mx":
             await _edit("model picker · cancelled", markup={"inline_keyboard": []})

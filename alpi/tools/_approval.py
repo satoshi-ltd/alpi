@@ -7,7 +7,6 @@ import re
 import threading
 from dataclasses import dataclass
 from enum import Enum
-from pathlib import Path
 from typing import Callable, Optional
 
 
@@ -82,11 +81,35 @@ _PATTERNS: list[Pattern] = [
         Severity.DANGEROUS,
     ),
     Pattern(
-        "read ssh private key",
+        "read private key / credential file",
         re.compile(
-            r"(?:cat|head|tail|less|more|cp|mv|scp|rsync)\s+[^ ]*(?:\.ssh/id_|\.pem\b|id_rsa\b|id_ed25519\b)",
+            r"(?:cat|head|tail|less|more|cp|mv|scp|rsync|xxd|hexdump|strings|od|base64|gpg)\b[^|;&]*?"
+            r"(?:\.ssh/id_|\.pem\b|id_rsa\b|id_ed25519\b|/\.aws/credentials\b|/\.gnupg\b"
+            r"|/\.netrc\b|/\.pgpass\b|/\.npmrc\b|/\.pypirc\b)",
             re.I,
         ),
+        Severity.DANGEROUS,
+    ),
+    Pattern(
+        "read profile secret",
+        re.compile(
+            r"(?:cat|head|tail|less|more|cp|mv|scp|rsync|grep|awk|sed|xxd|hexdump|strings|od|base64)\b"
+            r"[^|;&]*?\.alpi(?:/profiles/[^/ ]+)?/(?:\.env|config\.yaml)\b",
+            re.I,
+        ),
+        Severity.DANGEROUS,
+    ),
+    Pattern(
+        "write profile config / secret",
+        re.compile(
+            r"(?:>+|tee\b)[^|;&]*?\.alpi(?:/profiles/[^/ ]+)?/(?:\.env|config\.yaml)\b",
+            re.I,
+        ),
+        Severity.DANGEROUS,
+    ),
+    Pattern(
+        "dump environment",
+        re.compile(r"(?:^|[|;&]\s*)\s*(?:env|printenv)\s*(?:\||;|&|>|$)", re.I),
         Severity.DANGEROUS,
     ),
     Pattern(

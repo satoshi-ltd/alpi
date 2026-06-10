@@ -419,8 +419,10 @@ precedence at runtime.
 The cap covers **every** turn this profile runs: interactive TUI
 replies, gateway responses (Telegram / IMAP / Gmail), scheduled jobs,
 sub-agent spawns (`research`, `delegate`, `read_image`), and inbound
-ALP calls from pinned peers. Counters reset at UTC midnight; no
-carry-over. The ledger lives at `~/.alpi/<profile>/logs/ledger.json` and
+ALP calls from pinned peers. It is re-checked **before each step**
+within a turn, so a long multi-step turn aborts as soon as it crosses
+the ceiling rather than running to completion. Counters reset at UTC
+midnight; no carry-over. The ledger lives at `~/.alpi/<profile>/logs/ledger.json` and
 also records a per-peer breakdown for the `/cost` panel, though only
 the profile total gates new turns.
 

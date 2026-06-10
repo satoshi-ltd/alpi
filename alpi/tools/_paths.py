@@ -19,11 +19,19 @@ _SENSITIVE_EXACT_PATHS: frozenset[str] = frozenset({
 
 _SENSITIVE_PATH_REGEX: tuple[re.Pattern[str], ...] = (
     re.compile(r"(?:^|/)\.ssh/(?:id_|.*_key$|.*_ed25519$)", re.I),
+    re.compile(r"(?:^|/)\.ssh/authorized_keys$", re.I),
     re.compile(r"\.(?:pem|p12|pfx)$", re.I),
-    re.compile(r"(?:^|/)\.aws/credentials$", re.I),
+    re.compile(r"(?:^|/)\.aws/(?:credentials|config)$", re.I),
     re.compile(r"(?:^|/)\.gnupg/", re.I),
+    re.compile(r"(?:^|/)\.(?:netrc|npmrc|pypirc|pgpass)$", re.I),
+    re.compile(r"(?:^|/)\.config/(?:gh|gcloud)/", re.I),
+    # Shell rc / login files and launchd plists — persistence write vectors.
+    re.compile(r"(?:^|/)\.(?:bashrc|zshrc|bash_profile|zprofile|zlogin|profile)$", re.I),
+    re.compile(r"(?:^|/)Library/Launch(?:Agents|Daemons)/", re.I),
     # Profile secrets and config must only be edited by hand or setup.
     re.compile(r"(?:^|/)\.alpi(?:/profiles/[^/]+)?/(?:\.env|config\.yaml)$"),
+    # Skill secrets dir (mode 0700, scanner-skipped) — never via file tools.
+    re.compile(r"(?:^|/)skills/[^/]+/[^/]+/secrets/", re.I),
 )
 
 

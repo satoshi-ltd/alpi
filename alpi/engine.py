@@ -271,6 +271,13 @@ class Engine:
                 if self.interrupt_requested:
                     self._finalize_interrupt(emit)
                     return
+                if step_idx > 0:
+                    try:
+                        ledger.check(self.home, self.cfg.budget)
+                    except ledger.BudgetExceeded as e:
+                        emit(AgentEvent(kind="error", text=str(e)))
+                        turn_error = str(e)
+                        break
                 accumulated_text: list[str] = []
                 reasoning_text: list[str] = []
                 final: dict = {}

@@ -62,6 +62,10 @@ def test_macos_builds_sandbox_exec_command(ws: Path, ah: Path) -> None:
     profile = args[args.index("-p") + 1]
     assert "(deny default)" in profile
     assert "(deny network*)" in profile
+    # Secrets under ALPI_HOME are denied both read and write inside the sandbox.
+    assert "(deny file-read-data" in profile
+    assert "(deny file-write*" in profile
+    assert r"/\.alpi/(profiles/[^/]+/)?\.env$" in profile
 
 
 @pytest.mark.skipif(sys.platform != "darwin" or shutil.which("sandbox-exec") is None,

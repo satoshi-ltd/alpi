@@ -64,3 +64,28 @@ def test_non_secret_passes_through() -> None:
 def test_short_strings_not_falsely_matched() -> None:
     # "sk-" alone (no key body) shouldn't trip the key pattern.
     assert redact("sk-12") == "sk-12"
+
+
+def test_credential_url_keeps_scheme_drops_userinfo() -> None:
+    out = redact("clone https://alice:s3cr3t@github.com/x.git now")
+    assert out == "clone https://[REDACTED]@github.com/x.git now"
+    out2 = redact("postgres://admin:pw@db.internal:5432/app")
+    assert out2 == "postgres://[REDACTED]@db.internal:5432/app"
+
+
+def test_url_without_userinfo_passes_through() -> None:
+    assert redact("see https://example.com/path?x=1") == "see https://example.com/path?x=1"
+
+
+def test_pem_private_key_block_redacted() -> None:
+    pem = (
+        "-----BEGIN OPENSSH PRIVATE KEY-----\n"
+        "b3BlbnNzaC1rZXktdjEAAAAA...\nmoremoremore\n"
+        "-----END OPENSSH PRIVATE KEY-----"
+    )
+    assert redact(f"key:\n{pem}\ndone") == "key:\n[REDACTED]\ndone"
+
+
+def test_attachment_metadata_redacted_recursively() -> None:
+    out = redact([{"name": "sk-1234567890abcdefABCDEF.png", "size": 10, "mime": "image/png"}])
+    assert out == [{"name": "[REDACTED].png", "size": 10, "mime": "image/png"}]

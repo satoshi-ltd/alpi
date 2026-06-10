@@ -50,15 +50,26 @@ def check_command(command: str) -> Tuple[bool, str]:
 
 
 _BLOCKED_NETWORKS = [
+    ipaddress.ip_network("0.0.0.0/8"),
     ipaddress.ip_network("10.0.0.0/8"),
+    ipaddress.ip_network("100.64.0.0/10"),   # CGNAT — Alibaba metadata 100.100.100.200
     ipaddress.ip_network("172.16.0.0/12"),
+    ipaddress.ip_network("192.0.0.0/24"),    # IETF protocol — Oracle metadata 192.0.0.192
     ipaddress.ip_network("192.168.0.0/16"),
     ipaddress.ip_network("127.0.0.0/8"),
     ipaddress.ip_network("169.254.0.0/16"),
     ipaddress.ip_network("::1/128"),
+    ipaddress.ip_network("::/128"),
     ipaddress.ip_network("fe80::/10"),
     ipaddress.ip_network("fc00::/7"),
 ]
+
+
+def _is_blocked_ip(ip: "ipaddress.IPv4Address | ipaddress.IPv6Address") -> bool:
+    if any(ip in net for net in _BLOCKED_NETWORKS):
+        return True
+    mapped = getattr(ip, "ipv4_mapped", None)
+    return mapped is not None and any(mapped in net for net in _BLOCKED_NETWORKS)
 
 _METADATA_HOSTS = {
     "metadata.google.internal",
@@ -84,7 +95,7 @@ def check_url(url: str) -> Tuple[bool, str]:
         return False, f"cloud metadata host {host!r}"
     try:
         ip = ipaddress.ip_address(host)
-        if any(ip in net for net in _BLOCKED_NETWORKS):
+        if _is_blocked_ip(ip):
             return False, f"private/link-local ip {ip}"
         return True, ""
     except ValueError:
@@ -92,7 +103,7 @@ def check_url(url: str) -> Tuple[bool, str]:
     try:
         infos = socket.getaddrinfo(host, None)
     except OSError:
-        return True, ""
+        return False, f"dns resolution failed for {host!r}"
     seen: set[str] = set()
     for info in infos:
         addr = info[4][0]
@@ -103,6 +114,6 @@ def check_url(url: str) -> Tuple[bool, str]:
             ip = ipaddress.ip_address(addr)
         except ValueError:
             continue
-        if any(ip in net for net in _BLOCKED_NETWORKS):
+        if _is_blocked_ip(ip):
             return False, f"{host!r} resolves to private ip {ip}"
     return True, ""

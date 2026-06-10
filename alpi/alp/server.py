@@ -46,6 +46,10 @@ class HandlerError(Exception):
         self.data = data
 
 
+# Cap concurrent unauthenticated handshakes — bounds responder keygen/DH CPU before the per-pubkey rate limiter applies.
+_MAX_INFLIGHT_HANDSHAKES = 32
+
+
 class Server:
     def __init__(
         self,
@@ -66,6 +70,7 @@ class Server:
         self.replay = env.ReplayCache()
         self.rate_limiter = rl.RateLimiter()
         self.handlers: dict[str, Handler] = {}
+        self._handshake_sem: asyncio.Semaphore | None = None
         self._server: asyncio.AbstractServer | None = None
         self._tcp_server: asyncio.AbstractServer | None = None
         self._tcp_host = tcp_host or ("127.0.0.1" if tcp_port else None)
@@ -202,12 +207,16 @@ class Server:
         peername = writer.get_extra_info("peername")
         try:
             static_x = ed25519_to_x25519_private(self.kp.private)
+            sem = self._handshake_sem
+            if sem is None:
+                sem = self._handshake_sem = asyncio.Semaphore(_MAX_INFLIGHT_HANDSHAKES)
             try:
-                cs_send, cs_recv, remote_x = await tcp.perform_handshake_responder(
-                    reader,
-                    writer,
-                    static_x,
-                )
+                async with sem:
+                    cs_send, cs_recv, remote_x = await tcp.perform_handshake_responder(
+                        reader,
+                        writer,
+                        static_x,
+                    )
             except tcp.TransportError as e:
                 log.info("alp tcp: handshake failed from %s: %s", peername, e)
                 return

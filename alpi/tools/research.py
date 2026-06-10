@@ -253,6 +253,8 @@ class Research(Tool):
                         result = execute(name, args)
                         payload = result.output if result.ok else f"ERROR: {result.error}"
                         payload = _budget_apply(name, payload)
+                        from alpi.tools._sanitizer import sanitize_tool_payload
+                        payload = sanitize_tool_payload(name, payload, is_error=not result.ok)
                     messages.append({
                         "role": "tool", "tool_call_id": tc["id"],
                         "name": name, "content": payload,

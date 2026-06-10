@@ -63,6 +63,26 @@ _HUB_KEYS = "hub_keys.json"  # hub-only history: past group keys (sealed for the
 _BIO_MAX = 200
 _VOICE_MAX = 64
 
+# Hub-side bounds on remote posts (the poster is untrusted).
+_MAX_POST_CIPHERTEXT = 256 * 1024   # bytes of one post's ciphertext
+_MAX_TRANSCRIPT_POSTS = 10_000      # per-workgroup transcript cap
+_MAX_DECLARED_USD = 1000.0          # clamp self-declared cost
+_MAX_DECLARED_TOKENS = 100_000_000
+
+
+def _as_float(v: Any) -> float:
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _as_int(v: Any) -> int:
+    try:
+        return int(v)
+    except (TypeError, ValueError):
+        return 0
+
 GROUP_KEY_BYTES = 32
 _HKDF_INFO = b"alp.workgroup.seal.v1"
 _PROTOCOL_KIND_SEAL = b"seal"
@@ -911,6 +931,11 @@ def register(server: alp_server.Server, home: Path) -> None:
                 -32602, "invalid-params",
                 data={"detail": "workgroup_id, nonce, ciphertext required"},
             )
+        if len(ciphertext) > _MAX_POST_CIPHERTEXT:
+            raise alp_server.HandlerError(
+                -32602, "invalid-params",
+                data={"detail": f"ciphertext exceeds {_MAX_POST_CIPHERTEXT} bytes"},
+            )
         try:
             key_version = int((params or {}).get("key_version", 1))
         except (TypeError, ValueError):
@@ -922,8 +947,14 @@ def register(server: alp_server.Server, home: Path) -> None:
         wg = load(home, wg_id)
         if wg is None:
             raise alp_server.HandlerError(-32009, "workgroup-not-found")
-        if wg.member(peer.pubkey) is None:
+        member = wg.member(peer.pubkey)
+        if member is None:
             raise alp_server.HandlerError(-32008, "workgroup-not-member")
+        if not member.joined:
+            raise alp_server.HandlerError(
+                -32008, "workgroup-not-joined",
+                data={"detail": "run workgroup.join before posting"},
+            )
         if wg.meta.paused:
             raise alp_server.HandlerError(
                 -32010, "workgroup-paused",
@@ -933,11 +964,30 @@ def register(server: alp_server.Server, home: Path) -> None:
                 },
             )
 
+        # Poster is untrusted: clamp self-declared cost before it gates budget / lands in the ledger.
+        declared_usd = max(0.0, min(_as_float(cost.get("usd")), _MAX_DECLARED_USD))
+        declared_tokens = max(0, min(_as_int(cost.get("tokens")), _MAX_DECLARED_TOKENS))
+        declared_in = max(0, min(_as_int(cost.get("tokens_in")), _MAX_DECLARED_TOKENS))
+        declared_out = max(0, min(_as_int(cost.get("tokens_out")), _MAX_DECLARED_TOKENS))
+        # Keep the combined total consistent with the split for the gate + usage.
+        declared_tokens = max(declared_tokens, declared_in + declared_out)
+
         d = _wg_dir(home, wg_id)
         ledger = _load_ledger(d)
-        _gate_post(wg.meta, ledger, cost)  # raises -32005 on breach
+        _gate_post(wg.meta, ledger, {"usd": declared_usd, "tokens": declared_tokens})
 
         existing = _read_transcript(d)
+        if len(existing) >= _MAX_TRANSCRIPT_POSTS:
+            raise alp_server.HandlerError(
+                -32010, "workgroup-full",
+                data={"detail": f"transcript at cap ({_MAX_TRANSCRIPT_POSTS} posts)"},
+            )
+        if any(e.get("nonce") == nonce and _as_int(e.get("key_version", 1)) == key_version
+               for e in existing):
+            raise alp_server.HandlerError(
+                -32602, "invalid-params",
+                data={"detail": "nonce reuse for this key_version"},
+            )
         seq = (existing[-1]["seq"] + 1) if existing else 1
         entry: dict[str, Any] = {
             "seq": seq,
@@ -947,10 +997,6 @@ def register(server: alp_server.Server, home: Path) -> None:
             "nonce": nonce,
             "ciphertext": ciphertext,
         }
-        declared_usd = float(cost.get("usd", 0.0)) if cost else 0.0
-        declared_tokens = int(cost.get("tokens", 0)) if cost else 0
-        declared_in = int(cost.get("tokens_in", 0)) if cost else 0
-        declared_out = int(cost.get("tokens_out", 0)) if cost else 0
         if declared_usd or declared_tokens:
             entry["cost"] = {"usd": declared_usd, "tokens": declared_tokens}
             if declared_in or declared_out:
@@ -963,10 +1009,8 @@ def register(server: alp_server.Server, home: Path) -> None:
         ledger["posts"] = int(ledger.get("posts", 0)) + 1
         _save_ledger(d, ledger)
 
-        member = wg.member(peer.pubkey)
-        if member is not None:
-            member.last_seen_at = entry["ts"]
-            _save_members(d, wg.members)
+        member.last_seen_at = entry["ts"]
+        _save_members(d, wg.members)
 
         try:
             from alpi.host import events as host_events

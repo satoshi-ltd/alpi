@@ -57,7 +57,9 @@ _MACOS_PROFILE = """
 (deny file-read-data
     (subpath (param "HOME_SSH"))
     (subpath (param "HOME_AWS"))
-    (subpath (param "HOME_GNUPG")))
+    (subpath (param "HOME_GNUPG"))
+    (regex #"/\\.alpi/(profiles/[^/]+/)?\\.env$")
+    (regex #"/\\.alpi/.*/secrets/"))
 (allow file-write*
     (subpath (param "WORKSPACE"))
     (subpath (param "ALPI_HOME"))
@@ -77,6 +79,10 @@ _MACOS_PROFILE = """
     (literal "/dev/stdin")
     (literal "/dev/stdout")
     (literal "/dev/stderr"))
+(deny file-write*
+    (regex #"/\\.alpi/(profiles/[^/]+/)?\\.env$")
+    (regex #"/\\.alpi/(profiles/[^/]+/)?config\\.yaml$")
+    (regex #"/\\.alpi/.*/secrets/"))
 %NETWORK%
 """.strip()
 

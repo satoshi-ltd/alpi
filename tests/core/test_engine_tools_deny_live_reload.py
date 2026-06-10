@@ -76,3 +76,39 @@ def test_tools_deny_refreshes_from_disk_each_turn(
     engine.run_turn("second", emit=lambda _e: None)
     assert "terminal" not in schema_names[1]
     assert "write_file" in schema_names[1]
+
+
+def test_budget_exceeded_mid_turn_aborts(engine: Engine, monkeypatch) -> None:
+    """A turn that crosses the daily cap mid-flight aborts instead of
+    spending all the way to max_steps (the gate is re-checked per step)."""
+    import alpi.ledger as ledger
+
+    calls = {"n": 0}
+
+    def fake_check(*_a, **_kw):
+        calls["n"] += 1
+        # Pre-loop check (1) passes; the first mid-turn check (2) trips.
+        if calls["n"] >= 2:
+            raise ledger.BudgetExceeded("usd", 1.0, 2.0)
+
+    monkeypatch.setattr("alpi.ledger.check", fake_check)
+
+    steps = {"n": 0}
+
+    def stream(messages, tools, **kwargs):
+        steps["n"] += 1
+        # Always request a denied tool so the loop would keep going forever
+        # if the mid-turn budget check did not stop it.
+        yield {
+            "final": True, "input_tokens": 1, "output_tokens": 1, "cost_usd": 0.0,
+            "tool_calls": [{"id": f"t{steps['n']}", "name": "write_file",
+                            "arguments": "{\"path\": \"x\", \"content\": \"y\"}"}],
+        }
+
+    monkeypatch.setattr("alpi.llm.stream", stream)
+
+    events: list = []
+    engine.run_turn("go", emit=lambda e: events.append(e))
+
+    assert any(e.kind == "error" and "budget" in (e.text or "").lower() for e in events)
+    assert steps["n"] == 1  # stopped after the first step, not max_steps (6)

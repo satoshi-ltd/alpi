@@ -127,6 +127,25 @@ def test_check_url_blocks_when_any_record_is_private() -> None:
     assert "10.0.0.7" in reason
 
 
+@pytest.mark.parametrize("url", [
+    "http://0.0.0.0/",
+    "http://100.100.100.200/latest/meta-data/",   # Alibaba metadata
+    "http://192.0.0.192/latest/",                  # Oracle metadata
+    "http://[::ffff:169.254.169.254]/",            # v4-mapped link-local metadata
+])
+def test_check_url_blocks_extra_metadata_and_unspecified(url: str) -> None:
+    safe, reason = check_url(url)
+    assert not safe, f"expected BLOCK for {url}"
+    assert reason
+
+
+def test_check_url_fails_closed_on_dns_error() -> None:
+    with patch("alpi.tools._guards.socket.getaddrinfo", side_effect=OSError("nxdomain")):
+        safe, reason = check_url("https://unresolvable.example/")
+    assert not safe
+    assert "dns" in reason.lower()
+
+
 def test_check_url_rejects_non_http_scheme() -> None:
     safe, reason = check_url("file:///etc/passwd")
     assert not safe

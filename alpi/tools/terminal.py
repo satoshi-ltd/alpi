@@ -34,7 +34,6 @@ _SAFE_ENV_KEYS = (
 def _build_subprocess_env() -> dict[str, str]:
     from alpi.home import effective_profile_env
     from alpi.tools import _state
-    # Process-level keys come from os.environ (PATH, HOME, TZ, ALPI_PLATFORM…); profile-scoped secrets (active skill env keys typically include API tokens declared in .env) overlay from the active profile so terminal subprocesses see the same env the agent sees.
     parent = effective_profile_env(get_home())
     out: dict[str, str] = {}
     for key in _SAFE_ENV_KEYS:
@@ -43,6 +42,7 @@ def _build_subprocess_env() -> dict[str, str]:
     for key in parent:
         if key.startswith("LC_") and key not in out:
             out[key] = parent[key]
+    # Intentional: an active skill's *declared* env reaches ad-hoc terminal so prose-mode skills (no scripts/run.py) can run their CLI steps; scoped to declared keys, not all secrets.
     for key in _state.get_active_skills_env():
         if key in parent and key not in out:
             out[key] = parent[key]
@@ -81,7 +81,8 @@ def _sandbox_config() -> tuple[bool, bool]:
         cfg = cfg_mod.load(get_home())
         return cfg.tools.terminal.sandbox, cfg.tools.terminal.allow_network
     except Exception:
-        return False, False
+        # Fail closed: unreadable config → sandbox required (wrap_command then raises, caller refuses).
+        return True, False
 
 
 def _resolve_popen_args(command: str) -> list[str] | str:

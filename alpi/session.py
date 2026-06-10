@@ -125,14 +125,14 @@ class Session:
                             "args": redact(tl.args),
                             "result": redact(tl.result), "ok": tl.ok,
                             "duration_s": round(tl.duration_s, 3),
-                            **({"reasoning": tl.reasoning} if tl.reasoning else {}),
+                            **({"reasoning": redact(tl.reasoning)} if tl.reasoning else {}),
                         }
                         for tl in t.tools
                     ],
                     **({"reasoning": redact(t.reasoning)} if t.reasoning else {}),
                     **({"reasoned_s": round(t.reasoned_s, 1)} if t.reasoned_s else {}),
-                    **({"attachments": t.attachments} if t.attachments else {}),
-                    **({"output_attachments": t.output_attachments} if t.output_attachments else {}),
+                    **({"attachments": redact(t.attachments)} if t.attachments else {}),
+                    **({"output_attachments": redact(t.output_attachments)} if t.output_attachments else {}),
                 }
                 for t in self.turns
             ],

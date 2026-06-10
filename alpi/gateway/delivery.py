@@ -42,6 +42,23 @@ def is_allowed(platform: str, chat_id: str, env: dict | None = None) -> bool:
     return needle in allowed_chat_ids(platform, env)
 
 
+def allowed_user_ids(platform: str, env: dict | None = None) -> list[str]:
+    src = env if env is not None else os.environ
+    raw = src.get(f"{platform.upper()}_ALLOWED_USER_IDS", "")
+    seen: list[str] = []
+    for part in raw.split(","):
+        uid = part.strip()
+        if uid and uid not in seen:
+            seen.append(uid)
+    return seen
+
+
+def sender_allowed(platform: str, user_id: str, env: dict | None = None) -> bool:
+    """Opt-in per-sender gate: unset ``{PLATFORM}_ALLOWED_USER_IDS`` → allow; set → sender id must be listed."""
+    ids = allowed_user_ids(platform, env)
+    return True if not ids else str(user_id) in ids
+
+
 def default_chat_id(platform: str, env: dict | None = None) -> str | None:
     """First allowed chat for ``platform``."""
     ids = allowed_chat_ids(platform, env)

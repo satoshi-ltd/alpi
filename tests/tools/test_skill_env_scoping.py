@@ -9,7 +9,6 @@ import pytest
 from alpi.tools import _state
 from alpi.tools.skill import (
     Skill,
-    _frontmatter_from_text,
     _parse_env_list,
 )
 from alpi.tools.terminal import Terminal, _build_subprocess_env, _SAFE_ENV_KEYS
@@ -41,6 +40,7 @@ def test_secrets_blocked_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_skill_declared_env_passes_through(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Declared skill env reaches ad-hoc terminal (prose-mode skills); undeclared secrets do not.
     monkeypatch.setenv("OPENAI_API_KEY", "sk-secret")
     monkeypatch.setenv("HTTP_PROXY", "http://proxy:3128")
     _state.reset_skill_env()
@@ -53,13 +53,15 @@ def test_skill_declared_env_passes_through(monkeypatch: pytest.MonkeyPatch) -> N
 def test_terminal_subprocess_cannot_see_secret(
     tmp_home: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    # `env`/`printenv` are gated as dump-environment; probe one scoped var
+    # via an allowed echo to confirm the secret never reached the subprocess.
     monkeypatch.setenv("OPENAI_API_KEY", "sk-secret")
     monkeypatch.setenv("PATH", "/usr/bin:/bin")
     _state.reset_skill_env()
-    r = Terminal().run(action="run", command="env")
+    r = Terminal().run(action="run", command='echo "OPENAI_API_KEY=$OPENAI_API_KEY"')
     assert r.ok, r.error
     assert "sk-secret" not in r.output
-    assert _line_for(r.output, "OPENAI_API_KEY") is None
+    assert _line_for(r.output, "OPENAI_API_KEY") == ""
 
 
 def test_terminal_subprocess_sees_skill_declared_var(
@@ -69,7 +71,7 @@ def test_terminal_subprocess_sees_skill_declared_var(
     monkeypatch.setenv("PATH", "/usr/bin:/bin")
     _state.reset_skill_env()
     _state.add_skill_env(["HTTP_PROXY"])
-    r = Terminal().run(action="run", command="env")
+    r = Terminal().run(action="run", command='echo "HTTP_PROXY=$HTTP_PROXY"')
     assert r.ok, r.error
     assert _line_for(r.output, "HTTP_PROXY") == "http://proxy:3128"
 

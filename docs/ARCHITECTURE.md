@@ -262,7 +262,7 @@ Single entry point `resolve_path(path)`:
 3. Resolve symlinks.
 4. Reject if the resulting path matches any sensitive-path entry (denylist below) — `ValueError`.
 
-Denylist: `/etc/`, `/boot/`, `/sys/`, `/proc/`, `/usr/lib/systemd/`, `/System/`, `/private/etc/`, the docker sockets, `~/.ssh/id_*`, `*_key`, `*_ed25519`, `*.pem/.p12/.pfx`, `~/.aws/credentials`, `~/.gnupg/`. Both pre-resolve and post-resolve forms are checked (macOS `/var` → `/private/var` symlink case).
+Denylist: `/etc/`, `/boot/`, `/sys/`, `/proc/`, `/usr/lib/systemd/`, `/System/`, `/private/etc/`, the docker sockets, `~/.ssh/id_*`, `~/.ssh/authorized_keys`, `*_key`, `*_ed25519`, `*.pem/.p12/.pfx`, `~/.aws/{credentials,config}`, `~/.gnupg/`, `~/.netrc`, `~/.npmrc`, `~/.pypirc`, `~/.pgpass`, `~/.config/{gh,gcloud}/`, shell rc/login files (`.bashrc`/`.zshrc`/`.zprofile`/…), `~/Library/Launch{Agents,Daemons}/`, profile `.env`/`config.yaml`, and skill `secrets/` dirs. Both pre-resolve and post-resolve forms are checked (macOS `/var` → `/private/var` symlink case).
 
 `suggest_similar_paths(target)` lists the parent directory and fuzzy-matches siblings by basename substring/prefix. Used by `read_file`, `edit_file`, and `search` to turn dead-end errors into actionable suggestions.
 
@@ -831,7 +831,11 @@ keeps the typing indicator on while the subprocess works, and sends
 only the final reply back to the gateway.
 
 Allowlist: `TELEGRAM_ALLOWED_CHAT_IDS` and `IMAP_ALLOWED_SENDERS`
-in `.env`, fail-closed if unset. Per-platform user config under
+in `.env`, fail-closed if unset. Optional per-sender gate
+`{PLATFORM}_ALLOWED_USER_IDS` (e.g. `TELEGRAM_ALLOWED_USER_IDS`): unset
+→ the chat allowlist governs (any member of an allowed group can drive
+the agent); set → the sender's id must also be listed. Inbound text
+reaches the model behind an untrusted banner + injection scan. Per-platform user config under
 `gateway.*` in `config.yaml`: Telegram/Matrix intentionally expose
 no UX knobs; IMAP/Gmail expose `poll_interval` and `mark_as_read`.
 Typing indicators are hardcoded by platform (chat on, email off —

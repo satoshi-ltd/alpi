@@ -15,8 +15,10 @@
 
 ## Always-on guards
 
-- Sensitive-path checks on file/terminal tools.
-- Terminal approval/refusal logic for risky commands (see `config`).
+- Sensitive-path checks on file/terminal tools: keys, credential files (`.aws`, `.netrc`, `.npmrc`, `.pgpass`), profile `.env`/`config.yaml`, shell rc/login files, launch agents, and skill `secrets/` are refused.
+- Terminal hard-denies secret-file reads, environment dumps (`env`/`printenv`), and writes to credential/config files; other risky commands need approval (see `config`).
+- Inbound chat/gateway messages and fetched web/email/MCP content reach the model behind an untrusted banner + prompt-injection scan — data, not instructions.
+- Outbound web fetches block private/link-local/CGNAT and cloud-metadata IPs (SSRF), re-validating redirects; DNS-resolution failure fails closed.
 - Tool schemas constrain arguments.
 - Skill scanner runs before save.
 - `.env` and `secrets/` are not shown to the model by default.
@@ -109,6 +111,14 @@ The daemon supervises many profiles in one process and does not mutate
 global `os.environ`. Profile lookups use `effective_profile_env(home)`:
 process env overlaid with the profile `.env`. Gateway adapters snapshot env
 at construction, so credential edits usually require restart.
+
+Ad-hoc `terminal` subprocesses get only the safelisted process keys (PATH,
+HOME, TZ, LC_*) plus **an active skill's *declared* env** (`requires_env` /
+`env`) — never the rest of the profile `.env`. The skill-declared passthrough
+is intentional: prose-mode skills (no `scripts/run.py`) instruct the agent to
+run their CLI steps via `terminal`, which need those vars. Residual exposure:
+while a skill is active, a permitted command (e.g. `python -c`) can read that
+skill's declared vars; it is scoped to the declared keys, not all secrets.
 
 ## Inline image reads
 

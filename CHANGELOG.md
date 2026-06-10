@@ -1,5 +1,27 @@
 # Changelog
 
+## v0.8.13 — 2026-06-10 — security hardening pass
+
+- **Tighter terminal guardrails.** Commands that read credential files
+  (`~/.aws`, `~/.ssh`, `.netrc`, the profile `.env`), dump the environment, or
+  write to config/credential files are refused outright — and the OS sandbox
+  fails closed if its config can't be read.
+- **The daily budget is a hard ceiling.** A long multi-step turn now aborts the
+  moment it crosses the cap instead of running to completion.
+- **Less reachable from a hostile network.** Web fetches block more private,
+  carrier-grade, and cloud-metadata addresses (and fail closed when a host
+  won't resolve); file tools refuse more credential and persistence paths
+  (authorized_keys, shell rc files, launch agents).
+- **Inbound messages are treated as untrusted.** Telegram/Matrix/webhook text
+  gets the same injection scan + "data, not instructions" framing email already
+  had; an optional `{PLATFORM}_ALLOWED_USER_IDS` pins who may drive the agent
+  inside an allowed group chat.
+- **Workgroup posts can't skew the budget or flood the hub.** A posting peer's
+  declared cost is clamped, posting requires having joined, duplicate nonces and
+  oversized/over-many posts are rejected, and handshakes are rate-limited.
+- **Session logs redact more** — credential URLs, private-key blocks, and
+  attachment metadata are scrubbed before they hit disk.
+
 ## v0.8.12 — 2026-06-09 — daily token usage and cost, per profile and workgroup
 
 - **The daemon now reports the last 14 days of token usage and cost** — per day,

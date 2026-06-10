@@ -19,6 +19,22 @@ def test_alpi_profile_secrets_are_refused(path: str) -> None:
 
 
 @pytest.mark.parametrize("path", [
+    "/Users/javi/.ssh/authorized_keys",
+    "/Users/javi/.netrc",
+    "/Users/javi/.npmrc",
+    "/Users/javi/.aws/config",
+    "/Users/javi/.config/gh/hosts.yml",
+    "/Users/javi/.zshrc",
+    "/Users/javi/.bashrc",
+    "/Users/javi/Library/LaunchAgents/com.evil.plist",
+    "/Users/javi/.alpi/skills/system/persist/secrets/key.txt",
+])
+def test_persistence_and_credential_files_are_refused(path: str) -> None:
+    with pytest.raises(ValueError, match="sensitive"):
+        resolve_path(path)
+
+
+@pytest.mark.parametrize("path", [
     "/Users/javi/projects/myapp/.env",
     "/Users/javi/work/server/config.yaml",
     "/tmp/.env",

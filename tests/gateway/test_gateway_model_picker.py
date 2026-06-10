@@ -17,8 +17,8 @@ def test_provider_keyboard_marks_current() -> None:
     kb = tg._provider_keyboard(providers, current="anthropic")
     flat = [btn for row in kb["inline_keyboard"] for btn in row]
     labels = [b["text"] for b in flat]
-    assert any("✓ Anthropic" in l for l in labels)
-    assert any(l == "OpenAI" for l in labels)
+    assert any("✓ Anthropic" in lbl for lbl in labels)
+    assert any(lbl == "OpenAI" for lbl in labels)
     assert any(b["callback_data"] == "mx" for b in flat)
 
 
@@ -47,16 +47,10 @@ def test_model_keyboard_drops_over_long_callback_payloads() -> None:
     rows = kb["inline_keyboard"][:-1]
     labels = [btn["text"] for row in rows for btn in row]
     assert "gpt-4o" in labels
-    assert not any(len(l) > 60 for l in labels)
+    assert not any(len(lbl) > 60 for lbl in labels)
 
 
 def test_model_keyboard_marks_current() -> None:
-    class _M:
-        def __init__(self, mid: str):
-            self.id = mid
-            self.display = mid
-    models = [_M("a"), _M("b")]
-    kb = tg._model_keyboard("openai", models, current_model="openai/b")
     # Compare the full id and force one provider-prefixed id.
     class _M2:
         def __init__(self, mid: str, disp: str):
@@ -96,3 +90,41 @@ def test_read_current_model_parses_slash(tmp_path: Path) -> None:
     provider, model = tg._read_current_model(tmp_path)
     assert provider == "openai"
     assert model == "openai/gpt-4o"
+
+
+class _FakeAsyncClient:
+    def __init__(self, **kw):
+        pass
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *a):
+        return False
+
+    async def post(self, *a, **kw):
+        class _R:
+            status_code = 200
+        return _R()
+
+
+def test_callback_query_enforces_sender_pin(tmp_path: Path, monkeypatch) -> None:
+    import asyncio
+    monkeypatch.setattr(tg.httpx, "AsyncClient", _FakeAsyncClient)
+    persisted: list[tuple[str, str]] = []
+    monkeypatch.setattr(tg, "_persist_model",
+                        lambda home, slug, mid: persisted.append((slug, mid)))
+
+    inst = tg.Telegram(tmp_path)
+    inst.env = {"TELEGRAM_ALLOWED_USER_IDS": "7", "TELEGRAM_BOT_TOKEN": "x"}
+    inst._token = "x"
+    inst._model_picker["-100"] = {"msg_id": 1}
+    cq = {"id": "c1", "data": "mm:openai:gpt-4o", "message": {"chat": {"id": -100}}}
+
+    # A non-allowlisted group member's button press is rejected — no model change.
+    asyncio.run(inst._handle_callback_query({**cq, "from": {"id": 999}}))
+    assert persisted == []
+
+    # The allowlisted sender's press goes through (harness sanity).
+    asyncio.run(inst._handle_callback_query({**cq, "from": {"id": 7}}))
+    assert persisted == [("openai", "gpt-4o")]

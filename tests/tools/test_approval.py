@@ -38,6 +38,30 @@ def test_caution_denied_without_callback() -> None:
     assert "Rerun from TUI" in d.reason
 
 
+@pytest.mark.parametrize("cmd", [
+    "env",
+    "printenv",
+    "env | grep TOKEN",
+    "cat ~/.alpi/.env",
+    "cat ~/.alpi/profiles/main/.env",
+    "tee ~/.alpi/.env",
+    "cat ~/.aws/credentials",
+    "cat ~/.netrc",
+    "xxd ~/.ssh/id_rsa",
+    "base64 ~/.ssh/id_ed25519",
+    "strings ~/.ssh/id_rsa",
+])
+def test_secret_read_and_env_dump_are_dangerous(cmd: str) -> None:
+    d = check(cmd)
+    assert not d.allowed
+    assert d.severity == Severity.DANGEROUS
+
+
+def test_env_with_assignment_stays_safe() -> None:
+    # `env FOO=bar cmd` sets vars (benign); only a bare dump is blocked.
+    assert classify("env FOO=bar python script.py")[0] == Severity.SAFE
+
+
 def test_caution_allowed_once_does_not_persist() -> None:
     choices = iter(["once"])
     _approval.set_prompt_callback(lambda c, p, s, cwd=None: next(choices))

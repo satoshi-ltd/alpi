@@ -1032,6 +1032,128 @@ async def test_post_persists_token_split_in_transcript(short_tmp: Path) -> None:
 
 @pytest.mark.integration
 @pytest.mark.asyncio
+async def test_post_requires_join_first(short_tmp: Path) -> None:
+    import os as _os
+
+    hub_home = short_tmp / "hub"
+    hub_home.mkdir()
+    bob_home = short_tmp / "b"
+    bob_home.mkdir()
+    hub_kp = load_or_generate(hub_home)
+    bob_kp = load_or_generate(bob_home)
+    _pin(hub_home, "b", bob_kp.pubkey_b64(), ["workgroup.join", "workgroup.post"])
+    wg = wg_mod.create(
+        hub_home, name="needsjoin", hub_kp=hub_kp,
+        member_pubkeys=[bob_kp.pubkey_b64()],
+    )
+    server = alp_server.Server(home=hub_home, agent_name="hub")
+    wg_mod.register(server, hub_home)
+    await server.start()
+    try:
+        # Bob is on the roster but never joined → he holds no key, but the hub
+        # must reject before that even matters.
+        nonce, ct = wg_mod.encrypt_post(_os.urandom(wg_mod.GROUP_KEY_BYTES), b"x")
+        with pytest.raises(alp_client.RemoteError) as exc:
+            await alp_client.call(
+                socket_path=server.socket_path(), sender=bob_kp,
+                recipient_pubkey_b64=hub_kp.pubkey_b64(), method="workgroup.post",
+                params={"workgroup_id": wg.meta.id, "key_version": 1,
+                        "nonce": nonce, "ciphertext": ct},
+            )
+        assert exc.value.code == -32008
+    finally:
+        await server.stop()
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_post_rejects_duplicate_nonce_and_clamps_negative_cost(short_tmp: Path) -> None:
+    hub_home = short_tmp / "hub"
+    hub_home.mkdir()
+    bob_home = short_tmp / "b"
+    bob_home.mkdir()
+    hub_kp = load_or_generate(hub_home)
+    bob_kp = load_or_generate(bob_home)
+    _pin(hub_home, "b", bob_kp.pubkey_b64(), ["workgroup.join", "workgroup.post"])
+    wg = wg_mod.create(
+        hub_home, name="nonce", hub_kp=hub_kp,
+        member_pubkeys=[bob_kp.pubkey_b64()],
+    )
+    server = alp_server.Server(home=hub_home, agent_name="hub")
+    wg_mod.register(server, hub_home)
+    await server.start()
+    try:
+        join = await alp_client.call(
+            socket_path=server.socket_path(), sender=bob_kp,
+            recipient_pubkey_b64=hub_kp.pubkey_b64(), method="workgroup.join",
+            params={"workgroup_id": wg.meta.id},
+        )
+        key = wg_mod.open_sealed_group_key(join["sealed_key"], bob_kp)
+        nonce, ct = wg_mod.encrypt_post(key, b"hello")
+
+        async def _post(n, c, cost):
+            return await alp_client.call(
+                socket_path=server.socket_path(), sender=bob_kp,
+                recipient_pubkey_b64=hub_kp.pubkey_b64(), method="workgroup.post",
+                params={"workgroup_id": wg.meta.id, "key_version": 1,
+                        "nonce": n, "ciphertext": c, "cost": cost},
+            )
+
+        # Negative cost is clamped to zero, not subtracted from the ledger.
+        await _post(nonce, ct, {"usd": -5.0, "tokens": -10})
+        ledger = wg_mod._load_ledger(wg_mod._wg_dir(hub_home, wg.meta.id))
+        assert ledger["usd"] == 0.0
+        assert ledger["tokens"] == 0
+
+        # Re-posting the same (key_version, nonce) is rejected.
+        nonce2, ct2 = wg_mod.encrypt_post(key, b"world")
+        with pytest.raises(alp_client.RemoteError) as exc:
+            await _post(nonce, ct2, {})
+        assert exc.value.code == -32602
+        # A fresh nonce works; combined tokens are normalized up to the in+out split.
+        await _post(nonce2, ct2, {"tokens": 1, "tokens_in": 100, "tokens_out": 50})
+        ledger = wg_mod._load_ledger(wg_mod._wg_dir(hub_home, wg.meta.id))
+        assert ledger["tokens"] == 150
+    finally:
+        await server.stop()
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_post_rejects_oversized_ciphertext(short_tmp: Path, monkeypatch) -> None:
+    # The real cap (256 KiB) bites on TCP (1 MiB frames); the Unix socket's
+    # 64 KiB readline limit is stricter. Shrink the cap to test the handler
+    # logic with a payload the transport will still deliver.
+    monkeypatch.setattr(wg_mod, "_MAX_POST_CIPHERTEXT", 64)
+    hub_home = short_tmp / "hub"
+    hub_home.mkdir()
+    bob_home = short_tmp / "b"
+    bob_home.mkdir()
+    hub_kp = load_or_generate(hub_home)
+    bob_kp = load_or_generate(bob_home)
+    _pin(hub_home, "b", bob_kp.pubkey_b64(), ["workgroup.join", "workgroup.post"])
+    wg = wg_mod.create(
+        hub_home, name="big", hub_kp=hub_kp,
+        member_pubkeys=[bob_kp.pubkey_b64()],
+    )
+    server = alp_server.Server(home=hub_home, agent_name="hub")
+    wg_mod.register(server, hub_home)
+    await server.start()
+    try:
+        with pytest.raises(alp_client.RemoteError) as exc:
+            await alp_client.call(
+                socket_path=server.socket_path(), sender=bob_kp,
+                recipient_pubkey_b64=hub_kp.pubkey_b64(), method="workgroup.post",
+                params={"workgroup_id": wg.meta.id, "key_version": 1, "nonce": "n",
+                        "ciphertext": "a" * 200},
+            )
+        assert exc.value.code == -32602
+    finally:
+        await server.stop()
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
 async def test_post_with_tokens_cap_blocks_at_breach(short_tmp: Path) -> None:
     hub_home = short_tmp / "hub"
     hub_home.mkdir()
