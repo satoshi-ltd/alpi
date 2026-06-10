@@ -54,7 +54,7 @@ export function BudgetEditor({ current, onSave }) {
       {open && (
         <div
           ref={popoverRef}
-          className={styles.popover}
+          className={`${pos.ready ? "anim-pop " : ""}${styles.popover}`}
           style={{
             minWidth: 260,
             maxWidth: pos.maxWidth ?? undefined,

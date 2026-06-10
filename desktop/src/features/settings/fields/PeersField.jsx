@@ -305,7 +305,7 @@ function PeerDetailPopover({ peer, status, reason, anchorRef, onClose, onRemove 
   return (
     <div
       ref={popoverRef}
-      className={styles.popover}
+      className={`${pos.ready ? "anim-pop " : ""}${styles.popover}`}
       style={{
         minWidth: 320,
         maxWidth: pos.maxWidth ?? undefined,
@@ -424,7 +424,7 @@ function AddPeerPopover({ profile, existingIds, anchorRef, onClose, onAdded }) {
   return (
     <div
       ref={popoverRef}
-      className={styles.popover}
+      className={`${pos.ready ? "anim-pop " : ""}${styles.popover}`}
       style={{
         minWidth: 320,
         maxWidth: pos.maxWidth ?? undefined,

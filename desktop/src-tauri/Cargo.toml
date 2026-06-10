@@ -1,6 +1,6 @@
 [package]
 name = "alpi-desktop"
-version = "0.3.51"
+version = "0.3.52"
 description = "alpi desktop — filesystem-level wizard for the local alpi profile"
 authors = ["@soyjavi"]
 edition = "2021"
@@ -37,3 +37,4 @@ uuid = { version = "1", features = ["v4"] }
 base64 = "0.22"
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 sha2 = "0.10"
+tauri-plugin-window-state = "2.4.1"

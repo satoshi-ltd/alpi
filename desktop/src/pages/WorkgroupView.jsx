@@ -28,6 +28,7 @@ import {
 } from "../lib/workgroup-tasks.js";
 import { playTts, subscribeTts, voiceForPubkey } from "../lib/tts.js";
 import { buildSpeakerIndex, speakerFromIndex } from "../lib/wg-speakers.js";
+import { clearDraft, getDraft, setDraft } from "../lib/drafts.js";
 import { useOnline } from "../lib/useOnline.js";
 import {
   loadCachedMessages,
@@ -464,7 +465,9 @@ export default function WorkgroupView({
       </div>
 
       <WorkgroupComposer
-        paused={workgroup.paused || daemonOffline}
+        paused={workgroup.paused}
+        offline={daemonOffline}
+        draftKey={`wg|${connectionId || "local"}|${workgroup.profile}|${workgroup.id}`}
         mentions={mentionsForWorkgroup(members, peers, profiles, ownPubkey)}
         hubName={hubName}
         hubAccent={ownerProfile?.accent}
@@ -707,22 +710,32 @@ function mentionsForWorkgroup(members, peers, profiles, ownPubkey) {
   return out;
 }
 
-function WorkgroupComposer({ paused, mentions, onSend, hubName, hubAccent }) {
-  const [text, setText] = useState("");
+function WorkgroupComposer({ paused, offline, mentions, onSend, hubName, hubAccent, draftKey }) {
+  const [text, setText] = useState(() => getDraft(draftKey));
+  useEffect(() => {
+    setText(getDraft(draftKey));
+  }, [draftKey]);
+  const updateText = (next) => {
+    setText(next);
+    setDraft(draftKey, next);
+  };
   const [posting, setPosting] = useState(false);
   const hasText = text.trim().length > 0;
   const taskShape = validateTaskShape(text);
-  const canSend = hasText && !paused && !posting && taskShape.ok;
+  const canSend = hasText && !paused && !offline && !posting && taskShape.ok;
   const placeholder = paused
     ? "Workgroup is paused"
-    : posting
-      ? "Posting…"
-      : "Send a message — use @<peer> or #task #<slug> to open";
+    : offline
+      ? "Reconnecting — you can keep typing…"
+      : posting
+        ? "Posting…"
+        : "Send a message — use @<peer> or #task #<slug> to open";
 
   async function trySend() {
     if (!canSend) return;
     const payload = text.trim();
     setText("");
+    clearDraft(draftKey);
     setPosting(true);
     try {
       await onSend?.(payload);
@@ -757,13 +770,13 @@ function WorkgroupComposer({ paused, mentions, onSend, hubName, hubAccent }) {
   return (
     <Composer
       value={text}
-      onChange={setText}
+      onChange={updateText}
       onSubmit={trySend}
       disabled={paused || posting}
       canSend={canSend}
       accent={hubAccent ?? null}
       placeholder={placeholder}
-      sendTitle={paused ? "Workgroup is paused" : "Send (⌘↵)"}
+      sendTitle={paused ? "Workgroup is paused" : offline ? "Reconnecting…" : "Send (⌘↵)"}
       disabledTitle={
         taskShape.ok ? "Type a message" : "#task needs a #<slug>"
       }

@@ -7,7 +7,6 @@
   align-items: center;
   justify-content: center;
   z-index: var(--z-modal);
-  animation: backdropIn var(--dur-1) var(--ease) both;
 }
 
 .modal {
@@ -20,7 +19,6 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  animation: modalIn var(--dur-2) var(--ease) both;
 }
 
 .header {
@@ -229,14 +227,4 @@
 
 .footerRight {
   font-variant-numeric: tabular-nums;
-}
-
-@keyframes backdropIn {
-  from { opacity: 0; }
-  to   { opacity: 1; }
-}
-
-@keyframes modalIn {
-  from { opacity: 0; transform: translateY(6px) scale(0.985); }
-  to   { opacity: 1; transform: none; }
 }

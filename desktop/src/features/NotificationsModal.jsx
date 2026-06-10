@@ -235,8 +235,8 @@ export default function NotificationsModal({
   if (!open) return null;
 
   return createPortal(
-    <div className={styles.backdrop}>
-      <div ref={wrapRef} className={styles.modal} role="dialog" aria-modal="true">
+    <div className={`anim-overlay ${styles.backdrop}`}>
+      <div ref={wrapRef} className={`anim-dialog ${styles.modal}`} role="dialog" aria-modal="true">
         <header className={styles.header}>
           <span className={styles.headerLead}>
             <span className={styles.title}>Notifications</span>

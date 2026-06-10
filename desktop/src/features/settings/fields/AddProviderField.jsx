@@ -39,7 +39,7 @@ export function AddProviderField({ profile, onSaved }) {
       {open && (
         <div
           ref={popoverRef}
-          className={styles.popover}
+          className={`${pos.ready ? "anim-pop " : ""}${styles.popover}`}
           style={{
             minWidth: 360,
             maxWidth: pos.maxWidth ?? undefined,

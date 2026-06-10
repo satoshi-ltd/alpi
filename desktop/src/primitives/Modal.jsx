@@ -39,13 +39,30 @@ export default function Modal({
     };
   }, [visible, onClose, closeOnBackdrop]);
 
+  const openerRef = useRef(null);
+  const prevVisibleRef = useRef(false);
+  if (visible && !prevVisibleRef.current) {
+    openerRef.current = typeof document !== "undefined" ? document.activeElement : null;
+  }
+  prevVisibleRef.current = visible;
+
+  useEffect(() => {
+    if (!visible) return undefined;
+    return () => {
+      const opener = openerRef.current;
+      setTimeout(() => {
+        if (opener && document.contains(opener)) opener.focus?.();
+      }, 0);
+    };
+  }, [visible]);
+
   if (!visible) return null;
 
   const body = (
-    <div className={styles.backdrop}>
+    <div className={`anim-overlay ${styles.backdrop}`}>
       <div
         ref={wrapRef}
-        className={styles.modal}
+        className={`anim-dialog ${styles.modal}`}
         style={width ? { width, minWidth: width, maxWidth: width } : undefined}
       >
         {(title || closeButton) && (

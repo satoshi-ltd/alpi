@@ -212,7 +212,7 @@ function DeviceDetailPopover({
   return (
     <div
       ref={popoverRef}
-      className={styles.popover}
+      className={`${pos.ready ? "anim-pop " : ""}${styles.popover}`}
       style={{
         minWidth: 320,
         maxWidth: pos.maxWidth ?? undefined,

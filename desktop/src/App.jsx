@@ -9,6 +9,7 @@ import Settings from "./pages/Settings.jsx";
 import { Banner } from "./primitives/index.js";
 import { useNotify } from "./primitives/Notification.jsx";
 import CommandPalette from "./features/CommandPalette.jsx";
+import ShortcutsModal from "./features/ShortcutsModal.jsx";
 import ApprovalModal from "./features/ApprovalModal.jsx";
 import ClarificationModal from "./features/ClarificationModal.jsx";
 import CreateProfileModal from "./features/CreateProfileModal.jsx";
@@ -179,6 +180,9 @@ export default function App() {
   }, [searchOpen]);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const paletteOpenRef = useRef(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const onToggleShortcuts = useCallback(() => setShortcutsOpen((v) => !v), []);
+  const onCloseShortcuts = useCallback(() => setShortcutsOpen(false), []);
   useEffect(() => {
     paletteOpenRef.current = paletteOpen;
   }, [paletteOpen]);
@@ -263,6 +267,7 @@ export default function App() {
     onBrowseSkills,
     onBrowseMemory,
     onToggleNotifications: onOpenNotifications,
+    onToggleShortcuts,
   });
   useNavListener(setView);
 
@@ -857,6 +862,7 @@ export default function App() {
   }, [jumpTargets]);
 
   const paletteCommands = useCommands({
+    onToggleShortcuts,
     view,
     profiles,
     workgroups,
@@ -1027,6 +1033,7 @@ export default function App() {
         profiles={profiles}
         workgroups={workgroups}
       />
+      <ShortcutsModal open={shortcutsOpen} onClose={onCloseShortcuts} />
       <ToolsPanel
         open={browse === "tools"}
         onClose={onCloseBrowse}

@@ -16,6 +16,7 @@ export function useWindowChrome({
   onBrowseSkills,
   onBrowseMemory,
   onToggleNotifications,
+  onToggleShortcuts,
 } = {}) {
   useEffect(() => {
     function onDown(e) {
@@ -128,6 +129,12 @@ export function useWindowChrome({
         e.preventDefault();
         e.stopPropagation();
         onToggleNotifications?.();
+        return;
+      }
+      if (key === "/" || key === "?") {
+        e.preventDefault();
+        e.stopPropagation();
+        onToggleShortcuts?.();
         return;
       }
       if (e.shiftKey && (key === "t" || key === "s" || key === "m")) {

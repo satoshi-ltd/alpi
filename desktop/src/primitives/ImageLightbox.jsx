@@ -23,7 +23,7 @@ export default function ImageLightbox({ src, caption, path, onClose }) {
 
   return createPortal(
     <div className={styles.backdrop} onClick={onClose}>
-      <div className={styles.actions} onClick={(e) => e.stopPropagation()}>
+      <div className={`anim-fade ${styles.actions}`} onClick={(e) => e.stopPropagation()}>
         {path && (
           <IconBtn
             aria-label="Download image"
@@ -37,7 +37,7 @@ export default function ImageLightbox({ src, caption, path, onClose }) {
           <XIcon />
         </IconBtn>
       </div>
-      <figure className={styles.figure} onClick={(e) => e.stopPropagation()}>
+      <figure className={`anim-pop ${styles.figure}`} onClick={(e) => e.stopPropagation()}>
         <img className={styles.img} src={src} alt={caption || ""} />
         {caption && <figcaption className={styles.caption}>{caption}</figcaption>}
       </figure>

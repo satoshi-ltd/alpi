@@ -101,12 +101,12 @@ export default function BrowsePanel({
 
   return (
     <div
-      className={styles.backdrop}
+      className={`anim-overlay ${styles.backdrop}`}
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose?.();
       }}
     >
-      <div className={styles.panel} role="dialog" aria-label={title}>
+      <div className={`anim-pop ${styles.panel}`} role="dialog" aria-label={title}>
         <div className={styles.header}>
           <span className={styles.title}>{title}</span>
           <span className={styles.counter}>{counter}</span>

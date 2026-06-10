@@ -7,7 +7,6 @@
   align-items: center;
   justify-content: center;
   z-index: var(--z-modal);
-  animation: backdropIn var(--dur-1) var(--ease) both;
 }
 
 .modal {
@@ -21,7 +20,6 @@
   gap: var(--space-3);
   min-width: 460px;
   max-width: min(560px, calc(100vw - var(--space-10)));
-  animation: modalIn 160ms var(--ease) both;
 }
 
 .titleRow {
@@ -41,14 +39,4 @@
 
 .closeBtn {
   margin-left: auto;
-}
-
-@keyframes backdropIn {
-  from { opacity: 0; }
-  to   { opacity: 1; }
-}
-
-@keyframes modalIn {
-  from { opacity: 0; transform: translateY(4px) scale(0.98); }
-  to   { opacity: 1; transform: none; }
 }

@@ -255,12 +255,12 @@ export default function ManageSessionsModal({
 
   const body = (
     <div
-      className={styles.backdrop}
+      className={`anim-overlay ${styles.backdrop}`}
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose?.();
       }}
     >
-      <div className={styles.modal} role="dialog" aria-modal="true" aria-label="Manage sessions">
+      <div className={`anim-dialog ${styles.modal}`} role="dialog" aria-modal="true" aria-label="Manage sessions">
         <header className={styles.header}>
           <div className={styles.headerLead}>
             <div className={styles.titleRow}>

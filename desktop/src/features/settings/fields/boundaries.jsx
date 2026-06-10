@@ -140,7 +140,7 @@ function ProfileBudgetEditor({ currentUsd, currentTokens, onSave }) {
       {open && (
         <div
           ref={popoverRef}
-          className={styles.popover}
+          className={`${pos.ready ? "anim-pop " : ""}${styles.popover}`}
           style={{
             minWidth: 280,
             maxWidth: pos.maxWidth ?? undefined,

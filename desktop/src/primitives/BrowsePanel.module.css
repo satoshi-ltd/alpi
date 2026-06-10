@@ -10,7 +10,6 @@
   padding: 60px var(--space-11) var(--space-11);
   background: color-mix(in srgb, var(--ink) 20%, transparent);
   backdrop-filter: blur(2px);
-  animation: bpFade var(--dur-1) var(--ease) both;
 }
 
 .panel {
@@ -23,17 +22,6 @@
   border-radius: var(--r-2xl);
   box-shadow: var(--shadow);
   overflow: hidden;
-  animation: bpIn 160ms var(--ease) both;
-}
-
-@keyframes bpFade {
-  from { opacity: 0; }
-  to   { opacity: 1; }
-}
-
-@keyframes bpIn {
-  from { opacity: 0; transform: translateY(-4px) scale(0.99); }
-  to   { opacity: 1; transform: none; }
 }
 
 .header {

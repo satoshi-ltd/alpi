@@ -53,7 +53,7 @@ export default function Tooltip({
       {open && coords &&
         createPortal(
           <span
-            className={styles.tooltip}
+            className={`anim-fade ${styles.tooltip}`}
             style={positionFor(coords, direction, align)}
           >
             {text}

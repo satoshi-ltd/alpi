@@ -40,7 +40,8 @@ marked.use({
       const label = (lang || "").trim().split(/\s+/)[0] || "text";
       return (
         `<div class="md-code">` +
-        `<div class="md-code-head"><span class="md-code-lang">${escapeHtml(label)}</span></div>` +
+        `<div class="md-code-head"><span class="md-code-lang">${escapeHtml(label)}</span>` +
+        `<button class="md-code-copy" type="button" title="Copy code">copy</button></div>` +
         `<pre><code>${escapeHtml(text)}</code></pre>` +
         `</div>`
       );

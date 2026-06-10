@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import AttachmentChips from "../primitives/AttachmentChips.jsx";
 import { PaperclipIcon } from "../primitives/icons.jsx";
@@ -8,6 +8,7 @@ import Composer from "../primitives/Composer.jsx";
 import { IconBtn, Kbd, Mono } from "../primitives/index.js";
 import { useNotify } from "../primitives/Notification.jsx";
 import { attachmentMimeFor } from "../lib/fileKind.js";
+import { clearDraft, getDraft, setDraft } from "../lib/drafts.js";
 // Shares ChatPane's stylesheet on purpose — the composer renders inside the pane and reuses its class vocabulary.
 import styles from "../pages/ChatPane.module.css";
 
@@ -30,7 +31,20 @@ export default function ChatComposer({
   minHeight = null,
 }) {
   const notify = useNotify();
-  const [text, setText] = useState("");
+  const draftKey = activeProfile
+    ? `chat|${activeProfile.pubkey_b64 || activeProfile.name}`
+    : null;
+  const [text, setText] = useState(() => getDraft(draftKey));
+  const draftKeyRef = useRef(draftKey);
+  useEffect(() => {
+    if (draftKeyRef.current === draftKey) return;
+    draftKeyRef.current = draftKey;
+    setText(getDraft(draftKey));
+  }, [draftKey]);
+  const updateText = useCallback((next) => {
+    setText(next);
+    setDraft(draftKeyRef.current, next);
+  }, []);
   const [baseMentions, setBaseMentions] = useState([]);
   const [attachments, setAttachments] = useState([]);
 
@@ -84,9 +98,9 @@ export default function ChatComposer({
   }, [addPaths]);
   useEffect(() => {
     if (!rewriteDraft?.text || rewriteDraft.consumed) return;
-    setText(rewriteDraft.text);
+    updateText(rewriteDraft.text);
     onRewriteDraftApplied?.();
-  }, [rewriteDraft, onRewriteDraftApplied]);
+  }, [rewriteDraft, onRewriteDraftApplied, updateText]);
   useEffect(() => {
     if (!activeProfile?.name) {
       setBaseMentions([]);
@@ -144,6 +158,7 @@ export default function ChatComposer({
     const payload = text.trim();
     const atts = attachments;
     setText("");
+    clearDraft(draftKeyRef.current);
     setAttachments([]);
     onSend?.(payload, modelOverride ?? null, {
       attachments: atts.map((a) => ({ path: a.path, name: a.name, mime: a.mime, size: a.size })),
@@ -166,7 +181,7 @@ export default function ChatComposer({
   return (
     <Composer
       value={text}
-      onChange={setText}
+      onChange={updateText}
       onSubmit={trySend}
       onCancel={onCancel}
       canSend={canSend}

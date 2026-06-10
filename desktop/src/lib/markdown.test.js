@@ -24,7 +24,7 @@ describe("renderMarkdown code blocks", () => {
     const html = renderMarkdown("```python\nprint('hi')\n```");
     expect(html).toContain('<div class="md-code">');
     expect(html).toContain('<span class="md-code-lang">python</span>');
-    expect(html).not.toContain("md-code-copy");
+    expect(html).toContain("md-code-copy");
     expect(html).toContain("print(");
   });
 
@@ -86,5 +86,15 @@ describe("renderMarkdown images", () => {
 
   it("does not inline svg (logos are linked, not rendered)", () => {
     expect(renderMarkdown("![logo](/tmp/logo.svg)")).not.toContain("md-figure");
+  });
+});
+
+
+describe("code block copy affordance", () => {
+  it("fenced code renders a copy button inside the header", async () => {
+    const { renderMarkdown } = await import("./markdown.js");
+    const html = renderMarkdown("```js\nconst a = 1;\n```");
+    expect(html).toContain('class="md-code-copy"');
+    expect(html).toContain('type="button"');
   });
 });

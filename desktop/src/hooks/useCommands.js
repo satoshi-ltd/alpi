@@ -21,6 +21,7 @@ export function useCommands({
   onBrowseTools,
   onBrowseSkills,
   onBrowseMemory,
+  onToggleShortcuts,
 }) {
   return useMemo(() => {
     const cmds = [];
@@ -61,6 +62,16 @@ export function useCommands({
         hint: "⌘,",
         action: () =>
           view.kind === "settings" ? onCloseSettings?.() : onOpenSettings?.(),
+      });
+    }
+
+    if (onToggleShortcuts) {
+      cmds.push({
+        id: "view:shortcuts",
+        group: "View",
+        label: "Keyboard shortcuts",
+        hint: "⌘/",
+        action: () => onToggleShortcuts(),
       });
     }
 
@@ -158,5 +169,6 @@ export function useCommands({
     onBrowseTools,
     onBrowseSkills,
     onBrowseMemory,
+    onToggleShortcuts,
   ]);
 }

@@ -92,7 +92,7 @@ export default function Dropdown({
     open && (
       <div
         ref={menuRef}
-        className={`${styles.menu} ${portal ? styles.menuPortal : ""}`}
+        className={`anim-pop ${styles.menu} ${portal ? styles.menuPortal : ""}`}
         style={
           portal
             ? {

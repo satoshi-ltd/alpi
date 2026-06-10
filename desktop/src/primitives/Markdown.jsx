@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 
 import { useRenderedMarkdown } from "../lib/markdownImages.js";
 import { getImageRoots } from "../lib/imageRoots.js";
+import { copyText } from "../lib/clipboard.js";
 import ImageLightbox from "./ImageLightbox.jsx";
 
 export default function Markdown({ source, as = "div", className = "", style }) {
@@ -10,6 +11,18 @@ export default function Markdown({ source, as = "div", className = "", style }) 
   const [zoom, setZoom] = useState(null);
 
   const onClick = useCallback((e) => {
+    const copyBtn = e.target.closest?.(".md-code-copy");
+    if (copyBtn) {
+      e.stopPropagation();
+      const code = copyBtn.closest(".md-code")?.querySelector("pre code");
+      if (code) {
+        copyText(code.textContent).then((ok) => {
+          copyBtn.textContent = ok ? "copied" : "failed";
+          setTimeout(() => { copyBtn.textContent = "copy"; }, 1200);
+        });
+      }
+      return;
+    }
     const dl = e.target.closest?.(".md-figure .md-figdl");
     if (dl) {
       e.stopPropagation();

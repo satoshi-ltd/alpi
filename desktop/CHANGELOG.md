@@ -11,6 +11,19 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.3.52 — 2026-06-11 — drafts that survive, smoother modals, less friction
+
+- **Your unsent text is never lost.** Drafts persist per chat and workgroup when
+  you switch views or restart the app, and clear once sent.
+- **Copy code with one click.** Code blocks now show a copy button on hover.
+- **Every modal, panel and tooltip animates** consistently — and respects your
+  system's reduced-motion setting.
+- **The window remembers its size and position** between launches.
+- **A keyboard shortcuts sheet** — press ⌘/ (or find it in the command palette).
+- **Keep typing while reconnecting** in a workgroup — only sending waits.
+- **Closing a dialog returns focus** to where you were, for keyboard users.
+- Long sidebar names no longer clip their descenders (g, y, p).
+
 ## v0.3.51 — 2026-06-10 — animations are back, text zoom, calmer shortcuts
 
 Requires alpi v0.8.18+.

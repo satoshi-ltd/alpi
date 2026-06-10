@@ -534,9 +534,30 @@ textarea.ds-field, textarea.field { resize: vertical; min-height: 88px; height: 
   overflow: hidden;
 }
 .alpi-md .md-code-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   padding: var(--space-2) var(--space-4);
   background: color-mix(in srgb, var(--ink) 4%, var(--bg-pane));
   border-bottom: .5px solid var(--line);
+}
+.alpi-md .md-code-copy {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+  background: transparent;
+  border: none;
+  padding: 0 var(--space-1);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
+}
+.alpi-md .md-code:hover .md-code-copy,
+.alpi-md .md-code-copy:focus-visible {
+  opacity: 1;
+}
+.alpi-md .md-code-copy:hover {
+  color: var(--ink);
 }
 .alpi-md .md-code-lang {
   font-family: var(--font-mono);
@@ -610,6 +631,7 @@ textarea.ds-field, textarea.field { resize: vertical; min-height: 88px; height: 
 }
 
 @keyframes ds-pop-in   { from { opacity: 0; transform: translateY(4px) scale(0.98); } to { opacity: 1; transform: none; } }
+@keyframes ds-dialog-in { from { opacity: 0; transform: translateY(10px) scale(0.97); } to { opacity: 1; transform: none; } }
 @keyframes ds-fade-in  { from { opacity: 0; } to { opacity: 1; } }
 @keyframes ds-slide-up { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 @keyframes ds-pulse-dot { 0%, 100% { opacity: 1; } 50% { opacity: var(--alpha-faint); } }
@@ -624,6 +646,11 @@ textarea.ds-field, textarea.field { resize: vertical; min-height: 88px; height: 
 .anim-pop  { animation: ds-pop-in var(--dur-3) var(--ease) both; }
 .anim-fade { animation: ds-fade-in var(--dur-2) var(--ease) both; }
 .anim-up   { animation: ds-slide-up var(--dur-4) var(--ease) both; }
+.anim-overlay { animation: ds-fade-in var(--dur-2) var(--ease) both; }
+.anim-dialog  { animation: ds-dialog-in var(--dur-3) var(--ease) both; }
+@media (prefers-reduced-motion: reduce) {
+  .anim-pop, .anim-fade, .anim-up, .anim-overlay, .anim-dialog { animation: none; }
+}
 .pulse-dot { animation: ds-pulse-ring 1.6s ease-out infinite; }
 @keyframes ds-pulse-ring {
   0%   { box-shadow: 0 0 0 0 color-mix(in srgb, var(--c, var(--ink-3)) 40%, transparent); }
