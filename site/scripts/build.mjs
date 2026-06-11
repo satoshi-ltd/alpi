@@ -275,7 +275,6 @@ function renderNav(kind, opts = {}) {
   } else if (kind === 'blog') {
     brandHref = '../index.html';
     crumbs.push({ label: 'BLOG', href: 'index.html', docs: true });
-    crumbs.push({ label: opts.current, current: true });
   }
 
   const crumbsHtml = crumbs.length
@@ -607,7 +606,7 @@ ${renderHead({
 <div id="ascii-bg" aria-hidden="true"><pre id="ascii-pre"></pre></div>
 <div class="veil"></div>
 
-${renderNav('blog', { current: post.title })}
+${renderNav('blog')}
 
 <main class="shell doc">
   <header class="dochead">
@@ -619,6 +618,17 @@ ${renderNav('blog', { current: post.title })}
   <article id="md-target" class="md">
 ${bodyHtml}
   </article>
+
+  <aside class="post-cta">
+    <div class="eyebrow">Get started</div>
+    <h2 class="post-cta-h">Run your own private agent network.</h2>
+    <p class="post-cta-sub">One command. Local-first, source-available, no telemetry — your agents run on the machines you already own.</p>
+    <div class="cta-row">
+      <a class="btn btn-primary" href="../index.html#install">$ uv tool install alpi-agent <span class="arr">→</span></a>
+      <a class="btn btn-ghost" href="https://github.com/satoshi-ltd/alpi">View source <span class="arr">→</span></a>
+    </div>
+    <p class="post-cta-meta">BUSL-1.1 → Apache-2.0 (rolling) · the ALP protocol is Apache-2.0 from day one</p>
+  </aside>
 
   <nav class="pager">
     ${prev
