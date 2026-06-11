@@ -254,6 +254,34 @@ def test_env_ref_unresolved_falls_back_to_empty(monkeypatch) -> None:
     assert env["GHOST"] == ""
 
 
+def test_env_ref_resolves_from_profile_base_not_os_environ(monkeypatch) -> None:
+    monkeypatch.delenv("BITBUCKET_URL", raising=False)
+    env = mcp_client._build_env(
+        {"BITBUCKET_URL": "env:BITBUCKET_URL"},
+        base={"BITBUCKET_URL": "https://api.bitbucket.org/2.0"},
+    )
+    assert env["BITBUCKET_URL"] == "https://api.bitbucket.org/2.0"
+
+
+def test_env_ref_base_takes_precedence_over_os_environ(monkeypatch) -> None:
+    monkeypatch.setenv("TOKEN", "from-process")
+    env = mcp_client._build_env(
+        {"TOKEN": "env:TOKEN"}, base={"TOKEN": "from-profile"},
+    )
+    assert env["TOKEN"] == "from-profile"
+
+
+def test_client_passes_env_base_to_resolution(monkeypatch) -> None:
+    monkeypatch.delenv("BITBUCKET_PASSWORD", raising=False)
+    client = mcp_client.MCPClient(
+        name="bb", command="true",
+        env={"BITBUCKET_PASSWORD": "env:BITBUCKET_PASSWORD"},
+        env_base={"BITBUCKET_PASSWORD": "app-pw"},
+    )
+    resolved = mcp_client._build_env(client._env_spec, client._env_base)
+    assert resolved["BITBUCKET_PASSWORD"] == "app-pw"
+
+
 def test_literal_env_value_passes_through() -> None:
     env = mcp_client._build_env({"FOO": "literal"})
     assert env["FOO"] == "literal"
@@ -347,8 +375,9 @@ def test_build_env_uses_augmented_path(monkeypatch) -> None:
 
 
 class _FakeConfig:
-    def __init__(self, raw: dict) -> None:
+    def __init__(self, raw: dict, home: Path | None = None) -> None:
         self.raw = raw
+        self.home = home or Path("/nonexistent-profile")
 
 
 def test_registry_registers_prefixed_tools(server_and_patch) -> None:
@@ -392,6 +421,42 @@ def test_wrapped_tool_calls_delegates_to_client(server_and_patch) -> None:
         result = tool_cls().run(arg1="foo")
         assert result.ok is True
         assert result.output == "pong"
+    finally:
+        for c in clients:
+            c.stop()
+        mcp_registry._stop_existing()
+
+
+def test_load_and_register_resolves_env_from_profile_dotenv(
+    monkeypatch, tmp_path,
+) -> None:
+    """End-to-end: a server's env:VAR ref resolves from the profile's own
+    .env (never loaded into os.environ) and reaches the spawned subprocess."""
+    monkeypatch.delenv("BITBUCKET_TOKEN", raising=False)
+    (tmp_path / ".env").write_text('BITBUCKET_TOKEN="secret-from-profile"\n')
+
+    server = _FakeServer()
+    server.handle("initialize", {"protocolVersion": "2024-11-05"})
+    server.handle("tools/list", {"tools": [{"name": "list_prs", "description": ""}]})
+
+    captured: dict[str, dict] = {}
+
+    def factory(args, env=None, **kw):
+        captured["env"] = env
+        return _FakePopen(server)
+
+    monkeypatch.setattr(mcp_client.subprocess, "Popen", factory)
+    cfg = _FakeConfig(
+        {"mcp": {"servers": {"bb": {
+            "command": "echo",
+            "env": {"BITBUCKET_TOKEN": "env:BITBUCKET_TOKEN"},
+        }}}},
+        home=tmp_path,
+    )
+    clients = mcp_registry.load_and_register(cfg)
+    try:
+        assert captured["env"]["BITBUCKET_TOKEN"] == "secret-from-profile"
+        assert "bb__list_prs" in _TOOLS
     finally:
         for c in clients:
             c.stop()

@@ -794,7 +794,9 @@ def _parse_etime(raw: str) -> int | None:
     return days * 86400 + h * 3600 + m * 60 + s
 
 
-def _probe_mcp(name: str, spec: dict) -> Check:
+def _probe_mcp(
+    name: str, spec: dict, env_base: dict[str, str] | None = None,
+) -> Check:
     """Spawn one MCP server, list its tools, then stop it."""
     from alpi.mcp.client import MCPClient
     command = str(spec.get("command") or "")
@@ -806,6 +808,7 @@ def _probe_mcp(name: str, spec: dict) -> Check:
         name=name, command=command,
         args=list(spec.get("args") or []),
         env=dict(spec.get("env") or {}),
+        env_base=env_base,
     )
     try:
         client.start(timeout=8.0)
@@ -825,9 +828,11 @@ def _check_mcps_live(cfg: cfg_mod.Config) -> list[Check]:
     servers = (cfg.raw.get("mcp") or {}).get("servers") or {}
     if not servers:
         return [Check("MCPs", "configured", "info", "none")]
+    from alpi.home import effective_profile_env
+    env_base = effective_profile_env(cfg.home)
     out_by_name: dict[str, Check] = {}
     with ThreadPoolExecutor(max_workers=min(8, len(servers))) as pool:
-        futures = {pool.submit(_probe_mcp, n, s): n for n, s in servers.items()}
+        futures = {pool.submit(_probe_mcp, n, s, env_base): n for n, s in servers.items()}
         for fut in as_completed(futures):
             c = fut.result()
             out_by_name[c.name] = c

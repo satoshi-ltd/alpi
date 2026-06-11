@@ -22,9 +22,12 @@ def load_and_register(cfg: cfg_mod.Config) -> list[MCPClient]:
     if not isinstance(servers, dict) or not servers:
         return []
 
+    from alpi.home import effective_profile_env
+    profile_env = effective_profile_env(cfg.home)
+
     clients: list[MCPClient] = []
     for name, spec in servers.items():
-        client = _spawn(name, spec)
+        client = _spawn(name, spec, profile_env)
         if client is None:
             continue
         clients.append(client)
@@ -35,7 +38,9 @@ def load_and_register(cfg: cfg_mod.Config) -> list[MCPClient]:
     return clients
 
 
-def _spawn(name: str, spec: Any) -> MCPClient | None:
+def _spawn(
+    name: str, spec: Any, env_base: dict[str, str] | None = None,
+) -> MCPClient | None:
     if not isinstance(spec, dict):
         log.warning("mcp: skipping %s — spec is not a dict", name)
         return None
@@ -48,6 +53,7 @@ def _spawn(name: str, spec: Any) -> MCPClient | None:
         command=str(command),
         args=list(spec.get("args") or []),
         env=dict(spec.get("env") or {}),
+        env_base=env_base,
     )
     try:
         client.start()

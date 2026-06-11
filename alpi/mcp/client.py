@@ -36,12 +36,13 @@ class MCPClient:
     def __init__(
         self, name: str, command: str, args: list[str] | None = None,
         env: dict[str, str] | None = None,
+        env_base: dict[str, str] | None = None,
     ) -> None:
         self.name = name
         self.command = command
         self.args = list(args or [])
-        # Keep env specs verbatim so restarts see fresh `.env` values.
         self._env_spec = dict(env or {})
+        self._env_base = env_base
         self._proc: subprocess.Popen | None = None
         self._req_id = 0
         self._lock = threading.Lock()
@@ -54,7 +55,7 @@ class MCPClient:
         """Spawn the subprocess, handshake, cache the tool list."""
         if self._proc is not None:
             return
-        env = _build_env(self._env_spec)
+        env = _build_env(self._env_spec, self._env_base)
         try:
             self._proc = subprocess.Popen(
                 [self.command, *self.args],
@@ -289,8 +290,11 @@ def _augmented_path() -> str:
     return ":".join([*extras, inherited]) if inherited else ":".join(extras)
 
 
-def _build_env(spec: dict[str, str]) -> dict[str, str]:
+def _build_env(
+    spec: dict[str, str], base: dict[str, str] | None = None,
+) -> dict[str, str]:
     parent = os.environ
+    lookup = base if base is not None else parent
     out: dict[str, str] = {}
     for key in _SAFE_ENV_KEYS:
         if key in parent:
@@ -304,7 +308,7 @@ def _build_env(spec: dict[str, str]) -> dict[str, str]:
     for key, value in spec.items():
         if isinstance(value, str) and value.startswith("env:"):
             ref = value[len("env:"):]
-            resolved = parent.get(ref, "")
+            resolved = lookup.get(ref, "")
             if not resolved:
                 log.warning(
                     "mcp: %s references env:%s but it's empty/unset",

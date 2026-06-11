@@ -127,7 +127,11 @@ def _wizard(
 
     env_vars = _ask_env_vars(home, existing=current_env)
 
-    client = MCPClient(name=name, command=command, args=args, env=env_vars)
+    from alpi.home import effective_profile_env
+    client = MCPClient(
+        name=name, command=command, args=args, env=env_vars,
+        env_base=effective_profile_env(home),
+    )
     try:
         with ui.activity(f"Spawning and handshaking with {name}…"):
             client.start()

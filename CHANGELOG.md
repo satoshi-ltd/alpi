@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.8.22 — 2026-06-11 — MCP servers read the profile's own .env
+
+- **MCP servers now resolve `env:` credentials from the profile's `.env`.**
+  An `env:BITBUCKET_TOKEN`-style reference in an MCP server config is looked up
+  in the profile's `.env` first (then the daemon environment) — the same
+  precedence every other tool already uses. Before, these refs resolved only
+  from the daemon's process environment, so a server whose secrets lived in the
+  profile `.env` failed to start and its tools silently went missing. Servers
+  with no `env:` references were never affected.
+
 ## v0.8.21 — 2026-06-11 — local-build browsing, Gemini-safe tools, security docs
 
 - **The browser can view your local builds.** A new opt-in
