@@ -2576,13 +2576,9 @@ def _sandbox_status(cfg: config.Config) -> str:
 
 
 def _budget_status(cfg: config.Config) -> str:
-    b = cfg.budget or {}
-    usd = b.get("daily_usd")
-    tokens = b.get("daily_tokens")
+    usd = (cfg.budget or {}).get("daily_usd")
     if isinstance(usd, (int, float)) and usd > 0:
         return f"${float(usd):.2f}/day"
-    if isinstance(tokens, int) and tokens > 0:
-        return f"{tokens:,} tokens/day"
     return "unlimited"
 
 
@@ -2590,16 +2586,8 @@ def _budget_setup(h: Path) -> None:
     from alpi import ui
 
     cfg = config.load(h)
-    b = dict(cfg.budget or {})
-    current_usd = b.get("daily_usd")
-    current_tokens = b.get("daily_tokens")
-
-    if current_tokens is not None:
-        current_kind = "tokens"
-    elif current_usd is not None:
-        current_kind = "usd"
-    else:
-        current_kind = "unlimited"
+    current_usd = (cfg.budget or {}).get("daily_usd")
+    current_kind = "usd" if current_usd is not None else "unlimited"
 
     items = [
         (
@@ -2610,18 +2598,13 @@ def _budget_setup(h: Path) -> None:
         (
             ("● " if current_kind == "usd" else "  ") + "Daily USD cap",
             "usd",
-            "for paid models — measured in dollars",
-        ),
-        (
-            ("● " if current_kind == "tokens" else "  ") + "Daily token cap",
-            "tokens",
-            "for local / free models — measured in tokens",
+            "measured in dollars — the only spend cap",
         ),
     ]
     kind = ui.menu(
         ui.crumb("setup", "budget"),
         items,
-        subtitle="daily spend cap for this profile · pick one or unlimited",
+        subtitle="daily spend cap for this profile · USD or unlimited",
         home=h,
         close="Back",
     )
@@ -2633,53 +2616,28 @@ def _budget_setup(h: Path) -> None:
         ui.ok_and_wait("budget cleared — unlimited")
         return
 
-    if kind == "usd":
-        default_s = str(current_usd) if current_usd is not None else ""
-        raw = ui.text(
-            "Daily USD cap (must be > 0):",
-            default=default_s,
-        )
-        if raw is None:
-            return ui.cancelled()
-        raw = (raw or "").strip()
-        if not raw:
-            ui.fail_and_wait("USD cap required (or pick Unlimited)")
-            return
-        try:
-            v = float(raw)
-        except ValueError:
-            ui.fail_and_wait(f"not a number: {raw!r}")
-            return
-        if v <= 0:
-            ui.fail_and_wait("USD cap must be > 0")
-            return
-        cfg.budget = {"daily_usd": v}
-        config.save(cfg)
-        ui.ok_and_wait(f"cap: ${v:.2f}/day")
-        return
-
-    default_s = str(current_tokens) if current_tokens is not None else ""
+    default_s = str(current_usd) if current_usd is not None else ""
     raw = ui.text(
-        "Daily token cap (must be > 0):",
+        "Daily USD cap (must be > 0):",
         default=default_s,
     )
     if raw is None:
         return ui.cancelled()
     raw = (raw or "").strip()
     if not raw:
-        ui.fail_and_wait("token cap required (or pick Unlimited)")
+        ui.fail_and_wait("USD cap required (or pick Unlimited)")
         return
     try:
-        v_int = int(raw)
+        v = float(raw)
     except ValueError:
-        ui.fail_and_wait(f"not an integer: {raw!r}")
+        ui.fail_and_wait(f"not a number: {raw!r}")
         return
-    if v_int <= 0:
-        ui.fail_and_wait("token cap must be > 0")
+    if v <= 0:
+        ui.fail_and_wait("USD cap must be > 0")
         return
-    cfg.budget = {"daily_tokens": v_int}
+    cfg.budget = {"daily_usd": v}
     config.save(cfg)
-    ui.ok_and_wait(f"cap: {v_int:,} tokens/day")
+    ui.ok_and_wait(f"cap: ${v:.2f}/day")
 
 
 def _identity_status(cfg: config.Config) -> str:
@@ -3724,9 +3682,7 @@ def _read_local_transcript(h: Path, wg_id: str) -> list[dict]:
 @click.option("--member", "members", multiple=True,
               help="Member pubkey or pinned peer id. Repeat for multiple.")
 @click.option("--budget-usd", type=float, default=None,
-              help="Lifetime USD cap (paid models).")
-@click.option("--budget-tokens", type=int, default=None,
-              help="Lifetime token cap (local / free models).")
+              help="Lifetime USD cap.")
 @click.option("--briefing", default="",
               help="Initial briefing text. Hub can edit later via set-briefing.")
 @click.option("--pipeline", default="",
@@ -3737,7 +3693,7 @@ def _read_local_transcript(h: Path, wg_id: str) -> list[dict]:
 def workgroup_create(
     ctx: click.Context, name: str,
     members: tuple[str, ...], budget_usd: float | None,
-    budget_tokens: int | None, briefing: str, pipeline: str,
+    briefing: str, pipeline: str,
 ) -> None:
     """Create a workgroup as hub; members are pubkeys or pinned peer ids."""
     from alpi.alp import peers as peers_mod
@@ -3754,12 +3710,8 @@ def workgroup_create(
         pubkeys.append(peer.pubkey if peer else m)
 
     budget: dict = {}
-    if budget_usd is not None and budget_tokens is not None:
-        raise click.ClickException("--budget-usd and --budget-tokens are mutually exclusive")
     if budget_usd is not None:
         budget["max_usd"] = budget_usd
-    if budget_tokens is not None:
-        budget["max_tokens"] = budget_tokens
 
     hub_cfg = config.load(h)
     hub_bio = (hub_cfg.public_bio or "").strip()

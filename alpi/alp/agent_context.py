@@ -71,17 +71,11 @@ def _budget_zone(home: Path) -> str:
         cfg = cfg_mod.load(home)
     except Exception:  # noqa: BLE001
         return ""
-    budget = cfg.budget or {}
-    cap_usd = float(budget.get("daily_usd") or 0)
-    cap_tok = int(budget.get("daily_tokens") or 0)
-    if cap_usd <= 0 and cap_tok <= 0:
+    cap_usd = float((cfg.budget or {}).get("daily_usd") or 0)
+    if cap_usd <= 0:
         return ""
     used = ledger.load(home).get("profile", {})
-    if cap_usd > 0:
-        pct = float(used.get("usd") or 0) / cap_usd
-    else:
-        pct = float(used.get("tokens") or 0) / cap_tok
-    pct = max(0.0, min(1.0, pct))
+    pct = max(0.0, min(1.0, float(used.get("usd") or 0) / cap_usd))
     if pct < 0.4:
         return ""
     if pct < 0.6:

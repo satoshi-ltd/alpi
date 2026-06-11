@@ -11,6 +11,11 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.3.54 — 2026-06-12 — budget editor is USD-only
+
+- **The profile budget is now just a daily USD cap (or unlimited)** — the
+  token-cap option is gone, matching the simplified budget model.
+
 ## v0.3.53 — 2026-06-11 — chat fixes: no double message, calmer scroll, kept formatting
 
 - **Your message no longer shows up twice** while the reply is still streaming.

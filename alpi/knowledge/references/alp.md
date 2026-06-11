@@ -75,7 +75,7 @@ Do not describe workgroups as globally serial, and do not promise guaranteed par
 
 ## Budget
 
-ALP/workgroup tasks respect profile budget settings (`budget.daily_usd` / `budget.daily_tokens`, CONFIG.md → Budget). On exhaustion, stop or synthesize a bounded result rather than silently retrying. A workgroup may add a separate optional **lifetime** cap (`max_usd` / `max_tokens`) that double-gates `workgroup.post` on top of the daily profile cap.
+ALP/workgroup tasks respect profile budget settings (`budget.daily_usd`, CONFIG.md → Budget — USD or unlimited, no token cap). On exhaustion, stop or synthesize a bounded result rather than silently retrying. A workgroup may add a separate optional **lifetime** cap (`max_usd`) that double-gates `workgroup.post` on top of the daily profile cap.
 
 ## Error codes
 
@@ -85,7 +85,7 @@ ALP/workgroup tasks respect profile budget settings (`budget.daily_usd` / `budge
 | `-32002` | `replay` | `(from, nonce)` seen within window. |
 | `-32003` | `bad-signature` | Signature verification failed. |
 | `-32004` | `target-offline` | Resolvable peer, connection refused. |
-| `-32005` | `budget-exceeded` | Profile (daily) or workgroup (lifetime) cap. `data.cap_kind`: `usd`/`tokens` (profile) or `workgroup_usd`/`workgroup_tokens`. |
+| `-32005` | `budget-exceeded` | Profile (daily) or workgroup (lifetime) cap. `data.cap_kind`: `usd` (profile) or `workgroup_usd`. |
 | `-32006` | `version-mismatch` | Incompatible `alp.v`. |
 | `-32007` | `target-busy` | Session already running a turn. |
 | `-32008` | `workgroup-not-member` (`workgroup-not-hub` for hub-only verbs) | Not a pinned member / not the hub. |

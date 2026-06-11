@@ -68,8 +68,6 @@ def _hub_detail(home: Path, wg) -> str:
         led = _read_ledger(home, wg.meta.id)
         if "max_usd" in wg.meta.budget:
             parts.append(f"${led.get('usd', 0):.2f} / ${wg.meta.budget['max_usd']:.2f}")
-        elif "max_tokens" in wg.meta.budget:
-            parts.append(f"{led.get('tokens', 0):,} / {wg.meta.budget['max_tokens']:,} tok")
     return " · ".join(parts)
 
 
@@ -548,14 +546,9 @@ def _budget_summary(home: Path, wg) -> str:
     if not wg.meta.budget:
         return "no cap"
     led = _read_ledger(home, wg.meta.id)
-    parts: list[str] = []
     if "max_usd" in wg.meta.budget:
-        parts.append(f"${led.get('usd', 0):.2f} / ${wg.meta.budget['max_usd']:.2f}")
-    if "max_tokens" in wg.meta.budget:
-        parts.append(
-            f"{led.get('tokens', 0):,} / {wg.meta.budget['max_tokens']:,} tok",
-        )
-    return " · ".join(parts)
+        return f"${led.get('usd', 0):.2f} / ${wg.meta.budget['max_usd']:.2f}"
+    return "no cap"
 
 
 def _edit_briefing(home: Path, wg) -> None:
@@ -628,24 +621,20 @@ def _preview(text: str, limit: int = 60) -> str:
 
 
 def _edit_budget(home: Path, wg) -> None:
-    """Edit-in-place over the wizard. Same prompts as create; the
-    current values surface as defaults and the user can blank either
-    field to clear it. Empty + empty = no cap."""
+    """Edit the workgroup's lifetime USD cap in place (empty clears it)"""
     from alpi.alp.workgroup import _save_meta, _wg_dir, _validate_budget
 
     cur = wg.meta.budget or {}
     cur_usd = str(cur.get("max_usd")) if "max_usd" in cur else ""
-    cur_tokens = str(cur.get("max_tokens")) if "max_tokens" in cur else ""
 
     ui.banner(
         ui.crumb("setup", "workgroups", wg.meta.name, "budget"),
-        subtitle="lifetime cap — paid (USD) and/or local (tokens)",
+        subtitle="lifetime USD cap (empty = no workgroup cap)",
         home=home,
     )
     ui.dim(
-        "Empty = clear that cap. Set both to keep both gates active\n"
-        "(whichever trips first freezes posts). Profile-level daily\n"
-        "budget keeps applying on top of this either way."
+        "Empty clears the cap. The profile-level daily budget keeps\n"
+        "applying on top of this either way."
     )
     ui._console.print("")
 
@@ -655,13 +644,6 @@ def _edit_budget(home: Path, wg) -> None:
     if usd_s is None:
         return ui.cancelled()
     usd_s = (usd_s or "").strip()
-
-    tokens_s = ui.text(
-        f"Lifetime token cap (empty to clear) [{cur_tokens}]:", default=cur_tokens,
-    )
-    if tokens_s is None:
-        return ui.cancelled()
-    tokens_s = (tokens_s or "").strip()
 
     new: dict[str, Any] = {}
     if usd_s:
@@ -674,16 +656,6 @@ def _edit_budget(home: Path, wg) -> None:
             ui.fail_and_wait("USD cap must be > 0")
             return
         new["max_usd"] = v
-    if tokens_s:
-        try:
-            v_int = int(tokens_s)
-        except ValueError:
-            ui.fail_and_wait(f"not an integer: {tokens_s!r}")
-            return
-        if v_int <= 0:
-            ui.fail_and_wait("token cap must be > 0")
-            return
-        new["max_tokens"] = v_int
 
     try:
         wg.meta.budget = _validate_budget(new) if new else {}
@@ -698,19 +670,15 @@ def _edit_budget(home: Path, wg) -> None:
 
 
 def _pick_budget(home: Path) -> dict[str, Any] | bool | None:
-    """Same shape as the profile-budget wizard: ask for both caps,
-    empty = skip. Set what you care about; both can coexist (each
-    gates independently). Returns the budget dict, ``None`` if the
-    user declined to set one, or ``False`` on cancel/invalid input."""
+    """Ask for the workgroup's lifetime USD cap at create time (empty = no cap)"""
     ui.banner(
         ui.crumb("setup", "workgroups", "create", "budget"),
         subtitle="lifetime spend cap (optional, project-scoped)",
         home=home,
     )
     ui.dim(
-        "Paid models → set a USD cap. Local / free models → set a token\n"
-        "cap. Leave both empty for no ceiling. Both can be set; whichever\n"
-        "trips first freezes posts in this workgroup."
+        "Set a lifetime USD cap for this workgroup, or leave empty for no\n"
+        "ceiling. The profile daily budget keeps applying on top either way."
     )
     ui._console.print("")
     if not ui.confirm("Set a lifetime budget?", default=False):
@@ -721,11 +689,6 @@ def _pick_budget(home: Path) -> dict[str, Any] | bool | None:
     if usd_s is None:
         return False
     usd_s = (usd_s or "").strip()
-
-    tokens_s = ui.text("Lifetime token cap (empty to skip):")
-    if tokens_s is None:
-        return False
-    tokens_s = (tokens_s or "").strip()
 
     out: dict[str, Any] = {}
     if usd_s:
@@ -738,16 +701,6 @@ def _pick_budget(home: Path) -> dict[str, Any] | bool | None:
             ui.fail_and_wait("USD cap must be > 0")
             return False
         out["max_usd"] = v
-    if tokens_s:
-        try:
-            v_int = int(tokens_s)
-        except ValueError:
-            ui.fail_and_wait(f"not an integer: {tokens_s!r}")
-            return False
-        if v_int <= 0:
-            ui.fail_and_wait("token cap must be > 0")
-            return False
-        out["max_tokens"] = v_int
     return out or None
 
 

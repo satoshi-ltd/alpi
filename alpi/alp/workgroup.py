@@ -183,7 +183,7 @@ class Meta:
     hub_pubkey: str
     created_at: str
     current_key_version: int = 1
-    # ``max_usd`` xor ``max_tokens`` (pick one). Empty/missing = no workgroup-level cap; profile cap still applies upstream.
+    # ``max_usd`` lifetime cap (empty = none), additional to the upstream profile cap
     budget: dict[str, Any] = field(default_factory=dict)
     # Soft circuit-breaker on ``workgroup.post`` only — ``pull``/``join``/``leave`` keep working so members can catch up and exit cleanly.
     paused: bool = False
@@ -815,21 +815,12 @@ def _validate_budget(budget: dict[str, Any]) -> dict[str, Any]:
     if not budget:
         return {}
     usd = budget.get("max_usd")
-    tokens = budget.get("max_tokens")
-    if usd is None and tokens is None:
-        raise ValueError("budget must set max_usd or max_tokens")
-    out: dict[str, Any] = {}
-    if usd is not None:
-        usd_f = float(usd)
-        if usd_f <= 0:
-            raise ValueError("max_usd must be > 0")
-        out["max_usd"] = usd_f
-    if tokens is not None:
-        tokens_i = int(tokens)
-        if tokens_i <= 0:
-            raise ValueError("max_tokens must be > 0")
-        out["max_tokens"] = tokens_i
-    return out
+    if usd is None:
+        raise ValueError("budget must set max_usd")
+    usd_f = float(usd)
+    if usd_f <= 0:
+        raise ValueError("max_usd must be > 0")
+    return {"max_usd": usd_f}
 
 
 def _gate_post(meta: Meta, ledger: dict[str, Any], cost: dict[str, Any]) -> None:
@@ -837,9 +828,7 @@ def _gate_post(meta: Meta, ledger: dict[str, Any], cost: dict[str, Any]) -> None
     if not meta.budget:
         return
     usd_cap = meta.budget.get("max_usd")
-    tokens_cap = meta.budget.get("max_tokens")
     declared_usd = float(cost.get("usd", 0.0)) if cost else 0.0
-    declared_tokens = int(cost.get("tokens", 0)) if cost else 0
     if usd_cap is not None:
         used = float(ledger.get("usd", 0.0))
         if used >= usd_cap or used + declared_usd > usd_cap:
@@ -850,18 +839,6 @@ def _gate_post(meta: Meta, ledger: dict[str, Any], cost: dict[str, Any]) -> None
                     "cap": usd_cap,
                     "used": used,
                     "declared": declared_usd,
-                },
-            )
-    if tokens_cap is not None:
-        used_t = int(ledger.get("tokens", 0))
-        if used_t >= tokens_cap or used_t + declared_tokens > tokens_cap:
-            raise alp_server.HandlerError(
-                -32005, "budget-exceeded",
-                data={
-                    "cap_kind": "workgroup_tokens",
-                    "cap": tokens_cap,
-                    "used": used_t,
-                    "declared": declared_tokens,
                 },
             )
 

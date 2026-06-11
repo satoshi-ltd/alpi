@@ -56,7 +56,7 @@ Every CLI command accepts `-p <name>`. No per-profile service to uninstall — t
 
 ## When to create a profile (axis = identity + stakes)
 
-- Different cost/compliance boundary — per-profile `.env` + `config.yaml`; `budget.daily_usd` (paid) **or** `daily_tokens` (local models, mutually exclusive) caps spend independently.
+- Different cost/compliance boundary — per-profile `.env` + `config.yaml`; `budget.daily_usd` caps spend independently (USD or unlimited — no token cap).
 - Different memory — MEMORY.md is profile-scoped; work context shouldn't bleed into personal.
 - Different gateway identity — e.g. separate Telegram bots.
 - Different ALP role — a peer others talk to (`home-server`, `laptop`) with its own pubkey + peer list.

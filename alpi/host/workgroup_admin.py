@@ -80,16 +80,6 @@ async def _create(
             budget["max_usd"] = float(params["budget_usd"])
         except (TypeError, ValueError):
             raise host_server.HandlerError(-32602, "invalid-params", data={"detail": "budget_usd must be a number"})
-    if params.get("budget_tokens") is not None:
-        if "max_usd" in budget:
-            raise host_server.HandlerError(
-                -32602, "invalid-params",
-                data={"detail": "budget_usd and budget_tokens are mutually exclusive"},
-            )
-        try:
-            budget["max_tokens"] = int(params["budget_tokens"])
-        except (TypeError, ValueError):
-            raise host_server.HandlerError(-32602, "invalid-params", data={"detail": "budget_tokens must be an int"})
 
     briefing = str(params.get("briefing") or "").strip()
 

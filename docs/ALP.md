@@ -159,7 +159,7 @@ before any `id`-based routing occurs.
 Spending is not configured here. Every inbound call from every peer
 draws from the same daily ledger that interactive turns, gateway
 replies, and sub-agents spend from; the cap lives at the profile level
-(`budget.daily_usd` / `budget.daily_tokens` in `config.yaml`, see
+(`budget.daily_usd` in `config.yaml`, see
 [CONFIG.md → Budget](CONFIG.md#budget)). When the profile cap trips,
 ALP inbound answers with JSON-RPC `-32005 budget-exceeded` and falls
 silent on interactive paths until UTC midnight.
@@ -292,7 +292,7 @@ on the wire is a JSON object of the following shape:
   "jsonrpc": "2.0",
   "id": "<uuid>",
   "method": "link.ask",
-  "params": {"prompt": "…", "budget": {"tokens": 10000}},
+  "params": {"prompt": "…", "budget": {"usd": 0.50}},
   "alp": {
     "v": 1,
     "from":  "<sender-pubkey-b64>",
@@ -475,7 +475,7 @@ reserved space:
 | `-32002` | `replay` | `(from, nonce)` seen within the window. |
 | `-32003` | `bad-signature` | Envelope signature verification failed. |
 | `-32004` | `target-offline` | Peer resolvable but connection refused. |
-| `-32005` | `budget-exceeded` | Request would breach a profile (daily) or workgroup (lifetime) cap. `data.cap_kind` distinguishes: `usd` / `tokens` for profile, `workgroup_usd` / `workgroup_tokens` for the workgroup pool. |
+| `-32005` | `budget-exceeded` | Request would breach a profile (daily) or workgroup (lifetime) cap. `data.cap_kind` distinguishes: `usd` for the profile, `workgroup_usd` for the workgroup pool. |
 | `-32006` | `version-mismatch` | Incompatible `alp.v`. |
 | `-32007` | `target-busy` | Session already running a turn. |
 | `-32008` | `workgroup-not-member` | Caller is not a pinned member of the workgroup. |
@@ -693,8 +693,7 @@ The hub persists each workgroup under
   `{seq, ts, from, key_version, nonce, ciphertext, cost?}` per
   line.
 - `ledger.json` — cumulative `{usd, tokens, posts}` across the
-  workgroup's lifetime; the gate for the `max_usd` /
-  `max_tokens` budget below.
+  workgroup's lifetime; the gate for the `max_usd` budget below.
 - `hub_keys.json` — hub-only sealed-key history, `{key_version:
   sealed_key}`. On every rekey (`leave` / `kick` / `add_member`)
   the hub stashes the group key it held for the outgoing version,
@@ -917,21 +916,17 @@ A workgroup may carry its own optional **lifetime** budget — a
 project-scoped ceiling that, unlike the profile budget, does not
 reset. The profile budget answers *"how much can my agent spend
 today?"*; the workgroup budget answers *"how big can this
-collaboration grow before someone reviews it?"*. Two axes, two
-caps.
+collaboration grow before someone reviews it?"*.
 
 ```yaml
 # meta.yaml inside ~/.alpi/<profile>/alp/workgroups/<wg_id>/
 budget:
-  max_usd: 5.00         # paid models; or
-  max_tokens: 500000    # local / free models
+  max_usd: 5.00
 ```
 
-Both knobs are optional and mirror the profile-budget shape — set
-what you care about. When both are set each gates independently;
-whichever cap trips first freezes posts. Workgroups without a
-configured budget inherit no ceiling of their own; the profile
-caps are the only stop.
+`max_usd` is optional and mirrors the profile-budget shape (dollars or
+nothing — no token cap). Workgroups without a configured budget inherit
+no ceiling of their own; the profile caps are the only stop.
 
 When set, **every post is double-gated** — admits only if the
 poster's profile still has budget *and* the workgroup still has
@@ -952,7 +947,7 @@ identity, not from a verified receipt. The author SHOULD report
 the LLM spend that produced the message; the hub records it in
 the workgroup `ledger.json` and checks cumulative `used + declared
 > cap` before admitting the post (`-32005 budget-exceeded` with
-`data.cap_kind = "workgroup_usd"` or `"workgroup_tokens"`).
+`data.cap_kind = "workgroup_usd"`).
 
 ### Autonomous engagement
 

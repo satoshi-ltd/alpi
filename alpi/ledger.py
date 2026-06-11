@@ -28,12 +28,8 @@ class BudgetExceeded(Exception):
     """Raised when a check would push usage past the profile cap."""
 
     def __init__(self, cap_kind: str, cap: float, used: float) -> None:
-        if cap_kind == "usd":
-            shape = f"${used:.4f} / ${cap:.2f}"
-        else:
-            shape = f"{int(used):,} / {int(cap):,} tokens"
         super().__init__(
-            f"Daily budget reached ({shape}). Resets at UTC midnight — "
+            f"Daily budget reached (${used:.4f} / ${cap:.2f}). Resets at UTC midnight — "
             f"raise the cap in `alpi setup → Budget` if you need more."
         )
         self.cap_kind = cap_kind
@@ -145,14 +141,9 @@ def save(home: Path, data: dict[str, Any]) -> None:
 
 
 def _budget(cfg_budget: dict[str, Any] | None) -> tuple[str | None, float]:
-    """``daily_usd`` wins when both are set; ``(None, 0)`` means uncapped."""
-    budget = cfg_budget or {}
-    usd = budget.get("daily_usd")
+    usd = (cfg_budget or {}).get("daily_usd")
     if isinstance(usd, (int, float)) and usd > 0:
         return "usd", float(usd)
-    tokens = budget.get("daily_tokens")
-    if isinstance(tokens, int) and tokens > 0:
-        return "tokens", float(tokens)
     return None, 0.0
 
 
@@ -241,8 +232,5 @@ def status_line(home: Path, cfg_budget: dict[str, Any] | None) -> str:
     kind, cap = _budget(cfg_budget)
     if kind is None:
         return f"${used_usd:.4f} · {used_tokens:,} tokens · no cap"
-    if kind == "usd":
-        suffix = " · capped" if used_usd >= cap else ""
-        return f"${used_usd:.4f} / ${cap:.2f}{suffix}"
-    suffix = " · capped" if used_tokens >= cap else ""
-    return f"{used_tokens:,} / {int(cap):,} tokens{suffix}"
+    suffix = " · capped" if used_usd >= cap else ""
+    return f"${used_usd:.4f} / ${cap:.2f}{suffix}"

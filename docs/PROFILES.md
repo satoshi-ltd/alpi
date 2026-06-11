@@ -44,7 +44,7 @@ Everything that represents state, identity, or cost:
 | `alp/` (peers.yaml, socket, keypair) | ✓ | ALP identity + pinned peers. Two profiles on the same machine are two distinct peers. |
 | `schedule/jobs.json` | ✓ | Cron + one-shot jobs. Scheduled runs use `chat --once --no-save` and do not create chat sessions. Jobs flagged `no_agent: true` exec `prompt` as a `python [flags] <skill_script>` invocation directly, bypassing the LLM (allowlist restricts the script to `skills/<category>/<name>/scripts/`). |
 | `logs/` | ✓ | `gateway.log`, `schedule.log`, `alp.log`, `agent.log`, `approval.log`, plus JSONL telemetry `compaction.jsonl` and `runs.jsonl` (run ledger, surfaced by `alpi digest`). |
-| `logs/ledger.json` | ✓ | Daily spending ledger — the profile's USD / token cap is enforced from here across every turn (interactive, gateway, scheduled, sub-agent, inbound ALP). Resets at UTC midnight. |
+| `logs/ledger.json` | ✓ | Daily spending ledger — the profile's USD cap is enforced from here across every turn (interactive, gateway, scheduled, sub-agent, inbound ALP). Resets at UTC midnight. |
 | `cache/` (tts, stt, inbound voice) | ✓ | Audio cache. |
 
 Not isolated (shared globally by design):
@@ -106,8 +106,7 @@ Create a new profile when:
 - **Different cost / compliance boundary.** Work charges tokens to
   the company API key; personal pays out of pocket. Per-profile
   `.env` + `config.yaml` prevents mixing, and a per-profile
-  `budget.daily_usd` (paid models) **or** `daily_tokens` (local
-  models, mutex) caps the spend independently — the work profile can
+  `budget.daily_usd` caps the spend independently — the work profile can
   be aggressive while the personal one runs on a $1/day leash.
 - **Different memory.** You don't want work context (calendar,
   colleagues, ongoing projects) bleeding into a personal chat

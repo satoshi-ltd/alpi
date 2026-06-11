@@ -195,7 +195,6 @@ def _profile_summary(row: dict[str, Any]) -> dict[str, Any]:
             "workgroups": cfg.service.get("workgroups", True) is not False,
         },
         "budget_daily_usd": cfg.budget.get("daily_usd"),
-        "budget_daily_tokens": cfg.budget.get("daily_tokens"),
         "budget_used_usd": used_usd,
         "budget_used_tokens": used_tokens,
         "counts": _counts(home),
@@ -591,8 +590,6 @@ def _unset_dotted(data: dict[str, Any], key: str) -> None:
 
 def _coerce_config_value(key: str, value: Any) -> Any:
     if key in {"alp.tcp_port", "host.tcp_port"}:
-        return int(value)
-    if key in {"budget.daily_tokens"}:
         return int(value)
     if key in {"budget.daily_usd"}:
         return float(value)

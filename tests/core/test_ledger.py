@@ -85,18 +85,16 @@ def test_check_raises_at_or_over_cap(home: Path) -> None:
     assert exc.value.used == 5.0
 
 
-def test_check_uses_usd_when_both_caps_set(home: Path) -> None:
+def test_daily_tokens_is_ignored_usd_caps(home: Path) -> None:
     ledger.record(home, usd=10.0, tokens=100)
     with pytest.raises(ledger.BudgetExceeded) as exc:
         ledger.check(home, {"daily_usd": 2.0, "daily_tokens": 10**9})
     assert exc.value.cap_kind == "usd"
 
 
-def test_check_tokens_only_profile(home: Path) -> None:
-    ledger.record(home, usd=0.0, tokens=1000)
-    with pytest.raises(ledger.BudgetExceeded) as exc:
-        ledger.check(home, {"daily_tokens": 1000})
-    assert exc.value.cap_kind == "tokens"
+def test_token_only_budget_is_uncapped(home: Path) -> None:
+    ledger.record(home, usd=0.0, tokens=10**9)
+    ledger.check(home, {"daily_tokens": 1000})  # token budget removed → no cap, no raise
 
 
 def test_stale_day_resets_on_load(home: Path) -> None:
@@ -249,11 +247,11 @@ def test_save_swallows_oserror_so_record_does_not_kill_the_turn(
     ledger_mod.record(home, usd=0.10, tokens=50)
 
 
-def test_budget_selects_pickone(home: Path) -> None:
+def test_budget_usd_or_uncapped(home: Path) -> None:
     assert ledger._budget({}) == (None, 0)
     assert ledger._budget({"daily_usd": 5.0}) == ("usd", 5.0)
-    assert ledger._budget({"daily_tokens": 1000}) == ("tokens", 1000.0)
+    # daily_tokens is no longer a budget kind — uncapped unless daily_usd is set.
+    assert ledger._budget({"daily_tokens": 1000}) == (None, 0)
     kind, cap = ledger._budget({"daily_usd": 5.0, "daily_tokens": 100})
     assert kind == "usd" and cap == 5.0
     assert ledger._budget({"daily_usd": 0}) == (None, 0)
-    assert ledger._budget({"daily_tokens": -1}) == (None, 0)

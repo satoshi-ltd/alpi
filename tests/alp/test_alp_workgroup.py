@@ -898,14 +898,14 @@ def test_create_validates_budget_shape(short_tmp: Path) -> None:
     home = short_tmp / "hub"
     home.mkdir()
     kp = load_or_generate(home)
-    # Both set is accepted; each gate is independent.
+    # USD cap accepted, non-max_usd keys dropped (token budget removed)
     wg = wg_mod.create(
-        home, name="both", hub_kp=kp, member_pubkeys=[],
+        home, name="usd", hub_kp=kp, member_pubkeys=[],
         budget={"max_usd": 1.0, "max_tokens": 1000},
     )
-    assert wg.meta.budget == {"max_usd": 1.0, "max_tokens": 1000}
-    # Empty budget dict with neither key
-    with pytest.raises(ValueError, match="max_usd or max_tokens"):
+    assert wg.meta.budget == {"max_usd": 1.0}
+    # Budget dict without max_usd
+    with pytest.raises(ValueError, match="max_usd"):
         wg_mod.create(
             home, name="x", hub_kp=kp, member_pubkeys=[],
             budget={"foo": "bar"},
@@ -1148,74 +1148,6 @@ async def test_post_rejects_oversized_ciphertext(short_tmp: Path, monkeypatch) -
                         "ciphertext": "a" * 200},
             )
         assert exc.value.code == -32602
-    finally:
-        await server.stop()
-
-
-@pytest.mark.integration
-@pytest.mark.asyncio
-async def test_post_with_tokens_cap_blocks_at_breach(short_tmp: Path) -> None:
-    hub_home = short_tmp / "hub"
-    hub_home.mkdir()
-    bob_home = short_tmp / "b"
-    bob_home.mkdir()
-    hub_kp = load_or_generate(hub_home)
-    bob_kp = load_or_generate(bob_home)
-    _pin(hub_home, "b", bob_kp.pubkey_b64(),
-         ["workgroup.join", "workgroup.post"])
-
-    wg = wg_mod.create(
-        hub_home, name="tok", hub_kp=hub_kp,
-        member_pubkeys=[bob_kp.pubkey_b64()],
-        budget={"max_tokens": 1000},
-    )
-    server = alp_server.Server(home=hub_home, agent_name="hub")
-    wg_mod.register(server, hub_home)
-    await server.start()
-    try:
-        join = await alp_client.call(
-            socket_path=server.socket_path(),
-            sender=bob_kp,
-            recipient_pubkey_b64=hub_kp.pubkey_b64(),
-            method="workgroup.join",
-            params={"workgroup_id": wg.meta.id},
-        )
-        key = wg_mod.open_sealed_group_key(join["sealed_key"], bob_kp)
-        nonce, ct = wg_mod.encrypt_post(key, b"x")
-
-        # First post at 600 tokens admits
-        await alp_client.call(
-            socket_path=server.socket_path(),
-            sender=bob_kp,
-            recipient_pubkey_b64=hub_kp.pubkey_b64(),
-            method="workgroup.post",
-            params={
-                "workgroup_id": wg.meta.id,
-                "key_version": 1,
-                "nonce": nonce,
-                "ciphertext": ct,
-                "cost": {"tokens": 600},
-            },
-        )
-
-        # Second at 500 → cumulative 1100, breach
-        nonce2, ct2 = wg_mod.encrypt_post(key, b"y")
-        with pytest.raises(alp_client.RemoteError) as exc:
-            await alp_client.call(
-                socket_path=server.socket_path(),
-                sender=bob_kp,
-                recipient_pubkey_b64=hub_kp.pubkey_b64(),
-                method="workgroup.post",
-                params={
-                    "workgroup_id": wg.meta.id,
-                    "key_version": 1,
-                    "nonce": nonce2,
-                    "ciphertext": ct2,
-                    "cost": {"tokens": 500},
-                },
-            )
-        assert exc.value.code == -32005
-        assert exc.value.data["cap_kind"] == "workgroup_tokens"
     finally:
         await server.stop()
 

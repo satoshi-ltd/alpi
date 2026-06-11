@@ -250,8 +250,8 @@ observability, the signals to watch:
 - **Log tail error rate.** `grep ERROR ~/.alpi/logs/*.log | wc -l`
   over a window — spike = misconfig, broken credentials, LLM API
   outage.
-- **Cost ceiling.** Set `budget.daily_usd` (paid models) or
-  `budget.daily_tokens` (local) in the profile's `config.yaml` —
+- **Cost ceiling.** Set `budget.daily_usd` in the profile's
+  `config.yaml` (or leave it unset for unlimited) —
   see [CONFIG.md → Budget](CONFIG.md#budget). The ledger at
   `~/.alpi/<profile>/logs/ledger.json` is the in-process gate;
   every interactive turn, gateway reply, scheduled job, sub-agent

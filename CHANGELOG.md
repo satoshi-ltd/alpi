@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.8.24 — 2026-06-12 — budgets are dollars or nothing
+
+- **The daily budget is now one honest knob: a USD cap, or unlimited.** The
+  token-based cap is gone — tokens were never a meaningful spend limit (their
+  cost varies by model), so a profile (and a workgroup) now caps real dollars
+  or runs uncapped.
+- Token *usage* is still tracked and charted; only the cap changed.
+- Setup, the desktop app, and the docs drop the token-cap option accordingly.
+
 ## v0.8.23 — 2026-06-12 — daemon FD limit + clean stream disconnects
 
 - **The daemon no longer hits "too many open files."** Its service

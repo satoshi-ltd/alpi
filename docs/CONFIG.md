@@ -402,19 +402,15 @@ Configure both if you want: `imap` polls your primary mailbox via password, `gma
 
 ### Budget
 
-One daily spending ceiling per profile. Pick **either** USD or tokens
-— they are mutually exclusive, matching the profile's provider:
+One daily spending ceiling per profile, in dollars — or unlimited.
 
-- `daily_usd` for paid APIs (Claude, OpenAI, Gemini, OpenRouter) where
-  LiteLLM reports a real cost per turn.
-- `daily_tokens` for local Ollama and other free inference paths where
-  cost is always zero.
-- Leave both unset for no ceiling.
+- `daily_usd` caps real spend (LiteLLM reports a cost per turn for
+  paid APIs; local/free paths report zero and so never hit the cap).
+- Leave it unset for no ceiling.
 
-The setup flows (`alpi setup → Budget` and the desktop app) enforce
-the mutex by clearing the other key when you save one. If you
-hand-edit `config.yaml` and end up with both, `daily_usd` takes
-precedence at runtime.
+A token-denominated cap is intentionally not offered: tokens are not a
+meaningful business constraint (their cost varies by model), so the only
+caps that mean anything are dollars or nothing.
 
 The cap covers **every** turn this profile runs: interactive TUI
 replies, gateway responses (Telegram / IMAP / Gmail), scheduled jobs,
@@ -428,17 +424,11 @@ the profile total gates new turns.
 
 | Key | Default | Notes |
 |---|---|---|
-| `budget.daily_usd` | unset | Hard daily USD cap. Exceeding it surfaces `budget-exceeded` (interactive) or JSON-RPC `-32005 budget-exceeded` (ALP). |
-| `budget.daily_tokens` | unset | Hard daily token cap. Same behaviour; use instead of `daily_usd` for local / free providers. |
+| `budget.daily_usd` | unset | Hard daily USD cap. Exceeding it surfaces `budget-exceeded` (interactive) or JSON-RPC `-32005 budget-exceeded` (ALP). Unset = unlimited. |
 
 ```yaml
-# Paid-API profile
 budget:
   daily_usd: 5.00
-
-# Local Ollama profile
-budget:
-  daily_tokens: 500000
 ```
 
 Edit interactively via `alpi setup → Budget` or the desktop app's

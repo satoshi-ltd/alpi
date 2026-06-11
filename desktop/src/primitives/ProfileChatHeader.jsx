@@ -45,9 +45,7 @@ export default function ProfileChatHeader({
   const ctxPct = contextWindow > 0 ? Math.min(1, ctxTokens / contextWindow) : 0;
 
   const capUsd = profile?.budget_daily_usd;
-  const capTokens = profile?.budget_daily_tokens;
   const usedUsd = profile?.budget_used_usd ?? 0;
-  const usedTokens = profile?.budget_used_tokens ?? 0;
   let budgetSeg = null;
   if (capUsd != null && capUsd > 0) {
     budgetSeg = {
@@ -59,17 +57,6 @@ export default function ProfileChatHeader({
       ),
       pct: Math.min(1, usedUsd / capUsd),
       tip: `Daily budget — spent ${fmtCost(usedUsd)} of $${capUsd.toFixed(2)} cap today`,
-    };
-  } else if (capTokens != null && capTokens > 0) {
-    budgetSeg = {
-      value: (
-        <>
-          {fmtCount(usedTokens)}
-          <span className={styles.ink3}>/{fmtCount(capTokens)}</span>
-        </>
-      ),
-      pct: Math.min(1, usedTokens / capTokens),
-      tip: `Daily budget — spent ${fmtCount(usedTokens)} of ${fmtCount(capTokens)} tokens today`,
     };
   }
 
