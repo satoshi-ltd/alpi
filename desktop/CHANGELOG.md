@@ -11,6 +11,14 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.3.53 — 2026-06-11 — chat fixes: no double message, calmer scroll, kept formatting
+
+- **Your message no longer shows up twice** while the reply is still streaming.
+- **The chat follows the reply as it streams** and snaps to the latest when you
+  send — scroll up any time to stop following, send again to re-engage.
+- **Multi-line messages and bullet lists keep their formatting** in the bubble
+  instead of collapsing onto one line.
+
 ## v0.3.52 — 2026-06-11 — drafts that survive, smoother modals, less friction
 
 - **Your unsent text is never lost.** Drafts persist per chat and workgroup when

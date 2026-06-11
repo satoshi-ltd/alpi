@@ -43,6 +43,7 @@ import {
   nonImageProduced,
 } from "../lib/producedAttachments.js";
 import { rewriteCut } from "../lib/rewriteCut.js";
+import { dropInflightStub } from "../lib/transcriptTurns.js";
 import { copyText } from "../lib/clipboard.js";
 
 export default function ChatPane({
@@ -300,7 +301,7 @@ const Transcript = memo(function Transcript({
   searchOpen,
   onCloseSearch,
 }) {
-  const scrollRef = useStickyScroll([data, pendingTurn]);
+  const scrollRef = useStickyScroll([data, pendingTurn], pendingTurn?.requestId ?? null);
   const { farFromBottom, scrollToBottom } = useScrollProgress(scrollRef, {
     streaming: !!pendingTurn,
   });
@@ -311,7 +312,8 @@ const Transcript = memo(function Transcript({
   };
   const allTurns = data?.turns ?? [];
   const cut = rewriteCut({ pendingTurn, rewriteDraft, profileName, sessionId });
-  const turns = cut != null ? allTurns.slice(0, cut) : allTurns;
+  const cutTurns = cut != null ? allTurns.slice(0, cut) : allTurns;
+  const turns = dropInflightStub(cutTurns, pendingTurn);
 
   const [showSkeleton, setShowSkeleton] = useState(false);
   useEffect(() => {

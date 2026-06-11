@@ -12,7 +12,8 @@
   color: var(--ink);
   font-size: var(--fs-md);
   line-height: var(--lh-normal);
-  text-wrap: pretty;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .userFooter {
