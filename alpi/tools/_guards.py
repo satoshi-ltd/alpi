@@ -65,6 +65,11 @@ _BLOCKED_NETWORKS = [
 ]
 
 
+def _is_loopback(ip) -> bool:
+    mapped = getattr(ip, "ipv4_mapped", None)
+    return ip.is_loopback or (mapped is not None and mapped.is_loopback)
+
+
 def _is_blocked_ip(ip: "ipaddress.IPv4Address | ipaddress.IPv6Address") -> bool:
     if any(ip in net for net in _BLOCKED_NETWORKS):
         return True
@@ -79,7 +84,7 @@ _METADATA_HOSTS = {
 }
 
 
-def check_url(url: str) -> Tuple[bool, str]:
+def check_url(url: str, allow_loopback: bool = False) -> Tuple[bool, str]:
     if not url:
         return False, "empty url"
     try:
@@ -95,7 +100,7 @@ def check_url(url: str) -> Tuple[bool, str]:
         return False, f"cloud metadata host {host!r}"
     try:
         ip = ipaddress.ip_address(host)
-        if _is_blocked_ip(ip):
+        if _is_blocked_ip(ip) and not (allow_loopback and _is_loopback(ip)):
             return False, f"private/link-local ip {ip}"
         return True, ""
     except ValueError:
@@ -114,6 +119,6 @@ def check_url(url: str) -> Tuple[bool, str]:
             ip = ipaddress.ip_address(addr)
         except ValueError:
             continue
-        if _is_blocked_ip(ip):
+        if _is_blocked_ip(ip) and not (allow_loopback and _is_loopback(ip)):
             return False, f"{host!r} resolves to private ip {ip}"
     return True, ""

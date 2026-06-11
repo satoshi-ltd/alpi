@@ -141,12 +141,44 @@ writes, tool-result sanitizing, and inbound gateway content. Recalled
 untrusted data. `AGENT.md` is the profile persona (instruction by design) and
 is deliberately not marked that way.
 
+## Audit and accountability
+
+Personal-grade: rich local records, but no tamper-evident audit log and no
+actor attribution on the host plane. What is recorded:
+
+- **Session transcripts** (`sessions/<id>.json`) — per turn: messages, every
+  tool call with args + result (capped), reasoning, model, tokens, cost,
+  timestamps; secret-shape redaction runs before write.
+- **Run ledger** (`logs/runs.jsonl`) — append-only, rolling ~1000 runs:
+  outcome, elapsed, exit code, backend, last tool, and `peer_id` for
+  workgroup runs.
+- **Approval log** (`logs/approval.log`) — allow/deny verdicts on
+  caution/dangerous terminal gates, with severity and reason.
+- **Cost ledger** (`logs/ledger.json`) — tokens/USD per profile and per peer,
+  30-day history. **Event bus** (`host/events.jsonl`) is a rolling reconnect
+  buffer, not durable audit.
+- **ALP peer calls are attributed** — dispatch logs the calling `peer.id` on
+  signed, replay-checked, identity-pinned envelopes. The one plane with a
+  cryptographic actor.
+
+Gaps for a fleet (not a single owner): host RPC validates the device token
+but does not propagate or log it, so a privileged change isn't attributable
+to a device/human; records are local and mutable (no WORM, no signing, no
+external sink); sessions/memory/logs are plaintext at rest (only `alpi
+backup` is encrypted); LLM egress is not logged and there's no
+approved/on-prem provider policy (Ollama is the on-prem option); access
+control stops at admin/member with no RBAC/SSO. Closing these is roadmap
+item **AUDIT.2** — deliberately not in the personal product until a real
+fleet pulls for it.
+
 ## Not fully solved
 
 - Malicious code the user explicitly runs.
 - Compromised provider or local OS account.
 - Every prompt-injection variant.
 - Bugs or behavior changes in third-party integrations.
+- Enterprise audit: attributable, tamper-evident trail across the host plane
+  (roadmap AUDIT.2).
 
 ## Related topics
 

@@ -81,7 +81,7 @@ class Db(Tool):
             },
             "params": {
                 "type": "array",
-                "items": {"type": ["string", "number", "boolean", "null"]},
+                "items": {"anyOf": [{"type": "string"}, {"type": "number"}, {"type": "boolean"}, {"type": "null"}]},
                 "description": "Positional parameters for the ``?`` placeholders. Default: [].",
                 "default": [],
             },

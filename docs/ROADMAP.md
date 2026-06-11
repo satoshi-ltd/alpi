@@ -70,6 +70,7 @@ Items worth doing, but not part of the next two cycles.
 
 | ID | Item | Status |
 |---|---|---|
+| AUDIT.2 | Enterprise audit & accountability — actor attribution on the host plane, an append-only / external audit sink, LLM-egress logging + provider policy, at-rest encryption, and RBAC/SSO. For fleet deployments, not the personal product. | 🔵 |
 | CM.5 | Exact session browse / scroll — cheap lexical session navigation that complements CM.4 semantic recall when the user needs the original message window. | 🔵 |
 | TERM.2 | Docker / SSH terminal backends — isolated or remote command execution for unattended profiles once local sandboxing is no longer enough. | 🔵 |
 | ALP.5 | Blob transfer — `link.put_blob` / `link.get_blob`, content-addressed, chunked AEAD. Depends on real workgroup usage to justify the protocol complexity. | 🔵 |
@@ -157,6 +158,50 @@ humans.
 Promotion condition for B: a user reports that the convention forces
 awkward duplication or coordination between two profiles in the same
 org. Promotion condition for C: B itself proves insufficient.
+
+### AUDIT.2. Enterprise audit & accountability
+
+`AUDIT.1` (v0.9) is the local posture scan — "is this install hardened?".
+AUDIT.2 is the orthogonal axis a CTO asks about — "can I prove who did
+what, and can the trail be trusted?". alpi already records a lot (session
+transcripts, the run ledger, the approval log, the cost ledger, ALP
+peer-attributed calls — see
+[SECURITY.md → Audit trail & accountability](SECURITY.md)), but it is
+personal-grade: local, mutable, and unattributed on the host plane.
+AUDIT.2 is the set of changes that make it fleet-grade, in rough
+priority order:
+
+1. **Actor attribution on the host plane.** Propagate the validated
+   device `token_id` (and its role) into every host RPC handler and stamp
+   it onto the run ledger, approval log, and config-mutation events. Today
+   the token is checked at dispatch and then dropped — a privileged change
+   cannot be tied to a device or human. Highest value, smallest change; no
+   redesign needed.
+2. **Append-only / external audit sink.** Mirror sessions, runs,
+   approvals, and config mutations to a tamper-evident destination
+   (syslog/SIEM, or S3 with object-lock / a WORM path), optionally with
+   per-record signing or a hash chain so local edits are detectable.
+   Closes the "logs are locally mutable" gap.
+3. **LLM-egress logging + provider policy.** Record what leaves to each
+   model provider (at least prompt/message/tool-output sizes and a
+   content hash, optionally full payloads), and a policy knob to restrict a
+   profile to approved or on-prem (Ollama) providers. The compliance gap
+   that matters for regulated data.
+4. **At-rest encryption** of sessions/memory/logs (reuse the backup KDF,
+   or lean on FileVault/LUKS at the deployment layer and document it).
+5. **RBAC / SSO.** Groups beyond admin/member and an IdP-bound
+   device↔human mapping. Heaviest; only if a managed fleet needs it.
+
+**Why it waits.** alpi is a personal, local-first agent; this whole axis
+is dead weight for a single owner who already trusts their own machine.
+It is also large and partly deployment-specific (a SIEM, an IdP, an
+object store the user already runs).
+
+**Promotion condition.** A concrete fleet/enterprise deployment asks for
+attributable, tamper-evident audit — or a compliance regime (SOC 2,
+HIPAA, PCI) is in scope for a real operator. Start with item 1 (actor
+attribution): it is cheap, useful even for a single power user, and a
+prerequisite for everything else.
 
 ---
 

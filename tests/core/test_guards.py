@@ -218,3 +218,18 @@ def test_terminal_tool_runs_safe_command(tmp_path, monkeypatch) -> None:
                        cwd=str(tmp_path), timeout=5)
     assert r.ok
     assert "hello" in r.output
+
+
+def test_check_url_loopback_blocked_by_default():
+    assert not check_url("http://127.0.0.1:4321/")[0]
+    assert not check_url("http://localhost:4321/")[0]
+
+
+def test_check_url_loopback_allowed_with_flag():
+    assert check_url("http://127.0.0.1:4321/", allow_loopback=True)[0]
+    assert check_url("http://localhost:4321/", allow_loopback=True)[0]
+
+
+def test_check_url_flag_keeps_private_and_metadata_blocked():
+    assert not check_url("http://10.0.0.5/", allow_loopback=True)[0]
+    assert not check_url("http://metadata.google.internal/", allow_loopback=True)[0]

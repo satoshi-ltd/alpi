@@ -19,7 +19,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "deny": [],
         "web_extract": {"model": ""},
         "read_image": {"model": ""},
-        "browser": {"vision": False},
+        "browser": {"vision": False, "allow_local": False},
         "terminal": {
             "sandbox": False,
             "allow_network": False,
@@ -97,6 +97,7 @@ class TerminalToolConfig:
 @dataclass
 class BrowserToolConfig:
     vision: bool = False
+    allow_local: bool = False
 
 
 @dataclass
@@ -284,6 +285,7 @@ def load(home: Path) -> Config:
         ),
         browser=BrowserToolConfig(
             vision=bool(browser_raw.get("vision", False)),
+            allow_local=bool(browser_raw.get("allow_local", False)),
         ),
         tts=TtsToolConfig(
             voice=str(tts_raw.get("voice", "en-US-AriaNeural") or "en-US-AriaNeural"),
@@ -453,6 +455,8 @@ def _tools_delta(cfg: Config) -> dict:
     browser_out: dict[str, Any] = {}
     if cfg.tools.browser.vision != d["browser"]["vision"]:
         browser_out["vision"] = cfg.tools.browser.vision
+    if cfg.tools.browser.allow_local != d["browser"]["allow_local"]:
+        browser_out["allow_local"] = cfg.tools.browser.allow_local
     if browser_out:
         out["browser"] = browser_out
     tts_out: dict[str, Any] = {}

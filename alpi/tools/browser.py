@@ -71,8 +71,9 @@ def _ensure_page_blocking():
     context = browser.new_context(**context_args)
     _apply_stealth(context)
 
+    allow_local = _allow_local()
     def _route_guard(route, request):  # noqa: ANN001
-        ok, reason = check_url(request.url)
+        ok, reason = check_url(request.url, allow_loopback=allow_local)
         if not ok:
             try:
                 route.abort("addressunreachable")
@@ -300,6 +301,15 @@ def _do_screenshot() -> ToolResult:
     return ToolResult(ok=True, output=str(path))
 
 
+def _allow_local() -> bool:
+    try:
+        from alpi import config as cfg_mod
+        cfg = cfg_mod.load(get_home())
+        return cfg.tools.browser.allow_local
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def _vision_enabled() -> bool:
     try:
         from alpi import config as cfg_mod
@@ -425,7 +435,7 @@ class Browser(Tool):
         if action == "navigate":
             if not url:
                 return ToolResult(ok=False, output="", error="'url' required")
-            safe, reason = check_url(url)
+            safe, reason = check_url(url, allow_loopback=_allow_local())
             if not safe:
                 return ToolResult(ok=False, output="", error=f"blocked: {reason}")
             return _run(_do_navigate, url)

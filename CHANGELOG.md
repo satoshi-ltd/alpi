@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.8.21 — 2026-06-11 — local-build browsing, Gemini-safe tools, security docs
+
+- **The browser can view your local builds.** A new opt-in
+  `tools.browser.allow_local` lets the browser tool reach loopback
+  addresses (e.g. a dev server at `127.0.0.1`) while every other private
+  range stays blocked by the SSRF guard.
+- **Tool schemas work with Gemini.** Tool argument schemas now use `anyOf`
+  instead of type-union lists, which Gemini's schema translator rejected —
+  the `db` tool (and any future union-typed argument) works across all
+  providers.
+- **Security & audit docs.** `SECURITY.md` now documents the audit-trail
+  and accountability posture (what's recorded, and the honest gaps for a
+  fleet), with the enterprise-audit work tracked as `AUDIT.2` in the
+  roadmap.
+
 ## v0.8.20 — 2026-06-10 — heavy downloads only when they're needed
 
 - **The daemon no longer grabs ~600 MB at boot on machines that won't use it.**

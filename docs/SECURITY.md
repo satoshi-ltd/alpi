@@ -426,6 +426,70 @@ already trusted for the profile), but it is a real read surface. A future
 tightening would restrict reads to paths that appear in the session
 transcript or an output manifest; not implemented today.
 
+## Audit trail & accountability
+
+alpi records what the agent and its operators do across several local
+surfaces. The posture is **personal-grade**: rich per-session detail and
+useful operational logs, but no single tamper-evident audit log and no
+actor attribution on the local control plane. What exists today:
+
+- **Session transcripts** (`~/.alpi/profiles/<name>/sessions/<id>.json`).
+  The richest record: per turn it stores the user message, assistant
+  reply, **every tool call with its arguments and result** (result capped
+  at 400 chars), the inter-tool reasoning, model, token counts, cost, and
+  timestamps. Secret-shape redaction (see Layer 1) runs before write.
+  Persistent — pruned only by explicit `host.sessions.delete`.
+- **Run ledger** (`logs/runs.jsonl`, v0.8.1). Append-only, rolling ~1000
+  records. One line per run (agent / scheduled / workgroup / terminal)
+  with outcome, elapsed, exit code, backend, last tool, tool count, and —
+  for workgroup runs — the `peer_id`. The closest thing to an execution
+  audit log.
+- **Approval log** (`logs/approval.log`). Every caution/dangerous
+  `terminal` gate writes the allow/deny verdict, severity, the matched
+  pattern, the reason (once / session / config-allowlist / denied), and a
+  truncated command preview.
+- **Cost ledger** (`logs/ledger.json`). Tokens and USD per profile and
+  per peer, with a rolling 30-day history.
+- **Event bus** (`host/events.jsonl`). `config_changed`,
+  `gateway_changed`, `peers_changed`, `session_changed`, approvals, etc.
+  Explicitly **transport, not durable history** — a bounded rolling
+  buffer for client reconnect, not an audit source.
+- **Daemon logs** (`logs/<subsystem>.log`). Per-subsystem, human-readable,
+  rotating (1 MB × 3). Includes a per-turn agent summary and the approval
+  decisions above.
+- **ALP peer calls are attributed.** Inter-agent dispatch logs the calling
+  `peer.id` with every method, on top of signed + replay-checked +
+  identity-pinned envelopes. This is the one plane where actions carry a
+  cryptographic actor identity.
+
+**What is NOT covered today** (and why it matters for a fleet, not a
+single user):
+
+- **Host-plane RPC has no actor in the record.** A device pairing token is
+  validated per request and gated by role (admin/member), but the token
+  is *not* propagated to the handler or written to any log — a privileged
+  mutation (rotate a provider key, change a gateway, restart the daemon)
+  cannot be attributed to a specific device or human after the fact. The
+  Unix socket is treated as sovereign admin with no per-action trail.
+- **Records are local and mutable.** Sessions, ledgers, and logs can be
+  edited or deleted by any process running as the daemon user. Nothing is
+  append-only at the filesystem level, signed, or mirrored to an external
+  sink — there is no WORM guarantee and no tamper detection.
+- **No at-rest encryption** of sessions, memory, or logs. Only `alpi
+  backup` is encrypted (ChaCha20-Poly1305 + Scrypt). A disk image or VM
+  snapshot exposes transcripts and any non-redacted secret in the clear.
+- **LLM egress is not logged.** What leaves in the system prompt, user
+  messages, and tool outputs to a third-party provider is kept only in
+  turn memory; there is no record of what was sent, no classification, and
+  no policy to force an approved/on-prem provider (Ollama is the on-prem
+  escape hatch, configured per profile).
+- **Access control stops at admin/member.** No group RBAC, no SSO/IdP
+  binding, no cryptographic device↔human mapping.
+
+Closing these is an explicit roadmap item — see **AUDIT.2** in
+[ROADMAP.md](ROADMAP.md). It is deliberately not built into the personal
+product until a real fleet deployment pulls for it.
+
 ## Known gaps
 
 - Writes to `/tmp` are allowed by both layers. A process could drop
