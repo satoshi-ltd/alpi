@@ -77,6 +77,17 @@ a new profile just creates a directory under `~/.alpi/profiles/`;
 the daemon picks it up on its next restart. Operational verbs
 that aren't lifecycle survive on their own:
 
+**File-descriptor limit.** One daemon hosts every profile's services
+(gateway / schedule / alp / workgroups / host), so a machine with many
+profiles holds a lot of sockets at once. The launchd/systemd unit — and the
+Docker compose `ulimits` — raise the FD ceiling to **8192**; a low platform
+default (256 on macOS launchd) is exhausted under load (symptom:
+`OSError: [Errno 24] Too many open files` in `service.log`, operations failing
+intermittently). The limit lives in the service definition, so **`alpi daemon
+install` (re-run after upgrading) — or recreating the container — applies
+it**; `launchctl limit maxfiles` shows the old default but the unit's own
+`SoftResourceLimits` overrides it for the daemon process.
+
 ```bash
 alpi schedule run-once          # tick the scheduler once, in-process
 alpi schedule fire <job-id>     # ad-hoc run of a specific job

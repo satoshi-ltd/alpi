@@ -19,6 +19,10 @@ services:
     image: satoshiltd/alpi:latest
     restart: unless-stopped
     stop_grace_period: 1m
+    ulimits:
+      nofile:
+        soft: 8192
+        hard: 8192
     environment:
       # Reachable endpoint advertised to clients (LAN IP, Tailscale IP, or host).
       ALPI_NETWORK_HOST: ${HOST_IP}
@@ -36,6 +40,10 @@ services:
   #   image: satoshiltd/alpi:latest
   #   restart: unless-stopped
   #   stop_grace_period: 1m
+  #   ulimits:
+  #     nofile:
+  #       soft: 8192
+  #       hard: 8192
   #   environment:
   #     ALPI_NETWORK_HOST: ${HOST_IP}
   #     ALPI_HOST_TCP_PORT: 49201

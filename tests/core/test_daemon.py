@@ -483,3 +483,37 @@ async def test_reconcile_stops_tasks_when_profile_home_disappears(
 
     assert "alfa" not in registry
     assert all(t.cancelled() for t in tasks)
+
+
+def test_daemon_plist_raises_file_descriptor_limit() -> None:
+    import plistlib
+
+    # The macOS launchd default (256) is exhausted by many profiles × services;
+    # the daemon must set its own ceiling, and the rendered plist must be valid.
+    xml = service._DAEMON_PLIST_TEMPLATE.format(
+        label="com.alpi.daemon",
+        program_args="    <string>alpi</string>",
+        log="/tmp/service.log",
+    )
+    parsed = plistlib.loads(xml.encode())
+    assert parsed["SoftResourceLimits"]["NumberOfFiles"] == 8192
+    assert parsed["HardResourceLimits"]["NumberOfFiles"] == 8192
+
+
+def test_daemon_systemd_unit_raises_file_descriptor_limit() -> None:
+    unit = service._DAEMON_UNIT_TEMPLATE.format(
+        exec_start="alpi daemon start",
+        log="/tmp/service.log",
+    )
+    service_section = unit.split("[Service]", 1)[1].split("[Install]", 1)[0]
+    assert "LimitNOFILE=8192" in service_section
+
+
+def test_docker_compose_raises_file_descriptor_limit() -> None:
+    import yaml
+
+    repo_root = Path(__file__).resolve().parents[2]
+    compose = yaml.safe_load((repo_root / "docker-compose.yml").read_text())
+    nofile = compose["services"]["alpi"]["ulimits"]["nofile"]
+    assert nofile["soft"] == 8192
+    assert nofile["hard"] == 8192

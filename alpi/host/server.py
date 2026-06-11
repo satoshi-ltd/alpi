@@ -421,6 +421,8 @@ class Server:
             await send_frame({
                 "error": {"code": e.code, "message": e.message, "data": e.data},
             })
+        except (websockets.ConnectionClosed, ConnectionResetError, BrokenPipeError):
+            return
         except Exception as e:  # noqa: BLE001
             log.exception("stream handler %s crashed", method)
             await send_frame({

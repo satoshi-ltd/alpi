@@ -2125,6 +2125,16 @@ _DAEMON_PLIST_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
   <true/>
   <key>KeepAlive</key>
   <true/>
+  <key>SoftResourceLimits</key>
+  <dict>
+    <key>NumberOfFiles</key>
+    <integer>8192</integer>
+  </dict>
+  <key>HardResourceLimits</key>
+  <dict>
+    <key>NumberOfFiles</key>
+    <integer>8192</integer>
+  </dict>
   <key>StandardOutPath</key>
   <string>{log}</string>
   <key>StandardErrorPath</key>
@@ -2192,6 +2202,7 @@ Type=simple
 ExecStart={exec_start}
 Restart=on-failure
 RestartSec=5
+LimitNOFILE=8192
 StandardOutput=append:{log}
 StandardError=append:{log}
 

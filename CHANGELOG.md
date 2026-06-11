@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.8.23 — 2026-06-12 — daemon FD limit + clean stream disconnects
+
+- **The daemon no longer hits "too many open files."** Its service
+  definitions — launchd, systemd, and the Docker compose — now pin a
+  file-descriptor ceiling of 8192 instead of inheriting a low platform default
+  (256 on macOS launchd), which a machine running many profiles (each with
+  gateway/schedule/alp/workgroups/host) could exhaust under load, making
+  profile operations fail intermittently. Reinstall the daemon
+  (`alpi daemon install`), or recreate the container, to apply it.
+- **Quitting a client no longer logs a false daemon error.** When the desktop
+  app or a paired device disconnects from the live event stream, the daemon now
+  ends that stream cleanly instead of recording the normal disconnect as a crash.
+
 ## v0.8.22 — 2026-06-11 — MCP servers read the profile's own .env
 
 - **MCP servers now resolve `env:` credentials from the profile's `.env`.**
