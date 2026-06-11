@@ -118,6 +118,38 @@ function splitRow(line) {
   return s.split('|');
 }
 
+// Minimal YAML-ish front-matter: `key: value` per line, `[a, b]` arrays,
+// `true`/`false` booleans, surrounding quotes stripped. Enough for post meta;
+// no nesting, no multiline. Returns { meta, body } — body is the rest verbatim.
+export function parseFrontmatter(src) {
+  const text = src.replace(/^﻿/, '');
+  if (!text.startsWith('---\n')) return { meta: {}, body: text };
+  const end = text.indexOf('\n---\n', 4);
+  if (end === -1) return { meta: {}, body: text };
+  const block = text.slice(4, end);
+  // Trim leading blank lines so the body starts at its first real line — keeps
+  // downstream stripFirstH1 anchored and renders without a leading gap.
+  const body = text.slice(end + 5).replace(/^\n+/, '');
+  const meta = {};
+  for (const line of block.split('\n')) {
+    const m = line.match(/^([A-Za-z0-9_-]+)\s*:\s*(.*)$/);
+    if (!m) continue;
+    const key = m[1];
+    let val = m[2].trim();
+    if (val.startsWith('[') && val.endsWith(']')) {
+      meta[key] = val.slice(1, -1).split(',')
+        .map(s => s.trim().replace(/^["']|["']$/g, ''))
+        .filter(Boolean);
+    } else {
+      val = val.replace(/^["']|["']$/g, '');
+      if (val === 'true') meta[key] = true;
+      else if (val === 'false') meta[key] = false;
+      else meta[key] = val;
+    }
+  }
+  return { meta, body };
+}
+
 export function renderMarkdown(src, opts = {}) {
   const linkRewrite = opts.linkRewrite || null;
   const lines = src.replace(/\r\n?/g, '\n').split('\n');

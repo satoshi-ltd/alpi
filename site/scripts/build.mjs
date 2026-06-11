@@ -5,7 +5,7 @@
 import { readFileSync, writeFileSync, mkdirSync, rmSync, readdirSync, copyFileSync, existsSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { renderMarkdown } from './markdown.mjs';
+import { renderMarkdown, parseFrontmatter } from './markdown.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const SITE = resolve(__dirname, '..');
@@ -59,12 +59,43 @@ const DOCS = [
 ];
 const TOTAL = DOCS.length;
 
+// ── blog posts ───────────────────────────────────────────────────────────────
+// Auto-discovered from site/posts/*.md — no manual registry. Drop a markdown
+// file with front-matter (title, date, description, tags, draft?) and it
+// publishes on the next build. `draft: true` is skipped.
+const POSTS_DIR = join(SITE, 'posts');
+function loadPosts() {
+  if (!existsSync(POSTS_DIR)) return [];
+  const out = [];
+  for (const name of readdirSync(POSTS_DIR)) {
+    if (!name.endsWith('.md')) continue;
+    const raw = readFileSync(join(POSTS_DIR, name), 'utf8');
+    const { meta, body } = parseFrontmatter(raw);
+    if (meta.draft === true) continue;
+    const slug = name.replace(/\.md$/, '');
+    const h1 = body.match(/^#\s+(.+?)\s*$/m);
+    const title = meta.title || (h1 && h1[1]) || slug;
+    out.push({
+      slug,
+      title,
+      date: meta.date || '',
+      description: meta.description || '',
+      tags: Array.isArray(meta.tags) ? meta.tags : [],
+      body,
+    });
+  }
+  // Newest first; ISO dates sort lexically, undated posts sink to the bottom.
+  out.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  return out;
+}
+const POSTS = loadPosts();
+
 // ── SEO head block — identical shape across every page, just data differs ─
 // kind: 'landing' | 'docs-index' | 'doc'
-function renderHead({ kind, title, description, path, iconPath }) {
+function renderHead({ kind, title, description, path, iconPath, date }) {
   const canonical = `${SITE_URL}${path}`;
-  const ogType = kind === 'doc' ? 'article' : 'website';
-  const structuredData = renderJsonLd({ kind, title, description, canonical });
+  const ogType = (kind === 'doc' || kind === 'post') ? 'article' : 'website';
+  const structuredData = renderJsonLd({ kind, title, description, canonical, date });
   return `<meta charset="utf-8" />
 <title>${escapeHtml(title)}</title>
 <meta name="description" content="${escapeAttr(description)}" />
@@ -110,7 +141,8 @@ function escapeAttr(s) {
 }
 
 // ── JSON-LD structured data ─────────────────────────────────────────────────
-function renderJsonLd({ kind, title, description, canonical }) {
+function renderJsonLd({ kind, title, description, canonical, date }) {
+  const opts = { date };
   const organization = {
     '@type': 'Organization',
     name: 'Satoshi Ltd.',
@@ -150,14 +182,30 @@ function renderJsonLd({ kind, title, description, canonical }) {
     return blocks.map(b => `<script type="application/ld+json">${JSON.stringify(b)}</script>`).join('\n');
   }
 
-  if (kind === 'docs-index') {
+  if (kind === 'docs-index' || kind === 'blog-index') {
     const data = {
       '@context': 'https://schema.org',
-      '@type': 'CollectionPage',
+      '@type': kind === 'blog-index' ? 'Blog' : 'CollectionPage',
       name: title,
       description,
       url: canonical,
       isPartOf: { '@type': 'WebSite', name: SITE_NAME, url: SITE_URL },
+      publisher: organization,
+    };
+    return `<script type="application/ld+json">${JSON.stringify(data)}</script>`;
+  }
+
+  if (kind === 'post') {
+    const data = {
+      '@context': 'https://schema.org',
+      '@type': 'BlogPosting',
+      headline: title,
+      description,
+      url: canonical,
+      inLanguage: 'en',
+      ...(opts.date ? { datePublished: opts.date } : {}),
+      isPartOf: { '@type': 'Blog', name: `${SITE_NAME} blog`, url: `${SITE_URL}/blog/` },
+      author: organization,
       publisher: organization,
     };
     return `<script type="application/ld+json">${JSON.stringify(data)}</script>`;
@@ -221,6 +269,13 @@ function renderNav(kind, opts = {}) {
     // Subpage at the site root — brand goes to landing, crumb shows the section.
     brandHref = 'index.html';
     crumbs.push({ label: 'APPS', current: true, docs: true });
+  } else if (kind === 'blog-index') {
+    brandHref = '../index.html';
+    crumbs.push({ label: 'BLOG', current: true, docs: true });
+  } else if (kind === 'blog') {
+    brandHref = '../index.html';
+    crumbs.push({ label: 'BLOG', href: 'index.html', docs: true });
+    crumbs.push({ label: opts.current, current: true });
   }
 
   const crumbsHtml = crumbs.length
@@ -241,6 +296,7 @@ function renderNav(kind, opts = {}) {
     ['apps.html', 'Apps'],
     ['#alp', 'ALP'],
     ['docs/index.html', 'Docs'],
+    ['blog/index.html', 'Blog'],
   ];
   const menuHtml = showMenu
     ? `<ul class="nav-menu">${menuLinks.map(([h, l]) => `<li><a href="${h}">${l}</a></li>`).join('')}</ul>`
@@ -444,6 +500,143 @@ ${themeControlHtml}
 `;
 }
 
+// ── blog ─────────────────────────────────────────────────────────────────────
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+function formatPostDate(iso) {
+  const m = (iso || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return iso || '';
+  return `${MONTHS[Number(m[2]) - 1]} ${Number(m[3])}, ${m[1]}`;
+}
+
+// Post-aware link rewrite: a `<slug>.md` matching another post resolves within
+// /blog/; everything else falls back to the docs/external rewrite.
+function postLinkRewrite(url) {
+  if (/^(https?:|mailto:|#|\/)/.test(url)) return url;
+  const clean = url.replace(/^(\.\/|\.\.\/)+/, '');
+  const [path, hash = ''] = clean.split('#');
+  const base = path.replace(/\.md$/i, '');
+  if (POSTS.some(p => p.slug === base)) return base + '.html' + (hash ? '#' + hash : '');
+  return linkRewrite(url);
+}
+
+function postMetaLine(post) {
+  const parts = [];
+  if (post.date) parts.push(formatPostDate(post.date));
+  if (post.tags.length) parts.push(post.tags.join(' · '));
+  return parts.join('  ·  ');
+}
+
+function renderPostsGrid() {
+  if (!POSTS.length) {
+    return `    <p class="sub">No posts yet.</p>`;
+  }
+  const cards = POSTS.map(p =>
+    `      <a class="doc" href="${p.slug}.html">
+        <span class="ix">${escapeHtml(postMetaLine(p))}</span>
+        <h4>${escapeHtml(p.title)}</h4>
+        <p>${escapeHtml(p.description)}</p>
+        <span class="go">read →</span>
+      </a>`
+  ).join('\n');
+  return `    <div class="docs" style="grid-template-columns:repeat(3,1fr)">
+${cards}
+    </div>`;
+}
+
+function blogIndexPage() {
+  return `<!doctype html>
+<html lang="en">
+<head>
+${renderHead({
+  kind: 'blog-index',
+  title: 'alpi blog — posts',
+  description: `Writing from the alpi project: positioning, architecture, and how local-first agent infrastructure plays out in practice. ${POSTS.length} post${POSTS.length === 1 ? '' : 's'}.`,
+  path: '/blog/',
+  iconPath: '../assets/alpi-favicon.svg',
+})}
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../doc.css?v=${VERSION}" />
+</head>
+<body>
+<div id="ascii-bg" aria-hidden="true"><pre id="ascii-pre"></pre></div>
+<div class="veil"></div>
+
+${renderNav('blog-index')}
+
+<main class="shell shell-wide docs-index">
+<section id="docs">
+  <div class="shell">
+    <div class="eyebrow">${POSTS.length} post${POSTS.length === 1 ? '' : 's'}</div>
+    <h2>BLOG</h2>
+    <p class="sub">Positioning, architecture, and field notes from the alpi project.</p>
+${renderPostsGrid()}
+  </div>
+</section>
+</main>
+
+${themeControlHtml}
+<script src="../doc.js?v=${VERSION}"></script>
+</body>
+</html>
+`;
+}
+
+function postPage(post, bodyHtml, prev, next) {
+  const metaLine = postMetaLine(post);
+  return `<!doctype html>
+<html lang="en">
+<head>
+${renderHead({
+  kind: 'post',
+  title: `${post.title} — alpi blog`,
+  description: post.description || `A post from the alpi blog.`,
+  path: `/blog/${post.slug}.html`,
+  iconPath: '../assets/alpi-favicon.svg',
+  date: post.date || undefined,
+})}
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../doc.css?v=${VERSION}" />
+</head>
+<body>
+<div id="ascii-bg" aria-hidden="true"><pre id="ascii-pre"></pre></div>
+<div class="veil"></div>
+
+${renderNav('blog', { current: post.title })}
+
+<main class="shell doc">
+  <header class="dochead">
+    <h1>${escapeHtml(post.title)}</h1>
+    ${post.description ? `<p class="sub">${escapeHtml(post.description)}</p>` : ''}
+    ${metaLine ? `<div class="meta mono"><span>${escapeHtml(metaLine)}</span></div>` : ''}
+  </header>
+
+  <article id="md-target" class="md">
+${bodyHtml}
+  </article>
+
+  <nav class="pager">
+    ${prev
+      ? `<a class="pg prev" href="${prev.slug}.html"><span class="lbl">← newer</span><span class="tt">${escapeHtml(prev.title)}</span></a>`
+      : `<a class="pg prev" href="index.html"><span class="lbl">← back</span><span class="tt">all posts</span></a>`}
+    ${next
+      ? `<a class="pg next" href="${next.slug}.html"><span class="lbl">older →</span><span class="tt">${escapeHtml(next.title)}</span></a>`
+      : `<a class="pg next" href="index.html"><span class="lbl">index →</span><span class="tt">all posts</span></a>`}
+  </nav>
+</main>
+
+${themeControlHtml}
+<script src="../doc.js?v=${VERSION}"></script>
+</body>
+</html>
+`;
+}
+
 // ── runtime JS (drops renderDoc — docs are pre-rendered at build) ──────────
 const runtimeJs = (() => {
   const full = readFileSync(join(TPL, 'doc.js'), 'utf8');
@@ -566,6 +759,17 @@ for (let k = 0; k < DOCS.length; k++) {
   console.log(`  ${doc.ix}  ${doc.slug.padEnd(14)} ← ${doc.src}`);
 }
 
+// Blog — auto-discovered posts. Index + one page per post; newest-first pager.
+write(join(DIST, 'blog', 'index.html'), blogIndexPage());
+for (let k = 0; k < POSTS.length; k++) {
+  const post = POSTS[k];
+  const body = renderMarkdown(stripFirstH1(post.body), { linkRewrite: postLinkRewrite });
+  const prev = POSTS[k - 1] || null;   // newer
+  const next = POSTS[k + 1] || null;   // older
+  write(join(DIST, 'blog', `${post.slug}.html`), postPage(post, body, prev, next));
+  console.log(`  blog  ${post.slug.padEnd(14)} ← posts/${post.slug}.md`);
+}
+
 // sitemap.xml — discoverable URL list for crawlers
 const today = new Date().toISOString().slice(0, 10);
 const sitemapUrls = [
@@ -576,6 +780,12 @@ const sitemapUrls = [
     loc: `${SITE_URL}/docs/${d.slug}.html`,
     priority: '0.8',
     changefreq: 'weekly',
+  })),
+  ...(POSTS.length ? [{ loc: `${SITE_URL}/blog/`, priority: '0.7', changefreq: 'weekly' }] : []),
+  ...POSTS.map(p => ({
+    loc: `${SITE_URL}/blog/${p.slug}.html`,
+    priority: '0.6',
+    changefreq: 'monthly',
   })),
 ];
 const sitemapXml = `<?xml version="1.0" encoding="UTF-8"?>
