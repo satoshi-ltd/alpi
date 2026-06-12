@@ -45,7 +45,7 @@ alpi --version
 - Tools: file, terminal, browser/search, memory, schedule, MCP client, plus:
   - `search_workspace` / `index_workspace`: local semantic RAG over the workspace.
   - `learn_file`: promote an attachment (or any file) to a durable, indexed workspace document; explicit user intent only.
-  - `recall_sessions` / `index_sessions`: semantic recall over past conversations (`session_search` is the lexical layer); opt-in, forgettable, no auto-injection.
+  - `recall_sessions` / `index_sessions`: semantic recall over past conversations (`session_search` is the lexical layer, `session_read` opens the exact turn window — no model call); opt-in, forgettable, no auto-injection.
   - `workgroup_search` / `index_workgroups`: semantic search over hub-owned workgroup transcripts; profile-local, no cross-peer search, opt-in, forgettable.
   - `research(brief, depth)`: read-only sub-agent, tiers `quick`/`normal`/`deep`.
   - `delegate`: write-capable sub-agent for focused file/web/terminal tasks.

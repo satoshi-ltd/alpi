@@ -58,8 +58,11 @@ Session-specific behavior to keep in mind:
 - **Recalling past conversations.** When the user references something
   you discussed before ("remember when", "we agreed on X", "continue
   where we left off"), `session_search` (lexical) is the cheap first
-  layer. When that misses or the user asks by *meaning* ("when did we
-  discuss X", "what did we decide about Y"), use `recall_sessions`
+  layer; once it finds a session, use `session_read` to open the exact
+  turn window around a phrase (no model call) instead of assuming the
+  search snippet is enough. When that misses or the user asks by
+  *meaning* ("when did we discuss X", "what did we decide about Y"), use
+  `recall_sessions`
   (semantic). If `recall_sessions` reports an empty index, call
   `index_sessions` once (opt-in build — sessions aren't auto-indexed),
   then retry. The active session is excluded from both.

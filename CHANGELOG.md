@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.9.2 — 2026-06-12 — browse past conversations exactly
+
+- **New `session_read` tool** lets the agent open the exact message window of a
+  past conversation — list recent sessions, or jump to the turns around an exact
+  phrase and scroll from there — with no embedding or extra model call. It pairs
+  with `session_search` (lexical find) and `recall_sessions` (semantic).
+
 ## v0.9.1 — 2026-06-12 — auto-read voice toggles
 
 - **Profiles and workgroups can read agent output aloud automatically.** A new

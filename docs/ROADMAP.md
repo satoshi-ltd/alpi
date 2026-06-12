@@ -27,20 +27,8 @@ sandbox, no new gateway family, and no default anti-bot posture.
 
 | ID | Item | Status |
 |---|---|---|
-| CM.5 | Exact session browse / scroll — cheap lexical session navigation around the original message window, complementing CM.4 semantic recall. | 🟡 |
-| ALP.5 | Blob transfer — `link.put_blob` / `link.get_blob`, content-addressed and chunked, for screenshots, PDFs, skill outputs, and other artefacts that should not live inline in an ALP JSON envelope. | 🔵 |
+| ALP.5 | Blob transfer — `link.put_blob` / `link.get_blob`, content-addressed and chunked, for screenshots, PDFs, skill outputs, and other artefacts that should not live inline in an ALP JSON envelope. | 🟡 |
 | BROWSER.1 | Optional lightweight browser backend — acceptance-test Obscura or a similar CDP backend behind the existing `browser` tool to cut Chromium's footprint on small hosts. | 🔵 |
-
-### CM.5. Exact session browse / scroll
-
-CM.4 gives semantic recall over past sessions. Sometimes the right answer is
-not another embedding hit, but the exact message window around a remembered
-conversation. CM.5 adds a cheap lexical/browse layer: list recent sessions,
-search exact text, and scroll around a message window without extra LLM calls.
-
-This complements `recall_sessions`; it does not replace it. The semantic tool
-finds "that conversation about pricing thresholds", while CM.5 lets the agent
-open the original surrounding turns once it has a session id or anchor.
 
 ### ALP.5. Blob transfer
 

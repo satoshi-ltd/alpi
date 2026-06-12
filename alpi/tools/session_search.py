@@ -24,6 +24,10 @@ def set_current_session_id(sid: str | None) -> None:
     _CURRENT_SESSION_ID = sid
 
 
+def current_session_id() -> str | None:
+    return _CURRENT_SESSION_ID
+
+
 class SessionSearch(Tool):
     name = "session_search"
     description = (

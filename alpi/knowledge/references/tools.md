@@ -18,7 +18,7 @@
 | Family | Tools | Use |
 |---|---|---|
 | Workspace RAG | `search_workspace`, `index_workspace`, `learn_file` | Semantic search over workspace files and durable learned documents. |
-| Session recall | `session_search`, `recall_sessions`, `index_sessions` | Lexical then semantic search over past local chat sessions. |
+| Session recall | `session_search`, `session_read`, `recall_sessions`, `index_sessions` | Lexical then semantic search over past local chat sessions; `session_read` lists recent sessions and opens a windowed turn slice (around a phrase or index) with no LLM call. |
 | Workgroup recall | `workgroup_search`, `index_workgroups` | Semantic search over hub-owned workgroup transcripts. |
 | Files | `read_file`, `write_file`, `edit_file`, `search` | Direct filesystem work. |
 | Terminal | `terminal` | Shell commands when no native tool fits. Approval + guards apply. |
@@ -42,9 +42,9 @@ model actually sees.
 - **Durable company/project docs**: call `learn_file` for explicit learning,
   then use `search_workspace`. Learned docs are copied under
   `<workspace>/.alpi/documents/YYYY/MM/` and indexed.
-- **Past chat memory**: use `session_search` first for exact words; if it fails
-  or the question is semantic, use `recall_sessions`. Indexing is opt-in via
-  `index_sessions`.
+- **Past chat memory**: `session_search` first for exact words; `session_read`
+  to open the exact turn window of a found session; `recall_sessions` when the
+  wording is fuzzy/semantic. Indexing is opt-in via `index_sessions`.
 - **Workgroup history**: use `workgroup_search` only on hub-owned workgroups.
   It is profile-local, scoped per workgroup, and opt-in via `index_workgroups`.
 - **Risky shell command**: use `terminal` only when needed. Caution commands
@@ -115,7 +115,9 @@ Output attachments (MM.2):
 
 - `session_search` is lexical; `recall_sessions` is semantic. `index_sessions`
   indexes only local `sessions/*.json`, excludes the active session, and never
-  injects recall automatically.
+  injects recall automatically. `session_read` is the browse layer: once a
+  session id or phrase is known it opens the surrounding turn window (paged via
+  `start`) — no embedding, no LLM call.
 - Deleting a session via host sessions deletion purges semantic recall rows;
   reindex orphan-sweeps removed sessions.
 - `index_workgroups` indexes decrypted hub-owned transcripts, key-history aware;

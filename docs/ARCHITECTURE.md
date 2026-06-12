@@ -293,8 +293,10 @@ Supported formats: markdown / text / source / configs (stdlib read), HTML (`html
 
 ### Session recall (`alpi/tools/recall.py`)
 
-Semantic recall over **past conversations**, the conversational-memory peer of the workspace RAG. Lexical `session_search` stays the cheap first layer (term counts over `sessions/*.json`); the semantic layer handles "when did we discuss X / what did we decide about Y" when the wording is fuzzy. Two tools:
+Recall over **past conversations**, the conversational-memory peer of the workspace RAG, in three layers: lexical find (`session_search`, term counts over `sessions/*.json`), exact browse (`session_read`, no model call), and opt-in semantic search (`index_sessions` / `recall_sessions`) for fuzzy "when did we discuss X / what did we decide about Y".
 
+- `session_search(query)` — lexical first layer; returns the tail thread of matching sessions, active session excluded.
+- `session_read(session?, phrase?, start?)` — browse layer, no embedding/LLM call: lists recent sessions, or opens a windowed turn slice around an exact phrase or `start` index (paged). Pairs with `session_search` (find → open the window).
 - `index_sessions(force?)` — **opt-in** (sessions are never auto-indexed): walks `<home>/sessions/*.json`, builds a per-turn transcript (`user:`/`alpi:` lines), chunks + embeds with the same `core/embed.py` + sqlite-vec primitives as the workspace index, into a **separate table family** (`session_files` / `session_chunks` / `session_vec` / `session_meta`) in the same `rag/store.sqlite`. Incremental (mtime/size skip); the active session is excluded.
 - `recall_sessions(query, k=5)` — cosine MATCH → `[{session_id, when, snippet, score}]`, active session excluded.
 
@@ -374,7 +376,7 @@ Sibling to `research`, but can mutate: spawn a focused sub-agent with a chosen t
 - `terminal` → `terminal`
 - `web` → `web_search`, `web_fetch`, `web_extract`
 
-**Blocked for sub-agents**: `delegate` (no recursion), `memory`, `skill`, `schedule`, `notify`, `send_message`, `email`, `session_search`, `todo` (shared global state). `research` is not in any preset either — if you need deep investigation inside a delegate task today, do it in the main agent first and pass findings via `context`.
+**Blocked for sub-agents**: `delegate` (no recursion), `memory`, `skill`, `schedule`, `notify`, `send_message`, `email`, `session_search`, `session_read`, `todo` (shared global state). `research` is not in any preset either — if you need deep investigation inside a delegate task today, do it in the main agent first and pass findings via `context`.
 
 **Budget**: hardcoded `MAX_STEPS = 30`. No config knob — it's a ceiling, not a target (sub-agent stops when done). If a real case needs more, bump the constant.
 
