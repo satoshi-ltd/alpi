@@ -11,6 +11,17 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.3.55 — 2026-06-12 — sidebar + modal fixes
+
+- **No more stray "Show less"** in the sidebar when all your alpis already fit.
+- **The profile right-click menu actually works.** "Open settings" and
+  "Delete profile…" now open the right profile (before they silently did
+  nothing); delete removes the row immediately, shows a toast, and restores it
+  if the daemon call fails.
+- **No right-click menu on connections you don't administer** — it would only
+  have shown "Pin", which already lives on the row.
+- **The Connection window closes with Esc**, like every other modal.
+
 ## v0.3.54 — 2026-06-12 — budget editor is USD-only
 
 - **The profile budget is now just a daily USD cap (or unlimited)** — the

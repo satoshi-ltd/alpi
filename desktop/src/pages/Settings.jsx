@@ -11,6 +11,7 @@ export default function Settings({
   refreshTick = 0,
   onSelectTarget,
   onRefresh,
+  onDeleteProfile,
   onOpenChat,
 }) {
   const setTarget = onSelectTarget ?? (() => {});
@@ -41,7 +42,9 @@ export default function Settings({
           profile={selectedProfile}
           profiles={profiles}
           activeConnection={activeConnection}
+          intent={target?.kind === "profile" ? target.intent : undefined}
           onSaved={onRefresh}
+          onDelete={onDeleteProfile}
           onNavigate={setTarget}
           onOpenChat={onOpenChat}
         />

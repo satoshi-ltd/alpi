@@ -373,6 +373,7 @@ export function useHostConnections({
     hostConnections,
     hostConnectionsRef,
     profiles,
+    setProfiles,
     workgroups,
     touchWorkgroup,
     pickerAlpi,

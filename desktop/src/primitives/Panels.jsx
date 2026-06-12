@@ -4,6 +4,13 @@ import Tip from "./Tip.jsx";
 import styles from "./Panels.module.css";
 
 export function Scrim({ onClose, children, align = "flex-start", top = 96 }) {
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === "Escape") onClose?.();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
   return (
     <div
       className={`anim-fade ${styles.scrim}`}

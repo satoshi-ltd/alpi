@@ -59,7 +59,9 @@ export default function ProfileDetail({
   profile: profileSummary,
   profiles,
   activeConnection,
+  intent,
   onSaved,
+  onDelete,
   onNavigate,
   onOpenChat,
 }) {
@@ -393,7 +395,12 @@ export default function ProfileDetail({
           && (activeConnection?.kind === "local" || activeConnection?.role === "admin") && (
           <Section title="Danger Zone">
             <Row label="delete">
-              <DeleteProfileAction profile={profile} onDeleted={onSaved} />
+              <DeleteProfileAction
+                profile={profile}
+                onDelete={onDelete}
+                autoConfirm={intent === "delete"}
+                onConsumed={() => onNavigate?.({ kind: "profile", id: profile.name })}
+              />
             </Row>
           </Section>
         )}

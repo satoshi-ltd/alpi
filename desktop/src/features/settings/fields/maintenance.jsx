@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import Button from "../../../primitives/Button.jsx";
 import Chip from "../../../primitives/Chip.jsx";
-import { useNotify } from "../../../primitives/Notification.jsx";
 import { Row } from "../primitives.jsx";
 import { ConfirmDelete } from "../../../primitives/index.js";
 import { Btn } from "../../../primitives/index.js";
@@ -56,33 +55,20 @@ export function StorageField({ profile, activeConnection }) {
   );
 }
 
-export function DeleteProfileAction({ profile, onDeleted }) {
-  const notify = useNotify();
-  const [busy, setBusy] = useState(false);
+export function DeleteProfileAction({ profile, onDelete, autoConfirm = false, onConsumed }) {
   const [open, setOpen] = useState(false);
 
-  async function doDelete() {
-    setBusy(true);
-    try {
-      await invoke("profile_delete", { name: profile.name });
-      notify({ message: `Profile @${profile.name} deleted`, variant: "success" });
-      await onDeleted?.();
-    } catch (e) {
-      notify({
-        message: `delete failed: ${String(e)}`,
-        variant: "error",
-        duration: 4000,
-      });
-    } finally {
-      setBusy(false);
+  useEffect(() => {
+    if (autoConfirm) {
+      setOpen(true);
+      onConsumed?.();
     }
-  }
+  }, [autoConfirm]);
 
   return (
     <span className={styles.inlineRow}>
       <Btn
         variant="ghost"
-        disabled={busy}
         style={{ color: "var(--c-danger)" }}
         onClick={() => setOpen(true)}
       >
@@ -96,7 +82,7 @@ export function DeleteProfileAction({ profile, onDeleted }) {
         mode="typed"
         open={open}
         onClose={() => setOpen(false)}
-        onConfirm={doDelete}
+        onConfirm={() => onDelete?.(profile.name)}
         title={`Delete profile @${profile.name}?`}
         consequence={`This wipes ~/.alpi/profiles/${profile.name}/ on disk — sessions, RAG, ALP keypair, every secret stored under it. Cannot be undone.`}
         typeToConfirm={profile.name}

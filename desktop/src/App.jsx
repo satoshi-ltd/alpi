@@ -252,6 +252,32 @@ export default function App() {
     setView({ kind: "settings" });
   }, []);
   const adminOnOpenSettings = canAdminEarly ? onOpenSettings : null;
+  // opens settings for a specific target (onOpenSettings only toggles the active view)
+  const openSettingsFor = useCallback((target) => {
+    setSettingsTarget(target);
+    setView({ kind: "settings" });
+  }, []);
+  const adminOpenSettingsFor = canAdminEarly ? openSettingsFor : null;
+  // Optimistic delete: drop the row now, restore it if the host call fails.
+  const onDeleteProfile = useCallback(async (name) => {
+    const snapshot = profilesRef.current;
+    setProfiles((prev) => prev.filter((p) => p.name !== name));
+    const v = viewRef.current;
+    const t = settingsTargetRef.current;
+    const viewingDeleted =
+      (v?.kind === "profile" && v.profile === name) ||
+      (v?.kind === "settings" && t?.kind === "profile" && t.id === name);
+    if (viewingDeleted) setView({ kind: "empty" });
+    try {
+      await invoke("profile_delete", { name });
+      window.notify?.(`Profile @${name} deleted`, { variant: "success" });
+      reload();
+    } catch (e) {
+      setProfiles(snapshot);
+      window.notify?.(`Delete @${name} failed: ${String(e)}`, { variant: "error" });
+    }
+  }, [setProfiles, reload]);
+  const adminOnDeleteProfile = canAdminEarly ? onDeleteProfile : null;
   useWindowChrome({
     viewRef,
     setView,
@@ -288,6 +314,7 @@ export default function App() {
     hostConnections,
     hostConnectionsRef,
     profiles,
+    setProfiles,
     workgroups,
     touchWorkgroup,
     pickerAlpi,
@@ -904,6 +931,7 @@ export default function App() {
         onNewWorkgroup={adminOnNewWorkgroup}
         onCloseSettings={closeSettings}
         onSetSettingsTarget={setSettingsTarget}
+        onOpenSettingsTarget={adminOpenSettingsFor}
         onTogglePin={onTogglePin}
         onSetHostConnection={onSetHostConnection}
         onAddHostConnection={onAddHostConnection}
@@ -927,6 +955,7 @@ export default function App() {
               onTogglePin={onTogglePin}
               onSelectTarget={setSettingsTarget}
               onRefresh={reload}
+              onDeleteProfile={adminOnDeleteProfile}
               onOpenChat={closeSettings}
               onSetHostConnection={onSetHostConnection}
               onAddHostConnection={onAddHostConnection}

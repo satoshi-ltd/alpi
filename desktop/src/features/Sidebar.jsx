@@ -82,6 +82,7 @@ function Sidebar({
   onOpenPalette,
   onCloseSettings,
   onSetSettingsTarget,
+  onOpenSettingsTarget,
   onTogglePin,
   onSetHostConnection,
   onAddHostConnection,
@@ -251,20 +252,21 @@ function Sidebar({
   ]);
 
   const [showAllAlpis, setShowAllAlpis] = useState(false);
-  const alpisOverflow =
-    sortedProfiles.length > maxAlpisVisible && !showAllAlpis;
-  const visibleAlpis = alpisOverflow
-    ? sortedProfiles.slice(0, maxAlpisVisible)
-    : sortedProfiles;
+  const hasAlpisOverflow = sortedProfiles.length > maxAlpisVisible;
+  const visibleAlpis =
+    hasAlpisOverflow && !showAllAlpis
+      ? sortedProfiles.slice(0, maxAlpisVisible)
+      : sortedProfiles;
   const hiddenAlpisCount = sortedProfiles.length - maxAlpisVisible;
 
   const [ctxMenu, setCtxMenu] = useState(null);
   const closeCtxMenu = useCallback(() => setCtxMenu(null), []);
-  const canOpenSettings = Boolean(onOpenSettings);
 
   const openProfileCtx = useCallback(
     (e, profile) => {
       e.preventDefault();
+      // no admin actions here → menu would be just a redundant Pin (already on the row)
+      if (!onOpenSettingsTarget) return;
       const pinned = pinnedProfileNames.includes(profile.name);
       const items = [
         {
@@ -272,78 +274,67 @@ function Sidebar({
           icon: pinned ? <PinOffIcon /> : <PinIcon />,
           onClick: () => onTogglePin?.("profiles", profile.name),
         },
+        { kind: "separator" },
+        {
+          label: "Open settings",
+          icon: <GearIcon />,
+          shortcut: "⌘,",
+          onClick: () => onOpenSettingsTarget({ kind: "profile", id: profile.name }),
+        },
+        { kind: "separator" },
+        {
+          label: "Delete profile…",
+          icon: <TrashIcon />,
+          kind: "danger",
+          onClick: () =>
+            onOpenSettingsTarget({ kind: "profile", id: profile.name, intent: "delete" }),
+        },
       ];
-      if (canOpenSettings) {
-        items.push(
-          { kind: "separator" },
-          {
-            label: "Open settings",
-            icon: <GearIcon />,
-            shortcut: "⌘,",
-            onClick: () => onSetSettingsTarget?.({ kind: "profile", id: profile.name }),
-          },
-          { kind: "separator" },
-          {
-            label: "Delete profile…",
-            icon: <TrashIcon />,
-            kind: "danger",
-            onClick: () => onSetSettingsTarget?.({ kind: "profile", id: profile.name }),
-          },
-        );
-      }
       setCtxMenu({ x: e.clientX, y: e.clientY, items });
     },
-    [pinnedProfileNames, onTogglePin, onSetSettingsTarget, canOpenSettings],
+    [pinnedProfileNames, onTogglePin, onOpenSettingsTarget],
   );
 
   const openWorkgroupCtx = useCallback(
     (e, workgroup) => {
       e.preventDefault();
+      if (!onOpenSettingsTarget) return;
       const key = `${workgroup.profile}/${workgroup.id}`;
       const pinned = pinnedWorkgroupKeys.includes(key);
+      const wgTarget = {
+        kind: "workgroup",
+        id: workgroup.id,
+        profile: workgroup.profile,
+      };
       const items = [
         {
           label: pinned ? "Unpin from top" : "Pin to top",
           icon: pinned ? <PinOffIcon /> : <PinIcon />,
           onClick: () => onTogglePin?.("workgroups", key),
         },
+        { kind: "separator" },
+        {
+          label: "Open settings",
+          icon: <GearIcon />,
+          shortcut: "⌘,",
+          onClick: () => onOpenSettingsTarget(wgTarget),
+        },
+        {
+          label: "Archive workgroup",
+          icon: <ArchiveIcon />,
+          onClick: () => window.notify?.(`#${workgroup.id} archived`, { kind: "info" }),
+        },
+        { kind: "separator" },
+        {
+          label: "Delete workgroup…",
+          icon: <TrashIcon />,
+          kind: "danger",
+          onClick: () => onOpenSettingsTarget(wgTarget),
+        },
       ];
-      if (canOpenSettings) {
-        items.push(
-          { kind: "separator" },
-          {
-            label: "Open settings",
-            icon: <GearIcon />,
-            shortcut: "⌘,",
-            onClick: () =>
-              onSetSettingsTarget?.({
-                kind: "workgroup",
-                id: workgroup.id,
-                profile: workgroup.profile,
-              }),
-          },
-          {
-            label: "Archive workgroup",
-            icon: <ArchiveIcon />,
-            onClick: () => window.notify?.(`#${workgroup.id} archived`, { kind: "info" }),
-          },
-          { kind: "separator" },
-          {
-            label: "Delete workgroup…",
-            icon: <TrashIcon />,
-            kind: "danger",
-            onClick: () =>
-              onSetSettingsTarget?.({
-                kind: "workgroup",
-                id: workgroup.id,
-                profile: workgroup.profile,
-              }),
-          },
-        );
-      }
       setCtxMenu({ x: e.clientX, y: e.clientY, items });
     },
-    [pinnedWorkgroupKeys, onTogglePin, onSetSettingsTarget, canOpenSettings],
+    [pinnedWorkgroupKeys, onTogglePin, onOpenSettingsTarget],
   );
 
   const renderProfileRow = (p, keyPrefix = "") => (
@@ -463,7 +454,7 @@ function Sidebar({
                   renderProfileRow(p)
                 ),
               )}
-              {(alpisOverflow || showAllAlpis) && (
+              {hasAlpisOverflow && (
                 <div ref={showMoreRef} className={styles.showMoreWrap}>
                   <Btn variant="ghost" onClick={() => setShowAllAlpis((v) => !v)}>
                     {showAllAlpis
