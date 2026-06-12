@@ -107,7 +107,9 @@ Not implemented (tracked, not planned): per-turn aggregate cap and inline previe
 doesn't know about) AND **refused by the executor** as defence in
 depth — if a stale context or a peer's `link.ask` names a denied tool,
 the call returns `tool denied for this profile: <name>` instead of
-running. Unknown names are no-ops, so typos are harmless.
+running. Unknown names are no-ops, so typos are harmless. Denying
+`alpi_knowledge` also drops the self-knowledge rule from the system
+prompt, so the model is never told to call a tool it cannot reach.
 
 Canonical names are the strings used at registration time —
 `write_file`, `edit_file`, `terminal`, `email`, `send_message`,
@@ -414,7 +416,7 @@ meaningful business constraint (their cost varies by model), so the only
 caps that mean anything are dollars or nothing.
 
 The cap covers **every** turn this profile runs: interactive TUI
-replies, gateway responses (Telegram / IMAP / Gmail), scheduled jobs,
+replies, gateway responses (Telegram / IMAP / Gmail / Matrix), scheduled jobs,
 sub-agent spawns (`research`, `delegate`, `read_image`), and inbound
 ALP calls from pinned peers. It is re-checked **before each step**
 within a turn, so a long multi-step turn aborts as soon as it crosses
@@ -503,7 +505,7 @@ activates here.
 
 ```yaml
 service:
-  gateway: true     # Telegram / IMAP / Gmail / webhook listeners
+  gateway: true     # Telegram / IMAP / Gmail / Matrix / webhook listeners
   schedule: true    # cron tick loop
   alp: true         # peer-to-peer ALP listener
   workgroups: true  # ALP.3 outbound poller for joined workgroups

@@ -109,7 +109,7 @@ Dangerous classifications are always blocked. Globs do not apply to compound com
 
 ## Tool denylist
 
-`tools.deny` is a per-profile list of tool names hidden from the LLM's schema and refused by the executor as defence in depth. Used to tighten profiles exposed to less-trusted input (e.g. a librarian profile reachable via `link.ask`).
+`tools.deny` is a per-profile list of tool names hidden from the LLM's schema and refused by the executor as defence in depth. Used to tighten profiles exposed to less-trusted input (e.g. a librarian profile reachable via `link.ask`). Denying `alpi_knowledge` also drops the self-knowledge rule from the system prompt.
 
 ```yaml
 tools:

@@ -128,6 +128,42 @@ def test_clean_memory_is_not_flagged_and_prefix_stays_stable(tmp_path: Path) -> 
     assert parts["memory_md"].startswith("# AGENT MEMORY")
 
 
+def test_missing_agent_md_falls_back_to_default_persona(tmp_path: Path) -> None:
+    cfg = _make_cfg(tmp_path)
+    agent_profile = pc.build_parts(tmp_path, cfg)["agent_profile"]
+    assert "You are alpi" in agent_profile
+
+
+def test_existing_agent_md_wins_over_default(tmp_path: Path) -> None:
+    cfg = _make_cfg(tmp_path)
+    _write_memory(tmp_path, "AGENT.md", "You are Atlas.\n")
+    agent_profile = pc.build_parts(tmp_path, cfg)["agent_profile"]
+    assert agent_profile == "You are Atlas."
+    assert "You are alpi" not in agent_profile
+
+
+def test_knowledge_rule_dropped_when_tool_denied(tmp_path: Path) -> None:
+    (tmp_path / "config.yaml").write_text(
+        "model: openrouter/anthropic/claude-3.5-sonnet\n"
+        "tools:\n  deny: [alpi_knowledge]\n"
+    )
+    cfg = cfg_mod.load(tmp_path)
+    assert pc.build_parts(tmp_path, cfg)["knowledge_rule"] == ""
+
+
+def test_knowledge_rule_present_by_default(tmp_path: Path) -> None:
+    cfg = _make_cfg(tmp_path)
+    assert "alpi_knowledge" in pc.build_parts(tmp_path, cfg)["knowledge_rule"]
+
+
+def test_matrix_surface_gets_plain_text_hint(tmp_path: Path, monkeypatch) -> None:
+    cfg = _make_cfg(tmp_path)
+    monkeypatch.setenv("ALPI_PLATFORM", "matrix")
+    surface = pc.build_parts(tmp_path, cfg)["surface"]
+    assert surface.startswith("# SURFACE: Matrix")
+    assert "plain text" in surface
+
+
 def test_surface_change_only_affects_surface_part(tmp_path: Path, monkeypatch) -> None:
     cfg = _make_cfg(tmp_path)
     monkeypatch.delenv("ALPI_PLATFORM", raising=False)

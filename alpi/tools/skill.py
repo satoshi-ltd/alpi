@@ -33,6 +33,8 @@ _FILENAME_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._-]{0,100}$")
 MAX_AGENT_SKILLS = 40
 MAX_FILE_BYTES = 1_048_576
 MAX_BODY_CHARS = 100_000
+# Index truncation only — schema's DESC_MAX (150) is a soft warning, not a cap.
+_INDEX_DESC_MAX = 200
 
 _EDIT_PLACEHOLDER_RE = re.compile(
     r"^\s*(?:\[?pending[_ -]?view\]?|todo|tbd|\.{3}|<placeholder>)\s*$",
@@ -106,6 +108,8 @@ def skills_index_block(home: Path, cfg_raw: dict[str, Any] | None = None) -> str
             continue
         name = meta.get("name") or p.name
         desc = meta.get("description") or ""
+        if len(desc) > _INDEX_DESC_MAX:
+            desc = desc[: _INDEX_DESC_MAX - 1].rstrip() + "…"
         cat = meta.get("category") or "miscellaneous"
         by_cat.setdefault(cat, []).append((name, desc))
     for cat in sorted(by_cat):

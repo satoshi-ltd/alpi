@@ -152,3 +152,16 @@ def test_inactive_skills_do_not_appear_in_index(
     assert "needs-secret" not in index, (
         "skills failing requires_env must be hidden from the prompt"
     )
+
+
+def test_skills_index_block_truncates_long_descriptions(tmp_home: Path) -> None:
+    from alpi.tools.skill import _INDEX_DESC_MAX
+
+    long_desc = "word " * 80
+    _write_skill(tmp_home, name="long-desc", description=long_desc.strip())
+
+    index = skills_index_block(tmp_home)
+    line = next(l for l in index.splitlines() if "long-desc:" in l)
+
+    assert line.rstrip().endswith("…")
+    assert len(line.split("long-desc: ", 1)[1]) <= _INDEX_DESC_MAX

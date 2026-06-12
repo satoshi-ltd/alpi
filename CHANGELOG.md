@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.9.3 — 2026-06-12 — system prompt hardening
+
+- **Clearer agent ground rules.** The system prompt now states plainly that the
+  workspace is a default root, not a sandbox — paths you give explicitly are
+  honoured — and that a literal `curl`/`wget` command you type runs as-is.
+- **Recall has its own section.** Guidance for finding past conversations,
+  workspace documents, and workgroup history is grouped and easier for the
+  agent to follow.
+- **Matrix replies render correctly.** The agent now knows Matrix messages are
+  plain text and avoids Markdown that would show as literal asterisks.
+- **Denying `alpi_knowledge` is consistent** — the prompt no longer tells the
+  agent to call a tool the profile has denied.
+- **Profiles without an `AGENT.md` get the default persona** instead of
+  starting with no identity.
+
 ## v0.9.2 — 2026-06-12 — browse past conversations exactly
 
 - **New `session_read` tool** lets the agent open the exact message window of a

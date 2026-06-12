@@ -73,6 +73,13 @@ PLATFORM_HINTS: dict[str, str] = {
         "greetings and sign-offs unless the user's message warranted "
         "them (business tone vs casual)."
     ),
+    "matrix": (
+        "# SURFACE: Matrix\n"
+        "You are replying on Matrix. Messages are sent as plain text — "
+        "Markdown is not rendered and shows as literal asterisks and "
+        "backticks. Keep replies chat-friendly: short paragraphs, flat "
+        "text, no sign-offs."
+    ),
 }
 
 
@@ -134,7 +141,8 @@ def build_parts(home: Path, cfg) -> dict[str, str]:
 
     parts["agent_profile"] = (
         cfg.agent_path.read_text().strip()
-        if cfg.agent_path.exists() else ""
+        if cfg.agent_path.exists()
+        else resources.files("alpi.prompts").joinpath("default_agent.md").read_text().strip()
     )
     parts["base_prompt"] = (
         resources.files("alpi.prompts").joinpath("system_prompt.md").read_text().strip()
@@ -143,7 +151,9 @@ def build_parts(home: Path, cfg) -> dict[str, str]:
     parts["system_time"] = clock.system_time_section()
     parts["surface"] = _platform_hint()
     parts["guidance"] = guidance.render_guidance(cfg.model, cfg.providers)
-    parts["knowledge_rule"] = _ALPI_KNOWLEDGE_RULE
+    parts["knowledge_rule"] = (
+        "" if "alpi_knowledge" in (cfg.tools.deny or []) else _ALPI_KNOWLEDGE_RULE
+    )
 
     skills_block = skills_index_block(home, cfg_raw=cfg.raw)
     parts["skills_index"] = skills_block or ""

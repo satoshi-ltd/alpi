@@ -70,7 +70,7 @@ in one profile's service leaves siblings untouched.
 
 | What it does | Lifecycle | Install / config |
 |---|---|---|
-| Boots one task per (profile, service) on a single asyncio loop: gateway (Telegram / IMAP / Gmail / webhook), scheduler tick, ALP socket (Unix + optional TCP/Noise_XK), workgroups poller, host plane. Toggle which services run for a profile via `service.{gateway,schedule,alp,workgroups,host}: bool` in that profile's `config.yaml`. | `alpi daemon start\|stop\|restart\|status` | auto-installed on first `alpi setup`; manage from `alpi setup → Services → Daemon` (default profile only) |
+| Boots one task per (profile, service) on a single asyncio loop: gateway (Telegram / IMAP / Gmail / Matrix / webhook), scheduler tick, ALP socket (Unix + optional TCP/Noise_XK), workgroups poller, host plane. Toggle which services run for a profile via `service.{gateway,schedule,alp,workgroups,host}: bool` in that profile's `config.yaml`. | `alpi daemon start\|stop\|restart\|status` | auto-installed on first `alpi setup`; manage from `alpi setup → Services → Daemon` (default profile only) |
 
 There's exactly one daemon per machine, one plist / unit. Adding
 a new profile just creates a directory under `~/.alpi/profiles/`;

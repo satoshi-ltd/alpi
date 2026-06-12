@@ -145,7 +145,7 @@ alpi/
 │   └── … (read_file, write_file, edit_file, todo, web_*, schedule,
 │         memory, session_search, send_message, email, config)
 ├── tui/                    Textual app, widgets, screens, theme
-├── gateway/                inbound platforms (Telegram / IMAP / Gmail), hosted by the alpi daemon
+├── gateway/                inbound platforms (Telegram / IMAP / Gmail / Matrix), hosted by the alpi daemon
 ├── scheduler/              cron + once jobs, hosted by the alpi daemon
 ├── mail/                   mail backends (imap.py — IMAP+SMTP; gmail.py coming in T)
 ├── mcp/                    MCP client (stdio JSON-RPC) + registry
@@ -230,7 +230,7 @@ Per turn: append user message → loop {LLM stream → emit deltas → exec tool
 
 Events emitted to the UI sink: `user`, `reasoning_delta`, `assistant_delta`, `assistant_done`, `tool_start`, `tool_state`, `tool_end`, `usage`, `error`, `done`, `interrupted`. The TUI consumes them; the gateway subprocess consumes a subset via JSON-lines.
 
-The system prompt for each turn is built from: `AGENT.md` (agent profile — voice, style, identity) → base prompt → environment block (workspace, profile home, path rule) → **platform hint** (`_platform_hint()` — injects per-surface guidance when `ALPI_PLATFORM` is set by the caller: `cron`, `telegram`, `email`, `gmail`; empty for TUI) → **skills index** (auto-injected by `alpi.tools.skill.skills_index_block`) → `USER.md` → `MEMORY.md`.
+The system prompt for each turn is built from: `AGENT.md` (agent profile — voice, style, identity) → base prompt → environment block (workspace, profile home, path rule) → **platform hint** (`_platform_hint()` — injects per-surface guidance when `ALPI_PLATFORM` is set by the caller: `cron`, `telegram`, `email`, `gmail`, `matrix`; empty for TUI) → **skills index** (auto-injected by `alpi.tools.skill.skills_index_block`) → `USER.md` → `MEMORY.md`.
 
 The gateway (`alpi/gateway/run.py`) sets `ALPI_PLATFORM=<msg.platform>` on every spawned subprocess so Telegram replies arrive Markdown-aware and email replies arrive plain-text-only. The scheduler (`alpi/scheduler/run.py`) sets `ALPI_PLATFORM=cron` so scheduled jobs run knowing no user is present and they cannot ask for clarification.
 
@@ -422,7 +422,7 @@ profile's gateway leaves siblings untouched. Tasks are named
 Per-profile services (`service.{gateway, schedule, alp,
 workgroups, host}` in each profile's `config.yaml`):
 
-- **gateway** — Telegram / IMAP / Gmail / webhook listeners.
+- **gateway** — Telegram / IMAP / Gmail / Matrix / webhook listeners.
 - **schedule** — cron tick loop.
 - **alp** — ALP **listener** (inbound). Serves the full protocol
   on a Unix socket plus optional Noise_XK on TCP: `link.ping`,
@@ -941,7 +941,7 @@ Every subsystem writes to a single flat folder: `~/.alpi/logs/<subsystem>.log`, 
 Four sources today:
 
 - **`service`** — the unified orchestrator's root log: subsystem
-  start/stop, gateway listener events (Telegram / IMAP / Gmail),
+  start/stop, gateway listener events (Telegram / IMAP / Gmail / Matrix),
   scheduler ticks, ALP listener traffic, delivery errors. Written
   by `alpi.service` and every subsystem that logs through the
   root logger.
