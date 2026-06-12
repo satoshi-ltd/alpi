@@ -168,9 +168,12 @@ review:
    keep the upper bound one minor ahead (``>=1.83,<1.85`` shape).
 5. ``uv lock``, commit.
 
-**CVEs.** Filter by surface: alpi uses the **SDK**, not the **Proxy**
-server. CVEs scoped to LiteLLM Proxy (e.g. CVE-2026-30623, MCP stdio
-RCE) don't apply. SDK CVEs do — bump promptly.
+**CVEs.** `alpi audit` checks installed Python packages against OSV with exact
+versions. Use `alpi audit --offline` on machines that must not make network
+calls; use plain `alpi audit` before releases or after dependency changes.
+Filter findings by surface: alpi uses the **SDK**, not the **Proxy** server.
+CVEs scoped to LiteLLM Proxy (e.g. CVE-2026-30623, MCP stdio RCE) don't apply.
+SDK CVEs do — bump promptly.
 
 **Alternatives evaluated.** Raw SDKs (rejected: maintenance cost,
 see above). [chuk-llm](https://github.com/chrishayuk/chuk-llm) on
@@ -247,6 +250,11 @@ observability, the signals to watch:
 - **Daemon liveness.** `alpi doctor` in a cron; exits non-zero if
   any live check fails. Alert on non-zero. The Daemon row covers
   the supervisor's PID + install backend.
+- **Security posture.** `alpi audit --offline` in cron gives a local-only
+  posture scan of every profile: secret file permissions, public binds,
+  disabled hardening, and uncapped budgets. Run `alpi audit` manually when
+  network is allowed to include OSV CVEs. Its exit code is non-zero only on
+  `fail` findings; warnings are for review.
 - **Log tail error rate.** `grep ERROR ~/.alpi/logs/*.log | wc -l`
   over a window — spike = misconfig, broken credentials, LLM API
   outage.

@@ -3,6 +3,8 @@
 ## Answer directly
 
 - First diagnostic command: `alpi doctor` (exits non-zero on any failed live check; flags stale binary).
+- Security posture command: `alpi audit` (whole install, every profile);
+  use `alpi audit --offline` for local-only cron checks.
 - Evidence rollup: `alpi digest` / `alpi -p <profile> digest`.
 - Daemon control: `alpi daemon status|restart|stop` — one daemon supervises every profile on the machine.
 - Durable memory promotion is CLI-only via `alpi memory promote`.
@@ -11,6 +13,8 @@
 
 ```bash
 alpi doctor
+alpi audit --offline
+alpi audit
 alpi digest
 alpi digest --since 24h
 alpi digest --json
@@ -18,6 +22,10 @@ alpi -p <profile> digest --since 7d
 ```
 
 - `doctor`: live checks for common setup problems.
+- `audit`: read-only security posture for the whole install. Offline checks:
+  secret-file permissions, public/all-interface binds, terminal sandbox,
+  LLM watchdog, and daily spend cap. Online check: OSV CVEs for installed
+  Python packages. Exit code is non-zero only for `fail`, not warnings.
 - `digest`: read-only evidence — tool availability, gateway breaker state, skill telemetry, memory promotion backlog/pressure, compaction rate.
 
 ## Daemon

@@ -403,9 +403,44 @@ Risk profile of the runtime set:
 ### Policy
 
 - **`pip-audit` before every release.** Zero tolerance for known CVEs on the lockfile.
+- **`alpi audit` for local posture.** Run it before releases and after changing
+  daemon/network/security config. It scans every profile in the install,
+  reports known CVEs via OSV when online, and never mutates files or packages.
 - **Image / parser deps on the latest minor.** Pillow especially — image parser CVEs land multiple times per year.
 - **New runtime deps require justification.** A line in `ARCHITECTURE.md → Dependencies` and a row in the table above. No drift.
 - **Reverse-engineered integrations carry a fallback plan.** `edge-tts` (Microsoft), `playwright-stealth` (detection vendors), `ddgs` (DuckDuckGo HTML) are all at the mercy of third parties. When they break we swap, we don't patch around them forever.
+
+## Security posture audit
+
+`alpi audit` is the read-only posture scan for an installed machine. It is
+different from `alpi doctor`: doctor asks "is the active profile healthy and
+reachable right now?", while audit asks "is this whole install hardened enough
+to leave unattended?".
+
+The command scans the entire `~/.alpi` install, not just the selected profile:
+
+```bash
+alpi audit           # includes OSV CVE lookup when network is available
+alpi audit --offline # local-only: permissions, binds, hardening
+```
+
+Checks today:
+
+- **Dependencies** (global): installed Python packages are queried against
+  OSV with exact versions. Network failure is fail-open (`info`), advisories
+  are `warn`, and `--offline` skips the lookup.
+- **Permissions** (per profile): `.env`, ALP private keys, and `secrets/`
+  must not have group/other bits; loose mode is `fail`. `config.yaml` and
+  `peers.yaml` are `warn` when group/other readable.
+- **Network bind** (per profile): reuses doctor's public-bind exposure check.
+  Public or all-interface binds are `warn`, not enforcement.
+- **Hardening** (per profile): terminal sandbox off, stale-call watchdog
+  disabled, and no daily USD cap are reported as posture findings.
+
+Exit code is `1` only when a `fail` is present. Warnings are visible but do not
+break cron or release scripts. The command never changes permissions, writes
+config, upgrades packages, or phones home unless the user explicitly runs the
+online CVE check by omitting `--offline`.
 
 ## Inline image reads (host plane)
 

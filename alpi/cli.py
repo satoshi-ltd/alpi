@@ -345,6 +345,7 @@ class _OrderedGroup(click.Group):
         "chat",
         "setup",
         "doctor",
+        "audit",
         "update",
         "diff",
         "logs",
@@ -1343,6 +1344,19 @@ def doctor_cmd(ctx: click.Context) -> None:
     profile: str = ctx.obj.get("profile") or "default"
     checks = doctor.run_and_render(ui._console, h, profile, __version__)
     ctx.exit(doctor.exit_code(checks))
+
+
+@main.command("audit")
+@click.option("--offline", is_flag=True, help="Skip network checks (OSV CVE lookup).")
+@click.pass_context
+def audit_cmd(ctx: click.Context, offline: bool) -> None:
+    """Read-only security posture scan of the whole install (every profile)."""
+    from alpi import audit, home, ui
+
+    root = home.alpi_root()
+    checks = audit.run_all(root, offline=offline)
+    audit.render(ui._console, checks, __version__)
+    ctx.exit(audit.exit_code(checks))
 
 
 @main.command("logs")

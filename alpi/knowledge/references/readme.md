@@ -14,6 +14,7 @@ alpi setup           # model, gateways, MCPs, sandbox, daemon
 alpi                 # interactive TUI
 alpi -p work         # named profile
 alpi doctor          # live health checks
+alpi audit           # whole-install security posture scan
 alpi daemon status | restart
 alpi update --check
 alpi --version
@@ -62,6 +63,9 @@ LLM is treated as powerful, fallible, next to user credentials. Layered local gu
 - sensitive-path denylist shared across file + terminal;
 - SSRF protection on web tools; prompt-injection warnings on fetched web/email content;
 - OSV malware checks before skill or MCP install;
+- `alpi audit` scans every profile for loose secret permissions, public binds,
+  disabled hardening, uncapped budgets, and installed-package CVEs; `--offline`
+  skips the OSV lookup;
 - audit via `approval.log` and `agent.log`. see security
 
 ## Related topics

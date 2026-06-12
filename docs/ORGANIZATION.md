@@ -34,9 +34,9 @@ deal flow. The bootstrap pattern is the same.
   on-demand layers, 4 standing workgroups. **This document focuses on
   it as the primary worked example.**
 - [`web-factory/`](../organizations/web-factory/web-factory.md) — a
-  standalone factory producing ~120 hotel websites a year. 10 profiles,
-  3 persistent workgroups, ephemeral `proj-<slug>` workgroup per
-  hotel. Shows how an org can carry its own templates, brand starters,
+  standalone factory producing ~120 hotel websites a year. 11 profiles,
+  3 persistent workgroups, plus a persistent `proj-<slug>` workgroup
+  per hotel. Shows how an org can carry its own templates, brand starters,
   and per-project bootstrap script alongside the standard pieces.
 
 See [`organizations/README.md`](../organizations/README.md) for the
@@ -192,7 +192,7 @@ for different intents:
   profile wipe.
 - `--workspace-only` — re-sync workspace scaffold + templates/assets
   (useful when iterating on `web-factory/templates/` or
-  `web-factory/library/starters/`; no-op for orgs without a synced
+  `web-factory/library/`; no-op for orgs without a synced
   workspace).
 - `--no-check` — skip the pre-bootstrap validation gate. Use sparingly,
   only when iterating on tooling itself.
@@ -219,7 +219,11 @@ needed.
 
 **Changing a model.** Edit `tier: strong | default` in the agent's
 frontmatter, or override `daily_usd` directly. Per-org model defaults
-live in `organizations/company/org.yaml` under `models:`.
+live in `organizations/company/org.yaml` under `models:`. Vision is **not
+a tier** — every agent reasons on a text model; an agent that needs to SEE
+calls a per-call vision SKILL (e.g. web-factory's muse → `analyze-image`,
+which sends the image to a vision model via OpenRouter), never a vision
+base model.
 
 **Adding a common skill.** Drop the skill under
 `organizations/company/common/skills/` and add an entry to the

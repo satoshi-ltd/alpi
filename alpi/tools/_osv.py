@@ -13,6 +13,7 @@ from typing import Iterable
 import httpx
 
 _OSV_URL = "https://api.osv.dev/v1/query"
+_OSV_BATCH_URL = "https://api.osv.dev/v1/querybatch"
 
 _PYPI_IMPORT_RE = re.compile(r"^\s*(?:from\s+([a-zA-Z_][a-zA-Z0-9_]*)|import\s+([a-zA-Z_][a-zA-Z0-9_]*))", re.M)
 _NPM_PKG_RE = re.compile(r"^(@[a-z0-9][\w.-]*\/[a-z0-9][\w.-]*|[a-z0-9][\w.-]*)$", re.I)
@@ -58,6 +59,33 @@ def check(ecosystem: str, names: Iterable[str]) -> list[str]:
                 url = f"https://osv.dev/vulnerability/{advisory_id}"
                 advisories.append(f"✗ {name} ({ecosystem}): {advisory_id} — {summary} ({url})")
     return advisories
+
+
+def check_versions(ecosystem: str, packages: list[tuple[str, str]]) -> dict[str, list[str]] | None:
+    """Map package name → advisory IDs affecting its installed version.
+
+    None on network failure (fail-open); empty dict = all clean.
+    """
+    if not packages:
+        return {}
+    queries = [
+        {"package": {"name": name, "ecosystem": ecosystem}, "version": version}
+        for name, version in packages
+    ]
+    try:
+        with httpx.Client(timeout=10.0) as client:
+            r = client.post(_OSV_BATCH_URL, json={"queries": queries})
+            r.raise_for_status()
+            data = r.json() or {}
+    except Exception:
+        return None
+    results = data.get("results") or []
+    out: dict[str, list[str]] = {}
+    for (name, _version), res in zip(packages, results):
+        ids = [v.get("id") for v in (res.get("vulns") or []) if v.get("id")]
+        if ids:
+            out.setdefault(name, []).extend(ids)
+    return out
 
 
 def _query(ecosystem: str, package: str) -> list[dict] | None:

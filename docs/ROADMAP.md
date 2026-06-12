@@ -12,41 +12,11 @@ Legend: ✅ shipped · 🔵 backlog · 🟡 next up · ⏸ blocked · 🔴 gate.
 
 ---
 
-## v0.9 cycle (open)
-
-**Theme: safer unattended runtime.**
-The retrieval spine is done. v0.9 focuses on letting profiles run longer,
-farther away from the user's main machine, and with better failure evidence —
-without turning Alpi into a broad orchestration platform.
-
-| ID | Item | Status |
-|---|---|---|
-| AUDIT.1 | `alpi audit` — local dependency / config / security posture scan: stale deps, known CVEs, exposed binds, risky permissions, and missing hardening warnings. | 🟡 |
-
-v0.9 should stay narrow: improve observability and failure handling on
-surfaces Alpi already owns. No new execution backend, no worker-lane
-marketplace, no cloud sandbox abstraction, and no automatic file migration.
-With the credential-file denylist shipped, `AUDIT.1` is next and
-closes the safety posture.
-
-### AUDIT.1. `alpi audit`
-
-`alpi doctor` explains whether the current install is healthy. AUDIT.1 is the
-deeper, explicit security / maintenance pass: dependency CVEs, stale pinned
-versions, risky host binds, world-readable control files, bad permissions,
-disabled hardening, and config combinations that are valid but unsafe for an
-unattended profile.
-
-The first version should stay local and report-only. No cloud telemetry, no
-auto-upgrades, no package-manager writes. It can call public vulnerability
-databases only when the user explicitly runs the command and network is
-available; otherwise it reports what can be checked offline.
-
-## v0.10 cycle (planned)
+## v0.10 cycle (open)
 
 **Theme: artifact-capable agents on lighter runtime surfaces.**
-v0.8 gave profiles semantic recall and workgroup transcript search. v0.9
-hardens unattended safety. v0.10 should make that base more useful for real
+The retrieval spine and the unattended-safety pass (FS.1 denylist, `alpi
+audit`) are done. v0.10 makes that hardened base more useful for real
 agentic work: browsing exact past conversations, moving artefacts between
 peers without abusing JSON envelopes, and proving whether the browser stack
 can get lighter on small hosts.

@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.9.0 — 2026-06-12 — `alpi audit` security posture scan
+
+- **New `alpi audit` command** — a read-only security scan of your whole
+  install, every profile at once (not just the active one). It flags
+  world-readable secrets (`.env`, ALP keys, `secrets/`), public network binds,
+  disabled hardening (terminal sandbox off, no spend cap, stale-call watchdog
+  off), and known CVEs in your installed dependencies (via osv.dev).
+- **`alpi audit --offline`** skips the network lookup for a pure-local scan.
+- It only reports — it never changes permissions, config, or packages.
+
 ## v0.8.25 — 2026-06-12 — file tools won't read your .env secrets
 
 - **The file tools now refuse `.env` files** (`.env`, `.env.local`,

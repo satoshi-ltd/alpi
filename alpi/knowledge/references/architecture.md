@@ -91,6 +91,9 @@ Contracts:
 ## Doctor and cleanup
 
 - `alpi doctor` — read-only health; may warn about outsized stores (sessions, TTS cache, workgroup transcripts), never deletes.
+- `alpi audit` — read-only security posture for the whole install; scans every
+  profile, checks permissions/network/hardening offline, and optionally queries
+  OSV for installed-package CVEs unless `--offline` is set.
 - `alpi setup -> Cleanup` — manual cleanup for caches, logs, mentions, gateway sessions, schedule output, workgroup files, RAG freelist vacuum.
 - Desktop Manage Sessions — richer chat-session pruning UI.
 

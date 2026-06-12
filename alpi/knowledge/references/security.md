@@ -161,6 +161,13 @@ actor attribution on the host plane. What is recorded:
   signed, replay-checked, identity-pinned envelopes. The one plane with a
   cryptographic actor.
 
+`alpi audit` is the installed-machine posture scan. It is read-only and scans
+every profile, not just the selected one. Offline checks: secret-file
+permissions (`.env`, ALP private key, `secrets/`), public/all-interface binds,
+terminal sandbox, LLM stale-call watchdog, and daily USD budget. Online check:
+installed Python package CVEs via OSV; `alpi audit --offline` skips it. Exit
+code is `1` only for `fail` findings; warnings are visible review items.
+
 Gaps for a fleet (not a single owner): host RPC validates the device token
 but does not propagate or log it, so a privileged change isn't attributable
 to a device/human; records are local and mutable (no WORM, no signing, no
