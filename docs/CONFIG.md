@@ -84,6 +84,7 @@ Three options:
 | `tools.tts.voice` | `"en-US-AriaNeural"` | Edge TTS voice id | next turn |
 | `tools.tts.rate` | `""` | string (`"+10%"`, `"-20%"`) — speed | next turn |
 | `tools.tts.pitch` | `""` | string (`"+5Hz"`, `"-10Hz"`) — pitch | next turn |
+| `tools.tts.auto_read` | `false` | bool — apps auto-play each agent reply aloud | next turn |
 | `tools.stt.model` | `"base"` | `tiny` \| `base` \| `small` \| `medium` \| `large-v3` | next turn |
 | `tools.stt.language` | `""` (auto) | ISO code (`en`, `es`, ...) | next turn |
 | `tools.<name>.max_result_chars` | `—` (unset) | int (-1 = unlimited) | next turn |
@@ -236,7 +237,7 @@ The `research` sub-agent's depth tiers (`quick` = 8 steps, `normal` = 15, `deep`
 
 `tools.tts.voice` selects the Edge TTS voice used by the `tts` tool. Any Microsoft Neural voice id is valid (`es-ES-AlvaroNeural`, `en-US-AriaNeural`, `fr-FR-DeniseNeural`, ...). Output is an MP3 cached under `~/.alpi/cache/tts/<hash>.mp3` — same text + voice reuses the cached file. Edge TTS runs against a free Microsoft endpoint (no API key), so there's no per-call cost. To use a different voice per call the agent can pass `voice=...` directly without touching config. `alpi setup → Voice` gives you a curated shortlist (10 common-language voices) plus a "custom" entry to type any voice id.
 
-The daemon never plays audio itself — the `tts` tool returns the cached file path and stops. The alpi mobile / desktop apps stream playback on demand from a per-message button; for an external chat (e.g. Telegram) the agent chains `send_message(attachment=<path>)` to deliver the MP3 as an audio attachment.
+The daemon never plays audio itself — the `tts` tool returns the cached file path and stops. The alpi mobile / desktop apps stream playback on demand from a per-message button, and — when `tools.tts.auto_read` is on — auto-play each agent reply aloud as it arrives (your own messages are never read); they synthesize through the same Edge TTS path via `host.voice.preview`. For an external chat (e.g. Telegram) the agent chains `send_message(attachment=<path>)` to deliver the MP3 as an audio attachment. Workgroups carry an analogous **hub-local** `auto_read` flag in the workgroup meta (set from the desktop/mobile workgroup settings) that auto-reads agents' messages — never your directives; it is not replicated to members.
 
 `rate` and `pitch` are config-only (not per-call args) — persistent prosody defaults. Leave empty for neutral. Text is capped at 1000 chars (~1 minute); longer input is rejected. Output is always MP3.
 

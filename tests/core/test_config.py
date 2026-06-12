@@ -19,6 +19,15 @@ def test_load_uses_defaults_when_fresh(tmp_home_no_env: Path) -> None:
     assert cfg.model == ""
 
 
+def test_tts_auto_read_roundtrips(tmp_home_no_env: Path) -> None:
+    config.seed_defaults(tmp_home_no_env)
+    cfg = config.load(tmp_home_no_env)
+    assert cfg.tools.tts.auto_read is False
+    cfg.tools.tts.auto_read = True
+    config.save(cfg)
+    assert config.load(tmp_home_no_env).tools.tts.auto_read is True
+
+
 def test_save_roundtrips(tmp_home_no_env: Path) -> None:
     config.seed_defaults(tmp_home_no_env)
     cfg = config.load(tmp_home_no_env)

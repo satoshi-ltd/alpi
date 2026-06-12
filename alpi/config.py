@@ -29,6 +29,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
             "voice": "en-US-AriaNeural",
             "rate": "",
             "pitch": "",
+            "auto_read": False,
         },
         "stt": {"model": "base", "language": ""},
     },
@@ -105,6 +106,7 @@ class TtsToolConfig:
     voice: str = "en-US-AriaNeural"
     rate: str = ""  # "+10%" / "-20%" / "" = neutral
     pitch: str = ""  # "+5Hz" / "-10Hz" / "" = neutral
+    auto_read: bool = False
 
 
 @dataclass
@@ -291,6 +293,7 @@ def load(home: Path) -> Config:
             voice=str(tts_raw.get("voice", "en-US-AriaNeural") or "en-US-AriaNeural"),
             rate=str(tts_raw.get("rate", "") or ""),
             pitch=str(tts_raw.get("pitch", "") or ""),
+            auto_read=bool(tts_raw.get("auto_read", False)),
         ),
         stt=SttToolConfig(
             model=str(stt_raw.get("model", "base") or "base"),
@@ -466,6 +469,8 @@ def _tools_delta(cfg: Config) -> dict:
         tts_out["rate"] = cfg.tools.tts.rate
     if cfg.tools.tts.pitch != d["tts"]["pitch"]:
         tts_out["pitch"] = cfg.tools.tts.pitch
+    if cfg.tools.tts.auto_read != d["tts"]["auto_read"]:
+        tts_out["auto_read"] = cfg.tools.tts.auto_read
     if tts_out:
         out["tts"] = tts_out
     stt_out: dict[str, Any] = {}

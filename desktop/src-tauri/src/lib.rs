@@ -789,14 +789,18 @@ async fn workgroup_update(
     budget_usd: Option<f64>,
     clear_budget: Option<bool>,
     pipeline: Option<String>,
+    auto_read: Option<bool>,
 ) -> Result<(), String> {
     let mut params = serde_json::json!({ "profile": profile, "wg_id": wg_id });
     if let Some(b) = briefing {
         params["briefing"] = serde_json::Value::String(b);
     }
-    // Comma-separated phase slugs; empty string clears the pipeline.
+    // comma-separated phase slugs, empty string clears the pipeline
     if let Some(p) = pipeline {
         params["pipeline"] = serde_json::Value::String(p);
+    }
+    if let Some(a) = auto_read {
+        params["auto_read"] = serde_json::json!(a);
     }
     if clear_budget.unwrap_or(false) {
         params["clear_budget"] = serde_json::json!(true);
@@ -1400,6 +1404,15 @@ async fn voice_set_voice(profile: String, voice_id: String) -> Result<(), String
     alp_call_async(
         "host.voice.set_voice",
         serde_json::json!({"profile": profile, "voice_id": voice_id}),
+    )
+    .await
+}
+
+#[tauri::command]
+async fn voice_set_auto_read(profile: String, enabled: bool) -> Result<(), String> {
+    alp_call_async(
+        "host.voice.set_auto_read",
+        serde_json::json!({"profile": profile, "enabled": enabled}),
     )
     .await
 }
@@ -2730,6 +2743,7 @@ pub fn run() {
             sandbox_set,
             sandbox_network,
             voice_set_voice,
+            voice_set_auto_read,
             gateway_config,
             gateway_gmail_authorize,
             gateway_gmail_paste,

@@ -30,6 +30,27 @@ def _pin(home: Path, peer_id: str, pubkey: str, allow: list[str]) -> None:
     peers_mod.add(home, Peer(id=peer_id, pubkey=pubkey, allow=allow))
 
 
+# Meta persistence
+
+
+def test_meta_auto_read_roundtrip(short_tmp: Path) -> None:
+    d = wg_mod._wg_dir(short_tmp, "wg-test")
+    meta = wg_mod.Meta(
+        id="wg-test", name="t", hub_pubkey="pk",
+        created_at="2026-01-01T00:00:00Z", auto_read=True,
+    )
+    wg_mod._save_meta(d, meta)
+    loaded = wg_mod._load_meta(d)
+    assert loaded is not None and loaded.auto_read is True
+
+    d2 = wg_mod._wg_dir(short_tmp, "wg-default")
+    wg_mod._save_meta(d2, wg_mod.Meta(
+        id="wg-default", name="t", hub_pubkey="pk",
+        created_at="2026-01-01T00:00:00Z",
+    ))
+    assert wg_mod._load_meta(d2).auto_read is False
+
+
 # Crypto round-trip
 
 

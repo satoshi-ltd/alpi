@@ -116,6 +116,24 @@ export default function WorkgroupDetail({ workgroup, profiles, connectionId = nu
     }
   }
 
+  const autoRead = !!workgroup.auto_read;
+  const [autoReadBusy, setAutoReadBusy] = useState(false);
+  async function setAutoRead(enabled) {
+    setAutoReadBusy(true);
+    try {
+      await invoke("workgroup_update", {
+        profile: workgroup.profile,
+        wgId: workgroup.id,
+        autoRead: enabled,
+      });
+      await onSaved?.();
+    } catch (e) {
+      notify({ message: `auto-read: ${String(e)}`, variant: "error", duration: 4000 });
+    } finally {
+      setAutoReadBusy(false);
+    }
+  }
+
   // Local edits; reorder with ◀ ▶; persist on Save (comma-joined, host splits +
   // validates; empty clears). Same draft→Save pattern as the briefing above.
   function addStage() {
@@ -306,6 +324,26 @@ export default function WorkgroupDetail({ workgroup, profiles, connectionId = nu
               )}
             </span>
           </Row>
+          {workgroup.is_hub && (
+            <Row label="auto-read">
+              <span className={styles.inlineRow}>
+                <Chip
+                  state={autoRead ? "on" : "off"}
+                  tooltip="reads agents' automatic messages aloud — never your directives"
+                >
+                  {autoRead ? "on" : "off"}
+                </Chip>
+                <Button
+                  size="sm"
+                  onClick={() => setAutoRead(!autoRead)}
+                  disabled={autoReadBusy}
+                  loading={autoReadBusy}
+                >
+                  {autoRead ? "Disable" : "Enable"}
+                </Button>
+              </span>
+            </Row>
+          )}
           <Row label="id">
             <span className={styles.inlineRow}>
               <span className={styles.mono}>{workgroup.id}</span>

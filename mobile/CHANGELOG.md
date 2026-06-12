@@ -14,6 +14,16 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.1.41 — 2026-06-12 — auto-read agent voices
+
+_Requires alpi v0.9.1+._
+
+- **Auto-read replies (per profile)** and **auto-read messages (per workgroup)**
+  toggles in Settings — the app speaks each agent message aloud as it arrives.
+  Your own messages and directives are never read.
+- **Animated sound-wave in the chat header** while a reply is being read aloud —
+  tap it to stop the current read.
+
 ## v0.1.40 — 2026-06-10 — settings apply on their own
 
 Requires alpi v0.8.18+.

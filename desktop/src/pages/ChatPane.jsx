@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import Reasoning from "../primitives/Reasoning.jsx";
 import ChatComposer from "../features/ChatComposer.jsx";
@@ -34,7 +34,7 @@ import {
   Tip,
   VolumeIcon,
 } from "../primitives/index.js";
-import { playTts, subscribeTts, VOICE_POOL } from "../lib/tts.js";
+import { playTts, subscribeTts, enqueueTts, VOICE_POOL } from "../lib/tts.js";
 import { useOnline } from "../lib/useOnline.js";
 import styles from "./ChatPane.module.css";
 import {
@@ -94,6 +94,32 @@ export default function ChatPane({
   useEffect(() => {
     setImageRoots([activeDetail?.workspace]);
   }, [activeDetail?.workspace]);
+
+  const autoRead = !!activeDetail?.voice_auto_read;
+  const ttsVoiceId = activeProfile?.voice_id ?? activeDetail?.voice_id ?? null;
+  const prevPendingRef = useRef(false);
+  const lastPreviewRef = useRef("");
+  // fire only on the pendingTurn truthy→null edge, never on history load
+  useEffect(() => {
+    if (pendingTurn?.assistantPreview) lastPreviewRef.current = pendingTurn.assistantPreview;
+    const was = prevPendingRef.current;
+    const now = !!pendingTurn;
+    prevPendingRef.current = now;
+    if (!autoRead || !(was && !now)) return;
+    const turns = sessionData?.turns ?? [];
+    const idx = turns.length - 1;
+    const text = turns[idx]?.assistant || lastPreviewRef.current;
+    lastPreviewRef.current = "";
+    if (text) {
+      enqueueTts({
+        key: `chat:${activeProfile?.name}:${view.sessionId ?? "new"}:${idx}`,
+        profile: activeProfile?.name,
+        voice: ttsVoiceId || VOICE_POOL[0],
+        text,
+        accent: activeProfile?.accent,
+      });
+    }
+  }, [pendingTurn, autoRead, sessionData, ttsVoiceId, activeProfile?.name, view.sessionId]);
 
   const noModel = !!activeProfile && !activeProfile.model;
   // Pre-split: needed full provider lists from summary to decide "is the profile chat-ready?". Post-split: the daemon precomputes `has_any_provider` so we don't drag the heavy detail down the hot poll.

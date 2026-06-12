@@ -47,6 +47,7 @@ export function stripMarkdown(md) {
 
 let currentAudio = null;
 let currentKey = null;
+let currentAccent = null;
 const subs = new Set();
 
 function notify(state) {
@@ -85,6 +86,44 @@ export function stopTts() {
   }
 }
 
+const queue = [];
+let draining = false;
+
+function playTtsAwait(item) {
+  return new Promise((resolve) => {
+    const unsub = subscribeTts((state) => {
+      if (state?.key !== item.key) return;
+      if (state.kind === "stopped" || state.kind === "error") {
+        unsub();
+        resolve();
+      }
+    });
+    Promise.resolve(playTts(item)).catch(() => {
+      unsub();
+      resolve();
+    });
+  });
+}
+
+async function drain() {
+  draining = true;
+  while (queue.length) {
+    await playTtsAwait(queue.shift());
+  }
+  draining = false;
+}
+
+export function enqueueTts(item) {
+  if (!stripMarkdown(item?.text)) return;
+  queue.push(item);
+  if (!draining) drain();
+}
+
+export function clearTtsQueue() {
+  queue.length = 0;
+  stopTts();
+}
+
 const FALLBACK_VOICE = "en-US-AriaNeural";
 
 const PREVIEW_PHRASES = {
@@ -105,18 +144,19 @@ async function synth(_profile, voice, text) {
   return invoke("tts_synthesize", { voice, text });
 }
 
-export async function playTts({ key, profile, voice, text }) {
+export async function playTts({ key, profile, voice, text, accent = null }) {
   const clean = stripMarkdown(text);
   if (!clean) return;
 
   if (currentKey === key) {
-    // Re-click on a still-loading key is ignored on purpose so an impatient click can't cancel its own synth.
+    // re-click a loading key is ignored so a click can't cancel its own synth
     if (currentAudio) stopTts();
     return;
   }
   stopTts();
   currentKey = key;
-  notify({ kind: "loading", key });
+  currentAccent = accent;
+  notify({ kind: "loading", key, accent });
 
   let b64;
   try {
@@ -171,7 +211,7 @@ export async function playTts({ key, profile, voice, text }) {
   try {
     await audio.play();
     if (currentAudio !== audio) return;
-    notify({ kind: "playing", key });
+    notify({ kind: "playing", key, accent: currentAccent });
   } catch (e) {
     URL.revokeObjectURL(url);
     if (currentAudio !== audio) return;

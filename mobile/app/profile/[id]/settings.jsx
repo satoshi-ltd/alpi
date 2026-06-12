@@ -110,6 +110,8 @@ export default function ProfileSettings() {
 
   const setVoice = (voiceId) =>
     call('host.voice.set_voice', { profile: id, voice_id: voiceId }).then(() => refresh());
+  const toggleAutoRead = () =>
+    call('host.voice.set_auto_read', { profile: id, enabled: !profile.voice_auto_read }).then(() => refresh());
 
   const subs = profile?.subsystems ?? SUBSYSTEMS_DEFAULT;
   const toggleSubsystem = async (name) => {
@@ -334,6 +336,13 @@ export default function ProfileSettings() {
           label="Voice"
           value={voiceLabel(profile.voice_id) ?? 'not set'}
           onPress={() => setSheet('voice')}
+        />
+        <RowSeparator />
+        <Row
+          label="Auto-read replies"
+          helper="reads each agent reply aloud as it arrives — never your messages"
+          value={<OnOff on={!!profile.voice_auto_read} />}
+          onPress={toggleAutoRead}
         />
 
         <SectionHeader>MCP Servers</SectionHeader>

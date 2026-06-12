@@ -11,6 +11,18 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.3.57 — 2026-06-12 — auto-read agent voices
+
+_Requires alpi v0.9.1+._
+
+- **Auto-read replies (per profile)** — turn it on in Settings → Voice and the
+  app speaks each agent reply aloud as it lands. Your own messages are never
+  read.
+- **Auto-read messages (per workgroup)** — the hub can have agents' automatic
+  messages read aloud; your directives are never read.
+- **Animated sound-wave in the chat header** whenever a reply is being read
+  aloud (auto-read or a manual *Read aloud*) — tap it to stop the current read.
+
 ## v0.3.56 — 2026-06-12 — robust startup: no blank screens, no duplicate windows
 
 - **No more blank screen on launch** — a startup crash introduced in v0.3.55 is

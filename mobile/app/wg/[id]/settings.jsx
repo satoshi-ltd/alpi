@@ -9,6 +9,7 @@ import { radii, space , fontSizes} from '../../../src/theme/tokens';
 import { ActionSheet } from '../../../src/components/ActionSheet';
 import { Diamond } from '../../../src/components/Diamond';
 import { Icon } from '../../../src/components/Icon';
+import { OnOff } from '../../../src/components/OnOff';
 import { Pill } from '../../../src/components/Pill';
 import { Row, RowSeparator, SectionHeader } from '../../../src/components/Row';
 import { ScreenHeader } from '../../../src/components/ScreenHeader';
@@ -110,6 +111,15 @@ function WorkgroupSettings() {
     }
   };
 
+  const toggleAutoRead = async () => {
+    try {
+      await call('host.workgroup.update', { profile: wg.profile, wg_id: wg.id, auto_read: !wg.auto_read });
+      refresh();
+    } catch (e) {
+      toast({ title: 'auto-read failed', message: String(e) });
+    }
+  };
+
   const kickMember = async (pubkey, label) => {
     try {
       await call('host.workgroup.kick', { profile: wg.profile, wg_id: wg.id, member: pubkey });
@@ -160,6 +170,17 @@ function WorkgroupSettings() {
           chevron={false}
         />
         <RowSeparator />
+        {isHub ? (
+          <>
+            <Row
+              label="Auto-read messages"
+              helper="reads agents' automatic messages aloud — never your directives"
+              value={<OnOff on={!!wg.auto_read} />}
+              onPress={toggleAutoRead}
+            />
+            <RowSeparator />
+          </>
+        ) : null}
         <Row label="ID" value={`wg_${wg.id}`} chevron={false} />
         <RowSeparator />
         <Row

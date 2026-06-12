@@ -55,6 +55,7 @@ _ADMIN_METHODS = frozenset({
     "host.sandbox.set",
     "host.sandbox.network",
     "host.voice.set_voice",
+    "host.voice.set_auto_read",
     "host.sessions.delete",
     "host.schedule.fire",
     "host.schedule.remove",
@@ -79,7 +80,7 @@ _ADMIN_METHODS = frozenset({
 })
 
 # host.profile.detail leaks Settings-only fields (providers, mcps, peers, sandbox, workspace path…) inside its result blob. Members hit it from ChatPane for `models` + `voice_id`, so we can't gate the whole verb — instead redact the result down to the chat-essential fields when role != admin.
-_MEMBER_DETAIL_KEEP = frozenset({"models", "voice_id"})
+_MEMBER_DETAIL_KEEP = frozenset({"models", "voice_id", "voice_auto_read"})
 
 # Methods that don't operate on a single profile — exempt from the scope gate. New profile-handling RPCs MUST default to denied for scoped members; add here only when the verb is truly profile-agnostic (or aggregates across profiles and the response gets scope-filtered downstream).
 _SCOPE_FREE_METHODS = frozenset({

@@ -11,6 +11,7 @@ import {
   PauseIcon,
   PlayIcon,
 } from "./index.js";
+import SoundWave from "./SoundWave.jsx";
 import styles from "./WorkgroupChatHeader.module.css";
 
 export default function WorkgroupChatHeader({
@@ -80,6 +81,7 @@ export default function WorkgroupChatHeader({
           <IconBtn onClick={onOpenSettings} aria-label="Workgroup settings"><GearIcon /></IconBtn>
         </Tip>
       )}
+      <SoundWave accent={accent} />
       {onRefresh && <RefreshButton onClick={onRefresh} />}
     </>
   );

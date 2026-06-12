@@ -9,6 +9,8 @@ import { Dot } from '../../src/components/Dot';
 import { useToast } from '../../src/components/Toast';
 import { WorkgroupMessage } from '../../src/features/chat/Bubble';
 import { ChatHeader } from '../../src/features/chat/ChatHeader';
+import { SoundWave } from '../../src/features/chat/SoundWave';
+import { enqueueReadAloud } from '../../src/lib/readAloud';
 import { useCanAdminEarly } from '../../src/hooks/useActiveRole';
 import { ChatSkeleton } from '../../src/features/chat/ChatSkeleton';
 import { Composer } from '../../src/features/chat/Composer';
@@ -36,6 +38,7 @@ const PAGE_STEP = 30;
 const WG_STYLES = StyleSheet.create({
   pending: { opacity: 0.6 },
   ready: { opacity: 1 },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: space.s2 },
   error: { paddingHorizontal: space.s7, marginTop: space.s1 },
   rowPad: { paddingTop: space.s6 },
   emptyHero: { flex: 1, alignItems: 'center', justifyContent: 'center' },
@@ -383,6 +386,46 @@ export default function WorkgroupChat() {
 
   const tasks = useMemo(() => buildTasks(messages, hubPubkey), [messages, hubPubkey]);
   const blocked = useMemo(() => findBlocked(messages, hubPubkey), [messages, hubPubkey]);
+
+  const autoRead = !!wg?.auto_read;
+  const voiceMap = useMemo(() => {
+    const out = {};
+    for (const m of members) if (m.pubkey && m.voice) out[m.pubkey] = m.voice;
+    return out;
+  }, [members]);
+  const lastReadSeqRef = useRef(-1);
+  const armedWgRef = useRef(null);
+  // baseline on the first LOADED transcript so existing history is never auto-read
+  useEffect(() => {
+    if (!transcript.data) return;
+    const maxSeq = messages.reduce((a, m) => Math.max(a, m.seq ?? -1), -1);
+    if (armedWgRef.current !== id) {
+      armedWgRef.current = id;
+      lastReadSeqRef.current = maxSeq;
+      return;
+    }
+    if (!autoRead) {
+      lastReadSeqRef.current = maxSeq;
+      return;
+    }
+    const fresh = messages
+      .filter((m) => (m.seq ?? -1) > lastReadSeqRef.current && m.from_pubkey !== ownPubkey && m.body)
+      .sort((a, b) => a.seq - b.seq);
+    if (fresh.length) {
+      lastReadSeqRef.current = maxSeq;
+      for (const m of fresh) {
+        const speakerName = m.from?.startsWith('@') ? m.from.slice(1) : m.from || '';
+        const speakerAccent = summaries.data?.profiles?.find((x) => x.name === speakerName)?.accent ?? null;
+        enqueueReadAloud({
+          call,
+          key: `wg:${id}:${m.seq}`,
+          voiceId: voiceMap[m.from_pubkey] || 'en-US-AriaNeural',
+          text: m.body,
+          accent: speakerAccent,
+        });
+      }
+    }
+  }, [messages, autoRead, id, ownPubkey, voiceMap, call, transcript.data, summaries.data]);
   const phases = useMemo(
     () => pipelineState(wg?.pipeline || [], messages, hubPubkey),
     [wg?.pipeline, messages, hubPubkey],
@@ -512,7 +555,12 @@ export default function WorkgroupChat() {
         meta={meta}
         onBack={() => router.back()}
         onMore={canAdmin ? () => router.push(`/wg/${wg.id}/settings`) : null}
-        right={tasks.length ? <TasksHeaderButton tasks={tasks} accent={accent} onPress={() => setTasksOpen(true)} /> : null}
+        right={(
+          <View style={styles.headerRight}>
+            <SoundWave accent={accent} />
+            {tasks.length ? <TasksHeaderButton tasks={tasks} accent={accent} onPress={() => setTasksOpen(true)} /> : null}
+          </View>
+        )}
       />
       {blocked ? (
         <View style={[WG_STYLES.banner, { backgroundColor: `${colors.danger}1f` }]}>

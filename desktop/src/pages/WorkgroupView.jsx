@@ -1,4 +1,4 @@
-import { Fragment, memo, useEffect, useMemo, useState } from "react";
+import { Fragment, memo, useEffect, useMemo, useRef, useState } from "react";
 import { useStickyScroll } from "../lib/useStickyScroll.js";
 import { useScrollProgress } from "../lib/useScrollProgress.js";
 import { invoke } from "@tauri-apps/api/core";
@@ -26,7 +26,7 @@ import {
   parseWorking,
   validateTaskShape,
 } from "../lib/workgroup-tasks.js";
-import { playTts, subscribeTts, voiceForPubkey } from "../lib/tts.js";
+import { playTts, subscribeTts, enqueueTts, voiceForPubkey } from "../lib/tts.js";
 import { buildSpeakerIndex, speakerFromIndex } from "../lib/wg-speakers.js";
 import { clearDraft, getDraft, setDraft } from "../lib/drafts.js";
 import { useOnline } from "../lib/useOnline.js";
@@ -199,6 +199,40 @@ export default function WorkgroupView({
     () => buildSpeakerIndex(profiles, peers, members),
     [profiles, peers, members],
   );
+
+  const autoRead = !!workgroup.auto_read;
+  const lastReadSeqRef = useRef(-1);
+  const autoReadWgRef = useRef(null);
+  // baseline on the first LOADED message set so existing history is never auto-read
+  useEffect(() => {
+    if (messages == null) return;
+    const maxSeq = messages.reduce((a, m) => Math.max(a, m.seq ?? -1), -1);
+    if (autoReadWgRef.current !== workgroup.id) {
+      autoReadWgRef.current = workgroup.id;
+      lastReadSeqRef.current = maxSeq;
+      return;
+    }
+    if (!autoRead) {
+      lastReadSeqRef.current = maxSeq;
+      return;
+    }
+    const fresh = messages
+      .filter((m) => (m.seq ?? -1) > lastReadSeqRef.current
+        && m.from_pubkey !== ownPubkey && m.body)
+      .sort((a, b) => a.seq - b.seq);
+    if (fresh.length) {
+      lastReadSeqRef.current = maxSeq;
+      for (const m of fresh) {
+        enqueueTts({
+          key: `wg:${workgroup.id}:${m.seq}`,
+          profile: workgroup.profile,
+          voice: voiceMap[m.from_pubkey] || voiceForPubkey(m.from_pubkey),
+          text: m.body,
+          accent: speakerFromIndex(speakerIndex, m)?.accent,
+        });
+      }
+    }
+  }, [messages, autoRead, workgroup.id, workgroup.profile, ownPubkey, voiceMap, speakerIndex]);
   const bumpRefresh = () => {
     setRefreshBeat((b) => b + 1);
     setRefreshTick((t) => t + 1);

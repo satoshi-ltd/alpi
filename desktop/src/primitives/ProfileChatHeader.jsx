@@ -11,6 +11,7 @@ import {
   WrenchIcon,
 } from "./index.js";
 import SessionsButton from "./SessionsButton.jsx";
+import SoundWave from "./SoundWave.jsx";
 import styles from "./ProfileChatHeader.module.css";
 
 function fmtCount(n) {
@@ -123,6 +124,7 @@ export default function ProfileChatHeader({
           <IconBtn onClick={onOpenSettings} aria-label="Profile settings"><GearIcon /></IconBtn>
         </Tip>
       )}
+      <SoundWave accent={accent} />
       {onRefresh && (sessionData?.turns?.length ?? 0) > 0 && (
         <RefreshButton onClick={onRefresh} />
       )}

@@ -197,6 +197,8 @@ class Meta:
     notify_on_close: str = "none"
     # Ordered phase slugs (empty = deliberation wg); lets continuation advance phases deterministically. Owners/deliverables live in the org, not here.
     pipeline: tuple[str, ...] = ()
+    # Hub-local desktop playback preference — not replicated to members
+    auto_read: bool = False
     # Closure-quorum grace (s) before the hub may `#done` with no substantive peer input; 0 = the _FULL_QUORUM_TIMEOUT_SECONDS default.
     quorum_timeout_seconds: int = 0
 
@@ -265,6 +267,7 @@ def _load_meta(d: Path) -> Meta | None:
             auto_kickoff=bool(raw.get("auto_kickoff", True)),
             notify_on_close=str(raw.get("notify_on_close") or "none"),
             pipeline=pipeline,
+            auto_read=bool(raw.get("auto_read", False)),
             quorum_timeout_seconds=_coerce_positive_int(raw.get("quorum_timeout_seconds")),
         )
     except KeyError:
@@ -296,6 +299,8 @@ def _save_meta(d: Path, meta: Meta) -> None:
         payload["notify_on_close"] = meta.notify_on_close
     if meta.pipeline:
         payload["pipeline"] = list(meta.pipeline)
+    if meta.auto_read:
+        payload["auto_read"] = True
     if meta.quorum_timeout_seconds:
         payload["quorum_timeout_seconds"] = meta.quorum_timeout_seconds
     (d / _META).write_text(yaml.safe_dump(payload, sort_keys=False, allow_unicode=True))

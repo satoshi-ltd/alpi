@@ -71,9 +71,9 @@ providers:
 
 ## TTS / voice
 
-Config keys: `tools.tts.voice` (Edge TTS id), `tools.tts.rate`, `tools.tts.pitch` (prosody, config-only defaults).
+Config keys: `tools.tts.voice` (Edge TTS id), `tools.tts.rate`, `tools.tts.pitch` (prosody, config-only defaults), `tools.tts.auto_read` (bool; set via `host.voice.set_auto_read`).
 
-The `tts` tool only synthesizes and returns a cached MP3 path. The daemon does not play audio; there is no `tools.tts.autoplay` and no `host.voice.autoplay` host verb. Desktop/mobile playback is an explicit per-message action; external chats receive audio only when the agent chains `send_message(attachment=<mp3 path>)`.
+The `tts` tool only synthesizes and returns a cached MP3 path — the daemon never plays audio. Desktop/mobile play on demand from a per-message button, and when `tools.tts.auto_read` is on they auto-play each agent reply (synthesizing via `host.voice.preview`); your own messages are never read. Workgroups carry an analogous hub-local `auto_read` flag in the workgroup meta (`host.workgroup.update`), not replicated to members. External chats receive audio only when the agent chains `send_message(attachment=<mp3 path>)`.
 
 ## STT
 

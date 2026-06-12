@@ -63,6 +63,7 @@ def register(server: host_server.Server) -> None:
     server.register("host.sandbox.set", _sandbox_set)
     server.register("host.sandbox.network", _sandbox_network)
     server.register("host.voice.set_voice", _voice_set_voice)
+    server.register("host.voice.set_auto_read", _voice_set_auto_read)
     server.register("host.voice.preview", _voice_preview)
 
 
@@ -816,6 +817,17 @@ async def _voice_set_voice(
     home = _resolve_home(str(params.get("profile") or ""))
     cfg = cfg_mod.load(home)
     cfg.tools.tts.voice = voice_id
+    cfg_mod.save(cfg)
+    _emit_config_changed(home, scope="voice")
+    return {"ok": True}
+
+
+async def _voice_set_auto_read(
+    params: dict[str, Any], _server: host_server.Server,
+) -> dict[str, Any]:
+    home = _resolve_home(str(params.get("profile") or ""))
+    cfg = cfg_mod.load(home)
+    cfg.tools.tts.auto_read = bool(params.get("enabled"))
     cfg_mod.save(cfg)
     _emit_config_changed(home, scope="voice")
     return {"ok": True}

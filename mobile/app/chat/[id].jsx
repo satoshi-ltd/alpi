@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { memo, useCallback, useEffect, useMemo, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, KeyboardAvoidingView, Platform, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { radii, space , fontSizes} from '../../src/theme/tokens';
@@ -10,6 +10,8 @@ import { useToast } from '../../src/components/Toast';
 import { ProfileAssistantMessage, ProfileUserMessage } from '../../src/features/chat/Bubble';
 import { Reasoning } from '../../src/features/chat/Reasoning';
 import { ChatHeader } from '../../src/features/chat/ChatHeader';
+import { SoundWave } from '../../src/features/chat/SoundWave';
+import { enqueueReadAloud } from '../../src/lib/readAloud';
 import { Composer } from '../../src/features/chat/Composer';
 import { MessageActionsSheet } from '../../src/features/chat/MessageActionsSheet';
 import { retryTextFor } from '../../src/features/chat/messageActions';
@@ -392,6 +394,43 @@ export default function ProfileChat() {
     if (ev.data?.profile === id) refreshSession();
   });
 
+  const [voiceCfg, setVoiceCfg] = useState({ voiceId: null, autoRead: false });
+  const loadVoiceCfg = useCallback(() => {
+    if (!id) return;
+    call('host.profile.detail', { profile: id })
+      .then((d) => setVoiceCfg({ voiceId: d?.voice_id ?? null, autoRead: !!d?.voice_auto_read }))
+      .catch(() => {});
+  }, [id, call]);
+  useEffect(() => { loadVoiceCfg(); }, [loadVoiceCfg]);
+  useEventEffect('config_changed', (ev) => {
+    if (ev?.data?.profile && ev.data.profile !== id) return;
+    loadVoiceCfg();
+  });
+
+  const prevPendingRef = useRef(false);
+  const lastPreviewRef = useRef('');
+  // fire only on the pendingTurn truthy→null edge, never on history load
+  useEffect(() => {
+    if (pendingTurn?.assistant) lastPreviewRef.current = pendingTurn.assistant;
+    const was = prevPendingRef.current;
+    const now = !!pendingTurn;
+    prevPendingRef.current = now;
+    if (!voiceCfg.autoRead || !(was && !now)) return;
+    const ts = session.data?.turns ?? [];
+    const idx = ts.length - 1;
+    const text = ts[idx]?.assistant || lastPreviewRef.current;
+    lastPreviewRef.current = '';
+    if (text) {
+      enqueueReadAloud({
+        call,
+        key: `chat:${id}:${idx}`,
+        voiceId: voiceCfg.voiceId || 'en-US-AriaNeural',
+        text,
+        accent,
+      });
+    }
+  }, [pendingTurn, voiceCfg, session.data, call, id, accent]);
+
   const sendMessage = (text, options) => streamSend(text, options);
   const [composerSeed, setComposerSeed] = useState(null);
   const [pendingRewriteIndex, setPendingRewriteIndex] = useState(null);
@@ -511,6 +550,7 @@ export default function ProfileChat() {
         onBack={() => router.back()}
         onMore={canAdmin ? () => router.push(`/profile/${profile.name}/settings`) : null}
         onPickSession={() => setSessionsOpen(true)}
+        right={<SoundWave accent={accent} />}
       />
       {blocked ? (
         <NeedsSetup

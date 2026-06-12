@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.9.1 — 2026-06-12 — auto-read voice toggles
+
+- **Profiles and workgroups can read agent output aloud automatically.** A new
+  per-profile *auto-read replies* toggle and a per-workgroup *auto-read
+  messages* toggle let the desktop speak each agent message as it arrives. Your
+  own messages and directives are never read back.
+
 ## v0.9.0 — 2026-06-12 — `alpi audit` security posture scan
 
 - **New `alpi audit` command** — a read-only security scan of your whole

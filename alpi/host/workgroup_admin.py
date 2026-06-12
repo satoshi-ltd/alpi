@@ -171,11 +171,15 @@ async def _update(
         except ValueError as e:
             raise host_server.HandlerError(-32602, "invalid-params", data={"detail": str(e)})
         changes.append(f"budget=${v:.2f}")
+    auto_read = params.get("auto_read")
+    if auto_read is not None:
+        wg.meta.auto_read = bool(auto_read)
+        changes.append(f"auto_read={wg.meta.auto_read}")
 
     if not changes:
         raise host_server.HandlerError(
             -32602, "invalid-params",
-            data={"detail": "nothing to update — pass briefing, pipeline, budget_usd or clear_budget"},
+            data={"detail": "nothing to update — pass briefing, pipeline, budget_usd, clear_budget or auto_read"},
         )
 
     wg_mod._save_meta(wg_mod._wg_dir(home, wg_id), wg.meta)
