@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.8.25 — 2026-06-12 — file tools won't read your .env secrets
+
+- **The file tools now refuse `.env` files** (`.env`, `.env.local`,
+  `.env.production`, `.envrc`, …) anywhere on disk, not just inside `~/.alpi`.
+  Templates without secrets — `.env.example`, `.env.sample`, `.env.template`,
+  `.env.dist` — stay readable.
+
 ## v0.8.24 — 2026-06-12 — budgets are dollars or nothing
 
 - **The daily budget is now one honest knob: a USD cap, or unlimited.** The

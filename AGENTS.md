@@ -92,17 +92,33 @@ every ``host.*`` verb the UI calls.
   The TUI is the exception — it consumes every `assistant_done` to
   rewrite the active bubble, which is correct for live streaming.
 
+- **Two messaging intents: `notify` (owner) vs `send_message` (third party).**
+  `notify(text, title?, type?)` pushes to the OWNER's own paired Alpi apps —
+  it files an inbox row in `~/.alpi/outputs/` and emits the `agent.message`
+  host event (the only native push). `type` is the single presentation axis:
+  `info` (default) | `warning` | `error`. `send_message(text, channel,
+  chat_id?, attachment?)` reaches a THIRD PARTY through a gateway
+  (telegram / imap / gmail / matrix / webhook) — `channel` is required, there
+  is no owner channel, and it carries no `type` (its inbox rows are always
+  `info`). The shared native-emit helpers live in `alpi/outputs.py`
+  (`create_output_and_emit_message`, `_suppress_native_emit`). Clients must
+  surface every `agent.message` — do not suppress it (e.g. for the active
+  chat).
+
 - **`schedule.done` / `schedule.failed` events carry structured output.**
   The scheduler tick emits `{profile, job_id, kind, message, reply,
   delivered_to, silent}` on the host event bus. `message` is the
   operational status for daemon logs and ops UIs. `reply` is the clean
   agent/script output, capped at 2000 chars, intended for native
-  notification bodies. `delivered_to` tells clients whether the daemon
-  already pushed the reply through a gateway or `send_message`; `silent`
-  means a successful maintenance job produced no user-facing output and
-  native notifications should be suppressed. Do not parse `message` in
-  clients when an explicit field exists. When changing the contract,
-  update desktop/mobile consumers and bump the docs here.
+  notification bodies. A job has one delivery axis, `notify: bool` (default
+  `false`). `delivered_to` is `""` (silent, `notify:false`) | `"alpi"`
+  (`notify:true` → the daemon re-emits the reply as `agent.message`) |
+  `"external"` (the agent called `notify` itself → no duplicate). Failures
+  always file an `error` inbox row and emit `schedule.failed`, regardless of
+  `notify`. `silent` means a successful job produced no user-facing output.
+  Do not parse `message` in clients when an explicit field exists. When
+  changing the contract, update desktop/mobile consumers and bump the docs
+  here.
 
 - **`host.network.*` is the canonical network config surface for
   desktop/mobile.** `host.network.status` returns

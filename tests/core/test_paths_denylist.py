@@ -6,10 +6,10 @@ from alpi.tools._paths import resolve_path
 
 
 @pytest.mark.parametrize("path", [
-    "/Users/javi/.alpi/.env",
-    "/Users/javi/.alpi/config.yaml",
-    "/Users/javi/.alpi/profiles/mirai/.env",
-    "/Users/javi/.alpi/profiles/work/config.yaml",
+    "/Users/user/.alpi/.env",
+    "/Users/user/.alpi/config.yaml",
+    "/Users/user/.alpi/profiles/mirai/.env",
+    "/Users/user/.alpi/profiles/work/config.yaml",
     "/home/foo/.alpi/.env",
     "/home/foo/.alpi/profiles/laptop/.env",
 ])
@@ -19,15 +19,15 @@ def test_alpi_profile_secrets_are_refused(path: str) -> None:
 
 
 @pytest.mark.parametrize("path", [
-    "/Users/javi/.ssh/authorized_keys",
-    "/Users/javi/.netrc",
-    "/Users/javi/.npmrc",
-    "/Users/javi/.aws/config",
-    "/Users/javi/.config/gh/hosts.yml",
-    "/Users/javi/.zshrc",
-    "/Users/javi/.bashrc",
-    "/Users/javi/Library/LaunchAgents/com.evil.plist",
-    "/Users/javi/.alpi/skills/system/persist/secrets/key.txt",
+    "/Users/user/.ssh/authorized_keys",
+    "/Users/user/.netrc",
+    "/Users/user/.npmrc",
+    "/Users/user/.aws/config",
+    "/Users/user/.config/gh/hosts.yml",
+    "/Users/user/.zshrc",
+    "/Users/user/.bashrc",
+    "/Users/user/Library/LaunchAgents/com.evil.plist",
+    "/Users/user/.alpi/skills/system/persist/secrets/key.txt",
 ])
 def test_persistence_and_credential_files_are_refused(path: str) -> None:
     with pytest.raises(ValueError, match="sensitive"):
@@ -35,16 +35,31 @@ def test_persistence_and_credential_files_are_refused(path: str) -> None:
 
 
 @pytest.mark.parametrize("path", [
-    "/Users/javi/projects/myapp/.env",
-    "/Users/javi/work/server/config.yaml",
+    "/Users/user/projects/myapp/.env",
+    "/Users/user/projects/myapp/.env.local",
+    "/Users/user/projects/myapp/.env.production",
+    "/Users/user/projects/myapp/.env.production.local",
+    "/Users/user/projects/myapp/.envrc",
+    "/Users/user/projects/myapp/.envrc.local",
+    "/Users/user/projects/myapp/.envrc.example",
     "/tmp/.env",
-    "/Users/javi/.alpi/sessions/abc.json",
-    "/Users/javi/.alpi/profiles/mirai/sessions/x.json",
-    "/Users/javi/.alpi/logs/agent.log",
 ])
-def test_workspace_paths_with_same_basename_pass(path: str, tmp_path) -> None:
-    """A user's project may legitimately have a `.env` or `config.yaml`
-    in the workspace; only the alpi-profile copies are off-limits."""
+def test_project_env_files_are_refused(path: str) -> None:
+    with pytest.raises(ValueError, match="sensitive"):
+        resolve_path(path)
+
+
+@pytest.mark.parametrize("path", [
+    "/Users/user/projects/myapp/.env.example",
+    "/Users/user/projects/myapp/.env.sample",
+    "/Users/user/projects/myapp/.env.template",
+    "/Users/user/projects/myapp/.env.dist",
+    "/Users/user/work/server/config.yaml",
+    "/Users/user/.alpi/sessions/abc.json",
+    "/Users/user/.alpi/profiles/mirai/sessions/x.json",
+    "/Users/user/.alpi/logs/agent.log",
+])
+def test_readable_paths_pass(path: str) -> None:
     try:
         resolve_path(path)
     except ValueError as e:

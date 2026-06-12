@@ -33,7 +33,7 @@ from alpi.tools._guards import check_command, check_url, scan_injection
     "psql -c 'TRUNCATE TABLE customers'",
     "cat ~/.alpi/.env",
     "cat ~/.alpi/profiles/mirai/.env",
-    "head -n 5 /Users/javi/.alpi/profiles/work/.env",
+    "head -n 5 /Users/user/.alpi/profiles/work/.env",
     "grep KEY ~/.alpi/profiles/mirai/.env",
     "less ~/.alpi/config.yaml",
     "cp ~/.alpi/profiles/mirai/.env /tmp/leak",

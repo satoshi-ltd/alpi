@@ -13,7 +13,7 @@ class WriteFile(Tool):
         "Create or OVERWRITE a file (atomic: tmp + rename).\n"
         "\n"
         "Relative paths root at the workspace; absolute paths work anywhere "
-        "except sensitive system locations (/etc, SSH keys, etc.). Use "
+        "except sensitive locations (/etc, SSH keys, .env files, etc.). Use "
         "`edit_file` for targeted changes — don't read + rewrite.\n"
         "\n"
         "DO NOT use write_file for:\n"

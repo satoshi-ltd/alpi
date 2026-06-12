@@ -12,16 +12,6 @@ Legend: ✅ shipped · 🔵 backlog · 🟡 next up · ⏸ blocked · 🔴 gate.
 
 ---
 
-## v0.8 cycle (shipped)
-
-**Theme: multimodal input + knowledge retrieval — complete.**
-v0.8 opened the agent to non-text content (MM.1), made attachments durable,
-searchable workspace documents (RAG.2), added semantic recall over past
-sessions (CM.4), and semantic search over workgroup transcripts (ALP.6) — all
-shipped on one local embedding / sqlite-vec retrieval layer. One store, three
-surfaces: workspace documents, conversation history, workgroup transcripts.
-Per-feature detail lives in [CHANGELOG.md](../CHANGELOG.md).
-
 ## v0.9 cycle (open)
 
 **Theme: safer unattended runtime.**
@@ -31,25 +21,13 @@ without turning Alpi into a broad orchestration platform.
 
 | ID | Item | Status |
 |---|---|---|
-| FS.1 | Credential file denylist audit — defense-in-depth read/write blocks for provider keys, profile control files, `.env*`, SSH/cloud creds, and project-local secret stores. | 🟡 |
-| AUDIT.1 | `alpi audit` — local dependency / config / security posture scan: stale deps, known CVEs, exposed binds, risky permissions, and missing hardening warnings. | 🔵 |
+| AUDIT.1 | `alpi audit` — local dependency / config / security posture scan: stale deps, known CVEs, exposed binds, risky permissions, and missing hardening warnings. | 🟡 |
 
 v0.9 should stay narrow: improve observability and failure handling on
 surfaces Alpi already owns. No new execution backend, no worker-lane
 marketplace, no cloud sandbox abstraction, and no automatic file migration.
-`FS.1` is next — denylisting credential stores across file tools;
-`AUDIT.1` then closes the safety posture.
-
-### FS.1. Credential file denylist audit
-
-Alpi's tools should not casually read or write obvious credential stores.
-FS.1 is a defense-in-depth audit across file tools, attachment learning, and
-terminal-adjacent helpers for `.env*`, SSH keys/config, cloud credentials,
-profile control files, provider key stores, and project-local secret files.
-
-This is not a hard security boundary while terminal access exists. It is a
-model-facing guardrail and audit signal: tools should return clear denials for
-paths the agent normally has no legitimate reason to inspect directly.
+With the credential-file denylist shipped, `AUDIT.1` is next and
+closes the safety posture.
 
 ### AUDIT.1. `alpi audit`
 
@@ -64,34 +42,24 @@ auto-upgrades, no package-manager writes. It can call public vulnerability
 databases only when the user explicitly runs the command and network is
 available; otherwise it reports what can be checked offline.
 
-## Future releases
+## v0.10 cycle (planned)
 
-Items worth doing, but not part of the next two cycles.
+**Theme: artifact-capable agents on lighter runtime surfaces.**
+v0.8 gave profiles semantic recall and workgroup transcript search. v0.9
+hardens unattended safety. v0.10 should make that base more useful for real
+agentic work: browsing exact past conversations, moving artefacts between
+peers without abusing JSON envelopes, and proving whether the browser stack
+can get lighter on small hosts.
+
+This cycle can be more ambitious than v0.9, but it should still stay inside
+surfaces Alpi already owns. No worker-pool scheduler, no marketplace, no cloud
+sandbox, no new gateway family, and no default anti-bot posture.
 
 | ID | Item | Status |
 |---|---|---|
-| AUDIT.2 | Enterprise audit & accountability — actor attribution on the host plane, an append-only / external audit sink, LLM-egress logging + provider policy, at-rest encryption, and RBAC/SSO. For fleet deployments, not the personal product. | 🔵 |
-| CM.5 | Exact session browse / scroll — cheap lexical session navigation that complements CM.4 semantic recall when the user needs the original message window. | 🔵 |
-| TERM.2 | Docker / SSH terminal backends — isolated or remote command execution for unattended profiles once local sandboxing is no longer enough. | 🔵 |
-| ALP.5 | Blob transfer — `link.put_blob` / `link.get_blob`, content-addressed, chunked AEAD. Depends on real workgroup usage to justify the protocol complexity. | 🔵 |
-| Notify.ntfy | ntfy gateway — accountless self-hostable notification gateway, opt-in only. Lower priority because Alpi-owned apps + outputs remain the primary notification surface. | 🔵 |
-| ORG.2.B/C | Workspace overlay (`cfg.workspace_path` as list) + first-class runtime org entity (`~/.alpi/orgs/<id>/`) with roles, event fan-out, and shared RAG. Deferred — see entry below. | ⏸ |
-
-### TERM.2. Docker / SSH terminal backends
-
-Local terminal execution plus optional OS sandboxing is enough for the
-current product. Docker and SSH become worthwhile only when a real
-unattended profile needs stronger isolation, reproducibility, or a remote
-machine that the agent can damage without touching its own code or the
-user's main workstation.
-
-The first implementation should be conservative: one configured backend
-per profile, no provider zoo, no cloud sandbox abstraction, and no
-automatic migration of local files.
-
-**Promotion condition.** A real profile needs isolation or a remote machine
-that the local terminal + OS sandbox cannot provide. Until then, TERM.2 stays
-backlog; hardening the existing runtime comes first.
+| CM.5 | Exact session browse / scroll — cheap lexical session navigation around the original message window, complementing CM.4 semantic recall. | 🟡 |
+| ALP.5 | Blob transfer — `link.put_blob` / `link.get_blob`, content-addressed and chunked, for screenshots, PDFs, skill outputs, and other artefacts that should not live inline in an ALP JSON envelope. | 🔵 |
+| BROWSER.1 | Optional lightweight browser backend — acceptance-test Obscura or a similar CDP backend behind the existing `browser` tool to cut Chromium's footprint on small hosts. | 🔵 |
 
 ### CM.5. Exact session browse / scroll
 
@@ -115,8 +83,78 @@ a PDF, a dataset, the output of a skill, a screenshot.
 transfer with per-chunk AEAD; the final frame carries the full-blob
 signature so the receiver can verify end-to-end.
 
-**Why it waits.** ALP.5 is only worth the protocol complexity if
-workgroups are heavily used and blobs are a real bottleneck.
+**Scope guard.** ALP.5 is for peer-to-peer artefact transfer only. It does not
+turn ALP into a shared filesystem, does not add sync folders, and does not
+auto-ship every output attachment. The sender still chooses what to share.
+
+### BROWSER.1. Optional lightweight browser backend
+
+The `browser` tool drives a full Playwright + Chromium install. That is the
+right engine for interactive automation, but Chromium is heavy: a ~520MB
+per-bump download and 200MB+ of RAM, which hurts small or headless hosts. A
+Rust headless engine like Obscura speaks the Chrome DevTools Protocol and
+ships as a ~70MB binary in ~30MB of RAM, so it could back the same tool far
+more cheaply where full fidelity is not required.
+
+It would land as an **opt-in CDP backend behind the existing tool interface** —
+never the default, never with stealth/anti-detect on. Playwright stays the
+engine for the interactive `browser` tool.
+
+**Why it waits.** Obscura is a young, reimplemented engine (V8 plus a partial
+DOM and a CDP subset) with a scraping-evasion trust profile, against a
+battle-tested Playwright + Chromium. It earns adoption only after its source is
+vetted, its WPT conformance is tracked, it passes real acceptance, and it
+measurably cuts Chromium's footprint on a host that needs it.
+
+---
+
+## Backlog — demand-gated
+
+Items worth keeping, but not committed to a numbered cycle. Some are
+well-defined and simply waiting for pull from real usage; others are
+deliberately parked because they would broaden the product. The promotion
+criterion is always the same: real user demand, or a concrete blocker for a
+v0.x feature that depends on it. Nothing graduates because it is interesting.
+
+| ID | Item | Status |
+|---|---|---|
+| TERM.2 | Docker / SSH terminal backends — isolated or remote command execution for unattended profiles once local sandboxing is no longer enough. | 🔵 |
+| AUDIT.2 | Enterprise audit & accountability — actor attribution on the host plane, append-only / external audit sink, LLM-egress logging + provider policy, at-rest encryption, and RBAC/SSO. | 🔵 |
+| Notify.ntfy | ntfy gateway — accountless self-hostable notification gateway, opt-in only. | 🔵 |
+| ORG.2.B/C | Workspace overlay (`cfg.workspace_path` as list) + first-class runtime org entity (`~/.alpi/orgs/<id>/`) with roles, event fan-out, and shared RAG. | ⏸ |
+| ALP.7 | Pinned shared memory per workgroup (hub-anchored `wiki.md`). | 🔵 |
+| ALP.8 | Workgroup capacity scheduling — optional profile capacity, queue/defer telemetry, or worker-pool assignment for high-throughput orgs. | 🔵 |
+| ALP.3+ | Multi-task workgroups — opt-in `multitask`, letter-prefixed task IDs, per-task roster/dispatch/budget. | 🔵 |
+| Signal | Signal gateway via signal-cli. | 🔵 |
+| AY | Skills marketplace — federated, signed, never centralised. | 🔵 |
+| SK.2 | Safe skill import (`alpi skill import <dir\|zip>` — preview, scan, install). | 🔵 |
+| BF-8 | Skill versioning / install-update flows. | 🔵 |
+| AI (2) | Memory v2 — TUI panel (collapsible, edit-in-place, "forget this"). | 🔵 |
+| AI (3) | Entity memory — structured SQLite store (`entities`/`relations`/`observations`) replacing the markdown memory model, with selective injection per turn instead of full-blob system prompt. | 🔵 |
+| AJ | Browser realism — Cloudflare / captcha / fingerprint depth. | 🔵 |
+| AQ | Continuous voice mode (push-to-talk, hotword loops). | 🔵 |
+| Webhook | Inbound HTTP triggers (HMAC-signed). | 🔵 |
+| BG re-audit | LiteLLM quarterly review — bump pin, run LLM probe, swap if better alternative emerges. | 🔵 |
+| Matrix E2EE | Olm/Megolm sessions, encryption store, SAS device verification, encrypted-room send/read tests. | 🔵 |
+| TTS.1 | Local TTS engine + daemon-served voice — single host-served voice catalog, deprecate desktop-local synthesis. | 🔵 |
+| UX.6 | Desktop `.env` manager — per-profile environment editor (mask/reveal/audit) for keys other than provider keys. | 🔵 |
+| External secrets | Bitwarden / external secret manager resolver for provider keys. | 🔵 |
+
+### TERM.2. Docker / SSH terminal backends
+
+Local terminal execution plus optional OS sandboxing is enough for the
+current product. Docker and SSH become worthwhile only when a real
+unattended profile needs stronger isolation, reproducibility, or a remote
+machine that the agent can damage without touching its own code or the
+user's main workstation.
+
+The first implementation should be conservative: one configured backend
+per profile, no provider zoo, no cloud sandbox abstraction, and no
+automatic migration of local files.
+
+**Promotion condition.** A real profile needs isolation or a remote machine
+that the local terminal + OS sandbox cannot provide. Until then, TERM.2 stays
+backlog; hardening the existing runtime comes first.
 
 ### Notify.ntfy. ntfy gateway
 
@@ -203,38 +241,40 @@ HIPAA, PCI) is in scope for a real operator. Start with item 1 (actor
 attribution): it is cheap, useful even for a single power user, and a
 prerequisite for everything else.
 
----
+### Listening-first notes
 
-## Future versions — listening first
+The items below are intentionally light until a real deployment pulls them
+forward:
 
-Items that may or may not have legs. We deliberately don't
-commit to a cycle for them — we'd rather hear from real alpi
-users which ones they actually need before building. Each is
-already analysed; the "why now?" question is the open one.
-
-| ID | Item | Reason it waits |
-|---|---|---|
-| ALP.7 | Pinned shared memory per workgroup (hub-anchored `wiki.md`) | Heavy new surface (concurrency, history, roles) only justified if workgroups become heavily used |
-| ALP.8 | Workgroup capacity scheduling — optional profile capacity, queue/defer telemetry, or worker-pool assignment for high-throughput orgs | Current dispatch already allows opportunistic concurrency across workgroups; promote only if real users need guaranteed throughput, dynamic worker pools, or capacity negotiation beyond adding more profiles |
-| ALP.3+ | Multi-task workgroups — opt-in `multitask`, letter-prefixed task IDs, per-task roster/dispatch/budget | Targeted tasks + pipeline continuation already cover sequential per-project pipelines; revisit only if the persistent workgroups (`template`/`quality`/`brand-library`) show real, sustained parallelism |
-| Signal | Signal gateway via signal-cli | Strong privacy fit, but new gateways are out of scope now that Alpi-owned clients are the primary mobile surface |
-| AY | Skills marketplace — federated, signed, never centralised | Presupposes an active author community + adoption for discovery to matter |
-| SK.2 | Safe skill import (`alpi skill import <dir\|zip>` — preview, scan, install) | Pulls toward marketplace/import-ecosystem mental model without a concrete user pull. Promote when somebody actually needs to migrate a batch of skills from another stack. |
-| BF-8 | Skill versioning / install-update flows | Depends on SK.2 and imported-source metadata. Keep it out while import itself is deferred. |
-| AI (2) | Memory v2 — TUI panel (collapsible, edit-in-place, "forget this") | UI weight for niche audience (power users with much memory); item 1 covers the substantive part |
-| AI (3) | Entity memory — structured SQLite store (`entities`/`relations`/`observations`) replacing the markdown memory model, with selective injection per turn instead of full-blob system prompt | Markdown memory hasn't demonstrably broken yet for real users; AI(1) is a quality pass on the existing model. Promote when a user reports `MEMORY.md` is large enough that prompt size / cost becomes a real bottleneck. BA's shared `store` primitive (v0.5) is designed so the migration is incremental when promoted. |
-| AJ | Browser realism — Cloudflare / captcha / fingerprint depth | Cat-and-mouse perpetuo; without concrete failing use case, scope can't close |
-| AQ | Continuous voice mode (push-to-talk, hotword loops) | Niche unless voice becomes a real surface for users |
-| Webhook | Inbound HTTP triggers (HMAC-signed) | Automation bridge, not product UX; needs repeated real demand before adding another inbound surface |
-| BG re-audit | LiteLLM quarterly review — bump pin, run LLM probe, swap if better alternative emerges | Standing maintenance task; cadence + procedure documented in `OPERATIONS.md → Dependencies` |
-| Matrix E2EE | Olm/Megolm sessions, encryption store, SAS device verification, encrypted-room send/read tests | MVP intentionally unencrypted; promote when an external user runs the bot against a non-self-hosted homeserver |
-| TTS.1 | Local TTS engine + daemon-served voice — single host-served voice catalog, deprecate desktop-local synthesis | Current cloud TTS path works; promote alongside `AQ` (continuous voice) or when desktop/daemon catalog drift becomes a real operator burden |
-| UX.6 | Desktop `.env` manager — per-profile environment editor (mask/reveal/audit) for keys other than provider keys | Provider keys already have a first-class flow; promote when editing other `.env` entries by hand becomes a real friction reported by users |
-| External secrets | Bitwarden / external secret manager resolver for provider keys | Useful in managed fleets, but likely too much setup for the current solo/local product. Promote only if users ask for central rotation instead of local `.env` files. |
-
-Promotion criteria: real user demand, or concrete blocker for
-a v0.x feature that depends on it. None of these items
-graduate "because we feel like it".
+- **ALP.7** waits because pinned shared memory adds concurrency, history, and
+  role semantics to every workgroup. Promote only if workgroups become heavily
+  used and the transcript is no longer enough.
+- **ALP.8** waits because current dispatch already allows opportunistic
+  concurrency across workgroups. Promote only if users need guaranteed
+  throughput, dynamic worker pools, or capacity negotiation beyond adding more
+  profiles.
+- **ALP.3+** waits because targeted tasks plus pipeline continuation already
+  cover sequential project pipelines. Revisit only if persistent workgroups
+  (`template`, `quality`, `brand-library`) show real sustained parallelism.
+- **Signal** is a strong privacy fit, but new gateways are out of scope while
+  Alpi-owned clients are the primary mobile surface.
+- **AY / SK.2 / BF-8** wait on a real import or author community. Until then,
+  skills stay user-owned and local.
+- **AI (2) / AI (3)** wait until markdown memory demonstrably breaks: either
+  power users need a TUI memory editor, or `MEMORY.md` becomes large enough
+  that prompt size / cost is a real bottleneck.
+- **AJ** is cat-and-mouse browser evasion. Without a concrete failing use case,
+  scope cannot close.
+- **AQ / TTS.1** wait until voice becomes a real surface. If that happens,
+  daemon-served local voice should land before always-on voice loops.
+- **Webhook** waits because it is another inbound automation surface, not core
+  product UX.
+- **BG re-audit** is standing maintenance, not product scope; cadence and
+  procedure live in `OPERATIONS.md → Dependencies`.
+- **Matrix E2EE** waits until a user runs the Matrix gateway against a
+  non-self-hosted homeserver.
+- **UX.6 / External secrets** wait until editing non-provider `.env` entries or
+  central key rotation becomes repeated user friction.
 
 ---
 

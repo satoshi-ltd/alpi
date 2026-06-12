@@ -14,7 +14,7 @@ class EditFile(Tool):
         "a `.bak` sibling before overwriting.\n"
         "\n"
         "Relative paths root at the workspace; absolute paths work anywhere "
-        "except sensitive system locations. Use this instead of "
+        "except sensitive locations (SSH keys, .env files, etc.). Use this instead of "
         "`terminal sed/awk/perl -i`.\n"
         "\n"
         "If `old_string` matches 0 or >1 times → the call fails. In that "

@@ -29,7 +29,9 @@ _SENSITIVE_PATH_REGEX: tuple[re.Pattern[str], ...] = (
     re.compile(r"(?:^|/)\.(?:bashrc|zshrc|bash_profile|zprofile|zlogin|profile)$", re.I),
     re.compile(r"(?:^|/)Library/Launch(?:Agents|Daemons)/", re.I),
     # Profile secrets and config must only be edited by hand or setup.
-    re.compile(r"(?:^|/)\.alpi(?:/profiles/[^/]+)?/(?:\.env|config\.yaml)$"),
+    re.compile(r"(?:^|/)\.alpi(?:/profiles/[^/]+)?/config\.yaml$"),
+    # .env* blocked except .env.example/.sample/.template/.dist
+    re.compile(r"(?:^|/)\.env(?!\.(?:example|sample|template|dist)$)[^/]*$", re.I),
     # Skill secrets dir (mode 0700, scanner-skipped) — never via file tools.
     re.compile(r"(?:^|/)skills/[^/]+/[^/]+/secrets/", re.I),
 )
