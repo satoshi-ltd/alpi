@@ -89,6 +89,7 @@ function Sidebar({
   onForgetHostConnection,
   onRefreshHostConnectionStatus,
   autoOpenConnectionSwitcher = false,
+  connectionLocked = false,
   onOpenNotifications,
   notificationsUnread = 0,
 }) {
@@ -400,6 +401,7 @@ function Sidebar({
               onForget={onForgetHostConnection}
               onOpen={onRefreshHostConnectionStatus}
               autoOpenSignal={autoOpenConnectionSwitcher}
+              locked={connectionLocked}
             />
           </div>
           {!daemonOffline && !inSettings && (

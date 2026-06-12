@@ -1,6 +1,6 @@
 [package]
 name = "alpi-desktop"
-version = "0.3.55"
+version = "0.3.56"
 description = "alpi desktop — filesystem-level wizard for the local alpi profile"
 authors = ["@soyjavi"]
 edition = "2021"
@@ -27,6 +27,7 @@ notify = "6"
 notify-debouncer-mini = "0.4"
 tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
+tauri-plugin-single-instance = "2"
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-notification = "2"
 socket2 = "0.5"

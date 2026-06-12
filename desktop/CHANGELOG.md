@@ -11,6 +11,18 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.3.56 — 2026-06-12 — robust startup: no blank screens, no duplicate windows
+
+- **No more blank screen on launch** — a startup crash introduced in v0.3.55 is
+  fixed, and an unexpected error now shows a recoverable screen with a Reload
+  button instead of a dead window.
+- **Only ever one Alpi window** — launching the app again (or after an update)
+  now focuses the existing window instead of opening duplicates. Fixes the
+  multiple-windows behaviour seen on Windows.
+- **First-run connection guard** — if there's no daemon running and no
+  connection set up yet, the Connection panel opens and stays put until you add
+  one, so the app never sits empty with nothing to do.
+
 ## v0.3.55 — 2026-06-12 — sidebar + modal fixes
 
 - **No more stray "Show less"** in the sidebar when all your alpis already fit.

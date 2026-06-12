@@ -3,19 +3,20 @@ import { I } from "./icons.jsx";
 import Tip from "./Tip.jsx";
 import styles from "./Panels.module.css";
 
-export function Scrim({ onClose, children, align = "flex-start", top = 96 }) {
+export function Scrim({ onClose, children, align = "flex-start", top = 96, dismissable = true }) {
   useEffect(() => {
+    if (!dismissable) return;
     const onKey = (e) => {
       if (e.key === "Escape") onClose?.();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, [onClose, dismissable]);
   return (
     <div
       className={`anim-fade ${styles.scrim}`}
       onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
+        if (dismissable && e.target === e.currentTarget) onClose();
       }}
       style={{
         alignItems: align,
@@ -43,6 +44,7 @@ export function ConnectionPanel({
   onPick,
   onForget,
   onPair,
+  locked = false,
 }) {
   const [pairing, setPairing] = useState("");
   const [pairBusy, setPairBusy] = useState(false);
@@ -58,21 +60,23 @@ export function ConnectionPanel({
   }
   if (!open) return null;
   return (
-    <Scrim onClose={onClose} top={80}>
+    <Scrim onClose={onClose} top={80} dismissable={!locked}>
       <PanelShell width={560} maxHeight="auto">
         <div className={`row between ${styles.panelHeader}`}>
           <div className={`row row-gap ${styles.headerRow}`}>
             <I.Globe />
             <span className={styles.panelTitle}>Connection</span>
             <span className={`eyebrow ${styles.headerEyebrow}`}>
-              where alpi runs
+              {locked ? "no host yet — add a connection to continue" : "where alpi runs"}
             </span>
           </div>
-          <Tip text="Close" side="r">
-            <button type="button" className="iconbtn" onClick={onClose}>
-              <I.X />
-            </button>
-          </Tip>
+          {!locked && (
+            <Tip text="Close" side="r">
+              <button type="button" className="iconbtn" onClick={onClose}>
+                <I.X />
+              </button>
+            </Tip>
+          )}
         </div>
 
         <div className={`col ${styles.connList}`}>

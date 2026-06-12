@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
-import { render } from "@testing-library/react";
-import { Scrim } from "./Panels.jsx";
+import { render, fireEvent } from "@testing-library/react";
+import { Scrim, ConnectionPanel } from "./Panels.jsx";
 
 function esc() {
   window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
@@ -37,6 +37,34 @@ describe("Scrim", () => {
       </Scrim>,
     );
     unmount();
+    esc();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("ignores Escape and backdrop clicks when not dismissable", () => {
+    const onClose = vi.fn();
+    const { container } = render(
+      <Scrim onClose={onClose} dismissable={false}>
+        <div>body</div>
+      </Scrim>,
+    );
+    esc();
+    fireEvent.click(container.firstChild);
+    expect(onClose).not.toHaveBeenCalled();
+  });
+});
+
+describe("ConnectionPanel locked", () => {
+  it("hides the close button so the only path forward is adding a connection", () => {
+    const onClose = vi.fn();
+    const { queryByText, rerender } = render(
+      <ConnectionPanel open locked={false} onClose={onClose} connections={[]} />,
+    );
+    expect(queryByText("Close")).toBeTruthy();
+    rerender(
+      <ConnectionPanel open locked onClose={onClose} connections={[]} />,
+    );
+    expect(queryByText("Close")).toBeNull();
     esc();
     expect(onClose).not.toHaveBeenCalled();
   });

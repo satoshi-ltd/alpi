@@ -28,10 +28,14 @@ export default function ConnectionSwitcher({
   onForget,
   onOpen,
   autoOpenSignal = false,
+  locked = false,
 }) {
   const [open, setOpen] = useState(false);
   const probeTimerRef = useRef(null);
   const notify = useNotify();
+  const closePanel = () => {
+    if (!locked) setOpen(false);
+  };
 
   useFireOnce(autoOpenSignal, () => {
     setOpen(true);
@@ -83,8 +87,9 @@ export default function ConnectionSwitcher({
         tipText={tooltipFor(active, activeStatus)}
       />
       <ConnectionPanel
-        open={open}
-        onClose={() => setOpen(false)}
+        open={open || locked}
+        locked={locked}
+        onClose={closePanel}
         connections={connections.map((c) => ({
           id: c.id,
           kind: c.kind,
@@ -97,7 +102,7 @@ export default function ConnectionSwitcher({
         activeId={activeId}
         onPick={(r) => {
           onSetActive?.(r.id);
-          setOpen(false);
+          closePanel();
         }}
         onForget={(r) => onForget?.(r.id)}
         onPair={async (payload) => {
@@ -107,7 +112,7 @@ export default function ConnectionSwitcher({
               message: name ? `Paired ${name}` : "Device paired",
               variant: "success",
             });
-            setOpen(false);
+            closePanel();
             return true;
           } catch (e) {
             notify({
