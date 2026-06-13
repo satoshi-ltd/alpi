@@ -378,6 +378,11 @@ textarea.ds-field, textarea.field { resize: vertical; min-height: 88px; height: 
   z-index: var(--z-overlay);
   line-height: var(--lh-cozy);
 }
+.ds-tip-wide {
+  max-width: min(680px, 50vw);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
 .ds-tip > .ds-tip-body {
   position: absolute;
   left: 50%;

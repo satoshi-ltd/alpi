@@ -188,7 +188,7 @@ export function isValidEd25519Pubkey(s) {
 }
 
 export function scheduleSummary(j) {
-  if (j.kind === "cron") return `cron ${j.expression || "?"}`;
+  if (j.kind === "cron") return j.expression || "?";
   if (j.kind === "once") return `once ${j.run_at || "?"}`;
   if (j.kind === "inactivity") return `after ${j.after_hours ?? "?"}h`;
   return j.kind || "?";

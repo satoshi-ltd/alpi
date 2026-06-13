@@ -99,6 +99,17 @@ class Schedule(Tool):
                 "type": "string",
                 "description": "What to ask alpi to do when the job fires.",
             },
+            "title": {
+                "type": "string",
+                "description": (
+                    "Optional short human label shown in clients (e.g. the "
+                    "desktop schedule list) instead of the raw prompt. A few "
+                    "words: 'Sports this weekend', 'Morning brief'. Especially "
+                    "useful for no_agent script jobs whose prompt is an ugly "
+                    "shell command. Falls back to the prompt when unset. On "
+                    "update, pass an empty string to remove an existing title."
+                ),
+            },
             "notify": {
                 "type": "boolean",
                 "description": (
@@ -139,7 +150,8 @@ class Schedule(Tool):
             run_at: str = "", id: str | None = None,
             force: bool = False,
             paused: bool | None = None,
-            no_agent: bool | None = None) -> ToolResult:
+            no_agent: bool | None = None,
+            title: str | None = None) -> ToolResult:
         home = get_home()
         jobs_path = home / "schedule" / "jobs.json"
         jobs_path.parent.mkdir(parents=True, exist_ok=True)
@@ -189,6 +201,8 @@ class Schedule(Tool):
             }
             if no_agent:
                 job["no_agent"] = True
+            if title and title.strip():
+                job["title"] = title.strip()
             if job["kind"] == "cron":
                 if not expression:
                     return ToolResult(
@@ -267,6 +281,12 @@ class Schedule(Tool):
             if notify is not None:
                 job["notify"] = bool(notify)
                 changes.append("notify")
+            if title is not None:
+                if title.strip():
+                    job["title"] = title.strip()
+                else:
+                    job.pop("title", None)
+                changes.append("title")
             if paused is not None:
                 job["paused"] = bool(paused)
                 changes.append("paused")

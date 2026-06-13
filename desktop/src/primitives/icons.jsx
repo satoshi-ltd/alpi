@@ -18,6 +18,7 @@ export const Check = (p) => <Icon name="check" {...p} />;
 export const X = (p) => <Icon name="x" {...p} />;
 export const Pause = (p) => <Icon name="pause" {...p} />;
 export const Play = (p) => <Icon name="play" {...p} />;
+export const Power = (p) => <Icon name="power" {...p} />;
 export const Copy = (p) => <Icon name="copy" {...p} />;
 export const Cpu = (p) => <Icon name="cpu" {...p} />;
 export const Server = (p) => <Icon name="server" {...p} />;
@@ -165,7 +166,7 @@ export const AlpacaIcon = Alpaca;
 
 export const I = {
   Search, Plus, Arrow, ArrowLeft, Refresh,
-  Gear, Check, X, Pause, Play, Copy, Cpu, Server, Globe, Sun, Moon,
+  Gear, Check, X, Pause, Play, Power, Copy, Cpu, Server, Globe, Sun, Moon,
   Trash, ChevDown, ChevRight, Send, Blocks, Sparkle, Wrench,
   MuteIcon: Mute, Archive, Bell, Alpaca,
 };

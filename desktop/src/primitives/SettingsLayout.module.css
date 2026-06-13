@@ -182,10 +182,16 @@
   font-family: var(--font-mono);
 }
 
+.scheduleList {
+  display: grid;
+  grid-template-columns: max-content max-content minmax(0, 1fr) auto;
+  column-gap: var(--space-7);
+}
+
 .scheduleRow {
   display: grid;
-  grid-template-columns: 96px max-content minmax(0, 1fr) auto;
-  gap: var(--space-7);
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
   align-items: center;
   padding: var(--space-5) 0;
   border-top: .5px solid var(--line);
@@ -198,14 +204,13 @@
   letter-spacing: .02em;
 }
 
-.scheduleKind {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-3);
+.scheduleTitleCell {
+  min-width: 0;
 }
 
-.scheduleDesc {
+.scheduleTitle {
   flex: 1;
+  min-width: 0;
   font-size: var(--fs-base);
   color: var(--ink-2);
   white-space: nowrap;
@@ -213,20 +218,19 @@
   text-overflow: ellipsis;
 }
 
-.scheduleDescMono {
-  font-family: var(--font-mono);
-  font-size: var(--fs-sm);
-}
-
 .scheduleActions {
-  gap: var(--space-5);
-  position: relative;
-  opacity: 0;
-  transition: opacity var(--dur-1) var(--ease);
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
 }
 
 .deleteWrap {
   position: relative;
+}
+
+.deleteBtn:hover {
+  color: var(--c-danger);
+  background: color-mix(in srgb, var(--c-danger) 10%, transparent);
 }
 
 .memberRow {

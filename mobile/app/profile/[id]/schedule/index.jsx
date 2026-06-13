@@ -119,7 +119,7 @@ export default function ScheduleList() {
                     style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, color: colors.ink3, lineHeight: fontSizes.sm * 1.4 }}
                     numberOfLines={2}
                   >
-                    {desc}
+                    {j.title || desc}
                   </Text>
                 </Pressable>
               </View>
@@ -136,15 +136,15 @@ export default function ScheduleList() {
         actions={
           target
             ? [
-                { id: 'fire', label: 'Fire now', icon: <Icon name="send" size={20} color={colors.ink2} />, onPress: () => fire(target.id) },
+                { id: 'fire', label: 'Fire now', icon: <Icon name="play" size={20} color={colors.ink2} />, onPress: () => fire(target.id) },
                 {
                   id: 'toggle',
                   label: target.paused ? 'Resume' : 'Pause',
-                  icon: <Icon name="bell" size={20} color={colors.ink2} />,
+                  icon: <Icon name={target.paused ? 'power' : 'pause'} size={20} color={colors.ink2} />,
                   onPress: () => togglePaused(target),
                 },
                 { divider: true },
-                { id: 'delete', label: 'Delete', danger: true, icon: <Icon name="x" size={20} color={colors.danger} />, onPress: () => {
+                { id: 'delete', label: 'Delete', danger: true, icon: <Icon name="trash" size={20} color={colors.danger} />, onPress: () => {
                   const job = target;
                   setTarget(null);
                   setConfirmDelete(job);

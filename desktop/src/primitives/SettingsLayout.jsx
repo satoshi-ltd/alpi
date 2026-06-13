@@ -181,26 +181,48 @@ export function AccentPicker({ value, onChange }) {
   );
 }
 
+export function ScheduleList({ children }) {
+  return <div className={styles.scheduleList}>{children}</div>;
+}
+
 export function ScheduleRow({ s, onFire, onToggle, onDelete }) {
   const [confirm, setConfirm] = useState(false);
   return (
-    <div className={`msg-row ${styles.scheduleRow}`}>
+    <div className={styles.scheduleRow}>
       <span className={`mono ${styles.scheduleId}`}>{s.id}</span>
-      <span className={styles.scheduleKind}>
-        <Chip state={s.on ? "on" : "off"} size="sm">{s.cron}</Chip>
-      </span>
-      <span
-        className={`${styles.scheduleDesc} ${s.noAgent ? styles.scheduleDescMono : ""}`}
-      >
-        {s.desc}
-      </span>
-      <div className={`row msg-actions ${styles.scheduleActions}`}>
-        <ActionLink onClick={onFire}>Fire</ActionLink>
-        <ActionLink onClick={onToggle}>{s.on ? "Disable" : "Enable"}</ActionLink>
+      <Chip state={s.on ? "on" : "off"} size="sm">{s.cron}</Chip>
+      <div className={styles.scheduleTitleCell}>
+        <Tip text={s.prompt} side="up" escape block wide>
+          <span className={styles.scheduleTitle}>{s.title || s.prompt}</span>
+        </Tip>
+      </div>
+      <div className={styles.scheduleActions}>
+        <Tip text="Run now" side="up">
+          <button type="button" className="iconbtn" onClick={onFire} aria-label="Run now">
+            <I.Play />
+          </button>
+        </Tip>
+        <Tip text={s.on ? "Disable" : "Enable"} side="up">
+          <button
+            type="button"
+            className="iconbtn"
+            onClick={onToggle}
+            aria-label={s.on ? "Disable" : "Enable"}
+          >
+            {s.on ? <I.Pause /> : <I.Power />}
+          </button>
+        </Tip>
         <span className={styles.deleteWrap}>
-          <ActionLink danger onClick={() => setConfirm(true)}>
-            Delete
-          </ActionLink>
+          <Tip text="Delete" side="up">
+            <button
+              type="button"
+              className={`iconbtn ${styles.deleteBtn}`}
+              onClick={() => setConfirm(true)}
+              aria-label="Delete"
+            >
+              <I.Trash />
+            </button>
+          </Tip>
           <ConfirmDelete
             mode="simple"
             open={confirm}

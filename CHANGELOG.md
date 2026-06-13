@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.9.4 — 2026-06-13 — name your scheduled jobs
+
+- **Scheduled jobs can carry a title.** `schedule` now takes an optional `title`
+  — a short human label the apps show instead of the raw prompt or `python3 …`
+  command, so your scheduled tasks are easy to tell apart. Jobs without a title
+  are unchanged; they keep showing the prompt.
+
 ## v0.9.3 — 2026-06-12 — system prompt hardening
 
 - **Clearer agent ground rules.** The system prompt now states plainly that the

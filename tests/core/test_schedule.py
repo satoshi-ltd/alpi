@@ -43,6 +43,52 @@ def test_cron_tool_add_cron_job_silent_by_default(tmp_home_no_env: Path) -> None
     assert data[0]["notify"] is False
 
 
+def test_cron_tool_add_stores_title(tmp_home_no_env: Path) -> None:
+    out = Schedule().run(action="add", kind="cron", expression="0 9 * * 1",
+                     prompt="python3 ${ALPI_HOME}/skills/personal/sports/scripts/run.py",
+                     no_agent=True, title="Sports this weekend")
+    assert out.ok
+    job = json.loads((tmp_home_no_env / "schedule" / "jobs.json").read_text())[0]
+    assert job["title"] == "Sports this weekend"
+
+
+def test_cron_tool_add_without_title_omits_field(tmp_home_no_env: Path) -> None:
+    out = Schedule().run(action="add", kind="cron", expression="0 9 * * 1",
+                     prompt="morning summary")
+    assert out.ok
+    job = json.loads((tmp_home_no_env / "schedule" / "jobs.json").read_text())[0]
+    assert "title" not in job
+
+
+def test_cron_tool_update_sets_title(tmp_home_no_env: Path) -> None:
+    Schedule().run(action="add", kind="cron", expression="0 9 * * 1",
+                   prompt="morning summary")
+    jid = json.loads((tmp_home_no_env / "schedule" / "jobs.json").read_text())[0]["id"]
+    out = Schedule().run(action="update", id=jid, title="Morning brief")
+    assert out.ok
+    job = json.loads((tmp_home_no_env / "schedule" / "jobs.json").read_text())[0]
+    assert job["title"] == "Morning brief"
+
+
+def test_cron_tool_update_empty_title_clears_it(tmp_home_no_env: Path) -> None:
+    Schedule().run(action="add", kind="cron", expression="0 9 * * 1",
+                   prompt="morning summary", title="Morning brief")
+    jid = json.loads((tmp_home_no_env / "schedule" / "jobs.json").read_text())[0]["id"]
+    out = Schedule().run(action="update", id=jid, title="")
+    assert out.ok
+    job = json.loads((tmp_home_no_env / "schedule" / "jobs.json").read_text())[0]
+    assert "title" not in job
+
+
+def test_cron_tool_update_omitted_title_untouched(tmp_home_no_env: Path) -> None:
+    Schedule().run(action="add", kind="cron", expression="0 9 * * 1",
+                   prompt="morning summary", title="Morning brief")
+    jid = json.loads((tmp_home_no_env / "schedule" / "jobs.json").read_text())[0]["id"]
+    Schedule().run(action="update", id=jid, paused=True)
+    job = json.loads((tmp_home_no_env / "schedule" / "jobs.json").read_text())[0]
+    assert job["title"] == "Morning brief"
+
+
 def test_cron_tool_add_inactivity_job(tmp_home_no_env: Path) -> None:
     out = Schedule().run(action="add", kind="inactivity", after_hours=6,
                      prompt="check on me")

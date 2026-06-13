@@ -14,6 +14,14 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.1.42 — 2026-06-13 — readable schedule names
+
+_Job titles require alpi v0.9.4+._
+
+- **The schedule list shows a job's title** when it has one, instead of the raw
+  prompt — easier to tell your jobs apart. Tap a job to read its full
+  prompt/command. The timing chip also drops the redundant "cron" label.
+
 ## v0.1.41 — 2026-06-12 — auto-read agent voices
 
 _Requires alpi v0.9.1+._

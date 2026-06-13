@@ -11,6 +11,20 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.3.58 — 2026-06-13 — clearer schedule view
+
+_Titles require alpi v0.9.4+._
+
+- **Job titles.** The schedule list shows a job's title when it has one, instead
+  of the raw prompt or `python3 …` command. Without a title it still shows the
+  prompt.
+- **Hover the title** to see the full underlying prompt or `python3 …` command
+  in a wide tooltip.
+- **Distinct icon actions** — Run (▶), Enable/Disable (power), Delete — always
+  visible with tooltips, instead of text links that only appeared on hover.
+- **Cleaner four-column row** — id · schedule · title · actions — and the
+  schedule chip drops the redundant "cron" label.
+
 ## v0.3.57 — 2026-06-12 — auto-read agent voices
 
 _Requires alpi v0.9.1+._

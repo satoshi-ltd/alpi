@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useNotify } from "../../../primitives/Notification.jsx";
 import { Section } from "../primitives.jsx";
-import { ScheduleRow as DsScheduleRow } from "../../../primitives/SettingsLayout.jsx";
+import { ScheduleRow as DsScheduleRow, ScheduleList as DsScheduleList } from "../../../primitives/SettingsLayout.jsx";
 import { scheduleSummary } from "../util.js";
 
 export function SchedulesSection({ profile }) {
@@ -65,23 +65,23 @@ export function SchedulesSection({ profile }) {
   if (jobs === null || jobs.length === 0) return null;
   return (
     <Section title="Schedule" tooltip="recurring agent tasks">
-      <div className="col" style={{ gap: 0 }}>
+      <DsScheduleList>
         {jobs.map((j) => (
           <DsScheduleRow
             key={j.id}
             s={{
               id: j.id,
               cron: scheduleSummary(j),
-              desc: j.prompt || "",
+              title: j.title || "",
+              prompt: j.prompt || "",
               on: !j.paused,
-              noAgent: Boolean(j.no_agent),
             }}
             onFire={() => fire(j.id)}
             onToggle={() => setPaused(j.id, !j.paused)}
             onDelete={() => remove(j.id)}
           />
         ))}
-      </div>
+      </DsScheduleList>
     </Section>
   );
 }

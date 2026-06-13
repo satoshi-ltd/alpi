@@ -8,6 +8,7 @@ export default function Tip({
   block = false,
   escape = false,
   style,
+  wide = false,
 }) {
   if (!text) return children;
   const sideClass =
@@ -22,7 +23,7 @@ export default function Tip({
             : side === "up"
               ? "up"
               : "";
-  const bodyClass = [`ds-tip-body`, sideClass].filter(Boolean).join(" ");
+  const bodyClass = [`ds-tip-body`, sideClass, wide ? "ds-tip-wide" : ""].filter(Boolean).join(" ");
   const wrapStyle = {
     display: block ? "flex" : "inline-flex",
     width: block ? "100%" : "auto",
