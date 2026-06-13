@@ -742,7 +742,7 @@ Verb namespaces in current shape:
   and the parent parses the `tool_end` args (via
   `alpi.outputs.record_child_send_message`) to file one canonical
   output with the full `delivered_to` list. Each row carries
-  `{id, profile, created_at, source, source_id, body,
+  `{id, profile, created_at, body,
   type: info|warning|error, status: unread|read, session_id, delivered_to}`.
   No `archive` action — the 500-row cap handles retention so
   clients only render a two-state inbox. `agent.message`,
@@ -808,8 +808,8 @@ queries those stores, not ``host.events.history``.
     (`/outputs/<profile>/<id>`) so clients land on the canonical
     output instead of the chat window.
   - `output.created` — companion event for every new outputs row
-    (`source`: `send_message | schedule`). Lets inbox surfaces
-    refresh without polling `host.outputs.list`.
+    (`{profile, id, type}`). Lets inbox surfaces refresh without
+    polling `host.outputs.list`.
   - `schedule.changed` (`action: removed|paused|resumed`) —
     schedule mutators on the host plane.
   - `config_changed` (`scope: providers|mcp|sandbox|voice|env|<dotted-key-head>`)

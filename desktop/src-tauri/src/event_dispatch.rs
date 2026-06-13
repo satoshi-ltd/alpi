@@ -108,6 +108,44 @@ pub fn classify_frame(state: &mut SubscribeState, frame: &Value) -> SubscribeAct
     SubscribeAction::Deliver { seq }
 }
 
+pub const NOTIFIABLE_KINDS: [&str; 5] = [
+    "agent.message",
+    "wg.done",
+    "approval.request",
+    "schedule.failed",
+    "budget.threshold",
+];
+
+pub struct PollOutcome {
+    pub to_notify: Vec<Value>,
+    pub next_cursor: u64,
+}
+
+// cursor=None is first sight: anchor at head, notify nothing (no startup storm). With a cursor: notify returned frames past it, then jump to head — events older than the fetched window are skipped on purpose (anti-storm; the durable inbox still lists them).
+pub fn classify_poll(cursor: Option<u64>, events: &[Value], next_seq: Option<u64>) -> PollOutcome {
+    let max_seq = events
+        .iter()
+        .filter_map(|e| e.get("seq").and_then(|v| v.as_u64()))
+        .max();
+    let head = next_seq.into_iter().chain(max_seq).max().unwrap_or(0);
+    match cursor {
+        None => PollOutcome { to_notify: Vec::new(), next_cursor: head },
+        Some(c) => {
+            let to_notify: Vec<Value> = events
+                .iter()
+                .filter(|e| {
+                    e.get("seq")
+                        .and_then(|v| v.as_u64())
+                        .map(|s| s > c)
+                        .unwrap_or(false)
+                })
+                .cloned()
+                .collect();
+            PollOutcome { to_notify, next_cursor: head.max(c) }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -235,5 +273,70 @@ mod tests {
         let mut s = fresh();
         let action = classify_frame(&mut s, &json!({"data": {"profile": "doc"}}));
         assert_eq!(action, SubscribeAction::Ignore);
+    }
+
+    // classify_poll -------------------------------------------------------------
+
+    fn ev(seq: u64) -> Value {
+        json!({"event": "agent.message", "seq": seq})
+    }
+
+    fn seqs(out: &PollOutcome) -> Vec<u64> {
+        out.to_notify
+            .iter()
+            .filter_map(|e| e.get("seq").and_then(|v| v.as_u64()))
+            .collect()
+    }
+
+    #[test]
+    fn poll_first_sight_anchors_at_head_without_notifying() {
+        let out = classify_poll(None, &[ev(5), ev(6)], Some(6));
+        assert!(out.to_notify.is_empty());
+        assert_eq!(out.next_cursor, 6);
+    }
+
+    #[test]
+    fn poll_first_sight_with_no_events_anchors_at_next_seq() {
+        let out = classify_poll(None, &[], Some(10));
+        assert!(out.to_notify.is_empty());
+        assert_eq!(out.next_cursor, 10);
+    }
+
+    #[test]
+    fn poll_with_cursor_notifies_only_frames_past_it() {
+        let out = classify_poll(Some(5), &[ev(5), ev(6), ev(7)], Some(7));
+        assert_eq!(seqs(&out), vec![6, 7]);
+        assert_eq!(out.next_cursor, 7);
+    }
+
+    #[test]
+    fn poll_with_cursor_and_no_new_events_keeps_cursor() {
+        let out = classify_poll(Some(7), &[], None);
+        assert!(out.to_notify.is_empty());
+        assert_eq!(out.next_cursor, 7);
+    }
+
+    #[test]
+    fn poll_cursor_never_moves_backwards_on_stale_response() {
+        let out = classify_poll(Some(9), &[ev(3)], Some(2));
+        assert!(out.to_notify.is_empty());
+        assert_eq!(out.next_cursor, 9);
+    }
+
+    #[test]
+    fn poll_with_cursor_jumps_to_head_skipping_events_beyond_the_window() {
+        // Busy daemon: only the recent tail returned, head far ahead → cursor jumps to head, older-than-window events skipped on purpose.
+        let out = classify_poll(Some(5), &[ev(108), ev(109), ev(110)], Some(200));
+        assert_eq!(seqs(&out), vec![108, 109, 110]);
+        assert_eq!(out.next_cursor, 200);
+    }
+
+    #[test]
+    fn notifiable_kinds_cover_interrupts_but_not_wg_blocked() {
+        // wg.blocked is a derived fold of a BLOCKED wg.done close, not an emitted event — blocked workgroups surface via wg.done.
+        assert!(NOTIFIABLE_KINDS.contains(&"agent.message"));
+        assert!(NOTIFIABLE_KINDS.contains(&"wg.done"));
+        assert!(!NOTIFIABLE_KINDS.contains(&"wg.blocked"));
+        assert!(!NOTIFIABLE_KINDS.contains(&"wg.post"));
     }
 }

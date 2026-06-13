@@ -36,6 +36,8 @@ pub struct Deeplink {
     pub kind: String,
     pub profile: Option<String>,
     pub id: Option<String>,
+    // Origin connection — the React side switches to it before applying the view.
+    pub connection_id: String,
 }
 
 fn show(app: &AppHandle, title: &str, body: &str, deeplink: Deeplink) {
@@ -79,7 +81,13 @@ fn show_via_osascript(title: &str, body: &str) -> std::io::Result<()> {
         .map(|_| ())
 }
 
-pub fn dispatch_daemon_frame(app: &AppHandle, frame: &serde_json::Value) {
+// !is_active_connection: frame is from a background daemon, so focus/active-view suppression never applies — always surface.
+pub fn dispatch_daemon_frame(
+    app: &AppHandle,
+    connection_id: &str,
+    is_active_connection: bool,
+    frame: &serde_json::Value,
+) {
     let event = frame.get("event").and_then(|v| v.as_str()).unwrap_or("");
     let data = frame
         .get("data")
@@ -88,7 +96,7 @@ pub fn dispatch_daemon_frame(app: &AppHandle, frame: &serde_json::Value) {
     match event {
         "approval.request" => {
             // Skip native banner when window focused — App.jsx's ApprovalSheet modal already pops, banner would be a duplicate.
-            if window_focused(app) {
+            if is_active_connection && window_focused(app) {
                 return;
             }
             let profile = data
@@ -130,6 +138,7 @@ pub fn dispatch_daemon_frame(app: &AppHandle, frame: &serde_json::Value) {
                     kind: "approval".into(),
                     profile: Some(profile),
                     id: Some(request_id),
+                    connection_id: connection_id.to_string(),
                 },
             );
         }
@@ -145,7 +154,7 @@ pub fn dispatch_daemon_frame(app: &AppHandle, frame: &serde_json::Value) {
                 .unwrap_or("")
                 .to_string();
             // Gate is_active on focus: ACTIVE_VIEW stays set after blur, so alone it's stale.
-            if window_focused(app) && is_active("workgroup", &wg_id) {
+            if is_active_connection && window_focused(app) && is_active("workgroup", &wg_id) {
                 return;
             }
             let summary = data
@@ -167,6 +176,7 @@ pub fn dispatch_daemon_frame(app: &AppHandle, frame: &serde_json::Value) {
                     kind: "workgroup".into(),
                     profile: Some(profile),
                     id: Some(wg_id),
+                    connection_id: connection_id.to_string(),
                 },
             );
         }
@@ -200,12 +210,14 @@ pub fn dispatch_daemon_frame(app: &AppHandle, frame: &serde_json::Value) {
                     kind: "output".into(),
                     profile: Some(profile),
                     id: Some(output_id),
+                    connection_id: connection_id.to_string(),
                 }
             } else {
                 Deeplink {
                     kind: "settings".into(),
                     profile: Some(profile),
                     id: Some("schedules".into()),
+                    connection_id: connection_id.to_string(),
                 }
             };
             show(app, &title, &body, deeplink);
@@ -248,18 +260,21 @@ pub fn dispatch_daemon_frame(app: &AppHandle, frame: &serde_json::Value) {
                     kind: "output".into(),
                     profile: Some(profile),
                     id: Some(output_id),
+                    connection_id: connection_id.to_string(),
                 }
             } else if !session_id.is_empty() {
                 Deeplink {
                     kind: "chat".into(),
                     profile: Some(profile),
                     id: Some(session_id),
+                    connection_id: connection_id.to_string(),
                 }
             } else {
                 Deeplink {
                     kind: "profile".into(),
                     profile: Some(profile),
                     id: None,
+                    connection_id: connection_id.to_string(),
                 }
             };
             show(app, &title, &body, deeplink);
@@ -286,6 +301,7 @@ pub fn dispatch_daemon_frame(app: &AppHandle, frame: &serde_json::Value) {
                     kind: "settings".into(),
                     profile: Some(profile),
                     id: Some("budget".into()),
+                    connection_id: connection_id.to_string(),
                 },
             );
         }
@@ -293,7 +309,12 @@ pub fn dispatch_daemon_frame(app: &AppHandle, frame: &serde_json::Value) {
     }
 }
 
-pub fn dispatch_session_done(app: &AppHandle, profile: &str, session_id: &str) {
+pub fn dispatch_session_done(
+    app: &AppHandle,
+    connection_id: &str,
+    profile: &str,
+    session_id: &str,
+) {
     // Skip when focused — emitting a deeplink here yanks the user back on next focus change.
     if window_focused(app) {
         return;
@@ -307,6 +328,7 @@ pub fn dispatch_session_done(app: &AppHandle, profile: &str, session_id: &str) {
             kind: "chat".into(),
             profile: Some(profile.to_string()),
             id: Some(session_id.to_string()),
+            connection_id: connection_id.to_string(),
         },
     );
 }
@@ -327,6 +349,7 @@ pub fn dispatch_daemon_disconnect(app: &AppHandle, connection_id: &str) {
             kind: "settings".into(),
             profile: None,
             id: Some("connection".into()),
+            connection_id: connection_id.to_string(),
         },
     );
 }

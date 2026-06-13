@@ -13,7 +13,7 @@ from alpi.host import server as host_server
 
 
 def _seed(home: Path, **overrides) -> dict:
-    base = dict(profile="default", source="send_message", body="b")
+    base = dict(profile="default", body="b")
     base.update(overrides)
     return outputs_mod.append(home, **base)
 

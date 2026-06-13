@@ -26,12 +26,6 @@ function fmtRelative(ts) {
 }
 
 
-function sourceTag(row) {
-  if (row.source === 'schedule') return 'SCHEDULE';
-  return 'SEND MSG';
-}
-
-
 function severityTag(row) {
   if (row.kind === 'alert') return 'ERROR';
   if (row.severity === 'urgent') return 'URGENT';
@@ -42,9 +36,6 @@ function severityTag(row) {
 
 function contextualAction(row) {
   if (!row) return null;
-  if (row.source === 'schedule' && row.source_id) {
-    return { label: 'Open schedule', href: `/profile/${row.profile}/schedule` };
-  }
   if (row.session_id) {
     return { label: 'Open chat', href: `/chat/${row.profile}` };
   }
@@ -84,8 +75,8 @@ export default function OutputDetailScreen() {
   const { colors, fonts, fontSizes } = useTheme();
   const router = useRouter();
   const toast = useToast();
-  const { profile, id } = useLocalSearchParams();
-  const { row, loading, error, markRead } = useOutput(profile, id);
+  const { profile, id, connectionId } = useLocalSearchParams();
+  const { row, loading, error, markRead } = useOutput(profile, id, connectionId);
   const summaries = useProfileSummaries();
 
   useEffect(() => {
@@ -155,24 +146,6 @@ export default function OutputDetailScreen() {
               <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.danger, letterSpacing: 0.6 }}>
                 {sev}
               </Text>
-            ) : null}
-            {sev ? (
-              <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink4 ?? colors.ink3 }}>
-                ·
-              </Text>
-            ) : null}
-            <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3, letterSpacing: 0.6 }}>
-              {sourceTag(row)}
-            </Text>
-            {row.source_id ? (
-              <>
-                <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink4 ?? colors.ink3 }}>
-                  ·
-                </Text>
-                <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink2, letterSpacing: 0.6 }}>
-                  {row.source_id}
-                </Text>
-              </>
             ) : null}
           </View>
 

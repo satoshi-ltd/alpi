@@ -11,7 +11,7 @@ import { safeUnlisten } from "../lib/tauri-listen.js";
 const DEEPLINK_TTL_MS = 30_000;
 
 export function resolveDeeplink(deeplink) {
-  const { kind, profile, id } = deeplink || {};
+  const { kind, profile, id, connection_id: connectionId } = deeplink || {};
   if (kind === "chat" && profile) {
     return { view: { kind: "profile", profile, sessionId: id || null } };
   }
@@ -23,7 +23,9 @@ export function resolveDeeplink(deeplink) {
   }
   if (kind === "output" && profile && id) {
     // No view swap — leave whatever the user is on. The opened modal owns selection.
-    return { notifications: { profile, id } };
+    const target = { profile, id };
+    if (connectionId) target.connectionId = connectionId;
+    return { notifications: target };
   }
   if (kind === "settings") {
     // Convention: undefined settingsTarget means "keep current"; null would crash settingsTarget.kind in App.jsx.
@@ -34,10 +36,27 @@ export function resolveDeeplink(deeplink) {
   return null;
 }
 
-export function useNotificationDeeplink({ setView, setSettingsTarget, openNotifications }) {
+export function connectionToSwitch(deeplink, activeConnectionId) {
+  const id = deeplink?.connection_id;
+  if (typeof id !== "string" || !id) return null;
+  if (id === activeConnectionId) return null;
+  return id;
+}
+
+export function useNotificationDeeplink({
+  setView,
+  setSettingsTarget,
+  openNotifications,
+  onSwitchConnection,
+  activeConnectionId,
+}) {
   const pendingRef = useRef(null);
   const openNotificationsRef = useRef(openNotifications);
   useEffect(() => { openNotificationsRef.current = openNotifications; }, [openNotifications]);
+  const onSwitchConnectionRef = useRef(onSwitchConnection);
+  useEffect(() => { onSwitchConnectionRef.current = onSwitchConnection; }, [onSwitchConnection]);
+  const activeConnectionIdRef = useRef(activeConnectionId);
+  useEffect(() => { activeConnectionIdRef.current = activeConnectionId; }, [activeConnectionId]);
 
   useEffect(() => {
     let unlistenFired = null;
@@ -52,6 +71,8 @@ export function useNotificationDeeplink({ setView, setSettingsTarget, openNotifi
         return;
       }
       pendingRef.current = null;
+      const target = connectionToSwitch(pending.deeplink, activeConnectionIdRef.current);
+      if (target) onSwitchConnectionRef.current?.(target);
       const action = resolveDeeplink(pending.deeplink);
       if (!action) return;
       if (action.settingsTarget !== undefined) {

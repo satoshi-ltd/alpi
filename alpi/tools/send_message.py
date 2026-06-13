@@ -116,7 +116,6 @@ class SendMessage(Tool):
         if not _suppress_native_emit() and text.strip():
             create_output(
                 text=text, type="info",
-                source="send_message", source_id="",
                 delivered_to=[channel],
             )
 

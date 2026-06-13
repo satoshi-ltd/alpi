@@ -37,7 +37,6 @@ def test_notify_creates_output(monkeypatch, tmp_path: Path) -> None:
     items = outputs_mod.list_outputs(tmp_path)
     assert len(items) == 1
     out = items[0]
-    assert out["source"] == "send_message"
     assert out["body"] == "ping"
     assert "title" not in out
     assert out["delivered_to"] == ["alpi"]
@@ -48,7 +47,6 @@ def test_notify_creates_output(monkeypatch, tmp_path: Path) -> None:
     assert msg["deep_link"] == f"/outputs/{out['profile']}/{out['id']}"
     created = next(d for k, d in events if k == "output.created")
     assert created["id"] == out["id"]
-    assert created["source"] == "send_message"
 
 
 def test_send_message_gateway_only_creates_output(
@@ -162,8 +160,6 @@ def test_scheduler_failed_creates_output(
     items = outputs_mod.list_outputs(home)
     assert len(items) == 1
     out = items[0]
-    assert out["source"] == "schedule"
-    assert out["source_id"] == "j-fail"
     assert out["type"] == "error"
     assert out["delivered_to"] == []
     assert out["body"] == "boom"
@@ -221,8 +217,6 @@ def test_scheduler_done_notify_creates_output(
     items = outputs_mod.list_outputs(home)
     assert len(items) == 1
     out = items[0]
-    assert out["source"] == "schedule"
-    assert out["source_id"] == "daily"
     assert out["body"] == "Daily summary · 5 open PRs"
     assert out["delivered_to"] == ["alpi"]
     assert out["type"] == "info"
@@ -345,7 +339,6 @@ def test_scheduler_send_message_creates_one_output(
     items = outputs_mod.list_outputs(home)
     assert len(items) == 1
     out = items[0]
-    assert out["source"] == "send_message"
     assert out["body"] == "hi"
     assert out["delivered_to"] == ["alpi"]
 

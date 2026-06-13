@@ -20,7 +20,6 @@ def home(tmp_path: Path) -> Path:
 def _append(home: Path, **overrides) -> dict:
     base = dict(
         profile="default",
-        source="send_message",
         body="hello",
     )
     base.update(overrides)
@@ -134,13 +133,6 @@ def test_corrupt_lines_are_skipped(home: Path) -> None:
         f.write('{"id": ""}\n')
     items = outputs_mod.list_outputs(home)
     assert [it["id"] for it in items] == [out["id"]]
-
-
-def test_append_rejects_unknown_source(home: Path) -> None:
-    with pytest.raises(ValueError, match="invalid source"):
-        outputs_mod.append(
-            home, profile="default", source="garbage", body="x",
-        )
 
 
 def test_append_normalises_invalid_type(home: Path) -> None:

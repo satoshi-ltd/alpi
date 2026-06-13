@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 
-import { resolveDeeplink } from "./useNotificationDeeplink.js";
+import { connectionToSwitch, resolveDeeplink } from "./useNotificationDeeplink.js";
 
 describe("resolveDeeplink", () => {
   it("opens the chat with a specific session when kind=chat carries id", () => {
@@ -33,6 +33,11 @@ describe("resolveDeeplink", () => {
     expect(action.view).toBeUndefined();
   });
 
+  it("threads connection_id into the output target so the modal loads the right daemon's notification", () => {
+    const action = resolveDeeplink({ kind: "output", profile: "abby", id: "abc123", connection_id: "remote-b" });
+    expect(action).toEqual({ notifications: { profile: "abby", id: "abc123", connectionId: "remote-b" } });
+  });
+
   it("ignores kind=output with missing profile or id — the daemon's contract requires both", () => {
     expect(resolveDeeplink({ kind: "output", profile: "abby" })).toBeNull();
     expect(resolveDeeplink({ kind: "output", id: "abc123" })).toBeNull();
@@ -59,5 +64,21 @@ describe("resolveDeeplink", () => {
     expect(resolveDeeplink({ kind: "profile" })).toBeNull();
     expect(resolveDeeplink({ kind: "workgroup", profile: "vera" })).toBeNull();
     expect(resolveDeeplink({ kind: "unknown", profile: "abby" })).toBeNull();
+  });
+});
+
+describe("connectionToSwitch", () => {
+  it("returns the connection id when the deeplink belongs to a background connection", () => {
+    expect(connectionToSwitch({ connection_id: "remote-b" }, "local")).toBe("remote-b");
+  });
+
+  it("returns null when the deeplink connection is already active", () => {
+    expect(connectionToSwitch({ connection_id: "local" }, "local")).toBeNull();
+  });
+
+  it("returns null for legacy notifications without a connection_id", () => {
+    expect(connectionToSwitch({}, "local")).toBeNull();
+    expect(connectionToSwitch({ connection_id: "" }, "local")).toBeNull();
+    expect(connectionToSwitch(null, "local")).toBeNull();
   });
 });

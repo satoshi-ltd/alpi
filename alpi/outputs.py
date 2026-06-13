@@ -4,8 +4,6 @@ Row schema (one JSON object per line):
     id           12 hex chars
     profile      ``default`` or ``<name>``
     created_at   epoch seconds (float)
-    source       ``send_message`` | ``schedule``
-    source_id    job id when source=schedule, else ``""``
     body         message body
     type         ``info`` | ``warning`` | ``error``
     status       ``unread`` | ``read``
@@ -25,7 +23,6 @@ from typing import Any, Iterable
 
 MAX_OUTPUTS = 500
 
-VALID_SOURCE = frozenset({"send_message", "schedule"})
 VALID_TYPE = frozenset({"info", "warning", "error"})
 VALID_STATUS = frozenset({"unread", "read"})
 
@@ -85,15 +82,11 @@ def append(
     home: Path,
     *,
     profile: str,
-    source: str,
     body: str,
     type: str = "info",
     session_id: str = "",
-    source_id: str = "",
     delivered_to: list[str] | None = None,
 ) -> dict[str, Any]:
-    if source not in VALID_SOURCE:
-        raise ValueError(f"invalid source: {source!r}")
     if type not in VALID_TYPE:
         type = "info"
 
@@ -101,8 +94,6 @@ def append(
         "id": _new_id(),
         "profile": profile or "default",
         "created_at": time.time(),
-        "source": source,
-        "source_id": source_id or "",
         "body": body or "",
         "type": type,
         "status": "unread",
@@ -256,7 +247,6 @@ def record_child_send_message(home: Path, args: dict) -> str:
         output = append(
             home,
             profile=profile,
-            source="send_message",
             body=body,
             type=type,
             delivered_to=delivered_to,
@@ -269,7 +259,6 @@ def record_child_send_message(home: Path, args: dict) -> str:
         host_events.emit("output.created", {
             "profile": profile,
             "id": output_id,
-            "source": "send_message",
             "type": type,
         })
     except Exception:  # noqa: BLE001
@@ -300,7 +289,7 @@ def _suppress_native_emit() -> bool:
 
 
 def create_output(
-    *, text: str, type: str, source: str, source_id: str,
+    *, text: str, type: str,
     delivered_to: list[str],
 ) -> dict | None:
     # Persistence is opportunistic — failures never block delivery.
@@ -319,7 +308,7 @@ def create_output(
         session_id = ""
     try:
         return append(
-            home, profile=prof, source=source, source_id=source_id,
+            home, profile=prof,
             body=text, type=type, session_id=session_id,
             delivered_to=delivered_to,
         )
@@ -328,12 +317,12 @@ def create_output(
 
 
 def create_output_and_emit_message(
-    *, text: str, title: str, type: str, source: str, source_id: str,
+    *, text: str, title: str, type: str,
     delivered_to: list[str],
 ) -> str:
     """Callers must guard with _suppress_native_emit() — schedule/gateway children defer to the parent."""
     output = create_output(
-        text=text, type=type, source=source, source_id=source_id,
+        text=text, type=type,
         delivered_to=delivered_to,
     )
     if output is None:
@@ -354,7 +343,6 @@ def create_output_and_emit_message(
         host_events.emit("output.created", {
             "profile": output["profile"],
             "id": output["id"],
-            "source": output["source"],
             "type": output["type"],
         })
     except Exception:  # noqa: BLE001
@@ -364,7 +352,6 @@ def create_output_and_emit_message(
 
 __all__ = [
     "MAX_OUTPUTS",
-    "VALID_SOURCE",
     "VALID_TYPE",
     "VALID_STATUS",
     "append",

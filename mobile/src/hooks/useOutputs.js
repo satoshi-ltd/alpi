@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useEndpoint } from '../lib/EndpointContext';
+import { call as rpcCall } from '../lib/rpc';
 import { useDebouncedCallback } from './useDebouncedCallback';
 import { useEventEffect } from './useEvents';
 
@@ -59,18 +60,35 @@ export function useOutputs({ profile, status, profiles } = {}) {
 }
 
 
-export function useOutput(profile, id) {
-  const { endpoint, call } = useEndpoint();
+// Three modes so an unknown connectionId never silently reads the active daemon — that could open/mark the wrong notification on a profile/id collision.
+export function resolveReadTarget(connections, connectionId) {
+  if (!connectionId) return { mode: 'active' };
+  const connection = (connections ?? []).find((c) => c.id === connectionId);
+  return connection ? { mode: 'connection', connection } : { mode: 'unknown' };
+}
+
+export function useOutput(profile, id, connectionId) {
+  const { endpoint, call, connections } = useEndpoint();
   const [row, setRow] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
   const load = useCallback(async () => {
-    if (!endpoint || !profile || !id) return;
+    if (!profile || !id) return;
+    const target = resolveReadTarget(connections, connectionId);
+    if (target.mode === 'unknown') {
+      setRow(null);
+      setError(new Error(`unknown connection: ${connectionId}`));
+      setLoading(false);
+      return;
+    }
+    if (target.mode === 'active' && !endpoint) return;
     setLoading(true);
     setError(null);
     try {
-      const res = await call('host.outputs.read', { profile, id });
+      const res = target.mode === 'connection'
+        ? await rpcCall(target.connection, 'host.outputs.read', { profile, id })
+        : await call('host.outputs.read', { profile, id });
       setRow(res?.output ?? null);
     } catch (e) {
       setError(e);
@@ -78,21 +96,26 @@ export function useOutput(profile, id) {
     } finally {
       setLoading(false);
     }
-  }, [endpoint, call, profile, id]);
+  }, [endpoint, call, connections, connectionId, profile, id]);
 
   useEffect(() => {
     load();
   }, [load]);
 
   const markRead = useCallback(async () => {
-    if (!endpoint || !profile || !id) return;
+    if (!profile || !id) return;
+    const target = resolveReadTarget(connections, connectionId);
+    if (target.mode === 'unknown') return;
+    if (target.mode === 'active' && !endpoint) return;
     try {
-      const res = await call('host.outputs.mark_read', { profile, id });
+      const res = target.mode === 'connection'
+        ? await rpcCall(target.connection, 'host.outputs.mark_read', { profile, id })
+        : await call('host.outputs.mark_read', { profile, id });
       if (res?.output) setRow(res.output);
     } catch {
       /* */
     }
-  }, [endpoint, call, profile, id]);
+  }, [endpoint, call, connections, connectionId, profile, id]);
 
   return { row, loading, error, reload: load, markRead };
 }

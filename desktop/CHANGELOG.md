@@ -11,6 +11,20 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.3.59 — 2026-06-13 — notifications across every connection
+
+- **Background daemons can reach you now.** You get native notifications from
+  every connected daemon, not just the active one — switch away from a daemon
+  and you'll still hear when it needs you.
+- **One notifications inbox for all connections**, each item tagged with its
+  daemon. Read, open, or clear any of them from a single list.
+- **The unread count covers every connection**, so the bell reflects all your
+  daemons at a glance.
+- **Dropped the confusing source tag** (`send msg` / `schedule`) from the list
+  and detail — it showed an internal delivery detail, not anything useful.
+- **Click a notification to land on it** — the app switches to the originating
+  connection and opens the right place.
+
 ## v0.3.58 — 2026-06-13 — clearer schedule view
 
 _Titles require alpi v0.9.4+._

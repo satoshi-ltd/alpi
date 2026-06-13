@@ -14,6 +14,18 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.1.43 — 2026-06-13 — notifications across every connection
+
+- **Your notifications inbox now spans all paired daemons.** Alerts from every
+  connection land in one list, each tagged with the daemon it came from — no
+  more switching connections to discover one was waiting on you.
+- **The unread badge counts all connections**, so the bell tells you when *any*
+  of your daemons needs attention, not just the one on screen.
+- **Tap a notification to go straight there** — the app switches to the right
+  connection and opens the conversation or note, even from a fully-closed app.
+- **Dropped the confusing source tag** (`send msg` / `schedule`) from the list
+  and detail — it showed an internal delivery detail, not anything useful.
+
 ## v0.1.42 — 2026-06-13 — readable schedule names
 
 _Job titles require alpi v0.9.4+._

@@ -629,10 +629,27 @@ fn socket_path() -> Result<PathBuf, String> {
     Ok(root.join("host").join("host.sock"))
 }
 
+fn connection_by_id(connection_id: &str) -> Option<HostConnection> {
+    load_connections()
+        .connections
+        .into_iter()
+        .find(|c| c.id() == connection_id)
+}
+
 pub fn call(method: &str, params: Value) -> Result<Value, String> {
-    let conn = active_connection();
+    call_conn(&active_connection(), method, params)
+}
+
+// Same as `call`, but routed to a specific connection regardless of which is active.
+pub fn call_for(connection_id: &str, method: &str, params: Value) -> Result<Value, String> {
+    let conn = connection_by_id(connection_id)
+        .ok_or_else(|| format!("unknown connection: {connection_id}"))?;
+    call_conn(&conn, method, params)
+}
+
+fn call_conn(conn: &HostConnection, method: &str, params: Value) -> Result<Value, String> {
     let id = conn.id().to_string();
-    let result = match &conn {
+    let result = match conn {
         HostConnection::Local { .. } => call_local_inner(
             method,
             params,
@@ -653,7 +670,7 @@ pub fn call(method: &str, params: Value) -> Result<Value, String> {
     match &result {
         Ok(_) => set_status(&id, ConnectionStatus::Online, None),
         Err(e) => {
-            let next = match &conn {
+            let next = match conn {
                 HostConnection::Local { .. } => classify_local_error(e),
                 HostConnection::Remote { .. } => {
                     let cls = classify_remote_error(e);

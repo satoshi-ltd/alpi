@@ -7,8 +7,7 @@ import { Button } from '../src/components/Button';
 import { Diamond } from '../src/components/Diamond';
 import { ScreenHeader } from '../src/components/ScreenHeader';
 import { useToast } from '../src/components/Toast';
-import { useProfileSummaries } from '../src/hooks/useDaemonData';
-import { useMarkAllOutputsRead, useOutputs } from '../src/hooks/useOutputs';
+import { markAllUnifiedRead, useUnifiedOutputs } from '../src/hooks/useUnifiedOutputs';
 import { useEndpoint } from '../src/lib/EndpointContext';
 import { accentForProfile } from '../src/theme/accents';
 import { useTheme } from '../src/theme/ThemeContext';
@@ -23,12 +22,6 @@ function fmtRelative(ts) {
   if (diff < 86400) return `${Math.round(diff / 3600)}h`;
   if (diff < 86400 * 7) return `${Math.round(diff / 86400)}d`;
   return `${Math.round(diff / (86400 * 7))}w`;
-}
-
-
-function sourceTag(row) {
-  if (row.source === 'schedule') return 'schedule';
-  return 'send msg';
 }
 
 
@@ -52,28 +45,14 @@ function rowTitle(row) {
 export default function OutputsScreen() {
   const { colors, fonts, fontSizes } = useTheme();
   const router = useRouter();
-  const { endpoint } = useEndpoint();
-  const summaries = useProfileSummaries();
+  const { endpoint, connections, setActive } = useEndpoint();
   const toast = useToast();
 
   const [refreshing, setRefreshing] = useState(false);
 
-  const profileList = summaries.data?.profiles ?? [];
-  const profileNames = useMemo(
-    () => profileList.map((p) => p.name),
-    [profileList],
-  );
-  // Daemon-provided accent wins; static dict is the fallback for unmapped names.
-  const accentByName = useMemo(() => {
-    const m = {};
-    for (const p of profileList) m[p.name] = p.accent ?? accentForProfile(p.name);
-    return m;
-  }, [profileList]);
-  const profiles = profileNames.length ? profileNames : ['default'];
-
-  const { rows, loading, refresh } = useOutputs({ profiles });
+  const { rows, loading, refresh } = useUnifiedOutputs();
+  const multi = connections.length > 1;
   const unreadCount = useMemo(() => rows.filter((r) => r.status === 'unread').length, [rows]);
-  const markAll = useMarkAllOutputsRead();
 
   useFocusEffect(useCallback(() => { refresh(); }, [refresh]));
 
@@ -83,20 +62,27 @@ export default function OutputsScreen() {
   }, [refresh]);
 
   const onMarkAll = useCallback(async () => {
-    let total = 0;
-    for (const p of profiles) {
-      total += await markAll(p);
-    }
+    const total = await markAllUnifiedRead(rows, connections);
     if (total) toast({ title: `Marked ${total} read` });
     refresh();
-  }, [markAll, profiles, refresh, toast]);
+  }, [rows, connections, refresh, toast]);
+
+  const openRow = useCallback(async (item) => {
+    if (item.connectionId) {
+      try { await setActive(item.connectionId); } catch { /* */ }
+    }
+    router.push({
+      pathname: '/outputs/[profile]/[id]',
+      params: { profile: item.profile, id: item.id, connectionId: item.connectionId ?? '' },
+    });
+  }, [router, setActive]);
 
   const renderRow = useCallback(({ item }) => {
-    const accent = accentByName[item.profile] ?? accentForProfile(item.profile);
+    const accent = item.accent ?? accentForProfile(item.profile);
     const unread = item.status === 'unread';
     return (
       <Pressable
-        onPress={() => router.push(`/outputs/${item.profile}/${item.id}`)}
+        onPress={() => openRow(item)}
         style={({ pressed }) => ({
           paddingHorizontal: space.s7,
           paddingVertical: space.s5,
@@ -126,11 +112,14 @@ export default function OutputsScreen() {
               >
                 @{item.profile}
               </Text>
-              <Text
-                style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3 }}
-              >
-                · {sourceTag(item)}
-              </Text>
+              {multi ? (
+                <Text
+                  numberOfLines={1}
+                  style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: accent }}
+                >
+                  · {item.connectionName}
+                </Text>
+              ) : null}
             </View>
             <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3 }}>
               {fmtRelative(item.created_at)}
@@ -149,7 +138,7 @@ export default function OutputsScreen() {
         </View>
       </Pressable>
     );
-  }, [accentByName, colors, fonts, fontSizes, router]);
+  }, [colors, fonts, fontSizes, openRow, multi]);
 
   const showEmpty = !loading && rows.length === 0;
   const showSkeleton = loading && rows.length === 0;
@@ -167,7 +156,7 @@ export default function OutputsScreen() {
       <FlatList
         style={{ flex: 1 }}
         data={rows}
-        keyExtractor={(it) => `${it.profile}:${it.id}`}
+        keyExtractor={(it) => `${it.connectionId}:${it.profile}:${it.id}`}
         renderItem={renderRow}
         ItemSeparatorComponent={() => (
           <View style={{ height: 0.5, backgroundColor: colors.line }} />
@@ -203,7 +192,7 @@ export default function OutputsScreen() {
                 }}
               >
                 {endpoint
-                  ? 'Notifications land here when your agent calls send_message or a scheduled job fails.'
+                  ? 'Notifications land here when your agent notifies you or a scheduled job fails.'
                   : 'Pair this phone to a daemon to see your notifications.'}
               </Text>
             </View>

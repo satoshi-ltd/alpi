@@ -467,8 +467,6 @@ def _emit_schedule_event(home: Path, job: dict, outcome: JobOutcome) -> None:
                 output = outputs_mod.append(
                     home,
                     profile=profile,
-                    source="schedule",
-                    source_id=job_id,
                     body=outcome.message or "",
                     type="error",
                     delivered_to=[],
@@ -489,8 +487,6 @@ def _emit_schedule_event(home: Path, job: dict, outcome: JobOutcome) -> None:
                 output = outputs_mod.append(
                     home,
                     profile=profile,
-                    source="schedule",
-                    source_id=job_id,
                     body=(outcome.reply or "")[:2000],
                     type="info",
                     delivered_to=delivered_to_list,
@@ -507,7 +503,6 @@ def _emit_schedule_event(home: Path, job: dict, outcome: JobOutcome) -> None:
             host_events.emit("output.created", {
                 "profile": profile,
                 "id": output_id,
-                "source": "schedule",
                 "type": out_type,
             })
         # notify:true jobs push natively to the user's apps (agent.message is notifiable; schedule.done is not).

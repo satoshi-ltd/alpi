@@ -51,7 +51,6 @@ class Notify(Tool):
         if not _suppress_native_emit():
             create_output_and_emit_message(
                 text=text, title=title or "", type=type,
-                source="send_message", source_id="",
                 delivered_to=["alpi"],
             )
         return ToolResult(ok=True, output="delivered: alpi")

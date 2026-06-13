@@ -197,10 +197,18 @@ async fn profile_memory(profile: String) -> Result<serde_json::Value, String> {
 }
 
 #[tauri::command]
-async fn profile_summaries() -> serde_json::Value {
-    off_main(|| host_array_value("host.profile.summaries", serde_json::json!({}), "profiles"))
-        .await
-        .unwrap_or(serde_json::Value::Array(vec![]))
+async fn profile_summaries(connection_id: Option<String>) -> serde_json::Value {
+    off_main(move || {
+        let res = match connection_id {
+            Some(cid) => host_client::call_for(&cid, "host.profile.summaries", serde_json::json!({})),
+            None => host_client::call("host.profile.summaries", serde_json::json!({})),
+        };
+        res.ok()
+            .and_then(|v| v.get("profiles").cloned())
+            .unwrap_or_else(|| serde_json::Value::Array(vec![]))
+    })
+    .await
+    .unwrap_or(serde_json::Value::Array(vec![]))
 }
 
 #[tauri::command]
@@ -1619,6 +1627,7 @@ async fn outputs_list(
     profile: String,
     status: Option<String>,
     limit: Option<u32>,
+    connection_id: Option<String>,
 ) -> Result<serde_json::Value, String> {
     let mut params = serde_json::json!({"profile": profile});
     if let Some(s) = status {
@@ -1627,8 +1636,9 @@ async fn outputs_list(
     if let Some(l) = limit {
         params["limit"] = serde_json::Value::Number(serde_json::Number::from(l));
     }
-    let result = tauri::async_runtime::spawn_blocking(move || {
-        host_client::call("host.outputs.list", params)
+    let result = tauri::async_runtime::spawn_blocking(move || match connection_id {
+        Some(cid) => host_client::call_for(&cid, "host.outputs.list", params),
+        None => host_client::call("host.outputs.list", params),
     })
     .await
     .map_err(|e| format!("outputs_list: {e}"))??;
@@ -1639,12 +1649,15 @@ async fn outputs_list(
 }
 
 #[tauri::command]
-async fn outputs_read(profile: String, id: String) -> Result<serde_json::Value, String> {
-    let result = tauri::async_runtime::spawn_blocking(move || {
-        host_client::call(
-            "host.outputs.read",
-            serde_json::json!({"profile": profile, "id": id}),
-        )
+async fn outputs_read(
+    profile: String,
+    id: String,
+    connection_id: Option<String>,
+) -> Result<serde_json::Value, String> {
+    let params = serde_json::json!({"profile": profile, "id": id});
+    let result = tauri::async_runtime::spawn_blocking(move || match connection_id {
+        Some(cid) => host_client::call_for(&cid, "host.outputs.read", params),
+        None => host_client::call("host.outputs.read", params),
     })
     .await
     .map_err(|e| format!("outputs_read: {e}"))??;
@@ -1652,12 +1665,15 @@ async fn outputs_read(profile: String, id: String) -> Result<serde_json::Value, 
 }
 
 #[tauri::command]
-async fn outputs_mark_read(profile: String, id: String) -> Result<serde_json::Value, String> {
-    let result = tauri::async_runtime::spawn_blocking(move || {
-        host_client::call(
-            "host.outputs.mark_read",
-            serde_json::json!({"profile": profile, "id": id}),
-        )
+async fn outputs_mark_read(
+    profile: String,
+    id: String,
+    connection_id: Option<String>,
+) -> Result<serde_json::Value, String> {
+    let params = serde_json::json!({"profile": profile, "id": id});
+    let result = tauri::async_runtime::spawn_blocking(move || match connection_id {
+        Some(cid) => host_client::call_for(&cid, "host.outputs.mark_read", params),
+        None => host_client::call("host.outputs.mark_read", params),
     })
     .await
     .map_err(|e| format!("outputs_mark_read: {e}"))??;
@@ -1665,12 +1681,14 @@ async fn outputs_mark_read(profile: String, id: String) -> Result<serde_json::Va
 }
 
 #[tauri::command]
-async fn outputs_mark_all_read(profile: String) -> Result<u64, String> {
-    let result = tauri::async_runtime::spawn_blocking(move || {
-        host_client::call(
-            "host.outputs.mark_all_read",
-            serde_json::json!({"profile": profile}),
-        )
+async fn outputs_mark_all_read(
+    profile: String,
+    connection_id: Option<String>,
+) -> Result<u64, String> {
+    let params = serde_json::json!({"profile": profile});
+    let result = tauri::async_runtime::spawn_blocking(move || match connection_id {
+        Some(cid) => host_client::call_for(&cid, "host.outputs.mark_all_read", params),
+        None => host_client::call("host.outputs.mark_all_read", params),
     })
     .await
     .map_err(|e| format!("outputs_mark_all_read: {e}"))??;
@@ -1678,12 +1696,15 @@ async fn outputs_mark_all_read(profile: String) -> Result<u64, String> {
 }
 
 #[tauri::command]
-async fn outputs_delete(profile: String, id: String) -> Result<serde_json::Value, String> {
-    let result = tauri::async_runtime::spawn_blocking(move || {
-        host_client::call(
-            "host.outputs.delete",
-            serde_json::json!({"profile": profile, "id": id}),
-        )
+async fn outputs_delete(
+    profile: String,
+    id: String,
+    connection_id: Option<String>,
+) -> Result<serde_json::Value, String> {
+    let params = serde_json::json!({"profile": profile, "id": id});
+    let result = tauri::async_runtime::spawn_blocking(move || match connection_id {
+        Some(cid) => host_client::call_for(&cid, "host.outputs.delete", params),
+        None => host_client::call("host.outputs.delete", params),
     })
     .await
     .map_err(|e| format!("outputs_delete: {e}"))??;
@@ -2232,7 +2253,7 @@ fn stream_chat(
         },
     );
     if !got_error && !got_interrupted {
-        notifications::dispatch_session_done(&app, &profile, &resolved_id);
+        notifications::dispatch_session_done(&app, &host_client::active_connection_id(), &profile, &resolved_id);
     }
     let _ = app.emit(
         "chat-event",
@@ -2439,6 +2460,8 @@ fn subscribe_daemon_events(app: AppHandle) {
                                     drop(g);
                                     notifications::dispatch_daemon_frame(
                                         &app_for_frames,
+                                        &id_for_payload,
+                                        true,
                                         ev,
                                     );
                                     let _ = app_for_frames.emit(
@@ -2474,7 +2497,7 @@ fn subscribe_daemon_events(app: AppHandle) {
                         }
                     }
                     SubscribeAction::Deliver { .. } => {
-                        notifications::dispatch_daemon_frame(&app_for_frames, &frame);
+                        notifications::dispatch_daemon_frame(&app_for_frames, &id_for_payload, true, &frame);
                         let _ = app_for_frames.emit(
                             "daemon-event",
                             serde_json::json!({
@@ -2499,6 +2522,63 @@ fn subscribe_daemon_events(app: AppHandle) {
             }
         };
         std::thread::sleep(std::time::Duration::from_secs(sleep_secs));
+    }
+}
+
+const INACTIVE_POLL_SECS: u64 = 25;
+
+// The active connection notifies via its instant stream; this polls every OTHER connection so background daemons still raise native notifications.
+fn poll_inactive_connections(app: AppHandle) {
+    use std::collections::{HashMap, HashSet};
+
+    use crate::event_dispatch::{classify_poll, NOTIFIABLE_KINDS};
+
+    let mut cursors: HashMap<String, u64> = HashMap::new();
+    loop {
+        std::thread::sleep(std::time::Duration::from_secs(INACTIVE_POLL_SECS));
+        let state = host_client::load_connections();
+        let active = host_client::active_connection_id();
+        let known: HashSet<String> =
+            state.connections.iter().map(|c| c.id().to_string()).collect();
+        cursors.retain(|id, _| known.contains(id));
+        for conn in &state.connections {
+            let id = conn.id().to_string();
+            if id == active {
+                // Drop so it re-anchors (no replay) the moment it stops being active.
+                cursors.remove(&id);
+                continue;
+            }
+            let cursor = cursors.get(&id).copied();
+            let params = serde_json::json!({
+                "after_seq": cursor.unwrap_or(0),
+                "limit": 50,
+                "kinds": NOTIFIABLE_KINDS,
+            });
+            let resp = match host_client::call_for(&id, "host.events.history", params) {
+                Ok(v) => v,
+                Err(_) => continue,
+            };
+            let events: Vec<serde_json::Value> = resp
+                .get("events")
+                .and_then(|v| v.as_array())
+                .cloned()
+                .unwrap_or_default();
+            let next_seq = resp.get("next_seq").and_then(|v| v.as_u64());
+            let outcome = classify_poll(cursor, &events, next_seq);
+            for frame in &outcome.to_notify {
+                notifications::dispatch_daemon_frame(&app, &id, false, frame);
+                // background flag: useAllOutputs refreshes on this even though the poller carries agent.message/etc., not output.created.
+                let _ = app.emit(
+                    "daemon-event",
+                    serde_json::json!({
+                        "connection_id": id.clone(),
+                        "frame": frame.clone(),
+                        "background": true,
+                    }),
+                );
+            }
+            cursors.insert(id, outcome.next_cursor);
+        }
     }
 }
 
@@ -2660,6 +2740,8 @@ pub fn run() {
                 std::thread::sleep(std::time::Duration::from_secs(30));
                 host_client::probe_active();
             });
+            let app_for_poll = app_handle.clone();
+            spawn_background("inactive-poll", move || poll_inactive_connections(app_for_poll));
             spawn_background("daemon-events", move || subscribe_daemon_events(app_handle));
             Ok(())
         })

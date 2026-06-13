@@ -27,6 +27,11 @@ describe('NOTIFIABLE_KINDS', () => {
   it('excludes schedule.done from native notifications — schedule success is not an interrupt; if a job wants to notify it calls send_message explicitly', () => {
     expect(NOTIFIABLE_KINDS).not.toContain('schedule.done');
   });
+
+  it('excludes wg.blocked — it is a derived fold of a BLOCKED wg.done close, not an emitted event, so blocked workgroups already surface via wg.done', () => {
+    expect(NOTIFIABLE_KINDS).not.toContain('wg.blocked');
+    expect(NOTIFIABLE_KINDS).toContain('wg.done');
+  });
 });
 
 describe('formatNotification', () => {

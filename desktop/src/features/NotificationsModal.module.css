@@ -209,7 +209,7 @@
 }
 
 .detailMeta {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: var(--space-1);
   color: var(--ink-3);
@@ -217,6 +217,7 @@
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
+.detailMetaSpacer { flex: 1; }
 .detailMeta :global(.mono) { font-size: var(--fs-xs); color: var(--ink-3); }
 
 .detailMetaPart { color: var(--ink-3); }

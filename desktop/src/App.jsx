@@ -36,7 +36,7 @@ import { useCoalescedCallback } from "./hooks/useCoalescedCallback.js";
 import { usePendingQueue } from "./hooks/usePendingQueue.js";
 import { useChatStream } from "./hooks/useChatStream.js";
 import { useHostConnections } from "./hooks/useHostConnections.js";
-import { useOutputs } from "./hooks/useOutputs.js";
+import { useAllOutputs } from "./hooks/useOutputs.js";
 import { useNavListener } from "./hooks/useNavListener.js";
 import { usePinned } from "./hooks/usePinned.js";
 import { useLastView } from "./hooks/useLastView.js";
@@ -101,11 +101,6 @@ export default function App() {
     setNotificationsOpen(false);
     setNotificationsTarget(null);
   }, []);
-  useNotificationDeeplink({
-    setView,
-    setSettingsTarget,
-    openNotifications: openNotificationsForDeeplink,
-  });
   useActiveViewPing(view);
 
   const onOpenRecent = useCallback((profile, sessionId) => {
@@ -313,6 +308,14 @@ export default function App() {
     pendingTurnRef,
   });
 
+  useNotificationDeeplink({
+    setView,
+    setSettingsTarget,
+    openNotifications: openNotificationsForDeeplink,
+    onSwitchConnection: onSetHostConnection,
+    activeConnectionId: hostConnections.active_id,
+  });
+
   const approval = usePendingQueue({
     command: "approval_pending",
     connectionId: hostConnections.active_id,
@@ -328,9 +331,8 @@ export default function App() {
     reloadRef.current = reload;
   }, [reload]);
 
-  const { rows: unreadOutputs } = useOutputs({
-    profiles,
-    connectionId: hostConnections.active_id,
+  const { rows: unreadOutputs } = useAllOutputs({
+    connections: hostConnections.connections,
     status: "unread",
   });
   const notificationsUnread = unreadOutputs.length;
@@ -1117,17 +1119,13 @@ export default function App() {
       <NotificationsModal
         open={notificationsOpen}
         onClose={onCloseNotifications}
-        profiles={profiles}
-        connectionId={hostConnections.active_id}
+        connections={hostConnections.connections}
         selectedId={notificationsTarget?.id}
         selectedProfile={notificationsTarget?.profile}
+        selectedConnectionId={notificationsTarget?.connectionId}
         onOpenChat={(profile, sessionId) =>
           setView({ kind: "profile", profile, sessionId: sessionId || null })
         }
-        onOpenSchedule={(profile) => {
-          setSettingsTarget({ kind: "profile", id: profile });
-          setView({ kind: "settings" });
-        }}
       />
     </div>
   );

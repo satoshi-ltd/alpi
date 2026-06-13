@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.9.5 — 2026-06-13 — simpler notifications
+
+- **Dropped the `source` tag on notifications.** Inbox rows no longer carry a
+  `send_message`/`schedule` provenance field — it leaked an internal delivery
+  detail and mislabeled owner `notify` alerts as "send msg". The apps show the
+  content and the `type` (info/warning/error); nothing else changes.
+
 ## v0.9.4 — 2026-06-13 — name your scheduled jobs
 
 - **Scheduled jobs can carry a title.** `schedule` now takes an optional `title`

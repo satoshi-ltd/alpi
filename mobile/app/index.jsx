@@ -16,11 +16,10 @@ import { SegmentedFilter } from '../src/features/inbox/SegmentedFilter';
 import { ComposeSheet } from '../src/features/sheets/ComposeSheet';
 import { ConnectionSheet } from '../src/features/sheets/ConnectionSheet';
 import { SettingsSheet } from '../src/features/sheets/SettingsSheet';
-import { useProfileSummaries } from '../src/hooks/useDaemonData';
 import { useDebouncedCallback } from '../src/hooks/useDebouncedCallback';
 import { useEventEffect } from '../src/hooks/useEvents';
 import { useInbox } from '../src/hooks/useInbox';
-import { useOutputs } from '../src/hooks/useOutputs';
+import { useUnifiedOutputs } from '../src/hooks/useUnifiedOutputs';
 import { useEndpoint } from '../src/lib/EndpointContext';
 import { useFireOnce } from '../src/lib/useFireOnce';
 import { usePins } from '../src/lib/pins';
@@ -34,15 +33,7 @@ export default function Inbox() {
   const { endpoint, probeState } = useEndpoint();
   const { items, loading, refresh } = useInbox();
   const pins = usePins();
-  const summaries = useProfileSummaries();
-  const profileNames = useMemo(
-    () => (summaries.data?.profiles ?? []).map((p) => p.name),
-    [summaries.data],
-  );
-  const { rows: unreadOutputs } = useOutputs({
-    profiles: profileNames.length ? profileNames : ['default'],
-    status: 'unread',
-  });
+  const { rows: unreadOutputs } = useUnifiedOutputs({ status: 'unread' });
   const unreadCount = unreadOutputs.length;
 
   const [tab, setTab] = useState('all');

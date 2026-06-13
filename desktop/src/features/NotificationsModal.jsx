@@ -17,10 +17,11 @@ import { relativeTime } from "../lib/time.js";
 import { profileLabel } from "../lib/profile-display.js";
 import {
   pendingDeleteKeys,
+  rowKey,
+  useAllOutputs,
   useDeleteOutput,
   useMarkAllOutputsRead,
   useOutput,
-  useOutputs,
 } from "../hooks/useOutputs.js";
 import styles from "./NotificationsModal.module.css";
 import { copyText } from "../lib/clipboard.js";
@@ -36,12 +37,6 @@ function fmtAbsolute(ts) {
 }
 
 
-function sourceTag(row) {
-  if (row.source === "schedule") return "schedule";
-  return "send msg";
-}
-
-
 function typeTag(row) {
   const t = row?.type;
   if (!t || t === "info") return null;
@@ -51,9 +46,6 @@ function typeTag(row) {
 
 function contextAction(row) {
   if (!row) return null;
-  if (row.source === "schedule" && row.source_id) {
-    return { label: "Open schedule", target: { kind: "schedule", profile: row.profile } };
-  }
   if (row.session_id) {
     return { label: "Open chat", target: { kind: "chat", profile: row.profile, sessionId: row.session_id } };
   }
@@ -81,58 +73,57 @@ function bodyPreview(row) {
 export default function NotificationsModal({
   open,
   onClose,
-  profiles = [],
-  connectionId,
+  connections = [],
   selectedId,
   selectedProfile,
+  selectedConnectionId,
   onSelect,
   onOpenChat,
-  onOpenSchedule,
 }) {
   const notify = useNotify();
-  const accentByName = useMemo(() => {
-    const m = {};
-    for (const p of profiles) m[p.name] = p.accent || null;
-    return m;
-  }, [profiles]);
-  const { rows, refresh } = useOutputs({ profiles, connectionId });
+  const multi = connections.length > 1;
+  const { rows, refresh } = useAllOutputs({ connections });
   const markAll = useMarkAllOutputsRead();
   const { schedule: scheduleDelete, cancel: cancelDelete } = useDeleteOutput();
   const [pendingId, setPendingId] = useState(null);
   const [pendingProfile, setPendingProfile] = useState(null);
+  const [pendingConnectionId, setPendingConnectionId] = useState(null);
   const [query, setQuery] = useState("");
   const [hiddenIds, setHiddenIds] = useState(() => new Set());
   const wrapRef = useRef(null);
 
   const activeId = pendingId ?? selectedId ?? rows[0]?.id ?? null;
   const activeProfile = pendingProfile ?? selectedProfile ?? rows[0]?.profile ?? null;
+  const activeConnId = pendingConnectionId ?? selectedConnectionId ?? rows[0]?.connectionId ?? null;
+  const activeRow = useMemo(
+    () =>
+      rows.find(
+        (r) => r.id === activeId && r.profile === activeProfile && r.connectionId === activeConnId,
+      ) ?? null,
+    [rows, activeId, activeProfile, activeConnId],
+  );
 
   useEffect(() => {
     if (!open) {
       setPendingId(null);
       setPendingProfile(null);
+      setPendingConnectionId(null);
       setQuery("");
       return;
     }
     // hiddenIds reseeds from in-flight pending deletes so a row in its undo window stays hidden across modal reopens.
-    setHiddenIds(() => {
-      const next = new Set();
-      for (const key of pendingDeleteKeys()) {
-        const idx = key.indexOf(":");
-        if (idx > 0) next.add(key.slice(idx + 1));
-      }
-      return next;
-    });
+    setHiddenIds(() => new Set(pendingDeleteKeys()));
   }, [open]);
 
   useEffect(() => {
     if (selectedId) {
       setPendingId(selectedId);
       setPendingProfile(selectedProfile);
+      setPendingConnectionId(selectedConnectionId ?? null);
     }
-  }, [selectedId, selectedProfile]);
+  }, [selectedId, selectedProfile, selectedConnectionId]);
 
-  const { row: detail, markRead } = useOutput(activeProfile, activeId);
+  const { row: detail, markRead } = useOutput(activeProfile, activeId, activeConnId);
 
   // Only EXPLICIT selection marks read — passive default to rows[0] must not silently consume the topmost unread on mere modal open.
   const explicitlySelected = pendingId !== null || selectedId !== undefined;
@@ -158,7 +149,7 @@ export default function NotificationsModal({
   const unread = useMemo(() => rows.filter((r) => r.status === "unread").length, [rows]);
 
   const visibleRows = useMemo(
-    () => rows.filter((r) => !hiddenIds.has(r.id)),
+    () => rows.filter((r) => !hiddenIds.has(rowKey(r))),
     [rows, hiddenIds],
   );
 
@@ -170,7 +161,6 @@ export default function NotificationsModal({
         row.body,
         row.title,
         row.profile,
-        sourceTag(row),
         row.type,
       ].filter(Boolean).join(" ").toLowerCase();
       return hay.includes(q);
@@ -180,40 +170,49 @@ export default function NotificationsModal({
   const onSelectRow = useCallback((row) => {
     setPendingId(row.id);
     setPendingProfile(row.profile);
+    setPendingConnectionId(row.connectionId ?? null);
     onSelect?.(row);
   }, [onSelect]);
 
   const onMarkAll = useCallback(async () => {
-    const names = profiles.map((p) => p.name ?? p).filter(Boolean);
-    await Promise.all(names.map((n) => markAll(n)));
+    const pairs = new Map();
+    for (const r of rows) {
+      const key = `${r.connectionId}:${r.profile}`;
+      if (!pairs.has(key)) pairs.set(key, { connectionId: r.connectionId, profile: r.profile });
+    }
+    await Promise.all(
+      Array.from(pairs.values()).map(({ connectionId, profile }) => markAll(profile, connectionId)),
+    );
     refresh();
-  }, [profiles, markAll, refresh]);
+  }, [rows, markAll, refresh]);
 
   const onDeleteRow = useCallback((row) => {
+    const key = rowKey(row);
     setHiddenIds((prev) => {
       const next = new Set(prev);
-      next.add(row.id);
+      next.add(key);
       return next;
     });
-    if (row.id === activeId && row.profile === activeProfile) {
+    if (row.id === activeId && row.profile === activeProfile && row.connectionId === activeConnId) {
       setPendingId(null);
       setPendingProfile(null);
+      setPendingConnectionId(null);
     }
-    scheduleDelete(row.profile, row.id);
+    scheduleDelete(row.profile, row.id, { connectionId: row.connectionId });
     notify({
       message: "Notification deleted",
       action: "Undo",
       onAction: () => {
-        cancelDelete(row.profile, row.id);
+        cancelDelete(row.profile, row.id, row.connectionId);
         setHiddenIds((prev) => {
-          if (!prev.has(row.id)) return prev;
+          if (!prev.has(key)) return prev;
           const next = new Set(prev);
-          next.delete(row.id);
+          next.delete(key);
           return next;
         });
       },
     });
-  }, [scheduleDelete, cancelDelete, notify, activeId, activeProfile]);
+  }, [scheduleDelete, cancelDelete, notify, activeId, activeProfile, activeConnId]);
 
   const onCopy = useCallback(async () => {
     if (!detail) return;
@@ -224,13 +223,11 @@ export default function NotificationsModal({
   const onAction = useCallback(() => {
     const action = contextAction(detail);
     if (!action) return;
-    if (action.target.kind === "schedule") {
-      onOpenSchedule?.(action.target.profile);
-    } else if (action.target.kind === "chat") {
+    if (action.target.kind === "chat") {
       onOpenChat?.(action.target.profile, action.target.sessionId);
     }
     onClose?.();
-  }, [detail, onClose, onOpenChat, onOpenSchedule]);
+  }, [detail, onClose, onOpenChat]);
 
   if (!open) return null;
 
@@ -275,7 +272,7 @@ export default function NotificationsModal({
                 <li className={styles.empty}>
                   <span className={styles.emptyTitle}>Inbox zero</span>
                   <span className={styles.emptyHint}>
-                    Notifications land here when an agent calls <code>send_message</code> or a scheduled job fails.
+                    Notifications land here when an agent notifies you or a scheduled job fails.
                   </span>
                 </li>
               ) : filteredRows.length === 0 ? (
@@ -288,10 +285,11 @@ export default function NotificationsModal({
               ) : (
                 filteredRows.map((row) => (
                   <NotificationRow
-                    key={`${row.profile}:${row.id}`}
+                    key={`${row.connectionId}:${row.profile}:${row.id}`}
                     row={row}
-                    accent={accentByName[row.profile]}
-                    active={row.id === activeId && row.profile === activeProfile}
+                    accent={row.accent}
+                    multi={multi}
+                    active={row.id === activeId && row.profile === activeProfile && row.connectionId === activeConnId}
                     onSelect={onSelectRow}
                     onDelete={onDeleteRow}
                   />
@@ -304,7 +302,8 @@ export default function NotificationsModal({
             {detail ? (
               <DetailPane
                 row={detail}
-                accent={accentByName[detail.profile]}
+                accent={activeRow?.accent}
+                multi={multi}
                 onCopy={onCopy}
                 onAction={onAction}
                 action={contextAction(detail)}
@@ -321,7 +320,7 @@ export default function NotificationsModal({
 }
 
 
-function NotificationRow({ row, accent, active, onSelect, onDelete }) {
+function NotificationRow({ row, accent, multi, active, onSelect, onDelete }) {
   const unread = row.status === "unread";
   const label = profileLabel(row.profile);
   const handleDelete = (e) => {
@@ -340,7 +339,7 @@ function NotificationRow({ row, accent, active, onSelect, onDelete }) {
           <span className={styles.rowMetaLead}>
             <Diamond color={accent} />
             <Mono>@{label}</Mono>
-            <Mono>· {sourceTag(row)}</Mono>
+            {multi && row.connectionName ? <Mono>· {row.connectionName}</Mono> : null}
           </span>
           <span className={styles.rowSlot}>
             <Mono className={styles.rowTs}>{relativeTime(row.created_at)}</Mono>
@@ -360,9 +359,10 @@ function NotificationRow({ row, accent, active, onSelect, onDelete }) {
 }
 
 
-function DetailPane({ row, accent, onCopy, onAction, action }) {
+function DetailPane({ row, accent, multi, onCopy, onAction, action }) {
   const label = profileLabel(row.profile);
   const tag = typeTag(row);
+  const externalDelivery = (row.delivered_to || []).filter((c) => c !== "alpi");
 
   return (
     <article className={styles.article}>
@@ -373,48 +373,44 @@ function DetailPane({ row, accent, onCopy, onAction, action }) {
             <span className={styles.detailMetaDot}>·</span>
           </span>
         ) : null}
-        <Mono className={styles.detailMetaPart}>{row.source === "schedule" ? "SCHEDULE" : "SEND MSG"}</Mono>
-        <span className={styles.detailMetaDot}>·</span>
         <span className={styles.detailMetaProfile}>
           <Diamond color={accent} />
           <Mono>@{label.toUpperCase()}</Mono>
         </span>
+        {multi && row.connectionName ? (
+          <>
+            <span className={styles.detailMetaDot}>·</span>
+            <Mono className={styles.detailMetaPart}>{row.connectionName.toUpperCase()}</Mono>
+          </>
+        ) : null}
         <span className={styles.detailMetaDot}>·</span>
-        <Mono className={styles.detailMetaPart}>
-          {relativeTime(row.created_at).toUpperCase()} AGO
-        </Mono>
+        <Mono className={styles.detailMetaPart}>{fmtAbsolute(row.created_at)}</Mono>
+        <span className={styles.detailMetaSpacer} />
+        <Tip text="Copy" side="l">
+          <IconBtn aria-label="Copy notification" onClick={onCopy}>
+            <CopyIcon />
+          </IconBtn>
+        </Tip>
       </div>
 
       <div className={styles.detailBody}>
         <MarkdownBody source={row.body || ""} />
       </div>
 
-      {row.source === "schedule" && row.source_id ? (
-        <div className={styles.detailIdRow}>
-          <Mono className={styles.detailIdLabel}>schedule id</Mono>
-          <Mono className={styles.detailIdValue}>{row.source_id}</Mono>
+      {externalDelivery.length ? (
+        <div className={styles.detailMetaSecondary}>
+          <Mono>delivered: {externalDelivery.join(", ")}</Mono>
         </div>
       ) : null}
 
-      <div className={styles.detailMetaSecondary}>
-        <Mono>{fmtAbsolute(row.created_at)}</Mono>
-        {row.delivered_to?.length ? (
-          <Mono>· delivered: {row.delivered_to.join(", ")}</Mono>
-        ) : null}
-      </div>
-
-      <div className={styles.actions}>
-        {action ? (
+      {action ? (
+        <div className={styles.actions}>
           <Btn variant="ghost" onClick={onAction}>
             <GearIcon />
             <span>{action.label}</span>
           </Btn>
-        ) : null}
-        <Btn variant="ghost" onClick={onCopy}>
-          <CopyIcon />
-          <span>Copy</span>
-        </Btn>
-      </div>
+        </div>
+      ) : null}
     </article>
   );
 }
