@@ -201,6 +201,28 @@ def _upgrade_command(installer: str) -> list[str] | None:
     return None
 
 
+def update_now() -> dict:
+    # Non-interactive upgrade for the host plane: no prompt, no respawn (the caller restarts the daemon).
+    latest = _fetch_pypi_version()
+    if latest is None:
+        return {"ok": False, "updated": False, "current": __version__, "reason": "offline"}
+    _save_cache(latest, __version__)
+    if not _is_newer(latest, __version__):
+        return {"ok": True, "updated": False, "current": __version__, "latest": latest, "reason": "up-to-date"}
+    installer = _detect_installer()
+    cmd = _upgrade_command(installer)
+    if cmd is None:
+        return {"ok": False, "updated": False, "current": __version__, "latest": latest, "installer": installer, "reason": "manual"}
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=300, check=False)
+    except (OSError, subprocess.TimeoutExpired) as e:
+        return {"ok": False, "updated": False, "current": __version__, "latest": latest, "installer": installer, "reason": str(e)}
+    if proc.returncode != 0:
+        detail = (proc.stderr or "").strip()[:200] or f"exit {proc.returncode}"
+        return {"ok": False, "updated": False, "current": __version__, "latest": latest, "installer": installer, "reason": detail}
+    return {"ok": True, "updated": True, "current": __version__, "latest": latest, "installer": installer}
+
+
 def do_update(*, check_only: bool, yes: bool) -> int:
     from alpi import ui
 

@@ -106,9 +106,11 @@ async def _host_version(
     if token:
         valid, looked_up = devices_mod.validate_and_lookup_role(token)
         role = looked_up if valid else "member"
+    from alpi import updater
     return {
         "agent_name": "alpi",
         "version": _alpi_version,
+        "update_available": updater.available_update() or "",
         "device_name": device_name,
         "device_id": _ensure_device_id(server.home),
         "role": role,

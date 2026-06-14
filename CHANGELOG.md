@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.9.6 — 2026-06-14 — update a daemon from the apps
+
+- **New `host.daemon.update`** lets a paired client trigger a self-upgrade: the
+  daemon checks PyPI, upgrades (uv / pipx) and restarts. It no-ops cleanly on
+  source or image-pinned (Docker) installs, reporting that the version is fixed.
+- **`host.version` now reports `update_available`** so the apps can flag a daemon
+  that's running behind the latest release.
+
 ## v0.9.5 — 2026-06-13 — simpler notifications
 
 - **Dropped the `source` tag on notifications.** Inbox rows no longer carry a

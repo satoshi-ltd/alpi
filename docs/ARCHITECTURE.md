@@ -170,7 +170,7 @@ alpi/
 │   ├── probes.py          host.gateway.probe, host.peers.ping, host.model.ctx_window
 │   ├── schedule.py        host.schedule.{list,remove,set_paused,fire}
 │   ├── outputs.py         host.outputs.{list,read,mark_read,mark_all_read,delete}
-│   ├── daemon.py          host.daemon.restart
+│   ├── daemon.py          host.daemon.{restart,update}
 │   ├── device_state.py    device-facing profile state (profiles, summaries, storage, gateways, skills, workgroups)
 │   ├── events.py          host.events.subscribe + thread-safe emit() for daemon-pushed updates
 │   ├── workgroup.py       transcript decryption (hub + member shapes)

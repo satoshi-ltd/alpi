@@ -11,6 +11,7 @@ export function EndpointProvider({ children }) {
   const [activeId, setActiveId] = useState(null);
   const [probeState, setProbeState] = useState(() => new Map());
   const [versionState, setVersionState] = useState(() => new Map());
+  const [updateState, setUpdateState] = useState(() => new Map());
   const [roleState, setRoleState] = useState(() => new Map());
   const [ready, setReady] = useState(false);
 
@@ -27,7 +28,7 @@ export function EndpointProvider({ children }) {
       next.set(id, 'probing');
       return next;
     });
-    const { status, version, deviceId, role } = await probe(target);
+    const { status, version, updateAvailable, deviceId, role } = await probe(target);
     setProbeState((m) => {
       const next = new Map(m);
       next.set(id, status);
@@ -36,6 +37,12 @@ export function EndpointProvider({ children }) {
     setVersionState((m) => {
       const next = new Map(m);
       if (version) next.set(id, version);
+      else next.delete(id);
+      return next;
+    });
+    setUpdateState((m) => {
+      const next = new Map(m);
+      if (updateAvailable) next.set(id, updateAvailable);
       else next.delete(id);
       return next;
     });
@@ -68,9 +75,10 @@ export function EndpointProvider({ children }) {
     setConnections(state.connections);
     setActiveId(state.active_id);
     setReady(true);
-    const { status, versions, deviceIds, roles = new Map() } = await probeAll(state.connections);
+    const { status, versions, updates = new Map(), deviceIds, roles = new Map() } = await probeAll(state.connections);
     setProbeState(status);
     setVersionState(versions);
+    setUpdateState(updates);
     setRoleState(roles);
     if (deviceIds.size > 0) {
       const next = await setDeviceIds(deviceIds);
@@ -166,6 +174,7 @@ export function EndpointProvider({ children }) {
       endpoint: activeEndpoint,
       probeState,
       versionState,
+      updateState,
       roleState,
       activeRole,
       setActive,
@@ -177,7 +186,7 @@ export function EndpointProvider({ children }) {
       call,
       callStream,
     }),
-    [ready, connections, activeId, activeEndpoint, probeState, versionState, roleState, activeRole, setActive, addConnection, forget, unpair, probeOne, probeAllConnections, call, callStream],
+    [ready, connections, activeId, activeEndpoint, probeState, versionState, updateState, roleState, activeRole, setActive, addConnection, forget, unpair, probeOne, probeAllConnections, call, callStream],
   );
 
   return <EndpointContext.Provider value={value}>{children}</EndpointContext.Provider>;

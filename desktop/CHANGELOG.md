@@ -11,6 +11,14 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.3.60 — 2026-06-14 — update a daemon in place
+
+_Requires alpi v0.9.6+._
+
+- **"Update alpi"** in Settings → Service upgrades the daemon to the latest
+  release and restarts it (no-op + a clear note on image-pinned Docker installs).
+- **An "update" badge** marks any connection running behind the latest version.
+
 ## v0.3.59 — 2026-06-13 — notifications across every connection
 
 - **Background daemons can reach you now.** You get native notifications from

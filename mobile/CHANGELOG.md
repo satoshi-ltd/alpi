@@ -14,6 +14,14 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.1.44 — 2026-06-14 — update a daemon from your phone
+
+_Requires alpi v0.9.6+._
+
+- **Long-press a connection → "Update"** upgrades that daemon to the latest and
+  restarts it (with a clear note when it's an image-pinned Docker install).
+- **An "update" badge** marks connections running behind the latest version.
+
 ## v0.1.43 — 2026-06-13 — notifications across every connection
 
 - **Your notifications inbox now spans all paired daemons.** Alerts from every

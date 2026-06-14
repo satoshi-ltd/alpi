@@ -1623,6 +1623,15 @@ async fn daemon_restart() -> Result<(), String> {
 }
 
 #[tauri::command]
+async fn daemon_update() -> Result<serde_json::Value, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        host_client::call("host.daemon.update", serde_json::json!({}))
+    })
+    .await
+    .map_err(|e| format!("daemon_update: {e}"))?
+}
+
+#[tauri::command]
 async fn outputs_list(
     profile: String,
     status: Option<String>,
@@ -2729,6 +2738,7 @@ pub fn run() {
                         },
                         "error": error,
                         "alpi_version": host_client::version_for(id),
+                        "update_available": host_client::update_available_for(id),
                     }),
                 );
                 if matches!(status, host_client::ConnectionStatus::Offline) {
@@ -2805,6 +2815,7 @@ pub fn run() {
             schedule_set_paused,
             schedule_fire,
             daemon_restart,
+            daemon_update,
             outputs_list,
             outputs_read,
             outputs_mark_read,

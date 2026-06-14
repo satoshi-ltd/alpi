@@ -61,6 +61,7 @@ struct StatusEntry {
     error: Option<String>,
     consecutive_failures: u32,
     alpi_version: Option<String>,
+    update_available: Option<String>,
     role: Option<String>,
 }
 
@@ -71,6 +72,7 @@ impl Default for StatusEntry {
             error: None,
             consecutive_failures: 0,
             alpi_version: None,
+            update_available: None,
             role: None,
         }
     }
@@ -143,6 +145,34 @@ pub fn role_for(id: &str) -> Option<String> {
         }
     }
     None
+}
+
+pub fn update_available_for(id: &str) -> Option<String> {
+    if let Ok(map) = status_map().lock() {
+        if let Some(entry) = map.get(id) {
+            return entry.update_available.clone();
+        }
+    }
+    None
+}
+
+fn set_update_available(id: &str, value: Option<String>) {
+    let mut changed = false;
+    if let Ok(mut map) = status_map().lock() {
+        let entry = map.entry(id.to_string()).or_default();
+        if entry.update_available != value {
+            entry.update_available = value;
+            changed = true;
+        }
+    }
+    if changed {
+        if let Ok(guard) = listeners().lock() {
+            let (status, error) = status_for(id);
+            for listener in guard.iter() {
+                listener(id, status, error.as_deref());
+            }
+        }
+    }
 }
 
 fn set_version(id: &str, version: Option<String>) {
@@ -340,6 +370,7 @@ impl HostConnection {
     fn with_token_redacted(&self) -> Value {
         let (status, error) = status_for(self.id());
         let alpi_version = version_for(self.id());
+        let update_available = update_available_for(self.id());
         let role = role_for(self.id());
         match self {
             HostConnection::Local { id, name, device_id } => {
@@ -350,6 +381,7 @@ impl HostConnection {
                     "status": status.as_str(),
                     "error": error,
                     "alpi_version": alpi_version,
+                    "update_available": update_available,
                     "device_id": device_id,
                     "role": role,
                 })
@@ -373,6 +405,7 @@ impl HostConnection {
                 "status": status.as_str(),
                 "error": error,
                 "alpi_version": alpi_version,
+                "update_available": update_available,
                 "device_id": device_id,
                 "role": role,
             }),
@@ -1290,6 +1323,13 @@ pub fn probe_connection(conn: &HostConnection) {
                 .and_then(|v| v.get("version"))
                 .and_then(|v| v.as_str())
                 .map(|s| s.to_string());
+            let update_available = version_value
+                .as_ref()
+                .and_then(|v| v.get("update_available"))
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.is_empty())
+                .map(|s| s.to_string());
+            set_update_available(&id, update_available);
             set_version(&id, version);
             let role = version_value
                 .as_ref()

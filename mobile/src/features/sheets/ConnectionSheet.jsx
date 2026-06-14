@@ -8,8 +8,11 @@ import { Dot } from '../../components/Dot';
 import { Icon } from '../../components/Icon';
 import { Row, RowSeparator } from '../../components/Row';
 import { Sheet } from '../../components/Sheet';
+import { useToast } from '../../components/Toast';
 import { Bold, Code, TypedConfirm } from '../../components/TypedConfirm';
+import { canUpdateConnection } from '../../lib/connectionUpdate';
 import { useEndpoint } from '../../lib/EndpointContext';
+import { call as rpc } from '../../lib/rpc';
 import { useTheme } from '../../theme/ThemeContext';
 
 function statusColor(status, colors) {
@@ -20,8 +23,8 @@ function statusColor(status, colors) {
 
 function Tag({ label, tone }) {
   const { colors, fonts, fontSizes } = useTheme();
-  const bg = tone === 'danger' ? `${colors.danger}22` : colors.hover;
-  const fg = tone === 'danger' ? colors.danger : colors.ink2;
+  const bg = tone === 'danger' ? `${colors.danger}22` : tone === 'warn' ? `${colors.warning}22` : colors.hover;
+  const fg = tone === 'danger' ? colors.danger : tone === 'warn' ? colors.warning : colors.ink2;
   return (
     <View style={{ paddingHorizontal: space.s3, paddingVertical: space.s1, borderRadius: radii.sm, backgroundColor: bg }}>
       <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: fg }}>{label}</Text>
@@ -32,7 +35,8 @@ function Tag({ label, tone }) {
 export function ConnectionSheet({ open, onClose }) {
   const { colors } = useTheme();
   const router = useRouter();
-  const { connections, activeId, probeState, versionState, setActive, forget, probeAll } = useEndpoint();
+  const toast = useToast();
+  const { connections, activeId, probeState, versionState, updateState, roleState, setActive, forget, probeAll } = useEndpoint();
   const [target, setTarget] = useState(null);
   const [confirmForget, setConfirmForget] = useState(null);
 
@@ -40,6 +44,25 @@ export function ConnectionSheet({ open, onClose }) {
     if (!open) return;
     probeAll().catch(() => { /* */ });
   }, [open, probeAll]);
+
+  const doUpdate = async (conn) => {
+    setTarget(null);
+    try {
+      const res = await rpc(conn, 'host.daemon.update', {});
+      if (res?.updated) {
+        toast({ title: 'Updating', message: `${conn.name} → v${res.latest} · daemon restarting`, duration: 3000 });
+      } else if (res?.reason === 'up-to-date') {
+        toast({ title: 'Up to date', message: `${conn.name} is on v${res.current}`, duration: 2000 });
+      } else if (res?.reason === 'manual') {
+        toast({ title: "Can't self-update", message: 'Image-pinned (Docker) — repull the image to update.', duration: 4000 });
+      } else {
+        toast({ title: 'Update failed', message: String(res?.reason || 'unknown'), duration: 4000 });
+      }
+      probeAll().catch(() => {});
+    } catch (e) {
+      toast({ title: 'Update failed', message: String(e), duration: 4000 });
+    }
+  };
 
   const handlePair = () => {
     onClose?.();
@@ -63,6 +86,7 @@ export function ConnectionSheet({ open, onClose }) {
           connections.map((c, i) => {
             const status = probeState.get(c.id) ?? 'unknown';
             const version = versionState.get(c.id);
+            const upd = updateState.get(c.id);
             return (
               <View key={c.id}>
                 {i > 0 ? <RowSeparator indent={60} /> : null}
@@ -87,11 +111,14 @@ export function ConnectionSheet({ open, onClose }) {
                   label={c.name}
                   helper={version ? `${c.ip}:${c.port} · v${version}` : `${c.ip}:${c.port}`}
                   value={
-                    c.id === activeId ? (
-                      <Tag label="current" />
-                    ) : status === 'offline' ? (
-                      <Tag label="offline" tone="danger" />
-                    ) : null
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s2 }}>
+                      {upd ? <Tag label="update" tone="warn" /> : null}
+                      {c.id === activeId ? (
+                        <Tag label="current" />
+                      ) : status === 'offline' ? (
+                        <Tag label="offline" tone="danger" />
+                      ) : null}
+                    </View>
                   }
                   chevron={false}
                   // Tap = switch to this daemon. Long-press = open actions (only "Forget" lives there now, but that pattern leaves room for more later — same affordance schedule uses).
@@ -114,6 +141,14 @@ export function ConnectionSheet({ open, onClose }) {
         actions={
           target
             ? [
+                ...(canUpdateConnection(roleState.get(target.id), updateState.get(target.id))
+                  ? [{
+                      id: 'update',
+                      label: `Update to v${updateState.get(target.id)}`,
+                      icon: <Icon name="download" size={20} color={colors.ink2} />,
+                      onPress: () => doUpdate(target),
+                    }]
+                  : []),
                 {
                   id: 'forget',
                   label: 'Forget',

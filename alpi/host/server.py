@@ -68,6 +68,7 @@ _ADMIN_METHODS = frozenset({
     "host.workgroup.action",
     "host.approval.respond",
     "host.daemon.restart",
+    "host.daemon.update",
     "host.devices.list",
     "host.devices.generate",
     "host.devices.revoke",

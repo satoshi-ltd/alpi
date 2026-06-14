@@ -6,16 +6,20 @@ const PROBE_TIMEOUT_MS = 3500;
 const VERSION_TIMEOUT_MS = 2000;
 
 export async function probe(endpoint) {
-  if (!endpoint) return { status: 'unknown', version: null, deviceName: null, deviceId: null, role: null };
+  if (!endpoint) return { status: 'unknown', version: null, updateAvailable: null, deviceName: null, deviceId: null, role: null };
   try {
     await call(endpoint, 'host.profile.summaries', {}, { timeoutMs: PROBE_TIMEOUT_MS });
     let version = null;
+    let updateAvailable = null;
     let deviceName = null;
     let deviceId = null;
     let role = null;
     try {
       const res = await call(endpoint, 'host.version', {}, { timeoutMs: VERSION_TIMEOUT_MS });
       if (res && typeof res.version === 'string') version = res.version;
+      if (res && typeof res.update_available === 'string' && res.update_available.trim()) {
+        updateAvailable = res.update_available.trim();
+      }
       if (res && typeof res.device_name === 'string' && res.device_name.trim()) {
         deviceName = res.device_name.trim();
       }
@@ -28,18 +32,19 @@ export async function probe(endpoint) {
     } catch {
       // version is non-fatal
     }
-    return { status: 'online', version, deviceName, deviceId, role };
+    return { status: 'online', version, updateAvailable, deviceName, deviceId, role };
   } catch (e) {
     if (e instanceof RpcError && e.code === AUTH_FAILED) {
-      return { status: 'auth-failed', version: null, deviceName: null, deviceId: null, role: null };
+      return { status: 'auth-failed', version: null, updateAvailable: null, deviceName: null, deviceId: null, role: null };
     }
-    return { status: 'offline', version: null, deviceName: null, deviceId: null, role: null };
+    return { status: 'offline', version: null, updateAvailable: null, deviceName: null, deviceId: null, role: null };
   }
 }
 
 export async function probeAll(connections) {
   const status = new Map();
   const versions = new Map();
+  const updates = new Map();
   const deviceIds = new Map();
   const roles = new Map();
   await Promise.all(
@@ -47,9 +52,10 @@ export async function probeAll(connections) {
       const r = await probe(c);
       status.set(c.id, r.status);
       if (r.version) versions.set(c.id, r.version);
+      if (r.updateAvailable) updates.set(c.id, r.updateAvailable);
       if (r.deviceId) deviceIds.set(c.id, r.deviceId);
       if (r.role) roles.set(c.id, r.role);
     }),
   );
-  return { status, versions, deviceIds, roles };
+  return { status, versions, updates, deviceIds, roles };
 }

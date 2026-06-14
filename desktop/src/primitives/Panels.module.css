@@ -122,6 +122,11 @@
   background: color-mix(in srgb, var(--c-danger) 14%, var(--bg-elev));
 }
 
+.tagUpdate {
+  color: var(--c-warning);
+  background: color-mix(in srgb, var(--c-warning) 14%, var(--bg-elev));
+}
+
 .forgetBtn {
   font-size: var(--fs-xs);
   color: var(--ink-3);

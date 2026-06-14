@@ -39,6 +39,55 @@ def _write_cache(home: Path, latest: str, current: str,
 # version comparison
 
 
+def test_update_now_offline_returns_not_ok(fake_home: Path, monkeypatch) -> None:
+    monkeypatch.setattr(updater, "_fetch_pypi_version", lambda: None)
+    res = updater.update_now()
+    assert res["ok"] is False and res["updated"] is False and res["reason"] == "offline"
+
+
+def test_update_now_up_to_date(fake_home: Path, monkeypatch) -> None:
+    monkeypatch.setattr(updater, "__version__", "0.9.5")
+    monkeypatch.setattr(updater, "_fetch_pypi_version", lambda: "0.9.5")
+    res = updater.update_now()
+    assert res["ok"] is True and res["updated"] is False and res["reason"] == "up-to-date"
+
+
+def test_update_now_dev_install_is_manual(fake_home: Path, monkeypatch) -> None:
+    monkeypatch.setattr(updater, "__version__", "0.9.4")
+    monkeypatch.setattr(updater, "_fetch_pypi_version", lambda: "0.9.5")
+    monkeypatch.setattr(updater, "_detect_installer", lambda: "dev")
+    res = updater.update_now()
+    assert res["ok"] is False and res["updated"] is False
+    assert res["reason"] == "manual" and res["installer"] == "dev"
+
+
+def test_update_now_runs_upgrade_and_reports_updated(fake_home: Path, monkeypatch) -> None:
+    monkeypatch.setattr(updater, "__version__", "0.9.4")
+    monkeypatch.setattr(updater, "_fetch_pypi_version", lambda: "0.9.5")
+    monkeypatch.setattr(updater, "_detect_installer", lambda: "uv")
+    ran = {}
+
+    def fake_run(cmd, **kw):
+        ran["cmd"] = cmd
+        return MagicMock(returncode=0, stderr="")
+
+    monkeypatch.setattr(updater.subprocess, "run", fake_run)
+    res = updater.update_now()
+    assert res["ok"] is True and res["updated"] is True
+    assert res["installer"] == "uv" and res["latest"] == "0.9.5"
+    assert ran["cmd"] == ["uv", "tool", "upgrade", "alpi-agent"]
+
+
+def test_update_now_failed_upgrade_returns_reason(fake_home: Path, monkeypatch) -> None:
+    monkeypatch.setattr(updater, "__version__", "0.9.4")
+    monkeypatch.setattr(updater, "_fetch_pypi_version", lambda: "0.9.5")
+    monkeypatch.setattr(updater, "_detect_installer", lambda: "uv")
+    monkeypatch.setattr(updater.subprocess, "run",
+                        lambda cmd, **kw: MagicMock(returncode=1, stderr="boom"))
+    res = updater.update_now()
+    assert res["ok"] is False and res["updated"] is False and res["reason"] == "boom"
+
+
 def test_is_newer_handles_double_digit_patches() -> None:
     """The classic gotcha: lexical sort puts 0.2.10 before 0.2.9."""
     assert updater._is_newer("0.2.10", "0.2.9") is True

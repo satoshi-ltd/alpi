@@ -10,6 +10,7 @@ from alpi.host import server as host_server
 
 def register(server: host_server.Server) -> None:
     server.register("host.daemon.restart", _daemon_restart)
+    server.register("host.daemon.update", _daemon_update)
 
 
 async def _daemon_restart(
@@ -17,6 +18,17 @@ async def _daemon_restart(
 ) -> dict[str, Any]:
     schedule_self_terminate()
     return {"ok": True, "respawn": True}
+
+
+async def _daemon_update(
+    _params: dict[str, Any], _server: host_server.Server,
+) -> dict[str, Any]:
+    from alpi import updater
+    result = await asyncio.to_thread(updater.update_now)
+    # Restart only on a real upgrade — the supervisor relaunches the new code (in-container too: a restart keeps the writable layer; only a recreate reverts).
+    if result.get("updated"):
+        schedule_self_terminate(delay=0.5)
+    return result
 
 
 def schedule_self_terminate(delay: float = 0.2) -> None:

@@ -206,3 +206,28 @@ describe("useHostConnections.touchWorkgroup", () => {
     expect(result.current.workgroups).toBe(before);
   });
 });
+
+describe("useHostConnections connection-status", () => {
+  it("propagates update_available from a connection-status event without a full reload", async () => {
+    invoke.mockImplementation(async (cmd) => {
+      if (cmd === "host_connections") return makeConnections("local");
+      if (cmd === "profile_summaries") return [{ name: "doc", model: "a/b" }];
+      if (cmd === "workgroups") return [];
+      return null;
+    });
+
+    const { result } = renderHostConnections();
+    await waitFor(() =>
+      expect(result.current.hostConnections.connections.length).toBe(2),
+    );
+
+    await act(async () => {
+      await connectionStatusListener({
+        payload: { id: "remote", status: "online", update_available: "0.9.6" },
+      });
+    });
+
+    const remote = result.current.hostConnections.connections.find((c) => c.id === "remote");
+    expect(remote.update_available).toBe("0.9.6");
+  });
+});

@@ -120,6 +120,9 @@ export function ConnectionPanel({
                         offline
                       </span>
                     )}
+                    {r.update_available && (
+                      <span className={`tag ${styles.tagUpdate}`}>update</span>
+                    )}
                   </div>
                   <span className={`mono ${styles.connHost}`}>
                     {r.host}

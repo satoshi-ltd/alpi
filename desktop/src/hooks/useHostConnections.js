@@ -212,7 +212,7 @@ export function useHostConnections({
     let cancelled = false;
     let unlisten = null;
     listen("connection-status", (event) => {
-      const { id, status, error, alpi_version } = event.payload ?? {};
+      const { id, status, error, alpi_version, update_available } = event.payload ?? {};
       if (!id || !status) return;
       setHostConnections((prev) => {
         const before = prev.connections.find((c) => c.id === id);
@@ -220,7 +220,8 @@ export function useHostConnections({
           before &&
           before.status === status &&
           before.error === error &&
-          before.alpi_version === (alpi_version ?? null)
+          before.alpi_version === (alpi_version ?? null) &&
+          before.update_available === (update_available ?? null)
         ) {
           return prev;
         }
@@ -233,6 +234,7 @@ export function useHostConnections({
                   status,
                   error: error ?? null,
                   alpi_version: alpi_version ?? null,
+                  update_available: update_available ?? null,
                 }
               : c,
           ),

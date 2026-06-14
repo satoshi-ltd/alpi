@@ -59,14 +59,16 @@ vi.mock("./probe", () => ({
   probeAll: async (connections) => {
     const status = new Map();
     const versions = new Map();
+    const updates = new Map();
     const deviceIds = new Map();
     for (const c of connections) {
       const r = probeResults.get(c.id) ?? { status: "online", version: "0.4.54" };
       status.set(c.id, r.status);
       if (r.version) versions.set(c.id, r.version);
+      if (r.updateAvailable) updates.set(c.id, r.updateAvailable);
       if (r.deviceId) deviceIds.set(c.id, r.deviceId);
     }
-    return { status, versions, deviceIds };
+    return { status, versions, updates, deviceIds };
   },
 }));
 
@@ -159,6 +161,13 @@ describe("EndpointProvider lifecycle", () => {
     expect(captureRef.current.versionState.has("beta")).toBe(false);
     // alpha untouched.
     expect(captureRef.current.probeState.get("alpha")).toBe("online");
+  });
+
+  it("probeOne records update_available so the badge updates without a full reload", async () => {
+    const { captureRef } = await mount();
+    probeResults.set("beta", { status: "online", version: "0.9.4", updateAvailable: "0.9.5" });
+    await act(async () => { await captureRef.current.probeOne("beta"); });
+    expect(captureRef.current.updateState.get("beta")).toBe("0.9.5");
   });
 });
 
