@@ -190,6 +190,7 @@ def _profile_summary(row: dict[str, Any]) -> dict[str, Any]:
         "model": cfg.model or None,
         "accent": cfg.tui.get("accent"),
         "bio": cfg.public_bio or None,
+        "paused": cfg.paused,
         "subsystems": {
             "gateway": cfg.service.get("gateway", True) is not False,
             "schedule": cfg.service.get("schedule", True) is not False,

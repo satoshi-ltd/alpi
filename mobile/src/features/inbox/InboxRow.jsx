@@ -44,10 +44,10 @@ export const InboxRow = memo(function InboxRow({ item, onPress, onLongPress }) {
       STATIC.row,
       {
         backgroundColor: pressed ? colors.selected : 'transparent',
-        opacity: needsProvider ? alpha.muted : 1,
+        opacity: needsProvider || item.paused ? alpha.muted : 1,
       },
     ],
-    [colors.selected, alpha.muted, needsProvider],
+    [colors.selected, alpha.muted, needsProvider, item.paused],
   );
 
   const nameVariant = useMemo(

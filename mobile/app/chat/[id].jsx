@@ -431,7 +431,10 @@ export default function ProfileChat() {
     }
   }, [pendingTurn, voiceCfg, session.data, call, id, accent]);
 
-  const sendMessage = (text, options) => streamSend(text, options);
+  const sendMessage = (text, options) => {
+    if (profile?.paused) return;
+    streamSend(text, options);
+  };
   const [composerSeed, setComposerSeed] = useState(null);
   const [pendingRewriteIndex, setPendingRewriteIndex] = useState(null);
   const onEditTarget = (target) => {
@@ -539,6 +542,7 @@ export default function ProfileChat() {
             .join(' · ');
 
   const turns = session.data?.turns ?? [];
+  const paused = !!profile.paused;
 
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
@@ -552,6 +556,14 @@ export default function ProfileChat() {
         onPickSession={() => setSessionsOpen(true)}
         right={<SoundWave accent={accent} />}
       />
+      {paused ? (
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s3, paddingHorizontal: space.s7, paddingVertical: space.s4, backgroundColor: `${colors.warning}22` }}>
+          <Text numberOfLines={2} style={{ flex: 1, fontFamily: fonts.sans.medium, fontSize: fontSizes.sm, color: colors.ink2 }}>
+            <Text style={{ fontFamily: fonts.sans.semibold ?? fonts.sans.medium, color: colors.ink }}>This profile is paused.</Text>
+            {' '}You can read the history; resume from ··· to chat.
+          </Text>
+        </View>
+      ) : null}
       {blocked ? (
         <NeedsSetup
           name={profile.name}
@@ -578,6 +590,7 @@ export default function ProfileChat() {
           <Composer
             placeholder={`Message @${profileLabel(profile.name)}…`}
             accent={accent}
+            disabled={paused}
             onSend={onComposerSend}
             onMicPress={micUnavailable}
             onMicLongPress={micUnavailable}
@@ -592,8 +605,8 @@ export default function ProfileChat() {
       <MessageActionsSheet
         target={actionTarget}
         onClose={() => setActionTarget(null)}
-        onEdit={onEditTarget}
-        onRetry={onRetryTarget}
+        onEdit={paused ? null : onEditTarget}
+        onRetry={paused ? null : onRetryTarget}
       />
       <SessionsSheet
         open={sessionsOpen}

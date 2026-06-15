@@ -31,7 +31,9 @@ export function ComposeSheet({ open, onClose }) {
       accent: p.accent ?? accentForProfile(p.name),
       needsProvider: !profileReadyToChat(p),
       sub: p.identity ?? p.model ?? '',
+      paused: !!p.paused,
     }));
+    profiles.sort((a, b) => (a.paused ? 1 : 0) - (b.paused ? 1 : 0));
     const wg = (wgs.data?.workgroups ?? []).map((w) => {
       const hub = profileByName.get(w.hub_id);
       return {
@@ -129,6 +131,7 @@ export function ComposeSheet({ open, onClose }) {
               gap: space.s5,
               paddingHorizontal: space.s8,
               paddingVertical: space.s5,
+              opacity: item.paused ? 0.55 : 1,
               backgroundColor: pressed ? colors.selected : 'transparent',
             })}
           >

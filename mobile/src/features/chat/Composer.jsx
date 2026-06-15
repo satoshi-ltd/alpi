@@ -6,6 +6,7 @@ import { radii, space } from '../../theme/tokens';
 import { Icon } from '../../components/Icon';
 import { useTheme } from '../../theme/ThemeContext';
 import { AttachmentCards } from './AttachmentCards';
+import { canComposerSend } from './composerSend';
 import { MentionPopover } from './MentionPopover';
 import { validateTaskShape } from './parseMarkers';
 
@@ -21,6 +22,7 @@ export function Composer({
   attachments = [],
   onPickAttachment,
   onRemoveAttachment,
+  disabled = false,
 }) {
   const { colors, fonts , fontSizes} = useTheme();
   const insets = useSafeAreaInsets();
@@ -35,7 +37,7 @@ export function Composer({
   const hasText = text.trim().length > 0;
   const taskShape = validateTaskShape(text);
   const hasAttachments = attachments.length > 0;
-  const canSend = (hasText || hasAttachments) && taskShape.ok;
+  const canSend = canComposerSend({ hasText, hasAttachments, taskOk: taskShape.ok, disabled });
 
   const mentionMatch = mentionSource && text.length > 0
     ? /(^|\s)@([a-zA-Z0-9_-]*)$/.exec(text)
@@ -97,11 +99,12 @@ export function Composer({
           paddingTop: space.s3,
           paddingBottom: Math.max(10, insets.bottom),
           gap: space.s3,
+          opacity: disabled ? 0.55 : 1,
         }}
       >
         {onPickAttachment ? (
           <Pressable
-            onPress={onPickAttachment}
+            onPress={disabled ? undefined : onPickAttachment}
             hitSlop={8}
             accessibilityLabel="Attach file"
             style={({ pressed }) => ({ width: 36, height: 44, alignItems: 'center', justifyContent: 'center', opacity: pressed ? 0.5 : 1 })}
@@ -122,7 +125,8 @@ export function Composer({
           <TextInput
             value={text}
             onChangeText={setText}
-            placeholder={placeholder}
+            editable={!disabled}
+            placeholder={disabled ? 'Paused — resume to chat' : placeholder}
             placeholderTextColor={colors.ink3}
             multiline
             autoCapitalize="sentences"
@@ -161,8 +165,8 @@ export function Composer({
           </Pressable>
         ) : (
           <Pressable
-            onPress={onMicPress}
-            onLongPress={onMicLongPress}
+            onPress={disabled ? undefined : onMicPress}
+            onLongPress={disabled ? undefined : onMicLongPress}
             delayLongPress={250}
             style={({ pressed }) => ({
               width: 44,

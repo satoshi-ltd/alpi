@@ -24,6 +24,7 @@ export default function ChatComposer({
   embedded,
   disabled,
   daemonOffline = false,
+  paused = false,
   modelOverride,
   onModelChange,
   rewriteDraft,
@@ -151,7 +152,7 @@ export default function ChatComposer({
   );
 
   const hasText = text.trim().length > 0;
-  const canSend = (hasText || attachments.length > 0) && !!activeProfile && !daemonOffline;
+  const canSend = (hasText || attachments.length > 0) && !!activeProfile && !daemonOffline && !paused;
 
   function trySend() {
     if (!canSend) return;
@@ -167,15 +168,15 @@ export default function ChatComposer({
 
   const placeholder = daemonOffline
     ? "daemon offline — sending paused"
-    : disabled
-      ? "thinking… (type your next message)"
+    : paused
+      ? "Paused — resume to chat"
       : activeProfile?.name
         ? `Message ${activeProfile.name}…`
         : "Send a message…";
   const sendTitle = daemonOffline
     ? "Daemon offline"
-    : disabled
-      ? "Waiting for reply"
+    : paused
+      ? "Profile is paused"
       : "Send (⌘↵)";
 
   return (
@@ -185,6 +186,7 @@ export default function ChatComposer({
       onSubmit={trySend}
       onCancel={onCancel}
       canSend={canSend}
+      disabled={paused}
       embedded={embedded}
       minHeight={minHeight}
       accent={activeProfile?.accent ?? null}

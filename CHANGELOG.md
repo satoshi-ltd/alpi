@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.9.8 — 2026-06-15 — pause a profile
+
+- **Profiles can be paused.** A new `paused` flag (toggled from the desktop/
+  mobile apps) marks a profile as not-for-chatting — the apps sort it last and
+  dim it, never pick it as the new-chat default, and open it read-only (the
+  composer and retry/edit are disabled). It's a UI/chat hint surfaced in
+  `host.profile.summaries`; the daemon keeps running the profile's subsystems,
+  so nothing scheduled or gateway-driven stops.
+
 ## v0.9.7 — 2026-06-15 — responsive host under a busy fleet
 
 - **The daemon stays responsive when many profiles share a workgroup mesh.**

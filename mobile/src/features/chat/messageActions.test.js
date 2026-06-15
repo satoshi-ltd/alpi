@@ -55,6 +55,14 @@ describe('buildMessageActions', () => {
     expect(onEdit).toHaveBeenCalledWith(target);
     expect(onRetry).toHaveBeenCalledWith(target);
   });
+
+  it('paused profile (edit/retry handlers null) → only Copy, no edit/retry', () => {
+    const ids = buildMessageActions(
+      { kind: 'user', text: 'hi', turnIndex: 1 },
+      { onCopy: vi.fn(), onEdit: null, onRetry: null },
+    ).map((a) => a.id);
+    expect(ids).toEqual(['copy']);
+  });
 });
 
 describe('retryTextFor', () => {

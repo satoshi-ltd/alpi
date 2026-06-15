@@ -180,6 +180,7 @@ class Config:
     # AGENT.md stays private; this is the deliberate cross-agent
     # introduction the user opts into.
     public_bio: str = ""
+    paused: bool = False
     raw: dict[str, Any] = field(default_factory=dict)
 
     @property
@@ -340,6 +341,7 @@ def load(home: Path) -> Config:
         service=dict(data.get("service") or {}),
         workspace=str(data.get("workspace", "") or ""),
         public_bio=str(data.get("public_bio", "") or ""),
+        paused=bool(data.get("paused", False)),
         raw=user_data,
     )
 
@@ -356,6 +358,8 @@ def save(cfg: Config) -> None:
         data["workspace"] = cfg.workspace
     if cfg.public_bio:
         data["public_bio"] = cfg.public_bio
+    if cfg.paused:
+        data["paused"] = True
     if cfg.fallback_models:
         data["fallback_models"] = cfg.fallback_models
 

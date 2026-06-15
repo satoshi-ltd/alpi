@@ -417,6 +417,17 @@ export default function App() {
     }
   }, [setProfiles, reload]);
   const adminOnDeleteProfile = canAdminEarly ? onDeleteProfile : null;
+  const onTogglePauseProfile = useCallback((profile) => {
+    const next = !profile.paused;
+    setProfiles((prev) => prev.map((p) => (p.name === profile.name ? { ...p, paused: next } : p)));
+    invoke("set_config_field", { profile: profile.name, key: "paused", value: next ? "true" : "false" })
+      .then(() => reload())
+      .catch((e) => {
+        setProfiles((prev) => prev.map((p) => (p.name === profile.name ? { ...p, paused: !next } : p)));
+        window.notify?.(`Pause @${profile.name} failed: ${String(e)}`, { variant: "error" });
+      });
+  }, [setProfiles, reload]);
+  const adminOnTogglePauseProfile = canAdminEarly ? onTogglePauseProfile : null;
   useEffect(() => {
     const conn = hostConnections.connections.find(
       (c) => c.id === hostConnections.active_id,
@@ -634,6 +645,7 @@ export default function App() {
     async (text, model, opts) => {
       const attachments = opts?.attachments?.length ? opts.attachments : null;
       if ((!text.trim() && !attachments) || !activeProfile) return;
+      if (activeProfile.paused) return;
       if (sendingRef.current) return;
       sendingRef.current = true;
       try {
@@ -933,6 +945,7 @@ export default function App() {
         onSetSettingsTarget={setSettingsTarget}
         onOpenSettingsTarget={adminOpenSettingsFor}
         onTogglePin={onTogglePin}
+        onTogglePauseProfile={adminOnTogglePauseProfile}
         onSetHostConnection={onSetHostConnection}
         onAddHostConnection={onAddHostConnection}
         onForgetHostConnection={onForgetHostConnection}
@@ -1026,6 +1039,7 @@ export default function App() {
                     setSettingsTarget({ kind: "profile", id: p.name });
                     setView({ kind: "settings" });
                   } : null}
+                  onTogglePauseProfile={adminOnTogglePauseProfile}
                   onSelectProfile={(name) => {
                     setPickerAlpi(name);
                     if (view.kind === "profile") {

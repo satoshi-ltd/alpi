@@ -31,7 +31,7 @@ import {
   markProfileRead,
   markWorkgroupRead,
 } from "../hooks/useReadState.js";
-import { orderedSidebarProfiles } from "../lib/profile-order.js";
+import { compareProfiles, orderedSidebarProfiles, orderPinnedItems } from "../lib/profile-order.js";
 import styles from "./Sidebar.module.css";
 
 const MIN_VISIBLE_ALPIS = 3;
@@ -84,6 +84,7 @@ function Sidebar({
   onSetSettingsTarget,
   onOpenSettingsTarget,
   onTogglePin,
+  onTogglePauseProfile,
   onSetHostConnection,
   onAddHostConnection,
   onForgetHostConnection,
@@ -165,14 +166,7 @@ function Sidebar({
     const list = pinnedProfileNames
       .map((name) => profiles.find((p) => p.name === name))
       .filter(Boolean);
-    list.sort((a, b) => {
-      const aBad = !a.model ? 1 : 0;
-      const bBad = !b.model ? 1 : 0;
-      if (aBad !== bBad) return aBad - bBad;
-      const ra = a.latest_session?.updated_at ?? a.latest_session?.started_at ?? a.latest_session?.mtime ?? 0;
-      const rb = b.latest_session?.updated_at ?? b.latest_session?.started_at ?? b.latest_session?.mtime ?? 0;
-      return rb - ra;
-    });
+    list.sort(compareProfiles);
     return list;
   }, [pinnedProfileNames, profiles]);
 
@@ -197,27 +191,10 @@ function Sidebar({
 
   const hasPinned = pinnedProfiles.length > 0 || pinnedWorkgroups.length > 0;
 
-  const pinnedItems = useMemo(() => {
-    const items = [
-      ...pinnedProfiles.map((p) => ({
-        kind: "profile",
-        item: p,
-        ts: p.latest_session?.updated_at ?? p.latest_session?.started_at ?? p.latest_session?.mtime ?? 0,
-        bad: !p.model ? 1 : 0,
-      })),
-      ...pinnedWorkgroups.map((w) => ({
-        kind: "workgroup",
-        item: w,
-        ts: w.mtime ?? 0,
-        bad: w.paused ? 1 : 0,
-      })),
-    ];
-    items.sort((a, b) => {
-      if (a.bad !== b.bad) return a.bad - b.bad;
-      return b.ts - a.ts;
-    });
-    return items;
-  }, [pinnedProfiles, pinnedWorkgroups]);
+  const pinnedItems = useMemo(
+    () => orderPinnedItems(pinnedProfiles, pinnedWorkgroups),
+    [pinnedProfiles, pinnedWorkgroups],
+  );
 
   const navRef = useRef(null);
   const [navHeight, setNavHeight] = useState(0);
@@ -276,6 +253,13 @@ function Sidebar({
           onClick: () => onTogglePin?.("profiles", profile.name),
         },
         { kind: "separator" },
+        ...(onTogglePauseProfile
+          ? [{
+              label: profile.paused ? "Resume profile" : "Pause profile",
+              icon: <PauseIcon />,
+              onClick: () => onTogglePauseProfile(profile),
+            }]
+          : []),
         {
           label: "Open settings",
           icon: <GearIcon />,
@@ -293,7 +277,7 @@ function Sidebar({
       ];
       setCtxMenu({ x: e.clientX, y: e.clientY, items });
     },
-    [pinnedProfileNames, onTogglePin, onOpenSettingsTarget],
+    [pinnedProfileNames, onTogglePin, onTogglePauseProfile, onOpenSettingsTarget],
   );
 
   const openWorkgroupCtx = useCallback(
@@ -652,11 +636,12 @@ const ProfileRow = memo(function ProfileRow({
   const ls = profile.latest_session;
   const sessionRecency = ls?.updated_at ?? ls?.started_at ?? ls?.mtime ?? 0;
   const incomplete = !profile.model;
+  const paused = !!profile.paused;
   useEffect(() => {
     if (active && sessionRecency > 0) markProfileRead(connId, profile.name, sessionRecency);
   }, [active, connId, profile.name, sessionRecency]);
   const unread =
-    !incomplete && !active && checkUnread?.(profile.name, sessionRecency);
+    !incomplete && !paused && !active && checkUnread?.(profile.name, sessionRecency);
   const trailing = unread
     ? <span className="sb-unread-dot" aria-label="unread" />
     : sessionRecency > 0
@@ -675,7 +660,7 @@ const ProfileRow = memo(function ProfileRow({
         color={profile.accent || undefined}
         sel={active}
         unread={unread}
-        state={incomplete ? "needs-provider" : undefined}
+        state={paused ? "paused" : incomplete ? "needs-provider" : undefined}
         ariaLabel={incomplete ? incompleteHint : undefined}
         title={incomplete ? incompleteHint : undefined}
         leading={

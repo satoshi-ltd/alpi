@@ -11,6 +11,17 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.3.63 — 2026-06-15 — pause a profile
+
+_Requires alpi v0.9.8+._
+
+- **Pause a profile** from its chat header (or the sidebar's right-click menu),
+  the same way you pause a workgroup. A paused profile drops to the bottom of
+  the sidebar (dimmed), is never the new-chat default, and opens read-only — you
+  can read the history, but the composer is disabled until you resume.
+- **Quieter "thinking" indicator** — dropped the bouncing dots next to the
+  label, in both the reasoning trace and the pending-reply placeholder.
+
 ## v0.3.62 — 2026-06-15 — reasoning trace, livelier loading, cleaner switch
 
 _Requires alpi v0.9.7+._

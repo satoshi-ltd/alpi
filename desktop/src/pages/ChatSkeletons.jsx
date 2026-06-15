@@ -1,5 +1,4 @@
 import { SkParagraph } from "../primitives/Skeleton.jsx";
-import Activity from "../primitives/Activity.jsx";
 import styles from "./ChatSkeletons.module.css";
 
 export function ChatLoadSkeleton() {
@@ -21,7 +20,6 @@ export function PendingReplySkeleton() {
   return (
     <div className={`${styles.pending} anim-fade`}>
       <div className={styles.status}>
-        <Activity size="md" tint="var(--ink-3)" />
         <span className={styles.thinkingLabel}>thinking…</span>
       </div>
       <SkParagraph lg widths={["92%", "100%", "74%"]} />

@@ -14,6 +14,12 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.1.47 — 2026-06-15 — pause a profile
+
+- **Pause a profile** from its settings (the ··· in the chat header). Paused
+  profiles sort last and dim in the new-chat picker, and open read-only with a
+  "paused" banner — resume to chat again.
+
 ## v0.1.46 — 2026-06-15 — reasoning trace + livelier loading
 
 - **Redesigned the reasoning trace** to match desktop: a live thinking window

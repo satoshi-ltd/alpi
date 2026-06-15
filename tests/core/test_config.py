@@ -214,3 +214,12 @@ def test_resolve_model_profile_env_wins_over_os_environ(tmp_path: Path, monkeypa
 
     cfg = config.Config(home=home, model="anthropic/claude-sonnet-4-6")
     assert config.resolve_model(cfg)["api_key"] == "profile_key"
+
+
+def test_paused_roundtrips(tmp_home_no_env: Path) -> None:
+    config.seed_defaults(tmp_home_no_env)
+    cfg = config.load(tmp_home_no_env)
+    assert cfg.paused is False
+    cfg.paused = True
+    config.save(cfg)
+    assert config.load(tmp_home_no_env).paused is True

@@ -78,12 +78,12 @@ export function useHostConnections({
     setWorkgroups(ws);
     pruneCachedMessages(hostConnectionsRef.current?.active_id, ws);
     setPickerAlpi((prev) => {
-      if (prev && ps.some((p) => p.name === prev)) return prev;
-      const def = ps.find((p) => p.is_default && p.model);
+      if (prev && ps.some((p) => p.name === prev && !p.paused)) return prev;
+      const def = ps.find((p) => p.is_default && p.model && !p.paused);
       if (def) return def.name;
-      const firstWithModel = ps.find((p) => p.model);
+      const firstWithModel = ps.find((p) => p.model && !p.paused);
       if (firstWithModel) return firstWithModel.name;
-      return ps[0]?.name ?? null;
+      return ps.find((p) => !p.paused)?.name ?? null;
     });
   }, []);
 

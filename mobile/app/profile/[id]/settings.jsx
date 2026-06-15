@@ -182,6 +182,14 @@ export default function ProfileSettings() {
       <ScrollView contentContainerStyle={{ paddingBottom: space.s10 }}>
         <SectionHeader>Overview</SectionHeader>
         <Row
+          label={profile.paused ? 'Resume profile' : 'Pause profile'}
+          helper="paused alpis can't be chatted and sort last in new-chat"
+          value={<Pill tone={profile.paused ? 'warn' : 'on'}>{profile.paused ? 'paused' : 'active'}</Pill>}
+          onPress={() => saveField('paused', profile.paused ? 'false' : 'true')}
+          chevron={false}
+        />
+        <RowSeparator />
+        <Row
           label="Providers"
           helper="API keys + local Ollama"
           value={String(providerCount)}

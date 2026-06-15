@@ -62,6 +62,7 @@ export function useInbox() {
         unread,
         ts: blocked ? null : fmtRelative(sessionTs),
         sortKey: sessionTs,
+        paused: !!p.paused,
         raw: p,
       };
     });
@@ -89,6 +90,7 @@ export function useInbox() {
     // Filter sessionless items — reachable via Compose FAB instead.
     const active = [...profileItems, ...wgItems].filter((it) => it.sortKey > 0);
     return active.sort((a, b) => {
+      if (!!a.paused !== !!b.paused) return a.paused ? 1 : -1;
       if (!!a.unread !== !!b.unread) return a.unread ? -1 : 1;
       return b.sortKey - a.sortKey;
     });

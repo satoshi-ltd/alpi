@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 
-import Activity from "./Activity.jsx";
 import { CaretIcon } from "./icons.jsx";
 import styles from "./Reasoning.module.css";
 
@@ -40,7 +39,6 @@ function Thinking({ text }) {
   return (
     <div className={styles.trace}>
       <div className={styles.head}>
-        <Activity size="md" tint="var(--ink-3)" />
         <span className={styles.thinkingLabel}>thinking · {elapsed}s</span>
       </div>
       <div className={styles.box} ref={boxRef} aria-hidden="true">

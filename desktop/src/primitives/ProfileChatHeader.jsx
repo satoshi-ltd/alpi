@@ -1,5 +1,6 @@
 import { ChatHeader } from "./index.js";
 import {
+  Btn,
   IconBtn,
   Mono,
   MeterChip,
@@ -8,6 +9,8 @@ import {
   BlocksIcon,
   CpuIcon,
   GearIcon,
+  PauseIcon,
+  PlayIcon,
   WrenchIcon,
 } from "./index.js";
 import SessionsButton from "./SessionsButton.jsx";
@@ -37,6 +40,8 @@ export default function ProfileChatHeader({
   onOpenTools,
   onOpenSettings,
   onRefresh,
+  paused = false,
+  onTogglePause,
   onNewSession,
   onChangeSession,
   sessionsButton,
@@ -119,6 +124,12 @@ export default function ProfileChatHeader({
         </Tip>
       )}
       <span className={styles.divider} aria-hidden />
+      {onTogglePause && (
+        <Btn variant="ghost" onClick={onTogglePause} title={paused ? "Resume profile" : "Pause profile"}>
+          {paused ? <PlayIcon /> : <PauseIcon />}
+          <span>{paused ? "Resume" : "Pause"}</span>
+        </Btn>
+      )}
       {onOpenSettings && (
         <Tip text="Profile settings" side="r">
           <IconBtn onClick={onOpenSettings} aria-label="Profile settings"><GearIcon /></IconBtn>

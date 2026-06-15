@@ -17,7 +17,7 @@ import { useNotify } from "../primitives/Notification.jsx";
 import Logo from "../primitives/Logo.jsx";
 import Markdown from "../primitives/Markdown.jsx";
 import { setImageRoots } from "../lib/imageRoots.js";
-import { JumpToLatest, NewChatHero, ProfileChatHeader } from "../primitives/index.js";
+import { Banner, JumpToLatest, NewChatHero, ProfileChatHeader } from "../primitives/index.js";
 import { ProfileMessage } from "../primitives/index.js";
 import {
   AlpiSilhouette,
@@ -57,6 +57,7 @@ export default function ChatPane({
   onCancel,
   onSelectProfile,
   onConfigureProfile,
+  onTogglePauseProfile,
   onRewriteMessage,
   onRetryMessage,
   rewriteDraft,
@@ -130,6 +131,10 @@ export default function ChatPane({
       : (activeProfile.models?.length ?? 0) > 0
         || (activeProfile.provider_ollama?.length ?? 0) > 0);
 
+  const paused = !!activeProfile?.paused;
+  const onTogglePause =
+    onTogglePauseProfile && activeProfile ? () => onTogglePauseProfile(activeProfile) : null;
+
   if (noModel) {
     return (
       <>
@@ -200,8 +205,9 @@ export default function ChatPane({
           onConfigureProfile={onConfigureProfile}
           onSend={onSend}
           onCancel={pendingTurn ? onCancel : null}
-          disabled={daemonOffline}
+          disabled={daemonOffline || paused}
           daemonOffline={daemonOffline}
+          paused={paused}
           showPicker={view.kind === "empty"}
           modelOverride={modelOverride}
           onModelChange={setModelOverride}
@@ -231,7 +237,14 @@ export default function ChatPane({
           onOpenTools={onOpenTools}
           onNewSession={onNewSession}
           onChangeSession={onChangeSession}
+          paused={paused}
+          onTogglePause={onTogglePause}
         />
+      )}
+      {paused && (
+        <Banner kind="warning">
+          <strong>This profile is paused.</strong> You can read the history; resume from the header to chat.
+        </Banner>
       )}
       <div className={styles.body}>
         <RefreshBar
@@ -247,8 +260,8 @@ export default function ChatPane({
           profileName={activeProfile?.name ?? null}
           profileModel={activeProfile?.model ?? null}
           voiceId={activeProfile?.voice_id ?? activeDetail?.voice_id ?? null}
-          onRewriteMessage={onRewriteMessage}
-          onRetryMessage={onRetryMessage}
+          onRewriteMessage={paused ? null : onRewriteMessage}
+          onRetryMessage={paused ? null : onRetryMessage}
           sessionId={view.sessionId ?? null}
           rewriteDraft={rewriteDraft}
           searchOpen={searchOpen}
@@ -263,8 +276,9 @@ export default function ChatPane({
         onConfigureProfile={onConfigureProfile}
         onSend={onSend}
         onCancel={pendingTurn ? onCancel : null}
-        disabled={daemonOffline}
+        disabled={daemonOffline || paused}
         daemonOffline={daemonOffline}
+        paused={paused}
         showPicker={false}
         modelOverride={modelOverride}
         onModelChange={setModelOverride}
