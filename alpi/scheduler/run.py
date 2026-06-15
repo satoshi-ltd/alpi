@@ -48,6 +48,19 @@ class ParsedEvents:
 # for "every minute" expressions while keeping CPU ~0.
 TICK_SECONDS = 30
 
+DEFAULT_RUN_TIMEOUT_SECONDS = 600
+MAX_RUN_TIMEOUT_SECONDS = 3600
+
+
+def job_run_timeout(job: dict) -> int:
+    raw = job.get("timeout")
+    if raw is None:
+        return DEFAULT_RUN_TIMEOUT_SECONDS
+    try:
+        secs = int(raw)
+    except (TypeError, ValueError):
+        return DEFAULT_RUN_TIMEOUT_SECONDS
+    return max(30, min(MAX_RUN_TIMEOUT_SECONDS, secs))
 
 
 def jobs_path(home: Path) -> Path:
@@ -254,12 +267,13 @@ def _run_script_only(job: dict, home: Path) -> JobOutcome:
         "ALPI_PLATFORM": "cron",
     })
 
+    secs = job_run_timeout(job)
     try:
         proc = subprocess.run(
-            argv, env=env, capture_output=True, text=True, timeout=600,
+            argv, env=env, capture_output=True, text=True, timeout=secs,
         )
     except subprocess.TimeoutExpired:
-        return JobOutcome(False, "script timed out", timeout_reason="timeout_600s")
+        return JobOutcome(False, "script timed out", timeout_reason=f"timeout_{secs}s")
     except FileNotFoundError:
         return JobOutcome(False, f"executable not found: {argv[0]!r}")
 
@@ -322,6 +336,7 @@ def run_job(job: dict, home: Path) -> JobOutcome:
         "ALPI_SCHEDULE_CHILD": "1",
         "ALPI_PARENT_EMITS_AGENT_MESSAGE": "1",
     })
+    secs = job_run_timeout(job)
     try:
         proc = subprocess.run(
             [
@@ -334,10 +349,10 @@ def run_job(job: dict, home: Path) -> JobOutcome:
                 "--emit-events",
                 "--no-save",
             ],
-            env=env, capture_output=True, text=True, timeout=600,
+            env=env, capture_output=True, text=True, timeout=secs,
         )
     except subprocess.TimeoutExpired:
-        return JobOutcome(False, "agent timed out", timeout_reason="timeout_600s")
+        return JobOutcome(False, "agent timed out", timeout_reason=f"timeout_{secs}s")
     if proc.returncode != 0:
         return JobOutcome(
             False, f"agent rc={proc.returncode}: {proc.stderr[:300]}",
@@ -584,8 +599,8 @@ async def serve(home: Path) -> None:
     using ``asyncio.sleep`` so other subsystems share the same loop.
 
     ``tick`` runs in a dedicated thread executor so a long-running
-    ``subprocess.run`` (up to 10 min via run_job's timeout) can't
-    starve host.chat streaming or other coroutines.
+    ``subprocess.run`` (up to the per-job ``timeout``, default 600s,
+    max 3600s) can't starve host.chat streaming or other coroutines.
     """
     import asyncio
     import concurrent.futures

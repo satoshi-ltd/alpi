@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.9.9 — 2026-06-15 — scheduled jobs can run longer
+
+- **A scheduled job can set its own timeout.** Jobs that do real work — deep
+  research, multi-step writing, publishing — used to be capped at 10 minutes and
+  killed mid-run. `schedule` (add/update) now takes an optional `timeout`
+  (seconds, default 600, up to 1 hour), so a heavy weekly job gets the time it
+  needs while quick jobs keep the tight default that guards against runaway
+  unattended runs.
+
 ## v0.9.8 — 2026-06-15 — pause a profile
 
 - **Profiles can be paused.** A new `paused` flag (toggled from the desktop/

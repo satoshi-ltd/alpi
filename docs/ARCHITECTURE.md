@@ -232,7 +232,7 @@ Events emitted to the UI sink: `user`, `reasoning_delta`, `assistant_delta`, `as
 
 The system prompt for each turn is built from: `AGENT.md` (agent profile — voice, style, identity) → base prompt → environment block (workspace, profile home, path rule) → **platform hint** (`_platform_hint()` — injects per-surface guidance when `ALPI_PLATFORM` is set by the caller: `cron`, `telegram`, `email`, `gmail`, `matrix`; empty for TUI) → **skills index** (auto-injected by `alpi.tools.skill.skills_index_block`) → `USER.md` → `MEMORY.md`.
 
-The gateway (`alpi/gateway/run.py`) sets `ALPI_PLATFORM=<msg.platform>` on every spawned subprocess so Telegram replies arrive Markdown-aware and email replies arrive plain-text-only. The scheduler (`alpi/scheduler/run.py`) sets `ALPI_PLATFORM=cron` so scheduled jobs run knowing no user is present and they cannot ask for clarification.
+The gateway (`alpi/gateway/run.py`) sets `ALPI_PLATFORM=<msg.platform>` on every spawned subprocess so Telegram replies arrive Markdown-aware and email replies arrive plain-text-only. The scheduler (`alpi/scheduler/run.py`) sets `ALPI_PLATFORM=cron` so scheduled jobs run knowing no user is present and they cannot ask for clarification. Each fire runs as a subprocess capped at `job_run_timeout(job)` seconds — `job.timeout` if set, else `DEFAULT_RUN_TIMEOUT_SECONDS` (600), clamped to `[30, MAX_RUN_TIMEOUT_SECONDS]` (3600). The cap is a runaway/cost guardrail for unattended runs, not a hint that jobs must be short; heavy jobs (deep research, multi-step publishing) opt into a longer budget via `schedule(add|update, timeout=…)`.
 
 Cron jobs with `no_agent: true` skip the LLM entirely. The `prompt` is shlex-tokenized and exec'd directly (`shell=False`); `${ALPI_HOME}` expands to the profile home and the profile's `.env` overrides inherited env keys so skills find their declared `requires_env`. A form-based allowlist enforces that the command is `python[3] [flags] <script>` or `<script>` invoked directly, where `<script>` resolves to `<home>/skills/<category>/<name>/scripts/…`; non-python executables and `-c`/`-m` inline-code flags are rejected at both `schedule(add)` time and inside the scheduler before exec. Use this for deterministic skills (sync, file processors) — saves both tokens and the agent boot latency per fire.
 
@@ -908,7 +908,7 @@ schedule delivery/logging, not to local TUI / desktop chat history.
 **Loop isolation.** `serve()` runs `tick()` in a dedicated
 `ThreadPoolExecutor(max_workers=2)`, and `host.schedule.fire` wraps
 `fire_by_id` in `run_in_executor` before awaiting. Both paths
-ultimately call `subprocess.run(timeout=600)`; running them inline
+ultimately call `subprocess.run(timeout=job_run_timeout(job))` (default 600s, per-job up to 3600s); running them inline
 would block every other coroutine on the daemon's asyncio loop —
 gateway listeners, ALP responders, and `host.chat.send` streams in
 sibling profiles all stall for the duration of the scheduled job.

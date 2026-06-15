@@ -811,3 +811,47 @@ def test_serve_runs_tick_off_loop_so_chat_can_progress(
         f"loop starved during tick — only {result['heartbeats']} heartbeats fired "
         "while tick blocked for 500ms; serve() must run tick in an executor"
     )
+
+
+def test_job_run_timeout_defaults_to_600_when_unset() -> None:
+    assert scheduler.job_run_timeout({}) == scheduler.DEFAULT_RUN_TIMEOUT_SECONDS == 600
+
+
+def test_job_run_timeout_honors_explicit_value() -> None:
+    assert scheduler.job_run_timeout({"timeout": 1800}) == 1800
+
+
+def test_job_run_timeout_clamps_to_bounds() -> None:
+    assert scheduler.job_run_timeout({"timeout": 10}) == 30
+    assert scheduler.job_run_timeout({"timeout": 99999}) == scheduler.MAX_RUN_TIMEOUT_SECONDS
+
+
+def test_job_run_timeout_ignores_garbage() -> None:
+    assert scheduler.job_run_timeout({"timeout": "nope"}) == 600
+    assert scheduler.job_run_timeout({"timeout": None}) == 600
+
+
+def test_cron_tool_add_persists_timeout(tmp_home_no_env: Path) -> None:
+    out = Schedule().run(action="add", kind="cron", expression="0 9 * * 4",
+                     prompt="weekly research post", timeout=1800)
+    assert out.ok
+    job = json.loads((tmp_home_no_env / "schedule" / "jobs.json").read_text())[0]
+    assert job["timeout"] == 1800
+
+
+def test_cron_tool_add_rejects_out_of_range_timeout(tmp_home_no_env: Path) -> None:
+    out = Schedule().run(action="add", kind="cron", expression="0 9 * * 4",
+                     prompt="weekly research post", timeout=99999)
+    assert not out.ok
+    assert "timeout" in (out.error or "")
+
+
+def test_cron_tool_update_sets_timeout(tmp_home_no_env: Path) -> None:
+    add = Schedule().run(action="add", kind="cron", expression="0 9 * * 4",
+                     prompt="weekly research post")
+    assert add.ok
+    job_id = json.loads((tmp_home_no_env / "schedule" / "jobs.json").read_text())[0]["id"]
+    upd = Schedule().run(action="update", id=job_id, timeout=1800)
+    assert upd.ok and "timeout" in upd.output
+    job = json.loads((tmp_home_no_env / "schedule" / "jobs.json").read_text())[0]
+    assert job["timeout"] == 1800

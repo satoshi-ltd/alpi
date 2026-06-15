@@ -63,6 +63,7 @@ live at `{home}/skills/<category>/<name>/`.
 
 - Agent jobs run via `alpi chat --once --emit-events --no-save`.
 - Script jobs (`no_agent: true`) run directly, `shell=False`.
+- Each fire is capped at `job.timeout` seconds (default 600, max 3600) — a runaway/cost guardrail for unattended runs, not a hint that jobs must be short. Heavy jobs (deep research, multi-step publishing) raise it via `schedule(add|update, timeout=…)`.
 - `schedule.done` / `schedule.failed` payload: `profile`, `job_id`, `kind`, `message`, `reply`, `delivered_to`, `silent`. `schedule.failed` adds `output_id` + `deep_link` (`/outputs/<profile>/<id>`) for the persisted failure row.
 - Jobs are silent by default (`notify: false`). Set `notify: true` and the reply is pushed to the owner's apps — the scheduler re-emits `agent.message` (`delivered_to="alpi"`) with `output_id` + `deep_link`. A job that wants to reach a THIRD PARTY calls `send_message` (gateway) in its prompt; that does not count as notifying the owner.
 - In schedule/gateway subprocesses the parent daemon is the single source of truth: the child's `notify` / `send_message` is suppressed; the parent parses `tool_end` args via `alpi.outputs.record_child_send_message` to create the canonical output and re-emit `agent.message`. If the agent already notified itself, the scheduler skips the auto-notify (`delivered_to="external"`).

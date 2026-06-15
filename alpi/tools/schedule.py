@@ -138,6 +138,16 @@ class Schedule(Tool):
                 ),
                 "default": False,
             },
+            "timeout": {
+                "type": "integer",
+                "description": (
+                    "Max seconds a fired run may take before it is killed "
+                    "(default 600, max 3600). Raise it for heavy jobs — deep "
+                    "research, multi-step writing/publishing — that genuinely "
+                    "need longer; the cap is a runaway/cost guardrail for "
+                    "unattended runs, not a hint that jobs must be short."
+                ),
+            },
         },
         "required": ["action"],
     }
@@ -151,7 +161,8 @@ class Schedule(Tool):
             force: bool = False,
             paused: bool | None = None,
             no_agent: bool | None = None,
-            title: str | None = None) -> ToolResult:
+            title: str | None = None,
+            timeout: int | None = None) -> ToolResult:
         home = get_home()
         jobs_path = home / "schedule" / "jobs.json"
         jobs_path.parent.mkdir(parents=True, exist_ok=True)
@@ -203,6 +214,11 @@ class Schedule(Tool):
                 job["no_agent"] = True
             if title and title.strip():
                 job["title"] = title.strip()
+            if timeout is not None:
+                err = _validate_timeout(timeout)
+                if err:
+                    return ToolResult(ok=False, output="", error=err)
+                job["timeout"] = int(timeout)
             if job["kind"] == "cron":
                 if not expression:
                     return ToolResult(
@@ -334,6 +350,12 @@ class Schedule(Tool):
                     )
                 job["after_hours"] = float(after_hours)
                 changes.append("after_hours")
+            if timeout is not None:
+                err = _validate_timeout(timeout)
+                if err:
+                    return ToolResult(ok=False, output="", error=err)
+                job["timeout"] = int(timeout)
+                changes.append("timeout")
 
             err = _validate_job_shape(job)
             if err:
@@ -399,6 +421,17 @@ def _validate_prompt(prompt: str) -> str | None:
             "threat scan blocked scheduled prompt "
             f"(runs unattended with full tool access): {', '.join(flags)}"
         )
+    return None
+
+
+def _validate_timeout(timeout) -> str | None:
+    from alpi.scheduler.run import MAX_RUN_TIMEOUT_SECONDS
+    try:
+        secs = int(timeout)
+    except (TypeError, ValueError):
+        return f"'timeout' must be an integer number of seconds, got {timeout!r}"
+    if not (30 <= secs <= MAX_RUN_TIMEOUT_SECONDS):
+        return f"'timeout' must be between 30 and {MAX_RUN_TIMEOUT_SECONDS} seconds"
     return None
 
 
