@@ -194,3 +194,34 @@ describe("EndpointProvider call routing", () => {
     expect(callSpy.mock.calls[0][0].id).toBe("beta");
   });
 });
+
+
+describe("EndpointProvider offline auto-reprobe", () => {
+  it("re-probes the active endpoint while offline and recovers when it returns", async () => {
+    const { captureRef } = await mount();
+    vi.useFakeTimers();
+    try {
+      probeResults.set("alpha", { status: "offline", version: null });
+      await act(async () => { await captureRef.current.probeOne("alpha"); });
+      expect(captureRef.current.probeState.get("alpha")).toBe("offline");
+
+      probeResults.set("alpha", { status: "online", version: "0.9.7" });
+      await act(async () => {
+        vi.advanceTimersByTime(4000);
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(captureRef.current.probeState.get("alpha")).toBe("online");
+
+      probeResults.set("alpha", { status: "offline", version: null });
+      await act(async () => {
+        vi.advanceTimersByTime(4000 * 2);
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(captureRef.current.probeState.get("alpha")).toBe("online");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

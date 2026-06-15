@@ -11,6 +11,19 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.3.61 — 2026-06-15 — connections recover on their own
+
+_Requires alpi v0.9.7+._
+
+- **A dropped connection now reconnects by itself.** When the daemon went away,
+  the connection got stuck on "offline · retrying…" until you clicked retry or
+  reopened the app — the "retrying" was only a label. It now genuinely re-probes
+  every few seconds and flips back online the moment the daemon is reachable.
+- **A brief daemon hiccup — or the warmup right after a restart — no longer
+  flaps the connection offline.** The local probe is more tolerant (one retry,
+  a longer timeout), so a busy-but-alive daemon stays shown as online instead of
+  blinking offline↔online.
+
 ## v0.3.60 — 2026-06-14 — update a daemon in place
 
 _Requires alpi v0.9.6+._

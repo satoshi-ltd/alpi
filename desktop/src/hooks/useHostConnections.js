@@ -7,6 +7,7 @@ import { safeUnlisten } from "../lib/tauri-listen.js";
 
 const PROFILES_CACHE_PREFIX = "alf:profiles:v1:";
 const WORKGROUPS_CACHE_PREFIX = "alf:workgroups:v1:";
+const OFFLINE_REPROBE_MS = 4000;
 
 function parsePairingPayload(payload) {
   const text = payload.trim();
@@ -278,6 +279,16 @@ export function useHostConnections({
     reload();
     invoke("host_connections_probe_active").catch(() => {});
   }, [reload, reloadConnections]);
+
+  // Offline has no liveness stream to recover on, so re-probe until the daemon returns (makes the pill's "retrying…" real); auth-failed is excluded — a revoked token won't fix itself.
+  useEffect(() => {
+    const status = activeConnectionForSync?.status;
+    if (status !== "offline" && status !== "unknown") return undefined;
+    const timer = setInterval(() => {
+      invoke("host_connections_probe_active").catch(() => {});
+    }, OFFLINE_REPROBE_MS);
+    return () => clearInterval(timer);
+  }, [activeStatusKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Probe runs fire-and-forget; awaiting it locks the UI for 8-16s on slow remotes.
   const onSetHostConnection = useCallback(

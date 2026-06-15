@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.9.7 — 2026-06-15 — responsive host under a busy fleet
+
+- **The daemon stays responsive when many profiles share a workgroup mesh.**
+  Background polling no longer monopolizes the host control plane: profile
+  pollers are staggered instead of firing in lockstep, hand control back
+  between workgroups, and poll idle or finished workgroups progressively less
+  often — workgroups with a live task keep the base cadence. Local and remote
+  clients that used to flap to "offline" now hold steady.
+- **An idle fleet sits idle.** Hub transcripts are re-decrypted only when they
+  actually change, so a daemon with nothing happening stops burning CPU on
+  every tick.
+
 ## v0.9.6 — 2026-06-14 — update a daemon from the apps
 
 - **New `host.daemon.update`** lets a paired client trigger a self-upgrade: the

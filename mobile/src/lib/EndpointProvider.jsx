@@ -5,6 +5,8 @@ import { probe, probeAll } from './probe';
 import { call as rpcCall, callStream as rpcCallStream, dropEndpointPool } from './rpc';
 import { clearAll, loadConnections, removeConnection, saveConnection, setActiveConnection, setDeviceIds } from './store';
 
+const OFFLINE_REPROBE_MS = 4000;
+
 // auth-failed handling lives in <AuthFailedBridge> (app/_layout.jsx) — it needs router + toast context.
 export function EndpointProvider({ children }) {
   const [connections, setConnections] = useState([]);
@@ -90,13 +92,28 @@ export function EndpointProvider({ children }) {
     refresh().catch(() => setReady(true));
   }, [refresh]);
 
+  const connectionsRef = useRef(connections);
+  connectionsRef.current = connections;
+
+  // A dropped daemon has no liveness stream to recover on, so re-probe the active until it returns; auth-failed is excluded — a revoked token won't fix itself.
+  const activeStatus = activeId ? (probeState.get(activeId) ?? 'unknown') : null;
+  useEffect(() => {
+    if (!activeId) return undefined;
+    if (activeStatus !== 'offline' && activeStatus !== 'unknown') return undefined;
+    const timer = setInterval(() => {
+      probeByIdFrom(connectionsRef.current, activeId).catch(() => {});
+    }, OFFLINE_REPROBE_MS);
+    return () => clearInterval(timer);
+  }, [activeId, activeStatus, probeByIdFrom]);
+
   const setActive = useCallback(async (id) => {
     // Drop the previous endpoint's pooled WS — its tokens won't auth on the new one and a stale socket holds an FD + battery for nothing.
     const prev = connections.find((c) => c.id === activeId);
     if (prev) dropEndpointPool(prev);
     await setActiveConnection(id);
     setActiveId(id);
-  }, [connections, activeId]);
+    probeByIdFrom(connections, id).catch(() => {});
+  }, [connections, activeId, probeByIdFrom]);
 
   const addConnection = useCallback(async (endpoint) => {
     await saveConnection({ ...endpoint, added_at: Date.now() });

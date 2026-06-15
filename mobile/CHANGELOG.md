@@ -14,6 +14,14 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.1.45 — 2026-06-15 — connections recover on their own
+
+- **A dropped connection now reconnects by itself.** While a connection is
+  offline the app keeps re-probing and flips it back online as soon as the
+  daemon is reachable — no need to reopen the connection sheet.
+- **Switching connections refreshes status right away** instead of showing a
+  stale online/offline state.
+
 ## v0.1.44 — 2026-06-14 — update a daemon from your phone
 
 _Requires alpi v0.9.6+._

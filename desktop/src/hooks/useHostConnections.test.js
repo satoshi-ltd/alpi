@@ -231,3 +231,52 @@ describe("useHostConnections connection-status", () => {
     expect(remote.update_available).toBe("0.9.6");
   });
 });
+
+
+describe("useHostConnections offline auto-reprobe", () => {
+  it("re-probes the active connection while offline and stops once back online", async () => {
+    let localStatus = "offline";
+    invoke.mockImplementation(async (cmd) => {
+      if (cmd === "host_connections") return makeConnections("local", { local: localStatus });
+      if (cmd === "profile_summaries") return [];
+      if (cmd === "workgroups") return [];
+      return null;
+    });
+    vi.useFakeTimers();
+    try {
+      const { result } = renderHostConnections();
+      // flush the initial async reload (microtasks) so state→offline and the effect installs a faked interval
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(
+        result.current.hostConnections.connections.find((c) => c.id === "local")?.status,
+      ).toBe("offline");
+      invoke.mockClear();
+      await act(async () => {
+        vi.advanceTimersByTime(4000 * 3);
+      });
+      const offlineProbes = invoke.mock.calls.filter(
+        ([c]) => c === "host_connections_probe_active",
+      ).length;
+      expect(offlineProbes).toBeGreaterThanOrEqual(2);
+
+      localStatus = "online";
+      await act(async () => {
+        await connectionStatusListener({ payload: { id: "local", status: "online" } });
+      });
+      invoke.mockClear();
+      await act(async () => {
+        vi.advanceTimersByTime(4000 * 3);
+      });
+      const onlineProbes = invoke.mock.calls.filter(
+        ([c]) => c === "host_connections_probe_active",
+      ).length;
+      expect(onlineProbes).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

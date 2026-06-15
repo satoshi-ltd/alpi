@@ -19,14 +19,14 @@ use crate::home::resolve_root;
 const LOCAL_UNSUPPORTED: &str =
     "local daemon connections aren't supported on Windows yet — pair a remote daemon over Tailscale";
 
-// RPC timeouts stay generous — a busy daemon or slow Tailscale hop must not fail falsely (calls run off the main thread, so nothing freezes); dead-daemon detection belongs to the probes (400ms/8s) and the stream keepalives (events ping 25s, chat heartbeat 5s → 75s = three missed pings).
+// RPC timeouts stay generous — a busy daemon or slow Tailscale hop must not fail falsely (calls run off the main thread, so nothing freezes); dead-daemon detection belongs to the probes (2.5s local / 8s remote — a just-restarted daemon's warmup must not read as offline) and the stream keepalives (events ping 25s, chat heartbeat 5s → 75s = three missed pings).
 const READ_TIMEOUT_LOCAL_SECS: u64 = 8;
 const READ_TIMEOUT_REMOTE_SECS: u64 = 20;
 const STREAM_READ_TIMEOUT_SECS: u64 = 75;
 const WS_CONNECT_TIMEOUT_SECS: u64 = 4;
 const WS_KEEPALIVE_IDLE_SECS: u64 = 30;
 const WS_KEEPALIVE_INTERVAL_SECS: u64 = 10;
-const PROBE_LOCAL_TIMEOUT_MS: u64 = 400;
+const PROBE_LOCAL_TIMEOUT_MS: u64 = 2500;
 const PROBE_REMOTE_TIMEOUT_MS: u64 = 8000;
 const PROBE_RETRY_DELAY_MS: u64 = 350;
 // Sticky offline: tolerate transient blips on noisy Tailscale links.
@@ -1270,7 +1270,7 @@ impl WsClient {
     }
 }
 
-// Remote probes retry once after PROBE_RETRY_DELAY_MS; auth failures and local probes don't.
+// Both transports retry once after PROBE_RETRY_DELAY_MS before flipping; only a rejected token (auth-failed) skips the retry.
 pub fn probe_connection(conn: &HostConnection) {
     let id = conn.id().to_string();
     set_status(&id, ConnectionStatus::Probing, None);
@@ -1292,9 +1292,13 @@ pub fn probe_connection(conn: &HostConnection) {
     };
     let mut result = probe_once();
     if let Err(e) = &result {
-        if matches!(conn, HostConnection::Remote { .. })
-            && classify_remote_error(e) != ConnectionStatus::AuthFailed
-        {
+        let retryable = match conn {
+            HostConnection::Local { .. } => true,
+            HostConnection::Remote { .. } => {
+                classify_remote_error(e) != ConnectionStatus::AuthFailed
+            }
+        };
+        if retryable {
             std::thread::sleep(Duration::from_millis(PROBE_RETRY_DELAY_MS));
             result = probe_once();
         }

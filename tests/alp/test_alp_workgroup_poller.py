@@ -1183,3 +1183,145 @@ def test_resume_resets_poller_state_for_wg(short_tmp: Path) -> None:
     # other workgroup untouched
     assert st.get("hub_watchdog_fired_seq", {}).get("wg_y") == 3
     assert service._get_hub_watchdog_seq(home, "wg_y") == 3
+
+
+def test_poller_start_offset_is_deterministic_and_staggered() -> None:
+    a1 = service._poller_start_offset("quill")
+    a2 = service._poller_start_offset("quill")
+    assert a1 == a2  # deterministic across restarts
+    assert 0.0 <= a1 < service.WORKGROUP_TICK_SECONDS
+    spread = {
+        service._poller_start_offset(p)
+        for p in ("quill", "muse", "lens", "scout", "mira", "atlas")
+    }
+    assert len(spread) >= 4  # distinct profiles land on distinct offsets
+
+
+@pytest.mark.asyncio
+async def test_poller_yields_between_subs(monkeypatch) -> None:
+    import types
+    from alpi.alp import subscription as sub_mod
+    from alpi.alp import workgroup as wg_mod
+    from alpi.alp import workgroup_client as wc
+
+    subs = [types.SimpleNamespace(wg_id=f"wg{i}") for i in range(10)]
+    beats = {"n": 0}
+    samples: list[int] = []
+
+    async def fake_pull(home, wg_id):
+        samples.append(beats["n"])  # local hubs resolve with no real I/O yield
+        return [], None
+
+    monkeypatch.setattr(service, "_poller_start_offset", lambda _p: 0.0)
+    monkeypatch.setattr(sub_mod, "load", lambda home: subs)
+    monkeypatch.setattr(sub_mod, "get", lambda home, wid: types.SimpleNamespace(wg_id=wid))
+    monkeypatch.setattr(wc, "pull", fake_pull)
+    monkeypatch.setattr(wg_mod, "list_workgroups", lambda home: [])
+
+    async def fake_dispatch(home, profile, sub):
+        return None
+
+    monkeypatch.setattr(service, "_maybe_dispatch_for_sub", fake_dispatch)
+
+    async def heartbeat() -> None:
+        while True:
+            beats["n"] += 1
+            await asyncio.sleep(0)
+
+    hb = asyncio.create_task(heartbeat())
+    poller = asyncio.create_task(
+        service._run_workgroup_poller(Path("/tmp/does-not-matter"), "alice")
+    )
+    try:
+        # Stop after one tick's sub loop, before the 30s sleep, so samples are in-tick only.
+        for _ in range(200):
+            await asyncio.sleep(0)
+            if len(samples) >= len(subs):
+                break
+    finally:
+        poller.cancel()
+        hb.cancel()
+
+    assert len(samples) == len(subs)
+    # Heartbeat advanced while the poller walked its subs → it yielded per sub.
+    assert samples[-1] - samples[0] >= 5
+
+
+def test_wg_backoff_schedule() -> None:
+    # Steady cadence for the first ticks, then exponential backoff capped.
+    assert service._wg_backoff_mult(0) == 1
+    assert service._wg_backoff_mult(2) == 1
+    assert service._wg_backoff_mult(3) == 2
+    assert service._wg_backoff_mult(4) == service._WG_POLL_BACKOFF_MAX
+    assert service._wg_backoff_mult(5) == service._WG_POLL_BACKOFF_MAX  # capped
+    assert service._wg_backoff_mult(99) == service._WG_POLL_BACKOFF_MAX
+    base = service.WORKGROUP_TICK_SECONDS
+    assert base * service._wg_backoff_mult(99) <= 120  # dormant wg still polled >= every 2 min
+
+
+def test_hub_transcript_decrypt_is_cached_by_mtime(short_tmp: Path, monkeypatch) -> None:
+    import json as _json
+    import types
+    from alpi.alp import keys as keys_mod
+    from alpi.alp import workgroup as wg_mod
+
+    home = short_tmp / "mira"
+    (home / "alp" / "workgroups" / "wg_x").mkdir(parents=True)
+    tpath = home / "alp" / "workgroups" / "wg_x" / "transcript.jsonl"
+    tpath.write_text(
+        _json.dumps({"key_version": 1, "nonce": "n", "ciphertext": "c", "seq": 1}) + "\n",
+    )
+
+    fake_kp = types.SimpleNamespace(pubkey_b64=lambda: "me")
+    monkeypatch.setattr(keys_mod, "load_or_generate", lambda _home: fake_kp)
+    wg = types.SimpleNamespace(meta=types.SimpleNamespace(id="wg_x"), member=lambda _pk: object())
+    monkeypatch.setattr(wg_mod, "hub_group_keys", lambda _h, _w, _k: {1: b"k"})
+    calls = {"n": 0}
+
+    def fake_decrypt(_group_key, _nonce, _ct):
+        calls["n"] += 1
+        return b"hello"
+
+    monkeypatch.setattr(wg_mod, "decrypt_post", fake_decrypt)
+    service._HUB_DECRYPT_CACHE.clear()
+
+    a = service._all_hub_posts_decrypted(home, wg)
+    b = service._all_hub_posts_decrypted(home, wg)
+    assert calls["n"] == 1  # second call served from cache, no re-decrypt
+    assert a == b and len(a) == 1 and a[0]["text"] == "hello"
+
+    tpath.write_text(
+        _json.dumps({"key_version": 1, "nonce": "n", "ciphertext": "c", "seq": 1}) + "\n"
+        + _json.dumps({"key_version": 1, "nonce": "n2", "ciphertext": "c2", "seq": 2}) + "\n",
+    )
+    c = service._all_hub_posts_decrypted(home, wg)
+    assert calls["n"] == 3  # transcript changed → re-decrypted both posts
+    assert len(c) == 2
+
+
+def test_sub_with_open_task_stays_hot_no_backoff() -> None:
+    import types
+    open_task = [{"seq": 1, "from": "hub_pk", "text": "@quill #task #x do it"}]
+    closed = open_task + [{"seq": 2, "from": "hub_pk", "text": "#done shipped"}]
+    # Open task → keep base cadence even with no new posts (peer wakeup + #working recovery).
+    assert service._sub_stays_hot([], types.SimpleNamespace(recent_posts=open_task)) is True
+    # Resolved (all #done) → eligible to back off.
+    assert service._sub_stays_hot([], types.SimpleNamespace(recent_posts=closed)) is False
+    # A fresh post is always hot, regardless of task state.
+    assert service._sub_stays_hot([{"seq": 9}], types.SimpleNamespace(recent_posts=[])) is True
+    # Missing/None cache must not crash.
+    assert service._sub_stays_hot([], None) is False
+
+
+def test_sub_stays_hot_ignores_member_authored_markers() -> None:
+    import types
+    # hub_pubkey makes a member's own "#done" prose non-closing, so the task stays open.
+    posts = [
+        {"seq": 1, "from": "hub_pk", "text": "@quill #task #x do it"},
+        {"seq": 2, "from": "quill_pk", "text": "are we #done with this?"},
+    ]
+    sub = types.SimpleNamespace(recent_posts=posts, hub_pubkey="hub_pk")
+    assert service._sub_stays_hot([], sub) is True
+    # The hub's own #done genuinely closes it → eligible to back off.
+    closed = posts + [{"seq": 3, "from": "hub_pk", "text": "#done shipped"}]
+    assert service._sub_stays_hot([], types.SimpleNamespace(recent_posts=closed, hub_pubkey="hub_pk")) is False

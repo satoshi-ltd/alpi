@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
 import os
 import platform
@@ -458,6 +459,35 @@ async def _run_scheduler(home: Path) -> None:
     await sch_serve(home)
 
 
+def _poller_start_offset(profile: str) -> float:
+    # Stagger pollers so they don't all fire at once and saturate the host-shared loop.
+    h = int.from_bytes(hashlib.sha1(profile.encode("utf-8")).digest()[:4], "big")
+    return (h % (WORKGROUP_TICK_SECONDS * 1000)) / 1000.0
+
+
+# Idle subs back off (base → base*MAX) so a fleet of done workgroups stops polling every tick; any new post resets to base.
+_WG_POLL_STEADY_TICKS = 3
+_WG_POLL_BACKOFF_MAX = 4
+
+
+def _wg_backoff_mult(idle_ticks: int) -> int:
+    if idle_ticks < _WG_POLL_STEADY_TICKS:
+        return 1
+    return min(_WG_POLL_BACKOFF_MAX, 1 << (idle_ticks - _WG_POLL_STEADY_TICKS + 1))
+
+
+def _sub_stays_hot(new_posts: list, sub) -> bool:
+    # An open task (in-progress pipeline / awaited peer reply / un-handed-off #working) must keep base cadence — backing it off would delay the peer wakeup and the #working recovery watchdog.
+    if new_posts:
+        return True
+    from alpi.alp import tasks as wg_tasks
+    # hub_pubkey is required: without it a member's own #done text would falsely close the task and let it back off.
+    return wg_tasks.active_task(
+        getattr(sub, "recent_posts", None) or [],
+        hub_pubkey=getattr(sub, "hub_pubkey", None),
+    ) is not None
+
+
 async def _run_workgroup_poller(home: Path, profile: str) -> None:
     """Watch workgroups for new triggers and dispatch turns."""
     from alpi.alp import subscription as sub_mod
@@ -465,23 +495,34 @@ async def _run_workgroup_poller(home: Path, profile: str) -> None:
     from alpi.alp import workgroup_client as wc
 
     log.info("workgroup poller running (tick=%ss)", WORKGROUP_TICK_SECONDS)
+    await asyncio.sleep(_poller_start_offset(profile))
+    due_at: dict[str, float] = {}
+    idle: dict[str, int] = {}
     while True:
         try:
+            now = time.monotonic()
             # Pull member workgroups, then check whether they need a response.
             for sub in sub_mod.load(home):
+                wid = sub.wg_id
+                if due_at.get(wid, 0.0) > now:  # backed off — not due this tick
+                    continue
                 try:
-                    await wc.pull(home, sub.wg_id)
+                    new_posts, _head = await wc.pull(home, wid)
+                    # Re-load to pick up the freshly-saved cache.
+                    refreshed = sub_mod.get(home, wid)
+                    if refreshed is not None:
+                        await _maybe_dispatch_for_sub(home, profile, refreshed)
+                    idle[wid] = 0 if _sub_stays_hot(new_posts, refreshed) else idle.get(wid, 0) + 1
                 except Exception as e:  # noqa: BLE001
-                    log.debug("wg poller pull(%s) failed: %s", sub.wg_id, e)
-                    continue
-                # Re-load to pick up the freshly-saved cache.
-                refreshed = sub_mod.get(home, sub.wg_id)
-                if refreshed is None:
-                    continue
-                await _maybe_dispatch_for_sub(home, profile, refreshed)
+                    log.debug("wg poller pull(%s) failed: %s", wid, e)
+                    idle[wid] = idle.get(wid, 0) + 1
+                due_at[wid] = now + WORKGROUP_TICK_SECONDS * _wg_backoff_mult(idle[wid])
+                # Local pull() never yields; hand the loop back per sub so a host RPC isn't stuck behind the whole set.
+                await asyncio.sleep(0)
 
             # Hub workgroups use the local transcript.
             for wg in wg_mod.list_workgroups(home):
+                await asyncio.sleep(0)
                 try:
                     recent = _all_hub_posts_decrypted(home, wg)
                 except Exception as e:  # noqa: BLE001
@@ -1015,6 +1056,9 @@ async def _maybe_watchdog_close(
     )
 
 
+_HUB_DECRYPT_CACHE: dict[str, tuple[tuple[int, int, int], list[dict]]] = {}
+
+
 def _all_hub_posts_decrypted(home: Path, wg) -> list[dict]:
     """Return the decrypted hub transcript."""
     import json
@@ -1033,6 +1077,17 @@ def _all_hub_posts_decrypted(home: Path, wg) -> list[dict]:
     transcript_path = home / "alp" / "workgroups" / wg.meta.id / "transcript.jsonl"
     if not transcript_path.exists():
         return []
+    try:
+        st = transcript_path.stat()
+        sig = (st.st_mtime_ns, st.st_size, len(keys))
+    except OSError:
+        sig = None
+    cache_key = str(transcript_path)
+    if sig is not None:
+        cached = _HUB_DECRYPT_CACHE.get(cache_key)
+        # Unchanged transcript decrypts to the same posts — skip the per-tick full re-decrypt that dominated idle-hub CPU.
+        if cached is not None and cached[0] == sig:
+            return cached[1]
     out: list[dict] = []
     for line in transcript_path.read_text().splitlines():
         line = line.strip()
@@ -1052,6 +1107,8 @@ def _all_hub_posts_decrypted(home: Path, wg) -> list[dict]:
         except Exception:  # noqa: BLE001
             continue
         out.append({**entry, "text": text})
+    if sig is not None:
+        _HUB_DECRYPT_CACHE[cache_key] = (sig, out)
     return out
 
 
