@@ -24,11 +24,11 @@ function Dot({ delay, color }) {
   );
 }
 
-export function ThinkingDots({ color }) {
+export function ThinkingDots({ color, padded = true }) {
   const { colors } = useTheme();
   const tint = color ?? colors.ink3;
   return (
-    <View style={{ flexDirection: 'row', gap: space.s1, paddingHorizontal: space.s7 }}>
+    <View style={{ flexDirection: 'row', gap: space.s1, paddingHorizontal: padded ? space.s7 : 0 }}>
       <Dot delay={0} color={tint} />
       <Dot delay={150} color={tint} />
       <Dot delay={300} color={tint} />

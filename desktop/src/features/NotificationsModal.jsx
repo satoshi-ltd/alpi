@@ -386,7 +386,7 @@ function DetailPane({ row, accent, multi, onCopy, onAction, action }) {
         <span className={styles.detailMetaDot}>·</span>
         <Mono className={styles.detailMetaPart}>{fmtAbsolute(row.created_at)}</Mono>
         <span className={styles.detailMetaSpacer} />
-        <Tip text="Copy" side="l">
+        <Tip text="Copy" side="l" escape>
           <IconBtn aria-label="Copy notification" onClick={onCopy}>
             <CopyIcon />
           </IconBtn>

@@ -22,3 +22,38 @@
   0% { background-position: 100% 0; }
   100% { background-position: -100% 0; }
 }
+
+.skLine {
+  display: block;
+  height: 11px;
+  border-radius: 5px;
+  background: linear-gradient(
+    100deg,
+    var(--hover) 30%,
+    color-mix(in srgb, var(--ink) 9%, var(--bg-pane)) 50%,
+    var(--hover) 70%
+  );
+  background-size: 220% 100%;
+  animation: skShimmer 1.5s ease-in-out infinite;
+}
+
+.skLineLg {
+  height: 13px;
+  border-radius: 6px;
+}
+
+.skPara {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+@keyframes skShimmer {
+  0% { background-position: -180% 0; }
+  100% { background-position: 180% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton,
+  .skLine { animation: none; background: var(--hover); }
+}

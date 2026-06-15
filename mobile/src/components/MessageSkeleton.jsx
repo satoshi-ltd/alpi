@@ -1,21 +1,27 @@
-import { useMemo } from 'react';
-import { View } from 'react-native';
+import { Text, View } from 'react-native';
 
+import { useTheme } from '../theme/ThemeContext';
 import { space } from '../theme/tokens';
+import { ThinkingDots } from '../features/chat/ThinkingDots';
 import { SkeletonBar } from './SkeletonBar';
 
+const WIDTHS = ['92%', '100%', '74%'];
+
 export function MessageSkeleton({ style }) {
-  const widths = useMemo(() => {
-    const lines = 2 + Math.round(Math.random());
-    const pick = (min, max) => `${Math.round(min + Math.random() * (max - min))}%`;
-    const ranges = [[80, 100], [55, 85], [30, 60]];
-    return Array.from({ length: lines }, (_, i) => pick(...ranges[i]));
-  }, []);
+  const { colors, fonts, fontSizes } = useTheme();
   return (
-    <View style={[{ gap: space.s2 }, style]}>
-      {widths.map((w, i) => (
-        <SkeletonBar key={i} width={w} height={12} />
-      ))}
+    <View style={[{ gap: space.s4 }, style]}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s2 }}>
+        <ThinkingDots color={colors.ink3} padded={false} />
+        <Text style={{ color: colors.ink4, fontFamily: fonts.mono, fontSize: fontSizes.xs }}>
+          thinking…
+        </Text>
+      </View>
+      <View style={{ gap: space.s2 }}>
+        {WIDTHS.map((w, i) => (
+          <SkeletonBar key={i} width={w} height={13} delay={i * 120} />
+        ))}
+      </View>
     </View>
   );
 }

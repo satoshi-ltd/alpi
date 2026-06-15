@@ -14,6 +14,16 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.1.46 — 2026-06-15 — reasoning trace + livelier loading
+
+- **Redesigned the reasoning trace** to match desktop: a live thinking window
+  while the agent reasons, then a collapsible "Thought for Ns". A very long
+  thought caps to half the screen and scrolls.
+- **Refreshed the pending-reply placeholder** — thinking dots over animated
+  shimmer lines.
+- **Cleaner "Thought" on older sessions** — no more "Thought for 0s" when the
+  duration wasn't recorded.
+
 ## v0.1.45 — 2026-06-15 — connections recover on their own
 
 - **A dropped connection now reconnects by itself.** While a connection is

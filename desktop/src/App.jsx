@@ -39,7 +39,6 @@ import { useHostConnections } from "./hooks/useHostConnections.js";
 import { useAllOutputs } from "./hooks/useOutputs.js";
 import { useNavListener } from "./hooks/useNavListener.js";
 import { usePinned } from "./hooks/usePinned.js";
-import { useLastView } from "./hooks/useLastView.js";
 import { useActiveRole } from "./hooks/useActiveRole.js";
 import { useWorkgroupTasks } from "./hooks/useWorkgroupTasks.js";
 import { markWorkgroupRead } from "./hooks/useReadState.js";
@@ -360,13 +359,6 @@ export default function App() {
   }, []);
 
   const { pinned, onTogglePin } = usePinned(hostConnections.active_id);
-  useLastView({
-    connectionId: hostConnections.active_id,
-    view,
-    setView,
-    profiles,
-    workgroups,
-  });
 
   // On connection switch drop cache for BOTH prev and new active: events from the new daemon weren't received while we were elsewhere, so anything still cached for it is potentially stale.
   const prevConnectionIdRef = useRef(hostConnections.active_id);

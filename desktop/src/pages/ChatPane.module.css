@@ -204,30 +204,6 @@
   margin: 0 auto;
 }
 
-.loadingUser {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: var(--space-2);
-}
-
-.loadingUserBubble {
-  background: var(--bg-input);
-  border-radius: var(--r-2xl);
-  padding: var(--space-5) var(--space-7);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  width: 55%;
-  max-width: var(--bubble-max);
-}
-
-.loadingAssistant {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-}
-
 .tool {
   display: inline-flex;
   align-items: center;
@@ -347,15 +323,6 @@
   to {
     transform: rotate(360deg);
   }
-}
-
-.thinking {
-  padding: var(--space-3) 0;
-  align-self: flex-start;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  width: min(80%, 480px);
 }
 
 .userActionTime {

@@ -4,7 +4,7 @@ import { radii } from '../theme/tokens';
 
 import { useTheme } from '../theme/ThemeContext';
 
-export function SkeletonBar({ width, height = 12, style }) {
+export function SkeletonBar({ width, height = 12, delay = 0, style }) {
   const { colors } = useTheme();
   const op = useRef(new Animated.Value(0.4)).current;
   useEffect(() => {
@@ -14,9 +14,9 @@ export function SkeletonBar({ width, height = 12, style }) {
         Animated.timing(op, { toValue: 0.4, duration: 700, useNativeDriver: true }),
       ]),
     );
-    loop.start();
-    return () => loop.stop();
-  }, [op]);
+    const t = setTimeout(() => loop.start(), delay);
+    return () => { clearTimeout(t); loop.stop(); };
+  }, [op, delay]);
   return (
     <Animated.View
       style={[

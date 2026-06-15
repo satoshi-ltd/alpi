@@ -11,6 +11,22 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.3.62 — 2026-06-15 — reasoning trace, livelier loading, cleaner switch
+
+_Requires alpi v0.9.7+._
+
+- **Redesigned the reasoning ("thinking") trace.** While the agent reasons you
+  get a live, auto-scrolling window; when it's done it collapses to a
+  "Thought for Ns" you can expand. A page-long thought is capped to half the
+  screen and scrolls instead of burying the conversation.
+- **Livelier loading placeholders** — both opening a conversation and waiting
+  on a reply now animate instead of sitting static.
+- **Switching connections opens a new chat** instead of reopening the last
+  profile you were on — the switch is instant and carries no stale context.
+- **Cleaner "Thought" on older sessions** — no more "Thought for 0s" when the
+  duration wasn't recorded.
+- **The Copy tooltip in a notification no longer shows in ALL-CAPS.**
+
 ## v0.3.61 — 2026-06-15 — connections recover on their own
 
 _Requires alpi v0.9.7+._

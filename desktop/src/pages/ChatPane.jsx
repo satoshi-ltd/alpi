@@ -10,7 +10,7 @@ import { useStickyScroll } from "../lib/useStickyScroll.js";
 import { useScrollProgress } from "../lib/useScrollProgress.js";
 import { relativeTime } from "../lib/time.js";
 import { profileLabel } from "../lib/profile-display.js";
-import MessageSkeleton from "../primitives/MessageSkeleton.jsx";
+import { ChatLoadSkeleton, PendingReplySkeleton } from "./ChatSkeletons.jsx";
 import SearchBar from "../primitives/SearchBar.jsx";
 import { useTranscriptSearch } from "../hooks/useTranscriptSearch.js";
 import { useNotify } from "../primitives/Notification.jsx";
@@ -366,14 +366,7 @@ const Transcript = memo(function Transcript({
     if (!showSkeleton) return <div className={styles.loading} />;
     return (
       <div className={styles.loading}>
-        <div className={styles.loadingUser}>
-          <div className={styles.loadingUserBubble}>
-            <MessageSkeleton />
-          </div>
-        </div>
-        <div className={styles.loadingAssistant}>
-          <MessageSkeleton />
-        </div>
+        <ChatLoadSkeleton />
       </div>
     );
   }
@@ -810,7 +803,7 @@ function PendingTurn({ turn, accent }) {
         <div className={styles.toolError}>{turn.error}</div>
       )}
       {!turn.error && !turn.assistantPreview && allTools.length === 0 && (
-        <MessageSkeleton className={styles.thinking} />
+        <PendingReplySkeleton />
       )}
     </div>
   );
