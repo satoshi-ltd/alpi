@@ -23,9 +23,18 @@ def bootstrapped_home(tmp_home_no_env: Path) -> Path:
 
 
 def _save_session(home_: Path, sid: str, user: str, assistant: str,
-                  tools: list[dict] | None = None) -> None:
+                  tools: list[dict] | None = None,
+                  output_attachments: list[dict] | None = None) -> None:
     sessions = home_ / "sessions"
     sessions.mkdir(parents=True, exist_ok=True)
+    turn = {
+        "at": 1_700_000_001,
+        "user": user,
+        "assistant": assistant,
+        "tools": tools or [],
+    }
+    if output_attachments:
+        turn["output_attachments"] = output_attachments
     (sessions / f"{sid}.json").write_text(json.dumps({
         "id": sid,
         "model": "openrouter/xiaomi/mimo-v2-flash",
@@ -34,14 +43,7 @@ def _save_session(home_: Path, sid: str, user: str, assistant: str,
         "output_tokens": 300,
         "cost_usd": 0.0,
         "last_ctx_tokens": 1200,
-        "turns": [
-            {
-                "at": 1_700_000_001,
-                "user": user,
-                "assistant": assistant,
-                "tools": tools or [],
-            }
-        ],
+        "turns": [turn],
     }))
 
 
@@ -85,6 +87,43 @@ def test_resume_carries_context_and_adopts_id(bootstrapped_home: Path) -> None:
     # The turns log is also loaded onto the engine for later save().
     assert len(engine.session.turns) == 1
     assert engine.session.turns[0].user == "mi color favorito es el turquesa"
+
+
+def test_resume_surfaces_produced_attachment_paths(bootstrapped_home: Path) -> None:
+    _save_session(
+        bootstrapped_home, "made-img",
+        user="mejora esta imagen",
+        assistant="Listo, ya mejoré la foto.",
+        output_attachments=[{
+            "name": "studio-enhanced.jpg", "mime": "image/jpeg",
+            "path": "/tmp/out/studio-enhanced.jpg", "kind": "image",
+        }],
+    )
+    cfg = config.load(bootstrapped_home)
+    engine = Engine(home=bootstrapped_home, cfg=cfg)
+    assert _continue_last_session(engine, bootstrapped_home, Console())
+    joined = "\n".join(m.get("content") or "" for m in engine.session.messages)
+    assert "/tmp/out/studio-enhanced.jpg" in joined
+
+
+def test_resume_drops_tool_output_but_keeps_produced_path(bootstrapped_home: Path) -> None:
+    _save_session(
+        bootstrapped_home, "tooled",
+        user="mejora esta imagen",
+        assistant="Listo.",
+        tools=[{"name": "skill", "args": {"name": "generate-image"},
+                "result": "SECRET_TOOL_OUTPUT_42", "ok": True, "duration_s": 1.0}],
+        output_attachments=[{
+            "name": "x.jpg", "mime": "image/jpeg",
+            "path": "/tmp/out/x.jpg", "kind": "image",
+        }],
+    )
+    cfg = config.load(bootstrapped_home)
+    engine = Engine(home=bootstrapped_home, cfg=cfg)
+    assert _continue_last_session(engine, bootstrapped_home, Console())
+    joined = "\n".join(m.get("content") or "" for m in engine.session.messages)
+    assert "/tmp/out/x.jpg" in joined
+    assert "SECRET_TOOL_OUTPUT_42" not in joined
 
 
 def test_continue_skips_scheduled_sessions(bootstrapped_home: Path) -> None:

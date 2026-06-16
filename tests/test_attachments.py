@@ -181,10 +181,14 @@ def test_image_becomes_data_url_part(tmp_path):
     assert base64.b64decode(url.split(",", 1)[1]) == PNG_BYTES
 
 
-def test_image_without_vision_errors(tmp_path):
-    a = att.validate([{"path": str(_png(tmp_path)), "mime": "image/png"}])
-    with pytest.raises(att.AttachmentError, match="does not support image"):
-        att.build_content_parts("hi", a, vision=False)
+def test_image_without_vision_degrades_to_path_note(tmp_path):
+    png = _png(tmp_path, "shot.png")
+    a = att.validate([{"path": str(png), "mime": "image/png"}])
+    parts = att.build_content_parts("reimagine this", a, vision=False)
+    assert not any(p["type"] == "image_url" for p in parts)
+    note = " ".join(p.get("text", "") for p in parts)
+    assert str(png) in note
+    assert "no image input" in note
 
 
 def test_attachment_notice_surfaces_absolute_path(tmp_path):
@@ -265,6 +269,18 @@ def test_describe_marker(tmp_path):
     a = att.validate([{"path": str(_png(tmp_path)), "mime": "image/png"}])
     assert att.describe(a) == "[attached: shot.png (image/png)]"
     assert att.describe([]) == ""
+
+
+def test_describe_produced_carries_paths():
+    marker = att.describe_produced([
+        {"name": "shot.png", "mime": "image/png",
+         "path": "/abs/out/shot.png", "kind": "image"},
+    ])
+    assert "/abs/out/shot.png" in marker
+    assert "shot.png" in marker
+    assert att.describe_produced([]) == ""
+    assert att.describe_produced(None) == ""
+    assert att.describe_produced([{"name": "x", "mime": "image/png"}]) == ""
 
 
 def test_session_persists_attachments_round_trip(tmp_path):

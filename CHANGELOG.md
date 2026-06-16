@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.9.10 — 2026-06-16 — multi-turn image editing on text-only models
+
+- **An attached image no longer dead-ends a model that can't see images.**
+  Sending a photo to a chat whose model has no vision used to abort the turn
+  with "this model does not support image input." Now the agent gets the file's
+  path and can route it through a vision-capable tool or skill instead of
+  failing — so an agent running on a text model still inspects and edits what
+  you send.
+- **Agents remember the files they made earlier in the chat.** Ask to tweak an
+  image the agent just produced — "now change the lighting to sunset" — and it
+  reuses that file instead of replying it has nothing to work with; paths of
+  files produced in the conversation now carry across turns.
+
 ## v0.9.9 — 2026-06-15 — scheduled jobs can run longer
 
 - **A scheduled job can set its own timeout.** Jobs that do real work — deep

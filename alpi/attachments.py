@@ -363,7 +363,11 @@ def build_content_parts(
     for a in attachments:
         if is_image(a.mime):
             if not vision:
-                raise AttachmentError(f"{a.name}: this model does not support image input")
+                parts.append(_text_part(
+                    f"[{a.name}: not shown inline — this model has no image input. The file is "
+                    f"at {a.path}; view it with a vision-capable tool or skill before acting on it.]"
+                ))
+                continue
             try:
                 data = a.path.read_bytes()
             except OSError as e:
@@ -428,6 +432,17 @@ def describe_meta(meta: list[dict]) -> str:
         return ""
     items = ", ".join(f"{m.get('name')} ({m.get('mime')})" for m in meta)
     return f"[attached: {items}]"
+
+
+def describe_produced(meta: list[dict] | None) -> str:
+    if not meta:
+        return ""
+    items = ", ".join(
+        f"{m.get('name')} → {m.get('path')}" for m in meta if m.get("path")
+    )
+    if not items:
+        return ""
+    return f"[produced this turn — reuse the absolute path for follow-up edits: {items}]"
 
 
 def describe(attachments: list[Attachment]) -> str:

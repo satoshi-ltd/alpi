@@ -56,6 +56,7 @@ live at `{home}/skills/<category>/<name>/`.
 - `Engine.run_turn()` owns one turn: append input, call model, execute tools, record usage, save session.
 - `assistant_done` may be pre-tool narration or final output. Consumers delivering a canonical reply must filter `final=True`.
 - Chat history lives in `sessions/`. Scheduler/gateway/workgroup/system turns must not appear as ordinary profile chats.
+- Each turn runs on a fresh Engine that rehydrates the session from disk (`_hydrate_from_path`). Cross-turn context = a resume note + each prior turn's user text (with an input marker `[attached: name (mime)]`) + assistant text (with a produced-file marker `[produced this turn … name → /abs/path]`). Tool calls and tool results are NOT replayed (context budget): an agent does not see its prior search/read/analyze output across turns — only its final text and the absolute paths of files it produced. A follow-up edit reuses the produced path from the marker, not a remembered tool result.
 - A final assistant message with pending/in-progress todos is rejected; the model is re-prompted inside the same turn.
 - Tool calls per turn are capped at `tools.max_steps_per_turn` (default 40). When left at the default, a free model (zero per-token OpenRouter pricing) or a local/ollama one raises the ceiling to 1000; an explicitly configured value is always respected (it also bounds loops / refusals / the TODO guard, not just cost).
 

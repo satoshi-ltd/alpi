@@ -145,14 +145,17 @@ def _hydrate_from_path(engine: Engine, path: Path, console=None) -> bool:
             ),
         }
     )
+    from alpi import attachments as _att
     for t in turns:
         if t.user or t.attachments:
-            from alpi import attachments as _att
             marker = _att.describe_meta(t.attachments)
             text = f"{t.user}\n{marker}".strip() if marker else t.user
             engine.session.messages.append({"role": "user", "content": text})
-        if t.assistant:
-            engine.session.messages.append({"role": "assistant", "content": t.assistant})
+        if t.assistant or t.output_attachments:
+            produced = _att.describe_produced(t.output_attachments)
+            atext = f"{t.assistant}\n{produced}".strip() if produced else t.assistant
+            if atext:
+                engine.session.messages.append({"role": "assistant", "content": atext})
     engine.session.turns = list(turns)
 
     if data.get("id"):

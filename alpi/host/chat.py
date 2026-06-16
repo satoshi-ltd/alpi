@@ -375,11 +375,19 @@ def _truncate_hydrated_session(engine, keep_turns: Any) -> None:  # noqa: ANN401
             "`session_search` to recover it. Refer to the messages directly."
         ),
     }]
+    from alpi import attachments as _att
     for turn in kept:
-        if getattr(turn, "user", ""):
-            messages.append({"role": "user", "content": turn.user})
-        if getattr(turn, "assistant", ""):
-            messages.append({"role": "assistant", "content": turn.assistant})
+        user = getattr(turn, "user", "")
+        atts = getattr(turn, "attachments", None)
+        if user or atts:
+            marker = _att.describe_meta(atts)
+            text = f"{user}\n{marker}".strip() if marker else user
+            messages.append({"role": "user", "content": text})
+        produced = _att.describe_produced(getattr(turn, "output_attachments", None))
+        if getattr(turn, "assistant", "") or produced:
+            atext = f"{turn.assistant}\n{produced}".strip() if produced else turn.assistant
+            if atext:
+                messages.append({"role": "assistant", "content": atext})
     engine.session.messages = messages
     engine.session.input_tokens = 0
     engine.session.output_tokens = 0

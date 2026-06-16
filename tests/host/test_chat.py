@@ -165,6 +165,31 @@ async def test_data_chat_send_rewrite_truncates_hydrated_session(
     assert seen["input_tokens"] == 0
 
 
+def test_truncate_hydrated_session_carries_attachment_markers() -> None:
+    from alpi.host.chat import _truncate_hydrated_session
+
+    engine = SimpleNamespace(session=SimpleNamespace(
+        turns=[
+            SimpleNamespace(
+                user="mejora esta",
+                assistant="hecho",
+                attachments=[{"name": "room.jpg", "mime": "image/jpeg", "size": 10}],
+                output_attachments=[
+                    {"name": "x.jpg", "mime": "image/jpeg",
+                     "path": "/tmp/out/x.jpg", "kind": "image"},
+                ],
+            ),
+            SimpleNamespace(user="otra", assistant="vale", attachments=[], output_attachments=[]),
+        ],
+        messages=[], input_tokens=5, output_tokens=3, cost_usd=0.1, last_ctx_tokens=9,
+    ))
+    _truncate_hydrated_session(engine, 1)
+    joined = "\n".join(m.get("content") or "" for m in engine.session.messages)
+    assert "[attached: room.jpg (image/jpeg)]" in joined
+    assert "/tmp/out/x.jpg" in joined
+    assert engine.session.input_tokens == 0
+
+
 @pytest.mark.asyncio
 async def test_data_chat_send_streams_events_in_order(
     monkeypatch, short_tmp: Path,
