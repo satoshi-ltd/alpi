@@ -33,8 +33,8 @@ export function useRenderedMarkdown(source) {
       const mime = IMG_MIME[p.toLowerCase().split(".").pop()];
       if (!mime) { cache.set(p, null); return Promise.resolve(); }
       return invoke("attachment_thumb", { path: p, mime, roots: getImageRoots() })
-        .then((url) => cache.set(p, url || null))
-        .catch(() => cache.set(p, null));
+        .then((url) => { if (url) cache.set(p, url); })
+        .catch(() => {});
     })).then(() => { if (alive) force(); });
     return () => { alive = false; };
   }, [base]);

@@ -11,6 +11,19 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.3.65 — 2026-06-16 — generated images render as attachments
+
+_Requires alpi v0.9.8+._
+
+- **Images an agent generates now render as real attachments** — a large inline
+  preview you can click to zoom or download, instead of being flattened into the
+  message text. A produced photo shows reliably (no more occasional blank), and
+  several images lay out in a simple grid.
+- **A preview that fails to load once is no longer stuck for the whole session.**
+  A transient read failure (for example right after the daemon restarts) used to
+  stay blank until you reloaded the app; now it can recover when the message
+  remounts (e.g. navigating back to the chat).
+
 ## v0.3.64 — 2026-06-16 — reasoning reads in execution order
 
 _Requires alpi v0.9.8+._

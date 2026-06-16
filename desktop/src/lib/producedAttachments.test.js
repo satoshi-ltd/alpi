@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  assistantWithProducedImages,
   compactProducedTool,
+  imageProduced,
   nonImageProduced,
   stripProducedImageMarkdown,
 } from "./producedAttachments.js";
@@ -30,10 +30,9 @@ describe("producedAttachments", () => {
     expect(out).toContain("Saved successfully.");
   });
 
-  it("re-emits image markdown from the structured attachment (model text dropped)", () => {
-    const body = assistantWithProducedImages("done ![x](/p/out/hero.jpg)", [img]);
-    expect(body).toContain("![](/p/out/hero.jpg)");  // empty alt → caption is just the filename
-    expect(body.match(/!\[/g)).toHaveLength(1); // not doubled
+  it("imageProduced keeps only images that carry a path", () => {
+    expect(imageProduced([img, pdf])).toEqual([img]);
+    expect(imageProduced([{ kind: "image", name: "no-path" }])).toEqual([]);
   });
 
   it("non-image attachments are kept for chips; images are not", () => {

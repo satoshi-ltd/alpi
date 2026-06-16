@@ -17,6 +17,7 @@ import { useTranscriptSearch } from "../hooks/useTranscriptSearch.js";
 import { useNotify } from "../primitives/Notification.jsx";
 import Logo from "../primitives/Logo.jsx";
 import Markdown from "../primitives/Markdown.jsx";
+import ProducedImages from "../primitives/ProducedImages.jsx";
 import { setImageRoots } from "../lib/imageRoots.js";
 import { Banner, JumpToLatest, NewChatHero, ProfileChatHeader } from "../primitives/index.js";
 import { ProfileMessage } from "../primitives/index.js";
@@ -39,9 +40,10 @@ import { playTts, subscribeTts, enqueueTts, VOICE_POOL } from "../lib/tts.js";
 import { useOnline } from "../lib/useOnline.js";
 import styles from "./ChatPane.module.css";
 import {
-  assistantWithProducedImages,
   compactProducedTool,
+  imageProduced,
   nonImageProduced,
+  stripProducedImageMarkdown,
 } from "../lib/producedAttachments.js";
 import { rewriteCut } from "../lib/rewriteCut.js";
 import { dropInflightStub } from "../lib/transcriptTurns.js";
@@ -625,9 +627,12 @@ const Turn = memo(function Turn({
         >
           <Markdown
             as="div"
-            source={assistantWithProducedImages(turn.assistant, turn.output_attachments)}
+            source={stripProducedImageMarkdown(turn.assistant, turn.output_attachments)}
             className="alpi-md"
           />
+          {imageProduced(turn.output_attachments).length > 0 && (
+            <ProducedImages images={imageProduced(turn.output_attachments)} />
+          )}
           {nonImageProduced(turn.output_attachments).length > 0 && (
             <AttachmentChips items={nonImageProduced(turn.output_attachments)} variant="message" />
           )}

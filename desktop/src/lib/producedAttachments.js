@@ -13,13 +13,8 @@ export function stripProducedImageMarkdown(text, produced) {
   return out.replace(/\n{3,}/g, "\n\n").trim();
 }
 
-export function assistantWithProducedImages(text, produced) {
-  const stripped = stripProducedImageMarkdown(text, produced);
-  const imgs = (produced || [])
-    .filter((a) => a?.kind === "image" && a?.path)
-    .map((a) => `![](${a.path})`)
-    .join("\n\n");
-  return [stripped, imgs].filter(Boolean).join("\n\n");
+export function imageProduced(produced) {
+  return (produced || []).filter((a) => a?.kind === "image" && a?.path);
 }
 
 export function nonImageProduced(produced) {
