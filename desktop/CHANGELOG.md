@@ -11,6 +11,21 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.3.64 — 2026-06-16 — reasoning reads in execution order
+
+_Requires alpi v0.9.8+._
+
+- **Thinking and tools now interleave in the order they happened** — think →
+  search → think → read → answer, instead of stacking all the reasoning above
+  the tools. Each earlier thinking step collapses to a one-line "Thought for Ns"
+  you can expand, and the steps sit together as one tight timeline.
+- **Calmer live thinking** — while the agent works you see a single
+  "thinking · Ns" line with its latest thought; click to open the full trace.
+  The shimmer placeholder is gone and the reasoning window no longer takes over
+  the screen.
+- **Screen readers** now announce a grouped tool row as expandable, with its
+  expanded/collapsed state.
+
 ## v0.3.63 — 2026-06-15 — pause a profile
 
 _Requires alpi v0.9.8+._

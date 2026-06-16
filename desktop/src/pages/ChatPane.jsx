@@ -9,8 +9,9 @@ import Message from "../primitives/Message.jsx";
 import { useStickyScroll } from "../lib/useStickyScroll.js";
 import { useScrollProgress } from "../lib/useScrollProgress.js";
 import { relativeTime } from "../lib/time.js";
+import { reasoningSteps } from "../lib/reasoningSteps.js";
 import { profileLabel } from "../lib/profile-display.js";
-import { ChatLoadSkeleton, PendingReplySkeleton } from "./ChatSkeletons.jsx";
+import { ChatLoadSkeleton } from "./ChatSkeletons.jsx";
 import SearchBar from "../primitives/SearchBar.jsx";
 import { useTranscriptSearch } from "../hooks/useTranscriptSearch.js";
 import { useNotify } from "../primitives/Notification.jsx";
@@ -459,10 +460,7 @@ const Turn = memo(function Turn({
 }) {
   const notify = useNotify();
   const allTools = turn.tools ?? [];
-  const tools = allTools
-    .filter((t) => t.name !== "ask_user")
-    .map((t) => compactProducedTool(t, turn.output_attachments));
-  const reasoning = turn.reasoning || allTools.map((t) => t.reasoning).filter(Boolean).join("\n\n");
+  const steps = reasoningSteps(turn);
   const askUserAnswers = allTools
     .filter((t) => t.name === "ask_user")
     .map((t) => ({
@@ -542,22 +540,28 @@ const Turn = memo(function Turn({
           {turn.user}
         </ProfileMessage>
       )}
-      {tools.length > 0 && (
-        <div className={styles.toolGroup}>
-          {groupConsecutiveTools(tools).map((g, i) => (
-            <ToolGroupCard key={`g-${i}-${g.tools[0].tool_id ?? g.name}`} group={g} accent={accent} />
-          ))}
+      {steps.length > 0 && (
+        <div className={styles.steps}>
+          {steps.map((step, i) => {
+            if (step.kind === "reasoning") {
+              return <Reasoning key={`r-${i}`} text={step.text} seconds={step.seconds} />;
+            }
+            if (step.kind === "askUser") {
+              return step.result ? (
+                <AskUserAnswer key={`a-${i}`} result={step.result} question={step.question} accent={accent} />
+              ) : null;
+            }
+            const tools = step.tools.map((t) => compactProducedTool(t, turn.output_attachments));
+            return (
+              <div key={`t-${i}`} className={styles.toolGroup}>
+                {groupConsecutiveTools(tools).map((g, j) => (
+                  <ToolGroupCard key={`g-${j}-${g.tools[0].tool_id ?? g.name}`} group={g} accent={accent} />
+                ))}
+              </div>
+            );
+          })}
         </div>
       )}
-      {askUserAnswers.map((a) => (
-        <AskUserAnswer
-          key={a.tool_id ?? a.result}
-          result={a.result}
-          question={a.question}
-          accent={accent}
-        />
-      ))}
-      {reasoning && <Reasoning text={reasoning} seconds={turn.reasoned_s} />}
       {(turn.assistant || turn.output_attachments?.length > 0) && !hideAssistant && (
         <ProfileMessage
           role="assistant"
@@ -735,6 +739,7 @@ const ToolGroupCard = memo(function ToolGroupCard({ group, accent }) {
         className={`${styles.tool} ${styles[`tool_${groupStatus}`]} ${styles.toolGroupClickable}`}
         style={rootStyle}
         onClick={() => setExpanded((v) => !v)}
+        aria-expanded={expanded}
         aria-label={expanded ? "Collapse tool group" : `Expand ${group.tools.length} ${group.name} calls`}
       >
         <Diamond color={diamondColor} className={styles.toolIcon} />
@@ -768,20 +773,12 @@ const ToolGroupCard = memo(function ToolGroupCard({ group, accent }) {
 
 function PendingTurn({ turn, accent }) {
   const allTools = turn.tools ?? [];
-  const tools = allTools
-    .filter((t) => t.name !== "ask_user")
-    .map((t) => compactProducedTool(t, turn.output_attachments));
-  const reasoning = [...allTools.map((t) => t.reasoning).filter(Boolean), turn.reasoningPreview]
-    .filter(Boolean)
-    .join("\n\n");
-  const askUserAnswers = allTools
-    .filter((t) => t.name === "ask_user")
-    .map((t) => ({
-      tool_id: t.tool_id,
-      result: (t.output || t.result || "").trim(),
-      question: t.args?.question || "",
-    }))
-    .filter((a) => a.result);
+  const steps = reasoningSteps({
+    at: turn.at,
+    tools: allTools,
+    reasoning: turn.reasoningPreview,
+    reasoned_s: turn.reasoned_s,
+  }, { active: !turn.assistantPreview });
   return (
     <div className={styles.turn}>
       {turn.user && (
@@ -792,22 +789,28 @@ function PendingTurn({ turn, accent }) {
           {turn.user}
         </ProfileMessage>
       )}
-      {tools.length > 0 && (
-        <div className={styles.toolGroup}>
-          {groupConsecutiveTools(tools).map((g, i) => (
-            <ToolGroupCard key={`g-${i}-${g.tools[0].tool_id ?? g.name}`} group={g} accent={accent} />
-          ))}
+      {steps.length > 0 && (
+        <div className={styles.steps}>
+          {steps.map((step, i) => {
+            if (step.kind === "reasoning") {
+              return <Reasoning key={`r-${i}`} text={step.text} seconds={step.seconds} streaming={step.trailing} />;
+            }
+            if (step.kind === "askUser") {
+              return step.result ? (
+                <AskUserAnswer key={`a-${i}`} result={step.result} question={step.question} accent={accent} />
+              ) : null;
+            }
+            const tools = step.tools.map((t) => compactProducedTool(t, turn.output_attachments));
+            return (
+              <div key={`t-${i}`} className={styles.toolGroup}>
+                {groupConsecutiveTools(tools).map((g, j) => (
+                  <ToolGroupCard key={`g-${j}-${g.tools[0].tool_id ?? g.name}`} group={g} accent={accent} />
+                ))}
+              </div>
+            );
+          })}
         </div>
       )}
-      {askUserAnswers.map((a) => (
-        <AskUserAnswer
-          key={a.tool_id ?? a.result}
-          result={a.result}
-          question={a.question}
-          accent={accent}
-        />
-      ))}
-      {reasoning && <Reasoning text={reasoning} streaming />}
       {turn.assistantPreview && (
         <ProfileMessage role="assistant">
           <Markdown as="div" source={turn.assistantPreview} className="alpi-md" />
@@ -815,9 +818,6 @@ function PendingTurn({ turn, accent }) {
       )}
       {turn.error && (
         <div className={styles.toolError}>{turn.error}</div>
-      )}
-      {!turn.error && !turn.assistantPreview && allTools.length === 0 && (
-        <PendingReplySkeleton />
       )}
     </div>
   );

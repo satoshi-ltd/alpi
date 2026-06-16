@@ -21,12 +21,13 @@ export function thoughtLabel(seconds) {
 }
 
 export default function Reasoning({ text, seconds, streaming = false }) {
-  if (!String(text || "").trim()) return null;
+  if (!streaming && !String(text || "").trim()) return null;
   return streaming ? <Thinking text={text} /> : <Finished text={text} seconds={seconds} />;
 }
 
 function Thinking({ text }) {
   const boxRef = useRef(null);
+  const [open, setOpen] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   useEffect(() => {
     const id = setInterval(() => setElapsed((s) => s + 1), 1000);
@@ -35,17 +36,29 @@ function Thinking({ text }) {
   useEffect(() => {
     const el = boxRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [text]);
+  }, [text, open]);
+  const lines = toLines(text);
+  const lastLine = lines[lines.length - 1] ?? "";
   return (
     <div className={styles.trace}>
-      <div className={styles.head}>
+      <button
+        type="button"
+        className={`${styles.disclosure} ${styles.live}`}
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        aria-label={open ? "Collapse reasoning" : "Expand reasoning"}
+      >
+        <CaretIcon className={open ? styles.chevOpen : styles.chev} />
         <span className={styles.thinkingLabel}>thinking · {elapsed}s</span>
-      </div>
-      <div className={styles.box} ref={boxRef} aria-hidden="true">
-        {toLines(text).map((r, i) => (
-          <div key={i} className={styles.line}>{r}</div>
-        ))}
-      </div>
+        {!open && lastLine && <span className={styles.peek}>{lastLine}</span>}
+      </button>
+      {open && (
+        <div className={styles.box} ref={boxRef} aria-hidden="true">
+          {lines.map((r, i) => (
+            <div key={i} className={styles.line}>{r}</div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

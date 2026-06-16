@@ -17,14 +17,24 @@ describe("thoughtLabel", () => {
 });
 
 describe("Reasoning", () => {
-  it("renders nothing for blank text", () => {
+  it("renders nothing for blank finished text", () => {
     const { container } = render(<Reasoning text="   " />);
     expect(container.firstChild).toBeNull();
   });
 
-  it("streaming shows the live thinking label", () => {
+  it("streaming renders the thinking header even before any trace text", () => {
+    render(<Reasoning text="" streaming />);
+    expect(screen.getByRole("button").textContent).toContain("thinking");
+  });
+
+  it("streaming peeks the latest line while collapsed and expands to the full trace", () => {
     render(<Reasoning text={"line one\nline two"} streaming />);
-    expect(screen.getByText(/thinking/)).toBeTruthy();
+    const btn = screen.getByRole("button");
+    expect(btn.textContent).toContain("thinking");
+    expect(screen.getByText("line two")).toBeTruthy();
+    expect(screen.queryByText("line one")).toBeNull();
+    fireEvent.click(btn);
+    expect(screen.getByText("line one")).toBeTruthy();
   });
 
   it("finished is collapsed, labelled, and expands on click", () => {

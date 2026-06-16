@@ -190,17 +190,17 @@ describe("useChatStream stall watchdog", () => {
     expect(result.current.pendingTurn.assistantPreview).toBe("Hel");
   });
 
-  it("folds inter-tool prose into reasoning, keeps the final answer as the reply", async () => {
+  it("attaches inter-tool prose to the tool as its reasoning, keeps the final answer as the reply", async () => {
     invoke.mockImplementation(async (cmd) => {
       if (cmd === "chat_events_since") {
         return {
           exists: true,
           events: [
             { frame: { event: "session_start", session_id: "sess-1" } },
-            { frame: { event: "assistant_delta", text: "Voy a investigar." } },
+            { frame: { event: "assistant_delta", text: "Let me investigate." } },
             { frame: { event: "tool_start", tool_id: "t1", name: "research" } },
             { frame: { event: "tool_end", tool_id: "t1", ok: true, output: "done" } },
-            { frame: { event: "assistant_delta", text: "La respuesta final." } },
+            { frame: { event: "assistant_delta", text: "The final answer." } },
           ],
         };
       }
@@ -213,8 +213,43 @@ describe("useChatStream stall watchdog", () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(12_000); });
     await act(async () => { await vi.advanceTimersByTimeAsync(0); });
 
-    expect(result.current.pendingTurn.reasoningPreview).toBe("Voy a investigar.");
-    expect(result.current.pendingTurn.assistantPreview).toBe("La respuesta final.");
+    expect(result.current.pendingTurn.tools[0].reasoning).toBe("Let me investigate.");
+    expect(result.current.pendingTurn.reasoningPreview).toBe("");
+    expect(result.current.pendingTurn.assistantPreview).toBe("The final answer.");
+  });
+
+  it("stamps at on tool_start and duration_s on tool_end so per-step seconds show live", async () => {
+    const { result } = mount();
+    await waitForListen();
+    seedTurn(result, { sessionId: "sess-1" });
+    emit({ kind: "tool_start", tool_id: "t1", name: "search" });
+    expect(typeof result.current.pendingTurn.tools[0].at).toBe("number");
+    await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+    emit({ kind: "tool_end", tool_id: "t1", ok: true, output: "done" });
+    expect(result.current.pendingTurn.tools[0].duration_s).toBeGreaterThan(0);
+  });
+
+  it("replay carries at/duration_s from the sidecar ts", async () => {
+    invoke.mockImplementation(async (cmd) => {
+      if (cmd === "chat_events_since") {
+        return {
+          exists: true,
+          events: [
+            { ts: 100, frame: { event: "session_start", session_id: "sess-1" } },
+            { ts: 101, frame: { event: "tool_start", tool_id: "t1", name: "search" } },
+            { ts: 104, frame: { event: "tool_end", tool_id: "t1", ok: true, output: "done" } },
+          ],
+        };
+      }
+      return null;
+    });
+    const { result } = mount();
+    await waitForListen();
+    seedTurn(result, { sessionId: "sess-1" });
+    await act(async () => { await vi.advanceTimersByTimeAsync(12_000); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    expect(result.current.pendingTurn.tools[0].at).toBe(101);
+    expect(result.current.pendingTurn.tools[0].duration_s).toBe(3);
   });
 
   it("never replays an errored turn (no recovery-toast flood)", async () => {

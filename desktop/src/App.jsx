@@ -682,6 +682,7 @@ export default function App() {
           requestId,
           attachments,
           rewriteFromTurn,
+          at: Date.now() / 1000,
         });
 
         let wireAttachments = attachments;

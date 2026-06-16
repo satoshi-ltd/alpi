@@ -168,6 +168,9 @@ export function ToolCallGroup({ group, accent }) {
       <View style={{ paddingHorizontal: space.s7 }}>
         <Pressable
           onPress={() => setExpanded((v) => !v)}
+          accessibilityRole="button"
+          accessibilityState={{ expanded }}
+          accessibilityLabel={expanded ? 'Collapse tool group' : `Expand ${group.tools.length} ${group.name} calls`}
           style={({ pressed }) => ({
             alignSelf: 'flex-start',
             flexDirection: 'row',

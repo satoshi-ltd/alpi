@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 
 import ChatPane from "./ChatPane.jsx";
 
@@ -43,5 +43,63 @@ describe("ChatPane — a paused profile is read-only", () => {
   it("leaves the composer editable when active", () => {
     renderPane({ name: "a", model: "x/y" });
     expect(screen.getByPlaceholderText(/Message a/)).not.toBeDisabled();
+  });
+});
+
+describe("ChatPane — interleaved reasoning and tools", () => {
+  it("renders each reasoning segment before the tool it preceded, in execution order", () => {
+    const profile = { name: "a", model: "x/y" };
+    const turn = {
+      at: 0,
+      user: "hi",
+      assistant: "answer",
+      reasoned_s: 5,
+      tools: [
+        { name: "search_workspace", reasoning: "let me search", args: { query: "x" }, tool_id: "t1", ok: true, at: 5, duration_s: 1 },
+        { name: "read_file", reasoning: "now read the file", args: { path: "p" }, tool_id: "t2", ok: true, at: 8, duration_s: 1 },
+      ],
+    };
+    const { container } = render(
+      <ChatPane
+        view={{ kind: "profile", profile: profile.name, sessionId: "s1" }}
+        profiles={[profile]}
+        activeProfile={profile}
+        sessionData={{ turns: [turn], last_ctx_tokens: 0 }}
+        onSend={vi.fn()}
+        onRewriteMessage={vi.fn()}
+        onRetryMessage={vi.fn()}
+      />,
+    );
+    const text = container.textContent;
+    const order = ["Thought for 5s", "search_workspace", "Thought for 2s", "read_file"].map((s) => text.indexOf(s));
+    expect(order.every((v, i) => v >= 0 && (i === 0 || v > order[i - 1]))).toBe(true);
+  });
+
+  it("a grouped tool expander exposes aria-expanded and toggles it", () => {
+    const profile = { name: "a", model: "x/y" };
+    const turn = {
+      at: 0,
+      user: "hi",
+      assistant: "ok",
+      tools: [
+        { name: "terminal", args: { command: "a" }, tool_id: "t1", ok: true, at: 1, duration_s: 1 },
+        { name: "terminal", args: { command: "b" }, tool_id: "t2", ok: true, at: 3, duration_s: 1 },
+      ],
+    };
+    render(
+      <ChatPane
+        view={{ kind: "profile", profile: profile.name, sessionId: "s1" }}
+        profiles={[profile]}
+        activeProfile={profile}
+        sessionData={{ turns: [turn], last_ctx_tokens: 0 }}
+        onSend={vi.fn()}
+        onRewriteMessage={vi.fn()}
+        onRetryMessage={vi.fn()}
+      />,
+    );
+    const btn = screen.getByLabelText(/Expand 2 terminal calls/);
+    expect(btn).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(btn);
+    expect(btn).toHaveAttribute("aria-expanded", "true");
   });
 });

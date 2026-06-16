@@ -90,11 +90,9 @@ export function useChatStream({
       if (kind === "session_start") {
         if (f.session_id) finalSessionId = f.session_id;
       } else if (kind === "tool_start") {
-        const prose = assistant.trim();
-        if (prose) {
-          reasoning = reasoning ? `${reasoning}\n\n${prose}` : prose;
-          assistant = "";
-        }
+        const segment = [reasoning, assistant.trim()].map((s) => (s ?? "").trim()).filter(Boolean).join("\n\n");
+        reasoning = "";
+        assistant = "";
         const existing = nextTools.findIndex((t) => t.tool_id === f.tool_id);
         const entry = {
           tool_id: f.tool_id,
@@ -105,6 +103,8 @@ export function useChatStream({
           output: existing >= 0 ? nextTools[existing].output : "",
           ok: null,
           startedAt: existing >= 0 ? nextTools[existing].startedAt : Date.now(),
+          at: existing >= 0 ? nextTools[existing].at : (Number.isFinite(rec.ts) ? rec.ts : Date.now() / 1000),
+          ...(segment ? { reasoning: segment } : {}),
         };
         if (existing >= 0) nextTools[existing] = entry;
         else nextTools.push(entry);
@@ -119,9 +119,15 @@ export function useChatStream({
           }
         }
       } else if (kind === "tool_end") {
+        const endTs = Number.isFinite(rec.ts) ? rec.ts : Date.now() / 1000;
         for (let i = nextTools.length - 1; i >= 0; i--) {
           if (nextTools[i].tool_id === f.tool_id && nextTools[i].ok === null) {
-            nextTools[i] = { ...nextTools[i], ok: f.ok, output: f.output ?? "" };
+            nextTools[i] = {
+              ...nextTools[i],
+              ok: f.ok,
+              output: f.output ?? "",
+              duration_s: Math.max(0, endTs - (nextTools[i].at ?? endTs)),
+            };
             break;
           }
         }
@@ -250,34 +256,36 @@ export function useChatStream({
         return;
       }
       if (p.kind === "tool_start") {
-        // Prose the model wrote before a tool is inter-tool reasoning, not the
-        // answer — fold it into the reasoning stream and clear the answer buffer.
+        // Reasoning+prose since the last tool belong to THIS tool — ride them on the entry, then reset, so the turn renders interleaved.
         const pendingProse = deltaBufferRef.current.assistant;
+        const pendingReasoning = deltaBufferRef.current.reasoning;
         deltaBufferRef.current.assistant = "";
+        deltaBufferRef.current.reasoning = "";
         setPendingTurn((prev) => {
           if (!prev) return prev;
-          const prose = `${prev.assistantPreview ?? ""}${pendingProse}`.trim();
           const existing = prev.tools.findIndex((t) => t.tool_id === p.tool_id);
+          const prior = existing >= 0 ? prev.tools[existing] : null;
+          const segment = [prev.reasoningPreview, pendingReasoning, `${prev.assistantPreview ?? ""}${pendingProse}`]
+            .map((s) => (s ?? "").trim())
+            .filter(Boolean)
+            .join("\n\n");
+          const reasoning = segment || prior?.reasoning;
           const entry = {
             tool_id: p.tool_id,
             name: p.name,
             preview: p.preview,
             args: p.args,
-            states: existing >= 0 ? prev.tools[existing].states : [],
-            output: existing >= 0 ? prev.tools[existing].output : "",
+            states: prior ? prior.states : [],
+            output: prior ? prior.output : "",
             ok: null,
-            startedAt: existing >= 0 ? prev.tools[existing].startedAt : Date.now(),
+            startedAt: prior ? prior.startedAt : Date.now(),
+            at: prior?.at ?? Date.now() / 1000,
+            ...(reasoning ? { reasoning } : {}),
           };
           const tools = existing >= 0
             ? prev.tools.map((t, i) => (i === existing ? entry : t))
             : [...prev.tools, entry];
-          if (!prose) return { ...prev, tools };
-          return {
-            ...prev,
-            tools,
-            reasoningPreview: prev.reasoningPreview ? `${prev.reasoningPreview}\n\n${prose}` : prose,
-            assistantPreview: "",
-          };
+          return { ...prev, tools, reasoningPreview: "", assistantPreview: "" };
         });
       } else if (p.kind === "tool_state") {
         setPendingTurn((prev) => {
@@ -306,6 +314,7 @@ export function useChatStream({
                   ...tools[i],
                   ok: p.ok,
                   output: p.output ?? "",
+                  duration_s: Math.max(0, (Date.now() - tools[i].startedAt) / 1000),
                 };
                 break;
               }
@@ -331,6 +340,7 @@ export function useChatStream({
               ...tools[idx],
               ok: p.ok,
               output: p.output ?? "",
+              duration_s: elapsed / 1000,
             };
             return { ...prev, tools };
           }

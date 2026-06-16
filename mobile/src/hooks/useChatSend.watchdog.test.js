@@ -112,4 +112,29 @@ describe("useChatSend watchdog", () => {
     expect(result.current.pendingTurn).not.toBeNull();
     expect(result.current.pendingTurn.pending).toBe(true);
   });
+
+  it("recovery from sidecar stamps at/duration_s from each frame's ts", async () => {
+    mockCall.mockImplementation(async (method) => {
+      if (method === "host.chat.events_since") {
+        return {
+          events: [
+            { ts: 100, frame: { event: "session_start", session_id: "sess-1" } },
+            { ts: 101, frame: { event: "tool_start", tool_id: "t1", name: "search" } },
+            { ts: 104, frame: { event: "tool_end", tool_id: "t1", ok: true, output: "done" } },
+          ],
+        };
+      }
+      return {};
+    });
+
+    const { result } = renderHook(() => useChatSend({ profile: "doc" }));
+    act(() => result.current.send("hi"));
+    act(() => lastStreamHandlers.onFrame({ event: "session_start", session_id: "sess-1" }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(16000); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+
+    const tool = result.current.pendingTurn.tools[0];
+    expect(tool.at).toBe(101);
+    expect(tool.duration_s).toBe(3);
+  });
 });

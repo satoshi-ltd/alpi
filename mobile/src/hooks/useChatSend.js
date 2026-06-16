@@ -116,7 +116,7 @@ export function useChatSend({ profile, sessionId, onCompleted }) {
       // Daemon mints session_id for new threads — surface via onCompleted so caller pins it before next send.
       let streamSessionId = sessionId ?? null;
 
-      const applyFrame = (frame) => {
+      const applyFrame = (frame, ts) => {
         const event = frame?.event;
         if (!event) return;
         lastFrameAtRef.current = Date.now();
@@ -138,30 +138,30 @@ export function useChatSend({ profile, sessionId, onCompleted }) {
             rafRef.current = requestAnimationFrame(flushDeltas);
           }
         } else if (event === 'tool_start') {
-          // Prose written before a tool is inter-tool reasoning, not the answer —
-          // fold it into the reasoning stream and clear the answer buffer.
+          // Attach reasoning+prose since the last tool to THIS tool, then reset — that per-tool split is what renders the turn interleaved.
           const pendingProse = deltaBufRef.current;
+          const pendingReasoning = reasoningBufRef.current;
           deltaBufRef.current = '';
+          reasoningBufRef.current = '';
           setPendingTurn((cur) => {
             if (!cur) return cur;
             const tools = [...(cur.tools ?? [])];
             const existing = tools.findIndex((t) => t.tool_id === frame.tool_id);
+            const segment = [cur.reasoning, pendingReasoning, `${cur.assistant ?? ''}${pendingProse}`]
+              .map((s) => (s ?? '').trim())
+              .filter(Boolean)
+              .join('\n\n');
             const next = {
               tool_id: frame.tool_id ?? frame.name,
               name: frame.name,
               args: frame.args ?? frame.preview,
               ok: null,
+              at: Number.isFinite(ts) ? ts : Date.now() / 1000,
             };
+            if (segment) next.reasoning = segment;
             if (existing >= 0) tools[existing] = { ...tools[existing], ...next };
             else tools.push(next);
-            const prose = `${cur.assistant ?? ''}${pendingProse}`.trim();
-            if (!prose) return { ...cur, tools };
-            return {
-              ...cur,
-              tools,
-              reasoning: cur.reasoning ? `${cur.reasoning}\n\n${prose}` : prose,
-              assistant: '',
-            };
+            return { ...cur, tools, reasoning: '', assistant: '' };
           });
         } else if (event === 'tool_state') {
           setPendingTurn((cur) => {
@@ -174,11 +174,12 @@ export function useChatSend({ profile, sessionId, onCompleted }) {
             return { ...cur, tools };
           });
         } else if (event === 'tool_end') {
+          const endTs = Number.isFinite(ts) ? ts : Date.now() / 1000;
           setPendingTurn((cur) => {
             if (!cur) return cur;
             const tools = (cur.tools ?? []).map((t) =>
               t.tool_id === frame.tool_id
-                ? { ...t, ok: frame.ok ?? true, output: frame.output }
+                ? { ...t, ok: frame.ok ?? true, output: frame.output, duration_s: Math.max(0, endTs - (t.at ?? endTs)) }
                 : t,
             );
             return { ...cur, tools };
@@ -216,7 +217,7 @@ export function useChatSend({ profile, sessionId, onCompleted }) {
           let sawDone = false;
           for (const rec of records) {
             const f = rec?.frame ?? rec;
-            applyFrame(f);
+            applyFrame(f, rec?.ts);
             if (f?.event === 'done') sawDone = true;
           }
           flushDeltas();

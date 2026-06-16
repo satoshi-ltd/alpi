@@ -14,6 +14,18 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.1.48 — 2026-06-16 — reasoning reads in execution order
+
+- **Thinking and tools now interleave in the order they happened** (think →
+  search → think → read → answer) instead of stacking all the reasoning above
+  the tools. Earlier thinking steps collapse to a one-line "Thought for Ns" —
+  tap to expand.
+- **Calmer live thinking** — a single "thinking · Ns" line shows the latest
+  thought while the agent works; tap for the full trace. The shimmer
+  placeholder is gone.
+- **Screen readers** now announce a grouped tool row as expandable, with its
+  expanded/collapsed state.
+
 ## v0.1.47 — 2026-06-15 — pause a profile
 
 - **Pause a profile** from its settings (the ··· in the chat header). Paused
