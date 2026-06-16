@@ -33,7 +33,7 @@ PyPI package is `alpi-agent`; binary/import/home dir is `alpi`. Install details 
 
 ## Resume
 
-Sessions persist per profile. `alpi -c` reopens the latest; set `tui.auto_resume` so bare `alpi` does the same.
+Sessions persist per profile. `alpi -c` reopens the latest; set `tui.auto_resume` so bare `alpi` does the same. `alpi chat --once` resumes too — `-c` for the last session, `--session <id>` for a specific one — so a script can drive a multi-turn chat where each turn keeps the prior context.
 
 ## Daemon
 

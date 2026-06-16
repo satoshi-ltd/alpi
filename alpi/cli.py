@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import re
 import sys
 from importlib import resources
 from pathlib import Path
@@ -110,10 +111,15 @@ def _is_local_chat_session_path(path: Path) -> bool:
     return _is_local_chat_session_payload(data)
 
 
+_SAFE_SESSION_ID = re.compile(r"^[A-Za-z0-9_-]+$")
+
+
 def _continue_specific_session(
     engine: Engine, h: Path, session_id: str, subdir: str = "sessions",
 ) -> bool:
     """Resume a session by id; subdir splits desktop ('sessions/') from gateway ('gateway/sessions/')."""
+    if not _SAFE_SESSION_ID.match(session_id or ""):
+        return False
     path = h / subdir / f"{session_id}.json"
     if not path.exists():
         return False
@@ -172,6 +178,25 @@ def _hydrate_from_path(engine: Engine, path: Path, console=None) -> bool:
     return True
 
 
+def _resume_once(
+    engine: Engine, h: Path, *,
+    resume_chat_id: str | None = None,
+    session_id: str | None = None,
+    continue_last: bool = False,
+) -> None:
+    from alpi import session_map
+    if resume_chat_id:
+        engine.session.subdir = "gateway/sessions"
+        existing = session_map.get(h, resume_chat_id)
+        if existing:
+            _continue_specific_session(engine, h, existing, subdir="gateway/sessions")
+    elif session_id:
+        if not _continue_specific_session(engine, h, session_id):
+            raise click.ClickException(f"session not found: {session_id}")
+    elif continue_last:
+        _continue_last_session(engine, h, None)
+
+
 def _run_once(
     h: Path,
     user_text: str,
@@ -179,6 +204,8 @@ def _run_once(
     resume_chat_id: str | None = None,
     persist: bool = True,
     attach: tuple[str, ...] = (),
+    session_id: str | None = None,
+    continue_last: bool = False,
 ) -> None:
     import json
     from alpi import session_map
@@ -192,13 +219,10 @@ def _run_once(
         or None
     )
 
-    if resume_chat_id:
-        engine.session.subdir = "gateway/sessions"
-        existing = session_map.get(h, resume_chat_id)
-        if existing:
-            _continue_specific_session(
-                engine, h, existing, subdir="gateway/sessions",
-            )
+    _resume_once(
+        engine, h, resume_chat_id=resume_chat_id,
+        session_id=session_id, continue_last=continue_last,
+    )
 
     from alpi.alp import mention as alp_mention
     parsed = alp_mention.parse(user_text, home=h)
@@ -434,6 +458,10 @@ def cmd_ctx(ctx: click.Context, model: str) -> None:
     "--attach", "attach", multiple=True, type=click.Path(exists=True, dir_okay=False),
     help="Attach a file to the --once turn (repeatable). Images/PDFs/text the model can read.",
 )
+@click.option(
+    "--session", "session", default=None,
+    help="With --once, resume a specific session id (robust under concurrency; --continue resumes the last).",
+)
 @click.pass_context
 def chat(
     ctx: click.Context,
@@ -442,10 +470,12 @@ def chat(
     no_save: bool,
     resume_chat: str | None,
     continue_last: bool,
+    session: str | None,
     attach: tuple[str, ...],
 ) -> None:
     """Launch the TUI, or run one turn with ``--once "text"``."""
     h: Path = ctx.obj["home"]
+    resume_last = continue_last or bool(ctx.obj.get("continue_last"))
     if input_text is not None or attach:
         _run_once(
             h,
@@ -454,9 +484,11 @@ def chat(
             resume_chat_id=resume_chat,
             persist=not no_save,
             attach=attach,
+            session_id=session,
+            continue_last=resume_last,
         )
     else:
-        _run_chat(h, continue_last=continue_last)
+        _run_chat(h, continue_last=resume_last)
 
 
 @main.command("diff")

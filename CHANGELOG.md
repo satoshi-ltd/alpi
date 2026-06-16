@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.9.11 — 2026-06-16 — `chat --once` can resume a session
+
+- **`alpi chat --once` can now continue a conversation.** `-c` / `--continue`
+  resumes the last chat (it used to be silently ignored outside the interactive
+  TUI), and a new `--session <id>` resumes a specific one (erroring on an
+  unknown id instead of silently starting fresh) — so a script can drive a
+  multi-turn chat where each turn keeps the earlier turns' context.
+
 ## v0.9.10 — 2026-06-16 — multi-turn image editing on text-only models
 
 - **An attached image no longer dead-ends a model that can't see images.**

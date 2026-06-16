@@ -126,6 +126,54 @@ def test_resume_drops_tool_output_but_keeps_produced_path(bootstrapped_home: Pat
     assert "SECRET_TOOL_OUTPUT_42" not in joined
 
 
+def test_resume_once_continue_last_resumes_latest(bootstrapped_home: Path) -> None:
+    from alpi.cli import _resume_once
+    _save_session(bootstrapped_home, "prev-chat", user="my color is turquoise", assistant="ok")
+    engine = Engine(home=bootstrapped_home, cfg=config.load(bootstrapped_home))
+    _resume_once(engine, bootstrapped_home, continue_last=True)
+    assert engine.session.id == "prev-chat"
+    assert any("turquoise" in (m.get("content") or "") for m in engine.session.messages)
+
+
+def test_resume_once_session_id_is_specific_not_latest(bootstrapped_home: Path) -> None:
+    from alpi.cli import _resume_once
+    _save_session(bootstrapped_home, "target", user="fact to remember", assistant="ok")
+    _save_session(bootstrapped_home, "newer", user="something else", assistant="ok")
+    _touch_session(bootstrapped_home, "target", 1_700_000_000)
+    _touch_session(bootstrapped_home, "newer", 1_700_001_000)
+    engine = Engine(home=bootstrapped_home, cfg=config.load(bootstrapped_home))
+    _resume_once(engine, bootstrapped_home, session_id="target")
+    assert engine.session.id == "target"
+    assert any("fact to remember" in (m.get("content") or "") for m in engine.session.messages)
+
+
+def test_resume_once_missing_session_id_raises(bootstrapped_home: Path) -> None:
+    import click
+    from alpi.cli import _resume_once
+    engine = Engine(home=bootstrapped_home, cfg=config.load(bootstrapped_home))
+    with pytest.raises(click.ClickException):
+        _resume_once(engine, bootstrapped_home, session_id="no-such-session")
+
+
+def test_resume_once_continue_last_is_best_effort(bootstrapped_home: Path) -> None:
+    from alpi.cli import _resume_once
+    engine = Engine(home=bootstrapped_home, cfg=config.load(bootstrapped_home))
+    _resume_once(engine, bootstrapped_home, continue_last=True)
+    assert engine.session.turns == []
+
+
+def test_continue_specific_session_rejects_traversal(bootstrapped_home: Path) -> None:
+    from alpi.cli import _continue_specific_session
+    (bootstrapped_home / "sessions").mkdir(exist_ok=True)
+    (bootstrapped_home / "secret.json").write_text(json.dumps({
+        "id": "secret",
+        "turns": [{"at": 1, "user": "leaked secret", "assistant": "x", "tools": []}],
+    }))
+    engine = Engine(home=bootstrapped_home, cfg=config.load(bootstrapped_home))
+    assert _continue_specific_session(engine, bootstrapped_home, "../secret") is False
+    assert not any("leaked" in (m.get("content") or "") for m in engine.session.messages)
+
+
 def test_continue_skips_scheduled_sessions(bootstrapped_home: Path) -> None:
     _save_session(
         bootstrapped_home, "chat-123",

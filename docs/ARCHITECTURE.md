@@ -58,6 +58,7 @@ alpi -p <name>                 profile flag, combinable with any command
 
 alpi chat                      alias for `alpi`
 alpi chat --once "<text>"      one-shot turn to stdout (pipe-friendly)
+alpi chat --once ... -c | --session <id>   continue the last / a specific session (one-shot)
 alpi chat --once ... --emit-events     INTERNAL — gateway subprocess contract
 alpi chat --once ... --no-save         INTERNAL — do not write a session file
 
