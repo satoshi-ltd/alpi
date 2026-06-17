@@ -4,7 +4,7 @@ import {
   Btn,
   ChevDownIcon,
   Eyebrow,
-  IconBtn,
+  Kbd,
   Mono,
   Pill,
   PlusIcon,
@@ -84,22 +84,29 @@ export default function SessionsButton({
     return [...m.entries()];
   }, [sessions]);
 
-  if (!loaded || sessions.length === 0) return null;
+  if (!loaded) return null;
 
   return (
     <span className={styles.root}>
-      <Tip text="Sessions — switch or browse history" side="r">
+      <Tip text="Sessions — switch, start or browse" side="r">
         <Btn variant="ghost" onClick={() => setOpen((o) => !o)}>
           <span>Sessions</span>
           <ChevDownIcon className={styles.chev} />
         </Btn>
       </Tip>
-      <Tip text="New session" side="r">
-        <IconBtn aria-label="New session" onClick={onNew}>
-          <PlusIcon />
-        </IconBtn>
-      </Tip>
       <Popover open={open} onClose={() => setOpen(false)} width="var(--pop-lg)" align="right">
+        <button
+          type="button"
+          className={styles.newRow}
+          onClick={() => {
+            onNew?.();
+            setOpen(false);
+          }}
+        >
+          <PlusIcon className={styles.newIcon} />
+          <span className={styles.newLabel}>New session</span>
+          <span className={styles.kbd}><Kbd>⌘</Kbd><Kbd>N</Kbd></span>
+        </button>
         <div className={styles.scroll}>
           {sessions.length === 0 && (
             <div className={styles.empty}>No sessions yet</div>
@@ -129,20 +136,22 @@ export default function SessionsButton({
             </div>
           ))}
         </div>
-        <div className={styles.popFooter}>
-          <Mono className={styles.popCount}>
-            {sessions.length} session{sessions.length === 1 ? "" : "s"}
-          </Mono>
-          <Btn
-            variant="ghost"
-            onClick={() => {
-              setOpen(false);
-              setManageOpen(true);
-            }}
-          >
-            Manage sessions →
-          </Btn>
-        </div>
+        {sessions.length > 0 && (
+          <div className={styles.popFooter}>
+            <Mono className={styles.popCount}>
+              {sessions.length} session{sessions.length === 1 ? "" : "s"}
+            </Mono>
+            <Btn
+              variant="ghost"
+              onClick={() => {
+                setOpen(false);
+                setManageOpen(true);
+              }}
+            >
+              Manage sessions →
+            </Btn>
+          </div>
+        )}
       </Popover>
       <ManageSessionsModal
         open={manageOpen}

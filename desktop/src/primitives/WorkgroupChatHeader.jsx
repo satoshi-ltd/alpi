@@ -1,17 +1,6 @@
-import { ChatHeader } from "./index.js";
-import {
-  Btn,
-  Diamond,
-  IconBtn,
-  Mono,
-  MeterChip,
-  RefreshButton,
-  Tip,
-  GearIcon,
-  PauseIcon,
-  PlayIcon,
-} from "./index.js";
+import { ChatHeader, Diamond, MeterChip, Mono, Tip } from "./index.js";
 import SoundWave from "./SoundWave.jsx";
+import HeaderMenu from "./HeaderMenu.jsx";
 import styles from "./WorkgroupChatHeader.module.css";
 
 export default function WorkgroupChatHeader({
@@ -23,6 +12,8 @@ export default function WorkgroupChatHeader({
   budget,           // { used, cap } in USD
   paused = false,
   onTogglePause,
+  autoRead = false,
+  onToggleAutoRead,
   onOpenSettings,
   onRefresh,
   tasksButton,
@@ -68,21 +59,17 @@ export default function WorkgroupChatHeader({
   const right = (
     <>
       {tasksButton}
-      {tasksButton && <span className={styles.divider} aria-hidden />}
-      {onTogglePause && (
-        <Btn variant="ghost" onClick={onTogglePause} title={paused ? "Resume workgroup" : "Pause workgroup"}>
-          {paused ? <PlayIcon /> : <PauseIcon />}
-          <span>{paused ? "Resume" : "Pause"}</span>
-        </Btn>
-      )}
-      <span className={styles.divider} aria-hidden />
-      {onOpenSettings && (
-        <Tip text="Workgroup settings" side="r">
-          <IconBtn onClick={onOpenSettings} aria-label="Workgroup settings"><GearIcon /></IconBtn>
-        </Tip>
-      )}
       <SoundWave accent={accent} />
-      {onRefresh && <RefreshButton onClick={onRefresh} />}
+      <HeaderMenu
+        noun="workgroup"
+        paused={paused}
+        onTogglePause={onTogglePause}
+        onOpenSettings={onOpenSettings}
+        autoRead={autoRead}
+        onToggleAutoRead={onToggleAutoRead}
+        onRefresh={onRefresh}
+        canRefresh
+      />
     </>
   );
 

@@ -17,7 +17,7 @@ export default function SoundWave({ accent }) {
   if (!state) return null;
 
   return (
-    <Tip text="Stop read-aloud" side="r">
+    <Tip text="Auto-read on — tap to silence" side="r">
       <button
         type="button"
         className={styles.wave}

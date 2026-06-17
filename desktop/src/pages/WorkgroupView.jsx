@@ -394,6 +394,19 @@ export default function WorkgroupView({
             setError(String(e));
           }
         }}
+        autoRead={!!workgroup.auto_read}
+        onToggleAutoRead={async () => {
+          try {
+            await invoke("workgroup_update", {
+              profile: workgroup.profile,
+              wgId: workgroup.id,
+              autoRead: !workgroup.auto_read,
+            });
+            onReload?.();
+          } catch (e) {
+            setError(String(e));
+          }
+        }}
         onOpenSettings={onOpenSettings ? () => onOpenSettings(workgroup) : undefined}
         onRefresh={bumpRefresh}
         tasksButton={

@@ -24,7 +24,9 @@ export default function Popover({
   useEffect(() => {
     if (!open) return undefined;
     const onDoc = (e) => {
-      if (ref.current && !ref.current.contains(e.target)) onClose?.();
+      // Wrapper (trigger + panel), not just the panel — else a trigger click closes here and its own handler re-opens.
+      const host = ref.current?.parentElement ?? ref.current;
+      if (host && !host.contains(e.target)) onClose?.();
     };
     const onKey = (e) => {
       if (e.key === "Escape") onClose?.();

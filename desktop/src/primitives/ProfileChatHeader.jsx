@@ -1,20 +1,7 @@
-import { ChatHeader } from "./index.js";
-import {
-  Btn,
-  IconBtn,
-  Mono,
-  MeterChip,
-  RefreshButton,
-  Tip,
-  BlocksIcon,
-  CpuIcon,
-  GearIcon,
-  PauseIcon,
-  PlayIcon,
-  WrenchIcon,
-} from "./index.js";
+import { ChatHeader, MeterChip, Mono } from "./index.js";
 import SessionsButton from "./SessionsButton.jsx";
 import SoundWave from "./SoundWave.jsx";
+import HeaderMenu from "./HeaderMenu.jsx";
 import styles from "./ProfileChatHeader.module.css";
 
 function fmtCount(n) {
@@ -42,6 +29,8 @@ export default function ProfileChatHeader({
   onRefresh,
   paused = false,
   onTogglePause,
+  autoRead = false,
+  onToggleAutoRead,
   onNewSession,
   onChangeSession,
   sessionsButton,
@@ -107,38 +96,19 @@ export default function ProfileChatHeader({
           onNew={onNewSession}
         />
       )}
-      <span className={styles.divider} aria-hidden />
-      {onOpenSkills && (
-        <Tip text="Skills" side="r">
-          <IconBtn onClick={onOpenSkills} aria-label="Skills"><BlocksIcon /></IconBtn>
-        </Tip>
-      )}
-      {onOpenMemory && (
-        <Tip text="Memory" side="r">
-          <IconBtn onClick={onOpenMemory} aria-label="Memory"><CpuIcon /></IconBtn>
-        </Tip>
-      )}
-      {onOpenTools && (
-        <Tip text="Tools" side="r">
-          <IconBtn onClick={onOpenTools} aria-label="Tools"><WrenchIcon /></IconBtn>
-        </Tip>
-      )}
-      <span className={styles.divider} aria-hidden />
-      {onTogglePause && (
-        <Btn variant="ghost" onClick={onTogglePause} title={paused ? "Resume profile" : "Pause profile"}>
-          {paused ? <PlayIcon /> : <PauseIcon />}
-          <span>{paused ? "Resume" : "Pause"}</span>
-        </Btn>
-      )}
-      {onOpenSettings && (
-        <Tip text="Profile settings" side="r">
-          <IconBtn onClick={onOpenSettings} aria-label="Profile settings"><GearIcon /></IconBtn>
-        </Tip>
-      )}
       <SoundWave accent={accent} />
-      {onRefresh && (sessionData?.turns?.length ?? 0) > 0 && (
-        <RefreshButton onClick={onRefresh} />
-      )}
+      <HeaderMenu
+        paused={paused}
+        onTogglePause={onTogglePause}
+        onOpenSettings={onOpenSettings}
+        autoRead={autoRead}
+        onToggleAutoRead={onToggleAutoRead}
+        onOpenSkills={onOpenSkills}
+        onOpenMemory={onOpenMemory}
+        onOpenTools={onOpenTools}
+        onRefresh={onRefresh}
+        canRefresh={(sessionData?.turns?.length ?? 0) > 0}
+      />
     </>
   );
 

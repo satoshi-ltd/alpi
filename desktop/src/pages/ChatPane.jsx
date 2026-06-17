@@ -91,7 +91,7 @@ export default function ChatPane({
   }, [sessionKey, activeProfile?.model]);
 
   // Lazy heavy fields — voice_id / models / mcps. Scoped per connection so two daemons with the same profile name never share state.
-  const { detail: activeDetail } = useProfileDetail(connectionId ?? null, activeProfile?.name ?? null);
+  const { detail: activeDetail, refresh: refreshActiveDetail } = useProfileDetail(connectionId ?? null, activeProfile?.name ?? null);
   const activeModels = activeProfile?.models ?? activeDetail?.models ?? [];
 
   // Let chat images resolve from the active profile's workspace (project assets), not just ~/.alpi.
@@ -242,6 +242,12 @@ export default function ChatPane({
           onChangeSession={onChangeSession}
           paused={paused}
           onTogglePause={onTogglePause}
+          autoRead={autoRead}
+          onToggleAutoRead={activeProfile ? () => {
+            invoke("voice_set_auto_read", { profile: activeProfile.name, enabled: !autoRead })
+              .then(() => refreshActiveDetail())
+              .catch(() => {});
+          } : null}
         />
       )}
       {paused && (

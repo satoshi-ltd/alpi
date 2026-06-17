@@ -1,0 +1,50 @@
+.root {
+  position: relative;
+  display: inline-flex;
+}
+
+.menu {
+  padding: var(--space-2);
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  width: 100%;
+  padding: 10px 14px;
+  border: 0;
+  background: transparent;
+  border-radius: var(--r-md);
+  cursor: pointer;
+  text-align: left;
+  color: var(--ink);
+  font-size: var(--fs-base);
+}
+.item:hover {
+  background: var(--hover);
+}
+
+.icon {
+  flex: none;
+  color: var(--ink-3);
+}
+
+.label {
+  flex: 1;
+}
+
+.statePill {
+  font-size: var(--fs-xs);
+}
+
+.kbd {
+  display: inline-flex;
+  gap: var(--space-1);
+}
+
+.sep {
+  height: 0.5px;
+  background: var(--line);
+  margin: var(--space-2) var(--space-3);
+}

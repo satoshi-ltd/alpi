@@ -34,7 +34,7 @@ dependencies = [
 
 [[package]]
 name = "alpi-desktop"
-version = "0.3.65"
+version = "0.3.66"
 dependencies = [
  "base64 0.22.1",
  "chrono",

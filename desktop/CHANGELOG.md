@@ -11,6 +11,19 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.3.66 — 2026-06-17 — tidier chat header
+
+_Requires alpi v0.9.8+._
+
+- **Header actions moved into a "⋯" menu** — Profile settings, Pause, Auto-read
+  replies (with an on/off toggle), Skills, Memory, Tools and Refresh thread now
+  live in one menu instead of a row of buttons. Sessions and the live audio
+  indicator stay in the bar. Workgroups get the same menu.
+- **New session** is the top row of the Sessions dropdown (⌘N) — and you can
+  start one even from a profile with no sessions yet.
+- **Popovers toggle properly** — clicking a menu or dropdown button again closes
+  it instead of flickering back open (fixed across the app).
+
 ## v0.3.65 — 2026-06-16 — generated images render as attachments
 
 _Requires alpi v0.9.8+._

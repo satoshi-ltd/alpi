@@ -9,6 +9,36 @@
   height: 12px;
 }
 
+.newRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  width: 100%;
+  padding: 12px 16px;
+  border: 0;
+  border-bottom: 0.5px solid var(--line);
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  color: var(--ink);
+}
+.newRow:hover {
+  background: var(--hover);
+}
+.newIcon {
+  flex: none;
+  color: var(--ink-3);
+}
+.newLabel {
+  flex: 1;
+  font-size: var(--fs-base);
+  font-weight: var(--fw-semibold);
+}
+.kbd {
+  display: inline-flex;
+  gap: var(--space-1);
+}
+
 .scroll {
   padding: var(--space-2);
   max-height: 420px;

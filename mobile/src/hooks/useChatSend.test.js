@@ -214,4 +214,14 @@ describe("useChatSend.send", () => {
     act(() => lastStreamHandlers.onFrame({ event: "tool_end", tool_id: "t1", ok: true, output: "done" }));
     expect(result.current.pendingTurn.tools[0].duration_s).toBeGreaterThanOrEqual(0);
   });
+
+  it("a simple answer streams live into the answer bubble (no tool, no thinking)", async () => {
+    const { result } = renderHook(() => useChatSend({ profile: "doc" }));
+    act(() => result.current.send("hi"));
+    act(() => lastStreamHandlers.onFrame({ event: "session_start", session_id: "sess-1" }));
+    act(() => lastStreamHandlers.onFrame({ event: "assistant_delta", text: "hello there" }));
+    await act(async () => { await new Promise((r) => setTimeout(r, 50)); });
+    expect(result.current.pendingTurn.assistant).toBe("hello there");
+    expect(result.current.pendingTurn.reasoning).toBe("");
+  });
 });

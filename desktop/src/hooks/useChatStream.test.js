@@ -252,6 +252,16 @@ describe("useChatStream stall watchdog", () => {
     expect(result.current.pendingTurn.tools[0].duration_s).toBe(3);
   });
 
+  it("a simple answer streams live into the answer bubble (no tool, no thinking)", async () => {
+    const { result } = mount();
+    await waitForListen();
+    seedTurn(result, { sessionId: "sess-1" });
+    emit({ kind: "assistant_delta", text: "hello there" });
+    await act(async () => { await vi.advanceTimersByTimeAsync(60); });
+    expect(result.current.pendingTurn.assistantPreview).toBe("hello there");
+    expect(result.current.pendingTurn.reasoningPreview).toBe("");
+  });
+
   it("never replays an errored turn (no recovery-toast flood)", async () => {
     const { result, notify } = mount();
     await waitForListen();
