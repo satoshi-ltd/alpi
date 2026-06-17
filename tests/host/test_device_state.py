@@ -203,6 +203,8 @@ async def test_device_profile_summaries_are_served_by_host(
         "params": {"profile": "default"},
     })
     detail_payload = detail["result"]
+    assert "voice_id" in profile
+    assert profile["voice_id"] == detail_payload["voice_id"]
     assert detail_payload["workspace"] == "/tmp/work"
     assert detail_payload["provider_keys"][0]["env"] == "OPENAI_API_KEY"
     assert "peers" in detail_payload

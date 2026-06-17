@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   Btn,
@@ -6,14 +6,20 @@ import {
   Diamond,
   GearIcon,
   IconBtn,
-  MarkdownBody,
   Mono,
   SearchIcon,
+  SpinnerIcon as DSSpinnerIcon,
   Tip,
+  VolumeIcon,
   XIcon,
 } from "../primitives/index.js";
+import Markdown from "../primitives/Markdown.jsx";
+import WaveBars from "../primitives/WaveBars.jsx";
+import Eyebrow from "../primitives/Eyebrow.jsx";
+import { playTts, subscribeTts, VOICE_POOL } from "../lib/tts.js";
+import { useOnline } from "../lib/useOnline.js";
 import { useNotify } from "../primitives/Notification.jsx";
-import { relativeTime } from "../lib/time.js";
+import { groupByDate, relativeTime } from "../lib/time.js";
 import { profileLabel } from "../lib/profile-display.js";
 import {
   pendingDeleteKeys,
@@ -23,6 +29,7 @@ import {
   useMarkAllOutputsRead,
   useOutput,
 } from "../hooks/useOutputs.js";
+import { useProfileDetail } from "../hooks/useProfileDetail.js";
 import styles from "./NotificationsModal.module.css";
 import { copyText } from "../lib/clipboard.js";
 
@@ -103,6 +110,20 @@ export default function NotificationsModal({
     [rows, activeId, activeProfile, activeConnId],
   );
 
+  const voiceByProfile = useMemo(() => {
+    const map = new Map();
+    for (const r of rows) {
+      const key = `${r.connectionId}:${r.profile}`;
+      if (r.voice_id != null && !map.has(key)) map.set(key, r.voice_id);
+    }
+    return map;
+  }, [rows]);
+  const { detail: profileDetail } = useProfileDetail(activeConnId, activeProfile);
+  const activeVoiceId = profileDetail?.voice_id
+    ?? voiceByProfile.get(`${activeConnId}:${activeProfile}`)
+    ?? activeRow?.voice_id
+    ?? null;
+
   useEffect(() => {
     if (!open) {
       setPendingId(null);
@@ -123,7 +144,8 @@ export default function NotificationsModal({
     }
   }, [selectedId, selectedProfile, selectedConnectionId]);
 
-  const { row: detail, markRead } = useOutput(activeProfile, activeId, activeConnId);
+  const { row: fetchedDetail, markRead } = useOutput(activeProfile, activeId, activeConnId);
+  const detail = activeRow ?? fetchedDetail;
 
   // Only EXPLICIT selection marks read — passive default to rows[0] must not silently consume the topmost unread on mere modal open.
   const explicitlySelected = pendingId !== null || selectedId !== undefined;
@@ -166,6 +188,11 @@ export default function NotificationsModal({
       return hay.includes(q);
     });
   }, [visibleRows, query]);
+
+  const grouped = useMemo(
+    () => groupByDate(filteredRows, (r) => r.created_at),
+    [filteredRows],
+  );
 
   const onSelectRow = useCallback((row) => {
     setPendingId(row.id);
@@ -283,16 +310,21 @@ export default function NotificationsModal({
                   </span>
                 </li>
               ) : (
-                filteredRows.map((row) => (
-                  <NotificationRow
-                    key={`${row.connectionId}:${row.profile}:${row.id}`}
-                    row={row}
-                    accent={row.accent}
-                    multi={multi}
-                    active={row.id === activeId && row.profile === activeProfile && row.connectionId === activeConnId}
-                    onSelect={onSelectRow}
-                    onDelete={onDeleteRow}
-                  />
+                grouped.map((group) => (
+                  <Fragment key={group.label}>
+                    <Eyebrow as="li" className={styles.groupHeader} role="presentation">{group.label}</Eyebrow>
+                    {group.rows.map((row) => (
+                      <NotificationRow
+                        key={`${row.connectionId}:${row.profile}:${row.id}`}
+                        row={row}
+                        accent={row.accent}
+                        multi={multi}
+                        active={row.id === activeId && row.profile === activeProfile && row.connectionId === activeConnId}
+                        onSelect={onSelectRow}
+                        onDelete={onDeleteRow}
+                      />
+                    ))}
+                  </Fragment>
                 ))
               )}
             </ul>
@@ -303,6 +335,9 @@ export default function NotificationsModal({
               <DetailPane
                 row={detail}
                 accent={activeRow?.accent}
+                connId={activeConnId}
+                connectionName={activeRow?.connectionName}
+                voiceId={activeVoiceId}
                 multi={multi}
                 onCopy={onCopy}
                 onAction={onAction}
@@ -359,10 +394,26 @@ function NotificationRow({ row, accent, multi, active, onSelect, onDelete }) {
 }
 
 
-function DetailPane({ row, accent, multi, onCopy, onAction, action }) {
+function DetailPane({ row, accent, connId, connectionName, voiceId, multi, onCopy, onAction, action }) {
   const label = profileLabel(row.profile);
   const tag = typeTag(row);
   const externalDelivery = (row.delivered_to || []).filter((c) => c !== "alpi");
+
+  const [ttsState, setTtsState] = useState(null);
+  useEffect(() => subscribeTts(setTtsState), []);
+  const online = useOnline();
+  const ttsKey = `notif:${connId}:${row.profile}:${row.id}`;
+  const ttsKind = ttsState?.key === ttsKey ? ttsState.kind : null;
+  const isLoading = ttsKind === "loading";
+  const isPlaying = ttsKind === "playing";
+  const ttsDisabled = (!online && !isPlaying) || !row.body;
+  const speakTip = !online && !isPlaying
+    ? "Offline — TTS unavailable"
+    : isLoading ? "Loading…" : isPlaying ? "Stop" : "Read aloud";
+  const onSpeak = () => {
+    if (!row.body) return;
+    playTts({ key: ttsKey, profile: row.profile, voice: voiceId ?? row.voice_id ?? VOICE_POOL[0], text: row.body, accent });
+  };
 
   return (
     <article className={styles.article}>
@@ -375,17 +426,28 @@ function DetailPane({ row, accent, multi, onCopy, onAction, action }) {
         ) : null}
         <span className={styles.detailMetaProfile}>
           <Diamond color={accent} />
-          <Mono>@{label.toUpperCase()}</Mono>
+          <Mono>@{label}</Mono>
         </span>
-        {multi && row.connectionName ? (
+        {multi && connectionName ? (
           <>
             <span className={styles.detailMetaDot}>·</span>
-            <Mono className={styles.detailMetaPart}>{row.connectionName.toUpperCase()}</Mono>
+            <Mono className={styles.detailMetaPart}>{connectionName}</Mono>
           </>
         ) : null}
         <span className={styles.detailMetaDot}>·</span>
         <Mono className={styles.detailMetaPart}>{fmtAbsolute(row.created_at)}</Mono>
         <span className={styles.detailMetaSpacer} />
+        <Tip text={speakTip} side="l" escape>
+          <IconBtn aria-label={speakTip} disabled={ttsDisabled} onClick={onSpeak}>
+            {isLoading ? (
+              <DSSpinnerIcon />
+            ) : isPlaying ? (
+              <WaveBars accent={accent} active />
+            ) : (
+              <VolumeIcon />
+            )}
+          </IconBtn>
+        </Tip>
         <Tip text="Copy" side="l" escape>
           <IconBtn aria-label="Copy notification" onClick={onCopy}>
             <CopyIcon />
@@ -394,7 +456,9 @@ function DetailPane({ row, accent, multi, onCopy, onAction, action }) {
       </div>
 
       <div className={styles.detailBody}>
-        <MarkdownBody source={row.body || ""} />
+        <div className="profmsg">
+          <Markdown as="div" source={row.body || ""} className="alpi-md" />
+        </div>
       </div>
 
       {externalDelivery.length ? (

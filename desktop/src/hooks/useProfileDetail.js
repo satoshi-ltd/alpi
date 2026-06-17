@@ -23,7 +23,7 @@ function load(connectionId, name, { force = false } = {}) {
   const key = makeKey(connectionId, name);
   if (!force && _cache.has(key)) return Promise.resolve(_cache.get(key));
   if (_inflight.has(key)) return _inflight.get(key);
-  const p = invoke("profile_detail", { profile: name })
+  const p = invoke("profile_detail", { profile: name, connectionId })
     .then((d) => {
       _cache.set(key, d || {});
       _inflight.delete(key);

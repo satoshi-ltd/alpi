@@ -138,12 +138,16 @@ async fn profile_skill_read(
 }
 
 #[tauri::command]
-async fn profile_detail(profile: String) -> Result<serde_json::Value, String> {
+async fn profile_detail(
+    profile: String,
+    connection_id: Option<String>,
+) -> Result<serde_json::Value, String> {
     off_main(move || {
-        host_client::call(
-            "host.profile.detail",
-            serde_json::json!({ "profile": profile }),
-        )
+        let params = serde_json::json!({ "profile": profile });
+        match connection_id {
+            Some(cid) => host_client::call_for(&cid, "host.profile.detail", params),
+            None => host_client::call("host.profile.detail", params),
+        }
         .map_err(|e| e.to_string())
     })
     .await?

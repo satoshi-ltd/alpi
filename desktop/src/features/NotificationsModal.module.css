@@ -111,6 +111,11 @@
   flex: 1;
 }
 
+.groupHeader {
+  padding: var(--space-4) var(--space-4) var(--space-2);
+}
+.list > .groupHeader:first-child { padding-top: var(--space-2); }
+
 .row {
   position: relative;
   display: flex;
@@ -190,7 +195,7 @@
 
 .detail {
   overflow-y: auto;
-  padding: var(--space-8) var(--space-9);
+  padding: 0 var(--space-9) var(--space-8);
 }
 
 .detailEmpty {
@@ -209,13 +214,17 @@
 }
 
 .detailMeta {
+  position: sticky;
+  top: 0;
+  z-index: 1;
   display: flex;
   align-items: center;
   gap: var(--space-1);
+  margin: 0 calc(-1 * var(--space-9));
+  padding: var(--space-8) var(--space-9) var(--space-3);
+  background: var(--bg-elev);
   color: var(--ink-3);
   font-size: var(--fs-xs);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
 }
 .detailMetaSpacer { flex: 1; }
 .detailMeta :global(.mono) { font-size: var(--fs-xs); color: var(--ink-3); }
@@ -256,12 +265,6 @@
 
 .detailBody {
   color: var(--ink);
-  font-size: var(--fs-md);
-  line-height: var(--lh-relaxed);
-}
-.detailBody :global(.alpi-md) {
-  font-size: inherit;
-  line-height: inherit;
 }
 
 .detailIdRow {

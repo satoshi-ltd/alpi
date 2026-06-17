@@ -11,6 +11,24 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.3.68 — 2026-06-17 — read notifications aloud
+
+_Requires alpi v0.9.15+._
+
+- **Read a notification aloud** — the notification detail gets a read-aloud
+  button next to Copy, with live audio bars while it plays (tap to stop). It
+  uses the profile's configured voice.
+- **Notification text now renders like a chat message** — same size and full
+  Markdown (tables, code blocks, lists, links) instead of a smaller, plainer
+  style.
+- **The inbox is grouped by date** — Today / Yesterday / This week … like
+  sessions, so recent alerts are easy to scan.
+- **The detail header shows the source connection**, matches the list's
+  lowercase styling, and stays pinned while you scroll a long notification.
+- **Per-connection profile data loads from the right daemon** — a paired
+  connection's voice (and other profile details) no longer falls back to the
+  active connection's.
+
 ## v0.3.67 — 2026-06-17 — interrupted turns are marked
 
 _Requires alpi v0.9.14+._

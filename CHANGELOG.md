@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.9.15 — 2026-06-17 — profile summaries expose the TTS voice
+
+- **Profile listings now include the configured voice**, so paired apps can
+  read a notification aloud in the same voice the profile uses elsewhere.
+
 ## v0.9.14 — 2026-06-17 — interrupted turns read as interrupted
 
 - **A cut-off turn now reads as interrupted, not pending.** When a message was

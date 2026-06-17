@@ -189,6 +189,7 @@ def _profile_summary(row: dict[str, Any]) -> dict[str, Any]:
         "installed_via": _installed_via(),
         "model": cfg.model or None,
         "accent": cfg.tui.get("accent"),
+        "voice_id": cfg.tools.tts.voice,
         "bio": cfg.public_bio or None,
         "paused": cfg.paused,
         "subsystems": {

@@ -30,7 +30,7 @@ describe("useAllOutputs (cross-connection fan-out)", () => {
     invoke.mockImplementation(async (cmd, params) => {
       if (cmd === "profile_summaries") {
         expect(params.connectionId).toBe("c1");
-        return [{ name: "abby", accent: "#f00" }];
+        return [{ name: "abby", accent: "#f00", voice_id: "en-GB-SoniaNeural" }];
       }
       if (cmd === "outputs_list") {
         expect(params.connectionId).toBe("c1");
@@ -41,7 +41,7 @@ describe("useAllOutputs (cross-connection fan-out)", () => {
     const rows = await fetchConnectionOutputs({ id: "c1", name: "home" }, "unread");
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({
-      id: "a1", profile: "abby", accent: "#f00", connectionId: "c1", connectionName: "home",
+      id: "a1", profile: "abby", accent: "#f00", voice_id: "en-GB-SoniaNeural", connectionId: "c1", connectionName: "home",
     });
   });
 

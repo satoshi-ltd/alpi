@@ -20,7 +20,7 @@ export async function fetchConnectionOutputs(connection, status) {
   let profiles;
   try {
     const res = await invoke("profile_summaries", { connectionId });
-    profiles = (Array.isArray(res) ? res : []).map((p) => ({ name: p.name, accent: p.accent || null }));
+    profiles = (Array.isArray(res) ? res : []).map((p) => ({ name: p.name, accent: p.accent || null, voice_id: p.voice_id ?? null }));
   } catch {
     return [];
   }
@@ -38,6 +38,7 @@ export async function fetchConnectionOutputs(connection, status) {
             ...o,
             profile: o.profile || p.name,
             accent: p.accent,
+            voice_id: p.voice_id,
             connectionId,
             connectionName: connection.name,
           })),

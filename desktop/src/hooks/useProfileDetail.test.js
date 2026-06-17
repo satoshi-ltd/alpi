@@ -34,7 +34,15 @@ describe("useProfileDetail", () => {
     await waitFor(() => {
       expect(result.current.detail).toEqual({ peers: [{ id: "alice" }], models: ["a/b"] });
     });
-    expect(invoke).toHaveBeenCalledWith("profile_detail", { profile: "doc" });
+    expect(invoke).toHaveBeenCalledWith("profile_detail", { profile: "doc", connectionId: "conn-a" });
+  });
+
+  it("forwards connectionId to the profile_detail RPC so it hits the right daemon", async () => {
+    invoke.mockResolvedValueOnce({ voice_id: "es-ES-AlvaroNeural" });
+    renderHook(() => useProfileDetail("remote-a", "doc"));
+    await waitFor(() => {
+      expect(invoke).toHaveBeenCalledWith("profile_detail", { profile: "doc", connectionId: "remote-a" });
+    });
   });
 
   it("hits the cache instead of refetching across remounts with same (conn, name)", async () => {
@@ -88,7 +96,7 @@ describe("useProfileDetail", () => {
       .mockResolvedValueOnce({ peers: ["mirai-after"] }); // pre-warm conn-a/mirai
     renderHook(() => useProfileDetail("conn-a", "doc"));
     await waitFor(() => expect(invoke).toHaveBeenCalledTimes(1));
-    expect(invoke).toHaveBeenLastCalledWith("profile_detail", { profile: "doc" });
+    expect(invoke).toHaveBeenLastCalledWith("profile_detail", { profile: "doc", connectionId: "conn-a" });
     daemonEventListener({
       payload: {
         connection_id: "conn-a",
@@ -97,7 +105,7 @@ describe("useProfileDetail", () => {
     });
     await waitFor(() => expect(invoke).toHaveBeenCalledTimes(2));
     // Second call targets mirai, not doc — the watched (conn-a, doc) cache is untouched.
-    expect(invoke).toHaveBeenLastCalledWith("profile_detail", { profile: "mirai" });
+    expect(invoke).toHaveBeenLastCalledWith("profile_detail", { profile: "mirai", connectionId: "conn-a" });
   });
 
   it("invalidateProfileDetailCache(prev) drops only that connection's entries", async () => {
