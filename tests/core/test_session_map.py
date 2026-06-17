@@ -67,3 +67,33 @@ def test_malformed_json_falls_back_to_empty(tmp_path: Path) -> None:
     # Subsequent writes heal the file.
     session_map.set(tmp_path, "chat-1", "sess-abc")
     assert session_map.get(tmp_path, "chat-1") == "sess-abc"
+
+
+def test_set_waits_for_stable_lock(tmp_path: Path) -> None:
+    import fcntl
+    import threading
+
+    lock = tmp_path / "gateway" / "sessions" / "_map.lock"
+    lock.parent.mkdir(parents=True, exist_ok=True)
+    lock.touch()
+
+    done = threading.Event()
+
+    def worker() -> None:
+        session_map.set(tmp_path, "chat-lock", "sess-lock")
+        done.set()
+
+    fh = lock.open("a")
+    fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
+    t = threading.Thread(target=worker)
+    t.start()
+    try:
+        assert not done.wait(0.3)
+        assert session_map.get(tmp_path, "chat-lock") is None
+    finally:
+        fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
+        fh.close()
+        assert done.wait(2.0)
+        t.join()
+
+    assert session_map.get(tmp_path, "chat-lock") == "sess-lock"

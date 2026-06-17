@@ -104,6 +104,8 @@ class Session:
         path = self.home / self.subdir / f"{self.id}.json"
         path.parent.mkdir(parents=True, exist_ok=True)
         import json
+        import os
+        import tempfile
         from alpi._redact import redact
         payload = {
             "id": self.id,
@@ -137,7 +139,19 @@ class Session:
                 for t in self.turns
             ],
         }
-        path.write_text(json.dumps(payload, indent=2, default=str))
+        fd, tmp_name = tempfile.mkstemp(dir=str(path.parent), prefix=f".{self.id}.", suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                f.write(json.dumps(payload, indent=2, default=str))
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp_name, path)
+        except Exception:
+            try:
+                Path(tmp_name).unlink()
+            except OSError:
+                pass
+            raise
         return path
 
 

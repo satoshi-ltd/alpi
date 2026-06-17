@@ -97,6 +97,24 @@ def test_terminal_background_and_kill(
         Terminal().run(action="kill", pid=pid)
 
 
+def test_terminal_background_meta_omits_command(
+    tmp_home_no_env: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ALPI_HOME", str(tmp_home_no_env))
+    secret = "topsecrettoken42"
+    r = Terminal().run(action="background", command=f"sleep 30 {secret}")
+    assert r.ok
+    pid = int(r.output.split("pid=")[1].split()[0])
+    try:
+        meta = (tmp_home_no_env / "run" / "bg" / f"{pid}.meta").read_text()
+        assert "command=" not in meta
+        assert secret not in meta
+        status = Terminal().run(action="status", pid=pid)
+        assert secret not in status.output
+    finally:
+        Terminal().run(action="kill", pid=pid)
+
+
 def test_search_content_finds_pattern() -> None:
     repo_root = Path(__file__).resolve().parents[2] / "alpi"
     r = Search().run(pattern="def run", path=str(repo_root), target="content")

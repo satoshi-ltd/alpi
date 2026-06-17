@@ -83,7 +83,9 @@ async def _data_chat_send(
     if isinstance(session_id, str) and session_id:
         from alpi.host.handlers import _check_id
         _check_id(session_id, "session_id")
-        _continue_specific_session(engine, home, session_id)
+        if not _continue_specific_session(engine, home, session_id):
+            await send_frame({"event": "error", "text": f"session not found: {session_id}"})
+            return
         if rewrite_from_turn is not None:
             _truncate_hydrated_session(engine, rewrite_from_turn)
 
@@ -246,7 +248,9 @@ async def _send_mention(
     if isinstance(session_id, str) and session_id:
         from alpi.host.handlers import _check_id
         _check_id(session_id, "session_id")
-        _continue_specific_session(engine, home, session_id)
+        if not _continue_specific_session(engine, home, session_id):
+            await send_frame({"event": "error", "text": f"session not found: {session_id}"})
+            return
 
     tool_id = f"mention-{parsed.peer_id}-{request_id}"
     args = {"peer_id": parsed.peer_id, "prompt": parsed.prompt}

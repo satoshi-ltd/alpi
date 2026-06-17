@@ -4,6 +4,8 @@ import json
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 from alpi.session import Session, ToolLog, load_turns, truncate_result, TOOL_RESULT_CAP
 
 
@@ -84,3 +86,32 @@ def test_session_save_writes_serialized_turns(tmp_path: Path) -> None:
     assert data["turns"][0]["user"] == "hola"
     assert data["turns"][0]["assistant"] == "adios"
     assert data["turns"][0]["tools"][0]["name"] == "web_search"
+
+
+def test_session_save_leaves_no_temp_sibling(tmp_path: Path) -> None:
+    session = Session(home=tmp_path, model="m")
+    session.log_turn(user="hi", assistant="hello", tools=[], started_at=1.0)
+
+    path = session.save()
+
+    assert path is not None and path.exists()
+    assert not any(p.name.endswith(".tmp") for p in path.parent.iterdir())
+    assert load_turns(json.loads(path.read_text()))[0].user == "hi"
+
+
+def test_session_save_failure_preserves_existing_file(tmp_path: Path) -> None:
+    session = Session(home=tmp_path, model="m")
+    session.log_turn(user="first", assistant="one", tools=[], started_at=1.0)
+    path = session.save()
+    original = path.read_text()
+
+    session.log_turn(user="second", assistant="two", tools=[], started_at=2.0)
+
+    def _boom(*_a, **_k):
+        raise OSError("disk full")
+
+    with patch("os.replace", _boom), pytest.raises(OSError):
+        session.save()
+
+    assert path.read_text() == original
+    assert not any(p.name.endswith(".tmp") for p in path.parent.iterdir())

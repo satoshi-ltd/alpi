@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.9.13 — 2026-06-17 — session & state hardening
+
+- **Continuing a chat that no longer exists fails cleanly.** Asking to resume
+  a deleted session used to silently start a disconnected one — your reply
+  saved under a different id than the one streaming the updates. It now returns
+  a clear "session not found" instead.
+- **A crash while saving a chat can't corrupt it.** Session files are written
+  atomically (write-then-swap), so an interrupted save leaves the previous copy
+  intact instead of a half-written file.
+- **Per-chat threading no longer loses updates.** On Telegram/email, two
+  messages arriving at once could drop one chat's session pointer; the map is
+  now updated under a lock.
+- **Background commands aren't kept on disk.** A backgrounded terminal job no
+  longer records its raw command (which can carry secrets) in its job file.
+
 ## v0.9.12 — 2026-06-17 — resuming a session no longer answers an old unanswered message
 
 - **A new message no longer gets the answer meant for a previous, unanswered

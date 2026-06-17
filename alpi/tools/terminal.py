@@ -290,7 +290,7 @@ class Terminal(Tool):
             )
         registry = _bg_dir() / f"{proc.pid}.meta"
         registry.write_text(
-            f"command={command}\nlog={log.name}\nstarted={int(time.time())}\n"
+            f"log={log.name}\nstarted={int(time.time())}\n"
         )
         _record_terminal_run(
             outcome="ok", at=time.time(), elapsed=0.0, pid=proc.pid,
@@ -320,7 +320,7 @@ class Terminal(Tool):
         elapsed = int(time.time()) - started if started else 0
         return ToolResult(ok=True, output=(
             f"pid={pid} running={alive} elapsed={elapsed}s\n"
-            f"command={meta.get('command', '')}\nlog={meta.get('log', '')}"
+            f"log={meta.get('log', '')}"
         ))
 
     def _output(self, pid: int) -> ToolResult:

@@ -16,6 +16,7 @@ the two from racing.
 
 from __future__ import annotations
 
+import contextlib
 import fcntl
 import json
 from pathlib import Path
@@ -26,6 +27,22 @@ _FILENAME = "_map.json"
 
 def _path(home: Path) -> Path:
     return home / "gateway" / "sessions" / _FILENAME
+
+
+def _lock_path(home: Path) -> Path:
+    return home / "gateway" / "sessions" / "_map.lock"
+
+
+@contextlib.contextmanager
+def _locked(home: Path):
+    lp = _lock_path(home)
+    lp.parent.mkdir(parents=True, exist_ok=True)
+    with lp.open("a") as fh:
+        fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
 
 
 def _load(home: Path) -> dict[str, str]:
@@ -69,9 +86,10 @@ def set(home: Path, chat_id: str, session_id: str) -> None:  # noqa: A001
     """Bind ``chat_id`` to ``session_id``. Overwrites any prior pointer."""
     if not chat_id or not session_id:
         return
-    data = _load(home)
-    data[chat_id] = session_id
-    _save(home, data)
+    with _locked(home):
+        data = _load(home)
+        data[chat_id] = session_id
+        _save(home, data)
 
 
 def forget(home: Path, chat_id: str) -> bool:
@@ -83,12 +101,13 @@ def forget(home: Path, chat_id: str) -> bool:
     """
     if not chat_id:
         return False
-    data = _load(home)
-    if chat_id not in data:
-        return False
-    del data[chat_id]
-    _save(home, data)
-    return True
+    with _locked(home):
+        data = _load(home)
+        if chat_id not in data:
+            return False
+        del data[chat_id]
+        _save(home, data)
+        return True
 
 
 def all_pointers(home: Path) -> dict[str, str]:

@@ -165,6 +165,149 @@ async def test_data_chat_send_rewrite_truncates_hydrated_session(
     assert seen["input_tokens"] == 0
 
 
+@pytest.mark.asyncio
+async def test_data_chat_send_unknown_session_errors(
+    monkeypatch, short_tmp: Path,
+) -> None:
+    home = short_tmp / "h"
+    home.mkdir()
+    load_or_generate(home)
+
+    ran = {"turn": False}
+
+    class _Engine:
+        def __init__(self, *, home: Path, cfg) -> None:  # noqa: ANN001
+            self.home = home
+            self.session = SimpleNamespace(
+                id="freshuuid0001", subdir="sessions", turns=[], messages=[],
+            )
+
+        def run_turn(self, text, emit, **kwargs) -> None:  # noqa: ANN001
+            from alpi.engine import AgentEvent
+
+            ran["turn"] = True
+            emit(AgentEvent(kind="assistant_done", text=f"echo: {text}", final=True))
+
+        def request_interrupt(self) -> None:
+            return None
+
+        def save_session(self) -> None:
+            return None
+
+    from alpi import config as cfg_mod
+    monkeypatch.setattr(cfg_mod, "load", lambda h: SimpleNamespace(model="x"))
+    import alpi.engine
+    monkeypatch.setattr(alpi.engine, "Engine", _Engine)
+    from alpi.host import chat as dc
+    monkeypatch.setattr(dc, "_resolve_home", lambda profile: home)
+
+    import alpi.cli as cli_mod
+    monkeypatch.setattr(cli_mod, "_continue_specific_session", lambda *a, **k: False)
+
+    srv = host_server.Server(home=home)
+    data_handlers.register(srv)
+    dc.register(srv)
+    await srv.start()
+
+    raw = b""
+    try:
+        reader, writer = await asyncio.open_unix_connection(str(srv.socket_path()))
+        writer.write((json.dumps({
+            "id": "req-missing",
+            "method": "host.chat.send",
+            "params": {
+                "profile": "default",
+                "text": "hello",
+                "request_id": "req-missing",
+                "session_id": "deadbeefdead",
+            },
+        }) + "\n").encode("utf-8"))
+        await writer.drain()
+        while True:
+            line = await reader.readline()
+            if not line:
+                break
+            raw += line
+        writer.close()
+        await writer.wait_closed()
+    finally:
+        await srv.stop()
+
+    assert b"session not found" in raw
+    assert b"echo:" not in raw
+    assert ran["turn"] is False
+
+
+@pytest.mark.asyncio
+async def test_data_chat_send_mention_unknown_session_errors(
+    monkeypatch, short_tmp: Path,
+) -> None:
+    home = short_tmp / "h"
+    home.mkdir()
+    load_or_generate(home)
+
+    from alpi.alp import mention as alp_mention
+    monkeypatch.setattr(
+        alp_mention, "parse",
+        lambda text, home=None: SimpleNamespace(peer_id="bob", prompt="hi"),
+    )
+
+    async def _empty(*a, **k):  # noqa: ANN001, ANN202
+        for _ in ():
+            yield
+
+    monkeypatch.setattr(alp_mention, "execute_stream", _empty)
+
+    from alpi import config as cfg_mod
+    monkeypatch.setattr(cfg_mod, "load", lambda h: SimpleNamespace(model="x"))
+    import alpi.engine
+    monkeypatch.setattr(
+        alpi.engine, "Engine",
+        lambda *, home, cfg: SimpleNamespace(
+            home=home,
+            session=SimpleNamespace(
+                id="freshuuid0002", subdir="sessions", turns=[], messages=[],
+            ),
+        ),
+    )
+    from alpi.host import chat as dc
+    monkeypatch.setattr(dc, "_resolve_home", lambda profile: home)
+    import alpi.cli as cli_mod
+    monkeypatch.setattr(cli_mod, "_continue_specific_session", lambda *a, **k: False)
+
+    srv = host_server.Server(home=home)
+    data_handlers.register(srv)
+    dc.register(srv)
+    await srv.start()
+
+    raw = b""
+    try:
+        reader, writer = await asyncio.open_unix_connection(str(srv.socket_path()))
+        writer.write((json.dumps({
+            "id": "req-m",
+            "method": "host.chat.send",
+            "params": {
+                "profile": "default",
+                "text": "@bob hi",
+                "request_id": "req-m",
+                "session_id": "deadbeefdead",
+            },
+        }) + "\n").encode("utf-8"))
+        await writer.drain()
+        while True:
+            line = await reader.readline()
+            if not line:
+                break
+            raw += line
+        writer.close()
+        await writer.wait_closed()
+    finally:
+        await srv.stop()
+
+    assert b"session not found" in raw
+    assert b"tool_start" not in raw
+
+
 def test_truncate_hydrated_session_carries_attachment_markers() -> None:
     from alpi.host.chat import _truncate_hydrated_session
 
