@@ -14,6 +14,11 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.1.50 — 2026-06-17 — auto-read speaks the new reply
+
+- **Auto-read speaks the reply that was just generated, not the previous one** —
+  on a fast turn it could lag a beat and read the prior message.
+
 ## v0.1.49 — 2026-06-17 — interrupted turns are marked
 
 _Requires alpi v0.9.14+._

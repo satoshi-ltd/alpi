@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-import { mergeStreamingTurn, isInterruptedTurn } from './chatTurns.js';
+import { mergeStreamingTurn, isInterruptedTurn, autoReadText, consumeAutoRead } from './chatTurns.js';
 
 describe('mergeStreamingTurn', () => {
   it('returns turns unchanged when there is no pendingTurn', () => {
@@ -73,5 +73,33 @@ describe('isInterruptedTurn', () => {
 
   it('is false when the flag is absent', () => {
     expect(isInterruptedTurn({ user: 'q', assistant: 'a' })).toBe(false);
+  });
+});
+
+describe('autoReadText', () => {
+  it('prefers the just-streamed reply over the persisted last turn (which can still hold the previous turn)', () => {
+    expect(autoReadText('the new reply', [{ assistant: 'the previous reply' }])).toBe('the new reply');
+  });
+
+  it('falls back to the last persisted turn when there is no streamed reply', () => {
+    expect(autoReadText('', [{ assistant: 'persisted' }])).toBe('persisted');
+  });
+
+  it('returns empty string when neither source has text', () => {
+    expect(autoReadText('', [])).toBe('');
+    expect(autoReadText('', null)).toBe('');
+    expect(autoReadText(undefined, undefined)).toBe('');
+  });
+});
+
+describe('consumeAutoRead', () => {
+  it('speaks the streamed reply when auto-read is on', () => {
+    expect(consumeAutoRead('new reply', true, [{ assistant: 'prev' }]))
+      .toEqual({ speak: 'new reply', nextStreamed: '' });
+  });
+
+  it('clears the streamed reply but speaks nothing when auto-read is off — so it can\'t go stale across turns', () => {
+    expect(consumeAutoRead('stale reply', false, [{ assistant: 'prev' }]))
+      .toEqual({ speak: '', nextStreamed: '' });
   });
 });

@@ -18,7 +18,7 @@ import { MessageActionsSheet } from '../../src/features/chat/MessageActionsSheet
 import { retryTextFor } from '../../src/features/chat/messageActions';
 import { compactProducedTool } from '../../src/lib/producedAttachments';
 import { profileLabel } from '../../src/lib/profileLabel';
-import { mergeStreamingTurn, isInterruptedTurn } from '../../src/features/chat/chatTurns';
+import { mergeStreamingTurn, isInterruptedTurn, consumeAutoRead } from '../../src/features/chat/chatTurns';
 import { ChatSkeleton } from '../../src/features/chat/ChatSkeleton';
 import { ToolCallGroup, groupConsecutiveTools } from '../../src/features/chat/ToolCallRow';
 import { askUserNoAnswerTag } from '../../src/features/chat/askUserAnswer';
@@ -430,17 +430,17 @@ export default function ProfileChat() {
     const was = prevPendingRef.current;
     const now = !!pendingTurn;
     prevPendingRef.current = now;
-    if (!voiceCfg.autoRead || !(was && !now)) return;
+    if (!(was && !now)) return;
     const ts = session.data?.turns ?? [];
-    const idx = ts.length - 1;
-    const text = ts[idx]?.assistant || lastPreviewRef.current;
-    lastPreviewRef.current = '';
-    if (text) {
+    const { speak, nextStreamed } = consumeAutoRead(lastPreviewRef.current, voiceCfg.autoRead, ts);
+    lastPreviewRef.current = nextStreamed;
+    if (speak) {
+      const idx = ts.length - 1;
       enqueueReadAloud({
         call,
         key: `chat:${id}:${idx}`,
         voiceId: voiceCfg.voiceId || 'en-US-AriaNeural',
-        text,
+        text: speak,
         accent,
       });
     }

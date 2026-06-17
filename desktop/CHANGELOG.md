@@ -11,6 +11,14 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.3.70 — 2026-06-17 — auto-read speaks the new reply
+
+_Requires alpi v0.9.15+._
+
+- **Auto-read speaks the reply that was just generated, not the previous one.**
+  On a fast turn the spoken text could lag a beat behind the saved history and
+  read the prior message; it now reads from the freshly streamed reply.
+
 ## v0.3.69 — 2026-06-17 — a dropped connection no longer hijacks the app
 
 _Requires alpi v0.9.15+._

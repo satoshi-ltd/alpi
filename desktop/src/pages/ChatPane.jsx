@@ -37,6 +37,7 @@ import {
   VolumeIcon,
 } from "../primitives/index.js";
 import { playTts, subscribeTts, enqueueTts, VOICE_POOL } from "../lib/tts.js";
+import { consumeAutoRead } from "../lib/autoRead.js";
 import { useOnline } from "../lib/useOnline.js";
 import styles from "./ChatPane.module.css";
 import {
@@ -109,17 +110,17 @@ export default function ChatPane({
     const was = prevPendingRef.current;
     const now = !!pendingTurn;
     prevPendingRef.current = now;
-    if (!autoRead || !(was && !now)) return;
+    if (!(was && !now)) return;
     const turns = sessionData?.turns ?? [];
-    const idx = turns.length - 1;
-    const text = turns[idx]?.assistant || lastPreviewRef.current;
-    lastPreviewRef.current = "";
-    if (text) {
+    const { speak, nextStreamed } = consumeAutoRead(lastPreviewRef.current, autoRead, turns);
+    lastPreviewRef.current = nextStreamed;
+    if (speak) {
+      const idx = turns.length - 1;
       enqueueTts({
         key: `chat:${activeProfile?.name}:${view.sessionId ?? "new"}:${idx}`,
         profile: activeProfile?.name,
         voice: ttsVoiceId || VOICE_POOL[0],
-        text,
+        text: speak,
         accent: activeProfile?.accent,
       });
     }
