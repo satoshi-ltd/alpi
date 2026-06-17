@@ -185,7 +185,9 @@ def load_turns(data: dict[str, Any]) -> list[Turn]:
 
 
 # tools aren't replayed into the prompt, so they don't make a turn replayable.
-def turn_replayable(t: Turn) -> bool:
+def turn_replayable(t: Turn | dict[str, Any]) -> bool:
+    if isinstance(t, dict):
+        return bool(t.get("assistant") or t.get("output_attachments"))
     return bool(getattr(t, "assistant", "") or getattr(t, "output_attachments", None))
 
 

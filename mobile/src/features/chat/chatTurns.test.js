@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-import { mergeStreamingTurn } from './chatTurns.js';
+import { mergeStreamingTurn, isInterruptedTurn } from './chatTurns.js';
 
 describe('mergeStreamingTurn', () => {
   it('returns turns unchanged when there is no pendingTurn', () => {
@@ -55,5 +55,23 @@ describe('mergeStreamingTurn', () => {
     const pendingTurn = { user: 'hi', assistant: '' };
     expect(mergeStreamingTurn(undefined, pendingTurn)).toEqual([pendingTurn]);
     expect(mergeStreamingTurn(null, pendingTurn)).toEqual([pendingTurn]);
+  });
+});
+
+describe('isInterruptedTurn', () => {
+  it('is true for a server turn with no final reply', () => {
+    expect(isInterruptedTurn({ user: 'q', unfinished: true })).toBe(true);
+  });
+
+  it('is false while the turn is still streaming live', () => {
+    expect(isInterruptedTurn({ user: 'q', unfinished: true, pending: true })).toBe(false);
+  });
+
+  it('is false for a completed turn', () => {
+    expect(isInterruptedTurn({ user: 'q', assistant: 'a', unfinished: false })).toBe(false);
+  });
+
+  it('is false when the flag is absent', () => {
+    expect(isInterruptedTurn({ user: 'q', assistant: 'a' })).toBe(false);
   });
 });

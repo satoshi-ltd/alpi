@@ -14,6 +14,14 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.1.49 — 2026-06-17 — interrupted turns are marked
+
+_Requires alpi v0.9.14+._
+
+- **An interrupted message no longer looks like it's still loading.** A turn
+  that never got a reply now shows a subtle "Interrupted before final reply"
+  instead of appearing as if a response is still on its way.
+
 ## v0.1.48 — 2026-06-16 — reasoning reads in execution order
 
 - **Thinking and tools now interleave in the order they happened** (think →

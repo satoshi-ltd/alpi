@@ -103,3 +103,23 @@ describe("ChatPane — interleaved reasoning and tools", () => {
     expect(btn).toHaveAttribute("aria-expanded", "true");
   });
 });
+
+describe("ChatPane — an interrupted turn is marked, not pending", () => {
+  it("shows a discreet interrupted note and no assistant bubble", () => {
+    const profile = { name: "a", model: "x/y" };
+    const turn = { at: 0, user: "do a long research", assistant: "", tools: [], unfinished: true };
+    render(
+      <ChatPane
+        view={{ kind: "profile", profile: profile.name, sessionId: "s1" }}
+        profiles={[profile]}
+        activeProfile={profile}
+        sessionData={{ turns: [turn], last_ctx_tokens: 0 }}
+        onSend={vi.fn()}
+        onRewriteMessage={vi.fn()}
+        onRetryMessage={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("Interrupted before final reply")).toBeTruthy();
+    expect(screen.queryByLabelText("Copy response")).toBeNull();
+  });
+});

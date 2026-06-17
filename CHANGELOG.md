@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.9.14 — 2026-06-17 — interrupted turns read as interrupted
+
+- **A cut-off turn now reads as interrupted, not pending.** When a message was
+  interrupted before its reply (e.g. a restart mid-task), the terminal chat now
+  shows a discreet "interrupted — no final reply" on resume instead of making
+  it look like the agent is still about to answer; paired apps get the same
+  signal.
+
 ## v0.9.13 — 2026-06-17 — session & state hardening
 
 - **Continuing a chat that no longer exists fails cleanly.** Asking to resume

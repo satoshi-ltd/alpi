@@ -101,6 +101,10 @@ async def _session_read(
         raise host_server.HandlerError(
             -32004, "not-found", data={"detail": str(e)},
         )
+    from alpi.session import turn_replayable
+    for t in data.get("turns") or []:
+        if isinstance(t, dict):
+            t["unfinished"] = not turn_replayable(t)
     return {"session": data}
 
 

@@ -18,7 +18,7 @@ import { MessageActionsSheet } from '../../src/features/chat/MessageActionsSheet
 import { retryTextFor } from '../../src/features/chat/messageActions';
 import { compactProducedTool } from '../../src/lib/producedAttachments';
 import { profileLabel } from '../../src/lib/profileLabel';
-import { mergeStreamingTurn } from '../../src/features/chat/chatTurns';
+import { mergeStreamingTurn, isInterruptedTurn } from '../../src/features/chat/chatTurns';
 import { ChatSkeleton } from '../../src/features/chat/ChatSkeleton';
 import { ToolCallGroup, groupConsecutiveTools } from '../../src/features/chat/ToolCallRow';
 import { askUserNoAnswerTag } from '../../src/features/chat/askUserAnswer';
@@ -52,6 +52,7 @@ const TURN_STYLES = StyleSheet.create({
   steps: { gap: space.s2 },
   tools: { gap: space.s1 },
   error: { paddingHorizontal: space.s7 },
+  unfinished: { paddingHorizontal: space.s7 },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: space.s10, gap: space.s10 },
   emptyTextWrap: { gap: space.s4, alignItems: 'center' },
   emptyHeading: { fontSize: fontSizes["2xl"], lineHeight: 26, letterSpacing: -0.018 * 22, textAlign: 'center' },
@@ -134,6 +135,11 @@ const TurnBlock = memo(function TurnBlock({ turn, turnIndex, profileName, accent
             turnIndex,
           })}
         />
+      ) : null}
+      {isInterruptedTurn(turn) ? (
+        <Text style={[TURN_STYLES.unfinished, { color: colors.ink3, fontFamily: fonts.mono, fontSize: fontSizes.xs }]}>
+          Interrupted before final reply
+        </Text>
       ) : null}
       {turn.error ? (
         <Text style={[TURN_STYLES.error, { color: colors.danger, fontFamily: fonts.mono, fontSize: fontSizes.xs }]}>

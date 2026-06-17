@@ -11,6 +11,14 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.3.67 — 2026-06-17 — interrupted turns are marked
+
+_Requires alpi v0.9.14+._
+
+- **An interrupted message no longer looks like it's still loading.** A turn
+  that never got a reply now shows a subtle "Interrupted before final reply"
+  instead of appearing as if a response is still on its way.
+
 ## v0.3.66 — 2026-06-17 — tidier chat header
 
 _Requires alpi v0.9.8+._

@@ -19,6 +19,10 @@ def test_turn_replayable_distinguishes_aborted_turns() -> None:
     )
     assert not turn_replayable(Turn(at=0.0, user="do a long research", tools=[], assistant=""))
     assert not turn_replayable(Turn(at=0.0, user="old question", tools=[tool], assistant=""))
+    assert turn_replayable({"assistant": "hi"})
+    assert turn_replayable({"output_attachments": [{"path": "/p"}]})
+    assert not turn_replayable({"user": "q", "tools": [{"name": "web_search"}]})
+    assert not turn_replayable({"user": "q"})
 
 
 @pytest.fixture

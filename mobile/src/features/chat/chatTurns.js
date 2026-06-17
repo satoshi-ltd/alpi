@@ -10,3 +10,7 @@ export function mergeStreamingTurn(turns, pendingTurn) {
   out.push(pendingTurn);
   return out;
 }
+
+export function isInterruptedTurn(turn) {
+  return !!turn?.unfinished && !turn?.pending;
+}

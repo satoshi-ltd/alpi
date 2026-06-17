@@ -350,6 +350,12 @@
   margin-left: var(--space-3);
 }
 
+.unfinished {
+  padding: 0 var(--space-3);
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+}
+
 .agentMetaSep {
   margin: 0 6px;
   color: var(--ink-4);

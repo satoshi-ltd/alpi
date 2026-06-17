@@ -217,6 +217,39 @@ async def test_data_session_read_method_not_found_for_unknown_id(
     assert response.get("error", {}).get("code") == -32004
 
 
+@pytest.mark.asyncio
+async def test_session_read_marks_unfinished_turns(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    p = home / "sessions" / "mixed.json"
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps({
+        "id": "mixed",
+        "started_at": 1.0,
+        "turns": [
+            {"at": 1.0, "user": "hello", "assistant": "hi", "tools": []},
+            {"at": 2.0, "user": "do research", "assistant": "", "tools": [
+                {"at": 2.0, "name": "web_search", "args": {}, "result": "", "ok": True, "duration_s": 0.1},
+            ]},
+            {"at": 3.0, "user": "made a file", "assistant": "", "output_attachments": [{"path": "/p"}]},
+        ],
+    }), encoding="utf-8")
+    srv = host_server.Server(home=home)
+    data_handlers.register(srv)
+    monkeypatch.setattr(data_handlers, "_resolve_home", lambda p: home)
+
+    response = await srv._dispatch({
+        "id": "r", "method": "host.session.read",
+        "params": {"profile": "default", "id": "mixed"},
+    })
+    turns = response["result"]["session"]["turns"]
+    assert turns[0]["unfinished"] is False
+    assert turns[1]["unfinished"] is True
+    assert turns[2]["unfinished"] is False
+
+
 def test_list_sessions_size_bytes_sums_main_and_sidecar(tmp_path: Path) -> None:
     p = _seed_session(tmp_path, "sized", "hello")
     sidecar = tmp_path / "sessions" / "_events_sized.jsonl"

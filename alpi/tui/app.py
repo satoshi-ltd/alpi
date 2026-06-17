@@ -841,6 +841,8 @@ class AlpiApp(App):
                     text = "\n\n".join(x for x in (text, listing) if x)
                 if text:
                     widgets.append(AssistantMessage(initial=text))
+            elif t.user or t.tools:
+                widgets.append(DimLine("⋯ interrupted — no final reply"))
 
         widgets.append(DimLine(
             f"✦ continuing session {self.engine.session.id} — "

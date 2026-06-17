@@ -644,6 +644,9 @@ const Turn = memo(function Turn({
           )}
         </ProfileMessage>
       )}
+      {turn.unfinished && (
+        <div className={styles.unfinished}>Interrupted before final reply</div>
+      )}
     </div>
   );
 });
