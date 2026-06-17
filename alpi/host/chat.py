@@ -376,7 +376,10 @@ def _truncate_hydrated_session(engine, keep_turns: Any) -> None:  # noqa: ANN401
         ),
     }]
     from alpi import attachments as _att
+    from alpi.session import turn_replayable
     for turn in kept:
+        if not turn_replayable(turn):
+            continue
         user = getattr(turn, "user", "")
         atts = getattr(turn, "attachments", None)
         if user or atts:

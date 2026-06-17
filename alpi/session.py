@@ -170,6 +170,11 @@ def load_turns(data: dict[str, Any]) -> list[Turn]:
     return out
 
 
+# tools aren't replayed into the prompt, so they don't make a turn replayable.
+def turn_replayable(t: Turn) -> bool:
+    return bool(getattr(t, "assistant", "") or getattr(t, "output_attachments", None))
+
+
 def truncate_result(raw: str) -> str:
     """Apply the standard cap to a tool output before storing it."""
     text = (raw or "").strip()

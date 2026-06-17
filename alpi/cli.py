@@ -128,7 +128,7 @@ def _continue_specific_session(
 
 def _hydrate_from_path(engine: Engine, path: Path, console=None) -> bool:
     import json
-    from alpi.session import load_turns
+    from alpi.session import load_turns, turn_replayable
 
     try:
         data = json.loads(path.read_text())
@@ -153,6 +153,8 @@ def _hydrate_from_path(engine: Engine, path: Path, console=None) -> bool:
     )
     from alpi import attachments as _att
     for t in turns:
+        if not turn_replayable(t):
+            continue
         if t.user or t.attachments:
             marker = _att.describe_meta(t.attachments)
             text = f"{t.user}\n{marker}".strip() if marker else t.user

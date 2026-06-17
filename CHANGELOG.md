@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.9.12 — 2026-06-17 — resuming a session no longer answers an old unanswered message
+
+- **A new message no longer gets the answer meant for a previous, unanswered
+  one.** If a turn was interrupted (e.g. the daemon restarted mid-research) it
+  was saved with no reply; on resume the model saw that dangling request and
+  answered *it* instead of what you just sent. Turns without a final reply or
+  produced files are now dropped when rebuilding the prompt, so your new
+  message gets its own answer.
+
 ## v0.9.11 — 2026-06-16 — `chat --once` can resume a session
 
 - **`alpi chat --once` can now continue a conversation.** `-c` / `--continue`
