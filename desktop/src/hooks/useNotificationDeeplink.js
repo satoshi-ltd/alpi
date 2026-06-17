@@ -40,6 +40,8 @@ export function connectionToSwitch(deeplink, activeConnectionId) {
   const id = deeplink?.connection_id;
   if (typeof id !== "string" || !id) return null;
   if (id === activeConnectionId) return null;
+  const kind = deeplink?.kind;
+  if (kind !== "chat" && kind !== "profile" && kind !== "workgroup") return null;
   return id;
 }
 

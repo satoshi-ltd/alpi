@@ -68,17 +68,24 @@ describe("resolveDeeplink", () => {
 });
 
 describe("connectionToSwitch", () => {
-  it("returns the connection id when the deeplink belongs to a background connection", () => {
-    expect(connectionToSwitch({ connection_id: "remote-b" }, "local")).toBe("remote-b");
+  it("switches to a background connection for a connection-scoped view (chat/profile/workgroup)", () => {
+    expect(connectionToSwitch({ kind: "chat", connection_id: "remote-b" }, "local")).toBe("remote-b");
+    expect(connectionToSwitch({ kind: "profile", connection_id: "remote-b" }, "local")).toBe("remote-b");
+    expect(connectionToSwitch({ kind: "workgroup", connection_id: "remote-b" }, "local")).toBe("remote-b");
+  });
+
+  it("does NOT switch for settings/output deeplinks — a daemon-disconnect alert must not hijack the active connection", () => {
+    expect(connectionToSwitch({ kind: "settings", connection_id: "remote-b" }, "local")).toBeNull();
+    expect(connectionToSwitch({ kind: "output", connection_id: "remote-b" }, "local")).toBeNull();
   });
 
   it("returns null when the deeplink connection is already active", () => {
-    expect(connectionToSwitch({ connection_id: "local" }, "local")).toBeNull();
+    expect(connectionToSwitch({ kind: "chat", connection_id: "local" }, "local")).toBeNull();
   });
 
   it("returns null for legacy notifications without a connection_id", () => {
-    expect(connectionToSwitch({}, "local")).toBeNull();
-    expect(connectionToSwitch({ connection_id: "" }, "local")).toBeNull();
+    expect(connectionToSwitch({ kind: "chat" }, "local")).toBeNull();
+    expect(connectionToSwitch({ kind: "chat", connection_id: "" }, "local")).toBeNull();
     expect(connectionToSwitch(null, "local")).toBeNull();
   });
 });

@@ -2745,7 +2745,9 @@ pub fn run() {
                         "update_available": host_client::update_available_for(id),
                     }),
                 );
-                if matches!(status, host_client::ConnectionStatus::Offline) {
+                if matches!(status, host_client::ConnectionStatus::Offline)
+                    && id == host_client::active_connection_id().as_str()
+                {
                     notifications::dispatch_daemon_disconnect(&app_for_status, id);
                 }
             });

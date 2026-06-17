@@ -11,6 +11,17 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.3.69 — 2026-06-17 — a dropped connection no longer hijacks the app
+
+_Requires alpi v0.9.15+._
+
+- **A disconnected background daemon no longer yanks you to it.** A "daemon
+  disconnected" alert used to, on the next window focus, switch you to that
+  (often dead) connection and surface its connection error — even one you
+  weren't using. Disconnect alerts now fire only for the connection you're
+  actively using, and a settings/notification deep-link never switches the
+  active connection.
+
 ## v0.3.68 — 2026-06-17 — read notifications aloud
 
 _Requires alpi v0.9.15+._
