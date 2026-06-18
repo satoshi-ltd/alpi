@@ -20,6 +20,7 @@ function fmtCost(n) {
 export default function ProfileChatHeader({
   profile,
   sessionData,
+  model,
   contextWindow = 200_000,
   activeSessionId,
   onOpenSkills,
@@ -36,6 +37,7 @@ export default function ProfileChatHeader({
   sessionsButton,
 }) {
   const accent = profile?.accent || "var(--accent)";
+  const shownModel = model || profile?.model;
   const ctxTokens = sessionData?.last_ctx_tokens ?? 0;
   const ctxPct = contextWindow > 0 ? Math.min(1, ctxTokens / contextWindow) : 0;
 
@@ -57,8 +59,8 @@ export default function ProfileChatHeader({
 
   const meta = (
     <>
-      {profile?.model && <Mono className={styles.ink2}>{profile.model}</Mono>}
-      {profile?.model && contextWindow > 0 && (
+      {shownModel && <Mono className={styles.ink2}>{shownModel}</Mono>}
+      {shownModel && contextWindow > 0 && (
         <span className="sep" aria-hidden />
       )}
       {contextWindow > 0 && (

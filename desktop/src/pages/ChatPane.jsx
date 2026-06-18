@@ -14,6 +14,7 @@ import { profileLabel } from "../lib/profile-display.js";
 import { ChatLoadSkeleton } from "./ChatSkeletons.jsx";
 import SearchBar from "../primitives/SearchBar.jsx";
 import { useTranscriptSearch } from "../hooks/useTranscriptSearch.js";
+import { useContextWindow } from "../hooks/useContextWindow.js";
 import { useNotify } from "../primitives/Notification.jsx";
 import Logo from "../primitives/Logo.jsx";
 import Markdown from "../primitives/Markdown.jsx";
@@ -49,6 +50,7 @@ import {
 import { rewriteCut } from "../lib/rewriteCut.js";
 import { dropInflightStub } from "../lib/transcriptTurns.js";
 import { copyText } from "../lib/clipboard.js";
+import { pickEffectiveModel } from "../lib/effectiveModel.js";
 
 export default function ChatPane({
   view,
@@ -84,12 +86,9 @@ export default function ChatPane({
   const [modelOverride, setModelOverride] = useState(null);
   const [refreshBeat, setRefreshBeat] = useState(0);
 
-  // Clear the picker override on a new session AND when the profile's configured
-  // model changes — otherwise a stale override keeps overriding the live config
-  // (e.g. an old text-only pick masking a profile now set to a vision model).
   useEffect(() => {
     setModelOverride(null);
-  }, [sessionKey, activeProfile?.model]);
+  }, [connectionId, sessionKey, activeProfile?.model]);
 
   // Lazy heavy fields — voice_id / models / mcps. Scoped per connection so two daemons with the same profile name never share state.
   const { detail: activeDetail, refresh: refreshActiveDetail } = useProfileDetail(connectionId ?? null, activeProfile?.name ?? null);
@@ -138,6 +137,8 @@ export default function ChatPane({
   const paused = !!activeProfile?.paused;
   const onTogglePause =
     onTogglePauseProfile && activeProfile ? () => onTogglePauseProfile(activeProfile) : null;
+  const effectiveModel = pickEffectiveModel(modelOverride, sessionData?.model, activeProfile?.model);
+  const contextWindow = useContextWindow(activeProfile?.name, effectiveModel, connectionId);
 
   if (noModel) {
     return (
@@ -146,6 +147,8 @@ export default function ChatPane({
           <ProfileChatHeader
             profile={activeProfile}
             sessionData={sessionData}
+            model={effectiveModel}
+            contextWindow={contextWindow}
             activeSessionId={view.sessionId}
             onOpenSettings={onConfigureProfile ? () => onConfigureProfile(activeProfile) : null}
             onRefresh={() => {
@@ -230,6 +233,8 @@ export default function ChatPane({
         <ProfileChatHeader
           profile={activeProfile}
           sessionData={sessionData}
+          model={effectiveModel}
+          contextWindow={contextWindow}
           activeSessionId={view.sessionId}
           onOpenSettings={onConfigureProfile ? () => onConfigureProfile(activeProfile) : null}
           onRefresh={() => {

@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.9.17 — 2026-06-18 — accurate per-model context windows
+
+- **Context windows are now accurate per model.** Instead of a fixed 200K
+  default, alpi resolves each model's safe input capacity — from a bundled
+  offline catalog for OpenRouter models, from litellm for cloud providers
+  (OpenAI / Anthropic / …), and from the local Ollama daemon for Ollama
+  models — so large-context models report their real limit and the context
+  bar fills against the right denominator.
+
 ## v0.9.16 — 2026-06-18 — notifications can carry a title
 
 - **Notifications can now carry a title.** The `notify` tool already accepted a

@@ -11,6 +11,14 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.3.72 — 2026-06-18 — real context window in the header
+
+_Requires alpi v0.9.17+._
+
+- **The chat header shows the model's real context window.** It always read
+  200K; it now reflects the model's actual limit (e.g. 1M for the latest
+  models).
+
 ## v0.3.71 — 2026-06-18 — notification titles
 
 _Requires alpi v0.9.16+._

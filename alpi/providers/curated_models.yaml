@@ -30,3 +30,34 @@ anthropic:
   - id: claude-haiku-4-5
     note: cheap · fast
     reasoning: true
+openrouter:
+  - id: owl-alpha
+    note: alpha · 1M
+    reasoning: true
+  - id: deepseek/deepseek-v4-flash
+    note: cheap · fast · 1M
+    reasoning: true
+  - id: minimax/minimax-m3
+    note: 512K ctx
+    reasoning: true
+  - id: deepseek/deepseek-v4-pro
+    note: pro · 1M
+    reasoning: true
+  - id: stepfun/step-3.7-flash
+    note: fast
+    reasoning: false
+  - id: nvidia/nemotron-3-super-120b-a12b
+    note: open · 256K
+    reasoning: true
+  - id: anthropic/claude-sonnet-4.6
+    note: balanced
+    reasoning: true
+  - id: anthropic/claude-opus-4.8
+    note: flagship
+    reasoning: true
+  - id: xiaomi/mimo-v2.5
+    note: cheap
+    reasoning: true
+  - id: xiaomi/mimo-v2.5-pro
+    note: pro
+    reasoning: true

@@ -1769,12 +1769,17 @@ async fn clarification_pending() -> Result<serde_json::Value, String> {
 }
 
 #[tauri::command]
-async fn resolve_ctx_window(profile: String, model: String) -> Result<u64, String> {
+async fn resolve_ctx_window(
+    profile: String,
+    model: String,
+    connection_id: Option<String>,
+) -> Result<u64, String> {
     let result = tauri::async_runtime::spawn_blocking(move || {
-        host_client::call(
-            "host.model.ctx_window",
-            serde_json::json!({ "profile": profile, "model": model }),
-        )
+        let params = serde_json::json!({ "profile": profile, "model": model });
+        match connection_id {
+            Some(cid) => host_client::call_for(&cid, "host.model.ctx_window", params),
+            None => host_client::call("host.model.ctx_window", params),
+        }
     })
     .await
     .map_err(|e| format!("join: {e}"))??;
