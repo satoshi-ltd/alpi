@@ -38,7 +38,7 @@ def test_notify_creates_output(monkeypatch, tmp_path: Path) -> None:
     assert len(items) == 1
     out = items[0]
     assert out["body"] == "ping"
-    assert "title" not in out
+    assert out["title"] == "hi"
     assert out["delivered_to"] == ["alpi"]
     assert out["status"] == "unread"
 
@@ -340,11 +340,13 @@ def test_scheduler_send_message_creates_one_output(
     assert len(items) == 1
     out = items[0]
     assert out["body"] == "hi"
+    assert out["title"] == "from cron"
     assert out["delivered_to"] == ["alpi"]
 
     msgs = [d for k, d in events if k == "agent.message"]
     assert len(msgs) == 1
     assert msgs[0]["output_id"] == out["id"]
+    assert msgs[0]["title"] == "from cron"
     assert msgs[0]["deep_link"] == f"/outputs/atlas/{out['id']}"
     done = next(d for k, d in events if k == "schedule.done")
     assert "output_id" not in done
@@ -413,10 +415,12 @@ def test_scheduler_both_records_full_delivered_to(
     assert len(items) == 1
     out = items[0]
     assert out["delivered_to"] == ["alpi", "telegram"]
+    assert out["title"] == "t"
 
     msgs = [d for k, d in events if k == "agent.message"]
     assert len(msgs) == 1
     assert msgs[0]["output_id"] == out["id"]
+    assert msgs[0]["title"] == "t"
     assert msgs[0]["deep_link"] == f"/outputs/ada/{out['id']}"
 
 

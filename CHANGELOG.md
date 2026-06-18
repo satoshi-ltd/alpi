@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.9.16 — 2026-06-18 — notifications can carry a title
+
+- **Notifications can now carry a title.** The `notify` tool already accepted a
+  `title`; it's now stored on the notification so paired apps can show it as a
+  headline and the push can lead with it.
+
 ## v0.9.15 — 2026-06-17 — profile summaries expose the TTS voice
 
 - **Profile listings now include the configured voice**, so paired apps can

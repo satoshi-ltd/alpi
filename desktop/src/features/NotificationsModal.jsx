@@ -76,6 +76,21 @@ function bodyPreview(row) {
   return stripPreviewMarkdown(line) || "—";
 }
 
+const EMOJI_RE = /[\p{Extended_Pictographic}\u{1F1E6}-\u{1F1FF}\uFE0F\u200D\u{1F3FB}-\u{1F3FF}]/gu;
+
+function stripEmoji(text) {
+  return String(text || "").replace(EMOJI_RE, "").replace(/\s{2,}/g, " ").trim();
+}
+
+export function headlineParts(row) {
+  const explicit = stripEmoji((row?.title || "").trim());
+  if (explicit) return { title: explicit, preview: bodyPreview(row) };
+  const stripped = stripPreviewMarkdown(row?.body || "");
+  const m = stripped.match(/^(.{1,100}?[.!?])\s+(.+)$/);
+  if (m) return { title: stripEmoji(m[1].trim()), preview: m[2].trim() };
+  return { title: stripEmoji(stripped) || "—", preview: "" };
+}
+
 
 export default function NotificationsModal({
   open,
@@ -358,6 +373,7 @@ export default function NotificationsModal({
 function NotificationRow({ row, accent, multi, active, onSelect, onDelete }) {
   const unread = row.status === "unread";
   const label = profileLabel(row.profile);
+  const { title, preview } = headlineParts(row);
   const handleDelete = (e) => {
     e.stopPropagation();
     onDelete?.(row);
@@ -387,7 +403,8 @@ function NotificationRow({ row, accent, multi, active, onSelect, onDelete }) {
             </span>
           </span>
         </div>
-        <div className={styles.rowTitle}>{bodyPreview(row)}</div>
+        <div className={styles.rowTitle}>{title}</div>
+        {preview ? <div className={styles.rowPreview}>{preview}</div> : null}
       </div>
     </li>
   );
@@ -454,6 +471,10 @@ function DetailPane({ row, accent, connId, connectionName, voiceId, multi, onCop
           </IconBtn>
         </Tip>
       </div>
+
+      {(row.title || "").trim() ? (
+        <h2 className={styles.detailTitle}>{row.title}</h2>
+      ) : null}
 
       <div className={styles.detailBody}>
         <div className="profmsg">

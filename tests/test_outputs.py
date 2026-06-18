@@ -38,6 +38,12 @@ def test_append_persists_and_returns_record(home: Path) -> None:
     assert json.loads(lines[0])["id"] == out["id"]
 
 
+def test_append_persists_title_when_set(home: Path) -> None:
+    out = _append(home, body="python3 run.py exited with code 1.", title="whoop sync failed")
+    assert out["title"] == "whoop sync failed"
+    assert outputs_mod.read(home, out["id"])["title"] == "whoop sync failed"
+
+
 def test_list_returns_newest_first(home: Path) -> None:
     a = _append(home, body="first")
     b = _append(home, body="second")

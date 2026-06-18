@@ -11,6 +11,18 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.3.71 — 2026-06-18 — notification titles
+
+_Requires alpi v0.9.16+._
+
+- **Notifications show their title.** When a notification has a title it leads
+  the push as its headline (with the body below), heads the inbox row above a
+  two-line body preview, and sits as a bold heading above the body in the
+  detail. Untitled ones derive a headline from the body's first sentence so the
+  inbox stays scannable.
+- **The detail header lines up with the search box** — same height and a
+  matching bottom divider.
+
 ## v0.3.70 — 2026-06-17 — auto-read speaks the new reply
 
 _Requires alpi v0.9.15+._

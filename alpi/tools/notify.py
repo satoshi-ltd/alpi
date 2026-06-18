@@ -24,8 +24,8 @@ class Notify(Tool):
     parameters = {
         "type": "object",
         "properties": {
-            "text": {"type": "string", "description": "The notification body."},
-            "title": {"type": "string", "description": "Short headline for the notification."},
+            "text": {"type": "string", "description": "The notification body — the full message the user reads when they open it."},
+            "title": {"type": "string", "description": "Optional short headline. When set, the apps show it bold above the body and the native push uses it as the headline above the body; omit for a body-only notification."},
             "type": {
                 "type": "string",
                 "description": (

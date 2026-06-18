@@ -40,6 +40,12 @@ pub struct Deeplink {
     pub connection_id: String,
 }
 
+fn notification_lines(title: &str, body: &str, profile: &str) -> (String, String) {
+    let title = title.trim();
+    let head = if title.is_empty() { profile.to_string() } else { title.to_string() };
+    (head, body.trim().to_string())
+}
+
 fn show(app: &AppHandle, title: &str, body: &str, deeplink: Deeplink) {
     // Plugin has no per-notification click callback; React consumes the deeplink on next window focus.
     let payload = serde_json::json!({
@@ -228,19 +234,10 @@ pub fn dispatch_daemon_frame(
                 .and_then(|v| v.as_str())
                 .unwrap_or("")
                 .to_string();
-            let title = data
-                .get("title")
-                .and_then(|v| v.as_str())
-                .filter(|s| !s.is_empty())
-                .map(|s| s.to_string())
-                .unwrap_or_else(|| profile.clone());
-            let body = data
-                .get("body")
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .trim()
-                .to_string();
-            if body.is_empty() {
+            let title = data.get("title").and_then(|v| v.as_str()).unwrap_or("");
+            let body = data.get("body").and_then(|v| v.as_str()).unwrap_or("");
+            let (notif_title, notif_body) = notification_lines(title, body, &profile);
+            if notif_body.is_empty() {
                 return;
             }
             let output_id = data
@@ -277,7 +274,7 @@ pub fn dispatch_daemon_frame(
                     connection_id: connection_id.to_string(),
                 }
             };
-            show(app, &title, &body, deeplink);
+            show(app, &notif_title, &notif_body, deeplink);
         }
         "budget.threshold" => {
             let profile = data
@@ -352,4 +349,41 @@ pub fn dispatch_daemon_disconnect(app: &AppHandle, connection_id: &str) {
             connection_id: connection_id.to_string(),
         },
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::notification_lines;
+
+    #[test]
+    fn explicit_title_keeps_the_body() {
+        assert_eq!(
+            notification_lines("Sync failed", "details", "doc"),
+            ("Sync failed".to_string(), "details".to_string()),
+        );
+    }
+
+    #[test]
+    fn missing_title_falls_back_to_profile() {
+        assert_eq!(
+            notification_lines("", "details", "doc"),
+            ("doc".to_string(), "details".to_string()),
+        );
+    }
+
+    #[test]
+    fn empty_title_and_profile_yields_empty_head() {
+        assert_eq!(
+            notification_lines("   ", "details", ""),
+            (String::new(), "details".to_string()),
+        );
+    }
+
+    #[test]
+    fn trims_title_and_body() {
+        assert_eq!(
+            notification_lines("  T  ", "  b  ", "p"),
+            ("T".to_string(), "b".to_string()),
+        );
+    }
 }

@@ -4,6 +4,7 @@ Row schema (one JSON object per line):
     id           12 hex chars
     profile      ``default`` or ``<name>``
     created_at   epoch seconds (float)
+    title        optional short headline (omitted when not set)
     body         message body
     type         ``info`` | ``warning`` | ``error``
     status       ``unread`` | ``read``
@@ -86,6 +87,7 @@ def append(
     type: str = "info",
     session_id: str = "",
     delivered_to: list[str] | None = None,
+    title: str = "",
 ) -> dict[str, Any]:
     if type not in VALID_TYPE:
         type = "info"
@@ -100,6 +102,8 @@ def append(
         "session_id": session_id or "",
         "delivered_to": list(delivered_to or []),
     }
+    if title:
+        output["title"] = title
 
     path = _store_path(home)
     with _lock:
@@ -250,6 +254,7 @@ def record_child_send_message(home: Path, args: dict) -> str:
             body=body,
             type=type,
             delivered_to=delivered_to,
+            title=record["notification_title"],
         )
     except Exception:  # noqa: BLE001
         return ""
@@ -291,6 +296,7 @@ def _suppress_native_emit() -> bool:
 def create_output(
     *, text: str, type: str,
     delivered_to: list[str],
+    title: str = "",
 ) -> dict | None:
     # Persistence is opportunistic — failures never block delivery.
     try:
@@ -310,7 +316,7 @@ def create_output(
         return append(
             home, profile=prof,
             body=text, type=type, session_id=session_id,
-            delivered_to=delivered_to,
+            delivered_to=delivered_to, title=title,
         )
     except Exception:  # noqa: BLE001
         return None
@@ -323,7 +329,7 @@ def create_output_and_emit_message(
     """Callers must guard with _suppress_native_emit() — schedule/gateway children defer to the parent."""
     output = create_output(
         text=text, type=type,
-        delivered_to=delivered_to,
+        delivered_to=delivered_to, title=title,
     )
     if output is None:
         return ""

@@ -79,7 +79,8 @@
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  padding: var(--space-4) var(--space-5);
+  min-height: calc(var(--ctrl-lg) + var(--space-3));
+  padding: 0 var(--space-5);
   border-bottom: 0.5px solid var(--line);
   color: var(--ink-3);
 }
@@ -137,21 +138,21 @@
 .row:hover { background: var(--hover); }
 .rowActive,
 .rowActive:hover { background: var(--selected); }
-.rowUnread .rowTitle { color: var(--ink); font-weight: var(--fw-semibold); }
-.row:not(.rowUnread) .rowTitle { color: var(--ink-3); font-weight: var(--fw-regular); }
+.row:not(.rowUnread) .rowTitle { font-weight: var(--fw-semibold); color: var(--ink-2); }
 
 .rowSlot {
   position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: flex-end;
-  min-width: var(--ctrl-sm);
-  height: var(--ctrl-sm);
+  min-width: var(--ctrl-xs);
+  height: var(--ctrl-xs);
   flex-shrink: 0;
 }
 
 .rowTs { display: inline-flex; }
 .rowDelete { display: none !important; }
+.rowDelete :global(.ds-iconbtn) { width: var(--ctrl-xs); height: var(--ctrl-xs); }
 
 .row:hover .rowTs { display: none; }
 .row:hover .rowDelete { display: inline-flex !important; }
@@ -175,12 +176,24 @@
 
 .rowTitle {
   font-size: var(--fs-md);
-  line-height: var(--lh-cozy);
+  line-height: var(--lh-tight);
   letter-spacing: -0.005em;
+  font-weight: var(--fw-bold);
   color: var(--ink);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.rowPreview {
+  margin-top: var(--space-1);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-cozy);
+  color: var(--ink-3);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .empty {
@@ -220,9 +233,11 @@
   display: flex;
   align-items: center;
   gap: var(--space-1);
+  min-height: calc(var(--ctrl-lg) + var(--space-3));
   margin: 0 calc(-1 * var(--space-9));
-  padding: var(--space-8) var(--space-9) var(--space-3);
+  padding: 0 var(--space-9);
   background: var(--bg-elev);
+  border-bottom: 0.5px solid var(--line);
   color: var(--ink-3);
   font-size: var(--fs-xs);
 }

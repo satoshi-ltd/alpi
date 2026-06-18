@@ -44,7 +44,7 @@ vi.mock("../hooks/useProfileDetail.js", () => ({
   useProfileDetail: () => ({ detail: h.profileDetail, refresh: () => {} }),
 }));
 
-import NotificationsModal from "./NotificationsModal.jsx";
+import NotificationsModal, { headlineParts } from "./NotificationsModal.jsx";
 
 beforeEach(() => {
   h.playTts.mockClear();
@@ -81,6 +81,19 @@ describe("NotificationsModal — read aloud + body rendering", () => {
     const md = document.body.querySelector(".profmsg .alpi-md");
     expect(md?.textContent).toContain("bold");
     expect(screen.getByLabelText("Read aloud")).toBeTruthy();
+  });
+
+  it("renders a notification title in the list and as a detail heading", () => {
+    h.rows = [{
+      id: "n1", profile: "alice", connectionId: "c1", connectionName: "casa",
+      accent: "#abc", status: "read", type: "info", created_at: 1_700_000_000,
+      title: "whoop sync failed", body: "python3 run.py exited with code 1.", delivered_to: [],
+    }];
+    renderModal();
+    expect(document.body.querySelector("article h2")?.textContent).toBe("whoop sync failed");
+    const option = screen.getByRole("option");
+    expect(option.textContent).toContain("whoop sync failed");
+    expect(option.textContent).toContain("python3 run.py exited");
   });
 
   it("has a read-aloud button that plays the notification body", () => {
@@ -164,5 +177,27 @@ describe("NotificationsModal — read aloud + body rendering", () => {
     );
     fireEvent.click(screen.getByLabelText("Read aloud"));
     expect(h.playTts.mock.calls.at(-1)[0].voice).toBe("en-GB-SoniaNeural");
+  });
+});
+
+describe("headlineParts", () => {
+  it("uses the explicit title and a body preview", () => {
+    expect(headlineParts({ title: "Sync failed", body: "python3 run.py exited." }))
+      .toEqual({ title: "Sync failed", preview: "python3 run.py exited." });
+  });
+
+  it("derives the first sentence as the headline when there is no title", () => {
+    expect(headlineParts({ body: "Recovery is low. HRV down 8ms vs baseline." }))
+      .toEqual({ title: "Recovery is low.", preview: "HRV down 8ms vs baseline." });
+  });
+
+  it("uses the whole body as the headline when there is no sentence break", () => {
+    expect(headlineParts({ body: "just a short note" }))
+      .toEqual({ title: "just a short note", preview: "" });
+  });
+
+  it("strips emojis from the headline", () => {
+    expect(headlineParts({ title: "🔥 PR #482 ready ✅" }).title).toBe("PR #482 ready");
+    expect(headlineParts({ body: "⚠️ Recovery is low. HRV down 8ms." }).title).toBe("Recovery is low.");
   });
 });
