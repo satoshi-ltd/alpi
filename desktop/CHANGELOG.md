@@ -11,6 +11,20 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.3.73 — 2026-06-19 — skills explorer + unified panels
+
+_Requires alpi v0.9.18+._
+
+- **New Skills explorer.** Browse every skill on a profile: read its SKILL.md,
+  see at a glance whether it's active or inactive (and why), check its
+  requirements, tools and keywords, and open its files (scripts, references) —
+  all read-only. Secret files stay locked.
+- **Tools, Skills, Memory and Notifications now share one layout.** The same
+  two-pane shell, search, headers and sizing across all four; the window grows
+  with your screen instead of staying fixed.
+- **Cleaner detail headers.** Skills and Tools read as a `category/name` path,
+  disabled tools are dimmed, and a notification shows its `connection/profile · time`.
+
 ## v0.3.72 — 2026-06-18 — real context window in the header
 
 _Requires alpi v0.9.17+._

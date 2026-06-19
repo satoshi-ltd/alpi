@@ -41,6 +41,9 @@
 
   --panel-w:    1080px;
   --panel-h:    80vh;
+  --modal-w:    clamp(720px, 90vw, 1320px);
+  --modal-h:    min(900px, 90vh);
+  --modal-side: 340px;
 
   --space-1:  4px;
   --space-2:  6px;

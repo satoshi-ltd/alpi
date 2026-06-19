@@ -9,6 +9,7 @@ export { default as Bar } from "./Bar.jsx";
 export { default as Btn } from "./Btn.jsx";
 export { default as BudgetEdit } from "./BudgetEdit.jsx";
 export { default as Button } from "./Button.jsx";
+export { default as BrowseModal } from "./BrowseModal.jsx";
 export { default as ChatHeader } from "./ChatHeader.jsx";
 export { default as Checkbox } from "./Checkbox.jsx";
 export { default as Chip } from "./Chip.jsx";

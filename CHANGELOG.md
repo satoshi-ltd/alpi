@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.9.18 — 2026-06-19 — skills are fully inspectable
+
+- **Skills are now fully inspectable from the apps.** Each skill reports
+  whether it's active or inactive — and when inactive, why (a missing env var,
+  binary, platform, or config key) — along with its requirements and the files
+  inside it. Individual skill files can be opened on demand; secret files are
+  never exposed, only counted.
+
 ## v0.9.17 — 2026-06-18 — accurate per-model context windows
 
 - **Context windows are now accurate per model.** Instead of a fixed 200K

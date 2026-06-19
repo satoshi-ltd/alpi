@@ -239,6 +239,208 @@ def skill_requirements(meta: dict[str, str]) -> dict[str, list[str]]:
     }
 
 
+def skill_status(
+    meta: dict[str, str],
+    *,
+    env: dict[str, str] | None = None,
+    cfg_raw: dict[str, Any] | None = None,
+) -> tuple[str, str]:
+    from alpi.tools import _skill_schema as _schema
+    schema_errors = _schema.errors(
+        _schema.validate_frontmatter(meta, categories=CATEGORIES)
+    )
+    if schema_errors:
+        first = schema_errors[0]
+        more = f" (+{len(schema_errors) - 1} more)" if len(schema_errors) > 1 else ""
+        return ("invalid", f"{first.field}: {first.message}{more}")
+    ok, missing = skill_eligibility(meta, env=env, cfg_raw=cfg_raw)
+    if not ok:
+        pretty = ", ".join(m.replace("env var ", "env ") for m in missing)
+        return ("inactive", f"missing {pretty}")
+    return ("active", "")
+
+
+_BINARY_EXTS = {
+    ".sqlite", ".sqlite3", ".db", ".png", ".jpg", ".jpeg", ".gif", ".webp",
+    ".pdf", ".zip", ".gz", ".tar", ".bin", ".so", ".dylib", ".wasm", ".ico",
+    ".woff", ".woff2", ".ttf", ".otf", ".mp3", ".mp4", ".wav",
+}
+_TREE_SUBDIRS = ("scripts", "references", "assets", "secrets", "state")
+_SKILL_PROSE_MAX = 32_000
+_SKILL_FILE_MAX = 256_000
+
+
+def _skill_ftype(name: str) -> str:
+    if name == "SKILL.md":
+        return "skill"
+    low = name.lower()
+    if low.endswith(".py"):
+        return "py"
+    if low.endswith(".md"):
+        return "md"
+    if os.path.splitext(low)[1] in _BINARY_EXTS:
+        return "binary"
+    return "text"
+
+
+def _file_node(path: Path) -> dict[str, Any]:
+    try:
+        size = path.stat().st_size
+    except OSError:
+        size = 0
+    return {"name": path.name, "kind": "file", "ftype": _skill_ftype(path.name), "size": size}
+
+
+def _secrets_node(d: Path) -> dict[str, Any]:
+    files = [f for f in sorted(d.iterdir()) if f.is_file() and not f.is_symlink()]
+    if files:
+        mode = max((f.stat().st_mode & 0o777) for f in files)
+    else:
+        mode = d.stat().st_mode & 0o777
+    return {"name": "secrets", "kind": "dir", "locked": True, "count": len(files), "mode": format(mode, "04o")}
+
+
+def skill_tree(skill_dir: Path) -> list[dict[str, Any]]:
+    # symlinks skipped: a link could resolve into secrets/ or outside the skill.
+    out: list[dict[str, Any]] = []
+    md = skill_dir / "SKILL.md"
+    if md.is_file() and not md.is_symlink():
+        out.append(_file_node(md))
+    for sub in _TREE_SUBDIRS:
+        d = skill_dir / sub
+        if not d.is_dir() or d.is_symlink():
+            continue
+        if sub == "secrets":
+            out.append(_secrets_node(d))
+            continue
+        children = [_file_node(f) for f in sorted(d.iterdir())
+                    if f.is_file() and not f.is_symlink() and not f.name.startswith(".")]
+        out.append({"name": sub, "kind": "dir", "children": children})
+    return out
+
+
+def skill_dir_size(skill_dir: Path) -> int:
+    total = 0
+    for root, _dirs, files in os.walk(skill_dir):
+        for f in files:
+            try:
+                total += (Path(root) / f).stat().st_size
+            except OSError:
+                pass
+    return total
+
+
+def _skill_prose(text: str) -> str:
+    if not text.startswith("---"):
+        return text
+    lines = text.splitlines()
+    for i, line in enumerate(lines[1:], start=1):
+        if line.strip() == "---":
+            return "\n".join(lines[i + 1:]).lstrip("\n")
+    return text
+
+
+def skill_detail_payload(
+    skill_md: Path,
+    *,
+    category: str | None,
+    name: str,
+    env: dict[str, str] | None = None,
+    cfg_raw: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    skill_dir = skill_md.parent
+    if skill_md.is_symlink() or skill_dir.is_symlink():
+        raise PermissionError("symlinked skill is not readable")
+    try:
+        text = skill_md.read_text(encoding="utf-8")
+    except OSError:
+        text = ""
+    meta = _frontmatter_from_text(text)
+    status, reason = skill_status(meta, env=env, cfg_raw=cfg_raw)
+    reqs = skill_requirements(meta)
+    env_map = env if env is not None else os.environ
+    requires: list[dict[str, Any]] = []
+    for var in reqs["env"]:
+        requires.append({"name": var, "kind": "env", "resolved": bool(env_map.get(var))})
+    for bin_name in reqs["bins"]:
+        requires.append({"name": bin_name, "kind": "bin", "resolved": shutil.which(bin_name, path=env_map.get("PATH")) is not None})
+    for path in reqs["config"]:
+        resolved = bool(cfg_raw is not None and _config_path_set(cfg_raw, path))
+        requires.append({"name": path, "kind": "config", "resolved": resolved})
+    body = _skill_prose(text)
+    if len(body) > _SKILL_PROSE_MAX:
+        body = body[:_SKILL_PROSE_MAX] + "\n\n…(truncated)"
+    return {
+        "category": category,
+        "name": name,
+        "description": meta.get("description") or "",
+        "path": str(skill_md),
+        "version": (meta.get("version") or "").strip(),
+        "origin": (meta.get("origin") or "user").strip().lower(),
+        "created_at": (meta.get("created_at") or "").strip(),
+        "status": status,
+        "reason": reason,
+        "requires": requires,
+        "platforms": reqs["platforms"],
+        "tools": _parse_str_list(meta.get("tools", "")),
+        "keywords": skill_keywords(meta),
+        "tree": skill_tree(skill_dir),
+        "size": skill_dir_size(skill_dir),
+        "body": body,
+    }
+
+
+def skill_file_read(skill_dir: Path, relpath: str) -> dict[str, Any]:
+    """Read one file under a skill dir for the explorer. ``secrets/`` is never readable."""
+    parts = [p for p in (relpath or "").strip().lstrip("/").split("/") if p]
+    if not parts:
+        raise ValueError("path required")
+    if len(parts) == 1:
+        if parts[0] != "SKILL.md":
+            raise ValueError("only SKILL.md is readable at the skill root")
+        target = skill_dir / "SKILL.md"
+    elif len(parts) == 2:
+        sub, fn = parts
+        if sub == "secrets":
+            raise PermissionError("secrets are not readable")
+        if sub not in ALLOWED_SUBDIRS or not _FILENAME_RE.match(fn):
+            raise ValueError(f"invalid path: {relpath}")
+        target = skill_dir / sub / fn
+    else:
+        raise ValueError("path must be 'SKILL.md' or '<subdir>/<file>'")
+    if target.is_symlink() or target.parent.is_symlink():
+        raise PermissionError("symlinks are not followed")
+    resolved = target.resolve()
+    root = skill_dir.resolve()
+    if root not in resolved.parents:
+        raise ValueError("path escapes skill directory")
+    if resolved == root / "secrets" or root / "secrets" in resolved.parents:
+        raise PermissionError("secrets are not readable")
+    if not target.is_file():
+        raise FileNotFoundError(relpath)
+    size = target.stat().st_size
+    node: dict[str, Any] = {
+        "name": target.name,
+        "path": "/".join(parts),
+        "ftype": _skill_ftype(target.name),
+        "size": size,
+        "binary": False,
+    }
+    raw = target.read_bytes()[: _SKILL_FILE_MAX + 1]
+    truncated = len(raw) > _SKILL_FILE_MAX
+    chunk = raw[:_SKILL_FILE_MAX]
+    if b"\x00" in chunk:
+        node["binary"] = True
+        return node
+    try:
+        node["text"] = chunk.decode("utf-8")
+    except UnicodeDecodeError:
+        node["binary"] = True
+        return node
+    node["truncated"] = truncated
+    return node
+
+
 def _declared_env_for_skill(skill_dir: Path) -> set[str]:
     meta = _frontmatter(skill_dir / "SKILL.md")
     return set(_parse_env_list(meta.get("requires_env", ""))) | set(
@@ -268,7 +470,7 @@ def skill_eligibility(
             missing.append(f"env var {var}")
 
     for bin_name in reqs["bins"]:
-        if shutil.which(bin_name) is None:
+        if shutil.which(bin_name, path=env_map.get("PATH")) is None:
             missing.append(f"binary {bin_name}")
 
     if reqs["platforms"]:

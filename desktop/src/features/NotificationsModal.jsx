@@ -1,13 +1,12 @@
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import {
+  BrowseModal,
   Btn,
   CopyIcon,
   Diamond,
   GearIcon,
   IconBtn,
   Mono,
-  SearchIcon,
   SpinnerIcon as DSSpinnerIcon,
   Tip,
   VolumeIcon,
@@ -112,7 +111,6 @@ export default function NotificationsModal({
   const [pendingConnectionId, setPendingConnectionId] = useState(null);
   const [query, setQuery] = useState("");
   const [hiddenIds, setHiddenIds] = useState(() => new Set());
-  const wrapRef = useRef(null);
 
   const activeId = pendingId ?? selectedId ?? rows[0]?.id ?? null;
   const activeProfile = pendingProfile ?? selectedProfile ?? rows[0]?.profile ?? null;
@@ -168,20 +166,6 @@ export default function NotificationsModal({
     if (!explicitlySelected) return;
     if (detail && detail.status === "unread") markRead();
   }, [detail, markRead, explicitlySelected]);
-
-  useEffect(() => {
-    if (!open) return undefined;
-    const onKey = (e) => { if (e.key === "Escape") { e.preventDefault(); onClose?.(); } };
-    const onClick = (e) => {
-      if (wrapRef.current && !wrapRef.current.contains(e.target)) onClose?.();
-    };
-    document.addEventListener("keydown", onKey);
-    document.addEventListener("mousedown", onClick);
-    return () => {
-      document.removeEventListener("keydown", onKey);
-      document.removeEventListener("mousedown", onClick);
-    };
-  }, [open, onClose]);
 
   const unread = useMemo(() => rows.filter((r) => r.status === "unread").length, [rows]);
 
@@ -271,101 +255,69 @@ export default function NotificationsModal({
     onClose?.();
   }, [detail, onClose, onOpenChat]);
 
-  if (!open) return null;
-
-  return createPortal(
-    <div className={`anim-overlay ${styles.backdrop}`}>
-      <div ref={wrapRef} className={`anim-dialog ${styles.modal}`} role="dialog" aria-modal="true">
-        <header className={styles.header}>
-          <span className={styles.headerLead}>
-            <span className={styles.title}>Notifications</span>
+  const list = (
+    <ul className={styles.list} role="listbox">
+      {rows.length === 0 ? (
+        <li className={styles.empty}>
+          <span className={styles.emptyTitle}>Inbox zero</span>
+          <span className={styles.emptyHint}>
+            Notifications land here when an agent notifies you or a scheduled job fails.
           </span>
-          {unread > 0 ? (
-            <span className={styles.headerMeta}>
-              <Mono className={styles.metaPiece}>· {unread} UNREAD</Mono>
-            </span>
-          ) : null}
-          <span className={styles.headerSpacer} />
-          {unread > 0 ? (
-            <Btn variant="ghost" onClick={onMarkAll}>Mark all read</Btn>
-          ) : null}
-          <Tip text="Close" side="down">
-            <IconBtn aria-label="Close" onClick={() => onClose?.()}>
-              <XIcon />
-            </IconBtn>
-          </Tip>
-        </header>
-
-        <div className={styles.body}>
-          <div className={styles.sidebar}>
-            <div className={styles.searchWrap}>
-              <SearchIcon className={styles.searchIcon} />
-              <input
-                type="text"
-                className={styles.searchInput}
-                placeholder="Search notifications…"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                aria-label="Search notifications"
-              />
-            </div>
-            <ul className={styles.list} role="listbox">
-              {rows.length === 0 ? (
-                <li className={styles.empty}>
-                  <span className={styles.emptyTitle}>Inbox zero</span>
-                  <span className={styles.emptyHint}>
-                    Notifications land here when an agent notifies you or a scheduled job fails.
-                  </span>
-                </li>
-              ) : filteredRows.length === 0 ? (
-                <li className={styles.empty}>
-                  <span className={styles.emptyTitle}>No matches</span>
-                  <span className={styles.emptyHint}>
-                    Try a different query, or clear it to see everything.
-                  </span>
-                </li>
-              ) : (
-                grouped.map((group) => (
-                  <Fragment key={group.label}>
-                    <Eyebrow as="li" className={styles.groupHeader} role="presentation">{group.label}</Eyebrow>
-                    {group.rows.map((row) => (
-                      <NotificationRow
-                        key={`${row.connectionId}:${row.profile}:${row.id}`}
-                        row={row}
-                        accent={row.accent}
-                        multi={multi}
-                        active={row.id === activeId && row.profile === activeProfile && row.connectionId === activeConnId}
-                        onSelect={onSelectRow}
-                        onDelete={onDeleteRow}
-                      />
-                    ))}
-                  </Fragment>
-                ))
-              )}
-            </ul>
-          </div>
-
-          <div className={styles.detail}>
-            {detail ? (
-              <DetailPane
-                row={detail}
-                accent={activeRow?.accent}
-                connId={activeConnId}
-                connectionName={activeRow?.connectionName}
-                voiceId={activeVoiceId}
+        </li>
+      ) : filteredRows.length === 0 ? (
+        <li className={styles.empty}>
+          <span className={styles.emptyTitle}>No matches</span>
+          <span className={styles.emptyHint}>
+            Try a different query, or clear it to see everything.
+          </span>
+        </li>
+      ) : (
+        grouped.map((group) => (
+          <Fragment key={group.label}>
+            <Eyebrow as="li" className={styles.groupHeader} role="presentation">{group.label}</Eyebrow>
+            {group.rows.map((row) => (
+              <NotificationRow
+                key={`${row.connectionId}:${row.profile}:${row.id}`}
+                row={row}
+                accent={row.accent}
                 multi={multi}
-                onCopy={onCopy}
-                onAction={onAction}
-                action={contextAction(detail)}
+                active={row.id === activeId && row.profile === activeProfile && row.connectionId === activeConnId}
+                onSelect={onSelectRow}
+                onDelete={onDeleteRow}
               />
-            ) : (
-              <div className={styles.detailEmpty}>Select a notification.</div>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>,
-    document.body,
+            ))}
+          </Fragment>
+        ))
+      )}
+    </ul>
+  );
+
+  return (
+    <BrowseModal
+      open={open}
+      onClose={onClose}
+      title="Notifications"
+      count={rows.length}
+      kicker="pushed by your agents"
+      actions={unread > 0 ? <Btn variant="ghost" onClick={onMarkAll}>Mark all read</Btn> : null}
+      search={{ value: query, onChange: setQuery, placeholder: "Search notifications…", label: "Search notifications" }}
+      list={list}
+    >
+      {detail ? (
+        <DetailPane
+          row={detail}
+          accent={activeRow?.accent}
+          connId={activeConnId}
+          connectionName={activeRow?.connectionName}
+          voiceId={activeVoiceId}
+          onCopy={onCopy}
+          onAction={onAction}
+          action={contextAction(detail)}
+        />
+      ) : (
+        <div className={styles.detailEmpty}>Select a notification.</div>
+      )}
+    </BrowseModal>
   );
 }
 
@@ -411,9 +363,10 @@ function NotificationRow({ row, accent, multi, active, onSelect, onDelete }) {
 }
 
 
-function DetailPane({ row, accent, connId, connectionName, voiceId, multi, onCopy, onAction, action }) {
+function DetailPane({ row, accent, connId, connectionName, voiceId, onCopy, onAction, action }) {
   const label = profileLabel(row.profile);
   const tag = typeTag(row);
+  const isHost = connId === "local";
   const externalDelivery = (row.delivered_to || []).filter((c) => c !== "alpi");
 
   const [ttsState, setTtsState] = useState(null);
@@ -442,17 +395,12 @@ function DetailPane({ row, accent, connId, connectionName, voiceId, multi, onCop
           </span>
         ) : null}
         <span className={styles.detailMetaProfile}>
+          {!isHost && connectionName ? <span className={styles.detailMetaConn}>{connectionName}/</span> : null}
           <Diamond color={accent} />
-          <Mono>@{label}</Mono>
+          <span className={styles.detailMetaName}>@{label}</span>
+          <span className={styles.detailMetaDot}>·</span>
+          <span className={styles.detailMetaDate}>{fmtAbsolute(row.created_at)}</span>
         </span>
-        {multi && connectionName ? (
-          <>
-            <span className={styles.detailMetaDot}>·</span>
-            <Mono className={styles.detailMetaPart}>{connectionName}</Mono>
-          </>
-        ) : null}
-        <span className={styles.detailMetaDot}>·</span>
-        <Mono className={styles.detailMetaPart}>{fmtAbsolute(row.created_at)}</Mono>
         <span className={styles.detailMetaSpacer} />
         <Tip text={speakTip} side="l" escape>
           <IconBtn aria-label={speakTip} disabled={ttsDisabled} onClick={onSpeak}>

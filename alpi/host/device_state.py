@@ -4,6 +4,7 @@ import asyncio
 import base64
 import json
 import os
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -63,6 +64,7 @@ def register(server: host_server.Server) -> None:
     server.register("host.gateway.config", _gateway_config)
     server.register("host.skills.list", _skills_list)
     server.register("host.skill.read", _skill_read)
+    server.register("host.skill.file", _skill_file)
     server.register("host.workgroups.list", _workgroups_list)
     server.register("host.workgroup.members", _workgroup_members)
     server.register("host.providers.ollama_models", _ollama_models)
@@ -439,35 +441,107 @@ async def _skills_list(
     home = _resolve_home(str(params.get("profile") or ""))
     # ``include_body`` defaults to False — keeps listings under a few KB even with dozens of skills. Clients ask for ``host.skill.read`` when they actually need the SKILL.md text.
     include_body = bool((params or {}).get("include_body", False))
-    rows = await asyncio.to_thread(_skills, home, include_body=include_body)
+    rows = await asyncio.to_thread(_skills_overview, home, include_body)
     return {"skills": rows}
+
+
+def _skills_overview(home: Path, include_body: bool) -> list[dict[str, Any]]:
+    from alpi.home import effective_profile_env
+    from alpi.tools import skill as skill_mod
+
+    rows = _skills(home, include_body=include_body)
+    env = effective_profile_env(home)
+    cfg = skill_mod._load_cfg_raw(home)
+    for row in rows:
+        skill_dir = Path(row["path"]).parent
+        meta = skill_mod._frontmatter(skill_dir / "SKILL.md")
+        status, reason = skill_mod.skill_status(meta, env=env, cfg_raw=cfg)
+        row["status"] = status
+        row["reason"] = reason
+        row["size"] = skill_mod.skill_dir_size(skill_dir)
+        row["keywords"] = skill_mod.skill_keywords(meta)
+    return rows
+
+
+_SKILL_SEGMENT_RE = re.compile(r"^[A-Za-z0-9_-]+$")
+
+
+def _skill_meta(profile: str, name: str, category: Any) -> tuple[Path, Path, str | None]:
+    home = _resolve_home(profile)
+    if (home / "skills").is_symlink():
+        raise host_server.HandlerError(
+            -32602, "invalid-params", data={"detail": "skills root must not be a symlink"},
+        )
+    name = str(name or "").strip()
+    category = str(category).strip() if category else None
+    if not _SKILL_SEGMENT_RE.match(name):
+        raise host_server.HandlerError(
+            -32602, "invalid-params", data={"detail": "name must match [A-Za-z0-9_-]+"},
+        )
+    if category is not None and not _SKILL_SEGMENT_RE.match(category):
+        raise host_server.HandlerError(
+            -32602, "invalid-params", data={"detail": "category must match [A-Za-z0-9_-]+"},
+        )
+    skill_dir = (home / "skills" / category / name) if category else (home / "skills" / name)
+    if category is not None and (home / "skills" / category).is_symlink():
+        raise host_server.HandlerError(
+            -32602, "invalid-params", data={"detail": "category must not be a symlink"},
+        )
+    if skill_dir.is_symlink():
+        raise host_server.HandlerError(
+            -32602, "invalid-params", data={"detail": "skill directory must not be a symlink"},
+        )
+    if (home / "skills").resolve() not in skill_dir.resolve().parents:
+        raise host_server.HandlerError(
+            -32602, "invalid-params", data={"detail": "skill path escapes the skills directory"},
+        )
+    return home, skill_dir, category
 
 
 async def _skill_read(
     params: dict[str, Any], _server: host_server.Server,
 ) -> dict[str, Any]:
-    """Return one skill's full SKILL.md (capped at ``_SKILL_BODY_MAX``). Callers identify the skill by ``category`` + ``name`` — same shape ``host.skills.list`` returns. Path traversal would otherwise let a malicious client read arbitrary files under ``$HOME``."""
-    home = _resolve_home(str((params or {}).get("profile") or ""))
-    name = str((params or {}).get("name") or "").strip()
-    category = (params or {}).get("category")
-    category = str(category).strip() if category else None
-    if not name or "/" in name or name.startswith("."):
+    p = params or {}
+    home, skill_dir, category = _skill_meta(str(p.get("profile") or ""), p.get("name"), p.get("category"))
+    skill_md = skill_dir / "SKILL.md"
+    if skill_md.is_symlink():
         raise host_server.HandlerError(
-            -32602, "invalid-params", data={"detail": "name required and must not contain path separators"},
+            -32602, "invalid-params", data={"detail": "SKILL.md must not be a symlink"},
         )
-    if category is not None and ("/" in category or category.startswith(".")):
-        raise host_server.HandlerError(
-            -32602, "invalid-params", data={"detail": "category must not contain path separators"},
-        )
-    skill_md = (home / "skills" / category / name / "SKILL.md") if category else (home / "skills" / name / "SKILL.md")
     if not skill_md.exists():
         raise host_server.HandlerError(
             -32004, "not-found", data={"detail": f"no SKILL.md at {skill_md}"},
         )
-    row = await asyncio.to_thread(
-        _skill_row, skill_md, category=category, name=name, include_body=True,
-    )
+    row = await asyncio.to_thread(_skill_detail, home, skill_md, category, skill_dir.name)
     return {"skill": row}
+
+
+def _skill_detail(home: Path, skill_md: Path, category: str | None, name: str) -> dict[str, Any]:
+    from alpi.home import effective_profile_env
+    from alpi.tools import skill as skill_mod
+
+    env = effective_profile_env(home)
+    cfg = skill_mod._load_cfg_raw(home)
+    return skill_mod.skill_detail_payload(skill_md, category=category, name=name, env=env, cfg_raw=cfg)
+
+
+async def _skill_file(
+    params: dict[str, Any], _server: host_server.Server,
+) -> dict[str, Any]:
+    from alpi.tools import skill as skill_mod
+
+    p = params or {}
+    _home, skill_dir, _category = _skill_meta(str(p.get("profile") or ""), p.get("name"), p.get("category"))
+    path = str(p.get("path") or "").strip()
+    try:
+        row = await asyncio.to_thread(skill_mod.skill_file_read, skill_dir, path)
+    except PermissionError as e:
+        raise host_server.HandlerError(-32603, "forbidden", data={"detail": str(e)})
+    except FileNotFoundError as e:
+        raise host_server.HandlerError(-32004, "not-found", data={"detail": str(e)})
+    except (ValueError, OSError) as e:
+        raise host_server.HandlerError(-32602, "invalid-params", data={"detail": str(e)})
+    return {"file": row}
 
 
 def _aggregate_workgroups(profile: str | None) -> list[dict[str, Any]]:
@@ -818,20 +892,28 @@ def _mask_key(value: str) -> str:
     return f"{value[:3]}…{value[-4:]}"
 
 
+def _real_skill(d: Path) -> bool:
+    # symlinked dirs / SKILL.md could resolve outside <home>/skills and leak files.
+    if not d.is_dir() or d.is_symlink():
+        return False
+    md = d / "SKILL.md"
+    return md.is_file() and not md.is_symlink()
+
+
 def _skills(home: Path, *, include_body: bool = False) -> list[dict[str, Any]]:
     """List skills under ``<home>/skills``. ``include_body=False`` is the hot-path default — reading the markdown body costs ~32KB per skill and is wasted bytes for listings (inbox, settings); detail views call ``host.skill.read`` instead."""
     root = home / "skills"
     rows = []
-    if not root.exists():
+    if not root.exists() or root.is_symlink():
         return rows
     for top in sorted(root.iterdir()):
-        if not top.is_dir() or top.name.startswith("."):
+        if not top.is_dir() or top.is_symlink() or top.name.startswith("."):
             continue
-        if (top / "SKILL.md").exists():
+        if _real_skill(top):
             rows.append(_skill_row(top / "SKILL.md", category=None, name=top.name, include_body=include_body))
             continue
         for child in sorted(top.iterdir()):
-            if child.is_dir() and not child.name.startswith(".") and (child / "SKILL.md").exists():
+            if not child.name.startswith(".") and _real_skill(child):
                 rows.append(_skill_row(child / "SKILL.md", category=top.name, name=child.name, include_body=include_body))
     return rows
 
@@ -839,17 +921,17 @@ def _skills(home: Path, *, include_body: bool = False) -> list[dict[str, Any]]:
 def _count_skill_dirs(home: Path) -> int:
     """Cheap count for summaries — never opens SKILL.md so listings don't pay the ~32KB-per-skill read cost the body path does."""
     root = home / "skills"
-    if not root.exists():
+    if not root.exists() or root.is_symlink():
         return 0
     n = 0
     for top in sorted(root.iterdir()):
-        if not top.is_dir() or top.name.startswith("."):
+        if not top.is_dir() or top.is_symlink() or top.name.startswith("."):
             continue
-        if (top / "SKILL.md").exists():
+        if _real_skill(top):
             n += 1
             continue
         for child in sorted(top.iterdir()):
-            if child.is_dir() and not child.name.startswith(".") and (child / "SKILL.md").exists():
+            if not child.name.startswith(".") and _real_skill(child):
                 n += 1
     return n
 

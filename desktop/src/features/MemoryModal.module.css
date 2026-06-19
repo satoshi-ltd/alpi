@@ -1,0 +1,26 @@
+.fileRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.fileName {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fileNameLg {
+  font-family: var(--font-mono);
+  font-size: var(--fs-lg);
+  font-weight: var(--fw-semibold);
+  color: var(--ink);
+}
+
+.emptyNote { color: var(--ink-3); }

@@ -637,10 +637,19 @@ Verb namespaces in current shape:
   sandbox*, voice_*, mcps, peers, models}`), fetched lazily by
   settings/profile screens. The summaries verb is the hot poll; the
   detail verb is on-demand.
-- **`host.skills.list`** — lightweight by default: `category, name,
-  description, path` (no SKILL.md body). Pass `include_body=true`
-  for legacy callers. **`host.skill.read({name, category?})`**
-  returns one skill's full body on demand.
+- **`host.skills.list`** — one row per skill: `category, name,
+  description, path, size, status` (active | inactive | invalid),
+  `reason` (why, when not active) and `keywords`. Pass
+  `include_body=true` to also embed each SKILL.md body.
+- **`host.skill.read({name, category?})`** — full structured detail:
+  frontmatter (`version, origin, created_at, platforms, tools,
+  keywords`), `status`/`reason`, `requires[]` (env/bin/config, each
+  resolved or not), the `tree` of files (`secrets/` reports count +
+  mode only, never names), and the SKILL.md `body` (capped 32K).
+- **`host.skill.file({name, category?, path})`** — read one file
+  under a skill (`SKILL.md` or `<subdir>/<file>`, capped 256K, binary
+  flagged not decoded). `secrets/` and symlinks are refused; `name`
+  and `category` must match `[A-Za-z0-9_-]+`.
 - **`host.chat.send`** (stream), **`host.chat.cancel`**,
   **`host.chat.events_since`** — run an engine turn for a profile,
   stream tool / reasoning / assistant events back; cancel via a

@@ -98,8 +98,9 @@ async fn profiles() -> serde_json::Value {
 }
 
 #[tauri::command]
-async fn profile_tools(profile: String) -> serde_json::Value {
-    off_main(move || host_array_value(
+async fn profile_tools(profile: String, connection_id: Option<String>) -> serde_json::Value {
+    off_main(move || host_array_value_for(
+        connection_id.as_deref(),
         "host.tools.list",
         serde_json::json!({ "profile": profile }),
         "tools",
@@ -109,8 +110,9 @@ async fn profile_tools(profile: String) -> serde_json::Value {
 }
 
 #[tauri::command]
-async fn profile_skills(profile: String) -> serde_json::Value {
-    off_main(move || host_array_value(
+async fn profile_skills(profile: String, connection_id: Option<String>) -> serde_json::Value {
+    off_main(move || host_array_value_for(
+        connection_id.as_deref(),
         "host.skills.list",
         serde_json::json!({ "profile": profile }),
         "skills",
@@ -124,15 +126,42 @@ async fn profile_skill_read(
     profile: String,
     name: String,
     category: Option<String>,
+    connection_id: Option<String>,
 ) -> Result<serde_json::Value, String> {
     off_main(move || {
         let mut params = serde_json::json!({ "profile": profile, "name": name });
         if let Some(cat) = category {
             params["category"] = serde_json::Value::String(cat);
         }
-        host_client::call("host.skill.read", params)
-            .map(|v| v.get("skill").cloned().unwrap_or(serde_json::Value::Null))
-            .map_err(|e| e.to_string())
+        match connection_id.as_deref() {
+            Some(cid) => host_client::call_for(cid, "host.skill.read", params),
+            None => host_client::call("host.skill.read", params),
+        }
+        .map(|v| v.get("skill").cloned().unwrap_or(serde_json::Value::Null))
+        .map_err(|e| e.to_string())
+    })
+    .await?
+}
+
+#[tauri::command]
+async fn profile_skill_file(
+    profile: String,
+    name: String,
+    path: String,
+    category: Option<String>,
+    connection_id: Option<String>,
+) -> Result<serde_json::Value, String> {
+    off_main(move || {
+        let mut params = serde_json::json!({ "profile": profile, "name": name, "path": path });
+        if let Some(cat) = category {
+            params["category"] = serde_json::Value::String(cat);
+        }
+        match connection_id.as_deref() {
+            Some(cid) => host_client::call_for(cid, "host.skill.file", params),
+            None => host_client::call("host.skill.file", params),
+        }
+        .map(|v| v.get("file").cloned().unwrap_or(serde_json::Value::Null))
+        .map_err(|e| e.to_string())
     })
     .await?
 }
@@ -181,15 +210,16 @@ async fn workgroup_usage_daily(
 }
 
 #[tauri::command]
-async fn profile_memory(profile: String) -> Result<serde_json::Value, String> {
+async fn profile_memory(profile: String, connection_id: Option<String>) -> Result<serde_json::Value, String> {
     off_main(move || {
         let mut out = serde_json::Map::new();
         for name in ["USER.md", "MEMORY.md", "AGENT.md"] {
             let rel = format!("memories/{name}");
-            let text = host_client::call(
-                "host.profile.read_file",
-                serde_json::json!({ "profile": profile, "rel_path": rel }),
-            )
+            let params = serde_json::json!({ "profile": profile, "rel_path": rel });
+            let text = match connection_id.as_deref() {
+                Some(cid) => host_client::call_for(cid, "host.profile.read_file", params),
+                None => host_client::call("host.profile.read_file", params),
+            }
             .ok()
             .and_then(|v| v.get("text").and_then(|t| t.as_str()).map(String::from))
             .unwrap_or_default();
@@ -317,6 +347,21 @@ fn host_profile_names() -> Vec<String> {
 fn host_array_value(method: &str, params: serde_json::Value, key: &str) -> serde_json::Value {
     host_client::call(method, params)
         .ok()
+        .and_then(|v| v.get(key).cloned())
+        .unwrap_or_else(|| serde_json::Value::Array(vec![]))
+}
+
+fn host_array_value_for(
+    connection_id: Option<&str>,
+    method: &str,
+    params: serde_json::Value,
+    key: &str,
+) -> serde_json::Value {
+    let res = match connection_id {
+        Some(cid) => host_client::call_for(cid, method, params),
+        None => host_client::call(method, params),
+    };
+    res.ok()
         .and_then(|v| v.get(key).cloned())
         .unwrap_or_else(|| serde_json::Value::Array(vec![]))
 }
@@ -2782,6 +2827,7 @@ pub fn run() {
             profile_tools,
             profile_skills,
             profile_skill_read,
+            profile_skill_file,
             profile_memory,
             host_connections,
             host_connection_set_active,

@@ -1,0 +1,99 @@
+.toolRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.toolName {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.toolCount {
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--ink-4);
+}
+
+.toolMuted { color: var(--ink-4); }
+
+.toolNameLg {
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--font-mono);
+  font-size: var(--fs-lg);
+  font-weight: var(--fw-semibold);
+  color: var(--ink);
+  text-transform: lowercase;
+}
+
+.detailCat { color: var(--ink-4); font-weight: var(--fw-regular); }
+
+.paramsLabel {
+  display: block;
+  margin: var(--space-7) 0 var(--space-2);
+}
+
+.params {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+}
+
+.params th {
+  text-align: left;
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-3);
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 0.5px solid var(--line);
+}
+
+.params td {
+  padding: var(--space-3);
+  border-bottom: 0.5px solid var(--line);
+  vertical-align: top;
+}
+
+.paramName { color: var(--ink); white-space: nowrap; font-weight: var(--fw-medium); }
+.paramType { color: var(--ink-2); white-space: nowrap; }
+.paramReq { color: var(--ink-3); }
+.paramDef { color: var(--ink-3); }
+
+.noParams {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+  font-style: italic;
+}
+
+.denyBanner {
+  font-family: var(--font-sans);
+  font-size: var(--fs-sm);
+  color: var(--c-warning, var(--ink-2));
+  background: color-mix(in srgb, var(--c-warning, var(--ink-3)) 12%, var(--bg-elev));
+  border: 0.5px solid color-mix(in srgb, var(--c-warning, var(--line-2)) 35%, var(--line));
+  border-radius: var(--r-md);
+  padding: var(--space-4) var(--space-5);
+  margin: 0 0 var(--space-5);
+  line-height: var(--lh-normal);
+}
+
+.denyBanner code {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  background: var(--hover);
+  padding: 0 var(--space-2);
+  border-radius: var(--r-xs);
+}

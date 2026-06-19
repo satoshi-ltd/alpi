@@ -15,9 +15,9 @@ import ClarificationModal from "./features/ClarificationModal.jsx";
 import CreateProfileModal from "./features/CreateProfileModal.jsx";
 import CreateWorkgroupModal from "./features/CreateWorkgroupModal.jsx";
 import NotificationsModal from "./features/NotificationsModal.jsx";
-import ToolsPanel from "./features/ToolsPanel.jsx";
-import SkillsPanel from "./features/SkillsPanel.jsx";
-import MemoryPanel from "./features/MemoryPanel.jsx";
+import ToolsModal from "./features/ToolsModal.jsx";
+import SkillsModal from "./features/SkillsModal.jsx";
+import MemoryModal from "./features/MemoryModal.jsx";
 import { useCommands } from "./hooks/useCommands.js";
 import { orderedJumpTargets } from "./lib/profile-order.js";
 import { installUpdater } from "./lib/updater.js";
@@ -1079,20 +1079,26 @@ export default function App() {
         workgroups={workgroups}
       />
       <ShortcutsModal open={shortcutsOpen} onClose={onCloseShortcuts} />
-      <ToolsPanel
+      <ToolsModal
+        key={`${hostConnections.active_id}:${view.kind === "profile" ? view.profile : ""}`}
         open={browse === "tools"}
         onClose={onCloseBrowse}
         profile={view.kind === "profile" ? view.profile : null}
+        connectionId={hostConnections.active_id}
       />
-      <SkillsPanel
+      <SkillsModal
+        key={`${hostConnections.active_id}:${view.kind === "profile" ? view.profile : ""}`}
         open={browse === "skills"}
         onClose={onCloseBrowse}
         profile={view.kind === "profile" ? view.profile : null}
+        connectionId={hostConnections.active_id}
       />
-      <MemoryPanel
+      <MemoryModal
+        key={`${hostConnections.active_id}:${view.kind === "profile" ? view.profile : ""}`}
         open={browse === "memory"}
         onClose={onCloseBrowse}
         profile={view.kind === "profile" ? view.profile : null}
+        connectionId={hostConnections.active_id}
       />
       <CreateProfileModal
         open={createProfileOpen}

@@ -82,7 +82,7 @@ Contracts:
 - `host.events.*` is transport, not durable history. `host/events.jsonl` is a bounded reconnect replay buffer (`HISTORY_MAX = 500`) and may drop rows under load. Browseable history must query durable stores: outputs, sessions, workgroup transcripts.
 - `host.chat.send` has a replay sidecar; recover missed frames via `host.chat.events_since(after_seq)`.
 - `host.profile.summaries` = lightweight sidebar shape. `host.profile.detail` = heavier settings shape; its payload field is `advertise_host` (not `tcp_host`).
-- `host.skills.list` is metadata-only; `host.skill.read` returns a skill body.
+- `host.skills.list` returns per-skill `status`/`reason`/`size`/`keywords` + metadata; `host.skill.read` returns structured detail (frontmatter, resolved `requires[]`, file `tree`, body ≤32K); `host.skill.file` reads one file ≤256K and refuses `secrets/`/symlinks (`name`/`category` must be `[A-Za-z0-9_-]+`).
 - `host.attachments.{stage,fetch}`: `stage` uploads a file in; `fetch` serves a tool-produced output attachment's bytes (base64) out by path, so rich clients render images inline and other files as a metadata chip; text surfaces (CLI/TUI/gateway/ALP) get a shared textual listing instead. `fetch` reads are scoped to the profile's workspace/home/temp (see `security`).
 - `host.network.*` controls companion pairing/network config; local-only.
 - `host.usage.daily` / `host.usage.workgroup.daily` (admin-only) = last 14 days of per-day token usage + cost. Profile usage reads the `ledger.json` 30-day history (authoritative for ALL spend, incl. non-token costs like image generation); workgroup usage reads the hub transcript's per-post declared cost. Both bucket by UTC day, so today matches the budget gate.
