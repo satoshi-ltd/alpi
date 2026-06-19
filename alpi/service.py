@@ -52,6 +52,24 @@ def daemon_log_path(root: Path) -> Path:
     return root / "logs" / "service.log"
 
 
+def _acquire_singleton_lock(root: Path):
+    # OS-held lock beats the pidfile check: a stale pid + a TOCTOU race let two daemons start at once; freed on exit/crash.
+    lock_path = root / "service.lock"
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    fd = open(lock_path, "w")  # noqa: SIM115 — held for the daemon's lifetime
+    try:
+        if sys.platform == "win32":
+            import msvcrt
+            msvcrt.locking(fd.fileno(), msvcrt.LK_NBLCK, 1)
+        else:
+            import fcntl
+            fcntl.flock(fd.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        fd.close()
+        return None
+    return fd
+
+
 def _proc_starttime(pid: int) -> str | None:
     # /proc/<pid>/stat field 22 — survives container PID reuse. None on non-Linux.
     try:
@@ -135,6 +153,13 @@ def serve_all(root: Path) -> None:
     from alpi import home as home_mod
 
     _configure_logging_daemon(root)
+    lock = _acquire_singleton_lock(root)
+    if lock is None:
+        log.warning(
+            "another alpi daemon already holds %s — refusing to start a second",
+            root / "service.lock",
+        )
+        return
     profiles = home_mod.list_profiles(root)
     log.info("central service starting · profiles=%s", ",".join(profiles))
     _set_proctitle_daemon(len(profiles))
@@ -145,6 +170,7 @@ def serve_all(root: Path) -> None:
         pass
     finally:
         _clear_daemon_pid(root)
+        lock.close()
         log.info("central service stopped")
 
 
@@ -1901,7 +1927,7 @@ async def _run_preempt_watcher(home: Path, profile: str) -> None:
 DEFAULT_ALP_TCP_PORT = 7423
 
 
-def _resolve_alp_tcp(cfg, managed: bool) -> tuple[str | None, int | None]:
+def _resolve_alp_tcp(cfg, managed: bool, is_default: bool = True) -> tuple[str | None, int | None]:
     # ALP TCP (bind_host, port) or (None, None) for Unix-only. Always-on:
     # binds whenever resolve_bind_host yields a local-safe address from the
     # advertised network.host (env ALPI_NETWORK_HOST wins).
@@ -1911,7 +1937,11 @@ def _resolve_alp_tcp(cfg, managed: bool) -> tuple[str | None, int | None]:
     env_host = str(os.environ.get("ALPI_NETWORK_HOST") or "").strip()
     if env_host:
         configured = env_host
-    tcp_port = (cfg.alp or {}).get("tcp_port") or DEFAULT_ALP_TCP_PORT
+    configured_port = (cfg.alp or {}).get("tcp_port")
+    # Only default (or a profile with its own tcp_port) binds ALP TCP — else every profile fights the same default port.
+    if configured_port is None and not is_default:
+        return None, None
+    tcp_port = configured_port or DEFAULT_ALP_TCP_PORT
     env_port = str(os.environ.get("ALPI_ALP_TCP_PORT") or "").strip()
     if env_port:
         try:
@@ -1933,7 +1963,10 @@ async def _run_alp(home: Path, profile: str) -> None:
     from alpi.alp.server import Server
 
     cfg = cfg_mod.load(home)
-    tcp_host, tcp_port = _resolve_alp_tcp(cfg, runtime.is_docker())
+    # Network detection blocks (Tailscale CLI); off-loop so one slow profile can't starve host.sock + the others.
+    tcp_host, tcp_port = await asyncio.to_thread(
+        _resolve_alp_tcp, cfg, runtime.is_docker(), profile == "default",
+    )
     server = Server(
         home=home,
         agent_name=profile,
@@ -1975,20 +2008,9 @@ async def _run_host(home: Path, profile: str) -> None:
     from alpi.host.network import host_allow_public_bind, resolve_host_tcp_bind
     from alpi.host.server import Server as HostServer
 
-    tcp_bind = resolve_host_tcp_bind(home)
-    if tcp_bind is None:
-        log.info(
-            "no reachable address auto-detected; host TCP listener disabled "
-            "(Unix socket still up). Set network.host to expose it explicitly.",
-        )
-    else:
-        host, port = tcp_bind
-        detail = runtime.platform_id() or "auto"
-        log.info("host TCP bind chosen: %s:%d (%s)", host, port, detail)
-
     server = HostServer(
         home=home,
-        tcp_bind=tcp_bind,
+        tcp_bind=None,
         allow_public_bind=host_allow_public_bind(home),
     )
     host_handlers.register(server)
@@ -2008,8 +2030,22 @@ async def _run_host(home: Path, profile: str) -> None:
     host_tools.register(server)
     host_usage.register(server)
     host_attachments.register(server)
-    await server.start()
+    await server.start()  # host.sock up immediately — never blocked on network detection
     try:
+        # TCP bind needs network detection (slow under launchd); resolve off-loop, and a bind failure must NOT take down host.sock.
+        try:
+            tcp_bind = await asyncio.to_thread(resolve_host_tcp_bind, home)
+            if tcp_bind is None:
+                log.info(
+                    "no reachable address auto-detected; host TCP listener disabled "
+                    "(Unix socket still up). Set network.host to expose it explicitly.",
+                )
+            else:
+                host, port = tcp_bind
+                log.info("host TCP bind chosen: %s:%d (%s)", host, port, runtime.platform_id() or "auto")
+                await server.enable_tcp(tcp_bind)
+        except Exception:  # noqa: BLE001
+            log.warning("host TCP listener disabled — bind/detection failed; Unix socket still serving", exc_info=True)
         await server.serve_forever()
     finally:
         await server.stop()

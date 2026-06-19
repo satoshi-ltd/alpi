@@ -11,6 +11,18 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.3.74 — 2026-06-19 — reliable reconnect after a daemon restart
+
+_Requires alpi v0.9.19+._
+
+- **The app no longer thrashes after the daemon restarts.** It now marks a
+  connection "online" only once the daemon actually replies (not the instant
+  the socket opens), and a transient error no longer triggers reload storms —
+  so a restart settles cleanly instead of looping.
+- **Starting the daemon from the app uses the installed supervisor** (launchd /
+  systemd) instead of spawning a competing foreground process, and waits for the
+  daemon to actually answer — not just a pidfile — before reporting it started.
+
 ## v0.3.73 — 2026-06-19 — skills explorer + unified panels
 
 _Requires alpi v0.9.18+._

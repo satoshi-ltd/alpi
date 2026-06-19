@@ -258,7 +258,8 @@ export function useHostConnections({
   const activeConnectionForSync = hostConnections.connections.find(
     (c) => c.id === hostConnections.active_id,
   );
-  const activeStatusKey = `${hostConnections.active_id}:${activeConnectionForSync?.status ?? "unknown"}:${activeConnectionForSync?.error ?? ""}`;
+  // Status only (no error): the error string flapping during a restart must not re-fire reload/reprobe effects.
+  const activeStatusKey = `${hostConnections.active_id}:${activeConnectionForSync?.status ?? "unknown"}`;
 
   // React to status transitions (online → reload, offline → clear).
   useEffect(() => {

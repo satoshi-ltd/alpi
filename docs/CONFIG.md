@@ -459,16 +459,18 @@ A public IP is `config.yaml`-only: the desktop rejects it, and it also requires
 
 ### ALP
 
-ALP always serves the per-profile Unix socket for same-machine peers, and the
-Noise_XK TCP listener is **on too** whenever the machine has a reachable
-address — bound to the shared `network.host` (above), or an auto-detected
-overlay/LAN address, or `0.0.0.0` in Docker. With no reachable address (no
-`network.host`, no Tailscale/LAN, not Docker) it stays Unix-only. Turn ALP off
-entirely with `service.alp: false`.
+ALP always serves the per-profile Unix socket for same-machine peers. The
+Noise_XK TCP listener is auto-exposed only for the `default` profile, whenever
+the machine has a reachable address — bound to the shared `network.host`
+(above), or an auto-detected overlay/LAN address, or `0.0.0.0` in Docker.
+**Named profiles stay Unix-only** unless they set their own explicit, unique
+`alp.tcp_port` (otherwise every profile would fight over the shared port). With
+no reachable address (no `network.host`, no Tailscale/LAN, not Docker) even
+`default` stays Unix-only. Turn ALP off entirely with `service.alp: false`.
 
 | Key | Default | Notes |
 |---|---|---|
-| `alp.tcp_port` | `7423` | The ALP peer TCP port. Always on (the address gate is the only "off"). Set it only to move off the default port. The address is `network.host`. |
+| `alp.tcp_port` | `7423` (default profile only) | The ALP peer TCP port. Auto-exposed for the `default` profile; a named profile binds TCP only if it sets its own unique port here. The address is `network.host`. |
 
 ```yaml
 alp:

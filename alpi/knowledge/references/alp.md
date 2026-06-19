@@ -30,7 +30,7 @@ Peer `id` is a **local label** for human/UI use only — never on the wire, neve
 - Same machine: Unix-domain socket.
 - Cross machine: authenticated encrypted transport (Noise over TCP, default port `7423`). The operator supplies the address; ALP does no discovery, NAT traversal, or relay.
 
-`network.host` is the profile's advertised/accessible address (CONFIG.md → network) — distinct from the derived bind. The TCP listener is on whenever the machine has a reachable address (`network.host`, an auto-detected overlay/LAN address, or `0.0.0.0` in Docker); with none it stays Unix-only. One profile config drives both the ALP peer listener and the device-pairing host plane, on their own ports.
+`network.host` is the profile's advertised/accessible address (CONFIG.md → network) — distinct from the derived bind. The `default` profile's TCP listener is on whenever the machine has a reachable address (`network.host`, an auto-detected overlay/LAN address, or `0.0.0.0` in Docker); named profiles are Unix-only unless they set their own unique `alp.tcp_port`. One profile config drives both the ALP peer listener and the device-pairing host plane, on their own ports.
 
 Transport internals are implementation detail unless debugging ALP itself.
 

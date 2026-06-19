@@ -40,6 +40,33 @@ def test_configured_port_overrides_default(monkeypatch: pytest.MonkeyPatch) -> N
     assert (host, port) == ("192.168.1.5", 9000)
 
 
+def test_non_default_without_explicit_port_is_unix_only(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("ALPI_NETWORK_HOST", raising=False)
+    monkeypatch.delenv("ALPI_ALP_TCP_PORT", raising=False)
+    host, port = service._resolve_alp_tcp(
+        _cfg({"host": "192.168.1.5"}), managed=False, is_default=False,
+    )
+    assert host is None and port is None  # non-default profiles don't fight for the shared default port
+
+
+def test_non_default_with_explicit_port_binds(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("ALPI_NETWORK_HOST", raising=False)
+    monkeypatch.delenv("ALPI_ALP_TCP_PORT", raising=False)
+    host, port = service._resolve_alp_tcp(
+        _cfg({"host": "192.168.1.5"}, {"tcp_port": 9100}), managed=False, is_default=False,
+    )
+    assert (host, port) == ("192.168.1.5", 9100)
+
+
+def test_default_without_explicit_port_still_binds(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("ALPI_NETWORK_HOST", raising=False)
+    monkeypatch.delenv("ALPI_ALP_TCP_PORT", raising=False)
+    host, port = service._resolve_alp_tcp(
+        _cfg({"host": "192.168.1.5"}), managed=False, is_default=True,
+    )
+    assert (host, port) == ("192.168.1.5", service.DEFAULT_ALP_TCP_PORT)
+
+
 def test_hostname_binds_all_interfaces(monkeypatch: pytest.MonkeyPatch) -> None:
     """A reachable hostname is advertised, but bound as 0.0.0.0 — it isn't a
     local interface address."""

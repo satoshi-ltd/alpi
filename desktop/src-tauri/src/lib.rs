@@ -560,9 +560,60 @@ async fn port_available(host: String, port: u16) -> bool {
     .unwrap_or(false)
 }
 
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Supervisor {
+    Launchd,
+    Systemd,
+    None,
+}
+
+// With a supervisor installed, ask IT to start the service — a foreground `alpi daemon start` races launchd's KeepAlive for the singleton lock.
+fn daemon_start_argv(sup: Supervisor, uid: u32) -> Vec<String> {
+    match sup {
+        Supervisor::Launchd => vec![
+            "launchctl".into(),
+            "kickstart".into(),
+            format!("gui/{uid}/com.alpi.daemon"),
+        ],
+        Supervisor::Systemd => vec![
+            "systemctl".into(),
+            "--user".into(),
+            "start".into(),
+            "alpi-daemon.service".into(),
+        ],
+        Supervisor::None => vec!["alpi".into(), "daemon".into(), "start".into()],
+    }
+}
+
+#[cfg(unix)]
+fn current_uid() -> u32 {
+    extern "C" {
+        fn getuid() -> u32;
+    }
+    unsafe { getuid() }
+}
+#[cfg(not(unix))]
+fn current_uid() -> u32 {
+    0
+}
+
+fn detect_supervisor() -> Supervisor {
+    let Some(home) = std::env::var_os("HOME").map(std::path::PathBuf::from) else {
+        return Supervisor::None;
+    };
+    if cfg!(target_os = "macos") && home.join("Library/LaunchAgents/com.alpi.daemon.plist").exists() {
+        return Supervisor::Launchd;
+    }
+    if cfg!(target_os = "linux") && home.join(".config/systemd/user/alpi-daemon.service").exists() {
+        return Supervisor::Systemd;
+    }
+    Supervisor::None
+}
+
 // Local subprocess: daemon may not be running yet (start/install case).
 #[tauri::command]
 async fn service_action(profile: String, action: String) -> Result<String, String> {
+    let _ = &profile; // kept for the JS command ABI; the daemon is global, not per-profile.
     if !matches!(
         action.as_str(),
         "start" | "stop" | "restart" | "install" | "uninstall"
@@ -571,50 +622,65 @@ async fn service_action(profile: String, action: String) -> Result<String, Strin
     }
     if action == "start" {
         return tauri::async_runtime::spawn_blocking(move || {
-            Command::new("alpi")
-                .args(["-p", &profile, "service", "start"])
+            let argv = daemon_start_argv(detect_supervisor(), current_uid());
+            let mut child = Command::new(&argv[0])
+                .args(&argv[1..])
                 .stdin(Stdio::null())
                 .stdout(Stdio::null())
-                .stderr(Stdio::null())
+                .stderr(Stdio::piped())
                 .spawn()
-                .map_err(|e| format!("spawn `alpi`: {e}"))?;
-            if let Some(home) = crate::home::resolve_home(Some(&profile)) {
-                let pid_path = home.join("service.pid");
-                for _ in 0..60 {
-                    if pid_path.exists() {
-                        break;
-                    }
-                    std::thread::sleep(std::time::Duration::from_millis(50));
+                .map_err(|e| format!("spawn {argv:?}: {e}"))?;
+            // Readiness = host.sock + a working RPC, never the pidfile (the pid is written before the socket listens).
+            let mut launcher_exited = false;
+            for _ in 0..240 {
+                if host_client::call("host.version", serde_json::json!({})).is_ok() {
+                    return Ok("started".into());
                 }
+                if !launcher_exited {
+                    if let Ok(Some(status)) = child.try_wait() {
+                        launcher_exited = true;
+                        if !status.success() {
+                            if host_client::call("host.version", serde_json::json!({})).is_ok() {
+                                return Ok("started".into());
+                            }
+                            let mut err = String::new();
+                            if let Some(mut s) = child.stderr.take() {
+                                use std::io::Read;
+                                let _ = s.read_to_string(&mut err);
+                            }
+                            return Err(format!("daemon start failed ({status}): {}", err.trim()));
+                        }
+                    }
+                }
+                std::thread::sleep(std::time::Duration::from_millis(50));
             }
-            Ok("started".into())
+            Err("daemon did not become reachable (host.sock + RPC) in time".into())
         })
         .await
         .map_err(|e| format!("join: {e}"))?;
     }
     let action_for_msg = action.clone();
-    let profile_for_wait = profile.clone();
     let action_for_wait = action.clone();
     let out = tauri::async_runtime::spawn_blocking(move || {
         Command::new("alpi")
-            .args(["-p", &profile, "service", &action])
+            .args(["daemon", &action])
             .output()
     })
     .await
     .map_err(|e| format!("join: {e}"))?
-    .map_err(|e| format!("spawn `alpi`: {e}"))?;
+    .map_err(|e| format!("spawn `alpi daemon`: {e}"))?;
     if !out.status.success() {
         return Err(format!(
-            "service {} failed: {}",
+            "daemon {} failed: {}",
             action_for_msg,
             String::from_utf8_lossy(&out.stderr).trim()
         ));
     }
     if action_for_wait == "restart" || action_for_wait == "install" {
         tauri::async_runtime::spawn_blocking(move || {
-            if let Some(home) = crate::home::resolve_home(Some(&profile_for_wait)) {
+            if let Some(home) = crate::home::resolve_home(Some("default")) {
                 let pid_path = home.join("service.pid");
-                for _ in 0..60 {
+                for _ in 0..120 {
                     if pid_path.exists() {
                         break;
                     }
@@ -2940,6 +3006,25 @@ mod path_allow_tests {
         // Outside default roots → refused; a passed (workspace) root extends the allowlist.
         assert!(!path_within_allowed("/etc/hosts", &[]));
         assert!(path_within_allowed("/etc/hosts", &["/etc".to_string()]));
+    }
+}
+
+#[cfg(test)]
+mod daemon_start_tests {
+    use super::{daemon_start_argv, Supervisor};
+
+    #[test]
+    fn picks_supervisor_specific_command() {
+        // installed supervisor → ask it (no competing foreground daemon); none → spawn directly.
+        assert_eq!(
+            daemon_start_argv(Supervisor::Launchd, 501),
+            ["launchctl", "kickstart", "gui/501/com.alpi.daemon"],
+        );
+        assert_eq!(
+            daemon_start_argv(Supervisor::Systemd, 1000),
+            ["systemctl", "--user", "start", "alpi-daemon.service"],
+        );
+        assert_eq!(daemon_start_argv(Supervisor::None, 0), ["alpi", "daemon", "start"]);
     }
 }
 

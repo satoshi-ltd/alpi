@@ -162,6 +162,16 @@ def _disable_update_check(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture(autouse=True)
+def _clear_bind_ip_cache() -> None:
+    """detect_bind_ip is lru_cached once-per-daemon; clear it so mocked detection never leaks between tests."""
+    try:
+        from alpi.host import network
+        network.detect_bind_ip.cache_clear()
+    except Exception:
+        pass
+
+
+@pytest.fixture(autouse=True)
 def _reset_session_search_state() -> None:
     """Avoid state leaking between tests that use session_search."""
     try:

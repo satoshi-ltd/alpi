@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.9.19 — 2026-06-19 — faster, more reliable daemon startup
+
+- **The control socket comes up immediately on startup.** Network detection
+  (Tailscale) is now cached and reused for the daemon's lifetime, run off the
+  event loop, so the apps connect right away instead of waiting ~35 seconds
+  while every profile probed the network in turn.
+- **Only the default profile claims the shared ALP TCP port.** Named profiles
+  no longer collide on it — set a unique `alp.tcp_port` to expose one.
+- **A failed TCP listener no longer takes down the local socket.** If the
+  network bind fails (port in use, no address), the Unix control plane keeps
+  serving instead of the whole host subsystem dropping.
+- **Single-instance lock** so two daemons can't start at once, replacing a
+  pidfile check that raced (portable across Unix and Windows).
+
 ## v0.9.18 — 2026-06-19 — skills are fully inspectable
 
 - **Skills are now fully inspectable from the apps.** Each skill reports

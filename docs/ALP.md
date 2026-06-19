@@ -247,13 +247,15 @@ LAN / overlay. ALP defines identity, envelope, Noise, verbs, and workgroups; the
 hostname, a Docker network, or a public address if they accept the exposure).
 ALP itself does no discovery, NAT traversal, or relay.
 
-Each alpi listens on a TCP port (default `7423`). The listener is on whenever
-the machine has a reachable address — the profile's shared accessible address
-(`network.host` — see `CONFIG.md → network`), an auto-detected overlay/LAN
-address, or `0.0.0.0` in Docker; with no reachable address it stays Unix-only.
-A profile is configured once and both the ALP peer listener and the
-device-pairing host plane use the same address, on their own ports. (`service.alp:
-false` disables ALP for a profile entirely.)
+The `default` profile listens on a TCP port (default `7423`) whenever the
+machine has a reachable address — the shared accessible address (`network.host`
+— see `CONFIG.md → network`), an auto-detected overlay/LAN address, or `0.0.0.0`
+in Docker; with no reachable address it stays Unix-only. **Named profiles are
+Unix-only** unless they set their own explicit, unique `alp.tcp_port` (otherwise
+profiles would collide on the shared port). A profile is configured once and
+both the ALP peer listener and the device-pairing host plane use the same
+address, on their own ports. (`service.alp: false` disables ALP for a profile
+entirely.)
 Connection establishment uses the **Noise_XK** handshake pattern
 from the Noise Protocol Framework [NOISE], where the responder's
 static public key is known to the initiator in advance and the

@@ -197,6 +197,35 @@ def test_server_without_tcp_bind_only_serves_unix_socket(tmp_path: Path) -> None
 
 
 @pytest.mark.asyncio
+async def test_start_binds_unix_socket_without_tcp(short_tmp: Path) -> None:
+    # host.sock comes up on start() with no TCP/network resolution — the slow Tailscale detect is deferred to enable_tcp().
+    home = short_tmp / "h"
+    home.mkdir()
+    srv = host_server.Server(home=home, tcp_bind=None)
+    await srv.start()
+    try:
+        assert srv.socket_path().exists()
+        assert srv._ws_server is None
+    finally:
+        await srv.stop()
+    assert not srv.socket_path().exists()
+
+
+@pytest.mark.asyncio
+async def test_enable_tcp_refuses_public_bind_without_optin(short_tmp: Path) -> None:
+    home = short_tmp / "h"
+    home.mkdir()
+    srv = host_server.Server(home=home, tcp_bind=None)
+    await srv.start()
+    try:
+        with pytest.raises(ValueError):
+            await srv.enable_tcp(("8.8.8.8", 49200))
+        assert srv._ws_server is None
+    finally:
+        await srv.stop()
+
+
+@pytest.mark.asyncio
 async def test_server_accepts_calls_over_websocket_when_bound(
     short_tmp: Path, monkeypatch,
 ) -> None:
@@ -239,6 +268,82 @@ async def test_server_accepts_calls_over_websocket_when_bound(
             assert response["result"] == {"pong": True}
         finally:
             await srv.stop()
+
+
+@pytest.mark.asyncio
+async def test_enable_tcp_after_start_serves_websocket(short_tmp: Path, monkeypatch) -> None:
+    # start() unix-only, then enable_tcp() dynamically binds a working WS listener.
+    home = short_tmp / "h"
+    home.mkdir()
+    from alpi import home as home_mod
+    monkeypatch.setattr(home_mod, "_ROOT", short_tmp)
+    from alpi.host import devices as devices_mod
+    row = devices_mod.add(label="test", role="member")
+
+    with patch.object(
+        host_server.Server, "_validate_tcp_bind",
+        staticmethod(lambda b, allow_public_bind=False: b),
+    ):
+        srv = host_server.Server(home=home, tcp_bind=None)
+
+        async def handler(_params, _server):
+            return {"pong": True}
+
+        srv.register("host.ping", handler)
+        await srv.start()
+        try:
+            assert srv._ws_server is None
+            await srv.enable_tcp(("127.0.0.1", 0))
+            assert srv._ws_server is not None
+            sockets = srv._ws_server.sockets
+            assert sockets
+            port = sockets[0].getsockname()[1]
+            async with websockets.connect(f"ws://127.0.0.1:{port}") as ws:
+                await ws.send(json.dumps({
+                    "id": "1", "method": "host.ping",
+                    "params": {"auth_token": row["token"]},
+                }))
+                response = json.loads(await ws.recv())
+            assert response["result"] == {"pong": True}
+        finally:
+            await srv.stop()
+
+
+@pytest.mark.asyncio
+async def test_run_host_keeps_unix_when_tcp_bind_fails(short_tmp: Path, monkeypatch) -> None:
+    import asyncio
+    from alpi import service
+    from alpi import home as home_mod
+
+    monkeypatch.setattr(home_mod, "_ROOT", short_tmp)
+    monkeypatch.setattr("alpi.host.network.resolve_host_tcp_bind", lambda h: ("100.64.0.1", 49200))
+
+    async def _boom(self, host, port):  # the WS listener fails to bind...
+        raise OSError("address already in use")
+    monkeypatch.setattr(host_server.Server, "_start_ws", _boom)
+
+    task = asyncio.create_task(service._run_host(short_tmp, "default"))
+    sock = short_tmp / "host" / "host.sock"
+    try:
+        for _ in range(150):
+            if sock.exists():
+                break
+            await asyncio.sleep(0.02)
+        assert sock.exists()  # ...but host.sock stays up and serving
+        reader, writer = await asyncio.open_unix_connection(str(sock))
+        writer.write(b'{"id":"r","method":"host.version"}\n')
+        await writer.drain()
+        line = await asyncio.wait_for(reader.readline(), timeout=2.0)
+        assert b'"result"' in line
+        writer.close()
+        await writer.wait_closed()
+    finally:
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+    assert not sock.exists()  # stop() cleaned up on cancel
 
 
 @pytest.mark.asyncio

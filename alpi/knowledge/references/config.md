@@ -135,7 +135,7 @@ Use the canonical registered name — `alpi_knowledge`, not `knowledge`; `search
 - Wrong model? -> active profile + `model`.
 - Config edit ignored? -> restart the relevant daemon/service.
 - Different work/personal models? -> use separate profiles.
-- One address, two ports? -> `network.host` is the shared accessible address (empty = auto-detect Tailscale->LAN); `host.tcp_port` is device pairing, `alp.tcp_port` is the ALP peer listener. Both are always-on when a reachable address exists; Unix sockets always work locally.
+- One address, two ports? -> `network.host` is the shared accessible address (empty = auto-detect Tailscale->LAN); `host.tcp_port` is device pairing, `alp.tcp_port` is the ALP peer listener. The `default` profile auto-exposes ALP TCP when a reachable address exists; named profiles are Unix-only unless they set their own unique `alp.tcp_port`. Unix sockets always work locally.
 - Advertise vs bind? -> `network.host` is the *advertised* address clients and peers dial; the *bind* is derived from it, not used verbatim. A private/Tailscale IP binds itself; a hostname or an opted-in public IP binds `0.0.0.0`; a public IP without `host.allow_public_bind` refuses to bind (Unix-only); docker always binds `0.0.0.0`. `host.allow_public_bind` gates the public case for both planes (the address is shared).
 
 ## Related topics

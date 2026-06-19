@@ -132,6 +132,7 @@ class Server:
         self.stream_handlers: dict[str, StreamHandler] = {}
         self._server: asyncio.AbstractServer | None = None
         self._ws_server: Any | None = None
+        self._allow_public_bind = allow_public_bind
         self._tcp_bind: tuple[str, int] | None = (
             self._validate_tcp_bind(tcp_bind, allow_public_bind) if tcp_bind else None
         )
@@ -185,13 +186,23 @@ class Server:
         sock.chmod(0o600)
         log.info("host server listening on %s", sock)
         if self._tcp_bind is not None:
-            host, port = self._tcp_bind
-            # permessage-deflate: 50–80% off JSON-RPC payloads on remote Tailscale; clients that don't negotiate fall back to raw.
-            self._ws_server = await ws_serve(
-                self._handle_websocket, host=host, port=port,
-                compression="deflate",
-            )
-            log.info("host server listening on ws://%s:%d", host, port)
+            await self._start_ws(*self._tcp_bind)
+
+    async def _start_ws(self, host: str, port: int) -> None:
+        # permessage-deflate: 50–80% off JSON-RPC payloads on remote Tailscale; clients that don't negotiate fall back to raw.
+        self._ws_server = await ws_serve(
+            self._handle_websocket, host=host, port=port,
+            compression="deflate",
+        )
+        log.info("host server listening on ws://%s:%d", host, port)
+
+    async def enable_tcp(self, bind: tuple[str, int]) -> None:
+        # Bind the TCP/WS listener after start(), so host.sock (Unix) comes up first — the bind address needs slow network detection.
+        if self._ws_server is not None:
+            return
+        host, port = self._validate_tcp_bind(bind, self._allow_public_bind)
+        self._tcp_bind = (host, port)
+        await self._start_ws(host, port)
 
     async def stop(self) -> None:
         if self._ws_server is not None:

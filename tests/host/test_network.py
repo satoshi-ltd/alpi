@@ -31,6 +31,22 @@ def test_falls_back_to_lan() -> None:
         assert scope == "lan"
 
 
+def test_detect_bind_ip_is_cached_per_process() -> None:
+    network.detect_bind_ip.cache_clear()
+    calls = {"n": 0}
+
+    def fake_ts() -> str:
+        calls["n"] += 1
+        return "100.64.0.9"
+
+    with patch("alpi.host.network.detect_tailscale_ip", side_effect=fake_ts):
+        first = network.detect_bind_ip()
+        second = network.detect_bind_ip()
+    assert first == ("100.64.0.9", "tailscale")
+    assert second == ("100.64.0.9", "tailscale")
+    assert calls["n"] == 1  # the (blocking) probe is reused across calls, not re-run on every one
+
+
 def test_resolve_bind_host_docker_is_all_interfaces() -> None:
     assert network.resolve_bind_host("home.example.com", is_docker=True, allow_public=False) == "0.0.0.0"
 

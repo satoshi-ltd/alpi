@@ -865,9 +865,8 @@ where
         .map_err(|e| format!("write: {e}"))?;
     stream.flush().ok();
 
-    set_status(id, ConnectionStatus::Online, None);
-
     let reader = BufReader::new(stream);
+    let mut online = false;
     for line in reader.lines() {
         let line = match line {
             Ok(l) => l,
@@ -880,6 +879,11 @@ where
             Ok(v) => v,
             Err(_) => continue,
         };
+        if !online {
+            // Online only once the daemon actually replies — connecting to a still-booting daemon must not flap Online→Offline.
+            set_status(id, ConnectionStatus::Online, None);
+            online = true;
+        }
         if !on_frame(frame) {
             break;
         }
@@ -1015,13 +1019,13 @@ where
         Duration::from_secs(WS_CONNECT_TIMEOUT_SECS),
         Duration::from_secs(STREAM_READ_TIMEOUT_SECS),
     )?;
-    set_status(connection_id, ConnectionStatus::Online, None);
     let id = "tauri-stream";
     ws.send_json(&json!({
         "id": id,
         "method": method,
         "params": with_auth(params, token),
     }))?;
+    let mut online = false;
     loop {
         let text = ws.read_text()?;
         if !frame_matches_id(&text, id) {
@@ -1050,6 +1054,11 @@ where
         if auth_failed {
             mark_connection_revoked(connection_id);
             return Err("alp -32000: auth-failed".to_string());
+        }
+        if !online {
+            // Online only once the daemon actually replies — mirrors the local stream.
+            set_status(connection_id, ConnectionStatus::Online, None);
+            online = true;
         }
         let keep_going = on_frame(frame);
         if done || !keep_going {

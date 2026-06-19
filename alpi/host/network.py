@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import functools
 import ipaddress
 import os
 import shutil
@@ -20,6 +21,8 @@ _PRIVATE_RANGES = (
 
 
 # Tailscale first, LAN fallback. Never 0.0.0.0/public — pairing token would leak in plaintext.
+# Cached per process: re-running per profile blocks the loop (Tailscale CLI hits its 2s timeout under launchd).
+@functools.lru_cache(maxsize=1)
 def detect_bind_ip() -> tuple[str, str] | None:
     ts = detect_tailscale_ip()
     if ts:
