@@ -11,6 +11,16 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.3.75 — 2026-06-20 — attach & save files on Windows and Linux
+
+_Requires alpi v0.9.19+._
+
+- **Attaching files now works on Windows and Linux.** The attach button and the
+  workspace picker used a macOS-only file dialog and did nothing elsewhere; they
+  now open the native picker on every platform.
+- **"Reveal in folder" and "Save a copy" work cross-platform too** — Explorer on
+  Windows, the file manager on Linux, Finder on macOS.
+
 ## v0.3.74 — 2026-06-19 — reliable reconnect after a daemon restart
 
 _Requires alpi v0.9.19+._

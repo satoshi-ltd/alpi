@@ -15,6 +15,7 @@ use std::thread;
 use tauri::menu::{AboutMetadataBuilder, Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::Manager;
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
+use tauri_plugin_dialog::DialogExt;
 
 fn active_chats() -> &'static Mutex<HashMap<String, String>> {
     static SLOT: OnceLock<Mutex<HashMap<String, String>>> = OnceLock::new();
@@ -1901,27 +1902,15 @@ async fn resolve_ctx_window(
 }
 
 #[tauri::command]
-async fn pick_folder() -> Result<Option<String>, String> {
-    let out = tauri::async_runtime::spawn_blocking(|| {
-        Command::new("osascript")
-            .args([
-                "-e",
-                "POSIX path of (choose folder with prompt \"Select workspace\")",
-            ])
-            .output()
+async fn pick_folder(app: tauri::AppHandle) -> Result<Option<String>, String> {
+    let picked = tauri::async_runtime::spawn_blocking(move || {
+        app.dialog().file().set_title("Select workspace").blocking_pick_folder()
     })
     .await
-    .map_err(|e| format!("join: {e}"))?
-    .map_err(|e| format!("osascript: {e}"))?;
-    if !out.status.success() {
-        return Ok(None);
-    }
-    let p = String::from_utf8_lossy(&out.stdout).trim().to_string();
-    if p.is_empty() {
-        Ok(None)
-    } else {
-        Ok(Some(p.trim_end_matches('/').to_string()))
-    }
+    .map_err(|e| format!("join: {e}"))?;
+    Ok(picked
+        .and_then(|f| f.into_path().ok())
+        .map(|p| p.to_string_lossy().into_owned()))
 }
 
 #[derive(serde::Serialize)]
@@ -1931,22 +1920,20 @@ struct AttachmentMeta {
     size: u64,
 }
 
-// Native multi-file picker (macOS osascript, same approach as pick_folder).
-// Returns absolute POSIX paths; the daemon validates type/size.
+// Returns absolute paths; the daemon validates type/size.
 #[tauri::command]
-async fn pick_files() -> Result<Vec<String>, String> {
-    let script = "set theFiles to choose file with prompt \"Attach files\" with multiple selections allowed\nset out to \"\"\nrepeat with f in theFiles\nset out to out & POSIX path of f & linefeed\nend repeat\nreturn out";
-    let out = tauri::async_runtime::spawn_blocking(move || {
-        Command::new("osascript").args(["-e", script]).output()
+async fn pick_files(app: tauri::AppHandle) -> Result<Vec<String>, String> {
+    let picked = tauri::async_runtime::spawn_blocking(move || {
+        app.dialog().file().set_title("Attach files").blocking_pick_files()
     })
     .await
-    .map_err(|e| format!("join: {e}"))?
-    .map_err(|e| format!("osascript: {e}"))?;
-    if !out.status.success() {
-        return Ok(vec![]); // user cancelled
-    }
-    let s = String::from_utf8_lossy(&out.stdout);
-    Ok(s.lines().map(|l| l.trim().to_string()).filter(|l| !l.is_empty()).collect())
+    .map_err(|e| format!("join: {e}"))?;
+    Ok(picked
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|f| f.into_path().ok())
+        .map(|p| p.to_string_lossy().into_owned())
+        .collect())
 }
 
 // Stat the given paths (used by the picker + drag-drop) so the composer can
@@ -2052,20 +2039,44 @@ async fn attachment_stage(
         .ok_or_else(|| "stage: response missing attachment".to_string())
 }
 
-#[tauri::command]
-fn reveal_in_finder(path: String) -> Result<(), String> {
-    Command::new("open")
-        .args(["-R", &path])
-        .spawn()
-        .map(|_| ())
-        .map_err(|e| format!("open: {e}"))
+// Linux has no portable "select file" — open the containing directory instead.
+fn reveal_command(os: &str, path: &str) -> (&'static str, Vec<String>) {
+    match os {
+        "macos" => ("open", vec!["-R".into(), path.into()]),
+        "windows" => ("explorer", vec![format!("/select,{path}")]),
+        _ => {
+            let dir = std::path::Path::new(path)
+                .parent()
+                .map(|p| p.to_string_lossy().into_owned())
+                .filter(|s| !s.is_empty())
+                .unwrap_or_else(|| path.into());
+            ("xdg-open", vec![dir])
+        }
+    }
 }
 
-// Save-a-copy-as via osascript; copies the original so the saved file isn't re-encoded.
-// macOS-only for now (osascript) — other platforms get a clear error, not a silent no-op.
-#[cfg(target_os = "macos")]
 #[tauri::command]
-async fn save_file_as(path: String, roots: Option<Vec<String>>) -> Result<bool, String> {
+fn reveal_in_finder(path: String) -> Result<(), String> {
+    let os = if cfg!(target_os = "macos") {
+        "macos"
+    } else if cfg!(target_os = "windows") {
+        "windows"
+    } else {
+        "linux"
+    };
+    let (program, args) = reveal_command(os, &path);
+    Command::new(program)
+        .args(&args)
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| format!("reveal: {e}"))
+}
+
+// Save a copy via the native save dialog; copies the original so it isn't re-encoded.
+#[tauri::command]
+async fn save_file_as(
+    app: tauri::AppHandle, path: String, roots: Option<Vec<String>>,
+) -> Result<bool, String> {
     let src = std::path::Path::new(&path);
     if !src.is_file() {
         return Err(format!("not a file: {path}"));
@@ -2075,32 +2086,18 @@ async fn save_file_as(path: String, roots: Option<Vec<String>>) -> Result<bool, 
     }
     let default_name = src
         .file_name()
-        .map(|n| n.to_string_lossy().replace('"', ""))
+        .map(|n| n.to_string_lossy().into_owned())
         .unwrap_or_else(|| "download".into());
-    let script = format!(
-        "set f to choose file name with prompt \"Save image\" default name \"{default_name}\"\nreturn POSIX path of f"
-    );
-    let out = tauri::async_runtime::spawn_blocking(move || {
-        Command::new("osascript").args(["-e", &script]).output()
+    let dest = tauri::async_runtime::spawn_blocking(move || {
+        app.dialog().file().set_file_name(default_name).blocking_save_file()
     })
     .await
-    .map_err(|e| format!("join: {e}"))?
-    .map_err(|e| format!("osascript: {e}"))?;
-    if !out.status.success() {
+    .map_err(|e| format!("join: {e}"))?;
+    let Some(dest) = dest.and_then(|f| f.into_path().ok()) else {
         return Ok(false); // user cancelled
-    }
-    let dest = String::from_utf8_lossy(&out.stdout).trim().to_string();
-    if dest.is_empty() {
-        return Ok(false);
-    }
+    };
     std::fs::copy(&path, &dest).map_err(|e| format!("copy: {e}"))?;
     Ok(true)
-}
-
-#[cfg(not(target_os = "macos"))]
-#[tauri::command]
-async fn save_file_as(_path: String, _roots: Option<Vec<String>>) -> Result<bool, String> {
-    Err("download is only supported on macOS for now".into())
 }
 
 // Returns the full {models, errors} envelope so the UI can show *which*
@@ -2818,6 +2815,7 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_window_state::Builder::default().build())
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
@@ -3006,6 +3004,41 @@ mod path_allow_tests {
         // Outside default roots → refused; a passed (workspace) root extends the allowlist.
         assert!(!path_within_allowed("/etc/hosts", &[]));
         assert!(path_within_allowed("/etc/hosts", &["/etc".to_string()]));
+    }
+}
+
+#[cfg(test)]
+mod reveal_tests {
+    use super::reveal_command;
+
+    #[test]
+    fn macos_selects_the_file_with_spaces() {
+        assert_eq!(
+            reveal_command("macos", "/Users/a/My File.png"),
+            ("open", vec!["-R".to_string(), "/Users/a/My File.png".to_string()]),
+        );
+    }
+
+    #[test]
+    fn windows_selects_the_file_with_spaces() {
+        assert_eq!(
+            reveal_command("windows", "C:\\Users\\a\\My File.png"),
+            ("explorer", vec!["/select,C:\\Users\\a\\My File.png".to_string()]),
+        );
+    }
+
+    #[test]
+    fn linux_opens_the_containing_directory() {
+        assert_eq!(
+            reveal_command("linux", "/home/a/My File.png"),
+            ("xdg-open", vec!["/home/a".to_string()]),
+        );
+    }
+
+    #[test]
+    fn linux_falls_back_to_path_when_no_parent() {
+        assert_eq!(reveal_command("linux", "/"), ("xdg-open", vec!["/".to_string()]));
+        assert_eq!(reveal_command("linux", "file.png"), ("xdg-open", vec!["file.png".to_string()]));
     }
 }
 
