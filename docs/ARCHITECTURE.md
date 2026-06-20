@@ -72,7 +72,7 @@ alpi doctor                    live health check (Telegram getMe, IMAP login,
                                exits 1 on any failure, 0 otherwise
 
 alpi logs                      tail every subsystem log merged by timestamp
-  --source {service|agent|approval}            restrict to one subsystem
+  --source {service|gateway|schedule|agent|approval}  restrict to one subsystem
   -n N                                         last N lines (default 100)
   -f                                           follow mode (poll every 1s)
 
@@ -213,7 +213,7 @@ that live at `{home}/skills/<category>/<name>/`.
 │   ├── alp.pid            listener pid
 │   └── secrets/alp_key.{pem,pub}   Ed25519 identity (private 0600, public 0644)
 ├── host/                   control-plane state (default profile only)
-│   └── host.sock          Unix socket the desktop / mobile client connects to
+│   └── host.sock          Unix socket the local desktop connects to (mobile uses the WebSocket)
 ├── outputs/                persistent inbox for proactive agent messages + schedule failures
 │   └── outputs.jsonl       JSONL store (≤500 rows, atomic compaction)
 └── logs/                   service.log, agent.log, approval.log, ledger.json,
@@ -450,23 +450,6 @@ workgroups, host}` in each profile's `config.yaml`):
   client always targets default's socket and reaches sibling
   profiles via the `profile` param on each verb.
 
-### Host plane (`alpi/host/`)
-
-The host plane is the local device API. It is JSON-RPC-shaped over
-`~/.alpi/host/host.sock` with filesystem permissions as the trust
-boundary. It is not ALP: there is no peer identity, no envelope, no
-Noise handshake, and no remote transport. Desktop and future mobile
-clients talk to this API; they do not read profile files directly.
-
-`host.device_state` owns the device-facing profile state contract:
-profile lists/summaries, bounded profile file reads, storage stats,
-gateway status/config previews, skill lists, workgroup lists, workgroup
-member rosters, config field edits, and local Ollama model discovery.
-The desktop Tauri layer keeps its existing `invoke(...)` command names
-for UI stability, but those commands proxy to `host.*` verbs instead of
-parsing `~/.alpi` themselves. Mobile should use the same verb shapes
-rather than inventing a separate state API.
-
 Default if a key is missing: every service on (so the desktop
 "just works" after install).
 
@@ -489,6 +472,12 @@ ExecStart. It:
 7. SIGTERM / SIGINT cancels every task cooperatively; PID file
    removed on exit.
 
+**Operational invariants of `serve_all`** (each one is the root cause of a real production incident; do not regress):
+
+- `~/.alpi/service.lock` is held under an OS-level non-blocking lock (`fcntl.flock` on Unix, `msvcrt.locking` on Windows) for the daemon's lifetime; this guarantees one daemon per installation. A second `alpi daemon start` exits with a warning instead of racing the existing one.
+- `~/.alpi/host/host.sock` is published BEFORE the TCP plane is resolved or enabled. TCP bind work (`resolve_host_tcp_bind`, `server.enable_tcp`) runs off-loop via `asyncio.to_thread` and is non-fatal — a TCP failure leaves the Unix socket up, so the local desktop (which talks to the daemon over `host.sock`) keeps working when network detection (Tailscale, LAN) is slow or blocked. Mobile and any remote desktop go through the WebSocket transport and *do* need TCP to come up.
+- ALP TCP is auto-bound only on `default`, or on a profile with its own explicit `alp.tcp_port`. Other profiles stay Unix-only — otherwise every named profile would fight `default` for the same port.
+
 **Active home isolation.** Because N profiles share one process,
 tools that resolve their home via `home.get_home()` would all see
 the same env vars and write to default's home. The engine wraps
@@ -507,13 +496,26 @@ per-profile services map.
 Control-plane for the desktop / mobile client. **Not** ALP — the
 two share a profile but live on different sockets, with different
 auth models. ALP is peer-to-peer (Noise on TCP, envelope-signed,
-peers pinned in `peers.yaml`); host is client-to-daemon.
+peers pinned in `peers.yaml`); host is client-to-daemon. JSON-RPC-shaped
+over `~/.alpi/host/host.sock` with filesystem permissions as the trust
+boundary; no peer identity, no envelope, no Noise handshake. Desktop
+and future mobile clients talk to this API; they do not read profile
+files directly.
 
 Only the `default` profile hosts this subsystem — the client
 always targets default's socket and reaches sibling profiles via
 the `profile` parameter on each verb. `_run_host` refuses to bind
 on any other profile even if the toggle leaks via manual config
 edit.
+
+`host.device_state` owns the device-facing profile state contract:
+profile lists/summaries, bounded profile file reads, storage stats,
+gateway status/config previews, skill lists, workgroup lists, workgroup
+member rosters, config field edits, and local Ollama model discovery.
+The desktop Tauri layer keeps its existing `invoke(...)` command names
+for UI stability, but those commands proxy to `host.*` verbs instead of
+parsing `~/.alpi` themselves. Mobile should use the same verb shapes
+rather than inventing a separate state API.
 
 Two transports, one dispatcher:
 
@@ -949,17 +951,19 @@ tools.
 
 ### Logging (`alpi/_log.py`, `alpi/logs.py`)
 
-Every subsystem writes to a single flat folder: `~/.alpi/logs/<subsystem>.log`, rotated at 1 MB with no backups. Same format everywhere (`%(asctime)s %(levelname)s %(name)s %(message)s`) so `alpi logs` can merge them by timestamp prefix. The source tag on display comes from the filename.
+Every subsystem writes to a single flat folder: `~/.alpi/logs/<subsystem>.log`, rotated at 1 MB with 3 backups (`MAX_BYTES` / `BACKUP_COUNT` in `_log.py`). Same format everywhere (`%(asctime)s %(levelname)s %(name)s %(message)s`) so `alpi logs` can merge them by timestamp prefix. The source tag on display comes from the filename.
 
-Four sources today:
+Three sources today (file on disk + the writer that produces it):
 
 - **`service`** — the unified orchestrator's root log: subsystem
   start/stop, gateway listener events (Telegram / IMAP / Gmail / Matrix),
   scheduler ticks, ALP listener traffic, delivery errors. Written
   by `alpi.service` and every subsystem that logs through the
   root logger.
-- **`agent`** — one line per TUI/gateway/schedule-triggered turn: session id, elapsed, tool names, reply size, cumulative cost, truncated user prompt. This is the **cross-session grep index** — `sessions/<id>.json` carry the full detail; `agent.log` lets you answer "what has alpi been doing this week?" without iterating JSONs.
-- **`approval`** — one line per non-SAFE terminal command classification (ALLOW / DENY with severity, pattern, reason). **Security audit trail**; complements the per-turn detail in `sessions/`.
+- **`agent`** — one line per TUI/gateway/schedule-triggered turn: session id, elapsed, tool names, reply size, cumulative cost, truncated user prompt. Written by `engine.py::run_turn` via `get_subsystem_logger(home, "agent")`. This is the **cross-session grep index** — `sessions/<id>.json` carry the full detail; `agent.log` lets you answer "what has alpi been doing this week?" without iterating JSONs.
+- **`approval`** — one line per non-SAFE terminal command classification (ALLOW / DENY with severity, pattern, reason). Written by `tools/_approval.py`. **Security audit trail**; complements the per-turn detail in `sessions/`.
+
+The `alpi logs --source` CLI choice list also accepts `gateway` and `schedule`. Inside the unified daemon, gateway and scheduler events route through the root logger and land in `service.log` — those filter values are kept so that any standalone or legacy `gateway.log` / `schedule.log` (e.g. from an older `scheduler.run.ensure_running()` invocation that ran out-of-process) stays selectable.
 
 Why logs are NOT inside `sessions/`: `sessions/` is a structured store (one JSON per conversation, indexed by id, consumed by `session_search` and the resume flow). Mixing freeform logs would break the glob pattern and the cleanup semantics. Logs are the **index and audit trail**; sessions are the **content**. Peers, not nested.
 
@@ -1051,12 +1055,6 @@ Threat model: prompt injection via email/web content, LLM-issued tool calls on t
 
 `cfg.workspace` (or `cwd` fallback if unset) is the **default root for relative paths** — not a wall. File tools and terminal can reach absolute paths anywhere except the sensitive denylist. Real workspace-only isolation is the opt-in OS sandbox (Layer 2). Configure it via `alpi setup → Workspace`; the TUI top bar read-outs the resolved path but does not edit it.
 
-### `_state.py` — global tool state callbacks
-
-Three module-level globals: `_emit`, `_interrupt_getter`, `_usage_sink`. The engine sets them around each tool call (`_emit` → updates the active ToolCard, `_interrupt_getter` → propagates Ctrl+C, `_usage_sink` → records sub-agent token counts). Tools call `emit_state(label)`, `is_interrupted()`, `record_usage(in, out, cost)` to bubble info up.
-
-These are GLOBALS — concurrent tool calls would race. The current design is single-threaded; batch parallel research (ROADMAP §R.3) requires moving to `contextvars` or thread-locals.
-
 ## Dependencies
 
 Hard runtime deps are kept tight — every line in `pyproject.toml`'s `dependencies` is actually imported by `alpi/`. The audited set, with one-liner for why each earns its place:
@@ -1086,7 +1084,7 @@ Security posture: `uv run --with pip-audit pip-audit` ran clean against the full
 
 ## Testing
 
-`tests/` runs via `pytest`. ~340 tests, ~2s. `--llm` flag enables real-LLM integration tests (a few cents on free models).
+Run via `uv run pytest tests/`. The `--llm` flag enables real-LLM integration tests (a few cents on free models).
 
 Key fixtures (`tests/conftest.py`):
 - `tmp_home_no_env` — isolated `~/.alpi/` rooted at a tmp dir, no `.env` (safe for unit tests).
@@ -1095,11 +1093,10 @@ Key fixtures (`tests/conftest.py`):
 ## Non-obvious things to know
 
 - `rich.markup.escape()` any user-controlled substring before passing to `Text.from_markup()`. Several past crashes from `[exit 0]`-style tokens in tool output.
-- Tool results are capped at 10,000 chars in `engine.py` before going into the LLM message thread.
+- Tool results are capped per-tool by `alpi/tools/_budget.py` (default 100,000 chars; override via `tools.<name>.max_result_chars`).
 - `last_ctx_tokens` (current prompt size) ≠ cumulative `input_tokens`. Header shows the former.
 - `call_from_thread` + Python built-in methods (e.g. `dict.pop`) crashes Textual; always wrap in a regular function.
 - `cfg` must be loaded BEFORE `super().__init__()` on `AlpiApp`. The theme is then registered immediately after, in `__init__` rather than `on_mount`, because child widgets read `self.app.theme_variables` during their own mount (which fires first). `self.get_css_variables()` is called explicitly to rebuild the var dict synchronously — setting `self.theme` alone schedules the refresh for the next event-loop tick.
-- `browser.py` exists but is intentionally NOT in the registry. Reactivate when Playwright lands (ROADMAP §B).
 - Gateway subprocess uses `alpi chat --once --emit-events --resume-chat <chat_id>` — separate codepath from the TUI, simpler, non-streaming, and persisted under `gateway/sessions`.
 - Schedule subprocess uses `alpi chat --once --emit-events --no-save` — same event stream, no resumable session file.
 - `ALPI_HOME` env var routes daemons + tests to a specific profile root.

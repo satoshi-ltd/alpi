@@ -35,7 +35,7 @@
 ## Model examples
 
 ```yaml
-model: openrouter/xiaomi/mimo-v2-pro
+model: openrouter/owl-alpha
 ```
 
 ```yaml

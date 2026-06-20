@@ -15,6 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import yaml
 
 from alpi.providers.reasoning import supports_reasoning
+from alpi.tools.skill import CATEGORIES as ALPI_SKILL_CATEGORIES
 
 ROOT = Path.home() / ".alpi"
 PROFILES_DIR = ROOT / "profiles"
@@ -182,7 +183,14 @@ def validate_org(agents: list[dict], strict: bool = True) -> tuple[list[str], li
                 rel = (AGENTS_DIR / agent["name"] / "agent.md").relative_to(REPO_ROOT)
                 errors.append(f"{rel}: tools_deny references unknown tool(s) {unknown} — security risk, deny silently misses")
 
-    # 2. Per-agent: reasoning_effort is REQUIRED in every agent.md. No invisible defaults — reasoning is a property of the agent's identity, not the org's tier policy.
+    # 2. Per-agent: a mistyped tier silently resolves to the default model — same silent-miss class as a tools_deny typo.
+    valid_tiers = {"default", "strong"}
+    for agent in agents:
+        if agent["tier"] not in valid_tiers:
+            rel = (AGENTS_DIR / agent["name"] / "agent.md").relative_to(REPO_ROOT)
+            errors.append(f"{rel}: unknown tier '{agent['tier']}' — must be one of: default, strong")
+
+    # 3. Per-agent: reasoning_effort is REQUIRED in every agent.md. No invisible defaults — reasoning is a property of the agent's identity, not the org's tier policy.
     for agent in agents:
         rel = (AGENTS_DIR / agent["name"] / "agent.md").relative_to(REPO_ROOT)
         eff = agent["reasoning_effort"]
@@ -195,16 +203,23 @@ def validate_org(agents: list[dict], strict: bool = True) -> tuple[list[str], li
         if eff in {"low", "medium", "high"} and not supports_reasoning(agent["model"]):
             warnings.append(f"{rel}: reasoning_effort='{eff}' declared but model '{agent['model']}' doesn't support reasoning — value will be ignored")
 
-    # 3. Per-skill: structural integrity + tool-name correctness.
-    skill_paths = sorted(AGENTS_DIR.rglob("SKILL.md"))
+    skill_paths = sorted(list(AGENTS_DIR.rglob("SKILL.md")) + list(COMMON_SKILLS_DIR.rglob("SKILL.md")))
     for skill_path in skill_paths:
         fm, body = _parse_frontmatter(skill_path)
         rel = skill_path.relative_to(REPO_ROOT)
 
         if not fm.get("description"):
             errors.append(f"{rel}: missing required frontmatter field 'description'")
-        if not fm.get("category"):
+        cat = fm.get("category")
+        if not cat:
             errors.append(f"{rel}: missing required frontmatter field 'category'")
+        elif cat not in ALPI_SKILL_CATEGORIES:
+            errors.append(f"{rel}: category '{cat}' is outside alpi's closed enum — skill will be silently dropped from the system-prompt index. Valid: {sorted(ALPI_SKILL_CATEGORIES)}")
+        # origin must match alpi's runtime schema, else the skill is silently
+        # dropped from the system-prompt index (invisible to the agent).
+        origin = fm.get("origin")
+        if origin and origin not in ("agent", "user"):
+            errors.append(f"{rel}: origin must be 'agent' or 'user' (got '{origin}')")
 
         if have_registry:
             declared = list(fm.get("tools") or [])
@@ -324,7 +339,7 @@ def _parse_agent_file(path: Path) -> dict:
     else:
         model = MODEL_DEFAULT
 
-    daily_usd = float(front.get("daily_usd", BUDGET_DAILY_DEFAULT))
+    daily_usd = float(front.get("daily_usd", BUDGET_DAILY_STRONG if tier == "strong" else BUDGET_DAILY_DEFAULT))
 
     # Reasoning effort is REQUIRED in every agent.md. validate_org() catches missing or malformed values. Here we just parse and normalise. YAML 1.1 booleanises bare `off` / `no` / `false` to False — handle that. "" means "not declared" (validation will fail later).
     if "reasoning_effort" in front:
@@ -459,10 +474,22 @@ def _force_create(home: Path, name: str, max_attempts: int = 6) -> None:
     fail(f"profile create {name} failed after {max_attempts} attempts")
 
 
+# Workspace-only build artefacts the mirror must NOT delete (no node_modules in source).
+_SYNC_KEEP = {"node_modules", "dist", ".astro", ".git", "projects"}
+
+
 def _sync_children(src: Path, dst: Path) -> int:
-    """Replace each child of dst with the corresponding child from src. Returns count."""
+    """Mirror src's children into dst, deleting dst children absent from src (except _SYNC_KEEP)."""
     count = 0
     dst.mkdir(parents=True, exist_ok=True)
+    src_names = {item.name for item in src.iterdir()}
+    for stale in dst.iterdir():
+        if stale.name in src_names or stale.name in _SYNC_KEEP:
+            continue
+        if stale.is_dir():
+            shutil.rmtree(stale)
+        else:
+            stale.unlink()
     for item in src.iterdir():
         target = dst / item.name
         if item.is_dir():
@@ -643,7 +670,8 @@ def restart_and_verify(edges: list[tuple[str, str]]) -> None:
         pending.add((a, b))
         pending.add((b, a))
 
-    deadline_s = 180
+    # 110 directional pings on a cold daemon were observed to need >180s.
+    deadline_s = 360
     step(f"verifying {len(pending)} peer connections (ping, up to {deadline_s}s)")
     deadline = time.time() + deadline_s
     backoff = 1.0

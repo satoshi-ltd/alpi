@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.9.20 — 2026-06-20 — current model recommendations + safer org bootstrap
+
+- **Model recommendations refreshed against the current OpenRouter catalog.**
+  The top-picks tables (skill router / cheap turns / engineering) now use
+  models that actually exist — owl-alpha, DeepSeek V4 Pro/Flash, MiMo V2.5
+  Pro/V2.5, MiniMax M3, Claude Opus 4.8 / Sonnet 4.6, GPT-5.5 / 5.4-mini —
+  alongside the native Anthropic and OpenAI routes for users who have those
+  provider keys. The example config also uses a model the catalog recognises.
+- **`organizations/setup.py --check` rejects unknown skill categories.** A
+  skill declaring a category outside alpi's closed enum (e.g. `factory`,
+  `seo`, `qa`) is no longer silently dropped from the system-prompt skill
+  index at runtime — bootstrap now fails fast with the valid list, so an org
+  can't deploy a roster whose agents can't discover their own skills.
+
 ## v0.9.19 — 2026-06-19 — faster, more reliable daemon startup
 
 - **The control socket comes up immediately on startup.** Network detection

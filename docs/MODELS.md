@@ -9,7 +9,7 @@ shell commands, browser calls, and user-specific state in context?"
 Use this page as a practical selector. Prices, context windows, and
 provider wrappers move quickly; re-check them every 2-3 months.
 
-Last updated: **2026-05-03**.
+Last updated: **2026-06-20**.
 
 ## What matters for alpi
 
@@ -32,12 +32,19 @@ tool-heavy agent workloads rather than chat-only benchmarks. Treat
 that data as a weak signal, not a ranking: defaults, price, rate
 limits, regional availability, and provider wrappers all bias usage.
 
-Common high-usage models in tool-heavy agent workloads currently include
-MiMo-V2-Pro, Qwen3.6 Plus, MiniMax M2.7, Step 3.5 Flash, Nemotron 3
-Super, Claude Sonnet / Opus 4.6, GLM 5.x, Gemini Flash variants,
-Kimi K2.x, DeepSeek V3/V4, and OpenAI GPT-5.4 / 5.4-mini.
+Common high-usage models in tool-heavy agent workloads currently
+include owl-alpha, MiMo V2.5 Pro / V2.5, DeepSeek V4 Pro / Flash,
+MiniMax M3, Claude Sonnet 4.6 / Opus 4.8, Nemotron 3 Super, and
+OpenAI GPT-5.5 / 5.4-mini.
 
 ## Pick by workload
+
+The tables below use **OpenRouter routes** as the primary ID — a
+single OPENROUTER_API_KEY covers every entry, and several picks
+(owl-alpha, MiMo, DeepSeek, MiniMax, Nemotron) only ship via
+OpenRouter. For Anthropic and OpenAI you can also use **native
+routes** if you have those provider keys; the convention is shown
+under the tables.
 
 ### Skill router / long tool chains
 
@@ -47,15 +54,14 @@ daily interactive alpi use.
 
 | Model | OpenRouter ID | Why |
 |---|---|---|
-| **MiMo-V2-Pro** | `xiaomi/mimo-v2-pro` | Strong adoption in persistent-agent workloads; good price/context balance for tool-heavy profiles. |
-| **Claude Sonnet 4.6** | `anthropic/claude-sonnet-4.6` | Strong general tool discipline and coding judgement; sensible premium daily driver. |
-| **Qwen3.6 Plus** | `qwen/qwen3.6-plus` | Strong price-for-quality candidate for skill routing. |
-| **MiniMax M2.7** | `minimax/minimax-m2.7` | Strong mid-tier agent model; good for persistent sessions, with occasional parameter-filling slips. |
-| **GLM 5.1 / GLM 5 Turbo** | `z-ai/glm-5.1`, `z-ai/glm-5-turbo` | Strong usage in coding-agent workloads; watch wrapper/version stability. |
-| **GPT-5.4** | `openai/gpt-5.4` | Good premium fallback when OpenAI compatibility matters. |
+| **owl-alpha** | `owl-alpha` | Most-used OpenRouter model for tool-heavy workloads; 1M context, alpha channel — fast iteration, expect occasional wrapper churn. |
+| **DeepSeek V4 Pro** | `deepseek/deepseek-v4-pro` | Strong tool discipline at 1M context; sensible flagship-class daily driver. |
+| **MiMo V2.5 Pro** | `xiaomi/mimo-v2.5-pro` | Strong adoption in persistent-agent workloads; 1M context, good price-for-quality. |
+| **MiniMax M3** | `minimax/minimax-m3` | Mid-tier agent model; 512K context, decent for persistent sessions. |
+| **Claude Sonnet 4.6** | `anthropic/claude-sonnet-4.6` | Premium daily driver; strongest tool discipline and coding judgement at this tier. |
 
 If you can only choose one model for a skill-heavy profile, start with
-MiMo-V2-Pro, Qwen3.6 Plus, MiniMax M2.7, or Sonnet 4.6 depending on
+owl-alpha, DeepSeek V4 Pro, MiMo V2.5 Pro, or Sonnet 4.6 depending on
 budget and provider preference.
 
 ### Cheap service turns
@@ -66,11 +72,11 @@ creating or debugging skills.
 
 | Model | OpenRouter ID | Why |
 |---|---|---|
-| **Step 3.5 Flash** | `stepfun-ai/step-3.5-flash` | Good cheap workhorse for simple turns. |
-| **MiMo-V2-Flash** | `xiaomi/mimo-v2-flash` | Budget sibling to MiMo-V2-Pro; useful for A/B testing cheap service profiles. |
-| **Gemini Flash / Flash Lite** | provider-specific | Good for simple tasks, less convincing as the main skill router. |
-| **DeepSeek V3.2 / V4 Flash** | provider-specific | Good cost floor; use when price matters more than perfect tool discipline. |
-| **GPT-5.4-mini** | `openai/gpt-5.4-mini` | Reasonable budget OpenAI choice for simple tool use; acceptable as a router only when the skill catalog is clean and small. |
+| **DeepSeek V4 Flash** | `deepseek/deepseek-v4-flash` | 1M context at the cheap-fast tier; the headroom is useful even for short turns. |
+| **MiMo V2.5** | `xiaomi/mimo-v2.5` | Budget sibling to MiMo V2.5 Pro; 1M context, useful for A/B testing cheap service profiles. |
+| **Claude Haiku 4.5** | `anthropic/claude-haiku-4.5` | Cheap and fast with reasoning support; reliable for short-chain turns. |
+| **GPT-5.4 Mini** | `openai/gpt-5.4-mini` | Reasonable OpenAI budget pick for simple tool use; acceptable as a router only when the skill catalog is clean and small. |
+| **GPT-5.4 Nano** | `openai/gpt-5.4-nano` | Cheapest OpenAI tier; mechanical turns only. |
 
 ### High-stakes engineering
 
@@ -79,24 +85,46 @@ long debugging sessions, schema changes, release work.
 
 | Model | OpenRouter ID | Why |
 |---|---|---|
-| **Claude Opus 4.6** | `anthropic/claude-opus-4.6` | Expensive ceiling for hard multi-step engineering and long-context judgement. |
+| **Claude Opus 4.8** | `anthropic/claude-opus-4.8` | Flagship — expensive ceiling for hard multi-step engineering and long-context judgement. |
 | **Claude Sonnet 4.6** | `anthropic/claude-sonnet-4.6` | Best daily premium balance for coding-heavy profiles. |
-| **GLM 5.1** | `z-ai/glm-5.1` | Strong open-weight engineering candidate; useful for reviews and long tasks. |
-| **GPT-5.5 / GPT-5.4** | provider-specific | Good choice when OpenAI compatibility or ecosystem behaviour is the constraint. |
+| **GPT-5.5** | `openai/gpt-5.5` | OpenAI flagship; strong general engineering. |
+| **GPT-5.5 Pro** | `openai/gpt-5.5-pro` | Extended-reasoning variant for the hardest multi-step tasks. |
+| **o3** | `openai/o3` | Heavy-reasoning specialist; not a router, use for one-shot analysis. |
+| **GPT-5.3 Codex** | `openai/gpt-5.3-codex` | Coding-specific; good for repo-tooling profiles. |
+| **Nemotron 3 Super** | `nvidia/nemotron-3-super-120b-a12b` | Open-weight engineering option; 256K context. |
 
 ### Local / sovereign profiles
 
-"Best" here means best inside the Ollama-style local ecosystem, not
-best overall. Expect more prompt sensitivity than cloud frontier
-models.
+"Best" here means best inside the local model ecosystem (Ollama,
+llama.cpp, vLLM), not best overall. The curated catalog does not pin
+specific local IDs because the field moves fast and the right pick
+depends on your VRAM budget. Choose from current Qwen-coder, Gemma,
+codestral, or Mistral families. Expect more prompt sensitivity than
+cloud frontier models and tighter context windows.
 
-| Model | Mode | Notes |
+For privacy-constrained work that needs more headroom than your
+hardware allows, consider an open-weight cloud model like
+`nvidia/nemotron-3-super-120b-a12b` (256K) or
+`deepseek/deepseek-v4-pro` (1M) — not local, but no proprietary
+frontier dependency.
+
+### Native routes for Anthropic and OpenAI
+
+If you have ANTHROPIC_API_KEY or OPENAI_API_KEY, you can use native
+routes instead of the OpenRouter aliases. Native usually means lower
+latency and one less layer to break.
+
+| Provider | OpenRouter route | Native route |
 |---|---|---|
-| **Qwen3.6** | local, 27B/35B class | Default local pick for balanced agentic use. |
-| **Gemma4** | local + cloud variants | Good local family when multimodal/function-calling support matters. |
-| **qwen3-coder-next** | local + cloud variants | Coding specialist; do not treat it as the general personal-agent brain. |
-| **devstral-small-2** | local + cloud variants | Good repo-tooling option at moderate size. |
-| **Kimi K2.6** | cloud on Ollama | Strong within the Ollama ecosystem, but not a true local model. |
+| Anthropic | `anthropic/claude-opus-4.8` | `claude-opus-4-8` (hyphens, not dots) |
+| Anthropic | `anthropic/claude-sonnet-4.6` | `claude-sonnet-4-6` |
+| Anthropic | `anthropic/claude-haiku-4.5` | `claude-haiku-4-5` |
+| OpenAI | `openai/gpt-5.5` | `gpt-5.5` (no prefix) |
+| OpenAI | `openai/gpt-5.5-pro` | `gpt-5.5-pro` |
+| OpenAI | `openai/gpt-5.4-mini` | `gpt-5.4-mini` |
+| OpenAI | `openai/gpt-5.4-nano` | `gpt-5.4-nano` |
+| OpenAI | `openai/gpt-5.3-codex` | `gpt-5.3-codex` |
+| OpenAI | `openai/o3` | `o3` |
 
 ## Not recommended as the primary skill router
 
@@ -122,15 +150,14 @@ exists in config, but do not rely on automatic runtime escalation unless
 your installed version explicitly implements it. Use profiles to split
 roles today:
 
-- **Personal skill-heavy profile**: MiMo-V2-Pro, Qwen3.6 Plus,
-  MiniMax M2.7, or Sonnet 4.6.
-- **High-volume gateway profile**: Step 3.5 Flash, MiMo-V2-Flash,
-  Gemini Flash Lite, or GPT-5.4-mini, with fewer skills and tighter
-  prompts.
-- **Engineering profile**: Sonnet 4.6, Opus 4.6, GLM 5.1, GPT-5.5, or
-  GPT-5.4.
-- **Local/private profile**: Qwen3.6 first, then Gemma4 or a coding
-  specialist for repo-specific work.
+- **Personal skill-heavy profile**: owl-alpha, DeepSeek V4 Pro,
+  MiMo V2.5 Pro, or Sonnet 4.6.
+- **High-volume gateway profile**: DeepSeek V4 Flash, MiMo V2.5,
+  Haiku 4.5, or GPT-5.4-mini, with fewer skills and tighter prompts.
+- **Engineering profile**: Sonnet 4.6, Opus 4.8, GPT-5.5, GPT-5.5-pro,
+  or o3.
+- **Local/private profile**: a current Qwen-coder, Gemma, or codestral
+  family model, sized to your VRAM.
 
 ## Switching model
 
@@ -142,4 +169,4 @@ Three ways, any of them works:
   `~/.alpi/profiles/<name>/config.yaml`.
 
 The choice is per-profile. `alpi -p work` can run Sonnet 4.6 while
-`alpi -p personal` runs MiMo-V2-Flash without interference.
+`alpi -p personal` runs MiMo V2.5 without interference.
