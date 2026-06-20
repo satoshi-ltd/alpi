@@ -219,17 +219,36 @@ def list_profiles(root: Path | None = None) -> list[str]:
     return out
 
 
+_PRIVATE_SUBDIRS = (
+    "memories",
+    "secrets",
+    "sessions",
+    "skills",
+    "schedule/output",
+    "logs",
+    "host",
+    "mentions",
+    "outputs",
+)
+
+
+def _chmod_private(path: Path) -> None:
+    if os.name != "posix":
+        return
+    try:
+        path.chmod(0o700)
+    except OSError:
+        pass
+
+
 def ensure_home(home: Path) -> None:
     """Bootstrap the home directory tree on first run."""
-    for sub in (
-        "memories",
-        "secrets",
-        "sessions",
-        "skills",
-        "schedule/output",
-        "logs",
-    ):
-        (home / sub).mkdir(parents=True, exist_ok=True)
+    home.mkdir(parents=True, exist_ok=True)
+    _chmod_private(home)
+    for sub in _PRIVATE_SUBDIRS:
+        d = home / sub
+        d.mkdir(parents=True, exist_ok=True)
+        _chmod_private(d)
     gi = home / ".gitignore"
     if not gi.exists():
         gi.write_text(

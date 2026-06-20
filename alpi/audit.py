@@ -71,11 +71,20 @@ def _audit_permissions(home: Path) -> list[Check]:
 
     secrets_dir = keys_mod.private_path(home).parent
     targets = [
+        (home, "profile home", "warn"),
         (home / ".env", ".env", "fail"),
         (keys_mod.private_path(home), "ALP private key", "fail"),
         (secrets_dir, "secrets/", "fail"),
         (home / "config.yaml", "config.yaml", "warn"),
         (peers_mod.path(home), "peers.yaml", "warn"),
+        (home / "memories", "memories/", "warn"),
+        (home / "sessions", "sessions/", "warn"),
+        (home / "skills", "skills/", "warn"),
+        (home / "schedule" / "output", "schedule/output/", "warn"),
+        (home / "logs", "logs/", "warn"),
+        (home / "host", "host/", "fail"),
+        (home / "mentions", "mentions/", "warn"),
+        (home / "outputs", "outputs/", "warn"),
     ]
     out: list[Check] = []
     for path, label, severity in targets:

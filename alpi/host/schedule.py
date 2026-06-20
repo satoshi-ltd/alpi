@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 import asyncio
-import json
-import os
 from pathlib import Path
 from typing import Any
 
 from alpi.host import server as host_server
+from alpi.scheduler import jobs_store
 
 
 # asyncio.create_task is weak-ref; this set keeps the task alive until done_callback drops it.
@@ -35,35 +34,17 @@ def _emit_schedule_changed(home: Path, job_id: str, action: str) -> None:
     })
 
 
-def _atomic_write_json(path: Path, payload: Any) -> None:
-    """tmp + rename so a crash mid-write never leaves a half-written jobs.json that would silently empty the schedule on next read."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    fd = os.open(str(tmp), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            f.write(json.dumps(payload, indent=2))
-            f.flush()
-            os.fsync(f.fileno())
-    except Exception:
-        try: tmp.unlink()
-        except OSError: pass
-        raise
-    os.replace(str(tmp), str(path))
-
-
 async def _schedule_list(
     params: dict[str, Any], _server: host_server.Server,
 ) -> dict[str, Any]:
     profile = str((params or {}).get("profile") or "")
     home = _resolve_home(profile)
-    p = home / "schedule" / "jobs.json"
-    if not p.exists():
-        return {"jobs": []}
     try:
-        jobs = json.loads(p.read_text()) or []
-    except json.JSONDecodeError:
-        return {"jobs": []}
+        jobs = jobs_store.read(home)
+    except jobs_store.CorruptJobsFile as e:
+        raise host_server.HandlerError(
+            -32603, "internal-error", data={"detail": f"jobs.json corrupt: {e}"},
+        )
     return {"jobs": jobs}
 
 
@@ -76,23 +57,24 @@ async def _schedule_remove(
     job_id = str((params or {}).get("id") or "").strip()
     _check_id(job_id, "id")
     home = _resolve_home(profile)
-    p = home / "schedule" / "jobs.json"
-    if not p.exists():
+    if not jobs_store.jobs_path(home).exists():
         raise host_server.HandlerError(
             -32004, "not-found", data={"detail": "no jobs.json"},
         )
+
+    def _remove(jobs: list[dict]) -> list[dict]:
+        keep = [j for j in jobs if j.get("id") != job_id]
+        if len(keep) == len(jobs):
+            raise host_server.HandlerError(
+                -32004, "not-found", data={"detail": f"no job {job_id!r}"},
+            )
+        return keep
     try:
-        jobs = json.loads(p.read_text()) or []
-    except json.JSONDecodeError:
+        jobs_store.update(home, _remove)
+    except jobs_store.CorruptJobsFile as e:
         raise host_server.HandlerError(
-            -32603, "internal-error", data={"detail": "jobs.json corrupt"},
+            -32603, "internal-error", data={"detail": f"jobs.json corrupt: {e}"},
         )
-    keep = [j for j in jobs if j.get("id") != job_id]
-    if len(keep) == len(jobs):
-        raise host_server.HandlerError(
-            -32004, "not-found", data={"detail": f"no job {job_id!r}"},
-        )
-    _atomic_write_json(p, keep)
     _emit_schedule_changed(home, job_id, "removed")
     return {"ok": True}
 
@@ -107,28 +89,25 @@ async def _schedule_set_paused(
     paused = bool((params or {}).get("paused", False))
     _check_id(job_id, "id")
     home = _resolve_home(profile)
-    p = home / "schedule" / "jobs.json"
-    if not p.exists():
+    if not jobs_store.jobs_path(home).exists():
         raise host_server.HandlerError(
             -32004, "not-found", data={"detail": "no jobs.json"},
         )
-    try:
-        jobs = json.loads(p.read_text()) or []
-    except json.JSONDecodeError:
-        raise host_server.HandlerError(
-            -32603, "internal-error", data={"detail": "jobs.json corrupt"},
-        )
-    found = False
-    for j in jobs:
-        if j.get("id") == job_id:
-            j["paused"] = paused
-            found = True
-            break
-    if not found:
+
+    def _set_paused(jobs: list[dict]) -> list[dict]:
+        for j in jobs:
+            if j.get("id") == job_id:
+                j["paused"] = paused
+                return jobs
         raise host_server.HandlerError(
             -32004, "not-found", data={"detail": f"no job {job_id!r}"},
         )
-    _atomic_write_json(p, jobs)
+    try:
+        jobs_store.update(home, _set_paused)
+    except jobs_store.CorruptJobsFile as e:
+        raise host_server.HandlerError(
+            -32603, "internal-error", data={"detail": f"jobs.json corrupt: {e}"},
+        )
     _emit_schedule_changed(home, job_id, "paused" if paused else "resumed")
     return {"ok": True, "paused": paused}
 
@@ -146,11 +125,12 @@ async def _schedule_fire(
     _check_id(job_id, "id")
     home = _resolve_home(profile)
 
-    jobs_path = home / "schedule" / "jobs.json"
     try:
-        jobs = json.loads(jobs_path.read_text()) if jobs_path.exists() else []
-    except (OSError, json.JSONDecodeError):
-        jobs = []
+        jobs = jobs_store.read(home)
+    except jobs_store.CorruptJobsFile as e:
+        raise host_server.HandlerError(
+            -32603, "internal-error", data={"detail": f"jobs.json corrupt: {e}"},
+        )
     if not any(isinstance(j, dict) and j.get("id") == job_id for j in jobs):
         raise host_server.HandlerError(
             -32004, "fire-failed", data={"detail": f"no job with id {job_id!r}"},

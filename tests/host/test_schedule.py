@@ -465,8 +465,10 @@ async def test_set_paused_emits_schedule_changed(tmp_path: Path, monkeypatch) ->
 
 
 def test_atomic_write_no_tmp_left_behind(tmp_path: Path) -> None:
-    target = tmp_path / "jobs.json"
-    data_schedule._atomic_write_json(target, [{"id": "a"}])
+    from alpi.scheduler import jobs_store
+    home = tmp_path / "h"
+    jobs_store.update(home, lambda _old: [{"id": "a"}])
+    target = jobs_store.jobs_path(home)
     assert target.exists()
     assert not target.with_suffix(target.suffix + ".tmp").exists()
     assert json.loads(target.read_text()) == [{"id": "a"}]

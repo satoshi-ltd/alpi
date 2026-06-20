@@ -1,5 +1,34 @@
 # Changelog
 
+## v0.9.21 — 2026-06-20 — scheduler, filesystem, and outbound-HTTP hardening
+
+- **Scheduled jobs survive concurrent edits and corrupted files.** The
+  scheduler, the agent's `schedule` tool, and the desktop control plane
+  now share one locked store for `schedule/jobs.json` so a tick can't
+  clobber a job the desktop just removed and two clients can't lose
+  each other's changes. If the file is corrupt for any reason, every
+  caller refuses to write — the bytes on disk are preserved until you
+  fix or replace them.
+- **Profile state directories are owner-only on bootstrap.** Profile
+  home and the dirs holding memories, sessions, logs, secrets, host
+  pairing, ALP mentions, agent outputs, and skill state are tightened
+  to `0700` on bootstrap and re-tightened on upgrade. `alpi audit`
+  flags any drift. Closes a real exposure on shared hosts (docker
+  stacks, Umbrel) where another local user could list and read
+  conversation history or `AGENT.md` context.
+- **`web_fetch` and `read_image` are hardened against DNS rebinding.**
+  Each fetch resolves DNS once, validates every returned IP against
+  the private/cloud-metadata denylist, and pins the connection to that
+  validated set. The TLS layer still uses the original hostname for
+  SNI and certificate validation, and the client falls back across
+  multiple IPs under one shared deadline (a four-record host with
+  one-second budget still respects one second).
+- **`peers.yaml` rate-limit field matches what the daemon actually
+  reads.** The doc said `rate_limit.requests_per_minute` (default 10);
+  the runtime keys off `rate_limit.per_minute` (default 60). Doc
+  aligned to the runtime with no code rename — peer throttles you
+  configured per the published spec now take effect.
+
 ## v0.9.20 — 2026-06-20 — current model recommendations + safer org bootstrap
 
 - **Model recommendations refreshed against the current OpenRouter catalog.**

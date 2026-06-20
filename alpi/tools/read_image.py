@@ -4,12 +4,9 @@ from __future__ import annotations
 
 import base64
 
-import httpx
-
 from alpi import config as cfg_mod
 from alpi import llm
 from alpi.home import get_home
-from alpi.tools._guards import check_url
 from alpi.tools._paths import resolve_path
 from alpi.tools import _state as tool_state_mod
 from alpi.tools.base import Tool, ToolResult
@@ -88,37 +85,42 @@ def _is_url(s: str) -> bool:
 
 
 def _download(url: str) -> bytes:
-    ok, reason = check_url(url)
-    if not ok:
-        raise ValueError(f"URL blocked: {reason}")
-
-    def _redirect_guard(resp: httpx.Response) -> None:
-        if resp.is_redirect and resp.next_request is not None:
-            target = str(resp.next_request.url)
-            safe, why = check_url(target)
-            if not safe:
-                raise ValueError(f"blocked redirect to {target}: {why}")
-
-    with httpx.Client(
-        timeout=DOWNLOAD_TIMEOUT,
-        follow_redirects=True,
-        event_hooks={"response": [_redirect_guard]},
-    ) as client:
-        r = client.get(
-            url,
-            headers={
-                "User-Agent": "alpi/read_image",
-                "Accept": "image/*,*/*;q=0.8",
-            },
-        )
+    from alpi.tools._pinned_dns import safe_client
+    current = url
+    r = None
+    for _ in range(10):
+        ok, reason, client = safe_client(current, follow_redirects=False, timeout=DOWNLOAD_TIMEOUT)
+        if not ok or client is None:
+            raise ValueError(f"URL blocked: {reason}")
+        with client:
+            r = client.get(
+                current,
+                headers={
+                    "User-Agent": "alpi/read_image",
+                    "Accept": "image/*,*/*;q=0.8",
+                },
+            )
+        if r.status_code in (301, 302, 303, 307, 308):
+            nxt = r.headers.get("location") or ""
+            if not nxt:
+                raise ValueError("redirect without location")
+            if nxt.startswith("/"):
+                from urllib.parse import urljoin
+                nxt = urljoin(current, nxt)
+            current = nxt
+            continue
         r.raise_for_status()
-        cl = r.headers.get("content-length")
-        if cl and int(cl) > MAX_BYTES:
-            raise ValueError(f"image too large ({int(cl):,} bytes > {MAX_BYTES:,})")
-        body = r.content
-        if len(body) > MAX_BYTES:
-            raise ValueError(f"image too large ({len(body):,} bytes > {MAX_BYTES:,})")
-        return body
+        break
+    else:
+        raise ValueError("too many redirects")
+
+    cl = r.headers.get("content-length")
+    if cl and int(cl) > MAX_BYTES:
+        raise ValueError(f"image too large ({int(cl):,} bytes > {MAX_BYTES:,})")
+    body = r.content
+    if len(body) > MAX_BYTES:
+        raise ValueError(f"image too large ({len(body):,} bytes > {MAX_BYTES:,})")
+    return body
 
 
 class ReadImage(Tool):

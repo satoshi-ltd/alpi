@@ -133,7 +133,7 @@ before any `id`-based routing occurs.
     - link.ping
     - link.ask
   rate_limit:
-    requests_per_minute: 10
+    per_minute: 10
 
 - id: home-server
   alias: nas
@@ -144,7 +144,7 @@ before any `id`-based routing occurs.
     - link.ask
     - link.cancel
   rate_limit:
-    requests_per_minute: 30
+    per_minute: 30
 ```
 
 | Field | Required | Meaning |
@@ -154,7 +154,7 @@ before any `id`-based routing occurs.
 | `pubkey` | yes | Base64-encoded Ed25519 public key. The sole routing key for intra-machine dispatch. |
 | `address` | for inter-machine | `host:port`, opaque to ALP — resolved by the OS at dial time. Any reachable host works: a LAN IP, a private hostname, a Docker/compose DNS name, a VPN / Tailscale / WireGuard address, or a public IP. ALP does no discovery, NAT traversal, or relay — you supply the address. Omit for intra-profile peers (the local Unix socket is resolved by `pubkey`). |
 | `allow` | yes | Fail-closed list of methods the peer may invoke. `workgroup.*` methods bypass this list — workgroup membership (enforced per-handler with `-32008 workgroup-not-member`) is the real gate. |
-| `rate_limit.requests_per_minute` | no | Throttle. Default allows 10/min/peer. Enforced before handler dispatch. |
+| `rate_limit.per_minute` | no | Throttle. Default `60` requests/min/peer (`alpi/alp/rate_limit.py::DEFAULT_PER_MINUTE`). Enforced before handler dispatch; over-cap requests get JSON-RPC `-32005`. |
 
 Spending is not configured here. Every inbound call from every peer
 draws from the same daily ledger that interactive turns, gateway

@@ -7,6 +7,7 @@ import shlex
 import uuid
 
 from alpi.home import get_home
+from alpi.scheduler import jobs_store
 from alpi.tools.base import Tool, ToolResult
 
 
@@ -164,11 +165,12 @@ class Schedule(Tool):
             title: str | None = None,
             timeout: int | None = None) -> ToolResult:
         home = get_home()
-        jobs_path = home / "schedule" / "jobs.json"
-        jobs_path.parent.mkdir(parents=True, exist_ok=True)
-        jobs: list[dict] = json.loads(jobs_path.read_text()) if jobs_path.exists() else []
 
         if action == "list":
+            try:
+                jobs = jobs_store.read(home)
+            except jobs_store.CorruptJobsFile as e:
+                return ToolResult(ok=False, output="", error=f"jobs.json corrupt: {e}")
             return ToolResult(ok=True, output=json.dumps(jobs, indent=2))
 
         if action == "add":
@@ -187,20 +189,6 @@ class Schedule(Tool):
                 err = _validate_prompt(prompt)
                 if err:
                     return ToolResult(ok=False, output="", error=err)
-            if not force:
-                dup = _find_duplicate(jobs, kind or "cron", expression,
-                                       run_at, after_hours, prompt)
-                if dup is not None:
-                    return ToolResult(
-                        ok=False, output="",
-                        error=(
-                            f"a similar job already exists (id={dup['id']}, "
-                            f"kind={dup.get('kind')}). Run "
-                            f"schedule(action='list') to inspect, then "
-                            f"either remove the old one or pass force=true "
-                            f"to add this one anyway."
-                        ),
-                    )
             from datetime import datetime, timezone
             now_iso = datetime.now(timezone.utc).isoformat()
             job: dict = {
@@ -250,12 +238,33 @@ class Schedule(Tool):
             else:
                 return ToolResult(ok=False, output="", error=f"unknown kind: {kind}")
 
-            jobs.append(job)
-            jobs_path.write_text(json.dumps(jobs, indent=2))
+            outcome: list[ToolResult] = []
 
-            # Tell the user how to activate delivery. Nothing fires
-            # without the alpi daemon running with the schedule
-            # subsystem enabled for this profile.
+            def _add(jobs: list[dict]) -> list[dict] | None:
+                if not force:
+                    dup = _find_duplicate(jobs, kind or "cron", expression,
+                                           run_at, after_hours, prompt)
+                    if dup is not None:
+                        outcome.append(ToolResult(
+                            ok=False, output="",
+                            error=(
+                                f"a similar job already exists (id={dup['id']}, "
+                                f"kind={dup.get('kind')}). Run "
+                                f"schedule(action='list') to inspect, then "
+                                f"either remove the old one or pass force=true "
+                                f"to add this one anyway."
+                            ),
+                        ))
+                        return None
+                jobs.append(job)
+                return jobs
+            try:
+                jobs_store.update(home, _add)
+            except jobs_store.CorruptJobsFile as e:
+                return ToolResult(ok=False, output="", error=f"jobs.json corrupt: {e}")
+            if outcome:
+                return outcome[0]
+
             from alpi import home as home_mod
             from alpi import service as svc
             running = svc.daemon_running_pid(home_mod._ROOT) is not None
@@ -273,108 +282,130 @@ class Schedule(Tool):
         if action == "update":
             if not id:
                 return ToolResult(ok=False, output="", error="'id' required")
-            job = next((j for j in jobs if j.get("id") == id), None)
-            if job is None:
-                return ToolResult(ok=False, output="", error=f"job {id} not found")
+            outcome: list[ToolResult] = []
 
-            changes: list[str] = []
-            # Snapshot before mutation: needed to detect on↔off transitions
-            # and re-validate the inherited prompt with the right rule set.
-            was_no_agent = bool(job.get("no_agent"))
-            effective_no_agent = no_agent if no_agent is not None else was_no_agent
-            if prompt:
-                if effective_no_agent:
-                    from alpi.scheduler.run import validate_no_agent_command
-                    err = validate_no_agent_command(prompt, home)
-                    if err:
-                        return ToolResult(ok=False, output="", error=err)
-                else:
-                    err = _validate_prompt(prompt)
-                    if err:
-                        return ToolResult(ok=False, output="", error=err)
-                job["prompt"] = prompt
-                changes.append("prompt")
-            if notify is not None:
-                job["notify"] = bool(notify)
-                changes.append("notify")
-            if title is not None:
-                if title.strip():
-                    job["title"] = title.strip()
-                else:
-                    job.pop("title", None)
-                changes.append("title")
-            if paused is not None:
-                job["paused"] = bool(paused)
-                changes.append("paused")
-            if no_agent is not None:
-                if no_agent:
-                    if not was_no_agent:
+            def _update(jobs: list[dict]) -> list[dict] | None:
+                job = next((j for j in jobs if j.get("id") == id), None)
+                if job is None:
+                    outcome.append(ToolResult(ok=False, output="", error=f"job {id} not found"))
+                    return None
+
+                changes: list[str] = []
+                was_no_agent = bool(job.get("no_agent"))
+                effective_no_agent = no_agent if no_agent is not None else was_no_agent
+                if prompt:
+                    if effective_no_agent:
                         from alpi.scheduler.run import validate_no_agent_command
-                        err = validate_no_agent_command(job.get("prompt", ""), home)
+                        err = validate_no_agent_command(prompt, home)
                         if err:
-                            return ToolResult(ok=False, output="", error=err)
-                    job["no_agent"] = True
-                else:
-                    # Off-transition: existing prompt was a shell command,
-                    # re-run LLM-prompt validators before the agent path consumes it.
-                    if was_no_agent:
-                        err = _validate_prompt(job.get("prompt", ""))
+                            outcome.append(ToolResult(ok=False, output="", error=err))
+                            return None
+                    else:
+                        err = _validate_prompt(prompt)
                         if err:
-                            return ToolResult(ok=False, output="", error=err)
-                    job.pop("no_agent", None)
-                changes.append("no_agent")
+                            outcome.append(ToolResult(ok=False, output="", error=err))
+                            return None
+                    job["prompt"] = prompt
+                    changes.append("prompt")
+                if notify is not None:
+                    job["notify"] = bool(notify)
+                    changes.append("notify")
+                if title is not None:
+                    if title.strip():
+                        job["title"] = title.strip()
+                    else:
+                        job.pop("title", None)
+                    changes.append("title")
+                if paused is not None:
+                    job["paused"] = bool(paused)
+                    changes.append("paused")
+                if no_agent is not None:
+                    if no_agent:
+                        if not was_no_agent:
+                            from alpi.scheduler.run import validate_no_agent_command
+                            err = validate_no_agent_command(job.get("prompt", ""), home)
+                            if err:
+                                outcome.append(ToolResult(ok=False, output="", error=err))
+                                return None
+                        job["no_agent"] = True
+                    else:
+                        if was_no_agent:
+                            err = _validate_prompt(job.get("prompt", ""))
+                            if err:
+                                outcome.append(ToolResult(ok=False, output="", error=err))
+                                return None
+                        job.pop("no_agent", None)
+                    changes.append("no_agent")
 
-            if kind:
-                job["kind"] = kind
-                changes.append("kind")
-            job_kind = job.get("kind") or "cron"
-            if expression:
-                job["expression"] = expression
-                changes.append("expression")
-            if run_at:
-                from datetime import datetime
-                try:
-                    datetime.fromisoformat(run_at)
-                except ValueError:
-                    return ToolResult(
-                        ok=False, output="",
-                        error=f"'run_at' is not a valid ISO 8601 datetime: {run_at!r}",
-                    )
-                job["run_at"] = run_at
-                changes.append("run_at")
-            if after_hours is not None:
-                if after_hours <= 0:
-                    return ToolResult(
-                        ok=False, output="",
-                        error="'after_hours' must be > 0 for kind=inactivity",
-                    )
-                job["after_hours"] = float(after_hours)
-                changes.append("after_hours")
-            if timeout is not None:
-                err = _validate_timeout(timeout)
+                if kind:
+                    job["kind"] = kind
+                    changes.append("kind")
+                job_kind = job.get("kind") or "cron"
+                if expression:
+                    job["expression"] = expression
+                    changes.append("expression")
+                if run_at:
+                    from datetime import datetime
+                    try:
+                        datetime.fromisoformat(run_at)
+                    except ValueError:
+                        outcome.append(ToolResult(
+                            ok=False, output="",
+                            error=f"'run_at' is not a valid ISO 8601 datetime: {run_at!r}",
+                        ))
+                        return None
+                    job["run_at"] = run_at
+                    changes.append("run_at")
+                if after_hours is not None:
+                    if after_hours <= 0:
+                        outcome.append(ToolResult(
+                            ok=False, output="",
+                            error="'after_hours' must be > 0 for kind=inactivity",
+                        ))
+                        return None
+                    job["after_hours"] = float(after_hours)
+                    changes.append("after_hours")
+                if timeout is not None:
+                    err = _validate_timeout(timeout)
+                    if err:
+                        outcome.append(ToolResult(ok=False, output="", error=err))
+                        return None
+                    job["timeout"] = int(timeout)
+                    changes.append("timeout")
+
+                err = _validate_job_shape(job)
                 if err:
-                    return ToolResult(ok=False, output="", error=err)
-                job["timeout"] = int(timeout)
-                changes.append("timeout")
-
-            err = _validate_job_shape(job)
-            if err:
-                return ToolResult(ok=False, output="", error=err)
-            if job_kind == "cron" and "last_run_at" not in job:
-                from datetime import datetime, timezone
-                job["last_run_at"] = datetime.now(timezone.utc).isoformat()
-            jobs_path.write_text(json.dumps(jobs, indent=2))
-            changed = ", ".join(dict.fromkeys(changes)) or "nothing"
-            return ToolResult(ok=True, output=f"Updated job {id}: {changed}")
+                    outcome.append(ToolResult(ok=False, output="", error=err))
+                    return None
+                if job_kind == "cron" and "last_run_at" not in job:
+                    from datetime import datetime, timezone
+                    job["last_run_at"] = datetime.now(timezone.utc).isoformat()
+                changed = ", ".join(dict.fromkeys(changes)) or "nothing"
+                outcome.append(ToolResult(ok=True, output=f"Updated job {id}: {changed}"))
+                return jobs
+            try:
+                jobs_store.update(home, _update)
+            except jobs_store.CorruptJobsFile as e:
+                return ToolResult(ok=False, output="", error=f"jobs.json corrupt: {e}")
+            return outcome[0]
 
         if action == "remove":
             if not id:
                 return ToolResult(ok=False, output="", error="'id' required")
-            new_jobs = [j for j in jobs if j.get("id") != id]
-            if len(new_jobs) == len(jobs):
-                return ToolResult(ok=False, output="", error=f"job {id} not found")
-            jobs_path.write_text(json.dumps(new_jobs, indent=2))
-            return ToolResult(ok=True, output=f"Removed job {id}")
+            outcome: list[ToolResult] = []
+
+            def _remove(jobs: list[dict]) -> list[dict] | None:
+                new_jobs = [j for j in jobs if j.get("id") != id]
+                if len(new_jobs) == len(jobs):
+                    outcome.append(ToolResult(ok=False, output="", error=f"job {id} not found"))
+                    return None
+                outcome.append(ToolResult(ok=True, output=f"Removed job {id}"))
+                return new_jobs
+            try:
+                jobs_store.update(home, _remove)
+            except jobs_store.CorruptJobsFile as e:
+                return ToolResult(ok=False, output="", error=f"jobs.json corrupt: {e}")
+            return outcome[0]
 
         if action == "fire":
             if not id:

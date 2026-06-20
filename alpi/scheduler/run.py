@@ -16,6 +16,8 @@ from pathlib import Path
 
 from croniter import croniter
 
+from alpi.scheduler import jobs_store
+
 log = logging.getLogger("alpi.schedule")
 
 
@@ -77,17 +79,7 @@ def _sessions_dir(home: Path) -> Path:
 
 
 def _load_jobs(home: Path) -> list[dict]:
-    p = jobs_path(home)
-    if not p.exists():
-        return []
-    try:
-        data = json.loads(p.read_text() or "[]")
-    except json.JSONDecodeError:
-        log.warning("jobs.json is malformed — treating as empty")
-        return []
-    if not isinstance(data, list):
-        return []
-    return data
+    return jobs_store.read(home)
 
 
 def _job_notifies(job: dict) -> bool:
@@ -95,12 +87,7 @@ def _job_notifies(job: dict) -> bool:
 
 
 def _save_jobs(home: Path, jobs: list[dict]) -> None:
-    p = jobs_path(home)
-    p.parent.mkdir(parents=True, exist_ok=True)
-    # Write atomically: write a sibling then rename.
-    tmp = p.with_suffix(".json.tmp")
-    tmp.write_text(json.dumps(jobs, indent=2))
-    tmp.replace(p)
+    jobs_store.update(home, lambda _old: jobs)
 
 
 
@@ -432,23 +419,32 @@ def fire_by_id(home: Path, job_id: str) -> tuple[bool, str]:
     ``schedule.done`` / ``schedule.failed`` on the host event stream so
     a UI-triggered fire-and-forget run still surfaces the result.
     """
-    # Returns 2-tuple by design; the `reply` field lives only on the host event stream.
-    jobs = _load_jobs(home)
-    for job in jobs:
-        if job.get("id") == job_id:
-            log.info("firing job %s ad-hoc (%s)", job_id, job.get("kind", "?"))
-            outcome = run_job(job, home)
-            log.info("job %s ad-hoc %s — %s", job_id,
-                     "OK" if outcome.ok else "FAIL", outcome.message)
-            _emit_schedule_event(home, job, outcome)
-            job["last_run_at"] = _now().isoformat()
-            _save_jobs(home, jobs)
-            return outcome.ok, outcome.message
-    import difflib
-    available = [str(j.get("id", "")) for j in jobs if j.get("id")]
-    hit = difflib.get_close_matches(job_id, available, n=1, cutoff=0.6)
-    hint = f". Did you mean {hit[0]!r}?" if hit else ""
-    return False, f"no job with id {job_id!r}{hint}"
+    try:
+        jobs = jobs_store.read(home)
+    except jobs_store.CorruptJobsFile as e:
+        log.error("jobs.json corrupt — refusing to fire (preserve disk state): %s", e)
+        return False, f"jobs.json corrupt: {e}"
+    target = next((j for j in jobs if j.get("id") == job_id), None)
+    if target is None:
+        import difflib
+        available = [str(j.get("id", "")) for j in jobs if j.get("id")]
+        hit = difflib.get_close_matches(job_id, available, n=1, cutoff=0.6)
+        hint = f". Did you mean {hit[0]!r}?" if hit else ""
+        return False, f"no job with id {job_id!r}{hint}"
+    log.info("firing job %s ad-hoc (%s)", job_id, target.get("kind", "?"))
+    outcome = run_job(target, home)
+    log.info("job %s ad-hoc %s — %s", job_id,
+             "OK" if outcome.ok else "FAIL", outcome.message)
+    _emit_schedule_event(home, target, outcome)
+    stamp_at = _now().isoformat()
+    def _stamp(current: list[dict]) -> list[dict] | None:
+        for j in current:
+            if j.get("id") == job_id:
+                j["last_run_at"] = stamp_at
+                return current
+        return None
+    jobs_store.update(home, _stamp)
+    return outcome.ok, outcome.message
 
 
 def _emit_schedule_event(home: Path, job: dict, outcome: JobOutcome) -> None:
@@ -561,16 +557,18 @@ def _record_schedule_run(
 def tick(home: Path, now: datetime | None = None) -> list[tuple[str, bool, str]]:
     """Run one pass: fire every due job, persist ``last_run_at`` on success."""
     now = now or _now()
-    jobs = _load_jobs(home)
-    kept: list[dict] = []
+    try:
+        jobs = jobs_store.read(home)
+    except jobs_store.CorruptJobsFile as e:
+        log.error("jobs.json corrupt — skipping tick (preserve disk state): %s", e)
+        return []
+    fired: dict[str, tuple[str, bool]] = {}
     results: list[tuple[str, bool, str]] = []
-    changed = False
 
     for job in jobs:
         if not is_due(job, now=now, home=home):
-            kept.append(job)
             continue
-        job_id = job.get("id", "?")
+        job_id = str(job.get("id", "?"))
         log.info("firing job %s (%s)", job_id, job.get("kind", "cron"))
         _started = time.time()
         outcome = run_job(job, home)
@@ -579,18 +577,27 @@ def tick(home: Path, now: datetime | None = None) -> list[tuple[str, bool, str]]
                  "OK" if outcome.ok else "FAIL", outcome.message)
         _emit_schedule_event(home, job, outcome)
         _record_schedule_run(home, job, outcome, started=_started, elapsed=_elapsed)
-        # Update last_run_at even on failure to avoid a tight re-fire loop.
-        job["last_run_at"] = now.isoformat()
-        changed = True
+        fired[job_id] = (str(job.get("kind", "cron")), outcome.ok)
         results.append((job_id, outcome.ok, outcome.message))
-        # One-shot jobs die after a successful fire; on failure, keep so
-        # the next tick retries.
-        if job.get("kind") == "once" and outcome.ok:
-            continue
-        kept.append(job)
 
-    if changed:
-        _save_jobs(home, kept)
+    if not fired:
+        return results
+
+    stamp_at = now.isoformat()
+    def _apply(current: list[dict]) -> list[dict]:
+        kept: list[dict] = []
+        for j in current:
+            jid = j.get("id")
+            if jid in fired:
+                kind, ok = fired[jid]
+                # Stamp last_run_at even on failure to avoid a tight re-fire loop.
+                j["last_run_at"] = stamp_at
+                # One-shot success: drop. On failure, keep so the next tick retries.
+                if kind == "once" and ok:
+                    continue
+            kept.append(j)
+        return kept
+    jobs_store.update(home, _apply)
     return results
 
 

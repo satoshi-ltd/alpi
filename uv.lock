@@ -140,7 +140,7 @@ wheels = [
 
 [[package]]
 name = "alpi-agent"
-version = "0.9.20"
+version = "0.9.21"
 source = { editable = "." }
 dependencies = [
     { name = "click" },
@@ -152,6 +152,7 @@ dependencies = [
     { name = "fastembed" },
     { name = "faster-whisper" },
     { name = "html2text" },
+    { name = "httpcore" },
     { name = "httpx" },
     { name = "litellm" },
     { name = "pillow" },
@@ -196,7 +197,8 @@ requires-dist = [
     { name = "fastembed", specifier = ">=0.3,<1.0" },
     { name = "faster-whisper", specifier = ">=1.0" },
     { name = "html2text", specifier = ">=2024.2.26" },
-    { name = "httpx", specifier = ">=0.27.0" },
+    { name = "httpcore", specifier = ">=1.0,<2" },
+    { name = "httpx", specifier = ">=0.27.0,<0.29" },
     { name = "litellm", specifier = ">=1.83,<1.85" },
     { name = "matrix-nio", marker = "extra == 'matrix'", specifier = ">=0.25,<0.26" },
     { name = "pillow", specifier = ">=10.0" },
