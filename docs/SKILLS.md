@@ -85,11 +85,15 @@ requires_env: []                # env vars the skill needs; missing ones hide it
 requires_bins: [gh]             # executables on PATH; missing ones hide the skill
 requires_config: []             # profile config keys (dotted); missing ones hide it
 platforms: [macos, linux]       # supported OSes; empty/absent = portable
-tools: [read_file, terminal]    # tools the skill is allowed to call;
-                                # built-ins are snake_case; MCP tools
+tools: [read_file, terminal]    # tools the skill expects to call —
+                                # METADATA ONLY, not enforced at runtime
+                                # (used by curator / docs / inventory).
+                                # Built-ins are snake_case; MCP tools
                                 # use the server's native form
-                                # (e.g. ``bitbucket__getPullRequests``)
+                                # (e.g. ``bitbucket__getPullRequests``).
 keywords: [whoop, workout]      # optional lowercase tokens for keyword boost
+pinned: false                   # set true to protect from delete +
+                                # curator archive (default false)
 created_at: 2026-04-20
 ---
 ```
@@ -168,6 +172,17 @@ feature flag specific to the user's setup). Do not use it to check
 alpi's own defaults — those always look "set" to the user but
 intentionally do not count here.
 
+Unlike `requires_env` / `requires_bins` / `platforms` (always
+checked), `requires_config` is an **opt-in gate**: it kicks in only
+when the caller passes the raw profile config to
+`skill_eligibility(... cfg_raw=...)`. The system-prompt skill index
+and `skill(action="run"|"test"|"invoke")` both load it
+automatically — those are the surfaces a user touches — but
+direct programmatic callers that omit `cfg_raw` skip this single
+gate to avoid hiding skills they have no profile context for.
+Treat it as a discovery filter for the agent, not a hard execution
+barrier the runtime applies everywhere.
+
 #### `platforms`
 
 Operating systems the skill supports. One or more of `macos`,
@@ -179,6 +194,23 @@ platforms: [macos, linux]
 
 A skill declaring `platforms: [linux]` running on macOS shows up
 in `list` as `[inactive: missing platform linux (this is macos)]`.
+
+### `pinned` — protect from delete + curator archive
+
+Optional boolean. Default `false`. When `true`, the skill refuses
+`skill(action="delete", ...)` (`set_meta` it back to `false` first)
+and is left untouched by `alpi curator apply`'s bulk archive of
+stale/cold skills. Use it on skills you have hand-curated, on
+mission-critical recipes, or on anything the agent has hooked into
+that you do not want autoswept.
+
+```yaml
+pinned: true
+```
+
+`reset_state` and other surgical actions still apply to pinned
+skills — `pinned` guards lifecycle (delete / bulk archive), not
+content edits.
 
 ### `keywords` — per-turn discovery boost
 

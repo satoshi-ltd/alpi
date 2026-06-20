@@ -31,6 +31,10 @@
 | `host` | Control-plane port, device label, public-bind opt-in. |
 | `tui` | TUI cosmetics. |
 | `memory` | Reviewer cadence. |
+| `model_reasoning.effort` | `"" \| low \| medium \| high` reasoning hint passed alongside `cfg.model`. Default model only; mid-chat overrides and tool sub-models ignore it. |
+| `public_bio` | One-line public tag-line broadcast to every workgroup this profile joins (source of truth for `Member.bio`). Empty = no publication. |
+| `paused` | Profile-level pause flag, surfaced to desktop / mobile via `host.device_state.profile_summary`. UI-only signal; the daemon does not gate turns on it. |
+| `tools.browser.allow_local` | Let the `browser` tool navigate **loopback** only (`127.0.0.1`, `::1`, `localhost`). RFC1918 / CGNAT / Tailscale stay blocked; the exemption is loopback-only (`_guards._is_loopback`). |
 
 ## Model examples
 

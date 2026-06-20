@@ -1,5 +1,30 @@
 # Changelog
 
+## v0.9.22 — 2026-06-20 — skills + config docs reconciled with the runtime
+
+- **Skill frontmatter described honestly.** `tools:` is metadata used
+  by the curator and inventory — it has never been enforced at
+  runtime, despite the prior wording suggesting otherwise. `pinned`
+  is now in the frontmatter example with its own subsection (protects
+  the skill from `skill(delete)` and from `alpi curator apply`).
+  `requires_config` is described as an opt-in gate: it kicks in for
+  the system-prompt skill index and for explicit `skill(run|test|
+  invoke)` calls (both load profile config), not for every
+  programmatic resolver.
+- **CONFIG.md lists every key the code actually parses.** Added
+  `tools.browser.allow_local`, `model_reasoning.effort`, `public_bio`,
+  `paused`, and explicit `gateway.telegram` / `gateway.matrix`
+  placeholder rows. `tools.browser.allow_local` describes its actual
+  scope — loopback only (`127.0.0.1`, `::1`, `localhost`); RFC1918,
+  CGNAT, and Tailscale addresses stay blocked.
+- **Documentation drift won't slip through CI.** A new test extracts
+  every backticked config key from `docs/CONFIG.md` and asserts each
+  one resolves in `alpi/config.py` (`DEFAULT_CONFIG`, the `Config`
+  dataclass, or an explicit allowlist for keys parsed by their own
+  subsystems). The check is bidirectional: every leaf of
+  `DEFAULT_CONFIG` and every scalar field on `Config` must appear in
+  `CONFIG.md` too, so new code can't ship undocumented.
+
 ## v0.9.21 — 2026-06-20 — scheduler, filesystem, and outbound-HTTP hardening
 
 - **Scheduled jobs survive concurrent edits and corrupted files.** The

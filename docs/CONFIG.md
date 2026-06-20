@@ -67,6 +67,8 @@ Three options:
 | `fallback_models` | `[]` | list of strings | next turn |
 | `providers.ollama` | `[]` | list of `{name, url}` — one per Ollama server | next session |
 | `providers.openrouter.models` | `[]` | list of OpenRouter model ids the user has picked | next session |
+| `public_bio` | `""` | string — one-line public tag-line broadcast to every workgroup this profile joins (source of truth for `Member.bio` on the hub). Empty = don't publish; peers see name only. `AGENT.md` stays private. | next `workgroup.join` |
+| `paused` | `false` | bool — profile-level pause flag. Surfaced in the desktop / mobile profile summary so paired apps can show + respect the state; the daemon itself does not gate turns on this flag. Persisted only when `true`. | next host-plane read |
 
 ### Tools
 
@@ -80,6 +82,7 @@ Three options:
 | `tools.terminal.allow_network` | `false` | bool | next turn |
 | `tools.terminal.approval.allowlist` | `[]` | list of pattern descriptions and/or command globs (see below) | next turn |
 | `tools.browser.vision` | `false` | bool | next turn |
+| `tools.browser.allow_local` | `false` | bool — let the `browser` tool navigate **loopback** only (`127.0.0.1`, `::1`, and hostnames that resolve to loopback such as `localhost`). RFC1918 / CGNAT / Tailscale stay blocked even when this is on; the exemption is loopback-only, matching `_guards._is_loopback`. Off blocks every local target; on is for hitting a local dev server you trust. | next turn |
 | `tools.budget.per_result_chars` | `100_000` | int (-1 = unlimited) | next turn |
 | `tools.tts.voice` | `"en-US-AriaNeural"` | Edge TTS voice id | next turn |
 | `tools.tts.rate` | `""` | string (`"+10%"`, `"-20%"`) — speed | next turn |
@@ -266,6 +269,24 @@ Retries fire only for transient failures (timeouts, connection drops, 429/5xx)
 and only before any token has streamed — a partially-streamed turn is surfaced,
 not silently replayed.
 
+### Model reasoning
+
+Optional reasoning-effort hint passed alongside `cfg.model` to providers
+that support it (Anthropic extended thinking, OpenAI o-series, DeepSeek
+R1, etc.). Applied **only** to the profile's default model — mid-chat
+`model` overrides and tool sub-models (`research`, `delegate`,
+`web_extract`, `read_image`) ignore it. Models that don't recognise the
+hint are unaffected.
+
+| Key | Default | Type | Takes effect |
+|---|---|---|---|
+| `model_reasoning.effort` | `""` (no reasoning param sent) | `"" \| "low" \| "medium" \| "high"` — `"off"` written to disk normalises to `""` on load | next turn |
+
+```yaml
+model_reasoning:
+  effort: medium
+```
+
 ### Memory
 
 | Field | Default | Notes |
@@ -381,9 +402,13 @@ reasoning, so this flag has no effect there.
 
 ### Gateway — Telegram / Matrix
 
-Telegram and Matrix expose no per-platform config keys. They keep
-typing indicators hardcoded on and send only the final agent reply.
-Use TUI, desktop, or mobile when you want live tool progress.
+| Key | Default | Notes |
+|---|---|---|
+| `gateway.telegram` | `{}` | Placeholder section; no per-platform knobs today. Telegram credentials live in `~/.alpi/.env` (`TELEGRAM_BOT_TOKEN`, `TELEGRAM_ALLOWED_SENDERS`). |
+| `gateway.matrix` | `{}` | Placeholder section; same shape as Telegram. Matrix credentials in `.env`. |
+
+Both keep typing indicators hardcoded on and send only the final agent
+reply. Use TUI, desktop, or mobile when you want live tool progress.
 
 ### Gateway — IMAP
 

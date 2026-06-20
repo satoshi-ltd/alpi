@@ -26,6 +26,7 @@ requires_config: [home_assistant.url]
 platforms: [macos, linux]
 tools: [terminal]
 keywords: [whoop, workout]
+pinned: false
 created_at: 2026-04-20
 ---
 ```
@@ -33,7 +34,10 @@ created_at: 2026-04-20
 - `description`: headline for semantic discovery.
 - `keywords`: whole-token boost; avoid generic words.
 - `origin`: `agent` or `user`; user-origin mutations need `confirm_user_skill=true`.
-- `requires_env`, `requires_bins`, `requires_config`, `platforms`: hide inactive skills from prompt/hints and reject execution until met.
+- `tools`: metadata only, not enforced at runtime; used for documentation / curator / inventory.
+- `pinned`: `true` blocks `skill(delete)` and `alpi curator apply` archive (unpin via `set_meta` to remove).
+- `requires_env`, `requires_bins`, `platforms`: always checked; hide inactive skills from prompt/hints and reject execution.
+- `requires_config`: opt-in gate — checked only when the caller passes the raw profile config; `skills_index_block` and `skill(run|test|invoke)` do so, programmatic callers that omit `cfg_raw` skip it.
 
 ## Secrets and state
 
