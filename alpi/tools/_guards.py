@@ -9,6 +9,7 @@ from typing import Tuple
 from urllib.parse import urlparse
 
 from alpi.scan import scan_injection as scan_injection
+from alpi.tools._pipe_to_interpreter import is_pipe_to_interpreter
 
 _DANGEROUS: list[tuple[str, re.Pattern]] = [
     ("recursive rm on sensitive path",
@@ -21,8 +22,6 @@ _DANGEROUS: list[tuple[str, re.Pattern]] = [
      re.compile(r"\bmkfs(?:\.\w+)?\b", re.IGNORECASE)),
     ("dd to block device",
      re.compile(r"\bdd\b[^|;&]*\bof=/dev/", re.IGNORECASE)),
-    ("pipe-to-interpreter",
-     re.compile(r"\b(?:curl|wget|fetch)\b[^|]*\|\s*(?:sh|bash|zsh|python|python3|perl|ruby|node)\b", re.IGNORECASE)),
     ("fork bomb",
      re.compile(r":\s*\(\s*\)\s*\{\s*:\s*\|\s*:&\s*}\s*;\s*:", re.IGNORECASE)),
     ("write to system directory",
@@ -43,6 +42,8 @@ _DANGEROUS: list[tuple[str, re.Pattern]] = [
 def check_command(command: str) -> Tuple[bool, str]:
     if not command:
         return True, ""
+    if is_pipe_to_interpreter(command):
+        return False, "pipe-to-interpreter"
     for label, pattern in _DANGEROUS:
         if pattern.search(command):
             return False, label

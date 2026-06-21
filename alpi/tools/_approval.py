@@ -9,6 +9,8 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Callable, Optional
 
+from alpi.tools._pipe_to_interpreter import is_pipe_to_interpreter
+
 
 class Severity(str, Enum):
     SAFE = "safe"
@@ -60,14 +62,6 @@ _PATTERNS: list[Pattern] = [
     Pattern(
         "dd to block device",
         re.compile(r"\bdd\b[^|;&]*\bof=/dev/", re.I),
-        Severity.DANGEROUS,
-    ),
-    Pattern(
-        "pipe-to-interpreter",
-        re.compile(
-            r"\b(?:curl|wget|fetch)\b[^|]*\|\s*(?:sh|bash|zsh|python|python3|perl|ruby|node)\b",
-            re.I,
-        ),
         Severity.DANGEROUS,
     ),
     Pattern(
@@ -206,6 +200,8 @@ def classify(cmd: str) -> tuple[Severity, str]:
     """
     if not cmd:
         return Severity.SAFE, ""
+    if is_pipe_to_interpreter(cmd):
+        return Severity.DANGEROUS, "pipe-to-interpreter"
     caution_match: tuple[Severity, str] | None = None
     for p in _PATTERNS:
         if not p.regex.search(cmd):

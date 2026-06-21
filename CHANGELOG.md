@@ -1,5 +1,52 @@
 # Changelog
 
+## v0.9.24 — 2026-06-22 — pipe-to-interpreter detector rewritten on shlex.shlex
+
+- **`curl x|bash` and `curl x | tee … | bash` are now blocked;
+  `curl example.com || bash fallback.sh` no longer triggers a false
+  positive.** The previous regex-based classifier confused `||` /
+  `&&` / `;` with a pipe (false positives on fallback expressions)
+  and missed real bypasses: operators attached without spaces
+  (`curl x|bash`), redirections (`curl x 2>&1 | bash`),
+  multi-pipe chains (`curl x | tee /tmp/x | bash`), downloader under
+  a wrapper (`sudo curl x | bash`, `env FOO=1 curl x | bash`,
+  `FOO=1 curl x | bash`), wrappers with arity (`curl x | nice -n 5
+  bash`, `curl x | ionice -c 3 bash`, `curl x | timeout 10 bash`),
+  the `|&` operator, and group syntax (`curl x | (bash)`,
+  `curl x | { bash; }`). Replaced with
+  `alpi/tools/_pipe_to_interpreter.py` — a single shared helper
+  built on `shlex.shlex(punctuation_chars=True)` that tokenises
+  shell-aware operators, splits pipelines only on real `|` / `|&`,
+  resolves wrappers around both the downloader and the interpreter
+  (`sudo` with value flags including `-s` / `-i` / `--shell` /
+  `--login` which invoke the user shell directly, `env FOO=1`,
+  `env -S "bash -s"` and `env --split-string=…` whose argv is
+  re-tokenised and inspected, leading `FOO=1` assignments,
+  `command`, `exec`, `nice`, `ionice`, `nohup`, `stdbuf`,
+  `timeout`), strips shell redirections, and matches the supported
+  interpreter set: `sh / bash / zsh / ash / dash / ksh / fish /
+  python / python2 / python3 / perl / ruby / node / pwsh /
+  powershell`. Line continuations
+  (`\\<newline>`, `|<newline>`) are treated as one logical line
+  while real newlines act as command separators; Windows-style
+  executables are normalised when quoted (`curl.exe`,
+  `'C:\\path\\curl.exe'`, case-insensitive); subshell / group
+  syntax (`( cmd )`, `{ cmd; }`) is conservatively scanned for
+  downloaders. Used by both `_approval.classify` and
+  `_guards.check_command`, so the four duplicated regexes can no
+  longer drift apart.
+- **SECURITY.md and the knowledge reference describe the sandbox
+  truthfully.** Persistent writes are confined to `workspace` +
+  `~/.alpi/` + system temporary trees (`/tmp` everywhere; macOS also
+  exposes `/private/tmp` and `/private/var/folders`) — earlier
+  wording oversimplified this as just `/tmp` and "the same write
+  set" on Linux. Linux/`bubblewrap` actually makes only explicitly-
+  mounted paths readable: workspace and profile bind-mounted
+  writable, runtime system paths read-only, `/tmp` as an in-sandbox
+  tmpfs. macOS/`sandbox-exec` runs default-allow for reads with a
+  small explicit deny list (`~/.ssh`, `~/.aws`, `~/.gnupg`, profile
+  `.env`, skill `secrets/`).
+
 ## v0.9.23 — 2026-06-21 — ALP wire contract reconciled with the runtime
 
 - **`link.ask` result shape matches the daemon.** The doc used to

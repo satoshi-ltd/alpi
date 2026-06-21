@@ -31,6 +31,42 @@ the workspace alone is not a boundary. Pattern: personal/high-trust profile
 less restricted; email/internet automation profile sandbox on; work/client
 profile gets its own profile + workspace.
 
+Persistent writes are confined to `workspace` + `~/.alpi/` + system
+temporary trees (`/tmp` everywhere; on macOS also `/private/tmp` and
+`/private/var/folders`). A small allowlist of character devices
+(`/dev/null`, `/dev/{u,}random`, `/dev/tty`, std streams) is also
+writable but those are not persistent storage. Read confinement is
+platform-specific: Linux/`bubblewrap` makes only explicitly-mounted
+paths readable — workspace and profile bind-mounted writable,
+runtime system paths read-only (`/usr`, `/etc`, `/bin`, loader +
+libraries), `/tmp` as an in-sandbox tmpfs — so anything not mounted
+is invisible; macOS/`sandbox-exec` runs default-allow for reads with
+a small explicit deny list (`~/.ssh`, `~/.aws`, `~/.gnupg`, profile
+`.env`, skill `secrets/`). Use Linux when you need true read
+confinement to the workspace; macOS prevents writes and credential
+reads but leaves unrelated user files readable.
+
+Pipe-to-interpreter is classified `dangerous` and blocked regardless of
+sandbox state via a `shlex.shlex(punctuation_chars=True)` detector that
+splits the command into shell-aware tokens — distinguishing `|` and `|&`
+from `||`, `&&`, `;` — resolves wrappers around both the downloader and
+the interpreter (`sudo` with value flags and shell-spawning `-s` / `-i`
+/ `--shell` / `--login` that map directly to the interpreter, `env FOO=1`,
+`env -S "argv"` and `env --split-string=…` whose argv is re-tokenised,
+leading `FOO=1` assignments, `command`, `exec`, `nice -n N`, `ionice -c N`,
+`timeout N`, `nohup`, `stdbuf`), handles subshell / group syntax (`( … )`, `{ …; }`)
+conservatively, respects line continuations (`\\<newline>` and a newline
+right after `|` / `&&` / `||` are treated as one logical line, while bare
+newlines act as command separators), normalises Windows-style executables
+when quoted (`'C:\\path\\curl.exe'`, `curl.exe`, case-insensitive), and
+matches the supported interpreter set: `sh / bash / zsh / ash / dash / ksh
+/ fish / python / python2 / python3 / perl / ruby / node / pwsh / powershell`. Examples flagged: `curl … | bash`,
+`curl x|bash`, `wget -qO- … | sed … | python`, `curl … | tee … | bash`,
+`curl … | sudo -u runner -E bash`, `sudo curl x | bash`,
+`curl x |& bash`, `curl x | (bash)`. Examples not flagged:
+`curl … | jq`, `curl … | tar xz`, `curl example.com || bash fallback.sh`,
+`curl x | jq . || python recover.py`.
+
 ## Host pairing and device roles
 
 Desktop/mobile WebSocket transport uses per-device tokens from

@@ -37,10 +37,36 @@ doesn't reach:
     non-interactive surfaces (gateway, schedule) caution commands
     auto-deny with a clear error.
   - **dangerous**: `mkfs`, `dd of=/dev/…`, fork bombs, pipe-to-
-    interpreter (`curl | sh`), recursive `chmod`/`chown` on `/`,
-    reads of SSH private keys, writes to `/etc /var /usr /boot /sys
-    /proc`. Always blocked. No override — run directly from your
-    shell if you genuinely need one of these.
+    interpreter (`curl | sh`, `wget -qO- … | sed … | python`,
+    `curl … | tee … | bash`, `curl … | sudo bash`, `curl x|bash`,
+    `curl x |& bash`, `curl x | (bash)`, and similar — a
+    `shlex.shlex(punctuation_chars=True)` tokeniser splits the
+    command into shell-aware tokens, distinguishing `|` and `|&`
+    from `||`, `&&`, `;`, `>&`, etc. The detector identifies a
+    downloader (`curl` / `wget` / `fetch`) — also when it appears
+    under `sudo`, `env FOO=1`, `env -S "curl x"` (whose argv is
+    re-tokenised), `command`, or a leading `FOO=1` assignment —
+    piped through zero or more intermediate commands
+    into a shell or scripting interpreter (`sh / bash / zsh / ash /
+    dash / ksh / fish / python / python2 / python3 / perl / ruby /
+    node / pwsh / powershell` — the supported interpreter set, not
+    a claim to recognise every interpreter that might exist).
+    Wrappers with arity are resolved (`nice -n 5 bash`, `ionice -c
+    3 bash`, `timeout 10 bash`, `stdbuf -oL bash`); shell-spawning
+    flags resolve to the interpreter directly (`sudo -s`,
+    `sudo -i`, `sudo --shell`, `sudo --login`); line
+    continuations (`\\<newline>`, `|<newline>`) are treated as one
+    logical line; real newlines act as command separators;
+    Windows-style executables are normalised when quoted
+    (`curl.exe`, `'C:\\path\\curl.exe'`); subshell / group syntax
+    (`( … )`, `{ …; }`) is conservatively scanned for downloaders.
+    `||`, `&&`, and `;` separate pipelines, so benign-fallback
+    expressions like `curl example.com || bash fallback.sh` or
+    `curl x | jq . || python recover.py` are not flagged),
+    recursive `chmod`/`chown` on `/`, reads of SSH private keys,
+    writes to `/etc /var /usr /boot /sys /proc`. Always blocked.
+    No override — run directly from your shell if you genuinely
+    need one of these.
 
   Replaces the previous hard denylist. See `docs/CONFIG.md` for the
   allowlist format and surface-specific behaviour.
@@ -235,9 +261,21 @@ doesn't reach:
 ## Layer 2 — OS sandbox (opt-in, per profile)
 
 Wraps `terminal` subprocess calls in a native OS sandbox so the
-kernel refuses the syscalls, not just the regex above. Read/write
-access is limited to `workspace` + `~/.alpi/` + `/tmp`; network is
-denied by default.
+kernel refuses the syscalls, not just the detector above. **Persistent
+writes** are confined to `workspace` + `~/.alpi/` + the system
+temporary trees (`/tmp`, plus macOS-specific `/private/tmp` and
+`/private/var/folders`); a small set of character devices that
+well-behaved CLI tools reopen (`/dev/null`, `/dev/{u,}random`,
+`/dev/tty`, std streams) is also writable but they are not
+persistent storage. **Read** posture is platform-specific:
+Linux/`bubblewrap` only makes explicitly-mounted paths readable —
+workspace and profile bind-mounted writable, runtime system paths
+(`/usr`, `/etc`, `/bin`, the loader and libraries the process needs)
+mounted read-only, `/tmp` as an in-sandbox tmpfs — so anything not
+mounted is invisible. macOS/`sandbox-exec` runs default-allow for
+reads with a small explicit deny list (`~/.ssh`, `~/.aws`,
+`~/.gnupg`, profile `.env`, skill `secrets/`), so anything outside
+those denies stays readable. Network is denied by default.
 
 **Status: stable, opt-in.** Defaults to off because real-world dev
 workflows vary too much to pick a profile that never breaks: `git
@@ -308,10 +346,14 @@ distros; some hardened configs disable them).
 
 ### What happens when the sandbox is on
 
-- `rm -rf ~/Documents` → kernel refuses. Error to LLM: *"Operation
-  not permitted"*.
-- `cat ~/.ssh/id_rsa` → refused by the macOS profile (`~/.ssh`
-  denied) or inaccessible on Linux (not bind-mounted).
+- `rm -rf ~/Documents` → kernel refuses (path outside the
+  write-allow set). Error to LLM: *"Operation not permitted"*.
+- `cat ~/.ssh/id_rsa` → refused on both platforms (`~/.ssh` is in
+  the explicit macOS deny list and is not bind-mounted on Linux).
+- `cat ~/Documents/notes.md` → readable on macOS (default-allow
+  reads outside the deny list), refused on Linux (not bind-mounted).
+  Use Linux/bubblewrap when you need true read confinement to the
+  workspace.
 - `curl https://example.com` with `allow_network: false` → no
   network stack in the process. `curl: (6) Could not resolve host`.
 - `git status` inside the workspace → works normally.
