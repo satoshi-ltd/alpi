@@ -1,5 +1,32 @@
 # Changelog
 
+## v0.9.23 — 2026-06-21 — ALP wire contract reconciled with the runtime
+
+- **`link.ask` result shape matches the daemon.** The doc used to
+  promise `tokens: { input, output }` and `cost_usd`. The runtime
+  returns flat `tokens_in`, `tokens_out`, `cost`, plus the
+  `interrupted` flag that flips when `link.cancel` lands mid-turn.
+  Callers building against the documented shape now actually parse
+  what arrives.
+- **Wire error table only lists wire errors.** Bad signature
+  (`-32002`), replay (`-32003`), and version-mismatch (`-32006`) are
+  envelope-level failures the server silently drops — they never
+  cross the wire, so listing them as wire codes invited callers to
+  match on a response that never arrives. Removed from the wire
+  table; the Envelope and Versioning sections describe the
+  silent-drop posture instead.
+- **Client-side diagnostics get their own section.** `target-offline`
+  is `alpi.alp.client.TargetOffline` raised when the peer socket is
+  missing or refused — the offline target cannot answer, so it never
+  travels on the wire. `task-missing-slug` is a plain `ValueError`
+  raised before encryption, since the hub stays zero-knowledge
+  against post bodies. Neither carries a JSON-RPC `code`; both used
+  to be listed as if they did.
+- **`-32005` documents both reasons.** The runtime uses it for
+  `budget-exceeded` (with `data.cap_kind=usd` / `workgroup_usd`) and
+  for `rate-limited` (with `data.window_seconds`). Same code, two
+  reasons; check `message` to tell them apart.
+
 ## v0.9.22 — 2026-06-20 — skills + config docs reconciled with the runtime
 
 - **Skill frontmatter described honestly.** `tools:` is metadata used

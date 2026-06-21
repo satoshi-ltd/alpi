@@ -82,16 +82,16 @@ ALP/workgroup tasks respect profile budget settings (`budget.daily_usd`, CONFIG.
 | Code | Name | Meaning |
 |---|---|---|
 | `-32001` | `capability-denied` | Method not in peer's `allow`. |
-| `-32002` | `replay` | `(from, nonce)` seen within window. |
-| `-32003` | `bad-signature` | Signature verification failed. |
-| `-32004` | `target-offline` | Resolvable peer, connection refused. |
-| `-32005` | `budget-exceeded` | Profile (daily) or workgroup (lifetime) cap. `data.cap_kind`: `usd` (profile) or `workgroup_usd`. |
-| `-32006` | `version-mismatch` | Incompatible `alp.v`. |
+| `-32005` | `budget-exceeded` / `rate-limited` | Two reasons under one code. `budget-exceeded` (`data.cap_kind=usd`/`workgroup_usd`) → profile/workgroup spend cap. `rate-limited` (`data.window_seconds`) → peer `rate_limit.per_minute` exhausted. Distinguish via `message`. |
 | `-32007` | `target-busy` | Session already running a turn. |
 | `-32008` | `workgroup-not-member` (`workgroup-not-hub` for hub-only verbs) | Not a pinned member / not the hub. |
 | `-32009` | `workgroup-not-found` | No workgroup with that id at the hub. |
 | `-32010` | `workgroup-paused` | Paused; `post` rejected (`pull`/`join`/`leave` still work). |
-| `-32011` | `task-missing-slug` | `#task` post lacks its `#<slug>` (SDK-side; hub stays zero-knowledge). |
+
+Client-side diagnostics (SDK Python exceptions, no JSON-RPC code, never on wire):
+
+- `target-offline` → `alpi.alp.client.TargetOffline` (peer socket missing or TCP refused).
+- `task-missing-slug` → `ValueError` raised before `#task` post encryption (hub stays zero-knowledge).
 
 ## Security posture
 

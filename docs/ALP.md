@@ -359,8 +359,10 @@ params:
 result:                         # when stream is false (default)
   text: string
   session_id: string
-  tokens: { input: int, output: int }
-  cost_usd: float
+  tokens_in: int
+  tokens_out: int
+  cost: float                   # USD; matches the per-turn ledger entry
+  interrupted: bool             # true when link.cancel landed mid-turn
 ```
 
 Runs a **full agent turn** on the target profile with `prompt`
@@ -474,20 +476,26 @@ reserved space:
 | Code | Name | Meaning |
 |---|---|---|
 | `-32001` | `capability-denied` | Method not in peer's `allow` list. |
-| `-32002` | `replay` | `(from, nonce)` seen within the window. |
-| `-32003` | `bad-signature` | Envelope signature verification failed. |
-| `-32004` | `target-offline` | Peer resolvable but connection refused. |
-| `-32005` | `budget-exceeded` | Request would breach a profile (daily) or workgroup (lifetime) cap. `data.cap_kind` distinguishes: `usd` for the profile, `workgroup_usd` for the workgroup pool. |
-| `-32006` | `version-mismatch` | Incompatible `alp.v`. |
+| `-32005` | `budget-exceeded` / `rate-limited` | Request would breach a cap. `message: "budget-exceeded"` for profile (daily) or workgroup (lifetime) spend caps — `data.cap_kind` is `usd` (profile) or `workgroup_usd` (workgroup). `message: "rate-limited"` when the peer's `rate_limit.per_minute` is exhausted — `data.window_seconds` is the sliding-window length. Same code, two reasons; check `message`. |
 | `-32007` | `target-busy` | Session already running a turn. |
 | `-32008` | `workgroup-not-member` | Caller is not a pinned member of the workgroup. |
 | `-32009` | `workgroup-not-found` | No workgroup with the requested id at the hub. |
 | `-32010` | `workgroup-paused` | Workgroup is paused; `post` rejected. `pull` / `join` / `leave` still work. |
-| `-32011` | `task-missing-slug` | A `#task` post is missing its required `#<slug>` identifier. Raised by the SDK client-side before the post is encrypted (the hub stays zero-knowledge against post bodies and cannot enforce this on the wire). |
 
 The standard JSON-RPC codes (`-32600` through `-32603`) retain
 their standard meaning and apply to malformed requests, unknown
 methods, invalid parameters, and internal errors respectively.
+
+### Client-side diagnostics
+
+Not every failure travels on the wire. Two conditions are detected
+locally and raised by the SDK as plain Python exceptions, with no
+JSON-RPC `code` attached:
+
+| Symbol | SDK class | When |
+|---|---|---|
+| `target-offline` | `alpi.alp.client.TargetOffline` | The peer's Unix socket is missing or the TCP connect is refused. The offline target cannot answer, so this never crosses a wire. |
+| `task-missing-slug` | `ValueError` | A `#task` post lacks its required `#<slug>` identifier. Raised client-side before the post is encrypted — the hub stays zero-knowledge against post bodies and could not enforce it anyway. |
 
 ---
 
@@ -1333,8 +1341,10 @@ cap (if set) gates on top.
 ## Versioning
 
 The `alp.v` field in every envelope carries the integer protocol
-version the sender speaks. Receivers MUST reject messages with
-an unknown version with error `-32006`.
+version the sender speaks. Receivers MUST silently drop messages
+with an unknown version — same posture as bad signature, replay,
+or stale timestamp (see **Envelope**). No JSON-RPC error reaches
+the wire; this denies the sender any oracle.
 
 ALP is a living spec — workgroup behaviour in particular has
 been iterated on as the reference implementation hit real-world

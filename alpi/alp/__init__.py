@@ -9,10 +9,4 @@ socket, inter-machine over Noise_XK-on-TCP, and shared workgroups.
 from __future__ import annotations
 
 PROTOCOL_VERSION = 1
-"""The ALP protocol version this implementation speaks.
-
-Senders tag every envelope with this value. Receivers reject
-messages carrying an unknown version with error ``-32006``. A
-bump is deliberate and lands alongside a changelog entry in
-``docs/ALP.md``.
-"""
+"""Receivers silent-drop envelopes with any other version (no wire error)."""
