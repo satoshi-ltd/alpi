@@ -10,7 +10,8 @@ export const CURATED_BY_PROVIDER = {
     { id: 'o3', note: 'heavy reasoning' },
   ],
   anthropic: [
-    { id: 'claude-opus-4-7', note: 'flagship' },
+    { id: 'claude-opus-4-8', note: 'flagship' },
+    { id: 'claude-opus-4-7', note: 'previous flagship' },
     { id: 'claude-sonnet-4-6', note: 'balanced' },
     { id: 'claude-haiku-4-5', note: 'cheap · fast' },
   ],

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { DialogFooter, Eyebrow, Modal } from "../primitives/index.js";
 import { useNotify } from "../primitives/Notification.jsx";
-import { RESERVED_PROFILE_NAMES } from "../lib/profile-display.js";
+import { isValidProfileName, RESERVED_PROFILE_NAMES } from "../lib/profile-display.js";
 import ProviderPickerForm, {
   applyProvider,
   defaultProviderValue,
@@ -30,7 +30,7 @@ export default function CreateProfileModal({
 
   const trimmed = name.trim();
   const reserved = RESERVED_PROFILE_NAMES.includes(trimmed);
-  const formatValid = trimmed !== "" && /^[a-z0-9_-]+$/.test(trimmed);
+  const formatValid = isValidProfileName(trimmed);
   const duplicate = existingNames.includes(trimmed);
   const providerOk = isProviderValueValid(providerValue);
   const canSubmit =
@@ -83,7 +83,7 @@ export default function CreateProfileModal({
           />
           {trimmed !== "" && !formatValid && (
             <span className={styles.error}>
-              use a–z, 0–9, '-' and '_' only
+              a–z, 0–9, '.', '_', '-'; must start with a letter or digit
             </span>
           )}
           {reserved && (

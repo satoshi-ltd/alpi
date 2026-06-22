@@ -28,6 +28,7 @@ export default function ScheduleList() {
   const [confirmDelete, setConfirmDelete] = useState(null);
 
   const jobs = schedule.data?.jobs ?? [];
+  const loadError = schedule.error ? String(schedule.error?.message ?? schedule.error) : null;
 
   // schedule.changed fires on remove/pause/resume from any client — without it, a desktop pause wouldn't update this screen until manual pull-to-refresh.
   useEventEffect(['schedule.done', 'schedule.failed', 'schedule.changed'], (ev) => {
@@ -75,9 +76,18 @@ export default function ScheduleList() {
         // Schedules are created via chat (ask the agent to set one up) — no in-app "New" affordance. List + manage (fire/pause/delete) live here, creation does not.
       />
       <ScrollView contentContainerStyle={{ paddingBottom: space.s9 }}>
-        {schedule.loading && jobs.length === 0 ? (
+        {schedule.loading && jobs.length === 0 && !loadError ? (
           <View style={{ padding: space.s10, alignItems: 'center' }}>
             <ActivityIndicator color={colors.ink3} />
+          </View>
+        ) : loadError ? (
+          <View style={{ padding: space.s8, gap: space.s2 }}>
+            <Text style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.md, color: colors.danger }}>
+              Could not load schedule
+            </Text>
+            <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.ink3 }}>
+              {loadError}
+            </Text>
           </View>
         ) : jobs.length === 0 ? (
           <Row label="No scheduled jobs" helper="ask the agent to set one up" chevron={false} />

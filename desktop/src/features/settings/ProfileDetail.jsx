@@ -370,7 +370,7 @@ export default function ProfileDetail({
           </Section>
         )}
 
-        <SchedulesSection profile={profile} />
+        <SchedulesSection profile={profile} connectionId={activeConnection?.id ?? null} />
 
         <Section
           title="Sandbox"

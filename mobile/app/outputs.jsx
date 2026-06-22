@@ -9,6 +9,7 @@ import { ScreenHeader } from '../src/components/ScreenHeader';
 import { useToast } from '../src/components/Toast';
 import { markAllUnifiedRead, useUnifiedOutputs } from '../src/hooks/useUnifiedOutputs';
 import { useEndpoint } from '../src/lib/EndpointContext';
+import { rowTitle } from '../src/lib/outputsFormat';
 import { accentForProfile } from '../src/theme/accents';
 import { useTheme } from '../src/theme/ThemeContext';
 import { radii, space } from '../src/theme/tokens';
@@ -22,23 +23,6 @@ function fmtRelative(ts) {
   if (diff < 86400) return `${Math.round(diff / 3600)}h`;
   if (diff < 86400 * 7) return `${Math.round(diff / 86400)}d`;
   return `${Math.round(diff / (86400 * 7))}w`;
-}
-
-
-function stripPreviewMarkdown(text) {
-  return String(text || '')
-    .replace(/!\[([^\]]*)\]\([^)]+\)/g, '$1')
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-    .replace(/`{1,3}/g, '')
-    .replace(/[*_~>#-]+/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-
-function rowTitle(row) {
-  const line = row.body?.split('\n').find((it) => stripPreviewMarkdown(it));
-  return stripPreviewMarkdown(line) || '—';
 }
 
 

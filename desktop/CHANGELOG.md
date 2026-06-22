@@ -11,6 +11,23 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.3.76 — 2026-06-22 — scheduler errors visible; schedules respect the chosen daemon; profile-name traversal closed
+
+_Requires alpi v0.9.27+._
+
+- **Scheduler errors no longer disappear.** When alpi cannot read its
+  `jobs.json` (corrupt file, parse failure), the Schedule panel now
+  shows the daemon's exact error instead of pretending the list is
+  empty.
+- **Schedules respect the chosen daemon.** When two paired daemons share
+  a profile name (e.g. `default` on home + work), the schedule list and
+  every fire/pause/delete now target the daemon the panel is showing,
+  not whichever connection happened to be active.
+- **Profile names accept dots and reject `..` everywhere.** The
+  new-profile dialog matches the daemon's contract — `build.debug`,
+  `a1`, single-character names all pass; `foo..bar` and any other path-
+  traversal vector is refused with the same rule the daemon enforces.
+
 ## v0.3.75 — 2026-06-20 — attach & save files on Windows and Linux
 
 _Requires alpi v0.9.19+._

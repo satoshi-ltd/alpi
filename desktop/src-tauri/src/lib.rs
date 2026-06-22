@@ -1566,6 +1566,20 @@ async fn alp_call_async(method: &'static str, params: serde_json::Value) -> Resu
         .map(|_| ())
 }
 
+async fn alp_call_async_for(
+    connection_id: Option<String>,
+    method: &'static str,
+    params: serde_json::Value,
+) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || match connection_id.as_deref() {
+        Some(cid) => host_client::call_for(cid, method, params),
+        None => host_client::call(method, params),
+    })
+    .await
+    .map_err(|e| format!("{method}: {e}"))?
+    .map(|_| ())
+}
+
 #[tauri::command]
 async fn provider_set_key(
     profile: String, key: String, value: String,
@@ -1690,12 +1704,14 @@ async fn peers_pending_discard(
 }
 
 #[tauri::command]
-async fn schedules(profile: String) -> Result<serde_json::Value, String> {
-    let result = tauri::async_runtime::spawn_blocking(move || {
-        host_client::call(
-            "host.schedule.list",
-            serde_json::json!({"profile": profile}),
-        )
+async fn schedules(
+    profile: String,
+    connection_id: Option<String>,
+) -> Result<serde_json::Value, String> {
+    let params = serde_json::json!({"profile": profile});
+    let result = tauri::async_runtime::spawn_blocking(move || match connection_id.as_deref() {
+        Some(cid) => host_client::call_for(cid, "host.schedule.list", params),
+        None => host_client::call("host.schedule.list", params),
     })
     .await
     .map_err(|e| format!("schedules: {e}"))??;
@@ -1703,8 +1719,13 @@ async fn schedules(profile: String) -> Result<serde_json::Value, String> {
 }
 
 #[tauri::command]
-async fn schedule_remove(profile: String, id: String) -> Result<(), String> {
-    alp_call_async(
+async fn schedule_remove(
+    profile: String,
+    id: String,
+    connection_id: Option<String>,
+) -> Result<(), String> {
+    alp_call_async_for(
+        connection_id,
         "host.schedule.remove",
         serde_json::json!({"profile": profile, "id": id}),
     )
@@ -1716,8 +1737,10 @@ async fn schedule_set_paused(
     profile: String,
     id: String,
     paused: bool,
+    connection_id: Option<String>,
 ) -> Result<(), String> {
-    alp_call_async(
+    alp_call_async_for(
+        connection_id,
         "host.schedule.set_paused",
         serde_json::json!({"profile": profile, "id": id, "paused": paused}),
     )
@@ -1725,8 +1748,13 @@ async fn schedule_set_paused(
 }
 
 #[tauri::command]
-async fn schedule_fire(profile: String, id: String) -> Result<(), String> {
-    alp_call_async(
+async fn schedule_fire(
+    profile: String,
+    id: String,
+    connection_id: Option<String>,
+) -> Result<(), String> {
+    alp_call_async_for(
+        connection_id,
         "host.schedule.fire",
         serde_json::json!({"profile": profile, "id": id}),
     )

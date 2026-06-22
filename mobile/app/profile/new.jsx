@@ -11,6 +11,7 @@ import { ScreenHeader } from '../../src/components/ScreenHeader';
 import { useToast } from '../../src/components/Toast';
 import { useProfileSummaries } from '../../src/hooks/useDaemonData';
 import { useEndpoint } from '../../src/lib/EndpointContext';
+import { profileNameError } from '../../src/lib/profileName';
 import { useTheme } from '../../src/theme/ThemeContext';
 import { AdminGuard } from '../../src/components/AdminGuard';
 
@@ -21,9 +22,6 @@ const PROVIDERS = [
   { id: 'openrouter', label: 'OpenRouter', env: 'OPENROUTER_API_KEY', placeholder: 'sk-or-…' },
   { id: 'gemini', label: 'Gemini', env: 'GEMINI_API_KEY', placeholder: 'AIza…' },
 ];
-
-const RESERVED = new Set(['default', 'alpi', 'new']);
-const NAME_RE = /^[a-z0-9_-]{2,}$/;
 
 export default function NewProfileRoute() {
   return (
@@ -55,7 +53,8 @@ function NewProfile() {
   );
 
   const trimmed = name.trim().toLowerCase();
-  const validName = NAME_RE.test(trimmed) && !RESERVED.has(trimmed) && !taken.has(trimmed);
+  const nameError = profileNameError(trimmed, [...taken]);
+  const validName = trimmed.length > 0 && nameError === null;
 
   const validProvider = (() => {
     if (providerId === 'ollama') {
@@ -138,19 +137,11 @@ function NewProfile() {
             label="Name"
             placeholder="work · personal · home-server"
             value={name}
-            onChangeText={(t) => setName(t.replace(/[^a-zA-Z0-9_-]/g, '').toLowerCase())}
+            onChangeText={(t) => setName(t.replace(/[^a-zA-Z0-9._-]/g, '').toLowerCase())}
             mono
             autoCapitalize="none"
             autoCorrect={false}
-            helper={
-              trimmed && taken.has(trimmed)
-                ? `@${trimmed} already exists`
-                : trimmed && RESERVED.has(trimmed)
-                  ? `${trimmed} is reserved`
-                  : trimmed && !NAME_RE.test(trimmed)
-                    ? 'min 2 chars · a–z, 0–9, _, -'
-                    : 'Configure workspace, accent, peers, etc. after.'
-            }
+            helper={nameError ?? 'Configure workspace, accent, peers, etc. after.'}
           />
 
           <View style={{ gap: space.s4 }}>

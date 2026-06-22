@@ -118,10 +118,12 @@ export default function OutputDetailScreen() {
     </View>
   ) : null;
 
+  const headerTitle = (row?.title || '').trim() || 'Notification';
+
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
       <ScreenHeader
-        title="Notification"
+        title={headerTitle}
         subtitle={subtitleNode}
         onBack={() => router.back()}
       />

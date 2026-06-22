@@ -14,6 +14,32 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.1.51 — 2026-06-22 — scheduler errors visible, agent-set titles, Opus 4.8, richer skill detail, profile-name traversal closed
+
+_Requires alpi v0.9.27+._
+
+- **Scheduler errors no longer disappear.** When alpi cannot read its
+  `jobs.json` (corrupt file, parse failure), the schedule screen now
+  shows the daemon's exact error instead of pretending the list is
+  empty.
+- **Agent-set notification titles surface in the inbox and detail.**
+  Push notifications already used the title the agent set; the inbox
+  row and the notification detail now do the same instead of guessing
+  one from the body.
+- **Anthropic catalog refreshed.** Claude Opus 4.8 is the new flagship;
+  Opus 4.7 stays in the list as "previous flagship". Matches the
+  daemon's catalog.
+- **Richer skill detail screen.** Each skill now shows its current
+  status (active / invalid / inactive) and the daemon's reason when it
+  is not active, the resolved-vs-missing list of `requires_env` /
+  `requires_bins` / `requires_config`, and the files inside the skill
+  directory (with `secrets/` flagged as locked). Opening individual
+  files for preview is still desktop-only.
+- **Profile names accept dots, single characters, and reject `..`
+  everywhere.** The new-profile form matches the daemon's contract
+  (e.g. `build.debug`, `a1` pass; `foo..bar` is refused) with helper
+  text spelling out the allowed set.
+
 ## v0.1.50 — 2026-06-17 — auto-read speaks the new reply
 
 - **Auto-read speaks the reply that was just generated, not the previous one** —
