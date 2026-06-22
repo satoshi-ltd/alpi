@@ -61,28 +61,86 @@ The layout is identical for every org:
 organizations/
   README.md                       # multi-org index
   setup.py                        # unified bootstrap — reads <org>/org.yaml
-  lint.py                         # shared: validates SKILL.md across orgs
   <org>/                          # one folder per organization
     <org>.md                      # design contract (roster, workgroups, lifecycle)
-    org.yaml                      # workspace, scaffold, sync, voices, common_skills
+    org.yaml                      # bootstrap config — full schema below
     user-memory.md                # USER.md template (placeholders: name, wg_section, peers)
     agents/
       <name>/
-        agent.md                  # frontmatter: bio, peers, tier, daily_usd, reasoning_effort
+        agent.md                  # frontmatter (bio, accent, tier, daily_usd,
+                                  #              reasoning_effort, model?,
+                                  #              tools_deny?, peers? — legacy)
                                   # body:        soul written to memories/AGENT.md
         skills/<category>/<skill>/SKILL.md
     common/
       skills/<category>/<skill>/SKILL.md   # shared across multiple agents in this org
     workgroups/
-      <name>/workgroup.md         # hub, members, budget, briefing
+      <name>/workgroup.md         # hub, members, budget_usd?, briefing
     (org-specific tools)          # e.g. company/test-workgroup-tasks.py, web-factory/new-project.py
 ```
 
-`org.yaml` is the configuration surface — workspace path (defaults to
-`~/alpi/organizations/<name>/` if omitted), workspace scaffold dirs,
-template/asset sync entries, agent voices, and common-skills mappings.
-The unified `setup.py` consumes this and runs the same mechanical
-pipeline for every org.
+### `org.yaml` — full schema
+
+Every key `setup.py` reads, with the default it falls back to:
+
+| Key | Default | Effect |
+|---|---|---|
+| `display_name` | `<name>` (the folder name) | Human label used in console output during bootstrap. |
+| `workspace` | `~/alpi/organizations/<name>/` | Default project root for file/terminal tools across the org's profiles. `~` is honoured verbatim (e.g. the company org sets workspace to `~` so the agents share the user's home as their workspace). Bare YAML `~` parses to `None` and falls back to the default; a literal home string is `"~"`. |
+| `workspace_scaffold` | `[]` | List of relative subdir names created inside `workspace` at bootstrap (`projects`, `templates/hotel-web`, etc.). |
+| `sync` | `[]` | List of `{src, dst}` entries copied from `organizations/<name>/` into `workspace` every bootstrap (replace mode). Used for shipping templates / libraries with the org. |
+| `peer_edges` | `[]` | Permanent peer graph. **Preferred source** — see _Peer graph_ below. Accepts `"all"` (every agent a mutual peer), a list of `[a, b]` pairs, or empty (workgroup membership alone wires the graph). |
+| `models.default` | `openai/gpt-5.4-mini` | Model assigned to agents with `tier: default`. |
+| `models.strong` | `anthropic/claude-sonnet-4-6` | Model assigned to agents with `tier: strong`. An agent's `agent.md` can override either with an explicit `model:` field. |
+| `budgets.daily_default` | `2.0` | USD daily cap for tier-default agents (used when `agent.md` omits `daily_usd`). |
+| `budgets.daily_strong` | `5.0` | USD daily cap for tier-strong agents (same fallback rule). |
+| `budgets.workgroup` | `50.0` | Default lifetime USD cap for standing workgroups (each `workgroup.md` can override via `budget_usd`). |
+| `agent_voices` | `{}` | Map `<agent-name> → Edge TTS voice id` (e.g. `vera: en-US-AriaNeural`). Written into the profile's `tools.tts.voice`. |
+| `common_skills` | `{}` | Map `<category>/<skill> → [agent names]` — shared skills under `common/skills/` that bootstrap copies into each named profile's `skills/`. |
+
+### Peer graph — `peer_edges` vs legacy `peers:`
+
+Three sources are **merged into a deduped union** (no precedence at
+runtime; pin order is irrelevant — `setup.py::derive_edges` builds the
+edge set once):
+
+1. **`org.yaml peer_edges`** — the preferred declaration site for new
+   orgs. Declarative, lives next to the rest of the org's configuration.
+   `"all"` (complete graph) or `[[a, b], …]`.
+2. **`agent.md peers:` frontmatter** — **legacy** back-compat; still
+   read so older orgs keep working without rewrite. Treat as deprecated
+   for new orgs: peers are network infrastructure, not agent identity.
+3. **Workgroup membership** — every `workgroup.md` automatically adds
+   hub↔member edges. This source can stand alone — an org with no
+   `peer_edges` and no `peers:` still has a working graph through its
+   workgroups.
+
+Overlap between the three is harmless; edges are deduped.
+
+### `agent.md` — frontmatter fields
+
+Every `agents/<name>/agent.md` carries a YAML frontmatter block; the
+body is the agent's soul (copied verbatim into the profile's
+`memories/AGENT.md`).
+
+| Field | Required | Notes |
+|---|---|---|
+| `reasoning_effort` | **yes** (validation) | `off \| low \| medium \| high`. Validation hard-fails if the field is missing or holds anything else. `False` / `no` / `none` / `disabled` normalise to `off`. The only field required to be present — validation also rejects invalid `tier` values and unknown names in `tools_deny`, but those checks fire only when the field is set. |
+| `bio` | no (default `""`) | One-line public tag-line; broadcast to every workgroup the agent joins (truncated to fit ALP's bio limit). Empty = no broadcast. |
+| `accent` | no (default `"#888888"`) | CSS color (hex / named / rgb). Drives the TUI accent for the profile. |
+| `tier` | no (default `"default"`) | `default` or `strong`. Picks the org's `models.default` / `models.strong` unless overridden by `model:`. Validation rejects any other value. |
+| `model` | no | Explicit LiteLLM string that overrides the tier-derived model. |
+| `daily_usd` | no | USD daily cap; defaults to `budgets.daily_strong` for tier-strong, `budgets.daily_default` otherwise. |
+| `tools_deny` | no (default `[]`) | List of tool names hidden from this profile's LLM schema. Validation rejects unknown names (a typo here is a security gap — the deny silently misses). |
+| `peers` | no (default `[]`) | **Legacy.** Per-agent peer list; honoured for back-compat. Prefer `org.yaml peer_edges` for new orgs. |
+
+`workgroup.md` frontmatter uses `hub` (required), `members` (list of
+agent names), and optional `budget_usd` (defaults to
+`budgets.workgroup`). The body is the briefing, loaded into every
+member's context.
+
+The unified `setup.py` consumes all of this and runs the same
+mechanical pipeline for every org.
 
 ---
 
@@ -213,9 +271,12 @@ for different intents:
 to/from that agent. No other file needs editing.
 
 **Adding an agent.** Create `organizations/company/agents/<name>/agent.md`
-with the required frontmatter (`bio`, `peers`, `tier`, `reasoning_effort`)
-and a soul in the body. Add it to any workgroup's `members` list if
-needed.
+with the required frontmatter (`reasoning_effort`; the recommended
+identity fields are `bio`, `accent`, `tier`; `model` / `daily_usd` /
+`tools_deny` are optional) and a soul in the body. Add it to any
+workgroup's `members` list if needed. Network edges are picked up
+automatically — declare them via `org.yaml peer_edges` (legacy `peers:`
+in `agent.md` still honoured).
 
 **Changing a model.** Edit `tier: strong | default` in the agent's
 frontmatter, or override `daily_usd` directly. Per-org model defaults
@@ -235,8 +296,10 @@ base model.
 The same scaffold-and-bootstrap pattern grows the system:
 
 1. `mkdir organizations/<name>/`
-2. Write `<name>.md` (design contract), `org.yaml` (workspace + voices
-   + common_skills), and `user-memory.md` (USER.md template).
+2. Write `<name>.md` (design contract), `org.yaml` (the file must exist
+   and contain a YAML mapping; `{}` is valid — every key falls back to
+   the default in the schema above), and `user-memory.md` (USER.md
+   template).
 3. Populate `agents/` and `workgroups/` following the company layout.
 4. `uv run python organizations/setup.py <name>` — `setup.py`
    auto-discovers any subdir of `organizations/` that contains an

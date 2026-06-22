@@ -1,5 +1,39 @@
 # Changelog
 
+## v0.9.25 — 2026-06-22 — multi-profile organizations are first-class in alpi_knowledge
+
+- **`alpi_knowledge` answers questions about organizations.** A new
+  `organization` topic ships with the tool — `alpi_knowledge(action="view",
+  topic="organization")` returns the full schema for `org.yaml`,
+  `agent.md`, and `workgroup.md`, the peer-graph merge rules, and
+  every `setup.py` mode. The tool description, the prompt-injected
+  self-knowledge rule, and the per-topic summaries all mention
+  organizations so the agent reaches for the topic when a user asks
+  about multi-profile setups.
+- **`docs/ORGANIZATION.md` reconciled with `organizations/setup.py`.**
+  Every `org.yaml` key the bootstrap reads is now in the doc with its
+  real default (`display_name`, `workspace`, `workspace_scaffold`,
+  `sync`, `peer_edges`, `models.default`/`models.strong`,
+  `budgets.daily_default`/`daily_strong`/`workgroup`, `agent_voices`,
+  `common_skills`). `agent.md` and `workgroup.md` frontmatter tables
+  match the validator — `reasoning_effort` is the only field required
+  to be present; everything else has a default. The peer graph is
+  described as a deduped union of three sources (`org.yaml peer_edges`
+  preferred, `agent.md peers:` legacy back-compat, workgroup
+  membership), not a precedence chain. Workgroups are documented as
+  persistent, end-to-end.
+- **A guard test pins the doc to the code.** `tests/core/test_org_doc.py`
+  parses `setup.py` with `ast`, extracts the keys actually read inside
+  `init_org`, `_parse_agent_file`, and `load_workgroups`, and asserts
+  the `org.yaml` and `agent.md` tables in `ORGANIZATION.md` enumerate
+  exactly the same set — neither doc rows that don't exist in code,
+  nor code keys missing from the doc. `workgroup.md` fields are
+  documented in prose; the guard for that one is one-directional
+  (every field setup.py reads is documented). Two extra guards:
+  `TOPICS` and `_TOPIC_SUMMARIES` must stay symmetric, and the new
+  `organization` topic must be wired through the tool description
+  and the prompt rule, not only the enum.
+
 ## v0.9.24 — 2026-06-22 — pipe-to-interpreter detector rewritten on shlex.shlex
 
 - **`curl x|bash` and `curl x | tee … | bash` are now blocked;

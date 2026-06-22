@@ -23,6 +23,7 @@ _TOPIC_SUMMARIES: dict[str, str] = {
     "security": "Approval system, SSRF, prompt-injection, sensitive-path denylist, sandbox.",
     "deployments": "launchd on macOS, systemd on Linux, gateway/schedule daemon shape, keep-alive, log paths.",
     "operations": "Day-2 ops — doctor, diagnostics, log rotation, backup, recovery, upgrade workflow.",
+    "organization": "Multi-profile orgs — org.yaml schema, agent.md / workgroup.md frontmatter, peer graph, setup.py modes, persistent workgroups.",
 }
 
 
@@ -32,7 +33,7 @@ class AlpiKnowledge(Tool):
         "Read packaged documentation about alpi itself. CALL THIS "
         "BEFORE answering any question about alpi — install, profiles, "
         "ALP protocol, tools, skills, models, config, security, gateways, "
-        "deployment, day-2 ops. The packaged references are "
+        "deployment, day-2 ops, multi-profile organizations. The packaged references are "
         "authoritative; your training predates alpi and will be wrong "
         "about flags, paths, and behaviours.\n"
         "\n"
@@ -102,7 +103,8 @@ TOOL = AlpiKnowledge
 PROMPT_RULE = (
     "# ALPI SELF-KNOWLEDGE\n"
     "When the user asks about alpi itself (install, profiles, ALP "
-    "protocol, tools, skills, config, security, deployment, day-2 ops), "
+    "protocol, tools, skills, config, security, deployment, day-2 ops, "
+    "multi-profile organizations / org.yaml / agent.md), "
     "CALL ``alpi_knowledge`` BEFORE answering. The packaged "
     "references are authoritative; your training predates alpi."
 )
