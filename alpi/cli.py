@@ -406,7 +406,10 @@ class _OrderedGroup(click.Group):
 def main(ctx: click.Context, profile: str | None, continue_last: bool) -> None:
     """alpi — a slim personal AI agent."""
     ctx.ensure_object(dict)
-    h = home.get_home(profile)
+    try:
+        h = home.get_home(profile)
+    except home.InvalidProfileName as e:
+        raise click.BadParameter(str(e), param_hint="-p / --profile")
     ctx.obj["home"] = h
     ctx.obj["profile"] = profile or "default"
     ctx.obj["continue_last"] = continue_last
@@ -3323,14 +3326,12 @@ def profile_list(ctx: click.Context) -> None:
 @click.argument("name")
 def profile_create(name: str) -> None:
     """Bootstrap a new profile directory with default config."""
-    from alpi.host.config import RESERVED_PROFILE_NAMES
-
     if not name:
         raise click.ClickException("name required")
-    if name in RESERVED_PROFILE_NAMES:
-        raise click.ClickException(f"use a real name — {name!r} is reserved")
-    if "/" in name or name.startswith("."):
-        raise click.ClickException(f"invalid profile name: {name!r}")
+    try:
+        home.validate_profile_name(name)
+    except home.InvalidProfileName as e:
+        raise click.ClickException(str(e))
 
     h = home.home_for(name)
     if h.exists() and any(h.iterdir()):

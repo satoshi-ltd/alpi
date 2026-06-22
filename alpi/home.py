@@ -3,11 +3,33 @@
 from __future__ import annotations
 
 import os
+import re
 from contextvars import ContextVar
 from pathlib import Path
 from typing import Optional
 
 _ROOT = Path.home() / ".alpi"
+
+_PROFILE_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._\-]*$")
+
+RESERVED_PROFILE_NAMES = frozenset({"default", "alpi"})
+
+
+class InvalidProfileName(ValueError):
+    pass
+
+
+def validate_profile_name(name: str) -> str:
+    if not isinstance(name, str) or not _PROFILE_NAME_RE.fullmatch(name) or ".." in name:
+        raise InvalidProfileName(
+            f"invalid profile name: {name!r} — must start with [A-Za-z0-9] and "
+            f"contain only [A-Za-z0-9._-]; got {name!r}"
+        )
+    if name in RESERVED_PROFILE_NAMES:
+        raise InvalidProfileName(
+            f"invalid profile name: {name!r} is reserved"
+        )
+    return name
 
 
 # Active-home context for concurrent daemon turns.
@@ -54,7 +76,7 @@ def get_home(profile: Optional[str] = None) -> Path:
 
     name = profile or os.environ.get("ALPI_PROFILE")
     if name and name != "default":
-        return _ROOT / "profiles" / name
+        return _ROOT / "profiles" / validate_profile_name(name)
     return _ROOT
 
 
@@ -62,7 +84,7 @@ def home_for(name: str) -> Path:
     """Resolve a profile literally; never honour ``ALPI_HOME``."""
     if not name or name == "default":
         return _ROOT
-    return _ROOT / "profiles" / name
+    return _ROOT / "profiles" / validate_profile_name(name)
 
 
 def alpi_root() -> Path:

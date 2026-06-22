@@ -35,17 +35,26 @@ Everything that represents state, identity, or cost:
 |---|---|---|
 | `config.yaml` | ✓ | Model, fallbacks, tool limits, gateway config, MCP servers. |
 | `.env` | ✓ | API keys. A leak in one profile doesn't touch the other. |
+| `secrets/` | ✓ | Per-profile non-ALP credential files (OAuth tokens, Gmail tokens, etc.). Created `0o700` on bootstrap. The ALP keypair lives separately at `alp/secrets/alp_key.{pem,pub}`. |
 | `memories/` (USER.md, MEMORY.md, AGENT.md) | ✓ | Your identity and what alpi remembers. |
 | `sessions/<id>.json` | ✓ | Local human chat log (TUI / desktop / manual `chat --once`). |
 | `mentions/<sender>.json` | ✓ | Per-sender `@`-mention threads (capped at 20 turns). Receiving side only. |
 | `gateway/sessions/<id>.json` | ✓ | Telegram / email / webhook chat logs. Hidden from TUI/desktop listings on purpose. |
 | `gateway/sessions/_map.json` | ✓ | `chat_id → session_id` pointer for per-chat threading. |
 | `skills/` | ✓ | Installed skills (live under this profile's allowlist). |
-| `alp/` (peers.yaml, socket, keypair) | ✓ | ALP identity + pinned peers. Two profiles on the same machine are two distinct peers. |
+| `alp/` (peers.yaml, socket, keypair under `alp/secrets/`) | ✓ | ALP identity + pinned peers. Two profiles on the same machine are two distinct peers. The ALP private key lives here, NOT under `secrets/`. |
+| `host/attachments/tmp/` | ✓ | Staged chat-attachment uploads from the paired apps. Per profile — the rest of `host/` (`host.sock`, `devices.yaml`, `events.jsonl`, `device_id`) is root-only (see below). |
+| `run/bg/` | ✓ | Background-terminal state — one combined `alpi-bg-*.log` (stdout+stderr capture) and one `<pid>.meta` file (key=value pairs: `log=…`, `started=…`) per job spawned with `terminal(action="background")`. |
 | `schedule/jobs.json` | ✓ | Cron + one-shot jobs. Scheduled runs use `chat --once --no-save` and do not create chat sessions. Jobs flagged `no_agent: true` exec `prompt` as a `python [flags] <skill_script>` invocation directly, bypassing the LLM (allowlist restricts the script to `skills/<category>/<name>/scripts/`). |
+| `outputs/outputs.jsonl` | ✓ | Persistent inbox for proactive agent messages + schedule failures, capped at 500 rows. Surfaced by `host.outputs.*` to paired apps. |
+| `rag/store.sqlite` | ✓ | Local RAG index (sqlite-vec) over the workspace and learned documents. |
 | `logs/` | ✓ | `agent.log` (one line per engine turn on every surface — TUI, gateway, schedule, workgroup, inbound ALP, research / delegate sub-agents — written by `engine.py::run_turn`) and `approval.log` (one line per non-SAFE `terminal` classification, written by `tools/_approval.py`), plus JSONL telemetry `compaction.jsonl` and `runs.jsonl` (run ledger, surfaced by `alpi digest`). The daemon's root log lives outside the per-profile tree at `~/.alpi/logs/service.log` — there is ONE per installation, not one per profile, and `alpi logs --source service` always reads the root file regardless of `-p`. `alpi logs --source` still accepts `gateway`/`schedule` as filter values for any standalone or legacy file on disk. |
 | `logs/ledger.json` | ✓ | Daily spending ledger — the profile's USD cap is enforced from here across every turn (interactive, gateway, scheduled, sub-agent, inbound ALP). Resets at UTC midnight. |
 | `cache/` (tts, stt, inbound voice) | ✓ | Audio cache. |
+
+**Eager vs lazy.** `home.ensure_home()` creates 9 subdirs eagerly with `0o700` permissions on first bootstrap: `memories/`, `secrets/`, `sessions/`, `skills/`, `schedule/output/`, `logs/`, `host/`, `mentions/`, `outputs/`. The rest (`alp/`, `rag/`, `cache/`, `gateway/sessions/`, `run/bg/`, `host/attachments/`) are created lazily on first use. `alpi audit` walks a fixed sensitive-path list and flags any group/other bits set (`st_mode & 0o077`); the fix is `chmod 700` for directories and `chmod 600` for files. The list: the profile home itself, `.env`, the ALP private key (`alp/secrets/alp_key.pem`), `alp/secrets/` (the ALP keypair directory — **not** the profile-level OAuth `secrets/`, which is not audited today), `config.yaml`, `peers.yaml`, `memories/`, `sessions/`, `skills/`, `schedule/output/`, `logs/`, `host/`, `mentions/`, `outputs/`. Lazily-created paths outside this list (`alp/` itself, `rag/`, `cache/`, `gateway/sessions/`, `run/bg/`, `host/attachments/`) and the profile-level `secrets/` OAuth folder are not audited today.
+
+**Profile creation.** `alpi -p <name>` auto-bootstraps any not-yet-existing profile on first use; `alpi profile create <name>` is the explicit pre-bootstrap. Both paths go through the same central validator (`home.validate_profile_name`): the name must match `^[A-Za-z0-9][A-Za-z0-9._-]*$`, so `-p ../escape`, `-p .hidden`, `-p a/b`, `-p ..`, and any name containing `..` are rejected with `InvalidProfileName` before the path is joined. `-p ""` is a no-op — empty falls through to the default profile (`~/.alpi/`), it does **not** resolve to `~/.alpi/profiles/`. Quote names containing zsh-glob characters (`*`, `?`, `[`); they're rejected by validation anyway but the shell expands them first.
 
 Not isolated (shared globally by design):
 
@@ -53,6 +62,7 @@ Not isolated (shared globally by design):
 - Whisper model downloads (`~/.cache/huggingface/`).
 - Chromium for the `browser` tool (Playwright's own cache).
 - The user's shell, git config, workspace contents.
+- **Host-plane root state.** `~/.alpi/host/host.sock` (control-plane socket), `~/.alpi/host/devices.yaml` (pairing tokens), `~/.alpi/host/events.jsonl` (host event stream), and `~/.alpi/host/device_id` are root-only — ONE instance per installation, not duplicated per profile. The desktop / mobile client always pairs against the root and reaches sibling profiles via the `profile` parameter on each verb. Named profiles still get their own `host/attachments/tmp/` (uploaded chat attachments) — that IS per profile and appears in the table above.
 
 ## Creating and removing profiles
 

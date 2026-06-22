@@ -6,19 +6,17 @@ from pathlib import Path
 from typing import Any
 
 from alpi import config as cfg_mod
+from alpi.home import RESERVED_PROFILE_NAMES
 from alpi.host import server as host_server
 
 
 _ENV_KEY_RE = re.compile(r"^[A-Z_][A-Z0-9_]{0,63}$")
-# Reserved keys the daemon needs for itself.
 _PROTECTED_ENV_KEYS = frozenset({
     "HOME", "PATH", "USER", "ALPI_HOME", "ALPI_PROFILE",
     "PYTHONPATH", "TMPDIR", "LANG", "LC_ALL",
 })
 
-# "default" is the physical root profile (~/.alpi/); "alpi" is the desktop
-# display label for it — both must be unavailable as user-created names.
-RESERVED_PROFILE_NAMES = frozenset({"default", "alpi"})
+__all__ = ["RESERVED_PROFILE_NAMES"]
 
 
 def _check_env_key(key: str) -> str:
@@ -407,20 +405,17 @@ async def _profile_create(
     from alpi import home as home_mod
     from alpi.cli import _bootstrap
 
-    name = str(params.get("name") or "").strip()
+    name = str(params.get("name") or "")
     if not name:
         raise host_server.HandlerError(
             -32602, "invalid-params",
             data={"detail": "name required"},
         )
-    if name in RESERVED_PROFILE_NAMES:
+    try:
+        home_mod.validate_profile_name(name)
+    except home_mod.InvalidProfileName as e:
         raise host_server.HandlerError(
-            -32602, "invalid-params",
-            data={"detail": f"{name!r} is reserved"},
-        )
-    if "/" in name or name.startswith(".") or not name.replace("-", "").replace("_", "").isalnum():
-        raise host_server.HandlerError(
-            -32602, "invalid-params", data={"detail": f"invalid name {name!r}"},
+            -32602, "invalid-params", data={"detail": str(e)},
         )
     h = home_mod.home_for(name)
     if h.exists() and any(h.iterdir()):

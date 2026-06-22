@@ -1,5 +1,31 @@
 # Changelog
 
+## v0.9.27 — 2026-06-22 — profile-name path traversal closed; profile docs reconciled
+
+- **Profile names are now validated centrally.** `alpi -p <name>`,
+  `ALPI_PROFILE`, `alpi profile create`, and the `host.profile.create` RPC
+  all go through `home.validate_profile_name`: names must match
+  `^[A-Za-z0-9][A-Za-z0-9._-]*$` and cannot be the reserved alias `alpi`
+  (which is the desktop display label for the default profile). Unsafe
+  selections — `-p ../escape`, `-p .hidden`, `-p a/b`, `-p ..`, `-p alpi`,
+  any name containing `..` — are rejected with a clear `invalid profile
+  name` error before the path is joined. `-p default` keeps selecting the
+  root profile as before; only **creation** (`profile create default`,
+  `host.profile.create({"name": "default"})`) refuses `default`, since the
+  root already exists. `-p ""` likewise keeps the historical no-op
+  behaviour (falls through to the default profile).
+- **PROFILES docs match the runtime.** The isolation table now lists the
+  per-profile rows that were previously missing — OAuth `secrets/`, the
+  `alp/secrets/` keypair distinction, `host/attachments/tmp/`, `run/bg/`
+  (one `alpi-bg-*.log` + one `<pid>.meta` per background terminal job),
+  `outputs/outputs.jsonl`, `rag/store.sqlite`. Eager-vs-lazy creation is
+  spelled out; `alpi audit`'s real check is described as "any group/other
+  bits set" with the chmod fix (`700` for dirs, `600` for files), and the
+  audited `secrets/` row is correctly identified as `alp/secrets/` (the
+  ALP keypair directory) — the profile-level OAuth `secrets/` is **not**
+  audited today and is flagged as such. Host-plane root state is named
+  explicitly (`host.sock`, `devices.yaml`, `events.jsonl`, `device_id`).
+
 ## v0.9.26 — 2026-06-22 — host plane hardening: atomic peers.yaml, constant-time token compare, no token suffix in auth-failure logs
 
 - **A daemon crash mid-write can no longer brick `peers.yaml`.** The
