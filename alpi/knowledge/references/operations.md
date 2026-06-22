@@ -38,20 +38,26 @@ One daemon supervises every profile on the machine. `restart` after `uv tool ins
 
 ## Logs
 
-Per-profile under `{home}/logs/`. Rotated text caps at **1 MB** (`.log.1` = previous gen); `compaction.jsonl` does not rotate (read with `jq`).
+Two scopes, do not conflate:
 
-| File | Content |
-|---|---|
-| `service.log` | daemon supervisor + per-profile services |
-| `agent.log` | one line per turn |
-| `approval.log` | terminal approval decisions (audit trail with `agent.log`) |
-| `compaction.jsonl` | compaction/truncation records |
-| `runs.jsonl` | run ledger: one line per long-running turn (agent/schedule/workgroup/terminal); surfaced by `alpi digest` |
-| `ledger.json` | daily budget gate (live counters, UTC reset) + 30-day per-day spend history (usd + input/output tokens, ALL spend incl. non-token costs like image generation); served by `host.usage.daily` |
+- **Daemon-wide (root):** `~/.alpi/logs/service.log` — ONE file per installation, never duplicated under a profile. `alpi logs --source service` always reads it regardless of `-p`.
+- **Per profile:** `{home}/logs/` for the active profile (`~/.alpi/logs/` for default, `~/.alpi/profiles/<name>/logs/` otherwise). `alpi -p <name> logs ...` reads under that profile (`-p` belongs to the root `alpi` command, not to `logs`).
+
+Rotated text caps at **1 MB** (`.log.1` = previous gen); `compaction.jsonl` does not rotate (read with `jq`).
+
+| File | Scope | Content |
+|---|---|---|
+| `service.log` | root | daemon supervisor + per-profile services. `alpi logs --source service` always reads the root file regardless of `-p`. |
+| `agent.log` | per profile | one line per engine turn on every surface (TUI, gateway, schedule, workgroup, inbound ALP, sub-agents). |
+| `approval.log` | per profile | terminal approval decisions (audit trail with `agent.log`). |
+| `compaction.jsonl` | per profile | compaction/truncation records. |
+| `runs.jsonl` | per profile | run ledger: one line per long-running turn (agent/schedule/workgroup/terminal); surfaced by `alpi digest`. |
+| `ledger.json` | per profile | daily budget gate (live counters, UTC reset) + 30-day per-day spend history (usd + input/output tokens, ALL spend incl. non-token costs like image generation); served by `host.usage.daily`. |
 
 ```bash
-alpi logs --source agent -n 100
-alpi logs --source service -f
+alpi logs --source agent -n 100              # active profile's agent.log
+alpi -p mira logs --source agent             # mira's agent.log (note: -p before subcommand)
+alpi logs --source service -f                # always reads ~/.alpi/logs/service.log
 jq -r '[.ts, .session_id[0:8], .trigger, .tokens_before, .tokens_after] | @tsv' \
   ~/.alpi/logs/compaction.jsonl
 ```

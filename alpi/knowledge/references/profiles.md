@@ -28,7 +28,7 @@
 | `rag/store.sqlite` | Local RAG index over the workspace (sqlite-vec). |
 | `alp/` (peers.yaml, socket, keypair) | ALP identity + pinned peers; two profiles = two distinct peers. |
 | `schedule/jobs.json` | Cron + one-shot jobs. Runs use `chat --once --no-save` (no session). Jobs with `no_agent: true` exec `prompt` as `python [flags] <skill_script>` directly, bypassing the LLM (allowlist restricts to `skills/<category>/<name>/scripts/`). |
-| `logs/` | `gateway.log`, `schedule.log`, `alp.log`, `agent.log`, `approval.log`. |
+| `logs/` | `agent.log` (one line per engine turn on every surface — TUI, gateway, schedule, workgroup, inbound ALP, sub-agents) and `approval.log` (non-SAFE terminal classifications) — the only per-profile `.log` files actually emitted today. Daemon-wide events (gateway, schedule, ALP, workgroup) land in the root `~/.alpi/logs/service.log` — ONE per installation, not duplicated per profile; `alpi logs --source service` always reads the root file regardless of `-p`. `alpi logs --source` still accepts `gateway` / `schedule` as filter values for any standalone or legacy file on disk. |
 | `logs/ledger.json` | Daily USD/token spend cap, enforced across every turn (interactive, gateway, scheduled, sub-agent, inbound ALP). Resets at UTC midnight. |
 | `cache/` (tts, stt, inbound voice) | Audio cache. |
 | `run/` | Runtime sockets / PIDs. |

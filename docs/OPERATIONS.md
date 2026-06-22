@@ -24,20 +24,25 @@ generation. JSONL telemetry feeds are append-only, read with `jq` (or
 `alpi digest`) — `compaction.jsonl` is unbounded; `runs.jsonl` is capped
 and rolling.
 
-| File | Format | What it answers | Who writes it |
-|---|---|---|---|
-| `service.log` | rotated text | Did the daemon start? Which services came up for which profile? Did a gateway accept this inbound? Did a peer hit an ALP listener? Did a cron job fire? | the daemon supervisor + every per-profile service that logs through the root logger |
-| `agent.log` | rotated text | What has the agent *been doing*? One line per turn: session id, elapsed, tools called, reply length, cost, user prompt preview. Cross-session grep index. | the engine (every turn on every surface) |
-| `approval.log` | rotated text | Security audit of every non-safe shell command the LLM tried to run: caution (pending / once / session / always / deny) or dangerous (always denied). | the approval system |
-| `compaction.jsonl` | append-only JSONL | Did auto-compact run this turn? Tokens before/after, summarized-message count, tool-truncation count, manual vs auto, `fired` (true when the LLM summarized; false when only oversized tool outputs were truncated). Use it as the evidence source before changing compaction/memory constants. | the engine (one line whenever compaction *or* tool truncation ran) |
-| `runs.jsonl` | capped rolling JSONL | What ran and where it stopped: one record per long-running turn (agent, schedule, workgroup, terminal) — outcome, exit code, timeout reason, pid, backend, last tool, and a secret-redacted output tail. Surfaced by `alpi digest`. | the engine, scheduler, and terminal tool (one line per finished run) |
+| File | Scope | Format | What it answers | Who writes it |
+|---|---|---|---|---|
+| `service.log` | **daemon-wide; ONE file at `~/.alpi/logs/service.log`, never duplicated per profile** | rotated text | Did the daemon start? Which services came up for which profile? Did a gateway accept this inbound? Did a peer hit an ALP listener? Did a cron job fire? | the daemon supervisor + every per-profile service that logs through the root logger |
+| `agent.log` | per profile | rotated text | What has the agent *been doing*? One line per **engine turn on every surface** (TUI, gateway, schedule, workgroup post, inbound ALP, research / delegate sub-agents): session id, elapsed, tools called, reply length, cost, user prompt preview. Cross-session grep index. | the engine (every turn on every surface) |
+| `approval.log` | per profile | rotated text | Security audit of every non-safe shell command the LLM tried to run: caution (pending / once / session / always / deny) or dangerous (always denied). | the approval system |
+| `compaction.jsonl` | per profile | append-only JSONL | Did auto-compact run this turn? Tokens before/after, summarized-message count, tool-truncation count, manual vs auto, `fired` (true when the LLM summarized; false when only oversized tool outputs were truncated). Use it as the evidence source before changing compaction/memory constants. | the engine (one line whenever compaction *or* tool truncation ran) |
+| `runs.jsonl` | per profile | capped rolling JSONL | What ran and where it stopped: one record per long-running turn (agent, schedule, workgroup, terminal) — outcome, exit code, timeout reason, pid, backend, last tool, and a secret-redacted output tail. Surfaced by `alpi digest`. | the engine, scheduler, and terminal tool (one line per finished run) |
+| `ledger.json` | per profile | JSON | Daily USD spend ledger; live counters for the daily cap + 30-day per-day history. Not a log; never cleaned by `Subsystem logs`. | every turn that records cost |
 
 **Tail one or all:**
 
 ```bash
-alpi logs                          # merged tail of every source
-alpi logs --source service         # just service.log
-alpi logs --source agent -n 500    # last 500 lines of agent.log
+alpi logs                          # merged tail of every source under the active profile
+alpi logs --source service         # always reads ~/.alpi/logs/service.log
+                                   #   (root-scope; -p <name> doesn't change the source)
+alpi logs --source agent -n 500    # last 500 lines of the active profile's agent.log
+alpi -p mira logs --source agent   # mira's agent.log under ~/.alpi/profiles/mira/logs/
+                                   #   NOTE: `-p` belongs to the root `alpi` command,
+                                   #   not to `logs` — it must come before the subcommand
 alpi logs -f                       # follow mode (poll every 1s)
 ```
 

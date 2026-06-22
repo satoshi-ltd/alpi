@@ -43,7 +43,7 @@ Everything that represents state, identity, or cost:
 | `skills/` | ✓ | Installed skills (live under this profile's allowlist). |
 | `alp/` (peers.yaml, socket, keypair) | ✓ | ALP identity + pinned peers. Two profiles on the same machine are two distinct peers. |
 | `schedule/jobs.json` | ✓ | Cron + one-shot jobs. Scheduled runs use `chat --once --no-save` and do not create chat sessions. Jobs flagged `no_agent: true` exec `prompt` as a `python [flags] <skill_script>` invocation directly, bypassing the LLM (allowlist restricts the script to `skills/<category>/<name>/scripts/`). |
-| `logs/` | ✓ | `gateway.log`, `schedule.log`, `alp.log`, `agent.log`, `approval.log`, plus JSONL telemetry `compaction.jsonl` and `runs.jsonl` (run ledger, surfaced by `alpi digest`). |
+| `logs/` | ✓ | `agent.log` (one line per engine turn on every surface — TUI, gateway, schedule, workgroup, inbound ALP, research / delegate sub-agents — written by `engine.py::run_turn`) and `approval.log` (one line per non-SAFE `terminal` classification, written by `tools/_approval.py`), plus JSONL telemetry `compaction.jsonl` and `runs.jsonl` (run ledger, surfaced by `alpi digest`). The daemon's root log lives outside the per-profile tree at `~/.alpi/logs/service.log` — there is ONE per installation, not one per profile, and `alpi logs --source service` always reads the root file regardless of `-p`. `alpi logs --source` still accepts `gateway`/`schedule` as filter values for any standalone or legacy file on disk. |
 | `logs/ledger.json` | ✓ | Daily spending ledger — the profile's USD cap is enforced from here across every turn (interactive, gateway, scheduled, sub-agent, inbound ALP). Resets at UTC midnight. |
 | `cache/` (tts, stt, inbound voice) | ✓ | Audio cache. |
 

@@ -1415,10 +1415,15 @@ def audit_cmd(ctx: click.Context, offline: bool) -> None:
 )
 @click.pass_context
 def logs_cmd(ctx: click.Context, source: str | None, tail_n: int, follow: bool) -> None:
-    """Show the tail of every log this profile writes, merged by timestamp."""
-    from alpi import logs as logs_mod, ui
+    """Show the tail of every log this profile writes, merged by timestamp.
 
-    h: Path = ctx.obj["home"]
+    `--source service` always reads the daemon-wide root log
+    `~/.alpi/logs/service.log` regardless of the active profile —
+    it is one file per installation, not one per profile.
+    """
+    from alpi import home as home_mod, logs as logs_mod, ui
+
+    h: Path = ctx.obj["home"] if source != "service" else home_mod.alpi_root()
     lines = logs_mod.tail(h, source, tail_n)
     if not lines and not follow:
         ui._console.print("[dim]no logs yet — run `alpi setup` to get started.[/dim]")
@@ -3019,7 +3024,14 @@ def _cleanup_categories(h: Path) -> list[dict]:
     session_files = _all(_dir("sessions"))
     mention_files = _all(_dir("mentions"))
     gateway_files = _all(_dir("gateway/sessions"))
-    log_files = _all(_dir("logs"))
+    logs_root = _dir("logs")
+    log_files: list[Path] = (
+        [
+            p for p in logs_root.iterdir()
+            if p.is_file() and re.fullmatch(r".+\.log(?:\.\d+)?", p.name)
+        ]
+        if logs_root.exists() else []
+    )
     sched_files = _all(_dir("schedule/output"))
     wg_root = _dir("alp/workgroups")
     wg_files: list[Path] = (
@@ -3083,7 +3095,7 @@ def _cleanup_categories(h: Path) -> list[dict]:
         {
             "key": "logs",
             "label": "Subsystem logs",
-            "desc": "`logs/*.log` — gateway, schedule, agent, approval",
+            "desc": "`logs/*.log` — per-profile agent.log + approval.log (daemon-wide service.log lives at the alpi root)",
             "files": log_files,
             "size": _sum(log_files),
         },

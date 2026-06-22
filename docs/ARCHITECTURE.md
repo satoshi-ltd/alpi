@@ -216,11 +216,13 @@ that live at `{home}/skills/<category>/<name>/`.
 │   └── host.sock          Unix socket the local desktop connects to (mobile uses the WebSocket)
 ├── outputs/                persistent inbox for proactive agent messages + schedule failures
 │   └── outputs.jsonl       JSONL store (≤500 rows, atomic compaction)
-└── logs/                   service.log, agent.log, approval.log, ledger.json,
-                            compaction.jsonl, runs.jsonl (run ledger), plus
-                            subsystem logs such as gateway.log / schedule.log / alp.log
+└── logs/                   service.log (daemon-wide; lives only at the root, NOT
+                            duplicated per profile), agent.log + approval.log
+                            (per profile — only the default profile's pair is at
+                            this level), ledger.json, compaction.jsonl, runs.jsonl
 
-~/.alpi/profiles/<name>/     same layout, isolated per profile
+~/.alpi/profiles/<name>/     same layout MINUS service.log; agent.log + approval.log
+                             are emitted under each profile's own logs/
 ```
 
 ## Core systems
