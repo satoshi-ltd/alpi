@@ -1,10 +1,17 @@
 import json
 from pathlib import Path
 
+import pytest
+
 WEB_FACTORY = Path(__file__).resolve().parents[1] / "web-factory"
 SPEC = WEB_FACTORY / "factory" / "template-spec.json"
 I18N_DIR = WEB_FACTORY / "templates" / "hotel-web" / "src" / "i18n"
 SCOUT_SKILL = WEB_FACTORY / "agents" / "scout" / "skills" / "meta" / "intake-interview" / "SKILL.md"
+
+pytestmark = pytest.mark.skipif(
+    not WEB_FACTORY.exists(),
+    reason="organizations/web-factory/ is not in this checkout (subtree imported once acceptance fixtures pass)",
+)
 
 
 def test_supported_locales_match_shipped_i18n_files():
