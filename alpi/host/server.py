@@ -576,8 +576,8 @@ def _check_token_meta(body: dict[str, Any]) -> tuple[bool, str, list[str]]:
             log.warning("host auth-failed: no token sent (method=%s)", method)
         else:
             log.warning(
-                "host auth-failed: token …%s not in store (method=%s)",
-                token[-8:], method,
+                "host auth-failed: invalid token (len=%d, method=%s)",
+                len(token), method,
             )
         return False, "", []
     return True, role, scope

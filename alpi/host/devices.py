@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hmac
 import os
 import re
 import secrets
@@ -11,6 +12,17 @@ from typing import Any
 import yaml
 
 from alpi.host import server as host_server
+
+
+def _tokens_match(stored: str, presented: str) -> bool:
+    if not stored or not presented:
+        return False
+    try:
+        a = stored.encode("utf-8")
+        b = presented.encode("utf-8")
+    except (AttributeError, UnicodeError):
+        return False
+    return hmac.compare_digest(a, b)
 
 
 _VALID_ROLES = frozenset({"member", "admin"})
@@ -180,8 +192,10 @@ def save(devices: list[dict[str, Any]]) -> None:
             f.flush()
             os.fsync(f.fileno())
     except Exception:
-        try: tmp.unlink()
-        except OSError: pass
+        try:
+            tmp.unlink()
+        except OSError:
+            pass
         raise
     os.replace(str(tmp), str(path))
     _invalidate_cache()
@@ -190,7 +204,7 @@ def save(devices: list[dict[str, Any]]) -> None:
 def is_valid(token: str) -> bool:
     if not token:
         return False
-    return any(d["token"] == token for d in load())
+    return any(_tokens_match(d["token"], token) for d in load())
 
 
 def touch(token: str) -> None:
@@ -198,7 +212,7 @@ def touch(token: str) -> None:
     now = int(time.time())
     changed = False
     for d in devices:
-        if d["token"] == token:
+        if _tokens_match(d["token"], token):
             d["last_seen"] = now
             changed = True
             break
@@ -231,7 +245,7 @@ def validate_and_lookup(
     now = int(time.time())
     match_idx = -1
     for i, d in enumerate(devices):
-        if d["token"] == token:
+        if _tokens_match(d["token"], token):
             match_idx = i
             break
     if match_idx < 0:
@@ -240,10 +254,9 @@ def validate_and_lookup(
     scope = _normalise_profile_scope(devices[match_idx].get("profile_scope"))
     last = devices[match_idx].get("last_seen") or 0
     if now - int(last) >= min_interval:
-        # Reload fresh to avoid writing a stale snapshot when the cache is older than the file.
         fresh = load()
         for d in fresh:
-            if d["token"] == token:
+            if _tokens_match(d["token"], token):
                 d["last_seen"] = now
                 break
         save(fresh)
@@ -276,7 +289,7 @@ def set_role(token: str, role: str) -> bool:
     devices = load()
     changed = False
     for d in devices:
-        if d["token"] == token:
+        if _tokens_match(d["token"], token):
             if d.get("role") != role:
                 d["role"] = role
                 changed = True
@@ -289,7 +302,7 @@ def set_role(token: str, role: str) -> bool:
 def revoke(token: str) -> bool:
     devices = load()
     before = len(devices)
-    devices = [d for d in devices if d["token"] != token]
+    devices = [d for d in devices if not _tokens_match(d["token"], token)]
     if len(devices) == before:
         return False
     save(devices)
@@ -321,7 +334,7 @@ def set_profile_scope(token: str, profile_scope: list[str]) -> bool:
     normalised = _normalise_profile_scope(profile_scope)
     changed = False
     for d in devices:
-        if d["token"] == token:
+        if _tokens_match(d["token"], token):
             if d.get("profile_scope") != normalised:
                 d["profile_scope"] = normalised
                 changed = True
@@ -335,7 +348,7 @@ def rename(token: str, label: str) -> bool:
     devices = load()
     changed = False
     for d in devices:
-        if d["token"] == token:
+        if _tokens_match(d["token"], token):
             d["label"] = (label or "").strip() or d["label"]
             changed = True
             break

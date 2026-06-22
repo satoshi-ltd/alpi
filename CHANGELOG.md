@@ -1,5 +1,38 @@
 # Changelog
 
+## v0.9.26 — 2026-06-22 — host plane hardening: atomic peers.yaml, constant-time token compare, no token suffix in auth-failure logs
+
+- **A daemon crash mid-write can no longer brick `peers.yaml`.** The
+  pinned-peer list now lands through the same `mkstemp + fsync +
+  replace` helper that `config.yaml` uses (temp name is unique per
+  writer via `tempfile.mkstemp`, so concurrent writers can't truncate
+  a shared sibling), so a power loss or hard kill leaves either the
+  previous full file or the new full file — never a half-written one
+  that silently empties the peer roster on next load. `peers.add` /
+  `peers.remove` / the workgroup verb-grant routine run under a
+  cross-platform file lock (`fcntl.flock` on Unix, `msvcrt.locking`
+  on Windows) via `peers.update(home, mutator)`, so the
+  load → mutate → save sequence can no longer drop a concurrent
+  update.
+- **Host-plane device token comparisons use `hmac.compare_digest`.**
+  Token equality everywhere in `host/devices.py` (validation, touch,
+  role / scope / label updates, revoke) goes through a single
+  `_tokens_match(stored, presented)` helper that delegates to
+  `hmac.compare_digest` on UTF-8-encoded bytes. Replaces direct
+  secret-string `==` so the per-token comparison no longer short-
+  circuits at the first differing byte; the lookup loop itself still
+  early-exits on first match (one constant-time compare per device
+  until a hit). Unicode tokens are rejected cleanly instead of raising
+  `TypeError`. A regression guard fails if `d["token"] == token`
+  reappears in the module.
+- **Failed-auth logs no longer leak the last 8 chars of the presented
+  token.** `host/server.py::_check_token_meta` used to write
+  `…XXXXXXXX not in store` to the warning log — useful for triage of
+  attacker-presented bytes, useless to the operator, and bad hygiene
+  for any log shipped off the box. The line is now `invalid token
+  (len=N, method=<verb>)`: the operator still gets enough to diagnose
+  (length + verb) without the log carrying a partial secret.
+
 ## v0.9.25 — 2026-06-22 — multi-profile organizations are first-class in alpi_knowledge
 
 - **`alpi_knowledge` answers questions about organizations.** A new

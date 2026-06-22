@@ -497,19 +497,19 @@ def _grant_workgroup_verbs(home: Path, member_pks: list[str]) -> int:
     ``allow`` list — otherwise the hub would reject their `join` at
     the capability gate. Idempotent: only adds verbs that aren't
     already there. Returns the number of peers we actually touched."""
-    pinned = peers_mod.load(home)
-    touched = 0
-    for peer in pinned:
-        if peer.pubkey not in member_pks:
-            continue
-        missing = [v for v in _WORKGROUP_VERBS if v not in peer.allow]
-        if not missing:
-            continue
-        peer.allow = list(peer.allow) + missing
-        touched += 1
-    if touched:
-        peers_mod.save(home, pinned)
-    return touched
+    touched = [0]
+    def _grant(pinned: list[peers_mod.Peer]) -> list[peers_mod.Peer] | None:
+        for peer in pinned:
+            if peer.pubkey not in member_pks:
+                continue
+            missing = [v for v in _WORKGROUP_VERBS if v not in peer.allow]
+            if not missing:
+                continue
+            peer.allow = list(peer.allow) + missing
+            touched[0] += 1
+        return pinned if touched[0] else None
+    peers_mod.update(home, _grant)
+    return touched[0]
 
 
 def _pick_members(pinned, home: Path) -> list[str] | None:

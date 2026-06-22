@@ -401,22 +401,36 @@ def save(cfg: Config) -> None:
     atomic_write_yaml(cfg.config_path, data)
 
 
-def atomic_write_yaml(path: Path, data: dict[str, Any]) -> None:
-    """tmp + fsync + rename so a daemon crash mid-save never leaves a truncated yaml — half-written config silently empties providers/mcp/gateway state on the next load. Reused by ``host.config.set_field`` so direct dotted-key writes share the same safety as ``config.save``."""
+def atomic_write_yaml(path: Path, data: dict[str, Any] | list[Any]) -> None:
+    import tempfile
     path.parent.mkdir(parents=True, exist_ok=True)
     text = yaml.safe_dump(data, sort_keys=False, allow_unicode=True)
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    fd = os.open(str(tmp), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    fd, tmp_name = tempfile.mkstemp(
+        dir=str(path.parent), prefix=f".{path.name}.", suffix=".tmp",
+    )
+    tmp = Path(tmp_name)
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             f.write(text)
             f.flush()
             os.fsync(f.fileno())
+        os.chmod(tmp, 0o600)
+        os.replace(str(tmp), str(path))
     except Exception:
-        try: tmp.unlink()
-        except OSError: pass
+        try:
+            tmp.unlink()
+        except FileNotFoundError:
+            pass
         raise
-    os.replace(str(tmp), str(path))
+    if hasattr(os, "O_DIRECTORY"):
+        try:
+            dir_fd = os.open(str(path.parent), os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                os.fsync(dir_fd)
+            finally:
+                os.close(dir_fd)
+        except OSError:
+            pass
 
 
 _GATEWAY_ALLOWED_KEYS: dict[str, frozenset[str]] = {

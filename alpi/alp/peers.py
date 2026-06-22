@@ -9,6 +9,9 @@ rejected with ``-32001 capability-denied``.
 
 from __future__ import annotations
 
+import contextlib
+import sys
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
 from typing import Any
@@ -16,8 +19,48 @@ from typing import Any
 import yaml
 
 
+if sys.platform == "win32":
+    import msvcrt
+    _fcntl = None
+else:
+    import fcntl as _fcntl
+    msvcrt = None
+
+
 _ALP_DIR = "alp"
 _FILENAME = "peers.yaml"
+
+
+@contextlib.contextmanager
+def _locked(home: Path) -> Iterator[None]:
+    lock_path = home / _ALP_DIR / "peers.lock"
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    f = open(lock_path, "w")
+    try:
+        if sys.platform == "win32":
+            msvcrt.locking(f.fileno(), msvcrt.LK_LOCK, 1)
+        else:
+            _fcntl.flock(f.fileno(), _fcntl.LOCK_EX)
+        yield
+    finally:
+        try:
+            if sys.platform == "win32":
+                f.seek(0)
+                msvcrt.locking(f.fileno(), msvcrt.LK_UNLCK, 1)
+            else:
+                _fcntl.flock(f.fileno(), _fcntl.LOCK_UN)
+        finally:
+            f.close()
+
+
+def update(home: Path, mutator: Callable[[list["Peer"]], list["Peer"] | None]) -> list["Peer"]:
+    with _locked(home):
+        peers = load(home)
+        result = mutator(peers)
+        if result is None:
+            return peers
+        save_unsafe(home, result)
+        return result
 
 
 @dataclass
@@ -77,11 +120,10 @@ def load(home: Path) -> list[Peer]:
     return out
 
 
-def save(home: Path, peers: list[Peer]) -> None:
+def save_unsafe(home: Path, peers: list[Peer]) -> None:
+    from alpi.config import atomic_write_yaml
     p = path(home)
-    p.parent.mkdir(parents=True, exist_ok=True)
     data = [asdict(peer) for peer in peers]
-    # Trim empty optional fields so the file stays minimal.
     for entry in data:
         if not entry.get("alias"):
             entry.pop("alias", None)
@@ -91,7 +133,12 @@ def save(home: Path, peers: list[Peer]) -> None:
             entry.pop("budget", None)
         if not entry.get("rate_limit"):
             entry.pop("rate_limit", None)
-    p.write_text(yaml.safe_dump(data, sort_keys=False, allow_unicode=True))
+    atomic_write_yaml(p, data)
+
+
+def save(home: Path, peers: list[Peer]) -> None:
+    with _locked(home):
+        save_unsafe(home, peers)
 
 
 def get_by_id(home: Path, peer_id: str) -> Peer | None:
@@ -109,23 +156,26 @@ def get_by_pubkey(home: Path, pubkey_b64: str) -> Peer | None:
 
 
 def add(home: Path, peer: Peer) -> None:
-    peers = load(home)
-    if any(p.id == peer.id for p in peers):
-        raise ValueError(f"peer {peer.id!r} already exists; remove it first")
-    if any(p.pubkey == peer.pubkey for p in peers):
-        raise ValueError(f"peer with pubkey already pinned under a different id")
-    peers.append(peer)
-    save(home, peers)
+    def _mutate(peers: list[Peer]) -> list[Peer]:
+        if any(p.id == peer.id for p in peers):
+            raise ValueError(f"peer {peer.id!r} already exists; remove it first")
+        if any(p.pubkey == peer.pubkey for p in peers):
+            raise ValueError("peer with pubkey already pinned under a different id")
+        peers.append(peer)
+        return peers
+    update(home, _mutate)
 
 
 def remove(home: Path, peer_id: str) -> bool:
-    peers = load(home)
-    before = len(peers)
-    peers = [p for p in peers if p.id != peer_id]
-    if len(peers) == before:
-        return False
-    save(home, peers)
-    return True
+    removed = [False]
+    def _mutate(peers: list[Peer]) -> list[Peer] | None:
+        kept = [p for p in peers if p.id != peer_id]
+        if len(kept) == len(peers):
+            return None
+        removed[0] = True
+        return kept
+    update(home, _mutate)
+    return removed[0]
 
 
 def local_socket_path(peer: Peer) -> Path:
