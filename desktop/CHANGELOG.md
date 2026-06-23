@@ -11,6 +11,23 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.3.79 — 2026-06-23 — the rest of Settings reads and writes only the daemon you've selected
+
+_Requires alpi v0.9.29+._
+
+- **Every Settings panel now targets the daemon the panel is showing.** Following
+  schedules in v0.3.76, the rest of the surface — usage, profile memory, devices
+  and gateways — reads and edits only the selected daemon when two paired daemons
+  share a profile name. Late results from a previously selected daemon no longer
+  leak in, and each save, key change or removal lands on the right one.
+- **Gmail authorization stays on the daemon and attempt that started it.**
+  Switching daemons mid-flow can no longer let a late "authorized" event drive
+  the wrong daemon; the whole consent flow — including the paste-the-callback-URL
+  fallback — is pinned to the one connection that began it.
+- **The "fetching latest settings" bar reflects each panel.** Usage, devices and
+  gateways now report their own loading, so the indicator is accurate while a
+  panel refreshes against the chosen daemon.
+
 ## v0.3.78 — 2026-06-23 — scheduled-job failure notifications name the schedule and the reason
 
 _Requires alpi v0.9.29+._

@@ -90,6 +90,7 @@ export default function WorkgroupDetail({ workgroup, profiles, connectionId = nu
   const usage = useWorkgroupUsageDaily(
     workgroup.is_hub ? workgroup.profile : null,
     workgroup.id,
+    connectionId,
   );
 
   function updateBriefing(text) {

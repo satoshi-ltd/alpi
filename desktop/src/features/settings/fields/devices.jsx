@@ -17,35 +17,58 @@ import { Btn } from "../../../primitives/index.js";
 import Field from "../../../primitives/Field.jsx";
 import { ConfirmDelete, DialogFooter } from "../../../primitives/index.js";
 import { formatLastSeen } from "../util.js";
-import { useActiveRole } from "../../../hooks/useActiveRole.js";
 import styles from "../Settings.module.css";
 import { copyText } from "../../../lib/clipboard.js";
 
-export function DevicesField() {
+export function DevicesField({
+  connectionId = null,
+  role = null,
+  onLoadingChange = null,
+}) {
   const notify = useNotify();
   const [devices, setDevices] = useState(null);
   const [adding, setAdding] = useState(false);
   const [selectedTokenId, setSelectedTokenId] = useState(null);
   const [revokeTarget, setRevokeTarget] = useState(null);
   const detailAnchorRef = useRef(null);
-  const activeRole = useActiveRole();
-  const canManage = activeRole === "admin" || activeRole == null;
+  const requestRef = useRef(0);
+  const canManage = role === "admin" || role == null;
+  const connectionArg = useMemo(
+    () => (connectionId ? { connectionId } : {}),
+    [connectionId],
+  );
 
   const reload = useCallback(async () => {
+    const requestId = ++requestRef.current;
+    onLoadingChange?.(true);
     try {
-      const list = await invoke("devices_list");
+      const list = await invoke("devices_list", connectionArg);
+      if (requestRef.current !== requestId) return;
       setDevices(Array.isArray(list) ? list : []);
     } catch (e) {
+      if (requestRef.current !== requestId) return;
       setDevices([]);
       notify({ message: `devices: ${String(e)}`, variant: "error" });
+    } finally {
+      if (requestRef.current === requestId) onLoadingChange?.(false);
     }
-  }, [notify]);
+  }, [connectionArg, notify, onLoadingChange]);
 
-  useEffect(() => { reload(); }, [reload]);
+  useEffect(() => {
+    setDevices(null);
+    setAdding(false);
+    setSelectedTokenId(null);
+    setRevokeTarget(null);
+    reload();
+    return () => {
+      requestRef.current += 1;
+      onLoadingChange?.(false);
+    };
+  }, [reload, onLoadingChange]);
 
   async function revoke(tokenId) {
     try {
-      await invoke("devices_revoke", { tokenId });
+      await invoke("devices_revoke", { tokenId, ...connectionArg });
       notify({ message: "Device revoked", variant: "success" });
       setSelectedTokenId(null);
       await reload();
@@ -56,7 +79,7 @@ export function DevicesField() {
 
   async function rename(tokenId, label) {
     try {
-      await invoke("devices_rename", { tokenId, label });
+      await invoke("devices_rename", { tokenId, label, ...connectionArg });
       await reload();
     } catch (e) {
       notify({ message: `rename: ${String(e)}`, variant: "error", duration: 4000 });
@@ -128,7 +151,7 @@ export function DevicesField() {
                 }}
                 onPromote={async () => {
                   try {
-                    await invoke("devices_promote", { tokenId: selected.token_id });
+                    await invoke("devices_promote", { tokenId: selected.token_id, ...connectionArg });
                     notify({ message: "Device promoted to admin", variant: "success" });
                     setSelectedTokenId(null);
                     await reload();
@@ -138,7 +161,7 @@ export function DevicesField() {
                 }}
                 onDemote={async () => {
                   try {
-                    await invoke("devices_demote", { tokenId: selected.token_id });
+                    await invoke("devices_demote", { tokenId: selected.token_id, ...connectionArg });
                     notify({ message: "Device demoted to member", variant: "success" });
                     setSelectedTokenId(null);
                     await reload();
@@ -158,6 +181,7 @@ export function DevicesField() {
       </span>
       {adding && (
         <PairDeviceModal
+          connectionId={connectionId}
           onClose={() => setAdding(false)}
           onPaired={() => { setAdding(false); reload(); }}
         />
@@ -295,8 +319,12 @@ function DeviceDetailPopover({
   );
 }
 
-function PairDeviceModal({ onClose, onPaired }) {
+function PairDeviceModal({ connectionId, onClose, onPaired }) {
   const notify = useNotify();
+  const connectionArg = useMemo(
+    () => (connectionId ? { connectionId } : {}),
+    [connectionId],
+  );
   const [label, setLabel] = useState("");
   const [payload, setPayload] = useState(null);
   const [qrSvg, setQrSvg] = useState("");
@@ -312,7 +340,7 @@ function PairDeviceModal({ onClose, onPaired }) {
   const pairedRef = useRef(false);
 
   useEffect(() => {
-    invoke("profile_summaries")
+    invoke("profile_summaries", connectionArg)
       .then((rows) => setProfiles(
         Array.isArray(rows)
           ? rows.filter((r) => r && r.name).map((r) => ({
@@ -322,7 +350,7 @@ function PairDeviceModal({ onClose, onPaired }) {
           : [],
       ))
       .catch(() => setProfiles([]));
-  }, []);
+  }, [connectionArg]);
 
   const filteredProfiles = useMemo(() => {
     const q = scopeQuery.trim().toLowerCase();
@@ -357,9 +385,9 @@ function PairDeviceModal({ onClose, onPaired }) {
   useEffect(() => () => {
     const tokenId = pendingTokenIdRef.current;
     if (tokenId && !pairedRef.current) {
-      invoke("devices_revoke", { tokenId }).catch(() => {});
+      invoke("devices_revoke", { tokenId, ...connectionArg }).catch(() => {});
     }
-  }, []);
+  }, [connectionArg]);
 
   const scopeValid = grantAdmin || scopeMode === "all" || scope.length > 0;
   const canGenerate = (
@@ -378,6 +406,7 @@ function PairDeviceModal({ onClose, onPaired }) {
         label: label.trim(),
         role: grantAdmin ? "admin" : "member",
         profiles: grantAdmin ? [] : (scopeMode === "restrict" ? scope : []),
+        ...connectionArg,
       });
       const token = p?.token || "";
       const tokenId = token.slice(-8);
@@ -445,7 +474,7 @@ function PairDeviceModal({ onClose, onPaired }) {
   async function cancel() {
     if (payload?.token_id) {
       try {
-        const list = await invoke("devices_list");
+        const list = await invoke("devices_list", connectionArg);
         const row = (Array.isArray(list) ? list : [])
           .find((d) => d && d.token_id === payload.token_id);
         if (row && row.last_seen) {
@@ -461,7 +490,7 @@ function PairDeviceModal({ onClose, onPaired }) {
         // list rpc failed — fall through to revoke; on revoke failure unmount cleanup retries.
       }
       try {
-        await invoke("devices_revoke", { tokenId: payload.token_id });
+        await invoke("devices_revoke", { tokenId: payload.token_id, ...connectionArg });
         pairedRef.current = true;
       } catch {
         // leave pairedRef false so unmount cleanup retries the revoke.

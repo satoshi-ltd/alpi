@@ -21,30 +21,38 @@ export function toUsageDays(rpcDays) {
 
 function useUsageCall(command, params, ready) {
   const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(false);
   const key = JSON.stringify(params);
   useEffect(() => {
     if (!ready) {
       setData(null);
+      setLoading(false);
       return undefined;
     }
     let cancelled = false;
+    setLoading(true);
     invoke(command, params)
       .then((d) => { if (!cancelled) setData(d || null); })
-      .catch(() => { if (!cancelled) setData(null); });
+      .catch(() => { if (!cancelled) setData(null); })
+      .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [command, key, ready]);
-  if (!data) return { days: [], priceOut: undefined };
-  return { days: toUsageDays(data.days), priceOut: data.priceOut };
+  if (!data) return { days: [], priceOut: undefined, loading };
+  return { days: toUsageDays(data.days), priceOut: data.priceOut, loading };
 }
 
-export function useUsageDaily(profile) {
-  return useUsageCall("usage_daily", { profile }, !!profile);
+export function useUsageDaily(profile, connectionId = null) {
+  return useUsageCall(
+    "usage_daily",
+    { profile, ...(connectionId ? { connectionId } : {}) },
+    !!profile,
+  );
 }
 
-export function useWorkgroupUsageDaily(profile, wgId) {
+export function useWorkgroupUsageDaily(profile, wgId, connectionId = null) {
   return useUsageCall(
     "workgroup_usage_daily",
-    { profile, wgId },
+    { profile, wgId, ...(connectionId ? { connectionId } : {}) },
     !!profile && !!wgId,
   );
 }

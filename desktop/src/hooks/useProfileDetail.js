@@ -79,14 +79,20 @@ function ensureEventListener() {
 }
 
 // `connectionId` and `name` may be null/undefined — the hook stays idle.
-export function useProfileDetail(connectionId, name) {
+export function useProfileDetail(connectionId, name, { refreshOnMount = false } = {}) {
   ensureEventListener();
   const [, setTick] = useState(0);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (!name) return undefined;
     let cancelled = false;
-    load(connectionId, name).then(() => { if (!cancelled) setTick((t) => t + 1); });
+    setLoading(true);
+    load(connectionId, name, { force: refreshOnMount }).then(() => {
+      if (!cancelled) setTick((t) => t + 1);
+    }).finally(() => {
+      if (!cancelled) setLoading(false);
+    });
     const key = makeKey(connectionId, name);
     const fn = (changed) => {
       if (changed === key) setTick((t) => t + 1);
@@ -96,15 +102,17 @@ export function useProfileDetail(connectionId, name) {
       cancelled = true;
       _subs.delete(fn);
     };
-  }, [connectionId, name]);
+  }, [connectionId, name, refreshOnMount]);
 
   const refresh = useCallback(() => {
     if (!name) return Promise.resolve(null);
-    return load(connectionId, name, { force: true });
+    setLoading(true);
+    return load(connectionId, name, { force: true })
+      .finally(() => setLoading(false));
   }, [connectionId, name]);
 
   const detail = name ? (_cache.get(makeKey(connectionId, name)) ?? null) : null;
-  return { detail, refresh };
+  return { detail, loading, refresh };
 }
 
 export function invalidateProfileDetailCache(connectionId) {

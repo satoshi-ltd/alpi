@@ -10,6 +10,7 @@ import { Section, Row, CopyButton } from "./primitives.jsx";
 import Usage from "./Usage.jsx";
 import { SettingsHero } from "../../primitives/index.js";
 import { CopyIcon, Mono } from "../../primitives/index.js";
+import RefreshBar from "../../primitives/RefreshBar.jsx";
 import { FIELD_KEYS } from "./util.js";
 import { mergeProfileDraft } from "../../lib/profile-draft.js";
 import {
@@ -66,14 +67,23 @@ export default function ProfileDetail({
   onOpenChat,
 }) {
   // Lazy heavy fields (peers/models/mcps/provider_keys/sandbox/voice/tcp_*) — scoped per connection so two daemons with the same profile name never share state.
-  const { detail, refresh } = useProfileDetail(activeConnection?.id ?? null, profileSummary?.name ?? null);
+  const { detail, loading: detailLoading, refresh } = useProfileDetail(
+    activeConnection?.id ?? null,
+    profileSummary?.name ?? null,
+    { refreshOnMount: true },
+  );
   const profile = useMemo(
     () => ({ ...profileSummary, ...(detail || {}) }),
     [profileSummary, detail],
   );
-  const usage = useUsageDaily(profileSummary?.name ?? null);
+  const usage = useUsageDaily(
+    profileSummary?.name ?? null,
+    activeConnection?.id ?? null,
+  );
   const baseline = useMemo(() => initialDraft(profile), [profile]);
   const [draft, setDraft] = useState(baseline);
+  const [devicesLoading, setDevicesLoading] = useState(false);
+  const [gatewaysLoading, setGatewaysLoading] = useState(false);
   const notify = useNotify();
   const timersRef = useRef({});
   const prevBaselineRef = useRef(baseline);
@@ -170,6 +180,12 @@ export default function ProfileDetail({
 
   return (
     <main className={styles.detail}>
+      <RefreshBar
+        active={detailLoading || devicesLoading || gatewaysLoading || usage.loading}
+        accent={profile.accent || null}
+        controlled
+        label="Fetching latest settings"
+      />
       <SettingsHero
         kind="profile"
         id={profile.name}
@@ -255,7 +271,11 @@ export default function ProfileDetail({
             <SubsystemsCell profile={profile} onSaved={onSaved} />
           </Row>
           <Row label="gateways">
-            <GatewaysCell profile={profile} />
+            <GatewaysCell
+              profile={profile}
+              connectionId={activeConnection?.id ?? null}
+              onLoadingChange={setGatewaysLoading}
+            />
           </Row>
         </Section>
 
@@ -366,7 +386,11 @@ export default function ProfileDetail({
           <Section title="Devices" tooltip="paired apps">
             {activeConnection?.kind === "local" && <PairingNameField />}
             {activeConnection?.kind === "local" && <HostPortField profile={profile} onSaved={onSaved} />}
-            <DevicesField />
+            <DevicesField
+              connectionId={activeConnection?.id ?? null}
+              role={activeConnection?.role ?? null}
+              onLoadingChange={setDevicesLoading}
+            />
           </Section>
         )}
 

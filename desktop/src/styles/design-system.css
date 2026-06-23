@@ -684,6 +684,9 @@ textarea.ds-field, textarea.field { resize: vertical; min-height: 88px; height: 
   background: var(--c, var(--accent));
   animation: ds-refresh-bar 800ms var(--ease);
 }
+.refresh-bar[data-controlled] > i {
+  animation-iteration-count: infinite;
+}
 
 .msg-row { -webkit-user-select: text; user-select: text; cursor: text; }
 .msg-row :is(button, a, [role="button"]) { cursor: pointer; }

@@ -184,12 +184,16 @@ async fn profile_detail(
 }
 
 #[tauri::command]
-async fn usage_daily(profile: String) -> Result<serde_json::Value, String> {
+async fn usage_daily(
+    profile: String,
+    connection_id: Option<String>,
+) -> Result<serde_json::Value, String> {
     off_main(move || {
-        host_client::call(
-            "host.usage.daily",
-            serde_json::json!({ "profile": profile }),
-        )
+        let params = serde_json::json!({ "profile": profile });
+        match connection_id {
+            Some(cid) => host_client::call_for(&cid, "host.usage.daily", params),
+            None => host_client::call("host.usage.daily", params),
+        }
         .map_err(|e| e.to_string())
     })
     .await?
@@ -199,19 +203,24 @@ async fn usage_daily(profile: String) -> Result<serde_json::Value, String> {
 async fn workgroup_usage_daily(
     profile: String,
     wg_id: String,
+    connection_id: Option<String>,
 ) -> Result<serde_json::Value, String> {
     off_main(move || {
-        host_client::call(
-            "host.usage.workgroup.daily",
-            serde_json::json!({ "profile": profile, "wg_id": wg_id }),
-        )
+        let params = serde_json::json!({ "profile": profile, "wg_id": wg_id });
+        match connection_id {
+            Some(cid) => host_client::call_for(&cid, "host.usage.workgroup.daily", params),
+            None => host_client::call("host.usage.workgroup.daily", params),
+        }
         .map_err(|e| e.to_string())
     })
     .await?
 }
 
 #[tauri::command]
-async fn profile_memory(profile: String, connection_id: Option<String>) -> Result<serde_json::Value, String> {
+async fn profile_memory(
+    profile: String,
+    connection_id: Option<String>,
+) -> Result<serde_json::Value, String> {
     off_main(move || {
         let mut out = serde_json::Map::new();
         for name in ["USER.md", "MEMORY.md", "AGENT.md"] {
@@ -696,8 +705,9 @@ async fn service_action(profile: String, action: String) -> Result<String, Strin
 }
 
 #[tauri::command]
-async fn gateway_status(profile: String) -> serde_json::Value {
-    off_main(move || host_array_value(
+async fn gateway_status(profile: String, connection_id: Option<String>) -> serde_json::Value {
+    off_main(move || host_array_value_for(
+        connection_id.as_deref(),
         "host.gateway.status",
         serde_json::json!({"profile": profile}),
         "gateways",
@@ -707,8 +717,13 @@ async fn gateway_status(profile: String) -> serde_json::Value {
 }
 
 #[tauri::command]
-async fn devices_list() -> serde_json::Value {
-    off_main(|| host_array_value("host.devices.list", serde_json::json!({}), "devices"))
+async fn devices_list(connection_id: Option<String>) -> serde_json::Value {
+    off_main(move || host_array_value_for(
+        connection_id.as_deref(),
+        "host.devices.list",
+        serde_json::json!({}),
+        "devices",
+    ))
         .await
         .unwrap_or(serde_json::Value::Array(vec![]))
 }
@@ -718,16 +733,18 @@ async fn devices_generate(
     label: String,
     role: Option<String>,
     profiles: Option<Vec<String>>,
+    connection_id: Option<String>,
 ) -> Result<serde_json::Value, String> {
     let role = role.unwrap_or_else(|| "member".into());
     let profiles = profiles.unwrap_or_default();
     let value = tauri::async_runtime::spawn_blocking(move || {
-        host_client::call(
-            "host.devices.generate",
-            serde_json::json!({
-                "label": label, "role": role, "profiles": profiles,
-            }),
-        )
+        let params = serde_json::json!({
+            "label": label, "role": role, "profiles": profiles,
+        });
+        match connection_id {
+            Some(cid) => host_client::call_for(&cid, "host.devices.generate", params),
+            None => host_client::call("host.devices.generate", params),
+        }
     })
     .await
     .map_err(|e| format!("join: {e}"))??;
@@ -738,12 +755,14 @@ async fn devices_generate(
 async fn devices_set_profiles(
     token_id: String,
     profiles: Vec<String>,
+    connection_id: Option<String>,
 ) -> Result<serde_json::Value, String> {
     let value = tauri::async_runtime::spawn_blocking(move || {
-        host_client::call(
-            "host.devices.set_profiles",
-            serde_json::json!({"token_id": token_id, "profiles": profiles}),
-        )
+        let params = serde_json::json!({"token_id": token_id, "profiles": profiles});
+        match connection_id {
+            Some(cid) => host_client::call_for(&cid, "host.devices.set_profiles", params),
+            None => host_client::call("host.devices.set_profiles", params),
+        }
     })
     .await
     .map_err(|e| format!("join: {e}"))??;
@@ -751,12 +770,13 @@ async fn devices_set_profiles(
 }
 
 #[tauri::command]
-async fn devices_promote(token_id: String) -> Result<(), String> {
+async fn devices_promote(token_id: String, connection_id: Option<String>) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || {
-        host_client::call(
-            "host.devices.promote",
-            serde_json::json!({"token_id": token_id}),
-        )
+        let params = serde_json::json!({"token_id": token_id});
+        match connection_id {
+            Some(cid) => host_client::call_for(&cid, "host.devices.promote", params),
+            None => host_client::call("host.devices.promote", params),
+        }
     })
     .await
     .map_err(|e| format!("join: {e}"))??;
@@ -764,12 +784,13 @@ async fn devices_promote(token_id: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-async fn devices_demote(token_id: String) -> Result<(), String> {
+async fn devices_demote(token_id: String, connection_id: Option<String>) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || {
-        host_client::call(
-            "host.devices.demote",
-            serde_json::json!({"token_id": token_id}),
-        )
+        let params = serde_json::json!({"token_id": token_id});
+        match connection_id {
+            Some(cid) => host_client::call_for(&cid, "host.devices.demote", params),
+            None => host_client::call("host.devices.demote", params),
+        }
     })
     .await
     .map_err(|e| format!("join: {e}"))??;
@@ -777,12 +798,13 @@ async fn devices_demote(token_id: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-async fn devices_revoke(token_id: String) -> Result<(), String> {
+async fn devices_revoke(token_id: String, connection_id: Option<String>) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || {
-        host_client::call(
-            "host.devices.revoke",
-            serde_json::json!({"token_id": token_id}),
-        )
+        let params = serde_json::json!({"token_id": token_id});
+        match connection_id {
+            Some(cid) => host_client::call_for(&cid, "host.devices.revoke", params),
+            None => host_client::call("host.devices.revoke", params),
+        }
     })
     .await
     .map_err(|e| format!("join: {e}"))??;
@@ -790,12 +812,17 @@ async fn devices_revoke(token_id: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-async fn devices_rename(token_id: String, label: String) -> Result<(), String> {
+async fn devices_rename(
+    token_id: String,
+    label: String,
+    connection_id: Option<String>,
+) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || {
-        host_client::call(
-            "host.devices.rename",
-            serde_json::json!({"token_id": token_id, "label": label}),
-        )
+        let params = serde_json::json!({"token_id": token_id, "label": label});
+        match connection_id {
+            Some(cid) => host_client::call_for(&cid, "host.devices.rename", params),
+            None => host_client::call("host.devices.rename", params),
+        }
     })
     .await
     .map_err(|e| format!("join: {e}"))??;
@@ -1004,6 +1031,7 @@ struct GatewayProbe {
 async fn probe_gateways(
     profile: String,
     only: Option<Vec<String>>,
+    connection_id: Option<String>,
 ) -> Vec<GatewayProbe> {
     let names: Vec<String> = match only {
         Some(list) if !list.is_empty() => list,
@@ -1013,11 +1041,13 @@ async fn probe_gateways(
     for name in names {
         let p = profile.clone();
         let n = name.clone();
+        let cid = connection_id.clone();
         handles.push(tauri::async_runtime::spawn_blocking(move || {
-            let result = host_client::call(
-                "host.gateway.probe",
-                serde_json::json!({ "profile": p, "name": n.clone() }),
-            );
+            let params = serde_json::json!({ "profile": p, "name": n.clone() });
+            let result = match cid.as_deref() {
+                Some(c) => host_client::call_for(c, "host.gateway.probe", params),
+                None => host_client::call("host.gateway.probe", params),
+            };
             let (status, reason) = match result {
                 Ok(v) => (
                     v.get("status").and_then(|x| x.as_str()).unwrap_or("off").to_string(),
@@ -1105,12 +1135,17 @@ async fn peer_add(
 }
 
 #[tauri::command]
-async fn gateway_config(profile: String, name: String) -> std::collections::HashMap<String, String> {
+async fn gateway_config(
+    profile: String,
+    name: String,
+    connection_id: Option<String>,
+) -> std::collections::HashMap<String, String> {
     off_main(move || {
-        host_client::call(
-            "host.gateway.config",
-            serde_json::json!({"profile": profile, "name": name}),
-        )
+        let params = serde_json::json!({"profile": profile, "name": name});
+        match connection_id.as_deref() {
+            Some(cid) => host_client::call_for(cid, "host.gateway.config", params),
+            None => host_client::call("host.gateway.config", params),
+        }
         .ok()
         .and_then(|v| v.get("config").cloned())
         .and_then(|v| serde_json::from_value(v).ok())
@@ -1129,10 +1164,22 @@ async fn gateway_config(profile: String, name: String) -> std::collections::Hash
 //   4. Accept ONE GET, parse code+state from the query.
 //   5. Hand them back to the daemon for the token exchange.
 //
-// Events emitted to JS (`gmail-auth-event`):
-//   { event: "browser_opened" }       — auth_url launched
-//   { event: "authorized", email }    — token persisted by daemon
-//   { event: "error", text }          — anything failed
+fn emit_gmail_event(
+    app: &AppHandle,
+    flow_id: &str,
+    connection_id: &Option<String>,
+    mut payload: serde_json::Value,
+) {
+    if let Some(map) = payload.as_object_mut() {
+        map.insert("flow_id".into(), serde_json::Value::String(flow_id.to_string()));
+        map.insert(
+            "connection_id".into(),
+            serde_json::to_value(connection_id).unwrap_or(serde_json::Value::Null),
+        );
+    }
+    let _ = app.emit("gmail-auth-event", payload);
+}
+
 #[tauri::command]
 async fn gateway_gmail_authorize(
     app: AppHandle,
@@ -1140,10 +1187,22 @@ async fn gateway_gmail_authorize(
     client_id: String,
     client_secret: String,
     allowed_senders: String,
+    flow_id: String,
+    connection_id: Option<String>,
 ) -> Result<(), String> {
-    tauri::async_runtime::spawn_blocking(move || run_gmail_oauth(app, profile, client_id, client_secret, allowed_senders))
-        .await
-        .map_err(|e| format!("join: {e}"))?;
+    tauri::async_runtime::spawn_blocking(move || {
+        run_gmail_oauth(
+            app,
+            profile,
+            client_id,
+            client_secret,
+            allowed_senders,
+            flow_id,
+            connection_id,
+        )
+    })
+    .await
+    .map_err(|e| format!("join: {e}"))?;
     Ok(())
 }
 
@@ -1153,16 +1212,24 @@ fn run_gmail_oauth(
     client_id: String,
     client_secret: String,
     allowed_senders: String,
+    flow_id: String,
+    connection_id: Option<String>,
 ) {
     use std::io::{ErrorKind, Read, Write};
     use std::net::TcpListener;
     use std::time::{Duration, Instant};
 
     let emit_err = |text: String| {
-        let _ = app.emit(
-            "gmail-auth-event",
+        emit_gmail_event(
+            &app,
+            &flow_id,
+            &connection_id,
             serde_json::json!({"event": "error", "text": text}),
         );
+    };
+    let host_call = |method: &str, params: serde_json::Value| match connection_id.as_deref() {
+        Some(cid) => host_client::call_for(cid, method, params),
+        None => host_client::call(method, params),
     };
 
     // 1. Bind the loopback first so we can advertise the exact port we'll
@@ -1178,7 +1245,7 @@ fn run_gmail_oauth(
     let redirect_uri = format!("http://127.0.0.1:{port}");
 
     // 2. Ask the daemon to persist creds + prepare the consent URL.
-    let begin_resp = match host_client::call(
+    let begin_resp = match host_call(
         "host.gateway.gmail.begin",
         serde_json::json!({
             "profile": profile,
@@ -1208,8 +1275,10 @@ fn run_gmail_oauth(
     // 3. Launch the browser. If this fails we still wait for the user to
     //    paste the URL manually (the JS modal also shows the URL).
     let _ = open_in_browser(&auth_url);
-    let _ = app.emit(
-        "gmail-auth-event",
+    emit_gmail_event(
+        &app,
+        &flow_id,
+        &connection_id,
         serde_json::json!({"event": "browser_opened", "auth_url": auth_url}),
     );
 
@@ -1280,7 +1349,7 @@ fn run_gmail_oauth(
     }
 
     // 6. Hand the code to the daemon for the token exchange.
-    let exchange = match host_client::call(
+    let exchange = match host_call(
         "host.gateway.gmail.exchange",
         serde_json::json!({"state": state, "code": got_code}),
     ) {
@@ -1292,8 +1361,10 @@ fn run_gmail_oauth(
         .and_then(|v| v.as_str())
         .unwrap_or("")
         .to_string();
-    let _ = app.emit(
-        "gmail-auth-event",
+    emit_gmail_event(
+        &app,
+        &flow_id,
+        &connection_id,
         serde_json::json!({"event": "authorized", "email": email}),
     );
 }
@@ -1309,11 +1380,18 @@ const _OAUTH_ACCEPT_TIMEOUT_SECS: u64 = 300;
 // and call exchange directly — same daemon endpoint the loopback
 // path uses, no new architecture.
 #[tauri::command]
-async fn gateway_gmail_paste(app: AppHandle, pasted_url: String) -> Result<(), String> {
+async fn gateway_gmail_paste(
+    app: AppHandle,
+    pasted_url: String,
+    flow_id: String,
+    connection_id: Option<String>,
+) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || {
         let emit_err = |text: String| {
-            let _ = app.emit(
-                "gmail-auth-event",
+            emit_gmail_event(
+                &app,
+                &flow_id,
+                &connection_id,
                 serde_json::json!({"event": "error", "text": text}),
             );
         };
@@ -1334,18 +1412,24 @@ async fn gateway_gmail_paste(app: AppHandle, pasted_url: String) -> Result<(), S
             );
         }
 
-        match host_client::call(
-            "host.gateway.gmail.exchange",
-            serde_json::json!({"state": state, "code": code}),
-        ) {
+        let exchange_params = serde_json::json!({"state": state, "code": code});
+        let result = match connection_id.as_deref() {
+            Some(cid) => {
+                host_client::call_for(cid, "host.gateway.gmail.exchange", exchange_params)
+            }
+            None => host_client::call("host.gateway.gmail.exchange", exchange_params),
+        };
+        match result {
             Ok(v) => {
                 let email = v
                     .get("email")
                     .and_then(|e| e.as_str())
                     .unwrap_or("")
                     .to_string();
-                let _ = app.emit(
-                    "gmail-auth-event",
+                emit_gmail_event(
+                    &app,
+                    &flow_id,
+                    &connection_id,
                     serde_json::json!({"event": "authorized", "email": email}),
                 );
             }
@@ -1439,8 +1523,13 @@ fn open_in_browser(url: &str) -> std::io::Result<()> {
 }
 
 #[tauri::command]
-async fn gateway_remove(profile: String, name: String) -> Result<(), String> {
-    alp_call_async(
+async fn gateway_remove(
+    profile: String,
+    name: String,
+    connection_id: Option<String>,
+) -> Result<(), String> {
+    alp_call_async_for(
+        connection_id,
         "host.gateway.remove",
         serde_json::json!({"profile": profile, "name": name}),
     )
@@ -1582,9 +1671,10 @@ async fn alp_call_async_for(
 
 #[tauri::command]
 async fn provider_set_key(
-    profile: String, key: String, value: String,
+    profile: String, key: String, value: String, connection_id: Option<String>,
 ) -> Result<(), String> {
-    alp_call_async(
+    alp_call_async_for(
+        connection_id,
         "host.providers.set_key",
         serde_json::json!({"profile": profile, "key": key, "value": value}),
     )
@@ -1592,8 +1682,13 @@ async fn provider_set_key(
 }
 
 #[tauri::command]
-async fn provider_unset_key(profile: String, key: String) -> Result<(), String> {
-    alp_call_async(
+async fn provider_unset_key(
+    profile: String,
+    key: String,
+    connection_id: Option<String>,
+) -> Result<(), String> {
+    alp_call_async_for(
+        connection_id,
         "host.providers.unset_key",
         serde_json::json!({"profile": profile, "key": key}),
     )

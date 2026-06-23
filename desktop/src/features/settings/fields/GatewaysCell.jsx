@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { safeUnlisten } from "../../../lib/tauri-listen.js";
@@ -16,42 +16,55 @@ import {
 } from "../util.js";
 import styles from "../Settings.module.css";
 
-export function GatewaysCell({ profile }) {
+export function GatewaysCell({ profile, connectionId = null, onLoadingChange = null }) {
   const [statuses, setStatuses] = useState([]);
   const [probes, setProbes] = useState(null);
   const [tick, setTick] = useState(0);
   const [editing, setEditing] = useState(null);
+  const requestRef = useRef(0);
   const gatewayServiceOff = profile.subsystems?.gateway === false;
+  const connectionArg = useMemo(
+    () => (connectionId ? { connectionId } : {}),
+    [connectionId],
+  );
 
   useEffect(() => {
-    let cancelled = false;
+    const requestId = ++requestRef.current;
+    setStatuses([]);
     setProbes(null);
-    invoke("gateway_status", { profile: profile.name })
+    setEditing(null);
+    onLoadingChange?.(true);
+    invoke("gateway_status", { profile: profile.name, ...connectionArg })
       .then((s) => {
-        if (cancelled) return;
+        if (requestRef.current !== requestId) return;
         setStatuses(s);
         const toProbe = s.filter((g) => g.configured).map((g) => g.name);
         if (toProbe.length === 0) {
           setProbes({});
+          onLoadingChange?.(false);
           return;
         }
-        invoke("probe_gateways", { profile: profile.name, only: toProbe })
+        invoke("probe_gateways", { profile: profile.name, only: toProbe, ...connectionArg })
           .then((r) => {
-            if (cancelled) return;
+            if (requestRef.current !== requestId) return;
             const map = {};
             for (const p of r) map[p.name] = p;
             setProbes(map);
           })
-          .catch(() => { if (!cancelled) setProbes({}); });
+          .catch(() => { if (requestRef.current === requestId) setProbes({}); })
+          .finally(() => { if (requestRef.current === requestId) onLoadingChange?.(false); });
       })
       .catch(() => {
-        if (!cancelled) {
-          setStatuses([]);
-          setProbes({});
-        }
+        if (requestRef.current !== requestId) return;
+        setStatuses([]);
+        setProbes({});
+        onLoadingChange?.(false);
       });
-    return () => { cancelled = true; };
-  }, [profile.name, tick]);
+    return () => {
+      requestRef.current += 1;
+      onLoadingChange?.(false);
+    };
+  }, [profile.name, connectionArg, tick, onLoadingChange]);
 
   return (
     <span className={styles.gatewayChips}>
@@ -109,6 +122,7 @@ export function GatewaysCell({ profile }) {
         <GatewayEditorModal
           profile={profile}
           gateway={editing}
+          connectionId={connectionId}
           onClose={() => setEditing(null)}
           onSaved={() => { setTick((t) => t + 1); setEditing(null); }}
         />
@@ -117,8 +131,12 @@ export function GatewaysCell({ profile }) {
   );
 }
 
-function GmailAuthModal({ profile, config, onClose, onSaved }) {
+function GmailAuthModal({ profile, config, connectionId = null, onClose, onSaved }) {
   const notify = useNotify();
+  const connectionArg = useMemo(
+    () => (connectionId ? { connectionId } : {}),
+    [connectionId],
+  );
   const [clientId, setClientId] = useState("");
   const [clientSecret, setClientSecret] = useState("");
   const [senders, setSenders] = useState("");
@@ -127,6 +145,7 @@ function GmailAuthModal({ profile, config, onClose, onSaved }) {
   const [busy, setBusy] = useState(false);
   const hydrated = useRef(false);
   const mounted = useRef(true);
+  const flowRef = useRef("");
 
   useEffect(() => {
     if (!hydrated.current && config !== null) {
@@ -144,6 +163,8 @@ function GmailAuthModal({ profile, config, onClose, onSaved }) {
     const unlistenPromise = listen("gmail-auth-event", (ev) => {
       if (!mounted.current) return;
       const frame = ev.payload;
+      if (frame.flow_id !== flowRef.current) return;
+      if ((frame.connection_id ?? null) !== connectionId) return;
       if (frame.event === "browser_opened") {
         setPhase("waiting");
         setAuthUrl(frame.auth_url || "");
@@ -169,7 +190,7 @@ function GmailAuthModal({ profile, config, onClose, onSaved }) {
       mounted.current = false;
       unlistenPromise.then(safeUnlisten).catch(() => {});
     };
-  }, [notify, onSaved]);
+  }, [notify, onSaved, connectionId]);
 
   async function authorize() {
     const hasStoredId = !!config?.GMAIL_CLIENT_ID;
@@ -182,6 +203,8 @@ function GmailAuthModal({ profile, config, onClose, onSaved }) {
       notify({ message: "Client Secret is required", variant: "error" });
       return;
     }
+    const flowId = crypto.randomUUID();
+    flowRef.current = flowId;
     setBusy(true);
     setPhase("waiting");
     setStatusText("Opening browser…");
@@ -191,6 +214,8 @@ function GmailAuthModal({ profile, config, onClose, onSaved }) {
         clientId: clientId.trim(),
         clientSecret: clientSecret.trim(),
         allowedSenders: senders.trim(),
+        flowId,
+        ...connectionArg,
       });
     } catch (e) {
       setPhase("error");
@@ -205,7 +230,7 @@ function GmailAuthModal({ profile, config, onClose, onSaved }) {
     setBusy(true);
     setStatusText("Exchanging code with Google…");
     try {
-      await invoke("gateway_gmail_paste", { pastedUrl: url });
+      await invoke("gateway_gmail_paste", { pastedUrl: url, flowId: flowRef.current, ...connectionArg });
     } catch (e) {
       setPhase("error");
       setStatusText(String(e));
@@ -216,7 +241,7 @@ function GmailAuthModal({ profile, config, onClose, onSaved }) {
   async function remove() {
     setBusy(true);
     try {
-      await invoke("gateway_remove", { profile: profile.name, name: "gmail" });
+      await invoke("gateway_remove", { profile: profile.name, name: "gmail", ...connectionArg });
       notify({ message: "Gmail gateway removed", variant: "success" });
       onSaved();
     } catch (e) {
@@ -342,15 +367,19 @@ function GmailAuthModal({ profile, config, onClose, onSaved }) {
   );
 }
 
-function GatewayEditorModal({ profile, gateway, onClose, onSaved }) {
+function GatewayEditorModal({ profile, gateway, connectionId = null, onClose, onSaved }) {
   const notify = useNotify();
+  const connectionArg = useMemo(
+    () => (connectionId ? { connectionId } : {}),
+    [connectionId],
+  );
   const [config, setConfig] = useState(null);
   const [values, setValues] = useState({});
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
-    invoke("gateway_config", { profile: profile.name, name: gateway })
+    invoke("gateway_config", { profile: profile.name, name: gateway, ...connectionArg })
       .then((c) => {
         if (cancelled) return;
         setConfig(c);
@@ -364,13 +393,14 @@ function GatewayEditorModal({ profile, gateway, onClose, onSaved }) {
       })
       .catch(() => { if (!cancelled) setConfig({}); });
     return () => { cancelled = true; };
-  }, [profile.name, gateway]);
+  }, [profile.name, gateway, connectionArg]);
 
   if (gateway === "gmail") {
     return (
       <GmailAuthModal
         profile={profile}
         config={config}
+        connectionId={connectionId}
         onClose={onClose}
         onSaved={onSaved}
       />
@@ -406,19 +436,21 @@ function GatewayEditorModal({ profile, gateway, onClose, onSaved }) {
               profile: profile.name,
               key: f.env,
               value: next,
+              ...connectionArg,
             });
           }
         } else {
           if (next === "") {
             const had = config?.[f.env];
             if (had) {
-              await invoke("provider_unset_key", { profile: profile.name, key: f.env });
+              await invoke("provider_unset_key", { profile: profile.name, key: f.env, ...connectionArg });
             }
           } else if (next !== (config?.[f.env] ?? "")) {
             await invoke("provider_set_key", {
               profile: profile.name,
               key: f.env,
               value: next,
+              ...connectionArg,
             });
           }
         }
@@ -440,7 +472,7 @@ function GatewayEditorModal({ profile, gateway, onClose, onSaved }) {
   async function remove() {
     setBusy(true);
     try {
-      await invoke("gateway_remove", { profile: profile.name, name: gateway });
+      await invoke("gateway_remove", { profile: profile.name, name: gateway, ...connectionArg });
       notify({ message: `${gateway} gateway removed`, variant: "success" });
       onSaved();
     } catch (e) {

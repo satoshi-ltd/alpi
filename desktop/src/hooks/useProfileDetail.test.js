@@ -37,6 +37,23 @@ describe("useProfileDetail", () => {
     expect(invoke).toHaveBeenCalledWith("profile_detail", { profile: "doc", connectionId: "conn-a" });
   });
 
+  it("can force a fresh daemon fetch on mount and exposes its loading state", async () => {
+    let resolve;
+    invoke.mockReturnValueOnce(new Promise((done) => { resolve = done; }));
+    const { result } = renderHook(() => (
+      useProfileDetail("conn-a", "doc", { refreshOnMount: true })
+    ));
+    await waitFor(() => expect(result.current.loading).toBe(true));
+    await act(async () => {
+      resolve({ voice_id: "es-ES-AlvaroNeural" });
+      await Promise.resolve();
+    });
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+      expect(result.current.detail).toEqual({ voice_id: "es-ES-AlvaroNeural" });
+    });
+  });
+
   it("forwards connectionId to the profile_detail RPC so it hits the right daemon", async () => {
     invoke.mockResolvedValueOnce({ voice_id: "es-ES-AlvaroNeural" });
     renderHook(() => useProfileDetail("remote-a", "doc"));
