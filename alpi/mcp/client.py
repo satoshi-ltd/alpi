@@ -207,17 +207,19 @@ class MCPClient:
         return base + " (server wrote nothing to stderr)"
 
     def _drain_stderr(self) -> None:
-        if self._proc is None or self._proc.stderr is None:
+        # Capture once: stop() may null self._proc while this loop is running.
+        proc = self._proc
+        if proc is None or proc.stderr is None:
             return
+        stderr = proc.stderr
         while True:
             try:
-                line = self._proc.stderr.readline()
-            except ValueError:
+                line = stderr.readline()
+            except (ValueError, OSError):
                 return
             if not line:
                 return
             log.debug("%s (stderr): %s", self.name, line.rstrip())
-            # Keep a short stderr tail for failure context.
             with self._stderr_lock:
                 self._stderr_buf.append(line.rstrip())
                 if len(self._stderr_buf) > 40:

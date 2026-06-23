@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.9.28 — 2026-06-23 — MCP stderr reader shuts down cleanly on a failed server start
+
+- **No more spurious traceback when an MCP server fails to start.** A server
+  that died mid-handshake left its background error-log reader racing against
+  the teardown, which logged an `AttributeError` as the thread fell over. The
+  reader now exits cleanly. The server was already skipped correctly; this
+  only removes the noisy traceback and the dangling thread crash.
+
 ## v0.9.27 — 2026-06-22 — profile-name path traversal closed; profile docs reconciled
 
 - **Profile names are now validated centrally.** `alpi -p <name>`,

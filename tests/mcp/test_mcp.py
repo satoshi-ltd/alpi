@@ -499,6 +499,42 @@ def test_registry_isolates_failing_server(monkeypatch) -> None:
         mcp_registry._stop_existing()
 
 
+def test_drain_stderr_survives_proc_nulled_mid_loop() -> None:
+    c = mcp_client.MCPClient("x", "echo")
+    lines = iter(["first\n", "second\n", ""])
+    seen = {"calls": 0}
+
+    class _Stderr:
+        def readline(self) -> str:
+            seen["calls"] += 1
+            if seen["calls"] == 1:
+                c._proc = None
+            return next(lines)
+
+    class _Proc:
+        stderr = _Stderr()
+
+    c._proc = _Proc()
+    c._drain_stderr()
+    assert seen["calls"] == 3
+    assert "first" in c._stderr_buf and "second" in c._stderr_buf
+
+
+def test_drain_stderr_returns_when_readline_raises_oserror() -> None:
+    c = mcp_client.MCPClient("x", "echo")
+
+    class _Stderr:
+        def readline(self) -> str:
+            raise OSError("stream closed by stop()")
+
+    class _Proc:
+        stderr = _Stderr()
+
+    c._proc = _Proc()
+    c._drain_stderr()
+    assert c._stderr_buf == []
+
+
 # --------------------------------------------------------------------
 # Content rendering
 # --------------------------------------------------------------------
