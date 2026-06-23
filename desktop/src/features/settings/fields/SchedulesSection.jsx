@@ -1,15 +1,17 @@
 import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { useNotify } from "../../../primitives/Notification.jsx";
 import { Section } from "../primitives.jsx";
 import settingsStyles from "../Settings.module.css";
 import { ScheduleRow as DsScheduleRow, ScheduleList as DsScheduleList } from "../../../primitives/SettingsLayout.jsx";
 import { scheduleSummary } from "../util.js";
 
-export function SchedulesSection({ profile, connectionId = null }) {
+export function SchedulesSection({ profile, connectionId = null, onLoadingChange }) {
   const [jobs, setJobs] = useState(null);
   const [loadError, setLoadError] = useState(null);
   const [busyId, setBusyId] = useState(null);
+  const [loading, setLoading] = useState(true);
   const notify = useNotify();
   const targetRef = useRef({ profile: profile.name, connectionId });
   const genRef = useRef(0);
@@ -18,6 +20,7 @@ export function SchedulesSection({ profile, connectionId = null }) {
 
   async function load() {
     const gen = genRef.current;
+    setLoading(true);
     try {
       const list = await invoke("schedules", { profile: profile.name, ...connArg });
       if (gen !== genRef.current) return;
@@ -27,6 +30,8 @@ export function SchedulesSection({ profile, connectionId = null }) {
       if (gen !== genRef.current) return;
       setJobs([]);
       setLoadError(String(e));
+    } finally {
+      if (gen === genRef.current) setLoading(false);
     }
   }
 
@@ -37,6 +42,22 @@ export function SchedulesSection({ profile, connectionId = null }) {
     setLoadError(null);
     setBusyId(null);
     load();
+  }, [profile.name, connectionId]);
+
+  useEffect(() => {
+    onLoadingChange?.(loading);
+  }, [loading, onLoadingChange]);
+
+  useEffect(() => {
+    const unlistenP = listen("daemon-event", (event) => {
+      const payload = event?.payload ?? {};
+      const frame = payload.frame ?? payload;
+      if (frame?.event !== "schedule.changed") return;
+      if (frame?.data?.profile !== profile.name) return;
+      if (connectionId && payload.connection_id && payload.connection_id !== connectionId) return;
+      load();
+    });
+    return () => { unlistenP.then((fn) => fn()).catch(() => {}); };
   }, [profile.name, connectionId]);
 
   function pinnedTarget() {

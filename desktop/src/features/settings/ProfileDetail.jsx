@@ -84,6 +84,7 @@ export default function ProfileDetail({
   const [draft, setDraft] = useState(baseline);
   const [devicesLoading, setDevicesLoading] = useState(false);
   const [gatewaysLoading, setGatewaysLoading] = useState(false);
+  const [schedulesLoading, setSchedulesLoading] = useState(false);
   const notify = useNotify();
   const timersRef = useRef({});
   const prevBaselineRef = useRef(baseline);
@@ -181,7 +182,7 @@ export default function ProfileDetail({
   return (
     <main className={styles.detail}>
       <RefreshBar
-        active={detailLoading || devicesLoading || gatewaysLoading || usage.loading}
+        active={detailLoading || devicesLoading || gatewaysLoading || schedulesLoading || usage.loading}
         accent={profile.accent || null}
         controlled
         label="Fetching latest settings"
@@ -394,7 +395,11 @@ export default function ProfileDetail({
           </Section>
         )}
 
-        <SchedulesSection profile={profile} connectionId={activeConnection?.id ?? null} />
+        <SchedulesSection
+          profile={profile}
+          connectionId={activeConnection?.id ?? null}
+          onLoadingChange={setSchedulesLoading}
+        />
 
         <Section
           title="Sandbox"

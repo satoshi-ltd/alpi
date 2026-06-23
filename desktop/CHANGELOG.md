@@ -11,6 +11,19 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.3.80 — 2026-06-24 — the Schedule panel stays in sync and reports its loading
+
+_Requires alpi v0.9.29+._
+
+- **The Schedule panel updates live.** When another client pauses, resumes
+  or removes a schedule on the daemon you have open, the list refreshes
+  on its own instead of waiting for you to switch profile or reopen the
+  panel.
+- **The "fetching latest settings" bar now also reflects the Schedule
+  panel.** Following v0.3.79's pass over usage, devices and gateways, the
+  schedule list is the last Settings section whose loading state lights
+  up the indicator.
+
 ## v0.3.79 — 2026-06-23 — the rest of Settings reads and writes only the daemon you've selected
 
 _Requires alpi v0.9.29+._

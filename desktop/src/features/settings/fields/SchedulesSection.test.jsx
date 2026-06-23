@@ -4,14 +4,27 @@ import { render, screen, waitFor, act } from "@testing-library/react";
 globalThis.ResizeObserver ??= class { observe() {} unobserve() {} disconnect() {} };
 
 const invokeMock = vi.fn();
+const listenSubs = new Map();
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: (...a) => invokeMock(...a) }));
+vi.mock("@tauri-apps/api/event", () => ({
+  listen: vi.fn(async (name, fn) => {
+    if (!listenSubs.has(name)) listenSubs.set(name, new Set());
+    listenSubs.get(name).add(fn);
+    return () => { listenSubs.get(name)?.delete(fn); };
+  }),
+}));
 vi.mock("../../../primitives/Notification.jsx", () => ({ useNotify: () => () => {} }));
+
+function emit(name, payload) {
+  for (const fn of listenSubs.get(name) ?? []) fn({ payload });
+}
 
 import { SchedulesSection } from "./SchedulesSection.jsx";
 
 beforeEach(() => {
   invokeMock.mockReset();
+  listenSubs.clear();
 });
 
 describe("SchedulesSection", () => {
@@ -72,6 +85,71 @@ describe("SchedulesSection", () => {
     await act(async () => { await Promise.resolve(); await Promise.resolve(); });
     expect(screen.queryByText("From A")).toBeNull();
     expect(screen.getByText("From B")).toBeInTheDocument();
+  });
+
+  it("reports loading state via onLoadingChange so the parent RefreshBar reflects the panel", async () => {
+    let resolve;
+    invokeMock.mockImplementationOnce(() => new Promise((r) => { resolve = r; }));
+    const onLoadingChange = vi.fn();
+    render(<SchedulesSection profile={{ name: "work" }} onLoadingChange={onLoadingChange} />);
+    await waitFor(() => expect(onLoadingChange).toHaveBeenCalledWith(true));
+    onLoadingChange.mockClear();
+    resolve([]);
+    await waitFor(() => expect(onLoadingChange).toHaveBeenCalledWith(false));
+  });
+
+  it("re-fetches when the daemon emits schedule.changed for this (profile, connection)", async () => {
+    invokeMock.mockResolvedValueOnce([
+      { id: "j1", title: "First", prompt: "", paused: false, cron: "* * * * *" },
+    ]);
+    render(<SchedulesSection profile={{ name: "work" }} connectionId="casa" />);
+    expect(await screen.findByText("First")).toBeInTheDocument();
+
+    invokeMock.mockResolvedValueOnce([
+      { id: "j1", title: "First", prompt: "", paused: false, cron: "* * * * *" },
+      { id: "j2", title: "Second", prompt: "", paused: false, cron: "* * * * *" },
+    ]);
+    await act(async () => {
+      emit("daemon-event", {
+        connection_id: "casa",
+        frame: { event: "schedule.changed", data: { profile: "work" } },
+      });
+    });
+    expect(await screen.findByText("Second")).toBeInTheDocument();
+  });
+
+  it("ignores schedule.changed events for a different profile", async () => {
+    invokeMock.mockResolvedValueOnce([
+      { id: "j1", title: "Stay", prompt: "", paused: false, cron: "* * * * *" },
+    ]);
+    render(<SchedulesSection profile={{ name: "work" }} connectionId="casa" />);
+    expect(await screen.findByText("Stay")).toBeInTheDocument();
+    invokeMock.mockClear();
+
+    await act(async () => {
+      emit("daemon-event", {
+        connection_id: "casa",
+        frame: { event: "schedule.changed", data: { profile: "personal" } },
+      });
+    });
+    expect(invokeMock).not.toHaveBeenCalled();
+  });
+
+  it("ignores schedule.changed events from a different pinned connection", async () => {
+    invokeMock.mockResolvedValueOnce([
+      { id: "j1", title: "Stay", prompt: "", paused: false, cron: "* * * * *" },
+    ]);
+    render(<SchedulesSection profile={{ name: "work" }} connectionId="casa" />);
+    expect(await screen.findByText("Stay")).toBeInTheDocument();
+    invokeMock.mockClear();
+
+    await act(async () => {
+      emit("daemon-event", {
+        connection_id: "other",
+        frame: { event: "schedule.changed", data: { profile: "work" } },
+      });
+    });
+    expect(invokeMock).not.toHaveBeenCalled();
   });
 
   it("clears the stale list while loading the new connection so no A-job is interactive against B", async () => {
