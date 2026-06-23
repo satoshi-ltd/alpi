@@ -11,6 +11,15 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.3.77 — 2026-06-23 — Fast Refresh restored in the notifications view
+
+_Requires alpi v0.9.27+._
+
+- **Fast Refresh works again when editing the notifications view.** A
+  non-component helper exported alongside the modal was forcing Vite to
+  full-reload the page on every change during development; the helper now
+  lives in its own module so edits hot-apply in place.
+
 ## v0.3.76 — 2026-06-22 — scheduler errors visible; schedules respect the chosen daemon; profile-name traversal closed
 
 _Requires alpi v0.9.27+._

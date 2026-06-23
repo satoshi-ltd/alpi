@@ -44,7 +44,8 @@ vi.mock("../hooks/useProfileDetail.js", () => ({
   useProfileDetail: () => ({ detail: h.profileDetail, refresh: () => {} }),
 }));
 
-import NotificationsModal, { headlineParts } from "./NotificationsModal.jsx";
+import NotificationsModal from "./NotificationsModal.jsx";
+import { headlineParts } from "../lib/notificationHeadline.js";
 
 beforeEach(() => {
   h.playTts.mockClear();
