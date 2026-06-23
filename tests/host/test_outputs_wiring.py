@@ -162,11 +162,15 @@ def test_scheduler_failed_creates_output(
     out = items[0]
     assert out["type"] == "error"
     assert out["delivered_to"] == []
-    assert out["body"] == "boom"
+    assert "boom" in out["body"]
+    assert out["title"] == "job j-fail"
 
     failed = next(d for k, d in events if k == "schedule.failed")
     assert failed["output_id"] == out["id"]
     assert failed["deep_link"] == f"/outputs/{out['profile']}/{out['id']}"
+    assert failed["title"] == "job j-fail"
+    assert "boom" in failed["body"]
+    assert [d for k, d in events if k == "agent.message"] == []
 
 
 def test_scheduler_done_silent_maintenance_creates_no_output(

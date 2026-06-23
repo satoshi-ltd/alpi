@@ -85,6 +85,31 @@ describe('formatNotification', () => {
     expect(title).toContain('error');
   });
 
+  it('renders schedule.failed with the job title + enriched reason, flattening newlines', () => {
+    const ev = {
+      event: 'schedule.failed',
+      data: {
+        profile: 'mirai',
+        job_id: '6b7ad5d5',
+        title: 'Monthly Lobby improvement backlog',
+        body: 'agent timed out\ntimeout: timeout_1800s',
+        message: 'agent timed out',
+      },
+    };
+    const { title, body } = formatNotification(ev, conn);
+    expect(title).toBe('home · mirai · schedule failed');
+    expect(body).toBe('Monthly Lobby improvement backlog: agent timed out · timeout: timeout_1800s');
+  });
+
+  it('schedule.failed falls back to job_id + message on older daemons (no title/body)', () => {
+    const ev = {
+      event: 'schedule.failed',
+      data: { profile: 'doc', job_id: 'weekly', message: 'rc=1' },
+    };
+    const { body } = formatNotification(ev, conn);
+    expect(body).toBe('weekly: rc=1');
+  });
+
 });
 
 describe('deepLinkFor', () => {

@@ -449,7 +449,7 @@ def fire_by_id(home: Path, job_id: str) -> tuple[bool, str]:
 
 def _emit_schedule_event(home: Path, job: dict, outcome: JobOutcome) -> None:
     """Output rules:
-    - failure → file an alert (type=error).
+    - failure → file an alert (type=error) carrying the job title + enriched reason; schedule.failed is the notify trigger (clients already raise it) — no separate agent.message.
     - notify:true reply (delivered_to="alpi") → file the reply (type=info) + emit agent.message.
     - agent self-notified (delivered_to="external") → skip; the notify call already filed it.
     - no delivery (delivered_to="") → skip; stdout the user never saw isn't state.
@@ -461,10 +461,12 @@ def _emit_schedule_event(home: Path, job: dict, outcome: JobOutcome) -> None:
         profile = profile_name(home)
         job_id = str(job.get("id", "?"))
         kind = str(job.get("kind", "cron"))
+        title = str(job.get("title") or f"job {job_id}")
         event_kind = "schedule.done" if outcome.ok else "schedule.failed"
         payload = {
             "profile": profile,
             "job_id": job_id,
+            "title": title,
             "kind": kind,
             "message": outcome.message,
             "reply": (outcome.reply or "")[:2000],
@@ -473,13 +475,22 @@ def _emit_schedule_event(home: Path, job: dict, outcome: JobOutcome) -> None:
         }
         output_id = ""
         out_type = ""
+        fail_body = ""
         if not outcome.ok:
+            parts = [outcome.message or "unknown error"]
+            if outcome.timeout_reason:
+                parts.append(f"timeout: {outcome.timeout_reason}")
+            if outcome.exit_code is not None:
+                parts.append(f"exit code: {outcome.exit_code}")
+            fail_body = "\n".join(parts)[:2000]
+            payload["body"] = fail_body
             try:
                 output = outputs_mod.append(
                     home,
                     profile=profile,
-                    body=outcome.message or "",
+                    body=fail_body,
                     type="error",
+                    title=title,
                     delivered_to=[],
                 )
                 output_id = output["id"]
@@ -516,7 +527,6 @@ def _emit_schedule_event(home: Path, job: dict, outcome: JobOutcome) -> None:
                 "id": output_id,
                 "type": out_type,
             })
-        # notify:true jobs push natively to the user's apps (agent.message is notifiable; schedule.done is not).
         if output_id and outcome.delivered_to == "alpi":
             host_events.emit("agent.message", {
                 "profile": profile,

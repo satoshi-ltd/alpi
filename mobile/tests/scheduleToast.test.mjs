@@ -50,6 +50,17 @@ test('schedule.failed with no message falls back to job_id only', () => {
   assert.equal(t.message, 'weekly');
 });
 
+test('schedule.failed prefers the human title and enriched body, flattening newlines', () => {
+  const t = buildScheduleToast('schedule.failed', {
+    profile: 'mirai', job_id: '6b7ad5d5',
+    title: 'Monthly Lobby improvement backlog',
+    body: 'agent timed out\ntimeout: timeout_1800s',
+    message: 'agent timed out',
+  });
+  assert.equal(t.title, 'mirai · schedule failed');
+  assert.equal(t.message, 'Monthly Lobby improvement backlog: agent timed out · timeout: timeout_1800s');
+});
+
 test('unknown event → null', () => {
   assert.equal(buildScheduleToast('wg.done', {}), null);
   assert.equal(buildScheduleToast('session_changed', {}), null);
@@ -60,6 +71,11 @@ test('null/missing fields on failure tolerated', () => {
   const t = buildScheduleToast('schedule.failed', {});
   assert.notEqual(t, null);
   assert.equal(t.title, ' · schedule failed');
+});
+
+test('schedule.failed with a reason but no title/job_id has no leading colon', () => {
+  const t = buildScheduleToast('schedule.failed', { profile: 'doc', message: 'boom' });
+  assert.equal(t.message, 'boom');
 });
 
 test('duration is set (default 5000ms — readable for a sentence)', () => {

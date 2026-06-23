@@ -46,6 +46,17 @@ fn notification_lines(title: &str, body: &str, profile: &str) -> (String, String
     (head, body.trim().to_string())
 }
 
+fn schedule_failure_body(name: &str, reason: &str) -> String {
+    let reason = reason.replace('\n', " · ");
+    let reason = reason.trim();
+    let name = name.trim();
+    match (name.is_empty(), reason.is_empty()) {
+        (_, true) => name.to_string(),
+        (true, false) => reason.to_string(),
+        (false, false) => format!("{}: {}", name, reason),
+    }
+}
+
 fn show(app: &AppHandle, title: &str, body: &str, deeplink: Deeplink) {
     // Plugin has no per-notification click callback; React consumes the deeplink on next window focus.
     let payload = serde_json::json!({
@@ -193,18 +204,14 @@ pub fn dispatch_daemon_frame(
                 .and_then(|v| v.as_str())
                 .unwrap_or("")
                 .to_string();
-            let job_id = data
-                .get("job_id")
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_string();
+            let job_id = data.get("job_id").and_then(|v| v.as_str()).unwrap_or("");
+            let job_title = data.get("title").and_then(|v| v.as_str()).unwrap_or("");
+            let name = if job_title.trim().is_empty() { job_id } else { job_title };
+            let reason_field = data.get("body").and_then(|v| v.as_str()).unwrap_or("");
             let msg = data.get("message").and_then(|v| v.as_str()).unwrap_or("");
+            let reason = if reason_field.trim().is_empty() { msg } else { reason_field };
             let title = format!("{} · schedule failed", profile);
-            let body = if msg.is_empty() {
-                job_id.clone()
-            } else {
-                format!("{}: {}", job_id, msg)
-            };
+            let body = schedule_failure_body(name, reason);
             let output_id = data
                 .get("output_id")
                 .and_then(|v| v.as_str())
@@ -353,7 +360,7 @@ pub fn dispatch_daemon_disconnect(app: &AppHandle, connection_id: &str) {
 
 #[cfg(test)]
 mod tests {
-    use super::notification_lines;
+    use super::{notification_lines, schedule_failure_body};
 
     #[test]
     fn explicit_title_keeps_the_body() {
@@ -385,5 +392,23 @@ mod tests {
             notification_lines("  T  ", "  b  ", "p"),
             ("T".to_string(), "b".to_string()),
         );
+    }
+
+    #[test]
+    fn schedule_failure_uses_name_and_reason() {
+        assert_eq!(
+            schedule_failure_body("Monthly backlog", "agent timed out\ntimeout: timeout_1800s"),
+            "Monthly backlog: agent timed out · timeout: timeout_1800s".to_string(),
+        );
+    }
+
+    #[test]
+    fn schedule_failure_no_name_has_no_leading_colon() {
+        assert_eq!(schedule_failure_body("", "boom"), "boom".to_string());
+    }
+
+    #[test]
+    fn schedule_failure_name_only() {
+        assert_eq!(schedule_failure_body("weekly", ""), "weekly".to_string());
     }
 }

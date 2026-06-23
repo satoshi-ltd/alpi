@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.9.29 — 2026-06-23 — scheduled-job failure alerts now name the schedule and the reason
+
+- **A failed scheduled job's alert tells you which schedule failed and why.**
+  The failure notification now carries the job's name plus the reason — the
+  error, or "agent timed out" with the timeout — instead of a bare one-liner,
+  so you can act on it without opening the logs. (Failures were already
+  surfaced; this enriches the existing alert rather than creating it.)
+
 ## v0.9.28 — 2026-06-23 — MCP stderr reader shuts down cleanly on a failed server start
 
 - **No more spurious traceback when an MCP server fails to start.** A server

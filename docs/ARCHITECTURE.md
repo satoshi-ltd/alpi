@@ -760,7 +760,8 @@ Verb namespaces in current shape:
   output with the full `delivered_to` list. Each row carries
   `{id, profile, created_at, title?, body,
   type: info|warning|error, status: unread|read, session_id, delivered_to}`
-  (`title` present only when the `notify` caller set one).
+  (`title` present when a `notify` caller set one, or on scheduler
+  failure rows — the job's title).
   No `archive` action — the 500-row cap handles retention so
   clients only render a two-state inbox. `agent.message`,
   `schedule.done` and `schedule.failed` events ship `output_id`
@@ -808,16 +809,18 @@ queries those stores, not ``host.events.history``.
     `host.workgroup.{create,update,remove,action}`.
   - `workgroup_members` — `host.workgroup.{add_member,kick}`.
   - `schedule.done` / `schedule.failed` — `scheduler/run.py::tick`
-    after each job dispatch. Carries `job_id`, `kind`, `message`,
-    `reply`, `delivered_to`, and `silent`; clients use the explicit
-    fields instead of parsing the operational `message`. Silent
+    after each job dispatch. Carries `job_id`, `title`, `kind`,
+    `message`, `reply`, `delivered_to`, and `silent`; clients use the
+    explicit fields instead of parsing the operational `message`. Silent
     jobs (`notify: false`) are activity/history only; a job with
     `notify: true` (or one whose agent called `notify` itself) has
     its reply re-emitted as `agent.message` from the scheduler
-    daemon so it wakes the owner's apps. `schedule.failed`
-    remains an interrupt and carries `output_id` + `deep_link`
-    (`/outputs/<profile>/<id>`) so clients can land on the persisted
-    failure record.
+    daemon so it wakes the owner's apps. `schedule.failed` remains an
+    interrupt — it adds the job `title` and an enriched `body`
+    (reason + timeout/exit) plus `output_id` + `deep_link`
+    (`/outputs/<profile>/<id>`), and is itself the failure
+    notification (clients raise it; failures are NOT re-emitted as
+    `agent.message`).
   - `agent.message` — emitted by `notify` (the owner-push tool). In
     daemon turns it fires from the tool process; for scheduled jobs
     the parent re-emits after parsing the child subprocess events.

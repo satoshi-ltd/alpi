@@ -106,7 +106,7 @@ every ``host.*`` verb the UI calls.
   chat).
 
 - **`schedule.done` / `schedule.failed` events carry structured output.**
-  The scheduler tick emits `{profile, job_id, kind, message, reply,
+  The scheduler tick emits `{profile, job_id, title, kind, message, reply,
   delivered_to, silent}` on the host event bus. `message` is the
   operational status for daemon logs and ops UIs. `reply` is the clean
   agent/script output, capped at 2000 chars, intended for native
@@ -115,7 +115,10 @@ every ``host.*`` verb the UI calls.
   (`notify:true` → the daemon re-emits the reply as `agent.message`) |
   `"external"` (the agent called `notify` itself → no duplicate). Failures
   always file an `error` inbox row and emit `schedule.failed`, regardless of
-  `notify`. `silent` means a successful job produced no user-facing output.
+  `notify`; the failed event and row carry the job `title` and an enriched
+  `body` (reason + timeout/exit), and `schedule.failed` is the single failure
+  notification — it is NOT also re-emitted as `agent.message`. `silent` means a
+  successful job produced no user-facing output.
   Do not parse `message` in clients when an explicit field exists. When
   changing the contract, update desktop/mobile consumers and bump the docs
   here.

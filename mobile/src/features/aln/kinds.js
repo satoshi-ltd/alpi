@@ -31,11 +31,15 @@ export function formatNotification(event, connection) {
         title: `${prefix} · approval needed`,
         body: data.command || 'Tool execution awaiting approval.',
       };
-    case 'schedule.failed':
+    case 'schedule.failed': {
+      const name = data.title || data.job_id || '';
+      const reason = (data.body || data.message || '').replace(/\n+/g, ' · ');
+      const detail = reason ? (name ? `${name}: ${reason}` : reason) : name;
       return {
         title: `${prefix} · schedule failed`,
-        body: data.message || 'Scheduled job failed.',
+        body: detail || 'Scheduled job failed.',
       };
+    }
     case 'budget.threshold':
       return {
         title: `${prefix} · budget ${data.level || ''}%`,

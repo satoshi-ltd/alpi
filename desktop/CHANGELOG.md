@@ -11,6 +11,15 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.3.78 — 2026-06-23 — scheduled-job failure notifications name the schedule and the reason
+
+_Requires alpi v0.9.29+._
+
+- **A failed scheduled job's native notification now says which schedule failed
+  and why.** It uses the job's name and the enriched failure reason (the error,
+  or "agent timed out" with the timeout) from the daemon's `schedule.failed`
+  event, instead of the cryptic job id and a bare one-liner.
+
 ## v0.3.77 — 2026-06-23 — Fast Refresh restored in the notifications view
 
 _Requires alpi v0.9.27+._

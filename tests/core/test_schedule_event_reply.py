@@ -226,6 +226,61 @@ def test_event_reply_empty_on_failure(
     assert "rc=" in payload["message"]
 
 
+def test_failed_job_enriches_schedule_failed_no_duplicate(
+    monkeypatch, tmp_home_no_env: Path,
+) -> None:
+    """A failed job enriches schedule.failed with the job title + reason and fires NO second agent.message — clients already notify on schedule.failed."""
+
+    class _Proc:
+        returncode = 1
+        stdout = ""
+        stderr = "boom: connection refused"
+
+    monkeypatch.setattr(scheduler.subprocess, "run", lambda *a, **kw: _Proc())
+    emits = _capture_emit(monkeypatch)
+
+    _seed_job(tmp_home_no_env, {
+        "id": "bad", "kind": "cron", "expression": "* * * * *",
+        "title": "Nightly sync", "prompt": "fail", "last_run_at": None,
+    })
+    scheduler.tick(tmp_home_no_env)
+
+    failed = [d for k, d in emits if k == "schedule.failed"]
+    assert len(failed) == 1
+    p = failed[0]
+    assert p["title"] == "Nightly sync"
+    assert "rc=1" in p["body"]
+    assert "connection refused" in p["body"]
+    assert "exit code: 1" in p["body"]
+    assert [d for k, d in emits if k == "agent.message"] == []
+
+
+def test_timed_out_job_enriches_schedule_failed_no_duplicate(
+    monkeypatch, tmp_home_no_env: Path,
+) -> None:
+    """A timed-out job: schedule.failed carries the job title + timeout reason; no duplicate agent.message."""
+
+    def _raise_timeout(*a, **kw):
+        raise scheduler.subprocess.TimeoutExpired(cmd="alpi", timeout=600)
+
+    monkeypatch.setattr(scheduler.subprocess, "run", _raise_timeout)
+    emits = _capture_emit(monkeypatch)
+
+    _seed_job(tmp_home_no_env, {
+        "id": "slow", "kind": "cron", "expression": "* * * * *",
+        "title": "Heavy report", "prompt": "work", "last_run_at": None,
+    })
+    scheduler.tick(tmp_home_no_env)
+
+    failed = [d for k, d in emits if k == "schedule.failed"]
+    assert len(failed) == 1
+    p = failed[0]
+    assert p["title"] == "Heavy report"
+    assert "timed out" in p["body"]
+    assert "timeout:" in p["body"]
+    assert [d for k, d in emits if k == "agent.message"] == []
+
+
 def test_event_reply_truncated_at_2000_chars(
     monkeypatch, tmp_home_no_env: Path,
 ) -> None:
