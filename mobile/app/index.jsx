@@ -32,7 +32,7 @@ export default function Inbox() {
   const canAdmin = useCanAdminEarly();
   const { endpoint, probeState } = useEndpoint();
   const { items, loading, refresh } = useInbox();
-  const pins = usePins();
+  const pins = usePins(endpoint?.id);
   const { rows: unreadOutputs } = useUnifiedOutputs({ status: 'unread' });
   const unreadCount = unreadOutputs.length;
 
@@ -140,15 +140,6 @@ export default function Inbox() {
             onPress: () => togglePin(item),
           },
         ]}
-        rightActions={[
-          {
-            id: 'mute',
-            label: 'Mute',
-            tone: 'default',
-            icon: <Icon name="bell" size={20} color={colors.bgPane} strokeWidth={2} />,
-            onPress: () => {},
-          },
-        ]}
       >
         <InboxRow item={item} onPress={openItem} onLongPress={handleLongPress} />
       </Swipeable>
@@ -215,7 +206,7 @@ export default function Inbox() {
                   ? tab === 'wg'
                     ? 'No workgroups yet.'
                     : tab === 'alpis'
-                      ? 'No alpis on this daemon yet. Create one on desktop.'
+                      ? 'No alpis on this daemon yet. Tap + to create one.'
                       : 'Empty inbox.'
                   : 'Pair this phone to a daemon to see your alpis.'}
               </Text>

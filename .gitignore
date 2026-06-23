@@ -2,6 +2,7 @@ __pycache__/
 *.py[cod]
 *.egg-info/
 .venv/
+/node_modules/
 .env
 .pytest_cache/
 .ruff_cache/
@@ -9,3 +10,4 @@ dist/
 build/
 .DS_Store
 .alpi-umbrel
+.usage.json

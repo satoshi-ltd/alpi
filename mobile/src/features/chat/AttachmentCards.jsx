@@ -6,32 +6,16 @@ import { useEndpoint } from '../../lib/EndpointContext';
 import { useTheme } from '../../theme/ThemeContext';
 import { radii, space } from '../../theme/tokens';
 import { fileKind, fileTypeLabel, fmtSize, shouldFetchPreview } from '../../lib/fileKind';
+import { useCachedImage } from '../../hooks/useCachedImage';
 
 const ICON = { code: 'file-code', text: 'file-text', file: 'file', image: 'file' };
 const BOX = 32;
 const MESSAGE_MAX = 4;
-const imageCache = new Map();
 
 function FetchedImage({ path, profile, name, colors }) {
   const { call, endpoint } = useEndpoint();
-  const key = `${profile || ''}:${path}`;
-  const [uri, setUri] = useState(() => imageCache.get(key) || null);
+  const { uri, err } = useCachedImage(call, endpoint, profile, path);
   const [aspect, setAspect] = useState(16 / 9);
-  const [err, setErr] = useState(null);
-  useEffect(() => {
-    if (uri || !endpoint || !profile) return undefined;
-    let alive = true;
-    call(endpoint, 'host.attachments.fetch', { profile, path })
-      .then((r) => {
-        const u = r?.data_base64 ? `data:${r.mime};base64,${r.data_base64}` : null;
-        if (u) imageCache.set(key, u);
-        if (alive) (u ? setUri(u) : setErr('empty response'));
-      })
-      .catch((e) => {
-        if (alive) setErr(String(e?.message || e));
-      });
-    return () => { alive = false; };
-  }, [key, endpoint, profile]);
   useEffect(() => { if (uri) Image.getSize(uri, (w, h) => h && setAspect(w / h), () => {}); }, [uri]);
   if (!uri) {
     return (

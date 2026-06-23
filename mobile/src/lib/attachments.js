@@ -35,14 +35,18 @@ export function mimeFor(name, fallback = '') {
   return MIME_BY_EXT[ext] || fallback;
 }
 
-export async function stageAttachment(call, endpoint, { profile, name, mime, base64 }) {
+export function imageCacheKey(endpointId, profile, path) {
+  return `${endpointId || ''}:${profile || ''}:${path || ''}`;
+}
+
+export async function stageAttachment(call, { profile, name, mime, base64 }) {
   const resolvedMime = mime && ALLOWED_MIMES.has(mime) ? mime : mimeFor(name);
   if (!resolvedMime) {
     throw new Error(`unsupported file type: ${name}`);
   }
   let res;
   try {
-    res = await call(endpoint, 'host.attachments.stage', {
+    res = await call('host.attachments.stage', {
       profile,
       name,
       mime: resolvedMime,

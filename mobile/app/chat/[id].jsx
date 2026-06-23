@@ -30,6 +30,7 @@ import { useProfileSummaries, useSession, useSessionsList } from '../../src/hook
 import { useDebouncedCallback } from '../../src/hooks/useDebouncedCallback';
 import { useEventEffect } from '../../src/hooks/useEvents';
 import { useEndpoint } from '../../src/lib/EndpointContext';
+import { isForeignConnection } from '../../src/features/aln/deeplink';
 import { profileEmptyState } from '../../src/lib/profileReady';
 import { markProfileRead } from '../../src/lib/readState';
 import { useTheme } from '../../src/theme/ThemeContext';
@@ -318,7 +319,27 @@ function NeedsSetup({ name, accent, state, onSetupProvider, onPickModel }) {
 }
 
 export default function ProfileChat() {
-  const { id } = useLocalSearchParams();
+  const { id, connectionId, sid } = useLocalSearchParams();
+  const router = useRouter();
+  const { colors } = useTheme();
+  const { activeId } = useEndpoint();
+  if (isForeignConnection(activeId, connectionId)) {
+    return (
+      <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
+        <ChatHeader kind="profile" accent={colors.ink3} title={`@${profileLabel(id)}`} meta="other connection" onBack={() => router.back()} />
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: space.s10 }}>
+          <Text style={{ color: colors.ink3, textAlign: 'center' }}>
+            This notification came from a connection that isn't active. Switch to it to open this chat.
+          </Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+  return <ProfileChatInner key={`${activeId ?? ''}:${id}:${sid ?? ''}`} />;
+}
+
+function ProfileChatInner() {
+  const { id, sid } = useLocalSearchParams();
   const router = useRouter();
   const { colors, fonts, fontSizes } = useTheme();
   const canAdmin = useCanAdminEarly();
@@ -333,7 +354,7 @@ export default function ProfileChat() {
 
   const latestChatId =
     profile?.latest_session?.kind === 'chat' ? profile.latest_session.id : null;
-  const [sessionId, setSessionId] = useState(latestChatId);
+  const [sessionId, setSessionId] = useState(sid || latestChatId);
   const [sessionPicked, setSessionPicked] = useState(false);
   // Seed-only — once sessionId is set we stop watching latestChatId so a later session_changed can't yank the user into a different chat mid-conversation.
   useEffect(() => {
@@ -483,7 +504,7 @@ export default function ProfileChat() {
       if (!asset) return;
       const { readAsStringAsync } = await import('expo-file-system/legacy').catch(() => import('expo-file-system'));
       const base64 = await readAsStringAsync(asset.uri, { encoding: 'base64' });
-      const staged = await stageAttachment(call, endpoint, {
+      const staged = await stageAttachment(call, {
         profile: profile.name, name: asset.name, mime: asset.mimeType, base64,
       });
       setAttachments((prev) => [...prev, { ...staged, localUri: asset.uri }]);

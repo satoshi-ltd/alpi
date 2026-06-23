@@ -66,7 +66,7 @@ export function deepLinkFor(event, _connection) {
       }
       return data.profile ? `/profile/${data.profile}/schedule` : '/';
     case 'budget.threshold':
-      return data.profile ? `/profile/${data.profile}` : '/';
+      return data.profile ? `/profile/${data.profile}/settings` : '/';
     default:
       return '/';
   }

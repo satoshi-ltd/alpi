@@ -14,6 +14,32 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.1.52 — 2026-06-23 — attachments & inline images fixed, per-connection pins, fail-closed notification taps
+
+_Requires alpi v0.9.27+._
+
+- **Attachments and inline images work again.** Uploading a file and
+  loading attached or agent-produced images called the daemon with the
+  wrong argument shape and silently failed; both now go through correctly.
+- **Image previews no longer leak between daemons.** A cached image keyed
+  only by profile + path could surface on another connection that happened
+  to share the profile name; the cache is now scoped per connection.
+- **Pinned alpis are per connection.** Pinning `default` on one daemon no
+  longer pins it on every daemon that has a profile of the same name.
+- **Notification taps fail closed.** Tapping a notification from a
+  connection you've since removed no longer opens the same-named profile on
+  whatever daemon is active — chat and workgroup screens refuse to render
+  the wrong connection, and switching daemons mid-screen no longer carries
+  the previous one's session, attachments or pending stream across.
+- **"Open chat" opens the chat that fired the notification** — it now keeps
+  the originating connection and session instead of falling back to the
+  latest chat on the active daemon.
+- **Warning and error notifications show their label** in the detail view
+  (the badge read a field the daemon never sends).
+- **Budget alerts open profile settings** instead of a dead route.
+- Dropped a non-functional "Mute" swipe action and corrected the empty-inbox
+  hint that told you to create alpis "on desktop" — you can create them here.
+
 ## v0.1.51 — 2026-06-22 — scheduler errors visible, agent-set titles, Opus 4.8, richer skill detail, profile-name traversal closed
 
 _Requires alpi v0.9.27+._

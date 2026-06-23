@@ -4,6 +4,10 @@ import { useRouter } from 'expo-router';
 
 import { useEndpoint } from '../../lib/EndpointContext';
 
+export function isForeignConnection(activeId, connectionId) {
+  return !!connectionId && !!activeId && connectionId !== activeId;
+}
+
 export function routeFromResponse(response) {
   const data = response?.notification?.request?.content?.data || {};
   const link = typeof data.link === 'string' && data.link ? data.link : '/';
@@ -13,10 +17,14 @@ export function routeFromResponse(response) {
 
 export async function applyResponse(response, { setActive, push }) {
   const { link, connectionId } = routeFromResponse(response);
-  if (connectionId && typeof setActive === 'function') {
-    try { await setActive(connectionId); } catch { /* */ }
+  if (connectionId) {
+    if (typeof setActive !== 'function') return;
+    try {
+      await setActive(connectionId);
+    } catch {
+      return;
+    }
   }
-  // Carry connectionId on the href too so the destination reads the exact daemon without depending on setActive landing first.
   const href = connectionId
     ? `${link}${link.includes('?') ? '&' : '?'}connectionId=${encodeURIComponent(connectionId)}`
     : link;

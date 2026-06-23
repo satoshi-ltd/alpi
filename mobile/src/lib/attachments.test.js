@@ -1,5 +1,20 @@
 import { describe, expect, it, vi } from 'vitest';
-import { mimeFor, stageAttachment } from './attachments';
+import { imageCacheKey, mimeFor, stageAttachment } from './attachments';
+
+describe('imageCacheKey', () => {
+  it('namespaces by endpoint so two daemons with the same profile/path do not collide', () => {
+    expect(imageCacheKey('c-A', 'default', '/tmp/x.png'))
+      .not.toBe(imageCacheKey('c-B', 'default', '/tmp/x.png'));
+  });
+
+  it('is stable for the same endpoint/profile/path', () => {
+    expect(imageCacheKey('c-A', 'default', '/tmp/x.png')).toBe('c-A:default:/tmp/x.png');
+  });
+
+  it('tolerates a missing endpoint id', () => {
+    expect(imageCacheKey(undefined, 'default', '/p')).toBe(':default:/p');
+  });
+});
 
 describe('mimeFor', () => {
   it('maps known extensions', () => {
@@ -22,17 +37,15 @@ describe('mimeFor', () => {
 });
 
 describe('stageAttachment', () => {
-  const ENDPOINT = { id: 'conn-a' };
-
-  it('calls host.attachments.stage with the right payload and returns metadata', async () => {
+  it('calls host.attachments.stage with the useEndpoint (method, params) signature and returns metadata', async () => {
     const call = vi.fn().mockResolvedValue({
       ok: true,
       attachment: { path: '/d/tmp/x/scan.pdf', name: 'scan.pdf', mime: 'application/pdf', size: 9 },
     });
-    const out = await stageAttachment(call, ENDPOINT, {
+    const out = await stageAttachment(call, {
       profile: 'default', name: 'scan.pdf', mime: 'application/pdf', base64: 'AAAA',
     });
-    expect(call).toHaveBeenCalledWith(ENDPOINT, 'host.attachments.stage', {
+    expect(call).toHaveBeenCalledWith('host.attachments.stage', {
       profile: 'default', name: 'scan.pdf', mime: 'application/pdf', data_base64: 'AAAA',
     });
     expect(out.path).toBe('/d/tmp/x/scan.pdf');
@@ -40,14 +53,14 @@ describe('stageAttachment', () => {
 
   it('infers mime from the name when missing', async () => {
     const call = vi.fn().mockResolvedValue({ ok: true, attachment: { path: '/p', name: 'a.png', mime: 'image/png', size: 1 } });
-    await stageAttachment(call, ENDPOINT, { profile: 'default', name: 'a.png', base64: 'AA' });
-    expect(call.mock.calls[0][2].mime).toBe('image/png');
+    await stageAttachment(call, { profile: 'default', name: 'a.png', base64: 'AA' });
+    expect(call.mock.calls[0][1].mime).toBe('image/png');
   });
 
   it('rejects an unsupported type before calling', async () => {
     const call = vi.fn();
     await expect(
-      stageAttachment(call, ENDPOINT, { profile: 'default', name: 'a.zip', base64: 'AA' }),
+      stageAttachment(call, { profile: 'default', name: 'a.zip', base64: 'AA' }),
     ).rejects.toThrow(/unsupported/);
     expect(call).not.toHaveBeenCalled();
   });
@@ -55,7 +68,7 @@ describe('stageAttachment', () => {
   it('raises a clear error when the daemon rejects', async () => {
     const call = vi.fn().mockRejectedValue(new Error('too large'));
     await expect(
-      stageAttachment(call, ENDPOINT, { profile: 'default', name: 'a.png', mime: 'image/png', base64: 'AA' }),
+      stageAttachment(call, { profile: 'default', name: 'a.png', mime: 'image/png', base64: 'AA' }),
     ).rejects.toThrow(/could not upload a.png/);
   });
 });

@@ -10,6 +10,7 @@ import { ScreenHeader } from '../../../src/components/ScreenHeader';
 import { useToast } from '../../../src/components/Toast';
 import { useProfileSummaries } from '../../../src/hooks/useDaemonData';
 import { useOutput } from '../../../src/hooks/useOutputs';
+import { openChatTarget, severityTag } from '../../../src/lib/outputsFormat';
 import { accentForProfile } from '../../../src/theme/accents';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { radii, space } from '../../../src/theme/tokens';
@@ -23,23 +24,6 @@ function fmtRelative(ts) {
   if (diff < 86400) return `${Math.round(diff / 3600)}h`;
   if (diff < 86400 * 7) return `${Math.round(diff / 86400)}d`;
   return `${Math.round(diff / (86400 * 7))}w`;
-}
-
-
-function severityTag(row) {
-  if (row.kind === 'alert') return 'ERROR';
-  if (row.severity === 'urgent') return 'URGENT';
-  if (row.severity === 'important') return 'IMPORTANT';
-  return null;
-}
-
-
-function contextualAction(row) {
-  if (!row) return null;
-  if (row.session_id) {
-    return { label: 'Open chat', href: `/chat/${row.profile}` };
-  }
-  return null;
 }
 
 
@@ -99,7 +83,7 @@ export default function OutputDetailScreen() {
     }
   };
 
-  const action = contextualAction(row);
+  const chatTarget = openChatTarget(row, connectionId);
   const sev = row ? severityTag(row) : null;
 
   const subtitleNode = row ? (
@@ -145,7 +129,7 @@ export default function OutputDetailScreen() {
         <ScrollView contentContainerStyle={{ padding: space.s7, gap: space.s5, paddingBottom: space.s10 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s2, flexWrap: 'wrap' }}>
             {sev ? (
-              <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.danger, letterSpacing: 0.6 }}>
+              <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: sev === 'WARNING' ? colors.warning : colors.danger, letterSpacing: 0.6 }}>
                 {sev}
               </Text>
             ) : null}
@@ -165,8 +149,8 @@ export default function OutputDetailScreen() {
               borderTopColor: colors.line,
             }}
           >
-            {action ? (
-              <PillButton label={action.label} trailing="→" onPress={() => router.push(action.href)} />
+            {chatTarget ? (
+              <PillButton label="Open chat" trailing="→" onPress={() => router.push(chatTarget)} />
             ) : null}
             <PillButton label="Copy" onPress={onCopy} />
           </View>

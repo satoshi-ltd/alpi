@@ -28,6 +28,7 @@ import {
 import { useDebouncedCallback } from '../../src/hooks/useDebouncedCallback';
 import { useEventEffect } from '../../src/hooks/useEvents';
 import { useEndpoint } from '../../src/lib/EndpointContext';
+import { isForeignConnection } from '../../src/features/aln/deeplink';
 import { markWorkgroupRead } from '../../src/lib/readState';
 import { accentForProfile } from '../../src/theme/accents';
 import { useTheme } from '../../src/theme/ThemeContext';
@@ -302,6 +303,26 @@ function TasksHeaderButton({ tasks, accent, onPress }) {
 }
 
 export default function WorkgroupChat() {
+  const { id, connectionId } = useLocalSearchParams();
+  const router = useRouter();
+  const { colors } = useTheme();
+  const { activeId } = useEndpoint();
+  if (isForeignConnection(activeId, connectionId)) {
+    return (
+      <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
+        <ChatHeader kind="workgroup" accent={colors.ink3} title={`#${id}`} meta="other connection" onBack={() => router.back()} />
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: space.s10 }}>
+          <Text style={{ color: colors.ink3, textAlign: 'center' }}>
+            This notification came from a connection that isn't active. Switch to it to open this workgroup.
+          </Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+  return <WorkgroupChatInner key={`${activeId ?? ''}:${id}`} />;
+}
+
+function WorkgroupChatInner() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
   const { colors, fonts, fontSizes } = useTheme();

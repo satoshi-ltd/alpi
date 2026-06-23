@@ -5,7 +5,7 @@ vi.mock('expo-notifications', () => ({
   addNotificationResponseReceivedListener: vi.fn(() => ({ remove: vi.fn() })),
 }));
 
-import { applyResponse, routeFromResponse } from './deeplink';
+import { applyResponse, isForeignConnection, routeFromResponse } from './deeplink';
 
 function responseWith(data) {
   return { notification: { request: { content: { data } } } };
@@ -29,6 +29,16 @@ describe('routeFromResponse', () => {
       link: '/',
       connectionId: '',
     });
+  });
+});
+
+describe('isForeignConnection', () => {
+  it('is true only when both ids are set and differ', () => {
+    expect(isForeignConnection('a', 'b')).toBe(true);
+    expect(isForeignConnection('a', 'a')).toBe(false);
+    expect(isForeignConnection('a', '')).toBe(false);
+    expect(isForeignConnection(null, 'b')).toBe(false);
+    expect(isForeignConnection(undefined, undefined)).toBe(false);
   });
 });
 
@@ -56,9 +66,15 @@ describe('applyResponse', () => {
     expect(push).toHaveBeenCalledWith('/outputs');
   });
 
-  it('still navigates if setActive throws', async () => {
+  it('fails closed: does NOT navigate when setActive rejects (connection gone)', async () => {
     setActive = vi.fn(async () => { throw new Error('unknown connection'); });
     await applyResponse(responseWith({ link: '/chat/x', connectionId: 'gone' }), { setActive, push });
-    expect(push).toHaveBeenCalledWith('/chat/x?connectionId=gone');
+    expect(setActive).toHaveBeenCalledWith('gone');
+    expect(push).not.toHaveBeenCalled();
+  });
+
+  it('fails closed: does NOT navigate to a connection-scoped link with no way to switch', async () => {
+    await applyResponse(responseWith({ link: '/chat/x', connectionId: 'c9' }), { setActive: undefined, push });
+    expect(push).not.toHaveBeenCalled();
   });
 });

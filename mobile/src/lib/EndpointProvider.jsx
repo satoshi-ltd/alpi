@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { EndpointContext } from './EndpointContext';
+import { clearImageCache } from '../hooks/useCachedImage';
 import { probe, probeAll } from './probe';
 import { call as rpcCall, callStream as rpcCallStream, dropEndpointPool } from './rpc';
 import { clearAll, loadConnections, removeConnection, saveConnection, setActiveConnection, setDeviceIds } from './store';
@@ -107,13 +108,23 @@ export function EndpointProvider({ children }) {
   }, [activeId, activeStatus, probeByIdFrom]);
 
   const setActive = useCallback(async (id) => {
+    if (id === activeId) return;
+    let list = connectionsRef.current;
+    let target = list.find((c) => c.id === id);
+    if (!target) {
+      const state = await loadConnections();
+      setConnections(state.connections);
+      list = state.connections;
+      target = list.find((c) => c.id === id);
+    }
+    if (!target) throw new Error(`unknown connection: ${id}`);
     // Drop the previous endpoint's pooled WS — its tokens won't auth on the new one and a stale socket holds an FD + battery for nothing.
-    const prev = connections.find((c) => c.id === activeId);
+    const prev = list.find((c) => c.id === activeId);
     if (prev) dropEndpointPool(prev);
     await setActiveConnection(id);
     setActiveId(id);
-    probeByIdFrom(connections, id).catch(() => {});
-  }, [connections, activeId, probeByIdFrom]);
+    probeByIdFrom(list, id).catch(() => {});
+  }, [activeId, probeByIdFrom]);
 
   const addConnection = useCallback(async (endpoint) => {
     await saveConnection({ ...endpoint, added_at: Date.now() });
@@ -141,6 +152,7 @@ export function EndpointProvider({ children }) {
   const unpair = useCallback(async () => {
     for (const c of connections) dropEndpointPool(c);
     const targets = [...connections];
+    clearImageCache();
     await clearAll();
     try {
       const { alnStateKey, clearState } = await import('../features/aln/state');

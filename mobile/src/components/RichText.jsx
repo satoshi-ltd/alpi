@@ -3,35 +3,18 @@ import { ActivityIndicator, Image, Modal, Pressable, ScrollView, Text, View } fr
 import { space, fontSizes, lineHeights, radii } from '../theme/tokens';
 
 import { segmentBlocks } from '../lib/markdownBlocks';
+import { useCachedImage } from '../hooks/useCachedImage';
 import { useEndpoint } from '../lib/EndpointContext';
 import { useTheme } from '../theme/ThemeContext';
-
-const imageCache = new Map();
 
 function MarkdownImage({ path, alt, note, profile, theme }) {
   const { colors, fonts } = theme;
   const { call, endpoint } = useEndpoint();
-  const cacheKey = `${profile || ''}:${path}`;
-  const [uri, setUri] = useState(() => imageCache.get(cacheKey) || null);
+  const { uri } = useCachedImage(call, endpoint, profile, path);
   const [aspect, setAspect] = useState(16 / 9);
   const [open, setOpen] = useState(false);
   const filename = path.split('/').pop();
   const caption = note ? `${filename} · ${note}` : filename;
-
-  useEffect(() => {
-    if (uri || !endpoint || !profile) return undefined;
-    let alive = true;
-    call(endpoint, 'host.attachments.fetch', { profile, path })
-      .then((r) => {
-        const u = r?.data_base64 ? `data:${r.mime};base64,${r.data_base64}` : null;
-        if (u) imageCache.set(cacheKey, u);
-        if (alive && u) setUri(u);
-      })
-      .catch(() => {});
-    return () => {
-      alive = false;
-    };
-  }, [cacheKey, endpoint, profile]);
 
   useEffect(() => {
     if (uri) Image.getSize(uri, (w, h) => h && setAspect(w / h), () => {});

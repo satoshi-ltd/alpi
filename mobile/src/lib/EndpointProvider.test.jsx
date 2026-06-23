@@ -7,11 +7,16 @@ import { act, render, waitFor } from "@testing-library/react";
 const drops = [];
 const callSpy = vi.fn(async () => ({}));
 const callStreamSpy = vi.fn(() => ({ cancel: vi.fn() }));
+const clearImageCacheSpy = vi.fn();
 
 vi.mock("./rpc", () => ({
   call: (...args) => callSpy(...args),
   callStream: (...args) => callStreamSpy(...args),
   dropEndpointPool: (endpoint) => { drops.push(endpoint?.id ?? null); },
+}));
+
+vi.mock("../hooks/useCachedImage", () => ({
+  clearImageCache: () => clearImageCacheSpy(),
 }));
 
 // Mutable store state — each test resets in beforeEach.
@@ -81,6 +86,7 @@ beforeEach(() => {
   probeResults = new Map();
   callSpy.mockClear();
   callStreamSpy.mockClear();
+  clearImageCacheSpy.mockClear();
   storeState = {
     v: 1,
     active_id: "alpha",
@@ -128,6 +134,32 @@ describe("EndpointProvider lifecycle", () => {
     expect(captureRef.current.endpoint.id).toBe("beta");
   });
 
+  it("setActive on the already-active id is a no-op — no pool drop, no store write", async () => {
+    const { captureRef } = await mount();
+    await act(async () => { await captureRef.current.setActive("alpha"); });
+    expect(drops).toEqual([]);
+    expect(storeMutations.some((m) => m.op === "active")).toBe(false);
+    expect(captureRef.current.activeId).toBe("alpha");
+  });
+
+  it("setActive rejects an unknown id and leaves the active connection unchanged", async () => {
+    const { captureRef } = await mount();
+    await expect(
+      act(async () => { await captureRef.current.setActive("ghost"); }),
+    ).rejects.toThrow(/unknown connection/);
+    expect(captureRef.current.activeId).toBe("alpha");
+    expect(captureRef.current.endpoint.id).toBe("alpha");
+    expect(storeMutations.some((m) => m.op === "active" && m.id === "ghost")).toBe(false);
+  });
+
+  it("probes against the freshly loaded list when the connection is only in storage", async () => {
+    const { captureRef } = await mount();
+    storeState.connections.push({ id: "gamma", name: "pi", ip: "100.0.0.3", port: 49200, token: "g", kind: "remote" });
+    await act(async () => { await captureRef.current.setActive("gamma"); });
+    expect(captureRef.current.activeId).toBe("gamma");
+    await waitFor(() => expect(captureRef.current.probeState.get("gamma")).toBe("online"));
+  });
+
   it("forget drops only the targeted endpoint's pool", async () => {
     const { captureRef } = await mount();
     await act(async () => { await captureRef.current.forget("beta"); });
@@ -151,6 +183,7 @@ describe("EndpointProvider lifecycle", () => {
     expect(storeMutations.some((m) => m.op === "clear")).toBe(true);
     expect(captureRef.current.connections).toHaveLength(0);
     expect(captureRef.current.endpoint).toBeNull();
+    expect(clearImageCacheSpy).toHaveBeenCalled();
   });
 
   it("probeOne updates status + version for a single endpoint without touching others", async () => {

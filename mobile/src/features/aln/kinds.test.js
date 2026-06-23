@@ -118,6 +118,11 @@ describe('deepLinkFor', () => {
     expect(deepLinkFor({ event: 'agent.message', data: {} })).toBe('/');
   });
 
+  it('routes budget.threshold to the profile settings screen (a real route, unlike bare /profile/<name>)', () => {
+    expect(deepLinkFor({ event: 'budget.threshold', data: { profile: 'vera' } })).toBe('/profile/vera/settings');
+    expect(deepLinkFor({ event: 'budget.threshold', data: {} })).toBe('/');
+  });
+
   it('falls back to root for unknown kinds', () => {
     expect(deepLinkFor({ event: 'unknown', data: {} })).toBe('/');
   });
