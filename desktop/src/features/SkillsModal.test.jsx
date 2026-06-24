@@ -9,6 +9,8 @@ import {
   matchesSkill,
   viewerKind,
   groupSkills,
+  orderTools,
+  displayTool,
 } from "./SkillsModal.jsx";
 
 describe("formatBytes", () => {
@@ -71,10 +73,22 @@ describe("viewerKind", () => {
   it("classifies the file by ftype and binary flag", () => {
     expect(viewerKind(null)).toBe("empty");
     expect(viewerKind({ binary: true, ftype: "binary" })).toBe("binary");
-    expect(viewerKind({ ftype: "skill" })).toBe("markdown");
-    expect(viewerKind({ ftype: "md" })).toBe("markdown");
+    expect(viewerKind({ ftype: "skill" })).toBe("code");
+    expect(viewerKind({ ftype: "md" })).toBe("code");
     expect(viewerKind({ ftype: "py" })).toBe("code");
     expect(viewerKind({ ftype: "text" })).toBe("code");
+  });
+});
+
+describe("tool ordering and display", () => {
+  it("orders alpi built-ins before mcp tools, stable within groups", () => {
+    expect(orderTools(["lobby__a", "web_search", "lobby__b", "notify"]))
+      .toEqual(["web_search", "notify", "lobby__a", "lobby__b"]);
+  });
+
+  it("renders mcp tools with a middot separator, built-ins unchanged", () => {
+    expect(displayTool("lobby__lobby_list_channels")).toBe("lobby.lobby_list_channels");
+    expect(displayTool("web_search")).toBe("web_search");
   });
 });
 

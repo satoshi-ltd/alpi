@@ -855,3 +855,33 @@ def test_cron_tool_update_sets_timeout(tmp_home_no_env: Path) -> None:
     assert upd.ok and "timeout" in upd.output
     job = json.loads((tmp_home_no_env / "schedule" / "jobs.json").read_text())[0]
     assert job["timeout"] == 1800
+
+
+def test_emit_schedule_event_titles_auto_notify_with_job_title(tmp_home_no_env: Path) -> None:
+    from alpi import outputs as outputs_mod
+    job = {"id": "j1", "kind": "cron", "title": "Salud · recuperación", "notify": True}
+    outcome = scheduler.JobOutcome(True, "ok", reply="🟡 Recuperación al 43%", delivered_to="alpi")
+    scheduler._emit_schedule_event(tmp_home_no_env, job, outcome)
+    outs = outputs_mod.list_outputs(tmp_home_no_env)
+    assert any(o.get("title") == "Salud · recuperación" for o in outs)
+
+
+def test_emit_schedule_event_untitled_job_files_no_title(tmp_home_no_env: Path) -> None:
+    from alpi import outputs as outputs_mod
+    job = {"id": "j2", "kind": "cron", "notify": True}
+    outcome = scheduler.JobOutcome(True, "ok", reply="algo pasó", delivered_to="alpi")
+    scheduler._emit_schedule_event(tmp_home_no_env, job, outcome)
+    outs = outputs_mod.list_outputs(tmp_home_no_env)
+    assert outs and "title" not in outs[0]
+
+
+def test_emit_schedule_event_push_uses_job_title_and_clean_body(tmp_home_no_env: Path, monkeypatch) -> None:
+    from alpi.host import events as host_events
+    calls = []
+    monkeypatch.setattr(host_events, "emit", lambda kind, payload: calls.append((kind, payload)))
+    job = {"id": "j3", "kind": "cron", "title": "Salud · recuperación", "notify": True}
+    outcome = scheduler.JobOutcome(True, "ok", reply="✅ Recuperación al 43%", delivered_to="alpi")
+    scheduler._emit_schedule_event(tmp_home_no_env, job, outcome)
+    msg = next(p for (k, p) in calls if k == "agent.message")
+    assert msg["title"] == "Salud · recuperación"
+    assert "✅" not in msg["body"] and "Recuperación al 43%" in msg["body"]

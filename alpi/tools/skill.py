@@ -382,7 +382,7 @@ def skill_detail_payload(
         "reason": reason,
         "requires": requires,
         "platforms": reqs["platforms"],
-        "tools": _parse_str_list(meta.get("tools", "")),
+        "tools": sorted(_parse_str_list(meta.get("tools", "")), key=lambda t: "__" in t),
         "keywords": skill_keywords(meta),
         "tree": skill_tree(skill_dir),
         "size": skill_dir_size(skill_dir),

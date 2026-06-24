@@ -157,11 +157,9 @@
 .reqOk { background: var(--c-success); }
 .reqNo { border: 1px solid var(--ink-4); }
 
-.toolsFlow { font-family: var(--font-mono); font-size: var(--fs-xs); color: var(--ink-2); }
-.platforms { font-family: var(--font-mono); font-size: var(--fs-xs); color: var(--ink-3); }
-
 .kwFlow { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .kw {
+  font-family: var(--font-mono);
   font-size: var(--fs-xs);
   color: var(--ink-3);
   background: var(--hover);

@@ -61,6 +61,14 @@ def test_eligibility_and_requires_use_profile_path_for_binaries(tmp_path: Path) 
     assert resolved["only-profile-bin"] is True
 
 
+def test_skill_detail_payload_lists_builtin_tools_before_mcp(tmp_path: Path) -> None:
+    md = tmp_path / "skills" / "personal" / "x" / "SKILL.md"
+    md.parent.mkdir(parents=True)
+    md.write_text("---\nname: x\ncategory: personal\ntools: ['lobby__a', 'db', 'lobby__b', 'notify']\n---\n\nbody")
+    detail = skill.skill_detail_payload(md, category="personal", name="x", env={}, cfg_raw={})
+    assert detail["tools"] == ["db", "notify", "lobby__a", "lobby__b"]
+
+
 def test_skill_file_read_rejects_traversal_and_secrets(tmp_path: Path) -> None:
     d = tmp_path / "skills" / "personal" / "x"
     (d / "scripts").mkdir(parents=True)

@@ -11,6 +11,17 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.3.83 — 2026-06-24 — skills modal: consistent chips + source-style file viewer
+
+_Requires alpi v0.9.30+._
+
+- **A skill's tools, platforms and keywords render as consistent monospace
+  chips** — alpi's built-in tools first, MCP tools last (shown as
+  `server.tool`).
+- **Skill files (SKILL.md, scripts, configs) show as monospace source** in
+  the viewer, so you read them as code.
+- **The file tree is rooted at `files`** instead of repeating the skill name.
+
 ## v0.3.82 — 2026-06-24 — notification severity at a glance + tidier reading view
 
 _Requires alpi v0.9.30+._

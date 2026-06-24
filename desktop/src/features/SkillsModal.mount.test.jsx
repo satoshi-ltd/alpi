@@ -77,8 +77,8 @@ describe("SkillsModal (mounted)", () => {
       return Promise.resolve(null);
     });
     render(<SkillsModal open onClose={() => {}} profile="muse" connectionId="c2" />);
-    await waitFor(() => expect(screen.getByText("use it")).toBeTruthy());
+    await waitFor(() => expect(document.body.textContent).toContain("use it"));
     fireEvent.click(screen.getByText("whoop"));
-    await waitFor(() => expect(screen.queryByText("use it")).toBeNull());
+    await waitFor(() => expect(document.body.textContent).not.toContain("use it"));
   });
 });

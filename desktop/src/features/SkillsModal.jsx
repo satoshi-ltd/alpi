@@ -2,7 +2,6 @@ import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { BrowseModal, Eyebrow, Icon, Lock } from "../primitives/index.js";
 import shell from "../primitives/BrowseModal.module.css";
-import MarkdownBody from "../primitives/MarkdownBody.jsx";
 import styles from "./SkillsModal.module.css";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -41,8 +40,19 @@ export function matchesSkill(skill, query) {
 export function viewerKind(file) {
   if (!file) return "empty";
   if (file.binary) return "binary";
-  if (file.ftype === "skill" || file.ftype === "md") return "markdown";
   return "code";
+}
+
+export function isMcpTool(name) {
+  return String(name || "").includes("__");
+}
+
+export function displayTool(name) {
+  return isMcpTool(name) ? String(name).replace("__", ".") : String(name);
+}
+
+export function orderTools(tools) {
+  return [...(tools || [])].sort((a, b) => (isMcpTool(a) ? 1 : 0) - (isMcpTool(b) ? 1 : 0));
 }
 
 export function groupSkills(skills) {
@@ -253,7 +263,6 @@ function DetailPane({ detail, selectedPath, openDirs, onToggleDir, onSelectFile,
           <div className={styles.dirBox}>
             <SkillTree
               tree={detail.tree}
-              rootName={detail.name}
               selectedPath={selectedPath}
               openDirs={openDirs}
               onToggle={onToggleDir}
@@ -322,10 +331,18 @@ function Frontmatter({ detail }) {
         </FmRow>
       ) : null}
       {detail.tools?.length ? (
-        <FmRow label="tools"><span className={styles.toolsFlow}>{detail.tools.join(" ")}</span></FmRow>
+        <FmRow label="tools">
+          <span className={styles.kwFlow}>
+            {orderTools(detail.tools).map((t) => <span key={t} className={styles.kw}>{displayTool(t)}</span>)}
+          </span>
+        </FmRow>
       ) : null}
       {detail.platforms?.length ? (
-        <FmRow label="platforms"><span className={styles.platforms}>{detail.platforms.join(" ")}</span></FmRow>
+        <FmRow label="platforms">
+          <span className={styles.kwFlow}>
+            {detail.platforms.map((p) => <span key={p} className={styles.kw}>{p}</span>)}
+          </span>
+        </FmRow>
       ) : null}
       {detail.keywords?.length ? (
         <FmRow label="keywords">
@@ -347,10 +364,10 @@ function FmRow({ label, children }) {
   );
 }
 
-function SkillTree({ tree, rootName, selectedPath, openDirs, onToggle, onSelectFile }) {
+function SkillTree({ tree, selectedPath, openDirs, onToggle, onSelectFile }) {
   return (
     <div className={styles.tree}>
-      <Eyebrow className={styles.treeRoot}>{rootName}/</Eyebrow>
+      <Eyebrow className={styles.treeRoot}>files</Eyebrow>
       {tree.map((node) => {
         if (node.kind === "file") {
           return (
@@ -432,7 +449,6 @@ function FileViewer({ file, loading }) {
       </div>
     );
   }
-  if (kind === "markdown") return <MarkdownBody source={file.text || ""} />;
   if (kind === "code") return <pre className={styles.code}>{file.text || ""}</pre>;
   return <div className={styles.viewerLoading}>Select a file.</div>;
 }

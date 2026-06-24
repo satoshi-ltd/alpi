@@ -511,6 +511,7 @@ def _emit_schedule_event(home: Path, job: dict, outcome: JobOutcome) -> None:
                     profile=profile,
                     body=(outcome.reply or "")[:2000],
                     type="info",
+                    title=str(job.get("title") or ""),
                     delivered_to=delivered_to_list,
                 )
                 output_id = output["id"]
@@ -530,8 +531,8 @@ def _emit_schedule_event(home: Path, job: dict, outcome: JobOutcome) -> None:
         if output_id and outcome.delivered_to == "alpi":
             host_events.emit("agent.message", {
                 "profile": profile,
-                "title": profile or "alpi",
-                "body": (outcome.reply or "")[:2000],
+                "title": output.get("title") or profile or "alpi",
+                "body": output["body"],
                 "type": out_type or "info",
                 "output_id": output_id,
                 "deep_link": f"/outputs/{profile}/{output_id}",

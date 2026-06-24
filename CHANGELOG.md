@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.9.31 — 2026-06-24 — scheduled-job notifications carry the job title; skill tools list built-ins first
+
+- **A scheduled job that notifies on completion now uses the job's title**
+  as the notification headline, instead of a title-less push.
+- **A skill's tools are listed with alpi's built-in tools first and MCP
+  tools last**, so every client groups them the same way.
+
 ## v0.9.30 — 2026-06-24 — notifications are normalised to a clean report-grade format
 
 - **Notifications arrive clean and structured on every device.** Whatever an
