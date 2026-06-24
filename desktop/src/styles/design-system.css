@@ -97,7 +97,7 @@
 .ds-kbd, .kbd {
   font-family: var(--font-mono);
   font-size: var(--fs-xs);
-  padding: 1px 5px;
+  padding: var(--chip-pad);
   border-radius: var(--r-xs);
   background: var(--hover);
   border: .5px solid var(--line);
@@ -467,7 +467,7 @@ textarea.ds-field, textarea.field { resize: vertical; min-height: 88px; height: 
   font-family: var(--font-mono);
   font-size: .92em;
   background: var(--hover);
-  padding: 1px 5px;
+  padding: var(--chip-pad);
   border-radius: var(--r-xs);
 }
 .alpi-md pre {

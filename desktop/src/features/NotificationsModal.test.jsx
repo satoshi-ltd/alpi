@@ -68,20 +68,32 @@ function renderModal(connections = [{ id: "c1", name: "casa" }]) {
 }
 
 describe("NotificationsModal — read aloud + body rendering", () => {
-  it("renders the body as markdown at message-output size (profmsg/alpi-md)", () => {
+  it("renders the body with inline bold (no full markdown surface)", () => {
     renderModal();
-    const md = document.body.querySelector(".profmsg .alpi-md");
-    expect(md).toBeTruthy();
-    expect(md.textContent).toContain("bold");
-    expect(md.querySelector("strong, b")).toBeTruthy();
+    const article = document.body.querySelector("article");
+    expect(article.textContent).toContain("bold");
+    expect(article.querySelector("strong")).toBeTruthy();
+    expect(document.body.querySelector(".profmsg, .alpi-md")).toBeNull();
   });
 
   it("renders the body from the list row without waiting for outputs_read", () => {
     h.detail = null;
     renderModal();
-    const md = document.body.querySelector(".profmsg .alpi-md");
-    expect(md?.textContent).toContain("bold");
+    const article = document.body.querySelector("article");
+    expect(article.textContent).toContain("bold");
     expect(screen.getByLabelText("Read aloud")).toBeTruthy();
+  });
+
+  it("promotes a '**Label:** body' line into an uppercase eyebrow + paragraph", () => {
+    h.rows = [{
+      id: "n1", profile: "alice", connectionId: "c1", connectionName: "casa",
+      accent: "#abc", status: "read", type: "info", created_at: 1_700_000_000,
+      body: "**Veredicto:** Día normal en volumen.", delivered_to: [],
+    }];
+    renderModal();
+    const article = document.body.querySelector("article");
+    expect(article.textContent).toContain("Veredicto");
+    expect(article.textContent).toContain("Día normal en volumen.");
   });
 
   it("renders a notification title in the list and as a detail heading", () => {

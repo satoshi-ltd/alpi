@@ -248,7 +248,7 @@
   font-family: var(--font-mono);
   font-size: .92em;
   background: var(--hover);
-  padding: 1px 5px;
+  padding: var(--chip-pad);
   border-radius: var(--r-xs);
 }
 

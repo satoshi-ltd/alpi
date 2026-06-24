@@ -12,7 +12,7 @@ import {
   VolumeIcon,
   XIcon,
 } from "../primitives/index.js";
-import Markdown from "../primitives/Markdown.jsx";
+import NotificationBody from "./NotificationBody.jsx";
 import WaveBars from "../primitives/WaveBars.jsx";
 import Eyebrow from "../primitives/Eyebrow.jsx";
 import { playTts, subscribeTts, VOICE_POOL } from "../lib/tts.js";
@@ -392,11 +392,7 @@ function DetailPane({ row, accent, connId, connectionName, voiceId, onCopy, onAc
         <h2 className={styles.detailTitle}>{row.title}</h2>
       ) : null}
 
-      <div className={styles.detailBody}>
-        <div className="profmsg">
-          <Markdown as="div" source={row.body || ""} className="alpi-md" />
-        </div>
-      </div>
+      <NotificationBody body={row.body || ""} lead={!(row.title || "").trim()} />
 
       {externalDelivery.length ? (
         <div className={styles.detailMetaSecondary}>

@@ -44,6 +44,69 @@ def test_append_persists_title_when_set(home: Path) -> None:
     assert outputs_mod.read(home, out["id"])["title"] == "whoop sync failed"
 
 
+def test_sanitize_emoji_keeps_only_status_circles() -> None:
+    s = outputs_mod.sanitize_emoji
+    assert s("🔴 down, 🟡 warn, 🟢 ok") == "🔴 down, 🟡 warn, 🟢 ok"
+    assert s("⚠️ alert ✅ done 🚀 ship 🎉") == "alert done ship"
+    assert s("1.798 → 25 — 🟢 ok • bullet") == "1.798 → 25 — 🟢 ok • bullet"
+    assert s("") == ""
+
+
+def test_append_strips_disallowed_emoji(home: Path) -> None:
+    out = _append(home, body="✅ Deploy ok 🚀\n🔴 checkout 2%", title="📊 Report")
+    assert out["body"] == "Deploy ok\n🔴 checkout 2%"
+    assert out["title"] == "Report"
+
+
+def test_normalize_body_downgrades_disallowed_markdown() -> None:
+    n = outputs_mod.normalize_notification_body
+    assert n("# Resumen") == "## Resumen"
+    assert n("## Anomalías:") == "## Anomalías"
+    assert n("#### Deep") == "### Deep"
+    assert n("see [docs](https://x) now") == "see docs now"
+    assert n("![chart](https://x/c.png)") == "chart"
+    assert n("a\n---\nb") == "a\nb"
+    assert n("text <b>bold</b> tag") == "text bold tag"
+    assert n("  - nested item") == "- nested item"
+    assert n("**Veredicto:** ok") == "**Veredicto:** ok"
+
+
+def test_normalize_strips_only_real_html_tags() -> None:
+    n = outputs_mod.normalize_notification_body
+    assert n("strip <b>tags</b> only") == "strip tags only"
+    assert n("5 < x > 3, latency < p95 > target") == "5 < x > 3, latency < p95 > target"
+
+
+def test_normalize_preserves_quotes_and_tables() -> None:
+    n = outputs_mod.normalize_notification_body
+    assert n("> quoted line") == "> quoted line"
+    table = "| a | b |\n| --- | --- |\n| 1 | 2 |"
+    assert n(table) == table
+
+
+def test_normalize_title_strips_links_and_emoji() -> None:
+    assert outputs_mod.normalize_notification_title("📊 [Report](https://x)") == "Report"
+
+
+def test_append_normalizes_body_markdown(home: Path) -> None:
+    out = _append(home, body="# Daily\n\nsee [here](https://x)\n---\n- item")
+    assert out["body"] == "## Daily\n\nsee here\n- item"
+
+
+def test_read_normalizes_legacy_rows(home: Path) -> None:
+    path = outputs_mod._store_path(home)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    raw = {
+        "id": "a" * 12, "profile": "default", "created_at": 1.0,
+        "body": "# Old 🚀\n![chart](http://y)", "title": "📊 T",
+        "type": "info", "status": "unread", "delivered_to": [],
+    }
+    path.write_text(json.dumps(raw) + "\n", encoding="utf-8")
+    out = outputs_mod.read(home, "a" * 12)
+    assert out["body"] == "## Old\nchart"
+    assert out["title"] == "T"
+
+
 def test_list_returns_newest_first(home: Path) -> None:
     a = _append(home, body="first")
     b = _append(home, body="second")

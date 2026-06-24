@@ -19,7 +19,11 @@ class Notify(Tool):
         "goes to YOUR user's own apps, NOT a third party; to message someone "
         "else use `send_message` (a gateway). The only thing to avoid is firing "
         "it just to duplicate an answer the user is already reading in the live "
-        "chat and never asked to be pushed."
+        "chat and never asked to be pushed.\n"
+        "\n"
+        "Format it as a scannable report: a lead line, `**Label:**` sections, "
+        "`- ` bullets, and 🔴🟡🟢 for status. Richer markdown (tables, images, "
+        "headings, other emoji) is simplified automatically — don't fuss over format."
     )
     parameters = {
         "type": "object",

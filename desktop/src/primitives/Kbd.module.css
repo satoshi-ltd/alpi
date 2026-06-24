@@ -1,7 +1,7 @@
 .kbd {
   display: inline-flex;
   align-items: center;
-  padding: 1px 5px;
+  padding: var(--chip-pad);
   border-radius: var(--r-xs);
   background: var(--hover);
   border: .5px solid var(--line);

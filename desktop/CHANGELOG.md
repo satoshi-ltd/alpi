@@ -11,6 +11,17 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.3.81 — 2026-06-24 — report-grade notification reading view
+
+_Requires alpi v0.9.30+._
+
+- **Notifications now render as a clean report.** Long agent summaries get a
+  title, section headings and scannable subsection labels, bullet and
+  numbered lists, tables that scroll when wide, quotes, code blocks and
+  inline emphasis — capped to a comfortable reading width instead of a
+  full-bleed wall of text.
+- **You can select and copy text from a notification.**
+
 ## v0.3.80 — 2026-06-24 — the Schedule panel stays in sync and reports its loading
 
 _Requires alpi v0.9.29+._

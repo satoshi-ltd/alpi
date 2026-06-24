@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import secrets
 import threading
 import time
@@ -26,6 +27,82 @@ MAX_OUTPUTS = 500
 
 VALID_TYPE = frozenset({"info", "warning", "error"})
 VALID_STATUS = frozenset({"unread", "read"})
+
+_ALLOWED_EMOJI = frozenset("\U0001F534\U0001F7E1\U0001F7E2")
+_EMOJI_RANGES = (
+    (0x1F300, 0x1FAFF),
+    (0x1F1E6, 0x1F1FF),
+    (0x2600, 0x27BF),
+    (0x2B00, 0x2BFF),
+    (0xFE00, 0xFE0F),
+)
+_EMOJI_SINGLES = frozenset({0x200D, 0x20E3})
+
+
+def _is_disallowed_emoji(ch: str) -> bool:
+    if ch in _ALLOWED_EMOJI:
+        return False
+    cp = ord(ch)
+    if cp in _EMOJI_SINGLES:
+        return True
+    return any(lo <= cp <= hi for lo, hi in _EMOJI_RANGES)
+
+
+def sanitize_emoji(text: str) -> str:
+    if not text:
+        return text or ""
+    kept = "".join("" if _is_disallowed_emoji(ch) else ch for ch in text)
+    kept = re.sub(r"[^\S\n]{2,}", " ", kept)
+    kept = re.sub(r"[^\S\n]+(?=\n)", "", kept)
+    return kept.strip()
+
+
+_HEADING_RE = re.compile(r"^\s*(#{1,6})\s+(.*?)\s*$")
+_HR_RE = re.compile(r"^\s*([-*_])\1{2,}\s*$")
+_QUOTE_RE = re.compile(r"^\s*>\s?(.*)$")
+_LIST_RE = re.compile(r"^\s*([-*•]|\d+[.)])\s+(.*)$")
+_LINK_RE = re.compile(r"!?\[([^\]]*)\]\([^)]*\)")
+_HTML_RE = re.compile(r"</?[A-Za-z][^>]*>")
+
+
+def _normalize_inline(s: str) -> str:
+    s = _HTML_RE.sub("", s)
+    s = _LINK_RE.sub(lambda m: m.group(1), s)
+    return s
+
+
+def normalize_notification_title(text: str) -> str:
+    if not text:
+        return text or ""
+    return sanitize_emoji(_normalize_inline(text))
+
+
+def normalize_notification_body(text: str) -> str:
+    if not text:
+        return text or ""
+    out: list[str] = []
+    for raw in text.split("\n"):
+        line = raw.rstrip()
+        if _HR_RE.match(line):
+            continue
+        heading = _HEADING_RE.match(line)
+        if heading:
+            label = sanitize_emoji(_normalize_inline(heading.group(2))).rstrip(":").strip()
+            if label:
+                marker = "##" if len(heading.group(1)) <= 2 else "###"
+                out.append(f"{marker} {label}")
+            continue
+        quote = _QUOTE_RE.match(line)
+        if quote:
+            out.append(f"> {_normalize_inline(quote.group(1)).strip()}")
+            continue
+        item = _LIST_RE.match(line)
+        if item:
+            out.append(f"{item.group(1)} {_normalize_inline(item.group(2)).strip()}")
+        else:
+            out.append(_normalize_inline(line))
+    return sanitize_emoji("\n".join(out))
+
 
 _lock = threading.Lock()
 
@@ -56,6 +133,12 @@ def _read_all(home: Path) -> list[dict[str, Any]]:
         except json.JSONDecodeError:
             continue
         if isinstance(obj, dict) and isinstance(obj.get("id"), str) and obj["id"]:
+            obj["body"] = normalize_notification_body(obj.get("body") or "")
+            title = normalize_notification_title(obj.get("title") or "")
+            if title:
+                obj["title"] = title
+            elif "title" in obj:
+                del obj["title"]
             out.append(obj)
     return out
 
@@ -91,12 +174,14 @@ def append(
 ) -> dict[str, Any]:
     if type not in VALID_TYPE:
         type = "info"
+    body = normalize_notification_body(body or "")
+    title = normalize_notification_title(title or "")
 
     output = {
         "id": _new_id(),
         "profile": profile or "default",
         "created_at": time.time(),
-        "body": body or "",
+        "body": body,
         "type": type,
         "status": "unread",
         "session_id": session_id or "",
@@ -272,8 +357,8 @@ def record_child_send_message(home: Path, args: dict) -> str:
     if channel in {"alpi", "both"}:
         payload = {
             "profile": profile,
-            "title": notification_title,
-            "body": body,
+            "title": output.get("title") or profile or "alpi",
+            "body": output["body"],
             "type": type,
             "output_id": output_id,
             "deep_link": f"/outputs/{profile}/{output_id}",
@@ -335,7 +420,7 @@ def create_output_and_emit_message(
         return ""
     payload: dict = {
         "profile": output["profile"],
-        "title": title or output["profile"] or "alpi",
+        "title": output.get("title") or output["profile"] or "alpi",
         "body": output["body"],
         "type": output["type"],
         "output_id": output["id"],

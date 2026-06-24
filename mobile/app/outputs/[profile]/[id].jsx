@@ -5,7 +5,7 @@ import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-nati
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Diamond } from '../../../src/components/Diamond';
-import { RichText } from '../../../src/components/RichText';
+import { NotificationBody } from '../../../src/components/NotificationBody';
 import { ScreenHeader } from '../../../src/components/ScreenHeader';
 import { useToast } from '../../../src/components/Toast';
 import { useProfileSummaries } from '../../../src/hooks/useDaemonData';
@@ -102,7 +102,8 @@ export default function OutputDetailScreen() {
     </View>
   ) : null;
 
-  const headerTitle = (row?.title || '').trim() || 'Notification';
+  const rowTitle = (row?.title || '').trim();
+  const headerTitle = rowTitle || 'Notification';
 
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
@@ -135,9 +136,7 @@ export default function OutputDetailScreen() {
             ) : null}
           </View>
 
-          <RichText size={fontSizes.lg} color={colors.ink}>
-            {row.body || ''}
-          </RichText>
+          <NotificationBody body={row.body || ''} lead={!rowTitle} />
 
           <View
             style={{

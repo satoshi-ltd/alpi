@@ -139,6 +139,7 @@
 }
 .detailMetaSpacer { flex: 1; }
 .detailMeta :global(.mono) { font-size: var(--fs-xs); color: var(--ink-3); }
+.detailMeta + * { margin-top: var(--space-7); }
 
 .detailMetaPart { color: var(--ink-3); }
 
@@ -174,12 +175,10 @@
   font-weight: var(--fw-semibold);
   color: var(--ink);
   letter-spacing: -0.012em;
-  margin: 0;
+  margin: 0 0 var(--space-2);
   line-height: var(--lh-cozy);
-}
-
-.detailBody {
-  color: var(--ink);
+  -webkit-user-select: text;
+  user-select: text;
 }
 
 .detailIdRow {

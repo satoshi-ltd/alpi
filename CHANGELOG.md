@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.9.30 — 2026-06-24 — notifications are normalised to a clean report-grade format
+
+- **Notifications arrive clean and structured on every device.** Whatever an
+  agent writes is tidied at the source: only 🔴🟡🟢 status emoji survive
+  (others are stripped), raw HTML and stray images/links are removed, and a
+  long study keeps a title, section headings, subsections, lists, tables,
+  quotes and code — a report, not a wall of text. Older notifications are
+  tidied too when re-read.
+- **`alpi_knowledge` gained two answer packs:** writing good notifications,
+  and talking to a profile or workgroup programmatically.
+
 ## v0.9.29 — 2026-06-23 — scheduled-job failure alerts now name the schedule and the reason
 
 - **A failed scheduled job's alert tells you which schedule failed and why.**

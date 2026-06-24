@@ -25,6 +25,7 @@ _TOPIC_SUMMARIES: dict[str, str] = {
     "operations": "Day-2 ops — doctor, diagnostics, log rotation, backup, recovery, upgrade workflow.",
     "organization": "Multi-profile orgs — org.yaml schema, agent.md / workgroup.md frontmatter, peer graph, setup.py modes, persistent workgroups.",
     "integrations": "Programmatic access — external code talking to a profile/workgroup as a host-plane client (scoped device token over the host WebSocket), host.chat.send frames, workgroup methods, vs the ALP peer route.",
+    "notifications": "Writing report-grade notify() messages — allowed markdown subset, section labels, 🔴🟡🟢 status, what gets auto-simplified; the daemon normalizes content so author for quality not validity.",
 }
 
 

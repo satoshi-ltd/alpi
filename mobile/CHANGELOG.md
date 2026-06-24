@@ -14,6 +14,15 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.1.54 — 2026-06-24 — notification reports render like reports
+
+_Requires alpi v0.9.30+._
+
+- **Notification detail now uses the same report-grade body renderer as the
+  desktop app.** Agent notifications keep headings, labels, status bullets,
+  quotes, tables, code blocks, and inline emphasis instead of flattening the
+  body through the generic chat markdown renderer.
+
 ## v0.1.53 — 2026-06-23 — scheduled-job failure notifications name the schedule and the reason
 
 _Requires alpi v0.9.29+._

@@ -63,6 +63,8 @@
   --bubble-max: 76%;
   --composer-max: var(--stream-max);
 
+  --notif-measure: 40rem;
+
   --titlebar-h: 38px;
 
   --dot-size: 7px;
@@ -85,6 +87,8 @@
   --stream-pad-bottom: var(--space-7);
   --composer-pad-top: var(--space-7);
   --composer-pad-bottom: var(--space-9);
+
+  --chip-pad: 1px 5px;
 
   --r-xs:  4px;
   --r-sm:  6px;
