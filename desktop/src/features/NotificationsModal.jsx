@@ -2,6 +2,7 @@ import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import {
   BrowseModal,
   Btn,
+  Chip,
   CopyIcon,
   Diamond,
   GearIcon,
@@ -294,6 +295,7 @@ function NotificationRow({ row, accent, multi, active, onSelect, onDelete }) {
   const unread = row.status === "unread";
   const label = profileLabel(row.profile);
   const { title, preview } = headlineParts(row);
+  const sev = typeTag(row);
   const handleDelete = (e) => {
     e.stopPropagation();
     onDelete?.(row);
@@ -313,6 +315,7 @@ function NotificationRow({ row, accent, multi, active, onSelect, onDelete }) {
             {multi && row.connectionName ? <Mono>· {row.connectionName}</Mono> : null}
           </span>
           <span className={styles.rowSlot}>
+            {sev ? <span className={`${styles.rowSev} ${sev === "error" ? styles.rowSevError : styles.rowSevWarning}`} aria-hidden /> : null}
             <Mono className={styles.rowTs}>{relativeTime(row.created_at)}</Mono>
             <span className={styles.rowDelete}>
               <Tip text="Delete" side="up">
@@ -356,12 +359,6 @@ function DetailPane({ row, accent, connId, connectionName, voiceId, onCopy, onAc
   return (
     <article className={styles.article}>
       <div className={styles.detailMeta}>
-        {tag ? (
-          <span className={tag === "error" ? styles.detailMetaError : styles.detailMetaWarning}>
-            <Mono>{tag.toUpperCase()}</Mono>
-            <span className={styles.detailMetaDot}>·</span>
-          </span>
-        ) : null}
         <span className={styles.detailMetaProfile}>
           {!isHost && connectionName ? <span className={styles.detailMetaConn}>{connectionName}/</span> : null}
           <Diamond color={accent} />
@@ -369,6 +366,7 @@ function DetailPane({ row, accent, connId, connectionName, voiceId, onCopy, onAc
           <span className={styles.detailMetaDot}>·</span>
           <span className={styles.detailMetaDate}>{fmtAbsolute(row.created_at)}</span>
         </span>
+        {tag ? <Chip state={tag === "error" ? "error" : "warn"} size="sm">{tag}</Chip> : null}
         <span className={styles.detailMetaSpacer} />
         <Tip text={speakTip} side="l" escape>
           <IconBtn aria-label={speakTip} disabled={ttsDisabled} onClick={onSpeak}>

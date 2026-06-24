@@ -11,6 +11,18 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.3.82 — 2026-06-24 — notification severity at a glance + tidier reading view
+
+_Requires alpi v0.9.30+._
+
+- **Warning and error notifications stand out.** The list shows a coloured
+  dot next to the time, and the open notification shows an error/warning
+  chip beside the date.
+- **The notification title now has matching top spacing** instead of
+  hugging the header.
+- **List previews drop emoji** for a cleaner one-line summary — the full
+  notification keeps its 🔴🟡🟢 status markers.
+
 ## v0.3.81 — 2026-06-24 — report-grade notification reading view
 
 _Requires alpi v0.9.30+._

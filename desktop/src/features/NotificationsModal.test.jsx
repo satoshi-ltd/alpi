@@ -134,6 +134,24 @@ describe("NotificationsModal — read aloud + body rendering", () => {
     expect(article.textContent).not.toContain("CASA");
   });
 
+  it("shows a severity chip in the detail header for error notifications", () => {
+    h.rows = [{ ...h.ROW, type: "error" }];
+    h.detail = { ...h.DETAIL, type: "error" };
+    renderModal();
+    expect(document.body.querySelector("article").textContent).toContain("error");
+  });
+
+  it("marks a warning/error row with a severity dot", () => {
+    h.rows = [{ ...h.ROW, type: "warning" }];
+    renderModal();
+    expect(document.body.querySelector('[class*="rowSev"]')).toBeTruthy();
+  });
+
+  it("leaves info rows without a severity dot", () => {
+    renderModal();
+    expect(document.body.querySelector('[class*="rowSev"]')).toBeNull();
+  });
+
   it("groups the list by date", () => {
     renderModal();
     expect(screen.getByText("Earlier")).toBeTruthy();
@@ -212,5 +230,9 @@ describe("headlineParts", () => {
   it("strips emojis from the headline", () => {
     expect(headlineParts({ title: "🔥 PR #482 ready ✅" }).title).toBe("PR #482 ready");
     expect(headlineParts({ body: "⚠️ Recovery is low. HRV down 8ms." }).title).toBe("Recovery is low.");
+  });
+
+  it("strips emojis from the preview too", () => {
+    expect(headlineParts({ title: "Recovery", body: "🔴 25% de recovery." }).preview).toBe("25% de recovery.");
   });
 });

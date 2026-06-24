@@ -41,11 +41,21 @@
   position: relative;
   display: inline-flex;
   align-items: center;
+  gap: var(--space-2);
   justify-content: flex-end;
   min-width: var(--ctrl-xs);
   height: var(--ctrl-xs);
   flex-shrink: 0;
 }
+
+.rowSev {
+  width: var(--dot-size);
+  height: var(--dot-size);
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.rowSevError { background: var(--c-danger); }
+.rowSevWarning { background: var(--c-warning); }
 
 .rowTs { display: inline-flex; }
 .rowDelete { display: none !important; }
@@ -139,23 +149,9 @@
 }
 .detailMetaSpacer { flex: 1; }
 .detailMeta :global(.mono) { font-size: var(--fs-xs); color: var(--ink-3); }
-.detailMeta + * { margin-top: var(--space-7); }
+.article > .detailMeta + * { margin-top: var(--space-6); }
 
 .detailMetaPart { color: var(--ink-3); }
-
-.detailMetaError {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  color: var(--c-danger);
-}
-
-.detailMetaWarning {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  color: var(--c-warning);
-}
 
 .detailMetaDot { color: var(--ink-4); }
 
@@ -169,6 +165,7 @@
 .detailMetaConn { color: var(--ink-4); }
 .detailMetaName { font-weight: var(--fw-semibold); color: var(--ink); }
 .detailMetaDate { color: var(--ink-3); }
+.detailMetaProfile + * { margin-left: var(--space-2); }
 
 .detailTitle {
   font-size: var(--fs-xl);
