@@ -21,6 +21,7 @@ TOPICS: dict[str, str] = {
     "deployments": "deployments.md",
     "operations": "operations.md",
     "organization": "organization.md",
+    "integrations": "integrations.md",
 }
 
 
