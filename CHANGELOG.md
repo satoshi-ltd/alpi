@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.9.32 — 2026-06-24 — skills reference the workspace implicitly via $ALPI_WORKSPACE
+
+- **A profile's workspace is now exposed to skills and scheduled jobs as
+  `$ALPI_WORKSPACE`**, injected the same way `$ALPI_HOME` already was — for
+  skill scripts, cron jobs, the gateway and terminal commands. Skills no
+  longer need to hard-code the workspace path.
+- **Move a workspace by editing one line:** point `config.yaml`'s `workspace:`
+  somewhere new and every skill or scheduled/gateway/workgroup subprocess using
+  `$ALPI_WORKSPACE` follows — no skill-by-skill edits.
+
 ## v0.9.31 — 2026-06-24 — scheduled-job notifications carry the job title; skill tools list built-ins first
 
 - **A scheduled job that notifies on completion now uses the job's title**

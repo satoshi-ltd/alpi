@@ -248,10 +248,11 @@ def _run_script_only(job: dict, home: Path) -> JobOutcome:
     if not argv:
         return JobOutcome(False, "empty command after parsing")
 
-    from alpi.home import effective_profile_env as _effective_profile_env
+    from alpi.home import effective_profile_env as _effective_profile_env, workspace_env
     env = _effective_profile_env(home, extra={
         "ALPI_HOME": str(home),
         "ALPI_PLATFORM": "cron",
+        **workspace_env(home),
     })
 
     secs = job_run_timeout(job)
@@ -316,12 +317,13 @@ def run_job(job: dict, home: Path) -> JobOutcome:
         )
     wrapped = wrap_header + "\n\n" + prompt
 
-    from alpi.home import effective_profile_env as _effective_profile_env
+    from alpi.home import effective_profile_env as _effective_profile_env, workspace_env
     env = _effective_profile_env(home, extra={
         "ALPI_HOME": str(home),
         "ALPI_PLATFORM": "cron",
         "ALPI_SCHEDULE_CHILD": "1",
         "ALPI_PARENT_EMITS_AGENT_MESSAGE": "1",
+        **workspace_env(home),
     })
     secs = job_run_timeout(job)
     try:
@@ -685,8 +687,8 @@ def ensure_running(home: Path) -> int | None:
     # closes its handle immediately after spawn so we don't hold extra
     # fds open in the TUI.
     log_fd = open(log_file_path, "a")
-    from alpi.home import effective_profile_env as _effective_profile_env
-    env = _effective_profile_env(home, extra={"ALPI_HOME": str(home)})
+    from alpi.home import effective_profile_env as _effective_profile_env, workspace_env
+    env = _effective_profile_env(home, extra={"ALPI_HOME": str(home), **workspace_env(home)})
     try:
         proc = subprocess.Popen(
             [sys.executable, "-m", "alpi", "schedule", "start"],

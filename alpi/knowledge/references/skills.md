@@ -5,6 +5,7 @@
 - Skills are user-owned directories under `~/.alpi/skills/<category>/<name>/`. No bundled namespace.
 - Use the `skill` tool for skill file changes; generic file tools bypass validation.
 - Static env vars go in profile `.env`; runtime credentials go in `<skill>/secrets/`.
+- Skill `scripts/run.py` runs with `cwd` = the skill dir: use `$ALPI_WORKSPACE` for workspace/project files and `$ALPI_SKILL_DIR` for bundled files — a bare relative path roots at the skill dir, not the workspace.
 - `alpi_knowledge` is not a skill; it is a native tool for alpi docs.
 
 ## Shape

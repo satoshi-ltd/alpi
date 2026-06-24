@@ -90,6 +90,24 @@ async def test_run_agent_never_emits_tool_traces(monkeypatch, tmp_home_no_env: P
 
 
 @pytest.mark.asyncio
+async def test_run_agent_child_env_carries_alpi_workspace(monkeypatch, tmp_home_no_env: Path) -> None:
+    ws = tmp_home_no_env / "ws"
+    (tmp_home_no_env / "config.yaml").write_text(f"workspace: {ws}\n")
+    captured: dict = {}
+
+    async def fake_exec(*argv, **kwargs):
+        captured["env"] = kwargs.get("env") or {}
+        return FakeProc(_event_lines([{"kind": "reply", "text": "ok"}]))
+
+    monkeypatch.setattr(gw_run.asyncio, "create_subprocess_exec", fake_exec)
+    platform = FakePlatform(tmp_home_no_env)
+    msg = IncomingMessage(platform="fake", external_user_id="u", external_chat_id="c", text="hi")
+    await gw_run._run_agent(msg, platform, tmp_home_no_env)
+
+    assert captured["env"].get("ALPI_WORKSPACE") == str(ws.resolve())
+
+
+@pytest.mark.asyncio
 async def test_run_agent_reemits_child_agent_message(
     monkeypatch, tmp_home_no_env: Path,
 ) -> None:

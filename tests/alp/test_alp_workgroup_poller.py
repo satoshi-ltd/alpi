@@ -365,6 +365,38 @@ async def test_dispatch_records_start_and_end_events(short_tmp: Path) -> None:
 
 
 @pytest.mark.asyncio
+async def test_dispatch_env_carries_alpi_workspace(short_tmp: Path) -> None:
+    import sys as _sys
+    home = short_tmp / "alice"; home.mkdir()
+    (home / "alp").mkdir()
+    ws = home / "ws"
+    (home / "config.yaml").write_text(f"workspace: {ws}\n")
+
+    captured: dict = {}
+    real_create = service.asyncio.create_subprocess_exec
+
+    async def fake_create(*argv, **kw):
+        captured["env"] = kw.get("env") or {}
+        return await real_create(
+            _sys.executable, "-c", "pass",
+            stdout=service.asyncio.subprocess.PIPE,
+            stderr=service.asyncio.subprocess.PIPE,
+        )
+
+    service.asyncio.create_subprocess_exec = fake_create
+    try:
+        await service._dispatch_workgroup_turn(
+            home, profile="alice", wg_id="wg_x",
+            wg_name="design", reason="test trigger",
+        )
+    finally:
+        service.asyncio.create_subprocess_exec = real_create
+
+    assert captured["env"].get("ALPI_WORKSPACE") == str(ws.resolve())
+    assert captured["env"].get("ALPI_WORKGROUP_DISPATCH") == "wg_x"
+
+
+@pytest.mark.asyncio
 async def test_dispatch_timeout_kills_and_records(
     short_tmp: Path, monkeypatch,
 ) -> None:

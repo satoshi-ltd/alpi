@@ -47,13 +47,11 @@ def _build_subprocess_env() -> dict[str, str]:
         if key in parent and key not in out:
             out[key] = parent[key]
     out["ALPI_HOME"] = str(get_home())
-    try:
-        from alpi import config as cfg_mod
-        wp = cfg_mod.load(get_home()).workspace_path
-    except Exception:
-        wp = None
-    if wp is not None:
-        out["WORKSPACE"] = str(wp)
+    from alpi.home import workspace_env
+    ws = workspace_env(get_home())
+    out.update(ws)
+    if "ALPI_WORKSPACE" in ws:
+        out["WORKSPACE"] = ws["ALPI_WORKSPACE"]
     return out
 
 

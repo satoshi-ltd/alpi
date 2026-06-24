@@ -1582,21 +1582,13 @@ def _run_or_test(home: Path, name: str, args: list[str], *, mode: str) -> ToolRe
             error=f"skill {name!r} has no output_schema; invoke requires a structured contract",
         )
 
-    from alpi.home import effective_profile_env
+    from alpi.home import effective_profile_env, workspace_env
     extra_env = {
         "ALPI_HOME": str(home),
         "ALPI_SKILL_NAME": name,
         "ALPI_SKILL_DIR": str(skill_dir),
+        **workspace_env(home),
     }
-    # Scripts run with cwd=skill dir; expose the workspace so they can resolve
-    # project-relative output paths the way write_file does (not against cwd).
-    try:
-        from alpi import config as _cfg_mod
-        ws = _cfg_mod.load(home).workspace_path
-        if ws:
-            extra_env["ALPI_WORKSPACE"] = str(ws)
-    except Exception:  # noqa: BLE001
-        pass
     env = effective_profile_env(home, extra=extra_env)
 
     missing = [v for v in declared_env if v and not env.get(v)]

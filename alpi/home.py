@@ -138,6 +138,15 @@ def effective_profile_env(
     return out
 
 
+def workspace_env(home: Path) -> dict[str, str]:
+    try:
+        from alpi import config as _cfg_mod
+        wp = _cfg_mod.load(home).workspace_path
+    except Exception:  # noqa: BLE001
+        wp = None
+    return {"ALPI_WORKSPACE": str(wp)} if wp is not None else {}
+
+
 _NODE_BIN_DIRS: list[str] | None = None
 
 

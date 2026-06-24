@@ -161,11 +161,12 @@ def _llm_prompt(msg: IncomingMessage) -> str:
 
 
 async def _run_agent(msg: IncomingMessage, platform: Platform, home: Path) -> str:
-    from alpi.home import effective_profile_env
+    from alpi.home import effective_profile_env, workspace_env
     env = effective_profile_env(home, extra={
         "ALPI_HOME": str(home),
         "ALPI_PARENT_EMITS_AGENT_MESSAGE": "1",
         "ALPI_PLATFORM": msg.platform,
+        **workspace_env(home),
     })
     prompt = _llm_prompt(msg)
     argv = [

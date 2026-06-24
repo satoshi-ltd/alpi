@@ -61,6 +61,19 @@ def test_run_executes_script_and_returns_stdout(isolated_home: Path) -> None:
     assert "marker-out" in r.output
 
 
+def test_run_script_sees_alpi_workspace(isolated_home: Path) -> None:
+    ws = isolated_home / "ws"
+    (isolated_home / "config.yaml").write_text(f"workspace: {ws}\n")
+    _create(name="wsprinter", body="prints the workspace")
+    Skill().run(
+        action="add_file", name="wsprinter", subdir="scripts", filename="run.py",
+        content="import os; print(os.environ.get('ALPI_WORKSPACE', 'MISSING'))\n",
+    )
+    r = Skill().run(action="run", name="wsprinter")
+    assert r.ok, r.error
+    assert str(ws.resolve()) in r.output
+
+
 def test_run_propagates_nonzero_exit_as_failure(isolated_home: Path) -> None:
     _create(name="failer", body="exits 1")
     Skill().run(

@@ -1762,10 +1762,11 @@ async def _dispatch_workgroup_turn(
             "Match the user, do not default to English."
         )
         env_extra = {}
-    from alpi.home import effective_profile_env as _effective_profile_env
+    from alpi.home import effective_profile_env as _effective_profile_env, workspace_env
     env = _effective_profile_env(home, extra={
         "ALPI_HOME": str(home),
         "ALPI_WORKGROUP_DISPATCH": wg_id,
+        **workspace_env(home),
         **({"ALPI_WORKGROUP_ROUND_HUB_SEQ": str(round_hub_seq)} if (round_hub_seq is not None and round_hub_seq > 0) else {}),
         **env_extra,
     })

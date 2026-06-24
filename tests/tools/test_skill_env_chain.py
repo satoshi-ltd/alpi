@@ -210,6 +210,7 @@ def test_terminal_env_exposes_workspace_from_config(
     terminal; ``$WORKSPACE`` must be populated from ``config.yaml``
     even though it is not in os.environ."""
     monkeypatch.delenv("WORKSPACE", raising=False)
+    monkeypatch.delenv("ALPI_WORKSPACE", raising=False)
     workspace = tmp_home_no_env / "workspace"
     workspace.mkdir()
     (tmp_home_no_env / "config.yaml").write_text(
@@ -223,6 +224,7 @@ def test_terminal_env_exposes_workspace_from_config(
     finally:
         reset_active_home(token)
 
+    assert env.get("ALPI_WORKSPACE") == str(workspace)
     assert env.get("WORKSPACE") == str(workspace)
 
 

@@ -414,8 +414,11 @@ the current workspace; skill files live under the active profile home.
 skill from the agent. Two paths:
 
 - **`scripts/run.py` exists** — alpi spawns it with `cwd` = the skill
-  directory and an env enriched with `ALPI_HOME`, `ALPI_SKILL_NAME`,
-  `ALPI_SKILL_DIR`. Stdout (and stderr, if any) is returned as the
+  directory and an env enriched with `ALPI_HOME`, `ALPI_WORKSPACE`,
+  `ALPI_SKILL_NAME`, `ALPI_SKILL_DIR`. Use `$ALPI_WORKSPACE` for
+  project/workspace files and `$ALPI_SKILL_DIR` for files bundled with the
+  skill — a bare relative path roots at the skill directory (the cwd), not
+  the workspace. Stdout (and stderr, if any) is returned as the
   tool result. Timeout: 600 s. If the skill declares `requires_env:`
   fields and any of those vars are missing from the process env, the
   call fails up-front instead of half-running the script. Scripts are

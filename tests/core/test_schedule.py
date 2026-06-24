@@ -875,6 +875,35 @@ def test_emit_schedule_event_untitled_job_files_no_title(tmp_home_no_env: Path) 
     assert outs and "title" not in outs[0]
 
 
+def test_workspace_env_present_when_workspace_set(tmp_home_no_env: Path) -> None:
+    from alpi.home import workspace_env
+    ws = tmp_home_no_env / "ws"
+    (tmp_home_no_env / "config.yaml").write_text(f"workspace: {ws}\n")
+    assert workspace_env(tmp_home_no_env) == {"ALPI_WORKSPACE": str(ws.resolve())}
+
+
+def test_workspace_env_omitted_when_workspace_unset(tmp_home_no_env: Path) -> None:
+    from alpi.home import workspace_env
+    assert workspace_env(tmp_home_no_env) == {}
+
+
+def test_no_agent_env_carries_alpi_workspace(monkeypatch, tmp_home_no_env: Path) -> None:
+    ws = tmp_home_no_env / "ws"
+    (tmp_home_no_env / "config.yaml").write_text(f"workspace: {ws}\n")
+    script = _stub_skill_path(tmp_home_no_env)
+    captured = {}
+
+    def fake_run(*a, **kw):
+        captured["env"] = kw.get("env") or {}
+        return _fake_completed(rc=0, stdout="ok\n")
+
+    monkeypatch.setattr(scheduler.subprocess, "run", fake_run)
+    job = {"id": "j", "kind": "cron", "no_agent": True,
+           "prompt": f"python3 {script}", "notify": True}
+    scheduler.run_job(job, tmp_home_no_env)
+    assert captured["env"].get("ALPI_WORKSPACE") == str(ws.resolve())
+
+
 def test_emit_schedule_event_push_uses_job_title_and_clean_body(tmp_home_no_env: Path, monkeypatch) -> None:
     from alpi.host import events as host_events
     calls = []
