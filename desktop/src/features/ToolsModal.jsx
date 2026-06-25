@@ -123,8 +123,7 @@ function ToolDetail({ tool }) {
             Denied for this profile via <code>tools.deny</code> in <code>config.yaml</code>. The agent does not see this tool.
           </div>
         ) : null}
-        {tool.description ? <MarkdownBody source={tool.description} /> : null}
-        <Eyebrow className={styles.paramsLabel}>parameters</Eyebrow>
+        {tool.description ? <MarkdownBody source={tool.description} mono /> : null}
         {rows.length > 0 ? (
           <table className={styles.params}>
             <thead>

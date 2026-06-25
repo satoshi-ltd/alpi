@@ -84,3 +84,7 @@
 
 /* Tables and fenced code blocks are styled globally on `.alpi-md`
    (src/styles/design-system.css) so chat messages and MarkdownBody match. */
+
+.mono { font-family: var(--font-mono); }
+/* keep compound: global .alpi-md forces --font-sans on headings */
+.body.mono :is(h1, h2, h3, h4) { font-family: var(--font-mono); }

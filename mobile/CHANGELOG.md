@@ -14,6 +14,14 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.1.55 — 2026-06-25 — notification rendering locked in step with desktop
+
+_Requires alpi v0.9.30+._
+
+- **No behaviour change.** Adds a shared parity guard so the notification body
+  renderer stays formatting-identical to the desktop client and can't drift
+  silently.
+
 ## v0.1.54 — 2026-06-24 — notification reports render like reports
 
 _Requires alpi v0.9.30+._

@@ -11,6 +11,15 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.3.84 — 2026-06-25 — memory + tools: monospace, spec-sheet reading view
+
+_Requires alpi v0.9.30+._
+
+- **Memory files (AGENT / MEMORY / USER) now render as formatted markdown** —
+  headings, bold, lists and tables — in a monospace, spec-sheet style, instead
+  of raw text.
+- **Tool reference descriptions now render in that same monospace style.**
+
 ## v0.3.83 — 2026-06-24 — skills modal: consistent chips + source-style file viewer
 
 _Requires alpi v0.9.30+._

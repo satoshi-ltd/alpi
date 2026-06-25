@@ -9,7 +9,7 @@ vi.mock("@tauri-apps/api/core", () => ({ invoke: h.invoke }));
 
 import MemoryModal from "./MemoryModal.jsx";
 
-const MEM = { "AGENT.md": "I am doc", "MEMORY.md": "learned things", "USER.md": "about you" };
+const MEM = { "AGENT.md": "# Title\n\n**bold** note", "MEMORY.md": "learned things", "USER.md": "about you" };
 
 beforeEach(() => {
   h.invoke.mockReset();
@@ -33,5 +33,13 @@ describe("MemoryModal (mounted)", () => {
     expect((await screen.findAllByText("AGENT.md")).length).toBeGreaterThan(0);
     rerender(<Harness cid="c9" />);
     await waitFor(() => expect(screen.queryByText("AGENT.md")).toBeNull());
+  });
+
+  it("renders the active file's content as formatted markdown, not raw source", async () => {
+    render(<MemoryModal open onClose={() => {}} profile="muse" connectionId="c2" />);
+    await waitFor(() => expect(document.querySelector(".alpi-md")).not.toBeNull());
+    const md = document.querySelector(".alpi-md");
+    expect(md.querySelector("strong")?.textContent).toBe("bold");
+    expect(md.textContent).not.toContain("**");
   });
 });

@@ -4,7 +4,7 @@
     "slug": "alpi-mobile",
     "owner": "satoshi-ltd",
     "scheme": "alpi",
-    "version": "0.1.54",
+    "version": "0.1.55",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",

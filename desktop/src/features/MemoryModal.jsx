@@ -101,7 +101,7 @@ export default function MemoryModal({ open, onClose, profile, connectionId }) {
             <span className={shell.sizeTag}>{active.size}</span>
           </div>
           <div className={shell.detailScroll}>
-            {active.content ? <MarkdownBody source={active.content} /> : <em className={styles.emptyNote}>(empty)</em>}
+            {active.content ? <MarkdownBody source={active.content} mono /> : <em className={styles.emptyNote}>(empty)</em>}
           </div>
         </>
       ) : (
