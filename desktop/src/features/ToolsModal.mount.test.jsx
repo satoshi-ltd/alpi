@@ -22,6 +22,14 @@ beforeEach(() => {
 });
 
 describe("ToolsModal (mounted)", () => {
+  it("shows a loading state before tools resolve", () => {
+    h.invoke.mockImplementation(() => new Promise(() => {}));
+    render(<ToolsModal open onClose={() => {}} profile="muse" connectionId="c2" />);
+    expect(screen.getByRole("progressbar", { name: "Loading tools" })).toBeTruthy();
+    expect(screen.getAllByText("Loading tools…").length).toBeGreaterThan(0);
+    expect(screen.queryByText("No tools registered")).toBeNull();
+  });
+
   it("loads tools pinned to the active connection", async () => {
     render(<ToolsModal open onClose={() => {}} profile="muse" connectionId="c2" />);
     await waitFor(() => expect(h.invoke).toHaveBeenCalledWith("profile_tools", { profile: "muse", connectionId: "c2" }));

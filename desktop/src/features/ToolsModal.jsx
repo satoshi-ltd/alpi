@@ -37,15 +37,27 @@ export function groupTools(tools, order) {
 
 export default function ToolsModal({ open, onClose, profile, connectionId }) {
   const [tools, setTools] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState(null);
 
   useEffect(() => {
     if (!open || !profile) return undefined;
     let cancelled = false;
+    setTools([]);
+    setSelected(null);
+    setError(null);
+    setLoading(true);
     invoke("profile_tools", { profile, connectionId })
       .then((rows) => { if (!cancelled) setTools(Array.isArray(rows) ? rows : []); })
-      .catch(() => { if (!cancelled) setTools([]); });
+      .catch((e) => {
+        if (!cancelled) {
+          setTools([]);
+          setError(String(e));
+        }
+      })
+      .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [open, profile, connectionId]);
 
@@ -60,7 +72,16 @@ export default function ToolsModal({ open, onClose, profile, connectionId }) {
 
   const list = (
     <ul className={shell.list} role="listbox">
-      {tools.length === 0 ? (
+      {loading ? (
+        <li className={shell.empty}>
+          <span className={shell.emptyTitle}>Loading tools…</span>
+        </li>
+      ) : error ? (
+        <li className={shell.empty}>
+          <span className={shell.emptyTitle}>Could not load tools</span>
+          <span className={shell.emptyHint}>{error}</span>
+        </li>
+      ) : tools.length === 0 ? (
         <li className={shell.empty}><span className={shell.emptyTitle}>No tools registered</span></li>
       ) : filtered.length === 0 ? (
         <li className={shell.empty}>
@@ -98,8 +119,16 @@ export default function ToolsModal({ open, onClose, profile, connectionId }) {
       kicker="native callable functions"
       search={{ value: query, onChange: setQuery, placeholder: "Search tools…", label: "Search tools" }}
       list={list}
+      loading={loading}
+      loadingLabel="Loading tools"
     >
-      {active ? <ToolDetail tool={active} /> : <div className={shell.detailEmpty}>Select a tool.</div>}
+      {active ? (
+        <ToolDetail tool={active} />
+      ) : loading ? (
+        <div className={shell.detailEmpty}>Loading tools…</div>
+      ) : (
+        <div className={shell.detailEmpty}>Select a tool.</div>
+      )}
     </BrowseModal>
   );
 }

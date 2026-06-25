@@ -19,6 +19,14 @@ beforeEach(() => {
 });
 
 describe("MemoryModal (mounted)", () => {
+  it("shows a loading state before memory files resolve", () => {
+    h.invoke.mockImplementation(() => new Promise(() => {}));
+    render(<MemoryModal open onClose={() => {}} profile="muse" connectionId="c2" />);
+    expect(screen.getByRole("progressbar", { name: "Loading memory" })).toBeTruthy();
+    expect(screen.getAllByText("Loading memory…").length).toBeGreaterThan(0);
+    expect(screen.queryByText("No memory files")).toBeNull();
+  });
+
   it("loads memory files pinned to the active connection", async () => {
     render(<MemoryModal open onClose={() => {}} profile="muse" connectionId="c2" />);
     await waitFor(() => expect(h.invoke).toHaveBeenCalledWith("profile_memory", { profile: "muse", connectionId: "c2" }));

@@ -52,10 +52,12 @@ function renderPeerStatusChip(status, reason) {
   return null;
 }
 
-export function PeersField({ profile, profiles, onSaved, onRefresh }) {
+export function PeersField({ profile, profiles, onSaved, onRefresh, onLoadingChange = null }) {
   const peers = profile.peers ?? [];
   const [statusById, setStatusById] = useState({});
   const [reasonById, setReasonById] = useState({});
+  const [pendingLoading, setPendingLoading] = useState(false);
+  const [probeLoading, setProbeLoading] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [selectedPeerId, setSelectedPeerId] = useState(null);
   const [pending, setPending] = useState([]);
@@ -67,9 +69,11 @@ export function PeersField({ profile, profiles, onSaved, onRefresh }) {
 
   useEffect(() => {
     let cancelled = false;
+    setPendingLoading(true);
     invoke("peers_pending_list", { profile: profile.name })
       .then((rows) => !cancelled && setPending(Array.isArray(rows) ? rows : []))
-      .catch(() => !cancelled && setPending([]));
+      .catch(() => !cancelled && setPending([]))
+      .finally(() => { if (!cancelled) setPendingLoading(false); });
     return () => { cancelled = true; };
   }, [profile.name, pendingTick, peers.length]);
 
@@ -113,8 +117,14 @@ export function PeersField({ profile, profiles, onSaved, onRefresh }) {
   }
 
   useEffect(() => {
-    if (peers.length === 0) return;
+    if (peers.length === 0) {
+      setStatusById({});
+      setReasonById({});
+      setProbeLoading(false);
+      return undefined;
+    }
     let cancelled = false;
+    setProbeLoading(true);
     invoke("probe_peers", {
       profile: profile.name,
       ids: peers.map((p) => p.id),
@@ -130,9 +140,14 @@ export function PeersField({ profile, profiles, onSaved, onRefresh }) {
         setStatusById(sMap);
         setReasonById(rMap);
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setProbeLoading(false); });
     return () => { cancelled = true; };
   }, [profile.name, peers.length]);
+
+  useEffect(() => {
+    onLoadingChange?.(pendingLoading || probeLoading);
+  }, [pendingLoading, probeLoading, onLoadingChange]);
 
   useDismissOnOutside({
     open: addOpen || !!selectedPeerId,

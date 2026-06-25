@@ -8,18 +8,34 @@ import { Btn } from "../../../primitives/index.js";
 import { STORAGE_SCOPE, formatBytes } from "../util.js";
 import styles from "../Settings.module.css";
 
-export function StorageField({ profile, activeConnection }) {
-  const [items, setItems] = useState([]);
+export function StorageField({ profile, activeConnection, onLoadingChange = null }) {
+  const [items, setItems] = useState(null);
   const isLocal = activeConnection?.kind === "local";
   useEffect(() => {
+    let cancelled = false;
+    setItems(null);
+    onLoadingChange?.(true);
     invoke("profile_storage", { profile: profile.name })
-      .then(setItems)
-      .catch(() => setItems([]));
-  }, [profile.name]);
+      .then((rows) => { if (!cancelled) setItems(Array.isArray(rows) ? rows : []); })
+      .catch(() => { if (!cancelled) setItems([]); })
+      .finally(() => { if (!cancelled) onLoadingChange?.(false); });
+    return () => {
+      cancelled = true;
+      onLoadingChange?.(false);
+    };
+  }, [profile.name, onLoadingChange]);
 
-  const visible = items.filter(
+  const visible = (items ?? []).filter(
     (it) => it.size_bytes > 0 || it.file_count > 0,
   );
+
+  if (items === null) {
+    return (
+      <Row label="size">
+        <span className={styles.muted}>loading…</span>
+      </Row>
+    );
+  }
 
   if (visible.length === 0) {
     return (

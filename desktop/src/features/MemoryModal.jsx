@@ -31,12 +31,18 @@ export function matchesFile(file, query) {
 
 export default function MemoryModal({ open, onClose, profile, connectionId }) {
   const [files, setFiles] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState(null);
 
   useEffect(() => {
     if (!open || !profile) return undefined;
     let cancelled = false;
+    setFiles([]);
+    setSelected(null);
+    setError(null);
+    setLoading(true);
     invoke("profile_memory", { profile, connectionId })
       .then((data) => {
         if (cancelled) return;
@@ -45,7 +51,13 @@ export default function MemoryModal({ open, onClose, profile, connectionId }) {
           return { name, label, content: stripMemoryDelimiters(raw), size: humanBytes(raw.length) };
         }));
       })
-      .catch(() => { if (!cancelled) setFiles([]); });
+      .catch((e) => {
+        if (!cancelled) {
+          setFiles([]);
+          setError(String(e));
+        }
+      })
+      .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [open, profile, connectionId]);
 
@@ -59,7 +71,16 @@ export default function MemoryModal({ open, onClose, profile, connectionId }) {
 
   const list = (
     <ul className={shell.list} role="listbox">
-      {files.length === 0 ? (
+      {loading ? (
+        <li className={shell.empty}>
+          <span className={shell.emptyTitle}>Loading memory…</span>
+        </li>
+      ) : error ? (
+        <li className={shell.empty}>
+          <span className={shell.emptyTitle}>Could not load memory</span>
+          <span className={shell.emptyHint}>{error}</span>
+        </li>
+      ) : files.length === 0 ? (
         <li className={shell.empty}><span className={shell.emptyTitle}>No memory files</span></li>
       ) : filtered.length === 0 ? (
         <li className={shell.empty}>
@@ -92,6 +113,8 @@ export default function MemoryModal({ open, onClose, profile, connectionId }) {
       kicker="files read on every turn"
       search={{ value: query, onChange: setQuery, placeholder: "Search memory…", label: "Search memory" }}
       list={list}
+      loading={loading}
+      loadingLabel="Loading memory"
     >
       {active ? (
         <>
@@ -104,6 +127,8 @@ export default function MemoryModal({ open, onClose, profile, connectionId }) {
             {active.content ? <MarkdownBody source={active.content} mono /> : <em className={styles.emptyNote}>(empty)</em>}
           </div>
         </>
+      ) : loading ? (
+        <div className={shell.detailEmpty}>Loading memory…</div>
       ) : (
         <div className={shell.detailEmpty}>Select a file.</div>
       )}

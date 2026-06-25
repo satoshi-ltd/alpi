@@ -10,7 +10,7 @@ import { useNotify } from "../../primitives/Notification.jsx";
 import { profileLabel } from "../../lib/profile-display.js";
 import { Section, Row, CopyButton } from "./primitives.jsx";
 import { ConfirmDelete, ConfirmDeleteAction } from "../../primitives/index.js";
-import { SettingsHero } from "../../primitives/index.js";
+import { RefreshBar, SettingsHero } from "../../primitives/index.js";
 import { Diamond, Dot, Mono } from "../../primitives/index.js";
 import { BudgetEditor } from "./fields/alp.jsx";
 import { useProfileDetail } from "../../hooks/useProfileDetail.js";
@@ -37,6 +37,7 @@ function renderMemberRow(m, profiles, workgroup, hubPubkey, onRemove) {
 
 export default function WorkgroupDetail({ workgroup, profiles, connectionId = null, onSaved, onOpenChat }) {
   const [members, setMembers] = useState(null);
+  const [membersLoading, setMembersLoading] = useState(false);
   const [busyAction, setBusyAction] = useState(null);
   const [briefing, setBriefing] = useState(workgroup.briefing ?? "");
   const [stages, setStages] = useState(workgroup.pipeline ?? []);
@@ -57,6 +58,7 @@ export default function WorkgroupDetail({ workgroup, profiles, connectionId = nu
   }, []);
 
   const reloadMembers = useCallback(async () => {
+    setMembersLoading(true);
     try {
       const list = await invoke("workgroup_members", {
         profile: workgroup.profile,
@@ -65,24 +67,29 @@ export default function WorkgroupDetail({ workgroup, profiles, connectionId = nu
       setMembers(list);
     } catch {
       setMembers([]);
+    } finally {
+      setMembersLoading(false);
     }
   }, [workgroup.profile, workgroup.id]);
 
   useEffect(() => {
     let cancelled = false;
+    setMembers(null);
+    setMembersLoading(true);
     invoke("workgroup_members", {
       profile: workgroup.profile,
       wgId: workgroup.id,
     })
       .then((list) => { if (!cancelled) setMembers(list); })
-      .catch(() => { if (!cancelled) setMembers([]); });
+      .catch(() => { if (!cancelled) setMembers([]); })
+      .finally(() => { if (!cancelled) setMembersLoading(false); });
     return () => { cancelled = true; };
   }, [workgroup.profile, workgroup.id]);
 
   const hubName = workgroup.hub_id ?? workgroup.profile;
   const hubSummary = profiles.find((p) => p.name === hubName);
   // Lazy hub peer list, scoped per connection.
-  const { detail: hubDetail } = useProfileDetail(connectionId, hubName || null);
+  const { detail: hubDetail, loading: hubDetailLoading } = useProfileDetail(connectionId, hubName || null);
   const hub = hubSummary
     ? { ...hubSummary, ...(hubDetail || {}) }
     : (hubDetail || null);
@@ -265,6 +272,12 @@ export default function WorkgroupDetail({ workgroup, profiles, connectionId = nu
 
   return (
     <main className={styles.detail}>
+      <RefreshBar
+        active={membersLoading || hubDetailLoading || usage.loading}
+        accent={hub?.accent || null}
+        controlled
+        label="Fetching latest workgroup settings"
+      />
       <SettingsHero
         kind="workgroup"
         id={workgroup.name || workgroup.id}

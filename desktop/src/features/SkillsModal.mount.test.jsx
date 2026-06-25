@@ -31,6 +31,14 @@ beforeEach(() => {
 });
 
 describe("SkillsModal (mounted)", () => {
+  it("shows a loading state before skills resolve", () => {
+    h.invoke.mockImplementation(() => new Promise(() => {}));
+    render(<SkillsModal open onClose={() => {}} profile="muse" connectionId="c2" />);
+    expect(screen.getByRole("progressbar", { name: "Loading skills" })).toBeTruthy();
+    expect(screen.getByText("Loading skills…")).toBeTruthy();
+    expect(screen.queryByText("No skills installed")).toBeNull();
+  });
+
   it("loads the list and threads connectionId into list + detail RPCs", async () => {
     render(<SkillsModal open onClose={() => {}} profile="muse" connectionId="c2" />);
     await waitFor(() => expect(h.invoke).toHaveBeenCalledWith("profile_skills", { profile: "muse", connectionId: "c2" }));

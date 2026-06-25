@@ -11,6 +11,15 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.3.85 — 2026-06-25 — loading & error states across modals and settings
+
+_Requires alpi v0.9.30+._
+
+- **Browse modals (memory, skills, tools) show a progress bar while loading** and
+  a clear error state if the daemon can't be reached — no more blank pane.
+- **Settings fields (model, storage, peers, workgroups) surface their own loading
+  feedback** and cancel cleanly when you switch profiles, so you never see stale data.
+
 ## v0.3.84 — 2026-06-25 — memory + tools: monospace, spec-sheet reading view
 
 _Requires alpi v0.9.30+._

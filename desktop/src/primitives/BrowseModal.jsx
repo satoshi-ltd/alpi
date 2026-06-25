@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
-import { IconBtn, Mono, SearchIcon, Tip, XIcon } from "./index.js";
+import { IconBtn, Mono, RefreshBar, SearchIcon, Tip, XIcon } from "./index.js";
 import styles from "./BrowseModal.module.css";
 
 export { styles as browseStyles };
@@ -14,6 +14,9 @@ export default function BrowseModal({
   actions,
   search,
   list,
+  loading = false,
+  loadingLabel = "Loading",
+  accent = null,
   children,
 }) {
   const wrapRef = useRef(null);
@@ -56,6 +59,7 @@ export default function BrowseModal({
   return createPortal(
     <div className={`anim-overlay ${styles.backdrop}`}>
       <div ref={wrapRef} className={`anim-dialog ${styles.modal}`} role="dialog" aria-modal="true" aria-label={title}>
+        <RefreshBar active={loading} accent={accent} controlled label={loadingLabel} />
         <header className={styles.header}>
           <span className={styles.headerLead}>
             <span className={styles.title}>{title}</span>

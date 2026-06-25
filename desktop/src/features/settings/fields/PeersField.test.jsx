@@ -44,4 +44,27 @@ describe("PeersField — onRefresh wiring", () => {
       expect(onRefresh).toHaveBeenCalled();
     });
   });
+
+  it("reports loading while pending invites are fetched", async () => {
+    let resolvePending;
+    const pending = new Promise((resolve) => { resolvePending = resolve; });
+    const onLoadingChange = vi.fn();
+    invoke.mockImplementation((cmd) => {
+      if (cmd === "peers_pending_list") return pending;
+      if (cmd === "probe_peers") return Promise.resolve([]);
+      return Promise.resolve(null);
+    });
+
+    render(
+      <PeersField
+        profile={{ name: "mirai", peers: [] }}
+        profiles={[]}
+        onLoadingChange={onLoadingChange}
+      />,
+    );
+
+    await waitFor(() => expect(onLoadingChange).toHaveBeenCalledWith(true));
+    resolvePending([]);
+    await waitFor(() => expect(onLoadingChange).toHaveBeenLastCalledWith(false));
+  });
 });

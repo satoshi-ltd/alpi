@@ -4,16 +4,31 @@ import Chip from "../../../primitives/Chip.jsx";
 import Dropdown from "../../../primitives/Dropdown.jsx";
 import styles from "../Settings.module.css";
 
-export function WorkgroupsField({ profile, profiles, onSelectWorkgroup }) {
+export function WorkgroupsField({ profile, profiles, onSelectWorkgroup, onLoadingChange = null }) {
   const [groups, setGroups] = useState([]);
+  const [loading, setLoading] = useState(false);
   useEffect(() => {
+    let cancelled = false;
+    setGroups([]);
+    setLoading(true);
+    onLoadingChange?.(true);
     invoke("workgroups", { profile: profile.name })
-      .then(setGroups)
-      .catch(() => setGroups([]));
-  }, [profile.name]);
+      .then((rows) => { if (!cancelled) setGroups(Array.isArray(rows) ? rows : []); })
+      .catch(() => { if (!cancelled) setGroups([]); })
+      .finally(() => {
+        if (!cancelled) {
+          setLoading(false);
+          onLoadingChange?.(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+      onLoadingChange?.(false);
+    };
+  }, [profile.name, onLoadingChange]);
 
   if (groups.length === 0) {
-    return <span className={styles.muted}>none</span>;
+    return <span className={styles.muted}>{loading ? "loading…" : "none"}</span>;
   }
 
   const hubCount = groups.filter((g) => g.is_hub).length;

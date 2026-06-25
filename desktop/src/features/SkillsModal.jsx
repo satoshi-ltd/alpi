@@ -73,9 +73,12 @@ function sameSkill(a, b) {
 
 export default function SkillsModal({ open, onClose, profile, connectionId }) {
   const [skills, setSkills] = useState([]);
+  const [listLoading, setListLoading] = useState(false);
+  const [listError, setListError] = useState(null);
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState(null);
   const [detail, setDetail] = useState(null);
+  const [detailLoading, setDetailLoading] = useState(false);
   const [selectedPath, setSelectedPath] = useState("SKILL.md");
   const [file, setFile] = useState(null);
   const [fileLoading, setFileLoading] = useState(false);
@@ -84,9 +87,21 @@ export default function SkillsModal({ open, onClose, profile, connectionId }) {
   useEffect(() => {
     if (!open || !profile) return undefined;
     let cancelled = false;
+    setSkills([]);
+    setSelected(null);
+    setDetail(null);
+    setFile(null);
+    setListError(null);
+    setListLoading(true);
     invoke("profile_skills", { profile, connectionId })
       .then((rows) => { if (!cancelled) setSkills(Array.isArray(rows) ? rows : []); })
-      .catch(() => { if (!cancelled) setSkills([]); });
+      .catch((e) => {
+        if (!cancelled) {
+          setSkills([]);
+          setListError(String(e));
+        }
+      })
+      .finally(() => { if (!cancelled) setListLoading(false); });
     return () => { cancelled = true; };
   }, [open, profile, connectionId]);
 
@@ -101,6 +116,7 @@ export default function SkillsModal({ open, onClose, profile, connectionId }) {
     if (!open || !selected || !profile) return undefined;
     let cancelled = false;
     setDetail(null);
+    setDetailLoading(true);
     setSelectedPath("SKILL.md");
     setFile(null);
     invoke("profile_skill_read", { profile, name: selected.name, category: selected.category || null, connectionId })
@@ -110,7 +126,8 @@ export default function SkillsModal({ open, onClose, profile, connectionId }) {
         const dirs = (d?.tree || []).filter((n) => n.kind === "dir" && !n.locked && (n.children || []).length);
         setOpenDirs(new Set(dirs.map((n) => n.name)));
       })
-      .catch(() => { if (!cancelled) setDetail(null); });
+      .catch(() => { if (!cancelled) setDetail(null); })
+      .finally(() => { if (!cancelled) setDetailLoading(false); });
     return () => { cancelled = true; };
   }, [open, selected, profile, connectionId]);
 
@@ -146,7 +163,16 @@ export default function SkillsModal({ open, onClose, profile, connectionId }) {
 
   const list = (
     <ul className={shell.list} role="listbox">
-      {skills.length === 0 ? (
+      {listLoading ? (
+        <li className={shell.empty}>
+          <span className={shell.emptyTitle}>Loading skills…</span>
+        </li>
+      ) : listError ? (
+        <li className={shell.empty}>
+          <span className={shell.emptyTitle}>Could not load skills</span>
+          <span className={shell.emptyHint}>{listError}</span>
+        </li>
+      ) : skills.length === 0 ? (
         <li className={shell.empty}>
           <span className={shell.emptyTitle}>No skills installed</span>
           <span className={shell.emptyHint}>
@@ -185,6 +211,8 @@ export default function SkillsModal({ open, onClose, profile, connectionId }) {
       kicker="instructions the agent loads on demand"
       search={{ value: query, onChange: setQuery, placeholder: "Search skills…", label: "Search skills" }}
       list={list}
+      loading={listLoading || detailLoading}
+      loadingLabel={listLoading ? "Loading skills" : "Loading skill detail"}
     >
       {detail ? (
         <DetailPane
@@ -196,6 +224,8 @@ export default function SkillsModal({ open, onClose, profile, connectionId }) {
           file={currentFile}
           fileLoading={fileLoading && selectedPath !== "SKILL.md"}
         />
+      ) : detailLoading ? (
+        <div className={shell.detailEmpty}>Loading skill…</div>
       ) : (
         <div className={shell.detailEmpty}>Select a skill.</div>
       )}

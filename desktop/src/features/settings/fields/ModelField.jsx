@@ -3,12 +3,15 @@ import { invoke } from "@tauri-apps/api/core";
 import ModelPicker from "../../ModelPicker.jsx";
 import styles from "../Settings.module.css";
 
-export function ModelField({ profile, value, onChange }) {
+export function ModelField({ profile, value, onChange, onLoadingChange = null }) {
   const [ollama, setOllama] = useState([]);
   const [ollamaErrors, setOllamaErrors] = useState([]);
   useEffect(() => {
+    let cancelled = false;
+    onLoadingChange?.(true);
     invoke("ollama_models", { profile: profile.name })
       .then((envelope) => {
+        if (cancelled) return;
         if (Array.isArray(envelope)) {
           setOllama(envelope);
           setOllamaErrors([]);
@@ -18,10 +21,17 @@ export function ModelField({ profile, value, onChange }) {
         }
       })
       .catch(() => {
-        setOllama([]);
-        setOllamaErrors([]);
-      });
-  }, [profile.name]);
+        if (!cancelled) {
+          setOllama([]);
+          setOllamaErrors([]);
+        }
+      })
+      .finally(() => { if (!cancelled) onLoadingChange?.(false); });
+    return () => {
+      cancelled = true;
+      onLoadingChange?.(false);
+    };
+  }, [profile.name, onLoadingChange]);
 
   const merged = [...(profile.models ?? []), ...ollama];
   return (

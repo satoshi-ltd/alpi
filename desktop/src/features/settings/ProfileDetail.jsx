@@ -85,6 +85,10 @@ export default function ProfileDetail({
   const [devicesLoading, setDevicesLoading] = useState(false);
   const [gatewaysLoading, setGatewaysLoading] = useState(false);
   const [schedulesLoading, setSchedulesLoading] = useState(false);
+  const [modelLoading, setModelLoading] = useState(false);
+  const [peersLoading, setPeersLoading] = useState(false);
+  const [workgroupsLoading, setWorkgroupsLoading] = useState(false);
+  const [storageLoading, setStorageLoading] = useState(false);
   const notify = useNotify();
   const timersRef = useRef({});
   const prevBaselineRef = useRef(baseline);
@@ -182,7 +186,11 @@ export default function ProfileDetail({
   return (
     <main className={styles.detail}>
       <RefreshBar
-        active={detailLoading || devicesLoading || gatewaysLoading || schedulesLoading || usage.loading}
+        active={
+          detailLoading || devicesLoading || gatewaysLoading || schedulesLoading
+          || modelLoading || peersLoading || workgroupsLoading || storageLoading
+          || usage.loading
+        }
         accent={profile.accent || null}
         controlled
         label="Fetching latest settings"
@@ -218,6 +226,7 @@ export default function ProfileDetail({
                   profile={profile}
                   value={draft.model}
                   onChange={(v) => update("model", v)}
+                  onLoadingChange={setModelLoading}
                 />
               ) : (
                 <span className={styles.muted}>
@@ -370,7 +379,13 @@ export default function ProfileDetail({
             </span>
           </Row>
           <Row label="peers">
-            <PeersField profile={profile} profiles={profiles} onSaved={onSaved} onRefresh={refresh} />
+            <PeersField
+              profile={profile}
+              profiles={profiles}
+              onSaved={onSaved}
+              onRefresh={refresh}
+              onLoadingChange={setPeersLoading}
+            />
           </Row>
           <Row label="workgroups">
             <WorkgroupsField
@@ -379,6 +394,7 @@ export default function ProfileDetail({
               onSelectWorkgroup={(id) =>
                 onNavigate?.({ kind: "workgroup", id })
               }
+              onLoadingChange={setWorkgroupsLoading}
             />
           </Row>
         </Section>
@@ -417,7 +433,11 @@ export default function ProfileDetail({
         </Section>
 
         <Section title="Storage" tooltip="disk + data usage">
-          <StorageField profile={profile} activeConnection={activeConnection} />
+          <StorageField
+            profile={profile}
+            activeConnection={activeConnection}
+            onLoadingChange={setStorageLoading}
+          />
         </Section>
 
         {profile.name !== "default"
