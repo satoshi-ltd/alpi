@@ -8,6 +8,7 @@ import uuid
 
 from alpi.home import get_home
 from alpi.scheduler import jobs_store
+from alpi.scheduler.run import DEFAULT_RUN_TIMEOUT_SECONDS, MAX_RUN_TIMEOUT_SECONDS
 from alpi.tools.base import Tool, ToolResult
 
 
@@ -142,11 +143,13 @@ class Schedule(Tool):
             "timeout": {
                 "type": "integer",
                 "description": (
-                    "Max seconds a fired run may take before it is killed "
-                    "(default 600, max 3600). Raise it for heavy jobs — deep "
+                    f"Max seconds a fired run may take before it is killed "
+                    f"(default {DEFAULT_RUN_TIMEOUT_SECONDS}, max "
+                    f"{MAX_RUN_TIMEOUT_SECONDS}). Raise it for heavy jobs — deep "
                     "research, multi-step writing/publishing — that genuinely "
-                    "need longer; the cap is a runaway/cost guardrail for "
-                    "unattended runs, not a hint that jobs must be short."
+                    "need longer; the cap is a stuck-process backstop for "
+                    "unattended runs, not the spending cap, and not a hint that "
+                    "jobs must be short."
                 ),
             },
         },
@@ -456,7 +459,6 @@ def _validate_prompt(prompt: str) -> str | None:
 
 
 def _validate_timeout(timeout) -> str | None:
-    from alpi.scheduler.run import MAX_RUN_TIMEOUT_SECONDS
     try:
         secs = int(timeout)
     except (TypeError, ValueError):

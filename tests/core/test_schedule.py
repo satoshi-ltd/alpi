@@ -813,8 +813,8 @@ def test_serve_runs_tick_off_loop_so_chat_can_progress(
     )
 
 
-def test_job_run_timeout_defaults_to_600_when_unset() -> None:
-    assert scheduler.job_run_timeout({}) == scheduler.DEFAULT_RUN_TIMEOUT_SECONDS == 600
+def test_job_run_timeout_defaults_to_900_when_unset() -> None:
+    assert scheduler.job_run_timeout({}) == scheduler.DEFAULT_RUN_TIMEOUT_SECONDS == 900
 
 
 def test_job_run_timeout_honors_explicit_value() -> None:
@@ -827,8 +827,56 @@ def test_job_run_timeout_clamps_to_bounds() -> None:
 
 
 def test_job_run_timeout_ignores_garbage() -> None:
-    assert scheduler.job_run_timeout({"timeout": "nope"}) == 600
-    assert scheduler.job_run_timeout({"timeout": None}) == 600
+    assert scheduler.job_run_timeout({"timeout": "nope"}) == 900
+    assert scheduler.job_run_timeout({"timeout": None}) == 900
+
+
+def test_schedule_timeout_schema_matches_runtime_default() -> None:
+    desc = Schedule.parameters["properties"]["timeout"]["description"]
+    assert f"default {scheduler.DEFAULT_RUN_TIMEOUT_SECONDS}" in desc
+    assert str(scheduler.MAX_RUN_TIMEOUT_SECONDS) in desc
+    assert "default 600" not in desc
+
+
+def test_soft_turn_budget_reserves_for_wrap_up() -> None:
+    assert scheduler.soft_turn_budget(900) == 810
+    assert scheduler.soft_turn_budget(600) == 540
+    assert scheduler.soft_turn_budget(1800) == 1620
+
+
+def test_soft_turn_budget_none_when_no_room() -> None:
+    assert scheduler.soft_turn_budget(90) is None
+    assert scheduler.soft_turn_budget(30) is None
+
+
+def test_run_job_passes_soft_budget_to_child(tmp_home_no_env: Path, monkeypatch) -> None:
+    import subprocess as _sp
+
+    captured: dict = {}
+
+    def fake_run(cmd, **kwargs):
+        captured["env"] = kwargs.get("env", {})
+        captured["timeout"] = kwargs.get("timeout")
+        return _sp.CompletedProcess(cmd, 0, stdout='{"kind":"reply","text":""}\n', stderr="")
+
+    monkeypatch.setattr(scheduler.subprocess, "run", fake_run)
+    scheduler.run_job({"id": "x", "kind": "cron", "prompt": "do a thing"}, tmp_home_no_env)
+    assert captured["timeout"] == 900
+    assert captured["env"]["ALPI_TURN_BUDGET_S"] == "810"
+
+
+def test_run_job_omits_soft_budget_when_timeout_tiny(tmp_home_no_env: Path, monkeypatch) -> None:
+    import subprocess as _sp
+
+    captured: dict = {}
+
+    def fake_run(cmd, **kwargs):
+        captured["env"] = kwargs.get("env", {})
+        return _sp.CompletedProcess(cmd, 0, stdout='{"kind":"reply","text":""}\n', stderr="")
+
+    monkeypatch.setattr(scheduler.subprocess, "run", fake_run)
+    scheduler.run_job({"id": "x", "kind": "cron", "prompt": "do a thing", "timeout": 30}, tmp_home_no_env)
+    assert "ALPI_TURN_BUDGET_S" not in captured["env"]
 
 
 def test_cron_tool_add_persists_timeout(tmp_home_no_env: Path) -> None:

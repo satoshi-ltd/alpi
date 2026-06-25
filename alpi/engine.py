@@ -27,6 +27,18 @@ def _strip_cache_noise(text: str) -> str:
     return _CACHE_NOISE_RE.sub("", text).strip()
 
 
+def _turn_deadline_from_env(started: float) -> float | None:
+    import os
+    raw = os.environ.get("ALPI_TURN_BUDGET_S")
+    if not raw:
+        return None
+    try:
+        budget = float(raw)
+    except ValueError:
+        return None
+    return started + budget if budget > 0 else None
+
+
 _FREE_MODEL_MAX_STEPS = 1000
 
 
@@ -158,6 +170,7 @@ class Engine:
 
         # Accumulate this turn's state for the persistent log.
         turn_started = time.time()
+        turn_deadline = _turn_deadline_from_env(turn_started)
         turn_tools: list[ToolLog] = []
         turn_produced: list[dict] = []
         turn_reasoning_parts: list[str] = []
@@ -266,11 +279,15 @@ class Engine:
         from alpi.tools import todo as todo_mod
         todo_token = todo_mod.bind_store(self.session.todos)
 
+        deadline_hit = False
         try:
             for step_idx in range(max_steps):
                 if self.interrupt_requested:
                     self._finalize_interrupt(emit)
                     return
+                if turn_deadline is not None and time.time() >= turn_deadline:
+                    deadline_hit = True
+                    break
                 if step_idx > 0:
                     try:
                         ledger.check(self.home, self.cfg.budget)
@@ -543,12 +560,16 @@ class Engine:
                     return
 
             if not turn_error and not self.interrupt_requested:
+                _wrap_reason = (
+                    "You are out of time for this turn"
+                    if deadline_hit
+                    else f"You have reached the {max_steps}-step tool limit for this turn"
+                )
                 wrap_msgs = self.session.messages + [{
                     "role": "user",
                     "content": (
-                        f"You have reached the {max_steps}-step tool limit for this "
-                        "turn. Do NOT call any more tools — give your best final "
-                        "answer now using what you have already gathered."
+                        f"{_wrap_reason}. Do NOT call any more tools — give your best "
+                        "final answer now using what you have already gathered."
                     ),
                 }]
                 wrap_text: list[str] = []
@@ -607,7 +628,10 @@ class Engine:
                     emit(AgentEvent(kind="error", text=str(e)))
                     return
 
-            turn_error = "Reached max tool steps; stopping."
+            turn_error = (
+                "Reached the time limit; stopping." if deadline_hit
+                else "Reached max tool steps; stopping."
+            )
             emit(AgentEvent(kind="error", text=turn_error))
         finally:
             todo_mod.reset_store(todo_token)

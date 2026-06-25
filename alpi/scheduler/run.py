@@ -50,7 +50,7 @@ class ParsedEvents:
 # for "every minute" expressions while keeping CPU ~0.
 TICK_SECONDS = 30
 
-DEFAULT_RUN_TIMEOUT_SECONDS = 600
+DEFAULT_RUN_TIMEOUT_SECONDS = 900
 MAX_RUN_TIMEOUT_SECONDS = 3600
 
 
@@ -63,6 +63,12 @@ def job_run_timeout(job: dict) -> int:
     except (TypeError, ValueError):
         return DEFAULT_RUN_TIMEOUT_SECONDS
     return max(30, min(MAX_RUN_TIMEOUT_SECONDS, secs))
+
+
+def soft_turn_budget(secs: int) -> int | None:
+    reserve = max(60, secs // 10)
+    soft = secs - reserve
+    return soft if soft >= 60 else None
 
 
 def jobs_path(home: Path) -> Path:
@@ -318,14 +324,18 @@ def run_job(job: dict, home: Path) -> JobOutcome:
     wrapped = wrap_header + "\n\n" + prompt
 
     from alpi.home import effective_profile_env as _effective_profile_env, workspace_env
-    env = _effective_profile_env(home, extra={
+    secs = job_run_timeout(job)
+    extra = {
         "ALPI_HOME": str(home),
         "ALPI_PLATFORM": "cron",
         "ALPI_SCHEDULE_CHILD": "1",
         "ALPI_PARENT_EMITS_AGENT_MESSAGE": "1",
         **workspace_env(home),
-    })
-    secs = job_run_timeout(job)
+    }
+    soft = soft_turn_budget(secs)
+    if soft is not None:
+        extra["ALPI_TURN_BUDGET_S"] = str(soft)
+    env = _effective_profile_env(home, extra=extra)
     try:
         proc = subprocess.run(
             [
@@ -619,7 +629,7 @@ async def serve(home: Path) -> None:
     using ``asyncio.sleep`` so other subsystems share the same loop.
 
     ``tick`` runs in a dedicated thread executor so a long-running
-    ``subprocess.run`` (up to the per-job ``timeout``, default 600s,
+    ``subprocess.run`` (up to the per-job ``timeout``, default 900s,
     max 3600s) can't starve host.chat streaming or other coroutines.
     """
     import asyncio

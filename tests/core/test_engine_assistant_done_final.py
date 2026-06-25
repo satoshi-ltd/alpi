@@ -173,3 +173,61 @@ def test_max_steps_wrap_up_overrides_open_todo_guard(
     dones = [e for e in events if e.kind == "assistant_done" and e.final]
     assert dones, "cap wrap-up must finalize even with an open todo"
     assert "Best-effort" in dones[-1].text
+
+
+def test_turn_deadline_from_env(monkeypatch) -> None:
+    from alpi.engine import _turn_deadline_from_env
+
+    monkeypatch.delenv("ALPI_TURN_BUDGET_S", raising=False)
+    assert _turn_deadline_from_env(100.0) is None
+    monkeypatch.setenv("ALPI_TURN_BUDGET_S", "30")
+    assert _turn_deadline_from_env(100.0) == 130.0
+    monkeypatch.setenv("ALPI_TURN_BUDGET_S", "0")
+    assert _turn_deadline_from_env(100.0) is None
+    monkeypatch.setenv("ALPI_TURN_BUDGET_S", "garbage")
+    assert _turn_deadline_from_env(100.0) is None
+
+
+def test_wall_clock_deadline_triggers_wrap_up(
+    patched_engine: Engine, monkeypatch,
+) -> None:
+    monkeypatch.setenv("ALPI_TURN_BUDGET_S", "0.0001")
+    calls = {"loop": 0, "wrap": 0}
+
+    def fake_stream(messages, tools, **kwargs):
+        if not tools:  # tools-OFF wrap-up call after the soft deadline trips
+            calls["wrap"] += 1
+            yield {"text_delta": "Time-boxed best-effort answer."}
+            yield {"final": True, "text": "", "input_tokens": 11,
+                   "output_tokens": 7, "cost_usd": 0.1, "tool_calls": []}
+            return
+        calls["loop"] += 1
+        yield _final_chunk("", tool_calls=[{
+            "id": "tc", "name": "todo", "arguments": '{"action": "list"}',
+        }])
+
+    monkeypatch.setattr("alpi.llm.stream", fake_stream)
+
+    events = []
+    patched_engine.run_turn("do work", emit=lambda e: events.append(e))
+
+    dones = [e for e in events if e.kind == "assistant_done" and e.final]
+    assert dones and "Time-boxed best-effort" in dones[-1].text
+    assert calls["wrap"] == 1
+    assert calls["loop"] < 6, "deadline must break the loop before exhausting max_steps"
+    assert not any(e.kind == "error" for e in events)
+
+
+def test_generous_budget_does_not_trip(
+    patched_engine: Engine, monkeypatch,
+) -> None:
+    monkeypatch.setenv("ALPI_TURN_BUDGET_S", "9999")
+    _stub_stream(monkeypatch, [_final_chunk("hola")])
+
+    events = []
+    patched_engine.run_turn("hi", emit=lambda e: events.append(e))
+
+    dones = [e for e in events if e.kind == "assistant_done"]
+    assert len(dones) == 1
+    assert dones[0].final is True
+    assert dones[0].text == "hola"

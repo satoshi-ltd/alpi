@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.9.34 — 2026-06-25 — slow scheduled jobs finish gracefully instead of timing out
+
+- **A scheduled job that runs long no longer dies with "agent timed out."**
+  As it approaches its time limit it stops calling tools and returns a
+  best-effort final reply from what it already has — the same graceful close
+  long turns already got at the tool-call limit, instead of being killed with
+  nothing to show.
+- **The default per-job time limit is now 15 minutes** (was 10). It is a
+  stuck-process backstop, not a spending cap — daily spend stays governed by
+  `budget.daily_usd`. Heavy jobs can still raise it per job up to one hour via
+  `schedule(add|update, timeout=…)`.
+
 ## v0.9.33 — 2026-06-25 — long turns finish with an answer instead of cutting off
 
 - **A turn that does a lot of work no longer ends without a reply.** When an
