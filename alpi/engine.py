@@ -542,6 +542,71 @@ class Engine:
                     emit(AgentEvent(kind="done"))
                     return
 
+            if not turn_error and not self.interrupt_requested:
+                wrap_msgs = self.session.messages + [{
+                    "role": "user",
+                    "content": (
+                        f"You have reached the {max_steps}-step tool limit for this "
+                        "turn. Do NOT call any more tools — give your best final "
+                        "answer now using what you have already gathered."
+                    ),
+                }]
+                wrap_text: list[str] = []
+                wrap_final: dict = {}
+                try:
+                    for chunk in llm.stream(
+                        messages=wrap_msgs, tools=[], rt=self.cfg.runtime, **call_kwargs,
+                    ):
+                        if self.interrupt_requested:
+                            break
+                        if chunk.get("final"):
+                            wrap_final = chunk
+                            continue
+                        td = chunk.get("text_delta") or ""
+                        if td:
+                            wrap_text.append(td)
+                            emit(AgentEvent(kind="assistant_delta", text=td))
+                    if self.interrupt_requested:
+                        self._finalize_interrupt(emit)
+                        return
+                    wrap_content = _strip_cache_noise("".join(wrap_text))
+                    if wrap_content:
+                        self.session.messages.append({"role": "assistant", "content": wrap_content})
+                        final_assistant = wrap_content
+                        turn_completed = True
+                        self.session.record(
+                            input_tokens=wrap_final.get("input_tokens", 0),
+                            output_tokens=wrap_final.get("output_tokens", 0),
+                            cost=wrap_final.get("cost_usd", 0.0),
+                        )
+                        from alpi.tools import _state as _wg_state
+                        _wg_state.bump_turn_usage(
+                            int(wrap_final.get("input_tokens", 0)),
+                            int(wrap_final.get("output_tokens", 0)),
+                            float(wrap_final.get("cost_usd", 0.0)),
+                        )
+                        from alpi import ledger as _ledger
+                        _ledger.record(
+                            self.home, usd=float(wrap_final.get("cost_usd", 0.0)),
+                            tokens=int(wrap_final.get("input_tokens", 0)) + int(wrap_final.get("output_tokens", 0)),
+                            tokens_in=int(wrap_final.get("input_tokens", 0)),
+                            tokens_out=int(wrap_final.get("output_tokens", 0)),
+                            cfg_budget=self.cfg.budget,
+                        )
+                        self.session.last_ctx_tokens = int(wrap_final.get("input_tokens", 0))
+                        emit(AgentEvent(
+                            kind="usage",
+                            tokens_in=wrap_final.get("input_tokens", 0),
+                            tokens_out=wrap_final.get("output_tokens", 0),
+                            cost=wrap_final.get("cost_usd", 0.0),
+                        ))
+                        emit(AgentEvent(kind="assistant_done", text=wrap_content, final=True))
+                        emit(AgentEvent(kind="done"))
+                        return
+                except Exception as e:  # noqa: BLE001
+                    emit(AgentEvent(kind="error", text=str(e)))
+                    return
+
             turn_error = "Reached max tool steps; stopping."
             emit(AgentEvent(kind="error", text=turn_error))
         finally:

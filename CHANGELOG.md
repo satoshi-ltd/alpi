@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.9.33 — 2026-06-25 — long turns finish with an answer instead of cutting off
+
+- **A turn that does a lot of work no longer ends without a reply.** When an
+  agent reaches its per-turn tool-call limit, it now gives a best-effort final
+  answer from what it has already gathered — instead of failing with
+  "interrupted before final reply" and throwing the work (and its cost) away.
+- **The default tool-call limit per turn is now 100** (was 40), so skills that
+  legitimately chain many steps run to completion. This limit is a
+  runaway-loop backstop, not the spending cap — daily spend stays governed by
+  `budget.daily_usd`; set `tools.max_steps_per_turn` in `config.yaml` to
+  override.
+
 ## v0.9.32 — 2026-06-24 — skills reference the workspace implicitly via $ALPI_WORKSPACE
 
 - **A profile's workspace is now exposed to skills and scheduled jobs as

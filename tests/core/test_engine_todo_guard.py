@@ -176,10 +176,12 @@ def test_persistent_refusal_to_continue_burns_max_steps(
     events = []
     engine.run_turn("force it", emit=lambda e: events.append(e))
 
-    # max_steps_per_turn=6 → exactly 6 iterations, then "Reached max tool steps; stopping."
-    assert calls["i"] == 6
-    error_events = [e for e in events if e.kind == "error"]
-    assert any("max tool steps" in e.text for e in error_events)
+    assert calls["i"] == 7
+    dones = [e for e in events if e.kind == "assistant_done" and e.final]
+    assert dones
+    assert not any(
+        e.kind == "error" and "max tool steps" in (e.text or "") for e in events
+    )
 
 
 def test_todo_tool_writes_into_active_session_store(

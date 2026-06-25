@@ -218,15 +218,15 @@ def _k_tools_then_reply(k: int):
 def test_free_model_lifts_tool_call_ceiling(bootstrapped_home, monkeypatch):
     from alpi import engine as engine_mod
     cfg = config.load(bootstrapped_home)
-    assert cfg.tools.max_steps_per_turn == 40
+    assert cfg.tools.max_steps_per_turn == 100
     monkeypatch.setattr(engine_mod.llm, "is_free_model", lambda _m: True)
-    monkeypatch.setattr(engine_mod.llm, "stream", _k_tools_then_reply(42))
+    monkeypatch.setattr(engine_mod.llm, "stream", _k_tools_then_reply(150))
     monkeypatch.setattr(engine_mod.tools, "execute", lambda *_a, **_k: ToolResult(ok=True, output="ok"))
 
     engine = Engine(home=bootstrapped_home, cfg=cfg)
     engine.run_turn("do it", lambda _e: None)
 
-    assert len(engine.session.turns[-1].tools) == 42
+    assert len(engine.session.turns[-1].tools) == 150
 
 
 def test_explicit_cap_respected_even_for_free_model(bootstrapped_home, monkeypatch):

@@ -15,7 +15,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "workspace": "",
     "providers": {"ollama": []},
     "tools": {
-        "max_steps_per_turn": 40,
+        "max_steps_per_turn": 100,
         "deny": [],
         "web_extract": {"model": ""},
         "read_image": {"model": ""},
@@ -117,7 +117,7 @@ class SttToolConfig:
 
 @dataclass
 class ToolsConfig:
-    max_steps_per_turn: int = 40  # ceiling on tool-calls per user turn
+    max_steps_per_turn: int = 100  # ceiling on tool-calls per user turn
     # Tool names hidden from the LLM schema AND refused by the executor; unknown names are no-ops so typos are harmless.
     deny: list[str] = field(default_factory=list)
     web_extract: WebExtractToolConfig = field(default_factory=WebExtractToolConfig)

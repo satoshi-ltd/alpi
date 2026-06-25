@@ -74,7 +74,7 @@ Three options:
 
 | Key | Default | Type | Takes effect |
 |---|---|---|---|
-| `tools.max_steps_per_turn` | `40` | int | next turn |
+| `tools.max_steps_per_turn` | `100` | int | next turn |
 | `tools.deny` | `[]` | list of tool names | next turn |
 | `tools.web_extract.model` | `""` (use main) | string | next turn |
 | `tools.read_image.model` | `""` (use main) | string | next turn |
@@ -92,7 +92,7 @@ Three options:
 | `tools.stt.language` | `""` (auto) | ISO code (`en`, `es`, ...) | next turn |
 | `tools.<name>.max_result_chars` | `—` (unset) | int (-1 = unlimited) | next turn |
 
-`max_steps_per_turn` is a cost guard. **When left at the default**, a **free** model (zero per-token pricing) or a **local/ollama** one raises the effective ceiling to 1000 (no runaway cost to bound). An explicit value you set is always respected — it also bounds loops, refusals, and the TODO guard, not just cost.
+`max_steps_per_turn` is a **runaway-loop backstop, not the cost guard** — the cost guard is `budget.daily_usd`. Hitting the cap does NOT fail the turn: the engine forces one tools-off **wrap-up** reply so the gathered work (and its cost) isn't thrown away. **When left at the default**, a **free** model (zero per-token pricing) or a **local/ollama** one raises the effective ceiling to 1000 (no runaway cost to bound); an explicit value is always respected. Raise it for agentic profiles whose skills legitimately chain many tool calls.
 
 `tools.budget.per_result_chars` caps the size of any tool output the LLM
 sees in-context, with a `… [N chars elided by tool budget]` suffix when
