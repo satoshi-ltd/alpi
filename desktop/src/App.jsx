@@ -678,17 +678,18 @@ export default function App() {
             : null
         );
 
-        // Interrupt only the turn in THIS chat — an existing session, or the single blank-composer slot (launchSessionId null); other chats keep streaming.
         const prior = Object.values(pendingTurnsRef.current).find((t) =>
           t.profile === profileName &&
           (startSessionId != null
             ? (t.sessionId ?? t.launchSessionId) === startSessionId
             : (t.launchSessionId ?? null) === null),
         );
+        if (prior && !prior.error) {
+          notify({ message: "A turn is already running in this chat — wait for it or press Stop.", variant: "info" });
+          return;
+        }
         if (prior) {
-          try {
-            await invoke("chat_cancel", { profile: profileName, requestId: prior.requestId });
-          } catch {}
+          removeTurn(prior.requestId);
         }
 
         const requestId = `desktop-${profileName}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;

@@ -366,7 +366,7 @@ class AlpiApp(App):
         return w is not None and w.state == WorkerState.RUNNING
 
     def _interrupt_current_turn(self) -> None:
-        self.engine.request_interrupt()
+        self.engine.request_interrupt("tui-stop")
         self._stop_thinking()
         self._mount_message(DimLine("↯ interrupted previous turn"))
         for tid, card in list(self._active_tools.items()):

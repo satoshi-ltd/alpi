@@ -42,7 +42,7 @@ class _FakeEngine:
         emit(AgentEvent(kind="tool_end", name="search", ok=True))
         emit(AgentEvent(kind="assistant_done", text=f"echo: {text}", final=True))
 
-    def request_interrupt(self) -> None:
+    def request_interrupt(self, reason: str = "unknown") -> None:
         self._interrupted = True
 
     def save_session(self) -> None:
@@ -98,7 +98,7 @@ async def test_data_chat_send_rewrite_truncates_hydrated_session(
             seen["input_tokens"] = self.session.input_tokens
             emit(AgentEvent(kind="assistant_done", text=f"echo: {text}", final=True))
 
-        def request_interrupt(self) -> None:
+        def request_interrupt(self, reason: str = "unknown") -> None:
             return None
 
         def save_session(self) -> None:
@@ -188,7 +188,7 @@ async def test_data_chat_send_unknown_session_errors(
             ran["turn"] = True
             emit(AgentEvent(kind="assistant_done", text=f"echo: {text}", final=True))
 
-        def request_interrupt(self) -> None:
+        def request_interrupt(self, reason: str = "unknown") -> None:
             return None
 
         def save_session(self) -> None:
@@ -468,7 +468,7 @@ async def test_data_chat_cancel_interrupts_active_turn(
                 _t.sleep(0.025)
             emit(AgentEvent(kind="assistant_done", text="done", final=True))
 
-        def request_interrupt(self) -> None:
+        def request_interrupt(self, reason: str = "unknown") -> None:
             self._stop = True
 
         def save_session(self) -> None:
@@ -555,7 +555,7 @@ async def test_engine_exception_emits_error_frame_before_done(
             emit(AgentEvent(kind="assistant_delta", text="partial"))
             raise OSError(24, "Too many open files")
 
-        def request_interrupt(self) -> None:
+        def request_interrupt(self, reason: str = "unknown") -> None:
             return None
 
         def save_session(self) -> None:
@@ -606,7 +606,7 @@ async def test_engine_exception_emits_error_frame_before_done(
 
 
 @pytest.mark.asyncio
-async def test_data_chat_send_concurrent_same_session_interrupts_previous(
+async def test_data_chat_send_concurrent_same_session_returns_busy(
     monkeypatch, short_tmp: Path,
 ) -> None:
     home = short_tmp / "h"
@@ -636,7 +636,7 @@ async def test_data_chat_send_concurrent_same_session_interrupts_previous(
                 _t.sleep(0.025)
             emit(AgentEvent(kind="assistant_done", text=f"turn-{self._idx}:{text}", final=True))
 
-        def request_interrupt(self) -> None:
+        def request_interrupt(self, reason: str = "unknown") -> None:
             self._stop = True
 
         def save_session(self) -> None:
@@ -693,8 +693,63 @@ async def test_data_chat_send_concurrent_same_session_interrupts_previous(
 
     kinds_a = [e.get("event") for e in events_a]
     kinds_b = [e.get("event") for e in events_b]
-    assert "interrupted" in kinds_a, kinds_a
-    # B should run cleanly to completion
-    assert "reply" in kinds_b and "done" in kinds_b, kinds_b
-    reply_b = next(e for e in events_b if e["event"] == "reply")
-    assert reply_b["text"].endswith("second")
+    assert "interrupted" not in kinds_a, kinds_a
+    assert "reply" in kinds_a and "done" in kinds_a, kinds_a
+    assert any(e.get("event") == "error" and e.get("code") == "busy" for e in events_b), events_b
+    assert "reply" not in kinds_b, kinds_b
+    reply_a = next(e for e in events_a if e["event"] == "reply")
+    assert reply_a["text"].endswith("first")
+
+
+@pytest.mark.asyncio
+async def test_data_chat_send_releases_claim_when_setup_raises(
+    monkeypatch, short_tmp: Path,
+) -> None:
+    home = short_tmp / "h"
+    home.mkdir()
+    load_or_generate(home)
+
+    from types import SimpleNamespace as NS
+
+    class _Eng:
+        def __init__(self, *, home: Path, cfg) -> None:  # noqa: ANN001
+            self.session = NS(id="sid-leak", subdir="sessions")
+
+        def run_turn(self, text, emit, **kwargs) -> None:  # noqa: ANN001
+            return None
+
+        def request_interrupt(self, reason: str = "unknown") -> None:
+            return None
+
+        def save_session(self) -> None:
+            return None
+
+    from alpi import config as cfg_mod
+    monkeypatch.setattr(cfg_mod, "load", lambda h: NS(model="x"))
+    import alpi.engine
+    monkeypatch.setattr(alpi.engine, "Engine", _Eng)
+    from alpi.host import chat as dc
+    monkeypatch.setattr(dc, "_resolve_home", lambda profile: home)
+
+    def _boom(*a, **kw):
+        raise RuntimeError("setup boom")
+
+    monkeypatch.setattr(dc._chat_events, "reset_for_turn", _boom)
+
+    srv = host_server.Server(home=home)
+    frames: list[dict] = []
+
+    async def _send_frame(f) -> None:
+        frames.append(f)
+
+    dc._active.clear()
+    dc._session_active.clear()
+    with pytest.raises(RuntimeError, match="setup boom"):
+        await dc._data_chat_send(
+            {"profile": "default", "text": "hi", "request_id": "rZ", "session_id": None},
+            srv,
+            _send_frame,
+        )
+
+    assert dc._active == {}, dc._active
+    assert dc._session_active == {}, dc._session_active

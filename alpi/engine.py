@@ -109,8 +109,10 @@ class Engine:
         # Post-turn memory reviewer: counter resets when the daemon fires.
         self._turns_since_review: int = 0
 
-    def request_interrupt(self) -> None:
+    def request_interrupt(self, reason: str = "unknown") -> None:
         """Ask the current turn to stop at the next checkpoint."""
+        import logging
+        logging.getLogger("alpi.engine").warning("interrupt requested: %s", reason)
         self.interrupt_requested = True
 
     def reset_session(self) -> None:

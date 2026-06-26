@@ -89,77 +89,84 @@ async def _data_chat_send(
         if rewrite_from_turn is not None:
             _truncate_hydrated_session(engine, rewrite_from_turn)
 
-    with _active_lock:
-        _active[request_id] = engine
-
     # Pin the session id BEFORE the engine runs so replay via host.chat.events_since works even for a brand-new session whose id the client hasn't seen yet.
     effective_sid = session_id if isinstance(session_id, str) and session_id else engine.session.id
     persisted_sid = effective_sid
 
     session_lock: asyncio.Lock | None = None
-    # Concurrent send on the same session: interrupt the previous engine and wait for it to release the lock.
-    prev = _session_active.get(effective_sid)
-    if prev is not None and prev is not engine:
-        prev.request_interrupt()
-    session_lock = _get_session_lock(effective_sid)
-    await session_lock.acquire()
-    _session_active[effective_sid] = engine
-
-    _chat_events.reset_for_turn(home, persisted_sid, request_id)
-
-    stream_alive = True
-
-    async def emit(frame: dict[str, Any]) -> None:
-        nonlocal stream_alive
-        # Persist FIRST: replay depends on the sidecar staying complete even after the wire is gone.
-        try:
-            _chat_events.append(home, persisted_sid, request_id, frame)
-        except Exception:  # noqa: BLE001
-            pass
-        if not stream_alive:
-            return
-        try:
-            await send_frame(frame)
-        except Exception:  # noqa: BLE001
-            stream_alive = False
-
-    await emit({"event": "session_start", "session_id": persisted_sid, "model_used": cfg.model})
-
-    loop = asyncio.get_running_loop()
-    queue: asyncio.Queue = asyncio.Queue()
-    SENTINEL = object()
-
-    def sink(ev: AgentEvent) -> None:
-        loop.call_soon_threadsafe(queue.put_nowait, ev)
-
-    parts: list[str] = []
-    produced: list[dict] = []
+    # Claim atomically under the lock before any await, or the busy gate races.
+    busy = False
+    with _active_lock:
+        prev = _session_active.get(effective_sid)
+        if prev is not None and prev is not engine:
+            busy = True
+        else:
+            _active[request_id] = engine
+            _session_active[effective_sid] = engine
+    if busy:
+        await send_frame({"event": "error", "text": "session already has a running turn", "code": "busy"})
+        return
+    task = None
     heartbeat_task: asyncio.Task | None = None
+    lock_acquired = False
+    try:
+        session_lock = _get_session_lock(effective_sid)
+        await session_lock.acquire()
+        lock_acquired = True
 
-    async def _heartbeat_loop() -> None:
-        while stream_alive:
-            await asyncio.sleep(_HEARTBEAT_PERIOD_S)
-            if not stream_alive:
-                return
-            await emit({"event": "heartbeat"})
+        _chat_events.reset_for_turn(home, persisted_sid, request_id)
 
-    def run_engine() -> None:
-        try:
-            engine.run_turn(text, emit=sink, attachments=attachments)
+        stream_alive = True
+
+        async def emit(frame: dict[str, Any]) -> None:
+            nonlocal stream_alive
+            # Persist FIRST: replay depends on the sidecar staying complete even after the wire is gone.
             try:
-                engine.save_session()
+                _chat_events.append(home, persisted_sid, request_id, frame)
             except Exception:  # noqa: BLE001
                 pass
-        except Exception as exc:  # noqa: BLE001
-            # Surface engine failures before done so the client captures them.
-            sink(AgentEvent(kind="error", text=f"engine error: {exc}"))
-        finally:
-            loop.call_soon_threadsafe(queue.put_nowait, SENTINEL)
+            if not stream_alive:
+                return
+            try:
+                await send_frame(frame)
+            except Exception:  # noqa: BLE001
+                stream_alive = False
 
-    task = loop.run_in_executor(None, run_engine)
-    heartbeat_task = loop.create_task(_heartbeat_loop())
+        await emit({"event": "session_start", "session_id": persisted_sid, "model_used": cfg.model})
 
-    try:
+        loop = asyncio.get_running_loop()
+        queue: asyncio.Queue = asyncio.Queue()
+        SENTINEL = object()
+
+        def sink(ev: AgentEvent) -> None:
+            loop.call_soon_threadsafe(queue.put_nowait, ev)
+
+        parts: list[str] = []
+        produced: list[dict] = []
+
+        async def _heartbeat_loop() -> None:
+            while stream_alive:
+                await asyncio.sleep(_HEARTBEAT_PERIOD_S)
+                if not stream_alive:
+                    return
+                await emit({"event": "heartbeat"})
+
+        def run_engine() -> None:
+            try:
+                engine.run_turn(text, emit=sink, attachments=attachments)
+                try:
+                    engine.save_session()
+                except Exception:  # noqa: BLE001
+                    pass
+            except Exception as exc:  # noqa: BLE001
+                # Surface engine failures before done so the client captures them.
+                sink(AgentEvent(kind="error", text=f"engine error: {exc}"))
+            finally:
+                loop.call_soon_threadsafe(queue.put_nowait, SENTINEL)
+
+        task = loop.run_in_executor(None, run_engine)
+        heartbeat_task = loop.create_task(_heartbeat_loop())
+
         while True:
             item = await queue.get()
             if item is SENTINEL:
@@ -224,12 +231,13 @@ async def _data_chat_send(
                 await heartbeat_task
             except (asyncio.CancelledError, Exception):  # noqa: BLE001
                 pass
-        await task
+        if task is not None:
+            await task
         with _active_lock:
             _active.pop(request_id, None)
-        if session_lock is not None:
             if _session_active.get(effective_sid) is engine:
                 _session_active.pop(effective_sid, None)
+        if lock_acquired and session_lock is not None:
             session_lock.release()
 
 
@@ -349,7 +357,7 @@ async def _data_chat_cancel(
         engine = _active.get(request_id)
     if engine is None:
         return {"cancelled": False}
-    engine.request_interrupt()
+    engine.request_interrupt("cancel-rpc")
     return {"cancelled": True}
 
 

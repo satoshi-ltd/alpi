@@ -326,7 +326,7 @@ def _run_once(
     import signal as _signal
 
     def _on_sigint(_signum, _frame):
-        engine.request_interrupt()
+        engine.request_interrupt("cli-sigint")
 
     prev_handler = _signal.signal(_signal.SIGINT, _on_sigint)
     from alpi.tools import _clarification as _clar

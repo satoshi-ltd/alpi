@@ -78,7 +78,7 @@ def register_link_ask(server: alp_server.Server, home: Path) -> None:
         target_sid = str((params or {}).get("session_id") or "").strip()
         eng = active.engine
         if eng is not None and (not target_sid or target_sid == active.session_id):
-            eng.request_interrupt()
+            eng.request_interrupt("alp-cancel")
             return {"cancelled": True, "session_id": active.session_id}
         return {"cancelled": False}
 

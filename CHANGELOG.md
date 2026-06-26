@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.9.35 — 2026-06-26 — a working chat isn't killed by your next message
+
+- **A turn that's still working is no longer cancelled when you send another message in
+  the same chat.** The daemon keeps the running turn alive and tells the new message the
+  chat is busy; only an explicit Stop ends a turn — so long tasks (deep research,
+  enrichment) run to completion instead of being thrown away mid-work.
+- **Fixed a chat getting stuck unable to accept new messages** after a turn was cancelled
+  or errored during start-up.
+
 ## v0.9.34 — 2026-06-25 — slow scheduled jobs finish gracefully instead of timing out
 
 - **A scheduled job that runs long no longer dies with "agent timed out."**

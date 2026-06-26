@@ -53,7 +53,7 @@ def test_run_once_forwards_attachments(tmp_path, monkeypatch) -> None:
             captured["text"] = text
             captured["attachments"] = attachments
 
-        def request_interrupt(self):
+        def request_interrupt(self, reason="unknown"):
             return None
 
     monkeypatch.setattr(cli, "Engine", FakeEngine)

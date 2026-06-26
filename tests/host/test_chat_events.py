@@ -109,7 +109,7 @@ class _FakeEngine:
         emit(AgentEvent(kind="assistant_delta", text=text))
         emit(AgentEvent(kind="assistant_done", text=f"hi {text}", final=True))
 
-    def request_interrupt(self) -> None:
+    def request_interrupt(self, reason: str = "unknown") -> None:
         return None
 
     def save_session(self) -> None:
@@ -254,7 +254,7 @@ async def test_sidecar_finishes_turn_even_when_client_disconnects_mid_stream(
             emit(AgentEvent(kind="assistant_delta", text="late"))
             emit(AgentEvent(kind="assistant_done", text="early late", final=True))
 
-        def request_interrupt(self) -> None:
+        def request_interrupt(self, reason: str = "unknown") -> None:
             self._stop = True
 
         def save_session(self) -> None:

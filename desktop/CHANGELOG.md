@@ -11,6 +11,16 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.3.87 — 2026-06-26 — chat: a busy chat tells you, instead of cancelling
+
+_Requires alpi v0.9.35+._
+
+- **Sending a message into a chat that's still working no longer cancels the running
+  turn.** You get a "a turn is already running" notice; only Stop cancels. The
+  in-progress work keeps going and finishes.
+- **A chat that errored can be used again immediately** — no more getting stuck on
+  "a turn is already running" after a failed turn.
+
 ## v0.3.86 — 2026-06-26 — chat: run several conversations in parallel
 
 _Requires alpi v0.9.30+._

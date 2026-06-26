@@ -231,3 +231,17 @@ def test_generous_budget_does_not_trip(
     assert len(dones) == 1
     assert dones[0].final is True
     assert dones[0].text == "hola"
+
+
+def test_request_interrupt_logs_reason(patched_engine: Engine, caplog) -> None:
+    import logging
+
+    with caplog.at_level(logging.WARNING, logger="alpi.engine"):
+        patched_engine.request_interrupt("preempt-same-session")
+    assert patched_engine.interrupt_requested is True
+    assert "preempt-same-session" in caplog.text
+
+
+def test_request_interrupt_default_reason(patched_engine: Engine) -> None:
+    patched_engine.request_interrupt()
+    assert patched_engine.interrupt_requested is True
