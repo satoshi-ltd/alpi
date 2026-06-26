@@ -2238,10 +2238,10 @@ async fn ollama_models(profile: String) -> Result<serde_json::Value, String> {
 }
 
 #[tauri::command]
-async fn chat_cancel(profile: String) -> Result<(), String> {
-    let request_id = {
-        let map = active_chats().lock().unwrap();
-        map.get(&profile).cloned()
+async fn chat_cancel(profile: String, request_id: Option<String>) -> Result<(), String> {
+    let request_id = match request_id {
+        Some(rid) if !rid.is_empty() => Some(rid),
+        _ => active_chats().lock().unwrap().get(&profile).cloned(),
     };
     let Some(request_id) = request_id else {
         return Ok(());

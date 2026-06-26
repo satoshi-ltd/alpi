@@ -18,46 +18,118 @@ export function useChatStream({
   notify,
   connectionOnlineRef,
 }) {
-  const [pendingTurn, setPendingTurn] = useState(null);
-
-  // Drop late frames from an interrupted turn so they don't mutate the new pendingTurn.
-  const activeRequestIdRef = useRef(null);
-  const pendingTurnRef = useRef(null);
-  const lastEventAtRef = useRef(0);
-  const replayingRef = useRef(false);
-
-  const deltaBufferRef = useRef({ assistant: "", reasoning: "" });
+  // request_id -> turn. Many chats stream at once; each frame carries its request_id, so a turn never leaks into another chat.
+  const [pendingTurns, setPendingTurns] = useState({});
+  const pendingTurnsRef = useRef({});
+  // request_id -> { lastEventAt, replaying }. Hot per-turn clocks kept off React state so frames don't re-render for timing alone.
+  const turnMetaRef = useRef({});
+  const deltaBufferRef = useRef({});
   const deltaFlushScheduledRef = useRef(false);
   const deltaFlushTimerRef = useRef(null);
-  // Deferred tool_end timers — must be cleared on cancel/new-request so a stale one can't mutate the next turn.
+  // { requestId, timer } entries — cleared per-turn so one turn's done/cancel can't drop another's deferred tool_end.
   const toolEndTimersRef = useRef(new Set());
 
-  const markActivity = useCallback(() => {
-    lastEventAtRef.current = Date.now();
+  useEffect(() => {
+    pendingTurnsRef.current = pendingTurns;
+  }, [pendingTurns]);
+
+  const updateTurn = useCallback((requestId, updater) => {
+    setPendingTurns((prev) => {
+      const cur = prev[requestId];
+      if (cur === undefined) return prev;
+      const next = updater(cur);
+      if (next === cur) return prev;
+      if (next == null) {
+        const { [requestId]: _omit, ...rest } = prev;
+        return rest;
+      }
+      return { ...prev, [requestId]: next };
+    });
   }, []);
 
-  useEffect(() => {
-    const prev = pendingTurnRef.current;
-    pendingTurnRef.current = pendingTurn;
-    // Fresh turn: arm the watchdog from now so the previous turn's silence doesn't trip an immediate replay.
-    if (pendingTurn && pendingTurn.requestId !== prev?.requestId) {
-      lastEventAtRef.current = Date.now();
+  const dropTurnTimers = useCallback((requestId) => {
+    for (const entry of [...toolEndTimersRef.current]) {
+      if (entry.requestId === requestId) {
+        clearTimeout(entry.timer);
+        toolEndTimersRef.current.delete(entry);
+      }
     }
-  }, [pendingTurn]);
+  }, []);
+
+  const markActivity = useCallback((requestId) => {
+    const meta = turnMetaRef.current[requestId];
+    if (meta) meta.lastEventAt = Date.now();
+  }, []);
+
+  // Add a turn, superseding any prior turn for the SAME chat — an existing session, or the single blank-composer slot (launchSessionId null); other chats keep streaming.
+  const startTurn = useCallback((turn) => {
+    const rid = turn.requestId;
+    turnMetaRef.current[rid] = { lastEventAt: Date.now(), replaying: false };
+    deltaBufferRef.current[rid] = { assistant: "", reasoning: "" };
+    const slot = turn.launchSessionId ?? null;
+    setPendingTurns((prev) => {
+      const next = {};
+      for (const [k, t] of Object.entries(prev)) {
+        const sameChat =
+          t.profile === turn.profile &&
+          (slot != null
+            ? (t.sessionId ?? t.launchSessionId ?? null) === slot
+            : (t.launchSessionId ?? null) === null);
+        if (sameChat) {
+          delete turnMetaRef.current[k];
+          delete deltaBufferRef.current[k];
+          dropTurnTimers(k);
+          continue;
+        }
+        next[k] = t;
+      }
+      next[rid] = turn;
+      return next;
+    });
+  }, [dropTurnTimers]);
+
+  const removeTurn = useCallback((requestId) => {
+    delete turnMetaRef.current[requestId];
+    delete deltaBufferRef.current[requestId];
+    dropTurnTimers(requestId);
+    setPendingTurns((prev) => {
+      if (prev[requestId] === undefined) return prev;
+      const { [requestId]: _omit, ...rest } = prev;
+      return rest;
+    });
+  }, [dropTurnTimers]);
+
+  const clearAllTurns = useCallback(() => {
+    turnMetaRef.current = {};
+    deltaBufferRef.current = {};
+    for (const entry of toolEndTimersRef.current) clearTimeout(entry.timer);
+    toolEndTimersRef.current.clear();
+    setPendingTurns({});
+  }, []);
 
   const flushDeltas = useCallback(() => {
     deltaFlushScheduledRef.current = false;
-    const { assistant, reasoning } = deltaBufferRef.current;
-    if (!assistant && !reasoning) return;
-    deltaBufferRef.current = { assistant: "", reasoning: "" };
-    setPendingTurn((prev) => {
-      if (!prev) return prev;
+    const buffers = deltaBufferRef.current;
+    const updates = [];
+    for (const rid of Object.keys(buffers)) {
+      const { assistant, reasoning } = buffers[rid];
+      if (assistant || reasoning) updates.push([rid, assistant, reasoning]);
+      buffers[rid] = { assistant: "", reasoning: "" };
+    }
+    if (!updates.length) return;
+    setPendingTurns((prev) => {
+      let changed = false;
       const next = { ...prev };
-      if (assistant)
-        next.assistantPreview = (prev.assistantPreview ?? "") + assistant;
-      if (reasoning)
-        next.reasoningPreview = (prev.reasoningPreview ?? "") + reasoning;
-      return next;
+      for (const [rid, assistant, reasoning] of updates) {
+        const cur = prev[rid];
+        if (!cur) continue;
+        const t = { ...cur };
+        if (assistant) t.assistantPreview = (cur.assistantPreview ?? "") + assistant;
+        if (reasoning) t.reasoningPreview = (cur.reasoningPreview ?? "") + reasoning;
+        next[rid] = t;
+        changed = true;
+      }
+      return changed ? next : prev;
     });
   }, []);
 
@@ -70,13 +142,30 @@ export function useChatStream({
   useEffect(() => {
     return () => {
       if (deltaFlushTimerRef.current) clearTimeout(deltaFlushTimerRef.current);
-      for (const t of toolEndTimersRef.current) clearTimeout(t);
+      for (const entry of toolEndTimersRef.current) clearTimeout(entry.timer);
       toolEndTimersRef.current.clear();
     };
   }, []);
 
-  // Rebuild pendingTurn state from the persisted sidecar — used when the live stream goes silent.
-  const applyReplayedEvents = useCallback((events) => {
+  // Navigate/refresh the view only when the finished turn is the one on screen — a background turn completing must not yank the open chat.
+  const finishTurnView = useCallback((turn, sid, newData) => {
+    setView((cur) => {
+      const isProfile = cur?.kind === "profile" && cur.profile === turn.profile;
+      const foregroundExisting = isProfile && (cur.sessionId ?? null) === sid;
+      const foregroundNewChat =
+        isProfile && (cur.sessionId ?? null) === null && (turn.launchSessionId ?? null) === null;
+      if (foregroundExisting || foregroundNewChat) {
+        setRewriteDraft(null);
+        setSessionData(newData);
+        return { kind: "profile", profile: turn.profile, sessionId: sid };
+      }
+      return cur;
+    });
+    reloadRef.current?.();
+  }, [setView, setRewriteDraft, setSessionData, reloadRef]);
+
+  // Rebuild a turn's state from the persisted sidecar — used when its live stream goes silent.
+  const applyReplayedEvents = useCallback((requestId, events) => {
     let sawDone = false;
     let finalSessionId = null;
     let nextTools = [];
@@ -145,30 +234,28 @@ export function useChatStream({
       }
     }
 
-    setPendingTurn((prev) => {
-      if (!prev) return prev;
-      return {
-        ...prev,
-        tools: nextTools,
-        assistantPreview: assistant || prev.assistantPreview,
-        reasoningPreview: reasoning || prev.reasoningPreview,
-        error: errorText,
-      };
-    });
+    updateTurn(requestId, (prev) => ({
+      ...prev,
+      tools: nextTools,
+      assistantPreview: assistant || prev.assistantPreview,
+      reasoningPreview: reasoning || prev.reasoningPreview,
+      error: errorText,
+    }));
 
     return { sawDone, finalSessionId };
-  }, []);
+  }, [updateTurn]);
 
-  const runReplay = useCallback(async () => {
-    if (replayingRef.current) return;
-    const turn = pendingTurnRef.current;
+  const runReplay = useCallback(async (requestId) => {
+    const meta = turnMetaRef.current[requestId];
+    if (!meta || meta.replaying) return;
+    const turn = pendingTurnsRef.current[requestId];
     if (!turn?.sessionId || !turn?.profile) return;
-    replayingRef.current = true;
+    meta.replaying = true;
     const firstAttempt = !turn.didNotifyReconnecting;
     try {
       if (firstAttempt) {
         notify({ message: "Stream went silent — reconnecting…", variant: "info" });
-        setPendingTurn((prev) =>
+        updateTurn(requestId, (prev) =>
           prev ? { ...prev, didNotifyReconnecting: true } : prev,
         );
       }
@@ -179,90 +266,72 @@ export function useChatStream({
       });
       if (!result?.exists) return;
       const events = Array.isArray(result.events) ? result.events : [];
-      // Drop already-buffered deltas — we're rebuilding from disk.
-      deltaBufferRef.current = { assistant: "", reasoning: "" };
-      const { sawDone, finalSessionId } = applyReplayedEvents(events);
+      deltaBufferRef.current[requestId] = { assistant: "", reasoning: "" };
+      const { sawDone, finalSessionId } = applyReplayedEvents(requestId, events);
       if (sawDone) {
         notify({ message: "Reconnected — turn recovered from disk", variant: "success" });
         const sid = finalSessionId ?? turn.sessionId;
         try {
-          const newData = await invoke("session_detail", {
-            profile: turn.profile,
-            id: sid,
-          });
-          setRewriteDraft(null);
-          // Mirror the reply-path guard — no view yank if user switched profile.
-          setView((cur) => {
-            if (cur?.kind === "profile" && cur.profile === turn.profile) {
-              setSessionData(newData);
-              return { kind: "profile", profile: turn.profile, sessionId: sid };
-            }
-            return cur;
-          });
-          reloadRef.current?.();
+          const newData = await invoke("session_detail", { profile: turn.profile, id: sid });
+          finishTurnView(turn, sid, newData);
         } catch (e) {
           notify({ message: String(e), variant: "error" });
         }
-        setPendingTurn((prev) => (prev?.error ? prev : null));
+        delete turnMetaRef.current[requestId];
+        delete deltaBufferRef.current[requestId];
+        dropTurnTimers(requestId);
+        updateTurn(requestId, (prev) => (prev?.error ? prev : null));
       } else {
-        // Daemon may still be working — the watchdog will fire again; arm the clock so we don't spam-replay.
-        lastEventAtRef.current = Date.now();
+        meta.lastEventAt = Date.now();
       }
     } catch (e) {
       notify({ message: `reconnect failed: ${e}`, variant: "error" });
     } finally {
-      replayingRef.current = false;
+      const m = turnMetaRef.current[requestId];
+      if (m) m.replaying = false;
     }
-  }, [applyReplayedEvents, notify, reloadRef, setRewriteDraft, setSessionData, setView]);
+  }, [applyReplayedEvents, dropTurnTimers, finishTurnView, notify, updateTurn]);
 
-  // Stall watchdog — polls every STALL_POLL_INTERVAL_MS while a turn is pending.
   useEffect(() => {
-    if (!pendingTurn) return undefined;
+    if (Object.keys(pendingTurns).length === 0) return undefined;
     const id = setInterval(() => {
-      const turn = pendingTurnRef.current;
-      if (!turn) return;
-      if (replayingRef.current) return;
-      // Confirmed-offline daemon: replaying would just queue invokes against a dead socket — resume on the first online tick.
       if (connectionOnlineRef?.current === false) return;
-      // Errored turn is terminal but stays pending to show the error — replaying floods recovery toasts.
-      if (turn.error) return;
-      // Pre-session_start: nothing to replay yet (sidecar key is the session id, daemon emits it as the first frame).
-      if (!turn.sessionId) return;
-      const silentFor = Date.now() - (lastEventAtRef.current || 0);
-      if (silentFor >= STALL_THRESHOLD_MS) {
-        runReplay();
+      const now = Date.now();
+      for (const [rid, turn] of Object.entries(pendingTurnsRef.current)) {
+        const meta = turnMetaRef.current[rid];
+        if (!meta || meta.replaying) continue;
+        if (turn.error) continue;
+        if (!turn.sessionId) continue;
+        if (now - (meta.lastEventAt || 0) >= STALL_THRESHOLD_MS) runReplay(rid);
       }
     }, STALL_POLL_INTERVAL_MS);
     return () => clearInterval(id);
-  }, [pendingTurn, runReplay, connectionOnlineRef]);
+  }, [pendingTurns, runReplay, connectionOnlineRef]);
 
   useEffect(() => {
     let cancelled = false;
     let unlisten = null;
     listen("chat-event", (event) => {
       const p = event.payload;
-      if (p.request_id && p.request_id !== activeRequestIdRef.current) return;
-      markActivity();
+      const rid = p.request_id;
+      if (!rid || pendingTurnsRef.current[rid] === undefined) return;
+      markActivity(rid);
       if (p.kind === "heartbeat") {
         return; // keepalive only — daemon proving the loop is alive
       }
       if (p.kind === "session_start") {
-        // Pin the sessionId on pendingTurn BEFORE any tool/delta arrives so the stall watchdog can replay via host.chat.events_since even if the very next frame is the one that gets lost.
+        // Pin the sessionId BEFORE any tool/delta arrives so the stall watchdog can replay via host.chat.events_since even if the next frame is lost.
         if (p.session_id) {
-          setPendingTurn((prev) =>
-            prev ? { ...prev, sessionId: p.session_id } : prev,
-          );
+          updateTurn(rid, (prev) => ({ ...prev, sessionId: p.session_id }));
         }
         return;
       }
       if (p.kind === "tool_start") {
-        // Reasoning+prose since the last tool belong to THIS tool — ride them on the entry, then reset, so the turn renders interleaved.
-        const pendingProse = deltaBufferRef.current.assistant;
-        const pendingReasoning = deltaBufferRef.current.reasoning;
-        deltaBufferRef.current.assistant = "";
-        deltaBufferRef.current.reasoning = "";
-        setPendingTurn((prev) => {
-          if (!prev) return prev;
+        const buf = deltaBufferRef.current[rid] ?? { assistant: "", reasoning: "" };
+        const pendingProse = buf.assistant;
+        const pendingReasoning = buf.reasoning;
+        deltaBufferRef.current[rid] = { assistant: "", reasoning: "" };
+        updateTurn(rid, (prev) => {
           const existing = prev.tools.findIndex((t) => t.tool_id === p.tool_id);
           const prior = existing >= 0 ? prev.tools[existing] : null;
           const segment = [prev.reasoningPreview, pendingReasoning, `${prev.assistantPreview ?? ""}${pendingProse}`]
@@ -288,8 +357,7 @@ export function useChatStream({
           return { ...prev, tools, reasoningPreview: "", assistantPreview: "" };
         });
       } else if (p.kind === "tool_state") {
-        setPendingTurn((prev) => {
-          if (!prev) return prev;
+        updateTurn(rid, (prev) => {
           const tools = prev.tools.map((t) =>
             t.tool_id === p.tool_id && t.ok === null
               ? { ...t, states: [...t.states, { text: p.text, ok: p.ok }] }
@@ -301,12 +369,10 @@ export function useChatStream({
         const matchTool = (t) =>
           (p.tool_id && t.tool_id === p.tool_id) ||
           (!p.tool_id && t.name === p.name && t.ok === null);
-        const turnRequestId = activeRequestIdRef.current;
         function applyEnd() {
-          // Stale fires from a previous turn must not mutate the current pendingTurn.
-          if (activeRequestIdRef.current !== turnRequestId) return;
-          setPendingTurn((prev) => {
-            if (!prev) return prev;
+          // Stale fire after the turn ended/cancelled must not resurrect it.
+          if (pendingTurnsRef.current[rid] === undefined) return;
+          updateTurn(rid, (prev) => {
             const tools = [...prev.tools];
             for (let i = tools.length - 1; i >= 0; i--) {
               if (matchTool(tools[i])) {
@@ -322,8 +388,7 @@ export function useChatStream({
             return { ...prev, tools };
           });
         }
-        setPendingTurn((prev) => {
-          if (!prev) return prev;
+        updateTurn(rid, (prev) => {
           let idx = -1;
           for (let i = prev.tools.length - 1; i >= 0; i--) {
             if (matchTool(prev.tools[i])) {
@@ -344,73 +409,63 @@ export function useChatStream({
             };
             return { ...prev, tools };
           }
-          const timer = setTimeout(() => {
-            toolEndTimersRef.current.delete(timer);
+          const entry = { requestId: rid, timer: null };
+          entry.timer = setTimeout(() => {
+            toolEndTimersRef.current.delete(entry);
             applyEnd();
           }, MIN_TOOL_RUNNING_MS - elapsed);
-          toolEndTimersRef.current.add(timer);
+          toolEndTimersRef.current.add(entry);
           return prev;
         });
       } else if (p.kind === "assistant_delta") {
-        deltaBufferRef.current.assistant += p.text;
+        const buf = (deltaBufferRef.current[rid] ??= { assistant: "", reasoning: "" });
+        buf.assistant += p.text;
         scheduleDeltaFlush();
       } else if (p.kind === "reasoning_delta") {
-        deltaBufferRef.current.reasoning += p.text;
+        const buf = (deltaBufferRef.current[rid] ??= { assistant: "", reasoning: "" });
+        buf.reasoning += p.text;
         scheduleDeltaFlush();
       } else if (p.kind === "auto_compact") {
-        setPendingTurn((prev) =>
-          prev
-            ? {
-                ...prev,
-                tools: [
-                  ...prev.tools,
-                  {
-                    tool_id: `auto-compact-${Date.now()}`,
-                    name: "auto-compact",
-                    preview: p.text,
-                    args: {
-                      tokens_before: p.tokens_before,
-                      tokens_after: p.tokens_after,
-                    },
-                    states: [],
-                    output: p.text,
-                    ok: true,
-                    startedAt: Date.now(),
-                  },
-                ],
-              }
-            : prev,
-        );
+        updateTurn(rid, (prev) => ({
+          ...prev,
+          tools: [
+            ...prev.tools,
+            {
+              tool_id: `auto-compact-${Date.now()}`,
+              name: "auto-compact",
+              preview: p.text,
+              args: {
+                tokens_before: p.tokens_before,
+                tokens_after: p.tokens_after,
+              },
+              states: [],
+              output: p.text,
+              ok: true,
+              startedAt: Date.now(),
+            },
+          ],
+        }));
       } else if (p.kind === "error") {
-        setPendingTurn((prev) => (prev ? { ...prev, error: p.text } : prev));
+        updateTurn(rid, (prev) => ({ ...prev, error: p.text }));
       } else if (p.kind === "reply") {
-        setPendingTurn((prev) => {
-          if (!prev || !p.session_id) return prev;
-          const profileName = prev.profile;
-          invoke("session_detail", {
-            profile: profileName,
-            id: p.session_id,
-          })
-            .then((newData) => {
-              setRewriteDraft(null);
-              // No view yank if the user switched profile mid-turn — sidebar unread does the surfacing.
-              setView((cur) => {
-                if (cur?.kind === "profile" && cur.profile === profileName) {
-                  setSessionData(newData);
-                  return { kind: "profile", profile: profileName, sessionId: p.session_id };
-                }
-                return cur;
-              });
-              reloadRef.current?.();
-            })
-            .catch((e) => notify({ message: String(e), variant: "error" }));
-          return prev;
-        });
+        if (!p.session_id) return;
+        const turn = pendingTurnsRef.current[rid];
+        if (!turn) return;
+        const sid = p.session_id;
+        invoke("session_detail", { profile: turn.profile, id: sid })
+          .then((newData) => finishTurnView(turn, sid, newData))
+          .catch((e) => notify({ message: String(e), variant: "error" }));
       } else if (p.kind === "done") {
-        deltaBufferRef.current = { assistant: "", reasoning: "" };
-        for (const t of toolEndTimersRef.current) clearTimeout(t);
-        toolEndTimersRef.current.clear();
-        setPendingTurn((prev) => (prev?.error ? prev : null));
+        delete turnMetaRef.current[rid];
+        delete deltaBufferRef.current[rid];
+        dropTurnTimers(rid);
+        setPendingTurns((prev) => {
+          const cur = prev[rid];
+          if (cur === undefined) return prev;
+          if (cur.error) return prev; // keep an errored turn on screen
+          const { [rid]: _omit, ...rest } = prev;
+          return rest;
+        });
       }
     })
       .then((fn) => {
@@ -422,7 +477,7 @@ export function useChatStream({
       cancelled = true;
       safeUnlisten(unlisten);
     };
-  }, [markActivity, scheduleDeltaFlush, setSessionData, setView, setRewriteDraft, reloadRef, notify]);
+  }, [markActivity, scheduleDeltaFlush, updateTurn, dropTurnTimers, finishTurnView, notify]);
 
-  return { pendingTurn, setPendingTurn, activeRequestIdRef };
+  return { pendingTurns, pendingTurnsRef, startTurn, removeTurn, clearAllTurns };
 }

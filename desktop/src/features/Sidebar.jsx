@@ -67,7 +67,7 @@ function Sidebar({
   workgroups,
   taskByWorkgroup = {},
   activityByWorkgroup = {},
-  pendingProfile = null,
+  pendingProfiles = null,
   view,
   settingsTarget = null,
   pinned = { profiles: [], workgroups: [] },
@@ -327,7 +327,7 @@ function Sidebar({
       key={keyPrefix + p.name}
       profile={p}
       active={activeProfileName === p.name}
-      pending={pendingProfile === p.name}
+      pending={!!pendingProfiles?.has(p.name)}
       isPinned={pinnedProfileNames.includes(p.name)}
       connId={connId}
       checkUnread={checkUnread}

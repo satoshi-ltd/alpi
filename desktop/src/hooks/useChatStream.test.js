@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { renderHook, act, waitFor } from "@testing-library/react";
+import { renderHook, act } from "@testing-library/react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useChatStream } from "./useChatStream.js";
@@ -10,7 +10,7 @@ let chatEventCb;
 let unlisten;
 
 function emit(payload) {
-  act(() => chatEventCb({ payload }));
+  act(() => chatEventCb({ payload: { request_id: "req-1", ...payload } }));
 }
 
 function mount(extras = {}) {
@@ -27,18 +27,24 @@ function mount(extras = {}) {
 }
 
 function seedTurn(result, partial = {}) {
+  const requestId = partial.requestId ?? "req-1";
   act(() => {
-    result.current.setPendingTurn({
-      requestId: "req-1",
+    result.current.startTurn({
+      requestId,
       profile: "doc",
       user: "hi",
       assistantPreview: "",
       reasoningPreview: "",
       tools: [],
+      sessionId: partial.sessionId ?? null,
+      launchSessionId: partial.launchSessionId ?? partial.sessionId ?? null,
       ...partial,
     });
-    result.current.activeRequestIdRef.current = partial.requestId ?? "req-1";
   });
+}
+
+function turnOf(result, rid = "req-1") {
+  return result.current.pendingTurns[rid] ?? null;
 }
 
 beforeEach(() => {
@@ -62,47 +68,111 @@ async function waitForListen() {
 }
 
 describe("useChatStream live frames", () => {
-  it("session_start pins sessionId onto the pendingTurn", async () => {
+  it("session_start pins sessionId onto the turn", async () => {
     const { result } = mount();
     await waitForListen();
     seedTurn(result);
-    emit({ kind: "session_start", session_id: "sess-1", request_id: "req-1" });
-    expect(result.current.pendingTurn.sessionId).toBe("sess-1");
+    emit({ kind: "session_start", session_id: "sess-1" });
+    expect(turnOf(result).sessionId).toBe("sess-1");
   });
 
   it("heartbeat is a no-op (only resets the watchdog clock)", async () => {
     const { result } = mount();
     await waitForListen();
     seedTurn(result, { sessionId: "sess-1" });
-    const before = { ...result.current.pendingTurn };
-    emit({ kind: "heartbeat", request_id: "req-1" });
-    expect(result.current.pendingTurn).toEqual(before);
+    const before = { ...turnOf(result) };
+    emit({ kind: "heartbeat" });
+    expect(turnOf(result)).toEqual(before);
   });
 
-  it("done clears pendingTurn when there is no error", async () => {
+  it("done removes the turn when there is no error", async () => {
     const { result } = mount();
     await waitForListen();
     seedTurn(result, { sessionId: "sess-1" });
-    emit({ kind: "done", request_id: "req-1" });
-    expect(result.current.pendingTurn).toBeNull();
+    emit({ kind: "done" });
+    expect(turnOf(result)).toBeNull();
   });
 
-  it("done preserves pendingTurn when an error frame already landed", async () => {
+  it("done preserves the turn when an error frame already landed", async () => {
     const { result } = mount();
     await waitForListen();
     seedTurn(result, { sessionId: "sess-1" });
-    emit({ kind: "error", text: "model timeout", request_id: "req-1" });
-    emit({ kind: "done", request_id: "req-1" });
-    expect(result.current.pendingTurn).not.toBeNull();
-    expect(result.current.pendingTurn.error).toBe("model timeout");
+    emit({ kind: "error", text: "model timeout" });
+    emit({ kind: "done" });
+    expect(turnOf(result)).not.toBeNull();
+    expect(turnOf(result).error).toBe("model timeout");
   });
 
-  it("drops frames from a stale request_id (interrupted turn)", async () => {
+  it("drops frames whose request_id is not a tracked turn (interrupted/stale)", async () => {
     const { result } = mount();
     await waitForListen();
     seedTurn(result, { sessionId: "sess-1" });
     emit({ kind: "tool_start", tool_id: "t1", name: "search", request_id: "req-OLD" });
-    expect(result.current.pendingTurn.tools).toHaveLength(0);
+    expect(turnOf(result).tools).toHaveLength(0);
+  });
+});
+
+describe("useChatStream concurrent turns", () => {
+  it("routes frames to the turn matching request_id; other turns are untouched", async () => {
+    const { result } = mount();
+    await waitForListen();
+    seedTurn(result, { requestId: "req-1", sessionId: "s1" });
+    seedTurn(result, { requestId: "req-2", sessionId: "s2" });
+    emit({ kind: "tool_start", tool_id: "t1", name: "search", request_id: "req-1" });
+    expect(turnOf(result, "req-1").tools).toHaveLength(1);
+    expect(turnOf(result, "req-2").tools).toHaveLength(0);
+  });
+
+  it("done on one turn leaves the others streaming", async () => {
+    const { result } = mount();
+    await waitForListen();
+    seedTurn(result, { requestId: "req-1", sessionId: "s1" });
+    seedTurn(result, { requestId: "req-2", sessionId: "s2" });
+    emit({ kind: "done", request_id: "req-1" });
+    expect(turnOf(result, "req-1")).toBeNull();
+    expect(turnOf(result, "req-2")).not.toBeNull();
+  });
+
+  it("deltas fan out to the right turn only", async () => {
+    const { result } = mount();
+    await waitForListen();
+    seedTurn(result, { requestId: "req-1", sessionId: "s1" });
+    seedTurn(result, { requestId: "req-2", sessionId: "s2" });
+    emit({ kind: "assistant_delta", text: "for one", request_id: "req-1" });
+    emit({ kind: "assistant_delta", text: "for two", request_id: "req-2" });
+    await act(async () => { await vi.advanceTimersByTimeAsync(60); });
+    expect(turnOf(result, "req-1").assistantPreview).toBe("for one");
+    expect(turnOf(result, "req-2").assistantPreview).toBe("for two");
+  });
+
+  it("re-sending into the same chat evicts its prior turn but spares other chats", async () => {
+    const { result } = mount();
+    await waitForListen();
+    seedTurn(result, { requestId: "req-1", sessionId: "s1", launchSessionId: "s1" });
+    seedTurn(result, { requestId: "req-2", sessionId: "s2", launchSessionId: "s2" });
+    // New turn launched into s1 supersedes req-1; req-2 (a different chat) is left alone.
+    seedTurn(result, { requestId: "req-3", sessionId: "s1", launchSessionId: "s1" });
+    expect(turnOf(result, "req-1")).toBeNull();
+    expect(turnOf(result, "req-2")).not.toBeNull();
+    expect(turnOf(result, "req-3")).not.toBeNull();
+  });
+
+  it("a second send from the blank composer supersedes the prior new-chat turn", async () => {
+    const { result } = mount();
+    await waitForListen();
+    seedTurn(result, { requestId: "req-1", sessionId: null, launchSessionId: null });
+    seedTurn(result, { requestId: "req-2", sessionId: null, launchSessionId: null });
+    expect(turnOf(result, "req-1")).toBeNull();
+    expect(turnOf(result, "req-2")).not.toBeNull();
+  });
+
+  it("a blank-composer send leaves existing-session turns alone", async () => {
+    const { result } = mount();
+    await waitForListen();
+    seedTurn(result, { requestId: "req-1", sessionId: "s1", launchSessionId: "s1" });
+    seedTurn(result, { requestId: "req-2", sessionId: null, launchSessionId: null });
+    expect(turnOf(result, "req-1")).not.toBeNull();
+    expect(turnOf(result, "req-2")).not.toBeNull();
   });
 });
 
@@ -131,7 +201,7 @@ describe("useChatStream stall watchdog", () => {
     );
   });
 
-  it("after 10s of silence replays sidecar; on done clears pendingTurn", async () => {
+  it("after 10s of silence replays sidecar; on done clears the turn", async () => {
     invoke.mockImplementation(async (cmd) => {
       if (cmd === "chat_events_since") {
         return {
@@ -151,7 +221,6 @@ describe("useChatStream stall watchdog", () => {
     seedTurn(result, { sessionId: "sess-1" });
 
     await act(async () => { await vi.advanceTimersByTimeAsync(12_000); });
-    // Settle async invoke chain.
     await act(async () => { await vi.advanceTimersByTimeAsync(0); });
 
     expect(invoke).toHaveBeenCalledWith(
@@ -161,10 +230,10 @@ describe("useChatStream stall watchdog", () => {
     expect(notify).toHaveBeenCalledWith(
       expect.objectContaining({ variant: "info" }),
     );
-    expect(result.current.pendingTurn).toBeNull();
+    expect(turnOf(result)).toBeNull();
   });
 
-  it("if sidecar has no done frame, watchdog does NOT clear pendingTurn", async () => {
+  it("if sidecar has no done frame, watchdog does NOT clear the turn", async () => {
     invoke.mockImplementation(async (cmd) => {
       if (cmd === "chat_events_since") {
         return {
@@ -185,9 +254,9 @@ describe("useChatStream stall watchdog", () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(0); });
 
     expect(invoke).toHaveBeenCalledWith("chat_events_since", expect.anything());
-    expect(result.current.pendingTurn).not.toBeNull();
+    expect(turnOf(result)).not.toBeNull();
     // Assistant preview rebuilt from replay even though not done.
-    expect(result.current.pendingTurn.assistantPreview).toBe("Hel");
+    expect(turnOf(result).assistantPreview).toBe("Hel");
   });
 
   it("attaches inter-tool prose to the tool as its reasoning, keeps the final answer as the reply", async () => {
@@ -213,9 +282,9 @@ describe("useChatStream stall watchdog", () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(12_000); });
     await act(async () => { await vi.advanceTimersByTimeAsync(0); });
 
-    expect(result.current.pendingTurn.tools[0].reasoning).toBe("Let me investigate.");
-    expect(result.current.pendingTurn.reasoningPreview).toBe("");
-    expect(result.current.pendingTurn.assistantPreview).toBe("The final answer.");
+    expect(turnOf(result).tools[0].reasoning).toBe("Let me investigate.");
+    expect(turnOf(result).reasoningPreview).toBe("");
+    expect(turnOf(result).assistantPreview).toBe("The final answer.");
   });
 
   it("stamps at on tool_start and duration_s on tool_end so per-step seconds show live", async () => {
@@ -223,10 +292,10 @@ describe("useChatStream stall watchdog", () => {
     await waitForListen();
     seedTurn(result, { sessionId: "sess-1" });
     emit({ kind: "tool_start", tool_id: "t1", name: "search" });
-    expect(typeof result.current.pendingTurn.tools[0].at).toBe("number");
+    expect(typeof turnOf(result).tools[0].at).toBe("number");
     await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
     emit({ kind: "tool_end", tool_id: "t1", ok: true, output: "done" });
-    expect(result.current.pendingTurn.tools[0].duration_s).toBeGreaterThan(0);
+    expect(turnOf(result).tools[0].duration_s).toBeGreaterThan(0);
   });
 
   it("replay carries at/duration_s from the sidecar ts", async () => {
@@ -248,8 +317,8 @@ describe("useChatStream stall watchdog", () => {
     seedTurn(result, { sessionId: "sess-1" });
     await act(async () => { await vi.advanceTimersByTimeAsync(12_000); });
     await act(async () => { await vi.advanceTimersByTimeAsync(0); });
-    expect(result.current.pendingTurn.tools[0].at).toBe(101);
-    expect(result.current.pendingTurn.tools[0].duration_s).toBe(3);
+    expect(turnOf(result).tools[0].at).toBe(101);
+    expect(turnOf(result).tools[0].duration_s).toBe(3);
   });
 
   it("a simple answer streams live into the answer bubble (no tool, no thinking)", async () => {
@@ -258,8 +327,8 @@ describe("useChatStream stall watchdog", () => {
     seedTurn(result, { sessionId: "sess-1" });
     emit({ kind: "assistant_delta", text: "hello there" });
     await act(async () => { await vi.advanceTimersByTimeAsync(60); });
-    expect(result.current.pendingTurn.assistantPreview).toBe("hello there");
-    expect(result.current.pendingTurn.reasoningPreview).toBe("");
+    expect(turnOf(result).assistantPreview).toBe("hello there");
+    expect(turnOf(result).reasoningPreview).toBe("");
   });
 
   it("never replays an errored turn (no recovery-toast flood)", async () => {
@@ -272,7 +341,7 @@ describe("useChatStream stall watchdog", () => {
 
     expect(invoke).not.toHaveBeenCalledWith("chat_events_since", expect.anything());
     expect(notify).not.toHaveBeenCalled();
-    expect(result.current.pendingTurn.error).toBeTruthy();
+    expect(turnOf(result).error).toBeTruthy();
   });
 
   it("watchdog stays quiet if no sessionId yet (pre session_start)", async () => {
@@ -284,6 +353,6 @@ describe("useChatStream stall watchdog", () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(0); });
 
     expect(invoke).not.toHaveBeenCalledWith("chat_events_since", expect.anything());
-    expect(result.current.pendingTurn).not.toBeNull();
+    expect(turnOf(result)).not.toBeNull();
   });
 });

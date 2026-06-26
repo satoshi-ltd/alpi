@@ -32,11 +32,11 @@ function parsePairingPayload(payload) {
 // Connection switcher state + per-connection profile/workgroup cache; App.jsx passes its own setters (chat/view) so the hook can reset them on connection switch.
 export function useHostConnections({
   setSessionData,
-  setPendingTurn,
+  clearAllTurns,
   setRewriteDraft,
   setActiveTask,
   setView,
-  pendingTurnRef,
+  pendingTurnsRef,
 }) {
   const [hostConnections, setHostConnections] = useState({
     active_id: "local",
@@ -90,14 +90,14 @@ export function useHostConnections({
   const clearConnectionContent = useCallback(() => {
     applyProfilesAndWorkgroups([], []);
     setSessionData(null);
-    setPendingTurn(null);
+    clearAllTurns();
     setRewriteDraft(null);
     setActiveTask(null);
     setView((v) => (v.kind === "settings" ? v : { kind: "empty" }));
   }, [
     applyProfilesAndWorkgroups,
     setSessionData,
-    setPendingTurn,
+    clearAllTurns,
     setRewriteDraft,
     setActiveTask,
     setView,
@@ -298,9 +298,10 @@ export function useHostConnections({
       if (current.active_id === id) return;
       const previousState = current;
       const switchId = ++connectionSwitchRef.current;
-      const pending = pendingTurnRef.current;
-      if (pending?.profile) {
-        invoke("chat_cancel", { profile: pending.profile }).catch(() => {});
+      for (const t of Object.values(pendingTurnsRef.current)) {
+        if (t.profile) {
+          invoke("chat_cancel", { profile: t.profile, requestId: t.requestId }).catch(() => {});
+        }
       }
       // ref + state must flip BEFORE loadFromCache — pruneCachedMessages reads hostConnectionsRef
       const next = {
@@ -314,7 +315,7 @@ export function useHostConnections({
       setHostConnections(next);
       setRewriteDraft(null);
       setSessionData(null);
-      setPendingTurn(null);
+      clearAllTurns();
       setActiveTask(null);
       setView((v) => (v.kind === "settings" ? v : { kind: "empty" }));
       // reset picker — applyProfilesAndWorkgroups keeps prev if name collides across connections
@@ -339,10 +340,10 @@ export function useHostConnections({
     [
       loadFromCache,
       reloadConnections,
-      pendingTurnRef,
+      pendingTurnsRef,
       setRewriteDraft,
       setSessionData,
-      setPendingTurn,
+      clearAllTurns,
       setActiveTask,
       setView,
     ],

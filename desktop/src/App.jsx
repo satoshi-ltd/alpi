@@ -29,6 +29,7 @@ import {
   fromDaemonFrame,
   isActiveWorkgroupView,
 } from "./lib/daemon-frame.js";
+import { pendingTurnForView } from "./lib/pendingTurnForView.js";
 import { enqueueRequest as enqueueApprovalRequest } from "./lib/approval-queue.js";
 import { enqueueRequest as enqueueClarificationRequest } from "./lib/clarification-queue.js";
 import { invalidateProfileDetailCache } from "./hooks/useProfileDetail.js";
@@ -122,7 +123,7 @@ export default function App() {
   const workgroupsRef = useRef([]);
 
   const reloadRef = useRef(null);
-  const pendingTurnRef = useRef(null);
+  const foregroundTurnRef = useRef(null);
 
   const jumpTargetsRef = useRef([]);
   const onJumpToProfile = useCallback((index) => {
@@ -272,7 +273,7 @@ export default function App() {
   useNavListener(setView);
 
   const connectionOnlineRef = useRef(true);
-  const { pendingTurn, setPendingTurn, activeRequestIdRef } = useChatStream({
+  const { pendingTurns, pendingTurnsRef, startTurn, removeTurn, clearAllTurns } = useChatStream({
     setSessionData,
     setView,
     setRewriteDraft,
@@ -280,9 +281,6 @@ export default function App() {
     notify,
     connectionOnlineRef,
   });
-  useEffect(() => {
-    pendingTurnRef.current = pendingTurn;
-  }, [pendingTurn]);
 
   const {
     hostConnections,
@@ -300,11 +298,11 @@ export default function App() {
     onRefreshHostConnectionStatus,
   } = useHostConnections({
     setSessionData,
-    setPendingTurn,
+    clearAllTurns,
     setRewriteDraft,
     setActiveTask,
     setView,
-    pendingTurnRef,
+    pendingTurnsRef,
   });
 
   useNotificationDeeplink({
@@ -514,11 +512,14 @@ export default function App() {
     const v = viewRef.current;
     switch (ev.kind) {
       case "session": {
+        const liveForSession = Object.values(pendingTurnsRef.current).some(
+          (t) => t.profile === ev.profile && (t.sessionId ?? t.launchSessionId) === ev.session_id,
+        );
         if (
           v.kind === "profile" &&
           v.profile === ev.profile &&
           v.sessionId === ev.session_id &&
-          !pendingTurnRef.current
+          !liveForSession
         ) {
           scheduleSessionRefresh(ev.profile, ev.session_id);
         }
@@ -641,6 +642,19 @@ export default function App() {
     return null;
   }, [view, profiles, pickerAlpi, settingsTarget]);
 
+  const pendingTurnForCurrentView = useMemo(
+    () => pendingTurnForView({ pendingTurns, view, activeProfileName: activeProfile?.name }),
+    [pendingTurns, view, activeProfile?.name],
+  );
+  useEffect(() => {
+    foregroundTurnRef.current = pendingTurnForCurrentView;
+  }, [pendingTurnForCurrentView]);
+  const pendingProfiles = useMemo(() => {
+    const s = new Set();
+    for (const t of Object.values(pendingTurns)) s.add(t.profile);
+    return s;
+  }, [pendingTurns]);
+
   const onSend = useCallback(
     async (text, model, opts) => {
       const attachments = opts?.attachments?.length ? opts.attachments : null;
@@ -664,21 +678,28 @@ export default function App() {
             : null
         );
 
-        if (pendingTurn && pendingTurn.profile === profileName) {
+        // Interrupt only the turn in THIS chat — an existing session, or the single blank-composer slot (launchSessionId null); other chats keep streaming.
+        const prior = Object.values(pendingTurnsRef.current).find((t) =>
+          t.profile === profileName &&
+          (startSessionId != null
+            ? (t.sessionId ?? t.launchSessionId) === startSessionId
+            : (t.launchSessionId ?? null) === null),
+        );
+        if (prior) {
           try {
-            await invoke("chat_cancel", { profile: profileName });
+            await invoke("chat_cancel", { profile: profileName, requestId: prior.requestId });
           } catch {}
         }
 
         const requestId = `desktop-${profileName}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-        activeRequestIdRef.current = requestId;
 
-        setPendingTurn({
+        startTurn({
           user: text,
           tools: [],
           error: null,
           profile: profileName,
           sessionId: startSessionId,
+          launchSessionId: startSessionId,
           requestId,
           attachments,
           rewriteFromTurn,
@@ -701,7 +722,7 @@ export default function App() {
               );
             } catch (e) {
               notify({ message: `Attachment upload failed: ${e}`, variant: "error" });
-              setPendingTurn(null);
+              removeTurn(requestId);
               return;
             }
           }
@@ -719,26 +740,26 @@ export default function App() {
           });
         } catch (e) {
           notify({ message: String(e), variant: "error" });
-          setPendingTurn(null);
+          removeTurn(requestId);
         }
       } finally {
         sendingRef.current = false;
       }
     },
-    [activeProfile, view, pendingTurn, rewriteDraft, notify, setPendingTurn, activeRequestIdRef],
+    [activeProfile, view, rewriteDraft, notify, startTurn, removeTurn, pendingTurnsRef, hostConnectionsRef],
   );
 
   const onCancelTurn = useCallback(() => {
-    const pending = pendingTurnRef.current;
+    const pending = foregroundTurnRef.current;
     if (!pending?.profile) return;
-    invoke("chat_cancel", { profile: pending.profile }).catch(() => {});
+    invoke("chat_cancel", { profile: pending.profile, requestId: pending.requestId }).catch(() => {});
   }, []);
 
   useEffect(() => {
     function onKey(e) {
       if (e.key !== "Escape") return;
       if (e.defaultPrevented) return;
-      if (!pendingTurnRef.current?.profile) return;
+      if (!foregroundTurnRef.current?.profile) return;
       e.preventDefault();
       onCancelTurn();
     }
@@ -928,7 +949,7 @@ export default function App() {
         workgroups={workgroups}
         taskByWorkgroup={taskByWorkgroup}
         activityByWorkgroup={activityByWorkgroup}
-        pendingProfile={pendingTurn?.profile ?? null}
+        pendingProfiles={pendingProfiles}
         view={view}
         settingsTarget={settingsTarget}
         pinned={pinned}
@@ -1029,11 +1050,7 @@ export default function App() {
                   connectionId={hostConnections.active_id}
                   sessionData={sessionData}
                   daemonOffline={daemonOffline}
-                  pendingTurn={
-                    pendingTurn && pendingTurn.profile === activeProfile?.name
-                      ? pendingTurn
-                      : null
-                  }
+                  pendingTurn={pendingTurnForCurrentView}
                   onSend={onSend}
                   onCancel={onCancelTurn}
                   onConfigureProfile={canAdminEarly ? (p) => {

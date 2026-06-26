@@ -29,19 +29,19 @@ function setProfileCache(connectionId, profiles, workgroups = []) {
 
 function renderHostConnections() {
   const setSessionData = vi.fn();
-  const setPendingTurn = vi.fn();
+  const clearAllTurns = vi.fn();
   const setRewriteDraft = vi.fn();
   const setActiveTask = vi.fn();
   const setView = vi.fn();
-  const pendingTurnRef = { current: null };
+  const pendingTurnsRef = { current: {} };
   const r = renderHook(() =>
     useHostConnections({
       setSessionData,
-      setPendingTurn,
+      clearAllTurns,
       setRewriteDraft,
       setActiveTask,
       setView,
-      pendingTurnRef,
+      pendingTurnsRef,
     }),
   );
   return { ...r, setView };

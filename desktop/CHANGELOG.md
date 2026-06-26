@@ -11,6 +11,20 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.3.86 — 2026-06-26 — chat: run several conversations in parallel
+
+_Requires alpi v0.9.30+._
+
+- **Start a new chat without interrupting the one already running.** Every chat
+  — including separate sessions of the same agent — now streams on its own.
+  Kick off a long turn in one, switch away and ask something else in another,
+  and both keep working at the same time.
+- **A live turn stays in its own chat.** Switching sessions while a reply is
+  streaming no longer shows that reply's tool output in the chat you opened; it
+  reappears, up to date, when you switch back.
+- **Each chat has its own stop control**, and the sidebar marks every agent
+  that's currently working.
+
 ## v0.3.85 — 2026-06-25 — loading & error states across modals and settings
 
 _Requires alpi v0.9.30+._
