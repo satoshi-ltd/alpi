@@ -128,7 +128,7 @@ describe("fromDaemonFrame", () => {
       "config_changed",
       "skills_changed",
       "memory_changed",
-      "gateway_changed",
+      "email_changed",
       "budget.threshold",
     ])("%s maps to config", (event) => {
       expect(fromDaemonFrame({ event, data: {} })).toEqual({ kind: "config" });

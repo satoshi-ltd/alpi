@@ -47,7 +47,7 @@ def test_profile_tasks_respects_subsystem_flags(tmp_path: Path) -> None:
     home = tmp_path / "h"
     home.mkdir()
     subs = {
-        "gateway": True, "schedule": False, "alp": True,
+        "schedule": False, "alp": True,
         "host": True, "workgroups": False,
     }
 
@@ -61,7 +61,6 @@ def test_profile_tasks_respects_subsystem_flags(tmp_path: Path) -> None:
         return names
 
     names = asyncio.run(run())
-    assert "alice/gateway" in names
     assert "alice/alp" in names
     assert "alice/schedule" not in names
     # Host is blocked twice: task assembly and supervisor.
@@ -379,35 +378,6 @@ def _fake_subsystem_tasks_factory(created: list):
 
 
 @pytest.mark.asyncio
-async def test_reconcile_restarts_gateway_on_gateway_env_change(
-    monkeypatch, tmp_path: Path,
-) -> None:
-    root = _make_root(tmp_path, [])
-    created: list = []
-    monkeypatch.setattr(service, "_subsystem_tasks", _fake_subsystem_tasks_factory(created))
-
-    registry: dict = {}
-    service._start_new_profiles(root, ["default"], registry)
-    gateway_before = registry["default"]["tasks"]["gateway"][0]
-    schedule_before = registry["default"]["tasks"]["schedule"][0]
-
-    (root / ".env").write_text("TELEGRAM_BOT_TOKEN=tg-new\n")
-    await service._reconcile_profiles(root, registry)
-
-    assert gateway_before.cancelled()
-    assert registry["default"]["tasks"]["gateway"][0] is not gateway_before
-    assert registry["default"]["tasks"]["schedule"][0] is schedule_before
-
-    for ts in registry["default"]["tasks"].values():
-        for t in ts:
-            t.cancel()
-    await asyncio.gather(
-        *[t for ts in registry["default"]["tasks"].values() for t in ts],
-        return_exceptions=True,
-    )
-
-
-@pytest.mark.asyncio
 async def test_reconcile_ignores_provider_key_changes(
     monkeypatch, tmp_path: Path,
 ) -> None:
@@ -441,14 +411,14 @@ async def test_reconcile_applies_subsystem_toggle_without_restart(
     registry: dict = {}
     service._start_new_profiles(root, ["default"], registry)
     schedule_task = registry["default"]["tasks"]["schedule"][0]
-    gateway_task = registry["default"]["tasks"]["gateway"][0]
+    alp_task = registry["default"]["tasks"]["alp"][0]
 
     (root / "config.yaml").write_text("model: x\nservice:\n  schedule: false\n")
     await service._reconcile_profiles(root, registry)
 
     assert schedule_task.cancelled()
     assert "schedule" not in registry["default"]["tasks"]
-    assert registry["default"]["tasks"]["gateway"][0] is gateway_task
+    assert registry["default"]["tasks"]["alp"][0] is alp_task
 
     (root / "config.yaml").write_text("model: x\nservice:\n  schedule: true\n")
     await service._reconcile_profiles(root, registry)

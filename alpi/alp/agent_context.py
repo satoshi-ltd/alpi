@@ -1,6 +1,6 @@
 """Engine pre-turn hook: turn workgroup state into a system-prompt block.
 
-Runs before every agent turn (interactive, gateway, scheduler) so
+Runs before every agent turn (interactive, scheduled) so
 the agent always sees its current workgroup context: briefing,
 active task, recent posts, and budget headroom for each workgroup
 this profile is a member of (subscriptions) or hosts.

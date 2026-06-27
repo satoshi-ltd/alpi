@@ -14,8 +14,7 @@ planning that rollout.
 
 ## 1. Laptop only
 
-The baseline. One profile, one machine, TUI for chat, optional
-gateway for messaging.
+The baseline. One profile, one machine, TUI or desktop app for chat.
 
 ```
 ┌─────────────────────────────────────┐
@@ -25,8 +24,6 @@ gateway for messaging.
 │     │                               │
 │     ├─ ~/.alpi/  (default profile)  │
 │     └─ alpi daemon                  │
-│          ├─ gateway: Telegram /     │
-│          │           IMAP / Gmail   │
 │          ├─ scheduler (cron)        │
 │          ├─ ALP listener            │
 │          ├─ workgroups poller       │
@@ -40,7 +37,7 @@ gateway for messaging.
   costs nothing.
 - **Ops:** the daemon is installed automatically on the first
   `alpi setup` (launchd plist on macOS, systemd-user unit on
-  Linux). 24/7 messaging + cron from minute one.
+  Linux). 24/7 cron + ALP from minute one.
 - **Best for:** individual, personal use. Zero-config after the
   quickstart.
 
@@ -71,7 +68,7 @@ but that'd just be two profiles — see topology 3).
   `home-server` only `link.ping` + `link.ask`; home-server grants
   laptop only `link.ask`. See [ALP.md §Capability model](ALP.md).
 - **Ops:** home server runs `alpi setup` once (auto-installs the
-  daemon, which hosts gateway + scheduler + ALP listener). Laptop
+  daemon, which hosts the scheduler + ALP listener). Laptop
   just runs `alpi` when the user sits down.
 - **Best for:** power-user individual with a house NAS /
   mini-server. Also: "I want scheduled jobs to run even when my
@@ -90,8 +87,6 @@ clients pair to it. No web terminal — reach the TUI with `docker exec`.
 │                                      │
 │  container: satoshiltd/alpi          │
 │    alpi daemon (PID 1)               │
-│      ├─ gateway: Telegram / IMAP /   │
-│      │           Gmail / Matrix      │
 │      ├─ scheduler                    │
 │      ├─ ALP listener (:7423)         │
 │      ├─ workgroups poller            │
@@ -159,7 +154,7 @@ starter kit on a single host.
   `researcher` grants `link.ask` to both.
 - **Per-profile services.** Each profile's `service:` block in
   `config.yaml` decides what the daemon spawns: `assistant` runs
-  Telegram + scheduler + ALP; `cron` runs only the scheduler;
+  scheduler + ALP; `cron` runs only the scheduler;
   `researcher` only ALP. Add or remove a profile and `alpi daemon
   restart` to apply.
 - **Best for:** family on one home server, individual with

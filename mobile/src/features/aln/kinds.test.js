@@ -24,7 +24,7 @@ describe('NOTIFIABLE_KINDS', () => {
     expect(NOTIFIABLE_KINDS).not.toContain('wg.mention');
   });
 
-  it('excludes schedule.done from native notifications — schedule success is not an interrupt; if a job wants to notify it calls send_message explicitly', () => {
+  it('excludes schedule.done from native notifications — schedule success is not an interrupt; if a job wants to notify it calls notify or email explicitly', () => {
     expect(NOTIFIABLE_KINDS).not.toContain('schedule.done');
   });
 

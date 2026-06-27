@@ -1,9 +1,9 @@
 """Health check — verify everything this profile actually works.
 
-Live checks (not just config presence): for Telegram we hit `getMe`, for
-IMAP we log in + out, for Gmail we refresh the token, for MCPs we spawn
-+ handshake + stop. Network-bound checks run in a thread pool so total
-latency ≈ slowest single check, not the sum.
+Live checks (not just config presence): for email we log in + out over
+IMAP, for Gmail we refresh the token, for MCPs we spawn + handshake +
+stop. Network-bound checks run in a thread pool so total latency ≈
+slowest single check, not the sum.
 
 Each live check has a timeout so a hung provider can't stall the whole
 report. If you want a pure-config scan (no network) — there isn't one;
@@ -49,11 +49,7 @@ def run_all(home: Path, profile: str) -> list[Check]:
 
     # Kick off live checks immediately so they run while we do the sync ones.
     live_specs: list[tuple[str, Callable[[], list[Check]]]] = [
-        ("gateways", lambda: (
-            _check_telegram_live(env)
-            + _check_imap_live(env)
-            + _check_gmail_live(home, env)
-        )),
+        ("email", lambda: _check_email_live(home)),
         ("mcps", lambda: _check_mcps_live(cfg)),
     ]
     live: dict[str, list[Check]] = {}
@@ -67,7 +63,6 @@ def run_all(home: Path, profile: str) -> list[Check]:
             "workspace": _check_workspace(cfg),
             "tools": _check_tools(),
             "skills": _check_skills(home),
-            "gateway_state": _check_gateway_state(home),
             "services": _check_services(home, profile),
             "alp": _check_alp_integrity(home, cfg),
             "security": _check_security(cfg),
@@ -82,15 +77,14 @@ def run_all(home: Path, profile: str) -> list[Check]:
             except Exception as e:  # noqa: BLE001
                 live[key] = [Check("Live", key, "fail", str(e))]
 
-    # Render order: version → model → workspace → tools → gateways → services → mcps → security.
+    # Render order: version → model → workspace → tools → email → services → mcps → security.
     out: list[Check] = []
     out.extend(sync_checks["version"])
     out.extend(sync_checks["model"])
     out.extend(sync_checks["workspace"])
     out.extend(sync_checks["tools"])
     out.extend(sync_checks["skills"])
-    out.extend(live.get("gateways", []))
-    out.extend(sync_checks["gateway_state"])
+    out.extend(live.get("email", []))
     out.extend(sync_checks["services"])
     out.extend(sync_checks["alp"])
     out.extend(live.get("mcps", []))
@@ -207,39 +201,6 @@ def _check_alp_integrity(home: Path, cfg: cfg_mod.Config) -> list[Check]:
             ))
     if clean and rows:
         out.append(Check("ALP", "peers", "ok", f"{len(rows)} peer(s), identities distinct"))
-    return out
-
-
-def _check_gateway_state(home: Path) -> list[Check]:
-    """GW.1 — surface circuit-breaker state. Silent when every platform is healthy; one row per degraded/disabled platform with last error + cooldown when applicable. Doctor stays scannable on the happy path."""
-    from alpi.gateway import breaker as _breaker
-    import time as _time
-
-    out: list[Check] = []
-    try:
-        store = _breaker.for_home(home)
-        states = store.all_states()
-    except Exception:  # noqa: BLE001
-        return out
-
-    nowt = _time.time()
-    for name, st in sorted(states.items()):
-        if st.status == "healthy":
-            continue
-        if st.status == "disabled":
-            remaining = max(0.0, st.disabled_until - nowt)
-            detail = (
-                f"disabled — cooldown {int(remaining)}s remaining "
-                f"({st.consecutive_failures} consecutive failures: {st.last_error or 'unknown'})"
-            )
-            out.append(Check("Gateways", name, "warn", detail))
-        elif st.status == "degraded":
-            detail = (
-                f"{st.consecutive_failures} consecutive failure"
-                f"{'' if st.consecutive_failures == 1 else 's'}: "
-                f"{st.last_error or 'unknown'}"
-            )
-            out.append(Check("Gateways", name, "warn", detail))
     return out
 
 
@@ -362,19 +323,16 @@ def run_and_render(console, home: Path, profile: str, version: str) -> list[Chec
     _add_sync(_check_model(cfg, env))
     _add_sync(_check_workspace(cfg))
 
-    # Gateways: always show all three rows; pending if configured.
-    if env.get("TELEGRAM_BOT_TOKEN"):
-        _add_pending("tg", "Gateways", "Telegram")
-    else:
-        _add_sync([Check("Gateways", "Telegram", "info", "not configured")])
-    if env.get("IMAP_ADDRESS"):
-        _add_pending("imap", "Gateways", "IMAP")
-    else:
-        _add_sync([Check("Gateways", "IMAP", "info", "not configured")])
-    if env.get("GMAIL_CLIENT_ID"):
-        _add_pending("gmail", "Gateways", "Gmail")
-    else:
-        _add_sync([Check("Gateways", "Gmail", "info", "not configured")])
+    from alpi.mail import accounts as accounts_mod
+    email_rows = accounts_mod.list_accounts(home)
+    if not email_rows:
+        _add_sync([Check("Email", "accounts", "info", "none configured")])
+    for row in email_rows:
+        label = row.get("address") or row["id"]
+        if row.get("configured"):
+            _add_pending(f"email:{row['id']}", "Email", label)
+        else:
+            _add_sync([Check("Email", label, "info", "not authorized")])
 
     _add_sync(_check_services(home, profile))
 
@@ -427,17 +385,14 @@ def run_and_render(console, home: Path, profile: str, version: str) -> list[Chec
               transient=False) as live:
         with ThreadPoolExecutor(max_workers=8) as pool:
             futures = []
-            if any(k == "tg" for k, _, _ in plan):
-                f = pool.submit(_check_telegram_live, env)
-                f.add_done_callback(lambda fu: _set("tg", fu.result()[0]) or live.update(_render()))
-                futures.append(f)
-            if any(k == "imap" for k, _, _ in plan):
-                f = pool.submit(_check_imap_live, env)
-                f.add_done_callback(lambda fu: _set("imap", fu.result()[0]) or live.update(_render()))
-                futures.append(f)
-            if any(k == "gmail" for k, _, _ in plan):
-                f = pool.submit(_check_gmail_live, home, env)
-                f.add_done_callback(lambda fu: _set("gmail", fu.result()[0]) or live.update(_render()))
+            for row in email_rows:
+                if not row.get("configured"):
+                    continue
+                key = f"email:{row['id']}"
+                f = pool.submit(_check_account_live, home, row)
+                f.add_done_callback(
+                    lambda fu, k=key: _set(k, fu.result()) or live.update(_render())
+                )
                 futures.append(f)
             for n, spec in servers.items():
                 key = f"mcp:{n}"
@@ -532,62 +487,37 @@ def _check_workspace(cfg: cfg_mod.Config) -> list[Check]:
     return [Check("Workspace", "ready", "ok", str(wp))]
 
 
-def _check_telegram_live(env: dict[str, str]) -> list[Check]:
-    import json as _json
-    import urllib.request
-    token = env.get("TELEGRAM_BOT_TOKEN")
-    if not token:
-        return [Check("Gateways", "Telegram", "info", "not configured")]
+def _check_email_live(home: Path) -> list[Check]:
+    from alpi.mail import accounts as accounts_mod
 
-    allow = [c for c in (env.get("TELEGRAM_ALLOWED_CHAT_IDS") or "").split(",") if c.strip()]
+    rows = accounts_mod.list_accounts(home)
+    if not rows:
+        return [Check("Email", "accounts", "info", "none configured")]
+    out: list[Check] = []
+    for row in rows:
+        out.append(_check_account_live(home, row))
+    return out
+
+
+def _check_account_live(home: Path, row: dict) -> Check:
+    address = row.get("address") or row.get("id") or "?"
+    if not row.get("configured"):
+        return Check("Email", address, "info", "not authorized")
+    if row.get("type") == "gmail":
+        try:
+            from alpi.mail import gmail_auth
+            gmail_auth.get_access_token(home, row["id"])
+            who = gmail_auth.get_email(home, row["id"]) or address
+            return Check("Email", address, "ok", f"authorized as {who}")
+        except Exception as e:  # noqa: BLE001
+            return Check("Email", address, "fail", f"token refresh failed: {e}")
     try:
-        url = f"https://api.telegram.org/bot{token}/getMe"
-        with urllib.request.urlopen(url, timeout=5.0) as resp:
-            body = _json.loads(resp.read().decode())
-        if not body.get("ok"):
-            return [Check("Gateways", "Telegram", "fail",
-                          f"getMe: {body.get('description', 'unknown error')}")]
-        username = body.get("result", {}).get("username", "?")
-        if not allow:
-            return [Check("Gateways", "Telegram", "warn",
-                          f"@{username} reachable but no chats allowlisted (fail-closed)")]
-        return [Check("Gateways", "Telegram", "ok",
-                      f"@{username} · {len(allow)} allowlisted")]
-    except Exception as e:  # noqa: BLE001
-        return [Check("Gateways", "Telegram", "fail", f"unreachable: {e}")]
-
-
-def _check_imap_live(env: dict[str, str]) -> list[Check]:
-    if not env.get("IMAP_ADDRESS"):
-        return [Check("Gateways", "IMAP", "info", "not configured")]
-    try:
-        from alpi.mail.imap import ImapClient, DEFAULT_IMAP_PORT, DEFAULT_SMTP_PORT
-        client = ImapClient(
-            address=env["IMAP_ADDRESS"],
-            password=env.get("IMAP_PASSWORD", ""),
-            imap_host=env.get("IMAP_HOST", ""),
-            smtp_host=env.get("SMTP_HOST", ""),
-            imap_port=int(env.get("IMAP_PORT") or DEFAULT_IMAP_PORT),
-            smtp_port=int(env.get("SMTP_PORT") or DEFAULT_SMTP_PORT),
-        )
+        from alpi.mail import accounts as accounts_mod
+        client = accounts_mod.client_for(home, row["id"])
         client.test()
-        senders = [s for s in (env.get("IMAP_ALLOWED_SENDERS") or "").split(",") if s.strip()]
-        return [Check("Gateways", "IMAP", "ok",
-                      f"{env['IMAP_ADDRESS']} · {len(senders)} allowlisted sender(s)")]
+        return Check("Email", address, "ok", f"{address} · IMAP+SMTP ok")
     except Exception as e:  # noqa: BLE001
-        return [Check("Gateways", "IMAP", "fail", f"login/SMTP failed: {e}")]
-
-
-def _check_gmail_live(home: Path, env: dict[str, str]) -> list[Check]:
-    if not env.get("GMAIL_CLIENT_ID"):
-        return [Check("Gateways", "Gmail", "info", "not configured")]
-    try:
-        from alpi.mail import gmail_auth
-        gmail_auth.get_access_token(home)
-        email = gmail_auth.get_email(home) or "?"
-        return [Check("Gateways", "Gmail", "ok", f"authorized as {email}")]
-    except Exception as e:  # noqa: BLE001
-        return [Check("Gateways", "Gmail", "fail", f"token refresh failed: {e}")]
+        return Check("Email", address, "fail", f"login/SMTP failed: {e}")
 
 
 def _check_services(home: Path, profile: str) -> list[Check]:

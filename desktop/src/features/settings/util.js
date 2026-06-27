@@ -26,51 +26,12 @@ export const FIELD_KEYS = {
   reasoningEffort: "model_reasoning.effort",
 };
 
-export const SUBSYSTEMS = ["gateway", "schedule", "alp", "workgroups"];
+export const SUBSYSTEMS = ["schedule", "alp", "workgroups"];
 
 export const SUBSYSTEM_DESC = {
-  gateway: "Telegram, IMAP & Gmail polling",
   schedule: "Cron jobs",
   alp: "Inter-machine peer protocol",
   workgroups: "Workgroup background poller",
-};
-
-export const GATEWAY_DESC = {
-  telegram: "Telegram bot",
-  imap: "Email via IMAP",
-  gmail: "Email via Gmail OAuth",
-  matrix: "Matrix bot (no-E2EE MVP)",
-};
-
-export const GATEWAY_LABELS = {
-  telegram: "Telegram",
-  imap: "IMAP",
-  gmail: "Gmail",
-  matrix: "Matrix",
-};
-
-export const GATEWAY_FIELDS = {
-  telegram: [
-    { env: "TELEGRAM_BOT_TOKEN", label: "Bot token", secret: true, required: true, hint: "from @BotFather" },
-    { env: "TELEGRAM_ALLOWED_CHAT_IDS", label: "Allowed chat IDs", secret: false, required: true, hint: "comma-separated · empty = no inbound (fail-closed)" },
-  ],
-  imap: [
-    { env: "IMAP_ADDRESS", label: "Email address", secret: false, required: true, hint: "you@domain.com" },
-    { env: "IMAP_PASSWORD", label: "Password", secret: true, required: true, hint: "app password if 2FA" },
-    { env: "IMAP_HOST", label: "IMAP host", secret: false, required: true, hint: "imap.gmail.com · imap.fastmail.com · …" },
-    { env: "IMAP_PORT", label: "IMAP port", secret: false, required: true, hint: "993 (SSL) · 143 (STARTTLS)" },
-    { env: "SMTP_HOST", label: "SMTP host", secret: false, required: true, hint: "smtp.gmail.com · smtp.fastmail.com · …" },
-    { env: "SMTP_PORT", label: "SMTP port", secret: false, hint: "587 (STARTTLS) · 465 (SSL)" },
-    { env: "IMAP_ALLOWED_SENDERS", label: "Allowed senders", secret: false, hint: "comma-separated emails · empty = anyone" },
-  ],
-  matrix: [
-    { env: "MATRIX_HOMESERVER_URL", label: "Homeserver URL", secret: false, required: true, hint: "http://umbrel.local:8008 · https://matrix.example.com" },
-    { env: "MATRIX_USER_ID", label: "Bot user id", secret: false, required: true, hint: "@alpi-bot:server" },
-    { env: "MATRIX_ACCESS_TOKEN", label: "Access token", secret: true, required: true, hint: "from /_matrix/client/r0/login" },
-    { env: "MATRIX_DEVICE_ID", label: "Device id", secret: false, hint: "from the login response · optional but recommended" },
-    { env: "MATRIX_ALLOWED_ROOMS", label: "Allowed rooms", secret: false, required: true, hint: "comma-separated room IDs (!abc:server) · fail-closed" },
-    { env: "MATRIX_ALLOWED_SENDERS", label: "Allowed senders", secret: false, hint: "comma-separated user IDs (@user:server) · empty = all room members" },
-  ],
 };
 
 export const STORAGE_SCOPE = {
@@ -80,10 +41,9 @@ export const STORAGE_SCOPE = {
   rag: "workspace embeddings (sqlite-vec store)",
   outputs: "notifications inbox",
   audio: "TTS output + inbound voice notes",
-  logs: "gateway, schedule, agent, approval",
+  logs: "schedule, agent, approval",
   schedule: "stdout/stderr of past jobs",
   workgroups: "encrypted transcripts + turn telemetry",
-  gateway: "telegram/email/matrix chat sessions",
   mentions: "@-mention threads from ALP peers",
 };
 

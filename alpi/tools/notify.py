@@ -16,8 +16,8 @@ class Notify(Tool):
         "messaged — even mid-chat, that request is an order to call this tool — "
         "and proactively when you have deferred or async news for them (a "
         "reminder coming due, a long task finished, 'I noticed X'). The message "
-        "goes to YOUR user's own apps, NOT a third party; to message someone "
-        "else use `send_message` (a gateway). The only thing to avoid is firing "
+        "goes to YOUR user's own apps, NOT a third party; to email someone "
+        "else use the `email` tool. The only thing to avoid is firing "
         "it just to duplicate an answer the user is already reading in the live "
         "chat and never asked to be pushed.\n"
         "\n"
@@ -51,7 +51,7 @@ class Notify(Tool):
         type = (type or "info").strip().lower()
         if type not in VALID_TYPE:
             type = "info"
-        # Schedule/gateway children defer to the parent: it parses tool_end and files the single canonical output.
+        # Schedule children defer to the parent: it parses tool_end and files the single canonical output.
         if not _suppress_native_emit():
             create_output_and_emit_message(
                 text=text, title=title or "", type=type,

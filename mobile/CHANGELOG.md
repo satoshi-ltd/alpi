@@ -14,6 +14,24 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.2.0 — 2026-06-26 — Gateways is now Email
+
+_Requires alpi v0.10.0+._
+
+- **The "Gateways" screen is now "Email".** Profile settings show an **Email**
+  row (IMAP · Gmail) that opens the email accounts screen.
+- **Manage multiple email accounts.** The Email screen lists every configured
+  account; tap **+ Add** to connect an IMAP / SMTP mailbox, or open an account
+  to view its settings and remove it. Gmail accounts (added on desktop) appear
+  here read-only and can be removed.
+- **Chat-app gateways are gone.** Telegram and Matrix were removed from alpi —
+  email (IMAP and Gmail) is now an on-demand integration the agent reads and
+  sends from, not an inbound gateway.
+- **No more "Gateway" subsystem toggle.** The per-profile gateway on/off switch
+  was retired with the rename; email is configured account-by-account.
+- Completing the Gmail OAuth grant stays on the alpi desktop app for now; you
+  can still save the client id / secret from your phone.
+
 ## v0.1.55 — 2026-06-25 — notification rendering locked in step with desktop
 
 _Requires alpi v0.9.30+._

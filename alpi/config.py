@@ -44,17 +44,8 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "mcp": {
         "servers": {},
     },
-    "gateway": {
-        "telegram": {},
-        "matrix": {},
-        "imap": {
-            "poll_interval": 60,
-            "mark_as_read": True,
-        },
-        "gmail": {
-            "poll_interval": 60,
-            "mark_as_read": True,
-        },
+    "email": {
+        "accounts": {},
     },
     "runtime": {
         "first_byte_timeout_s": 300,
@@ -69,7 +60,7 @@ SEED_CONFIG: dict[str, Any] = {
     "model": DEFAULT_CONFIG["model"],
     "providers": {"ollama": []},
     "mcp": {"servers": {}},
-    "gateway": DEFAULT_CONFIG["gateway"],
+    "email": DEFAULT_CONFIG["email"],
 }
 
 
@@ -163,7 +154,7 @@ class Config:
     model_reasoning: ModelReasoningConfig = field(default_factory=ModelReasoningConfig)
     runtime: RuntimeConfig = field(default_factory=RuntimeConfig)
     tui: dict[str, Any] = field(default_factory=dict)
-    gateway: dict[str, Any] = field(default_factory=dict)
+    email: dict[str, Any] = field(default_factory=dict)
     alp: dict[str, Any] = field(default_factory=dict)
     host: dict[str, Any] = field(default_factory=dict)
     # Shared "address other machines reach this profile at" — feeds both the
@@ -333,7 +324,7 @@ def load(home: Path) -> Config:
         model_reasoning=reasoning_cfg,
         runtime=runtime_cfg,
         tui=data.get("tui", DEFAULT_CONFIG["tui"]),
-        gateway=data.get("gateway", DEFAULT_CONFIG["gateway"]),
+        email=data.get("email", DEFAULT_CONFIG["email"]),
         alp=dict(data.get("alp") or {}),
         host=dict(data.get("host") or {}),
         network=dict(data.get("network") or {}),
@@ -352,7 +343,7 @@ def save(cfg: Config) -> None:
         "model": cfg.model,
         "providers": cfg.providers,
         "mcp": cfg.raw.get("mcp", {"servers": {}}),
-        "gateway": _sanitize_gateway(cfg.gateway),
+        "email": _sanitize_email(cfg.email),
     }
     if cfg.workspace:
         data["workspace"] = cfg.workspace
@@ -433,20 +424,22 @@ def atomic_write_yaml(path: Path, data: dict[str, Any] | list[Any]) -> None:
             pass
 
 
-_GATEWAY_ALLOWED_KEYS: dict[str, frozenset[str]] = {
-    "telegram": frozenset(),
-    "matrix": frozenset(),
-    "imap": frozenset({"poll_interval", "mark_as_read"}),
-    "gmail": frozenset({"poll_interval", "mark_as_read"}),
+_EMAIL_ALLOWED_KEYS: dict[str, frozenset[str]] = {
+    "imap": frozenset({"type", "address", "imap_host", "imap_port", "smtp_host", "smtp_port"}),
+    "gmail": frozenset({"type", "address"}),
 }
 
 
-def _sanitize_gateway(gateway: dict) -> dict:
-    out: dict[str, Any] = {}
-    for platform, allowed in _GATEWAY_ALLOWED_KEYS.items():
-        section = dict((gateway or {}).get(platform) or {})
-        out[platform] = {k: v for k, v in section.items() if k in allowed}
-    return out
+def _sanitize_email(email: dict) -> dict:
+    from alpi.mail.accounts import valid_id
+    accounts_in = (email or {}).get("accounts") or {}
+    accounts_out: dict[str, Any] = {}
+    for account_id, row in accounts_in.items():
+        if not isinstance(row, dict) or not valid_id(str(account_id)):
+            continue
+        allowed = _EMAIL_ALLOWED_KEYS.get(str(row.get("type") or "imap"), _EMAIL_ALLOWED_KEYS["imap"])
+        accounts_out[str(account_id)] = {k: v for k, v in row.items() if k in allowed}
+    return {"accounts": accounts_out}
 
 
 def _tools_delta(cfg: Config) -> dict:

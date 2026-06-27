@@ -4,8 +4,8 @@
 
 alpi starts as the agent in your terminal, then grows with you:
 profiles for work, cron, home servers, research, and workgroups with other
-alpis. Each profile owns its memory, keys, model, skills, gateways,
-approvals, and trust boundary. ALP links them across machines without
+alpis. Each profile owns its memory, keys, model, skills, approvals,
+and trust boundary. ALP links them across machines without
 a registry, central account, or mandatory cloud.
 
 Bring any model. Keep every key. Run one alpi, or a network that stays
@@ -30,8 +30,8 @@ The design goal is sovereignty:
   Web and email content is treated as hostile data. Skills and MCPs
   are scanned before install.
 - **Operational UX.** One setup wizard, a live `doctor`, a single
-  per-machine `alpi daemon` supervisor for every profile (gateway +
-  scheduler + ALP + workgroups + host plane), merged logs, backup,
+  per-machine `alpi daemon` supervisor for every profile (scheduler +
+  ALP + workgroups + host plane), merged logs, backup,
   and cleanup.
 - **Private coordination.** ALP.1 links local profiles, ALP.2 links
   machines over Noise_XK, and ALP.3 adds shared workgroups. Peers are
@@ -62,8 +62,9 @@ The current release ships the full local-to-network shape:
   (no cross-peer search), opt-in (`index_workgroups`), and forgettable.
 - Docker image (`satoshiltd/alpi`) for an always-on home-server
   deployment, with persistent profile storage under `/data/.alpi`.
-- Telegram, IMAP, Gmail, and Matrix gateways hosted by the unified
-  per-machine daemon.
+- On-demand email tool: read, search, send, and reply over IMAP or
+  Gmail, driven by the agent during a chat or a scheduled job. Configured
+  in `alpi setup -> Email`; not a poller or inbound channel.
 - Inline-learning memory: `USER.md`, `MEMORY.md`, and `AGENT.md`.
 - Live skills under `~/.alpi/skills/<category>/<name>/`, scanner-gated
   and auto-injected into the system prompt.
@@ -109,7 +110,7 @@ alpi -c                      # resume last session
 alpi -p work                 # use named profile
 alpi chat --once "status?"   # one-shot stdout turn
 
-alpi setup                   # model, gateways, MCPs, sandbox, daemon
+alpi setup                   # model, email, MCPs, sandbox, daemon
 alpi doctor                  # live health checks
 alpi update                  # check PyPI and upgrade alpi-agent
 alpi logs                    # merged profile logs
@@ -136,8 +137,8 @@ For the first-day walkthrough, see [QUICKSTART.md](QUICKSTART.md).
 ## Core concepts
 
 **Profiles** are the isolation primitive. A profile is one directory,
-one identity, one model choice, one memory, one skill set, one gateway
-configuration, one schedule surface, and one ALP peer list. The
+one identity, one model choice, one memory, one skill set, one schedule
+surface, and one ALP peer list. The
 default profile lives at `~/.alpi/`; named profiles live under
 `~/.alpi/profiles/<name>/`.
 
@@ -189,7 +190,7 @@ See [docs/SECURITY.md](docs/SECURITY.md) for the full model.
 ## Documentation
 
 - [QUICKSTART.md](QUICKSTART.md) — install, model, workspace, first chat,
-  gateways, profiles, ALP, doctor.
+  email, profiles, ALP, doctor.
 - [docs/PROFILES.md](docs/PROFILES.md) — per-profile identity,
   isolation, state, memory, skills, peers, services.
 - [docs/ALP.md](docs/ALP.md) — wire protocol, identity, signatures,

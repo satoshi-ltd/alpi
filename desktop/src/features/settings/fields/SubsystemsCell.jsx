@@ -9,7 +9,6 @@ export function SubsystemsCell({ profile, onSaved }) {
   const notify = useNotify();
   const [busy, setBusy] = useState(null);
   const subs = profile.subsystems ?? {
-    gateway: true,
     schedule: true,
     alp: true,
     workgroups: true,
@@ -40,7 +39,7 @@ export function SubsystemsCell({ profile, onSaved }) {
     }
   }
   return (
-    <span className={styles.gatewayChips}>
+    <span className={styles.chipRow}>
       {SUBSYSTEMS.map((k) => {
         const enabled = subs[k];
         const state = !profile.running ? "off" : enabled ? "on" : "error";

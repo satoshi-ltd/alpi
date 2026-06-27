@@ -131,7 +131,7 @@ OUTPUT_ATTACHMENT_KINDS = frozenset({"image", "pdf", "text", "sheet", "doc", "de
 
 def render_output_attachments(attachments: list | None) -> str:
     """One textual rendering of output attachments for every non-rich surface
-    (CLI/TUI/gateway/ALP) so no surface loses or reinvents the list."""
+    (CLI/TUI/ALP) so no surface loses or reinvents the list."""
     if not attachments:
         return ""
     lines = ["Attachments:"]

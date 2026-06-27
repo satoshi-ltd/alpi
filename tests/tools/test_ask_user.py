@@ -49,7 +49,6 @@ def test_rejects_more_than_four_choices(monkeypatch) -> None:
 
 def test_multi_accepts_up_to_eight_choices(monkeypatch) -> None:
     monkeypatch.delenv("ALPI_PLATFORM", raising=False)
-    monkeypatch.setattr("alpi.tools.ask_user._is_gateway", lambda: True)
     eight = [{"label": f"L{i}"} for i in range(8)]
     r = AskUser().run(question="?", choices=eight, multi=True)
     assert r.ok, r.error
@@ -77,30 +76,6 @@ def test_rejects_duplicate_labels(monkeypatch) -> None:
     )
     assert not r.ok
     assert "duplicate" in (r.error or "")
-
-
-def test_gateway_short_circuits_with_numbered_text(monkeypatch) -> None:
-    monkeypatch.setenv("ALPI_PLATFORM", "telegram")
-    r = AskUser().run(
-        question="Which source?",
-        choices=_choices(3),
-        allow_other=True,
-    )
-    assert r.ok
-    assert "1. WHOOP — recovery, sleep" in r.output
-    assert "2. COROS" in r.output
-    assert "3. Garmin — training load" in r.output
-    assert "4. Other" in r.output
-    assert "Relay this list" in r.output
-
-
-def test_gateway_without_other_still_renders_options(monkeypatch) -> None:
-    monkeypatch.setenv("ALPI_PLATFORM", "email")
-    r = AskUser().run(
-        question="?", choices=_choices(2), allow_other=False,
-    )
-    assert r.ok
-    assert "Other" not in r.output
 
 
 def test_handler_path_returns_chosen_label(monkeypatch) -> None:
@@ -166,36 +141,11 @@ def test_multi_true_forces_allow_other_false(monkeypatch) -> None:
     assert received["allow_other"] is False
 
 
-def test_gateway_multi_render_mentions_multiple(monkeypatch) -> None:
-    monkeypatch.setenv("ALPI_PLATFORM", "telegram")
-    r = AskUser().run(
-        question="What sources?",
-        choices=_choices(3),
-        multi=True,
-    )
-    assert r.ok
-    assert "1. WHOOP" in r.output
-    assert "separated by commas" in r.output
-    assert "Other" not in r.output  # multi suppresses allow_other
-
-
 def test_no_handler_returns_plain_fallback(monkeypatch) -> None:
     monkeypatch.delenv("ALPI_PLATFORM", raising=False)
     r = AskUser().run(question="?", choices=_choices())
     assert r.ok
     assert "ask the user plainly" in r.output
-
-
-def test_gateway_path_does_not_call_handler(monkeypatch) -> None:
-    monkeypatch.setenv("ALPI_PLATFORM", "matrix")
-    sentinel = {"called": False}
-    def _handler(*_a, **_k):
-        sentinel["called"] = True
-        return "should-not-happen"
-    _clarification.set_handler(_handler)
-    r = AskUser().run(question="?", choices=_choices())
-    assert r.ok
-    assert sentinel["called"] is False
 
 
 def test_cron_headless_returns_fallback_without_calling_handler(monkeypatch) -> None:

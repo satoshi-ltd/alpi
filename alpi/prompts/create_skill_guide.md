@@ -6,14 +6,14 @@ skill. Never create one proactively.
 ## Rules the tool enforces (don't fight them)
 
 1. **Name**: kebab-case, 2–60 chars, starts with a letter. E.g.
-   `telegram-notifier`, `github-pr-review`. No spaces, no emojis.
+   `daily-brief`, `github-pr-review`. No spaces, no emojis.
 2. **Category**: must be exactly one of this closed list — do not invent new
    ones:
    - `software`    (code, git, devops, CI/CD)
    - `data`        (analysis, ML, viz)
    - `research`    (web research, summarization)
    - `productivity` (notes, todos, email, calendar)
-   - `communication` (Telegram, WhatsApp, Slack, SMS)
+   - `communication` (email, notifications)
    - `media`       (images, audio, video, diagrams)
    - `system`      (smart-home, self-hosted, infra)
    - `finance`     (Bitcoin, accounts, investments)

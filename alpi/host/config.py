@@ -55,9 +55,10 @@ def register(server: host_server.Server) -> None:
     server.register("host.identity.draft", _identity_draft)
     server.register("host.mcp.add", _mcp_add)
     server.register("host.mcp.remove", _mcp_remove)
-    server.register("host.gateway.remove", _gateway_remove)
-    server.register("host.gateway.gmail.begin", _gmail_begin)
-    server.register("host.gateway.gmail.exchange", _gmail_exchange)
+    server.register("host.email.add", _email_add)
+    server.register("host.email.remove", _email_remove)
+    server.register("host.email.gmail.begin", _gmail_begin)
+    server.register("host.email.gmail.exchange", _gmail_exchange)
     server.register("host.sandbox.set", _sandbox_set)
     server.register("host.sandbox.network", _sandbox_network)
     server.register("host.voice.set_voice", _voice_set_voice)
@@ -84,12 +85,12 @@ def _emit_config_changed(home: Path, scope: str) -> None:
     })
 
 
-def _emit_gateway_changed(home: Path, name: str, action: str) -> None:
+def _emit_email_changed(home: Path, account_id: str, action: str) -> None:
     from alpi import home as home_mod
     from alpi.host import events as host_events
-    host_events.emit("gateway_changed", {
+    host_events.emit("email_changed", {
         "profile": home_mod.profile_name(home),
-        "name": name,
+        "id": account_id,
         "action": action,
     })
 
@@ -130,26 +131,10 @@ async def _providers_set_key(
             data={"detail": "value must not contain newlines"},
         )
     home = _resolve_home(str(profile or ""))
-    if key == "TELEGRAM_BOT_TOKEN":
-        from alpi.home import telegram_token_owner
-        owner = telegram_token_owner(value_str, exclude=home)
-        if owner is not None:
-            raise host_server.HandlerError(
-                -32602, "invalid-params",
-                data={"detail": (
-                    f"Telegram bot token already used by profile {owner!r}. "
-                    "Telegram allows one poller per bot — give this profile its "
-                    "own bot from @BotFather or remove the token from the other "
-                    "profile first."
-                )},
-            )
     cfg = cfg_mod.load(home)
     _append_env(cfg.env_path, key, value_str)
-    # A gateway secret rewrite is observably different from a generic provider key (it may bring a poller online); route accordingly so clients can refresh the right surface.
-    for gw_name, keys in _GATEWAY_ENV_KEYS.items():
-        if key in keys:
-            _emit_gateway_changed(home, gw_name, "configured")
-            break
+    if _is_email_env_key(key):
+        _emit_email_changed(home, key, "configured")
     else:
         _emit_config_changed(home, scope="env")
     return {"ok": True}
@@ -165,10 +150,8 @@ async def _providers_unset_key(
     home = _resolve_home(str(profile or ""))
     cfg = cfg_mod.load(home)
     model_cleared = unset_provider_key(cfg, key)
-    for gw_name, keys in _GATEWAY_ENV_KEYS.items():
-        if key in keys:
-            _emit_gateway_changed(home, gw_name, "cleared")
-            break
+    if _is_email_env_key(key):
+        _emit_email_changed(home, key, "cleared")
     else:
         _emit_config_changed(home, scope="env")
     return {"ok": True, "model_cleared": model_cleared}
@@ -545,22 +528,8 @@ async def _mcp_remove(
     return {"ok": True}
 
 
-_GATEWAY_ENV_KEYS = {
-    "telegram": ("TELEGRAM_BOT_TOKEN", "TELEGRAM_ALLOWED_CHAT_IDS"),
-    "imap": (
-        "IMAP_ADDRESS", "IMAP_PASSWORD",
-        "IMAP_HOST", "IMAP_PORT",
-        "SMTP_HOST", "SMTP_PORT",
-        "IMAP_ALLOWED_SENDERS",
-    ),
-    "gmail": (
-        "GMAIL_CLIENT_ID", "GMAIL_CLIENT_SECRET", "GMAIL_ALLOWED_SENDERS",
-    ),
-    "matrix": (
-        "MATRIX_HOMESERVER_URL", "MATRIX_USER_ID", "MATRIX_ACCESS_TOKEN",
-        "MATRIX_DEVICE_ID", "MATRIX_ALLOWED_ROOMS", "MATRIX_ALLOWED_SENDERS",
-    ),
-}
+def _is_email_env_key(key: str) -> bool:
+    return key.startswith("EMAIL__") or key in ("GMAIL_CLIENT_ID", "GMAIL_CLIENT_SECRET")
 
 
 # In-memory pending OAuth handles, keyed by ``state``. The verifier is
@@ -625,7 +594,7 @@ async def _gmail_begin(
     The client supplies its own ``redirect_uri`` — typically a
     loopback on the **client machine**, where the browser actually
     runs. The daemon stashes the PKCE verifier under ``state`` until
-    ``host.gateway.gmail.exchange`` comes back with the code."""
+    ``host.email.gmail.exchange`` comes back with the code."""
     from alpi.mail import gmail_auth
     from alpi.model_selector import _append_env
 
@@ -638,13 +607,7 @@ async def _gmail_begin(
         str(params.get("client_secret") or "").strip()
         or existing.get("GMAIL_CLIENT_SECRET", "")
     )
-    senders_raw = params.get("allowed_senders")
-    if senders_raw is None:
-        senders = existing.get("GMAIL_ALLOWED_SENDERS", "")
-    else:
-        senders = ",".join(
-            s.strip().lower() for s in str(senders_raw).split(",") if s.strip()
-        )
+    address = str(params.get("address") or "").strip()
     redirect_uri = str(params.get("redirect_uri") or "").strip()
     if not redirect_uri:
         raise host_server.HandlerError(
@@ -662,7 +625,6 @@ async def _gmail_begin(
     for key, val in (
         ("GMAIL_CLIENT_ID", client_id),
         ("GMAIL_CLIENT_SECRET", client_secret),
-        ("GMAIL_ALLOWED_SENDERS", senders),
     ):
         _append_env(cfg.env_path, key, val)
 
@@ -677,6 +639,7 @@ async def _gmail_begin(
         "code_verifier": handle.code_verifier,
         "redirect_uri": handle.redirect_uri,
         "home": home,
+        "address": address,
         "created": time.time(),
     }
     return {"auth_url": handle.auth_url, "state": handle.state}
@@ -705,10 +668,15 @@ async def _gmail_exchange(
             data={"detail": "unknown or expired state — restart the auth flow"},
         )
 
+    from alpi.mail import accounts as accounts_mod
+
     home: Path = record["home"]
+    address = str(record.get("address") or "")
+    account_id = accounts_mod.slug(address) if address else ""
     try:
         token = gmail_auth.exchange(
             home,
+            account_id,
             code=code,
             code_verifier=record["code_verifier"],
             redirect_uri=record["redirect_uri"],
@@ -717,8 +685,35 @@ async def _gmail_exchange(
         raise host_server.HandlerError(
             -32603, "internal", data={"detail": str(exc)},
         )
-    _emit_gateway_changed(home, "gmail", "authorized")
-    return {"email": token.email}
+    token_email = (token.email or "").strip()
+    # Google authorizes whatever account the user picked in the browser, not necessarily the typed address — refuse the mismatch and wipe the token written under the requested id so config never points at the wrong inbox.
+    if address and token_email and token_email.lower() != address.lower():
+        try:
+            accounts_mod.gmail_token_path(home, account_id).unlink()
+        except OSError:
+            pass
+        raise host_server.HandlerError(
+            -32602, "invalid-params",
+            data={"detail": (
+                f"authorized {token_email!r} but you asked to add {address!r} — "
+                "token discarded; restart and sign in with the matching account"
+            )},
+        )
+    final_address = address or token_email
+    account_id = account_id or accounts_mod.slug(token_email)
+    if account_id:
+        try:
+            accounts_mod.add_gmail(home, address=final_address)
+        except ValueError as e:
+            try:
+                accounts_mod.gmail_token_path(home, account_id).unlink()
+            except OSError:
+                pass
+            raise host_server.HandlerError(
+                -32602, "invalid-params", data={"detail": str(e)},
+            )
+    _emit_email_changed(home, account_id, "authorized")
+    return {"id": account_id, "email": token.email}
 
 
 def _read_env_file(env_path: Path) -> dict[str, str]:
@@ -734,30 +729,68 @@ def _read_env_file(env_path: Path) -> dict[str, str]:
     return out
 
 
-async def _gateway_remove(
+async def _email_add(
     params: dict[str, Any], _server: host_server.Server,
 ) -> dict[str, Any]:
-    from alpi.model_selector import _remove_env_key
+    from alpi.mail import accounts as accounts_mod
 
-    name = str(params.get("name") or "").strip()
-    if name not in _GATEWAY_ENV_KEYS:
+    address = str(params.get("address") or "").strip()
+    password = str(params.get("password") or "")
+    imap_host = str(params.get("imap_host") or "").strip()
+    smtp_host = str(params.get("smtp_host") or "").strip()
+    if not address or not imap_host or not smtp_host:
         raise host_server.HandlerError(
             -32602, "invalid-params",
-            data={"detail": f"unknown gateway {name!r}"},
+            data={"detail": "address, imap_host, smtp_host are required"},
         )
     home = _resolve_home(str(params.get("profile") or ""))
-    cfg = cfg_mod.load(home)
-    for key in _GATEWAY_ENV_KEYS[name]:
-        _remove_env_key(cfg.env_path, key)
-    if name == "gmail":
-        token = home / "secrets" / "gmail_token.json"
-        if token.exists():
-            try:
-                token.unlink()
-            except OSError:
-                pass
-    _emit_gateway_changed(home, name, "removed")
-    return {"ok": True}
+    # Empty password is fine on an edit (preserve the stored one); a new account must set one.
+    if not password and accounts_mod.get_account(home, accounts_mod.slug(address)) is None:
+        raise host_server.HandlerError(
+            -32602, "invalid-params",
+            data={"detail": "password is required for a new account"},
+        )
+    try:
+        account_id = accounts_mod.add_imap(
+            home,
+            address=address,
+            password=password,
+            imap_host=imap_host,
+            smtp_host=smtp_host,
+            imap_port=_email_port(params.get("imap_port"), 993),
+            smtp_port=_email_port(params.get("smtp_port"), 587),
+        )
+    except (ValueError, TypeError) as e:
+        raise host_server.HandlerError(
+            -32602, "invalid-params", data={"detail": str(e)},
+        )
+    _emit_email_changed(home, account_id, "configured")
+    return {"ok": True, "id": account_id}
+
+
+async def _email_remove(
+    params: dict[str, Any], _server: host_server.Server,
+) -> dict[str, Any]:
+    from alpi.mail import accounts as accounts_mod
+
+    account_id = str(params.get("id") or "").strip()
+    if not accounts_mod.valid_id(account_id):
+        raise host_server.HandlerError(
+            -32602, "invalid-params", data={"detail": "valid account id required"},
+        )
+    home = _resolve_home(str(params.get("profile") or ""))
+    existed = accounts_mod.remove_account(home, account_id)
+    _emit_email_changed(home, account_id, "removed")
+    return {"ok": True, "existed": existed}
+
+
+def _email_port(value: Any, default: int) -> int:
+    if value is None or value == "":
+        return default
+    port = int(value)
+    if not (1 <= port <= 65535):
+        raise ValueError(f"port out of range (1-65535): {port}")
+    return port
 
 
 def _bool_state(params: dict[str, Any]) -> bool:

@@ -20,7 +20,7 @@ def test_top_level_help_shows_only_canonical_commands() -> None:
     out = result.output
 
     for name in ("chat", "setup", "doctor", "logs", "profile", "daemon",
-                 "schedule", "peers", "workgroup", "release", "gateway",
+                 "schedule", "peers", "workgroup", "release", "email",
                  "mcp", "providers", "sandbox", "voice"):
         assert name in out, f"{name!r} missing from top-level --help"
 

@@ -1,4 +1,4 @@
-"""Canonical ``/status`` rows shared by the TUI panel and Telegram shortcut."""
+"""Canonical ``/status`` rows shared by the TUI ``/status`` panel."""
 
 from __future__ import annotations
 

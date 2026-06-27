@@ -157,8 +157,8 @@ before any `id`-based routing occurs.
 | `rate_limit.per_minute` | no | Throttle. Default `60` requests/min/peer (`alpi/alp/rate_limit.py::DEFAULT_PER_MINUTE`). Enforced before handler dispatch; over-cap requests get JSON-RPC `-32005`. |
 
 Spending is not configured here. Every inbound call from every peer
-draws from the same daily ledger that interactive turns, gateway
-replies, and sub-agents spend from; the cap lives at the profile level
+draws from the same daily ledger that interactive turns, scheduled
+jobs, and sub-agents spend from; the cap lives at the profile level
 (`budget.daily_usd` in `config.yaml`, see
 [CONFIG.md → Budget](CONFIG.md#budget)). When the profile cap trips,
 ALP inbound answers with JSON-RPC `-32005 budget-exceeded` and falls
@@ -231,9 +231,9 @@ Path: `~/.alpi/<profile>/alp/alp.sock`, served by the alpi
 daemon when this profile's `alp` service is enabled (`service.alp:
 true` — default), mode `0600`. The listener shares the daemon's
 asyncio loop with this profile's other services; toggle
-`service.alp: false` for profiles that need gateway / scheduler
-but no ALP, or `service.gateway: false` + `service.schedule:
-false` for an ALP-only relay profile.
+`service.alp: false` for profiles that need the scheduler
+but no ALP, or `service.schedule: false` for an ALP-only relay
+profile.
 Filesystem permissions gate access to the socket file; every
 envelope on the socket is still signed as a second, orthogonal
 layer of defence.
@@ -368,8 +368,7 @@ result:                         # when stream is false (default)
 Runs a **full agent turn** on the target profile with `prompt`
 as the user input. The target invokes its complete tool loop,
 approval gate, memory subsystem, and cost accounting — exactly
-as if the prompt had arrived through a conventional gateway
-inbound (Telegram, email, and so on).
+as if the prompt had arrived through an interactive surface.
 
 When `stream: true` the response is delivered as a sequence of
 signed response envelopes for the same `id`, each carrying a
@@ -383,10 +382,10 @@ signed response envelopes for the same `id`, each carrying a
 
 Caller policy: interactive surfaces (TUI, desktop, mobile companion)
 pass `stream: true` so the user sees the remote agent's reply as it
-generates. Gateways (Telegram, IMAP, Gmail, Matrix) and the agent-
-internal `peer` tool keep `stream: false` — they need a single atomic
-message body to forward. The protocol supports both modes; the choice
-lives with the caller, not with the user.
+generates. Scheduled jobs and the agent-internal `peer` tool keep
+`stream: false` — they need a single atomic message body to forward.
+The protocol supports both modes; the choice lives with the caller,
+not with the user.
 
 Wire shape unchanged: same envelope, same signature, same Noise
 session if applicable. Each streamed chunk is its own signed envelope
@@ -870,13 +869,12 @@ practical consequences:
   pings alice without forcing the user to put `@alice` on its
   own line.
 - The matched id must resolve to a known peer (a workgroup
-  member, or a pinned peer for the TUI / desktop / gateway
+  member, or a pinned peer for the TUI / desktop
   shortcut). Strings like `@property` in code snippets fall
   through silently because no peer named `property` exists.
 
-The TUI (`alpi/tui/app.py`), the desktop host plane
-(`alpi/host/chat.py`), and the gateway listeners
-(`alpi/gateway/run.py`) all parse via `alp_mention.parse(text,
+The TUI (`alpi/tui/app.py`) and the desktop host plane
+(`alpi/host/chat.py`) both parse via `alp_mention.parse(text,
 home=home)`. Passing `home` makes the parser roster-gate: an
 unknown id (`@pepe`) returns `None` and the caller falls through
 to the LLM instead of routing the call to a phantom peer. Result:
@@ -916,9 +914,9 @@ with letter-prefixed task IDs) are tracked for v0.4.
 
 **Closure notification.** When `#done` lands, the engine
 on each member's machine emits a one-line summary into
-`agent.log` and (optionally per workgroup) pushes a Telegram DM
-to the user — `notify_on_close: telegram | none` in `meta.yaml`,
-defaulting to none.
+`agent.log` and (optionally per workgroup) pushes the summary
+to the owner's own apps via `notify` — `notify_on_close` in
+`meta.yaml`, defaulting to none.
 
 ### Budget inside workgroups
 
@@ -993,7 +991,7 @@ posts via `workgroup.post` or stays silent rather than asking a
 non-existent human for permission.
 
 **Pre-turn context hook.** Before every engine turn (interactive,
-gateway, scheduled, or workgroup-spawned), the hook reads the
+scheduled, or workgroup-spawned), the hook reads the
 on-disk subscription cache and emits a system-prompt block per
 workgroup the profile participates in. The block carries the
 briefing, the active task, the last few decrypted posts, the
@@ -1008,7 +1006,7 @@ discussion converges.
 a normal alpi engine invocation — the agent has its full toolbox
 loaded (skills, memories, `web_search`, `web_fetch`, custom
 tools, etc.) exactly as it would in an interactive turn or a
-gateway-spawned turn. The protocol does NOT inject "use these
+scheduled turn. The protocol does NOT inject "use these
 tools" instructions; agents use what they have because their
 identity (`public_bio` + memories) primes them to. A sommelier
 peer reaches for wine-pairing knowledge; a researcher peer

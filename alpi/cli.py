@@ -117,7 +117,7 @@ _SAFE_SESSION_ID = re.compile(r"^[A-Za-z0-9_-]+$")
 def _continue_specific_session(
     engine: Engine, h: Path, session_id: str, subdir: str = "sessions",
 ) -> bool:
-    """Resume a session by id; subdir splits desktop ('sessions/') from gateway ('gateway/sessions/')."""
+    """Resume a session by id."""
     if not _SAFE_SESSION_ID.match(session_id or ""):
         return False
     path = h / subdir / f"{session_id}.json"
@@ -182,17 +182,10 @@ def _hydrate_from_path(engine: Engine, path: Path, console=None) -> bool:
 
 def _resume_once(
     engine: Engine, h: Path, *,
-    resume_chat_id: str | None = None,
     session_id: str | None = None,
     continue_last: bool = False,
 ) -> None:
-    from alpi import session_map
-    if resume_chat_id:
-        engine.session.subdir = "gateway/sessions"
-        existing = session_map.get(h, resume_chat_id)
-        if existing:
-            _continue_specific_session(engine, h, existing, subdir="gateway/sessions")
-    elif session_id:
+    if session_id:
         if not _continue_specific_session(engine, h, session_id):
             raise click.ClickException(f"session not found: {session_id}")
     elif continue_last:
@@ -203,14 +196,12 @@ def _run_once(
     h: Path,
     user_text: str,
     emit_events: bool = False,
-    resume_chat_id: str | None = None,
     persist: bool = True,
     attach: tuple[str, ...] = (),
     session_id: str | None = None,
     continue_last: bool = False,
 ) -> None:
     import json
-    from alpi import session_map
 
     _bootstrap(h)
     cfg = config.load(h)
@@ -222,8 +213,7 @@ def _run_once(
     )
 
     _resume_once(
-        engine, h, resume_chat_id=resume_chat_id,
-        session_id=session_id, continue_last=continue_last,
+        engine, h, session_id=session_id, continue_last=continue_last,
     )
 
     from alpi.alp import mention as alp_mention
@@ -266,11 +256,6 @@ def _run_once(
                 engine.save_session()
             except Exception:  # noqa: BLE001
                 pass
-        if persist and resume_chat_id:
-            try:
-                session_map.set(h, resume_chat_id, engine.session.id)
-            except Exception:  # noqa: BLE001
-                pass
         if emit_events:
             sys.stdout.write(json.dumps({"kind": "reply", "text": reply}) + "\n")
         else:
@@ -290,12 +275,11 @@ def _run_once(
                 "name": ev.name,
                 "preview": arg_hint(ev.name, ev.args or {}),
             }
-            if ev.name in ("send_message", "notify"):
+            if ev.name == "notify":
                 args = ev.args or {}
                 payload["args"] = {
                     k: args[k] for k in (
-                        "text", "title", "type",
-                        "channel", "platform",
+                        "text", "title", "type", "channel",
                     ) if k in args
                 }
         elif ev.kind == "tool_end":
@@ -345,12 +329,6 @@ def _run_once(
         except Exception:  # noqa: BLE001
             pass
 
-    if persist and resume_chat_id:
-        try:
-            session_map.set(h, resume_chat_id, engine.session.id)
-        except Exception:  # noqa: BLE001
-            pass
-
     final = "\n\n".join(parts).strip()
     if emit_events:
         import json as _json
@@ -381,7 +359,7 @@ class _OrderedGroup(click.Group):
         "profile",
         "peers",
         "alp",
-        "gateway",
+        "email",
         "schedule",
         "release",
     ]
@@ -450,13 +428,6 @@ def cmd_ctx(ctx: click.Context, model: str) -> None:
 @click.option("--emit-events", is_flag=True, default=False, hidden=True)
 @click.option("--no-save", is_flag=True, default=False, hidden=True)
 @click.option(
-    "--resume-chat",
-    "resume_chat",
-    default=None,
-    hidden=True,
-    help="Gateway-only: resume the per-chat session for this id.",
-)
-@click.option(
     "-c", "--continue", "continue_last", is_flag=True, help="Resume from the last session."
 )
 @click.option(
@@ -473,7 +444,6 @@ def chat(
     input_text: str | None,
     emit_events: bool,
     no_save: bool,
-    resume_chat: str | None,
     continue_last: bool,
     session: str | None,
     attach: tuple[str, ...],
@@ -486,7 +456,6 @@ def chat(
             h,
             input_text or "",
             emit_events=emit_events,
-            resume_chat_id=resume_chat,
             persist=not no_save,
             attach=attach,
             session_id=session,
@@ -815,127 +784,51 @@ def schedule_fire(ctx: click.Context, job_id: str) -> None:
         ctx.exit(1)
 
 
-@main.group()
-def gateway() -> None:
-    """Inspect external messaging gateways."""
+@main.group("email")
+def email_group() -> None:
+    """Inspect the profile's email accounts (by id; any mix of IMAP / Gmail)."""
 
 
-@gateway.command("probe")
-@click.argument("name", type=click.Choice(["telegram", "imap", "gmail", "matrix"]))
+@email_group.command("probe")
+@click.argument("account_id")
 @click.pass_context
-def gateway_probe(ctx: click.Context, name: str) -> None:
-    """Probe a gateway and print JSON ``{status, reason?}``."""
+def email_probe(ctx: click.Context, account_id: str) -> None:
+    """Probe an email account by id and print JSON ``{status, reason?}``."""
     import json
 
+    from alpi.mail import accounts as accounts_mod
+
     h: Path = ctx.obj["home"]
-    env = _read_profile_env(h)
-    out: dict[str, str] = {}
-    if name == "telegram":
-        token = env.get("TELEGRAM_BOT_TOKEN", "").strip()
-        if not token:
-            out = {"status": "off"}
-        else:
-            try:
-                import urllib.request as _ur
-                with _ur.urlopen(
-                    f"https://api.telegram.org/bot{token}/getMe", timeout=2.0
-                ) as resp:
-                    body = json.loads(resp.read().decode("utf-8"))
-                if body.get("ok"):
-                    out = {"status": "on"}
-                else:
-                    out = {"status": "error", "reason": "token rejected"}
-            except Exception as e:  # noqa: BLE001
-                out = {"status": "error", "reason": str(e)[:80]}
-    elif name == "imap":
-        addr = env.get("IMAP_ADDRESS", "").strip()
-        if not addr:
-            out = {"status": "off"}
-        else:
-            host = env.get("IMAP_HOST", "").strip() or "imap.gmail.com"
-            port = int(env.get("IMAP_PORT", "993").strip() or "993")
-            try:
-                import socket as _s
-                with _s.create_connection((host, port), timeout=2.0):
-                    out = {"status": "on"}
-            except Exception as e:  # noqa: BLE001
-                out = {"status": "error", "reason": str(e)[:80]}
-    elif name == "gmail":
-        client_id = env.get("GMAIL_CLIENT_ID", "").strip()
-        token_path = h / "secrets" / "gmail_token.json"
-        if not client_id and not token_path.exists():
-            out = {"status": "off"}
-        elif not token_path.exists():
-            out = {"status": "error", "reason": "no token file"}
-        else:
-            try:
-                tok = json.loads(token_path.read_text())
-                expiry = tok.get("expiry") or tok.get("expires_at")
-                refresh = tok.get("refresh_token")
-                if not refresh and expiry:
-                    import datetime as _dt
-                    exp = _dt.datetime.fromisoformat(
-                        expiry.replace("Z", "+00:00")
-                    )
-                    if exp < _dt.datetime.now(_dt.timezone.utc):
-                        out = {"status": "error", "reason": "token expired"}
-                    else:
-                        out = {"status": "on"}
-                else:
-                    out = {"status": "on"}
-            except Exception as e:  # noqa: BLE001
-                out = {"status": "error", "reason": str(e)[:80]}
-    elif name == "matrix":
-        token = env.get("MATRIX_ACCESS_TOKEN", "").strip()
-        url = env.get("MATRIX_HOMESERVER_URL", "").strip()
-        if not token or not url:
-            out = {"status": "off"}
-        else:
-            try:
-                import urllib.request as _ur
-                req = _ur.Request(
-                    f"{url.rstrip('/')}/_matrix/client/r0/account/whoami",
-                    headers={"Authorization": f"Bearer {token}"},
-                )
-                with _ur.urlopen(req, timeout=2.0) as resp:
-                    body = json.loads(resp.read().decode("utf-8"))
-                if body.get("user_id"):
-                    out = {"status": "on"}
-                else:
-                    out = {"status": "error", "reason": "whoami missing user_id"}
-            except Exception as e:  # noqa: BLE001
-                out = {"status": "error", "reason": str(e)[:80]}
-    click.echo(json.dumps(out))
+    account = accounts_mod.get_account(h, account_id)
+    if account is None:
+        click.echo(json.dumps({"status": "error", "reason": f"unknown account {account_id!r}"}))
+        ctx.exit(1)
+    from alpi.host.probes import _email_probe_blocking
+    click.echo(json.dumps(_email_probe_blocking(h, account_id, account)))
 
 
-@gateway.command("remove")
-@click.argument("name", type=click.Choice(["telegram", "imap", "gmail", "matrix"]))
+@email_group.command("remove")
+@click.argument("account_id")
 @click.option("--yes", is_flag=True, default=False,
               help="Skip the confirmation prompt.")
 @click.pass_context
-def gateway_remove(ctx: click.Context, name: str, yes: bool) -> None:
-    """Drop env vars (and Gmail token file) for one configured gateway."""
-    from alpi.model_selector import _remove_env_key
+def email_remove(ctx: click.Context, account_id: str, yes: bool) -> None:
+    """Drop config + secret (and Gmail token file) for one email account."""
+    from alpi.mail import accounts as accounts_mod
 
     h: Path = ctx.obj["home"]
-    cfg = config.load(h)
     if not yes:
         if not click.confirm(
-            f"Remove {name} gateway? Drops env vars and you can re-add later.",
+            f"Remove {account_id} email account? You can re-add later.",
             default=False,
         ):
             click.echo("aborted")
             return
-    for key in _GATEWAY_ENV_KEYS.get(name, ()):
-        _remove_env_key(cfg.env_path, key)
-    if name == "gmail":
-        token_file = h / "secrets" / "gmail_token.json"
-        if token_file.exists():
-            try:
-                token_file.unlink()
-            except OSError:
-                pass
-    click.echo(f"removed {name} gateway · restart daemon to apply")
+    existed = accounts_mod.remove_account(h, account_id)
+    if not existed:
+        click.echo(f"no email account {account_id!r}")
+        return
+    click.echo(f"removed {account_id} email account · restart daemon to apply")
 
 
 @main.group()
@@ -1402,7 +1295,7 @@ def audit_cmd(ctx: click.Context, offline: bool) -> None:
 @main.command("logs")
 @click.option(
     "--source",
-    type=click.Choice(["service", "gateway", "schedule", "agent", "approval"]),
+    type=click.Choice(["service", "schedule", "agent", "approval"]),
     default=None,
     help="Restrict to one subsystem.",
 )
@@ -1458,7 +1351,7 @@ def update_cmd(ctx: click.Context, check_only: bool, assume_yes: bool) -> None:
 @main.command("setup")
 @click.pass_context
 def setup_cmd(ctx: click.Context) -> None:
-    """Interactive setup — model, gateways, MCPs."""
+    """Interactive setup — model, email, MCPs."""
     from alpi import ui
 
     h: Path = ctx.obj["home"]
@@ -1473,6 +1366,7 @@ def setup_cmd(ctx: click.Context) -> None:
             ("Model / Provider", "model", cfg.model or "(not set)"),
             ("Voice", "voice", _voice_status(cfg)),
             ("MCPs", "mcps", _mcp_status(h)),
+            ("Emails", "email", _email_accounts_status(h)),
 
             ui.Heading("Boundaries"),
             ("Workspace", "workspace", _workspace_status(cfg)),
@@ -1490,7 +1384,6 @@ def setup_cmd(ctx: click.Context) -> None:
             items.append(("Daemon", "daemon", _daemon_lifecycle_status()))
         items += [
             ("Subsystems", "subsystems", _subsystems_summary(h)),
-            ("Gateways", "gateways", _gateways_status(h)),
         ]
         if profile_name == "default":
             items.append(("Devices", "devices", _devices_status(h)))
@@ -1519,8 +1412,8 @@ def setup_cmd(ctx: click.Context) -> None:
             model_selector.run(config.load(h))
         elif choice == "workspace":
             _workspace_setup(h)
-        elif choice == "gateways":
-            _gateways_setup(h)
+        elif choice == "email":
+            _email_accounts_setup(h)
         elif choice == "mcps":
             from alpi.mcp.setup import run as mcp_setup_run
 
@@ -1563,128 +1456,70 @@ def _setup_farewell(profile: str, h: Path) -> None:
     ui_mod._console.print(f"\n[dim]next:[/dim] {prefix}\n")
 
 
-_GATEWAY_ENV_KEYS = {
-    "telegram": ("TELEGRAM_BOT_TOKEN", "TELEGRAM_ALLOWED_CHAT_IDS"),
-    "imap": (
-        "IMAP_ADDRESS", "IMAP_PASSWORD",
-        "IMAP_HOST", "IMAP_PORT",
-        "SMTP_HOST", "SMTP_PORT",
-        "IMAP_ALLOWED_SENDERS",
-    ),
-    "gmail": (
-        "GMAIL_CLIENT_ID", "GMAIL_CLIENT_SECRET", "GMAIL_ALLOWED_SENDERS",
-    ),
-    "matrix": (
-        "MATRIX_HOMESERVER_URL", "MATRIX_USER_ID", "MATRIX_ACCESS_TOKEN",
-        "MATRIX_DEVICE_ID", "MATRIX_ALLOWED_ROOMS", "MATRIX_ALLOWED_SENDERS",
-    ),
-}
-
-
-def _gateways_setup(h: Path) -> None:
+def _email_accounts_setup(h: Path) -> None:
     from alpi import ui
+    from alpi.mail import accounts as accounts_mod
 
     while True:
-        configured = _configured_gateways(h)
-        items = [
-            ("Telegram", "telegram", _telegram_status(h)),
-            ("IMAP", "imap", _email_status(h)),
-            ("Gmail", "gmail", _gmail_status(h)),
-            ("Matrix", "matrix", _matrix_status(h)),
-        ]
-        if configured:
+        rows = accounts_mod.list_accounts(h)
+        items: list = []
+        for row in rows:
+            items.append((
+                f"{row['address'] or row['id']} ({row['type']})",
+                row["id"],
+                "configured" if row["configured"] else "not authorized",
+            ))
+        if rows:
             items.append(None)
-            items.append(("Remove gateway", "remove",
-                          f"drop one of: {', '.join(configured)}"))
+        items.append(("Add account", "__add__", "connect a new IMAP or Gmail mailbox"))
         choice = ui.menu(
-            ui.crumb("setup", "gateways"),
+            ui.crumb("setup", "email"),
             items,
-            subtitle="inbound channels alpi listens on",
+            subtitle="email accounts the agent can read and send from",
             home=h,
             close="Back",
         )
         if choice is None:
             return
-        if choice == "telegram":
-            from alpi.gateway.setup import run as telegram_setup
-
-            telegram_setup(h)
-        elif choice == "imap":
-            from alpi.mail.setup import run as email_setup
-
-            email_setup(h)
-        elif choice == "gmail":
-            from alpi.mail.gmail_setup import run as gmail_setup
-
-            gmail_setup(h)
-        elif choice == "matrix":
-            from alpi.gateway.matrix_setup import run as matrix_setup
-
-            matrix_setup(h)
-        elif choice == "remove":
-            _remove_gateway_flow(h, configured)
+        if choice == "__add__":
+            _add_email_account_flow(h)
+        else:
+            _email_account_actions(h, choice)
 
 
-def _configured_gateways(h: Path) -> list[str]:
-    """Subset of {telegram, imap, gmail} that has any state worth wiping."""
-    env = _read_profile_env(h)
-    out: list[str] = []
-    if env.get("TELEGRAM_BOT_TOKEN"):
-        out.append("telegram")
-    if env.get("IMAP_ADDRESS"):
-        out.append("imap")
-    if env.get("GMAIL_CLIENT_ID") or (h / "secrets" / "gmail_token.json").exists():
-        out.append("gmail")
-    if env.get("MATRIX_ACCESS_TOKEN"):
-        out.append("matrix")
-    return out
-
-
-def _remove_gateway_flow(h: Path, configured: list[str]) -> None:
-    """Drop env vars (and Gmail token) for one configured gateway."""
+def _add_email_account_flow(h: Path) -> None:
     from alpi import ui
-    from alpi.model_selector import _remove_env_key
 
-    items = [(name, name, _gateway_summary(h, name)) for name in configured]
-    target = ui.menu(
-        ui.crumb("setup", "gateways", "remove"),
-        items,
-        subtitle="pick the gateway to disconnect",
+    kind = ui.menu(
+        ui.crumb("setup", "email", "add"),
+        [("IMAP + SMTP", "imap", ""), ("Gmail (OAuth)", "gmail", "")],
+        subtitle="pick the mailbox type",
         home=h,
         close="Back",
     )
-    if target is None:
+    if kind is None:
         return
+    if kind == "imap":
+        from alpi.mail.setup import run as email_setup
+        email_setup(h)
+    elif kind == "gmail":
+        from alpi.mail.gmail_setup import run as gmail_setup
+        gmail_setup(h)
+
+
+def _email_account_actions(h: Path, account_id: str) -> None:
+    from alpi import ui
+    from alpi.mail import accounts as accounts_mod
+
     if not ui.confirm(
-        f"Remove {target} gateway? Drops env vars; you can re-add later.",
+        f"Remove {account_id} email account? You can re-add later.",
         default=False,
     ):
         return ui.cancelled()
-
-    for key in _GATEWAY_ENV_KEYS.get(target, ()):
-        _remove_env_key(h / ".env", key)
-    if target == "gmail":
-        token_file = h / "secrets" / "gmail_token.json"
-        if token_file.exists():
-            try:
-                token_file.unlink()
-            except OSError:
-                pass
+    accounts_mod.remove_account(h, account_id)
     ui.ok_and_wait(
-        f"removed {target} — restart the service for the change to take effect",
+        f"removed {account_id} — restart the service for the change to take effect",
     )
-
-
-def _gateway_summary(h: Path, name: str) -> str:
-    if name == "telegram":
-        return _telegram_status(h)
-    if name == "imap":
-        return _email_status(h)
-    if name == "gmail":
-        return _gmail_status(h)
-    if name == "matrix":
-        return _matrix_status(h)
-    return ""
 
 
 def _subsystems_summary(h: Path) -> str:
@@ -1925,8 +1760,6 @@ def _subsystems_wizard(h: Path, profile: str) -> None:
 
         items: list = [
             ui.Heading(f"Services · profile: {profile}"),
-            (("Gateway · " + _on_off(on_subsystems["gateway"])),
-             "toggle-gateway", _gateways_status(h)),
             (("Scheduler · " + _on_off(on_subsystems["schedule"])),
              "toggle-schedule", "cron jobs"),
             (("ALP listener · " + _on_off(on_subsystems["alp"])),
@@ -1951,7 +1784,7 @@ def _subsystems_wizard(h: Path, profile: str) -> None:
             return
         try:
             if choice in (
-                "toggle-gateway", "toggle-schedule", "toggle-alp",
+                "toggle-schedule", "toggle-alp",
                 "toggle-host", "toggle-workgroups",
             ):
                 key = choice.split("-", 1)[1]
@@ -2231,7 +2064,7 @@ def _device_add(h: Path, endpoint) -> None:
         return ui.cancelled()
 
     grant_admin = ui.confirm(
-        "Grant admin access? — can manage profiles, gateways, devices",
+        "Grant admin access? — can manage profiles, devices",
         default=False,
     )
     role = "admin" if grant_admin else "member"
@@ -2415,7 +2248,7 @@ def _device_detail(h: Path, token_id: str) -> None:
         flip_hint = (
             "member can still chat, see events, post in workgroups"
             if current_role == "admin"
-            else "admin unlocks profile/gateway/device management over WS"
+            else "admin unlocks profile/device management over WS"
         )
         if current_role == "admin":
             profiles_display = "all (admin bypass)"
@@ -2554,17 +2387,6 @@ def _profile_from_home(h: Path) -> str:
         return h.name
 
 
-def _any_gateway_ready(h: Path) -> bool:
-    env = _read_profile_env(h)
-    if env.get("TELEGRAM_BOT_TOKEN"):
-        return True
-    if env.get("IMAP_ADDRESS"):
-        return True
-    if (h / "secrets" / "gmail_token.json").exists():
-        return True
-    return False
-
-
 def _read_profile_env(h: Path) -> dict[str, str]:
     env_path = h / ".env"
     if not env_path.exists():
@@ -2579,40 +2401,12 @@ def _read_profile_env(h: Path) -> dict[str, str]:
     return out
 
 
-def _gateways_status(h: Path) -> str:
-    from alpi.mail.gmail_auth import token_path
+def _email_accounts_status(h: Path) -> str:
+    from alpi.mail import accounts as accounts_mod
 
-    env = _read_profile_env(h)
-    names = []
-    if env.get("TELEGRAM_BOT_TOKEN"):
-        names.append("Telegram")
-    if env.get("IMAP_ADDRESS"):
-        names.append("IMAP")
-    if env.get("GMAIL_CLIENT_ID") and token_path(h).exists():
-        names.append("Gmail")
-    return ", ".join(names) if names else "none"
-
-
-def _telegram_status(h: Path) -> str:
-    env = _read_profile_env(h)
-    if not env.get("TELEGRAM_BOT_TOKEN"):
-        return "not set up"
-    chats = env.get("TELEGRAM_ALLOWED_CHAT_IDS", "")
-    n = len([c for c in chats.split(",") if c.strip()])
-    if n == 0:
-        return "ready · no one allowlisted yet"
-    return f"ready · {n} allowlisted chat{'s' if n != 1 else ''}"
-
-
-def _matrix_status(h: Path) -> str:
-    env = _read_profile_env(h)
-    if not env.get("MATRIX_ACCESS_TOKEN"):
-        return "not set up"
-    rooms = env.get("MATRIX_ALLOWED_ROOMS", "")
-    n = len([r for r in rooms.split(",") if r.strip()])
-    if n == 0:
-        return "ready · no rooms allowlisted yet"
-    return f"ready · {n} allowlisted room{'s' if n != 1 else ''}"
+    rows = accounts_mod.list_accounts(h)
+    configured = [r["address"] or r["id"] for r in rows if r["configured"]]
+    return ", ".join(configured) if configured else "none"
 
 
 def _mcp_status(h: Path) -> str:
@@ -2849,7 +2643,7 @@ def _sandbox_setup(h: Path) -> None:
             "Wraps shell commands in sandbox-exec (macOS) or bubblewrap (Linux):\n"
             "kernel blocks writes outside workspace + ~/.alpi, network denied\n"
             "unless opted in.\n\n"
-            "Recommended for unattended profiles (gateway, scheduler, sub-agents).\n"
+            "Recommended for unattended profiles (scheduler, sub-agents).\n"
             "Trade-offs: SSH push, Homebrew on Apple Silicon, and docker may break\n"
             "— keep off in your main dev profile."
         )
@@ -3026,7 +2820,6 @@ def _cleanup_categories(h: Path) -> list[dict]:
     inbound_files = _all(_dir("cache/inbound"))
     session_files = _all(_dir("sessions"))
     mention_files = _all(_dir("mentions"))
-    gateway_files = _all(_dir("gateway/sessions"))
     logs_root = _dir("logs")
     log_files: list[Path] = (
         [
@@ -3087,13 +2880,6 @@ def _cleanup_categories(h: Path) -> list[dict]:
             "desc": "per-sender @-mention threads in `mentions/`",
             "files": mention_files,
             "size": _sum(mention_files),
-        },
-        {
-            "key": "gateway",
-            "label": "Gateway",
-            "desc": "Telegram / email / webhook chats in `gateway/sessions/`",
-            "files": gateway_files,
-            "size": _sum(gateway_files),
         },
         {
             "key": "logs",
@@ -3228,39 +3014,6 @@ def _cleanup_setup(h: Path) -> None:
         ui.ok_and_wait(f"removed {deleted} file(s) from {target['label']}")
 
 
-def _email_status(h: Path) -> str:
-    env = _read_profile_env(h)
-    addr = env.get("IMAP_ADDRESS", "")
-    if not addr:
-        return "not set up"
-    senders = env.get("IMAP_ALLOWED_SENDERS", "")
-    n = len([s for s in senders.split(",") if s.strip()])
-    if n == 0:
-        return f"ready · {addr} · outbound only"
-    return f"ready · {addr} · {n} allowlisted sender{'s' if n != 1 else ''}"
-
-
-def _gmail_status(h: Path) -> str:
-    from alpi.mail.gmail_auth import token_path
-
-    env = _read_profile_env(h)
-    if not env.get("GMAIL_CLIENT_ID") or not env.get("GMAIL_CLIENT_SECRET"):
-        return "not set up"
-    if not token_path(h).exists():
-        return "credentials present · not authorized"
-    try:
-        from alpi.mail.gmail_auth import get_email
-
-        addr = get_email(h) or "?"
-    except Exception:  # noqa: BLE001
-        addr = "?"
-    senders = env.get("GMAIL_ALLOWED_SENDERS", "")
-    n = len([s for s in senders.split(",") if s.strip()])
-    if n == 0:
-        return f"ready · {addr} · outbound only"
-    return f"ready · {addr} · {n} allowlisted sender{'s' if n != 1 else ''}"
-
-
 @main.group()
 def profile() -> None:
     """Manage profiles (list, create, remove)."""
@@ -3343,7 +3096,7 @@ def profile_create(name: str) -> None:
     click.echo("")
     click.echo("Configure it:")
     click.echo(
-        f"  alpi -p {name} setup                          # interactive (API keys + gateway)"
+        f"  alpi -p {name} setup                          # interactive (API keys + email)"
     )
     default_env = Path.home() / ".alpi" / ".env"
     if default_env.exists():
@@ -4361,7 +4114,7 @@ def _render_audit(report, console) -> None:
 @click.pass_context
 def cmd_digest(ctx: click.Context, window: str, as_json: bool) -> None:
     """Read-only evidence digest aggregating existing on-disk signals:
-    broken tools, gateway state, skill usage, memory backlog, compaction
+    broken tools, skill usage, memory backlog, compaction
     rate. Sibling to ``alpi doctor`` — doctor is "is this healthy now?",
     digest is "what happened in the last N days?". No LLM, no dashboard,
     no recommendations."""
@@ -4404,32 +4157,6 @@ def _render_digest(report, console) -> None:
         console.print(f"  [dim]{t.total - len(t.unavailable)} other tools available[/dim]")
     else:
         console.print(f"  [green]{t.total} tools available[/green]")
-    console.print("")
-
-    # Gateways
-    g = report.gateways
-    console.print("[dim]Gateways[/dim]")
-    if g.total_tracked == 0:
-        console.print("  [dim]no tracked platforms yet[/dim]")
-    elif not g.degraded and not g.disabled:
-        console.print(f"  [green]{g.by_state.get('healthy', 0)} healthy[/green]")
-    else:
-        for d in g.disabled:
-            cooldown = int(d.get("cooldown_remaining_s") or 0)
-            console.print(
-                f"  [red]·[/red] {d['platform']} — disabled, "
-                f"cooldown {cooldown}s ({d['consecutive_failures']} failures: "
-                f"{d.get('last_error') or 'unknown'})"
-            )
-        for d in g.degraded:
-            console.print(
-                f"  [yellow]·[/yellow] {d['platform']} — degraded "
-                f"({d['consecutive_failures']} consecutive: "
-                f"{d.get('last_error') or 'unknown'})"
-            )
-        healthy = g.by_state.get("healthy", 0)
-        if healthy:
-            console.print(f"  [dim]{healthy} healthy[/dim]")
     console.print("")
 
     # Skills

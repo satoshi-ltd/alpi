@@ -358,8 +358,8 @@ def _status_rows(
 
 
 class StatusPanel(FloatingPanel):
-    """/status — session snapshot. Same shape as the Telegram ``/status``
-    shortcut so users see one consistent view across surfaces."""
+    """/status — session snapshot. Same shape as the ``/status`` panel
+    so users see one consistent view across surfaces."""
 
     panel_title = "/status"
 

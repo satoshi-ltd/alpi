@@ -2,11 +2,6 @@
 
 The ``ask_user`` tool routes by surface:
 
-- **gateway** (``ALPI_PLATFORM`` set to a chat/email/webhook id): the tool
-  short-circuits and returns a numbered text block as its result. The
-  model is expected to relay that block to the user via ``send_message``
-  and interpret the user's next inbound message naturally. No handler is
-  ever called for gateways.
 - **TUI / daemon**: a handler is installed at startup by whoever owns the
   user-facing surface — ``alpi.cli`` for interactive TUI turns,
   ``alpi.host.clarification`` for the daemon WebSocket path. The tool

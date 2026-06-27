@@ -120,23 +120,17 @@ def test_compute_handles_malformed_session_json(tmp_home: Path) -> None:
     assert report["sessions"]["count"] == 0
 
 
-def test_compute_separates_local_and_gateway_sessions(tmp_home: Path) -> None:
-    for sub, payload in [
-        ("sessions", {"id": "a", "turns": [{"tools": []}]}),
-        ("gateway/sessions", {"id": "b", "turns": [{"tools": []}, {"tools": []}]}),
-    ]:
-        d = tmp_home / sub
-        d.mkdir(parents=True)
-        f = d / "x.json"
-        f.write_text(json.dumps(payload))
-        _set_mtime(f, datetime.now(timezone.utc) - timedelta(minutes=5))
+def test_compute_counts_local_sessions(tmp_home: Path) -> None:
+    d = tmp_home / "sessions"
+    d.mkdir(parents=True)
+    f = d / "x.json"
+    f.write_text(json.dumps({"id": "a", "turns": [{"tools": []}]}))
+    _set_mtime(f, datetime.now(timezone.utc) - timedelta(minutes=5))
 
     cutoff = datetime.now(timezone.utc) - timedelta(hours=1)
     report = diff.compute(tmp_home, cutoff)
     assert report["sessions"]["count"] == 1
     assert report["sessions"]["turns"] == 1
-    assert report["gateway_sessions"]["count"] == 1
-    assert report["gateway_sessions"]["turns"] == 2
 
 
 # compute() — memory / skills / peers / mentions / schedule
@@ -247,7 +241,6 @@ def test_compute_empty_profile_is_safe(tmp_home: Path) -> None:
     cutoff = datetime.now(timezone.utc) - timedelta(hours=1)
     report = diff.compute(tmp_home, cutoff)
     assert report["sessions"]["count"] == 0
-    assert report["gateway_sessions"]["count"] == 0
     assert report["memory"] == []
     assert report["skills"] == []
     assert report["peers"]["yaml_mtime"] is None

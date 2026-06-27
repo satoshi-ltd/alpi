@@ -36,7 +36,6 @@ def enabled_subsystems(home: Path) -> dict[str, bool]:
 def _subsystem_flags(cfg) -> dict[str, bool]:
     raw = getattr(cfg, "service", None) or {}
     return {
-        "gateway": bool(raw.get("gateway", True)),
         "schedule": bool(raw.get("schedule", True)),
         "alp": bool(raw.get("alp", True)),
         "workgroups": bool(raw.get("workgroups", True)),
@@ -331,12 +330,7 @@ def _start_new_profiles(
 
 
 # Hot-reloadable per profile; "host" is deliberately absent — restarting it would drop every paired client, so it only moves on explicit daemon restart.
-_RELOADABLE_SUBSYSTEMS = ("gateway", "schedule", "alp", "workgroups")
-
-
-def _gateway_env_keys() -> list[str]:
-    from alpi.host.config import _GATEWAY_ENV_KEYS
-    return sorted({k for keys in _GATEWAY_ENV_KEYS.values() for k in keys})
+_RELOADABLE_SUBSYSTEMS = ("schedule", "alp", "workgroups")
 
 
 def _reload_fingerprints(home: Path) -> dict[str, str]:
@@ -348,10 +342,6 @@ def _reload_fingerprints(home: Path) -> dict[str, str]:
     env = read_profile_env(home)
     return {
         "flags": repr(sorted(_subsystem_flags(cfg).items())),
-        "gateway": repr((
-            [(k, env.get(k, "")) for k in _gateway_env_keys()],
-            cfg.gateway or {},
-        )),
         "alp": repr((
             (cfg.alp or {}).get("tcp_port"),
             (cfg.network or {}).get("host"),
@@ -426,11 +416,6 @@ def _profile_tasks(
 
 
 def _subsystem_tasks(home: Path, profile: str, name: str) -> list[asyncio.Task]:
-    if name == "gateway":
-        return [asyncio.create_task(
-            _supervise(_run_gateway, home, profile, "gateway"),
-            name=f"{profile}/gateway",
-        )]
     if name == "schedule":
         return [asyncio.create_task(
             _supervise(_run_scheduler, home, profile, "schedule"),
@@ -473,11 +458,6 @@ async def _supervise(coro_fn, home: Path, profile: str, name: str) -> None:
         raise
     except Exception:  # noqa: BLE001
         log.exception("subsystem %s crashed — staying down, other subsystems unaffected", name)
-
-
-async def _run_gateway(home: Path) -> None:
-    from alpi.gateway.run import serve as gw_serve
-    await gw_serve(home)
 
 
 async def _run_scheduler(home: Path) -> None:

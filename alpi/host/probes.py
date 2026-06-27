@@ -7,7 +7,7 @@ from alpi.host import server as host_server
 
 
 def register(server: host_server.Server) -> None:
-    server.register("host.gateway.probe", _gateway_probe)
+    server.register("host.email.probe", _email_probe)
     server.register("host.peers.ping", _peers_ping)
     server.register("host.model.ctx_window", _model_ctx_window)
 
@@ -17,119 +17,60 @@ def _resolve_home(profile: str):
     return _r(profile)
 
 
-_GATEWAYS = {"telegram", "imap", "gmail", "matrix"}
-
-
-async def _gateway_probe(
+async def _email_probe(
     params: dict[str, Any], _server: host_server.Server,
 ) -> dict[str, Any]:
+    from alpi.mail import accounts as accounts_mod
+
     profile = str(params.get("profile") or "")
-    name = str(params.get("name") or "")
-    if name not in _GATEWAYS:
+    account_id = str(params.get("id") or "")
+    home = _resolve_home(profile)
+    account = accounts_mod.get_account(home, account_id)
+    if account is None:
         raise host_server.HandlerError(
             -32602, "invalid-params",
-            data={"detail": f"unknown gateway {name!r}"},
+            data={"detail": f"unknown email account {account_id!r}"},
         )
-    home = _resolve_home(profile)
 
     return await asyncio.get_running_loop().run_in_executor(
-        None, _gateway_probe_blocking, home, name,
+        None, _email_probe_blocking, home, account_id, account,
     )
 
 
-def _gateway_probe_blocking(home, name: str) -> dict[str, Any]:
+def _email_probe_blocking(home, account_id: str, account: dict) -> dict[str, Any]:
     import json
+    from alpi.mail import accounts as accounts_mod
 
-    env = _read_profile_env(home)
-
-    if name == "telegram":
-        token = (env.get("TELEGRAM_BOT_TOKEN") or "").strip()
-        if not token:
-            return {"status": "off"}
-        try:
-            import urllib.request as _ur
-            with _ur.urlopen(
-                f"https://api.telegram.org/bot{token}/getMe", timeout=2.0,
-            ) as resp:
-                body = json.loads(resp.read().decode("utf-8"))
-            if body.get("ok"):
-                return {"status": "on"}
-            return {"status": "error", "reason": "token rejected"}
-        except Exception as e:  # noqa: BLE001
-            return {"status": "error", "reason": str(e)[:80]}
-
-    if name == "imap":
-        addr = (env.get("IMAP_ADDRESS") or "").strip()
-        if not addr:
-            return {"status": "off"}
-        host = (env.get("IMAP_HOST") or "").strip() or "imap.gmail.com"
-        try:
-            port = int((env.get("IMAP_PORT") or "993").strip() or "993")
-        except ValueError:
-            port = 993
-        try:
-            import socket as _s
-            with _s.create_connection((host, port), timeout=2.0):
-                return {"status": "on"}
-        except Exception as e:  # noqa: BLE001
-            return {"status": "error", "reason": str(e)[:80]}
-
-    if name == "gmail":
-        client_id = (env.get("GMAIL_CLIENT_ID") or "").strip()
-        token_path = home / "secrets" / "gmail_token.json"
-        if not client_id and not token_path.exists():
-            return {"status": "off"}
+    if account.get("type") == "gmail":
+        token_path = accounts_mod.gmail_token_path(home, account_id)
         if not token_path.exists():
-            return {"status": "error", "reason": "no token file"}
+            return {"status": "off"}
         try:
             tok = json.loads(token_path.read_text())
             expiry = tok.get("expiry") or tok.get("expires_at")
             refresh = tok.get("refresh_token")
             if not refresh and expiry:
                 import datetime as _dt
-                exp = _dt.datetime.fromisoformat(expiry.replace("Z", "+00:00"))
+                exp = _dt.datetime.fromisoformat(str(expiry).replace("Z", "+00:00"))
                 if exp < _dt.datetime.now(_dt.timezone.utc):
                     return {"status": "error", "reason": "token expired"}
             return {"status": "on"}
         except Exception as e:  # noqa: BLE001
             return {"status": "error", "reason": str(e)[:80]}
 
-    if name == "matrix":
-        token = (env.get("MATRIX_ACCESS_TOKEN") or "").strip()
-        url = (env.get("MATRIX_HOMESERVER_URL") or "").strip()
-        if not token or not url:
-            return {"status": "off"}
-        try:
-            import urllib.request as _ur
-            req = _ur.Request(
-                f"{url.rstrip('/')}/_matrix/client/r0/account/whoami",
-                headers={"Authorization": f"Bearer {token}"},
-            )
-            with _ur.urlopen(req, timeout=2.0) as resp:
-                body = json.loads(resp.read().decode("utf-8"))
-            if body.get("user_id"):
-                return {"status": "on"}
-            return {"status": "error", "reason": "whoami missing user_id"}
-        except Exception as e:  # noqa: BLE001
-            return {"status": "error", "reason": str(e)[:80]}
-
-    return {"status": "off"}
-
-
-def _read_profile_env(home) -> dict[str, str]:
-    out: dict[str, str] = {}
-    env_path = home / ".env"
+    host = str(account.get("imap_host") or "").strip()
+    if not host:
+        return {"status": "off"}
     try:
-        lines = env_path.read_text(encoding="utf-8").splitlines()
-    except OSError:
-        return out
-    for line in lines:
-        line = line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, value = line.split("=", 1)
-        out[key.strip()] = value.strip().strip('"').strip("'")
-    return out
+        port = int(account.get("imap_port") or 993)
+    except (TypeError, ValueError):
+        port = 993
+    try:
+        import socket as _s
+        with _s.create_connection((host, port), timeout=2.0):
+            return {"status": "on"}
+    except Exception as e:  # noqa: BLE001
+        return {"status": "error", "reason": str(e)[:80]}
 
 
 async def _peers_ping(

@@ -67,7 +67,7 @@ function ensureEventListener() {
     if (!profile || !connectionId) return;
     if (
       kind === "config_changed"
-      || kind === "gateway_changed"
+      || kind === "email_changed"
       || kind === "peers_changed"
     ) {
       scheduleInvalidate(connectionId, profile);

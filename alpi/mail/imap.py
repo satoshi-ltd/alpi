@@ -6,7 +6,6 @@ import email
 import email.header
 import email.utils
 import imaplib
-import os
 import re
 import smtplib
 import ssl
@@ -87,38 +86,30 @@ class ImapClient:
         self.imap_port = imap_port
         self.smtp_port = smtp_port
 
-    # Construction from environment
+    # Construction from a config account row
 
     @classmethod
-    def from_env(cls) -> "ImapClient":
-        """Build a client from ``IMAP_*`` / ``SMTP_*`` variables in ``os.environ``. Prefer ``from_env_map`` from daemon code so a per-profile .env is honored without mutating the process env."""
-        return cls.from_env_map(os.environ)
-
-    @classmethod
-    def from_env_map(cls, env: dict[str, str]) -> "ImapClient":
-        """Same as ``from_env`` but reads from an explicit env map (e.g. the gateway's ``self.env`` snapshot for one profile)."""
-        addr = (env.get("IMAP_ADDRESS") or "").strip()
-        pwd = env.get("IMAP_PASSWORD") or ""
-        imap = (env.get("IMAP_HOST") or "").strip()
-        smtp = (env.get("SMTP_HOST") or "").strip()
+    def from_account(cls, account: dict, password: str) -> "ImapClient":
+        addr = str(account.get("address") or "").strip()
+        imap = str(account.get("imap_host") or "").strip()
+        smtp = str(account.get("smtp_host") or "").strip()
         missing = [
             name for name, val in (
-                ("IMAP_ADDRESS", addr), ("IMAP_PASSWORD", pwd),
-                ("IMAP_HOST", imap), ("SMTP_HOST", smtp),
+                ("address", addr), ("password", password),
+                ("imap_host", imap), ("smtp_host", smtp),
             ) if not val
         ]
         if missing:
             raise ImapError(
-                f"IMAP not configured: missing {', '.join(missing)} in "
-                f"~/.alpi/.env. Run `alpi setup → Gateways → IMAP`."
+                f"IMAP account incomplete: missing {', '.join(missing)}."
             )
         return cls(
             address=addr,
-            password=pwd,
+            password=password,
             imap_host=imap,
             smtp_host=smtp,
-            imap_port=int(env.get("IMAP_PORT") or DEFAULT_IMAP_PORT),
-            smtp_port=int(env.get("SMTP_PORT") or DEFAULT_SMTP_PORT),
+            imap_port=int(account.get("imap_port") or DEFAULT_IMAP_PORT),
+            smtp_port=int(account.get("smtp_port") or DEFAULT_SMTP_PORT),
         )
 
     # Connectivity test (used by the setup wizard)

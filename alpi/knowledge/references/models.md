@@ -39,7 +39,7 @@ Pick one for a skill-heavy profile: start with owl-alpha, DeepSeek V4 Pro, MiMo 
 
 ## Cheap service turns
 
-For Telegram gateway traffic, heartbeats, summaries, simple lookups, low-risk commands. Not for creating/debugging skills.
+For scheduled-job turns, heartbeats, summaries, simple lookups, low-risk commands. Not for creating/debugging skills.
 
 | Model | OpenRouter ID | Notes |
 |---|---|---|

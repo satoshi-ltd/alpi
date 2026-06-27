@@ -16,12 +16,6 @@ providers:
   ollama: []
 mcp:
   servers: {}
-gateway:
-  telegram: {}
-  matrix: {}
-  imap:
-    poll_interval: 60
-    mark_as_read: true
 ```
 
 Everything else (tool limits, TUI flags, fallback models, workspace)
@@ -32,7 +26,7 @@ only when you want to override it.
 
 Three options:
 
-- **CLI wizards**: `alpi setup` covers model selection, gateway
+- **CLI wizards**: `alpi setup` covers model selection, email
   credentials, MCP servers, sandbox posture, voice, peers,
   workgroups, disk cleanup, and the alpi daemon's lifecycle.
   `alpi setup → Cleanup` inspects the profile's heavy dirs (audio
@@ -41,7 +35,7 @@ Three options:
   category. `alpi setup → Services` exposes two rows:
   **Daemon** (default profile only — install / uninstall / start /
   stop / restart of the per-machine launchd plist or systemd-user
-  unit) and **Subsystems** (per-profile toggles for gateway /
+  unit) and **Subsystems** (per-profile toggles for
   scheduler / ALP / workgroups / host, plus the inter-machine TCP
   port for ALP). The first `alpi setup` auto-installs the daemon,
   so the lifecycle row is mostly read-only after that.
@@ -49,10 +43,10 @@ Three options:
   `~/.alpi/profiles/<name>/config.yaml` for non-default profiles)
   and change values manually. Restart whatever surface was affected.
   Cosmetic knobs (`tui.*`, `tools.max_steps_per_turn`,
-  `gateway.imap.poll_interval`, `fallback_models`) live here.
+  `tools.stt.model`, `fallback_models`) live here.
 - **Populate `.env` directly** (non-interactive, CI / devcontainers):
-  alpi does not ship a `.env.example` — the Reference tables below
-  (Core, Gateway — Telegram / Matrix / IMAP / Gmail) list every key with its
+  alpi does not ship a `.env.example` — the Reference sections below
+  (Core, Email — IMAP / Gmail) name every key with its
   default. Create `~/.alpi/.env` yourself with just the keys you use
   and alpi picks them up on next launch.
 
@@ -115,7 +109,7 @@ running. Unknown names are no-ops, so typos are harmless. Denying
 prompt, so the model is never told to call a tool it cannot reach.
 
 Canonical names are the strings used at registration time —
-`write_file`, `edit_file`, `terminal`, `email`, `send_message`,
+`write_file`, `edit_file`, `terminal`, `email`,
 `schedule`, `delegate`, `peer`, `index_workspace`, `search_workspace`,
 `alpi_knowledge`, `research`, `browser`, `workgroup`, etc. See
 `alpi/tools/__init__.py` for the full registry. Note: the alpi-docs
@@ -135,7 +129,6 @@ tools:
     - edit_file
     - terminal
     - email
-    - send_message
     - schedule
     - delegate
 ```
@@ -148,7 +141,7 @@ power-user enough that raw names beat any UI we'd build right now.
 (macOS `sandbox-exec`, Linux `bubblewrap`). Toggle via `alpi setup →
 Sandbox`, or directly in YAML. The TUI top bar shows the current
 state (`sandbox on` / `off`). Most useful on profiles that run
-unattended (gateway, schedule, sub-agents) — see
+unattended (schedule, sub-agents) — see
 [SECURITY.md](SECURITY.md) for the recommended pattern + platform
 requirements.
 
@@ -158,11 +151,10 @@ network:
 
 - The `terminal` subprocess is denied sockets (sandbox-exec / bwrap).
 - Python-native tools (`web_fetch`, `web_search`, `web_extract`,
-  `browser`, `tts`, `send_message`, `email`, `read_image` on URLs)
+  `browser`, `tts`, `email`, `read_image` on URLs)
   refuse with a clear error.
 - The LLM call itself (litellm) is exempt — it's the agent's brain,
-  not an exfiltration vector. The gateway inbound listener is also
-  exempt (receiving is not exfiltrating).
+  not an exfiltration vector.
 
 The TUI top bar shows `offline` instead of `sandbox` when network is
 locked, so unattended profiles can be audited at a glance.
@@ -182,7 +174,7 @@ severities:
   the pattern until restart), `Always` (persist the pattern
   description to `tools.terminal.approval.allowlist` in config), or
   `Deny` (abort the tool call). On non-interactive surfaces
-  (gateway, schedule) these auto-deny with a clear error telling the
+  (schedule) these auto-deny with a clear error telling the
   user to rerun from the TUI or edit the config allowlist.
 - **dangerous** — matches a pattern that's almost never legitimate.
   Examples: `mkfs`, `dd of=/dev/…`, fork bomb, pipe-to-interpreter
@@ -234,7 +226,7 @@ destructive inside the allowed scope. Both can be on at once; the
 approval check runs first so the user sees the prompt before the
 sandbox has a chance to refuse.
 
-`tools.browser.vision` lets the `browser(screenshot, question=…)` action auto-chain the screenshot into the vision model (`tools.read_image.model` or the active main model) and return the answer instead of the file path. When `false` (default), `screenshot` always returns the path and a hint pointing at `read_image` so the LLM can decide whether to pay for vision per call. Useful to turn on in an exploratory profile; keep off in watchdog/gateway profiles so the agent doesn't burn vision tokens silently.
+`tools.browser.vision` lets the `browser(screenshot, question=…)` action auto-chain the screenshot into the vision model (`tools.read_image.model` or the active main model) and return the answer instead of the file path. When `false` (default), `screenshot` always returns the path and a hint pointing at `read_image` so the LLM can decide whether to pay for vision per call. Useful to turn on in an exploratory profile; keep off in watchdog/unattended profiles so the agent doesn't burn vision tokens silently.
 
 Image resizing is automatic: any image whose longer edge exceeds 1568 px (Anthropic's recommended bound) is downscaled before base64-encoding to the model. Vision-model cost scales with resolution — a 4K screenshot costs ~9× more tokens than its 1568-px version for the same content. Aspect ratio is preserved, PNG-with-alpha stays PNG, everything else rounds-trips through JPEG q=85. SVG (vector) is skipped. Not a knob — it is a fixed constant (`alpi.tools.read_image.MAX_EDGE`).
 
@@ -242,13 +234,11 @@ The `research` sub-agent's depth tiers (`quick` = 8 steps, `normal` = 15, `deep`
 
 `tools.tts.voice` selects the Edge TTS voice used by the `tts` tool. Any Microsoft Neural voice id is valid (`es-ES-AlvaroNeural`, `en-US-AriaNeural`, `fr-FR-DeniseNeural`, ...). Output is an MP3 cached under `~/.alpi/cache/tts/<hash>.mp3` — same text + voice reuses the cached file. Edge TTS runs against a free Microsoft endpoint (no API key), so there's no per-call cost. To use a different voice per call the agent can pass `voice=...` directly without touching config. `alpi setup → Voice` gives you a curated shortlist (10 common-language voices) plus a "custom" entry to type any voice id.
 
-The daemon never plays audio itself — the `tts` tool returns the cached file path and stops. The alpi mobile / desktop apps stream playback on demand from a per-message button, and — when `tools.tts.auto_read` is on — auto-play each agent reply aloud as it arrives (your own messages are never read); they synthesize through the same Edge TTS path via `host.voice.preview`. For an external chat (e.g. Telegram) the agent chains `send_message(attachment=<path>)` to deliver the MP3 as an audio attachment. Workgroups carry an analogous **hub-local** `auto_read` flag in the workgroup meta (set from the desktop/mobile workgroup settings) that auto-reads agents' messages — never your directives; it is not replicated to members.
+The daemon never plays audio itself — the `tts` tool returns the cached file path and stops. The alpi mobile / desktop apps stream playback on demand from a per-message button, and — when `tools.tts.auto_read` is on — auto-play each agent reply aloud as it arrives (your own messages are never read); they synthesize through the same Edge TTS path via `host.voice.preview`. To deliver the MP3 to a third party the agent chains `email(send, attachment=<path>)` as an audio attachment. Workgroups carry an analogous **hub-local** `auto_read` flag in the workgroup meta (set from the desktop/mobile workgroup settings) that auto-reads agents' messages — never your directives; it is not replicated to members.
 
 `rate` and `pitch` are config-only (not per-call args) — persistent prosody defaults. Leave empty for neutral. Text is capped at 1000 chars (~1 minute); longer input is rejected. Output is always MP3.
 
 `tools.stt.{model,language}` control the `stt` tool backed by faster-whisper running on CPU. First call downloads the model weights (~40 MB for `tiny`, ~150 MB for `base`, ~500 MB for `small`, ~1.5 GB for `medium`, ~3 GB for `large-v3`) into `~/.cache/huggingface/` and keeps them forever. Pick the smallest model that meets your accuracy bar — `base` is the sweet spot for spoken messages/voice notes; `small` or above for podcasts/meetings. `language` defaults to `""` (auto-detect); set to an ISO code (`en`, `es`, `fr`, ...) only when auto-detect fails on short clips.
-
-The Telegram gateway auto-transcribes inbound voice notes and audio files through the same `stt` pipeline: when a user sends a voice message, the gateway downloads it via `getFile`, caches under `~/.alpi/cache/inbound/`, runs `stt`, and feeds the transcript to the agent as text (`[voice note] <transcription>`). The agent sees a normal text turn — nothing surface-specific to handle.
 
 ### Runtime
 
@@ -307,9 +297,8 @@ Calibration stays evidence-gated: these constants should not become user knobs u
 alpi's TUI is built on [Textual](https://textual.textualize.io/) — a
 full widget-based framework with streaming, focus management, scroll
 anchoring, and responsive layout. It's the **primary surface** (not a
-fallback); gateway and schedule processes inherit the same engine
-behind the scenes but render through their own channel (chat message,
-log file).
+fallback); schedule processes inherit the same engine
+behind the scenes but render through their own channel (log file).
 
 Design choices worth knowing before tweaking config:
 
@@ -380,7 +369,7 @@ alpi <version>  │  profile <name> <size>  │  [sandbox|offline]  │  workspa
 `tui.auto_resume` makes bare `alpi` behave as if `-c` / `--continue` was
 passed — the last session is loaded automatically. Use `/new` inside the
 TUI to start a fresh thread without changing the config. The flag does
-not affect `alpi chat --once` (scripts and the gateway always start
+not affect `alpi chat --once` (scripts and scheduled jobs always start
 clean) or explicit `-c` usage (still an override).
 
 `tui.show_reasoning` controls two channels of model-thinking output:
@@ -397,36 +386,56 @@ When `false`, both are hidden from the screen. The reasoning is
 **still persisted** to the session file (`sessions/*.json`) so that
 re-enabling the flag later brings it back on replay, and so that
 debug inspection (`cat sessions/<id>.json`) always has the full
-context. Gateway surfaces (Telegram, Email) never rendered
+context. Non-interactive surfaces (scheduled jobs) never rendered
 reasoning, so this flag has no effect there.
 
-### Gateway — Telegram / Matrix
+### Email — IMAP / Gmail
 
-| Key | Default | Notes |
-|---|---|---|
-| `gateway.telegram` | `{}` | Placeholder section; no per-platform knobs today. Telegram credentials live in `~/.alpi/.env` (`TELEGRAM_BOT_TOKEN`, `TELEGRAM_ALLOWED_SENDERS`). |
-| `gateway.matrix` | `{}` | Placeholder section; same shape as Telegram. Matrix credentials in `.env`. |
+Email is an on-demand integration, not a listener: the agent reads,
+searches, and sends mail through the `email` tool when a chat or a
+scheduled job calls for it — nothing polls your inbox.
 
-Both keep typing indicators hardcoded on and send only the final agent
-reply. Use TUI, desktop, or mobile when you want live tool progress.
+A profile holds **as many email accounts as you want**, any mix of
+IMAP and Gmail. Each account is keyed by its address (its id is a slug
+of that address), so adding a second Gmail or a third IMAP mailbox is
+just another entry. The `email` tool's `account` parameter selects
+which one by address or id.
 
-### Gateway — IMAP
+Accounts are declared in `config.yaml` under `email.accounts`, which
+carries no secrets — only the non-sensitive shape of each account:
 
-| Key | Default | Why |
-|---|---|---|
-| `gateway.imap.poll_interval` | `60` (seconds) | IMAP polling cadence. Keeps CPU/network quiet for personal use. |
-| `gateway.imap.mark_as_read` | `true` | Processed messages marked `\Seen` so your mail client treats them as read. |
+```yaml
+email:
+  accounts:
+    you-at-work-com:
+      type: imap
+      address: you@work.com
+      imap_host: imap.work.com
+      imap_port: 993
+      smtp_host: smtp.work.com
+      smtp_port: 465
+    you-at-gmail-com:
+      type: gmail
+      address: you@gmail.com
+```
 
-### Gateway — Gmail
+Secrets live in `~/.alpi/<profile>/.env`, namespaced per account by
+its id: an IMAP account's password is `EMAIL__<ID>__PASSWORD` (e.g.
+`EMAIL__YOU_AT_WORK_COM__PASSWORD`). Gmail accounts use OAuth — the
+client credentials `GMAIL_CLIENT_ID` / `GMAIL_CLIENT_SECRET` are
+**shared across every Gmail account** on the profile, while each
+account's refreshable token is stored per account at
+`~/.alpi/<profile>/secrets/gmail_tokens/<id>.json` after a one-off
+consent.
 
-Same knobs as IMAP, different backend. Polling uses Gmail's `users.history.list` with the last-seen `historyId` so we only fetch deltas (cheaper than rescanning INBOX). Credentials live in `~/.alpi/<profile>/gmail_token.json` after the one-off OAuth consent via `alpi setup → Gateways → Gmail`.
+Add and manage accounts with `alpi setup → Email` (CLI) or the
+**Email** settings section in the desktop / mobile apps — its own
+section, where you add and remove accounts like MCP servers. Operate on
+a single account by id from the CLI with `alpi email probe <id>` and
+`alpi email remove <id>`.
 
-| Key | Default | Why |
-|---|---|---|
-| `gateway.gmail.poll_interval` | `60` (seconds) | Same rationale as IMAP. |
-| `gateway.gmail.mark_as_read` | `true` | Removes the `UNREAD` label on processed messages. |
-
-Configure both if you want: `imap` polls your primary mailbox via password, `gmail` polls another account via OAuth, each with its own allowlist (`IMAP_ALLOWED_SENDERS` vs `GMAIL_ALLOWED_SENDERS`).
+`email.accounts` is intentionally absent from the key tables above: it
+is a per-account map, not a fixed knob.
 
 ### Budget
 
@@ -441,7 +450,7 @@ meaningful business constraint (their cost varies by model), so the only
 caps that mean anything are dollars or nothing.
 
 The cap covers **every** turn this profile runs: interactive TUI
-replies, gateway responses (Telegram / IMAP / Gmail / Matrix), scheduled jobs,
+replies, scheduled jobs,
 sub-agent spawns (`research`, `delegate`, `read_image`), and inbound
 ALP calls from pinned peers. It is re-checked **before each step**
 within a turn, so a long multi-step turn aborts as soon as it crosses
@@ -532,7 +541,6 @@ activates here.
 
 ```yaml
 service:
-  gateway: true     # Telegram / IMAP / Gmail / Matrix / webhook listeners
   schedule: true    # cron tick loop
   alp: true         # peer-to-peer ALP listener
   workgroups: true  # ALP.3 outbound poller for joined workgroups

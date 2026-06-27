@@ -11,8 +11,8 @@ Audience: any developer (or LLM) reading this codebase from cold.
 alpi is a local-first personal AI agent. It has a Textual TUI in the
 terminal, a Tauri desktop app (and a planned mobile client) that
 talk to the daemon over the host plane (Unix socket locally,
-WebSocket remotely), Telegram/IMAP/Gmail/Matrix gateways hosted by
-the alpi daemon,
+WebSocket remotely), an on-demand `email` tool (IMAP / Gmail) the
+agent calls to read and send mail,
 inline-learning memory, scanner-gated live skills, multi-provider LLM
 support via LiteLLM, read-only research, write-capable delegation,
 scheduling, MCP integration, and ALP for private agent-to-agent links.
@@ -59,20 +59,20 @@ alpi -p <name>                 profile flag, combinable with any command
 alpi chat                      alias for `alpi`
 alpi chat --once "<text>"      one-shot turn to stdout (pipe-friendly)
 alpi chat --once ... -c | --session <id>   continue the last / a specific session (one-shot)
-alpi chat --once ... --emit-events     INTERNAL — gateway subprocess contract
+alpi chat --once ... --emit-events     INTERNAL — scheduler subprocess contract
 alpi chat --once ... --no-save         INTERNAL — do not write a session file
 
-alpi setup                     interactive menu: model / gateways / voice / MCPs /
+alpi setup                     interactive menu: model / email / voice / MCPs /
                                peers / workgroups / sandbox / service /
                                health check / cleanup /
                                delete profile (non-default only)
 
-alpi doctor                    live health check (Telegram getMe, IMAP login,
+alpi doctor                    live health check (IMAP login,
                                Gmail token refresh, MCP handshake, service PID);
                                exits 1 on any failure, 0 otherwise
 
 alpi logs                      tail every subsystem log merged by timestamp
-  --source {service|gateway|schedule|agent|approval}  restrict to one subsystem
+  --source {service|schedule|agent|approval}  restrict to one subsystem
   -n N                                         last N lines (default 100)
   -f                                           follow mode (poll every 1s)
 
@@ -100,13 +100,13 @@ alpi workgroup pause|resume|leave <wg_id>          membership ops
 alpi workgroup kick <wg_id> <member-id|pubkey>     hub-only; rotates the group key
 ```
 
-**Shape rules:** containers (profile, peers, workgroups) get `list/create/remove` (or `add/remove`). The daemon gets `start/stop/restart/status/install/uninstall` under `alpi daemon`; the same lifecycle is also reachable from `alpi setup → Services → Daemon` (default profile only) so users have one canonical place. The first `alpi setup` auto-installs the daemon — no opt-in step. Per-profile services (gateway, schedule, alp, workgroups, host) toggle from `alpi setup → Services → Subsystems` or directly via the `service:` block in each profile's `config.yaml`. Interactive wizards live exclusively under `alpi setup`; never add a per-feature wizard command.
+**Shape rules:** containers (profile, peers, workgroups) get `list/create/remove` (or `add/remove`). The daemon gets `start/stop/restart/status/install/uninstall` under `alpi daemon`; the same lifecycle is also reachable from `alpi setup → Services → Daemon` (default profile only) so users have one canonical place. The first `alpi setup` auto-installs the daemon — no opt-in step. Per-profile services (schedule, alp, workgroups, host) toggle from `alpi setup → Services → Subsystems` or directly via the `service:` block in each profile's `config.yaml`. Interactive wizards live exclusively under `alpi setup`; never add a per-feature wizard command.
 
 **Command ordering** in `--help` is frequency-first, not alphabetical: `chat → setup → doctor → logs → profile → peers → workgroup → schedule → daemon`. See `_OrderedGroup` in `cli.py`.
 
 **`alpi/ui.py`** is the shared interactive layer. Raw `questionary.*` is forbidden outside it. Helpers: `banner`, `menu`, `text`, `password`, `confirm`, `row`, `ok/fail/warn/dim/saved/cancelled`. The close item is added automatically with value `None` (callers treat `None` as "out").
 
-**Menu close wording**: top-level (`alpi setup`) → `Exit`. Sub-menus (`Gateways:`, `MCP servers:`, `Manage saved keys`) → `← Back`. Wizard aborted mid-flow → `cancelled`. Mixing `Exit/Back/Cancel` in one context is a bug.
+**Menu close wording**: top-level (`alpi setup`) → `Exit`. Sub-menus (`Email:`, `MCP servers:`, `Manage saved keys`) → `← Back`. Wizard aborted mid-flow → `cancelled`. Mixing `Exit/Back/Cancel` in one context is a bug.
 
 ## File layout
 
@@ -123,8 +123,8 @@ alpi/
 ├── ui.py                   shared wizard/menu primitives
 ├── service.py              unified orchestrator — runs every enabled subsystem on one asyncio loop; install/uninstall launchd / systemd unit per profile
 ├── ledger.py               daily spend ledger (logs/ledger.json: live counters + 30-day per-day history) + profile cap gate
-├── outputs.py              persistent inbox JSONL store (notify / send_message + schedule failures)
-├── status.py               canonical /status rows (TUI + Telegram share this)
+├── outputs.py              persistent inbox JSONL store (notify + schedule failures)
+├── status.py               canonical /status rows (TUI + apps share this)
 ├── prompts/
 │   ├── default_agent.md
 │   └── system_prompt.md
@@ -142,13 +142,12 @@ alpi/
 │   ├── search.py           content + filename search (rg + stdlib fallback)
 │   ├── research.py         read-only sub-agent (depth: quick/normal/deep)
 │   ├── terminal.py         run/background/status/output/kill
-│   ├── notify.py           native push to the owner's apps (delegates to send_message channel=alpi)
+│   ├── notify.py           native push to the owner's apps
 │   └── … (read_file, write_file, edit_file, todo, web_*, schedule,
-│         memory, session_search, send_message, email, config)
+│         memory, session_search, email, config)
 ├── tui/                    Textual app, widgets, screens, theme
-├── gateway/                inbound platforms (Telegram / IMAP / Gmail / Matrix), hosted by the alpi daemon
 ├── scheduler/              cron + once jobs, hosted by the alpi daemon
-├── mail/                   mail backends (imap.py — IMAP+SMTP; gmail.py coming in T)
+├── mail/                   multi-account email — accounts.py (account model + per-account env/token resolution); imap.py (IMAP+SMTP); gmail.py (Gmail API + OAuth)
 ├── mcp/                    MCP client (stdio JSON-RPC) + registry
 ├── alp/                    Alpi Link Protocol (spec: docs/ALP.md)
 │   ├── keys.py            Ed25519 identity at {home}/alp/secrets/alp_key.{pem,pub}
@@ -157,22 +156,22 @@ alpi/
 │   ├── server.py          Unix-socket listener, fail-closed dispatch
 │   ├── client.py          one-shot call with typed errors (TargetOffline, RemoteError)
 │   ├── handlers.py        link.ask / link.cancel — engine integration
-│   ├── mention.py         @peer parser + executor (shared by TUI + gateway)
+│   ├── mention.py         @peer parser + executor (shared by TUI + host chat)
 │   ├── pending.py         pending invites store (unpinned-sender capture)
 │   └── setup.py           `alpi setup → Peers` wizard
 ├── host/                   control plane for desktop / mobile clients (default profile only)
 │   ├── server.py          Unix-socket JSON-RPC server (no envelope, no Noise — fs perms = trust)
 │   ├── handlers.py        read verbs (host.workgroup.transcript, host.sessions.*)
 │   ├── chat.py            host.chat.send (streaming) + host.chat.cancel
-│   ├── config.py          mutation verbs (host.providers.*, host.peers.*, host.profile.*, host.mcp.*, host.gateway.*, host.sandbox.*, host.voice.*)
+│   ├── config.py          mutation verbs (host.providers.*, host.peers.*, host.profile.*, host.mcp.*, host.email.*, host.sandbox.*, host.voice.*)
 │   ├── devices.py         host.devices.* pairing-token lifecycle
 │   ├── attachments_rpc.py host.attachments.{stage,fetch} — stage uploads in, fetch serves a tool-produced output attachment's bytes out (scoped to the profile's workspace/home/temp) so rich clients render images inline + other files as a metadata chip; text surfaces get a shared listing
 │   ├── network_rpc.py     host.network.{status,set_advertised,restart_host_server} — pairing endpoint query + override (parity with `alpi setup → devices → network`); scope classified by host character via network.classify_scope (tailscale / lan / custom / docker) so clients don't surface the "configured" resolution-path detail
-│   ├── probes.py          host.gateway.probe, host.peers.ping, host.model.ctx_window
+│   ├── probes.py          host.email.probe, host.peers.ping, host.model.ctx_window
 │   ├── schedule.py        host.schedule.{list,remove,set_paused,fire}
 │   ├── outputs.py         host.outputs.{list,read,mark_read,mark_all_read,delete}
 │   ├── daemon.py          host.daemon.{restart,update}
-│   ├── device_state.py    device-facing profile state (profiles, summaries, storage, gateways, skills, workgroups)
+│   ├── device_state.py    device-facing profile state (profiles, summaries, storage, email, skills, workgroups)
 │   ├── events.py          host.events.subscribe + thread-safe emit() for daemon-pushed updates
 │   ├── workgroup.py       transcript decryption (hub + member shapes)
 │   └── sessions.py        plaintext session list / read
@@ -192,8 +191,8 @@ that live at `{home}/skills/<category>/<name>/`.
 
 ```
 ~/.alpi/                     default profile root
-├── .env                    API keys, gateway tokens, allowlists
-├── config.yaml             model + tools + tui + mcp + gateway
+├── .env                    API keys, IMAP/SMTP credentials, allowlists
+├── config.yaml             model + tools + tui + mcp
 ├── memories/               USER.md, MEMORY.md, AGENT.md (+ .bak)
 ├── skills/<category>/<name>/    SKILL.md + scripts/ + references/ +
 │                                 assets/ + secrets/ (0700) + state/ +
@@ -202,11 +201,7 @@ that live at `{home}/skills/<category>/<name>/`.
 ├── rag/                    local RAG over the workspace (BA)
 │   └── store.sqlite        sqlite-vec index — workspace_files / _chunks / _vec
 ├── mentions/<sender>.json  per-sender @-mention threads (cap 20 turns), receiving side
-├── gateway/                inbound transport state + chat sessions
-│   ├── telegram-state.json, imap-state.json, …   per-platform offsets, last-uid, etc.
-│   └── sessions/<id>.json  Telegram / email / webhook chat logs (hidden from local listings)
-│       └── _map.json       chat_id → session_id pointer
-├── run/                    background process registry, gateway/schedule pids
+├── run/                    background process registry, schedule pids
 ├── alp/                    ALP state — keypair, peer list, socket, pid
 │   ├── peers.yaml         pinned peers (pubkey + allow + optional address)
 │   ├── alp.sock           Unix-domain socket, 0600, only while listener runs
@@ -231,13 +226,13 @@ that live at `{home}/skills/<category>/<name>/`.
 
 Per turn: append user message → loop {LLM stream → emit deltas → exec tool calls → append tool results} until the LLM stops emitting tool calls OR the effective step ceiling is hit — `max_steps_per_turn` (default 100), raised to 1000 for free (zero-priced) or local/ollama models **when left at the default**; an explicit value is always respected. Hitting the ceiling does not drop the turn: the engine makes one tools-off wrap-up call so the model still returns a best-effort final reply. `interrupt_requested` is polled at three checkpoints (between iterations, mid-stream, between tool calls). A turn lock serializes concurrent runs so a delayed `research` tool from the previous turn can't bleed into the next.
 
-Events emitted to the UI sink: `user`, `reasoning_delta`, `assistant_delta`, `assistant_done`, `tool_start`, `tool_state`, `tool_end`, `usage`, `error`, `done`, `interrupted`. The TUI consumes them; the gateway subprocess consumes a subset via JSON-lines.
+Events emitted to the UI sink: `user`, `reasoning_delta`, `assistant_delta`, `assistant_done`, `tool_start`, `tool_state`, `tool_end`, `usage`, `error`, `done`, `interrupted`. The TUI consumes them; the scheduler subprocess consumes a subset via JSON-lines.
 
-**Cross-turn resume.** A chat is not a long-lived object: each turn spins up a fresh `Engine` and rehydrates the session from disk (`_hydrate_from_path` in `cli.py`, shared by TUI `--continue`, the host chat, and the gateway; the desktop "edit message" rewrite path mirrors it in `host/chat.py`). The model context is rebuilt from the prior **replayable** turns — those that ended in a final reply or produced a file; a turn aborted before its reply (no assistant text, no output files) is dropped, so a resumed session never re-answers a dangling request. Each replayed turn contributes its user text (plus an input-attachment marker `[attached: name (mime)]`) and assistant text (plus a produced-file marker `[produced this turn — reuse the absolute path…: name → /abs/path]`). Tool calls and tool results are deliberately **not** replayed — they would blow the context budget — so an agent does not remember what it searched, read, or analyzed last turn, only its final reply and the absolute paths of the files it produced. A multi-turn edit ("now relight it at sunset") reuses the produced path surfaced by the marker, not a remembered tool output; an agent that needs an earlier tool's result across turns must re-run the tool or rely on a produced file.
+**Cross-turn resume.** A chat is not a long-lived object: each turn spins up a fresh `Engine` and rehydrates the session from disk (`_hydrate_from_path` in `cli.py`, shared by TUI `--continue` and the host chat; the desktop "edit message" rewrite path mirrors it in `host/chat.py`). The model context is rebuilt from the prior **replayable** turns — those that ended in a final reply or produced a file; a turn aborted before its reply (no assistant text, no output files) is dropped, so a resumed session never re-answers a dangling request. Each replayed turn contributes its user text (plus an input-attachment marker `[attached: name (mime)]`) and assistant text (plus a produced-file marker `[produced this turn — reuse the absolute path…: name → /abs/path]`). Tool calls and tool results are deliberately **not** replayed — they would blow the context budget — so an agent does not remember what it searched, read, or analyzed last turn, only its final reply and the absolute paths of the files it produced. A multi-turn edit ("now relight it at sunset") reuses the produced path surfaced by the marker, not a remembered tool output; an agent that needs an earlier tool's result across turns must re-run the tool or rely on a produced file.
 
-The system prompt for each turn is built from: `AGENT.md` (agent profile — voice, style, identity) → base prompt → environment block (workspace, profile home, path rule) → **platform hint** (`_platform_hint()` — injects per-surface guidance when `ALPI_PLATFORM` is set by the caller: `cron`, `telegram`, `email`, `gmail`, `matrix`; empty for TUI) → **skills index** (auto-injected by `alpi.tools.skill.skills_index_block`) → `USER.md` → `MEMORY.md`.
+The system prompt for each turn is built from: `AGENT.md` (agent profile — voice, style, identity) → base prompt → environment block (workspace, profile home, path rule) → **platform hint** (`_platform_hint()` — injects per-surface guidance when `ALPI_PLATFORM` is set by the caller: `cron`; empty for TUI and the apps) → **skills index** (auto-injected by `alpi.tools.skill.skills_index_block`) → `USER.md` → `MEMORY.md`.
 
-The gateway (`alpi/gateway/run.py`) sets `ALPI_PLATFORM=<msg.platform>` on every spawned subprocess so Telegram replies arrive Markdown-aware and email replies arrive plain-text-only. The scheduler (`alpi/scheduler/run.py`) sets `ALPI_PLATFORM=cron` so scheduled jobs run knowing no user is present and they cannot ask for clarification. Each fire runs as a subprocess capped at `job_run_timeout(job)` seconds — `job.timeout` if set, else `DEFAULT_RUN_TIMEOUT_SECONDS` (900), clamped to `[30, MAX_RUN_TIMEOUT_SECONDS]` (3600). The cap is a stuck-process backstop for unattended runs, not the cost guard (`budget.daily_usd` is) and not a hint that jobs must be short; heavy jobs (deep research, multi-step publishing) opt into a longer budget via `schedule(add|update, timeout=…)`. The scheduler passes the child a soft budget via `ALPI_TURN_BUDGET_S` (the cap minus a ~10% reserve, floor 60s); when the engine crosses it mid-turn it makes one tools-off wrap-up call and returns a best-effort final reply instead of being killed with nothing — the same graceful close the max-step ceiling gets. The hard `subprocess` timeout remains as the last-resort kill if the wrap-up itself stalls.
+The scheduler (`alpi/scheduler/run.py`) sets `ALPI_PLATFORM=cron` so scheduled jobs run knowing no user is present and they cannot ask for clarification. Each fire runs as a subprocess capped at `job_run_timeout(job)` seconds — `job.timeout` if set, else `DEFAULT_RUN_TIMEOUT_SECONDS` (900), clamped to `[30, MAX_RUN_TIMEOUT_SECONDS]` (3600). The cap is a stuck-process backstop for unattended runs, not the cost guard (`budget.daily_usd` is) and not a hint that jobs must be short; heavy jobs (deep research, multi-step publishing) opt into a longer budget via `schedule(add|update, timeout=…)`. The scheduler passes the child a soft budget via `ALPI_TURN_BUDGET_S` (the cap minus a ~10% reserve, floor 60s); when the engine crosses it mid-turn it makes one tools-off wrap-up call and returns a best-effort final reply instead of being killed with nothing — the same graceful close the max-step ceiling gets. The hard `subprocess` timeout remains as the last-resort kill if the wrap-up itself stalls.
 
 Cron jobs with `no_agent: true` skip the LLM entirely. The `prompt` is shlex-tokenized and exec'd directly (`shell=False`); `${ALPI_HOME}` expands to the profile home and the profile's `.env` overrides inherited env keys so skills find their declared `requires_env`. A form-based allowlist enforces that the command is `python[3] [flags] <script>` or `<script>` invoked directly, where `<script>` resolves to `<home>/skills/<category>/<name>/scripts/…`; non-python executables and `-c`/`-m` inline-code flags are rejected at both `schedule(add)` time and inside the scheduler before exec. Use this for deterministic skills (sync, file processors) — saves both tokens and the agent boot latency per fire.
 
@@ -381,7 +376,7 @@ Sibling to `research`, but can mutate: spawn a focused sub-agent with a chosen t
 - `terminal` → `terminal`
 - `web` → `web_search`, `web_fetch`, `web_extract`
 
-**Blocked for sub-agents**: `delegate` (no recursion), `memory`, `skill`, `schedule`, `notify`, `send_message`, `email`, `session_search`, `session_read`, `todo` (shared global state). `research` is not in any preset either — if you need deep investigation inside a delegate task today, do it in the main agent first and pass findings via `context`.
+**Blocked for sub-agents**: `delegate` (no recursion), `memory`, `skill`, `schedule`, `notify`, `email`, `session_search`, `session_read`, `todo` (shared global state). `research` is not in any preset either — if you need deep investigation inside a delegate task today, do it in the main agent first and pass findings via `context`.
 
 **Budget**: hardcoded `MAX_STEPS = 30`. No config knob — it's a ceiling, not a target (sub-agent stops when done). If a real case needs more, bump the constant.
 
@@ -406,7 +401,7 @@ Textual 8.2.x. Layout: `AlpiTopBar` (identity) + chat scroll (`VerticalScroll.an
 
 **Persistence contract** (cross-surface). The engine consolidates the whole turn's reasoning — `reasoning_delta` thinking + the inter-tool prose — into **`Turn.reasoning`** (str), and records **`Turn.reasoned_s`** (float) = the reasoning span from turn start to the first tool boundary, or to the first final-answer text token when there are no tools; it **excludes both tool execution and final-answer streaming** so the duration isn't inflated by a long-running tool or a long reply. Desktop/mobile render a collapsible "Reasoned for Ns" block from `Turn.reasoning`, falling back to joining `ToolLog.reasoning` for turns logged before the field existed; the TUI renders the per-tool `ToolLog.reasoning` interleaved. `ToolLog.reasoning` (first tool of each batch) remains the legacy per-tool fallback.
 
-**Slash commands**: `/help`, `/memory`, `/tools`, `/mcps`, `/status`, `/skills`, `/clear`, `/new`, `/compact`, `/model`, `/exit`. All surface-panels are `FloatingPanel`s on the overlay layer docked above the input strip, dismissed by Esc or click-outside. Header (`$surface-lighten-1` tint) shows the command name; body scrolls with `max-height: 18`. The info panels (`screens.py`) are read-only; `/help` and `/model` (`model_panel.py`) are interactive — subclasses focus an `OptionList` / `Input` in `on_mount` via `call_after_refresh` so selection and navigation work while the panel floats. Configuration verbs (workspace, gateways, sandbox, …) live exclusively in `alpi setup` — the TUI is for chat and inspection, not for editing the profile.
+**Slash commands**: `/help`, `/memory`, `/tools`, `/mcps`, `/status`, `/skills`, `/clear`, `/new`, `/compact`, `/model`, `/exit`. All surface-panels are `FloatingPanel`s on the overlay layer docked above the input strip, dismissed by Esc or click-outside. Header (`$surface-lighten-1` tint) shows the command name; body scrolls with `max-height: 18`. The info panels (`screens.py`) are read-only; `/help` and `/model` (`model_panel.py`) are interactive — subclasses focus an `OptionList` / `Input` in `on_mount` via `call_after_refresh` so selection and navigation work while the panel floats. Configuration verbs (workspace, email, sandbox, …) live exclusively in `alpi setup` — the TUI is for chat and inspection, not for editing the profile.
 
 **Interrupt on new input**: typing while a turn runs cancels it. `engine.interrupt_requested` polled at 3 points; long-running tools (`research`) poll `tool_state.is_interrupted()`. Skipped tool calls get a `[skipped — user interrupted]` tool message to preserve OpenAI's pairing invariant.
 
@@ -420,14 +415,13 @@ launchd plist (`com.alpi.daemon`) on macOS or systemd-user unit
 that hosts every profile under `~/.alpi/` (default plus each
 `profiles/<name>/`) on the same asyncio loop. Per-(profile,
 service) tasks are independently supervised — a crash in one
-profile's gateway leaves siblings untouched. Tasks are named
-`<profile>/<service>` (e.g. `doc/gateway`, `builder/alp`) so logs
+profile's scheduler leaves siblings untouched. Tasks are named
+`<profile>/<service>` (e.g. `doc/schedule`, `builder/alp`) so logs
 + `asyncio.all_tasks()` stay readable.
 
-Per-profile services (`service.{gateway, schedule, alp,
+Per-profile services (`service.{schedule, alp,
 workgroups, host}` in each profile's `config.yaml`):
 
-- **gateway** — Telegram / IMAP / Gmail / Matrix / webhook listeners.
 - **schedule** — cron tick loop.
 - **alp** — ALP **listener** (inbound). Serves the full protocol
   on a Unix socket plus optional Noise_XK on TCP: `link.ping`,
@@ -512,7 +506,7 @@ edit.
 
 `host.device_state` owns the device-facing profile state contract:
 profile lists/summaries, bounded profile file reads, storage stats,
-gateway status/config previews, skill lists, workgroup lists, workgroup
+email status/config previews, skill lists, workgroup lists, workgroup
 member rosters, config field edits, and local Ollama model discovery.
 The desktop Tauri layer keeps its existing `invoke(...)` command names
 for UI stability, but those commands proxy to `host.*` verbs instead of
@@ -672,7 +666,7 @@ Verb namespaces in current shape:
   remove_ollama, add_openrouter_model, remove_openrouter_model),
   **`host.peers.{add,remove,pending_list,pending_accept,pending_discard}`**,
   **`host.profile.{create,delete}`**,
-  **`host.mcp.{add,remove}`**, **`host.gateway.remove`**,
+  **`host.mcp.{add,remove}`**, **`host.email.remove`**,
   **`host.sandbox.{set,network}`**, **`host.voice.set_voice`**
   — config mutations. Each is a thin wrapper around the same
   internal helper the matching CLI subcommand calls. The
@@ -717,9 +711,9 @@ Verb namespaces in current shape:
   device gets its own pairing token, so the desktop / mobile
   connection switcher sees them as independent connections
   pointing at the same daemon.
-- **`host.gateway.probe`**, **`host.peers.ping`**,
+- **`host.email.probe`**, **`host.peers.ping`**,
   **`host.model.ctx_window`** — diagnostic probes the desktop / TUI
-  used to invoke via `alpi gateway probe`, `alpi peers ping`, and
+  used to invoke via `alpi email probe`, `alpi peers ping`, and
   `alpi ctx`. Same logic, host-plane entry point. `host.peers.ping`
   resolves intra-machine targets by `pubkey` (not by the peer's
   local `id`), so a co-located peer pinned under any alias still
@@ -734,18 +728,15 @@ Verb namespaces in current shape:
 - **`host.outputs.{list,read,mark_read,mark_all_read,delete}`** —
   durable inbox for proactive agent messages and schedule
   results. Backed by `<home>/outputs/outputs.jsonl` (capped at
-  500 rows, atomic compaction). Two intents feed it: `notify`
-  pushes to the OWNER's own apps (native, via the shared
+  500 rows, atomic compaction). `notify` pushes to the OWNER's own
+  apps (native, via the shared
   `outputs.create_output_and_emit_message` helper) and carries the
   row's single `type` axis (`info` | `warning` | `error`, default
-  `info`); `send_message` reaches a THIRD PARTY through a gateway
-  (`telegram` / `email` / `matrix` / `webhook`) — `channel` is
-  required, there is no owner channel, and its rows are always
-  `info`. Producers:
-  - `notify` / `send_message` file an output for every successful
-    call (owner push or gateway). Attachment-only
-    deliveries with no text body skip the row — the artifact lives
-    in the gateway, nothing to revisit.
+  `info`). To reach a THIRD PARTY the agent uses the `email` tool,
+  which sends over IMAP/SMTP or Gmail directly. Producers:
+  - `notify` files an output for every successful owner push.
+    Attachment-only deliveries with no text body skip the row —
+    nothing to revisit.
   - `scheduler/run.py` files an output on `schedule.failed`
     (always) AND on `schedule.done` when the job notified the
     owner (`notify: true` → `delivered_to="alpi"`). Jobs where the
@@ -753,11 +744,10 @@ Verb namespaces in current shape:
     duplicate row. Silent jobs (`notify: false`, the default) and
     stdout-only summaries write nothing — operational noise the
     user never saw.
-  In schedule and gateway subprocesses the parent daemon is the
-  single source of truth: the child's `send_message` is suppressed
-  and the parent parses the `tool_end` args (via
-  `alpi.outputs.record_child_send_message`) to file one canonical
-  output with the full `delivered_to` list. Each row carries
+  In schedule subprocesses the parent daemon is the single source
+  of truth: the child's `notify` is suppressed and the parent
+  parses the `tool_end` args to file one canonical output with the
+  full `delivered_to` list. Each row carries
   `{id, profile, created_at, title?, body,
   type: info|warning|error, status: unread|read, session_id, delivered_to}`
   (`title` present when a `notify` caller set one, or on scheduler
@@ -835,8 +825,8 @@ queries those stores, not ``host.events.history``.
   - `config_changed` (`scope: providers|mcp|sandbox|voice|env|<dotted-key-head>`)
     — every cfg.save in `alpi/host/config.py` plus
     `host.config.set_field` / `unset_field`.
-  - `gateway_changed` (`name`, `action: configured|cleared|authorized|removed`)
-    — gateway env writes, gmail OAuth success, gateway removal.
+  - `email_changed` (`name`, `action: configured|cleared|authorized|removed`)
+    — IMAP/SMTP env writes, gmail OAuth success, credential removal.
   - `peers_changed` (`action: added|removed|accepted|discarded`)
     — peer add/remove/pending verbs.
   - `profile_changed` (`action: created|deleted`) — profile
@@ -852,61 +842,47 @@ module, register on `host_server.Server.register` (or
 mobile client via the platform's host-client helper. Never expose
 a verb outside `host.*` — the namespace check in `register` enforces it.
 
-### Gateway (`alpi/gateway/`)
+### Email (`alpi/tools/email.py`, `alpi/mail/`)
 
-Inbound platform listeners (Telegram long-poll, IMAP polling,
-Gmail OAuth, webhook stub) hosted by the alpi daemon. Each
-platform iterates `async for msg in platform.listen()`; per
-incoming message the gateway spawns `alpi chat --once --emit-events`,
-keeps the typing indicator on while the subprocess works, and sends
-only the final reply back to the gateway.
+Email is an **on-demand tool, not a listener** — nothing polls the
+inbox and nothing auto-replies. The agent calls `email` (actions:
+`list`, `search`, `read`, `send`, `reply`, `forward`, `move`,
+`delete`, `download_attachment`) whenever a chat or a scheduled job
+needs to read or send mail; the tool drives the IMAP/SMTP backend
+(`mail/imap.py::ImapClient`) or the Gmail backend (`mail/gmail.py::
+GmailClient` + OAuth). Bodies pulled by `email(read)` pass through
+the prompt-injection scanner behind an untrusted-content envelope
+before the model sees them.
 
-Allowlist: `TELEGRAM_ALLOWED_CHAT_IDS` and `IMAP_ALLOWED_SENDERS`
-in `.env`, fail-closed if unset. Optional per-sender gate
-`{PLATFORM}_ALLOWED_USER_IDS` (e.g. `TELEGRAM_ALLOWED_USER_IDS`): unset
-→ the chat allowlist governs (any member of an allowed group can drive
-the agent); set → the sender's id must also be listed. Inbound text
-reaches the model behind an untrusted banner + injection scan. Per-platform user config under
-`gateway.*` in `config.yaml`: Telegram/Matrix intentionally expose
-no UX knobs; IMAP/Gmail expose `poll_interval` and `mark_as_read`.
-Typing indicators are hardcoded by platform (chat on, email off —
-email has no typing concept). Gateways never send intermediate tool
-traces; use TUI, desktop, or mobile when you want live execution UI.
+**Multi-account.** A profile holds N accounts — any mix of IMAP and
+Gmail — modelled in `alpi/mail/accounts.py`; each account's identity is
+its address and its id is a slug of that address. The `email` tool's
+`account` parameter picks which one (by address or id); with one
+account it defaults to that account. Accounts are declared in
+`config.yaml` under `email.accounts` (non-secret shape only). Secrets
+live in `<home>/.env` namespaced per account — an IMAP account's
+password is `EMAIL__<ID>__PASSWORD`; Gmail OAuth client creds
+(`GMAIL_CLIENT_ID` / `GMAIL_CLIENT_SECRET`) are shared across all Gmail
+accounts, while each account's token sits at
+`<home>/secrets/gmail_tokens/<id>.json` after a one-off OAuth consent.
+Add and manage accounts via `alpi setup → Email` or the apps' Email
+section; probe / remove a single account by id from the CLI with
+`alpi email probe <id>` and `alpi email remove <id>`. There are no
+`email.*` scalar `config.yaml` knobs beyond the `email.accounts` map.
 
-Disable for a profile via `alpi setup → Services → Daemon →
-Gateway · off` (writes `service.gateway: false`).
-
-**One bot per profile (hard rule).** Telegram long-polling allows
-a single concurrent `getUpdates` per bot token; two profiles
-polling the same token deadlock each other on 409. The contract
-is enforced at write time: `alpi setup → telegram` and the host
-RPC `host.providers.set_key` reject a `TELEGRAM_BOT_TOKEN` that is
-already configured in another profile, with an error naming the
-owner. The daemon trusts the invariant and runs each profile's
-listener with its own `self._token` (read from `<home>/.env` at
-construction — no shared `os.environ`). Multi-profile inbound
-must use one bot per profile; single bot with internal routing
-is not supported (would force shared offsets / allowlists /
-session state).
-
-**Per-profile env snapshot.** Every `Platform` captures
-`alpi.home.effective_profile_env(home)` at `__init__` into
-`self.env` — `os.environ` (process-level vars: PATH, HOME, TZ,
-ALPI_PLATFORM…) overlaid with `<home>/.env` (per-profile secrets).
-Quotes in the .env file are stripped. `self.env` is the source of
-truth for **all credentials and allowlist checks**: Telegram token,
-`IMAP_*`, `MATRIX_*`, `GMAIL_*`, and `delivery.is_allowed(..., env=
-platform.env)`. Matrix `_build_client` and IMAP's `ImapClient.
-from_env_map(self.env)` both read from this snapshot — no platform
-adapter touches `os.environ` directly any more. As of v0.4.52 the
-same contract extends to the agent toolchain: `tools/email`, the
+**Per-profile env snapshot (v0.4.52).** `alpi.home.effective_profile_env(home)`
+overlays `os.environ` (process-level vars: PATH, HOME, TZ,
+ALPI_PLATFORM…) with `<home>/.env` (per-profile secrets, quotes
+stripped) and is the source of truth for **all credentials**:
+the per-account `EMAIL__<ID>__PASSWORD` keys and the shared
+`GMAIL_CLIENT_ID` / `GMAIL_CLIENT_SECRET`. The daemon never mutates `os.environ`
+— under multi-profile supervision a global mutation would
+cross-contaminate every profile. The contract holds across the agent
+toolchain: `tools/email` (IMAP's `ImapClient.from_env_map`), the
 LLM-override paths in `tools/web_extract` / `tools/read_image`,
-`alpi/identity.py`, the model selector / TUI provider gating, and
-the gateway child agent (`gateway/run._run_agent` injects via
-`effective_profile_env(home, extra={...})`). The snapshot is frozen
-at construction; credential edits via the host plane write the file
-atomically but live listeners pick up the change only on next
-daemon/gateway restart.
+`alpi/identity.py`, and the model selector / TUI provider gating.
+Credential edits via the host plane write the file atomically; a
+running engine reads the current `.env` on its next turn.
 
 ### Schedule (`alpi/scheduler/`)
 
@@ -917,7 +893,7 @@ the agent calls `schedule(action='add', kind='once',
 after_hours=N)`, the engine resolves `now` from a single source so
 the agent doesn't drift.
 
-**Duplicate guard + in-place edits.** `add` rejects a job whose (`kind` + cron / `run_at` / `after_hours`) matches an existing one AND whose prompt fingerprint (lowercase + whitespace-collapsed first 80 chars) collides. Pass `force=true` to bypass when the second job is genuinely intentional. Use `update` to change prompt, cron, `notify`, or pause state without remove/recreate churn. A job carries a single delivery axis, `notify: bool` (default `false` = silent): `true` pushes the reply to the owner's apps. Legacy jobs with a `platform` field are migrated to `notify` on load (`platform` set → `notify: true`). Reaching a THIRD PARTY is an explicit `send_message` in the prompt — that's now allowed (the old auto-delivery guard that rejected such prompts is gone).
+**Duplicate guard + in-place edits.** `add` rejects a job whose (`kind` + cron / `run_at` / `after_hours`) matches an existing one AND whose prompt fingerprint (lowercase + whitespace-collapsed first 80 chars) collides. Pass `force=true` to bypass when the second job is genuinely intentional. Use `update` to change prompt, cron, `notify`, or pause state without remove/recreate churn. A job carries a single delivery axis, `notify: bool` (default `false` = silent): `true` pushes the reply to the owner's apps. Legacy jobs with a `platform` field are migrated to `notify` on load (`platform` set → `notify: true`). Reaching a THIRD PARTY is an explicit `email` call in the prompt — that's now allowed (the old auto-delivery guard that rejected such prompts is gone).
 
 Scheduled jobs execute through `alpi chat --once --emit-events
 --no-save` with `ALPI_PLATFORM=cron`. The scheduler consumes stdout
@@ -930,7 +906,7 @@ schedule delivery/logging, not to local TUI / desktop chat history.
 `fire_by_id` in `run_in_executor` before awaiting. Both paths
 ultimately call `subprocess.run(timeout=job_run_timeout(job))` (default 900s, per-job up to 3600s); running them inline
 would block every other coroutine on the daemon's asyncio loop —
-gateway listeners, ALP responders, and `host.chat.send` streams in
+ALP responders and `host.chat.send` streams in
 sibling profiles all stall for the duration of the scheduled job.
 The dedicated executor also means the scheduler can't starve chat's
 default-executor turns. A regression test in
@@ -961,14 +937,13 @@ Every subsystem writes to a single flat folder: `~/.alpi/logs/<subsystem>.log`, 
 Three sources today (file on disk + the writer that produces it):
 
 - **`service`** — the unified orchestrator's root log: subsystem
-  start/stop, gateway listener events (Telegram / IMAP / Gmail / Matrix),
-  scheduler ticks, ALP listener traffic, delivery errors. Written
-  by `alpi.service` and every subsystem that logs through the
-  root logger.
-- **`agent`** — one line per TUI/gateway/schedule-triggered turn: session id, elapsed, tool names, reply size, cumulative cost, truncated user prompt. Written by `engine.py::run_turn` via `get_subsystem_logger(home, "agent")`. This is the **cross-session grep index** — `sessions/<id>.json` carry the full detail; `agent.log` lets you answer "what has alpi been doing this week?" without iterating JSONs.
+  start/stop, scheduler ticks, ALP listener traffic, delivery
+  errors. Written by `alpi.service` and every subsystem that logs
+  through the root logger.
+- **`agent`** — one line per TUI/schedule-triggered turn: session id, elapsed, tool names, reply size, cumulative cost, truncated user prompt. Written by `engine.py::run_turn` via `get_subsystem_logger(home, "agent")`. This is the **cross-session grep index** — `sessions/<id>.json` carry the full detail; `agent.log` lets you answer "what has alpi been doing this week?" without iterating JSONs.
 - **`approval`** — one line per non-SAFE terminal command classification (ALLOW / DENY with severity, pattern, reason). Written by `tools/_approval.py`. **Security audit trail**; complements the per-turn detail in `sessions/`.
 
-The `alpi logs --source` CLI choice list also accepts `gateway` and `schedule`. Inside the unified daemon, gateway and scheduler events route through the root logger and land in `service.log` — those filter values are kept so that any standalone or legacy `gateway.log` / `schedule.log` (e.g. from an older `scheduler.run.ensure_running()` invocation that ran out-of-process) stays selectable.
+The `alpi logs --source` CLI choice list also accepts `schedule`. Inside the unified daemon, scheduler events route through the root logger and land in `service.log` — the filter value is kept so that any standalone or legacy `schedule.log` (e.g. from an older `scheduler.run.ensure_running()` invocation that ran out-of-process) stays selectable.
 
 Why logs are NOT inside `sessions/`: `sessions/` is a structured store (one JSON per conversation, indexed by id, consumed by `session_search` and the resume flow). Mixing freeform logs would break the glob pattern and the cleanup semantics. Logs are the **index and audit trail**; sessions are the **content**. Peers, not nested.
 
@@ -984,12 +959,12 @@ Checks:
 
 - **Model** — `cfg.model` set + provider's API key present in `.env` or env.
 - **Workspace** — configured + exists + writable.
-- **Gateways** (live) — Telegram `getMe` over HTTPS, IMAP login+SMTP handshake, Gmail OAuth token refresh.
+- **Email** (live) — IMAP login + SMTP handshake, Gmail OAuth token refresh.
 - **Service** — `service.installed(profile)` + `service.running_pid(home)` to distinguish "installed but dead" from "running" from "not installed". A second info row lists which subsystems the config has enabled.
 - **MCPs** (live) — spawn each configured server, `list_tools`, stop. Parallelised; per-server timeout 8 s.
 - **Security** — sandbox backend binary on PATH (if `tools.terminal.sandbox: true`), approval allowlist count.
 
-Parallelism: the four network-bound tasks (Telegram/IMAP/Gmail/MCPs) submit to a `ThreadPoolExecutor(max_workers=8)`. Sync checks (model, workspace, services, security) run on the main thread while the pool works. Total wall time ≈ slowest single task, not sum — ~5-10 s on a healthy profile.
+Parallelism: the network-bound tasks (IMAP/Gmail/MCPs) submit to a `ThreadPoolExecutor(max_workers=8)`. Sync checks (model, workspace, services, security) run on the main thread while the pool works. Total wall time ≈ slowest single task, not sum — ~5-10 s on a healthy profile.
 
 Progressive rendering: `run_and_render()` uses `rich.live.Live` — every row appears immediately with a cyan spinner, each resolves to `✓`/`✗`/`!` as its future completes. Animation at 10 fps via a manual frame cycler (rich's `Spinner` objects can't be appended to `Text`). Layout is stable (same rows, same column widths) so the eye doesn't jump.
 
@@ -1002,7 +977,6 @@ operator decisions. It deliberately does not own new state: each section
 reads the primitive owned by another subsystem.
 
 - **Tools** — current availability report from `alpi.tools`.
-- **Gateways** — breaker states from `<home>/gateway/.breaker-state.json`.
 - **Skills** — summary from `skills_usage`.
 - **Memory** — promotion queue counts plus memory-file pressure.
 - **Compaction** — event count and after/before ratios from
@@ -1014,7 +988,7 @@ It is not an observability daemon, dashboard, recommendation engine, or
 telemetry channel. Tests pin the read-only contract by snapshotting the
 profile tree before and after a digest run.
 
-### Sessions (`alpi/session.py`, `alpi/session_map.py`)
+### Sessions (`alpi/session.py`)
 
 Turn-based JSON: `turns: [{at, user, tools[], assistant}]` plus cumulative metrics. `ToolLog` carries `at, name, args, result (truncated hint), ok, duration_s, reasoning (non-empty only on first tool of a batch)`. Empty sessions (no user message) are NOT saved.
 
@@ -1022,22 +996,16 @@ Turn-based JSON: `turns: [{at, user, tools[], assistant}]` plus cumulative metri
 `alpi chat --once` runs that should be resumable. `--continue`,
 `tui.auto_resume`, host `latest_session`, and desktop profile opening
 all treat only `kind == "chat"` as resumable local history. Historical
-files whose first user message starts with `[SCHEDULED:]`, `[INBOUND
-...]`, `[workgroup-poller]`, or another system bracket are ignored by
+files whose first user message starts with `[SCHEDULED:]`,
+`[workgroup-poller]`, or another system bracket are ignored by
 resume/profile history.
 
 **TUI resume.** Bare `alpi` resumes the most recent session when `tui.auto_resume: true`; `-c` / `--continue` is the manual override.
-
-**Gateway per-chat threading.** Each inbound message carries `external_chat_id` (a Telegram chat id, or the sender email for IMAP/Gmail). `alpi/session_map.py` holds a pointer map at `~/.alpi/<profile>/gateway/sessions/_map.json`: `{chat_id: session_id}`. When the gateway spawns `alpi chat --once --resume-chat <chat_id>`, the CLI sets `engine.session.subdir = "gateway/sessions"` and consults the map — if there's a pointer, that session is loaded and continued; otherwise a fresh session starts and the pointer gets bound after save. Same mechanism across every platform; the natural semantics fall out of what each puts in `chat_id`: per-chat threading for Telegram, per-sender threading for IMAP / Gmail.
-
-Gateway sessions live in their own subdir (`gateway/sessions/`) so they don't pollute the local TUI/desktop session list (which scans `sessions/` only) and so the `Cleanup → Gateway` category never collides with transport state files in `gateway/` itself (Telegram offsets, IMAP last-uid, …).
 
 Scheduled jobs do not persist session files. The scheduler uses
 `--no-save` because it only needs emitted final reply/tool events for
 delivery and audit; keeping a resumable transcript would make
 background jobs appear as user chats.
-
-`/new` (wired up in AK) calls `session_map.forget(chat_id)` — the pointer drops but the underlying session file stays on disk. Historical threads remain searchable via `session_search` against the local `sessions/` dir; gateway transcripts are intentionally excluded from local search.
 
 **`@`-mention threads (`alpi/alp/mention_thread.py`).** When peer A `@`-mentions peer B over ALP (`link.ask`), the receiving side runs a fresh `Engine` per turn — but B persists a small per-sender thread at `<B-home>/mentions/<A>.json`, capped at 20 turns. Successive mentions from the same A→B pair carry conversational memory ("what I said before" resolves) without polluting B's local `--continue` (which only reads `sessions/`). Threads are isolated per remitente. Wipe via `setup → Cleanup → Mentions`.
 
@@ -1068,7 +1036,7 @@ Hard runtime deps are kept tight — every line in `pyproject.toml`'s `dependenc
 - `rich` — Text formatting primitives used across the CLI wizards, TUI rendering pipeline, and tool output.
 - `textual` — TUI framework.
 - `prompt_toolkit` — CLI wizard input (menus, text, password). Replaced `questionary` in v0.2.10.
-- `httpx` — async HTTP; Telegram long-poll, Gmail API, web_fetch, setMyCommands, OAuth dance.
+- `httpx` — async HTTP; Gmail API, web_fetch, OAuth dance.
 - `click` — CLI command dispatch.
 - `pyyaml` — config.yaml + skill frontmatter.
 - `python-dotenv` — `.env` loader.
@@ -1082,8 +1050,6 @@ Hard runtime deps are kept tight — every line in `pyproject.toml`'s `dependenc
 - `faster-whisper` — STT tool (local-first, no API key).
 
 Optional `dev` extra: `pytest` + `pytest-asyncio` for the test suite, `ruff` for lint, `pip-audit` for CVE scans.
-
-**No `gateway` extra.** Prior to v0.2.66 there was one bundling `python-telegram-bot`, `fastapi`, `uvicorn` for an HTTP webhook server that never materialised. A dependency audit confirmed zero imports from the codebase; dropped. If a FastAPI webhook ever lands, the extra comes back.
 
 Security posture: `uv run --with pip-audit pip-audit` ran clean against the full lockfile at the time of the v0.2.66 audit. Re-run before each release. Known-CVE deps are not allowed to accumulate — drop or upgrade.
 
@@ -1102,7 +1068,6 @@ Key fixtures (`tests/conftest.py`):
 - `last_ctx_tokens` (current prompt size) ≠ cumulative `input_tokens`. Header shows the former.
 - `call_from_thread` + Python built-in methods (e.g. `dict.pop`) crashes Textual; always wrap in a regular function.
 - `cfg` must be loaded BEFORE `super().__init__()` on `AlpiApp`. The theme is then registered immediately after, in `__init__` rather than `on_mount`, because child widgets read `self.app.theme_variables` during their own mount (which fires first). `self.get_css_variables()` is called explicitly to rebuild the var dict synchronously — setting `self.theme` alone schedules the refresh for the next event-loop tick.
-- Gateway subprocess uses `alpi chat --once --emit-events --resume-chat <chat_id>` — separate codepath from the TUI, simpler, non-streaming, and persisted under `gateway/sessions`.
 - Schedule subprocess uses `alpi chat --once --emit-events --no-save` — same event stream, no resumable session file.
 - `ALPI_HOME` env var routes daemons + tests to a specific profile root.
 - `ALPI_SKIP_UPDATE_CHECK=1` short-circuits the background PyPI version check (`alpi/updater.py`); the autouse fixture in `tests/conftest.py` sets it so the unit suite never reaches PyPI. `ALPI_UPDATE_INDEX` overrides the JSON URL the updater hits when you need a staging or local mirror.

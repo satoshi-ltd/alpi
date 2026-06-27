@@ -115,7 +115,7 @@ def maybe_offer(home: Path) -> None:
     try:
         _maybe_offer(home)
     except Exception as e:  # noqa: BLE001
-        # Never break the gateway wizard because the PGP step misbehaved
+        # Never break the email wizard because the PGP step misbehaved
         # — IMAP/Gmail credentials are already saved by this point.
         ui.warn(f"PGP step skipped: {e}")
         ui._console.print("")
@@ -157,7 +157,7 @@ def _maybe_offer(home: Path) -> None:
     items.append(None)
     items.append(("Skip — keep plaintext for now", "", ""))
     selected = ui.menu(
-        ui.crumb("setup", "gateways", "pgp"),
+        ui.crumb("setup", "email", "pgp"),
         items,
         subtitle="pick the secret key alpi will sign with",
         home=home,

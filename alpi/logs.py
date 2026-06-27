@@ -2,7 +2,7 @@
 
 Convention: every subsystem writes to ``{home}/logs/{subsystem}.log``
 with lines prefixed by ``YYYY-MM-DD HH:MM:SS``. The source tag comes
-from the filename (``gateway.log`` → ``gateway``) — no per-subsystem
+from the filename (``schedule.log`` → ``schedule``) — no per-subsystem
 subdirectory, no config to keep in sync. New loggers plug in just by
 calling ``alpi._log.get_subsystem_logger(home, name)``.
 """
@@ -17,7 +17,7 @@ from pathlib import Path
 @dataclass
 class LogLine:
     ts: str       # "YYYY-MM-DD HH:MM:SS" — empty for unparseable continuation lines
-    source: str   # "gateway" / "schedule" / ...
+    source: str   # "schedule" / "agent" / ...
     text: str     # raw line (no trailing newline)
 
 
@@ -39,7 +39,7 @@ def _parse_ts(line: str) -> str:
 
 
 def _read_lines(path: Path) -> list[LogLine]:
-    source = path.stem  # "gateway.log" → "gateway"
+    source = path.stem  # "schedule.log" → "schedule"
     try:
         raw = path.read_text().splitlines()
     except OSError:

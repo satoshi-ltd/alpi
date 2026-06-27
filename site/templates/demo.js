@@ -186,22 +186,20 @@
       caption:"alpi ships `@alpi/knowledge`. Ask about config, commands, profiles, skills, or ALP and it answers from the shipped docs without hitting the web."
     },
     {
-      id:6, title:"Connect a gateway",
-      cmd:"alpi setup → Gateways",
+      id:6, title:"Connect email",
+      cmd:"alpi setup → Email",
       kind:"wizard",
-      topbar:'alpi <span class="muted">·</span> setup <span class="sep">›</span> gateways <span class="sep">·</span> <span class="lbl">profile </span><span class="acc">default</span>',
+      topbar:'alpi <span class="muted">·</span> setup <span class="sep">›</span> email <span class="sep">·</span> <span class="lbl">profile </span><span class="acc">default</span>',
       output:`  <span class="muted">↑↓ select   ⏎ configure   esc back</span>
 
-  <span class="acc">› Telegram</span>     <span class="check">✓</span> bot configured · 1 chat allowed
-    IMAP         <span class="muted">not configured</span>
+  <span class="acc">› IMAP</span>         <span class="check">✓</span> connected
     Gmail        <span class="muted">not configured</span>
-    Webhook      <span class="muted">v0.4 — coming soon</span>
 
   <span class="muted">───────────────────────────────────────────────</span>
 
   <span class="check">✓</span> Service installed: <span class="acc">com.alpi.service.default</span>
   <span class="check">✓</span> Listening · pid 86403`,
-      caption:"Optional. Use gateways only when you want 24/7 reach through Telegram / IMAP / Gmail. The primary surfaces are terminal, desktop, and mobile clients over the daemon."
+      caption:"Optional. Connect email (IMAP / Gmail) if you want the agent reading and sending mail. The primary surfaces are the terminal, desktop, and mobile apps over the daemon."
     },
     {
       id:7, title:"Check health",
@@ -219,8 +217,8 @@
 <span class="muted">Workspace</span>
   <span class="check">✓</span> ready                /Users/you/projects/alpi
 
-<span class="muted">Gateways</span>
-  <span class="check">✓</span> Telegram             @your_bot · 1 allowlisted
+<span class="muted">Email</span>
+  <span class="check">✓</span> Email                you@example.com · IMAP
 
 <span class="muted">Services</span>
   <span class="check">✓</span> Service              running · pid 86403
@@ -230,7 +228,7 @@
   <span class="check">✓</span> Socket               listening on alp.sock
 
 <span class="check">✓</span> all checks passed`,
-      caption:"Live checks: model reachable, gateways logged in, MCP handshaking, services alive, ALP socket listening, peers reachable. Exits 1 on any failure — cron-friendly. The basics are working — what follows is optional growth."
+      caption:"Live checks: model reachable, email accounts reachable, MCP handshaking, services alive, ALP socket listening, peers reachable. Exits 1 on any failure — cron-friendly. The basics are working — what follows is optional growth."
     },
     {
       id:8, title:"Add a second profile",

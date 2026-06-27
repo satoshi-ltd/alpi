@@ -156,20 +156,12 @@ def test_knowledge_rule_present_by_default(tmp_path: Path) -> None:
     assert "alpi_knowledge" in pc.build_parts(tmp_path, cfg)["knowledge_rule"]
 
 
-def test_matrix_surface_gets_plain_text_hint(tmp_path: Path, monkeypatch) -> None:
-    cfg = _make_cfg(tmp_path)
-    monkeypatch.setenv("ALPI_PLATFORM", "matrix")
-    surface = pc.build_parts(tmp_path, cfg)["surface"]
-    assert surface.startswith("# SURFACE: Matrix")
-    assert "plain text" in surface
-
-
 def test_surface_change_only_affects_surface_part(tmp_path: Path, monkeypatch) -> None:
     cfg = _make_cfg(tmp_path)
     monkeypatch.delenv("ALPI_PLATFORM", raising=False)
     before = pc.build_parts(tmp_path, cfg)
 
-    monkeypatch.setenv("ALPI_PLATFORM", "telegram")
+    monkeypatch.setenv("ALPI_PLATFORM", "cron")
     after = pc.build_parts(tmp_path, cfg)
 
     moved = [name for name in pc.PART_ORDER if before[name] != after[name]]

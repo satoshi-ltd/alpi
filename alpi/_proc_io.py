@@ -1,4 +1,4 @@
-"""Async subprocess I/O helpers shared by gateway + service daemon paths."""
+"""Async subprocess I/O helpers shared by the scheduler + service daemon paths."""
 
 from __future__ import annotations
 

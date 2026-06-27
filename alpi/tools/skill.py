@@ -650,7 +650,7 @@ class Skill(Tool):
         "local code: parsing files, transforming data, calling normal "
         "Python libraries, or maintaining skill-local state. Do NOT create "
         "a script for skills that depend on agent tools or MCP methods "
-        "(`memory`, `schedule`, `send_message`, `bitbucket__…`, etc.). "
+        "(`memory`, `schedule`, `email`, `bitbucket__…`, etc.). "
         "Those are agent-run skills: keep the instructions in SKILL.md and "
         "let `skill(action='run')` return them so the agent calls the real "
         "tools. Tools and MCP methods are not importable Python APIs.\n"
@@ -745,9 +745,9 @@ class Skill(Tool):
                     "(create only). Metadata only — it's NOT enforced at "
                     "runtime. Include ONLY the tools the body strictly "
                     "needs; do not pad with tools that MIGHT be useful. "
-                    "Example: a notify skill that runs a shell command "
-                    "and sends one Telegram message is `['terminal', "
-                    "'send_message']`, nothing more."
+                    "Example: a skill that runs a shell command "
+                    "and emails one message is `['terminal', "
+                    "'email']`, nothing more."
                 ),
                 "default": [],
             },

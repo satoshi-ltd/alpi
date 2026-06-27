@@ -3,7 +3,6 @@
 A simple, read-only aggregator over data already on disk:
 
 - broken / unavailable tools (TL.1 availability layer);
-- gateway state per platform (GW.1 breaker layer);
 - skill usage distribution + pinned-but-cold (SK.1 telemetry);
 - memory promotion backlog + usage pressure;
 - compaction rate over the time window.
@@ -24,7 +23,6 @@ from pathlib import Path
 from typing import Any
 
 from alpi import promotion, skills_usage
-from alpi.gateway import breaker as _breaker
 
 
 DEFAULT_WINDOW_DAYS = 7.0
@@ -73,14 +71,6 @@ class ToolsSection:
 
 
 @dataclass
-class GatewaysSection:
-    total_tracked: int
-    by_state: dict[str, int] = field(default_factory=dict)
-    degraded: list[dict[str, Any]] = field(default_factory=list)
-    disabled: list[dict[str, Any]] = field(default_factory=list)
-
-
-@dataclass
 class SkillsSection:
     total: int
     by_state: dict[str, int] = field(default_factory=dict)
@@ -118,7 +108,6 @@ class DigestReport:
     window_days: float
     generated_at: float
     tools: ToolsSection
-    gateways: GatewaysSection
     skills: SkillsSection
     memory: MemorySection
     compaction: CompactionSection
@@ -140,7 +129,6 @@ def run_digest(
         window_days=window_days,
         generated_at=nowt,
         tools=_tools_section(),
-        gateways=_gateways_section(home, nowt),
         skills=_skills_section(home, nowt),
         memory=_memory_section(home, nowt),
         compaction=_compaction_section(home, nowt, window_days),
@@ -181,45 +169,6 @@ def _tools_section() -> ToolsSection:
         return ToolsSection(total=0)
     unavailable = [(name, reason) for name, ok, reason in report if not ok]
     return ToolsSection(total=len(report), unavailable=unavailable)
-
-
-# ---------- section: gateways ----------
-
-
-def _gateways_section(home: Path, now_ts: float) -> GatewaysSection:
-    try:
-        store = _breaker.for_home(home)
-        states = store.all_states()
-    except Exception:  # noqa: BLE001
-        return GatewaysSection(total_tracked=0)
-
-    by_state = {"healthy": 0, "degraded": 0, "disabled": 0}
-    degraded: list[dict[str, Any]] = []
-    disabled: list[dict[str, Any]] = []
-
-    for name, st in sorted(states.items()):
-        by_state[st.status] = by_state.get(st.status, 0) + 1
-        if st.status == "degraded":
-            degraded.append({
-                "platform": name,
-                "last_error": st.last_error,
-                "consecutive_failures": st.consecutive_failures,
-            })
-        elif st.status == "disabled":
-            cooldown = max(0.0, st.disabled_until - now_ts)
-            disabled.append({
-                "platform": name,
-                "last_error": st.last_error,
-                "consecutive_failures": st.consecutive_failures,
-                "cooldown_remaining_s": cooldown,
-            })
-
-    return GatewaysSection(
-        total_tracked=len(states),
-        by_state=by_state,
-        degraded=degraded,
-        disabled=disabled,
-    )
 
 
 # ---------- section: skills ----------
@@ -375,7 +324,6 @@ __all__ = [
     "CompactionSection",
     "DEFAULT_WINDOW_DAYS",
     "DigestReport",
-    "GatewaysSection",
     "MemorySection",
     "RunsSection",
     "SkillsSection",

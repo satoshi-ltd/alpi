@@ -85,6 +85,7 @@ def test_exchange_posts_code_and_persists_token(tmp_path: Path, monkeypatch) -> 
 
     token = gmail_auth.exchange(
         tmp_path,
+        "alice_example_com",
         code="code-from-google",
         code_verifier="verifier-abc",
         redirect_uri="http://127.0.0.1:42",
@@ -94,8 +95,10 @@ def test_exchange_posts_code_and_persists_token(tmp_path: Path, monkeypatch) -> 
     assert token.access_token == "AT-xyz"
     assert token.refresh_token == "RT-abc"
 
-    # Token persisted on disk.
-    stored = json.loads((tmp_path / "secrets" / "gmail_token.json").read_text())
+    # Token persisted on disk at the per-account path.
+    stored = json.loads(
+        (tmp_path / "secrets" / "gmail_tokens" / "alice_example_com.json").read_text()
+    )
     assert stored["email"] == "alice@example.com"
     assert stored["refresh_token"] == "RT-abc"
 
@@ -138,7 +141,7 @@ def test_exchange_rejects_when_no_refresh_token(tmp_path: Path, monkeypatch) -> 
     monkeypatch.setattr(gmail_auth.httpx, "Client", FakeClient)
     with pytest.raises(gmail_auth.GmailAuthError, match="no refresh_token"):
         gmail_auth.exchange(
-            tmp_path, code="c", code_verifier="v",
+            tmp_path, "acc", code="c", code_verifier="v",
             redirect_uri="http://127.0.0.1:1",
         )
 
@@ -155,7 +158,7 @@ def test_first_run_paste_parses_callback_url(
         expires_at=1e12,
     )
 
-    def fake_exchange(home, *, code, code_verifier, redirect_uri):
+    def fake_exchange(home, account_id, *, code, code_verifier, redirect_uri):
         assert code == "the-code"
         return fake_token
 
@@ -240,7 +243,7 @@ def test_first_run_falls_back_to_paste_when_browser_open_fails(
         refresh_token="RT", expires_at=1e12,
     )
 
-    def fake_paste(home, handle, port):
+    def fake_paste(home, account_id, handle, port):
         return sentinel
 
     monkeypatch.setattr(gmail_auth, "_paste_flow", fake_paste)

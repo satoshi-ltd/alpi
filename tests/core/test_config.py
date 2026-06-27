@@ -40,20 +40,22 @@ def test_save_roundtrips(tmp_home_no_env: Path) -> None:
     assert reloaded.tools.web_extract.model.startswith("openrouter/google/gemini")
 
 
-def test_save_drops_suppressed_gateway_keys(tmp_home_no_env: Path) -> None:
-    """suppressed gateway.* keys carried over from old configs must not be re-persisted."""
+def test_save_keeps_email_accounts_dropping_unknown_keys(tmp_home_no_env: Path) -> None:
+    """email.accounts persists per-account rows; unknown per-account keys are dropped."""
     import yaml
     (tmp_home_no_env / "config.yaml").write_text(yaml.safe_dump({
-        "gateway": {
-            "telegram": {"show_tool_trace": True, "typing_indicator": True},
-            "matrix": {"show_tool_trace": False, "typing_indicator": True},
-            "imap": {
-                "poll_interval": 90, "mark_as_read": False,
-                "show_tool_trace": True, "typing_indicator": True,
-            },
-            "gmail": {
-                "poll_interval": 30, "mark_as_read": True,
-                "show_tool_trace": True, "typing_indicator": True,
+        "email": {
+            "accounts": {
+                "me_work_com": {
+                    "type": "imap", "address": "me@work.com",
+                    "imap_host": "imap.work.com", "imap_port": 993,
+                    "smtp_host": "smtp.work.com", "smtp_port": 587,
+                    "password": "leaked", "poll_interval": 90,
+                },
+                "me_gmail_com": {
+                    "type": "gmail", "address": "me@gmail.com",
+                    "client_secret": "leaked",
+                },
             },
         },
     }))
@@ -62,11 +64,14 @@ def test_save_drops_suppressed_gateway_keys(tmp_home_no_env: Path) -> None:
     config.save(cfg)
 
     on_disk = yaml.safe_load((tmp_home_no_env / "config.yaml").read_text())
-    # show_tool_trace was dropped — gateways never emit tool traces anymore.
-    assert on_disk["gateway"]["telegram"] == {}
-    assert on_disk["gateway"]["matrix"] == {}
-    assert on_disk["gateway"]["imap"] == {"poll_interval": 90, "mark_as_read": False}
-    assert on_disk["gateway"]["gmail"] == {"poll_interval": 30, "mark_as_read": True}
+    imap = on_disk["email"]["accounts"]["me_work_com"]
+    assert imap == {
+        "type": "imap", "address": "me@work.com",
+        "imap_host": "imap.work.com", "imap_port": 993,
+        "smtp_host": "smtp.work.com", "smtp_port": 587,
+    }
+    gmail = on_disk["email"]["accounts"]["me_gmail_com"]
+    assert gmail == {"type": "gmail", "address": "me@gmail.com"}
 
 
 def test_save_preserves_approval_allowlist(tmp_home_no_env: Path) -> None:

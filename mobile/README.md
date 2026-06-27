@@ -53,8 +53,8 @@ multiple paired daemons.
   pause/resume, briefing edit, budget edit, members list, add member,
   kick, leave/delete.
 - **Profile settings.** Overview, model picker (PickerRow), budget,
-  workspace, accent, subsystem toggles (gateway/schedule/alp/workgroups),
-  gateways, identity, peers, schedule, sandbox, voice,
+  workspace, accent, subsystem toggles (schedule/alp/workgroups),
+  email, identity, peers, schedule, sandbox, voice,
   MCP add/remove, providers (Ollama-first, then cloud keys),
   brain (skills, memories, tools), storage breakdown, delete profile.
 - **Live events.** Single `host.events.subscribe` stream at app root
@@ -86,7 +86,7 @@ multiple paired daemons.
   - `wg/[id].jsx`, `wg/[id]/{settings,briefing,budget,member}.jsx`,
     `wg/new.jsx`
   - `profile/[id]/{settings,identity}.jsx`,
-    `profile/[id]/{providers,peers,schedule,mcp,brain/*,gateways}/…`
+    `profile/[id]/{providers,peers,schedule,mcp,brain/*,email}/…`
   - `pair.jsx`, `paired.jsx`, `onboarding.jsx`, `biometric.jsx`
 - `src/lib/rpc.js` — pooled WebSocket per `(ip, port, token)` for unary
   RPCs (one persistent socket multiplexes every `call`, IDs route the

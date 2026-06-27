@@ -119,7 +119,7 @@ def test_event_reply_empty_when_agent_notified(
     assert payload["silent"] is False
 
 
-def test_send_message_from_schedule_reemits_agent_message_in_daemon(
+def test_notify_from_schedule_reemits_agent_message_in_daemon(
     monkeypatch, tmp_home_no_env: Path,
 ) -> None:
     """The scheduled agent runs in a subprocess. The parent scheduler must re-emit the alpi-native notification in the daemon process so desktop/mobile subscribers see it."""
@@ -129,15 +129,14 @@ def test_send_message_from_schedule_reemits_agent_message_in_daemon(
         stdout = _events_stdout([
             {
                 "kind": "tool_start",
-                "name": "send_message",
+                "name": "notify",
                 "args": {
                     "text": "Research finished.",
                     "title": "Research done",
                     "type": "warning",
-                    "channel": "alpi",
                 },
             },
-            {"kind": "tool_end", "name": "send_message", "ok": True},
+            {"kind": "tool_end", "name": "notify", "ok": True},
             {"kind": "reply", "text": "already sent"},
         ])
         stderr = ""
@@ -166,20 +165,20 @@ def test_send_message_from_schedule_reemits_agent_message_in_daemon(
     assert done["reply"] == ""
 
 
-def test_failed_send_message_does_not_count_as_delivered(
+def test_failed_notify_does_not_count_as_delivered(
     monkeypatch, tmp_home_no_env: Path,
 ) -> None:
-    """A failed send_message call should not suppress the final schedule reply."""
+    """A failed notify call should not suppress the final schedule reply."""
 
     class _Proc:
         returncode = 0
         stdout = _events_stdout([
             {
                 "kind": "tool_start",
-                "name": "send_message",
-                "args": {"text": "Ping", "channel": "alpi"},
+                "name": "notify",
+                "args": {"text": "Ping"},
             },
-            {"kind": "tool_end", "name": "send_message", "ok": False},
+            {"kind": "tool_end", "name": "notify", "ok": False},
             {"kind": "reply", "text": "fallback summary"},
         ])
         stderr = ""

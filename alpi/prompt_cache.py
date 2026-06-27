@@ -48,38 +48,6 @@ PLATFORM_HINTS: dict[str, str] = {
         "auto-delivered to the job's configured destination; put the "
         "primary content directly in your response."
     ),
-    "telegram": (
-        "# SURFACE: Telegram\n"
-        "You are replying on Telegram. Plain Markdown is auto-converted "
-        "to Telegram's MarkdownV2 (bold, italic, inline code, code "
-        "blocks, links, headers). Tables, blockquotes, and deeply "
-        "nested lists do NOT render — prefer flat text. Keep replies "
-        "chat-friendly: short paragraphs, no sign-offs. Attach files "
-        "via `send_message(attachment=…)`, not by inlining paths."
-    ),
-    "email": (
-        "# SURFACE: email\n"
-        "You are replying by email. Plain text only — no Markdown, it "
-        "shows as literal asterisks and backticks. Keep replies "
-        "concise. The subject line is preserved for threading. Skip "
-        "greetings and sign-offs unless the user's message warranted "
-        "them (business tone vs casual)."
-    ),
-    "gmail": (
-        "# SURFACE: email\n"
-        "You are replying by email. Plain text only — no Markdown, it "
-        "shows as literal asterisks and backticks. Keep replies "
-        "concise. The subject line is preserved for threading. Skip "
-        "greetings and sign-offs unless the user's message warranted "
-        "them (business tone vs casual)."
-    ),
-    "matrix": (
-        "# SURFACE: Matrix\n"
-        "You are replying on Matrix. Messages are sent as plain text — "
-        "Markdown is not rendered and shows as literal asterisks and "
-        "backticks. Keep replies chat-friendly: short paragraphs, flat "
-        "text, no sign-offs."
-    ),
 }
 
 

@@ -19,7 +19,7 @@ EXPECTED_TOOLS = {
     "read_file", "read_image", "write_file", "edit_file", "terminal", "search",
     "todo", "web_search", "web_fetch", "web_extract", "schedule",
     "memory", "skill", "research", "delegate",
-    "session_search", "send_message", "email",
+    "session_search", "email",
 }
 
 
@@ -579,7 +579,7 @@ def test_delegate_resolves_toolsets_and_filters_blocked() -> None:
     assert not unknown
     assert {"read_file", "write_file", "edit_file", "search"} <= names
     assert {"web_search", "web_fetch", "web_extract"} <= names
-    assert {"notify", "send_message"} <= BLOCKED_FOR_DELEGATE
+    assert {"notify", "email"} <= BLOCKED_FOR_DELEGATE
     assert names.isdisjoint(BLOCKED_FOR_DELEGATE)
 
 

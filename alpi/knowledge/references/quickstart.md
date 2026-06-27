@@ -5,7 +5,7 @@
 - New-user path: `uv tool install alpi-agent` → `alpi setup` → `alpi`.
 - Project work: pin `workspace` in setup/config so file/terminal tools default there.
 - Second identity: `alpi profile create <name>`, then setup + run with `-p <name>`.
-- Gateways, schedules, desktop, mobile all require the daemon.
+- Schedules, desktop, mobile all require the daemon.
 
 ## Commands
 
@@ -25,11 +25,11 @@ PyPI package is `alpi-agent`; binary/import/home dir is `alpi`. Install details 
 
 ## Setup wizard
 
-`alpi setup` collects: model/provider, API key or local endpoint, workspace path, optional gateway/daemon settings. Writes config to `~/.alpi/` (default profile) or `~/.alpi/profiles/<name>/` (named). Config keys → see config.
+`alpi setup` collects: model/provider, API key or local endpoint, workspace path, optional email/daemon settings. Writes config to `~/.alpi/` (default profile) or `~/.alpi/profiles/<name>/` (named). Config keys → see config.
 
 ## Profiles
 
-`alpi -p <name>` selects a profile. Each isolates config, memory, sessions, skills, logs, gateway state, and ALP identity.
+`alpi -p <name>` selects a profile. Each isolates config, memory, sessions, skills, logs, and ALP identity.
 
 ## Resume
 
@@ -37,7 +37,7 @@ Sessions persist per profile. `alpi -c` reopens the latest; set `tui.auto_resume
 
 ## Daemon
 
-One per-machine daemon supervises every profile; required for gateways, schedules, desktop, mobile. `alpi setup` auto-installs and starts it.
+One per-machine daemon supervises every profile; required for schedules, desktop, mobile. `alpi setup` auto-installs and starts it.
 
 ## doctor
 

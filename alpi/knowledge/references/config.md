@@ -23,7 +23,6 @@
 | `budget` | Daily spend limit (USD or tokens, mutually exclusive). |
 | `providers` | Provider-specific saved endpoints/choices. |
 | `tools` | Sandbox, vision, TTS/STT, approvals, denylist, char budget. |
-| `gateway` | Telegram, Matrix, IMAP, Gmail inbound. |
 | `service` | Per-profile daemon subsystem toggles. |
 | `schedule` | Scheduler settings. |
 | `alp` | ALP peer/workgroup settings. |
@@ -53,7 +52,7 @@ providers:
 
 ## Change paths
 
-- `alpi setup` (recommended): model, gateways, MCPs, sandbox, voice, peers, workgroups, devices, budget, cleanup, daemon/subsystem lifecycle.
+- `alpi setup` (recommended): model, email, MCPs, sandbox, voice, peers, workgroups, devices, budget, cleanup, daemon/subsystem lifecycle.
 - `/model` inside the TUI.
 - Direct `config.yaml` edit for advanced/cosmetic fields.
 - Desktop/mobile settings through `host.*` where available.
@@ -70,7 +69,7 @@ providers:
 | `tools.max_steps_per_turn` | Next turn. |
 | `tui.*` | Next session (`tui.auto_resume`: next launch). |
 | `service.*` | Next `alpi daemon restart`. |
-| Gateway config | Usually daemon/gateway restart. |
+| Email creds (`.env` `EMAIL__<ID>__PASSWORD` / shared `GMAIL_CLIENT_*`, `secrets/gmail_tokens/<id>.json`) | Next `email` tool call (read at call time, no restart). |
 | Scheduler config/jobs | Scheduler reload or daemon restart depending on path. |
 | `network.host`, `host.tcp_port`, `alp.tcp_port` | Daemon restart (listeners bind at boot). |
 | `host.device_name` | Next pairing/status (read fresh per call, no restart). |
@@ -79,17 +78,19 @@ providers:
 
 Config keys: `tools.tts.voice` (Edge TTS id), `tools.tts.rate`, `tools.tts.pitch` (prosody, config-only defaults), `tools.tts.auto_read` (bool; set via `host.voice.set_auto_read`).
 
-The `tts` tool only synthesizes and returns a cached MP3 path — the daemon never plays audio. Desktop/mobile play on demand from a per-message button, and when `tools.tts.auto_read` is on they auto-play each agent reply (synthesizing via `host.voice.preview`); your own messages are never read. Workgroups carry an analogous hub-local `auto_read` flag in the workgroup meta (`host.workgroup.update`), not replicated to members. External chats receive audio only when the agent chains `send_message(attachment=<mp3 path>)`.
+The `tts` tool only synthesizes and returns a cached MP3 path — the daemon never plays audio. Desktop/mobile play on demand from a per-message button, and when `tools.tts.auto_read` is on they auto-play each agent reply (synthesizing via `host.voice.preview`); your own messages are never read. Workgroups carry an analogous hub-local `auto_read` flag in the workgroup meta (`host.workgroup.update`), not replicated to members. To send synthesized audio to a third party, attach the cached MP3 to an `email` send.
 
 ## STT
 
-`tools.stt.{model,language}` drive the `stt` tool (faster-whisper on CPU). The Telegram gateway auto-transcribes inbound voice/audio through it and feeds the agent `[voice note] <transcription>` as a normal text turn.
+`tools.stt.{model,language}` drive the `stt` tool (faster-whisper on CPU) for on-demand transcription of audio attachments.
 
 ## `.env`
 
 Profile `.env` holds provider keys and static secrets. Skills declare needs with `requires_env`; runtime credentials belong in a skill's `secrets/` directory.
 
-The daemon supervises many profiles in one process and does not mutate global `os.environ`. Profile-scoped lookups go through `effective_profile_env(home)`: process env overlaid with the profile's `.env`. Gateway adapters snapshot env at construction, so credential edits normally need restart.
+The daemon supervises many profiles in one process and does not mutate global `os.environ`. Profile-scoped lookups go through `effective_profile_env(home)`: process env overlaid with the profile's `.env`. The `email` tool reads creds via this lookup at call time, so credential edits take effect on the next call with no restart.
+
+Email is multi-account: a profile holds N accounts (any mix of IMAP and Gmail), declared under `email.accounts` in `config.yaml` (non-secret shape only; id = slug of the address). Per-account secrets in `.env`: IMAP `EMAIL__<ID>__PASSWORD`; Gmail OAuth client `GMAIL_CLIENT_ID` / `GMAIL_CLIENT_SECRET` shared across all Gmail accounts, per-account token at `secrets/gmail_tokens/<id>.json`. Manage via `alpi setup → Email` or the apps' Email section; `alpi email probe <id>` / `alpi email remove <id>` operate by id. The `email` tool's `account` param selects by address or id.
 
 ## Memory knobs
 
@@ -124,7 +125,6 @@ tools:
     - edit_file
     - terminal
     - email
-    - send_message
     - schedule
     - delegate
 ```

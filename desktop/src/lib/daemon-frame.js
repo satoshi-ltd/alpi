@@ -58,7 +58,7 @@ export function fromDaemonFrame(frame) {
     event === "config_changed" ||
     event === "skills_changed" ||
     event === "memory_changed" ||
-    event === "gateway_changed" ||
+    event === "email_changed" ||
     event === "budget.threshold"
   ) {
     return { kind: "config" };

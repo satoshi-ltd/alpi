@@ -66,7 +66,7 @@ budget and provider preference.
 
 ### Cheap service turns
 
-Use these for Telegram gateway traffic, heartbeats, summaries, simple
+Use these for high-volume service turns, heartbeats, summaries, simple
 lookups, and low-risk commands. They are not the first choice for
 creating or debugging skills.
 
@@ -152,7 +152,7 @@ roles today:
 
 - **Personal skill-heavy profile**: owl-alpha, DeepSeek V4 Pro,
   MiMo V2.5 Pro, or Sonnet 4.6.
-- **High-volume gateway profile**: DeepSeek V4 Flash, MiMo V2.5,
+- **High-volume service profile**: DeepSeek V4 Flash, MiMo V2.5,
   Haiku 4.5, or GPT-5.4-mini, with fewer skills and tighter prompts.
 - **Engineering profile**: Sonnet 4.6, Opus 4.8, GPT-5.5, GPT-5.5-pro,
   or o3.

@@ -310,21 +310,52 @@ async def test_voice_autoplay_verb_is_unregistered(tmp_path: Path, monkeypatch) 
 
 
 @pytest.mark.asyncio
-async def test_gateway_remove_drops_env(tmp_path: Path, monkeypatch) -> None:
+async def test_email_add_then_status_then_remove(tmp_path: Path, monkeypatch) -> None:
+    from alpi.mail import accounts as accounts_mod
+
     home = _bootstrap(tmp_path)
-    (home / ".env").write_text(
-        "TELEGRAM_BOT_TOKEN=abc\nTELEGRAM_ALLOWED_CHAT_IDS=1\nOTHER=keep\n"
-    )
+    (home / ".env").write_text("OTHER=keep\n")
     monkeypatch.setattr(data_handlers, "_resolve_home", lambda p: home)
+    from alpi.host import device_state as data_state
+    monkeypatch.setattr(data_state, "_resolve_home", lambda p: home)
     srv = host_server.Server(home=home)
     data_config.register(srv)
+    data_state.register(srv)
 
-    body = {"id": "1", "method": "host.gateway.remove",
-            "params": {"profile": "default", "name": "telegram"}}
-    assert (await srv._dispatch(body))["result"]["ok"] is True
+    add = await srv._dispatch({
+        "id": "1", "method": "host.email.add",
+        "params": {
+            "profile": "default", "address": "Me@Work.com", "password": "pw",
+            "imap_host": "imap.work.com", "smtp_host": "smtp.work.com",
+        },
+    })
+    account_id = add["result"]["id"]
+    assert account_id == "me_work_com"
+
+    rows = accounts_mod.list_accounts(home)
+    assert {"id": "me_work_com", "type": "imap", "address": "Me@Work.com",
+            "configured": True} in rows
+
+    status = await srv._dispatch({
+        "id": "2", "method": "host.email.status",
+        "params": {"profile": "default"},
+    })
+    assert any(r["id"] == "me_work_com" and r["configured"]
+               for r in status["result"]["accounts"])
+
+    env_key = accounts_mod.password_env_key("me_work_com")
+    assert f"{env_key}=pw" in (home / ".env").read_text()
+
+    rm = await srv._dispatch({
+        "id": "3", "method": "host.email.remove",
+        "params": {"profile": "default", "id": "me_work_com"},
+    })
+    assert rm["result"]["ok"] is True
+    assert rm["result"]["existed"] is True
     text = (home / ".env").read_text()
-    assert "TELEGRAM_BOT_TOKEN" not in text
+    assert env_key not in text
     assert "OTHER=keep" in text
+    assert accounts_mod.list_accounts(home) == []
 
 
 @pytest.mark.asyncio
@@ -344,7 +375,7 @@ async def test_gmail_begin_writes_env_and_returns_auth_url(
             "profile": "default",
             "client_id": "cid-123",
             "client_secret": "sec-456",
-            "allowed_senders": " Bob@Example.com , carol@x.com ",
+            "address": "me@gmail.com",
             "redirect_uri": "http://127.0.0.1:55555",
         },
         None,
@@ -353,7 +384,6 @@ async def test_gmail_begin_writes_env_and_returns_auth_url(
     env_text = (home / ".env").read_text()
     assert "GMAIL_CLIENT_ID=cid-123" in env_text
     assert "GMAIL_CLIENT_SECRET=sec-456" in env_text
-    assert "GMAIL_ALLOWED_SENDERS=bob@example.com,carol@x.com" in env_text
     # No os.environ shadow: prepare reads creds from the profile's .env on demand.
     import os
     assert "GMAIL_CLIENT_ID" not in os.environ
@@ -508,8 +538,9 @@ async def test_gmail_exchange_runs_auth_exchange_with_stored_verifier(
     captured: dict = {}
     from alpi.mail import gmail_auth as ga
 
-    def fake_exchange(h, *, code, code_verifier, redirect_uri):
+    def fake_exchange(h, account_id, *, code, code_verifier, redirect_uri):
         captured["home"] = h
+        captured["account_id"] = account_id
         captured["code"] = code
         captured["code_verifier"] = code_verifier
         captured["redirect_uri"] = redirect_uri
@@ -522,12 +553,50 @@ async def test_gmail_exchange_runs_auth_exchange_with_stored_verifier(
         None,
     )
 
-    assert result == {"email": "alice@example.com"}
+    assert result == {"id": "alice_example_com", "email": "alice@example.com"}
     assert captured["code"] == "the-google-code"
     assert captured["redirect_uri"] == "http://127.0.0.1:9999"
     assert len(captured["code_verifier"]) >= 43  # PKCE min length
     # State should be consumed exactly once.
     assert state not in data_config._pending_gmail
+    # The gmail config row is written on success.
+    from alpi.mail import accounts as accounts_mod
+    assert any(r["id"] == "alice_example_com" and r["type"] == "gmail"
+               for r in accounts_mod.list_accounts(home))
+
+
+@pytest.mark.asyncio
+async def test_gmail_exchange_rejects_address_mismatch_and_wipes_token(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    home = _bootstrap(tmp_path)
+    monkeypatch.setattr(data_handlers, "_resolve_home", lambda p: home)
+    for key in ("GMAIL_CLIENT_ID", "GMAIL_CLIENT_SECRET"):
+        monkeypatch.delenv(key, raising=False)
+    data_config._pending_gmail.clear()
+
+    begin = await data_config._gmail_begin({
+        "profile": "default", "client_id": "x", "client_secret": "y",
+        "address": "work@gmail.com", "redirect_uri": "http://127.0.0.1:9999",
+    }, None)
+    state = begin["state"]
+
+    from alpi.mail import accounts as accounts_mod
+    from alpi.mail import gmail_auth as ga
+
+    def fake_exchange(h, account_id, *, code, code_verifier, redirect_uri):
+        # Real exchange writes the token under the requested id before we can check token.email.
+        p = accounts_mod.gmail_token_path(h, account_id)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text("{}")
+        return type("FakeToken", (), {"email": "personal@gmail.com"})()
+    monkeypatch.setattr(ga, "exchange", fake_exchange)
+
+    with pytest.raises(host_server.HandlerError) as ei:
+        await data_config._gmail_exchange({"state": state, "code": "c"}, None)
+    assert ei.value.code == -32602
+    assert not accounts_mod.gmail_token_path(home, "work_gmail_com").exists()
+    assert not any(r["id"] == "work_gmail_com" for r in accounts_mod.list_accounts(home))
 
 
 @pytest.mark.asyncio
@@ -567,7 +636,7 @@ async def test_gmail_exchange_propagates_oauth_error(
 
     from alpi.mail import gmail_auth as ga
 
-    def boom(_h, **_kw):
+    def boom(_h, _account_id, **_kw):
         raise ga.GmailAuthError("OAuth denied: access_denied")
 
     monkeypatch.setattr(ga, "exchange", boom)
@@ -596,47 +665,6 @@ def test_gc_pending_gmail_purges_old_entries(monkeypatch) -> None:
     data_config._gc_pending_gmail()
     assert "fresh" in data_config._pending_gmail
     assert "stale" not in data_config._pending_gmail
-
-
-@pytest.mark.asyncio
-async def test_providers_set_key_rejects_duplicate_telegram_token(
-    tmp_path: Path, monkeypatch,
-) -> None:
-    from alpi import home as home_mod
-    root = tmp_path / "alpi-root"
-    (root / "profiles" / "doc").mkdir(parents=True)
-    (root / "profiles" / "teacher").mkdir(parents=True)
-    cfg = cfg_mod.Config(home=root / "profiles" / "doc", model="x")
-    cfg_mod.save(cfg)
-    cfg = cfg_mod.Config(home=root / "profiles" / "teacher", model="x")
-    cfg_mod.save(cfg)
-    (root / "profiles" / "doc" / ".env").write_text("TELEGRAM_BOT_TOKEN=bot-shared\n")
-
-    monkeypatch.setattr(
-        data_handlers, "_resolve_home",
-        lambda p: root / "profiles" / (p or "doc"),
-    )
-    monkeypatch.setattr(home_mod, "_ROOT", root)
-
-    srv = host_server.Server(home=root / "profiles" / "teacher")
-    data_config.register(srv)
-
-    body = {
-        "id": "r",
-        "method": "host.providers.set_key",
-        "params": {
-            "profile": "teacher",
-            "key": "TELEGRAM_BOT_TOKEN",
-            "value": "bot-shared",
-        },
-    }
-    resp = await srv._dispatch(body)
-    assert "error" in resp
-    assert "already used by profile 'doc'" in resp["error"]["data"]["detail"]
-
-    body["params"]["value"] = "bot-fresh"
-    resp = await srv._dispatch(body)
-    assert resp["result"]["ok"] is True
 
 
 @pytest.mark.asyncio
@@ -681,15 +709,51 @@ async def test_mutators_emit_config_changed(tmp_path: Path, monkeypatch) -> None
 
 
 @pytest.mark.asyncio
-async def test_gateway_remove_emits_gateway_changed(
+async def test_email_add_new_requires_password(tmp_path: Path, monkeypatch) -> None:
+    home = _bootstrap(tmp_path)
+    monkeypatch.setattr(data_handlers, "_resolve_home", lambda p: home)
+    with pytest.raises(host_server.HandlerError) as ei:
+        await data_config._email_add({
+            "profile": "default", "address": "new@x.com", "password": "",
+            "imap_host": "imap.x.com", "smtp_host": "smtp.x.com",
+        }, None)
+    assert ei.value.code == -32602
+
+
+@pytest.mark.asyncio
+async def test_email_add_edit_preserves_password(tmp_path: Path, monkeypatch) -> None:
+    from alpi.mail import accounts as accounts_mod
+
+    home = _bootstrap(tmp_path)
+    monkeypatch.setattr(data_handlers, "_resolve_home", lambda p: home)
+    add = await data_config._email_add({
+        "profile": "default", "address": "me@x.com", "password": "orig",
+        "imap_host": "imap.x.com", "smtp_host": "smtp.x.com",
+    }, None)
+    aid = add["id"]
+    res = await data_config._email_add({
+        "profile": "default", "address": "me@x.com", "password": "",
+        "imap_host": "imap2.x.com", "smtp_host": "smtp.x.com",
+    }, None)
+    assert res["ok"] is True and res["id"] == aid
+    env = accounts_mod._read_env(home)
+    assert env[accounts_mod.password_env_key(aid)] == "orig"
+    assert accounts_mod.get_account(home, aid)["imap_host"] == "imap2.x.com"
+
+
+@pytest.mark.asyncio
+async def test_email_remove_emits_email_changed(
     tmp_path: Path, monkeypatch,
 ) -> None:
     from alpi.host import events as host_events
 
+    from alpi.mail import accounts as accounts_mod
+
     home = _bootstrap(tmp_path)
     monkeypatch.setattr(data_handlers, "_resolve_home", lambda p: home)
-    (home / ".env").write_text(
-        "TELEGRAM_BOT_TOKEN=secret\nTELEGRAM_ALLOWED_CHAT_IDS=1\n",
+    accounts_mod.add_imap(
+        home, address="me@x.com", password="pw",
+        imap_host="imap.x.com", smtp_host="smtp.x.com",
     )
     srv = host_server.Server(home=home)
     data_config.register(srv)
@@ -701,20 +765,20 @@ async def test_gateway_remove_emits_gateway_changed(
     )
 
     resp = await srv._dispatch({
-        "id": "r", "method": "host.gateway.remove",
-        "params": {"profile": "default", "name": "telegram"},
+        "id": "r", "method": "host.email.remove",
+        "params": {"profile": "default", "id": "me_x_com"},
     })
     assert resp["result"]["ok"] is True
-    assert ("gateway_changed", {
-        "profile": "default", "name": "telegram", "action": "removed",
+    assert ("email_changed", {
+        "profile": "default", "id": "me_x_com", "action": "removed",
     }) in captured
 
 
 @pytest.mark.asyncio
-async def test_set_gateway_key_emits_gateway_changed_not_config(
+async def test_set_email_key_emits_email_changed_not_config(
     tmp_path: Path, monkeypatch,
 ) -> None:
-    """Routing matters: a TELEGRAM_BOT_TOKEN rewrite is gateway-shaped (brings a poller online), not generic env. Clients refresh different surfaces on each."""
+    """Routing matters: an EMAIL__*__PASSWORD rewrite is email-shaped, not generic env. Clients refresh different surfaces on each."""
     from alpi.host import events as host_events
 
     home = _bootstrap(tmp_path)
@@ -731,10 +795,11 @@ async def test_set_gateway_key_emits_gateway_changed_not_config(
     resp = await srv._dispatch({
         "id": "r", "method": "host.providers.set_key",
         "params": {
-            "profile": "default", "key": "TELEGRAM_BOT_TOKEN", "value": "v",
+            "profile": "default", "key": "EMAIL__ME_X_COM__PASSWORD",
+            "value": "pw",
         },
     })
     assert resp["result"]["ok"] is True
     kinds = {k for k, _ in captured}
-    assert "gateway_changed" in kinds
+    assert "email_changed" in kinds
     assert "config_changed" not in kinds

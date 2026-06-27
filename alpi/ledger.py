@@ -1,6 +1,6 @@
 """Daily spending ledger — profile cap gate.
 
-Single source of truth for budget enforcement: interactive TUI, gateway,
+Single source of truth for budget enforcement: interactive TUI,
 scheduler, sub-agents, and inbound ALP all admit through ``check()`` and
 record through ``record()``. ``by_peer`` buckets are observability only.
 File: ``~/.alpi/<profile>/logs/ledger.json``; resets at UTC midnight via
@@ -224,7 +224,7 @@ def snapshot(home: Path) -> dict[str, Any]:
 
 
 def status_line(home: Path, cfg_budget: dict[str, Any] | None) -> str:
-    """``used / cap`` value for the ``daily budget`` row (TUI + Telegram)."""
+    """``used / cap`` value for the ``daily budget`` row (TUI)."""
     data = load(home)
     prof = data.get("profile", {"usd": 0.0, "tokens": 0})
     used_usd = float(prof.get("usd", 0))

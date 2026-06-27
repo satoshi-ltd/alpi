@@ -41,10 +41,7 @@ class Turn:
 class Session:
     home: Path
     model: str
-    # Subdirectory under ``home`` where ``save()`` lands. Gateway turns
-    # use ``gateway/sessions`` so they stay out of the local TUI/desktop
-    # list (which reads ``sessions/`` only) and don't collide with the
-    # transport state files in ``gateway/`` itself.
+    # Subdirectory under ``home`` where ``save()`` lands.
     subdir: str = "sessions"
     id: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
     started_at: float = field(default_factory=time.time)

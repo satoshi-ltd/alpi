@@ -12,7 +12,7 @@ _DOC_KEY_RE = re.compile(r"`([a-z][a-z0-9_]*(?:\.[a-z_<>0-9]+)*)`")
 
 _DOC_TOP_LEVEL_PREFIXES = {
     "model", "model_reasoning", "fallback_models", "workspace", "providers",
-    "tools", "tui", "mcp", "gateway", "runtime", "memory", "alp", "host",
+    "tools", "tui", "mcp", "email", "runtime", "memory", "alp", "host",
     "network", "budget", "service", "public_bio", "paused",
 }
 
@@ -28,26 +28,21 @@ DOCUMENTED_BUT_PARSED_ELSEWHERE = {
     "alp.tcp_port",
     "network.host",
     "budget.daily_usd",
-    "service.gateway",
     "service.schedule",
     "service.alp",
     "service.workgroups",
     "service.host",
     "mcp.servers",
-    "gateway.imap.poll_interval",
-    "gateway.imap.mark_as_read",
-    "gateway.gmail.poll_interval",
-    "gateway.gmail.mark_as_read",
     "providers.openrouter.models",
 }
 
 
-CODE_LEAVES_INTENTIONALLY_UNDOCUMENTED: set[str] = set()
+CODE_LEAVES_INTENTIONALLY_UNDOCUMENTED: set[str] = {"email.accounts"}
 
 
 _CONFIG_CONTAINER_FIELDS = {
     "providers", "tools", "memory", "model_reasoning", "runtime",
-    "tui", "gateway", "alp", "host", "network", "budget", "service",
+    "tui", "email", "alp", "host", "network", "budget", "service",
 }
 
 _CONFIG_INTERNAL_FIELDS = {"home", "raw"}
@@ -93,8 +88,7 @@ def test_config_doc_extractor_sees_known_keys():
     text = CONFIG_MD.read_text()
     keys = _extract_keys_from_doc(text)
     for required in ("model", "tools.browser.allow_local", "model_reasoning.effort",
-                     "public_bio", "paused", "tools.terminal.sandbox",
-                     "gateway.telegram", "gateway.matrix"):
+                     "public_bio", "paused", "tools.terminal.sandbox"):
         assert required in keys, (
             f"the doc-key extractor failed to pick up {required!r} — the regex is broken"
         )

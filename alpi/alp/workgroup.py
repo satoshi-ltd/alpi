@@ -193,7 +193,7 @@ class Meta:
     briefing: str = ""
     # When True, member engines engage with the briefing on their next turn after create — no human prompt required.
     auto_kickoff: bool = True
-    # Push target on ``#done`` landing: ``"none"`` (silent), ``"telegram"`` (user's configured gateway DM).
+    # Push target on ``#done`` landing: ``"none"`` (silent) or ``"notify"`` (native push to the owner's apps).
     notify_on_close: str = "none"
     # Ordered phase slugs (empty = deliberation wg); lets continuation advance phases deterministically. Owners/deliverables live in the org, not here.
     pipeline: tuple[str, ...] = ()

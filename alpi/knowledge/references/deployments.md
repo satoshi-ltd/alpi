@@ -2,15 +2,15 @@
 
 ## Answer directly
 
-Deployment shape follows trust boundary + availability needs. Profiles separate identities; the daemon runs where an inbound gateway or scheduled work must keep running while the TUI is closed.
+Deployment shape follows trust boundary + availability needs. Profiles separate identities; the daemon runs where scheduled work or the host plane must keep running while the TUI is closed.
 
 ## Shapes
 
 | Shape | Use when | Notes |
 |---|---|---|
 | Laptop only | Interactive personal use. | Run `alpi`; daemon optional. |
-| Laptop + daemon | Telegram/email/schedules on same machine. | `alpi daemon start`. |
-| Home server | Always-on gateway/scheduler/host plane. | Pair desktop/mobile over host-plane WebSocket. |
+| Laptop + daemon | Schedules/host plane on same machine. | `alpi daemon start`. |
+| Home server | Always-on scheduler/host plane. | Pair desktop/mobile over host-plane WebSocket. |
 | One machine, many profiles | Work/personal/client separation. | One daemon supervises all profiles. |
 | Multi-device personal | Laptop + trusted server/peer. | ALP for alpi-to-alpi links. |
 | Small team/family | Multiple identities, explicit trust. | Separate profiles + ALP peers. |
@@ -34,7 +34,7 @@ alpi daemon restart
 ## Decision rules
 
 - **Desktop/mobile clients** talk to the daemon through `host.*`. Desktop supports a local socket plus paired remote host-plane endpoints; mobile starts from one paired endpoint. They never read profile files directly and never spawn `alpi`.
-- **Gateways** need a running daemon. If one doesn't respond, check: profile, daemon status, gateway config, logs, provider/platform credentials.
+- **Schedules and the host plane** need a running daemon. If one doesn't respond, check: profile, daemon status, config, logs. Email is an on-demand tool (no listener); failures show as `email` tool errors, not daemon downtime.
 - **ALP** is for trusted alpi-to-alpi communication across machines — not the local desktop host API.
 
 ## What not to promise

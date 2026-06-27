@@ -71,12 +71,12 @@ def test_list_sessions_tolerates_corrupt_started_at(tmp_path: Path) -> None:
 
 
 def test_list_sessions_classifies_kinds(tmp_path: Path) -> None:
-    _seed_session(tmp_path, "a", "[INBOUND TELEGRAM] hi")
+    _seed_session(tmp_path, "a", "[INBOUND IMAP] hi")
     _seed_session(tmp_path, "b", "[SCHEDULED: digest]")
     _seed_session(tmp_path, "c", "ordinary chat")
     rows = data_sessions.list_sessions(tmp_path)
     by_id = {r["id"]: r for r in rows}
-    assert by_id["a"]["kind"] == "telegram"
+    assert by_id["a"]["kind"] == "email"
     assert by_id["b"]["kind"] == "scheduled"
     assert by_id["c"]["kind"] == "chat"
 

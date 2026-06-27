@@ -12,18 +12,18 @@ Legend: ✅ shipped · 🔵 backlog · 🟡 next up · ⏸ blocked · 🔴 gate.
 
 ---
 
-## v0.10 cycle (open)
+## v0.11 cycle (open)
 
 **Theme: artifact-capable agents on lighter runtime surfaces.**
-The retrieval spine and the unattended-safety pass (FS.1 denylist, `alpi
-audit`) are done. v0.10 makes that hardened base more useful for real
-agentic work: browsing exact past conversations, moving artefacts between
-peers without abusing JSON envelopes, and proving whether the browser stack
-can get lighter on small hosts.
+v0.10 retired the chat-app gateways and narrowed email to an on-demand
+tool — the daemon no longer listens on any third-party platform. v0.11
+makes that hardened base more useful for real agentic work: moving
+artefacts between peers without abusing JSON envelopes, and proving
+whether the browser stack can get lighter on small hosts.
 
-This cycle can be more ambitious than v0.9, but it should still stay inside
-surfaces Alpi already owns. No worker-pool scheduler, no marketplace, no cloud
-sandbox, no new gateway family, and no default anti-bot posture.
+This cycle should still stay inside surfaces Alpi already owns. No
+worker-pool scheduler, no marketplace, no cloud sandbox, no inbound chat
+gateways, and no default anti-bot posture.
 
 | ID | Item | Status |
 |---|---|---|
@@ -78,12 +78,10 @@ v0.x feature that depends on it. Nothing graduates because it is interesting.
 |---|---|---|
 | TERM.2 | Docker / SSH terminal backends — isolated or remote command execution for unattended profiles once local sandboxing is no longer enough. | 🔵 |
 | AUDIT.2 | Enterprise audit & accountability — actor attribution on the host plane, append-only / external audit sink, LLM-egress logging + provider policy, at-rest encryption, and RBAC/SSO. | 🔵 |
-| Notify.ntfy | ntfy gateway — accountless self-hostable notification gateway, opt-in only. | 🔵 |
 | ORG.2.B/C | Workspace overlay (`cfg.workspace_path` as list) + first-class runtime org entity (`~/.alpi/orgs/<id>/`) with roles, event fan-out, and shared RAG. | ⏸ |
 | ALP.7 | Pinned shared memory per workgroup (hub-anchored `wiki.md`). | 🔵 |
 | ALP.8 | Workgroup capacity scheduling — optional profile capacity, queue/defer telemetry, or worker-pool assignment for high-throughput orgs. | 🔵 |
 | ALP.3+ | Multi-task workgroups — opt-in `multitask`, letter-prefixed task IDs, per-task roster/dispatch/budget. | 🔵 |
-| Signal | Signal gateway via signal-cli. | 🔵 |
 | AY | Skills marketplace — federated, signed, never centralised. | 🔵 |
 | SK.2 | Safe skill import (`alpi skill import <dir\|zip>` — preview, scan, install). | 🔵 |
 | BF-8 | Skill versioning / install-update flows. | 🔵 |
@@ -91,9 +89,7 @@ v0.x feature that depends on it. Nothing graduates because it is interesting.
 | AI (3) | Entity memory — structured SQLite store (`entities`/`relations`/`observations`) replacing the markdown memory model, with selective injection per turn instead of full-blob system prompt. | 🔵 |
 | AJ | Browser realism — Cloudflare / captcha / fingerprint depth. | 🔵 |
 | AQ | Continuous voice mode (push-to-talk, hotword loops). | 🔵 |
-| Webhook | Inbound HTTP triggers (HMAC-signed). | 🔵 |
 | BG re-audit | LiteLLM quarterly review — bump pin, run LLM probe, swap if better alternative emerges. | 🔵 |
-| Matrix E2EE | Olm/Megolm sessions, encryption store, SAS device verification, encrypted-room send/read tests. | 🔵 |
 | TTS.1 | Local TTS engine + daemon-served voice — single host-served voice catalog, deprecate desktop-local synthesis. | 🔵 |
 | UX.6 | Desktop `.env` manager — per-profile environment editor (mask/reveal/audit) for keys other than provider keys. | 🔵 |
 | External secrets | Bitwarden / external secret manager resolver for provider keys. | 🔵 |
@@ -113,17 +109,6 @@ automatic migration of local files.
 **Promotion condition.** A real profile needs isolation or a remote machine
 that the local terminal + OS sandbox cannot provide. Until then, TERM.2 stays
 backlog; hardening the existing runtime comes first.
-
-### Notify.ntfy. ntfy gateway
-
-An optional gateway for users who already run or trust ntfy and want a
-simple notification overlap path. It should be opt-in, accountless where
-possible, and clearly secondary to Alpi-owned apps plus persistent outputs.
-
-**Why it waits.** Native app notifications are the primary product path.
-Adding another gateway is only justified if users explicitly ask for ntfy,
-or if self-hosted homelab users need a notification bridge while mobile app
-delivery remains local/poll-based.
 
 ### ORG.2.B/C. Workspace overlay + first-class runtime org entity
 
@@ -214,8 +199,6 @@ forward:
 - **ALP.3+** waits because targeted tasks plus pipeline continuation already
   cover sequential project pipelines. Revisit only if persistent workgroups
   (`template`, `quality`, `brand-library`) show real sustained parallelism.
-- **Signal** is a strong privacy fit, but new gateways are out of scope while
-  Alpi-owned clients are the primary mobile surface.
 - **AY / SK.2 / BF-8** wait on a real import or author community. Until then,
   skills stay user-owned and local.
 - **AI (2) / AI (3)** wait until markdown memory demonstrably breaks: either
@@ -225,12 +208,8 @@ forward:
   scope cannot close.
 - **AQ / TTS.1** wait until voice becomes a real surface. If that happens,
   daemon-served local voice should land before always-on voice loops.
-- **Webhook** waits because it is another inbound automation surface, not core
-  product UX.
 - **BG re-audit** is standing maintenance, not product scope; cadence and
   procedure live in `OPERATIONS.md → Dependencies`.
-- **Matrix E2EE** waits until a user runs the Matrix gateway against a
-  non-self-hosted homeserver.
 - **UX.6 / External secrets** wait until editing non-provider `.env` entries or
   central key rotation becomes repeated user friction.
 
@@ -271,8 +250,7 @@ repo.
 | Decision | Reason |
 |---|---|
 | Vendor subscription OAuth | ToS violation and account-risk surface; users bring normal API keys. |
-| Gateway sprawl: WhatsApp, Discord, Slack, XMPP | High token/blast-radius or operational cost; Alpi-owned apps are the primary surface. |
-| Gateway "open in Alpi" nudges | Would incentivise gateway usage; gateways stay text-first and secondary. |
+| Chat-app gateways (Telegram, Matrix, Signal, WhatsApp, Discord, …) | Retired in v0.10 — third-party chat bridges add attack surface and upkeep; the desktop/mobile/terminal apps are the surface, and email is an on-demand tool. |
 | Smart-home orchestration | Device protocols and physical-world policy belong in Home Assistant / MCP / user skills, not core. |
 | LangGraph / CrewAI / AutoGen as core | Graph frameworks do not match Alpi's profile/workgroup runtime and pull toward hosted observability. |
 | Image generation as a core tool | Useful via MCP or user skills, but a built-in provider surface would turn Alpi into a creative-tool platform. |

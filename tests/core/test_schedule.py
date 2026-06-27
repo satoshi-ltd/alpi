@@ -8,7 +8,6 @@ import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from alpi.gateway import delivery
 from alpi.scheduler import run as scheduler
 from alpi.tools.schedule import Schedule
 
@@ -329,19 +328,15 @@ def test_run_job_silent_when_notify_false(monkeypatch, tmp_home_no_env: Path) ->
         return _FakeCompletedProcess()
 
     monkeypatch.setattr(scheduler.subprocess, "run", fake_run)
-    sent = []
-    monkeypatch.setattr(delivery, "send_to",
-                        lambda p, c, t, **_: sent.append((p, c, t)))
 
     job = {"id": "j", "kind": "cron", "prompt": "reindex"}
     ok, msg, _reply = scheduler.run_job(job, tmp_home_no_env)
     assert ok
-    assert sent == []
     assert "silent" in msg
     joined = " ".join(captured_args["cmd"])
-    # Silent-job wrapper teaches the agent: call notify(...) for a native push, send_message for a third party; schedule.done alone doesn't wake the user.
+    # Silent-job wrapper teaches the agent: notify(...) for a native push, email for a third party; schedule.done alone doesn't wake the user.
     assert "notify" in joined
-    assert "send_message" in joined
+    assert "email" in joined
     assert "schedule.done" in joined
 
 
@@ -423,16 +418,12 @@ def test_no_agent_silent_when_no_stdout(monkeypatch, tmp_home_no_env: Path) -> N
         return _fake_completed(rc=0, stdout="")
 
     monkeypatch.setattr(scheduler.subprocess, "run", fake_run)
-    sent = []
-    monkeypatch.setattr(delivery, "send_to",
-                        lambda p, c, t, **_: sent.append((p, c, t)))
 
     job = {"id": "j", "kind": "cron", "no_agent": True,
            "prompt": f"python3 {script}"}
     ok, msg, _reply = scheduler.run_job(job, tmp_home_no_env)
 
     assert ok
-    assert sent == []
     assert "silent" in msg
     assert spawn_calls == [["python3", script]]
 

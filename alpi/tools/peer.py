@@ -3,7 +3,7 @@
 Tool-level glue for the ``link.ask`` verb. The caller supplies a
 pinned ``peer_id`` (from ``peers.yaml``) and a prompt; we route
 through ``alpi.alp.mention.execute`` so this tool, the TUI's
-``@peer`` gesture, and the gateway mention interception all share
+``@peer`` gesture, and the mention parser all share
 one implementation.
 
 Routing is automatic: peers with an ``address:`` go over TCP/Noise

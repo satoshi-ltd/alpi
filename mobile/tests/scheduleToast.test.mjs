@@ -17,7 +17,7 @@ function test(name, fn) {
   }
 }
 
-test('schedule.done success is NEVER toasted — schedule success is not an interrupt; jobs that want to notify call send_message explicitly', () => {
+test('schedule.done success is NEVER toasted — schedule success is not an interrupt; jobs that want to notify call notify explicitly', () => {
   assert.equal(buildScheduleToast('schedule.done', {
     profile: 'abby', job_id: 'ab12',
     message: 'silent run ok: ⏰ comprar pan',
@@ -28,7 +28,7 @@ test('schedule.done success is NEVER toasted — schedule success is not an inte
   }), null);
   assert.equal(buildScheduleToast('schedule.done', {
     profile: 'mirai', job_id: 'standup',
-    message: 'agent delivered via send_message',
+    message: 'agent delivered via notify',
     delivered_to: 'external',
   }), null);
 });

@@ -12,7 +12,6 @@ from pathlib import Path
 import pytest
 
 from alpi import memory, ops_digest, promotion, skills_usage
-from alpi.gateway import breaker as br
 from alpi.memory import MemoryStore
 
 
@@ -76,37 +75,6 @@ def test_tools_section_counts_unavailable_via_availability_report(
     assert ("browser", "playwright not installed") in report.tools.unavailable
     assert ("stt", "faster-whisper not installed") in report.tools.unavailable
     assert len(report.tools.unavailable) == 2
-
-
-# ---------- gateways section ----------
-
-
-def test_gateways_section_aggregates_breaker_states(home: Path) -> None:
-    """Pulls live state from BreakerStore without writing anything new —
-    the digest is downstream of the breaker, not a duplicate state."""
-    store = br.BreakerStore(home)
-    for _ in range(br.FAILURE_THRESHOLD):
-        store.record_failure("telegram", "401", now=1_700_000_000.0)
-    store.record_failure("imap", "timeout", now=1_700_000_000.0)
-    br._singletons.clear()
-
-    report = ops_digest.run_digest(home, now=1_700_000_000.0 + 60)
-    gw = report.gateways
-    assert gw.total_tracked == 2
-    assert gw.by_state["disabled"] == 1
-    assert gw.by_state["degraded"] == 1
-    assert any(d["platform"] == "telegram" for d in gw.disabled)
-    assert any(d["platform"] == "imap" for d in gw.degraded)
-    disabled_tg = next(d for d in gw.disabled if d["platform"] == "telegram")
-    assert "cooldown_remaining_s" in disabled_tg
-    assert disabled_tg["cooldown_remaining_s"] > 0
-
-
-def test_gateways_section_empty_when_no_state(home: Path) -> None:
-    report = ops_digest.run_digest(home, now=1_700_000_000.0)
-    assert report.gateways.total_tracked == 0
-    assert report.gateways.degraded == []
-    assert report.gateways.disabled == []
 
 
 # ---------- skills section ----------
@@ -265,7 +233,6 @@ def test_run_digest_returns_complete_report_shape(home: Path) -> None:
     assert isinstance(report.window_days, float)
     assert report.window_days == 7.0
     assert isinstance(report.tools, ops_digest.ToolsSection)
-    assert isinstance(report.gateways, ops_digest.GatewaysSection)
     assert isinstance(report.skills, ops_digest.SkillsSection)
     assert isinstance(report.memory, ops_digest.MemorySection)
     assert isinstance(report.compaction, ops_digest.CompactionSection)
@@ -344,10 +311,9 @@ def test_cli_digest_json_emits_stable_schema(tmp_path: Path, monkeypatch) -> Non
     payload = json.loads(result.output)
     assert payload["window_days"] == 7.0
     assert "generated_at" in payload
-    for section in ("tools", "gateways", "skills", "memory", "compaction", "runs"):
+    for section in ("tools", "skills", "memory", "compaction", "runs"):
         assert section in payload, f"missing section: {section}"
     assert "unavailable" in payload["tools"]
-    assert "by_state" in payload["gateways"]
     assert "promotion_pending" in payload["memory"]
     assert "events_in_window" in payload["compaction"]
     assert "by_kind" in payload["runs"] and "recent_failures" in payload["runs"]
@@ -370,7 +336,7 @@ def test_cli_digest_human_render_includes_each_section(
     out = result.output
     assert "digest" in out
     assert "window:" in out
-    for heading in ("Tools", "Gateways", "Skills", "Memory", "Compaction", "Runs"):
+    for heading in ("Tools", "Skills", "Memory", "Compaction", "Runs"):
         assert heading in out, f"missing section heading: {heading}"
 
 

@@ -1,3 +1,3 @@
 export { SubsystemsCell } from "./SubsystemsCell.jsx";
-export { GatewaysCell } from "./GatewaysCell.jsx";
+export { EmailCell } from "./EmailCell.jsx";
 export { SchedulesSection } from "./SchedulesSection.jsx";

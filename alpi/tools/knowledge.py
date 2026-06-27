@@ -18,10 +18,10 @@ _TOPIC_SUMMARIES: dict[str, str] = {
     "tools": "Tool selection and contracts — files, terminal, attachments, RAG, recall, outputs, approvals.",
     "models": "Picking a provider, tier guidance for tool-heavy use, local Ollama setup.",
     "alp": "ALP protocol — pinned identity, signed envelopes, peer capabilities, workgroups, group keys, transcript shape, error codes.",
-    "architecture": "Internals — code structure, turn loop, gateway, scheduler, MCP, logging, env vars.",
-    "config": "Every YAML field, its default, what it controls (TUI theme, sandbox, budget, gateway, schedule).",
+    "architecture": "Internals — code structure, turn loop, scheduler, MCP, logging, env vars.",
+    "config": "Every YAML field, its default, what it controls (TUI theme, sandbox, budget, schedule).",
     "security": "Approval system, SSRF, prompt-injection, sensitive-path denylist, sandbox.",
-    "deployments": "launchd on macOS, systemd on Linux, gateway/schedule daemon shape, keep-alive, log paths.",
+    "deployments": "launchd on macOS, systemd on Linux, scheduler daemon shape, keep-alive, log paths.",
     "operations": "Day-2 ops — doctor, diagnostics, log rotation, backup, recovery, upgrade workflow.",
     "organization": "Multi-profile orgs — org.yaml schema, agent.md / workgroup.md frontmatter, peer graph, setup.py modes, persistent workgroups.",
     "integrations": "Programmatic access — external code talking to a profile/workgroup as a host-plane client (scoped device token over the host WebSocket), host.chat.send frames, workgroup methods, vs the ALP peer route.",
@@ -34,7 +34,7 @@ class AlpiKnowledge(Tool):
     description = (
         "Read packaged documentation about alpi itself. CALL THIS "
         "BEFORE answering any question about alpi — install, profiles, "
-        "ALP protocol, tools, skills, models, config, security, gateways, "
+        "ALP protocol, tools, skills, models, config, security, "
         "deployment, day-2 ops, multi-profile organizations. The packaged references are "
         "authoritative; your training predates alpi and will be wrong "
         "about flags, paths, and behaviours.\n"

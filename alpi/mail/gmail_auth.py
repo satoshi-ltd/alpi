@@ -4,13 +4,13 @@ Scopes requested:
   - https://www.googleapis.com/auth/gmail.modify
   - https://www.googleapis.com/auth/gmail.send
 
-Token lifecycle:
+Token lifecycle (per account_id):
   - First run: browser consent → callback delivers ``code`` → exchange
     for access + refresh tokens. Saved to
-    ``~/.alpi/profiles/<name>/gmail_token.json`` (mode 0600).
+    ``<home>/secrets/gmail_tokens/<account_id>.json`` (mode 0600).
   - Subsequent: ``get_access_token()`` refreshes if <120s of
-    lifetime remain. ``fcntl`` lock avoids TUI + gateway +
-    schedule daemon racing on the same file.
+    lifetime remain. ``fcntl`` lock avoids TUI + scheduler +
+    service daemon racing on the same file.
 
 Client credentials (``GMAIL_CLIENT_ID`` / ``GMAIL_CLIENT_SECRET``)
 are read from the profile's ``.env``.
@@ -89,8 +89,9 @@ class AuthHandle:
     redirect_uri: str
 
 
-def token_path(home: Path) -> Path:
-    return home / "secrets" / "gmail_token.json"
+def token_path(home: Path, account_id: str) -> Path:
+    from alpi.mail.accounts import gmail_token_path
+    return gmail_token_path(home, account_id)
 
 
 def _client_credentials(home: Path) -> tuple[str, str]:
@@ -108,9 +109,9 @@ def _client_credentials(home: Path) -> tuple[str, str]:
 
 
 @contextmanager
-def _lock(home: Path):
+def _lock(home: Path, account_id: str):
     import fcntl
-    lock_path = home / "secrets" / ".gmail_token.lock"
+    lock_path = home / "secrets" / "gmail_tokens" / f".{account_id}.lock"
     lock_path.parent.mkdir(parents=True, exist_ok=True)
     f = open(lock_path, "w")
     try:
@@ -121,8 +122,8 @@ def _lock(home: Path):
         f.close()
 
 
-def _load(home: Path) -> Optional[GmailToken]:
-    p = token_path(home)
+def _load(home: Path, account_id: str) -> Optional[GmailToken]:
+    p = token_path(home, account_id)
     if not p.exists():
         return None
     try:
@@ -137,9 +138,9 @@ def _load(home: Path) -> Optional[GmailToken]:
         return None
 
 
-def _save(home: Path, token: GmailToken) -> None:
+def _save(home: Path, account_id: str, token: GmailToken) -> None:
     from alpi.secrets_io import safe_write_secret
-    safe_write_secret(token_path(home), json.dumps({
+    safe_write_secret(token_path(home, account_id), json.dumps({
         "email": token.email,
         "access_token": token.access_token,
         "refresh_token": token.refresh_token,
@@ -147,8 +148,8 @@ def _save(home: Path, token: GmailToken) -> None:
     }, indent=2))
 
 
-def clear(home: Path) -> None:
-    p = token_path(home)
+def clear(home: Path, account_id: str) -> None:
+    p = token_path(home, account_id)
     if p.exists():
         p.unlink()
 
@@ -226,6 +227,7 @@ def prepare(home: Path, *, redirect_uri: str) -> AuthHandle:
 
 def exchange(
     home: Path,
+    account_id: str,
     *,
     code: str,
     code_verifier: str,
@@ -269,12 +271,15 @@ def exchange(
         refresh_token=refresh_token,
         expires_at=expires_at,
     )
-    with _lock(home):
-        _save(home, token)
+    if not account_id:
+        from alpi.mail.accounts import slug
+        account_id = slug(email)
+    with _lock(home, account_id):
+        _save(home, account_id, token)
     return token
 
 
-def first_run(home: Path) -> GmailToken:
+def first_run(home: Path, account_id: str = "") -> GmailToken:
     """Browser + local loopback flow. Requires a usable browser and a
     loopback socket on the **same machine** running this function.
 
@@ -290,7 +295,7 @@ def first_run(home: Path) -> GmailToken:
     except Exception:  # noqa: BLE001
         opened = False
     if not opened:
-        return _paste_flow(home, handle, port)
+        return _paste_flow(home, account_id, handle, port)
 
     print(f"\nIf the browser did not open, visit:\n  {handle.auth_url}\n")
     server = _CallbackServer(("127.0.0.1", port), _CallbackHandler)
@@ -308,21 +313,22 @@ def first_run(home: Path) -> GmailToken:
 
     return exchange(
         home,
+        account_id,
         code=server.received_code or "",
         code_verifier=handle.code_verifier,
         redirect_uri=redirect_uri,
     )
 
 
-def first_run_paste(home: Path) -> GmailToken:
+def first_run_paste(home: Path, account_id: str = "") -> GmailToken:
     """Headless flow: print the consent URL, accept the pasted callback URL from stdin. No loopback, no browser-opening assumption — use this over SSH or inside a container."""
     port = _find_free_port()
     redirect_uri = f"http://127.0.0.1:{port}"
     handle = prepare(home, redirect_uri=redirect_uri)
-    return _paste_flow(home, handle, port)
+    return _paste_flow(home, account_id, handle, port)
 
 
-def _paste_flow(home: Path, handle: AuthHandle, port: int) -> GmailToken:
+def _paste_flow(home: Path, account_id: str, handle: AuthHandle, port: int) -> GmailToken:
     print(
         "\nGmail OAuth — paste flow (no local browser available).\n\n"
         "1. Open this URL in any browser, on any device:\n"
@@ -353,13 +359,14 @@ def _paste_flow(home: Path, handle: AuthHandle, port: int) -> GmailToken:
         raise GmailAuthError("OAuth state mismatch — possible CSRF or stale paste")
     return exchange(
         home,
+        account_id,
         code=code,
         code_verifier=handle.code_verifier,
         redirect_uri=handle.redirect_uri,
     )
 
 
-def _refresh(home: Path, token: GmailToken) -> GmailToken:
+def _refresh(home: Path, account_id: str, token: GmailToken) -> GmailToken:
     client_id, client_secret = _client_credentials(home)
     with httpx.Client(timeout=10.0) as client:
         r = client.post(_TOKEN_URL, data={
@@ -378,25 +385,25 @@ def _refresh(home: Path, token: GmailToken) -> GmailToken:
     token.expires_at = time.time() + float(body.get("expires_in", 3600))
     if body.get("refresh_token"):
         token.refresh_token = body["refresh_token"]
-    with _lock(home):
-        _save(home, token)
+    with _lock(home, account_id):
+        _save(home, account_id, token)
     return token
 
 
-def get_access_token(home: Path) -> str:
+def get_access_token(home: Path, account_id: str) -> str:
     """Return a valid access token, refreshing if needed."""
-    with _lock(home):
-        token = _load(home)
+    with _lock(home, account_id):
+        token = _load(home, account_id)
     if token is None:
         raise GmailAuthError(
-            "no Gmail token — run `alpi setup → Gateways → Gmail` first"
+            "no Gmail token — run `alpi setup → Email → Gmail` first"
         )
     if token.needs_refresh():
-        token = _refresh(home, token)
+        token = _refresh(home, account_id, token)
     return token.access_token
 
 
-def get_email(home: Path) -> Optional[str]:
+def get_email(home: Path, account_id: str) -> Optional[str]:
     """Return the email address bound to the stored token, if any."""
-    token = _load(home)
+    token = _load(home, account_id)
     return token.email if token else None

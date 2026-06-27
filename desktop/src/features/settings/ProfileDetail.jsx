@@ -32,7 +32,7 @@ import {
   WorkgroupsField,
 } from "./fields/alp.jsx";
 import {
-  GatewaysCell,
+  EmailCell,
   SchedulesSection,
   SubsystemsCell,
 } from "./fields/services.jsx";
@@ -83,7 +83,7 @@ export default function ProfileDetail({
   const baseline = useMemo(() => initialDraft(profile), [profile]);
   const [draft, setDraft] = useState(baseline);
   const [devicesLoading, setDevicesLoading] = useState(false);
-  const [gatewaysLoading, setGatewaysLoading] = useState(false);
+  const [emailLoading, setEmailLoading] = useState(false);
   const [schedulesLoading, setSchedulesLoading] = useState(false);
   const [modelLoading, setModelLoading] = useState(false);
   const [peersLoading, setPeersLoading] = useState(false);
@@ -187,7 +187,7 @@ export default function ProfileDetail({
     <main className={styles.detail}>
       <RefreshBar
         active={
-          detailLoading || devicesLoading || gatewaysLoading || schedulesLoading
+          detailLoading || devicesLoading || emailLoading || schedulesLoading
           || modelLoading || peersLoading || workgroupsLoading || storageLoading
           || usage.loading
         }
@@ -279,13 +279,6 @@ export default function ProfileDetail({
           {activeConnection?.kind === "local" && <NetworkAddressField />}
           <Row label="subsystems">
             <SubsystemsCell profile={profile} onSaved={onSaved} />
-          </Row>
-          <Row label="gateways">
-            <GatewaysCell
-              profile={profile}
-              connectionId={activeConnection?.id ?? null}
-              onLoadingChange={setGatewaysLoading}
-            />
           </Row>
         </Section>
 
@@ -430,6 +423,16 @@ export default function ProfileDetail({
 
         <Section title="MCP Servers" tooltip="external tool servers">
           <McpField profile={profile} onSaved={onSaved} />
+        </Section>
+
+        <Section title="Email" tooltip="IMAP + Gmail accounts">
+          <Row label="accounts">
+            <EmailCell
+              profile={profile}
+              connectionId={activeConnection?.id ?? null}
+              onLoadingChange={setEmailLoading}
+            />
+          </Row>
         </Section>
 
         <Section title="Storage" tooltip="disk + data usage">

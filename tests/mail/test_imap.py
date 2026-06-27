@@ -124,25 +124,24 @@ def client() -> ImapClient:
 
 
 # --------------------------------------------------------------------
-# from_env
+# from_account
 # --------------------------------------------------------------------
 
 
-def test_from_env_requires_all_four(monkeypatch) -> None:
-    monkeypatch.delenv("IMAP_ADDRESS", raising=False)
-    monkeypatch.delenv("IMAP_PASSWORD", raising=False)
-    monkeypatch.delenv("IMAP_HOST", raising=False)
-    monkeypatch.delenv("SMTP_HOST", raising=False)
+def test_from_account_requires_all_four() -> None:
     with pytest.raises(ImapError, match="missing"):
-        ImapClient.from_env()
+        ImapClient.from_account({"address": "me@x.com"}, password="")
 
 
-def test_from_env_builds_from_env_vars(monkeypatch) -> None:
-    monkeypatch.setenv("IMAP_ADDRESS", "me@example.com")
-    monkeypatch.setenv("IMAP_PASSWORD", "pw")
-    monkeypatch.setenv("IMAP_HOST", "imap.example.com")
-    monkeypatch.setenv("SMTP_HOST", "smtp.example.com")
-    c = ImapClient.from_env()
+def test_from_account_builds_from_config_row() -> None:
+    c = ImapClient.from_account(
+        {
+            "address": "me@example.com",
+            "imap_host": "imap.example.com",
+            "smtp_host": "smtp.example.com",
+        },
+        password="pw",
+    )
     assert c.address == "me@example.com"
     assert c.imap_port == 993
     assert c.smtp_port == 587
@@ -369,11 +368,19 @@ def test_delete_falls_through_trash_candidates(client, fake_imap) -> None:
 
 
 def _isolate_accounts(monkeypatch, tmp_path) -> None:
-    """Strip IMAP env and Gmail token so the tool has no backend."""
-    for var in ("IMAP_ADDRESS", "IMAP_PASSWORD", "IMAP_HOST", "SMTP_HOST"):
-        monkeypatch.delenv(var, raising=False)
+    """Point home at an empty tmp dir so the tool has no backend."""
     import alpi.home as home_mod
     monkeypatch.setattr(home_mod, "_ROOT", tmp_path)
+    monkeypatch.delenv("ALPI_PROFILE", raising=False)
+    monkeypatch.delenv("ALPI_HOME", raising=False)
+
+
+def _seed_imap(tmp_path) -> None:
+    from alpi.mail import accounts as accounts_mod
+    accounts_mod.add_imap(
+        tmp_path, address="me@x.com", password="p",
+        imap_host="i", smtp_host="s",
+    )
 
 
 def test_tool_surfaces_config_error_cleanly(monkeypatch, tmp_path) -> None:
@@ -385,10 +392,7 @@ def test_tool_surfaces_config_error_cleanly(monkeypatch, tmp_path) -> None:
 
 def test_tool_requires_uid_for_read(monkeypatch, tmp_path) -> None:
     _isolate_accounts(monkeypatch, tmp_path)
-    monkeypatch.setenv("IMAP_ADDRESS", "me@x.com")
-    monkeypatch.setenv("IMAP_PASSWORD", "p")
-    monkeypatch.setenv("IMAP_HOST", "i")
-    monkeypatch.setenv("SMTP_HOST", "s")
+    _seed_imap(tmp_path)
     result = Email().run(action="read")  # missing uid
     assert not result.ok
     assert "uid" in result.error
@@ -396,10 +400,7 @@ def test_tool_requires_uid_for_read(monkeypatch, tmp_path) -> None:
 
 def test_tool_unknown_action(monkeypatch, tmp_path) -> None:
     _isolate_accounts(monkeypatch, tmp_path)
-    monkeypatch.setenv("IMAP_ADDRESS", "me@x.com")
-    monkeypatch.setenv("IMAP_PASSWORD", "p")
-    monkeypatch.setenv("IMAP_HOST", "i")
-    monkeypatch.setenv("SMTP_HOST", "s")
+    _seed_imap(tmp_path)
     result = Email().run(action="nuke_everything")
     assert not result.ok
     assert "unknown action" in result.error

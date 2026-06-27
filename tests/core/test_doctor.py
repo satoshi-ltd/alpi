@@ -13,9 +13,7 @@ from alpi import cli, doctor
 @pytest.fixture(autouse=True)
 def _no_live_network(monkeypatch):
     """Default stubs; tests override them when needed."""
-    monkeypatch.setattr(doctor, "_check_telegram_live", lambda env: [])
-    monkeypatch.setattr(doctor, "_check_imap_live", lambda env: [])
-    monkeypatch.setattr(doctor, "_check_gmail_live", lambda home, env: [])
+    monkeypatch.setattr(doctor, "_check_email_live", lambda home: [])
     monkeypatch.setattr(doctor, "_check_mcps_live", lambda cfg: [])
 
 
@@ -78,18 +76,46 @@ def test_workspace_missing_dir_fails(tmp_path: Path) -> None:
 
 
 def test_live_failure_surfaces_in_output(tmp_path: Path, monkeypatch) -> None:
-    """A broken Telegram token should surface as a fail check."""
+    """A broken IMAP login should surface as a fail check."""
     _write_cfg(tmp_path, workspace=str(tmp_path))
     _write_env(tmp_path, OPENROUTER_API_KEY="x")
     monkeypatch.setattr(
-        doctor, "_check_telegram_live",
-        lambda env: [doctor.Check("Gateways", "Telegram", "fail", "getMe: 401 Unauthorized")],
+        doctor, "_check_email_live",
+        lambda home: [doctor.Check("Email", "me@x.com", "fail", "login/SMTP failed: 535 auth")],
     )
     checks = doctor.run_all(tmp_path, "default")
-    tg = next(c for c in checks if c.name == "Telegram")
-    assert tg.status == "fail"
-    assert "401" in tg.detail
+    row = next(c for c in checks if c.name == "me@x.com")
+    assert row.status == "fail"
+    assert "535" in row.detail
     assert doctor.exit_code(checks) == 1
+
+
+def test_email_live_emits_one_check_per_account(tmp_path: Path, monkeypatch) -> None:
+    _write_cfg(tmp_path, workspace=str(tmp_path))
+    _write_env(tmp_path, OPENROUTER_API_KEY="x")
+    from alpi.mail import accounts as accounts_mod
+    accounts_mod.add_imap(
+        tmp_path, address="a@x.com", password="pw",
+        imap_host="imap.x.com", smtp_host="smtp.x.com",
+    )
+    accounts_mod.add_gmail(tmp_path, address="b@gmail.com")
+
+    captured: dict = {}
+
+    def fake_test(self):
+        captured["imap_tested"] = True
+
+    monkeypatch.setattr("alpi.mail.imap.ImapClient.test", fake_test)
+
+    rows = [
+        doctor._check_account_live(tmp_path, r)
+        for r in accounts_mod.list_accounts(tmp_path)
+    ]
+    by_name = {c.name: c for c in rows}
+    assert by_name["a@x.com"].status == "ok"
+    assert captured.get("imap_tested") is True
+    # Gmail account has no token → not authorized (info, not a failure).
+    assert by_name["b@gmail.com"].status == "info"
 
 
 def test_live_ok_keeps_exit_zero(tmp_path: Path, monkeypatch) -> None:
@@ -303,76 +329,6 @@ def test_doctor_skills_warns_on_pinned_but_cold(tmp_path: Path, monkeypatch) -> 
     assert warn is not None
     assert warn.name == "cold-pinned"
     assert "pinned but" in warn.detail
-
-
-def test_doctor_silent_when_all_gateways_healthy(tmp_path: Path, monkeypatch) -> None:
-    """No breaker file → no platform has ever failed → no rows under
-    Gateways from the breaker section. Doctor stays scannable on the
-    happy path."""
-    _write_cfg(tmp_path, workspace=str(tmp_path))
-    _write_env(tmp_path, OPENROUTER_API_KEY="x")
-    from alpi import service
-    monkeypatch.setattr(service, "daemon_installed", lambda: False)
-    monkeypatch.setattr(service, "daemon_running_pid", lambda root: None)
-
-    checks = doctor.run_all(tmp_path, "default")
-    gw_breaker_rows = [
-        c for c in checks
-        if c.group == "Gateways" and c.name in ("telegram", "imap", "gmail", "matrix")
-    ]
-    assert gw_breaker_rows == []
-
-
-def test_doctor_warns_on_disabled_gateway(tmp_path: Path, monkeypatch) -> None:
-    """A platform locked out by the breaker shows up as a warn row with
-    cooldown + last error. exit_code stays 0 (warn != fail) so a broken
-    upstream doesn't break operator scripts."""
-    _write_cfg(tmp_path, workspace=str(tmp_path))
-    _write_env(tmp_path, OPENROUTER_API_KEY="x")
-    from alpi import service
-    from alpi.gateway import breaker as br
-    monkeypatch.setattr(service, "daemon_installed", lambda: False)
-    monkeypatch.setattr(service, "daemon_running_pid", lambda root: None)
-
-    store = br.BreakerStore(tmp_path)
-    for _ in range(br.FAILURE_THRESHOLD):
-        store.record_failure("telegram", "401 Unauthorized", now=1000.0)
-    br._singletons.clear()
-
-    checks = doctor.run_all(tmp_path, "default")
-    tg = next(
-        (c for c in checks if c.group == "Gateways" and c.name == "telegram"),
-        None,
-    )
-    assert tg is not None
-    assert tg.status == "warn"
-    assert "disabled" in tg.detail
-    assert "401" in tg.detail
-    assert doctor.exit_code(checks) == 0
-
-
-def test_doctor_warns_on_degraded_gateway(tmp_path: Path, monkeypatch) -> None:
-    _write_cfg(tmp_path, workspace=str(tmp_path))
-    _write_env(tmp_path, OPENROUTER_API_KEY="x")
-    from alpi import service
-    from alpi.gateway import breaker as br
-    monkeypatch.setattr(service, "daemon_installed", lambda: False)
-    monkeypatch.setattr(service, "daemon_running_pid", lambda root: None)
-
-    store = br.BreakerStore(tmp_path)
-    store.record_failure("imap", "timeout", now=1000.0)
-    store.record_failure("imap", "timeout", now=1001.0)
-    br._singletons.clear()
-
-    checks = doctor.run_all(tmp_path, "default")
-    row = next(
-        (c for c in checks if c.group == "Gateways" and c.name == "imap"),
-        None,
-    )
-    assert row is not None
-    assert row.status == "warn"
-    assert "2 consecutive failures" in row.detail
-    assert "timeout" in row.detail
 
 
 def test_storage_check_silent_when_under_thresholds(tmp_path: Path, monkeypatch) -> None:

@@ -406,7 +406,7 @@
       <div class="cell">
         <span class="n">// operations</span>
         <h3>Small surface. Real upkeep.</h3>
-        <p>One setup wizard, live doctor checks, launchd/systemd services, merged logs, approval audit, schedule daemon, and gateway daemon. Per-profile daily spend cap (USD or tokens) keeps a runaway agent from quietly burning your API budget.</p>
+        <p>One setup wizard, live doctor checks, launchd/systemd services, merged logs, approval audit, and a per-machine daemon supervising the scheduler, ALP, and host plane. Per-profile daily spend cap (USD or tokens) keeps a runaway agent from quietly burning your API budget.</p>
         <span class="tag">day-2 ready</span>
       </div>
     </div>
@@ -469,7 +469,7 @@
     <div class="eyebrow">03 / quickstart</div>
     <h2>Ten minutes, end to end.</h2>
     <p class="sub">
-      Install. Pick a model. Pin a workspace. Send a message. Connect a gateway if you want 24/7 messaging. Add a profile if you want isolation. Link machines or workgroups over ALP when you want a private network. All of it lives behind <span class="mono" style="color:var(--fg)">alpi setup</span>.
+      Install. Pick a model. Pin a workspace. Send a message. Give it an email account if you want it working your inbox. Add a profile if you want isolation. Link machines or workgroups over ALP when you want a private network. All of it lives behind <span class="mono" style="color:var(--fg)">alpi setup</span>.
     </p>
 
     <div class="grid c3" style="margin-top:64px">
@@ -500,8 +500,8 @@
       </div>
       <div class="cell">
         <span class="n">step · 06</span>
-        <h3>Optional: connect a gateway.</h3>
-        <p>Skip unless you want 24/7 reach through Telegram / IMAP / Gmail. <span class="mono" style="color:var(--fg)">alpi setup → Gateways</span> then <span class="mono" style="color:var(--fg)">Service → Install</span>. The same service also hosts the scheduler and ALP listener. Compatibility bridge, not the primary surface.</p>
+        <h3>Optional: work over email.</h3>
+        <p>Want alpi reading, sending, and replying to mail on your behalf? <span class="mono" style="color:var(--fg)">alpi setup → Email</span> to add an IMAP account or connect Gmail. It's an on-demand tool the agent uses in a chat or a scheduled job — not an inbound channel, nothing listens or auto-replies.</p>
       </div>
       <div class="cell">
         <span class="n">step · 07</span>
@@ -516,7 +516,7 @@
       <div class="cell">
         <span class="n">step · 09</span>
         <h3>Check health.</h3>
-        <p><span class="mono" style="color:var(--fg)">alpi doctor</span>. Live checks: model reachable, gateways logged in, MCP handshaking, services alive, ALP socket listening, peers reachable. Exits 1 on any failure — cron-friendly.</p>
+        <p><span class="mono" style="color:var(--fg)">alpi doctor</span>. Live checks: model reachable, email accounts reachable, MCP handshaking, services alive, ALP socket listening, peers reachable. Exits 1 on any failure — cron-friendly.</p>
       </div>
     </div>
   </div>
@@ -606,7 +606,7 @@
       <div class="cell" style="padding:36px">
         <span class="n">topology · 01</span>
         <h3>Laptop only.</h3>
-        <p>One profile, one machine, terminal or desktop app on top of a local daemon. Zero ALP. Add a gateway later if you want 24/7 messenger reach. The baseline — 90% of individual users stop here.</p>
+        <p>One profile, one machine, terminal or desktop app on top of a local daemon. Zero ALP. For always-on reach, move the daemon to a machine that never sleeps and connect the apps over Tailscale. The baseline — 90% of individual users stop here.</p>
       </div>
       <div class="cell" style="padding:36px">
         <span class="n">topology · 02</span>

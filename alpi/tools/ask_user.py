@@ -2,8 +2,8 @@
 
 Use when the next step depends on a discrete choice the user must make
 between 2-4 realistic options. Owned clients (desktop / mobile) render
-native choice UI; the TUI prompts inline; gateways receive a numbered
-text block in the next agent reply.
+native choice UI; the TUI prompts inline; headless/scheduled runs get a
+graceful fallback string.
 """
 
 from __future__ import annotations
@@ -15,16 +15,7 @@ from alpi.tools import _clarification
 from alpi.tools.base import Tool, ToolResult
 
 
-_GATEWAY_PLATFORMS = frozenset({
-    "telegram",
-    "matrix",
-    "email",
-    "imap",
-    "gmail",
-    "webhook",
-})
-
-# Scheduled / unattended platforms have no live user and no paired client; the tool must NOT reach the handler (would block on stdin / wait 5 min for nobody) and must NOT emit a gateway-style numbered block (there's no inbound channel for the user to answer through).
+# Scheduled / unattended platforms have no live user and no paired client; the tool must NOT reach the handler (would block on stdin / wait 5 min for nobody) and returns a graceful fallback instead.
 _HEADLESS_PLATFORMS = frozenset({"cron"})
 
 _MIN_CHOICES = 2
@@ -34,10 +25,6 @@ _MAX_CHOICES_MULTI = 8
 
 def _platform() -> str:
     return (os.environ.get("ALPI_PLATFORM") or "").strip().lower()
-
-
-def _is_gateway() -> bool:
-    return _platform() in _GATEWAY_PLATFORMS
 
 
 def _is_headless() -> bool:
@@ -71,41 +58,12 @@ def _normalize_choices(
     return out, None
 
 
-def _render_numbered(
-    question: str,
-    choices: list[dict[str, str]],
-    allow_other: bool,
-    multi: bool,
-) -> str:
-    lines = ["Ask the user:", "", question.strip(), ""]
-    for i, c in enumerate(choices, start=1):
-        if c.get("description"):
-            lines.append(f"{i}. {c['label']} — {c['description']}")
-        else:
-            lines.append(f"{i}. {c['label']}")
-    if allow_other and not multi:
-        lines.append(f"{len(choices) + 1}. Other (the user can answer freely)")
-    lines.append("")
-    if multi:
-        lines.append(
-            "Multiple choices are valid — the user may reply with several "
-            "labels separated by commas."
-        )
-    else:
-        lines.append(
-            "Relay this list in your reply; the user will answer in their "
-            "next message."
-        )
-    return "\n".join(lines)
-
-
 class AskUser(Tool):
     name = "ask_user"
     description = (
         "Ask the user to pick from a small set of discrete choices "
         "(2-4 for single-select, 2-8 for ``multi=True``). Desktop and "
-        "mobile render native buttons; the TUI prompts inline; gateways "
-        "fall back to a numbered list in your next reply.\n"
+        "mobile render native buttons; the TUI prompts inline.\n"
         "\n"
         "Use when:\n"
         " - the next step depends on a real preference (which account, "
@@ -156,7 +114,7 @@ class AskUser(Tool):
             "multi": {
                 "type": "boolean",
                 "default": False,
-                "description": "Allow the user to pick more than one option. Owned clients render checkboxes + an explicit Continue button; gateways still get a numbered list and may reply with several labels separated by commas. When True, ``allow_other`` is treated as False. The tool returns the chosen labels joined by ``\", \"`` in the order the user picked.",
+                "description": "Allow the user to pick more than one option. Owned clients render checkboxes + an explicit Continue button. When True, ``allow_other`` is treated as False. The tool returns the chosen labels joined by ``\", \"`` in the order the user picked.",
             },
         },
         "required": ["question", "choices"],
@@ -187,11 +145,6 @@ class AskUser(Tool):
                     f"{_platform()!r}). Continue with a safe default or "
                     "report that user input is required."
                 ),
-            )
-        if _is_gateway():
-            return ToolResult(
-                ok=True,
-                output=_render_numbered(q, normalised, allow_other_bool, multi_bool),
             )
         handler = _clarification.get_handler()
         if handler is None:

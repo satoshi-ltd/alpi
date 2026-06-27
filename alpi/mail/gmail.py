@@ -47,17 +47,14 @@ _SYSTEM_LABELS = {
 class GmailClient:
     """Mirrors ``ImapClient``'s surface against the Gmail REST API."""
 
-    def __init__(self, home: Path) -> None:
+    def __init__(self, home: Path, account_id: str) -> None:
         self.home = home
+        self.account_id = account_id
         self._label_cache: dict[str, str] | None = None
-
-    @classmethod
-    def from_home(cls, home: Path) -> "GmailClient":
-        return cls(home)
 
     def _token(self) -> str:
         try:
-            return get_access_token(self.home)
+            return get_access_token(self.home, self.account_id)
         except GmailAuthError as e:
             raise GmailError(str(e)) from None
 
@@ -276,7 +273,7 @@ def _check(r: httpx.Response) -> dict:
     if r.status_code == 401:
         raise GmailError(
             "unauthorized — the stored token may be revoked. "
-            "Run `alpi setup → Gateways → Gmail` to re-authorize."
+            "Run `alpi setup → Email → Gmail` to re-authorize."
         )
     if r.status_code >= 400:
         try:

@@ -200,15 +200,15 @@ async def test_session_choice_persists_for_repeat_caution_pattern(short_tmp: Pat
 
 
 @pytest.mark.asyncio
-async def test_always_choice_writes_pattern_to_config_allowlist(short_tmp: Path) -> None:
+async def test_always_choice_writes_pattern_to_config_allowlist(short_tmp: Path, monkeypatch) -> None:
     home = short_tmp / "h"
     home.mkdir()
     load_or_generate(home)
     srv = await _make_server(home)
 
-    # _persist_always reads from alpi.home.get_home() — point it at the test home.
+    # _persist_always reads from alpi.home.get_home() — point it at the test home (restored after the test, or it leaks _ROOT into later modules).
     from alpi import home as home_mod
-    home_mod._ROOT = home
+    monkeypatch.setattr(home_mod, "_ROOT", home)
 
     try:
         reader, writer = await _subscribe(srv, kinds=["approval.request"])

@@ -25,7 +25,7 @@
 | Web/browser | `web_search`, `web_fetch`, `web_extract`, `browser`, `research` | Web information; `research` is read-only sub-agent work. |
 | Memory | `memory`, `todo` | Durable profile memory and per-turn task tracking. |
 | Skills/state | `skill`, `db` | Create/run reusable skills; skill-local SQLite state. |
-| Communication | `notify`, `send_message`, `email`, `schedule`, `peer`, `workgroup`, `ask_user` | Push to the owner's apps, send to third parties, schedules, ALP peers/workgroups, clarification UI. |
+| Communication | `notify`, `email`, `schedule`, `peer`, `workgroup`, `ask_user` | Push to the owner's apps, reach third parties by email, schedules, ALP peers/workgroups, clarification UI. |
 | Media | `read_image`, `tts`, `stt` | Vision, speech synthesis, speech transcription. |
 | Delegation | `delegate` | Write-capable focused sub-agent. |
 | Self-knowledge | `alpi_knowledge` | Packaged docs about alpi. |
@@ -61,14 +61,16 @@ model actually sees.
   call `notify`; don't just answer in text. Only skip it when you'd be firing it
   purely to duplicate an answer the user is already reading and never asked to
   be pushed.
-- **Reach a third party**: use `send_message(text, channel, chat_id?, attachment?)`
-  to deliver through a gateway (Telegram, email, matrix, webhook) to someone
-  other than the owner. `channel` is required and names the gateway. Sending to
-  a gateway is NOT notifying the owner, and it has no `type` axis — gateway
-  messages carry no badge. To reach the owner, use `notify`.
+- **Reach a third party**: use the `email` tool
+  (`list/search/read/send/reply/forward/move/delete`) over IMAP/Gmail to send
+  to someone other than the owner. Email is on-demand only — nothing polls the
+  inbox. A profile can hold N accounts (any mix of IMAP and Gmail); the
+  `account` param picks one by address or id (defaults to the only account when
+  there is one). Sending email is NOT notifying the owner, and it has no `type`
+  axis. To reach the owner, use `notify`.
 - **Scheduled delivery**: a job pushes to the owner's apps when `notify: true`
-  (default silent). To also reach a third party, the job's prompt calls
-  `send_message` explicitly — it is an action, not a schedule field.
+  (default silent). To also reach a third party, the job's prompt calls the
+  `email` tool explicitly — it is an action, not a schedule field.
 
 ## Attachments
 

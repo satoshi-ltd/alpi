@@ -28,7 +28,6 @@ BLOCKED_FOR_DELEGATE: frozenset[str] = frozenset({
     "memory",
     "schedule",
     "notify",
-    "send_message",
     "skill",
     "session_search",
     "session_read",
@@ -95,7 +94,7 @@ class Delegate(Tool):
         "Default: ['file', 'web'].\n"
         "\n"
         "The sub-agent CANNOT call: delegate (no recursion), memory, "
-        "skill, schedule, send_message, email, session_search, session_read.\n"
+        "skill, schedule, email, session_search, session_read.\n"
         "\n"
         "IMPORTANT: the sub-agent knows nothing about your conversation. "
         "Pass every relevant fact (file paths, error messages, decisions, "

@@ -11,6 +11,23 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.4.0 — 2026-06-26 — Gateways are now Email
+
+_Requires alpi v0.10.0+._
+
+- **Email is its own settings section, below MCP Servers.** Add IMAP and Gmail
+  accounts directly — pick the type, fill the form, save. There's no separate
+  "Gateways" panel anymore.
+- **Each account is a pill labelled by its address.** Click one to edit it,
+  test the connection, or remove it; the editor header shows whether the account
+  is currently reachable.
+- **Chat gateways are gone.** Telegram and Matrix have been removed — alpi
+  v0.10 dropped the chat-app integrations entirely.
+- **The per-profile "gateway" subsystem toggle is gone.** The daemon no longer
+  runs a gateway subsystem, so there's nothing left to switch on or off.
+- **Gmail still uses OAuth** — authorize when adding an account; edit its client
+  id/secret later without re-authorizing.
+
 ## v0.3.87 — 2026-06-26 — chat: a busy chat tells you, instead of cancelling
 
 _Requires alpi v0.9.35+._

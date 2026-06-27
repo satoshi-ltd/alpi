@@ -318,7 +318,7 @@ def run_job(job: dict, home: Path) -> JobOutcome:
             "job is silent — `schedule.done` is activity history, not an "
             "interrupt. To alert the user, call `notify(text=…, title=…)` "
             "explicitly (native push to their apps). To reach a third "
-            "party, use `send_message`. If there is nothing to report, "
+            "party, use the `email` tool. If there is nothing to report, "
             "finish with an empty reply.]"
         )
     wrapped = wrap_header + "\n\n" + prompt
@@ -381,7 +381,7 @@ def run_job(job: dict, home: Path) -> JobOutcome:
 def _parse_events(stdout: str) -> ParsedEvents:
     notified_natively = False
     reply = ""
-    pending: dict[str, list[dict]] = {"send_message": [], "notify": []}
+    pending: dict[str, list[dict]] = {"notify": []}
     agent_messages: list[dict] = []
     for line in stdout.splitlines():
         line = line.strip()
@@ -393,16 +393,14 @@ def _parse_events(stdout: str) -> ParsedEvents:
             continue
         kind = ev.get("kind")
         name = ev.get("name")
-        if kind == "tool_start" and name in ("send_message", "notify"):
+        if kind == "tool_start" and name == "notify":
             args = ev.get("args")
             pending[name].append(args if isinstance(args, dict) else {})
-        elif kind == "tool_end" and name in ("send_message", "notify"):
+        elif kind == "tool_end" and name == "notify":
             args = pending[name].pop(0) if pending[name] else {}
             if ev.get("ok") is True:
-                if name == "notify":
-                    args = {**args, "channel": "alpi"}  # notify is always the native channel
-                if str(args.get("channel") or "alpi").strip().lower() in ("alpi", "both"):
-                    notified_natively = True
+                args = {**args, "channel": "alpi"}  # notify is always the native channel
+                notified_natively = True
                 agent_messages.append(args)
         elif kind == "reply":
             reply = (ev.get("text") or "").strip()
@@ -417,7 +415,7 @@ def _emit_agent_messages(home: Path, messages: list[dict]) -> None:
     except Exception:  # noqa: BLE001
         return
     for args in messages:
-        outputs_mod.record_child_send_message(home, args)
+        outputs_mod.record_child_native_message(home, args)
 
 
 # Tick + main loop

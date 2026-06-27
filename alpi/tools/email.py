@@ -5,48 +5,41 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from alpi.home import effective_profile_env, get_home
-from alpi.mail.gmail import GmailClient, GmailError
-from alpi.mail.gmail_auth import token_path
-from alpi.mail.imap import ImapClient, ImapError, EmailMessageFull
+from alpi.home import get_home
+from alpi.mail import accounts as accounts_mod
+from alpi.mail.gmail import GmailError
+from alpi.mail.imap import ImapError, EmailMessageFull
 from alpi.tools._paths import resolve_path
 from alpi.tools.base import Tool, ToolResult
 
 
 def _available_accounts() -> list[str]:
-    accounts = []
     home = get_home()
-    # Use the profile's .env, not os.environ — under the daemon two profiles can have independent IMAP credentials and we must not surface one's account in the other's tool listing.
-    env = effective_profile_env(home)
-    if env.get("IMAP_ADDRESS"):
-        accounts.append("imap")
-    if token_path(home).exists():
-        accounts.append("gmail")
-    return accounts
+    return [r["id"] for r in accounts_mod.list_accounts(home) if r["configured"]]
 
 
 def _resolve_client(account: str = ""):
-    available = _available_accounts()
+    home = get_home()
+    rows = {r["id"]: r for r in accounts_mod.list_accounts(home)}
+    available = [aid for aid, r in rows.items() if r["configured"]]
     if account:
-        if account not in available:
+        target = account if account in rows else accounts_mod.slug(account)
+        if target not in available:
             return None, (
                 f"account {account!r} not configured. "
-                f"Available: {available or 'none'}"
+                f"Configured: {available or 'none'}"
             )
-        target = account
     elif len(available) == 1:
         target = available[0]
     elif not available:
-        return None, "no email account configured — run `alpi setup → Gateways`"
+        return None, "no email account configured — run `alpi setup → Email`"
     else:
         return None, (
             f"multiple accounts configured ({available}). "
-            "Pass `account` ('imap' or 'gmail')."
+            "Pass `account` (an address or id)."
         )
     try:
-        if target == "imap":
-            return ImapClient.from_env_map(effective_profile_env(get_home())), None
-        return GmailClient(get_home()), None
+        return accounts_mod.client_for(home, target), None
     except (ImapError, GmailError) as e:
         return None, str(e)
 
@@ -57,8 +50,12 @@ class Email(Tool):
         "Read, search, send, or move email. Use when the user asks to "
         "check their inbox, send a message by mail, or act on a specific "
         "message (reply, forward, archive, delete). Works against IMAP "
-        "or Gmail API; pick which with `account` when both are "
-        "configured.\n"
+        "or Gmail API; pick which configured account with `account` "
+        "(an address or id) when more than one is configured.\n"
+        "\n"
+        "On-demand only: this runs when you call it — nothing polls the "
+        "inbox and no mail arrives on its own. It is an explicit tool "
+        "action, not an inbound listener; never wait for incoming mail.\n"
         "\n"
         "Actions: list, search, read, send, reply, forward, move, delete, "
         "download_attachment.\n"
@@ -85,10 +82,10 @@ class Email(Tool):
             },
             "account": {
                 "type": "string",
-                "enum": ["imap", "gmail"],
                 "description": (
-                    "Which mailbox backend. Auto-detected when only one is "
-                    "configured; required when both are."
+                    "Which configured account, by email address or id. "
+                    "Auto-detected when only one is configured; required "
+                    "when more than one is."
                 ),
             },
             # Read-side

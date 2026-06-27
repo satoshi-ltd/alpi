@@ -211,13 +211,11 @@ def compute(home: Path, since: datetime) -> dict[str, Any]:
     """Profile-state report; side-effect free; skips malformed files silently."""
     cutoff = since.timestamp()
     sessions_local = _scan_sessions(home / "sessions", cutoff)
-    sessions_gw = _scan_sessions(home / "gateway" / "sessions", cutoff)
     return {
         "since": since.astimezone(timezone.utc).isoformat(timespec="seconds"),
         "now": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "memory": _scan_memory(home, cutoff),
         "sessions": _facts_dict(sessions_local),
-        "gateway_sessions": _facts_dict(sessions_gw),
         "mentions": _scan_mentions(home, cutoff),
         "skills": _scan_skills(home, cutoff),
         "peers": _scan_peers(home, cutoff),
@@ -298,20 +296,6 @@ def render(report: dict[str, Any], *, profile: str) -> str:
         )
         lines.append(f"  last activity  {_fmt_relative(s['last_at'])}")
     lines.append("")
-
-    g = report["gateway_sessions"]
-    if g["count"] > 0:
-        lines.append("sessions (gateway)")
-        lines.append(
-            f"  {g['count']} sessions  {g['turns']} turns  "
-            f"{g['tool_calls']} tool calls"
-        )
-        lines.append(
-            f"  {_fmt_duration(g['elapsed_s'])} of agent time  "
-            f"${g['cost_usd']:.4f} / {g['tokens']} tokens"
-        )
-        lines.append(f"  last activity  {_fmt_relative(g['last_at'])}")
-        lines.append("")
 
     m = report["mentions"]
     if m["files"]:

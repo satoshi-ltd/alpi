@@ -22,7 +22,7 @@ def short_tmp():
 
 
 @pytest.mark.asyncio
-async def test_gateway_probe_unknown_name(short_tmp: Path, monkeypatch) -> None:
+async def test_email_probe_unknown_id(short_tmp: Path, monkeypatch) -> None:
     home = short_tmp / "h"
     home.mkdir()
     from alpi import home as home_mod
@@ -33,29 +33,30 @@ async def test_gateway_probe_unknown_name(short_tmp: Path, monkeypatch) -> None:
     probes.register(srv)
     resp = await srv._dispatch({
         "id": "r",
-        "method": "host.gateway.probe",
-        "params": {"profile": "default", "name": "foo"},
+        "method": "host.email.probe",
+        "params": {"profile": "default", "id": "nobody_x_com"},
     })
     assert resp["error"]["code"] == -32602
 
 
 @pytest.mark.asyncio
-async def test_gateway_probe_off_when_unconfigured(short_tmp: Path, monkeypatch) -> None:
+async def test_email_probe_off_when_token_missing(short_tmp: Path, monkeypatch) -> None:
     home = short_tmp / "h"
     home.mkdir()
     from alpi import home as home_mod
     monkeypatch.setattr(home_mod, "_ROOT", short_tmp)
     monkeypatch.setattr(home_mod, "home_for", lambda profile: home)
+    from alpi.mail import accounts as accounts_mod
+    gmail_id = accounts_mod.add_gmail(home, address="me@gmail.com")
 
     srv = host_server.Server(home=home)
     probes.register(srv)
-    for name in ("telegram", "imap", "gmail", "matrix"):
-        resp = await srv._dispatch({
-            "id": "r",
-            "method": "host.gateway.probe",
-            "params": {"profile": "default", "name": name},
-        })
-        assert resp["result"]["status"] == "off", (name, resp)
+    resp = await srv._dispatch({
+        "id": "r",
+        "method": "host.email.probe",
+        "params": {"profile": "default", "id": gmail_id},
+    })
+    assert resp["result"]["status"] == "off", resp
 
 
 @pytest.mark.asyncio

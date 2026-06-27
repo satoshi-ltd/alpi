@@ -38,7 +38,7 @@ The first `alpi setup` auto-installs the alpi daemon — one launchd
 plist on macOS (`com.alpi.daemon`), one systemd-user unit on Linux
 (`alpi-daemon.service`) — and starts it. The daemon supervises
 every profile under `~/.alpi/`, so a single install gets you
-24/7 messaging + cron + ALP listener for every profile you create.
+24/7 cron + ALP listener for every profile you create.
 Manage it later with `alpi daemon {status,restart,uninstall}` or
 from `alpi setup → Services → Daemon`.
 
@@ -146,5 +146,5 @@ uv run alpi
   system libraries Playwright needs:
   `uvx --from playwright playwright install-deps chromium`.
 - `alpi doctor` red lights — run it; the output names the missing
-  piece (model, workspace, gateway env, etc.) and tells you which
+  piece (model, workspace, email credentials, etc.) and tells you which
   wizard step fixes it.

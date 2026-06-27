@@ -6,8 +6,8 @@
 desktop, mobile). Write for **quality, not validity** — the daemon
 normalizes the content to the allowed subset on the way in, so you never
 have to police format. A notification is read once in a narrow column:
-make it scannable, not a wall of text. To message a third party use
-`send_message` (a gateway), not `notify`.
+make it scannable, not a wall of text. To reach a third party use the
+`email` tool, not `notify`.
 
 ## When to call
 
@@ -63,5 +63,5 @@ under each, and 🔴🟡🟢 to flag status.
 
 ## Related topics
 
-- tools — the full tool surface (notify, send_message, outputs)
+- tools — the full tool surface (notify, email, outputs)
 - profiles — where outputs/notifications are stored per profile

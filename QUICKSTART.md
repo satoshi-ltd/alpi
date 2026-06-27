@@ -2,7 +2,7 @@
 
 First-day walkthrough. Takes about 10 minutes end-to-end and leaves
 you with a working alpi — model selected, workspace pinned, first
-session running, and `alpi doctor` green. Profiles, gateways, apps,
+session running, and `alpi doctor` green. Profiles, email, apps,
 and ALP come next.
 
 For concepts behind any step, see [ARCHITECTURE.md](docs/ARCHITECTURE.md).
@@ -90,34 +90,30 @@ default behaviour without typing `-c` every time, enable
 `tui.auto_resume` in `~/.alpi/config.yaml` (or set it via
 `alpi setup`).
 
-## 6. Optional: connect a gateway
+## 6. Optional: let your agent work over email
 
-If you want alpi to answer you on Telegram / IMAP / Gmail / Matrix, run the
-wizard again:
-
-```bash
-alpi setup → Gateways
-```
-
-Pick the channel, follow the prompts, then make sure the unified
-daemon is running so alpi answers 24/7:
+If you want alpi to read, search, send, and reply to mail on your
+behalf — during a chat or a scheduled job — give it an email account:
 
 ```bash
-alpi daemon status
-alpi daemon start
+alpi setup → Email
 ```
 
-Gateways are compatibility bridges for 24/7 reach. The primary
-surfaces are the terminal, desktop app, and mobile app talking to
-the daemon directly. The single `alpi daemon` process supervises
-every profile on the machine and hosts gateways, scheduler ticks,
-ALP listeners, workgroup pollers, and the host plane.
+Add an IMAP account (host, port, credentials) or connect Gmail via
+OAuth, then ask alpi to triage your inbox or draft a reply. Email is
+an on-demand tool the agent uses, not an inbound channel: the daemon
+never listens for incoming messages, and nothing answers automatically.
+
+You reach alpi itself through its first-party surfaces — the terminal,
+desktop app, and mobile app talking to the per-machine daemon. The
+single `alpi daemon` process supervises every profile and hosts the
+scheduler, ALP listeners, workgroups, and the host plane.
 
 ## 7. Add a second profile (optional)
 
 If you want a work profile that's completely isolated from your
 personal one (different API keys, different memory, different
-Telegram bot):
+email account):
 
 ```bash
 alpi profile create work
@@ -149,7 +145,7 @@ See [docs/DEPLOYMENTS.md](docs/DEPLOYMENTS.md) for topologies
 alpi doctor
 ```
 
-Runs live checks: model reachable, gateways logged in, MCP servers
+Runs live checks: model reachable, email accounts reachable, MCP servers
 handshaking, services alive, ALP socket listening, peers reachable.
 Green = you're done.
 

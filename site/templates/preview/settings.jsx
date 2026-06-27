@@ -237,15 +237,15 @@ function ProfileDetail({ id, state, ui }) {
   const peerCount = peers.length;
   const onlineCount = peers.filter(pe => pe.status === 'connected').length;
 
-  // Stateful subsystems & gateways — 3 states: 'on' (working) · 'err' (error) · 'off' (disabled)
-  const [subsState, setSubsState] = useStateS({ gateway: 'on', schedule: 'on', alp: 'on', workgroups: 'err' });
-  const [gatewaysState, setGatewaysState] = useStateS({ telegram: 'on', imap: 'off', gmail: 'off', matrix: 'off' });
+  // Stateful subsystems & email accounts — 3 states: 'on' (working) · 'err' (error) · 'off' (disabled)
+  const [subsState, setSubsState] = useStateS({ schedule: 'on', alp: 'on', workgroups: 'err' });
+  const [emailState, setEmailState] = useStateS({ imap: 'off', gmail: 'off' });
   const cycle = (v) => v === 'on' ? 'off' : v === 'off' ? 'on' : 'on'; // err → on on click (acknowledge)
   const toggleSub = (k) => setSubsState(s => ({ ...s, [k]: cycle(s[k]) }));
-  const toggleGw  = (k) => setGatewaysState(s => ({ ...s, [k]: cycle(s[k]) }));
+  const toggleEmail = (k) => setEmailState(s => ({ ...s, [k]: cycle(s[k]) }));
 
-  const subs = ['gateway', 'schedule', 'alp', 'workgroups'];
-  const gateways = ['telegram', 'imap', 'gmail', 'matrix'];
+  const subs = ['schedule', 'alp', 'workgroups'];
+  const emailAccounts = ['imap', 'gmail'];
 
   const schedule = SCHEDULE_BY_PROFILE[id] || [
     { id: '2160CDE6', cron: 'cron 30 6 * * *', desc: "Use the `good-morning` skill to generate today's scheduled morning greeting…", on: true },
@@ -339,13 +339,13 @@ function ProfileDetail({ id, state, ui }) {
               ))}
             </div>
           </Field>
-          <Field label="Gateways">
+          <Field label="Email">
             <div className="row row-gap" style={{ gap: 6, flexWrap: 'wrap' }}>
-              {gateways.map(g => (
+              {emailAccounts.map(g => (
                 <button
                   key={g}
-                  onClick={() => toggleGw(g)}
-                  className={'pill is-' + gatewaysState[g]}
+                  onClick={() => toggleEmail(g)}
+                  className={'pill is-' + emailState[g]}
                   style={{ cursor: 'pointer' }}
                 >● {g}</button>
               ))}

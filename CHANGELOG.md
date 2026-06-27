@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.10.0 — 2026-06-26 — email is a tool now; chat-app gateways retired
+
+- **Telegram and Matrix gateways are removed.** The desktop, mobile, and terminal apps already do far more, and bridging third-party chat apps meant extra attack surface and upkeep for little gain. alpi no longer listens on any chat platform.
+- **Email becomes an on-demand integration.** Instead of a poller that watches your inbox and auto-replies, the agent reads, searches, sends, and replies to mail (IMAP / Gmail) when a conversation or a scheduled job needs it. Configure an account under `alpi setup → Email`.
+- **Add as many email accounts as you want** — any mix of IMAP and Gmail — instead of one of each.
+- **"Gateways" is now "Email" everywhere** — `alpi email` on the CLI and an Email panel in the apps.
+- **Smaller footprint:** a chunk of listener and bridge code is gone, along with the `matrix-nio` dependency.
+
 ## v0.9.35 — 2026-06-26 — a working chat isn't killed by your next message
 
 - **A turn that's still working is no longer cancelled when you send another message in

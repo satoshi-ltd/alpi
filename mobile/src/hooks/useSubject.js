@@ -22,7 +22,6 @@ export function useProfile(name) {
     [summaries.data, name],
   );
 
-  // host.profile.summaries is the hot path (inbox poll) — it intentionally omits peers / models / mcps / provider_keys / sandbox / voice. Settings screens need those, so fetch the heavy companion once per profile screen and refresh only when config/peers/gateway events fire for this profile.
   useEffect(() => {
     if (!name) return undefined;
     let cancelled = false;
@@ -38,7 +37,7 @@ export function useProfile(name) {
       .then((d) => setDetail(d || null))
       .catch(() => { /* */ });
   }, 300);
-  useEventEffect(['config_changed', 'gateway_changed', 'peers_changed'], (ev) => {
+  useEventEffect(['config_changed', 'email_changed', 'peers_changed'], (ev) => {
     if (!name) return;  // global events shouldn't fire a host.profile.detail("") roundtrip
     if (ev?.data?.profile && ev.data.profile !== name) return;
     refetchDetail();

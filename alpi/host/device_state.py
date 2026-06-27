@@ -24,31 +24,6 @@ KNOWN_PROVIDER_KEYS = (
     "OPENROUTER_API_KEY",
     "GEMINI_API_KEY",
 )
-GATEWAY_ENV_KEYS = {
-    "telegram": (("TELEGRAM_BOT_TOKEN", True), ("TELEGRAM_ALLOWED_CHAT_IDS", False)),
-    "imap": (
-        ("IMAP_ADDRESS", False),
-        ("IMAP_PASSWORD", True),
-        ("IMAP_HOST", False),
-        ("IMAP_PORT", False),
-        ("SMTP_HOST", False),
-        ("SMTP_PORT", False),
-        ("IMAP_ALLOWED_SENDERS", False),
-    ),
-    "gmail": (
-        ("GMAIL_CLIENT_ID", False),
-        ("GMAIL_CLIENT_SECRET", True),
-        ("GMAIL_ALLOWED_SENDERS", False),
-    ),
-    "matrix": (
-        ("MATRIX_HOMESERVER_URL", False),
-        ("MATRIX_USER_ID", False),
-        ("MATRIX_ACCESS_TOKEN", True),
-        ("MATRIX_DEVICE_ID", False),
-        ("MATRIX_ALLOWED_ROOMS", False),
-        ("MATRIX_ALLOWED_SENDERS", False),
-    ),
-}
 
 
 def register(server: host_server.Server) -> None:
@@ -60,8 +35,8 @@ def register(server: host_server.Server) -> None:
     server.register("host.profile.storage", _profile_storage)
     server.register("host.config.set_field", _config_set_field)
     server.register("host.config.unset_field", _config_unset_field)
-    server.register("host.gateway.status", _gateway_status)
-    server.register("host.gateway.config", _gateway_config)
+    server.register("host.email.status", _email_status)
+    server.register("host.email.config", _email_config)
     server.register("host.skills.list", _skills_list)
     server.register("host.skill.read", _skill_read)
     server.register("host.skill.file", _skill_file)
@@ -169,7 +144,7 @@ async def _profile_summaries(
 async def _profile_detail(
     params: dict[str, Any], _server: host_server.Server,
 ) -> dict[str, Any]:
-    """Heavy companion to ``host.profile.summaries`` — peers, mcps, models, provider keys, sandbox/voice. Called lazily by settings/profile/gateways screens; never by inbox polls."""
+    """Heavy companion to ``host.profile.summaries`` — peers, mcps, models, provider keys, sandbox/voice. Called lazily by settings/profile/email screens; never by inbox polls."""
     profile = str((params or {}).get("profile") or "")
     home = _resolve_home(profile)
     if not home.exists():
@@ -195,7 +170,6 @@ def _profile_summary(row: dict[str, Any]) -> dict[str, Any]:
         "bio": cfg.public_bio or None,
         "paused": cfg.paused,
         "subsystems": {
-            "gateway": cfg.service.get("gateway", True) is not False,
             "schedule": cfg.service.get("schedule", True) is not False,
             "alp": cfg.service.get("alp", True) is not False,
             "workgroups": cfg.service.get("workgroups", True) is not False,
@@ -242,6 +216,7 @@ def _profile_detail_payload(home: Path) -> dict[str, Any]:
 
 
 # Sensitive content `read_file` must never expose, no matter the caller's role. Component-based so nested directories (skills/foo/secrets/, alp/secrets/, workspace/.env) are caught — top-level prefix matching wasn't enough.
+# Keeps denying legacy `gateway/` state (telegram tokens, etc.) on profiles upgraded from 0.9, even though 0.10 no longer writes there.
 _TOP_LEVEL_DENY = frozenset({"host", "gateway", "cache"})
 _DENIED_COMPONENT = "secrets"
 _DENIED_BASENAME_PREFIX = ".env"
@@ -321,7 +296,6 @@ def _storage_rows(home: Path) -> list[dict[str, Any]]:
         ("logs", "logs", [home / "logs"]),
         ("schedule", "schedule", [home / "schedule" / "output"]),
         ("workgroups", "workgroups", [home / "alp" / "workgroups", home / "alp" / "turns.jsonl"]),
-        ("gateway", "gateway", [home / "gateway" / "sessions"]),
         ("mentions", "mentions", [home / "mentions"]),
     ]:
         size = 0
@@ -403,36 +377,30 @@ async def _config_unset_field(
     return {"ok": True}
 
 
-async def _gateway_status(
+async def _email_status(
     params: dict[str, Any], _server: host_server.Server,
 ) -> dict[str, Any]:
+    from alpi.mail import accounts as accounts_mod
     home = _resolve_home(str(params.get("profile") or ""))
-    env = _env_keys(home)
-    rows = [
-        {"name": "telegram", "configured": bool(env.get("TELEGRAM_BOT_TOKEN"))},
-        {"name": "imap", "configured": bool(env.get("IMAP_ADDRESS"))},
-        {
-            "name": "gmail",
-            "configured": bool(env.get("GMAIL_CLIENT_ID"))
-            or (home / "secrets" / "gmail_token.json").exists(),
-        },
-        {"name": "matrix", "configured": bool(env.get("MATRIX_ACCESS_TOKEN"))},
-    ]
-    return {"gateways": rows}
+    return {"accounts": accounts_mod.list_accounts(home)}
 
 
-async def _gateway_config(
+async def _email_config(
     params: dict[str, Any], _server: host_server.Server,
 ) -> dict[str, Any]:
+    from alpi.mail import accounts as accounts_mod
     home = _resolve_home(str(params.get("profile") or ""))
-    name = str(params.get("name") or "")
-    env = _env_keys(home)
-    out: dict[str, str] = {}
-    for key, secret in GATEWAY_ENV_KEYS.get(name, ()):
-        value = env.get(key)
-        if value:
-            out[key] = _mask_key(value) if secret else value
-    return {"config": out}
+    account_id = str(params.get("id") or "")
+    account = accounts_mod.get_account(home, account_id)
+    if account is None:
+        return {"config": None}
+    out = {k: v for k, v in account.items() if k != "id"}
+    if str(account.get("type")) == "gmail":
+        out["password_set"] = accounts_mod.gmail_token_path(home, account_id).exists()
+    else:
+        env = _env_keys(home)
+        out["password_set"] = bool(env.get(accounts_mod.password_env_key(account_id)))
+    return {"id": account_id, "config": out}
 
 
 async def _skills_list(
@@ -701,7 +669,7 @@ def _installed_via() -> str | None:
 def _latest_chat_for(home: Path) -> dict[str, Any] | None:
     """Return the most recent chat session only.
 
-    The desktop profile view should never reopen a workgroup / gateway
+    The desktop profile view should never reopen a workgroup
     session as if it were the user's normal chat history.
     """
     for row in host_sessions.list_sessions(home):

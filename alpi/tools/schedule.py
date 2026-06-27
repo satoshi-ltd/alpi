@@ -49,7 +49,7 @@ class Schedule(Tool):
         "always notify (`schedule.failed`).\n"
         "\n"
         "To reach a THIRD PARTY (not the user) — e.g. email a report to "
-        "someone — the prompt should call `send_message` (a gateway); that "
+        "someone — the prompt should call the `email` tool; that "
         "is separate from `notify` and not a schedule field.\n"
         "\n"
         "Language: write the `prompt` in ENGLISH, regardless of the "
@@ -58,7 +58,7 @@ class Schedule(Tool):
         "non-English prompts bias replies forever, exactly like memory "
         "and skill bodies. If the OUTPUT must be in another language "
         "(e.g. a Spanish daily message), say so inside the prompt: "
-        "``\"Send a Telegram greeting in Spanish: 'Buenos dias' …\"`` "
+        "``\"Email a greeting in Spanish: 'Buenos dias' …\"`` "
         "— English instruction, target-language content."
     )
     parameters = {
@@ -118,7 +118,7 @@ class Schedule(Tool):
                     "true → push the fired reply to the user's Alpi apps "
                     "(native notification: reminders, alerts, results). "
                     "false (default) → silent run, activity history only. To "
-                    "message a third party, have the prompt call `send_message`."
+                    "message a third party, have the prompt call the `email` tool."
                 ),
                 "default": False,
             },
@@ -423,7 +423,7 @@ class Schedule(Tool):
 def _prompt_fingerprint(text: str) -> str:
     """Normalise to detect near-duplicate prompts: lowercase, collapse
     whitespace, take the first 80 chars. Two daily-summary prompts that
-    differ only in trailing wording (e.g. one says 'send to Telegram')
+    differ only in trailing wording (e.g. one says 'email the summary')
     fingerprint to the same prefix and trip the duplicate guard."""
     norm = " ".join((text or "").lower().split())
     return norm[:80]

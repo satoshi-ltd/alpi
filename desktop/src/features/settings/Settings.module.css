@@ -716,11 +716,19 @@
   white-space: nowrap;
 }
 
-.gatewayChips {
+.chipRow {
   display: inline-flex;
   align-items: center;
   gap: var(--space-4);
   flex-wrap: wrap;
+}
+
+.popoverNote {
+  margin-bottom: var(--space-3);
+}
+
+.noteXs {
+  font-size: var(--fs-xs);
 }
 
 .deviceQr {
@@ -769,29 +777,38 @@
   margin-top: var(--space-4);
 }
 
-.gmailAuthStatus {
-  margin-top: var(--space-2);
-}
-.gmailAuthStatus.gmailAuthStatusError { color: var(--c-danger); }
-.gmailAuthStatus.gmailAuthStatusDone { color: var(--c-success); }
-.gmailAuthUrl {
-  margin-top: var(--space-2);
-  word-break: break-all;
+.emailTypeToggle {
+  flex-direction: row;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
 }
 
-.gmailPasteFallback {
-  margin-top: var(--space-3);
+.emailLabelHint {
+  color: var(--ink-4);
 }
-.gmailPasteSummary {
-  cursor: pointer;
-  font-size: 0.85rem;
-  color: var(--ink-3);
+
+.emailHostPort {
+  display: flex;
+  gap: var(--space-3);
 }
-.gmailPasteHint {
-  margin-top: var(--space-2);
-  font-size: 0.8rem;
-  line-height: 1.4;
+.emailHostPort .input {
+  flex: 1;
+  min-width: 0;
 }
+.emailPort {
+  flex: 0 0 80px;
+  width: 80px;
+}
+
+.emailEditorTitle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+.emailHeaderDot {
+  --dot-size: 9px;
+}
+
 .checkboxRow {
   display: flex;
   align-items: flex-start;
@@ -893,20 +910,6 @@
   padding-left: var(--space-1);
 }
 
-.gmailPasteInput {
-  width: 100%;
-  margin-top: var(--space-2);
-  margin-bottom: var(--space-2);
-  font-family: var(--font-mono, monospace);
-  font-size: 0.78rem;
-  padding: var(--space-2);
-  border: 1px solid var(--c-border, #ccc);
-  border-radius: var(--radius-2, 4px);
-  background: var(--c-bg-input, transparent);
-  color: inherit;
-  resize: vertical;
-  word-break: break-all;
-}
 .popoverFooterRight {
   margin-left: auto;
   display: flex;

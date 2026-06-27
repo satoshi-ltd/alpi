@@ -180,8 +180,8 @@ export function useTools(profile) {
   return usePolledCall('host.tools.list', { profile }, [profile], { skipWhen: !profile });
 }
 
-export function useGatewayStatus(profile) {
-  return usePolledCall('host.gateway.status', { profile }, [profile], { skipWhen: !profile });
+export function useEmailAccounts(profile) {
+  return usePolledCall('host.email.status', { profile }, [profile], { skipWhen: !profile });
 }
 
 export function useScheduleList(profile) {
@@ -196,12 +196,12 @@ export function usePeersPending(profile) {
   return usePolledCall('host.peers.pending_list', { profile }, [profile], { skipWhen: !profile });
 }
 
-export function useGatewayConfig(profile, name) {
+export function useEmailConfig(profile, id) {
   return usePolledCall(
-    'host.gateway.config',
-    profile && name ? { profile, name } : null,
-    [profile, name],
-    { skipWhen: !profile || !name },
+    'host.email.config',
+    profile && id ? { profile, id } : null,
+    [profile, id],
+    { skipWhen: !profile || !id },
   );
 }
 

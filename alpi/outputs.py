@@ -274,48 +274,25 @@ def mark_all_read(home: Path) -> int:
         return touched
 
 
-_CHILD_VALID_CHANNELS = frozenset({
-    "alpi", "both", "telegram", "imap", "gmail", "matrix", "webhook",
-})
-_CHILD_GATEWAYS = frozenset({"telegram", "imap", "gmail", "matrix", "webhook"})
-
-
-def normalize_send_message_args(args: dict) -> dict | None:
-    """Returns None when the call wasn't user-facing (empty text or malformed channel) so callers skip it."""
+def normalize_native_notification_args(args: dict) -> dict | None:
+    """Returns None when the call wasn't user-facing (empty text) so callers skip it."""
     text = str(args.get("text") or "").strip()
     if not text:
-        return None
-    channel = str(args.get("channel") or "alpi").strip().lower()
-    if channel not in _CHILD_VALID_CHANNELS:
         return None
     type = str(args.get("type") or "info").strip().lower()
     if type not in VALID_TYPE:
         type = "info"
-    notification_title = str(args.get("title") or "").strip()
-    gateway = ""
-    if channel == "both":
-        gateway = str(args.get("platform") or "telegram").strip().lower()
-    elif channel != "alpi":
-        gateway = channel
-    if gateway and gateway not in _CHILD_GATEWAYS:
-        gateway = ""
-    delivered_to: list[str] = []
-    if channel in {"alpi", "both"}:
-        delivered_to.append("alpi")
-    if gateway:
-        delivered_to.append(gateway)
     return {
-        "notification_title": notification_title,
+        "notification_title": str(args.get("title") or "").strip(),
         "body": text,
         "type": type,
-        "channel": channel,
-        "delivered_to": delivered_to,
+        "delivered_to": ["alpi"],
     }
 
 
-def record_child_send_message(home: Path, args: dict) -> str:
-    """Files the output and emits output.created. Emits agent.message (with output_id + deep_link) only for alpi/both — gateway-only channels already dispatched downstream, no need to wake the native client."""
-    record = normalize_send_message_args(args)
+def record_child_native_message(home: Path, args: dict) -> str:
+    """Files a child agent's native notification and emits output.created + agent.message so the parent's client wakes."""
+    record = normalize_native_notification_args(args)
     if record is None:
         return ""
 
@@ -326,19 +303,15 @@ def record_child_send_message(home: Path, args: dict) -> str:
         return ""
 
     profile = profile_name(home)
-    body = record["body"]
-    notification_title = record["notification_title"] or profile or "alpi"
     type = record["type"]
-    channel = record["channel"]
-    delivered_to = list(record["delivered_to"])
 
     try:
         output = append(
             home,
             profile=profile,
-            body=body,
+            body=record["body"],
             type=type,
-            delivered_to=delivered_to,
+            delivered_to=["alpi"],
             title=record["notification_title"],
         )
     except Exception:  # noqa: BLE001
@@ -354,19 +327,18 @@ def record_child_send_message(home: Path, args: dict) -> str:
     except Exception:  # noqa: BLE001
         pass
 
-    if channel in {"alpi", "both"}:
-        payload = {
-            "profile": profile,
-            "title": output.get("title") or profile or "alpi",
-            "body": output["body"],
-            "type": type,
-            "output_id": output_id,
-            "deep_link": f"/outputs/{profile}/{output_id}",
-        }
-        try:
-            host_events.emit("agent.message", payload)
-        except Exception:  # noqa: BLE001
-            pass
+    payload = {
+        "profile": profile,
+        "title": output.get("title") or profile or "alpi",
+        "body": output["body"],
+        "type": type,
+        "output_id": output_id,
+        "deep_link": f"/outputs/{profile}/{output_id}",
+    }
+    try:
+        host_events.emit("agent.message", payload)
+    except Exception:  # noqa: BLE001
+        pass
 
     return output_id
 
@@ -411,7 +383,7 @@ def create_output_and_emit_message(
     *, text: str, title: str, type: str,
     delivered_to: list[str],
 ) -> str:
-    """Callers must guard with _suppress_native_emit() — schedule/gateway children defer to the parent."""
+    """Callers must guard with _suppress_native_emit() — schedule children defer to the parent."""
     output = create_output(
         text=text, type=type,
         delivered_to=delivered_to, title=title,
@@ -451,8 +423,8 @@ __all__ = [
     "mark_read",
     "mark_all_read",
     "delete",
-    "normalize_send_message_args",
-    "record_child_send_message",
+    "normalize_native_notification_args",
+    "record_child_native_message",
     "create_output",
     "create_output_and_emit_message",
 ]

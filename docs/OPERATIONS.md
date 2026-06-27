@@ -26,8 +26,8 @@ and rolling.
 
 | File | Scope | Format | What it answers | Who writes it |
 |---|---|---|---|---|
-| `service.log` | **daemon-wide; ONE file at `~/.alpi/logs/service.log`, never duplicated per profile** | rotated text | Did the daemon start? Which services came up for which profile? Did a gateway accept this inbound? Did a peer hit an ALP listener? Did a cron job fire? | the daemon supervisor + every per-profile service that logs through the root logger |
-| `agent.log` | per profile | rotated text | What has the agent *been doing*? One line per **engine turn on every surface** (TUI, gateway, schedule, workgroup post, inbound ALP, research / delegate sub-agents): session id, elapsed, tools called, reply length, cost, user prompt preview. Cross-session grep index. | the engine (every turn on every surface) |
+| `service.log` | **daemon-wide; ONE file at `~/.alpi/logs/service.log`, never duplicated per profile** | rotated text | Did the daemon start? Which services came up for which profile? Did a peer hit an ALP listener? Did a cron job fire? | the daemon supervisor + every per-profile service that logs through the root logger |
+| `agent.log` | per profile | rotated text | What has the agent *been doing*? One line per **engine turn on every surface** (TUI, schedule, workgroup post, inbound ALP, research / delegate sub-agents): session id, elapsed, tools called, reply length, cost, user prompt preview. Cross-session grep index. | the engine (every turn on every surface) |
 | `approval.log` | per profile | rotated text | Security audit of every non-safe shell command the LLM tried to run: caution (pending / once / session / always / deny) or dangerous (always denied). | the approval system |
 | `compaction.jsonl` | per profile | append-only JSONL | Did auto-compact run this turn? Tokens before/after, summarized-message count, tool-truncation count, manual vs auto, `fired` (true when the LLM summarized; false when only oversized tool outputs were truncated). Use it as the evidence source before changing compaction/memory constants. | the engine (one line whenever compaction *or* tool truncation ran) |
 | `runs.jsonl` | per profile | capped rolling JSONL | What ran and where it stopped: one record per long-running turn (agent, schedule, workgroup, terminal) — outcome, exit code, timeout reason, pid, backend, last tool, and a secret-redacted output tail. Surfaced by `alpi digest`. | the engine, scheduler, and terminal tool (one line per finished run) |
@@ -70,12 +70,12 @@ alpi runs a single `com.alpi.daemon` process (launchd plist on
 macOS, systemd-user unit on Linux) that supervises every profile
 under `~/.alpi/` — default plus each `profiles/<name>/`. Each
 profile gets its own per-service supervised tasks named
-`<profile>/<service>` (e.g. `doc/gateway`, `builder/alp`); a crash
+`<profile>/<service>` (e.g. `doc/schedule`, `builder/alp`); a crash
 in one profile's service leaves siblings untouched.
 
 | What it does | Lifecycle | Install / config |
 |---|---|---|
-| Boots one task per (profile, service) on a single asyncio loop: gateway (Telegram / IMAP / Gmail / Matrix / webhook), scheduler tick, ALP socket (Unix + optional TCP/Noise_XK), workgroups poller, host plane. Toggle which services run for a profile via `service.{gateway,schedule,alp,workgroups,host}: bool` in that profile's `config.yaml`. | `alpi daemon start\|stop\|restart\|status` | auto-installed on first `alpi setup`; manage from `alpi setup → Services → Daemon` (default profile only) |
+| Boots one task per (profile, service) on a single asyncio loop: scheduler tick, ALP socket (Unix + optional TCP/Noise_XK), workgroups poller, host plane. Toggle which services run for a profile via `service.{schedule,alp,workgroups,host}: bool` in that profile's `config.yaml`. | `alpi daemon start\|stop\|restart\|status` | auto-installed on first `alpi setup`; manage from `alpi setup → Services → Daemon` (default profile only) |
 
 There's exactly one daemon per machine, one plist / unit. Adding
 a new profile just creates a directory under `~/.alpi/profiles/`;
@@ -83,7 +83,7 @@ the daemon picks it up on its next restart. Operational verbs
 that aren't lifecycle survive on their own:
 
 **File-descriptor limit.** One daemon hosts every profile's services
-(gateway / schedule / alp / workgroups / host), so a machine with many
+(schedule / alp / workgroups / host), so a machine with many
 profiles holds a lot of sockets at once. The launchd/systemd unit — and the
 Docker compose `ulimits` — raise the FD ceiling to **8192**; a low platform
 default (256 on macOS launchd) is exhausted under load (symptom:
@@ -203,7 +203,7 @@ alpi restore alpi.alpi-backup --force      # overwrite a non-empty home
 profile (memories, sessions, skills with `state/` SQLite +
 `secrets/`), every named profile under `profiles/<name>/`,
 `config.yaml`, `.env`, ALP identity (`alp/secrets/alp_key.{pem,pub}`),
-peers, gateway and host state. Excluded recursively at every depth:
+peers, and host state. Excluded recursively at every depth:
 `cache/`, `logs/`, `.trash/`, sockets (`*.sock`), PIDs (`*.pid`).
 
 **Crypto.** Scrypt KDF (n=2¹⁷, r=8, p=1) → ChaCha20-Poly1305 over
@@ -267,7 +267,7 @@ observability, the signals to watch:
   `config.yaml` (or leave it unset for unlimited) —
   see [CONFIG.md → Budget](CONFIG.md#budget). The ledger at
   `~/.alpi/<profile>/logs/ledger.json` is the in-process gate;
-  every interactive turn, gateway reply, scheduled job, sub-agent
+  every interactive turn, scheduled job, sub-agent
   spawn, and inbound ALP call admits against it before running and
   records its actual spend after. The same file keeps a 30-day
   `history` map of per-day totals (usd + input/output tokens) — the
@@ -303,8 +303,8 @@ alpi -p personal diff --since 1h
 alpi diff --since 7d --json     # machine-readable for scripts / dashboards
 ```
 
-What it covers: memory edits (which file, when), local + gateway
-sessions (count, turns, tool calls, cost, tokens, agent time),
+What it covers: memory edits (which file, when), local sessions
+(count, turns, tool calls, cost, tokens, agent time),
 mention threads touched, skill installs, peer-list mutations,
 fired schedule jobs grouped by job id, and today's budget usage.
 
@@ -335,7 +335,7 @@ alpi digest --json          # machine-readable report
 alpi -p work digest --json
 ```
 
-The report covers unavailable tools, gateway breaker state, skill usage
+The report covers unavailable tools, skill usage
 telemetry, memory promotion backlog / pressure, compaction rate over the
 window, and a **Runs** section folding the run ledger (`runs.jsonl`) — totals
 by kind/outcome, recent failures and timeouts, and the slowest recent runs. It
@@ -359,10 +359,9 @@ You've lost a machine. Here's the order of operations to restore.
 5. If your ALP identity is intact (backup included
    `alp/secrets/`), your peers still reach you. If you had to
    regenerate, see **ALP identity rotation** above.
-6. `alpi` → test a turn. Send a message from Telegram; verify the
-   reply lands.
+6. `alpi` → test a turn; verify the reply lands.
 7. Tail `service.log` and `agent.log` for 24 h to confirm every
-   profile's gateway and scheduler are firing normally.
+   profile's scheduler and ALP listener are firing normally.
 
 If you had no backup: you've lost the profile. Start from
 quickstart, re-pair your ALP peers, re-install your skills. The
@@ -388,10 +387,10 @@ tool call landed, the model decided the signal wasn't worth a
 write. Inline-learning is LLM-driven; if you want a guaranteed
 capture, tell alpi explicitly ("remember that…").
 
-**Telegram is silent.** `alpi logs --source service -n 100`.
-Expected to see inbound lines with `[telegram]` prefix. If
-nothing: bot token revoked, offset corrupted, or the daemon
-crashed. `alpi doctor` flags credential problems explicitly.
+**The `email` tool fails.** `alpi email probe <id>` exercises the live
+login for that account. A failure means revoked or wrong credentials
+in `<profile>/.env`, or an expired Gmail OAuth token. `alpi doctor`
+flags credential problems explicitly.
 
 **Stale binary.** After `uv tool install --reinstall`, the
 daemon still runs the old code. `alpi doctor` warns; fix with

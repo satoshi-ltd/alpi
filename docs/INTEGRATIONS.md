@@ -69,7 +69,7 @@ header shows the resolved endpoint, e.g. `tailscale · 100.64.50.234:49200`.
 Run `alpi setup` → **Devices** → **Add device** on machine B:
 
 1. Label it (e.g. `ci-bot`).
-2. Choose **member** (not admin) — admin can manage profiles, gateways
+2. Choose **member** (not admin) — admin can manage profiles
    and devices; an integration never needs that.
 3. Restrict it to the profile(s) it may reach (e.g. `abby`). Blank means
    all profiles — avoid that for an integration.

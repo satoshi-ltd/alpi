@@ -1,12 +1,11 @@
 """``@peer rest…`` shortcut parsing + execution.
 
-The ``@peer`` gesture is used from two places:
-- TUI input (``alpi/tui/app.py``): typed anywhere in the message.
-- Gateway inbound text (``alpi/gateway/run.py``): a user DM-ing
-  ``hey @peer can you…`` from Telegram / email / webhook routes to
-  the peer without firing the local LLM.
+The ``@peer`` gesture is typed from a chat surface — the TUI
+(``alpi/tui/app.py``) or the desktop/mobile apps over the host plane —
+and routes the rest of the message to the peer without firing the
+local LLM.
 
-Both call through this module so the semantics match: same parsing
+This module is the shared entry point so the semantics match: same parsing
 rules, same resolution rules, same error shapes. The ``peer`` tool
 (``alpi/tools/peer.py``) uses the same executor so LLM-invoked
 calls and direct ``@``-mentions hit the same code path.
@@ -67,9 +66,9 @@ def parse(text: str, home: Path | None = None) -> Mention | None:
     token (anywhere, with whitespace boundary), otherwise ``None``.
 
     When ``home`` is given, the matched id must also resolve to a
-    pinned peer in that profile's ``peers.yaml`` — used by the TUI
-    and the gateway so an ``@property`` in a code snippet falls
-    through to the LLM instead of erroring on a missing peer.
+    pinned peer in that profile's ``peers.yaml`` — so an ``@property``
+    in a code snippet falls through to the LLM instead of erroring on
+    a missing peer.
     """
     if not text:
         return None

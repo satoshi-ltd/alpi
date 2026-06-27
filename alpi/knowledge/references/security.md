@@ -17,7 +17,7 @@
 
 - Sensitive-path checks on file/terminal tools: keys, credential files (`.aws`, `.netrc`, `.npmrc`, `.pgpass`), profile `.env`/`config.yaml`, shell rc/login files, launch agents, and skill `secrets/` are refused.
 - Terminal hard-denies secret-file reads, environment dumps (`env`/`printenv`), and writes to credential/config files; other risky commands need approval (see `config`).
-- Inbound chat/gateway messages and fetched web/email/MCP content reach the model behind an untrusted banner + prompt-injection scan — data, not instructions.
+- Inbound chat messages and fetched web/email/MCP content reach the model behind an untrusted banner + prompt-injection scan — data, not instructions.
 - Outbound web fetches block private/link-local/CGNAT and cloud-metadata IPs (SSRF), re-validating redirects; DNS-resolution failure fails closed.
 - Tool schemas constrain arguments.
 - Skill scanner runs before save.
@@ -86,7 +86,7 @@ Three trust tiers:
 
 - **Unix socket (local)** — sovereign. Mints the first device, recovers a
   lost admin token, bypasses all role checks.
-- **WS admin** — manages profiles, gateways, providers, MCP, workgroups,
+- **WS admin** — manages profiles, email, providers, MCP, workgroups,
   peers, sandbox, schedules, daemon restart, and other devices
   (add/promote/demote/revoke/set_profiles). Always bypasses `profile_scope`.
 - **WS member** — chat, events, read-only views, schedule listing,
@@ -122,7 +122,7 @@ slip through:
 
 - Any component named `secrets` (`alp/secrets/key`,
   `skills/foo/secrets/token.json`).
-- Top-level `host/`, `gateway/`, `cache/` subtrees (daemon internal state).
+- Top-level `host/`, `cache/` subtrees (daemon internal state).
 - Any basename starting with `.env` (`.env`, `.env.local`,
   `skills/foo/.env`, `workspace/.env`).
 - Private-key extensions (`.pem`, `.key`, `.p12`, `.pfx`, `.keystore`).
@@ -130,8 +130,8 @@ slip through:
   secret read.
 - Symlinks resolving into a denied subtree.
 
-Secrets reach the model only through dedicated, audited methods (gateway
-setup, redacted `devices.list`, etc.).
+Secrets reach the model only through dedicated, audited methods (email
+account setup, redacted `devices.list`, etc.).
 
 ## Skills and secrets
 
@@ -145,8 +145,8 @@ setup, redacted `devices.list`, etc.).
 
 The daemon supervises many profiles in one process and does not mutate
 global `os.environ`. Profile lookups use `effective_profile_env(home)`:
-process env overlaid with the profile `.env`. Gateway adapters snapshot env
-at construction, so credential edits usually require restart.
+process env overlaid with the profile `.env`. The `email` tool reads creds
+through this lookup at call time, so credential edits need no restart.
 
 Ad-hoc `terminal` subprocesses get only the safelisted process keys (PATH,
 HOME, TZ, LC_*) plus **an active skill's *declared* env** (`requires_env` /
@@ -171,7 +171,7 @@ instructions inside them that ask alpi to ignore rules, reveal secrets,
 change config, or run unrelated commands.
 
 A shared scanner (`alpi/scan.py`) backs every check: skill bodies, memory
-writes, tool-result sanitizing, and inbound gateway content. Recalled
+writes, tool-result sanitizing, and fetched email/web content. Recalled
 `USER.md` / `MEMORY.md` are scanned again when loaded into the system prompt
 — if they look injected they get a warning-first marker labelling them as
 untrusted data. `AGENT.md` is the profile persona (instruction by design) and

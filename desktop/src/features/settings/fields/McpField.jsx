@@ -19,7 +19,7 @@ export function McpField({ profile, onSaved }) {
 
   return (
     <Row label="mcps">
-      <span className={styles.gatewayChips}>
+      <span className={styles.chipRow}>
         {mcps.length === 0 && <span className={styles.muted}>none</span>}
         {mcps.map((m) => (
           <Chip

@@ -705,12 +705,12 @@ async fn service_action(profile: String, action: String) -> Result<String, Strin
 }
 
 #[tauri::command]
-async fn gateway_status(profile: String, connection_id: Option<String>) -> serde_json::Value {
+async fn email_status(profile: String, connection_id: Option<String>) -> serde_json::Value {
     off_main(move || host_array_value_for(
         connection_id.as_deref(),
-        "host.gateway.status",
+        "host.email.status",
         serde_json::json!({"profile": profile}),
-        "gateways",
+        "accounts",
     ))
     .await
     .unwrap_or(serde_json::Value::Array(vec![]))
@@ -1028,25 +1028,22 @@ struct GatewayProbe {
 }
 
 #[tauri::command]
-async fn probe_gateways(
+async fn probe_email(
     profile: String,
     only: Option<Vec<String>>,
     connection_id: Option<String>,
 ) -> Vec<GatewayProbe> {
-    let names: Vec<String> = match only {
-        Some(list) if !list.is_empty() => list,
-        _ => vec!["telegram".into(), "imap".into(), "gmail".into(), "matrix".into()],
-    };
+    let ids: Vec<String> = only.unwrap_or_default();
     let mut handles = vec![];
-    for name in names {
+    for id in ids {
         let p = profile.clone();
-        let n = name.clone();
+        let account_id = id.clone();
         let cid = connection_id.clone();
         handles.push(tauri::async_runtime::spawn_blocking(move || {
-            let params = serde_json::json!({ "profile": p, "name": n.clone() });
+            let params = serde_json::json!({ "profile": p, "id": account_id.clone() });
             let result = match cid.as_deref() {
-                Some(c) => host_client::call_for(c, "host.gateway.probe", params),
-                None => host_client::call("host.gateway.probe", params),
+                Some(c) => host_client::call_for(c, "host.email.probe", params),
+                None => host_client::call("host.email.probe", params),
             };
             let (status, reason) = match result {
                 Ok(v) => (
@@ -1056,7 +1053,7 @@ async fn probe_gateways(
                 Err(_) => ("off".to_string(), None),
             };
             GatewayProbe {
-                name: n,
+                name: account_id,
                 status,
                 reason,
             }
@@ -1135,24 +1132,23 @@ async fn peer_add(
 }
 
 #[tauri::command]
-async fn gateway_config(
+async fn email_config(
     profile: String,
-    name: String,
+    id: String,
     connection_id: Option<String>,
-) -> std::collections::HashMap<String, String> {
+) -> serde_json::Value {
     off_main(move || {
-        let params = serde_json::json!({"profile": profile, "name": name});
+        let params = serde_json::json!({"profile": profile, "id": id});
         match connection_id.as_deref() {
-            Some(cid) => host_client::call_for(cid, "host.gateway.config", params),
-            None => host_client::call("host.gateway.config", params),
+            Some(cid) => host_client::call_for(cid, "host.email.config", params),
+            None => host_client::call("host.email.config", params),
         }
         .ok()
         .and_then(|v| v.get("config").cloned())
-        .and_then(|v| serde_json::from_value(v).ok())
-        .unwrap_or_default()
+        .unwrap_or(serde_json::Value::Null)
     })
     .await
-    .unwrap_or_default()
+    .unwrap_or(serde_json::Value::Null)
 }
 
 // Gmail OAuth — the loopback HTTP server lives on the **client** (this
@@ -1181,12 +1177,12 @@ fn emit_gmail_event(
 }
 
 #[tauri::command]
-async fn gateway_gmail_authorize(
+async fn email_gmail_authorize(
     app: AppHandle,
     profile: String,
+    address: String,
     client_id: String,
     client_secret: String,
-    allowed_senders: String,
     flow_id: String,
     connection_id: Option<String>,
 ) -> Result<(), String> {
@@ -1194,9 +1190,9 @@ async fn gateway_gmail_authorize(
         run_gmail_oauth(
             app,
             profile,
+            address,
             client_id,
             client_secret,
-            allowed_senders,
             flow_id,
             connection_id,
         )
@@ -1209,9 +1205,9 @@ async fn gateway_gmail_authorize(
 fn run_gmail_oauth(
     app: AppHandle,
     profile: String,
+    address: String,
     client_id: String,
     client_secret: String,
-    allowed_senders: String,
     flow_id: String,
     connection_id: Option<String>,
 ) {
@@ -1246,12 +1242,12 @@ fn run_gmail_oauth(
 
     // 2. Ask the daemon to persist creds + prepare the consent URL.
     let begin_resp = match host_call(
-        "host.gateway.gmail.begin",
+        "host.email.gmail.begin",
         serde_json::json!({
             "profile": profile,
+            "address": address,
             "client_id": client_id,
             "client_secret": client_secret,
-            "allowed_senders": allowed_senders,
             "redirect_uri": redirect_uri,
         }),
     ) {
@@ -1350,7 +1346,7 @@ fn run_gmail_oauth(
 
     // 6. Hand the code to the daemon for the token exchange.
     let exchange = match host_call(
-        "host.gateway.gmail.exchange",
+        "host.email.gmail.exchange",
         serde_json::json!({"state": state, "code": got_code}),
     ) {
         Ok(v) => v,
@@ -1380,7 +1376,7 @@ const _OAUTH_ACCEPT_TIMEOUT_SECS: u64 = 300;
 // and call exchange directly — same daemon endpoint the loopback
 // path uses, no new architecture.
 #[tauri::command]
-async fn gateway_gmail_paste(
+async fn email_gmail_paste(
     app: AppHandle,
     pasted_url: String,
     flow_id: String,
@@ -1415,9 +1411,9 @@ async fn gateway_gmail_paste(
         let exchange_params = serde_json::json!({"state": state, "code": code});
         let result = match connection_id.as_deref() {
             Some(cid) => {
-                host_client::call_for(cid, "host.gateway.gmail.exchange", exchange_params)
+                host_client::call_for(cid, "host.email.gmail.exchange", exchange_params)
             }
-            None => host_client::call("host.gateway.gmail.exchange", exchange_params),
+            None => host_client::call("host.email.gmail.exchange", exchange_params),
         };
         match result {
             Ok(v) => {
@@ -1523,17 +1519,49 @@ fn open_in_browser(url: &str) -> std::io::Result<()> {
 }
 
 #[tauri::command]
-async fn gateway_remove(
+async fn email_remove(
     profile: String,
-    name: String,
+    id: String,
     connection_id: Option<String>,
 ) -> Result<(), String> {
     alp_call_async_for(
         connection_id,
-        "host.gateway.remove",
-        serde_json::json!({"profile": profile, "name": name}),
+        "host.email.remove",
+        serde_json::json!({"profile": profile, "id": id}),
     )
     .await
+}
+
+#[tauri::command]
+async fn email_add(
+    profile: String,
+    address: String,
+    password: String,
+    imap_host: String,
+    smtp_host: String,
+    imap_port: Option<String>,
+    smtp_port: Option<String>,
+    connection_id: Option<String>,
+) -> Result<serde_json::Value, String> {
+    let mut params = serde_json::json!({
+        "profile": profile,
+        "address": address,
+        "password": password,
+        "imap_host": imap_host,
+        "smtp_host": smtp_host,
+    });
+    if let Some(p) = imap_port.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+        params["imap_port"] = serde_json::Value::String(p.to_string());
+    }
+    if let Some(p) = smtp_port.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+        params["smtp_port"] = serde_json::Value::String(p.to_string());
+    }
+    tauri::async_runtime::spawn_blocking(move || match connection_id.as_deref() {
+        Some(cid) => host_client::call_for(cid, "host.email.add", params),
+        None => host_client::call("host.email.add", params),
+    })
+    .await
+    .map_err(|e| format!("host.email.add: {e}"))?
 }
 
 #[tauri::command]
@@ -3042,7 +3070,7 @@ pub fn run() {
             service_action,
             reveal_in_finder,
             save_file_as,
-            gateway_status,
+            email_status,
             pick_folder,
             pick_files,
             attachment_meta,
@@ -3081,14 +3109,15 @@ pub fn run() {
             sandbox_network,
             voice_set_voice,
             voice_set_auto_read,
-            gateway_config,
-            gateway_gmail_authorize,
-            gateway_gmail_paste,
-            gateway_remove,
+            email_config,
+            email_gmail_authorize,
+            email_gmail_paste,
+            email_add,
+            email_remove,
             mcp_add,
             mcp_remove,
             resolve_ctx_window,
-            probe_gateways,
+            probe_email,
             devices_list,
             devices_generate,
             devices_set_profiles,

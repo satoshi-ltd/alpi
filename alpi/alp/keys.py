@@ -103,7 +103,7 @@ def load(home: Path) -> Keypair:
 
 
 def load_or_generate(home: Path) -> Keypair:
-    """Idempotent bootstrap — the gateway daemon calls this at start."""
+    """Idempotent bootstrap — the daemon calls this at start."""
     if exists(home):
         return load(home)
     return generate(home)

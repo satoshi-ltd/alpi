@@ -545,7 +545,7 @@ function PairDeviceModal({ connectionId, onClose, onPaired }) {
             </Tip>
           </span>
           <span className={styles.adminBannerCaption}>
-            Can manage profiles, gateways, devices. Sees all profiles.
+            Can manage profiles, devices. Sees all profiles.
           </span>
         </span>
       </label>

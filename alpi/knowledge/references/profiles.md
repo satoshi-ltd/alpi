@@ -3,7 +3,7 @@
 ## Answer directly
 
 - Default profile: `~/.alpi/`. Named profile: `~/.alpi/profiles/<name>/`.
-- A profile is one isolated alpi identity + data dir (config, `.env`, memory, skills, sessions, gateway/scheduler state, logs, ALP identity, budget ledger).
+- A profile is one isolated alpi identity + data dir (config, `.env`, memory, skills, sessions, scheduler state, logs, ALP identity, budget ledger).
 - Create a new profile for a separate identity/memory/credentials/ALP-trust/budget boundary. Use workspace (not a profile) when identity and memory can be shared across projects.
 
 ## Active profile resolution (first match wins)
@@ -17,14 +17,12 @@
 
 | Path | Purpose |
 |---|---|
-| `config.yaml` | Model, fallbacks, tool limits, gateway, MCP servers, scheduler, workspace, budget. |
+| `config.yaml` | Model, fallbacks, tool limits, MCP servers, scheduler, workspace, budget. |
 | `.env` | Provider keys / static secrets. A leak in one profile doesn't touch another. |
 | `secrets/` | Per-profile non-ALP credential files (OAuth / Gmail tokens, etc.). `0o700`. The ALP keypair lives at `alp/secrets/alp_key.{pem,pub}`, not here. |
 | `memories/` (USER.md, MEMORY.md, AGENT.md) | Persistent user/project memory + identity. |
-| `sessions/<id>.json` | Local human chat log only (TUI / desktop / `chat --once`). Gateway, schedule, workgroup, system-prefixed turns stay out of resume/history. |
+| `sessions/<id>.json` | Local human chat log only (TUI / desktop / `chat --once`). Schedule, workgroup, system-prefixed turns stay out of resume/history. |
 | `mentions/<sender>.json` | Per-sender `@`-mention threads, capped 20 turns, receiving side only. |
-| `gateway/sessions/<id>.json` | Telegram / email / webhook logs. Hidden from TUI/desktop listings on purpose. |
-| `gateway/sessions/_map.json` | `chat_id → session_id` pointer for per-chat threading. |
 | `skills/` | Installed/user skills, under this profile's allowlist. |
 | `rag/store.sqlite` | Local RAG index over the workspace + learned documents (sqlite-vec). |
 | `alp/` (peers.yaml, socket, keypair under `alp/secrets/`) | ALP identity + pinned peers; two profiles = two distinct peers. The ALP private key lives at `alp/secrets/alp_key.{pem,pub}`, NOT under the profile-level `secrets/`. |
@@ -32,11 +30,11 @@
 | `run/bg/` | Background-terminal state: one combined `alpi-bg-*.log` (stdout+stderr capture) and one `<pid>.meta` file (key=value: `log=…`, `started=…`) per job spawned with `terminal(action="background")`. |
 | `schedule/jobs.json` | Cron + one-shot jobs. Runs use `chat --once --no-save` (no session). Jobs with `no_agent: true` exec `prompt` as `python [flags] <skill_script>` directly, bypassing the LLM (allowlist restricts to `skills/<category>/<name>/scripts/`). |
 | `outputs/outputs.jsonl` | Persistent inbox for proactive agent messages + schedule failures, capped 500 rows; served to paired apps via `host.outputs.*`. |
-| `logs/` | `agent.log` (one line per engine turn on every surface — TUI, gateway, schedule, workgroup, inbound ALP, sub-agents) and `approval.log` (non-SAFE terminal classifications) — the only per-profile `.log` files actually emitted today. Daemon-wide events (gateway, schedule, ALP, workgroup) land in the root `~/.alpi/logs/service.log` — ONE per installation, not duplicated per profile; `alpi logs --source service` always reads the root file regardless of `-p`. `alpi logs --source` still accepts `gateway` / `schedule` as filter values for any standalone or legacy file on disk. |
-| `logs/ledger.json` | Daily USD/token spend cap, enforced across every turn (interactive, gateway, scheduled, sub-agent, inbound ALP). Resets at UTC midnight. |
+| `logs/` | `agent.log` (one line per engine turn on every surface — TUI, schedule, workgroup, inbound ALP, sub-agents) and `approval.log` (non-SAFE terminal classifications) — the only per-profile `.log` files actually emitted today. Daemon-wide events (schedule, ALP, workgroup) land in the root `~/.alpi/logs/service.log` — ONE per installation, not duplicated per profile; `alpi logs --source service` always reads the root file regardless of `-p`. `alpi logs --source` still accepts `schedule` as a filter value for any standalone or legacy file on disk. |
+| `logs/ledger.json` | Daily USD/token spend cap, enforced across every turn (interactive, scheduled, sub-agent, inbound ALP). Resets at UTC midnight. |
 | `cache/` (tts, stt, inbound voice) | Audio cache. |
 
-Eager dirs at `ensure_home`: `memories/`, `secrets/`, `sessions/`, `skills/`, `schedule/output/`, `logs/`, `host/`, `mentions/`, `outputs/` (all `0o700`). Lazy: `alp/`, `rag/`, `cache/`, `gateway/sessions/`, `run/bg/`, `host/attachments/` (created on first use). `alpi audit` walks a fixed sensitive-path list and flags any group/other bits set (`st_mode & 0o077`) — fix is `chmod 700` for directories, `chmod 600` for files. The audited `secrets/` row is actually `alp/secrets/` (the ALP keypair directory) via `keys_mod.private_path(home).parent`; the profile-level OAuth `secrets/` is NOT audited today, and neither are the other lazy paths.
+Eager dirs at `ensure_home`: `memories/`, `secrets/`, `sessions/`, `skills/`, `schedule/output/`, `logs/`, `host/`, `mentions/`, `outputs/` (all `0o700`). Lazy: `alp/`, `rag/`, `cache/`, `run/bg/`, `host/attachments/` (created on first use). `alpi audit` walks a fixed sensitive-path list and flags any group/other bits set (`st_mode & 0o077`) — fix is `chmod 700` for directories, `chmod 600` for files. The audited `secrets/` row is actually `alp/secrets/` (the ALP keypair directory) via `keys_mod.private_path(home).parent`; the profile-level OAuth `secrets/` is NOT audited today, and neither are the other lazy paths.
 
 `alpi -p <name>` auto-bootstraps any not-yet-existing profile on first use; `alpi profile create <name>` is the explicit pre-bootstrap. Both go through `home.validate_profile_name`: the name must match `^[A-Za-z0-9][A-Za-z0-9._-]*$`, so `-p ../escape`, `-p .hidden`, `-p a/b`, `-p ..`, and any name containing `..` raise `InvalidProfileName` before the path is joined. `-p ""` is a no-op — empty falls through to the default profile (`~/.alpi/`), it does NOT resolve to `~/.alpi/profiles/`. Quote names containing zsh-glob characters (`*`, `?`, `[`); they're rejected by validation anyway but the shell expands them first.
 
@@ -49,7 +47,7 @@ alpi profile create work   # bootstrap tree with defaults
 alpi profile list          # all profiles + model, disk size, active marker
 alpi profile remove work   # archives home to ~/.alpi/.trash/<name>-<timestamp>/ after confirm
 alpi -p work               # launch TUI for the work profile
-alpi -p work setup         # configure (services + gateways); setup → Delete profile = remove
+alpi -p work setup         # configure (services + email); setup → Delete profile = remove
 alpi -p work peers list    # peers pinned by the work profile
 ```
 
@@ -58,16 +56,16 @@ Every CLI command accepts `-p <name>`. No per-profile service to uninstall — t
 ## Common questions
 
 - "Where is my data?" → see layout table; default `~/.alpi/`, named `~/.alpi/profiles/<name>/`.
-- "Separate work/personal?" → two profiles (e.g. `~/.alpi/` personal + `~/.alpi/profiles/work/`); both gateways run in the one machine-wide daemon and can be ALP peers of each other (`@work ...`).
+- "Separate work/personal?" → two profiles (e.g. `~/.alpi/` personal + `~/.alpi/profiles/work/`); both run in the one machine-wide daemon and can be ALP peers of each other (`@work ...`).
 - "Different model only?" → NOT a new profile; use `/model` or `setup → Model` in the same profile (keeps memory/skills). Scratch chat → `/new`.
 
 ## When to create a profile (axis = identity + stakes)
 
 - Different cost/compliance boundary — per-profile `.env` + `config.yaml`; `budget.daily_usd` caps spend independently (USD or unlimited — no token cap).
 - Different memory — MEMORY.md is profile-scoped; work context shouldn't bleed into personal.
-- Different gateway identity — e.g. separate Telegram bots.
+- Different email identity — e.g. separate IMAP/Gmail accounts per profile.
 - Different ALP role — a peer others talk to (`home-server`, `laptop`) with its own pubkey + peer list.
-- Service identities: e.g. `assistant` (daily driver), `researcher` (read-only), `cron` (scheduled, no gateway) — each its own model/sandbox/memory/ALP surface.
+- Service identities: e.g. `assistant` (daily driver), `researcher` (read-only), `cron` (scheduled) — each its own model/sandbox/memory/ALP surface.
 - Per-employee org: `~/.alpi/profiles/<user>/` each with own identity/key/memory; IT seeds `peers.yaml` with shared-service pubkeys. See DEPLOYMENTS.md.
 
 ## ALP identity
@@ -79,8 +77,8 @@ Every CLI command accepts `-p <name>`. No per-profile service to uninstall — t
 ## Cost & service rules
 
 - Disk: fresh ~10 KB; after weeks 5–50 MB (voice cache + session retention). TUI top bar shows live size; `setup → Cleanup` reclaims audio cache, old sessions, rotated logs, schedule output, RAG freelist bloat.
-- CPU/mem: an idle profile costs nothing. One alpi daemon per machine hosts every profile's gateway/scheduler/ALP/workgroups poller as supervised `<profile>/<service>` asyncio tasks. Auto-installed on first `alpi setup`, managed from `setup → Services → Daemon`.
-- Wrong-identity gateway/scheduler symptom → check which profile's service is running.
+- CPU/mem: an idle profile costs nothing. One alpi daemon per machine hosts every profile's scheduler/ALP/workgroups poller as supervised `<profile>/<service>` asyncio tasks. Auto-installed on first `alpi setup`, managed from `setup → Services → Daemon`.
+- Wrong-identity scheduler symptom → check which profile's service is running.
 
 ## Related topics
 

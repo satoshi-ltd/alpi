@@ -36,25 +36,6 @@ def test_attachments_category_lists_staged_dirs(tmp_path: Path) -> None:
     assert att["action"] == "rmtree"
 
 
-def test_gateway_category_only_lists_session_files_not_state(
-    tmp_path: Path,
-) -> None:
-    """``gateway/`` mixes transport state (telegram-state.json) with
-    chat sessions (``gateway/sessions/<id>.json``). The Cleanup category
-    must point at the sessions subdir only — wiping transport state
-    would lose Telegram offsets / IMAP last-uid and trigger reprocessing."""
-    (tmp_path / "gateway").mkdir()
-    (tmp_path / "gateway" / "telegram-state.json").write_text("{}")
-    (tmp_path / "gateway" / "sessions").mkdir()
-    (tmp_path / "gateway" / "sessions" / "abc.json").write_text("{}")
-
-    cats = _cleanup_categories(tmp_path)
-    gateway = next(c for c in cats if c["key"] == "gateway")
-
-    names = sorted(p.name for p in gateway["files"])
-    assert names == ["abc.json"]
-
-
 def test_rag_category_absent_when_store_has_no_freelist(tmp_path: Path) -> None:
     """No `rag/store.sqlite` and no freelist → cleanup row appears with
     size 0, empty files, and the vacuum action. Empty list makes the
@@ -168,5 +149,5 @@ def test_bootstrap_gitignore_covers_private_dirs(tmp_path: Path) -> None:
     history so users syncing ``~/.alpi`` via git don't leak chats."""
     home_mod.ensure_home(tmp_path)
     gi = (tmp_path / ".gitignore").read_text()
-    for needle in ("sessions/", "mentions/", "gateway/sessions/", "secrets/"):
+    for needle in ("sessions/", "mentions/", "secrets/"):
         assert needle in gi, f"missing {needle!r} in .gitignore"

@@ -25,7 +25,12 @@ def _bootstrap(home: Path) -> Path:
         "openrouter": {"models": ["openai/gpt-5.4-mini"]},
     }
     cfg_mod.save(cfg)
-    (home / ".env").write_text("OPENAI_API_KEY=sk-test\nTELEGRAM_BOT_TOKEN=tg-secret\n")
+    (home / ".env").write_text("OPENAI_API_KEY=sk-test\n")
+    from alpi.mail import accounts as accounts_mod
+    accounts_mod.add_imap(
+        home, address="me@x.com", password="pw-secret",
+        imap_host="imap.x.com", smtp_host="smtp.x.com",
+    )
     (home / "memories").mkdir()
     (home / "memories" / "USER.md").write_text("hello\n")
     (home / "sessions").mkdir()
@@ -528,18 +533,21 @@ async def test_device_gateway_and_skills_views(
     host_device_state.register(srv)
 
     status = await srv._dispatch({
-        "id": "gateways",
-        "method": "host.gateway.status",
+        "id": "accounts",
+        "method": "host.email.status",
         "params": {"profile": "default"},
     })
-    assert {"name": "telegram", "configured": True} in status["result"]["gateways"]
+    assert {"id": "me_x_com", "type": "imap", "address": "me@x.com",
+            "configured": True} in status["result"]["accounts"]
 
     config = await srv._dispatch({
-        "id": "gateway-config",
-        "method": "host.gateway.config",
-        "params": {"profile": "default", "name": "telegram"},
+        "id": "email-config",
+        "method": "host.email.config",
+        "params": {"profile": "default", "id": "me_x_com"},
     })
-    assert config["result"]["config"]["TELEGRAM_BOT_TOKEN"].startswith("tg-")
+    assert config["result"]["config"]["address"] == "me@x.com"
+    assert config["result"]["config"]["imap_host"] == "imap.x.com"
+    assert config["result"]["config"]["password_set"] is True
 
     skills = await srv._dispatch({
         "id": "skills",
@@ -640,8 +648,6 @@ async def test_profile_storage_lists_all_known_categories(
     (home / "schedule" / "output").mkdir(parents=True)
     (home / "schedule" / "output" / "job.log").write_text("ok\n")
     (home / "alp" / "workgroups").mkdir(parents=True)
-    (home / "gateway" / "sessions").mkdir(parents=True)
-    (home / "gateway" / "sessions" / "tg-1.json").write_text("{}")
     (home / "mentions").mkdir(parents=True)
     (home / "mentions" / "peer-a.json").write_text("{}")
 
@@ -657,7 +663,7 @@ async def test_profile_storage_lists_all_known_categories(
     # All non-secret on-disk shapes a user might want to inspect must appear in the report.
     assert keys == {
         "sessions", "skills", "memories", "rag", "outputs",
-        "audio", "logs", "schedule", "workgroups", "gateway", "mentions",
+        "audio", "logs", "schedule", "workgroups", "mentions",
     }
     by_key = {row["key"]: row for row in resp["result"]["storage"]}
     # Spot-check that the new shapes actually report > 0 when seeded.
@@ -665,4 +671,3 @@ async def test_profile_storage_lists_all_known_categories(
     assert by_key["memories"]["file_count"] > 0, "memories row should pick up USER.md"
     assert by_key["rag"]["file_count"] > 0, "rag row should pick up store.sqlite"
     assert by_key["outputs"]["file_count"] > 0, "outputs row should pick up outputs.jsonl"
-    assert by_key["gateway"]["file_count"] > 0, "gateway row should pick up gateway/sessions/*"

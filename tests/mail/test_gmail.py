@@ -19,9 +19,10 @@ from alpi.mail.gmail import GmailClient, GmailError
 @pytest.fixture
 def client(tmp_path: Path, monkeypatch) -> GmailClient:
     monkeypatch.setattr(
-        gmail_mod, "get_access_token", lambda _home: "fake-access-token",
+        gmail_mod, "get_access_token",
+        lambda _home, _account_id: "fake-access-token",
     )
-    return GmailClient(home=tmp_path)
+    return GmailClient(home=tmp_path, account_id="me_gmail_com")
 
 
 def _mock_response(json_body: dict | None = None, status: int = 200):

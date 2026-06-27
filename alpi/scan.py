@@ -146,7 +146,7 @@ _INJECTION_PATTERNS: list[tuple[str, re.Pattern]] = [
     ("fake assistant turn",
      re.compile(r"\[\s*assistant\s*[:\]]", re.IGNORECASE)),
     ("tool-call injection",
-     re.compile(r"(?:call|invoke|run)\s+(?:the\s+)?(?:tool|function)\s+[`\"']?(?:send_message|email|terminal|write_file|schedule)[`\"']?", re.IGNORECASE)),
+     re.compile(r"(?:call|invoke|run)\s+(?:the\s+)?(?:tool|function)\s+[`\"']?(?:email|terminal|write_file|schedule)[`\"']?", re.IGNORECASE)),
     ("credential exfiltration",
      re.compile(r"(?:send|forward|post|upload)\s+.{0,40}?(?:password|credential|api[_\s-]?key|token|secret|\.env)", re.IGNORECASE)),
 ]

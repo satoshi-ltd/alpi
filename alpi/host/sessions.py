@@ -138,12 +138,8 @@ def _classify(first_user: str) -> str:
         return "workgroup"
     if s.startswith("[SCHEDULED:") or s.startswith("[CRON"):
         return "scheduled"
-    if s.startswith("[INBOUND TELEGRAM"):
-        return "telegram"
     if s.startswith("[INBOUND IMAP") or s.startswith("[INBOUND GMAIL"):
         return "email"
-    if s.startswith("[INBOUND "):
-        return "gateway"
     if s.startswith("["):
         return "system"
     if not s:

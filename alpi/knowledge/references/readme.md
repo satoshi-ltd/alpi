@@ -2,15 +2,15 @@
 
 ## Short answer
 
-alpi is a profile-based personal AI agent for the terminal, messaging gateways, and private peer-to-peer agent networks. It keeps persistent memory, uses tools, builds reusable skills, and runs a per-machine daemon for Telegram/IMAP/Gmail/Matrix inbound. Goal: a lighter, tighter personal-agent system. Not a hosted SaaS, not browser-only; it does not make weak models reliable (tool discipline still tracks model quality).
+alpi is a profile-based personal AI agent for the terminal and private peer-to-peer agent networks. It keeps persistent memory, uses tools, builds reusable skills, and runs a per-machine daemon for the scheduler/host plane/ALP. Email is an on-demand tool (IMAP/Gmail), not a polled inbox. Goal: a lighter, tighter personal-agent system. Not a hosted SaaS, not browser-only; it does not make weak models reliable (tool discipline still tracks model quality).
 
 - Package `alpi-agent`. Import path / binary / home dir: `alpi` / `alpi` / `~/.alpi`.
-- Surfaces: TUI/CLI, daemon-hosted gateways/scheduler/host plane, ALP peer links, tools, memory, skills.
+- Surfaces: TUI/CLI, daemon-hosted scheduler/host plane, ALP peer links, tools, memory, skills.
 
 ## Common commands
 
 ```bash
-alpi setup           # model, gateways, MCPs, sandbox, daemon
+alpi setup           # model, email, MCPs, sandbox, daemon
 alpi                 # interactive TUI
 alpi -p work         # named profile
 alpi doctor          # live health checks
@@ -26,7 +26,7 @@ alpi --version
 - **Memory**: plain Markdown written inline via `memory` tool, no post-session reflection. `USER.md` (user facts), `MEMORY.md` (env/operational), `AGENT.md` (response shaping).
 - **Skills**: reusable workflows under `~/.alpi/skills/<category>/<name>/`, user-owned; mutations pass validation + security scanner; secrets in `.env` or per-skill `secrets/`. see skills
 - **Workspace**: default root for relative paths, not a security wall. Absolute paths allowed except a sensitive-path denylist; real isolation is the opt-in OS sandbox.
-- **Gateway**: daemon-hosted inbound for Telegram, IMAP, Gmail, Matrix.
+- **Email**: on-demand `email` tool over IMAP/Gmail (list/search/read/send/reply/forward/move/delete); nothing polls the inbox.
 - **Schedule**: cron + one-shot jobs through the same agent loop.
 
 ## ALP vs host plane
@@ -51,7 +51,7 @@ alpi --version
   - `delegate`: write-capable sub-agent for focused file/web/terminal tasks.
   - `alpi_knowledge`: packaged references (shipped behavior, not roadmap).
 - Profile isolation; optional macOS/Linux OS sandbox per profile.
-- Unified per-machine daemon (gateway + scheduler + ALP + workgroups + host plane); one launchd/systemd user unit.
+- Unified per-machine daemon (scheduler + ALP + workgroups + host plane); one launchd/systemd user unit.
 - ALP identity + peer/workgroup features; desktop/mobile companion state behind `host.*`.
 - Docker image `satoshiltd/alpi`, persistent storage under `/data/.alpi`.
 

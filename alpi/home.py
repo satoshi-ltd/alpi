@@ -37,7 +37,7 @@ _HOME_CTX: ContextVar[Optional[Path]] = ContextVar(
     "alpi_active_home", default=None,
 )
 
-# Active-session context — Engine.run_turn binds it so tools like send_message attach session_id without plumbing it through every callsite.
+# Active-session context — Engine.run_turn binds it so tools like notify attach session_id without plumbing it through every callsite.
 _SESSION_CTX: ContextVar[Optional[str]] = ContextVar(
     "alpi_active_session", default=None,
 )
@@ -129,7 +129,7 @@ def effective_profile_env(
     base: dict[str, str] | None = None,
     extra: dict[str, str] | None = None,
 ) -> dict[str, str]:
-    """Effective env map for a profile call: ``base`` ∪ profile ``.env`` ∪ ``extra`` (last wins). Use this everywhere a profile-scoped subprocess/library lookup would otherwise reach into ``os.environ`` — the daemon supervises many profiles in one process, so global env would leak secrets across them. ``base`` defaults to ``os.environ`` so process-level vars (PATH, HOME, TZ, ALPI_PLATFORM) still propagate; per-profile keys (provider API keys, gateway tokens) overlay from the profile's .env."""
+    """Effective env map for a profile call: ``base`` ∪ profile ``.env`` ∪ ``extra`` (last wins). Use this everywhere a profile-scoped subprocess/library lookup would otherwise reach into ``os.environ`` — the daemon supervises many profiles in one process, so global env would leak secrets across them. ``base`` defaults to ``os.environ`` so process-level vars (PATH, HOME, TZ, ALPI_PLATFORM) still propagate; per-profile keys (provider API keys, integration secrets) overlay from the profile's .env."""
     out: dict[str, str] = dict(base if base is not None else os.environ)
     out.update(read_profile_env(home))
     if extra:
@@ -181,29 +181,6 @@ def _ensure_node_on_path(env: dict[str, str]) -> None:
     dirs = [d for d in _node_bin_dirs() if d not in path.split(os.pathsep)]
     if dirs:
         env["PATH"] = os.pathsep.join(dirs + ([path] if path else []))
-
-
-def telegram_token_owner(
-    token: str,
-    *,
-    exclude: Path | None = None,
-    root: Path | None = None,
-) -> str | None:
-    """Profile name that already owns this Telegram bot token, or ``None``. One-profile-per-bot is hard-required by Telegram long-polling (409 on second poller)."""
-    if not token:
-        return None
-    base = root or alpi_root()
-    candidates: list[Path] = [base]
-    profiles_dir = base / "profiles"
-    if profiles_dir.is_dir():
-        candidates.extend(sorted(p for p in profiles_dir.iterdir() if p.is_dir()))
-    target = token.strip()
-    for home in candidates:
-        if exclude is not None and home.resolve() == exclude.resolve():
-            continue
-        if read_profile_env(home).get("TELEGRAM_BOT_TOKEN", "").strip() == target:
-            return profile_name(home)
-    return None
 
 
 def profile_name(home: Path) -> str:
@@ -287,7 +264,6 @@ def ensure_home(home: Path) -> None:
             "secrets/\n"
             "sessions/\n"
             "mentions/\n"
-            "gateway/sessions/\n"
             "schedule/output/\n"
             "logs/\n"
             "cache/\n"

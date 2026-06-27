@@ -26,7 +26,7 @@ alpi -p <profile> digest --since 7d
   secret-file permissions, public/all-interface binds, terminal sandbox,
   LLM watchdog, and daily spend cap. Online check: OSV CVEs for installed
   Python packages. Exit code is non-zero only for `fail`, not warnings.
-- `digest`: read-only evidence — tool availability, gateway breaker state, skill telemetry, memory promotion backlog/pressure, compaction rate.
+- `digest`: read-only evidence — tool availability, skill telemetry, memory promotion backlog/pressure, compaction rate.
 
 ## Daemon
 
@@ -48,7 +48,7 @@ Rotated text caps at **1 MB** (`.log.1` = previous gen); `compaction.jsonl` does
 | File | Scope | Content |
 |---|---|---|
 | `service.log` | root | daemon supervisor + per-profile services. `alpi logs --source service` always reads the root file regardless of `-p`. |
-| `agent.log` | per profile | one line per engine turn on every surface (TUI, gateway, schedule, workgroup, inbound ALP, sub-agents). |
+| `agent.log` | per profile | one line per engine turn on every surface (TUI, schedule, workgroup, inbound ALP, sub-agents). |
 | `approval.log` | per profile | terminal approval decisions (audit trail with `agent.log`). |
 | `compaction.jsonl` | per profile | compaction/truncation records. |
 | `runs.jsonl` | per profile | run ledger: one line per long-running turn (agent/schedule/workgroup/terminal); surfaced by `alpi digest`. |
@@ -97,7 +97,7 @@ alpi restore ~/vault/alpi.alpi-backup
 alpi restore ~/vault/alpi.alpi-backup --force
 ```
 
-- One passphrase-encrypted archive of the whole `~/.alpi/` tree: all profiles, memories, sessions, skills, state, secrets, config, `.env`, ALP identity, peers, gateway + host state.
+- One passphrase-encrypted archive of the whole `~/.alpi/` tree: all profiles, memories, sessions, skills, state, secrets, config, `.env`, ALP identity, peers, host state.
 - Excluded recursively: `cache/`, `logs/`, `.trash/`, `*.sock`, `*.pid`.
 - Stop daemon before restore; run `alpi doctor` and restart afterward.
 
@@ -107,7 +107,7 @@ alpi restore ~/vault/alpi.alpi-backup --force
 |---|---|
 | Wrong model | Active profile and `config.yaml` `model`. |
 | Tool sees wrong files | Configured workspace. |
-| Gateway silent | Daemon status, gateway config, logs. |
+| Email tool fails | per-account creds in `.env` (`EMAIL__<ID>__PASSWORD`) / `secrets/gmail_tokens/<id>.json`, account config (`alpi setup → Email`), logs. |
 | Scheduled job missing | Daemon/scheduler running for the right profile. |
 | Env var missing in script | Skill `requires_env`, profile `.env`, skill opened. |
 | ALP peer fails | Peer identity, socket/TCP reachability, budget, logs. |

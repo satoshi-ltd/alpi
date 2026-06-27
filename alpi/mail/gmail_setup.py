@@ -1,4 +1,4 @@
-"""Interactive setup for the Gmail gateway (OAuth2)."""
+"""Interactive setup for one Gmail account (OAuth2)."""
 
 from __future__ import annotations
 
@@ -7,13 +7,14 @@ from pathlib import Path
 
 from alpi import ui
 from alpi.home import effective_profile_env
+from alpi.mail import accounts as accounts_mod
 from alpi.mail import gmail_auth
 from alpi.model_selector import _append_env
 
 
 def run(home: Path) -> None:
     ui.banner(
-        ui.crumb("setup", "gateways", "gmail"),
+        ui.crumb("setup", "email", "gmail"),
         subtitle="Gmail REST API (OAuth2)",
         home=home,
     )
@@ -26,16 +27,19 @@ def run(home: Path) -> None:
         "  3. Create OAuth client → Desktop app → copy Client ID + Secret.\n"
         "  4. Audience → add your Gmail as Test user (else consent blocks).\n"
         "\n"
-        "On 'Authorize now' Google will warn it's unverified and ask for two\n"
-        "scopes (send + read/modify). Accept both — without them the token\n"
-        "has no Gmail access.\n"
+        "The Client ID + Secret are SHARED across every Gmail account on this\n"
+        "profile — one Google app. On 'Authorize now' Google warns it's\n"
+        "unverified and asks for two scopes (send + read/modify). Accept both.\n"
     )
     ui._console.print("")
 
     env = effective_profile_env(home)
     current_cid = env.get("GMAIL_CLIENT_ID", "")
     current_csec = env.get("GMAIL_CLIENT_SECRET", "")
-    current_senders = env.get("GMAIL_ALLOWED_SENDERS", "")
+
+    address = ui.text("Gmail address:")
+    if not address:
+        return ui.cancelled()
 
     client_id = ui.text("OAuth Client ID", default=current_cid)
     if not client_id:
@@ -45,41 +49,30 @@ def run(home: Path) -> None:
     if not client_secret:
         return ui.cancelled()
 
-    senders_raw = ui.text(
-        "Allowed senders (comma-separated, empty = no inbound)",
-        default=current_senders,
-    )
-    senders = ",".join(
-        s.strip().lower() for s in (senders_raw or "").split(",") if s.strip()
-    )
-
-    env = home / ".env"
+    env_path = home / ".env"
     for key, val in (
         ("GMAIL_CLIENT_ID", client_id),
         ("GMAIL_CLIENT_SECRET", client_secret),
-        ("GMAIL_ALLOWED_SENDERS", senders),
     ):
-        _append_env(env, key, val)
+        _append_env(env_path, key, val)
+
+    account_id = accounts_mod.slug(address)
+    accounts_mod.add_gmail(home, address=address)
 
     if not ui.confirm("Authorize now via browser?", default=True):
         ui.ok_and_wait("credentials saved. Run this wizard again to authorize.")
         return
 
-    # Honour ALPI_HEADLESS for SSH/container sessions where no browser
-    # can open: skip the loopback and go straight to paste flow. The
-    # auto-fallback in ``first_run`` also catches this, but the env var
-    # lets the user force paste mode even when webbrowser.open lies.
     headless = os.environ.get("ALPI_HEADLESS", "").strip() not in ("", "0", "false", "no")
     runner = gmail_auth.first_run_paste if headless else gmail_auth.first_run
     try:
-        token = runner(home)
+        token = runner(home, account_id)
     except gmail_auth.GmailAuthError as e:
         ui.fail_and_wait(str(e))
         return
 
     ui._console.print("")
     ui.ok(f"authorized as {token.email}")
-    ui.saved(env)
     from alpi.mail.pgp_setup import maybe_offer
     maybe_offer(home)
     ui.press_enter()

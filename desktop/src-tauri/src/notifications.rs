@@ -257,7 +257,7 @@ pub fn dispatch_daemon_frame(
                 .and_then(|v| v.as_str())
                 .unwrap_or("")
                 .to_string();
-            // notify / send_message(channel=alpi) are deliberate pushes — always surface, even on the active chat.
+            // notify(channel=alpi) is a deliberate push — always surface, even on the active chat.
             // output_id is the v0.6.11+ path; older daemons fall back to the chat/profile deeplink.
             let deeplink = if !output_id.is_empty() {
                 Deeplink {

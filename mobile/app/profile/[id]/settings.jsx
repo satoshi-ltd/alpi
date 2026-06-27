@@ -13,7 +13,7 @@ import { profileLabel } from '../../../src/lib/profileLabel';
 import { useToast } from '../../../src/components/Toast';
 import { Bold, Code, TypedConfirm } from '../../../src/components/TypedConfirm';
 import {
-  useGatewayStatus,
+  useEmailAccounts,
   useProfileStorage,
   useScheduleList,
   useSkills,
@@ -33,9 +33,8 @@ import { accentForProfile } from '../../../src/theme/accents';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { voiceLabel } from '../../../src/lib/voices';
 
-// Toggles `service.<name>` in user.yaml; daemon must restart for changes to take effect (mobile can't restart it remotely).
-const SUBSYSTEMS = ['gateway', 'schedule', 'alp', 'workgroups'];
-const SUBSYSTEMS_DEFAULT = { gateway: true, schedule: true, alp: true, workgroups: true };
+const SUBSYSTEMS = ['schedule', 'alp', 'workgroups'];
+const SUBSYSTEMS_DEFAULT = { schedule: true, alp: true, workgroups: true };
 
 function formatBytes(n) {
   if (n < 1024) return `${n} B`;
@@ -51,7 +50,7 @@ export default function ProfileSettings() {
   const { call } = useEndpoint();
   const { colors, fonts, fontSizes } = useTheme();
   const { profile, loading, refresh } = useProfile(id);
-  const gateways = useGatewayStatus(id);
+  const emailAccounts = useEmailAccounts(id);
   const schedule = useScheduleList(id);
   const skills = useSkills(id);
   const tools = useTools(id);
@@ -95,7 +94,7 @@ export default function ProfileSettings() {
   }
 
   const accent = profile.accent ?? accentForProfile(profile.name);
-  const gatewayList = gateways.data?.gateways ?? [];
+  const emailList = emailAccounts.data?.accounts ?? [];
   const providerCount =
     (profile.provider_keys?.length ?? 0) + (profile.provider_ollama?.length ?? 0);
   const mcpCount = profile.mcps?.length ?? 0;
@@ -287,24 +286,24 @@ export default function ProfileSettings() {
         />
         <RowSeparator />
         <Row
-          label="Gateways"
-          helper="telegram · imap · gmail · matrix"
+          label="Email"
+          helper={emailList.length === 0 ? 'IMAP / Gmail accounts' : `${emailList.length} account${emailList.length === 1 ? '' : 's'}`}
           value={
             <View style={{ flexDirection: 'row', gap: space.s1, flexWrap: 'wrap', justifyContent: 'flex-end', maxWidth: 200 }}>
-              {gatewayList.filter((g) => g.configured).length === 0 ? (
+              {emailList.filter((a) => a.configured).length === 0 ? (
                 <Pill off>none</Pill>
               ) : (
-                gatewayList
-                  .filter((g) => g.configured)
-                  .map((g) => (
-                    <Pill key={g.name ?? g.id} tone="on">
-                      {g.name ?? g.id}
+                emailList
+                  .filter((a) => a.configured)
+                  .map((a) => (
+                    <Pill key={a.id ?? a.address} tone="on">
+                      {a.address ?? a.id}
                     </Pill>
                   ))
               )}
             </View>
           }
-          onPress={() => router.push(`/profile/${id}/gateways`)}
+          onPress={() => router.push(`/profile/${id}/email`)}
         />
 
         <SectionHeader>ALP · link protocol</SectionHeader>
