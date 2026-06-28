@@ -6,10 +6,11 @@ const invokeMock = vi.fn();
 vi.mock("@tauri-apps/api/core", () => ({ invoke: (...a) => invokeMock(...a) }));
 vi.mock("../../../primitives/Notification.jsx", () => ({ useNotify: () => () => {} }));
 
-import { HostPortField, NetworkAddressField, PairingNameField } from "./network.jsx";
+import { HostPortField, NetworkAddressField, PairingNameField, _resetNetworkStatus } from "./network.jsx";
 
 beforeEach(() => {
   invokeMock.mockReset();
+  _resetNetworkStatus();
 });
 
 describe("network settings fields", () => {
@@ -34,5 +35,20 @@ describe("network settings fields", () => {
 
     await waitFor(() => expect(onLoadingChange).toHaveBeenCalledWith(true));
     await waitFor(() => expect(onLoadingChange).toHaveBeenLastCalledWith(false));
+  });
+
+  it("coalesces the three fields' mount probes into one network_status call", async () => {
+    invokeMock.mockResolvedValue({ candidates: {}, port: 49200, device_name: "desk" });
+    render(
+      <>
+        <NetworkAddressField />
+        <HostPortField profile={{ name: "default", advertise_host: "" }} />
+        <PairingNameField />
+      </>,
+    );
+    await waitFor(() => {
+      const statusCalls = invokeMock.mock.calls.filter((c) => c[0] === "network_status");
+      expect(statusCalls).toHaveLength(1);
+    });
   });
 });

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
+import { subscribeDaemonEvent } from "../lib/daemon-bus.js";
 
 // Lazy `host.profile.detail` cache keyed by (connectionId, name) — two daemons with the same profile name must not bleed peers/models/mcps. Invalidate on connection switch via `invalidateProfileDetailCache(prev)`.
 
@@ -40,7 +40,7 @@ function load(connectionId, name, { force = false } = {}) {
   return p;
 }
 
-let _eventListenerInstalled = false;
+let _unsub = null;
 const _invalidateTimers = new Map(); // key -> timeout
 
 // Per-key leading-edge coalesce: a reconnect backfill can replay dozens of config_changed frames per profile — one force-refetch 300ms later covers them all.
@@ -55,10 +55,9 @@ function scheduleInvalidate(connectionId, profile) {
 }
 
 function ensureEventListener() {
-  if (_eventListenerInstalled) return;
-  _eventListenerInstalled = true;
+  if (_unsub) return;
   // Refetch on daemon-side mutations for the specific (connection, profile).
-  listen("daemon-event", (event) => {
+  _unsub = subscribeDaemonEvent((event) => {
     const payload = event.payload ?? {};
     const frame = payload.frame ?? payload;
     const kind = frame?.event;
@@ -72,9 +71,6 @@ function ensureEventListener() {
     ) {
       scheduleInvalidate(connectionId, profile);
     }
-  }).catch(() => {
-    // Re-arm on the next hook mount — a swallowed install failure would silently serve stale details forever.
-    _eventListenerInstalled = false;
   });
 }
 
@@ -132,5 +128,5 @@ export function _clearProfileDetailCache() {
   _inflight.clear();
   for (const t of _invalidateTimers.values()) clearTimeout(t);
   _invalidateTimers.clear();
-  _eventListenerInstalled = false;
+  if (_unsub) { _unsub(); _unsub = null; }
 }

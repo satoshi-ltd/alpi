@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
 
 import { pruneCachedMessages } from "../lib/workgroup-cache.js";
-import { safeUnlisten } from "../lib/tauri-listen.js";
+import { subscribe } from "../lib/daemon-bus.js";
 
 const PROFILES_CACHE_PREFIX = "alf:profiles:v1:";
 const WORKGROUPS_CACHE_PREFIX = "alf:workgroups:v1:";
@@ -219,9 +218,7 @@ export function useHostConnections({
 
   // Forward connection-status events from the daemon into local state.
   useEffect(() => {
-    let cancelled = false;
-    let unlisten = null;
-    listen("connection-status", (event) => {
+    return subscribe("connection-status", (event) => {
       const { id, status, error, alpi_version, update_available } = event.payload ?? {};
       if (!id || !status) return;
       setHostConnections((prev) => {
@@ -252,16 +249,7 @@ export function useHostConnections({
         hostConnectionsRef.current = next;
         return next;
       });
-    })
-      .then((fn) => {
-        if (cancelled) safeUnlisten(fn);
-        else unlisten = fn;
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-      safeUnlisten(unlisten);
-    };
+    });
   }, []);
 
   const activeConnectionForSync = hostConnections.connections.find(

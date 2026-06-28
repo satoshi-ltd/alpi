@@ -12,11 +12,13 @@ import {
   useMarkAllOutputsRead,
   useOutput,
 } from "./useOutputs.js";
+import { _resetDaemonBus } from "../lib/daemon-bus.js";
 
 
 let daemonEventListener;
 beforeEach(() => {
   vi.resetAllMocks();
+  _resetDaemonBus();
   daemonEventListener = null;
   listen.mockImplementation(async (eventName, cb) => {
     if (eventName === "daemon-event") daemonEventListener = cb;

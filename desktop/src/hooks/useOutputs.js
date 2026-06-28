@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
-import { safeUnlisten } from "../lib/tauri-listen.js";
+import { subscribeDaemonEvent } from "../lib/daemon-bus.js";
 
 const DEFAULT_LIMIT = 100;
 
@@ -84,10 +83,9 @@ export function useAllOutputs({ connections, status } = {}) {
 
   // Refresh on any daemon's output mutation (active stream emits output.created/updated) AND on background-poll notifications (flagged, since the poller carries agent.message/etc., not output.created).
   useEffect(() => {
-    let unlisten = null;
     let cancelled = false;
     let refreshTimer = null;
-    listen("daemon-event", (event) => {
+    const unsub = subscribeDaemonEvent((event) => {
       if (cancelled) return;
       const payload = event.payload ?? {};
       const frame = payload.frame ?? payload;
@@ -98,16 +96,11 @@ export function useAllOutputs({ connections, status } = {}) {
         refreshTimer = null;
         if (!cancelled) refresh();
       }, 400);
-    })
-      .then((fn) => {
-        if (cancelled) safeUnlisten(fn);
-        else unlisten = fn;
-      })
-      .catch(() => {});
+    });
     return () => {
       cancelled = true;
       if (refreshTimer) clearTimeout(refreshTimer);
-      safeUnlisten(unlisten);
+      unsub();
     };
   }, [refresh]);
 

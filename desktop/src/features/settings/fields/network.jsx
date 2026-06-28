@@ -10,6 +10,22 @@ import { Row } from "../primitives.jsx";
 import { scopeLabel } from "../util.js";
 import styles from "../Settings.module.css";
 
+// Coalesce only concurrent probes (the 3 fields mount together) — no time-cache, each settings open still fetches fresh.
+let _statusInflight = null;
+
+function fetchNetworkStatus() {
+  if (_statusInflight) return _statusInflight;
+  const p = invoke("network_status").finally(() => {
+    if (_statusInflight === p) _statusInflight = null;
+  });
+  _statusInflight = p;
+  return p;
+}
+
+export function _resetNetworkStatus() {
+  _statusInflight = null;
+}
+
 // Classify the typed address for the tag; warn only on the risky (public) case.
 function detectTag(host, status) {
   const h = (host || "").trim();
@@ -53,7 +69,7 @@ export function NetworkAddressField({ onLoadingChange = null }) {
   const refresh = useCallback(async () => {
     onLoadingChange?.(true);
     try {
-      const s = await invoke("network_status");
+      const s = await fetchNetworkStatus();
       setStatus(s);
       setHost(s?.candidates?.configured || "");
     } catch (e) {
@@ -152,7 +168,7 @@ export function HostPortField({ profile, onSaved, onLoadingChange = null }) {
   const refresh = useCallback(async () => {
     onLoadingChange?.(true);
     try {
-      const s = await invoke("network_status");
+      const s = await fetchNetworkStatus();
       setStatus(s);
       setPort(String(s?.port || 49200));
     } catch (e) {
@@ -257,7 +273,7 @@ export function PairingNameField({ onLoadingChange = null }) {
   const refresh = useCallback(async () => {
     onLoadingChange?.(true);
     try {
-      const s = await invoke("network_status");
+      const s = await fetchNetworkStatus();
       setStatus(s);
       setName(s?.device_name || "");
     } catch (e) {

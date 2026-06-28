@@ -7,11 +7,13 @@ import {
   invalidateProfileDetailCache,
   _clearProfileDetailCache,
 } from "./useProfileDetail.js";
+import { _resetDaemonBus } from "../lib/daemon-bus.js";
 
 let daemonEventListener;
 
 beforeEach(() => {
   _clearProfileDetailCache();
+  _resetDaemonBus();
   vi.resetAllMocks();
   daemonEventListener = null;
   listen.mockImplementation(async (eventName, cb) => {

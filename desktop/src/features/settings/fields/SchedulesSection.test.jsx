@@ -21,9 +21,11 @@ function emit(name, payload) {
 }
 
 import { SchedulesSection, _clearScheduleCache } from "./SchedulesSection.jsx";
+import { _resetDaemonBus } from "../../../lib/daemon-bus.js";
 
 beforeEach(() => {
   _clearScheduleCache();
+  _resetDaemonBus();
   invokeMock.mockReset();
   listenSubs.clear();
 });

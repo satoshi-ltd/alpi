@@ -667,7 +667,6 @@ fn call_conn(conn: &HostConnection, method: &str, params: Value) -> Result<Value
         HostConnection::Remote {
             host, port, token, ..
         } => call_remote_inner(
-            &id,
             host,
             *port,
             token,
@@ -868,7 +867,6 @@ where
 }
 
 fn call_remote_inner(
-    _connection_id: &str,
     host: &str,
     port: u16,
     token: &str,
@@ -876,11 +874,17 @@ fn call_remote_inner(
     params: Value,
     timeout: Duration,
 ) -> Result<Value, String> {
-    for attempt in 0..2 {
-        let result = call_remote_once(host, port, token, method, params.clone(), timeout);
-        match result {
+    retry_remote(|| call_remote_once(host, port, token, method, params.clone(), timeout))
+}
+
+fn retry_remote<F>(mut attempt: F) -> Result<Value, String>
+where
+    F: FnMut() -> Result<Value, String>,
+{
+    for i in 0..2 {
+        match attempt() {
             Ok(value) => return Ok(value),
-            Err(e) if attempt == 0 && should_retry_remote_ws(&e) => continue,
+            Err(e) if i == 0 && should_retry_remote_ws(&e) => continue,
             Err(e) => return Err(e),
         }
     }
@@ -1456,6 +1460,43 @@ mod tests {
         assert!(!should_retry_remote_ws("alp -32004: not-found"));
         // Auth failure: token bad, retrying won't help.
         assert!(!should_retry_remote_ws("alp -32000: auth-failed"));
+    }
+
+    #[test]
+    fn retry_remote_recovers_on_second_attempt_after_transport_error() {
+        let mut calls = 0;
+        let r = retry_remote(|| {
+            calls += 1;
+            if calls == 1 {
+                Err("websocket closed by daemon".to_string())
+            } else {
+                Ok(json!({"ok": true}))
+            }
+        });
+        assert_eq!(calls, 2);
+        assert_eq!(r.unwrap()["ok"], json!(true));
+    }
+
+    #[test]
+    fn retry_remote_does_not_retry_app_errors() {
+        let mut calls = 0;
+        let r = retry_remote(|| {
+            calls += 1;
+            Err("alp -32004: not-found".to_string())
+        });
+        assert_eq!(calls, 1);
+        assert!(r.is_err());
+    }
+
+    #[test]
+    fn retry_remote_gives_up_after_one_retry() {
+        let mut calls = 0;
+        let r = retry_remote(|| {
+            calls += 1;
+            Err("websocket closed by daemon".to_string())
+        });
+        assert_eq!(calls, 2);
+        assert!(r.is_err());
     }
 
 }

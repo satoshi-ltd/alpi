@@ -29,6 +29,7 @@ import {
   fromDaemonFrame,
   isActiveWorkgroupView,
 } from "./lib/daemon-frame.js";
+import { subscribeDaemonEvent } from "./lib/daemon-bus.js";
 import { pendingTurnForView } from "./lib/pendingTurnForView.js";
 import { enqueueRequest as enqueueApprovalRequest } from "./lib/approval-queue.js";
 import { enqueueRequest as enqueueClarificationRequest } from "./lib/clarification-queue.js";
@@ -573,14 +574,13 @@ export default function App() {
   useEffect(() => {
     let cancelled = false;
     let unlistenFs = null;
-    let unlistenDaemon = null;
     listen("fs-change", (e) => applyChange(e.payload))
       .then((fn) => {
         if (cancelled) safeUnlisten(fn);
         else unlistenFs = fn;
       })
       .catch(() => {});
-    listen("daemon-event", (e) => {
+    const unsubDaemon = subscribeDaemonEvent((e) => {
       const payload = e.payload ?? {};
       const cls = classifyDaemonPayload(
         payload,
@@ -614,16 +614,11 @@ export default function App() {
       }
       const mapped = fromDaemonFrame(frame);
       if (mapped) applyChange(mapped);
-    })
-      .then((fn) => {
-        if (cancelled) safeUnlisten(fn);
-        else unlistenDaemon = fn;
-      })
-      .catch(() => {});
+    });
     return () => {
       cancelled = true;
       safeUnlisten(unlistenFs);
-      safeUnlisten(unlistenDaemon);
+      unsubDaemon();
     };
   }, [applyChange, hostConnectionsRef, approval.merge, approval.resolve, clarification.merge, clarification.resolve, scheduleReload]);
 

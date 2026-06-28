@@ -11,6 +11,16 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.4.3 — 2026-06-29 — Lighter event handling, self-healing reconnects
+
+_Requires alpi v0.10.0+._
+
+- **Daemon events flow through one shared listener** instead of several, so
+  reconnects and event bursts do less redundant work.
+- **Event delivery self-heals:** if the app ever fails to attach its listener
+  it retries on its own, instead of going quiet until you navigate away.
+- **The local settings screen makes a single network probe** instead of three.
+
 ## v0.4.2 — 2026-06-28 — Settings panels load in parallel
 
 _Requires alpi v0.10.0+._

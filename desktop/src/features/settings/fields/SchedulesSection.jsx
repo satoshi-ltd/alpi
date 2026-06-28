@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
+import { subscribeDaemonEvent } from "../../../lib/daemon-bus.js";
 import { useNotify } from "../../../primitives/Notification.jsx";
 import { Section } from "../primitives.jsx";
 import settingsStyles from "../Settings.module.css";
@@ -62,7 +62,7 @@ export function SchedulesSection({ profile, connectionId = null, onLoadingChange
   }, [loading, onLoadingChange]);
 
   useEffect(() => {
-    const unlistenP = listen("daemon-event", (event) => {
+    return subscribeDaemonEvent((event) => {
       const payload = event?.payload ?? {};
       const frame = payload.frame ?? payload;
       if (frame?.event !== "schedule.changed") return;
@@ -70,7 +70,6 @@ export function SchedulesSection({ profile, connectionId = null, onLoadingChange
       if (connectionId && payload.connection_id && payload.connection_id !== connectionId) return;
       load();
     });
-    return () => { unlistenP.then((fn) => fn()).catch(() => {}); };
   }, [profile.name, connectionId]);
 
   function pinnedTarget() {

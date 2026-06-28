@@ -5,6 +5,7 @@ import { listen } from "@tauri-apps/api/event";
 
 import { useHostConnections } from "./useHostConnections.js";
 import { pruneCachedMessages } from "../lib/workgroup-cache.js";
+import { _resetDaemonBus } from "../lib/daemon-bus.js";
 
 vi.mock("../lib/workgroup-cache.js", () => ({
   pruneCachedMessages: vi.fn(),
@@ -49,6 +50,7 @@ function renderHostConnections() {
 
 beforeEach(() => {
   vi.resetAllMocks();
+  _resetDaemonBus();
   localStorage.clear();
   connectionStatusListener = null;
   listen.mockImplementation(async (eventName, cb) => {
