@@ -8,22 +8,41 @@ import { Btn } from "../../../primitives/index.js";
 import { STORAGE_SCOPE, formatBytes } from "../util.js";
 import styles from "../Settings.module.css";
 
+function storageCacheKey(connectionId, profileName) {
+  return `${connectionId || "local"}|${profileName}`;
+}
+
+const _storageCache = new Map();
+
+export function _clearStorageCache() {
+  _storageCache.clear();
+}
+
 export function StorageField({ profile, activeConnection, onLoadingChange = null }) {
-  const [items, setItems] = useState(null);
+  const key = storageCacheKey(activeConnection?.id ?? null, profile.name);
+  const [items, setItems] = useState(() => _storageCache.get(key) ?? null);
   const isLocal = activeConnection?.kind === "local";
   useEffect(() => {
     let cancelled = false;
-    setItems(null);
+    setItems(_storageCache.get(key) ?? null);
     onLoadingChange?.(true);
-    invoke("profile_storage", { profile: profile.name })
-      .then((rows) => { if (!cancelled) setItems(Array.isArray(rows) ? rows : []); })
-      .catch(() => { if (!cancelled) setItems([]); })
+    invoke("profile_storage", {
+      profile: profile.name,
+      ...(activeConnection?.id ? { connectionId: activeConnection.id } : {}),
+    })
+      .then((rows) => {
+        if (cancelled) return;
+        const next = Array.isArray(rows) ? rows : [];
+        _storageCache.set(key, next);
+        setItems(next);
+      })
+      .catch(() => { if (!cancelled) setItems(_storageCache.get(key) ?? []); })
       .finally(() => { if (!cancelled) onLoadingChange?.(false); });
     return () => {
       cancelled = true;
       onLoadingChange?.(false);
     };
-  }, [profile.name, onLoadingChange]);
+  }, [profile.name, activeConnection?.id, key, onLoadingChange]);
 
   const visible = (items ?? []).filter(
     (it) => it.size_bytes > 0 || it.file_count > 0,

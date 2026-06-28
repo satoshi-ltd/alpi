@@ -30,6 +30,7 @@ export function fetchWorkgroupTranscript(connectionId, profile, wgId, options = 
   const payload = afterSeq != null
     ? { profile, wgId, afterSeq, limit: options.limit ?? 200 }
     : { profile, wgId, tail: true, limit: options.limit ?? 200 };
+  if (connectionId) payload.connectionId = connectionId;
   const promise = invoke("workgroup_transcript", payload)
     .then((res) => {
       const posts = Array.isArray(res?.posts) ? res.posts : Array.isArray(res) ? res : [];

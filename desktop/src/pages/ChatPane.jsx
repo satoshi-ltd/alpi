@@ -207,6 +207,7 @@ export default function ChatPane({
         <ChatComposer
           profiles={profiles}
           activeProfile={activeProfile}
+          connectionId={connectionId}
           availableModels={activeModels}
           onSelectProfile={onSelectProfile}
           onConfigureProfile={onConfigureProfile}
@@ -286,6 +287,7 @@ export default function ChatPane({
       <ChatComposer
         profiles={profiles}
         activeProfile={activeProfile}
+        connectionId={connectionId}
         availableModels={activeModels}
         onSelectProfile={onSelectProfile}
         onConfigureProfile={onConfigureProfile}

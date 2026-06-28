@@ -493,26 +493,38 @@ async fn sessions_delete(
 }
 
 #[tauri::command]
-async fn workgroups(profile: Option<String>) -> serde_json::Value {
+async fn workgroups(profile: Option<String>, connection_id: Option<String>) -> serde_json::Value {
     off_main(move || {
         let params = match profile {
             Some(p) => serde_json::json!({"profile": p}),
             None => serde_json::json!({}),
         };
-        host_array_value("host.workgroups.list", params, "workgroups")
+        host_array_value_for(
+            connection_id.as_deref(),
+            "host.workgroups.list",
+            params,
+            "workgroups",
+        )
     })
     .await
     .unwrap_or(serde_json::Value::Array(vec![]))
 }
 
 #[tauri::command]
-async fn read_file(profile: Option<String>, rel_path: String) -> Result<String, String> {
+async fn read_file(
+    profile: Option<String>,
+    rel_path: String,
+    connection_id: Option<String>,
+) -> Result<String, String> {
     off_main(move || {
         let mut params = serde_json::json!({"rel_path": rel_path});
         if let Some(p) = profile {
             params["profile"] = serde_json::Value::String(p);
         }
-        let result = host_client::call("host.profile.read_file", params)?;
+        let result = match connection_id.as_deref() {
+            Some(cid) => host_client::call_for(cid, "host.profile.read_file", params),
+            None => host_client::call("host.profile.read_file", params),
+        }?;
         Ok(result
             .get("text")
             .and_then(|v| v.as_str())
@@ -875,8 +887,9 @@ async fn network_restart_host_server() -> Result<serde_json::Value, String> {
 }
 
 #[tauri::command]
-async fn profile_storage(profile: String) -> serde_json::Value {
-    off_main(move || host_array_value(
+async fn profile_storage(profile: String, connection_id: Option<String>) -> serde_json::Value {
+    off_main(move || host_array_value_for(
+        connection_id.as_deref(),
         "host.profile.storage",
         serde_json::json!({"profile": profile}),
         "storage",
@@ -886,8 +899,13 @@ async fn profile_storage(profile: String) -> serde_json::Value {
 }
 
 #[tauri::command]
-async fn workgroup_members(profile: String, wg_id: String) -> serde_json::Value {
-    off_main(move || host_array_value(
+async fn workgroup_members(
+    profile: String,
+    wg_id: String,
+    connection_id: Option<String>,
+) -> serde_json::Value {
+    off_main(move || host_array_value_for(
+        connection_id.as_deref(),
         "host.workgroup.members",
         serde_json::json!({"profile": profile, "wg_id": wg_id}),
         "members",
@@ -904,6 +922,7 @@ async fn workgroup_create(
     budget_usd: Option<f64>,
     briefing: Option<String>,
     pipeline: Option<String>,
+    connection_id: Option<String>,
 ) -> Result<String, String> {
     let mut params = serde_json::json!({
         "profile": profile,
@@ -921,7 +940,10 @@ async fn workgroup_create(
         params["pipeline"] = serde_json::Value::String(p);
     }
     let result = tauri::async_runtime::spawn_blocking(move || {
-        host_client::call("host.workgroup.create", params)
+        match connection_id.as_deref() {
+            Some(cid) => host_client::call_for(cid, "host.workgroup.create", params),
+            None => host_client::call("host.workgroup.create", params),
+        }
     })
     .await
     .map_err(|e| format!("join: {e}"))??;
@@ -941,6 +963,7 @@ async fn workgroup_update(
     clear_budget: Option<bool>,
     pipeline: Option<String>,
     auto_read: Option<bool>,
+    connection_id: Option<String>,
 ) -> Result<(), String> {
     let mut params = serde_json::json!({ "profile": profile, "wg_id": wg_id });
     if let Some(b) = briefing {
@@ -958,8 +981,9 @@ async fn workgroup_update(
     } else if let Some(b) = budget_usd {
         params["budget_usd"] = serde_json::json!(b);
     }
-    tauri::async_runtime::spawn_blocking(move || {
-        host_client::call("host.workgroup.update", params)
+    tauri::async_runtime::spawn_blocking(move || match connection_id.as_deref() {
+        Some(cid) => host_client::call_for(cid, "host.workgroup.update", params),
+        None => host_client::call("host.workgroup.update", params),
     })
     .await
     .map_err(|e| format!("join: {e}"))??;
@@ -971,10 +995,12 @@ async fn workgroup_add_member(
     profile: String,
     wg_id: String,
     member: String,
+    connection_id: Option<String>,
 ) -> Result<(), String> {
     let params = serde_json::json!({ "profile": profile, "wg_id": wg_id, "member": member });
-    tauri::async_runtime::spawn_blocking(move || {
-        host_client::call("host.workgroup.add_member", params)
+    tauri::async_runtime::spawn_blocking(move || match connection_id.as_deref() {
+        Some(cid) => host_client::call_for(cid, "host.workgroup.add_member", params),
+        None => host_client::call("host.workgroup.add_member", params),
     })
     .await
     .map_err(|e| format!("join: {e}"))??;
@@ -987,6 +1013,7 @@ async fn workgroup_action(
     wg_id: String,
     action: String,
     member_pubkey: Option<String>,
+    connection_id: Option<String>,
 ) -> Result<String, String> {
     let (method, params) = match action.as_str() {
         "pause" | "resume" | "leave" => (
@@ -1007,7 +1034,10 @@ async fn workgroup_action(
         ),
         _ => return Err(format!("invalid action: {action}")),
     };
-    tauri::async_runtime::spawn_blocking(move || host_client::call(method, params))
+    tauri::async_runtime::spawn_blocking(move || match connection_id.as_deref() {
+        Some(cid) => host_client::call_for(cid, method, params),
+        None => host_client::call(method, params),
+    })
         .await
         .map_err(|e| format!("join: {e}"))??;
     Ok(String::new())
@@ -2572,9 +2602,17 @@ async fn workgroup_transcript(
     after_seq: Option<u32>,
     limit: Option<u32>,
     tail: Option<bool>,
+    connection_id: Option<String>,
 ) -> Result<serde_json::Value, String> {
     // Default: tail=true, limit=200 — first-paint must be bounded so a workgroup with 10k posts doesn't ship megabytes over Tailscale. Subsequent fetches pass after_seq for incremental delta.
-    off_main(move || workgroup_transcript_blocking(profile, wg_id, after_seq, limit, tail)).await?
+    off_main(move || workgroup_transcript_blocking(
+        profile,
+        wg_id,
+        after_seq,
+        limit,
+        tail,
+        connection_id,
+    )).await?
 }
 
 fn workgroup_transcript_blocking(
@@ -2583,6 +2621,7 @@ fn workgroup_transcript_blocking(
     after_seq: Option<u32>,
     limit: Option<u32>,
     tail: Option<bool>,
+    connection_id: Option<String>,
 ) -> Result<serde_json::Value, String> {
     let mut params = serde_json::json!({ "profile": profile, "wg_id": wg_id });
     if let Some(s) = after_seq {
@@ -2591,7 +2630,10 @@ fn workgroup_transcript_blocking(
         params["tail"] = serde_json::json!(true);
     }
     params["limit"] = serde_json::json!(limit.unwrap_or(200));
-    let result = host_client::call("host.workgroup.transcript", params)?;
+    let result = match connection_id.as_deref() {
+        Some(cid) => host_client::call_for(cid, "host.workgroup.transcript", params),
+        None => host_client::call("host.workgroup.transcript", params),
+    }?;
     let posts = result
         .get("posts")
         .and_then(|v| v.as_array())
@@ -2640,10 +2682,12 @@ async fn workgroup_post(
     profile: String,
     wg_id: String,
     text: String,
+    connection_id: Option<String>,
 ) -> Result<String, String> {
     let params = serde_json::json!({ "profile": profile, "wg_id": wg_id, "text": text });
-    let result = tauri::async_runtime::spawn_blocking(move || {
-        host_client::call("host.workgroup.post", params)
+    let result = tauri::async_runtime::spawn_blocking(move || match connection_id.as_deref() {
+        Some(cid) => host_client::call_for(cid, "host.workgroup.post", params),
+        None => host_client::call("host.workgroup.post", params),
     })
     .await
     .map_err(|e| format!("join: {e}"))??;

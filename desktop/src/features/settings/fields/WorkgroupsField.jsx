@@ -4,7 +4,13 @@ import Chip from "../../../primitives/Chip.jsx";
 import Dropdown from "../../../primitives/Dropdown.jsx";
 import styles from "../Settings.module.css";
 
-export function WorkgroupsField({ profile, profiles, onSelectWorkgroup, onLoadingChange = null }) {
+export function WorkgroupsField({
+  profile,
+  profiles,
+  connectionId = null,
+  onSelectWorkgroup,
+  onLoadingChange = null,
+}) {
   const [groups, setGroups] = useState([]);
   const [loading, setLoading] = useState(false);
   useEffect(() => {
@@ -12,7 +18,10 @@ export function WorkgroupsField({ profile, profiles, onSelectWorkgroup, onLoadin
     setGroups([]);
     setLoading(true);
     onLoadingChange?.(true);
-    invoke("workgroups", { profile: profile.name })
+    invoke("workgroups", {
+      profile: profile.name,
+      ...(connectionId ? { connectionId } : {}),
+    })
       .then((rows) => { if (!cancelled) setGroups(Array.isArray(rows) ? rows : []); })
       .catch(() => { if (!cancelled) setGroups([]); })
       .finally(() => {
@@ -25,7 +34,7 @@ export function WorkgroupsField({ profile, profiles, onSelectWorkgroup, onLoadin
       cancelled = true;
       onLoadingChange?.(false);
     };
-  }, [profile.name, onLoadingChange]);
+  }, [profile.name, connectionId, onLoadingChange]);
 
   if (groups.length === 0) {
     return <span className={styles.muted}>{loading ? "loading…" : "none"}</span>;

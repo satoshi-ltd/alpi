@@ -1,9 +1,10 @@
 import { renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
-import { useUsageDaily, useWorkgroupUsageDaily } from "./useUsage.js";
+import { _clearUsageCache, useUsageDaily, useWorkgroupUsageDaily } from "./useUsage.js";
 
 beforeEach(() => {
+  _clearUsageCache();
   invoke.mockReset();
 });
 
@@ -34,5 +35,19 @@ describe("usage hooks", () => {
         connectionId: "remote-b",
       });
     });
+  });
+
+  it("serves cached usage immediately while refreshing in the background", async () => {
+    invoke
+      .mockResolvedValueOnce({ days: [{ iso: "2026-06-28", tokIn: 1, tokOut: 2, cost: 0.01 }], priceOut: 1 })
+      .mockResolvedValueOnce({ days: [{ iso: "2026-06-28", tokIn: 3, tokOut: 4, cost: 0.02 }], priceOut: 2 });
+    const first = renderHook(() => useUsageDaily("doc", "remote-a"));
+    await waitFor(() => expect(first.result.current.days[0].tokIn).toBe(1));
+    first.unmount();
+
+    const second = renderHook(() => useUsageDaily("doc", "remote-a"));
+    expect(second.result.current.days[0].tokIn).toBe(1);
+    expect(second.result.current.loading).toBe(true);
+    await waitFor(() => expect(second.result.current.days[0].tokIn).toBe(3));
   });
 });

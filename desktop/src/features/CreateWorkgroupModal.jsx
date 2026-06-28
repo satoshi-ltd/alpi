@@ -82,6 +82,7 @@ export default function CreateWorkgroupModal({
         budgetUsd: null,
         briefing: briefing.trim() || null,
         pipeline: pipeline.trim() || null,
+        ...(connectionId ? { connectionId } : {}),
       });
       notify({ message: `Workgroup #${name.trim()} created`, variant: "success" });
       onCreated?.(wgId, hubProfile);

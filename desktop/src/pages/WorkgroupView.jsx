@@ -245,6 +245,7 @@ export default function WorkgroupView({
     invoke("read_file", {
       profile: workgroup.profile,
       relPath: `alp/workgroups/${workgroup.id}/transcript.jsonl`,
+      ...(connectionId ? { connectionId } : {}),
     })
       .then((text) => {
         if (cancelled) return;
@@ -266,12 +267,14 @@ export default function WorkgroupView({
     invoke("read_file", {
       profile: workgroup.profile,
       relPath: `alp/workgroups/${workgroup.id}/members.yaml`,
+      ...(connectionId ? { connectionId } : {}),
     })
       .then((mem) => !cancelled && setMembers(parseMembers(mem)))
       .catch(() => {});
     invoke("read_file", {
       profile: workgroup.profile,
       relPath: "alp/peers.yaml",
+      ...(connectionId ? { connectionId } : {}),
     })
       .then((p) => !cancelled && setPeers(parsePeers(p)))
       .catch(() => {});
@@ -387,6 +390,7 @@ export default function WorkgroupView({
               profile: workgroup.profile,
               wgId: workgroup.id,
               action: workgroup.paused ? "resume" : "pause",
+              ...(connectionId ? { connectionId } : {}),
             });
             onReload?.();
             setRefreshTick((t) => t + 1);
@@ -401,6 +405,7 @@ export default function WorkgroupView({
               profile: workgroup.profile,
               wgId: workgroup.id,
               autoRead: !workgroup.auto_read,
+              ...(connectionId ? { connectionId } : {}),
             });
             onReload?.();
           } catch (e) {
@@ -535,6 +540,7 @@ export default function WorkgroupView({
               profile: workgroup.profile,
               wgId: workgroup.id,
               text,
+              ...(connectionId ? { connectionId } : {}),
             });
             const match = /seq\s+(\d+)/i.exec(String(result));
             if (match) {

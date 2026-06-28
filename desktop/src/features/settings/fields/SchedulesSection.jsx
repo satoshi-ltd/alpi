@@ -7,8 +7,19 @@ import settingsStyles from "../Settings.module.css";
 import { ScheduleRow as DsScheduleRow, ScheduleList as DsScheduleList } from "../../../primitives/SettingsLayout.jsx";
 import { scheduleSummary } from "../util.js";
 
+function cacheKey(connectionId, profileName) {
+  return `${connectionId || "local"}|${profileName}`;
+}
+
+const _jobsCache = new Map();
+
+export function _clearScheduleCache() {
+  _jobsCache.clear();
+}
+
 export function SchedulesSection({ profile, connectionId = null, onLoadingChange }) {
-  const [jobs, setJobs] = useState(null);
+  const key = cacheKey(connectionId, profile.name);
+  const [jobs, setJobs] = useState(() => _jobsCache.get(key) ?? null);
   const [loadError, setLoadError] = useState(null);
   const [busyId, setBusyId] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -24,11 +35,13 @@ export function SchedulesSection({ profile, connectionId = null, onLoadingChange
     try {
       const list = await invoke("schedules", { profile: profile.name, ...connArg });
       if (gen !== genRef.current) return;
-      setJobs(Array.isArray(list) ? list : []);
+      const next = Array.isArray(list) ? list : [];
+      _jobsCache.set(key, next);
+      setJobs(next);
       setLoadError(null);
     } catch (e) {
       if (gen !== genRef.current) return;
-      setJobs([]);
+      setJobs(_jobsCache.get(key) ?? []);
       setLoadError(String(e));
     } finally {
       if (gen === genRef.current) setLoading(false);
@@ -38,11 +51,11 @@ export function SchedulesSection({ profile, connectionId = null, onLoadingChange
   useEffect(() => {
     genRef.current += 1;
     targetRef.current = { profile: profile.name, connectionId };
-    setJobs(null);
+    setJobs(_jobsCache.get(key) ?? null);
     setLoadError(null);
     setBusyId(null);
     load();
-  }, [profile.name, connectionId]);
+  }, [profile.name, connectionId, key]);
 
   useEffect(() => {
     onLoadingChange?.(loading);

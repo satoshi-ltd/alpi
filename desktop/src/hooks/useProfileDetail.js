@@ -32,9 +32,9 @@ function load(connectionId, name, { force = false } = {}) {
     })
     .catch(() => {
       _inflight.delete(key);
-      _cache.set(key, {});
+      if (!_cache.has(key)) _cache.set(key, {});
       notify(key);
-      return {};
+      return _cache.get(key);
     });
   _inflight.set(key, p);
   return p;

@@ -163,6 +163,20 @@ describe("useProfileDetail", () => {
     await waitFor(() => expect(result.current.detail).toEqual({}));
   });
 
+  it("keeps cached detail when a forced background refresh fails", async () => {
+    invoke
+      .mockResolvedValueOnce({ models: ["a/b"] })
+      .mockRejectedValueOnce(new Error("offline"));
+    const first = renderHook(() => useProfileDetail("conn-a", "doc"));
+    await waitFor(() => expect(first.result.current.detail).toEqual({ models: ["a/b"] }));
+    first.unmount();
+
+    const second = renderHook(() => useProfileDetail("conn-a", "doc", { refreshOnMount: true }));
+    expect(second.result.current.detail).toEqual({ models: ["a/b"] });
+    await waitFor(() => expect(second.result.current.loading).toBe(false));
+    expect(second.result.current.detail).toEqual({ models: ["a/b"] });
+  });
+
   it("coalesces a burst of config_changed events into ONE refetch (reconnect replay storm)", async () => {
     invoke
       .mockResolvedValueOnce({ peers: ["alice"] })

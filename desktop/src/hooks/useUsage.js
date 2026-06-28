@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 
 const WEEKDAY_INITIALS = ["S", "M", "T", "W", "T", "F", "S"];
+const _cache = new Map();
 
 export function toUsageDays(rpcDays) {
   if (!Array.isArray(rpcDays)) return [];
@@ -20,9 +21,9 @@ export function toUsageDays(rpcDays) {
 }
 
 function useUsageCall(command, params, ready) {
-  const [data, setData] = useState(null);
+  const key = `${command}|${JSON.stringify(params)}`;
+  const [data, setData] = useState(() => _cache.get(key) ?? null);
   const [loading, setLoading] = useState(false);
-  const key = JSON.stringify(params);
   useEffect(() => {
     if (!ready) {
       setData(null);
@@ -30,10 +31,18 @@ function useUsageCall(command, params, ready) {
       return undefined;
     }
     let cancelled = false;
+    setData(_cache.has(key) ? _cache.get(key) : null);
     setLoading(true);
     invoke(command, params)
-      .then((d) => { if (!cancelled) setData(d || null); })
-      .catch(() => { if (!cancelled) setData(null); })
+      .then((d) => {
+        if (cancelled) return;
+        const next = d || null;
+        if (next) _cache.set(key, next);
+        setData(next ?? _cache.get(key) ?? null);
+      })
+      .catch(() => {
+        if (!cancelled) setData(_cache.get(key) ?? null);
+      })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [command, key, ready]);
@@ -55,4 +64,8 @@ export function useWorkgroupUsageDaily(profile, wgId, connectionId = null) {
     { profile, wgId, ...(connectionId ? { connectionId } : {}) },
     !!profile && !!wgId,
   );
+}
+
+export function _clearUsageCache() {
+  _cache.clear();
 }

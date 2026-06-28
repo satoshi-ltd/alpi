@@ -11,6 +11,22 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.4.1 — 2026-06-28 — Settings stay responsive across connections
+
+_Requires alpi v0.10.0+._
+
+- **Profile settings render from cache immediately, then refresh in the background.**
+  Usage, email accounts, paired devices, schedules, storage and workgroup
+  members no longer blank out while a remote daemon answers over Tailscale.
+- **Settings now shows the same indeterminate sync bar used by chat refreshes**
+  while profile/workgroup data is being fetched.
+- **Multi-connection settings calls are scoped to the selected daemon.**
+  Workgroup lists, creation, member reads, actions, transcript fetches, storage
+  and profile file reads now pass the active connection explicitly instead of
+  falling back to whichever daemon was globally active.
+- **Temporary offline probes keep the last good profile/workgroup cache visible**
+  and only clear the view on authentication failure.
+
 ## v0.4.0 — 2026-06-26 — Gateways are now Email
 
 _Requires alpi v0.10.0+._

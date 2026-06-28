@@ -8,9 +8,10 @@ vi.mock("../../../primitives/Notification.jsx", () => ({
   useNotify: () => notifyMock,
 }));
 
-import { DevicesField } from "./devices.jsx";
+import { DevicesField, _clearDevicesCache } from "./devices.jsx";
 
 beforeEach(() => {
+  _clearDevicesCache();
   invoke.mockReset();
   notifyMock.mockReset();
 });
@@ -69,5 +70,22 @@ describe("DevicesField", () => {
     });
     expect(screen.queryByText("Casa phone")).toBeNull();
     expect(screen.getByText("Mirai phone")).toBeInTheDocument();
+  });
+
+  it("renders cached devices immediately while refreshing", async () => {
+    invoke
+      .mockResolvedValueOnce([{ token_id: "casa-1", label: "Casa phone" }])
+      .mockResolvedValueOnce([{ token_id: "casa-2", label: "Casa tablet" }]);
+    const first = render(<DevicesField connectionId="casa" role="admin" />);
+    fireEvent.click(await screen.findByRole("button", { name: /1 device/i }));
+    expect(await screen.findByText("Casa phone")).toBeInTheDocument();
+    first.unmount();
+
+    render(<DevicesField connectionId="casa" role="admin" />);
+    expect(screen.getByRole("button", { name: /1 device/i })).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole("button", { name: /1 device/i })).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: /1 device/i }));
+    expect(await screen.findByText("Casa tablet")).toBeInTheDocument();
+    expect(invoke).toHaveBeenCalledTimes(2);
   });
 });

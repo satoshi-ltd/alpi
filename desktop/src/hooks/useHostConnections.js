@@ -45,6 +45,7 @@ export function useHostConnections({
   const [profiles, setProfiles] = useState([]);
   const [workgroups, setWorkgroups] = useState([]);
   const [pickerAlpi, setPickerAlpi] = useState(null);
+  const [connectionSyncing, setConnectionSyncing] = useState(false);
 
   const hostConnectionsRef = useRef(hostConnections);
   const connectionSwitchRef = useRef(0);
@@ -137,7 +138,7 @@ export function useHostConnections({
 
   const showCachedOrClear = useCallback(
     (connectionId, status) => {
-      if (status === "offline" || status === "auth-failed") {
+      if (status === "auth-failed") {
         clearConnectionContent();
       } else {
         loadFromCache(connectionId);
@@ -154,13 +155,15 @@ export function useHostConnections({
     const status = active?.status;
     if (status !== "online") {
       showCachedOrClear(activeId, status);
+      if (status === "offline" || status === "auth-failed") setConnectionSyncing(false);
       reloadConnections();
       return;
     }
+    setConnectionSyncing(true);
     try {
       let [ps, ws] = await Promise.all([
-        invoke("profile_summaries"),
-        invoke("workgroups", { profile: null }),
+        invoke("profile_summaries", { connectionId: activeId }),
+        invoke("workgroups", { profile: null, connectionId: activeId }),
       ]);
       if (Array.isArray(ps) && ps.length === 0) {
         const fallbackProfiles = await invoke("profiles");
@@ -199,6 +202,12 @@ export function useHostConnections({
         );
       }
     } finally {
+      if (
+        hostConnectionsRef.current?.active_id === activeId &&
+        connectionSwitchRef.current === switchId
+      ) {
+        setConnectionSyncing(false);
+      }
       reloadConnections();
     }
   }, [
@@ -271,10 +280,14 @@ export function useHostConnections({
     syncedStatusRef.current = activeStatusKey;
     if (status === "online") {
       reloadConnections().finally(() => reload());
-    } else if (status === "offline" || status === "auth-failed") {
+    } else if (status === "auth-failed") {
+      setConnectionSyncing(false);
       reloadConnections().finally(() => clearConnectionContent());
+    } else if (status === "offline") {
+      setConnectionSyncing(false);
+      reloadConnections().finally(() => loadFromCache(hostConnectionsRef.current.active_id));
     }
-  }, [activeStatusKey, clearConnectionContent, reload, reloadConnections]);
+  }, [activeStatusKey, clearConnectionContent, loadFromCache, reload, reloadConnections]);
 
   useEffect(() => {
     reload();
@@ -321,11 +334,23 @@ export function useHostConnections({
       // reset picker — applyProfilesAndWorkgroups keeps prev if name collides across connections
       setPickerAlpi(null);
       loadFromCache(id);
+      setConnectionSyncing(true);
 
       invoke("host_connection_set_active", { id })
         .then(() => {
           if (connectionSwitchRef.current !== switchId) return;
-          invoke("host_connection_probe", { id }).catch(() => {});
+          invoke("host_connection_probe", { id })
+            .then((status) => {
+              if (connectionSwitchRef.current !== switchId) return;
+              if (status === "online") {
+                reloadConnections().finally(() => reload());
+              } else if (status === "offline" || status === "auth-failed") {
+                setConnectionSyncing(false);
+              }
+            })
+            .catch(() => {
+              if (connectionSwitchRef.current === switchId) setConnectionSyncing(false);
+            });
         })
         .catch(() => {
           if (connectionSwitchRef.current === switchId) {
@@ -333,12 +358,14 @@ export function useHostConnections({
             setHostConnections(previousState);
             setPickerAlpi(null);
             loadFromCache(previousState.active_id);
+            setConnectionSyncing(false);
           }
           reloadConnections();
         });
     },
     [
       loadFromCache,
+      reload,
       reloadConnections,
       pendingTurnsRef,
       setRewriteDraft,
@@ -390,6 +417,7 @@ export function useHostConnections({
     profiles,
     setProfiles,
     workgroups,
+    connectionSyncing,
     touchWorkgroup,
     pickerAlpi,
     setPickerAlpi,

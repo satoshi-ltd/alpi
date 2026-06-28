@@ -9,7 +9,7 @@ vi.mock("../../../primitives/Notification.jsx", () => ({
   useNotify: () => notifyMock,
 }));
 
-import { EmailCell } from "./EmailCell.jsx";
+import { EmailCell, _clearEmailAccountsCache } from "./EmailCell.jsx";
 
 const profile = { name: "concierge" };
 
@@ -19,6 +19,7 @@ const TWO_ACCOUNTS = [
 ];
 
 beforeEach(() => {
+  _clearEmailAccountsCache();
   invoke.mockReset();
   notifyMock.mockReset();
   listen.mockReset();
@@ -50,6 +51,23 @@ describe("EmailCell multi-account", () => {
     });
     render(<EmailCell profile={profile} connectionId="casa" />);
     expect(await screen.findByText("none")).toBeInTheDocument();
+  });
+
+  it("renders cached accounts immediately while refreshing the selected daemon", async () => {
+    invoke
+      .mockResolvedValueOnce(TWO_ACCOUNTS)
+      .mockResolvedValueOnce([
+        ...TWO_ACCOUNTS,
+        { id: "ops_example_com", type: "imap", address: "ops@example.com", configured: true },
+      ]);
+    const first = render(<EmailCell profile={profile} connectionId="casa" />);
+    expect(await screen.findByRole("button", { name: "me@work.com" })).toBeInTheDocument();
+    first.unmount();
+
+    render(<EmailCell profile={profile} connectionId="casa" />);
+    expect(screen.getByRole("button", { name: "me@work.com" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "ops@example.com" })).toBeInTheDocument();
+    expect(invoke).toHaveBeenCalledTimes(2);
   });
 
   it("omits connectionId when no connection is selected", async () => {

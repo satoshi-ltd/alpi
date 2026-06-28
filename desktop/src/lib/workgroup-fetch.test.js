@@ -46,6 +46,7 @@ describe("fetchWorkgroupTranscript", () => {
       wgId: "wg-1",
       tail: true,
       limit: 200,
+      connectionId: "conn-a",
     });
   });
 
@@ -59,6 +60,7 @@ describe("fetchWorkgroupTranscript", () => {
       wgId: "wg-1",
       afterSeq: 5,
       limit: 200,
+      connectionId: "conn-a",
     });
   });
 
@@ -100,6 +102,7 @@ describe("fetchWorkgroupTranscript", () => {
       wgId: "wg-1",
       afterSeq: 5,
       limit: 200,
+      connectionId: "conn-a",
     });
   });
 });
@@ -120,6 +123,7 @@ describe("invalidateTranscriptCache", () => {
       wgId: "wg-1",
       tail: true,
       limit: 200,
+      connectionId: "conn-a",
     });
 
     // conn-b still has its cursor → uses after_seq.
@@ -130,6 +134,7 @@ describe("invalidateTranscriptCache", () => {
       wgId: "wg-1",
       afterSeq: 1,
       limit: 200,
+      connectionId: "conn-b",
     });
   });
 });

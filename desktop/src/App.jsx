@@ -288,6 +288,7 @@ export default function App() {
     profiles,
     setProfiles,
     workgroups,
+    connectionSyncing,
     touchWorkgroup,
     pickerAlpi,
     setPickerAlpi,
@@ -986,6 +987,7 @@ export default function App() {
               target={settingsTarget}
               hostConnections={hostConnections}
               activeConnection={activeConnection}
+              connectionSyncing={connectionSyncing}
               refreshTick={settingsRefreshTick}
               pinned={pinned}
               jumpHints={jumpHints}

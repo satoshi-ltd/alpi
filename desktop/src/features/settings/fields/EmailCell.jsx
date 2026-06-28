@@ -13,8 +13,19 @@ import Field from "../../../primitives/Field.jsx";
 import { ConfirmDeleteAction } from "../../../primitives/index.js";
 import styles from "../Settings.module.css";
 
+function cacheKey(connectionId, profileName) {
+  return `${connectionId || "local"}|${profileName}`;
+}
+
+const _accountsCache = new Map();
+
+export function _clearEmailAccountsCache() {
+  _accountsCache.clear();
+}
+
 export function EmailCell({ profile, connectionId = null, onLoadingChange = null }) {
-  const [accounts, setAccounts] = useState([]);
+  const key = cacheKey(connectionId, profile.name);
+  const [accounts, setAccounts] = useState(() => _accountsCache.get(key) ?? null);
   const [tick, setTick] = useState(0);
   const [editing, setEditing] = useState(null);
   const [adding, setAdding] = useState(false);
@@ -26,16 +37,18 @@ export function EmailCell({ profile, connectionId = null, onLoadingChange = null
 
   useEffect(() => {
     const requestId = ++requestRef.current;
-    setAccounts([]);
+    setAccounts(_accountsCache.get(key) ?? null);
     setEditing(null);
     onLoadingChange?.(true);
     invoke("email_status", { profile: profile.name, ...connectionArg })
       .then((s) => {
         if (requestRef.current !== requestId) return;
-        setAccounts(Array.isArray(s) ? s : []);
+        const next = Array.isArray(s) ? s : [];
+        _accountsCache.set(key, next);
+        setAccounts(next);
       })
       .catch(() => {
-        if (requestRef.current === requestId) setAccounts([]);
+        if (requestRef.current === requestId) setAccounts(_accountsCache.get(key) ?? []);
       })
       .finally(() => {
         if (requestRef.current === requestId) onLoadingChange?.(false);
@@ -44,7 +57,7 @@ export function EmailCell({ profile, connectionId = null, onLoadingChange = null
       requestRef.current += 1;
       onLoadingChange?.(false);
     };
-  }, [profile.name, connectionArg, tick, onLoadingChange]);
+  }, [profile.name, connectionArg, key, tick, onLoadingChange]);
 
   function refresh() {
     setTick((t) => t + 1);
@@ -52,8 +65,9 @@ export function EmailCell({ profile, connectionId = null, onLoadingChange = null
 
   return (
     <span className={styles.chipRow}>
-      {accounts.length === 0 && <span className={styles.muted}>none</span>}
-      {accounts.map((a) => (
+      {accounts === null && <span className={styles.muted}>loading…</span>}
+      {accounts?.length === 0 && <span className={styles.muted}>none</span>}
+      {accounts?.map((a) => (
         <Chip key={a.id} onClick={() => setEditing(a)}>
           {a.address || a.id}
         </Chip>

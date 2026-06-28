@@ -20,13 +20,24 @@ import { formatLastSeen } from "../util.js";
 import styles from "../Settings.module.css";
 import { copyText } from "../../../lib/clipboard.js";
 
+function cacheKey(connectionId) {
+  return connectionId || "local";
+}
+
+const _devicesCache = new Map();
+
+export function _clearDevicesCache() {
+  _devicesCache.clear();
+}
+
 export function DevicesField({
   connectionId = null,
   role = null,
   onLoadingChange = null,
 }) {
   const notify = useNotify();
-  const [devices, setDevices] = useState(null);
+  const key = cacheKey(connectionId);
+  const [devices, setDevices] = useState(() => _devicesCache.get(key) ?? null);
   const [adding, setAdding] = useState(false);
   const [selectedTokenId, setSelectedTokenId] = useState(null);
   const [revokeTarget, setRevokeTarget] = useState(null);
@@ -44,18 +55,20 @@ export function DevicesField({
     try {
       const list = await invoke("devices_list", connectionArg);
       if (requestRef.current !== requestId) return;
-      setDevices(Array.isArray(list) ? list : []);
+      const next = Array.isArray(list) ? list : [];
+      _devicesCache.set(key, next);
+      setDevices(next);
     } catch (e) {
       if (requestRef.current !== requestId) return;
-      setDevices([]);
+      setDevices(_devicesCache.get(key) ?? []);
       notify({ message: `devices: ${String(e)}`, variant: "error" });
     } finally {
       if (requestRef.current === requestId) onLoadingChange?.(false);
     }
-  }, [connectionArg, notify, onLoadingChange]);
+  }, [connectionArg, key, notify, onLoadingChange]);
 
   useEffect(() => {
-    setDevices(null);
+    setDevices(_devicesCache.get(key) ?? null);
     setAdding(false);
     setSelectedTokenId(null);
     setRevokeTarget(null);
@@ -64,7 +77,7 @@ export function DevicesField({
       requestRef.current += 1;
       onLoadingChange?.(false);
     };
-  }, [reload, onLoadingChange]);
+  }, [key, reload, onLoadingChange]);
 
   async function revoke(tokenId) {
     try {

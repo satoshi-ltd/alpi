@@ -60,6 +60,7 @@ export default function ProfileDetail({
   profile: profileSummary,
   profiles,
   activeConnection,
+  connectionSyncing = false,
   intent,
   onSaved,
   onDelete,
@@ -189,7 +190,7 @@ export default function ProfileDetail({
         active={
           detailLoading || devicesLoading || emailLoading || schedulesLoading
           || modelLoading || peersLoading || workgroupsLoading || storageLoading
-          || usage.loading
+          || usage.loading || connectionSyncing
         }
         accent={profile.accent || null}
         controlled
@@ -384,6 +385,7 @@ export default function ProfileDetail({
             <WorkgroupsField
               profile={profile}
               profiles={profiles}
+              connectionId={activeConnection?.id ?? null}
               onSelectWorkgroup={(id) =>
                 onNavigate?.({ kind: "workgroup", id })
               }

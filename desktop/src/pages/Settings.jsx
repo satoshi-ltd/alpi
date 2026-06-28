@@ -8,6 +8,7 @@ export default function Settings({
   workgroups = [],
   target,
   activeConnection,
+  connectionSyncing = false,
   refreshTick = 0,
   onSelectTarget,
   onRefresh,
@@ -42,6 +43,7 @@ export default function Settings({
           profile={selectedProfile}
           profiles={profiles}
           activeConnection={activeConnection}
+          connectionSyncing={connectionSyncing}
           intent={target?.kind === "profile" ? target.intent : undefined}
           onSaved={onRefresh}
           onDelete={onDeleteProfile}
@@ -55,6 +57,7 @@ export default function Settings({
           workgroup={selectedWorkgroup}
           profiles={profiles}
           connectionId={activeConnection?.id ?? null}
+          connectionSyncing={connectionSyncing}
           onSaved={onRefresh}
           onOpenChat={onOpenChat}
         />

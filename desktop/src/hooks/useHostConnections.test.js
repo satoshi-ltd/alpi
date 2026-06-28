@@ -230,6 +230,58 @@ describe("useHostConnections connection-status", () => {
     const remote = result.current.hostConnections.connections.find((c) => c.id === "remote");
     expect(remote.update_available).toBe("0.9.6");
   });
+
+  it("exposes syncing while the active connection profiles/workgroups refresh is in flight", async () => {
+    let resolveProfiles;
+    invoke.mockImplementation(async (cmd) => {
+      if (cmd === "host_connections") return makeConnections("local");
+      if (cmd === "profile_summaries") {
+        return new Promise((resolve) => { resolveProfiles = resolve; });
+      }
+      if (cmd === "workgroups") return [];
+      return null;
+    });
+
+    const { result } = renderHostConnections();
+    await waitFor(() => expect(result.current.connectionSyncing).toBe(true));
+    await act(async () => {
+      resolveProfiles([{ name: "doc", model: "a/b" }]);
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(result.current.connectionSyncing).toBe(false));
+  });
+
+  it("keeps cached profiles visible while an active connection is temporarily offline", async () => {
+    setProfileCache("local", [{ name: "cached-doc", model: "a/b" }], []);
+    invoke.mockImplementation(async (cmd) => {
+      if (cmd === "host_connections") return makeConnections("local", { local: "offline" });
+      if (cmd === "profile_summaries") return [];
+      if (cmd === "workgroups") return [];
+      return null;
+    });
+
+    const { result } = renderHostConnections();
+    await waitFor(() => {
+      expect(result.current.profiles.map((p) => p.name)).toEqual(["cached-doc"]);
+    });
+  });
+
+  it("clears syncing when a connection switch probe ends offline", async () => {
+    invoke.mockImplementation(async (cmd) => {
+      if (cmd === "host_connections") return makeConnections("local");
+      if (cmd === "profile_summaries") return [{ name: "doc", model: "a/b" }];
+      if (cmd === "workgroups") return [];
+      if (cmd === "host_connection_set_active") return null;
+      if (cmd === "host_connection_probe") return "offline";
+      return null;
+    });
+
+    const { result } = renderHostConnections();
+    await waitFor(() => expect(result.current.profiles.length).toBe(1));
+    act(() => result.current.onSetHostConnection("remote"));
+    expect(result.current.connectionSyncing).toBe(true);
+    await waitFor(() => expect(result.current.connectionSyncing).toBe(false));
+  });
 });
 
 

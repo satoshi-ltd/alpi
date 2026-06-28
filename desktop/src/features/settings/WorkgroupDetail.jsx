@@ -35,8 +35,26 @@ function renderMemberRow(m, profiles, workgroup, hubPubkey, onRemove) {
   );
 }
 
-export default function WorkgroupDetail({ workgroup, profiles, connectionId = null, onSaved, onOpenChat }) {
-  const [members, setMembers] = useState(null);
+function membersCacheKey(connectionId, profile, wgId) {
+  return `${connectionId || "local"}|${profile}|${wgId}`;
+}
+
+const _membersCache = new Map();
+
+export function _clearWorkgroupMembersCache() {
+  _membersCache.clear();
+}
+
+export default function WorkgroupDetail({
+  workgroup,
+  profiles,
+  connectionId = null,
+  connectionSyncing = false,
+  onSaved,
+  onOpenChat,
+}) {
+  const membersKey = membersCacheKey(connectionId, workgroup.profile, workgroup.id);
+  const [members, setMembers] = useState(() => _membersCache.get(membersKey) ?? null);
   const [membersLoading, setMembersLoading] = useState(false);
   const [busyAction, setBusyAction] = useState(null);
   const [briefing, setBriefing] = useState(workgroup.briefing ?? "");
@@ -63,28 +81,37 @@ export default function WorkgroupDetail({ workgroup, profiles, connectionId = nu
       const list = await invoke("workgroup_members", {
         profile: workgroup.profile,
         wgId: workgroup.id,
+        ...(connectionId ? { connectionId } : {}),
       });
-      setMembers(list);
+      const next = Array.isArray(list) ? list : [];
+      _membersCache.set(membersKey, next);
+      setMembers(next);
     } catch {
-      setMembers([]);
+      setMembers(_membersCache.get(membersKey) ?? []);
     } finally {
       setMembersLoading(false);
     }
-  }, [workgroup.profile, workgroup.id]);
+  }, [workgroup.profile, workgroup.id, connectionId, membersKey]);
 
   useEffect(() => {
     let cancelled = false;
-    setMembers(null);
+    setMembers(_membersCache.get(membersKey) ?? null);
     setMembersLoading(true);
     invoke("workgroup_members", {
       profile: workgroup.profile,
       wgId: workgroup.id,
+      ...(connectionId ? { connectionId } : {}),
     })
-      .then((list) => { if (!cancelled) setMembers(list); })
-      .catch(() => { if (!cancelled) setMembers([]); })
+      .then((list) => {
+        if (cancelled) return;
+        const next = Array.isArray(list) ? list : [];
+        _membersCache.set(membersKey, next);
+        setMembers(next);
+      })
+      .catch(() => { if (!cancelled) setMembers(_membersCache.get(membersKey) ?? []); })
       .finally(() => { if (!cancelled) setMembersLoading(false); });
     return () => { cancelled = true; };
-  }, [workgroup.profile, workgroup.id]);
+  }, [workgroup.profile, workgroup.id, connectionId, membersKey]);
 
   const hubName = workgroup.hub_id ?? workgroup.profile;
   const hubSummary = profiles.find((p) => p.name === hubName);
@@ -113,6 +140,7 @@ export default function WorkgroupDetail({ workgroup, profiles, connectionId = nu
         profile: workgroup.profile,
         wgId: workgroup.id,
         briefing,
+        ...(connectionId ? { connectionId } : {}),
       });
       await onSaved?.();
     } catch (e) {
@@ -133,6 +161,7 @@ export default function WorkgroupDetail({ workgroup, profiles, connectionId = nu
         profile: workgroup.profile,
         wgId: workgroup.id,
         autoRead: enabled,
+        ...(connectionId ? { connectionId } : {}),
       });
       await onSaved?.();
     } catch (e) {
@@ -178,6 +207,7 @@ export default function WorkgroupDetail({ workgroup, profiles, connectionId = nu
         profile: workgroup.profile,
         wgId: workgroup.id,
         pipeline: stages.join(","),
+        ...(connectionId ? { connectionId } : {}),
       });
       await onSaved?.();
     } catch (e) {
@@ -192,6 +222,7 @@ export default function WorkgroupDetail({ workgroup, profiles, connectionId = nu
         profile: workgroup.profile,
         wgId: workgroup.id,
         member: memberArg,
+        ...(connectionId ? { connectionId } : {}),
       });
       notify({ message: `Added ${label} · group rekeyed`, variant: "success" });
       await reloadMembers();
@@ -215,6 +246,7 @@ export default function WorkgroupDetail({ workgroup, profiles, connectionId = nu
         wgId: workgroup.id,
         action,
         memberPubkey,
+        ...(connectionId ? { connectionId } : {}),
       });
       notify({
         message:
@@ -273,7 +305,7 @@ export default function WorkgroupDetail({ workgroup, profiles, connectionId = nu
   return (
     <main className={styles.detail}>
       <RefreshBar
-        active={membersLoading || hubDetailLoading || usage.loading}
+        active={membersLoading || hubDetailLoading || usage.loading || connectionSyncing}
         accent={hub?.accent || null}
         controlled
         label="Fetching latest workgroup settings"
@@ -291,6 +323,7 @@ export default function WorkgroupDetail({ workgroup, profiles, connectionId = nu
               wgId: workgroup.id,
               action: workgroup.paused ? "resume" : "pause",
               memberPubkey: null,
+              ...(connectionId ? { connectionId } : {}),
             });
             await onSaved?.();
           } catch (e) {
@@ -401,6 +434,7 @@ export default function WorkgroupDetail({ workgroup, profiles, connectionId = nu
                           wgId: workgroup.id,
                           budgetUsd: next,
                           clearBudget: next === null,
+                          ...(connectionId ? { connectionId } : {}),
                         });
                         await onSaved?.();
                       } catch (e) {

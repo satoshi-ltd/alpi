@@ -30,6 +30,7 @@ export default function ChatComposer({
   rewriteDraft,
   onRewriteDraftApplied,
   minHeight = null,
+  connectionId = null,
 }) {
   const notify = useNotify();
   const draftKey = activeProfile
@@ -111,6 +112,7 @@ export default function ChatComposer({
     invoke("read_file", {
       profile: activeProfile.name,
       relPath: "alp/peers.yaml",
+      ...(connectionId ? { connectionId } : {}),
     })
       .then(async (text) => {
         if (cancelled) return;
@@ -140,7 +142,7 @@ export default function ChatComposer({
     return () => {
       cancelled = true;
     };
-  }, [activeProfile?.name]);
+  }, [activeProfile?.name, connectionId]);
 
   const mentions = useMemo(
     () =>

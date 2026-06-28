@@ -20,9 +20,10 @@ function emit(name, payload) {
   for (const fn of listenSubs.get(name) ?? []) fn({ payload });
 }
 
-import { SchedulesSection } from "./SchedulesSection.jsx";
+import { SchedulesSection, _clearScheduleCache } from "./SchedulesSection.jsx";
 
 beforeEach(() => {
+  _clearScheduleCache();
   invokeMock.mockReset();
   listenSubs.clear();
 });
@@ -49,6 +50,24 @@ describe("SchedulesSection", () => {
     ]);
     render(<SchedulesSection profile={{ name: "work" }} />);
     expect(await screen.findByText("Daily standup")).toBeInTheDocument();
+  });
+
+  it("renders cached jobs immediately while refreshing", async () => {
+    invokeMock
+      .mockResolvedValueOnce([
+        { id: "j1", title: "Cached", prompt: "", paused: false, cron: "* * * * *" },
+      ])
+      .mockResolvedValueOnce([
+        { id: "j2", title: "Fresh", prompt: "", paused: false, cron: "* * * * *" },
+      ]);
+    const first = render(<SchedulesSection profile={{ name: "work" }} connectionId="casa" />);
+    expect(await screen.findByText("Cached")).toBeInTheDocument();
+    first.unmount();
+
+    render(<SchedulesSection profile={{ name: "work" }} connectionId="casa" />);
+    expect(screen.getByText("Cached")).toBeInTheDocument();
+    expect(await screen.findByText("Fresh")).toBeInTheDocument();
+    expect(invokeMock).toHaveBeenCalledTimes(2);
   });
 
   it("forwards connectionId so two daemons with the same profile name don't share state", async () => {
