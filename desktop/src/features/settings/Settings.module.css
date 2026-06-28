@@ -158,6 +158,12 @@
   position: relative;
 }
 
+.syncBarSlot {
+  position: relative;
+  height: 2px;
+  flex: 0 0 2px;
+}
+
 .body {
   flex: 1;
   overflow-y: auto;
@@ -185,6 +191,7 @@
   justify-content: center;
   color: var(--ink-3);
   font-size: var(--fs-sm);
+  position: relative;
 }
 
 .section {

@@ -1,4 +1,4 @@
-import { render, waitFor } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
 
@@ -22,6 +22,19 @@ beforeEach(() => {
 });
 
 describe("WorkgroupDetail", () => {
+  it("shows the settings sync progress bar under the header", () => {
+    render(
+      <WorkgroupDetail
+        workgroup={{ id: "wg-1", profile: "mira", hub_id: "mira", is_hub: true }}
+        profiles={[{ name: "mira", pubkey_b64: "hub", accent: "#446" }]}
+        connectionId="casa"
+        connectionSyncing
+      />,
+    );
+
+    expect(screen.getByRole("progressbar", { name: "Fetching latest workgroup settings" })).toBeInTheDocument();
+  });
+
   it("routes member reads to the selected connection", async () => {
     invoke.mockResolvedValueOnce([]);
     render(

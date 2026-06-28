@@ -142,7 +142,14 @@ export function SchedulesSection({ profile, connectionId = null, onLoadingChange
       </Section>
     );
   }
-  if (jobs === null || jobs.length === 0) return null;
+  if (jobs === null) {
+    return (
+      <Section title="Schedule" tooltip="recurring agent tasks">
+        <span className={settingsStyles.muted}>loading…</span>
+      </Section>
+    );
+  }
+  if (jobs.length === 0) return null;
   return (
     <Section title="Schedule" tooltip="recurring agent tasks">
       <DsScheduleList>

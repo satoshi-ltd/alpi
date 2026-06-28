@@ -90,6 +90,9 @@ export default function ProfileDetail({
   const [peersLoading, setPeersLoading] = useState(false);
   const [workgroupsLoading, setWorkgroupsLoading] = useState(false);
   const [storageLoading, setStorageLoading] = useState(false);
+  const [networkLoading, setNetworkLoading] = useState(false);
+  const [pairingNameLoading, setPairingNameLoading] = useState(false);
+  const [hostPortLoading, setHostPortLoading] = useState(false);
   const notify = useNotify();
   const timersRef = useRef({});
   const prevBaselineRef = useRef(baseline);
@@ -183,19 +186,15 @@ export default function ProfileDetail({
       )}
     </>
   );
+  const syncing = (
+    detailLoading || devicesLoading || emailLoading || schedulesLoading
+    || modelLoading || peersLoading || workgroupsLoading || storageLoading
+    || networkLoading || pairingNameLoading || hostPortLoading
+    || usage.loading || connectionSyncing
+  );
 
   return (
     <main className={styles.detail}>
-      <RefreshBar
-        active={
-          detailLoading || devicesLoading || emailLoading || schedulesLoading
-          || modelLoading || peersLoading || workgroupsLoading || storageLoading
-          || usage.loading || connectionSyncing
-        }
-        accent={profile.accent || null}
-        controlled
-        label="Fetching latest settings"
-      />
       <SettingsHero
         kind="profile"
         id={profile.name}
@@ -204,6 +203,14 @@ export default function ProfileDetail({
         meta={heroMeta}
         onOpenChat={onOpenChat ? () => onOpenChat(profile) : undefined}
       />
+      <div className={styles.syncBarSlot}>
+        <RefreshBar
+          active={syncing}
+          accent={profile.accent || null}
+          controlled
+          label="Fetching latest settings"
+        />
+      </div>
       <div className={styles.body}>
         <Section title="Overview">
           <Row label="home">
@@ -261,13 +268,17 @@ export default function ProfileDetail({
           </Row>
         </Section>
 
-        {usage.days.length > 0 && (
+        {(usage.loading || usage.days.length > 0) && (
           <Section title="Usage" kicker="last 14 days">
-            <Usage
-              days={usage.days}
-              accent={profile.accent || "var(--accent)"}
-              capLine={capUsd}
-            />
+            {usage.days.length > 0 ? (
+              <Usage
+                days={usage.days}
+                accent={profile.accent || "var(--accent)"}
+                capLine={capUsd}
+              />
+            ) : (
+              <span className={styles.muted}>loading…</span>
+            )}
           </Section>
         )}
 
@@ -277,7 +288,9 @@ export default function ProfileDetail({
               <DaemonField />
             </Row>
           )}
-          {activeConnection?.kind === "local" && <NetworkAddressField />}
+          {activeConnection?.kind === "local" && (
+            <NetworkAddressField onLoadingChange={setNetworkLoading} />
+          )}
           <Row label="subsystems">
             <SubsystemsCell profile={profile} onSaved={onSaved} />
           </Row>
@@ -396,8 +409,16 @@ export default function ProfileDetail({
 
         {profile.name === "default" && (activeConnection?.kind === "local" || activeConnection?.role === "admin") && (
           <Section title="Devices" tooltip="paired apps">
-            {activeConnection?.kind === "local" && <PairingNameField />}
-            {activeConnection?.kind === "local" && <HostPortField profile={profile} onSaved={onSaved} />}
+            {activeConnection?.kind === "local" && (
+              <PairingNameField onLoadingChange={setPairingNameLoading} />
+            )}
+            {activeConnection?.kind === "local" && (
+              <HostPortField
+                profile={profile}
+                onSaved={onSaved}
+                onLoadingChange={setHostPortLoading}
+              />
+            )}
             <DevicesField
               connectionId={activeConnection?.id ?? null}
               role={activeConnection?.role ?? null}

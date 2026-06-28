@@ -40,7 +40,7 @@ function detectTag(host, status) {
 }
 
 // Service section — the one shared accessible address (network.host).
-export function NetworkAddressField() {
+export function NetworkAddressField({ onLoadingChange = null }) {
   const notify = useNotify();
   const [open, setOpen] = useState(false);
   const wrapRef = useRef(null);
@@ -51,14 +51,17 @@ export function NetworkAddressField() {
   useDismissOnOutside({ open, onClose: () => setOpen(false), wrapRef });
 
   const refresh = useCallback(async () => {
+    onLoadingChange?.(true);
     try {
       const s = await invoke("network_status");
       setStatus(s);
       setHost(s?.candidates?.configured || "");
     } catch (e) {
       notify({ message: `network: ${String(e)}`, variant: "error" });
+    } finally {
+      onLoadingChange?.(false);
     }
-  }, [notify]);
+  }, [notify, onLoadingChange]);
 
   useEffect(() => { refresh(); }, [refresh]);
 
@@ -136,7 +139,7 @@ export function NetworkAddressField() {
 }
 
 // Devices section — the device-pairing port (always on; only the port edits here).
-export function HostPortField({ profile, onSaved }) {
+export function HostPortField({ profile, onSaved, onLoadingChange = null }) {
   const notify = useNotify();
   const [open, setOpen] = useState(false);
   const wrapRef = useRef(null);
@@ -147,14 +150,17 @@ export function HostPortField({ profile, onSaved }) {
   useDismissOnOutside({ open, onClose: () => setOpen(false), wrapRef });
 
   const refresh = useCallback(async () => {
+    onLoadingChange?.(true);
     try {
       const s = await invoke("network_status");
       setStatus(s);
       setPort(String(s?.port || 49200));
     } catch (e) {
       notify({ message: `network: ${String(e)}`, variant: "error" });
+    } finally {
+      onLoadingChange?.(false);
     }
-  }, [notify]);
+  }, [notify, onLoadingChange]);
   useEffect(() => { refresh(); }, [refresh]);
 
   const current = status?.port || 49200;
@@ -238,7 +244,7 @@ export function HostPortField({ profile, onSaved }) {
 }
 
 // Devices section — the pairing label shown to new devices.
-export function PairingNameField() {
+export function PairingNameField({ onLoadingChange = null }) {
   const notify = useNotify();
   const [open, setOpen] = useState(false);
   const wrapRef = useRef(null);
@@ -249,14 +255,17 @@ export function PairingNameField() {
   useDismissOnOutside({ open, onClose: () => setOpen(false), wrapRef });
 
   const refresh = useCallback(async () => {
+    onLoadingChange?.(true);
     try {
       const s = await invoke("network_status");
       setStatus(s);
       setName(s?.device_name || "");
     } catch (e) {
       notify({ message: `network: ${String(e)}`, variant: "error" });
+    } finally {
+      onLoadingChange?.(false);
     }
-  }, [notify]);
+  }, [notify, onLoadingChange]);
 
   useEffect(() => { refresh(); }, [refresh]);
 

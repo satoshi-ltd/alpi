@@ -301,15 +301,10 @@ export default function WorkgroupDetail({
       <Mono className={styles.heroMetaMuted}>{workgroup.id}</Mono>
     </>
   );
+  const syncing = membersLoading || hubDetailLoading || usage.loading || connectionSyncing;
 
   return (
     <main className={styles.detail}>
-      <RefreshBar
-        active={membersLoading || hubDetailLoading || usage.loading || connectionSyncing}
-        accent={hub?.accent || null}
-        controlled
-        label="Fetching latest workgroup settings"
-      />
       <SettingsHero
         kind="workgroup"
         id={workgroup.name || workgroup.id}
@@ -332,6 +327,14 @@ export default function WorkgroupDetail({
         }}
         onOpenChat={onOpenChat ? () => onOpenChat(workgroup) : undefined}
       />
+      <div className={styles.syncBarSlot}>
+        <RefreshBar
+          active={syncing}
+          accent={hub?.accent || null}
+          controlled
+          label="Fetching latest workgroup settings"
+        />
+      </div>
       <div className={styles.body}>
         {/* Overview — Hub / Status / ID (3 rows, per v2 §8 canonical) */}
         <Section title="Overview">

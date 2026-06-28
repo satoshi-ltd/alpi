@@ -6,7 +6,7 @@ use std::net::{IpAddr, SocketAddr, TcpStream};
 use std::os::unix::net::UnixStream;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
@@ -88,22 +88,6 @@ type StatusListener = Box<dyn Fn(&str, ConnectionStatus, Option<&str>) + Send + 
 fn listeners() -> &'static Mutex<Vec<StatusListener>> {
     static LISTENERS: OnceLock<Mutex<Vec<StatusListener>>> = OnceLock::new();
     LISTENERS.get_or_init(|| Mutex::new(Vec::new()))
-}
-
-fn remote_ws_pool() -> &'static Mutex<HashMap<String, Arc<Mutex<WsClient>>>> {
-    static POOL: OnceLock<Mutex<HashMap<String, Arc<Mutex<WsClient>>>>> = OnceLock::new();
-    POOL.get_or_init(|| Mutex::new(HashMap::new()))
-}
-
-fn remote_pool_key(connection_id: &str, host: &str, port: u16, token: &str) -> String {
-    format!("{connection_id}|{host}:{port}|{token}")
-}
-
-fn drop_remote_connections_for(connection_id: &str) {
-    let prefix = format!("{connection_id}|");
-    if let Ok(mut pool) = remote_ws_pool().lock() {
-        pool.retain(|key, _| !key.starts_with(&prefix));
-    }
 }
 
 fn next_request_id() -> String {
@@ -529,13 +513,8 @@ pub fn set_active_connection(id: String) -> Result<(), String> {
     if !state.connections.iter().any(|c| c.id() == id) {
         return Err(format!("unknown connection: {id}"));
     }
-    let previous = state.active_id.clone();
     state.active_id = id;
     save_connections(&state)?;
-    if previous != state.active_id {
-        // Pooled sockets of the outgoing connection would otherwise linger until their next failed use.
-        drop_remote_connections_for(&previous);
-    }
     Ok(())
 }
 
@@ -552,7 +531,6 @@ pub fn forget_connection(id: String) -> Result<(), String> {
     if let Ok(mut map) = status_map().lock() {
         map.remove(&id);
     }
-    drop_remote_connections_for(&id);
     Ok(())
 }
 
@@ -593,7 +571,6 @@ pub fn add_remote_connection(
     });
     state.active_id = id.clone();
     save_connections(&state)?;
-    drop_remote_connections_for(&id);
     Ok(id)
 }
 
@@ -609,7 +586,6 @@ pub fn mark_connection_revoked(id: &str) {
         }
     }
     if changed {
-        drop_remote_connections_for(id);
         if state.active_id == id {
             state.active_id = LOCAL_ID.to_string();
         }
@@ -892,7 +868,7 @@ where
 }
 
 fn call_remote_inner(
-    connection_id: &str,
+    _connection_id: &str,
     host: &str,
     port: u16,
     token: &str,
@@ -900,67 +876,15 @@ fn call_remote_inner(
     params: Value,
     timeout: Duration,
 ) -> Result<Value, String> {
-    let key = remote_pool_key(connection_id, host, port, token);
     for attempt in 0..2 {
-        let ws = pooled_remote_ws(&key, host, port, timeout)?;
-        let id = next_request_id();
-        let request = json!({
-            "id": id,
-            "method": method,
-            "params": with_auth(params.clone(), token),
-        });
-        let result = {
-            let mut guard = ws
-                .lock()
-                .map_err(|_| "remote websocket pool poisoned".to_string())?;
-            guard.set_timeout(timeout)?;
-            guard.request(&id, &request)
-        };
+        let result = call_remote_once(host, port, token, method, params.clone(), timeout);
         match result {
             Ok(value) => return Ok(value),
-            Err(e) if attempt == 0 && should_retry_remote_ws(&e) => {
-                drop_pooled_remote_ws(&key);
-                continue;
-            }
-            Err(e) => {
-                // App-level RPC errors leave the WS intact — keep pool entry.
-                if !is_app_error(&e) {
-                    drop_pooled_remote_ws(&key);
-                }
-                return Err(e);
-            }
+            Err(e) if attempt == 0 && should_retry_remote_ws(&e) => continue,
+            Err(e) => return Err(e),
         }
     }
     Err("remote websocket retry exhausted".to_string())
-}
-
-fn pooled_remote_ws(
-    key: &str,
-    host: &str,
-    port: u16,
-    timeout: Duration,
-) -> Result<Arc<Mutex<WsClient>>, String> {
-    if let Ok(pool) = remote_ws_pool().lock() {
-        if let Some(ws) = pool.get(key) {
-            return Ok(Arc::clone(ws));
-        }
-    }
-    let ws = Arc::new(Mutex::new(WsClient::connect(
-        host,
-        port,
-        Duration::from_secs(WS_CONNECT_TIMEOUT_SECS),
-        timeout,
-    )?));
-    let mut pool = remote_ws_pool()
-        .lock()
-        .map_err(|_| "remote websocket pool poisoned".to_string())?;
-    Ok(Arc::clone(pool.entry(key.to_string()).or_insert(ws)))
-}
-
-fn drop_pooled_remote_ws(key: &str) {
-    if let Ok(mut pool) = remote_ws_pool().lock() {
-        pool.remove(key);
-    }
 }
 
 fn should_retry_remote_ws(err: &str) -> bool {
@@ -969,11 +893,6 @@ fn should_retry_remote_ws(err: &str) -> bool {
             || err.starts_with("connect ")
             || err.starts_with("set read timeout")
             || err.starts_with("set write timeout"))
-}
-
-// "alp -3200X: ..." = JSON-RPC error from the daemon. The WS is fine; keep pool.
-fn is_app_error(err: &str) -> bool {
-    err.starts_with("alp ")
 }
 
 fn call_remote_once(
@@ -1147,15 +1066,6 @@ impl WsClient {
             ));
         }
         Ok(Self { stream })
-    }
-
-    fn set_timeout(&mut self, timeout: Duration) -> Result<(), String> {
-        self.stream
-            .set_read_timeout(Some(timeout))
-            .map_err(|e| format!("set read timeout: {e}"))?;
-        self.stream
-            .set_write_timeout(Some(timeout))
-            .map_err(|e| format!("set write timeout: {e}"))
     }
 
     fn request(&mut self, id: &str, value: &Value) -> Result<Value, String> {
@@ -1548,51 +1458,4 @@ mod tests {
         assert!(!should_retry_remote_ws("alp -32000: auth-failed"));
     }
 
-    #[test]
-    fn is_app_error_only_matches_alp_rpc_errors() {
-        assert!(is_app_error("alp -32000: auth-failed"));
-        assert!(is_app_error("alp -32004: not-found"));
-        assert!(is_app_error("alp -1: anything"));
-        assert!(!is_app_error("websocket closed by daemon"));
-        assert!(!is_app_error("connect ws://1.2.3.4:80: refused"));
-        assert!(!is_app_error("set read timeout: foo"));
-        assert!(!is_app_error("remote websocket pool poisoned"));
-    }
-
-    // The pool entry must survive an app-level error so the next call
-    // doesn't pay the WS handshake again. Manipulate the pool directly
-    // and apply the same eviction rule call_remote_inner uses.
-    #[test]
-    fn pool_survives_app_error_but_drops_on_transport_error() {
-        let key_app = "test-app-error";
-        let key_transport = "test-transport-error";
-
-        // Seed both pool entries with placeholder TcpStreams pointing at a
-        // local TcpListener so the inner WsClient construction is valid.
-        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-        let addr = listener.local_addr().unwrap();
-        for key in [key_app, key_transport] {
-            let stream = std::net::TcpStream::connect(addr).unwrap();
-            let ws = std::sync::Arc::new(std::sync::Mutex::new(WsClient { stream }));
-            remote_ws_pool().lock().unwrap().insert(key.to_string(), ws);
-        }
-        // Simulate the eviction decision call_remote_inner makes.
-        let app_err = "alp -32004: not-found";
-        let transport_err = "websocket closed by daemon";
-        if !is_app_error(app_err) {
-            drop_pooled_remote_ws(key_app);
-        }
-        if !is_app_error(transport_err) {
-            drop_pooled_remote_ws(key_transport);
-        }
-        let pool = remote_ws_pool().lock().unwrap();
-        assert!(
-            pool.contains_key(key_app),
-            "app-level error must NOT evict the pool entry",
-        );
-        assert!(
-            !pool.contains_key(key_transport),
-            "transport error must evict the pool entry",
-        );
-    }
 }

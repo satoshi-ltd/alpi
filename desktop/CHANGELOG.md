@@ -11,6 +11,21 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.4.2 — 2026-06-28 — Settings panels load in parallel
+
+_Requires alpi v0.10.0+._
+
+- **Remote settings panels no longer stall behind one slow request.** Each
+  field now talks to the daemon independently, so a slow fetch no longer holds
+  up the rest — profile and workgroup settings open noticeably faster over a
+  remote connection.
+- **The sync bar sits in a fixed slot beneath the header** so the page no
+  longer jumps when a refresh starts or finishes.
+- **Usage and Schedule sections show a "loading…" hint** while they fetch
+  instead of appearing empty and popping in a moment later.
+- **Switching connection shows "Fetching latest settings…"** for the selected
+  profile instead of a misleading "No selection" while the new daemon answers.
+
 ## v0.4.1 — 2026-06-28 — Settings stay responsive across connections
 
 _Requires alpi v0.10.0+._

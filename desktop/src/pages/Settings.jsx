@@ -1,6 +1,7 @@
 import { useEffect, useMemo } from "react";
 import ProfileDetail from "../features/settings/ProfileDetail.jsx";
 import WorkgroupDetail from "../features/settings/WorkgroupDetail.jsx";
+import RefreshBar from "../primitives/RefreshBar.jsx";
 import styles from "../features/settings/Settings.module.css";
 
 export default function Settings({
@@ -63,7 +64,21 @@ export default function Settings({
         />
       )}
       {!selectedProfile && !selectedWorkgroup && (
-        <div className={styles.empty}>No selection</div>
+        <div className={styles.empty}>
+          {connectionSyncing && target?.id ? (
+            <>
+              <RefreshBar
+                active
+                accent={activeConnection?.accent || null}
+                controlled
+                label="Fetching latest settings"
+              />
+              Fetching latest settings…
+            </>
+          ) : (
+            "No selection"
+          )}
+        </div>
       )}
     </div>
   );

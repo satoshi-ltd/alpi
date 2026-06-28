@@ -44,6 +44,13 @@ describe("SchedulesSection", () => {
     expect(container.firstChild).toBeNull();
   });
 
+  it("keeps the schedule section visible while the selected daemon is loading", async () => {
+    invokeMock.mockImplementationOnce(() => new Promise(() => {}));
+    render(<SchedulesSection profile={{ name: "work" }} connectionId="casa" />);
+    expect(screen.getByText("Schedule")).toBeInTheDocument();
+    expect(screen.getByText("loading…")).toBeInTheDocument();
+  });
+
   it("renders rows when jobs come back", async () => {
     invokeMock.mockResolvedValueOnce([
       { id: "j1", title: "Daily standup", prompt: "summarize", paused: false, cron: "0 9 * * *" },
