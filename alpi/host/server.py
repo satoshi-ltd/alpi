@@ -84,6 +84,9 @@ _ADMIN_METHODS = frozenset({
 # host.profile.detail leaks Settings-only fields (providers, mcps, peers, sandbox, workspace path…) inside its result blob. Members hit it from ChatPane for `models` + `voice_id`, so we can't gate the whole verb — instead redact the result down to the chat-essential fields when role != admin.
 _MEMBER_DETAIL_KEEP = frozenset({"models", "voice_id", "voice_auto_read"})
 
+# Sections of host.settings.profile_snapshot whose standalone verb is admin-only — stripped for members so the aggregate never leaks what the per-section RPC would reject.
+_SNAPSHOT_ADMIN_SECTIONS = frozenset({"usage", "schedules", "email", "storage"})
+
 # Methods that don't operate on a single profile — exempt from the scope gate. New profile-handling RPCs MUST default to denied for scoped members; add here only when the verb is truly profile-agnostic (or aggregates across profiles and the response gets scope-filtered downstream).
 _SCOPE_FREE_METHODS = frozenset({
     "host.version",
@@ -495,6 +498,12 @@ def _redact_payload_by_role(method: str, payload: dict[str, Any]) -> dict[str, A
     if method == "host.profile.detail":
         redacted = {k: v for k, v in result.items() if k in _MEMBER_DETAIL_KEEP}
         return {**payload, "result": redacted}
+    if method == "host.settings.profile_snapshot":
+        redacted = {k: v for k, v in result.items() if k not in _SNAPSHOT_ADMIN_SECTIONS}
+        detail = redacted.get("detail")
+        if isinstance(detail, dict):
+            redacted["detail"] = {k: v for k, v in detail.items() if k in _MEMBER_DETAIL_KEEP}
+        return {**payload, "result": redacted}
     return payload
 
 
@@ -532,6 +541,13 @@ def _filter_payload_by_scope(
         if isinstance(rows, list):
             result["workgroups"] = [
                 w for w in rows
+                if isinstance(w, dict) and w.get("profile") in scope
+            ]
+    elif method == "host.settings.profile_snapshot":
+        wg = result.get("workgroups")
+        if isinstance(wg, dict) and isinstance(wg.get("workgroups"), list):
+            wg["workgroups"] = [
+                w for w in wg["workgroups"]
                 if isinstance(w, dict) and w.get("profile") in scope
             ]
     elif method in ("host.approval.pending", "host.clarification.pending"):

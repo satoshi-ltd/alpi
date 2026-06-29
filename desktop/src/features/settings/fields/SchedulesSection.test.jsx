@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen, waitFor, act } from "@testing-library/react";
+import { render, screen, waitFor, act, fireEvent } from "@testing-library/react";
 
 globalThis.ResizeObserver ??= class { observe() {} unobserve() {} disconnect() {} };
 
@@ -51,6 +51,44 @@ describe("SchedulesSection", () => {
     render(<SchedulesSection profile={{ name: "work" }} connectionId="casa" />);
     expect(screen.getByText("Schedule")).toBeInTheDocument();
     expect(screen.getByText("loading…")).toBeInTheDocument();
+  });
+
+  it("renders prefetched jobs without an individual schedules fetch", async () => {
+    render(
+      <SchedulesSection
+        profile={{ name: "work" }}
+        connectionId="casa"
+        prefetched={[{ id: "j1", title: "From snapshot", prompt: "", paused: false, cron: "* * * * *" }]}
+      />,
+    );
+    expect(await screen.findByText("From snapshot")).toBeInTheDocument();
+    await act(async () => { await Promise.resolve(); });
+    expect(invokeMock.mock.calls.some((c) => c[0] === "schedules")).toBe(false);
+  });
+
+  it("refreshes the snapshot after a mutation when seeded by prefetched jobs", async () => {
+    const onSnapshotRefresh = vi.fn(async () => {});
+    invokeMock.mockResolvedValueOnce(null);
+    render(
+      <SchedulesSection
+        profile={{ name: "work" }}
+        connectionId="casa"
+        prefetched={[{ id: "j1", title: "From snapshot", prompt: "", paused: false, cron: "* * * * *" }]}
+        onSnapshotRefresh={onSnapshotRefresh}
+      />,
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Disable" }));
+
+    await waitFor(() => {
+      expect(invokeMock).toHaveBeenCalledWith("schedule_set_paused", {
+        profile: "work",
+        connectionId: "casa",
+        id: "j1",
+        paused: true,
+      });
+      expect(onSnapshotRefresh).toHaveBeenCalledTimes(1);
+    });
+    expect(invokeMock.mock.calls.some(([cmd]) => cmd === "schedules")).toBe(false);
   });
 
   it("renders rows when jobs come back", async () => {

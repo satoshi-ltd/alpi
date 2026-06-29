@@ -81,6 +81,45 @@ describe("EmailCell multi-account", () => {
     });
   });
 
+  it("refreshes the snapshot after adding an account when seeded by prefetched accounts", async () => {
+    const onSnapshotRefresh = vi.fn(async () => {});
+    invoke.mockImplementation(async (command) => {
+      if (command === "email_add") return { ok: true, id: "me_x_com" };
+      return null;
+    });
+    render(
+      <EmailCell
+        profile={profile}
+        connectionId="casa"
+        prefetched={[]}
+        onSnapshotRefresh={onSnapshotRefresh}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "+ Add account" }));
+    fireEvent.change(await screen.findByPlaceholderText("you@domain.com"), {
+      target: { value: "me@x.com" },
+    });
+    fireEvent.change(screen.getByPlaceholderText("app password if 2FA"), {
+      target: { value: "secret" },
+    });
+    fireEvent.change(screen.getByPlaceholderText("imap.gmail.com"), {
+      target: { value: "imap.x" },
+    });
+    fireEvent.change(screen.getByPlaceholderText("smtp.gmail.com"), {
+      target: { value: "smtp.x" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add account" }));
+
+    await waitFor(() => {
+      expect(invoke).toHaveBeenCalledWith("email_add", expect.objectContaining({
+        profile: "concierge",
+        connectionId: "casa",
+      }));
+      expect(onSnapshotRefresh).toHaveBeenCalledTimes(1);
+    });
+    expect(invoke.mock.calls.some(([cmd]) => cmd === "email_status")).toBe(false);
+  });
+
   it("reports loading around the status fetch", async () => {
     let resolveStatus;
     const onLoadingChange = vi.fn();

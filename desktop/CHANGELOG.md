@@ -11,6 +11,22 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.4.4 — 2026-06-29 — Settings in one round-trip; bounded remote concurrency
+
+_Requires alpi v0.10.1+._
+
+- **A profile's Settings now load in a single request** instead of six — much
+  snappier over a remote connection. Cached settings paint instantly and
+  refresh in the background; a section that fails falls back on its own without
+  blanking the rest.
+- **Per-connection request limit:** the app caps how many requests are in
+  flight to any one remote daemon, so opening Settings (or juggling many
+  remotes) can't flood a connection. The local daemon and live event streams
+  are unaffected.
+- **Gentler reconnection to offline remotes:** retries back off from 4s up to
+  60s with a little jitter instead of a fixed drumbeat, and stop entirely for a
+  connection whose pairing was revoked until you re-pair it.
+
 ## v0.4.3 — 2026-06-29 — Lighter event handling, self-healing reconnects
 
 _Requires alpi v0.10.0+._

@@ -23,9 +23,16 @@ export function _clearEmailAccountsCache() {
   _accountsCache.clear();
 }
 
-export function EmailCell({ profile, connectionId = null, onLoadingChange = null }) {
+export function EmailCell({
+  profile,
+  connectionId = null,
+  prefetched,
+  onSnapshotRefresh = null,
+  onLoadingChange = null,
+}) {
+  const prefetchedMode = prefetched !== undefined;
   const key = cacheKey(connectionId, profile.name);
-  const [accounts, setAccounts] = useState(() => _accountsCache.get(key) ?? null);
+  const [accounts, setAccounts] = useState(() => (prefetchedMode ? prefetched : _accountsCache.get(key) ?? null));
   const [tick, setTick] = useState(0);
   const [editing, setEditing] = useState(null);
   const [adding, setAdding] = useState(false);
@@ -36,6 +43,12 @@ export function EmailCell({ profile, connectionId = null, onLoadingChange = null
   );
 
   useEffect(() => {
+    if (prefetchedMode) {
+      setAccounts(prefetched);
+      _accountsCache.set(key, Array.isArray(prefetched) ? prefetched : []);
+      onLoadingChange?.(false);
+      return undefined;
+    }
     const requestId = ++requestRef.current;
     setAccounts(_accountsCache.get(key) ?? null);
     setEditing(null);
@@ -57,9 +70,14 @@ export function EmailCell({ profile, connectionId = null, onLoadingChange = null
       requestRef.current += 1;
       onLoadingChange?.(false);
     };
-  }, [profile.name, connectionArg, key, tick, onLoadingChange]);
+  }, [profile.name, connectionArg, key, tick, prefetchedMode, prefetched, onLoadingChange]);
 
   function refresh() {
+    if (prefetchedMode && onSnapshotRefresh) {
+      onLoadingChange?.(true);
+      Promise.resolve(onSnapshotRefresh()).finally(() => onLoadingChange?.(false));
+      return;
+    }
     setTick((t) => t + 1);
   }
 

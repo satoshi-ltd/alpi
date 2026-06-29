@@ -43,6 +43,7 @@ def register(server: host_server.Server) -> None:
     server.register("host.workgroups.list", _workgroups_list)
     server.register("host.workgroup.members", _workgroup_members)
     server.register("host.providers.ollama_models", _ollama_models)
+    server.register("host.settings.profile_snapshot", _profile_snapshot)
 
 
 def _resolve_home(profile: str) -> Path:
@@ -535,6 +536,48 @@ async def _workgroups_list(
     return {"workgroups": rows}
 
 
+def _safe_section(fn) -> dict[str, Any]:
+    try:
+        return fn()
+    except Exception as e:  # noqa: BLE001
+        return {"error": {"code": -32603, "message": "internal-error", "data": {"detail": str(e)}}}
+
+
+def _snapshot_payload(home: Path, profile: str) -> dict[str, Any]:
+    from alpi.host.usage import compute_daily, price_out
+    from alpi.mail import accounts as accounts_mod
+    from alpi.scheduler import jobs_store
+
+    out: dict[str, Any] = {
+        "detail": _safe_section(lambda: _profile_detail_payload(home)),
+        "usage": _safe_section(
+            lambda: {"days": compute_daily(home), "priceOut": price_out(cfg_mod.load(home).model or "")},
+        ),
+        "workgroups": _safe_section(lambda: {"workgroups": _aggregate_workgroups(profile)}),
+        "email": _safe_section(lambda: {"accounts": accounts_mod.list_accounts(home)}),
+        "storage": _safe_section(lambda: {"storage": _storage_rows(home)}),
+    }
+    try:
+        out["schedules"] = {"jobs": jobs_store.read(home)}
+    except jobs_store.CorruptJobsFile as e:
+        out["schedules"] = {
+            "error": {"code": -32603, "message": "internal-error", "data": {"detail": f"jobs.json corrupt: {e}"}},
+        }
+    return out
+
+
+async def _profile_snapshot(
+    params: dict[str, Any], _server: host_server.Server,
+) -> dict[str, Any]:
+    profile = str((params or {}).get("profile") or "")
+    home = _resolve_home(profile)
+    if not home.exists():
+        raise host_server.HandlerError(
+            -32004, "not-found", data={"detail": f"no profile {profile!r}"},
+        )
+    return await asyncio.to_thread(_snapshot_payload, home, profile)
+
+
 async def _workgroup_members(
     params: dict[str, Any], _server: host_server.Server,
 ) -> dict[str, Any]:
@@ -672,20 +715,19 @@ def _latest_chat_for(home: Path) -> dict[str, Any] | None:
     The desktop profile view should never reopen a workgroup
     session as if it were the user's normal chat history.
     """
-    for row in host_sessions.list_sessions(home):
-        if row.get("kind") != "chat":
-            continue
-        return {
-            "id": row["id"],
-            "mtime": row["mtime"],
-            "updated_at": row.get("updated_at"),
-            "started_at": row.get("started_at"),
-            "first_user": row["first_user"],
-            "last_user": row.get("last_user"),
-            "last_assistant": row.get("last_assistant"),
-            "kind": row.get("kind"),
-        }
-    return None
+    row = host_sessions.latest_chat_summary(home)
+    if not row:
+        return None
+    return {
+        "id": row["id"],
+        "mtime": row["mtime"],
+        "updated_at": row.get("updated_at"),
+        "started_at": row.get("started_at"),
+        "first_user": row["first_user"],
+        "last_user": row.get("last_user"),
+        "last_assistant": row.get("last_assistant"),
+        "kind": row.get("kind"),
+    }
 
 
 def _today_ledger(home: Path) -> tuple[float, int]:
@@ -735,7 +777,7 @@ def _counts(home: Path) -> dict[str, int]:
     return {
         "peers": _yaml_entry_count(home / "alp" / "peers.yaml", "- id:"),
         "workgroups": _subdir_count(home / "alp" / "workgroups"),
-        "sessions": len(host_sessions.list_sessions(home)),
+        "sessions": host_sessions.count_sessions(home),
         "skills": _count_skill_dirs(home),
         "memory_bytes": _path_stats(home / "memories")[0],
     }

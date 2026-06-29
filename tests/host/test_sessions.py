@@ -43,8 +43,22 @@ def _seed_session(
 def test_list_sessions_skips_underscore_prefixed(tmp_path: Path) -> None:
     _seed_session(tmp_path, "abc", "hello world")
     _seed_session(tmp_path, "_gateway_map", "")
+    (tmp_path / "sessions" / "._abc.json").write_text("{}", encoding="utf-8")
     rows = data_sessions.list_sessions(tmp_path)
     assert [r["id"] for r in rows] == ["abc"]
+
+
+def test_count_sessions_ignores_sidecars_hidden_and_appledouble(tmp_path: Path) -> None:
+    _seed_session(tmp_path, "abc", "hello world")
+    d = tmp_path / "sessions"
+    (d / "_events_abc.jsonl").write_text("frame\n", encoding="utf-8")
+    (d / "_gateway_map.json").write_text("{}", encoding="utf-8")
+    (d / "._abc.json").write_text("{}", encoding="utf-8")
+    (d / ".hidden.json").write_text("{}", encoding="utf-8")
+    (d / "notes.txt").write_text("{}", encoding="utf-8")
+
+    assert data_sessions.count_sessions(tmp_path) == 1
+    assert [r["id"] for r in data_sessions.list_sessions(tmp_path)] == ["abc"]
 
 
 def test_list_sessions_tolerates_corrupt_started_at(tmp_path: Path) -> None:
@@ -264,6 +278,50 @@ def test_list_sessions_size_bytes_works_without_sidecar(tmp_path: Path) -> None:
     assert row["size_bytes"] == p.stat().st_size
 
 
+def _seed_large_session(home: Path, sid: str = "huge") -> Path:
+    p = home / "sessions" / f"{sid}.json"
+    p.parent.mkdir(parents=True, exist_ok=True)
+    payload = (
+        '{"id":"%s","model":"openrouter/deepseek/deepseek-v4-flash",'
+        '"started_at":1714000000.0,"input_tokens":123,'
+        '"output_tokens":456,"cost_usd":0.078,"last_ctx_tokens":789,'
+        '"turns":[{"at":1714000001.0,"user":"summarize this large session",'
+        '"assistant":"%s"}]}'
+    ) % (sid, "x" * (2 * 1024 * 1024 + 32))
+    p.write_text(payload, encoding="utf-8")
+    return p
+
+
+def test_latest_chat_summary_handles_large_session_without_full_json_parse(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    p = _seed_large_session(tmp_path, "huge")
+    sidecar = tmp_path / "sessions" / "_events_huge.jsonl"
+    sidecar.write_text("event\n", encoding="utf-8")
+    original_loads = data_sessions.json.loads
+
+    def bounded_loads(src: str, *args, **kwargs):
+        if isinstance(src, str) and len(src) > 1_000_000:
+            raise AssertionError("large session JSON was fully parsed")
+        return original_loads(src, *args, **kwargs)
+
+    monkeypatch.setattr(data_sessions.json, "loads", bounded_loads)
+
+    row = data_sessions.latest_chat_summary(tmp_path)
+    assert row is not None
+    assert row["id"] == "huge"
+    assert row["size_bytes"] == p.stat().st_size + sidecar.stat().st_size
+    assert row["updated_at"] >= 1_714_000_000.0
+    assert row["first_user"] == "summarize this large session"
+    assert row["last_user"] == ""
+    assert row["last_assistant"] == ""
+    assert row["kind"] == "chat"
+    assert row["input_tokens"] == 123
+    assert row["output_tokens"] == 456
+    assert row["cost_usd"] == pytest.approx(0.078)
+    assert row["last_ctx_tokens"] == 789
+
+
 def test_delete_session_removes_main_and_sidecar(tmp_path: Path) -> None:
     p = _seed_session(tmp_path, "doomed", "hi")
     sidecar = tmp_path / "sessions" / "_events_doomed.jsonl"
@@ -412,3 +470,43 @@ async def test_profile_summary_latest_session_includes_preview_fields(
     latest = resp["result"]["profiles"][0]["latest_session"]
     assert latest["first_user"] == "recuerdame X"
     assert latest["last_assistant"] == "listo te aviso"
+
+
+@pytest.mark.asyncio
+async def test_profile_summaries_counts_large_sessions_without_full_parse(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from alpi import config as cfg_mod
+    from alpi.alp.keys import load_or_generate
+    from alpi.host import device_state as host_device_state
+
+    home = tmp_path / "h"
+    home.mkdir()
+    cfg_mod.save(cfg_mod.Config(home=home, model="openai/gpt-5.4-mini"))
+    load_or_generate(home)
+    _seed_large_session(home, "huge")
+    d = home / "sessions"
+    (d / "_events_huge.jsonl").write_text("event\n", encoding="utf-8")
+    (d / "._huge.json").write_text("{}", encoding="utf-8")
+    original_loads = data_sessions.json.loads
+
+    def bounded_loads(src: str, *args, **kwargs):
+        if isinstance(src, str) and len(src) > 1_000_000:
+            raise AssertionError("large session JSON was fully parsed")
+        return original_loads(src, *args, **kwargs)
+
+    monkeypatch.setattr(data_sessions.json, "loads", bounded_loads)
+    monkeypatch.setattr(host_device_state.home_mod, "_ROOT", home)
+    monkeypatch.setattr(data_handlers, "_resolve_home", lambda profile: home)
+
+    srv = host_server.Server(home=home)
+    host_device_state.register(srv)
+    resp = await srv._dispatch({
+        "id": "p", "method": "host.profile.summaries", "params": {},
+    })
+
+    profile = resp["result"]["profiles"][0]
+    assert profile["counts"]["sessions"] == 1
+    assert profile["latest_session"]["id"] == "huge"
+    assert profile["latest_session"]["first_user"] == "summarize this large session"
+    assert profile["latest_session"]["last_assistant"] == ""

@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.10.1 — 2026-06-29 — faster Settings, even with huge session histories
+
+- **The daemon serves a profile's whole Settings view in one request** — model
+  and providers, usage, schedules, workgroups, email accounts and storage — so
+  desktop and mobile load a profile's settings in a single round-trip instead
+  of six. A noticeable difference over a remote Tailscale link. Per-device
+  permission scoping and member redaction are unchanged.
+- **Profiles with very large session histories stay responsive.** Listing and
+  summarizing sessions now reads only a bounded head of multi-megabyte session
+  files instead of parsing each one whole, so a busy profile no longer stalls
+  the profile list and Settings.
+
 ## v0.10.0 — 2026-06-26 — email is a tool now; chat-app gateways retired
 
 - **Telegram and Matrix gateways are removed.** The desktop, mobile, and terminal apps already do far more, and bridging third-party chat apps meant extra attack surface and upkeep for little gain. alpi no longer listens on any chat platform.

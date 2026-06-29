@@ -18,11 +18,17 @@ export function _clearStorageCache() {
   _storageCache.clear();
 }
 
-export function StorageField({ profile, activeConnection, onLoadingChange = null }) {
+export function StorageField({ profile, activeConnection, prefetched, onLoadingChange = null }) {
+  const prefetchedMode = prefetched !== undefined;
   const key = storageCacheKey(activeConnection?.id ?? null, profile.name);
-  const [items, setItems] = useState(() => _storageCache.get(key) ?? null);
+  const [items, setItems] = useState(() => (prefetchedMode ? prefetched : _storageCache.get(key) ?? null));
   const isLocal = activeConnection?.kind === "local";
   useEffect(() => {
+    if (prefetchedMode) {
+      setItems(prefetched);
+      onLoadingChange?.(false);
+      return undefined;
+    }
     let cancelled = false;
     setItems(_storageCache.get(key) ?? null);
     onLoadingChange?.(true);
@@ -42,7 +48,7 @@ export function StorageField({ profile, activeConnection, onLoadingChange = null
       cancelled = true;
       onLoadingChange?.(false);
     };
-  }, [profile.name, activeConnection?.id, key, onLoadingChange]);
+  }, [profile.name, activeConnection?.id, key, prefetchedMode, prefetched, onLoadingChange]);
 
   const visible = (items ?? []).filter(
     (it) => it.size_bytes > 0 || it.file_count > 0,

@@ -75,13 +75,14 @@ function ensureEventListener() {
 }
 
 // `connectionId` and `name` may be null/undefined — the hook stays idle.
-export function useProfileDetail(connectionId, name, { refreshOnMount = false } = {}) {
-  ensureEventListener();
+export function useProfileDetail(connectionId, name, { refreshOnMount = false, prefetched } = {}) {
   const [, setTick] = useState(0);
   const [loading, setLoading] = useState(false);
+  const prefetchedMode = prefetched !== undefined;
 
   useEffect(() => {
-    if (!name) return undefined;
+    if (prefetchedMode || !name) return undefined;
+    ensureEventListener();
     let cancelled = false;
     setLoading(true);
     load(connectionId, name, { force: refreshOnMount }).then(() => {
@@ -98,7 +99,7 @@ export function useProfileDetail(connectionId, name, { refreshOnMount = false } 
       cancelled = true;
       _subs.delete(fn);
     };
-  }, [connectionId, name, refreshOnMount]);
+  }, [connectionId, name, refreshOnMount, prefetchedMode]);
 
   const refresh = useCallback(() => {
     if (!name) return Promise.resolve(null);
@@ -107,6 +108,7 @@ export function useProfileDetail(connectionId, name, { refreshOnMount = false } 
       .finally(() => setLoading(false));
   }, [connectionId, name]);
 
+  if (prefetchedMode) return { detail: prefetched, loading: false, refresh };
   const detail = name ? (_cache.get(makeKey(connectionId, name)) ?? null) : null;
   return { detail, loading, refresh };
 }

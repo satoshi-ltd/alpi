@@ -6,7 +6,8 @@ import { subscribe } from "../lib/daemon-bus.js";
 
 const PROFILES_CACHE_PREFIX = "alf:profiles:v1:";
 const WORKGROUPS_CACHE_PREFIX = "alf:workgroups:v1:";
-const OFFLINE_REPROBE_MS = 4000;
+const OFFLINE_REPROBE_MIN_MS = 4000;
+const OFFLINE_REPROBE_MAX_MS = 60000;
 
 function parsePairingPayload(payload) {
   const text = payload.trim();
@@ -164,7 +165,7 @@ export function useHostConnections({
         invoke("profile_summaries", { connectionId: activeId }),
         invoke("workgroups", { profile: null, connectionId: activeId }),
       ]);
-      if (Array.isArray(ps) && ps.length === 0) {
+      if (activeId === "local" && Array.isArray(ps) && ps.length === 0) {
         const fallbackProfiles = await invoke("profiles");
         if (Array.isArray(fallbackProfiles) && fallbackProfiles.length > 0) {
           ps = fallbackProfiles;
@@ -286,10 +287,17 @@ export function useHostConnections({
   useEffect(() => {
     const status = activeConnectionForSync?.status;
     if (status !== "offline" && status !== "unknown") return undefined;
-    const timer = setInterval(() => {
+    // Backoff resets to 4s each offline period — the effect re-runs on status change, bounding the recursion to one continuous outage.
+    let delay = OFFLINE_REPROBE_MIN_MS;
+    let timer = null;
+    const jitter = (ms) => ms * (0.8 + Math.random() * 0.4);
+    const tick = () => {
       invoke("host_connections_probe_active").catch(() => {});
-    }, OFFLINE_REPROBE_MS);
-    return () => clearInterval(timer);
+      delay = Math.min(delay * 2, OFFLINE_REPROBE_MAX_MS);
+      timer = setTimeout(tick, jitter(delay));
+    };
+    timer = setTimeout(tick, jitter(delay));
+    return () => { if (timer) clearTimeout(timer); };
   }, [activeStatusKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Probe runs fire-and-forget; awaiting it locks the UI for 8-16s on slow remotes.

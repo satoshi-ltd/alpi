@@ -17,19 +17,36 @@ export function _clearScheduleCache() {
   _jobsCache.clear();
 }
 
-export function SchedulesSection({ profile, connectionId = null, onLoadingChange }) {
+export function SchedulesSection({
+  profile,
+  connectionId = null,
+  prefetched,
+  onSnapshotRefresh = null,
+  onLoadingChange,
+}) {
+  const prefetchedMode = prefetched !== undefined;
   const key = cacheKey(connectionId, profile.name);
-  const [jobs, setJobs] = useState(() => _jobsCache.get(key) ?? null);
+  const [jobs, setJobs] = useState(() => (prefetchedMode ? prefetched : _jobsCache.get(key) ?? null));
   const [loadError, setLoadError] = useState(null);
   const [busyId, setBusyId] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!prefetchedMode);
   const notify = useNotify();
   const targetRef = useRef({ profile: profile.name, connectionId });
   const genRef = useRef(0);
 
   const connArg = connectionId ? { connectionId } : {};
 
-  async function load() {
+  async function load({ force = false } = {}) {
+    if (prefetchedMode) {
+      if (!force || !onSnapshotRefresh) return;
+      setLoading(true);
+      try {
+        await onSnapshotRefresh();
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
     const gen = genRef.current;
     setLoading(true);
     try {
@@ -51,17 +68,26 @@ export function SchedulesSection({ profile, connectionId = null, onLoadingChange
   useEffect(() => {
     genRef.current += 1;
     targetRef.current = { profile: profile.name, connectionId };
+    if (prefetchedMode) {
+      setJobs(prefetched);
+      _jobsCache.set(key, Array.isArray(prefetched) ? prefetched : []);
+      setLoadError(null);
+      setBusyId(null);
+      setLoading(false);
+      return;
+    }
     setJobs(_jobsCache.get(key) ?? null);
     setLoadError(null);
     setBusyId(null);
     load();
-  }, [profile.name, connectionId, key]);
+  }, [profile.name, connectionId, key, prefetchedMode, prefetched]);
 
   useEffect(() => {
     onLoadingChange?.(loading);
   }, [loading, onLoadingChange]);
 
   useEffect(() => {
+    if (prefetchedMode) return undefined;
     return subscribeDaemonEvent((event) => {
       const payload = event?.payload ?? {};
       const frame = payload.frame ?? payload;
@@ -70,7 +96,7 @@ export function SchedulesSection({ profile, connectionId = null, onLoadingChange
       if (connectionId && payload.connection_id && payload.connection_id !== connectionId) return;
       load();
     });
-  }, [profile.name, connectionId]);
+  }, [profile.name, connectionId, prefetchedMode]);
 
   function pinnedTarget() {
     return {
@@ -87,7 +113,7 @@ export function SchedulesSection({ profile, connectionId = null, onLoadingChange
       await invoke("schedule_fire", { ...target, id });
       if (gen !== genRef.current) return;
       notify({ message: `Schedule ${id} started`, variant: "success", duration: 2000 });
-      await load();
+      await load({ force: true });
     } catch (e) {
       if (gen !== genRef.current) return;
       notify({ message: `fire failed: ${String(e)}`, variant: "error", duration: 4000 });
@@ -103,7 +129,7 @@ export function SchedulesSection({ profile, connectionId = null, onLoadingChange
     try {
       await invoke("schedule_set_paused", { ...target, id, paused });
       if (gen !== genRef.current) return;
-      await load();
+      await load({ force: true });
     } catch (e) {
       if (gen !== genRef.current) return;
       notify({
@@ -123,7 +149,7 @@ export function SchedulesSection({ profile, connectionId = null, onLoadingChange
     try {
       await invoke("schedule_remove", { ...target, id });
       if (gen !== genRef.current) return;
-      await load();
+      await load({ force: true });
     } catch (e) {
       if (gen !== genRef.current) return;
       notify({ message: `delete failed: ${String(e)}`, variant: "error", duration: 4000 });

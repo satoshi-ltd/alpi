@@ -20,11 +20,13 @@ export function toUsageDays(rpcDays) {
   });
 }
 
-function useUsageCall(command, params, ready) {
+function useUsageCall(command, params, ready, prefetched) {
   const key = `${command}|${JSON.stringify(params)}`;
   const [data, setData] = useState(() => _cache.get(key) ?? null);
   const [loading, setLoading] = useState(false);
+  const prefetchedMode = prefetched !== undefined;
   useEffect(() => {
+    if (prefetchedMode) return undefined;
     if (!ready) {
       setData(null);
       setLoading(false);
@@ -45,16 +47,20 @@ function useUsageCall(command, params, ready) {
       })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [command, key, ready]);
+  }, [command, key, ready, prefetchedMode]);
+  if (prefetchedMode) {
+    return { days: toUsageDays(prefetched?.days), priceOut: prefetched?.priceOut, loading: false };
+  }
   if (!data) return { days: [], priceOut: undefined, loading };
   return { days: toUsageDays(data.days), priceOut: data.priceOut, loading };
 }
 
-export function useUsageDaily(profile, connectionId = null) {
+export function useUsageDaily(profile, connectionId = null, prefetched) {
   return useUsageCall(
     "usage_daily",
     { profile, ...(connectionId ? { connectionId } : {}) },
     !!profile,
+    prefetched,
   );
 }
 

@@ -5,6 +5,7 @@ import Chip from "../../primitives/Chip.jsx";
 import Textarea from "../../primitives/Textarea.jsx";
 import { useNotify } from "../../primitives/Notification.jsx";
 import { useProfileDetail } from "../../hooks/useProfileDetail.js";
+import { useProfileSnapshot } from "../../hooks/useProfileSnapshot.js";
 import { useUsageDaily } from "../../hooks/useUsage.js";
 import { Section, Row, CopyButton } from "./primitives.jsx";
 import Usage from "./Usage.jsx";
@@ -67,20 +68,28 @@ export default function ProfileDetail({
   onNavigate,
   onOpenChat,
 }) {
-  // Lazy heavy fields (peers/models/mcps/provider_keys/sandbox/voice/tcp_*) — scoped per connection so two daemons with the same profile name never share state.
+  const connId = activeConnection?.id ?? null;
+  const name = profileSummary?.name ?? null;
+  // One round-trip feeds every section; a missing/errored section falls back to its individual fetch.
+  const snap = useProfileSnapshot(connId, name);
+  const sn = snap.snapshot;
+  const sectionData = (s) => (s && !s.error ? s : undefined);
+  const detailPre = sectionData(sn?.detail);
+  const usagePre = sectionData(sn?.usage);
+  const schedulesPre = sectionData(sn?.schedules)?.jobs;
+  const workgroupsPre = sectionData(sn?.workgroups)?.workgroups;
+  const emailPre = sectionData(sn?.email)?.accounts;
+  const storagePre = sectionData(sn?.storage)?.storage;
+
   const { detail, loading: detailLoading, refresh } = useProfileDetail(
-    activeConnection?.id ?? null,
-    profileSummary?.name ?? null,
-    { refreshOnMount: true },
+    connId, name, { refreshOnMount: true, prefetched: detailPre },
   );
+  const refreshDetail = detailPre !== undefined ? snap.refresh : refresh;
   const profile = useMemo(
     () => ({ ...profileSummary, ...(detail || {}) }),
     [profileSummary, detail],
   );
-  const usage = useUsageDaily(
-    profileSummary?.name ?? null,
-    activeConnection?.id ?? null,
-  );
+  const usage = useUsageDaily(name, connId, usagePre);
   const baseline = useMemo(() => initialDraft(profile), [profile]);
   const [draft, setDraft] = useState(baseline);
   const [devicesLoading, setDevicesLoading] = useState(false);
@@ -190,7 +199,7 @@ export default function ProfileDetail({
     detailLoading || devicesLoading || emailLoading || schedulesLoading
     || modelLoading || peersLoading || workgroupsLoading || storageLoading
     || networkLoading || pairingNameLoading || hostPortLoading
-    || usage.loading || connectionSyncing
+    || usage.loading || snap.loading || connectionSyncing
   );
 
   return (
@@ -390,7 +399,7 @@ export default function ProfileDetail({
               profile={profile}
               profiles={profiles}
               onSaved={onSaved}
-              onRefresh={refresh}
+              onRefresh={refreshDetail}
               onLoadingChange={setPeersLoading}
             />
           </Row>
@@ -399,6 +408,7 @@ export default function ProfileDetail({
               profile={profile}
               profiles={profiles}
               connectionId={activeConnection?.id ?? null}
+              prefetched={workgroupsPre}
               onSelectWorkgroup={(id) =>
                 onNavigate?.({ kind: "workgroup", id })
               }
@@ -430,6 +440,8 @@ export default function ProfileDetail({
         <SchedulesSection
           profile={profile}
           connectionId={activeConnection?.id ?? null}
+          prefetched={schedulesPre}
+          onSnapshotRefresh={snap.refresh}
           onLoadingChange={setSchedulesLoading}
         />
 
@@ -453,6 +465,8 @@ export default function ProfileDetail({
             <EmailCell
               profile={profile}
               connectionId={activeConnection?.id ?? null}
+              prefetched={emailPre}
+              onSnapshotRefresh={snap.refresh}
               onLoadingChange={setEmailLoading}
             />
           </Row>
@@ -462,6 +476,7 @@ export default function ProfileDetail({
           <StorageField
             profile={profile}
             activeConnection={activeConnection}
+            prefetched={storagePre}
             onLoadingChange={setStorageLoading}
           />
         </Section>

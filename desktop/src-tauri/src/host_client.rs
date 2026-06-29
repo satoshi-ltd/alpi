@@ -6,7 +6,7 @@ use std::net::{IpAddr, SocketAddr, TcpStream};
 use std::os::unix::net::UnixStream;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Mutex, OnceLock};
+use std::sync::{Arc, Condvar, Mutex, OnceLock};
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
@@ -31,6 +31,8 @@ const PROBE_REMOTE_TIMEOUT_MS: u64 = 8000;
 const PROBE_RETRY_DELAY_MS: u64 = 350;
 // Sticky offline: tolerate transient blips on noisy Tailscale links.
 const STICKY_OFFLINE_THRESHOLD: u32 = 2;
+// Bound concurrent request/response RPCs per remote connection so a Settings fan-out (or 10 remotes) can't open a burst of sockets at once. Local socket and streams are uncapped.
+const MAX_INFLIGHT_PER_REMOTE: usize = 4;
 const CONNECTIONS_FILE: &str = "connections.json";
 pub const LOCAL_ID: &str = "local";
 
@@ -645,6 +647,46 @@ fn connection_by_id(connection_id: &str) -> Option<HostConnection> {
         .find(|c| c.id() == connection_id)
 }
 
+struct RemoteGate {
+    inflight: Mutex<usize>,
+    cv: Condvar,
+}
+
+fn remote_gates() -> &'static Mutex<HashMap<String, Arc<RemoteGate>>> {
+    static GATES: OnceLock<Mutex<HashMap<String, Arc<RemoteGate>>>> = OnceLock::new();
+    GATES.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn remote_gate(connection_id: &str) -> Arc<RemoteGate> {
+    let mut map = remote_gates().lock().expect("remote gate map poisoned");
+    Arc::clone(
+        map.entry(connection_id.to_string())
+            .or_insert_with(|| Arc::new(RemoteGate { inflight: Mutex::new(0), cv: Condvar::new() })),
+    )
+}
+
+struct RemoteSlot(Arc<RemoteGate>);
+
+impl Drop for RemoteSlot {
+    fn drop(&mut self) {
+        let mut n = self.0.inflight.lock().expect("remote gate poisoned");
+        *n = n.saturating_sub(1);
+        self.0.cv.notify_one();
+    }
+}
+
+// Blocks the calling spawn_blocking thread until this connection is under MAX_INFLIGHT_PER_REMOTE; the guard releases the slot on drop. Never call on the async loop.
+fn acquire_remote_slot(connection_id: &str) -> RemoteSlot {
+    let gate = remote_gate(connection_id);
+    let mut n = gate.inflight.lock().expect("remote gate poisoned");
+    while *n >= MAX_INFLIGHT_PER_REMOTE {
+        n = gate.cv.wait(n).expect("remote gate poisoned");
+    }
+    *n += 1;
+    drop(n);
+    RemoteSlot(Arc::clone(&gate))
+}
+
 pub fn call(method: &str, params: Value) -> Result<Value, String> {
     call_conn(&active_connection(), method, params)
 }
@@ -666,14 +708,17 @@ fn call_conn(conn: &HostConnection, method: &str, params: Value) -> Result<Value
         ),
         HostConnection::Remote {
             host, port, token, ..
-        } => call_remote_inner(
-            host,
-            *port,
-            token,
-            method,
-            params,
-            Duration::from_secs(READ_TIMEOUT_REMOTE_SECS),
-        ),
+        } => {
+            let _slot = acquire_remote_slot(&id);
+            call_remote_inner(
+                host,
+                *port,
+                token,
+                method,
+                params,
+                Duration::from_secs(READ_TIMEOUT_REMOTE_SECS),
+            )
+        }
     };
     match &result {
         Ok(_) => set_status(&id, ConnectionStatus::Online, None),
@@ -1497,6 +1542,63 @@ mod tests {
         });
         assert_eq!(calls, 2);
         assert!(r.is_err());
+    }
+
+    #[test]
+    fn remote_gate_caps_inflight_at_four_per_connection() {
+        let id = "gate-cap-1";
+        let p1 = acquire_remote_slot(id);
+        let _p2 = acquire_remote_slot(id);
+        let _p3 = acquire_remote_slot(id);
+        let _p4 = acquire_remote_slot(id);
+        assert_eq!(*remote_gate(id).inflight.lock().unwrap(), 4);
+
+        let (tx, rx) = std::sync::mpsc::channel();
+        let waiter_id = id.to_string();
+        let h = std::thread::spawn(move || {
+            let _p5 = acquire_remote_slot(&waiter_id);
+            tx.send(()).unwrap();
+            std::thread::sleep(Duration::from_millis(30));
+        });
+        assert!(
+            rx.recv_timeout(Duration::from_millis(150)).is_err(),
+            "the 5th concurrent call must block while the connection is at its cap",
+        );
+        drop(p1);
+        assert!(
+            rx.recv_timeout(Duration::from_millis(500)).is_ok(),
+            "freeing a slot must admit the waiting call",
+        );
+        h.join().unwrap();
+    }
+
+    #[test]
+    fn remote_gates_are_independent_per_connection() {
+        let a = "gate-indep-a";
+        let _a1 = acquire_remote_slot(a);
+        let _a2 = acquire_remote_slot(a);
+        let _a3 = acquire_remote_slot(a);
+        let _a4 = acquire_remote_slot(a);
+
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let _b = acquire_remote_slot("gate-indep-b");
+            tx.send(()).unwrap();
+        });
+        assert!(
+            rx.recv_timeout(Duration::from_millis(300)).is_ok(),
+            "a saturated connection must not block calls on a different connection",
+        );
+    }
+
+    #[test]
+    fn remote_gate_releases_slot_on_drop() {
+        let id = "gate-drop-1";
+        {
+            let _p = acquire_remote_slot(id);
+            assert_eq!(*remote_gate(id).inflight.lock().unwrap(), 1);
+        }
+        assert_eq!(*remote_gate(id).inflight.lock().unwrap(), 0);
     }
 
 }

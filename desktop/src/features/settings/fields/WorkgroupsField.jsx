@@ -8,12 +8,19 @@ export function WorkgroupsField({
   profile,
   profiles,
   connectionId = null,
+  prefetched,
   onSelectWorkgroup,
   onLoadingChange = null,
 }) {
-  const [groups, setGroups] = useState([]);
+  const prefetchedMode = prefetched !== undefined;
+  const [groups, setGroups] = useState(prefetchedMode ? prefetched : []);
   const [loading, setLoading] = useState(false);
   useEffect(() => {
+    if (prefetchedMode) {
+      setGroups(prefetched);
+      onLoadingChange?.(false);
+      return undefined;
+    }
     let cancelled = false;
     setGroups([]);
     setLoading(true);
@@ -34,7 +41,7 @@ export function WorkgroupsField({
       cancelled = true;
       onLoadingChange?.(false);
     };
-  }, [profile.name, connectionId, onLoadingChange]);
+  }, [profile.name, connectionId, prefetchedMode, prefetched, onLoadingChange]);
 
   if (groups.length === 0) {
     return <span className={styles.muted}>{loading ? "loading…" : "none"}</span>;

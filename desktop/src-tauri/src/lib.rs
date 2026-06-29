@@ -184,6 +184,22 @@ async fn profile_detail(
 }
 
 #[tauri::command]
+async fn settings_profile_snapshot(
+    profile: String,
+    connection_id: Option<String>,
+) -> Result<serde_json::Value, String> {
+    off_main(move || {
+        let params = serde_json::json!({ "profile": profile });
+        match connection_id {
+            Some(cid) => host_client::call_for(&cid, "host.settings.profile_snapshot", params),
+            None => host_client::call("host.settings.profile_snapshot", params),
+        }
+        .map_err(|e| e.to_string())
+    })
+    .await?
+}
+
+#[tauri::command]
 async fn usage_daily(
     profile: String,
     connection_id: Option<String>,
@@ -241,18 +257,20 @@ async fn profile_memory(
 }
 
 #[tauri::command]
-async fn profile_summaries(connection_id: Option<String>) -> serde_json::Value {
+async fn profile_summaries(connection_id: Option<String>) -> Result<serde_json::Value, String> {
     off_main(move || {
-        let res = match connection_id {
+        match connection_id {
             Some(cid) => host_client::call_for(&cid, "host.profile.summaries", serde_json::json!({})),
             None => host_client::call("host.profile.summaries", serde_json::json!({})),
-        };
-        res.ok()
-            .and_then(|v| v.get("profiles").cloned())
-            .unwrap_or_else(|| serde_json::Value::Array(vec![]))
+        }
+        .map(|v| {
+            v.get("profiles")
+                .cloned()
+                .unwrap_or_else(|| serde_json::Value::Array(vec![]))
+        })
+        .map_err(|e| e.to_string())
     })
-    .await
-    .unwrap_or(serde_json::Value::Array(vec![]))
+    .await?
 }
 
 #[tauri::command]
@@ -3081,6 +3099,7 @@ pub fn run() {
             profiles,
             profile_summaries,
             profile_detail,
+            settings_profile_snapshot,
             usage_daily,
             workgroup_usage_daily,
             profile_tools,

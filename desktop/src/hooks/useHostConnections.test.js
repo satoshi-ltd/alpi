@@ -268,6 +268,37 @@ describe("useHostConnections connection-status", () => {
     });
   });
 
+  it("keeps cached remote profiles when profile_summaries rejects", async () => {
+    setProfileCache("remote", [{ name: "cached-remote", model: "a/b" }], []);
+    invoke.mockImplementation(async (cmd) => {
+      if (cmd === "host_connections") return makeConnections("remote");
+      if (cmd === "profile_summaries") throw new Error("read timeout");
+      if (cmd === "workgroups") return [];
+      return null;
+    });
+
+    const { result } = renderHostConnections();
+    await waitFor(() => {
+      expect(result.current.profiles.map((p) => p.name)).toEqual(["cached-remote"]);
+    });
+    expect(invoke.mock.calls.some(([cmd]) => cmd === "profiles")).toBe(false);
+  });
+
+  it("does not fall back to local profiles when an online remote returns no summaries", async () => {
+    invoke.mockImplementation(async (cmd) => {
+      if (cmd === "host_connections") return makeConnections("remote");
+      if (cmd === "profile_summaries") return [];
+      if (cmd === "workgroups") return [];
+      if (cmd === "profiles") return [{ name: "local-only" }];
+      return null;
+    });
+
+    const { result } = renderHostConnections();
+    await waitFor(() => expect(result.current.connectionSyncing).toBe(false));
+    expect(result.current.profiles.map((p) => p.name)).toEqual([]);
+    expect(invoke.mock.calls.some(([cmd]) => cmd === "profiles")).toBe(false);
+  });
+
   it("clears syncing when a connection switch probe ends offline", async () => {
     invoke.mockImplementation(async (cmd) => {
       if (cmd === "host_connections") return makeConnections("local");
@@ -288,18 +319,25 @@ describe("useHostConnections connection-status", () => {
 
 
 describe("useHostConnections offline auto-reprobe", () => {
-  it("re-probes the active connection while offline and stops once back online", async () => {
-    let localStatus = "offline";
+  function mockOfflineLocal(getStatus) {
     invoke.mockImplementation(async (cmd) => {
-      if (cmd === "host_connections") return makeConnections("local", { local: localStatus });
+      if (cmd === "host_connections") return makeConnections("local", { local: getStatus() });
       if (cmd === "profile_summaries") return [];
       if (cmd === "workgroups") return [];
       return null;
     });
+  }
+
+  const probeActiveCount = () =>
+    invoke.mock.calls.filter(([c]) => c === "host_connections_probe_active").length;
+
+  it("re-probes offline with exponential backoff and stops once back online", async () => {
+    const rnd = vi.spyOn(Math, "random").mockReturnValue(0.5); // jitter factor 1.0 → deterministic 4s,8s,16s…
+    let localStatus = "offline";
+    mockOfflineLocal(() => localStatus);
     vi.useFakeTimers();
     try {
       const { result } = renderHostConnections();
-      // flush the initial async reload (microtasks) so state→offline and the effect installs a faked interval
       await act(async () => {
         await Promise.resolve();
         await Promise.resolve();
@@ -308,29 +346,46 @@ describe("useHostConnections offline auto-reprobe", () => {
       expect(
         result.current.hostConnections.connections.find((c) => c.id === "local")?.status,
       ).toBe("offline");
+
       invoke.mockClear();
-      await act(async () => {
-        vi.advanceTimersByTime(4000 * 3);
-      });
-      const offlineProbes = invoke.mock.calls.filter(
-        ([c]) => c === "host_connections_probe_active",
-      ).length;
-      expect(offlineProbes).toBeGreaterThanOrEqual(2);
+      await act(async () => { vi.advanceTimersByTime(5000); });
+      expect(probeActiveCount()).toBeGreaterThanOrEqual(1); // fast first probe (~4s)
+
+      invoke.mockClear();
+      await act(async () => { vi.advanceTimersByTime(200000); });
+      // a fixed-4s drumbeat would be ~50 probes over 200s; backoff caps it well under 12
+      expect(probeActiveCount()).toBeLessThan(12);
 
       localStatus = "online";
       await act(async () => {
         await connectionStatusListener({ payload: { id: "local", status: "online" } });
       });
       invoke.mockClear();
-      await act(async () => {
-        vi.advanceTimersByTime(4000 * 3);
-      });
-      const onlineProbes = invoke.mock.calls.filter(
-        ([c]) => c === "host_connections_probe_active",
-      ).length;
-      expect(onlineProbes).toBe(0);
+      await act(async () => { vi.advanceTimersByTime(200000); });
+      expect(probeActiveCount()).toBe(0);
     } finally {
       vi.useRealTimers();
+      rnd.mockRestore();
+    }
+  });
+
+  it("jitters the reprobe delay below the base interval", async () => {
+    const rnd = vi.spyOn(Math, "random").mockReturnValue(0); // factor 0.8 → first probe at 3200ms
+    mockOfflineLocal(() => "offline");
+    vi.useFakeTimers();
+    try {
+      renderHostConnections();
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      invoke.mockClear();
+      await act(async () => { vi.advanceTimersByTime(3300); }); // > 3200 jittered, < 4000 base
+      expect(probeActiveCount()).toBeGreaterThanOrEqual(1);
+    } finally {
+      vi.useRealTimers();
+      rnd.mockRestore();
     }
   });
 });
