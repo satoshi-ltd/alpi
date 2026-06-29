@@ -6,7 +6,18 @@ from unittest.mock import patch
 
 import pytest
 
-from alpi.session import Session, ToolLog, load_turns, truncate_result, TOOL_RESULT_CAP
+from alpi.session import (
+    ASSISTANT_CAP,
+    SESSION_SCHEMA_VERSION,
+    TOOL_ARGS_CAP,
+    TURN_REASONING_CAP,
+    Session,
+    ToolLog,
+    Turn,
+    load_turns,
+    truncate_result,
+    TOOL_RESULT_CAP,
+)
 
 
 def test_truncate_result_strips_whitespace() -> None:
@@ -82,10 +93,13 @@ def test_session_save_writes_serialized_turns(tmp_path: Path) -> None:
 
     assert path == tmp_path / "sessions" / f"{session.id}.json"
     data = json.loads(path.read_text())
+    assert data["schema_version"] == SESSION_SCHEMA_VERSION
     assert data["model"] == "openai/gpt-4o"
     assert data["turns"][0]["user"] == "hola"
     assert data["turns"][0]["assistant"] == "adios"
     assert data["turns"][0]["tools"][0]["name"] == "web_search"
+    assert data["turns"][0]["tools"][0]["args"]["preview"] == '{"q": "x"}'
+    assert data["turns"][0]["tools"][0]["result"] == "done"
 
 
 def test_session_save_leaves_no_temp_sibling(tmp_path: Path) -> None:
@@ -115,3 +129,91 @@ def test_session_save_failure_preserves_existing_file(tmp_path: Path) -> None:
 
     assert path.read_text() == original
     assert not any(p.name.endswith(".tmp") for p in path.parent.iterdir())
+
+
+def test_session_save_compacts_large_payloads(tmp_path: Path) -> None:
+    big_arg = "a" * (TOOL_ARGS_CAP * 4)
+    big_reasoning = "r" * (TURN_REASONING_CAP * 4)
+    big_assistant = "z" * (ASSISTANT_CAP * 2)
+    session = Session(home=tmp_path, model="m")
+    session.turns.append(
+        Turn(
+            at=1.0,
+            user="build a large payload",
+            assistant=big_assistant,
+            tools=[
+                ToolLog(
+                    at=2.0,
+                    name="write_big",
+                    args={"payload": big_arg},
+                    result="ok",
+                    ok=False,
+                    duration_s=0.5,
+                    reasoning=big_reasoning,
+                ),
+            ],
+            reasoning=big_reasoning,
+        ),
+    )
+
+    path = session.save()
+    data = json.loads(path.read_text())
+    turn = data["turns"][0]
+    tool = turn["tools"][0]
+
+    assert path.stat().st_size < 120_000
+    assert turn["assistant"].endswith("…")
+    assert turn["assistant_meta"]["truncated"] is True
+    assert turn["reasoning"]["truncated"] is True
+    assert turn["reasoning"]["bytes"] == len(big_reasoning)
+    assert tool["status"] == "failed"
+    assert tool["args"]["truncated"] is True
+    assert tool["args"]["bytes"] > len(tool["args"]["preview"])
+    assert tool["args"]["sha256"]
+    assert tool["reasoning"]["truncated"] is True
+
+
+def test_load_turns_reads_v2_compact_fields() -> None:
+    turns = load_turns({
+        "schema_version": 2,
+        "turns": [{
+            "at": 1.0,
+            "user": "hello",
+            "assistant": "done",
+            "reasoning": {"preview": "compact thinking", "bytes": 999, "sha256": "x", "truncated": True},
+            "tools": [{
+                "at": 2.0,
+                "name": "ask_user",
+                "args": {"preview": '{"question":"which?"}', "bytes": 21, "sha256": "x", "truncated": False},
+                "result": "answer",
+                "ok": True,
+                "duration_s": 0.1,
+                "reasoning": {"preview": "ask first", "bytes": 8, "sha256": "x", "truncated": False},
+            }],
+        }],
+    })
+
+    assert turns[0].reasoning == "compact thinking"
+    assert turns[0].tools[0].args == {"question": "which?"}
+    assert turns[0].tools[0].result == "answer"
+    assert turns[0].tools[0].reasoning == "ask first"
+
+
+def test_load_turns_preserves_v1_args_with_preview_key() -> None:
+    turns = load_turns({
+        "turns": [{
+            "at": 1.0,
+            "user": "hello",
+            "assistant": "done",
+            "tools": [{
+                "at": 2.0,
+                "name": "custom",
+                "args": {"preview": "literal arg", "other": 1},
+                "result": "ok",
+                "ok": True,
+                "duration_s": 0.1,
+            }],
+        }],
+    })
+
+    assert turns[0].tools[0].args == {"preview": "literal arg", "other": 1}

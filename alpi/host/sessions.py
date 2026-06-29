@@ -216,7 +216,8 @@ def read_session(home: Path, session_id: str) -> dict[str, Any]:
     p = home / "sessions" / f"{session_id}.json"
     if not p.exists():
         raise FileNotFoundError(f"no session {session_id!r}")
-    return json.loads(p.read_text(encoding="utf-8"))
+    from alpi.session import normalize_payload
+    return normalize_payload(json.loads(p.read_text(encoding="utf-8")))
 
 
 def session_paths(home: Path, session_id: str) -> tuple[Path, Path]:

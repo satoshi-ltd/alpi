@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.10.2 — 2026-06-29 — compact sessions keep long runs reviewable
+
+- **New sessions are compact on disk.** Session files now carry
+  `schema_version: 2` and store large reasoning/tool payloads as
+  preview + byte count + hash instead of raw megabyte blobs. The live replay
+  sidecar keeps incremental deltas intact and clips oversized frames, so long
+  agent runs stay reviewable without producing 100 MB chat files.
+
 ## v0.10.1 — 2026-06-29 — faster Settings, even with huge session histories
 
 - **The daemon serves a profile's whole Settings view in one request** — model

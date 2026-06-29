@@ -197,7 +197,7 @@ that live at `{home}/skills/<category>/<name>/`.
 ├── skills/<category>/<name>/    SKILL.md + scripts/ + references/ +
 │                                 assets/ + secrets/ (0700) + state/ +
 │                                 .gitignore
-├── sessions/<id>.json      turn-based session log (TUI / desktop / `--once`)
+├── sessions/<id>.json      compact turn-based session log (TUI / desktop / `--once`)
 ├── rag/                    local RAG over the workspace (BA)
 │   └── store.sqlite        sqlite-vec index — workspace_files / _chunks / _vec
 ├── mentions/<sender>.json  per-sender @-mention threads (cap 20 turns), receiving side
@@ -990,7 +990,11 @@ profile tree before and after a digest run.
 
 ### Sessions (`alpi/session.py`)
 
-Turn-based JSON: `turns: [{at, user, tools[], assistant}]` plus cumulative metrics. `ToolLog` carries `at, name, args, result (truncated hint), ok, duration_s, reasoning (non-empty only on first tool of a batch)`. Empty sessions (no user message) are NOT saved.
+Turn-based JSON: `schema_version: 2`, `turns: [{at, user, tools[], assistant}]`, and cumulative metrics. `ToolLog` carries `at, name, args, result, ok, duration_s, reasoning`; large `user` / `assistant` / `reasoning` / tool payloads are persisted as bounded previews plus `{bytes, sha256, truncated}` metadata, not raw unbounded blobs. `host.session.read` normalizes both legacy and v2 payloads back to the client-facing shape, so desktop/mobile can render old and new sessions the same way. Empty sessions (no user message) are NOT saved.
+
+Listings are bounded. `host.sessions.list` fully parses normal files but uses a cheap summary path for files above the large-session threshold; `host.profile.summaries` uses `count_sessions()` and `latest_chat_summary()` so profile/sidebar RPCs never parse 50 MB histories just to show a count or latest row.
+
+Live replay is a separate sidecar (`sessions/_events_<id>.jsonl`). It is append-only within the active turn, sequence-numbered, and bounded: incremental `assistant_delta` / `reasoning_delta` frames are preserved exactly, while very large text fields are clipped. The canonical durable review remains `sessions/<id>.json`; the sidecar is for reconnect/backfill, not long-term full-fidelity storage.
 
 `sessions/` is local human chat history: TUI, desktop, and manual
 `alpi chat --once` runs that should be resumable. `--continue`,

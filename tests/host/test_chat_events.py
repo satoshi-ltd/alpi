@@ -97,6 +97,22 @@ def test_oversized_frame_text_is_truncated(short_tmp: Path) -> None:
     assert persisted.endswith("…")
 
 
+def test_repeated_incremental_assistant_deltas_are_preserved(short_tmp: Path) -> None:
+    home = short_tmp / "h"
+    home.mkdir()
+    sid = "sess-incremental"
+    chat_events.reset_for_turn(home, sid, "rid")
+    seq_a = chat_events.append(home, sid, "rid", {"event": "assistant_delta", "text": "ha"})
+    seq_b = chat_events.append(home, sid, "rid", {"event": "assistant_delta", "text": "ha"})
+    seq_c = chat_events.append(home, sid, "rid", {"event": "assistant_delta", "text": "!"})
+    seq_d = chat_events.append(home, sid, "rid", {"event": "assistant_delta", "text": "!"})
+
+    assert (seq_a, seq_b, seq_c, seq_d) == (1, 2, 3, 4)
+    state = chat_events.read_since(home, sid, after_seq=0)
+    frames = [e["frame"] for e in state["events"]]
+    assert [f["text"] for f in frames] == ["ha", "ha", "!", "!"]
+
+
 class _FakeEngine:
     def __init__(self, *, home: Path, cfg) -> None:  # noqa: ANN001
         self.home = home

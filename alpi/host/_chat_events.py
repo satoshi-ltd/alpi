@@ -12,6 +12,7 @@ _EVENTS_PREFIX = "_events_"
 _EVENTS_SUFFIX = ".jsonl"
 _HEARTBEAT_KIND = "heartbeat"
 _MAX_FRAME_BYTES = 32 * 1024
+_MAX_TEXT_FIELD_BYTES = 8 * 1024
 
 _locks: dict[str, threading.Lock] = {}
 _locks_guard = threading.Lock()
@@ -44,7 +45,8 @@ def reset_for_turn(home: Path, session_id: str, request_id: str) -> None:
     path = _file_for(home, session_id)
     path.parent.mkdir(parents=True, exist_ok=True)
     with _lock_for(home, session_id):
-        _seq_state[_key(home, session_id)] = 0
+        key = _key(home, session_id)
+        _seq_state[key] = 0
         try:
             path.write_text(
                 json.dumps({
@@ -67,16 +69,16 @@ def append(
 ) -> int:
     """Persist a single chat frame to the sidecar. Returns the assigned seq."""
     path = _file_for(home, session_id)
-    payload = json.dumps(frame, default=str)
-    if len(payload) > _MAX_FRAME_BYTES:
-        # Truncate text-bearing fields to keep replay log bounded.
-        clipped = dict(frame)
-        for k in ("text", "output"):
-            if isinstance(clipped.get(k), str) and len(clipped[k]) > _MAX_FRAME_BYTES // 2:
-                clipped[k] = clipped[k][: _MAX_FRAME_BYTES // 2] + "…"
-        payload = json.dumps(clipped, default=str)
     key = _key(home, session_id)
     with _lock_for(home, session_id):
+        payload = json.dumps(frame, default=str)
+        if len(payload) > _MAX_FRAME_BYTES:
+            # Truncate text-bearing fields to keep replay log bounded.
+            clipped = dict(frame)
+            for k in ("text", "output"):
+                if isinstance(clipped.get(k), str):
+                    clipped[k] = _clip_text(clipped[k], _MAX_TEXT_FIELD_BYTES)
+            payload = json.dumps(clipped, default=str)
         seq = _seq_state.get(key, 0) + 1
         _seq_state[key] = seq
         record = json.dumps({
@@ -92,6 +94,15 @@ def append(
         except OSError:
             pass
         return seq
+
+
+def _clip_text(text: str, max_bytes: int) -> str:
+    raw = text.encode("utf-8", errors="replace")
+    if len(raw) <= max_bytes:
+        return text
+    suffix = "…".encode("utf-8")
+    head = raw[: max(0, max_bytes - len(suffix))]
+    return head.decode("utf-8", errors="ignore") + "…"
 
 
 def heartbeat(home: Path, session_id: str, request_id: str) -> int:
