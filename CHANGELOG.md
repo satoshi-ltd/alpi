@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.10.3 — 2026-06-29 — leaner session files
+
+- **Session files shrink further.** Routine tool calls no longer carry
+  per-field size/hash metadata — that's written only when a field is actually
+  clipped, so everyday sessions stay lighter on disk. Older session files keep
+  loading unchanged.
+
 ## v0.10.2 — 2026-06-29 — compact sessions keep long runs reviewable
 
 - **New sessions are compact on disk.** Session files now carry

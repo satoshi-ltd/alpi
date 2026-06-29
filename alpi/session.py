@@ -142,20 +142,12 @@ class Session:
 
 
 def _serialize_turn_v2(t: Turn, *, redact) -> dict[str, Any]:  # noqa: ANN001
-    user_meta = _compact_text(redact(t.user), USER_CAP)
-    assistant_meta = _compact_text(redact(t.assistant), ASSISTANT_CAP)
-    row: dict[str, Any] = {
-        "at": t.at,
-        "user": user_meta["preview"],
-        "assistant": assistant_meta["preview"],
-        "tools": [_serialize_tool_v2(tl, redact=redact) for tl in t.tools],
-    }
-    if user_meta["truncated"]:
-        row["user_meta"] = _meta_without_preview(user_meta)
-    if assistant_meta["truncated"]:
-        row["assistant_meta"] = _meta_without_preview(assistant_meta)
+    row: dict[str, Any] = {"at": t.at}
+    _put(row, "user", redact(t.user), USER_CAP)
+    _put(row, "assistant", redact(t.assistant), ASSISTANT_CAP)
+    row["tools"] = [_serialize_tool_v2(tl, redact=redact) for tl in t.tools]
     if t.reasoning:
-        row["reasoning"] = _compact_text(redact(t.reasoning), TURN_REASONING_CAP)
+        _put(row, "reasoning", redact(t.reasoning), TURN_REASONING_CAP)
     if t.reasoned_s:
         row["reasoned_s"] = round(t.reasoned_s, 1)
     if t.attachments:
@@ -172,40 +164,37 @@ def _serialize_tool_v2(tl: ToolLog, *, redact) -> dict[str, Any]:  # noqa: ANN00
         "status": "ok" if tl.ok else "failed",
         "ok": tl.ok,
         "duration_s": round(tl.duration_s, 3),
-        "args": _compact_json(redact(tl.args), TOOL_ARGS_CAP),
-        "result": redact(tl.result),
     }
+    _put_json(row, "args", redact(tl.args), TOOL_ARGS_CAP)
+    row["result"] = redact(tl.result)  # already capped via truncate_result upstream
     if tl.reasoning:
-        row["reasoning"] = _compact_text(redact(tl.reasoning), TOOL_REASONING_CAP)
+        _put(row, "reasoning", redact(tl.reasoning), TOOL_REASONING_CAP)
     return row
 
 
-def _compact_json(value: Any, cap: int) -> dict[str, Any]:
+def _put(row: dict[str, Any], key: str, value: Any, cap: int) -> None:
+    preview, meta = _clip(value, cap)
+    row[key] = preview
+    if meta:
+        row[f"{key}_meta"] = meta
+
+
+def _put_json(row: dict[str, Any], key: str, value: Any, cap: int) -> None:
     try:
         text = json.dumps(value, ensure_ascii=False, sort_keys=True, default=str)
     except Exception:  # noqa: BLE001
         text = str(value)
-    return _compact_text(text, cap)
+    _put(row, key, text, cap)
 
 
-def _compact_text(value: Any, cap: int) -> dict[str, Any]:
+def _clip(value: Any, cap: int) -> tuple[str, dict[str, Any] | None]:
     text = "" if value is None else str(value)
     raw = text.encode("utf-8", errors="replace")
-    preview, truncated = _clip_utf8(raw, cap)
-    return {
-        "preview": preview,
-        "bytes": len(raw),
-        "sha256": hashlib.sha256(raw).hexdigest(),
-        "truncated": truncated,
-    }
-
-
-def _clip_utf8(raw: bytes, cap: int) -> tuple[str, bool]:
     if len(raw) <= cap:
-        return raw.decode("utf-8", errors="replace"), False
+        return text, None
     suffix = "…".encode("utf-8")
-    head = raw[: max(0, cap - len(suffix))]
-    return head.decode("utf-8", errors="ignore") + "…", True
+    preview = raw[: max(0, cap - len(suffix))].decode("utf-8", errors="ignore") + "…"
+    return preview, {"bytes": len(raw), "sha256": hashlib.sha256(raw).hexdigest(), "truncated": True}
 
 
 def _meta_without_preview(obj: dict[str, Any]) -> dict[str, Any]:
@@ -218,6 +207,13 @@ def _preview(value: Any) -> str:
     return str(value or "")
 
 
+def _meta_of(container: dict[str, Any], key: str) -> dict[str, Any] | None:
+    sibling = container.get(f"{key}_meta")
+    if isinstance(sibling, dict):
+        return sibling
+    return _field_meta(container.get(key))
+
+
 def _field_meta(value: Any) -> dict[str, Any] | None:
     if _is_compact_field(value):
         return _meta_without_preview(value)
@@ -226,14 +222,15 @@ def _field_meta(value: Any) -> dict[str, Any] | None:
 
 def _args_from_serialized(value: Any) -> dict[str, Any]:
     if _is_compact_field(value):
-        preview = str(value.get("preview") or "")
+        value = value.get("preview") or ""
+    if isinstance(value, str):
         try:
-            parsed = json.loads(preview)
+            parsed = json.loads(value)
             if isinstance(parsed, dict):
                 return parsed
         except Exception:  # noqa: BLE001
             pass
-        return {"preview": preview} if preview else {}
+        return {"preview": value} if value else {}
     if isinstance(value, dict):
         return value
     return {}
@@ -257,7 +254,7 @@ def normalize_payload(data: dict[str, Any]) -> dict[str, Any]:
             continue
         row = dict(t)
         row["reasoning"] = _preview(t.get("reasoning"))
-        meta = _field_meta(t.get("reasoning"))
+        meta = _meta_of(t, "reasoning")
         if meta:
             row["reasoning_meta"] = meta
         row["tools"] = [_normalize_tool_payload(tl) for tl in (t.get("tools") or []) if isinstance(tl, dict)]
@@ -273,7 +270,7 @@ def _normalize_tool_payload(tl: dict[str, Any]) -> dict[str, Any]:
     row["output"] = row.get("output") or row["result"]
     row["reasoning"] = _preview(tl.get("reasoning"))
     for key in ("args", "result", "reasoning"):
-        meta = _field_meta(tl.get(key))
+        meta = _meta_of(tl, key)
         if meta:
             row[f"{key}_meta"] = meta
     row.setdefault("status", "ok" if row.get("ok", True) else "failed")

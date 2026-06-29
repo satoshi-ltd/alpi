@@ -29,6 +29,7 @@ gateways, and no default anti-bot posture.
 |---|---|---|
 | ALP.5 | Blob transfer — `link.put_blob` / `link.get_blob`, content-addressed and chunked, for screenshots, PDFs, skill outputs, and other artefacts that should not live inline in an ALP JSON envelope. | 🟡 |
 | BROWSER.1 | Optional lightweight browser backend — acceptance-test Obscura or a similar CDP backend behind the existing `browser` tool to cut Chromium's footprint on small hosts. | 🔵 |
+| SESS.1 | Drop `schema_version: 1` session-file support — readers stop accepting the pre-v0.10 layout; only `schema_version: 2` loads. | 🔵 |
 
 ### ALP.5. Blob transfer
 
@@ -63,6 +64,20 @@ DOM and a CDP subset) with a scraping-evasion trust profile, against a
 battle-tested Playwright + Chromium. It earns adoption only after its source is
 vetted, its WPT conformance is tracked, it passes real acceptance, and it
 measurably cuts Chromium's footprint on a host that needs it.
+
+### SESS.1. Drop schema_version 1 session files
+
+v0.10 introduced `schema_version: 2` session files (capped previews +
+opt-in `*_meta`); the readers still accept the pre-v0.10 `schema_version: 1`
+layout so older sessions keep loading. v0.11 removes that fallback: only v2
+loads, and the v1 read paths come out. Search, recall, and the desktop
+session view all read v2 by then, so the only cost is that sessions written
+before v0.10 stop being machine-readable.
+
+**Why it waits.** Keeping the v1 reader through the v0.10 cycle lets every
+existing session migrate naturally as it is rewritten. Dropping it is a
+clean-up, not a feature — it lands once no active install still depends on
+v1 files.
 
 ---
 

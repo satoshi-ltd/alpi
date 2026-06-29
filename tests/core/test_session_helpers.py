@@ -98,8 +98,10 @@ def test_session_save_writes_serialized_turns(tmp_path: Path) -> None:
     assert data["turns"][0]["user"] == "hola"
     assert data["turns"][0]["assistant"] == "adios"
     assert data["turns"][0]["tools"][0]["name"] == "web_search"
-    assert data["turns"][0]["tools"][0]["args"]["preview"] == '{"q": "x"}'
+    assert data["turns"][0]["tools"][0]["args"] == '{"q": "x"}'
     assert data["turns"][0]["tools"][0]["result"] == "done"
+    assert "args_meta" not in data["turns"][0]["tools"][0]
+    assert "assistant_meta" not in data["turns"][0]
 
 
 def test_session_save_leaves_no_temp_sibling(tmp_path: Path) -> None:
@@ -164,13 +166,14 @@ def test_session_save_compacts_large_payloads(tmp_path: Path) -> None:
     assert path.stat().st_size < 120_000
     assert turn["assistant"].endswith("…")
     assert turn["assistant_meta"]["truncated"] is True
-    assert turn["reasoning"]["truncated"] is True
-    assert turn["reasoning"]["bytes"] == len(big_reasoning)
+    assert turn["reasoning"].endswith("…")
+    assert turn["reasoning_meta"]["truncated"] is True
+    assert turn["reasoning_meta"]["bytes"] == len(big_reasoning)
     assert tool["status"] == "failed"
-    assert tool["args"]["truncated"] is True
-    assert tool["args"]["bytes"] > len(tool["args"]["preview"])
-    assert tool["args"]["sha256"]
-    assert tool["reasoning"]["truncated"] is True
+    assert tool["args_meta"]["truncated"] is True
+    assert tool["args_meta"]["bytes"] > len(tool["args"])
+    assert tool["args_meta"]["sha256"]
+    assert tool["reasoning_meta"]["truncated"] is True
 
 
 def test_load_turns_reads_v2_compact_fields() -> None:
@@ -194,6 +197,33 @@ def test_load_turns_reads_v2_compact_fields() -> None:
     })
 
     assert turns[0].reasoning == "compact thinking"
+    assert turns[0].tools[0].args == {"question": "which?"}
+    assert turns[0].tools[0].result == "answer"
+    assert turns[0].tools[0].reasoning == "ask first"
+
+
+def test_load_turns_reads_v2_bare_meta_fields() -> None:
+    turns = load_turns({
+        "schema_version": 2,
+        "turns": [{
+            "at": 1.0,
+            "user": "hello",
+            "assistant": "done",
+            "reasoning": "compact thinking…",
+            "reasoning_meta": {"bytes": 999, "sha256": "x", "truncated": True},
+            "tools": [{
+                "at": 2.0,
+                "name": "ask_user",
+                "args": '{"question": "which?"}',
+                "result": "answer",
+                "ok": True,
+                "duration_s": 0.1,
+                "reasoning": "ask first",
+            }],
+        }],
+    })
+
+    assert turns[0].reasoning == "compact thinking…"
     assert turns[0].tools[0].args == {"question": "which?"}
     assert turns[0].tools[0].result == "answer"
     assert turns[0].tools[0].reasoning == "ask first"
