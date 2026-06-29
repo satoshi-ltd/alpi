@@ -2157,6 +2157,44 @@ async fn attachment_meta(paths: Vec<String>) -> Vec<AttachmentMeta> {
     .unwrap_or_default()
 }
 
+#[tauri::command]
+async fn save_text_file(name: String, content: String, dest: String) -> Result<AttachmentMeta, String> {
+    off_main(move || -> Result<AttachmentMeta, String> {
+        let base = std::path::Path::new(&name)
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .filter(|n| !n.is_empty())
+            .unwrap_or_else(|| "notification.md".into());
+        let dir = if dest == "download" {
+            dirs::download_dir().ok_or_else(|| "no download directory".to_string())?
+        } else {
+            let stamp = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0);
+            let sub = std::env::temp_dir().join(format!("alpi-attach-{stamp}"));
+            std::fs::create_dir_all(&sub).map_err(|e| format!("mkdir: {e}"))?;
+            sub
+        };
+        let mut path = dir.join(&base);
+        if dest == "download" {
+            let p = std::path::Path::new(&base);
+            let stem = p.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_else(|| "notification".into());
+            let ext = p.extension().map(|s| s.to_string_lossy().into_owned()).unwrap_or_else(|| "md".into());
+            let mut n = 1;
+            while path.exists() {
+                path = dir.join(format!("{stem} ({n}).{ext}"));
+                n += 1;
+            }
+        }
+        std::fs::write(&path, content.as_bytes()).map_err(|e| format!("write: {e}"))?;
+        let size = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(content.len() as u64);
+        let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or(base);
+        Ok(AttachmentMeta { path: path.to_string_lossy().into_owned(), name, size })
+    })
+    .await?
+}
+
 // Allowed read/copy roots; `extra` is the active profile's workspace (UI-supplied, trusted).
 fn path_within_allowed(path: &str, extra: &[String]) -> bool {
     let canon = match std::fs::canonicalize(path) {
@@ -3138,6 +3176,7 @@ pub fn run() {
             pick_files,
             attachment_meta,
             attachment_thumb,
+            save_text_file,
             attachment_stage,
             probe_peers,
             peer_add,

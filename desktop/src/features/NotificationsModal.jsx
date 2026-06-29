@@ -1,13 +1,16 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import {
   BrowseModal,
   Btn,
   Chip,
   CopyIcon,
   Diamond,
+  DownloadIcon,
   GearIcon,
   IconBtn,
   Mono,
+  SendToChatIcon,
   SpinnerIcon as DSSpinnerIcon,
   Tip,
   VolumeIcon,
@@ -45,6 +48,18 @@ function fmtAbsolute(ts) {
 }
 
 
+function slugify(s) {
+  const out = String(s || "")
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
+  return out || "notification";
+}
+
+
 function typeTag(row) {
   const t = row?.type;
   if (!t || t === "info") return null;
@@ -69,6 +84,7 @@ export default function NotificationsModal({
   selectedConnectionId,
   onSelect,
   onOpenChat,
+  onSendToChat: onSendToChatProp,
 }) {
   const notify = useNotify();
   const multi = connections.length > 1;
@@ -215,6 +231,39 @@ export default function NotificationsModal({
     else notify({ message: "Copy failed", variant: "error" });
   }, [detail, notify]);
 
+  const buildMarkdown = useCallback(() => {
+    const title = (detail?.title || "").trim() || "Notification";
+    const conn = activeConnId === "local" ? "local" : (activeRow?.connectionName || activeConnId || "");
+    const meta = [`@${profileLabel(detail.profile)}`, conn, fmtAbsolute(detail.created_at)]
+      .filter(Boolean)
+      .join(" · ");
+    return `# ${title}\n_${meta}_\n\n${detail.body || ""}\n`;
+  }, [detail, activeConnId, activeRow]);
+
+  const onSendToChat = useCallback(async () => {
+    if (!detail) return;
+    const name = `${slugify(detail.title)}.md`;
+    try {
+      const meta = await invoke("save_text_file", { name, content: buildMarkdown(), dest: "temp" });
+      onSendToChatProp?.(detail.profile, activeConnId, { path: meta.path, name, size: meta.size, mime: "text/markdown" });
+      notify({ message: `Attached to @${profileLabel(detail.profile)}` });
+      onClose?.();
+    } catch (e) {
+      notify({ message: `Send to chat failed: ${e}`, variant: "error" });
+    }
+  }, [detail, activeConnId, buildMarkdown, onSendToChatProp, notify, onClose]);
+
+  const onDownload = useCallback(async () => {
+    if (!detail) return;
+    const name = `${slugify(detail.title)}.md`;
+    try {
+      const meta = await invoke("save_text_file", { name, content: buildMarkdown(), dest: "download" });
+      notify({ message: `Downloaded ${meta.name}` });
+    } catch (e) {
+      notify({ message: `Download failed: ${e}`, variant: "error" });
+    }
+  }, [detail, buildMarkdown, notify]);
+
   const onAction = useCallback(() => {
     const action = contextAction(detail);
     if (!action) return;
@@ -280,6 +329,8 @@ export default function NotificationsModal({
           connectionName={activeRow?.connectionName}
           voiceId={activeVoiceId}
           onCopy={onCopy}
+          onSendToChat={onSendToChat}
+          onDownload={onDownload}
           onAction={onAction}
           action={contextAction(detail)}
         />
@@ -334,7 +385,7 @@ function NotificationRow({ row, accent, multi, active, onSelect, onDelete }) {
 }
 
 
-function DetailPane({ row, accent, connId, connectionName, voiceId, onCopy, onAction, action }) {
+function DetailPane({ row, accent, connId, connectionName, voiceId, onCopy, onSendToChat, onDownload, onAction, action }) {
   const label = profileLabel(row.profile);
   const tag = typeTag(row);
   const isHost = connId === "local";
@@ -377,6 +428,16 @@ function DetailPane({ row, accent, connId, connectionName, voiceId, onCopy, onAc
             ) : (
               <VolumeIcon />
             )}
+          </IconBtn>
+        </Tip>
+        <Tip text="Send to chat" side="l" escape>
+          <IconBtn aria-label="Send to chat" onClick={onSendToChat}>
+            <SendToChatIcon />
+          </IconBtn>
+        </Tip>
+        <Tip text="Download .md" side="l" escape>
+          <IconBtn aria-label="Download as markdown" onClick={onDownload}>
+            <DownloadIcon />
           </IconBtn>
         </Tip>
         <Tip text="Copy" side="l" escape>

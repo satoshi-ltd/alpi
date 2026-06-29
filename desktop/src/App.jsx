@@ -79,6 +79,7 @@ export default function App() {
   });
   const [sessionData, setSessionData] = useState(null);
   const [rewriteDraft, setRewriteDraft] = useState(null);
+  const [pendingAttachment, setPendingAttachment] = useState(null);
   const [activeTask, setActiveTask] = useState(null);
   const [recents, setRecents] = useState([]);
 
@@ -1071,6 +1072,12 @@ export default function App() {
                       prev ? { ...prev, consumed: true } : prev,
                     );
                   }}
+                  pendingAttachment={pendingAttachment}
+                  onPendingAttachmentApplied={() => {
+                    setPendingAttachment((prev) =>
+                      prev ? { ...prev, consumed: true } : prev,
+                    );
+                  }}
                   onOpenSkills={onBrowseSkills}
                   onOpenMemory={onBrowseMemory}
                   onOpenTools={onBrowseTools}
@@ -1154,6 +1161,11 @@ export default function App() {
         onOpenChat={(profile, sessionId) =>
           setView({ kind: "profile", profile, sessionId: sessionId || null })
         }
+        onSendToChat={(profile, connId, attachment) => {
+          setPendingAttachment({ profile, connectionId: connId ?? null, attachment, consumed: false });
+          if (connId && connId !== hostConnections.active_id) onSetHostConnection(connId);
+          setView({ kind: "profile", profile, sessionId: null });
+        }}
       />
     </div>
   );

@@ -68,6 +68,8 @@ export default function ChatPane({
   onRetryMessage,
   rewriteDraft,
   onRewriteDraftApplied,
+  pendingAttachment,
+  onPendingAttachmentApplied,
   onOpenSkills,
   onOpenMemory,
   onOpenTools,
@@ -222,6 +224,8 @@ export default function ChatPane({
           embedded
           rewriteDraft={rewriteDraft}
           onRewriteDraftApplied={onRewriteDraftApplied}
+          pendingAttachment={pendingAttachment}
+          onPendingAttachmentApplied={onPendingAttachmentApplied}
           minHeight={68}
         />
       </NewChatHero>
@@ -301,6 +305,8 @@ export default function ChatPane({
         onModelChange={setModelOverride}
         rewriteDraft={rewriteDraft}
         onRewriteDraftApplied={onRewriteDraftApplied}
+        pendingAttachment={pendingAttachment}
+        onPendingAttachmentApplied={onPendingAttachmentApplied}
         minHeight={40}
       />
     </>

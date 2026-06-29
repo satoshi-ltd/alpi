@@ -168,7 +168,7 @@
 .detailMetaProfile + * { margin-left: var(--space-2); }
 
 .detailTitle {
-  font-size: var(--fs-xl);
+  font-size: var(--fs-xxl);
   font-weight: var(--fw-semibold);
   color: var(--ink);
   letter-spacing: -0.012em;

@@ -29,6 +29,8 @@ export default function ChatComposer({
   onModelChange,
   rewriteDraft,
   onRewriteDraftApplied,
+  pendingAttachment,
+  onPendingAttachmentApplied,
   minHeight = null,
   connectionId = null,
 }) {
@@ -103,6 +105,14 @@ export default function ChatComposer({
     updateText(rewriteDraft.text);
     onRewriteDraftApplied?.();
   }, [rewriteDraft, onRewriteDraftApplied, updateText]);
+  useEffect(() => {
+    const att = pendingAttachment?.attachment;
+    if (!att || pendingAttachment.consumed) return;
+    if (pendingAttachment.profile && pendingAttachment.profile !== activeProfile?.name) return;
+    if (pendingAttachment.connectionId && connectionId && pendingAttachment.connectionId !== connectionId) return;
+    setAttachments((prev) => (prev.some((a) => a.path === att.path) ? prev : [...prev, att]));
+    onPendingAttachmentApplied?.();
+  }, [pendingAttachment, onPendingAttachmentApplied, activeProfile?.name, connectionId]);
   useEffect(() => {
     if (!activeProfile?.name) {
       setBaseMentions([]);

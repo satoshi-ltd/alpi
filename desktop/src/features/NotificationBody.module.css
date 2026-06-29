@@ -11,7 +11,7 @@
 
 .lead {
   margin: 0;
-  font-size: var(--fs-xl);
+  font-size: var(--fs-xxl);
   font-weight: var(--fw-semibold);
   letter-spacing: -0.012em;
   line-height: var(--lh-cozy);

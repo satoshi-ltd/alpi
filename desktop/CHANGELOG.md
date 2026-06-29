@@ -11,6 +11,18 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.4.5 — 2026-06-29 — Send a notification to chat, or save it as Markdown
+
+_Requires alpi v0.10.1+._
+
+- **New "Send to chat" on any notification** — opens a fresh chat with the
+  agent that sent it and pre-loads the notification as a Markdown attachment, so
+  you can ask a follow-up with the report already in hand. If that agent lives
+  on another connection, the app switches to it for you.
+- **New "Download" action** — saves a notification (its title, sender, date,
+  and body) as a `.md` file in your Downloads folder, no dialog.
+- **Larger notification titles** in the detail view, for quicker scanning.
+
 ## v0.4.4 — 2026-06-29 — Settings in one round-trip; bounded remote concurrency
 
 _Requires alpi v0.10.1+._

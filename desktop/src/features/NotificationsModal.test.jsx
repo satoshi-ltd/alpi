@@ -21,8 +21,13 @@ const h = vi.hoisted(() => {
   // outputs_read (the detail payload) carries no voice_id — only the list rows do.
   const DETAIL = { ...ROW };
   delete DETAIL.voice_id;
-  return { ROW, DETAIL, detail: DETAIL, rows: [ROW], profileDetail: null, playTts: vi.fn(), ttsCb: { current: null } };
+  return {
+    ROW, DETAIL, detail: DETAIL, rows: [ROW], profileDetail: null, playTts: vi.fn(), ttsCb: { current: null },
+    invoke: vi.fn(async () => ({ path: "/tmp/alpi-attach-1/whoop-sync-failed.md", name: "whoop-sync-failed.md", size: 42 })),
+  };
 });
+
+vi.mock("@tauri-apps/api/core", () => ({ invoke: h.invoke }));
 
 vi.mock("../lib/tts.js", () => ({
   playTts: h.playTts,
@@ -53,6 +58,7 @@ beforeEach(() => {
   h.rows = [h.ROW];
   h.detail = h.DETAIL;
   h.profileDetail = null;
+  h.invoke.mockClear();
 });
 
 function renderModal(connections = [{ id: "c1", name: "casa" }]) {
@@ -234,5 +240,74 @@ describe("headlineParts", () => {
 
   it("strips emojis from the preview too", () => {
     expect(headlineParts({ title: "Recovery", body: "🔴 25% de recovery." }).preview).toBe("25% de recovery.");
+  });
+});
+
+describe("NotificationsModal — send to chat + download", () => {
+  const TITLED = {
+    id: "n1", profile: "alice", connectionId: "c1", connectionName: "casa",
+    accent: "#abc", status: "read", type: "error", created_at: 1_700_000_000,
+    title: "whoop sync failed", body: "python3 run.py exited with code 1.", delivered_to: [],
+  };
+
+  function renderTitled(props = {}) {
+    h.rows = [TITLED];
+    h.detail = TITLED;
+    return render(
+      <NotificationsModal
+        open
+        onClose={() => {}}
+        connections={[{ id: "c1", name: "casa" }]}
+        onSelect={() => {}}
+        onOpenChat={() => {}}
+        onSendToChat={() => {}}
+        {...props}
+      />,
+    );
+  }
+
+  it("send to chat materializes a temp .md and hands the profile a markdown attachment", async () => {
+    const onSendToChat = vi.fn();
+    renderTitled({ onSendToChat });
+    await act(async () => {
+      fireEvent.click(screen.getByLabelText("Send to chat"));
+    });
+    expect(h.invoke).toHaveBeenCalledWith(
+      "save_text_file",
+      expect.objectContaining({ name: "whoop-sync-failed.md", dest: "temp" }),
+    );
+    const { content } = h.invoke.mock.calls[0][1];
+    expect(content).toContain("# whoop sync failed");
+    expect(content).toContain("@alice");
+    expect(content).toContain("python3 run.py exited with code 1.");
+    expect(onSendToChat).toHaveBeenCalledWith(
+      "alice",
+      "c1",
+      expect.objectContaining({ name: "whoop-sync-failed.md", mime: "text/markdown", path: expect.any(String) }),
+    );
+  });
+
+  it("download writes the markdown to the Downloads folder", async () => {
+    renderTitled();
+    await act(async () => {
+      fireEvent.click(screen.getByLabelText("Download as markdown"));
+    });
+    expect(h.invoke).toHaveBeenCalledWith(
+      "save_text_file",
+      expect.objectContaining({ name: "whoop-sync-failed.md", dest: "download" }),
+    );
+  });
+
+  it("slugifies an accented, punctuated title into a clean filename", async () => {
+    h.rows = [{ ...TITLED, title: "Lobby · insights del día" }];
+    h.detail = { ...TITLED, title: "Lobby · insights del día" };
+    render(
+      <NotificationsModal open onClose={() => {}} connections={[{ id: "c1", name: "casa" }]}
+        onSelect={() => {}} onOpenChat={() => {}} onSendToChat={() => {}} />,
+    );
+    await act(async () => {
+      fireEvent.click(screen.getByLabelText("Download as markdown"));
+    });
+    expect(h.invoke.mock.calls[0][1].name).toBe("lobby-insights-del-dia.md");
   });
 });
