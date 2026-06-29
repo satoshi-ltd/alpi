@@ -14,6 +14,16 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.2.1 — 2026-06-29 — See an MCP server's tools
+
+_Requires alpi v0.10.5+._
+
+- **Open an MCP server in a profile's settings and see the tools it exposes** —
+  name and description for each — not just its command and args. The app
+  handshakes with the server live, so the list reflects what it actually
+  offers right now, with a brief "handshaking…" state while it starts up.
+- If the server fails to start, the error shows in place of the list.
+
 ## v0.2.0 — 2026-06-26 — Gateways is now Email
 
 _Requires alpi v0.10.0+._

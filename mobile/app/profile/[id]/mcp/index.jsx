@@ -1,14 +1,13 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { space , fontSizes} from '../../../../src/theme/tokens';
 
-import { ActionSheet } from '../../../../src/components/ActionSheet';
 import { Button } from '../../../../src/components/Button';
-import { Icon } from '../../../../src/components/Icon';
 import { Pill } from '../../../../src/components/Pill';
-import { Row, RowSeparator } from '../../../../src/components/Row';
+import { Row, RowSeparator, SectionHeader } from '../../../../src/components/Row';
+import { Sheet } from '../../../../src/components/Sheet';
 import { ScreenHeader } from '../../../../src/components/ScreenHeader';
 import { useToast } from '../../../../src/components/Toast';
 import { Bold, Code, TypedConfirm } from '../../../../src/components/TypedConfirm';
@@ -25,9 +24,23 @@ export default function McpList() {
   const { profile, loading, refresh } = useProfile(id);
   const [target, setTarget] = useState(null);
   const [confirmRemove, setConfirmRemove] = useState(null);
+  const [tools, setTools] = useState(null);
+  const [toolsError, setToolsError] = useState(null);
 
   // Daemon profile summary uses `mcps` (alpi/host/device_state.py::_mcp_servers). Each entry: {name, command, args[], env_keys[]}.
   const servers = profile?.mcps ?? [];
+
+  useEffect(() => {
+    if (!target) return undefined;
+    const name = target.name;
+    let cancelled = false;
+    setTools(null);
+    setToolsError(null);
+    call('host.mcp.tools', { profile: id, name })
+      .then((res) => { if (!cancelled) setTools(res?.tools ?? []); })
+      .catch((e) => { if (!cancelled) { setToolsError(String(e)); setTools([]); } });
+    return () => { cancelled = true; };
+  }, [target?.name, id, call]);
 
   const remove = async (name) => {
     try {
@@ -91,29 +104,93 @@ export default function McpList() {
           })
         )}
       </ScrollView>
-      <ActionSheet
+      <Sheet
         open={!!target}
         onClose={() => setTarget(null)}
         title={target?.name ?? ''}
         subtitle={target ? `${target.command} ${(target.args ?? []).join(' ')}` : ''}
-        actions={
+        primaryAction={
           target
-            ? [
-                {
-                  id: 'remove',
-                  label: 'Remove',
-                  danger: true,
-                  icon: <Icon name="x" size={20} color={colors.danger} />,
-                  onPress: () => {
-                    const name = target.name;
-                    setTarget(null);
-                    setConfirmRemove(name);
-                  },
+            ? {
+                label: 'Remove server',
+                variant: 'danger',
+                onPress: () => {
+                  const name = target.name;
+                  setTarget(null);
+                  setConfirmRemove(name);
                 },
-              ]
-            : []
+              }
+            : undefined
         }
-      />
+      >
+        <ScrollView contentContainerStyle={{ paddingBottom: space.s6 }}>
+          {(target?.env_keys ?? []).length > 0 ? (
+            <View
+              style={{
+                flexDirection: 'row',
+                flexWrap: 'wrap',
+                gap: space.s2,
+                paddingHorizontal: space.s8,
+                paddingBottom: space.s5,
+              }}
+            >
+              {target.env_keys.map((k) => (
+                <Pill key={k} tone="on">{k}</Pill>
+              ))}
+            </View>
+          ) : null}
+          <SectionHeader>
+            {`tools${Array.isArray(tools) && tools.length ? ` · ${tools.length}` : ''}`}
+          </SectionHeader>
+          {tools === null ? (
+            <View
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: space.s3,
+                paddingHorizontal: space.s8,
+                paddingVertical: space.s4,
+              }}
+            >
+              <ActivityIndicator color={colors.ink3} />
+              <Text style={{ color: colors.ink3, fontSize: fontSizes.sm }}>handshaking with server…</Text>
+            </View>
+          ) : toolsError ? (
+            <Text
+              style={{
+                color: colors.danger,
+                fontSize: fontSizes.sm,
+                paddingHorizontal: space.s8,
+                paddingVertical: space.s3,
+              }}
+            >
+              {toolsError}
+            </Text>
+          ) : tools.length === 0 ? (
+            <Text
+              style={{
+                color: colors.ink3,
+                fontSize: fontSizes.sm,
+                paddingHorizontal: space.s8,
+                paddingVertical: space.s3,
+              }}
+            >
+              no tools
+            </Text>
+          ) : (
+            tools.map((t) => (
+              <View key={t.name} style={{ paddingHorizontal: space.s8, paddingVertical: space.s3, gap: 2 }}>
+                <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.ink }}>{t.name}</Text>
+                {t.description ? (
+                  <Text style={{ fontSize: fontSizes.xs, color: colors.ink3, lineHeight: fontSizes.xs * 1.4 }}>
+                    {t.description}
+                  </Text>
+                ) : null}
+              </View>
+            ))
+          )}
+        </ScrollView>
+      </Sheet>
       <TypedConfirm
         open={!!confirmRemove}
         onClose={() => setConfirmRemove(null)}
