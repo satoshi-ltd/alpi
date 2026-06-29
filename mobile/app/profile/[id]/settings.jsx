@@ -9,15 +9,15 @@ import { OnOff } from '../../../src/components/OnOff';
 import { Pill } from '../../../src/components/Pill';
 import { Row, RowSeparator, SectionHeader } from '../../../src/components/Row';
 import { ScreenHeader } from '../../../src/components/ScreenHeader';
+import { SyncBar } from '../../../src/components/SyncBar';
 import { profileLabel } from '../../../src/lib/profileLabel';
 import { useToast } from '../../../src/components/Toast';
 import { Bold, Code, TypedConfirm } from '../../../src/components/TypedConfirm';
 import {
   useEmailAccounts,
   useProfileStorage,
+  useProfileSnapshot,
   useScheduleList,
-  useSkills,
-  useTools,
 } from '../../../src/hooks/useDaemonData';
 import { useProfile } from '../../../src/hooks/useSubject';
 import { useEndpoint } from '../../../src/lib/EndpointContext';
@@ -43,23 +43,62 @@ function formatBytes(n) {
   return `${(n / 1024 ** 3).toFixed(2)} GB`;
 }
 
+function formatUsd(n) {
+  return `$${Number(n || 0).toFixed(2)}`;
+}
+
+function formatTokens(n) {
+  const v = Number(n || 0);
+  if (v >= 1000000) return `${(v / 1000000).toFixed(1)}M`;
+  if (v >= 1000) return `${(v / 1000).toFixed(1)}K`;
+  return String(Math.round(v));
+}
+
+function sectionData(section) {
+  return section && !section.error ? section : null;
+}
+
+function needsFallback(snapshot, name) {
+  if (snapshot.unsupported) return true;
+  if (!snapshot.data) return false;
+  return !sectionData(snapshot.data?.[name]);
+}
+
+function usageTotals(days) {
+  return (days || []).reduce(
+    (acc, d) => ({
+      cost: acc.cost + Number(d.cost || 0),
+      tokIn: acc.tokIn + Number(d.tokIn || 0),
+      tokOut: acc.tokOut + Number(d.tokOut || 0),
+    }),
+    { cost: 0, tokIn: 0, tokOut: 0 },
+  );
+}
+
 export default function ProfileSettings() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
   const toast = useToast();
   const { call } = useEndpoint();
   const { colors, fonts, fontSizes } = useTheme();
-  const { profile, loading, refresh } = useProfile(id);
-  const emailAccounts = useEmailAccounts(id);
-  const schedule = useScheduleList(id);
-  const skills = useSkills(id);
-  const tools = useTools(id);
-  const storage = useProfileStorage(id);
+  const snap = useProfileSnapshot(id);
+  const detailPre = sectionData(snap.data?.detail);
+  const { profile: baseProfile, loading, refresh, refreshDetail } = useProfile(id, { skipDetail: !snap.unsupported });
+  const profile = detailPre ? { ...(baseProfile || {}), ...detailPre } : baseProfile;
+  const emailAccounts = useEmailAccounts(id, { skipWhen: !needsFallback(snap, 'email') });
+  const schedule = useScheduleList(id, { skipWhen: !needsFallback(snap, 'schedules') });
+  const storage = useProfileStorage(id, { skipWhen: !needsFallback(snap, 'storage') });
   const [sheet, setSheet] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [busySubsystem, setBusySubsystem] = useState(null);
   const [restartBusy, setRestartBusy] = useState(false);
   const [confirmRestart, setConfirmRestart] = useState(false);
+
+  const refreshSettings = async () => {
+    await refresh();
+    const next = await snap.refresh();
+    if (!next && snap.unsupported) await refreshDetail();
+  };
 
   const handleRestart = async () => {
     setConfirmRestart(false);
@@ -94,23 +133,33 @@ export default function ProfileSettings() {
   }
 
   const accent = profile.accent ?? accentForProfile(profile.name);
-  const emailList = emailAccounts.data?.accounts ?? [];
+  const emailSection = sectionData(snap.data?.email);
+  const scheduleSection = sectionData(snap.data?.schedules);
+  const storageSection = sectionData(snap.data?.storage);
+  const usageSection = sectionData(snap.data?.usage);
+  const workgroupsSection = sectionData(snap.data?.workgroups);
+  const emailList = emailSection?.accounts ?? emailAccounts.data?.accounts ?? [];
   const providerCount =
     (profile.provider_keys?.length ?? 0) + (profile.provider_ollama?.length ?? 0);
   const mcpCount = profile.mcps?.length ?? 0;
-  const skillCount = skills.data?.skills?.length ?? profile.counts?.skills ?? 0;
-  const toolCount = tools.data?.tools?.length ?? 0;
-  const scheduleCount = schedule.data?.jobs?.length ?? 0;
+  const skillCount = profile.counts?.skills ?? 0;
+  const scheduleCount = scheduleSection?.jobs?.length ?? schedule.data?.jobs?.length ?? 0;
   const peerCount = profile.counts?.peers ?? profile.peers?.length ?? 0;
+  const workgroupCount = workgroupsSection?.workgroups?.length ?? profile.counts?.workgroups ?? 0;
+  const storageRows = storageSection?.storage ?? storage.data?.storage ?? [];
+  const usageDays = usageSection?.days ?? [];
+  const usageTotal = usageTotals(usageDays);
+  const todayUsage = usageDays.find((d) => d.today) ?? usageDays[usageDays.length - 1] ?? null;
+  const settingsSyncing = snap.loading || emailAccounts.loading || schedule.loading || storage.loading;
 
   // Field keys are dotted paths into user.yaml (e.g. `tui.accent`); voice uses a dedicated RPC.
   const saveField = (key, value) =>
-    call('host.config.set_field', { profile: id, key, value }).then(() => refresh());
+    call('host.config.set_field', { profile: id, key, value }).then(() => refreshSettings());
 
   const setVoice = (voiceId) =>
-    call('host.voice.set_voice', { profile: id, voice_id: voiceId }).then(() => refresh());
+    call('host.voice.set_voice', { profile: id, voice_id: voiceId }).then(() => refreshSettings());
   const toggleAutoRead = () =>
-    call('host.voice.set_auto_read', { profile: id, enabled: !profile.voice_auto_read }).then(() => refresh());
+    call('host.voice.set_auto_read', { profile: id, enabled: !profile.voice_auto_read }).then(() => refreshSettings());
 
   const subs = profile?.subsystems ?? SUBSYSTEMS_DEFAULT;
   const toggleSubsystem = async (name) => {
@@ -123,7 +172,7 @@ export default function ProfileSettings() {
         key: `service.${name}`,
         value: String(next),
       });
-      await refresh();
+      await refreshSettings();
       toast({
         title: `${name} ${next ? 'enabled' : 'disabled'}`,
         message: 'applying — takes a few seconds',
@@ -140,7 +189,7 @@ export default function ProfileSettings() {
   const toggleSandbox = async () => {
     try {
       await call('host.sandbox.set', { profile: id, state: profile.sandbox ? 'off' : 'on' });
-      refresh();
+      refreshSettings();
     } catch (e) {
       toast({ title: 'Sandbox failed', message: String(e) });
     }
@@ -153,7 +202,7 @@ export default function ProfileSettings() {
         profile: id,
         state: profile.sandbox_allow_network ? 'off' : 'on',
       });
-      refresh();
+      refreshSettings();
     } catch (e) {
       toast({ title: 'Network failed', message: String(e) });
     }
@@ -178,6 +227,7 @@ export default function ProfileSettings() {
         onBack={() => router.back()}
         leadingGlyph={<Diamond color={accent} size="md" />}
       />
+      <SyncBar syncing={settingsSyncing} />
       <ScrollView contentContainerStyle={{ paddingBottom: space.s10 }}>
         <SectionHeader>Overview</SectionHeader>
         <Row
@@ -244,6 +294,29 @@ export default function ProfileSettings() {
         />
         <RowSeparator />
         <Row label="Home" value={`~/.alpi/profiles/${profile.name}`} chevron={false} />
+
+        <SectionHeader>Usage · last 14 days</SectionHeader>
+        {usageDays.length === 0 && snap.loading ? (
+          <Row label="Loading usage…" chevron={false} />
+        ) : usageDays.length === 0 ? (
+          <Row label="No usage yet" helper="tokens and spend appear after the first turn" chevron={false} />
+        ) : (
+          <>
+            <Row
+              label="Today"
+              value={formatUsd(todayUsage?.cost)}
+              helper={`${formatTokens((todayUsage?.tokIn || 0) + (todayUsage?.tokOut || 0))} tokens`}
+              chevron={false}
+            />
+            <RowSeparator />
+            <Row
+              label="14-day total"
+              value={formatUsd(usageTotal.cost)}
+              helper={`${formatTokens(usageTotal.tokIn)} in · ${formatTokens(usageTotal.tokOut)} out`}
+              chevron={false}
+            />
+          </>
+        )}
 
         <SectionHeader>Identity · how peers see this agent</SectionHeader>
         <Row
@@ -312,6 +385,12 @@ export default function ProfileSettings() {
           value={String(peerCount)}
           onPress={() => router.push(`/profile/${id}/peers`)}
         />
+        <RowSeparator />
+        <Row
+          label="Workgroups"
+          value={String(workgroupCount)}
+          chevron={false}
+        />
 
         <SectionHeader>Schedule</SectionHeader>
         <Row
@@ -378,15 +457,19 @@ export default function ProfileSettings() {
         <Row
           label="Tools"
           helper="native callable functions"
-          value={String(toolCount)}
+          value="view"
           onPress={() => router.push(`/profile/${id}/brain/tools`)}
         />
 
         <SectionHeader>Storage · disk footprint</SectionHeader>
-        {(storage.data?.storage ?? []).filter((it) => it.size_bytes > 0 || it.file_count > 0).length === 0 ? (
-          <Row label="Nothing yet" helper="storage shows up once this profile starts using disk" chevron={false} />
+        {storageRows.filter((it) => it.size_bytes > 0 || it.file_count > 0).length === 0 ? (
+          <Row
+            label={snap.loading || storage.loading ? 'Loading storage…' : 'Nothing yet'}
+            helper={snap.loading || storage.loading ? undefined : 'storage shows up once this profile starts using disk'}
+            chevron={false}
+          />
         ) : (
-          (storage.data?.storage ?? [])
+          storageRows
             .filter((it) => it.size_bytes > 0 || it.file_count > 0)
             .map((it, i, arr) => (
               <View key={it.key}>

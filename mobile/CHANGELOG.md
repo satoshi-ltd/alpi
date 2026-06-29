@@ -14,6 +14,24 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.2.2 — 2026-06-29 — Profile Settings open fast over remote connections
+
+_Requires alpi v0.10.5+._
+
+- **Profile Settings now open from one daemon snapshot.** Detail, usage,
+  schedules, workgroups, email, and storage are seeded by one
+  `host.settings.profile_snapshot` request, with the older section-specific
+  calls kept only as fallbacks when a daemon is missing a section.
+- **Remote Settings keep showing useful cached data while syncing.** Transient
+  timeouts preserve the last good data instead of flashing empty sections; auth
+  and permission failures still clear sensitive data.
+- **A slim sync bar now marks Settings refreshes.** Cached sections stay on
+  screen while the app refreshes in the background, matching the desktop
+  "refresh thread/settings" feedback pattern.
+- **Usage is visible on mobile.** Profile Settings show a compact 14-day usage
+  summary with cost, token totals, and lightweight inline bars instead of the
+  desktop chart.
+
 ## v0.2.1 — 2026-06-29 — See an MCP server's tools
 
 _Requires alpi v0.10.5+._

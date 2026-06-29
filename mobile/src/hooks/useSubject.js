@@ -7,7 +7,7 @@ import { useDebouncedCallback } from './useDebouncedCallback';
 import { useEventEffect } from './useEvents';
 import { useProfileSummaries, useWorkgroups } from './useDaemonData';
 
-export function useProfile(name) {
+export function useProfile(name, opts = {}) {
   const summaries = useProfileSummaries();
   const { call } = useEndpoint();
   const [detail, setDetail] = useState(null);
@@ -23,13 +23,14 @@ export function useProfile(name) {
   );
 
   useEffect(() => {
+    if (opts.skipDetail) return undefined;
     if (!name) return undefined;
     let cancelled = false;
     call('host.profile.detail', { profile: name })
       .then((d) => { if (!cancelled) setDetail(d || null); })
       .catch(() => { if (!cancelled) setDetail(null); });
     return () => { cancelled = true; };
-  }, [name, call]);
+  }, [name, call, opts.skipDetail]);
 
   const refetchDetail = useDebouncedCallback(() => {
     if (!name) return;
@@ -49,13 +50,14 @@ export function useProfile(name) {
   );
   const refreshDetail = useCallback(async () => {
     if (!name) return;
+    if (opts.skipDetail) return;
     try {
       const d = await call('host.profile.detail', { profile: name });
       setDetail(d || null);
     } catch {
       // keep stale snapshot on failure — never blank a populated UI.
     }
-  }, [name, call]);
+  }, [name, call, opts.skipDetail]);
   return {
     profile,
     loading: summaries.loading,

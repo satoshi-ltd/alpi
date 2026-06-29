@@ -6,6 +6,10 @@ import { useEndpoint } from '../lib/EndpointContext';
 
 const cache = new Map();
 
+export function _resetDaemonDataCache() {
+  cache.clear();
+}
+
 function entryFor(key) {
   let entry = cache.get(key);
   if (!entry) {
@@ -28,6 +32,15 @@ function keyFor(endpointId, method, params) {
   return `${endpointId ?? '∅'}|${method}|${JSON.stringify(params || {})}`;
 }
 
+function isAuthFailure(error) {
+  const message = String(error?.message || '');
+  return message === 'auth-failed' || message === 'forbidden';
+}
+
+function isMethodNotFound(error) {
+  return error?.code === -32601 || String(error?.message || '').includes('method-not-found');
+}
+
 async function fetchAndStore(key, call, method, params) {
   const entry = entryFor(key);
   if (entry.inflight) return entry.inflight;
@@ -44,6 +57,9 @@ async function fetchAndStore(key, call, method, params) {
     .catch((e) => {
       entry.loading = false;
       entry.error = e;
+      if (isAuthFailure(e)) {
+        entry.data = null;
+      }
       throw e;
     })
     .finally(() => {
@@ -86,7 +102,7 @@ function usePolledCall(method, params, deps, opts = {}) {
     };
     entry.listeners.add(listener);
     setSnap(snapshotOf(entry));
-    if (!entry.inflight && entry.data === null) {
+    if (!entry.inflight) {
       fetchAndStore(key, call, method, params).catch(() => {});
     }
     return () => {
@@ -118,6 +134,19 @@ export function invalidate(endpointId, method, params = {}) {
 
 export function useProfileSummaries() {
   return usePolledCall('host.profile.summaries', {}, []);
+}
+
+export function useProfileSnapshot(profile) {
+  const inner = usePolledCall(
+    'host.settings.profile_snapshot',
+    profile ? { profile } : null,
+    [profile],
+    { skipWhen: !profile },
+  );
+  return {
+    ...inner,
+    unsupported: isMethodNotFound(inner.error),
+  };
 }
 
 // Daemon dedupes by wg_id when called with no profile param.
@@ -168,24 +197,49 @@ export function useWorkgroupMembers(profile, wgId) {
   );
 }
 
-export function useProfileStorage(profile) {
-  return usePolledCall('host.profile.storage', { profile }, [profile], { skipWhen: !profile });
+export function useProfileStorage(profile, opts = {}) {
+  return usePolledCall(
+    'host.profile.storage',
+    { profile },
+    [profile, opts.skipWhen],
+    { skipWhen: !profile || opts.skipWhen },
+  );
 }
 
-export function useSkills(profile) {
-  return usePolledCall('host.skills.list', { profile }, [profile], { skipWhen: !profile });
+export function useSkills(profile, opts = {}) {
+  return usePolledCall(
+    'host.skills.list',
+    { profile },
+    [profile, opts.skipWhen],
+    { skipWhen: !profile || opts.skipWhen },
+  );
 }
 
-export function useTools(profile) {
-  return usePolledCall('host.tools.list', { profile }, [profile], { skipWhen: !profile });
+export function useTools(profile, opts = {}) {
+  return usePolledCall(
+    'host.tools.list',
+    { profile },
+    [profile, opts.skipWhen],
+    { skipWhen: !profile || opts.skipWhen },
+  );
 }
 
-export function useEmailAccounts(profile) {
-  return usePolledCall('host.email.status', { profile }, [profile], { skipWhen: !profile });
+export function useEmailAccounts(profile, opts = {}) {
+  return usePolledCall(
+    'host.email.status',
+    { profile },
+    [profile, opts.skipWhen],
+    { skipWhen: !profile || opts.skipWhen },
+  );
 }
 
-export function useScheduleList(profile) {
-  return usePolledCall('host.schedule.list', { profile }, [profile], { skipWhen: !profile });
+export function useScheduleList(profile, opts = {}) {
+  return usePolledCall(
+    'host.schedule.list',
+    { profile },
+    [profile, opts.skipWhen],
+    { skipWhen: !profile || opts.skipWhen },
+  );
 }
 
 export function useOllamaModels(profile) {

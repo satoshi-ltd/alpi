@@ -1,8 +1,12 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { renderHook, act, waitFor } from "@testing-library/react";
 
 import { EndpointContext } from "../lib/EndpointContext";
-import { useProfileSummaries } from "./useDaemonData";
+import { _resetDaemonDataCache, useProfileSnapshot, useProfileSummaries } from "./useDaemonData";
+
+beforeEach(() => {
+  _resetDaemonDataCache();
+});
 
 describe("usePolledCall (via useProfileSummaries) endpoint switch", () => {
   it("clears snap synchronously when endpoint.id flips so the old endpoint's data does not bleed into the next render", async () => {
@@ -90,5 +94,129 @@ describe("usePolledCall (via useProfileSummaries) endpoint switch", () => {
     });
 
     expect(result.current.data?.profiles?.[0]?.name).toBe("doc-fresh");
+  });
+});
+
+describe("useProfileSnapshot", () => {
+  it("returns cached settings immediately while refreshing in the background", async () => {
+    const call = vi.fn()
+      .mockResolvedValueOnce({ detail: { name: "doc" }, usage: { days: [] } })
+      .mockResolvedValueOnce({ detail: { name: "doc", model: "openrouter/x" }, usage: { days: [] } });
+
+    function Wrapper({ children }) {
+      return (
+        <EndpointContext.Provider value={{ endpoint: { id: "alpha" }, call }}>
+          {children}
+        </EndpointContext.Provider>
+      );
+    }
+
+    const first = renderHook(() => useProfileSnapshot("doc"), { wrapper: Wrapper });
+    await waitFor(() => expect(first.result.current.data?.detail?.name).toBe("doc"));
+    first.unmount();
+
+    const second = renderHook(() => useProfileSnapshot("doc"), { wrapper: Wrapper });
+    expect(second.result.current.data?.detail?.name).toBe("doc");
+    expect(second.result.current.loading).toBe(true);
+
+    await act(async () => {
+      await second.result.current.refresh();
+    });
+
+    expect(second.result.current.data?.detail?.model).toBe("openrouter/x");
+  });
+
+  it("keeps cached settings on transient failure", async () => {
+    const call = vi.fn()
+      .mockResolvedValueOnce({ detail: { name: "doc" }, schedules: { jobs: [{ id: "daily" }] } })
+      .mockRejectedValueOnce(new Error("network down"));
+
+    function Wrapper({ children }) {
+      return (
+        <EndpointContext.Provider value={{ endpoint: { id: "remote" }, call }}>
+          {children}
+        </EndpointContext.Provider>
+      );
+    }
+
+    const { result } = renderHook(() => useProfileSnapshot("doc"), { wrapper: Wrapper });
+    await waitFor(() => expect(result.current.data?.schedules?.jobs?.[0]?.id).toBe("daily"));
+
+    await act(async () => {
+      await result.current.refresh();
+    });
+
+    expect(result.current.data?.schedules?.jobs?.[0]?.id).toBe("daily");
+    expect(result.current.error?.message).toBe("network down");
+  });
+
+  it("keeps cached settings on request timeout even though mobile timeouts use code -32000", async () => {
+    const timeout = new Error("request timed out after 10000ms");
+    timeout.code = -32000;
+    const call = vi.fn()
+      .mockResolvedValueOnce({ detail: { name: "doc" } })
+      .mockRejectedValueOnce(timeout);
+
+    function Wrapper({ children }) {
+      return (
+        <EndpointContext.Provider value={{ endpoint: { id: "slow" }, call }}>
+          {children}
+        </EndpointContext.Provider>
+      );
+    }
+
+    const { result } = renderHook(() => useProfileSnapshot("doc"), { wrapper: Wrapper });
+    await waitFor(() => expect(result.current.data?.detail?.name).toBe("doc"));
+
+    await act(async () => {
+      await result.current.refresh();
+    });
+
+    expect(result.current.data?.detail?.name).toBe("doc");
+    expect(result.current.error?.message).toContain("timed out");
+  });
+
+
+  it("drops cached settings on auth failure", async () => {
+    const auth = new Error("auth-failed");
+    auth.code = -32000;
+    const call = vi.fn()
+      .mockResolvedValueOnce({ detail: { name: "doc" } })
+      .mockRejectedValueOnce(auth);
+
+    function Wrapper({ children }) {
+      return (
+        <EndpointContext.Provider value={{ endpoint: { id: "secure" }, call }}>
+          {children}
+        </EndpointContext.Provider>
+      );
+    }
+
+    const { result } = renderHook(() => useProfileSnapshot("doc"), { wrapper: Wrapper });
+    await waitFor(() => expect(result.current.data?.detail?.name).toBe("doc"));
+
+    await act(async () => {
+      await result.current.refresh();
+    });
+
+    expect(result.current.data).toBe(null);
+    expect(result.current.error?.message).toBe("auth-failed");
+  });
+
+  it("marks method-not-found as unsupported for section fallback", async () => {
+    const err = new Error("method-not-found");
+    err.code = -32601;
+    const call = vi.fn().mockRejectedValue(err);
+
+    function Wrapper({ children }) {
+      return (
+        <EndpointContext.Provider value={{ endpoint: { id: "old" }, call }}>
+          {children}
+        </EndpointContext.Provider>
+      );
+    }
+
+    const { result } = renderHook(() => useProfileSnapshot("doc"), { wrapper: Wrapper });
+    await waitFor(() => expect(result.current.unsupported).toBe(true));
   });
 });
