@@ -59,6 +59,68 @@ async def test_email_probe_off_when_token_missing(short_tmp: Path, monkeypatch) 
     assert resp["result"]["status"] == "off", resp
 
 
+def _configured_gmail(home: Path) -> str:
+    from alpi.mail import accounts as accounts_mod
+    gmail_id = accounts_mod.add_gmail(home, address="me@gmail.com")
+    token = accounts_mod.gmail_token_path(home, gmail_id)
+    token.parent.mkdir(parents=True, exist_ok=True)
+    token.write_text(
+        '{"email":"me@gmail.com","access_token":"a","refresh_token":"r","expires_at":0}',
+    )
+    return gmail_id
+
+
+@pytest.mark.asyncio
+async def test_email_probe_on_when_auth_succeeds(short_tmp: Path, monkeypatch) -> None:
+    home = short_tmp / "h"
+    home.mkdir()
+    from alpi import home as home_mod
+    monkeypatch.setattr(home_mod, "_ROOT", short_tmp)
+    monkeypatch.setattr(home_mod, "home_for", lambda profile: home)
+    from alpi.mail import accounts as accounts_mod
+    gmail_id = _configured_gmail(home)
+
+    class _OkClient:
+        def test(self):  # noqa: ANN001, ANN202
+            return None
+
+    monkeypatch.setattr(accounts_mod, "client_for", lambda h, aid: _OkClient())
+
+    srv = host_server.Server(home=home)
+    probes.register(srv)
+    resp = await srv._dispatch({
+        "id": "r", "method": "host.email.probe",
+        "params": {"profile": "default", "id": gmail_id},
+    })
+    assert resp["result"]["status"] == "on", resp
+
+
+@pytest.mark.asyncio
+async def test_email_probe_error_when_auth_rejected(short_tmp: Path, monkeypatch) -> None:
+    home = short_tmp / "h"
+    home.mkdir()
+    from alpi import home as home_mod
+    monkeypatch.setattr(home_mod, "_ROOT", short_tmp)
+    monkeypatch.setattr(home_mod, "home_for", lambda profile: home)
+    from alpi.mail import accounts as accounts_mod
+    gmail_id = _configured_gmail(home)
+
+    class _DeadClient:
+        def test(self):  # noqa: ANN001, ANN202
+            raise RuntimeError("invalid_grant: token revoked")
+
+    monkeypatch.setattr(accounts_mod, "client_for", lambda h, aid: _DeadClient())
+
+    srv = host_server.Server(home=home)
+    probes.register(srv)
+    resp = await srv._dispatch({
+        "id": "r", "method": "host.email.probe",
+        "params": {"profile": "default", "id": gmail_id},
+    })
+    assert resp["result"]["status"] == "error", resp
+    assert "invalid_grant" in resp["result"]["reason"]
+
+
 @pytest.mark.asyncio
 async def test_peers_ping_unknown_peer(short_tmp: Path, monkeypatch) -> None:
     home = short_tmp / "h"

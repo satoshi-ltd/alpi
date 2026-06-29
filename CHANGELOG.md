@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.10.4 — 2026-06-29 — email "Test connection" tells the truth
+
+- **Testing an email account now really connects.** "Test connection" logs
+  into IMAP and calls the Gmail API for real (refreshing the token when due)
+  instead of just pinging the port or checking a token file exists — so a
+  revoked Gmail token or a wrong password shows up as an error instead of a
+  misleading green.
+
 ## v0.10.3 — 2026-06-29 — leaner session files
 
 - **Session files shrink further.** Routine tool calls no longer carry

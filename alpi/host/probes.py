@@ -17,6 +17,9 @@ def _resolve_home(profile: str):
     return _r(profile)
 
 
+_EMAIL_PROBE_TIMEOUT_SECS = 20
+
+
 async def _email_probe(
     params: dict[str, Any], _server: host_server.Server,
 ) -> dict[str, Any]:
@@ -32,45 +35,46 @@ async def _email_probe(
             data={"detail": f"unknown email account {account_id!r}"},
         )
 
-    return await asyncio.get_running_loop().run_in_executor(
-        None, _email_probe_blocking, home, account_id, account,
-    )
+    loop = asyncio.get_running_loop()
+    try:
+        return await asyncio.wait_for(
+            loop.run_in_executor(None, _email_probe_blocking, home, account_id, account),
+            timeout=_EMAIL_PROBE_TIMEOUT_SECS,
+        )
+    except asyncio.TimeoutError:
+        return {"status": "error", "reason": "probe timed out"}
 
 
 def _email_probe_blocking(home, account_id: str, account: dict) -> dict[str, Any]:
-    import json
     from alpi.mail import accounts as accounts_mod
 
-    if account.get("type") == "gmail":
-        token_path = accounts_mod.gmail_token_path(home, account_id)
-        if not token_path.exists():
+    info = next(
+        (a for a in accounts_mod.list_accounts(home) if a["id"] == account_id), None,
+    )
+    if info is None or not info.get("configured"):
+        return {"status": "off"}
+
+    if account.get("type") != "gmail":
+        # imaplib's socket is unbounded; fail fast if the host is unreachable.
+        host = str(account.get("imap_host") or "").strip()
+        if not host:
             return {"status": "off"}
         try:
-            tok = json.loads(token_path.read_text())
-            expiry = tok.get("expiry") or tok.get("expires_at")
-            refresh = tok.get("refresh_token")
-            if not refresh and expiry:
-                import datetime as _dt
-                exp = _dt.datetime.fromisoformat(str(expiry).replace("Z", "+00:00"))
-                if exp < _dt.datetime.now(_dt.timezone.utc):
-                    return {"status": "error", "reason": "token expired"}
-            return {"status": "on"}
-        except Exception as e:  # noqa: BLE001
-            return {"status": "error", "reason": str(e)[:80]}
+            port = int(account.get("imap_port") or 993)
+        except (TypeError, ValueError):
+            port = 993
+        try:
+            import socket as _s
+            with _s.create_connection((host, port), timeout=2.0):
+                pass
+        except OSError as e:
+            return {"status": "error", "reason": f"connect failed: {str(e)[:80]}"}
 
-    host = str(account.get("imap_host") or "").strip()
-    if not host:
-        return {"status": "off"}
     try:
-        port = int(account.get("imap_port") or 993)
-    except (TypeError, ValueError):
-        port = 993
-    try:
-        import socket as _s
-        with _s.create_connection((host, port), timeout=2.0):
-            return {"status": "on"}
+        accounts_mod.client_for(home, account_id).test()
     except Exception as e:  # noqa: BLE001
-        return {"status": "error", "reason": str(e)[:80]}
+        return {"status": "error", "reason": str(e)[:120]}
+    return {"status": "on"}
 
 
 async def _peers_ping(
