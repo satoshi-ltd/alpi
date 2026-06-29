@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import re
 import time
 from pathlib import Path
@@ -55,6 +56,7 @@ def register(server: host_server.Server) -> None:
     server.register("host.identity.draft", _identity_draft)
     server.register("host.mcp.add", _mcp_add)
     server.register("host.mcp.remove", _mcp_remove)
+    server.register("host.mcp.tools", _mcp_tools)
     server.register("host.email.add", _email_add)
     server.register("host.email.remove", _email_remove)
     server.register("host.email.gmail.begin", _gmail_begin)
@@ -526,6 +528,51 @@ async def _mcp_remove(
     cfg_mod.save(cfg)
     _emit_config_changed(home, scope="mcp")
     return {"ok": True}
+
+
+async def _mcp_tools(
+    params: dict[str, Any], _server: host_server.Server,
+) -> dict[str, Any]:
+    name = str(params.get("name") or "").strip()
+    home = _resolve_home(str(params.get("profile") or ""))
+    cfg = cfg_mod.load(home)
+    spec = ((cfg.raw.get("mcp") or {}).get("servers") or {}).get(name)
+    if not spec:
+        raise host_server.HandlerError(
+            -32004, "not-found", data={"detail": f"no MCP {name!r}"},
+        )
+
+    from alpi.home import effective_profile_env
+    from alpi.mcp.client import MCPClient, MCPError
+
+    def _probe() -> list[dict[str, Any]]:
+        client = MCPClient(
+            name=name,
+            command=str(spec.get("command") or ""),
+            args=[str(a) for a in (spec.get("args") or [])],
+            env={str(k): str(v) for k, v in (spec.get("env") or {}).items()},
+            env_base=effective_profile_env(home),
+        )
+        client.start(timeout=10.0)
+        try:
+            return [
+                {
+                    "name": t.name,
+                    "description": t.description,
+                    "parameters": t.input_schema,
+                }
+                for t in client.list_tools()
+            ]
+        finally:
+            client.stop()
+
+    try:
+        tools = await asyncio.to_thread(_probe)
+    except MCPError as e:
+        raise host_server.HandlerError(
+            -32603, "internal-error", data={"detail": str(e)},
+        ) from e
+    return {"server": name, "tools": tools}
 
 
 def _is_email_env_key(key: str) -> bool:

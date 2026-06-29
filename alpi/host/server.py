@@ -46,6 +46,7 @@ _ADMIN_METHODS = frozenset({
     "host.config.unset_field",
     "host.mcp.add",
     "host.mcp.remove",
+    "host.mcp.tools",
     "host.email.status",
     "host.email.config",
     "host.email.probe",

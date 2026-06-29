@@ -246,6 +246,61 @@ async def test_mcp_add_remove(tmp_path: Path, monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
+async def test_mcp_tools_lists_server_tools(tmp_path: Path, monkeypatch) -> None:
+    home = _bootstrap(tmp_path)
+    monkeypatch.setattr(data_handlers, "_resolve_home", lambda p: home)
+    cfg = cfg_mod.load(home)
+    cfg.raw.setdefault("mcp", {}).setdefault("servers", {})["fs"] = {
+        "command": "uvx", "args": ["server-fs"], "env": {},
+    }
+    cfg_mod.save(cfg)
+
+    from alpi.mcp import client as mcp_client
+
+    seen: dict[str, float] = {}
+
+    class _FakeClient:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+
+        def start(self, timeout: float = 45.0) -> None:
+            seen["timeout"] = timeout
+
+        def list_tools(self):
+            return [mcp_client.ToolSpec(
+                name="read_file", description="Read a file",
+                input_schema={"type": "object", "properties": {}},
+            )]
+
+        def stop(self) -> None:
+            pass
+
+    monkeypatch.setattr(mcp_client, "MCPClient", _FakeClient)
+
+    srv = host_server.Server(home=home)
+    data_config.register(srv)
+
+    resp = await srv._dispatch({
+        "id": "1", "method": "host.mcp.tools",
+        "params": {"profile": "default", "name": "fs"},
+    })
+    out = resp["result"]
+    assert out["server"] == "fs"
+    assert out["tools"] == [{
+        "name": "read_file",
+        "description": "Read a file",
+        "parameters": {"type": "object", "properties": {}},
+    }]
+    assert seen["timeout"] == 10.0
+
+    miss = await srv._dispatch({
+        "id": "2", "method": "host.mcp.tools",
+        "params": {"profile": "default", "name": "ghost"},
+    })
+    assert miss["error"]["code"] == -32004
+
+
+@pytest.mark.asyncio
 async def test_sandbox_set_disables_network(tmp_path: Path, monkeypatch) -> None:
     home = _bootstrap(tmp_path)
     cfg = cfg_mod.load(home)

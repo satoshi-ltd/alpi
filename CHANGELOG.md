@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.10.5 — 2026-06-29 — apps can list an MCP server's tools
+
+- **The daemon can report the tools an MCP server exposes.** A new
+  `host.mcp.tools` verb handshakes with a configured MCP server and returns its
+  tool list (name + description), so the desktop and mobile apps can show what a
+  server offers from a profile's settings — not just its command and args. The
+  handshake uses a short timeout so a broken server fails fast instead of
+  hanging.
+
 ## v0.10.4 — 2026-06-29 — email "Test connection" tells the truth
 
 - **Testing an email account now really connects.** "Test connection" logs
