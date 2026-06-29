@@ -11,6 +11,18 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.4.6 — 2026-06-29 — See an MCP server's tools from Settings
+
+_Requires alpi v0.10.5+._
+
+- **Open an MCP server in Settings and see the tools it exposes** — name and
+  description for each — instead of only its command and args. The app
+  handshakes with the server live (the same way `alpi setup` does), so the
+  list reflects what the server actually offers right now, with a brief
+  "handshaking…" state while it spins up.
+- If the server fails to start (e.g. command not found), the error is shown
+  in place rather than an empty list.
+
 ## v0.4.5 — 2026-06-29 — Send a notification to chat, or save it as Markdown
 
 _Requires alpi v0.10.1+._

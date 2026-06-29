@@ -457,7 +457,7 @@ export default function ProfileDetail({
         </Section>
 
         <Section title="MCP Servers" tooltip="external tool servers">
-          <McpField profile={profile} onSaved={onSaved} />
+          <McpField profile={profile} connectionId={activeConnection?.id ?? null} onSaved={onSaved} />
         </Section>
 
         <Section title="Email" tooltip="IMAP + Gmail accounts">

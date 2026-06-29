@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import Button from "../../../primitives/Button.jsx";
 import Eyebrow from "../../../primitives/Eyebrow.jsx";
@@ -12,7 +12,7 @@ import Field from "../../../primitives/Field.jsx";
 import { ConfirmDeleteAction, DialogFooter } from "../../../primitives/index.js";
 import styles from "../Settings.module.css";
 
-export function McpField({ profile, onSaved }) {
+export function McpField({ profile, connectionId, onSaved }) {
   const [adding, setAdding] = useState(false);
   const [viewing, setViewing] = useState(null);
   const mcps = profile.mcps ?? [];
@@ -35,6 +35,7 @@ export function McpField({ profile, onSaved }) {
       {adding && (
         <McpAddModal
           profile={profile}
+          connectionId={connectionId}
           existingNames={mcps.map((m) => m.name)}
           onClose={() => setAdding(false)}
           onSaved={async () => { await onSaved?.(); setAdding(false); }}
@@ -43,6 +44,7 @@ export function McpField({ profile, onSaved }) {
       {viewing && (
         <McpDetailModal
           profile={profile}
+          connectionId={connectionId}
           mcp={mcps.find((m) => m.name === viewing)}
           onClose={() => setViewing(null)}
           onRemoved={async () => { await onSaved?.(); setViewing(null); }}
@@ -52,16 +54,29 @@ export function McpField({ profile, onSaved }) {
   );
 }
 
-function McpDetailModal({ profile, mcp, onClose, onRemoved }) {
+function McpDetailModal({ profile, connectionId, mcp, onClose, onRemoved }) {
   const notify = useNotify();
   const [busy, setBusy] = useState(false);
+  const [tools, setTools] = useState(null);
+  const [toolsError, setToolsError] = useState(null);
+
+  useEffect(() => {
+    if (!mcp) return undefined;
+    let cancelled = false;
+    setTools(null);
+    setToolsError(null);
+    invoke("profile_mcp_tools", { profile: profile.name, name: mcp.name, connectionId })
+      .then((res) => { if (!cancelled) setTools(Array.isArray(res) ? res : []); })
+      .catch((e) => { if (!cancelled) { setToolsError(String(e)); setTools([]); } });
+    return () => { cancelled = true; };
+  }, [profile.name, mcp?.name, connectionId]);
 
   if (!mcp) return null;
 
   async function remove() {
     setBusy(true);
     try {
-      await invoke("mcp_remove", { profile: profile.name, name: mcp.name });
+      await invoke("mcp_remove", { profile: profile.name, name: mcp.name, connectionId });
       notify({ message: `MCP @${mcp.name} removed`, variant: "success" });
       onRemoved();
     } catch (e) {
@@ -97,6 +112,29 @@ function McpDetailModal({ profile, mcp, onClose, onRemoved }) {
           )}
         </span>
       </div>
+      <div className={styles.field}>
+        <Eyebrow as="label">
+          tools{Array.isArray(tools) && tools.length ? ` · ${tools.length}` : ""}
+        </Eyebrow>
+        {tools === null ? (
+          <span className={styles.muted}>handshaking with server…</span>
+        ) : toolsError ? (
+          <span className={styles.error}>{toolsError}</span>
+        ) : tools.length === 0 ? (
+          <span className={styles.muted}>no tools</span>
+        ) : (
+          <div className={styles.mcpToolList}>
+            {tools.map((t) => (
+              <div key={t.name} className={styles.mcpTool}>
+                <span className={styles.mono}>{t.name}</span>
+                {t.description ? (
+                  <span className={styles.mcpToolDesc}>{t.description}</span>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
       <div className={styles.muted} style={{ fontSize: "var(--fs-xs)" }}>
         To edit, remove and add again. Env values are never read back from disk.
       </div>
@@ -117,7 +155,7 @@ function McpDetailModal({ profile, mcp, onClose, onRemoved }) {
   );
 }
 
-function McpAddModal({ profile, existingNames, onClose, onSaved }) {
+function McpAddModal({ profile, connectionId, existingNames, onClose, onSaved }) {
   const notify = useNotify();
   const [name, setName] = useState("");
   const [command, setCommand] = useState("");
@@ -141,6 +179,7 @@ function McpAddModal({ profile, existingNames, onClose, onSaved }) {
         .filter((l) => l && l.includes("="));
       await invoke("mcp_add", {
         profile: profile.name,
+        connectionId,
         name: trimmed,
         command: command.trim(),
         args: args.trim(),

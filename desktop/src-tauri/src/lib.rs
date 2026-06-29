@@ -1619,6 +1619,7 @@ async fn mcp_add(
     command: String,
     args: String,
     env: Vec<String>,
+    connection_id: Option<String>,
 ) -> Result<(), String> {
     let args_vec: Vec<String> = if args.trim().is_empty() {
         vec![]
@@ -1634,7 +1635,8 @@ async fn mcp_add(
             env_map.insert(k.trim().to_string(), serde_json::Value::String(v.trim().to_string()));
         }
     }
-    alp_call_async(
+    alp_call_async_for(
+        connection_id,
         "host.mcp.add",
         serde_json::json!({
             "profile": profile,
@@ -1648,12 +1650,35 @@ async fn mcp_add(
 }
 
 #[tauri::command]
-async fn mcp_remove(profile: String, name: String) -> Result<(), String> {
-    alp_call_async(
+async fn mcp_remove(
+    profile: String, name: String, connection_id: Option<String>,
+) -> Result<(), String> {
+    alp_call_async_for(
+        connection_id,
         "host.mcp.remove",
         serde_json::json!({"profile": profile, "name": name}),
     )
     .await
+}
+
+#[tauri::command]
+async fn profile_mcp_tools(
+    profile: String, name: String, connection_id: Option<String>,
+) -> Result<serde_json::Value, String> {
+    off_main(move || {
+        let params = serde_json::json!({ "profile": profile, "name": name });
+        match connection_id {
+            Some(cid) => host_client::call_for(&cid, "host.mcp.tools", params),
+            None => host_client::call("host.mcp.tools", params),
+        }
+        .map(|v| {
+            v.get("tools")
+                .cloned()
+                .unwrap_or_else(|| serde_json::Value::Array(vec![]))
+        })
+        .map_err(|e| e.to_string())
+    })
+    .await?
 }
 
 fn shellwords_split(s: &str) -> Result<Vec<String>, String> {
@@ -3218,6 +3243,7 @@ pub fn run() {
             email_remove,
             mcp_add,
             mcp_remove,
+            profile_mcp_tools,
             resolve_ctx_window,
             probe_email,
             devices_list,
