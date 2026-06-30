@@ -8,7 +8,7 @@
 .userBubble {
   max-width: var(--bubble-max);
   padding: var(--space-5) var(--space-7);
-  border-radius: var(--r-2xl);
+  border-radius: var(--r-2xl) var(--r-sm) var(--r-2xl) var(--r-2xl);
   color: var(--ink);
   font-size: var(--fs-md);
   line-height: var(--lh-normal);

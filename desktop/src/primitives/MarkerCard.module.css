@@ -17,6 +17,8 @@
 .rootRight {
   align-items: flex-end;
 }
+.root :global(.ds-marker) { border-radius: var(--r-sm) var(--r-2xl) var(--r-2xl) var(--r-2xl); }
+.rootRight :global(.ds-marker) { border-radius: var(--r-2xl) var(--r-sm) var(--r-2xl) var(--r-2xl); }
 
 .meta {
   display: flex;

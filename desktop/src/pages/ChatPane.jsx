@@ -21,7 +21,7 @@ import Markdown from "../primitives/Markdown.jsx";
 import { ACCENT_SWATCHES } from "../primitives/SettingsLayout.jsx";
 import ProducedImages from "../primitives/ProducedImages.jsx";
 import { setImageRoots } from "../lib/imageRoots.js";
-import { Banner, JumpToLatest, NewChatHero, ProfileChatHeader } from "../primitives/index.js";
+import { Banner, JumpToLatest, MessageBubble, NewChatHero, ProfileChatHeader } from "../primitives/index.js";
 import { ProfileMessage } from "../primitives/index.js";
 import {
   AlpiSilhouette,
@@ -30,7 +30,6 @@ import {
   EditIcon,
   IconBtn,
   Kbd,
-  LinkIcon,
   Mono,
   RefreshBar,
   RefreshIcon,
@@ -741,19 +740,17 @@ function peerReplyFrom(tools) {
 }
 
 function PeerReplyCard({ peerId, reply, accent }) {
+  const tint = accent || "var(--accent)";
+  const meta = (
+    <span className={styles.peerMeta}>
+      <Diamond color={tint} />
+      <span className={styles.peerName}>@{peerId}</span>
+    </span>
+  );
   return (
-    <div className={styles.peerCard} style={{ "--peer": accent || "var(--accent)" }}>
-      <div className={styles.peerCardHeader}>
-        <Diamond color="var(--peer)" className={styles.peerCardDiamond} />
-        <span className={styles.peerCardWho}>@{peerId}</span>
-        <span className={styles.peerCardStatus}>replied</span>
-        <span className={styles.peerCardSpacer} />
-        <LinkIcon className={styles.peerCardLink} style={{ width: 13, height: 13 }} />
-      </div>
-      <div className={styles.peerCardBody}>
-        <Markdown as="div" source={reply} className="alpi-md" />
-      </div>
-    </div>
+    <MessageBubble side="left" tint={tint} meta={meta}>
+      <Markdown as="div" source={reply} className="alpi-md" />
+    </MessageBubble>
   );
 }
 

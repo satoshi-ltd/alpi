@@ -39,6 +39,8 @@
   font-size: var(--fs-md);
   text-wrap: pretty;
 }
+.rootRight .bubble { border-radius: var(--r-2xl) var(--r-sm) var(--r-2xl) var(--r-2xl); }
+.rootLeft .bubble { border-radius: var(--r-sm) var(--r-2xl) var(--r-2xl) var(--r-2xl); }
 
 .footer {
   opacity: 0;

@@ -96,6 +96,7 @@ export default function NotificationsModal({
   const [pendingConnectionId, setPendingConnectionId] = useState(null);
   const [query, setQuery] = useState("");
   const [hiddenIds, setHiddenIds] = useState(() => new Set());
+  const [readIds, setReadIds] = useState(() => new Set());
 
   const activeId = pendingId ?? selectedId ?? rows[0]?.id ?? null;
   const activeProfile = pendingProfile ?? selectedProfile ?? rows[0]?.profile ?? null;
@@ -128,6 +129,7 @@ export default function NotificationsModal({
       setPendingProfile(null);
       setPendingConnectionId(null);
       setQuery("");
+      setReadIds(new Set());
       return;
     }
     // hiddenIds reseeds from in-flight pending deletes so a row in its undo window stays hidden across modal reopens.
@@ -149,10 +151,19 @@ export default function NotificationsModal({
   const explicitlySelected = pendingId !== null || selectedId !== undefined;
   useEffect(() => {
     if (!explicitlySelected) return;
-    if (detail && detail.status === "unread") markRead();
-  }, [detail, markRead, explicitlySelected]);
+    if (detail && detail.status === "unread") {
+      const key = rowKey({ connectionId: activeConnId, profile: activeProfile, id: activeId });
+      setReadIds((prev) => (prev.has(key) ? prev : new Set(prev).add(key)));
+      markRead();
+    }
+  }, [detail, markRead, explicitlySelected, activeConnId, activeProfile, activeId]);
 
-  const unread = useMemo(() => rows.filter((r) => r.status === "unread").length, [rows]);
+  const unreadCount = useMemo(
+    () => rows.filter(
+      (r) => r.status === "unread" && !readIds.has(rowKey(r)) && !hiddenIds.has(rowKey(r)),
+    ).length,
+    [rows, readIds, hiddenIds],
+  );
 
   const visibleRows = useMemo(
     () => rows.filter((r) => !hiddenIds.has(rowKey(r))),
@@ -179,6 +190,8 @@ export default function NotificationsModal({
   );
 
   const onSelectRow = useCallback((row) => {
+    const key = rowKey(row);
+    setReadIds((prev) => (prev.has(key) ? prev : new Set(prev).add(key)));
     setPendingId(row.id);
     setPendingProfile(row.profile);
     setPendingConnectionId(row.connectionId ?? null);
@@ -186,6 +199,11 @@ export default function NotificationsModal({
   }, [onSelect]);
 
   const onMarkAll = useCallback(async () => {
+    setReadIds((prev) => {
+      const next = new Set(prev);
+      for (const r of rows) if (r.status === "unread") next.add(rowKey(r));
+      return next;
+    });
     const pairs = new Map();
     for (const r of rows) {
       const key = `${r.connectionId}:${r.profile}`;
@@ -299,6 +317,7 @@ export default function NotificationsModal({
                 row={row}
                 accent={row.accent}
                 multi={multi}
+                unread={row.status === "unread" && !readIds.has(rowKey(row))}
                 active={row.id === activeId && row.profile === activeProfile && row.connectionId === activeConnId}
                 onSelect={onSelectRow}
                 onDelete={onDeleteRow}
@@ -315,9 +334,8 @@ export default function NotificationsModal({
       open={open}
       onClose={onClose}
       title="Notifications"
-      count={rows.length}
-      kicker="pushed by your agents"
-      actions={unread > 0 ? <Btn variant="ghost" onClick={onMarkAll}>Mark all read</Btn> : null}
+      kicker={unreadCount > 0 ? `${unreadCount} unread` : null}
+      actions={unreadCount > 0 ? <Btn variant="ghost" onClick={onMarkAll}>Mark all read</Btn> : null}
       search={{ value: query, onChange: setQuery, placeholder: "Search notifications…", label: "Search notifications" }}
       list={list}
     >
@@ -342,8 +360,7 @@ export default function NotificationsModal({
 }
 
 
-function NotificationRow({ row, accent, multi, active, onSelect, onDelete }) {
-  const unread = row.status === "unread";
+function NotificationRow({ row, accent, multi, unread, active, onSelect, onDelete }) {
   const label = profileLabel(row.profile);
   const { title, preview } = headlineParts(row);
   const sev = typeTag(row);
@@ -361,9 +378,9 @@ function NotificationRow({ row, accent, multi, active, onSelect, onDelete }) {
       <div className={styles.rowBody}>
         <div className={styles.rowMeta}>
           <span className={styles.rowMetaLead}>
-            <Diamond color={accent} />
-            <Mono>@{label}</Mono>
-            {multi && row.connectionName ? <Mono>· {row.connectionName}</Mono> : null}
+            <span className={styles.rowDiamond}><Diamond color={accent} /></span>
+            <Mono className={styles.rowProfile}>@{label}</Mono>
+            {multi && row.connectionName ? <Mono className={styles.rowConn}>· {row.connectionName}</Mono> : null}
           </span>
           <span className={styles.rowSlot}>
             {sev ? <span className={`${styles.rowSev} ${sev === "error" ? styles.rowSevError : styles.rowSevWarning}`} aria-hidden /> : null}

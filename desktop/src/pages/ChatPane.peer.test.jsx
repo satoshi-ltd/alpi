@@ -42,7 +42,6 @@ describe("ChatPane — @mention peer reply card", () => {
   it("renders the peer answer as an attributed card, footer stripped", () => {
     renderWithTurn(PEER_TURN);
     expect(screen.getByText("@lingua")).toBeTruthy();
-    expect(screen.getByText("replied")).toBeTruthy();
     expect(screen.getByText(/opción canónica/)).toBeTruthy();
     expect(screen.queryByText(/tokens:/)).toBeNull();
   });
@@ -62,7 +61,7 @@ describe("ChatPane — @mention peer reply card", () => {
       { name: "lens", model: "x/y", accent: "#111111" },
       { name: "lingua", model: "x/y", accent: "#abcdef" },
     ]);
-    const card = container.querySelector('[style*="--peer"]');
+    const card = container.querySelector('[style*="#abcdef"]');
     expect(card).toBeTruthy();
     expect(card.getAttribute("style")).toContain("#abcdef");
   });

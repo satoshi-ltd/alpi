@@ -11,6 +11,23 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.4.8 — 2026-06-30 — Visual polish: chat bubbles, notifications & peer replies
+
+_Requires alpi v0.10.6+._
+
+- **Chat bubbles get a subtly cut corner.** Every message bubble — 1:1 chats,
+  workgroup messages, and the task / working / done markers — flattens its top
+  corner on the sender's side (toward the name + diamond), for a cleaner, more
+  directional shape with no tail.
+- **Opened notifications recede instead of vanishing — instantly.** An unread
+  notification reads in full contrast; the moment you open it (or hit "Mark all
+  read") it dims in place like a visited link, with no lag waiting on the
+  daemon. The header shows the live unread count, and error / warning
+  notifications keep their severity dot whether read or not.
+- **A peer @mention reply now matches the workgroup message style** — a bubble
+  tinted in that peer's own colour with a header naming it, instead of a
+  separate boxed card.
+
 ## v0.4.7 — 2026-06-30 — @mention replies render as their own card
 
 _Requires alpi v0.10.6+._

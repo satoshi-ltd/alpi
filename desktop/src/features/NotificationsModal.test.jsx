@@ -311,3 +311,67 @@ describe("NotificationsModal — send to chat + download", () => {
     expect(h.invoke.mock.calls[0][1].name).toBe("lobby-insights-del-dia.md");
   });
 });
+
+describe("NotificationsModal — read / unread", () => {
+  it("header shows the count of unread items", () => {
+    h.rows = [
+      { ...h.ROW, id: "a", status: "unread" },
+      { ...h.ROW, id: "b", status: "unread" },
+      { ...h.ROW, id: "c", status: "read" },
+    ];
+    renderModal();
+    expect(document.body.textContent).toContain("2 unread");
+  });
+
+  it("omits the unread suffix when nothing is unread", () => {
+    h.rows = [{ ...h.ROW, id: "a", status: "read" }];
+    renderModal();
+    expect(document.body.textContent).not.toContain("unread");
+  });
+
+  it("clicking a row marks it read optimistically — the count drops without waiting on the daemon", async () => {
+    h.rows = [
+      { ...h.ROW, id: "a", status: "unread" },
+      { ...h.ROW, id: "b", status: "unread" },
+    ];
+    renderModal();
+    expect(document.body.textContent).toContain("2 unread");
+    await act(async () => {
+      fireEvent.click(screen.getAllByRole("option")[0]);
+    });
+    expect(document.body.textContent).toContain("1 unread");
+  });
+
+  it("a deeplink-selected unread row is marked read optimistically without a click", () => {
+    h.rows = [
+      { ...h.ROW, id: "a", status: "unread" },
+      { ...h.ROW, id: "b", status: "unread" },
+    ];
+    render(
+      <NotificationsModal
+        open
+        onClose={() => {}}
+        connections={[{ id: "c1", name: "casa" }]}
+        selectedId="a"
+        selectedProfile="alice"
+        selectedConnectionId="c1"
+        onSelect={() => {}}
+        onOpenChat={() => {}}
+      />,
+    );
+    expect(document.body.textContent).toContain("1 unread");
+  });
+
+  it("deleting an unread row drops the count while it is hidden in the undo window", async () => {
+    h.rows = [
+      { ...h.ROW, id: "a", status: "unread" },
+      { ...h.ROW, id: "b", status: "unread" },
+    ];
+    renderModal();
+    expect(document.body.textContent).toContain("2 unread");
+    await act(async () => {
+      fireEvent.click(screen.getAllByLabelText("Delete notification")[0]);
+    });
+    expect(document.body.textContent).toContain("1 unread");
+  });
+});
