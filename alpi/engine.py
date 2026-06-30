@@ -14,7 +14,7 @@ from alpi import clock, config as cfg_mod
 from alpi import llm, session, tools
 from alpi.tools._budget import apply as _budget_apply
 from alpi.tools._sanitizer import sanitize_tool_payload
-from alpi.session import ToolLog, truncate_result
+from alpi.session import ASSISTANT_CAP, ToolLog, truncate_result
 
 
 _CACHE_NOISE_RE = re.compile(
@@ -40,6 +40,35 @@ def _turn_deadline_from_env(started: float) -> float | None:
 
 
 _FREE_MODEL_MAX_STEPS = 1000
+_PEER_USAGE_MARKER = "\n\n---\ntokens:"
+
+
+def _peer_reply_from_payload(payload: str) -> str:
+    text = (payload or "").strip()
+    idx = text.rfind(_PEER_USAGE_MARKER)
+    return text[:idx].strip() if idx != -1 else text
+
+
+def _clip_text(text: str, cap: int) -> str:
+    if len(text.encode("utf-8")) <= cap:
+        return text
+    out = ""
+    used = 0
+    suffix = "…"
+    suffix_bytes = len(suffix.encode("utf-8"))
+    for ch in text:
+        size = len(ch.encode("utf-8"))
+        if used + size > cap - suffix_bytes:
+            break
+        out += ch
+        used += size
+    return out + suffix
+
+
+def _result_for_log(name: str, payload: str) -> str:
+    if name != "peer":
+        return truncate_result(payload)
+    return _clip_text(_peer_reply_from_payload(payload), ASSISTANT_CAP)
 
 
 def _last_peer_reply(turn_tools) -> str:
@@ -49,9 +78,7 @@ def _last_peer_reply(turn_tools) -> str:
             continue
         if log.name != "peer":
             return ""
-        result = log.result or ""
-        idx = result.rfind("\n\n---\ntokens:")
-        return result[:idx].strip() if idx != -1 else result.strip()
+        return _peer_reply_from_payload(log.result or "")
     return ""
 
 
@@ -509,7 +536,7 @@ class Engine:
                     })
                     turn_tools.append(ToolLog(
                         at=tool_started, name=name, args=args,
-                        result=truncate_result(payload),
+                        result=_result_for_log(name, payload),
                         ok=result.ok, duration_s=duration,
                         reasoning=reasoning_for_this_tool,
                     ))

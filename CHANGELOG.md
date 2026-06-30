@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.10.6 — 2026-06-30 — peer @mention replies preserved, no stray sessions
+
+- **A peer's `@mention` reply is preserved on the calling turn** — kept up to
+  the same size cap as a normal assistant message, instead of clipped to a
+  short tool-result snippet.
+- **Mentioning a profile no longer leaves a stray session in it.** The
+  mentioned profile answers over the peer link without persisting an
+  "interrupted" chat in its own history; the exchange stays in its mention
+  thread as before.
+
 ## v0.10.5 — 2026-06-29 — apps can list an MCP server's tools
 
 - **The daemon can report the tools an MCP server exposes.** A new

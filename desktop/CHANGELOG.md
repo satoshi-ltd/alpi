@@ -11,6 +11,15 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.4.7 — 2026-06-30 — @mention replies render as their own card
+
+_Requires alpi v0.10.6+._
+
+- **When a profile @-mentions another and it answers, the reply shows as a
+  distinct "@peer replied" card** — tinted in that peer's own colour, with the
+  full reply rendered inline instead of a plain assistant message. The `peer`
+  tool-call row stays above it, so you can see who actually answered.
+
 ## v0.4.6 — 2026-06-29 — See an MCP server's tools from Settings
 
 _Requires alpi v0.10.5+._

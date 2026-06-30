@@ -37,6 +37,7 @@ export const Wrench = (p) => <Icon name="wrench" {...p} />;
 export const Eye = (p) => <Icon name="eye" {...p} />;
 export const Lock = (p) => <Icon name="lock" {...p} />;
 export const PaperclipIcon = (p) => <Icon name="paperclip" {...p} />;
+export const LinkIcon = (p) => <Icon name="link" {...p} />;
 export const FileIcon = (p) => <Icon name="file" {...p} />;
 export const FileTextIcon = (p) => <Icon name="file-text" {...p} />;
 export const FileCodeIcon = (p) => <Icon name="file-code" {...p} />;

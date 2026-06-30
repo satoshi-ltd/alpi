@@ -265,6 +265,51 @@
 .toolPreviewKey { color: var(--ink-4); }
 .toolPreviewVal { color: var(--ink-2); }
 
+.peerCard {
+  width: 100%;
+  align-self: stretch;
+  border: .5px solid color-mix(in srgb, var(--peer, var(--accent)) 26%, var(--line));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--peer, var(--accent)) 4%, var(--bg-pane));
+  overflow: hidden;
+}
+
+.peerCardHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-5);
+  background: color-mix(in srgb, var(--peer, var(--accent)) 9%, var(--bg-pane));
+  border-bottom: .5px solid color-mix(in srgb, var(--peer, var(--accent)) 18%, var(--line));
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+}
+
+.peerCardDiamond { flex-shrink: 0; }
+
+.peerCardWho {
+  font-weight: var(--fw-medium);
+  color: var(--ink);
+}
+
+.peerCardStatus {
+  color: var(--ink-3);
+}
+
+.peerCardSpacer { flex: 1; }
+
+.peerCardLink {
+  color: var(--ink-4);
+  flex-shrink: 0;
+}
+
+.peerCardBody {
+  padding: var(--space-3) var(--space-5);
+  font-size: 14px;
+  line-height: var(--lh-relaxed);
+  color: var(--ink);
+}
+
 /* Group header: inherits .tool styling (border, bg, etc) — only adds cursor + reset button defaults. */
 .toolGroupClickable {
   cursor: pointer;

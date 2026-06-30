@@ -18,6 +18,7 @@ import { useContextWindow } from "../hooks/useContextWindow.js";
 import { useNotify } from "../primitives/Notification.jsx";
 import Logo from "../primitives/Logo.jsx";
 import Markdown from "../primitives/Markdown.jsx";
+import { ACCENT_SWATCHES } from "../primitives/SettingsLayout.jsx";
 import ProducedImages from "../primitives/ProducedImages.jsx";
 import { setImageRoots } from "../lib/imageRoots.js";
 import { Banner, JumpToLatest, NewChatHero, ProfileChatHeader } from "../primitives/index.js";
@@ -29,6 +30,7 @@ import {
   EditIcon,
   IconBtn,
   Kbd,
+  LinkIcon,
   Mono,
   RefreshBar,
   RefreshIcon,
@@ -274,6 +276,7 @@ export default function ChatPane({
         />
         <SessionView
           data={sessionData}
+          profiles={profiles}
           pendingTurn={pendingTurn}
           accent={activeProfile?.accent ?? null}
           showEmptyHint={inProfile && view.sessionId == null && !pendingTurn}
@@ -315,6 +318,7 @@ export default function ChatPane({
 
 function SessionView({
   data,
+  profiles,
   pendingTurn,
   accent,
   showEmptyHint,
@@ -332,6 +336,7 @@ function SessionView({
     <>
       <Transcript
         data={data}
+        profiles={profiles}
         pendingTurn={pendingTurn}
         accent={accent}
         showEmptyHint={showEmptyHint}
@@ -351,6 +356,7 @@ function SessionView({
 
 const Transcript = memo(function Transcript({
   data,
+  profiles,
   pendingTurn,
   accent,
   showEmptyHint,
@@ -426,6 +432,7 @@ const Transcript = memo(function Transcript({
           <div className={styles.timeline}>
             <HistoryTurns
               turns={turns}
+              profiles={profiles}
               accent={accent}
               profileName={profileName}
               voiceId={voiceId}
@@ -433,7 +440,7 @@ const Transcript = memo(function Transcript({
               onRetryMessage={onRetryMessage}
               sessionId={sessionId}
             />
-            {pendingTurn && <PendingTurn turn={pendingTurn} accent={accent} />}
+            {pendingTurn && <PendingTurn turn={pendingTurn} accent={accent} profiles={profiles} />}
           </div>
         </div>
         <JumpToLatest show={farFromBottom} onClick={scrollToBottom} />
@@ -444,6 +451,7 @@ const Transcript = memo(function Transcript({
 
 const HistoryTurns = memo(function HistoryTurns({
   turns,
+  profiles,
   accent,
   profileName,
   voiceId,
@@ -457,6 +465,7 @@ const HistoryTurns = memo(function HistoryTurns({
         <Turn
           key={t.at ?? i}
           turn={t}
+          profiles={profiles}
           accent={accent}
           profileName={profileName}
           voiceId={voiceId}
@@ -472,6 +481,7 @@ const HistoryTurns = memo(function HistoryTurns({
 
 const Turn = memo(function Turn({
   turn,
+  profiles,
   accent,
   profileName,
   voiceId,
@@ -483,6 +493,7 @@ const Turn = memo(function Turn({
   const notify = useNotify();
   const allTools = turn.tools ?? [];
   const steps = reasoningSteps(turn);
+  const peerTool = peerReplyFrom(allTools);
   const askUserAnswers = allTools
     .filter((t) => t.name === "ask_user")
     .map((t) => ({
@@ -584,7 +595,14 @@ const Turn = memo(function Turn({
           })}
         </div>
       )}
-      {(turn.assistant || turn.output_attachments?.length > 0) && !hideAssistant && (
+      {turn.assistant && !hideAssistant && peerTool && (
+        <PeerReplyCard
+          peerId={peerTool.args?.peer_id || "peer"}
+          reply={turn.assistant}
+          accent={accentForPeer(peerTool.args?.peer_id, profiles)}
+        />
+      )}
+      {(turn.assistant || turn.output_attachments?.length > 0) && !hideAssistant && !peerTool && (
         <ProfileMessage
           role="assistant"
           footer={
@@ -702,6 +720,43 @@ function AskUserAnswer({ result, question, accent }) {
   );
 }
 
+function accentForPeer(peerId, profiles) {
+  const known = (profiles || []).find((p) => p.name === peerId);
+  if (known?.accent) return known.accent;
+  let h = 0;
+  const s = peerId || "";
+  for (let i = 0; i < s.length; i += 1) h = (h * 31 + s.charCodeAt(i)) | 0;
+  return ACCENT_SWATCHES[Math.abs(h) % ACCENT_SWATCHES.length];
+}
+
+function peerReplyFrom(tools) {
+  const list = Array.isArray(tools) ? tools : [];
+  for (let i = list.length - 1; i >= 0; i -= 1) {
+    const t = list[i];
+    if (t.ok === false) continue;
+    if (t.ok == null) return null;
+    return t.name === "peer" ? t : null;
+  }
+  return null;
+}
+
+function PeerReplyCard({ peerId, reply, accent }) {
+  return (
+    <div className={styles.peerCard} style={{ "--peer": accent || "var(--accent)" }}>
+      <div className={styles.peerCardHeader}>
+        <Diamond color="var(--peer)" className={styles.peerCardDiamond} />
+        <span className={styles.peerCardWho}>@{peerId}</span>
+        <span className={styles.peerCardStatus}>replied</span>
+        <span className={styles.peerCardSpacer} />
+        <LinkIcon className={styles.peerCardLink} style={{ width: 13, height: 13 }} />
+      </div>
+      <div className={styles.peerCardBody}>
+        <Markdown as="div" source={reply} className="alpi-md" />
+      </div>
+    </div>
+  );
+}
+
 function previewForArgs(args) {
   if (!args || typeof args !== "object") return "";
   return Object.entries(args).slice(0, 2).map(([k, v]) => {
@@ -799,7 +854,7 @@ const ToolGroupCard = memo(function ToolGroupCard({ group, accent }) {
   );
 });
 
-function PendingTurn({ turn, accent }) {
+function PendingTurn({ turn, accent, profiles }) {
   const allTools = turn.tools ?? [];
   const steps = reasoningSteps({
     at: turn.at,
@@ -807,6 +862,7 @@ function PendingTurn({ turn, accent }) {
     reasoning: turn.reasoningPreview,
     reasoned_s: turn.reasoned_s,
   }, { active: !turn.assistantPreview });
+  const peerTool = peerReplyFrom(allTools);
   return (
     <div className={styles.turn}>
       {turn.user && (
@@ -839,7 +895,14 @@ function PendingTurn({ turn, accent }) {
           })}
         </div>
       )}
-      {turn.assistantPreview && (
+      {turn.assistantPreview && peerTool && (
+        <PeerReplyCard
+          peerId={peerTool.args?.peer_id || "peer"}
+          reply={turn.assistantPreview}
+          accent={accentForPeer(peerTool.args?.peer_id, profiles)}
+        />
+      )}
+      {turn.assistantPreview && !peerTool && (
         <ProfileMessage role="assistant">
           <Markdown as="div" source={turn.assistantPreview} className="alpi-md" />
         </ProfileMessage>

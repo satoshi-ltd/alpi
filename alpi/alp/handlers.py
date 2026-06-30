@@ -142,7 +142,10 @@ async def _run_turn_stream(
         def worker() -> None:
             try:
                 with ledger.peer_context(peer_id):
-                    engine.run_turn(prompt, emit=sink, source="peer")
+                    engine.run_turn(
+                        prompt, emit=sink, source="peer",
+                        persist_inflight=False,
+                    )
             finally:
                 loop.call_soon_threadsafe(queue.put_nowait, SENTINEL)
 
@@ -226,7 +229,10 @@ def _run_turn(
         from alpi import ledger
 
         with ledger.peer_context(peer_id):
-            engine.run_turn(prompt, emit=sink, source="peer")
+            engine.run_turn(
+                prompt, emit=sink, source="peer",
+                persist_inflight=False,
+            )
     finally:
         active.engine = None
         active.session_id = ""

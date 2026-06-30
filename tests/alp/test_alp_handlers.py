@@ -23,7 +23,12 @@ class _FakeEngine:
     def __init__(self, *, home: Path, cfg) -> None:  # noqa: ANN001
         self.session = _FakeSession()
 
-    def run_turn(self, prompt: str, emit, *, source: str = "user") -> None:  # noqa: ANN001
+    def run_turn(
+        self, prompt: str, emit, *, source: str = "user",
+        persist_inflight: bool = True,
+    ) -> None:  # noqa: ANN001
+        self.source = source
+        self.persist_inflight = persist_inflight
         from alpi.engine import AgentEvent
 
         # Snapshot the messages the engine "would have" seen — the
@@ -50,6 +55,7 @@ def _patch_engine(monkeypatch, captured: dict) -> None:
         return eng
 
     monkeypatch.setattr(alp_handlers, "Engine", _factory)
+    monkeypatch.setattr("alpi.engine.Engine", _factory)
     monkeypatch.setattr(
         alp_handlers.cfg_mod, "load", lambda h: type("C", (), {"model": "x"})()
     )
@@ -69,6 +75,37 @@ def test_link_ask_does_not_persist_session(monkeypatch, tmp_path: Path) -> None:
 
     assert out["text"] == "echo: hello"
     assert out["tokens_in"] == 1
+    assert captured["engines"][0].source == "peer"
+    assert captured["engines"][0].persist_inflight is False
+    assert captured["engines"][0].session.saved is False
+    assert not (home / "sessions").exists()
+
+
+@pytest.mark.asyncio
+async def test_streaming_link_ask_does_not_persist_inflight_stub(
+    monkeypatch, tmp_path: Path,
+) -> None:
+    """The streaming path is what host chat @mentions use. It must also
+    disable the engine's early in-flight session stub; mention history
+    lives under ``mentions/<sender>.json`` instead."""
+    home = tmp_path / "bob"
+    home.mkdir()
+
+    captured: dict = {}
+    _patch_engine(monkeypatch, captured)
+
+    active = alp_handlers._ActiveTurn()
+    lock = __import__("asyncio").Lock()
+    frames = [
+        frame async for frame in alp_handlers._run_turn_stream(
+            home, "hello", "alice", active, lock,
+        )
+    ]
+
+    assert frames[-1]["kind"] == "final"
+    assert frames[-1]["text"] == "echo: hello"
+    assert captured["engines"][0].source == "peer"
+    assert captured["engines"][0].persist_inflight is False
     assert captured["engines"][0].session.saved is False
     assert not (home / "sessions").exists()
 
