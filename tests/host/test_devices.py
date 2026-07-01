@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import tempfile
 from pathlib import Path
@@ -1387,3 +1388,95 @@ async def test_ollama_models_callable_by_scoped_member(short_tmp: Path) -> None:
     await srv._handle_request(json.dumps(body_blocked), send, require_token=True)
     assert sent[1]["error"]["code"] == -32001
     assert sent[1]["error"]["data"]["detail"] == "profile not in device scope"
+
+
+def test_validate_does_not_wipe_on_read_glitch(short_tmp: Path, monkeypatch) -> None:
+    row = devices.add(label="x")
+    assert devices._load_cached()  # warm the 5s cache so in-cache validation still matches
+
+    def boom() -> list:
+        raise devices.StoreUnavailable("transient read glitch")
+
+    monkeypatch.setattr(devices, "_read_strict", boom)
+    valid, _role, _scope = devices.validate_and_lookup(row["token"], min_interval=0)
+    assert valid is True
+    assert row["token"] in devices._store_path().read_text()
+
+
+def test_corrupt_store_not_overwritten_by_validate(short_tmp: Path) -> None:
+    store = devices._store_path()
+    store.parent.mkdir(parents=True, exist_ok=True)
+    store.write_text("not-a-list-just-a-string\n")
+    devices._invalidate_cache()
+    valid, _role, _scope = devices.validate_and_lookup("whatever", min_interval=0)
+    assert valid is False
+    assert store.read_text() == "not-a-list-just-a-string\n"
+
+
+def test_add_refuses_when_store_unreadable(short_tmp: Path) -> None:
+    store = devices._store_path()
+    store.parent.mkdir(parents=True, exist_ok=True)
+    store.write_text("plain-string-not-a-list\n")
+    devices._invalidate_cache()
+    with pytest.raises(devices.StoreUnavailable):
+        devices.add(label="x")
+    assert store.read_text() == "plain-string-not-a-list\n"
+
+
+def test_mutators_skip_on_unreadable_store(short_tmp: Path) -> None:
+    store = devices._store_path()
+    store.parent.mkdir(parents=True, exist_ok=True)
+    store.write_text("bare-string\n")
+    devices._invalidate_cache()
+    devices.touch("x")
+    assert devices.revoke("x") is False
+    assert devices.prune_orphans() == 0
+    assert devices.set_role("x", "admin") is False
+    assert devices.rename("x", "y") is False
+    assert devices.set_profile_scope("x", ["p"]) is False
+    assert store.read_text() == "bare-string\n"
+
+
+def test_expired_cache_survives_read_glitch(short_tmp: Path, monkeypatch) -> None:
+    row = devices.add(label="x")
+    assert devices._load_cached()  # warm the cache from a good read
+    devices._cached_at = 0.0  # force expiry so the next read hits disk
+
+    def boom() -> list:
+        raise devices.StoreUnavailable("transient read glitch")
+
+    monkeypatch.setattr(devices, "_read_strict", boom)
+    got = devices._load_cached()
+    assert any(d["token"] == row["token"] for d in got)  # served last-good, not []
+    valid, _role, _scope = devices.validate_and_lookup(row["token"], min_interval=999999)
+    assert valid is True
+
+
+def test_cold_cache_corrupt_store_does_not_poison_cache(short_tmp: Path) -> None:
+    store = devices._store_path()
+    store.parent.mkdir(parents=True, exist_ok=True)
+    store.write_text("bare-string\n")
+    devices._invalidate_cache()
+    assert devices._load_cached() == []  # cold cache + unreadable store: fail closed
+    store.write_text(
+        "- token: good\n  label: ''\n  created: 0\n  last_seen: null\n"
+        "  role: member\n  profile_scope: []\n",
+    )
+    assert any(d["token"] == "good" for d in devices._load_cached())  # not stuck on cached []
+
+
+def test_save_uses_unique_tmp_per_writer(short_tmp: Path, monkeypatch) -> None:
+    captured: list[str] = []
+    real_replace = os.replace
+
+    def spy(src, dst):
+        captured.append(str(src))
+        real_replace(src, dst)
+
+    monkeypatch.setattr(devices.os, "replace", spy)
+    base = {"label": "", "created": 0, "last_seen": None, "role": "member", "profile_scope": []}
+    devices.save([{**base, "token": "a"}])
+    devices.save([{**base, "token": "b"}])
+    assert len(captured) == 2
+    assert captured[0] != captured[1]
+    assert not any(c.endswith("devices.yaml.tmp") for c in captured)

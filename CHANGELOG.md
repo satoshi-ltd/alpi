@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.10.7 — 2026-07-01 — paired devices stop vanishing
+
+- **A host no longer randomly drops to "offline" in the apps.** A momentary read
+  glitch on the paired-device store could wipe every paired token at once,
+  silently logging out every app and forcing a re-pair. The store is now never
+  rewritten from a failed read, and two writers can no longer corrupt it.
+
 ## v0.10.6 — 2026-06-30 — peer @mention replies preserved, no stray sessions
 
 - **A peer's `@mention` reply is preserved on the calling turn** — kept up to

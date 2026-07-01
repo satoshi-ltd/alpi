@@ -138,16 +138,22 @@ def _invalidate_cache() -> None:
         _cached_at = 0.0
 
 
-def load() -> list[dict[str, Any]]:
+class StoreUnavailable(Exception):
+    """Store unreadable/unparseable — callers MUST NOT treat as empty or write back."""
+
+
+def _read_strict() -> list[dict[str, Any]]:
     path = _store_path()
     if not path.exists():
         return []
     try:
-        data = yaml.safe_load(path.read_text(encoding="utf-8")) or []
-    except Exception:  # noqa: BLE001
+        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except Exception as exc:  # noqa: BLE001
+        raise StoreUnavailable(str(exc)) from exc
+    if data is None:
         return []
     if not isinstance(data, list):
-        return []
+        raise StoreUnavailable("devices store is not a list")
     out: list[dict[str, Any]] = []
     for row in data:
         if not isinstance(row, dict):
@@ -166,12 +172,25 @@ def load() -> list[dict[str, Any]]:
     return out
 
 
+def load() -> list[dict[str, Any]]:
+    try:
+        return _read_strict()
+    except StoreUnavailable:
+        return []
+
+
 def _load_cached() -> list[dict[str, Any]]:
     global _cached, _cached_at
     with _cache_lock:
         if _cached is not None and (time.time() - _cached_at) < _CACHE_TTL_S:
             return [dict(d) for d in _cached]
-    fresh = load()
+    try:
+        fresh = _read_strict()
+    except StoreUnavailable:
+        with _cache_lock:
+            if _cached is not None:
+                return [dict(d) for d in _cached]
+        return []
     with _cache_lock:
         _cached = [dict(d) for d in fresh]
         _cached_at = time.time()
@@ -183,7 +202,7 @@ def save(devices: list[dict[str, Any]]) -> None:
     path = _store_path()
     _guard_pytest_isolation(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp = path.with_suffix(path.suffix + f".tmp.{os.getpid()}.{secrets.token_hex(4)}")
     text = yaml.safe_dump(devices, sort_keys=False, allow_unicode=True)
     fd = os.open(str(tmp), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     try:
@@ -208,7 +227,10 @@ def is_valid(token: str) -> bool:
 
 
 def touch(token: str) -> None:
-    devices = load()
+    try:
+        devices = _read_strict()
+    except StoreUnavailable:
+        return
     now = int(time.time())
     changed = False
     for d in devices:
@@ -254,12 +276,18 @@ def validate_and_lookup(
     scope = _normalise_profile_scope(devices[match_idx].get("profile_scope"))
     last = devices[match_idx].get("last_seen") or 0
     if now - int(last) >= min_interval:
-        fresh = load()
+        try:
+            fresh = _read_strict()
+        except StoreUnavailable:
+            return True, role, scope
+        changed = False
         for d in fresh:
             if _tokens_match(d["token"], token):
                 d["last_seen"] = now
+                changed = True
                 break
-        save(fresh)
+        if changed:
+            save(fresh)
     return True, role, scope
 
 
@@ -267,7 +295,7 @@ def add(
     label: str = "", role: str = "member",
     profile_scope: list[str] | None = None,
 ) -> dict[str, Any]:
-    devices = load()
+    devices = _read_strict()
     # 24 bytes urlsafe = 32 chars, 192 bits entropy — keeps the QR small.
     row = {
         "token": secrets.token_urlsafe(24),
@@ -286,7 +314,10 @@ def set_role(token: str, role: str) -> bool:
     """Flip role on an existing device; unknown roles are silently rejected to avoid widening the enum on disk."""
     if role not in _VALID_ROLES:
         return False
-    devices = load()
+    try:
+        devices = _read_strict()
+    except StoreUnavailable:
+        return False
     changed = False
     for d in devices:
         if _tokens_match(d["token"], token):
@@ -300,7 +331,10 @@ def set_role(token: str, role: str) -> bool:
 
 
 def revoke(token: str) -> bool:
-    devices = load()
+    try:
+        devices = _read_strict()
+    except StoreUnavailable:
+        return False
     before = len(devices)
     devices = [d for d in devices if not _tokens_match(d["token"], token)]
     if len(devices) == before:
@@ -315,7 +349,10 @@ _ORPHAN_TTL_S = 24 * 3600
 def prune_orphans(now: int | None = None, ttl_seconds: int = _ORPHAN_TTL_S) -> int:
     # Drop tokens that never connected (last_seen is None) and are older than the TTL — handles modal-close / crash mid-pair leaving the row behind. last_seen is the only signal that survives label rename.
     cutoff = (now if now is not None else int(time.time())) - ttl_seconds
-    devices = load()
+    try:
+        devices = _read_strict()
+    except StoreUnavailable:
+        return 0
     kept = [
         d for d in devices
         if not (
@@ -330,7 +367,10 @@ def prune_orphans(now: int | None = None, ttl_seconds: int = _ORPHAN_TTL_S) -> i
 
 
 def set_profile_scope(token: str, profile_scope: list[str]) -> bool:
-    devices = load()
+    try:
+        devices = _read_strict()
+    except StoreUnavailable:
+        return False
     normalised = _normalise_profile_scope(profile_scope)
     changed = False
     for d in devices:
@@ -345,7 +385,10 @@ def set_profile_scope(token: str, profile_scope: list[str]) -> bool:
 
 
 def rename(token: str, label: str) -> bool:
-    devices = load()
+    try:
+        devices = _read_strict()
+    except StoreUnavailable:
+        return False
     changed = False
     for d in devices:
         if _tokens_match(d["token"], token):
