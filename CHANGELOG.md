@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.10.8 — 2026-07-01 — SMB AppleDouble files no longer break skills
+
+- Skill validation now ignores macOS/SMB AppleDouble files (`._*`) and
+  `__pycache__` artifacts, so profiles stored on SMB volumes do not fail
+  validation when Finder or the mount creates resource-fork sidecars.
+
 ## v0.10.7 — 2026-07-01 — paired devices stop vanishing
 
 - **A host no longer randomly drops to "offline" in the apps.** A momentary read

@@ -23,6 +23,17 @@ def test_clean_skill_has_no_findings(tmp_path: Path) -> None:
     assert validate_skill(d) == []
 
 
+def test_ignores_smb_appledouble_files(tmp_path: Path) -> None:
+    d = _write_skill(tmp_path, "appledouble", "# Clean\n", {
+        "run.py": "import os\nprint(os.getcwd())\n",
+        "._run.py": "\x00\x05Mac OS X resource fork",
+    })
+    (d / "._SKILL.md").write_text("\x00\x05Mac OS X resource fork")
+    (d / "scripts" / "__pycache__").mkdir()
+    (d / "scripts" / "__pycache__" / "._run.cpython-314.pyc").write_bytes(b"\0\5Mac OS X")
+    assert validate_skill(d) == []
+
+
 def test_detects_syntax_error(tmp_path: Path) -> None:
     d = _write_skill(tmp_path, "broken", "# Broken\n", {
         "bad.py": "def foo(:\n    pass\n",

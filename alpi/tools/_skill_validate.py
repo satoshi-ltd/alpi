@@ -19,7 +19,7 @@ _BIND_IN_CODE = re.compile(
 def validate_skill(skill_dir: Path) -> list[str]:
     """Return a list of ``['✗ …', '⚠ …']`` findings. Empty list = clean."""
     findings: list[str] = []
-    py_files = sorted(skill_dir.rglob("scripts/*.py"))
+    py_files = sorted(p for p in skill_dir.rglob("scripts/*.py") if _is_real_skill_file(p))
     findings.extend(_check_syntax(py_files, skill_dir))
     findings.extend(_check_imports(py_files, skill_dir))
     findings.extend(_check_alpi_tool_imports(py_files, skill_dir))
@@ -33,6 +33,10 @@ def _rel(p: Path, root: Path) -> str:
         return str(p.relative_to(root))
     except ValueError:
         return p.name
+
+
+def _is_real_skill_file(p: Path) -> bool:
+    return not any(part == "__pycache__" or part.startswith("._") for part in p.parts)
 
 
 def _check_syntax(files: Iterable[Path], root: Path) -> list[str]:
@@ -51,7 +55,7 @@ def _check_syntax(files: Iterable[Path], root: Path) -> list[str]:
 
 def _check_imports(files: Iterable[Path], root: Path) -> list[str]:
     out: list[str] = []
-    local_modules = {p.stem for p in root.rglob("*.py")}
+    local_modules = {p.stem for p in root.rglob("*.py") if _is_real_skill_file(p)}
     for p in files:
         try:
             tree = ast.parse(p.read_text(encoding="utf-8", errors="replace"))
