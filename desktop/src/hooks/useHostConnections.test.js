@@ -30,22 +30,20 @@ function setProfileCache(connectionId, profiles, workgroups = []) {
 
 function renderHostConnections() {
   const setSessionData = vi.fn();
-  const clearAllTurns = vi.fn();
+  const clearTurnsForConnection = vi.fn();
   const setRewriteDraft = vi.fn();
   const setActiveTask = vi.fn();
   const setView = vi.fn();
-  const pendingTurnsRef = { current: {} };
   const r = renderHook(() =>
     useHostConnections({
       setSessionData,
-      clearAllTurns,
+      clearTurnsForConnection,
       setRewriteDraft,
       setActiveTask,
       setView,
-      pendingTurnsRef,
     }),
   );
-  return { ...r, setView };
+  return { ...r, setView, clearTurnsForConnection };
 }
 
 beforeEach(() => {
@@ -89,6 +87,35 @@ describe("useHostConnections.onSetHostConnection", () => {
     const [activeIdArg, wgsArg] = pruneCachedMessages.mock.calls[0];
     expect(activeIdArg).toBe("remote");
     expect(wgsArg).toEqual([{ id: "wg-remote" }]);
+  });
+
+  it("keeps in-flight turns alive when switching the active connection (no cancel, no clear)", async () => {
+    invoke.mockImplementation(async (cmd) => {
+      if (cmd === "host_connections") return makeConnections("local");
+      if (cmd === "profile_summaries") return [{ name: "doc", model: "a/b" }];
+      if (cmd === "workgroups") return [];
+      if (cmd === "host_connection_set_active") return null;
+      return null;
+    });
+
+    const { result, clearTurnsForConnection } = renderHostConnections();
+    await waitFor(() =>
+      expect(result.current.profiles.map((p) => p.name)).toEqual(["doc"]),
+    );
+
+    invoke.mockClear();
+    clearTurnsForConnection.mockClear();
+    await act(async () => {
+      result.current.onSetHostConnection("remote");
+    });
+    await waitFor(() =>
+      expect(
+        invoke.mock.calls.some(([cmd]) => cmd === "host_connection_set_active"),
+      ).toBe(true),
+    );
+
+    expect(invoke.mock.calls.some(([cmd]) => cmd === "chat_cancel")).toBe(false);
+    expect(clearTurnsForConnection).not.toHaveBeenCalled();
   });
 
   it("resets pickerAlpi on switch so the new connection's default wins even when both share a profile name", async () => {

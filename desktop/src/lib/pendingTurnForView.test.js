@@ -71,4 +71,30 @@ describe("pendingTurnForView", () => {
   it("returns null when no turns are in flight", () => {
     expect(pendingTurnForView({ pendingTurns: {}, view: profileView("A"), activeProfileName: "muse" })).toBeNull();
   });
+
+  it("hides a turn from another connection even with the same profile + session", () => {
+    const t = turn({ connectionId: "A" });
+    expect(
+      pendingTurnForView({ pendingTurns: map(t), view: profileView("A"), activeProfileName: "muse", activeConnectionId: "B" }),
+    ).toBeNull();
+  });
+
+  it("shows the turn again once its own connection is active", () => {
+    const t = turn({ connectionId: "A" });
+    expect(
+      pendingTurnForView({ pendingTurns: map(t), view: profileView("A"), activeProfileName: "muse", activeConnectionId: "A" }),
+    ).toBe(t);
+  });
+
+  it("does not confuse two connections that share a profile name", () => {
+    const a = turn({ requestId: "ra", connectionId: "A" });
+    const b = turn({ requestId: "rb", connectionId: "B" });
+    const turns = map(a, b);
+    expect(
+      pendingTurnForView({ pendingTurns: turns, view: profileView("A"), activeProfileName: "muse", activeConnectionId: "A" }),
+    ).toBe(a);
+    expect(
+      pendingTurnForView({ pendingTurns: turns, view: profileView("A"), activeProfileName: "muse", activeConnectionId: "B" }),
+    ).toBe(b);
+  });
 });

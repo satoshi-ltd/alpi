@@ -11,6 +11,20 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.4.9 — 2026-06-30 — long agent turns survive navigation
+
+_Requires alpi v0.10.6+._
+
+- **Switching the active connection no longer cancels in-flight turns.** A long
+  agent run (e.g. a research or curation turn) keeps running on its daemon while
+  you look at another instance, instead of being killed mid-work.
+- **Escape no longer cancels a chat turn.** Esc is for dismissing modals and
+  popovers only; use the stop button to interrupt a running turn.
+- **The stop button reacts the instant you press it.** It now shows a spinner
+  ("Stopping…") right away instead of looking frozen while the turn winds down.
+  The turn still stops safely at the next checkpoint, so a long tool call
+  finishes before the agent halts.
+
 ## v0.4.8 — 2026-06-30 — Visual polish: chat bubbles, notifications & peer replies
 
 _Requires alpi v0.10.6+._

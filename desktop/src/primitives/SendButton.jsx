@@ -1,4 +1,4 @@
-import { SendIcon, StopIcon } from "./icons.jsx";
+import { SendIcon, StopIcon, SpinnerIcon } from "./icons.jsx";
 
 export default function SendButton({
   canSend = false,
@@ -6,22 +6,24 @@ export default function SendButton({
   variant = "send",   // "send" | "stop"
   onClick,
   disabled = false,
+  stopping = false,
   ...rest
 }) {
   const enabled = !disabled && canSend;
-  const bg =
-    variant === "stop"
-      ? "var(--ink)"
-      : enabled
-        ? accent || "var(--accent)"
-        : "var(--line)";
-  const fg = enabled || variant === "stop" ? "#fff" : "var(--ink-3)";
+  const isStop = variant === "stop";
+  const clickable = isStop ? !stopping : enabled;
+  const bg = isStop
+    ? "var(--ink)"
+    : enabled
+      ? accent || "var(--accent)"
+      : "var(--line)";
+  const fg = enabled || isStop ? "#fff" : "var(--ink-3)";
   return (
     <button
       type="button"
-      onClick={enabled || variant === "stop" ? onClick : undefined}
-      disabled={!enabled && variant !== "stop"}
-      aria-label={variant === "stop" ? "Stop" : "Send"}
+      onClick={clickable ? onClick : undefined}
+      disabled={isStop ? stopping : !enabled}
+      aria-label={isStop ? (stopping ? "Stopping" : "Stop") : "Send"}
       style={{
         width: 30,
         height: 30,
@@ -29,15 +31,20 @@ export default function SendButton({
         border: 0,
         background: bg,
         color: fg,
+        opacity: stopping ? 0.65 : 1,
         display: "grid",
         placeItems: "center",
-        cursor: enabled || variant === "stop" ? "pointer" : "default",
-        transition: "background var(--dur-1), transform var(--dur-1)",
+        cursor: clickable ? "pointer" : "default",
+        transition: "background var(--dur-1), transform var(--dur-1), opacity var(--dur-1)",
       }}
       {...rest}
     >
-      {variant === "stop" ? (
-        <StopIcon style={{ width: 12, height: 12 }} />
+      {isStop ? (
+        stopping ? (
+          <SpinnerIcon style={{ width: 14, height: 14 }} />
+        ) : (
+          <StopIcon style={{ width: 12, height: 12 }} />
+        )
       ) : (
         <SendIcon style={{ width: 14, height: 14, strokeWidth: 2 }} />
       )}

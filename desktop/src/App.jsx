@@ -126,6 +126,7 @@ export default function App() {
 
   const reloadRef = useRef(null);
   const foregroundTurnRef = useRef(null);
+  const activeConnectionIdRef = useRef(null);
 
   const jumpTargetsRef = useRef([]);
   const onJumpToProfile = useCallback((index) => {
@@ -275,13 +276,14 @@ export default function App() {
   useNavListener(setView);
 
   const connectionOnlineRef = useRef(true);
-  const { pendingTurns, pendingTurnsRef, startTurn, removeTurn, clearAllTurns } = useChatStream({
+  const { pendingTurns, pendingTurnsRef, startTurn, removeTurn, clearTurnsForConnection } = useChatStream({
     setSessionData,
     setView,
     setRewriteDraft,
     reloadRef,
     notify,
     connectionOnlineRef,
+    activeConnectionIdRef,
   });
 
   const {
@@ -301,12 +303,15 @@ export default function App() {
     onRefreshHostConnectionStatus,
   } = useHostConnections({
     setSessionData,
-    clearAllTurns,
+    clearTurnsForConnection,
     setRewriteDraft,
     setActiveTask,
     setView,
-    pendingTurnsRef,
   });
+
+  useEffect(() => {
+    activeConnectionIdRef.current = hostConnections.active_id;
+  }, [hostConnections.active_id]);
 
   useNotificationDeeplink({
     setView,
@@ -515,8 +520,12 @@ export default function App() {
     const v = viewRef.current;
     switch (ev.kind) {
       case "session": {
+        const activeConnectionId = hostConnectionsRef.current?.active_id ?? null;
         const liveForSession = Object.values(pendingTurnsRef.current).some(
-          (t) => t.profile === ev.profile && (t.sessionId ?? t.launchSessionId) === ev.session_id,
+          (t) =>
+            (t.connectionId ?? null) === activeConnectionId &&
+            t.profile === ev.profile &&
+            (t.sessionId ?? t.launchSessionId) === ev.session_id,
         );
         if (
           v.kind === "profile" &&
@@ -640,17 +649,24 @@ export default function App() {
   }, [view, profiles, pickerAlpi, settingsTarget]);
 
   const pendingTurnForCurrentView = useMemo(
-    () => pendingTurnForView({ pendingTurns, view, activeProfileName: activeProfile?.name }),
-    [pendingTurns, view, activeProfile?.name],
+    () => pendingTurnForView({
+      pendingTurns,
+      view,
+      activeProfileName: activeProfile?.name,
+      activeConnectionId: hostConnections.active_id,
+    }),
+    [pendingTurns, view, activeProfile?.name, hostConnections.active_id],
   );
   useEffect(() => {
     foregroundTurnRef.current = pendingTurnForCurrentView;
   }, [pendingTurnForCurrentView]);
   const pendingProfiles = useMemo(() => {
     const s = new Set();
-    for (const t of Object.values(pendingTurns)) s.add(t.profile);
+    for (const t of Object.values(pendingTurns)) {
+      if ((t.connectionId ?? null) === hostConnections.active_id) s.add(t.profile);
+    }
     return s;
-  }, [pendingTurns]);
+  }, [pendingTurns, hostConnections.active_id]);
 
   const onSend = useCallback(
     async (text, model, opts) => {
@@ -675,7 +691,9 @@ export default function App() {
             : null
         );
 
+        const activeConnectionId = hostConnectionsRef.current?.active_id ?? null;
         const prior = Object.values(pendingTurnsRef.current).find((t) =>
+          (t.connectionId ?? null) === activeConnectionId &&
           t.profile === profileName &&
           (startSessionId != null
             ? (t.sessionId ?? t.launchSessionId) === startSessionId
@@ -696,6 +714,7 @@ export default function App() {
           tools: [],
           error: null,
           profile: profileName,
+          connectionId: hostConnectionsRef.current?.active_id ?? null,
           sessionId: startSessionId,
           launchSessionId: startSessionId,
           requestId,
@@ -752,18 +771,6 @@ export default function App() {
     if (!pending?.profile) return;
     invoke("chat_cancel", { profile: pending.profile, requestId: pending.requestId }).catch(() => {});
   }, []);
-
-  useEffect(() => {
-    function onKey(e) {
-      if (e.key !== "Escape") return;
-      if (e.defaultPrevented) return;
-      if (!foregroundTurnRef.current?.profile) return;
-      e.preventDefault();
-      onCancelTurn();
-    }
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [onCancelTurn]);
 
   const onNewChat = useCallback(() => {
     setRewriteDraft(null);

@@ -32,11 +32,10 @@ function parsePairingPayload(payload) {
 // Connection switcher state + per-connection profile/workgroup cache; App.jsx passes its own setters (chat/view) so the hook can reset them on connection switch.
 export function useHostConnections({
   setSessionData,
-  clearAllTurns,
+  clearTurnsForConnection,
   setRewriteDraft,
   setActiveTask,
   setView,
-  pendingTurnsRef,
 }) {
   const [hostConnections, setHostConnections] = useState({
     active_id: "local",
@@ -91,14 +90,14 @@ export function useHostConnections({
   const clearConnectionContent = useCallback(() => {
     applyProfilesAndWorkgroups([], []);
     setSessionData(null);
-    clearAllTurns();
+    clearTurnsForConnection(hostConnectionsRef.current?.active_id ?? null);
     setRewriteDraft(null);
     setActiveTask(null);
     setView((v) => (v.kind === "settings" ? v : { kind: "empty" }));
   }, [
     applyProfilesAndWorkgroups,
     setSessionData,
-    clearAllTurns,
+    clearTurnsForConnection,
     setRewriteDraft,
     setActiveTask,
     setView,
@@ -307,11 +306,6 @@ export function useHostConnections({
       if (current.active_id === id) return;
       const previousState = current;
       const switchId = ++connectionSwitchRef.current;
-      for (const t of Object.values(pendingTurnsRef.current)) {
-        if (t.profile) {
-          invoke("chat_cancel", { profile: t.profile, requestId: t.requestId }).catch(() => {});
-        }
-      }
       // ref + state must flip BEFORE loadFromCache — pruneCachedMessages reads hostConnectionsRef
       const next = {
         ...previousState,
@@ -324,7 +318,6 @@ export function useHostConnections({
       setHostConnections(next);
       setRewriteDraft(null);
       setSessionData(null);
-      clearAllTurns();
       setActiveTask(null);
       setView((v) => (v.kind === "settings" ? v : { kind: "empty" }));
       // reset picker — applyProfilesAndWorkgroups keeps prev if name collides across connections
@@ -363,10 +356,8 @@ export function useHostConnections({
       loadFromCache,
       reload,
       reloadConnections,
-      pendingTurnsRef,
       setRewriteDraft,
       setSessionData,
-      clearAllTurns,
       setActiveTask,
       setView,
     ],

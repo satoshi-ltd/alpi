@@ -174,6 +174,45 @@ describe("useChatStream concurrent turns", () => {
     expect(turnOf(result, "req-1")).not.toBeNull();
     expect(turnOf(result, "req-2")).not.toBeNull();
   });
+
+  it("does not evict a same-profile turn that belongs to another connection", async () => {
+    const { result } = mount();
+    await waitForListen();
+    seedTurn(result, { requestId: "req-1", connectionId: "A", sessionId: "s1", launchSessionId: "s1" });
+    seedTurn(result, { requestId: "req-2", connectionId: "B", sessionId: "s1", launchSessionId: "s1" });
+    expect(turnOf(result, "req-1")).not.toBeNull();
+    expect(turnOf(result, "req-2")).not.toBeNull();
+  });
+});
+
+describe("useChatStream connection scoping", () => {
+  it("clearTurnsForConnection removes only the given connection's turns", async () => {
+    const { result } = mount();
+    await waitForListen();
+    seedTurn(result, { requestId: "a1", connectionId: "A", sessionId: "s1", launchSessionId: "s1" });
+    seedTurn(result, { requestId: "b1", connectionId: "B", sessionId: "s2", launchSessionId: "s2" });
+    act(() => result.current.clearTurnsForConnection("A"));
+    expect(turnOf(result, "a1")).toBeNull();
+    expect(turnOf(result, "b1")).not.toBeNull();
+  });
+
+  it("ignores a reply for a turn on a non-active connection (no wrong-daemon fetch)", async () => {
+    const { result } = mount({ activeConnectionIdRef: { current: "B" } });
+    await waitForListen();
+    seedTurn(result, { requestId: "req-1", connectionId: "A", sessionId: "sA", launchSessionId: "sA" });
+    invoke.mockClear();
+    emit({ kind: "reply", session_id: "sA" });
+    expect(invoke.mock.calls.some(([cmd]) => cmd === "session_detail")).toBe(false);
+  });
+
+  it("processes a reply for a turn on the active connection", async () => {
+    const { result } = mount({ activeConnectionIdRef: { current: "A" } });
+    await waitForListen();
+    seedTurn(result, { requestId: "req-1", connectionId: "A", sessionId: "sA", launchSessionId: "sA" });
+    invoke.mockClear();
+    emit({ kind: "reply", session_id: "sA" });
+    expect(invoke.mock.calls.some(([cmd]) => cmd === "session_detail")).toBe(true);
+  });
 });
 
 describe("useChatStream stall watchdog", () => {

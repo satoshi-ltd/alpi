@@ -17,6 +17,7 @@ export function useChatStream({
   reloadRef,
   notify,
   connectionOnlineRef,
+  activeConnectionIdRef,
 }) {
   // request_id -> turn. Many chats stream at once; each frame carries its request_id, so a turn never leaks into another chat.
   const [pendingTurns, setPendingTurns] = useState({});
@@ -32,6 +33,13 @@ export function useChatStream({
   useEffect(() => {
     pendingTurnsRef.current = pendingTurns;
   }, [pendingTurns]);
+
+  const isActiveConnection = useCallback(
+    (turn) =>
+      !activeConnectionIdRef ||
+      (turn.connectionId ?? null) === (activeConnectionIdRef.current ?? null),
+    [activeConnectionIdRef],
+  );
 
   const updateTurn = useCallback((requestId, updater) => {
     setPendingTurns((prev) => {
@@ -71,6 +79,7 @@ export function useChatStream({
       const next = {};
       for (const [k, t] of Object.entries(prev)) {
         const sameChat =
+          (t.connectionId ?? null) === (turn.connectionId ?? null) &&
           t.profile === turn.profile &&
           (slot != null
             ? (t.sessionId ?? t.launchSessionId ?? null) === slot
@@ -99,13 +108,24 @@ export function useChatStream({
     });
   }, [dropTurnTimers]);
 
-  const clearAllTurns = useCallback(() => {
-    turnMetaRef.current = {};
-    deltaBufferRef.current = {};
-    for (const entry of toolEndTimersRef.current) clearTimeout(entry.timer);
-    toolEndTimersRef.current.clear();
-    setPendingTurns({});
-  }, []);
+  const clearTurnsForConnection = useCallback((connectionId) => {
+    const cid = connectionId ?? null;
+    setPendingTurns((prev) => {
+      let changed = false;
+      const next = {};
+      for (const [rid, t] of Object.entries(prev)) {
+        if ((t.connectionId ?? null) === cid) {
+          delete turnMetaRef.current[rid];
+          delete deltaBufferRef.current[rid];
+          dropTurnTimers(rid);
+          changed = true;
+          continue;
+        }
+        next[rid] = t;
+      }
+      return changed ? next : prev;
+    });
+  }, [dropTurnTimers]);
 
   const flushDeltas = useCallback(() => {
     deltaFlushScheduledRef.current = false;
@@ -149,6 +169,7 @@ export function useChatStream({
 
   // Navigate/refresh the view only when the finished turn is the one on screen — a background turn completing must not yank the open chat.
   const finishTurnView = useCallback((turn, sid, newData) => {
+    if (!isActiveConnection(turn)) return;
     setView((cur) => {
       const isProfile = cur?.kind === "profile" && cur.profile === turn.profile;
       const foregroundExisting = isProfile && (cur.sessionId ?? null) === sid;
@@ -162,7 +183,7 @@ export function useChatStream({
       return cur;
     });
     reloadRef.current?.();
-  }, [setView, setRewriteDraft, setSessionData, reloadRef]);
+  }, [setView, setRewriteDraft, setSessionData, reloadRef, isActiveConnection]);
 
   // Rebuild a turn's state from the persisted sidecar — used when its live stream goes silent.
   const applyReplayedEvents = useCallback((requestId, events) => {
@@ -302,11 +323,12 @@ export function useChatStream({
         if (!meta || meta.replaying) continue;
         if (turn.error) continue;
         if (!turn.sessionId) continue;
+        if (!isActiveConnection(turn)) continue;
         if (now - (meta.lastEventAt || 0) >= STALL_THRESHOLD_MS) runReplay(rid);
       }
     }, STALL_POLL_INTERVAL_MS);
     return () => clearInterval(id);
-  }, [pendingTurns, runReplay, connectionOnlineRef]);
+  }, [pendingTurns, runReplay, connectionOnlineRef, isActiveConnection]);
 
   useEffect(() => {
     let cancelled = false;
@@ -451,6 +473,7 @@ export function useChatStream({
         if (!p.session_id) return;
         const turn = pendingTurnsRef.current[rid];
         if (!turn) return;
+        if (!isActiveConnection(turn)) return;
         const sid = p.session_id;
         invoke("session_detail", { profile: turn.profile, id: sid })
           .then((newData) => finishTurnView(turn, sid, newData))
@@ -477,7 +500,7 @@ export function useChatStream({
       cancelled = true;
       safeUnlisten(unlisten);
     };
-  }, [markActivity, scheduleDeltaFlush, updateTurn, dropTurnTimers, finishTurnView, notify]);
+  }, [markActivity, scheduleDeltaFlush, updateTurn, dropTurnTimers, finishTurnView, notify, isActiveConnection]);
 
-  return { pendingTurns, pendingTurnsRef, startTurn, removeTurn, clearAllTurns };
+  return { pendingTurns, pendingTurnsRef, startTurn, removeTurn, clearTurnsForConnection };
 }

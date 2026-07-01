@@ -88,10 +88,20 @@ export default function ChatPane({
   const sessionKey = inProfile ? `${view.profile}:${view.sessionId ?? "new"}` : "empty";
   const [modelOverride, setModelOverride] = useState(null);
   const [refreshBeat, setRefreshBeat] = useState(0);
+  const [stopping, setStopping] = useState(false);
 
   useEffect(() => {
     setModelOverride(null);
   }, [connectionId, sessionKey, activeProfile?.model]);
+
+  useEffect(() => {
+    setStopping(false);
+  }, [pendingTurn?.requestId]);
+
+  const handleCancel = useCallback(() => {
+    setStopping(true);
+    onCancel?.();
+  }, [onCancel]);
 
   // Lazy heavy fields — voice_id / models / mcps. Scoped per connection so two daemons with the same profile name never share state.
   const { detail: activeDetail, refresh: refreshActiveDetail } = useProfileDetail(connectionId ?? null, activeProfile?.name ?? null);
@@ -215,7 +225,8 @@ export default function ChatPane({
           onSelectProfile={onSelectProfile}
           onConfigureProfile={onConfigureProfile}
           onSend={onSend}
-          onCancel={pendingTurn ? onCancel : null}
+          onCancel={pendingTurn ? handleCancel : null}
+          stopping={stopping}
           disabled={daemonOffline || paused}
           daemonOffline={daemonOffline}
           paused={paused}
@@ -298,7 +309,8 @@ export default function ChatPane({
         onSelectProfile={onSelectProfile}
         onConfigureProfile={onConfigureProfile}
         onSend={onSend}
-        onCancel={pendingTurn ? onCancel : null}
+        onCancel={pendingTurn ? handleCancel : null}
+        stopping={stopping}
         disabled={daemonOffline || paused}
         daemonOffline={daemonOffline}
         paused={paused}

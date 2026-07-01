@@ -7,6 +7,7 @@ export default function Composer({
   onChange,
   onSubmit,
   onCancel = null,
+  stopping = false,
   disabled = false,
   canSend = true,
   placeholder = "Send a message…",
@@ -218,7 +219,13 @@ export default function Composer({
           <span className={styles.spacer} />
           {leftActions}
           {onCancel ? (
-            <SendButton variant="stop" canSend onClick={onCancel} title="Stop generating" />
+            <SendButton
+              variant="stop"
+              canSend
+              stopping={stopping}
+              onClick={onCancel}
+              title={stopping ? "Stopping…" : "Stop generating"}
+            />
           ) : (
             <SendButton
               canSend={canSend && !disabled}

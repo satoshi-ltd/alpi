@@ -20,6 +20,7 @@ export default function ChatComposer({
   onConfigureProfile,
   onSend,
   onCancel,
+  stopping = false,
   showPicker,
   embedded,
   disabled,
@@ -197,6 +198,7 @@ export default function ChatComposer({
       onChange={updateText}
       onSubmit={trySend}
       onCancel={onCancel}
+      stopping={stopping}
       canSend={canSend}
       disabled={paused}
       embedded={embedded}
