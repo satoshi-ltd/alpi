@@ -215,6 +215,37 @@ describe("useChatStream connection scoping", () => {
   });
 });
 
+describe("useChatStream new-chat hero detach", () => {
+  it("promotes a streaming new-chat turn to its real session so the hero frees up", async () => {
+    const { result } = mount();
+    await waitForListen();
+    seedTurn(result, { requestId: "req-1", connectionId: "A", sessionId: null, launchSessionId: null });
+    emit({ kind: "session_start", session_id: "S1" });
+    expect(turnOf(result, "req-1").sessionId).toBe("S1");
+    expect(turnOf(result, "req-1").launchSessionId).toBeNull();
+    act(() => result.current.detachNewChatTurns("A"));
+    expect(turnOf(result, "req-1").launchSessionId).toBe("S1");
+  });
+
+  it("falls back to the request id when the turn has no session id yet", async () => {
+    const { result } = mount();
+    await waitForListen();
+    seedTurn(result, { requestId: "req-1", connectionId: "A", sessionId: null, launchSessionId: null });
+    act(() => result.current.detachNewChatTurns("A"));
+    expect(turnOf(result, "req-1").launchSessionId).toBe("req-1");
+  });
+
+  it("leaves new-chat turns on other connections untouched", async () => {
+    const { result } = mount();
+    await waitForListen();
+    seedTurn(result, { requestId: "a1", connectionId: "A", sessionId: null, launchSessionId: null });
+    seedTurn(result, { requestId: "b1", connectionId: "B", sessionId: null, launchSessionId: null });
+    act(() => result.current.detachNewChatTurns("A"));
+    expect(turnOf(result, "a1").launchSessionId).toBe("a1");
+    expect(turnOf(result, "b1").launchSessionId).toBeNull();
+  });
+});
+
 describe("useChatStream stall watchdog", () => {
   it("skips replay while the connection is confirmed offline, resumes when it returns", async () => {
     invoke.mockImplementation(async (cmd) => {

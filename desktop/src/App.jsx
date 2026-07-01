@@ -276,7 +276,7 @@ export default function App() {
   useNavListener(setView);
 
   const connectionOnlineRef = useRef(true);
-  const { pendingTurns, pendingTurnsRef, startTurn, removeTurn, clearTurnsForConnection } = useChatStream({
+  const { pendingTurns, pendingTurnsRef, startTurn, removeTurn, clearTurnsForConnection, detachNewChatTurns } = useChatStream({
     setSessionData,
     setView,
     setRewriteDraft,
@@ -774,8 +774,9 @@ export default function App() {
 
   const onNewChat = useCallback(() => {
     setRewriteDraft(null);
+    detachNewChatTurns(hostConnectionsRef.current?.active_id ?? null);
     setView({ kind: "empty" });
-  }, []);
+  }, [detachNewChatTurns, hostConnectionsRef]);
 
   const onSelectWorkgroup = useCallback((wg) => {
     setView({ kind: "workgroup", profile: wg.profile, id: wg.id });

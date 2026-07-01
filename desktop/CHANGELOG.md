@@ -11,6 +11,15 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.4.10 — 2026-07-01 — New chat while a turn is still running
+
+_Requires alpi v0.10.6+._
+
+- **"New chat" always opens a fresh chat, even mid-run.** Pressing New chat
+  while an answer is still streaming now gives you a blank composer instead of
+  dropping you back into the turn that's still working. The earlier turn keeps
+  running in the background and stays available in its own session.
+
 ## v0.4.9 — 2026-06-30 — long agent turns survive navigation
 
 _Requires alpi v0.10.6+._

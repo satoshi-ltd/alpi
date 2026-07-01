@@ -127,6 +127,21 @@ export function useChatStream({
     });
   }, [dropTurnTimers]);
 
+  const detachNewChatTurns = useCallback((connectionId) => {
+    const cid = connectionId ?? null;
+    setPendingTurns((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      for (const [rid, t] of Object.entries(prev)) {
+        if ((t.connectionId ?? null) === cid && (t.launchSessionId ?? null) === null) {
+          next[rid] = { ...t, launchSessionId: t.sessionId ?? t.requestId };
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, []);
+
   const flushDeltas = useCallback(() => {
     deltaFlushScheduledRef.current = false;
     const buffers = deltaBufferRef.current;
@@ -502,5 +517,5 @@ export function useChatStream({
     };
   }, [markActivity, scheduleDeltaFlush, updateTurn, dropTurnTimers, finishTurnView, notify, isActiveConnection]);
 
-  return { pendingTurns, pendingTurnsRef, startTurn, removeTurn, clearTurnsForConnection };
+  return { pendingTurns, pendingTurnsRef, startTurn, removeTurn, clearTurnsForConnection, detachNewChatTurns };
 }
