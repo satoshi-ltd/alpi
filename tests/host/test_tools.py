@@ -49,10 +49,13 @@ async def test_tools_list_returns_registered_tools(short_tmp: Path) -> None:
     assert by_name["web_fetch"]["category"] == "Web"
     assert by_name["memory"]["category"] == "Memory"
     assert by_name["terminal"]["category"] == "System"
-    assert by_name["search_workspace"]["category"] == "Workspace"
+    assert by_name["knowledge"]["category"] == "Knowledge"
     assert by_name["recall_sessions"]["category"] == "Memory"
     assert by_name["workgroup_post"]["category"] == "Collab"
     assert by_name["notify"]["category"] == "Comms"
+    assert "search_workspace" not in by_name
+    assert "index_workspace" not in by_name
+    assert "learn_file" not in by_name
 
 
 @pytest.mark.asyncio

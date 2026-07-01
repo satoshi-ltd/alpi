@@ -2842,9 +2842,9 @@ def _cleanup_categories(h: Path) -> list[dict]:
         if curator_root.exists() else []
     )
     curator_size = sum(_dir_size(d) for d in curator_dirs)
-    rag_reclaimable = store_mod.reclaimable_bytes(h)
-    rag_files: list[Path] = (
-        [store_mod.store_path(h)] if rag_reclaimable > 0 else []
+    knowledge_reclaimable = store_mod.reclaimable_bytes(h)
+    knowledge_files: list[Path] = (
+        [store_mod.store_path(h)] if knowledge_reclaimable > 0 else []
     )
     att_root = _dir("host/attachments/tmp")
     att_dirs: list[Path] = (
@@ -2919,11 +2919,11 @@ def _cleanup_categories(h: Path) -> list[dict]:
             "action": "rmtree",
         },
         {
-            "key": "rag",
-            "label": "RAG store bloat",
-            "desc": "SQLite freelist pages in `rag/store.sqlite` from past force-reindexes",
-            "files": rag_files,
-            "size": rag_reclaimable,
+            "key": "knowledge",
+            "label": "Knowledge index bloat",
+            "desc": "SQLite freelist pages in `knowledge.sqlite` from past force-reindexes",
+            "files": knowledge_files,
+            "size": knowledge_reclaimable,
             "action": "vacuum",
         },
     ]
@@ -2971,7 +2971,7 @@ def _cleanup_setup(h: Path) -> None:
         ui._console.print("")
         if target.get("action") == "vacuum":
             if not ui.confirm(
-                f"  Compact RAG store and reclaim {size_label}?",
+                f"  Compact knowledge index and reclaim {size_label}?",
                 default=False,
             ):
                 continue

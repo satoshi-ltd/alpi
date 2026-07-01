@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.10.9 — 2026-07-01 — workspace knowledge replaces raw-file RAG
+
+- **Workspace knowledge is now a first-class Markdown wiki.** The new
+  `knowledge` tool searches, ingests, maintains, lints, and indexes
+  OKF-style Markdown pages under `<workspace>/knowledge/`, with SQLite kept as
+  a derived profile-local index.
+- **The old raw workspace RAG tools are retired.** `learn_file`,
+  `search_workspace`, and `index_workspace` are no longer published; explicit
+  learning now synthesizes durable Markdown knowledge instead of copying raw
+  files into `.alpi/documents/`.
+- **The derived knowledge index lives at `<profile>/knowledge.sqlite`.** Cleanup,
+  backup, storage reporting, and prefetch now use the knowledge name instead of
+  `rag/store.sqlite`.
+- **Prompt and docs now separate current-turn attachments, durable knowledge,
+  and Alpi self-knowledge.** Agents use attached files directly, call
+  `knowledge(action="search")` for user/workspace knowledge, and keep
+  `alpi_knowledge` for how Alpi itself works.
+
 ## v0.10.8 — 2026-07-01 — SMB AppleDouble files no longer break skills
 
 - Skill validation now ignores macOS/SMB AppleDouble files (`._*`) and

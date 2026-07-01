@@ -14,7 +14,7 @@ from alpi.tools import (
     edit_file,
     email as email_tool,
     knowledge as knowledge_tool,
-    learn_file as learn_file_tool,
+    knowledge_base as knowledge_base_tool,
     memory as memory_tool,
     notify as notify_tool,
     recall as recall_tool,
@@ -34,7 +34,6 @@ from alpi.tools import (
     web_fetch,
     web_search,
     workgroup as workgroup_tool,
-    workspace as workspace_tool,
     write_file,
 )
 
@@ -103,11 +102,9 @@ def execute(
 
 
 # Register every tool exposed by the sibling modules.
-# Order matters: tools that should be preferred for common intents
-# (semantic recall over user files) come first so they appear earlier
-# in the schema list the LLM sees.
-register(workspace_tool.TOOL_SEARCH)
-register(workspace_tool.TOOL_INDEX)
+# Order matters: durable knowledge retrieval should be the preferred recall
+# surface for user/workspace knowledge.
+register(knowledge_base_tool.TOOL)
 register(recall_tool.TOOL_RECALL)
 register(recall_tool.TOOL_INDEX)
 register(workgroup_search_tool.TOOL_SEARCH)
@@ -131,7 +128,6 @@ for _mod in (
     session_read,
     skill_tool,
     knowledge_tool,
-    learn_file_tool,
     research,
     delegate,
     notify_tool,

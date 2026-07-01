@@ -55,7 +55,7 @@ def main() -> int:
                      bool(results) and results[0]["session_id"] == "pricing-chat")
         ok &= _check("snippet carries the real content (42 seats)",
                      any("42 seats" in r["snippet"] for r in results))
-        ok &= _check("index lives in the profile (rag/store.sqlite)", store_path(home).is_file())
+        ok &= _check("index lives in the profile (knowledge.sqlite)", store_path(home).is_file())
 
         if results:
             top = results[0]

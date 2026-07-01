@@ -123,6 +123,10 @@ def test_schemas_includes_available_tools() -> None:
     names = [s["function"]["name"] for s in tools.schemas()]
     assert "memory" in names
     assert "read_file" in names
+    assert "knowledge" in names
+    assert "search_workspace" not in names
+    assert "index_workspace" not in names
+    assert "learn_file" not in names
 
 
 def test_availability_report_lists_every_registered_tool() -> None:

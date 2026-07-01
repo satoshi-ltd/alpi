@@ -12,7 +12,7 @@ File layout::
     ciphertext                        ChaCha20-Poly1305(gzip(tar(alpi-home)))
 
 The ciphertext is single-shot AEAD: the home is MB-scale, sometimes
-tens of MB once `rag/store.sqlite` is built, so streaming chunks would
+tens of MB once `knowledge.sqlite` is built, so streaming chunks would
 add complexity for no payoff at this size. Bumping the magic to
 ``ALPIBKP2`` is the migration path if that ever changes.
 """

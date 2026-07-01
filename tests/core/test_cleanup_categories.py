@@ -36,20 +36,20 @@ def test_attachments_category_lists_staged_dirs(tmp_path: Path) -> None:
     assert att["action"] == "rmtree"
 
 
-def test_rag_category_absent_when_store_has_no_freelist(tmp_path: Path) -> None:
-    """No `rag/store.sqlite` and no freelist → cleanup row appears with
+def test_knowledge_category_absent_when_store_has_no_freelist(tmp_path: Path) -> None:
+    """No `knowledge.sqlite` and no freelist -> cleanup row appears with
     size 0, empty files, and the vacuum action. Empty list makes the
     cleanup loop skip it just like other empty categories."""
     cats = _cleanup_categories(tmp_path)
-    rag = next(c for c in cats if c["key"] == "rag")
-    assert rag["size"] == 0
-    assert rag["files"] == []
-    assert rag["action"] == "vacuum"
+    knowledge = next(c for c in cats if c["key"] == "knowledge")
+    assert knowledge["size"] == 0
+    assert knowledge["files"] == []
+    assert knowledge["action"] == "vacuum"
 
 
-def test_rag_category_surfaces_freelist_bytes(tmp_path: Path) -> None:
-    """After artificial bloat the rag category must surface reclaimable
-    bytes and point at `rag/store.sqlite` for display."""
+def test_knowledge_category_surfaces_freelist_bytes(tmp_path: Path) -> None:
+    """After artificial bloat the knowledge category must surface reclaimable
+    bytes and point at `knowledge.sqlite` for display."""
     import sqlite3
 
     from alpi.core import store as store_mod
@@ -70,15 +70,15 @@ def test_rag_category_surfaces_freelist_bytes(tmp_path: Path) -> None:
         conn.close()
 
     cats = _cleanup_categories(tmp_path)
-    rag = next(c for c in cats if c["key"] == "rag")
-    assert rag["size"] > 0
-    assert rag["files"] == [sp]
-    assert rag["action"] == "vacuum"
+    knowledge = next(c for c in cats if c["key"] == "knowledge")
+    assert knowledge["size"] > 0
+    assert knowledge["files"] == [sp]
+    assert knowledge["action"] == "vacuum"
 
 
 def test_compact_reclaims_freelist_without_deleting_store(tmp_path: Path) -> None:
     """`compact()` runs VACUUM and shrinks the file but must NOT unlink
-    `rag/store.sqlite` — embeddings would be lost."""
+    `knowledge.sqlite` - embeddings would be lost."""
     import sqlite3
 
     from alpi.core import store as store_mod

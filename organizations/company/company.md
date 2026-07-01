@@ -430,7 +430,7 @@ This four-part context (briefing + rules + bios + task history) means a peer can
 
 ## How Knowledge Flows
 
-This is a scaffold decision, not an alpi rule. alpi gives every profile the same primitives (workspace + RAG via `search_workspace`/`index_workspace`, per-skill SQLite via `db`, memory files, ALP `link.ask`); the agent's `agent.md` decides when to use them. This scaffold chooses **one keeper** — Archive — as the canonical entry point, because a single source of truth scales better than N profiles each maintaining parallel notes. A different scaffold could fan the same primitives differently (e.g., every Council member curates its own domain workspace).
+This is a scaffold decision, not an alpi rule. alpi gives every profile the same primitives (workspace knowledge via `knowledge`, per-skill SQLite via `db`, memory files, ALP `link.ask`); the agent's `agent.md` decides when to use them. This scaffold chooses **one keeper** — Archive — as the canonical entry point, because a single source of truth scales better than N profiles each maintaining parallel notes. A different scaffold could fan the same primitives differently (e.g., every Council member curates its own domain knowledge pages).
 
 In this scaffold: Archive is the canonical entry point for org knowledge. Other agents do not duplicate the workspace, do not query Archive's SQLite directly, and do not maintain parallel notes. They ask Archive.
 
@@ -438,7 +438,7 @@ In this scaffold: Archive is the canonical entry point for org knowledge. Other 
 
 Archive maintains four complementary layers, consulted in this order on every query:
 
-1. **Workspace** — semantic search (`search_workspace`) over the directory the org has given Archive: PDFs, markdowns, contracts, meeting notes, scanned docs. This is the bulk of what Archive knows.
+1. **Knowledge** — `knowledge(action="search")` over synthesized pages compiled from the org's PDFs, markdowns, contracts, meeting notes, and scanned docs. This is the bulk of what Archive knows.
 2. **Decisions DB** — Archive's own per-skill SQLite tables (`decisions`, `post_mortems`, `doc_audits`) populated by the capture skills. Structured, queryable, the binding record.
 3. **Memory** — invariants the org has explicitly taught Archive (e.g. "Vera has final vote on strategy"). Short, hand-curated, in Archive's `USER.md` / `MEMORY.md` / `AGENT.md`.
 4. **Sessions** — Archive's past conversations. Fallback when 1-3 miss.

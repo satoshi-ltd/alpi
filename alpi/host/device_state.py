@@ -291,7 +291,7 @@ def _storage_rows(home: Path) -> list[dict[str, Any]]:
         ("sessions", "sessions", [home / "sessions"]),
         ("skills", "skills", [home / "skills"]),
         ("memories", "memories", [home / "memories"]),
-        ("rag", "rag", [home / "rag"]),
+        ("knowledge", "knowledge", [home / "knowledge.sqlite"]),
         ("outputs", "outputs", [home / "outputs"]),
         ("audio", "audio", [home / "cache" / "tts", home / "cache" / "inbound"]),
         ("logs", "logs", [home / "logs"]),

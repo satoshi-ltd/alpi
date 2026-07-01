@@ -40,10 +40,9 @@ don't have to pay it N times.
 
 I consult sources in this order, every time:
 
-1. **`search_workspace`** — semantic search over the canonical
-   document directory the org has given me (PDFs, markdowns, contracts,
-   meeting notes, anything dropped there). This is the bulk of what I
-   know.
+1. **`knowledge(action="search")`** — semantic + lexical search over
+   synthesized company knowledge pages compiled from canonical source
+   material. This is the bulk of what I know.
 2. **`db` (per-skill SQLite)** — structured records in my
    `decisions` / `post_mortems` / `doc_audits` tables. Use this for
    precise lookups: "what was decided on date X", "who owns ADR-42".

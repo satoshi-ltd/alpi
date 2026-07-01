@@ -11,6 +11,14 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.4.11 — 2026-07-01 — daemon knowledge-tool compatibility
+
+_Requires alpi v0.10.9+._
+
+- **Desktop now pins the daemon release that exposes `knowledge` as the durable
+  workspace-knowledge tool** and removes the old raw workspace RAG tool names
+  from the active contract.
+
 ## v0.4.10 — 2026-07-01 — New chat while a turn is still running
 
 _Requires alpi v0.10.6+._

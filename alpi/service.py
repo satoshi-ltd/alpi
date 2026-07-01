@@ -208,11 +208,12 @@ def _any_profile_allows_browser(root: Path) -> bool:
     return False
 
 
-def _any_profile_uses_rag(root: Path) -> bool:
+def _any_profile_uses_knowledge_index(root: Path) -> bool:
+    from alpi.core import store
+
     for home in _profile_homes(root):
-        rag = home / "rag"
         try:
-            if rag.is_dir() and any(rag.iterdir()):
+            if store.store_path(home).is_file():
                 return True
         except OSError:
             continue
@@ -232,12 +233,12 @@ def _prefetch_assets(root: Path) -> None:
         from alpi.core._playwright import ensure_chromium
 
         steps: list[tuple[str, Any]] = []
-        if mode == "all" or _any_profile_uses_rag(root):
+        if mode == "all" or _any_profile_uses_knowledge_index(root):
             steps.append(("embedder", embed.ensure_weights_cached))
         if mode == "all" or _any_profile_allows_browser(root):
             steps.append(("chromium", ensure_chromium))
         if not steps:
-            log.info("prefetch: nothing to do (no RAG index, browser denied everywhere)")
+            log.info("prefetch: nothing to do (no knowledge index, browser denied everywhere)")
             return
         for label, fn in steps:
             started = time.monotonic()
@@ -336,10 +337,8 @@ _RELOADABLE_SUBSYSTEMS = ("schedule", "alp", "workgroups")
 def _reload_fingerprints(home: Path) -> dict[str, str]:
     # Only inputs a subsystem task caches at startup belong here — schedule jobs and workgroup subscriptions are re-read every tick and must never force a restart.
     from alpi import config as cfg_mod
-    from alpi.home import read_profile_env
 
     cfg = cfg_mod.load(home)
-    env = read_profile_env(home)
     return {
         "flags": repr(sorted(_subsystem_flags(cfg).items())),
         "alp": repr((

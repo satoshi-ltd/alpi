@@ -53,7 +53,7 @@ def _seed(home: Path) -> None:
     (home / "profiles" / "doc" / "logs").mkdir()
     (home / "profiles" / "doc" / "logs" / "agent.log").write_text("noisy\n")
     (home / "profiles" / "doc" / "cache").mkdir()
-    (home / "profiles" / "doc" / "cache" / "rag.bin").write_bytes(b"\x00" * 32)
+    (home / "profiles" / "doc" / "cache" / "blob.bin").write_bytes(b"\x00" * 32)
     # Second profile to confirm multi-profile coverage.
     (home / "profiles" / "mirai").mkdir()
     (home / "profiles" / "mirai" / ".env").write_text("OTHER=value\n")
@@ -444,12 +444,11 @@ def test_preview_largest_files_surfaces_big_blobs(tmp_path: Path) -> None:
     _seed(src)
     # A 2MB blob inside the default profile, plus a small file that must
     # not appear in the largest-files list.
-    (src / "profiles" / "doc" / "rag").mkdir()
-    (src / "profiles" / "doc" / "rag" / "store.sqlite").write_bytes(b"\x00" * 2 * 1024 * 1024)
+    (src / "profiles" / "doc" / "knowledge.sqlite").write_bytes(b"\x00" * 2 * 1024 * 1024)
     (src / "profiles" / "doc" / "tiny.txt").write_text("tiny\n")
     pv = backup.preview(src)
     paths = [f.path for f in pv.largest_files]
-    assert "profiles/doc/rag/store.sqlite" in paths
+    assert "profiles/doc/knowledge.sqlite" in paths
     assert "profiles/doc/tiny.txt" not in paths
     assert all(f.size >= 1024 * 1024 for f in pv.largest_files)
     assert len(pv.largest_files) <= 5

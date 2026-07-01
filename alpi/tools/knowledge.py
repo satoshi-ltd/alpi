@@ -15,7 +15,7 @@ _TOPIC_SUMMARIES: dict[str, str] = {
     "install": "Install methods (uv tool, pipx, dev install), update path, uninstall, troubleshooting, supported platforms.",
     "profiles": "Profiles — creating, switching, isolation, identity, keys, memory layout.",
     "skills": "Skills system — frontmatter, security scanner, where credentials live, the skill tool actions.",
-    "tools": "Tool selection and contracts — files, terminal, attachments, RAG, recall, outputs, approvals.",
+    "tools": "Tool selection and contracts — files, terminal, attachments, knowledge, recall, outputs, approvals.",
     "models": "Picking a provider, tier guidance for tool-heavy use, local Ollama setup.",
     "alp": "ALP protocol — pinned identity, signed envelopes, peer capabilities, workgroups, group keys, transcript shape, error codes.",
     "architecture": "Internals — code structure, turn loop, scheduler, MCP, logging, env vars.",

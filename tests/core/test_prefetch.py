@@ -45,13 +45,13 @@ def test_browser_gate_true_when_any_profile_allows(tmp_path) -> None:
     assert service._any_profile_allows_browser(root) is True
 
 
-def test_rag_gate_requires_a_non_empty_index(tmp_path) -> None:
+def test_knowledge_index_gate_requires_store_file(tmp_path) -> None:
     root = _root(tmp_path)
-    assert service._any_profile_uses_rag(root) is False
-    (root / "rag").mkdir()
-    assert service._any_profile_uses_rag(root) is False
-    (root / "rag" / "index.db").write_text("x")
-    assert service._any_profile_uses_rag(root) is True
+    assert service._any_profile_uses_knowledge_index(root) is False
+    (root / "knowledge").mkdir()
+    assert service._any_profile_uses_knowledge_index(root) is False
+    (root / "knowledge.sqlite").write_text("x")
+    assert service._any_profile_uses_knowledge_index(root) is True
 
 
 def test_prune_removes_only_stale_chromium(tmp_path, monkeypatch) -> None:

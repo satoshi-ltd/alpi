@@ -3,8 +3,8 @@
 ## Answer directly
 
 - Prefer the native tool over shelling out: `read_file` over `terminal cat`,
-  `search_workspace`/`search` over `terminal grep`, `write_file` /
-  `edit_file` over `terminal sed/perl -i`.
+  `knowledge`/`search` over `terminal grep`, `write_file` / `edit_file` over
+  `terminal sed/perl -i`.
 - The workspace is the default root for relative paths, not a sandbox.
   Absolute paths can work, but sensitive paths are denied.
 - Tool availability is dynamic: unavailable tools are hidden from the schema;
@@ -17,7 +17,7 @@
 
 | Family | Tools | Use |
 |---|---|---|
-| Workspace RAG | `search_workspace`, `index_workspace`, `learn_file` | Semantic search over workspace files and durable learned documents. |
+| Knowledge wiki | `knowledge` | OKF-style synthesized Markdown knowledge; SQLite is only the derived search index. |
 | Session recall | `session_search`, `session_read`, `recall_sessions`, `index_sessions` | Lexical then semantic search over past local chat sessions; `session_read` lists recent sessions and opens a windowed turn slice (around a phrase or index) with no LLM call. |
 | Workgroup recall | `workgroup_search`, `index_workgroups` | Semantic search over hub-owned workgroup transcripts. |
 | Files | `read_file`, `write_file`, `edit_file`, `search` | Direct filesystem work. |
@@ -36,12 +36,14 @@ model actually sees.
 
 ## Selection rules
 
-- **Current attached file**: do not index or search the workspace just to read
-  an attachment from the current turn. The engine has already supplied it to the
-  model. If the user says "learn this", call `learn_file`.
-- **Durable company/project docs**: call `learn_file` for explicit learning,
-  then use `search_workspace`. Learned docs are copied under
-  `<workspace>/.alpi/documents/YYYY/MM/` and indexed.
+- **Current attached file**: do not index or search just to read an attachment
+  from the current turn. The engine has already supplied it to the model. If the
+  user says "learn this", call `knowledge(action="ingest")`.
+- **Durable company/project knowledge**: use
+  `knowledge(action="ingest")` for explicit learning from a source file or
+  attachment, then `knowledge(action="search")` for later recall. The raw
+  source is not copied; synthesized Markdown under `<workspace>/knowledge/` is
+  the source of truth.
 - **Past chat memory**: `session_search` first for exact words; `session_read`
   to open the exact turn window of a found session; `recall_sessions` when the
   wording is fuzzy/semantic. Indexing is opt-in via `index_sessions`.
@@ -98,20 +100,24 @@ Output attachments (MM.2):
 - Supported output kinds: `image`, `pdf`, `text`, `sheet`, `doc`, `deck`, `file`
   (Office files must be real ZIP-based `xlsx/docx/pptx`).
 
-## Workspace RAG and durable documents
+## OKF knowledge wiki
 
-- `index_workspace(path?, glob?, force?, ocr?)` builds/updates the index in
-  `<home>/rag/store.sqlite`; it is derived state, not source of truth.
-- Text, HTML, PDF, DOCX, EPUB, and images are supported. Scanned PDF/image OCR
-  requires `ocr=true`.
-- `index_workspace` skips build/dependency/cache dirs and most `.alpi/`, but
-  does include `<workspace>/.alpi/documents/` so learned docs survive full
-  reindex.
-- `learn_file(name?, source_path?, folder?, ocr?)` copies a selected source into
-  workspace documents, writes metadata to `manifest.jsonl`, indexes only that
-  file, and never overwrites (`-2`, `-3`, ... suffixes).
-- If indexing fails, `learn_file` keeps the copied file + manifest and reports
-  `indexed:false`.
+- Knowledge pages live under `<workspace>/knowledge/`; Markdown is the source of
+  truth and `<home>/knowledge.sqlite` is a rebuildable derived index.
+- `knowledge(action="search", query, k=5)` returns synthesized OKF pages for
+  compiled durable concepts/projects/people/sources.
+- `knowledge(action="ingest", source_path?|name?, topic?, ocr?)` reads a source
+  file or current-turn attachment, synthesizes Markdown pages, updates
+  `index.md` and `log.md`, lints, and refreshes the derived index. It does not
+  save a raw copy of the source document.
+- `knowledge(action="maintain", source_path?, topic?, apply=true, ocr=false)` is
+  the explicit LLM-wiki workflow for reorganizing or updating durable pages.
+- `knowledge(action="lint", path?)` validates required `index.md` / `log.md`,
+  minimal YAML frontmatter, relative Markdown links, and orphan pages.
+- `knowledge(action="index", path?, force?)` indexes valid pages into separate
+  `okf_*` tables with sqlite-vec embeddings plus SQLite FTS.
+- Text, HTML, PDF, DOCX, EPUB, and images are supported for ingest. Scanned
+  PDF/image OCR requires `ocr=true`.
 
 ## Session and workgroup recall
 
@@ -146,8 +152,9 @@ Output attachments (MM.2):
   missing bins/env/config, or `alpi doctor`.
 - Model keeps using a denied tool: executor still refuses denied names even if a
   stale context mentions them.
-- Search returns stale/no results: run the matching indexer (`index_workspace`,
-  `index_sessions`, `index_workgroups`) and check embedder/root mismatch errors.
+- Search returns stale/no results: run the matching indexer
+  (`knowledge(action="index")`, `index_sessions`, `index_workgroups`) and check
+  embedder/root mismatch errors.
 - Remote file preview missing: session attachment paths are best-effort; output
   attachment fetch is scoped to profile home/workspace/temp roots.
 - Long tool loops on free/local models: default effective step ceiling is higher

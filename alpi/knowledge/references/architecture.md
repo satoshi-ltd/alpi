@@ -34,7 +34,8 @@ Local agent runtime, per turn:
 | `alpi/memory.py` | `USER.md`, `MEMORY.md`, `AGENT.md`. |
 | `alpi/promotion.py` | Compaction-to-memory promotion queue. |
 | `alpi/compaction.py` | Auto-compact pipeline + logs. |
-| `alpi/tools/workspace.py` | `search_workspace`, `index_workspace`. |
+| `alpi/tools/knowledge_base.py` | `knowledge` tool for user/workspace OKF wiki. |
+| `alpi/tools/workspace.py` | Document readers/chunker used by knowledge ingest. |
 | `alpi/tui/` | Terminal UI. |
 | `alpi/host/` | Host-plane JSON-RPC for desktop/mobile. |
 | `alpi/mail/` | Multi-account email backing the on-demand `email` tool — `accounts.py` (account model, id = slug of address), IMAP/Gmail clients + OAuth. |
@@ -99,7 +100,7 @@ Contracts:
 - `alpi audit` — read-only security posture for the whole install; scans every
   profile, checks permissions/network/hardening offline, and optionally queries
   OSV for installed-package CVEs unless `--offline` is set.
-- `alpi setup -> Cleanup` — manual cleanup for caches, logs, mentions, schedule output, workgroup files, RAG freelist vacuum.
+- `alpi setup -> Cleanup` — manual cleanup for caches, logs, mentions, schedule output, workgroup files, knowledge index freelist vacuum.
 - Desktop Manage Sessions — richer chat-session pruning UI.
 
 ## Tools
@@ -108,9 +109,10 @@ Each tool exposes `name`, `description`, JSON schema `parameters`, `run(...) -> 
 
 - `write_file` / `edit_file` — syntax-lint before writing supported formats.
 - `safe_write_secret(...)` — canonical path for credential files.
-- `search_workspace` — semantic local RAG over the user's workspace.
-- `index_workspace(path?, glob?, force?, ocr?)` — incremental by default (mtime-skip, deleted files purged); auto-rebuilds on workspace-root or embedder change; `force=true` drops + vacuums.
-- `learn_file(name?, source_path?, folder?, ocr?)` — promote a file to durable workspace knowledge: copy under `<workspace>/.alpi/documents/YYYY/MM/`, never overwriting; append a `manifest.jsonl` line (metadata only); index just that file via `workspace.index_files()`. Source resolves from `source_path`, a current-turn attachment by `name`, or the single current-turn attachment. Explicit user intent only — no auto-learn. Images need `ocr=true`.
+- `knowledge(action="search", query, k=5)` — semantic + lexical recall over synthesized OKF pages in `<workspace>/knowledge/`.
+- `knowledge(action="ingest", source_path?|name?, topic?, ocr?)` — explicit learning from a source file or current-turn attachment. The source is read and summarized into Markdown; the raw file is not copied.
+- `knowledge(action="maintain", source_path?, topic?, apply=true, ocr=false)` — explicit LLM-wiki workflow: write/update pages, update index/log, lint, then refresh the derived index.
+- `knowledge(action="lint", path?)` / `knowledge(action="index", path?, force?)` — validate the bundle or rebuild the `okf_*` derived tables in `knowledge.sqlite`.
 - `recall_sessions(query, k=5)` / `index_sessions(force?)` — semantic recall over past conversations. `session_search` stays the lexical first layer and `session_read` is the exact-browse layer (lists recent sessions or opens a windowed turn slice around a phrase/index, no model call); the semantic layer runs on the same embed/sqlite-vec store, separate `session_*` table family. Opt-in indexing (never automatic), active session excluded, no per-turn injection. Forgettable: deleting a session purges its index rows (`recall.forget_session`), reindex orphan-sweeps gone sessions.
 - `workgroup_search(workgroup_id, query, k=5)` / `index_workgroups(workgroup_id?, force?)` — semantic search over hub-owned workgroup transcripts, same store, separate `workgroup_*` family. Hub-owned + profile-local only: no cross-peer/federated search. Decrypts via the existing key-history-aware path; opt-in, search scoped per-workgroup, no auto-injection. Forgettable: removing a workgroup (host RPC or CLI) purges its index (`workgroup_search.forget_workgroup`), reindex orphan-sweeps gone workgroups. ALP wire/crypto untouched.
 
@@ -119,7 +121,7 @@ Each tool exposes `name`, `description`, JSON schema `parameters`, `run(...) -> 
 - `host.chat.send` takes `attachments: [{path, mime?, name?}]`; the engine validates (magic bytes, binary-as-text guard, allowlist: images/PDF/text+source) and builds multimodal content-parts. Allowed text/source incl. `py`/`js`/`ts`/`tsx`/`go`/`rs`/`sh`/`sql`.
 - Per-turn only: bytes live in the in-memory message. `session_metadata` is path-free (`{name, mime, size}`), but the engine re-adds a best-effort local `path` to each persisted chat-turn attachment so clients can thumbnail history — the path may be unfetchable cross-client (outside `fetch` roots) or after a staged file's TTL, so it's preview replay, not durable storage. Validated turn attachments also go to a runtime-only ContextVar (`tools/_state`) so tools resolve them.
 - Remote clients upload via `host.attachments.stage` (caps + validation), getting a daemon-side path.
-- Storage contract: documents live in the **workspace** (`.alpi/documents/`, source of truth); the RAG index lives in the **profile** (`rag/store.sqlite`); `manifest.jsonl` is metadata only. `.alpi/documents/` is the one `.alpi` subtree `index_workspace` does NOT skip, so learned docs survive a full reindex.
+- Storage contract: synthesized Markdown lives in the **workspace** (`knowledge/`, source of truth); the derived SQLite index lives in the **profile** (`knowledge.sqlite`). Raw source documents used for ingest are not copied into alpi-managed durable storage.
 
 ## Skills and knowledge
 

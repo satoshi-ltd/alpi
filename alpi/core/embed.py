@@ -1,13 +1,3 @@
-"""Embedding backend for local RAG.
-
-Default: ``fastembed`` running the ONNX export of
-``sentence-transformers/all-MiniLM-L6-v2`` (384-dim, ~90 MB). Numerically
-equivalent to the original sentence-transformers checkpoint, ~10×
-lighter at runtime (no torch). The model is loaded lazily so importing
-this module costs nothing until the first ``embed()`` call. Tests
-override via ``set_default()``.
-"""
-
 from __future__ import annotations
 
 import logging

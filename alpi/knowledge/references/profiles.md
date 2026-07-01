@@ -24,7 +24,7 @@
 | `sessions/<id>.json` | Local human chat log only (TUI / desktop / `chat --once`). Schedule, workgroup, system-prefixed turns stay out of resume/history. |
 | `mentions/<sender>.json` | Per-sender `@`-mention threads, capped 20 turns, receiving side only. |
 | `skills/` | Installed/user skills, under this profile's allowlist. |
-| `rag/store.sqlite` | Local RAG index over the workspace + learned documents (sqlite-vec). |
+| `knowledge.sqlite` | Derived sqlite-vec indexes for workspace knowledge, session recall, and workgroup recall. |
 | `alp/` (peers.yaml, socket, keypair under `alp/secrets/`) | ALP identity + pinned peers; two profiles = two distinct peers. The ALP private key lives at `alp/secrets/alp_key.{pem,pub}`, NOT under the profile-level `secrets/`. |
 | `host/attachments/tmp/` | Uploaded chat attachments staged by the paired desktop / mobile apps. Per-profile — the rest of `host/` (`host.sock`, `devices.yaml`, `events.jsonl`, `device_id`) is root-only. |
 | `run/bg/` | Background-terminal state: one combined `alpi-bg-*.log` (stdout+stderr capture) and one `<pid>.meta` file (key=value: `log=…`, `started=…`) per job spawned with `terminal(action="background")`. |
@@ -34,7 +34,7 @@
 | `logs/ledger.json` | Daily USD/token spend cap, enforced across every turn (interactive, scheduled, sub-agent, inbound ALP). Resets at UTC midnight. |
 | `cache/` (tts, stt, inbound voice) | Audio cache. |
 
-Eager dirs at `ensure_home`: `memories/`, `secrets/`, `sessions/`, `skills/`, `schedule/output/`, `logs/`, `host/`, `mentions/`, `outputs/` (all `0o700`). Lazy: `alp/`, `rag/`, `cache/`, `run/bg/`, `host/attachments/` (created on first use). `alpi audit` walks a fixed sensitive-path list and flags any group/other bits set (`st_mode & 0o077`) — fix is `chmod 700` for directories, `chmod 600` for files. The audited `secrets/` row is actually `alp/secrets/` (the ALP keypair directory) via `keys_mod.private_path(home).parent`; the profile-level OAuth `secrets/` is NOT audited today, and neither are the other lazy paths.
+Eager dirs at `ensure_home`: `memories/`, `secrets/`, `sessions/`, `skills/`, `schedule/output/`, `logs/`, `host/`, `mentions/`, `outputs/` (all `0o700`). Lazy: `alp/`, `cache/`, `run/bg/`, `host/attachments/` and `knowledge.sqlite` (created on first use). `alpi audit` walks a fixed sensitive-path list and flags any group/other bits set (`st_mode & 0o077`) — fix is `chmod 700` for directories, `chmod 600` for files. The audited `secrets/` row is actually `alp/secrets/` (the ALP keypair directory) via `keys_mod.private_path(home).parent`; the profile-level OAuth `secrets/` is NOT audited today, and neither are the other lazy paths.
 
 `alpi -p <name>` auto-bootstraps any not-yet-existing profile on first use; `alpi profile create <name>` is the explicit pre-bootstrap. Both go through `home.validate_profile_name`: the name must match `^[A-Za-z0-9][A-Za-z0-9._-]*$`, so `-p ../escape`, `-p .hidden`, `-p a/b`, `-p ..`, and any name containing `..` raise `InvalidProfileName` before the path is joined. `-p ""` is a no-op — empty falls through to the default profile (`~/.alpi/`), it does NOT resolve to `~/.alpi/profiles/`. Quote names containing zsh-glob characters (`*`, `?`, `[`); they're rejected by validation anyway but the shell expands them first.
 
@@ -76,7 +76,7 @@ Every CLI command accepts `-p <name>`. No per-profile service to uninstall — t
 
 ## Cost & service rules
 
-- Disk: fresh ~10 KB; after weeks 5–50 MB (voice cache + session retention). TUI top bar shows live size; `setup → Cleanup` reclaims audio cache, old sessions, rotated logs, schedule output, RAG freelist bloat.
+- Disk: fresh ~10 KB; after weeks 5–50 MB (voice cache + session retention). TUI top bar shows live size; `setup → Cleanup` reclaims audio cache, old sessions, rotated logs, schedule output, and knowledge index freelist bloat.
 - CPU/mem: an idle profile costs nothing. One alpi daemon per machine hosts every profile's scheduler/ALP/workgroups poller as supervised `<profile>/<service>` asyncio tasks. Auto-installed on first `alpi setup`, managed from `setup → Services → Daemon`.
 - Wrong-identity scheduler symptom → check which profile's service is running.
 

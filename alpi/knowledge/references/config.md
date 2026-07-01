@@ -129,7 +129,10 @@ tools:
     - delegate
 ```
 
-Use the canonical registered name — `alpi_knowledge`, not `knowledge`; `search_workspace`, not `workspace_search`. Unknown names are no-ops (typos are harmless). A bare string (`deny: terminal`) collapses to `[]`, not a per-char iteration.
+Use the canonical registered name. `knowledge` is the user/workspace OKF wiki;
+`alpi_knowledge` is packaged docs about alpi itself. Unknown names are no-ops
+(typos are harmless). A bare string (`deny: terminal`) collapses to `[]`, not a
+per-char iteration.
 
 ## Network (shared accessible address)
 

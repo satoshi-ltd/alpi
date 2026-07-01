@@ -1,11 +1,11 @@
 ---
 name: knowledge-recall
-description: Answer an org-knowledge question by consulting workspace, decisions DB, memory, and past sessions with citations
+description: Answer an org-knowledge question by consulting knowledge pages, decisions DB, memory, and past sessions with citations
 category: research
 version: 0.1.0
 origin: user
 requires_env: []
-tools: [search_workspace, read_file, db, memory, session_search]
+tools: [knowledge, read_file, db, memory, session_search]
 keywords: [recall, knowledge, query, lookup, synthesis, citations]
 created_at: 2026-05-11
 ---
@@ -33,8 +33,8 @@ read-only over the org's existing record.
 Whenever Archive is asked something it can answer from the four layers
 it owns:
 
-1. `workspace` — canonical company documents (PDFs, markdowns, contracts,
-   meeting notes, scanned docs).
+1. `knowledge` — synthesized company knowledge pages compiled from
+   canonical documents, decisions, notes, and source material.
 2. `db` — structured records inside Archive's own skill tables
    (`decisions`, `post_mortems`, `doc_audits`).
 3. `memory` — org invariants in `USER.md` / `MEMORY.md` / `AGENT.md`.
@@ -46,10 +46,10 @@ Consult in order. Stop as soon as you have a confident answer, but
 never silently. The order matters because the layers have different
 trust profiles:
 
-- **Workspace** is the broadest — the raw artifacts the org has actually
-  produced. Start here. A snippet from a real document beats a memory of
-  what someone said about that document.
-- **DB** is canonical for decisions and process. If workspace and DB
+- **Knowledge** is the broadest — synthesized pages backed by the org's
+  actual source material. Start here. A cited knowledge page beats a memory
+  of what someone said about that page.
+- **DB** is canonical for decisions and process. If knowledge and DB
   agree, you have high confidence. If only DB has the fact, that's
   still strong — every entry was the closure of a `#done`.
 - **Memory** holds invariants the org has explicitly taught Archive
@@ -66,8 +66,8 @@ confidence in synthesis.
 A single synthesized paragraph (or short structured answer if the
 question demands one), **always with citations**:
 
-- File path + line range when citing from workspace (e.g.
-  `~/Documents/company-archive/policies/remote-work-v3.md:42-58`).
+- Knowledge page path when citing from workspace knowledge (e.g.
+  `knowledge/policies/remote-work-v3.md`).
 - Decision id when citing from the DB (`decision #42 (architecture,
   2026-02-15)`).
 - Memory entry tag when citing from memory.
@@ -75,7 +75,7 @@ question demands one), **always with citations**:
 
 If sources conflict, structure as:
 
-> **Workspace says** (handbook.pdf:p4): "remote work permitted up to
+> **Knowledge says** (policies/remote-work-v3.md): "remote work permitted up to
 > 4 days/week".
 > **DB says** (decision #18, growth, 2026-03-01): "remote work capped
 > at 3 days/week".
@@ -84,7 +84,7 @@ If sources conflict, structure as:
 
 If Archive genuinely doesn't know, say so plainly:
 
-> "Nothing in workspace, DB, or memory mentions Q3 hiring targets. The
+> "Nothing in knowledge pages, DB, or memory mentions Q3 hiring targets. The
 > last hiring-related decision is #29 (Q2 plan). Suggest asking Vera or
 > Ledger directly."
 
@@ -92,7 +92,7 @@ If Archive genuinely doesn't know, say so plainly:
 
 This skill has no DB of its own — it reads from sibling skills'
 state (`decisions`, `post_mortems`, `doc_audits`) and from Archive's
-workspace, memory, and sessions. No writes.
+knowledge pages, memory, and sessions. No writes.
 
 ## When NOT to use
 

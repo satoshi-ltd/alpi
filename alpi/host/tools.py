@@ -19,7 +19,7 @@ from alpi.host import server as host_server
 # metadata that only the UI consumes.
 _CATEGORIES: list[tuple[str, tuple[str, ...]]] = [
     ("Filesystem", ("read_file", "write_file", "edit_file", "read_image", "search")),
-    ("Workspace", ("search_workspace", "index_workspace", "learn_file")),
+    ("Knowledge", ("knowledge",)),
     ("Web", ("web_search", "web_fetch", "web_extract", "browser")),
     ("Memory", ("memory", "session_search", "session_read", "recall_sessions", "index_sessions")),
     ("Comms", ("email", "peer", "notify", "ask_user")),

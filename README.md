@@ -50,9 +50,10 @@ The current release ships the full local-to-network shape:
 - Textual TUI with streaming replies, slash commands, live tool cards,
   interrupt, session resume, model switching, and cost/token display.
 - Multimodal chat input: attach images, PDFs, and text/source files to a
-  turn (TUI `/attach`, desktop/mobile paperclip). Per-turn by default;
-  `learn_file` promotes an attachment into a durable workspace document,
-  indexed for semantic recall via `search_workspace` in later sessions.
+  turn (TUI `/attach`, desktop/mobile paperclip). Attachments are per-turn
+  by default. When the user explicitly asks Alpi to learn a source,
+  `knowledge(action="ingest")` synthesizes durable Markdown knowledge under
+  the workspace knowledge bundle instead of storing the raw document.
 - Semantic recall over past conversations: `recall_sessions` finds an old
   session by meaning (keyword `session_search` stays the quick first pass).
   Opt-in (`index_sessions`), profile-local, and forgettable — deleting a

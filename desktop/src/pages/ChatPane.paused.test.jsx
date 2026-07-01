@@ -55,7 +55,7 @@ describe("ChatPane — interleaved reasoning and tools", () => {
       assistant: "answer",
       reasoned_s: 5,
       tools: [
-        { name: "search_workspace", reasoning: "let me search", args: { query: "x" }, tool_id: "t1", ok: true, at: 5, duration_s: 1 },
+        { name: "knowledge", reasoning: "let me search", args: { action: "search", query: "x" }, tool_id: "t1", ok: true, at: 5, duration_s: 1 },
         { name: "read_file", reasoning: "now read the file", args: { path: "p" }, tool_id: "t2", ok: true, at: 8, duration_s: 1 },
       ],
     };
@@ -71,7 +71,7 @@ describe("ChatPane — interleaved reasoning and tools", () => {
       />,
     );
     const text = container.textContent;
-    const order = ["Thought for 5s", "search_workspace", "Thought for 2s", "read_file"].map((s) => text.indexOf(s));
+    const order = ["Thought for 5s", "knowledge", "Thought for 2s", "read_file"].map((s) => text.indexOf(s));
     expect(order.every((v, i) => v >= 0 && (i === 0 || v > order[i - 1]))).toBe(true);
   });
 

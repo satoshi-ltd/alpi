@@ -93,7 +93,7 @@ v0.x feature that depends on it. Nothing graduates because it is interesting.
 |---|---|---|
 | TERM.2 | Docker / SSH terminal backends — isolated or remote command execution for unattended profiles once local sandboxing is no longer enough. | 🔵 |
 | AUDIT.2 | Enterprise audit & accountability — actor attribution on the host plane, append-only / external audit sink, LLM-egress logging + provider policy, at-rest encryption, and RBAC/SSO. | 🔵 |
-| ORG.2.B/C | Workspace overlay (`cfg.workspace_path` as list) + first-class runtime org entity (`~/.alpi/orgs/<id>/`) with roles, event fan-out, and shared RAG. | ⏸ |
+| ORG.2.B/C | Workspace overlay (`cfg.workspace_path` as list) + first-class runtime org entity (`~/.alpi/orgs/<id>/`) with roles, event fan-out, and shared knowledge index. | ⏸ |
 | ALP.7 | Pinned shared memory per workgroup (hub-anchored `wiki.md`). | 🔵 |
 | ALP.8 | Workgroup capacity scheduling — optional profile capacity, queue/defer telemetry, or worker-pool assignment for high-throughput orgs. | 🔵 |
 | ALP.3+ | Multi-task workgroups — opt-in `multitask`, letter-prefixed task IDs, per-task roster/dispatch/budget. | 🔵 |
@@ -148,7 +148,7 @@ humans.
    primitive.
 2. **Layer C · First-class runtime org entity.**
    `~/.alpi/orgs/<id>/workspace/` with member profiles, per-member
-   roles, event fan-out across the org, and a shared RAG index.
+   roles, event fan-out across the org, and a shared knowledge index.
    Heaviest option — only land if the overlay also proves insufficient.
 
 Promotion condition for B: a user reports that the convention forces

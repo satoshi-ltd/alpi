@@ -30,7 +30,7 @@ Three options:
   credentials, MCP servers, sandbox posture, voice, peers,
   workgroups, disk cleanup, and the alpi daemon's lifecycle.
   `alpi setup → Cleanup` inspects the profile's heavy dirs (audio
-  cache, old sessions, schedule output) and the RAG store's SQLite
+  cache, old sessions, schedule output) and the knowledge index SQLite
   freelist (VACUUM-not-unlink), with one-shot confirmation per
   category. `alpi setup → Services` exposes two rows:
   **Daemon** (default profile only — install / uninstall / start /
@@ -110,11 +110,10 @@ prompt, so the model is never told to call a tool it cannot reach.
 
 Canonical names are the strings used at registration time —
 `write_file`, `edit_file`, `terminal`, `email`,
-`schedule`, `delegate`, `peer`, `index_workspace`, `search_workspace`,
-`alpi_knowledge`, `research`, `browser`, `workgroup`, etc. See
-`alpi/tools/__init__.py` for the full registry. Note: the alpi-docs
-tool registers as `alpi_knowledge`, not `knowledge` — writing
-`knowledge` in `deny` is a no-op.
+`schedule`, `delegate`, `peer`, `knowledge`, `alpi_knowledge`,
+`research`, `browser`, `workgroup`, etc. See `alpi/tools/__init__.py`
+for the full registry. Note: `knowledge` is the user's workspace OKF
+wiki; `alpi_knowledge` is the packaged docs tool for alpi itself.
 
 Useful for tightening a profile that is exposed to less-trusted input
 — e.g. a "librarian" profile that other peers reach via `link.ask`

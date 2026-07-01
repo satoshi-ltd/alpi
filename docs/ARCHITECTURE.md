@@ -198,8 +198,8 @@ that live at `{home}/skills/<category>/<name>/`.
 │                                 assets/ + secrets/ (0700) + state/ +
 │                                 .gitignore
 ├── sessions/<id>.json      compact turn-based session log (TUI / desktop / `--once`)
-├── rag/                    local RAG over the workspace (BA)
-│   └── store.sqlite        sqlite-vec index — workspace_files / _chunks / _vec
+├── knowledge.sqlite        sqlite-vec derived indexes for knowledge,
+│                            session recall, and workgroup recall
 ├── mentions/<sender>.json  per-sender @-mention threads (cap 20 turns), receiving side
 ├── run/                    background process registry, schedule pids
 ├── alp/                    ALP state — keypair, peer list, socket, pid
@@ -273,31 +273,45 @@ Denylist: `/etc/`, `/boot/`, `/sys/`, `/proc/`, `/usr/lib/systemd/`, `/System/`,
 
 ### Tool registry (`alpi/tools/__init__.py`)
 
-`register(cls)` adds a `Tool` subclass to the dict, `schemas()` emits the OpenAI function-calling shape, `execute(name, args)` runs by name with full error capture. The registry is assembled from the sibling tool modules in `alpi/tools/__init__.py`, including the Playwright-backed `browser` tool. `search_workspace` and `index_workspace` register first so they appear at the top of the schema list (semantic recall is the right default for "what does my file say about X" questions).
+`register(cls)` adds a `Tool` subclass to the dict, `schemas()` emits the OpenAI function-calling shape, `execute(name, args)` runs by name with full error capture. The registry is assembled from the sibling tool modules in `alpi/tools/__init__.py`, including the Playwright-backed `browser` tool. `knowledge` registers first so durable user/workspace recall has one canonical surface.
 
-### Local recall (`alpi/core/` + `alpi/tools/workspace.py`)
+### Knowledge recall (`alpi/core/` + `alpi/tools/knowledge_base.py`)
 
-Per-profile semantic search over the user's local files (BA). Two agent tools:
+Per-profile semantic search over synthesized user/workspace knowledge. The
+source of truth is Markdown under `<workspace>/knowledge/`; SQLite under
+`<home>/knowledge.sqlite` is only a rebuildable derived index. Raw source files
+and attachments are read only as inputs for synthesis; alpi does not copy them
+into a durable documents store.
 
-- `index_workspace(path?, glob?, force?, ocr?)` — walks the workspace root, chunks supported files (30 lines / stride 25), embeds in batches of 64, upserts into a sqlite-vec virtual table. Incremental by default: mtime-skip avoids re-embedding unchanged files, deleted files are purged from the index. A workspace-root change or an embedder/dim change auto-triggers a full rebuild without needing `force` (the stored `workspace_root` in `workspace_meta` is the trigger). `force=true` drops + rebuilds the schema and `VACUUM`s after the rebuild commits so the SQLite freelist doesn't leave the file inflated past the new index's real size.
-- `search_workspace(query, k=5)` — cosine similarity via sqlite-vec MATCH, returns `[{path, snippet, line_start, line_end, score}]` ordered ascending.
-- `learn_file(name?, source_path?, folder?, ocr?)` — promotes a file into durable workspace knowledge: copies it under `<workspace>/.alpi/documents/YYYY/MM/YYYY-MM-DD-<safe-name>` (never overwriting — `-2`/`-3` on collision; `folder` overrides the `YYYY/MM` subdir and is sanitised against `..`/absolute/traversal), appends a `manifest.jsonl` metadata line (`{path, original_name, mime, size, learned_at, source}` — metadata only, not authoritative), and indexes that one file via `index_files()`. Source resolution: explicit `source_path` → `name` matching a current-turn attachment → the single current-turn attachment → a clear "which file?" error. Validation reuses `attachments.validate` (allowlist + magic bytes + binary-as-text guard); images need `ocr=true`. Only fires on explicit user intent ("learn / remember / save this"). On index failure the copy is kept and `{ok:false, indexed:false}` returned.
+- `knowledge(action="search", query, k=5)` — hybrid sqlite-vec + FTS search over OKF pages, returning page-level results (`path`, `title`, `type`, `tags`, `snippet`, `score`, `links`). Use `alpi_knowledge`, not this tool, for questions about alpi itself.
+- `knowledge(action="ingest", source_path?|name?, topic?, apply=true, ocr=false)` — explicit learn path. Resolves an existing file or current-turn attachment, validates it with the same attachment allowlist/caps, extracts text (PDF/DOCX/EPUB/HTML/text, OCR for scanned PDF/images when requested), asks the LLM to synthesize durable Markdown pages, updates `index.md` and `log.md`, lints, and refreshes the derived OKF index. The raw file is not copied.
+- `knowledge(action="maintain", source_path?, topic?, apply=true, ocr=false)` — explicit LLM-wiki maintenance for reorganizing or updating pages.
+- `knowledge(action="lint", path?)` — validates required `index.md` / `log.md`, minimal YAML frontmatter (`type`, `title`, `tags`, `updated_at`, `sources`), relative Markdown links, and orphan pages.
+- `knowledge(action="index", path?, force?)` — chunks valid pages, writes `okf_*` tables, sqlite-vec rows, FTS rows, metadata, and outgoing links. Incremental by `mtime` + `size`; `force=true`, root drift, or embedder drift rebuilds only the OKF table family.
 
-`index_files(home, files, *, ocr)` is the shared per-file indexer that backs `learn_file`: same readers/chunker/embedder/tables as `index_workspace`, incremental (mtime/size skip), purges passed files that no longer exist, no global orphan sweep. `.alpi/documents/` is the **one `.alpi` subtree the index walk does NOT skip**, so a full `index_workspace` re-discovers learned docs and keeps them in sync instead of purging them as orphans.
-
-Supported formats: markdown / text / source / configs (stdlib read), HTML (`html2text`), PDF (`pypdf` for text-layer, RapidOCR fallback when `ocr=true` and pypdf extracts < 50 chars), DOCX (`python-docx`), EPUB (`ebooklib`), images (`PIL` + RapidOCR — only with `ocr=true`). OCR backend is `rapidocr-onnxruntime` (ONNX port of PaddleOCR, no torch dependency).
+Supported ingest formats: markdown / text / source / configs (stdlib read),
+HTML (`html2text`), PDF (`pypdf` for text-layer, RapidOCR fallback when
+`ocr=true` and pypdf extracts < 50 chars), DOCX (`python-docx`), EPUB
+(`ebooklib`), images (`PIL` + RapidOCR — only with `ocr=true`). OCR backend is
+`rapidocr-onnxruntime` (ONNX port of PaddleOCR, no torch dependency). The
+extractors and chunker live in `alpi/tools/workspace.py`; that module is a
+support library, not an agent-facing recall surface.
 
 **Shared store primitive (`alpi/core/store.py`)**. `open_store(home)` returns a `sqlite3.Connection` with the sqlite-vec extension loaded. Designed to host other shapes later (workgroup search, future entity memory) — they bring their own table schemas.
 
 **Embedder (`alpi/core/embed.py`)**. `Embedder` Protocol; default `FastembedEmbedder` wraps the ONNX export of `sentence-transformers/all-MiniLM-L6-v2` (384-dim, ~90 MB, no torch). Numerically equivalent to the original sentence-transformers checkpoint but ~10× lighter at runtime. Lazy-loaded under a `threading.Lock` so concurrent first-touch calls serialize on a single model instance instead of racing.
 
+The bundle uses minimal OKF-style YAML frontmatter, relative Markdown links,
+and required `index.md` / `log.md`. It is never auto-injected into the system
+prompt; access happens only through `knowledge` tool output.
+
 ### Session recall (`alpi/tools/recall.py`)
 
-Recall over **past conversations**, the conversational-memory peer of the workspace RAG, in three layers: lexical find (`session_search`, term counts over `sessions/*.json`), exact browse (`session_read`, no model call), and opt-in semantic search (`index_sessions` / `recall_sessions`) for fuzzy "when did we discuss X / what did we decide about Y".
+Recall over **past conversations**, the conversational-memory peer of knowledge recall, in three layers: lexical find (`session_search`, term counts over `sessions/*.json`), exact browse (`session_read`, no model call), and opt-in semantic search (`index_sessions` / `recall_sessions`) for fuzzy "when did we discuss X / what did we decide about Y".
 
 - `session_search(query)` — lexical first layer; returns the tail thread of matching sessions, active session excluded.
 - `session_read(session?, phrase?, start?)` — browse layer, no embedding/LLM call: lists recent sessions, or opens a windowed turn slice around an exact phrase or `start` index (paged). Pairs with `session_search` (find → open the window).
-- `index_sessions(force?)` — **opt-in** (sessions are never auto-indexed): walks `<home>/sessions/*.json`, builds a per-turn transcript (`user:`/`alpi:` lines), chunks + embeds with the same `core/embed.py` + sqlite-vec primitives as the workspace index, into a **separate table family** (`session_files` / `session_chunks` / `session_vec` / `session_meta`) in the same `rag/store.sqlite`. Incremental (mtime/size skip); the active session is excluded.
+- `index_sessions(force?)` — **opt-in** (sessions are never auto-indexed): walks `<home>/sessions/*.json`, builds a per-turn transcript (`user:`/`alpi:` lines), chunks + embeds with the same `core/embed.py` + sqlite-vec primitives as the knowledge index, into a **separate table family** (`session_files` / `session_chunks` / `session_vec` / `session_meta`) in the same `knowledge.sqlite`. Incremental (mtime/size skip); the active session is excluded.
 - `recall_sessions(query, k=5)` — cosine MATCH → `[{session_id, when, snippet, score}]`, active session excluded.
 
 **Forgettable.** Recall is a derived view, so forgetting is real: deleting a session (`host.sessions.delete` → `host/sessions.py::delete_session`) purges its rows via `recall.forget_session`, and `index_sessions` orphan-sweeps any tracked session whose file is gone. No auto per-turn injection — retrieval is explicit, like the workspace tools.
@@ -306,12 +320,12 @@ Recall over **past conversations**, the conversational-memory peer of the worksp
 
 The third retrieval surface on the same store: semantic search over **hub-owned** workgroup transcripts. Workgroups are hub-owned by design, so this is **profile-local and hub-only** — the hub decrypts its own transcript and indexes it; there is no cross-peer / federated search and no global "search all my peers' workgroups". Two tools:
 
-- `index_workgroups(workgroup_id?, force?)` — **opt-in**: decrypts each hub-owned transcript via `host/workgroup.py::decrypt_transcript` (key-history aware, so posts written before a rekey still index), groups consecutive posts into ~2 KB chunks tagged `[seq · ts · author]`, embeds, into a **separate table family** (`workgroup_files` / `workgroup_chunks` / `workgroup_vec` / `workgroup_meta`) in the same `rag/store.sqlite`. Posts that don't decrypt (rotated-out key, AEAD failure) are skipped. Incremental (transcript mtime/size); empty `workgroup_id` indexes all hub-owned workgroups on the profile.
+- `index_workgroups(workgroup_id?, force?)` — **opt-in**: decrypts each hub-owned transcript via `host/workgroup.py::decrypt_transcript` (key-history aware, so posts written before a rekey still index), groups consecutive posts into ~2 KB chunks tagged `[seq · ts · author]`, embeds, into a **separate table family** (`workgroup_files` / `workgroup_chunks` / `workgroup_vec` / `workgroup_meta`) in the same `knowledge.sqlite`. Posts that don't decrypt (rotated-out key, AEAD failure) are skipped. Incremental (transcript mtime/size); empty `workgroup_id` indexes all hub-owned workgroups on the profile.
 - `workgroup_search(workgroup_id, query, k=5)` — search is scoped to one workgroup (brute-force cosine over that workgroup's chunks, so per-workgroup ranking is exact rather than a filtered global KNN). Returns `[{workgroup_id, seq_start, seq_end, when, authors, snippet, score}]`; never returns group keys, ciphertext, or filesystem paths.
 
 **Forgettable.** Removing a workgroup purges its index in both delete paths — the host RPC (`host/workgroup_admin.py::_remove`) and the CLI (`alpi workgroup remove`) call `workgroup_search.forget_workgroup`; `index_workgroups` orphan-sweeps any tracked workgroup whose directory is gone. No auto-injection into workgroup turns. ALP encryption/transcript behaviour is untouched — this only reads through the existing decrypt path.
 
-**Asset prefetch (`service.py::_prefetch_assets`)**. Scheduled by `_main_all` at boot+600 s — deliberately past the client-reconnection rush (at boot+5 s the Chromium unzip + ONNX load starved small Docker hosts, which read as "the machine is blocked"). Gated by `service.prefetch` on the root profile: `auto` (default) fetches the fastembed weights only when some profile has a non-empty `rag/` index, and Chromium only when some profile leaves the `browser` tool un-denied; `all` forces both; `off` — the default under `ALPI_PLATFORM=docker` — skips prefetch entirely. Every asset still fetches lazily on first use, so `off` costs latency, never functionality. `ensure_weights_cached()` downloads through a throwaway embedder and releases the ONNX session instead of leaving ~150 MB resident in every daemon; the first real `embed()` lazy-loads from the disk cache. `ensure_chromium()` warns and stays retryable when the install fails, and after a successful install prunes stale `chromium*` builds (each playwright bump orphans ~520 MB; firefox/webkit are never touched, and nothing is pruned unless the wanted build exists on disk). RapidOCR remains first-use. Concurrent loaders keep the double-checked locking (`_load`, `_ocr_reader`, `ensure_chromium`).
+**Asset prefetch (`service.py::_prefetch_assets`)**. Scheduled by `_main_all` at boot+600 s — deliberately past the client-reconnection rush (at boot+5 s the Chromium unzip + ONNX load starved small Docker hosts, which read as "the machine is blocked"). Gated by `service.prefetch` on the root profile: `auto` (default) fetches the fastembed weights only when some profile has `knowledge.sqlite`, and Chromium only when some profile leaves the `browser` tool un-denied; `all` forces both; `off` — the default under `ALPI_PLATFORM=docker` — skips prefetch entirely. Every asset still fetches lazily on first use, so `off` costs latency, never functionality. `ensure_weights_cached()` downloads through a throwaway embedder and releases the ONNX session instead of leaving ~150 MB resident in every daemon; the first real `embed()` lazy-loads from the disk cache. `ensure_chromium()` warns and stays retryable when the install fails, and after a successful install prunes stale `chromium*` builds (each playwright bump orphans ~520 MB; firefox/webkit are never touched, and nothing is pruned unless the wanted build exists on disk). RapidOCR remains first-use. Concurrent loaders keep the double-checked locking (`_load`, `_ocr_reader`, `ensure_chromium`).
 
 ### Skills
 
@@ -349,11 +363,11 @@ Spawns a sub-agent with a read-only toolset (`web_search`, `web_fetch`, `web_ext
 
 ### Attachments (`alpi/attachments.py`)
 
-`host.chat.send` accepts `attachments: [{path, mime?, name?}]`. The engine validates them (`att.validate` — magic-byte sniff for image/PDF, NUL/control-ratio guard for binary-as-text, per-type size caps, allowlist: images `png`/`jpeg`/`webp`, PDF, and text/source incl. `py`/`js`/`ts`/`tsx`/`go`/`rs`/`sh`/`sql`) and turns them into OpenAI content-parts (`build_content_parts`): images → base64 `image_url` data parts, text/source → inline text parts, text-layer PDFs → extracted text, scanned PDFs → rendered page images for vision-capable models. A guidance text-part tells the model the files are inline so it doesn't reflexively `search_workspace`/`index_workspace` to "find" them.
+`host.chat.send` accepts `attachments: [{path, mime?, name?}]`. The engine validates them (`att.validate` — magic-byte sniff for image/PDF, NUL/control-ratio guard for binary-as-text, per-type size caps, allowlist: images `png`/`jpeg`/`webp`, PDF, and text/source incl. `py`/`js`/`ts`/`tsx`/`go`/`rs`/`sh`/`sql`) and turns them into OpenAI content-parts (`build_content_parts`): images → base64 `image_url` data parts, text/source → inline text parts, text-layer PDFs → extracted text, scanned PDFs → rendered page images for vision-capable models. A guidance text-part tells the model the files are inline so it doesn't reflexively call filesystem or knowledge tools to "find" them.
 
 **Per-turn only.** Bytes live only in the in-memory message. `session_metadata` is itself bytes- and **path-free** (`{name, mime, size}`), but the engine re-adds a **best-effort local `path`** to each persisted chat-turn attachment so clients can thumbnail history — the path may be unfetchable from another client (outside `host.attachments.fetch` roots) or after a staged file's TTL, so this is preview replay, not durable storage. The validated turn attachments (`{name, path, mime}`) are also published to a runtime-only `ContextVar` (`tools/_state.set_turn_attachments`) so a tool can resolve a turn's files. Remote clients (mobile, or desktop pointed at a remote daemon) can't hand the daemon a local path, so they upload bytes via the `host.attachments.stage` RPC (type-aware caps, content validated 1:1 with send) which writes to a TTL-swept temp dir and returns a daemon-side path.
 
-**Durable.** `learn_file` (see Local recall) is the bridge from per-turn to permanent: the **document** is copied into the user's **workspace** (`<workspace>/.alpi/documents/`, the source of truth), while the derived **RAG index** lives in the **profile home** (`rag/store.sqlite`). The `manifest.jsonl` beside the documents is metadata only — not authoritative; the files and the index are. There is **no auto-learn**: attachments stay one-turn unless the user explicitly asks to learn/remember/save one.
+**Durable.** `knowledge(action="ingest")` is the bridge from per-turn input to permanent knowledge. It reads an attachment or source file, synthesizes OKF Markdown under `<workspace>/knowledge/`, updates `index.md` / `log.md`, and refreshes the profile-local derived index in `knowledge.sqlite`. The raw source is not copied into a durable documents directory. There is **no auto-learn**: attachments stay one-turn unless the user explicitly asks to learn/remember/save/index/compile one.
 
 ### Vision (`alpi/tools/read_image.py`)
 

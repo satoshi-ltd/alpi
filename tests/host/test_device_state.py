@@ -637,8 +637,7 @@ async def test_profile_storage_lists_all_known_categories(
 ) -> None:
     home = _bootstrap(tmp_path / "h")
     # Seed a representative file under each storage scope so file_count > 0 and the row is non-trivial.
-    (home / "rag").mkdir(parents=True)
-    (home / "rag" / "store.sqlite").write_bytes(b"\x00" * 16)
+    (home / "knowledge.sqlite").write_bytes(b"\x00" * 16)
     (home / "outputs").mkdir(parents=True)
     (home / "outputs" / "outputs.jsonl").write_text("{}\n")
     (home / "logs").mkdir(parents=True)
@@ -662,12 +661,12 @@ async def test_profile_storage_lists_all_known_categories(
     keys = {row["key"] for row in resp["result"]["storage"]}
     # All non-secret on-disk shapes a user might want to inspect must appear in the report.
     assert keys == {
-        "sessions", "skills", "memories", "rag", "outputs",
+        "sessions", "skills", "memories", "knowledge", "outputs",
         "audio", "logs", "schedule", "workgroups", "mentions",
     }
     by_key = {row["key"]: row for row in resp["result"]["storage"]}
     # Spot-check that the new shapes actually report > 0 when seeded.
     assert by_key["skills"]["file_count"] > 0, "skills row should pick up SKILL.md"
     assert by_key["memories"]["file_count"] > 0, "memories row should pick up USER.md"
-    assert by_key["rag"]["file_count"] > 0, "rag row should pick up store.sqlite"
+    assert by_key["knowledge"]["file_count"] > 0, "knowledge row should pick up knowledge.sqlite"
     assert by_key["outputs"]["file_count"] > 0, "outputs row should pick up outputs.jsonl"

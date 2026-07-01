@@ -1,8 +1,9 @@
 #!/usr/bin/env python
-# Product acceptance for RAG.2 — "learn now, recall later". No LLM, no workgroup, no ALP.
+# Product acceptance for workspace knowledge recall. No LLM, no workgroup, no ALP.
 #   uv run python organizations/lab/test-knowledge-recall.py
 from __future__ import annotations
 
+import json
 import os
 import sys
 import tempfile
@@ -19,10 +20,23 @@ def _check(label: str, cond: bool) -> bool:
     return cond
 
 
+def _page(title: str, body: str, page_type: str = "concept") -> str:
+    return (
+        "---\n"
+        f"type: {page_type}\n"
+        f"title: {title}\n"
+        "tags: []\n"
+        "updated_at: \"2026-07-01T00:00:00Z\"\n"
+        "sources: []\n"
+        "---\n\n"
+        f"{body.strip()}\n"
+    )
+
+
 def main() -> int:
-    with tempfile.TemporaryDirectory(prefix="alpi-rag2-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="alpi-knowledge-") as tmp:
         tmp = Path(tmp)
-        home = tmp / "mind"          # the lab profile's home
+        home = tmp / "mind"
         workspace = tmp / "workspace"
         home.mkdir()
         workspace.mkdir()
@@ -30,56 +44,47 @@ def main() -> int:
         (home / "config.yaml").write_text(f"workspace: {workspace}\n")
 
         from alpi.core.store import store_path
-        from alpi.tools import _state
-        from alpi.tools import workspace as ws_mod
-        from alpi.tools.learn_file import LearnFile
+        from alpi.tools.knowledge_base import Knowledge
 
-        print(f"\n{BOLD}RAG.2 — learn now, recall later{RESET}")
+        print(f"\n{BOLD}Knowledge recall - index now, recall later{RESET}")
         print(f"{GREY}profile=mind  home={home}  workspace={workspace}{RESET}\n")
 
-        incoming = tmp / "downloads" / "deal-memo.md"
-        incoming.parent.mkdir(parents=True)
-        incoming.write_text(f"# Deal memo\n\n{UNIQUE}\n\nReview before the board call.\n")
-        _state.set_turn_attachments([
-            {"name": "deal-memo.md", "path": str(incoming), "mime": "text/markdown"},
-        ])
-        print(f"{GREY}before: attachment is visible only this turn — next session it's gone.{RESET}")
+        root = workspace / "knowledge"
+        (root / "concepts").mkdir(parents=True)
+        (root / "index.md").write_text(
+            _page("Knowledge Index", "# Knowledge Index\n\n- [Deal Memo](concepts/deal-memo.md)", "note")
+        )
+        (root / "log.md").write_text(_page("Knowledge Log", "# Knowledge Log", "note"))
+        (root / "concepts" / "deal-memo.md").write_text(
+            _page("Deal Memo", f"# Deal Memo\n\n{UNIQUE}\n\nReview before the board call.")
+        )
 
-        out = LearnFile().run()
-        if not out.ok:
-            print(f"{RED}learn_file failed: {out.error}{RESET}")
+        indexed = Knowledge().run(action="index")
+        if not indexed.ok:
+            print(f"{RED}knowledge index failed: {indexed.error}{RESET}")
             return 1
-        import json
-        body = json.loads(out.output)
-        print(f"{GREY}learn_file → {body}{RESET}\n")
+        print(f"{GREY}knowledge index -> {indexed.output}{RESET}\n")
+
+        result = Knowledge().run(action="search", query="what is the renewal threshold", k=5)
+        results = json.loads(result.output).get("results", []) if result.ok else []
 
         ok = True
-        ok &= _check("document copied into the workspace (source of truth)",
-                     (workspace / body.get("path", "x")).is_file())
-        ok &= _check("stored under .alpi/documents/",
-                     body.get("path", "").startswith(".alpi/documents/"))
-        ok &= _check("manifest.jsonl written",
-                     (workspace / ".alpi" / "documents" / "manifest.jsonl").is_file())
-        ok &= _check("RAG index lives in the profile (rag/store.sqlite)",
+        ok &= _check("knowledge page lives in the workspace",
+                     (workspace / "knowledge" / "concepts" / "deal-memo.md").is_file())
+        ok &= _check("derived index lives in the profile (knowledge.sqlite)",
                      store_path(home).is_file())
-
-        res = ws_mod.SearchWorkspace().run(query="what is the renewal threshold", k=5)
-        results = json.loads(res.output).get("results", []) if res.ok else []
-        ok &= _check("search_workspace finds the learned doc by meaning", bool(results))
-        ok &= _check("hit is the workspace document",
-                     any(".alpi/documents/" in r["path"] for r in results))
+        ok &= _check("knowledge search finds the page by meaning", bool(results))
         ok &= _check("snippet carries the real content (42 seats / BLUE HERON)",
                      any("42 seats" in r["snippet"] or "BLUE HERON" in r["snippet"] for r in results))
 
         if results:
             top = results[0]
             print(f"\n{GREY}recalled: {top['path']}{RESET}")
-            print(f"{GREY}  “{top['snippet'].strip().splitlines()[-1][:80]}”{RESET}")
+            print(f"{GREY}  \"{top['snippet'].strip().splitlines()[-1][:80]}\"{RESET}")
 
         print()
         if ok:
-            print(f"{GREEN}{BOLD}PASS{RESET} — learned a file, recalled it later by meaning; "
-                  f"document in workspace, index in profile.\n")
+            print(f"{GREEN}{BOLD}PASS{RESET} - indexed knowledge and recalled it later by meaning.\n")
             return 0
         print(f"{RED}{BOLD}FAIL{RESET}\n")
         return 1
