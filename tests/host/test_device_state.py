@@ -670,3 +670,102 @@ async def test_profile_storage_lists_all_known_categories(
     assert by_key["memories"]["file_count"] > 0, "memories row should pick up USER.md"
     assert by_key["knowledge"]["file_count"] > 0, "knowledge row should pick up knowledge.sqlite"
     assert by_key["outputs"]["file_count"] > 0, "outputs row should pick up outputs.jsonl"
+
+@pytest.fixture(autouse=True)
+def _fresh_storage_cache():
+    host_device_state._clear_storage_cache()
+    yield
+    host_device_state._clear_storage_cache()
+
+
+@pytest.mark.asyncio
+async def test_profile_storage_serves_cached_rows_within_ttl(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home = _bootstrap(tmp_path / "h")
+    monkeypatch.setattr(host_handlers, "_resolve_home", lambda p: home)
+    calls = {"n": 0}
+    real_rows = host_device_state._storage_rows
+
+    def counting(home_arg):
+        calls["n"] += 1
+        return real_rows(home_arg)
+
+    monkeypatch.setattr(host_device_state, "_storage_rows", counting)
+    srv = host_server.Server(home=home)
+    host_device_state.register(srv)
+
+    body = {"id": "s", "method": "host.profile.storage", "params": {"profile": "default"}}
+    first = await srv._dispatch(dict(body))
+    second = await srv._dispatch(dict(body))
+    assert calls["n"] == 1
+    assert first["result"] == second["result"]
+
+
+@pytest.mark.asyncio
+async def test_profile_storage_cache_expires_after_ttl(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home = _bootstrap(tmp_path / "h")
+    monkeypatch.setattr(host_handlers, "_resolve_home", lambda p: home)
+    monkeypatch.setattr(host_device_state, "_STORAGE_TTL_S", 0.0)
+    calls = {"n": 0}
+    real_rows = host_device_state._storage_rows
+
+    def counting(home_arg):
+        calls["n"] += 1
+        return real_rows(home_arg)
+
+    monkeypatch.setattr(host_device_state, "_storage_rows", counting)
+    srv = host_server.Server(home=home)
+    host_device_state.register(srv)
+
+    body = {"id": "s", "method": "host.profile.storage", "params": {"profile": "default"}}
+    await srv._dispatch(dict(body))
+    await srv._dispatch(dict(body))
+    assert calls["n"] == 2
+
+
+@pytest.mark.asyncio
+async def test_profile_storage_cached_rows_are_copies(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home = _bootstrap(tmp_path / "h")
+    monkeypatch.setattr(host_handlers, "_resolve_home", lambda p: home)
+    srv = host_server.Server(home=home)
+    host_device_state.register(srv)
+
+    body = {"id": "s", "method": "host.profile.storage", "params": {"profile": "default"}}
+    first = await srv._dispatch(dict(body))
+    first["result"]["storage"][0]["size_bytes"] = -999
+    second = await srv._dispatch(dict(body))
+    assert second["result"]["storage"][0]["size_bytes"] != -999
+
+
+@pytest.mark.asyncio
+async def test_ollama_models_runs_off_the_event_loop(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import asyncio as _asyncio
+    home = _bootstrap(tmp_path / "h")
+    monkeypatch.setattr(host_handlers, "_resolve_home", lambda p: home)
+    monkeypatch.setattr(
+        host_device_state, "_poll_ollama_models",
+        lambda h: {"models": [], "errors": []},
+    )
+    seen: list[str] = []
+    real = _asyncio.to_thread
+
+    async def spy(fn, *args, **kwargs):
+        seen.append(getattr(fn, "__name__", ""))
+        return await real(fn, *args, **kwargs)
+
+    monkeypatch.setattr(host_device_state.asyncio, "to_thread", spy)
+    srv = host_server.Server(home=home)
+    host_device_state.register(srv)
+    resp = await srv._dispatch({
+        "id": "om", "method": "host.providers.ollama_models",
+        "params": {"profile": "default"},
+    })
+    assert resp["result"] == {"models": [], "errors": []}
+    assert "<lambda>" in seen

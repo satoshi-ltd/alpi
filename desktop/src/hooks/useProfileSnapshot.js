@@ -15,21 +15,30 @@ const _REFRESH_KINDS = new Set([
   "workgroup_changed", "workgroup_meta", "workgroup_members",
 ]);
 
-export function useProfileSnapshot(connectionId, profile) {
+export function useProfileSnapshot(connectionId, profile, { sections = null } = {}) {
   const key = makeKey(connectionId, profile);
   const [snapshot, setSnapshot] = useState(() => _cache.get(key) ?? null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
+  const sectionsKey = Array.isArray(sections) ? sections.join(",") : "";
   const load = useCallback(() => {
     if (!profile) return Promise.resolve(null);
     setLoading(true);
     return invoke("settings_profile_snapshot", {
-      profile, ...(connectionId ? { connectionId } : {}),
+      profile,
+      ...(connectionId ? { connectionId } : {}),
+      ...(sectionsKey ? { sections: sectionsKey.split(",") } : {}),
     })
       .then((s) => {
-        if (s && typeof s === "object") { _cache.set(key, s); setSnapshot(s); }
-        setError(null);
+        if (s && typeof s === "object") {
+          _cache.set(key, s);
+          setSnapshot(s);
+          setError(null);
+        } else {
+          // A null snapshot must surface as an error — consumers gate their per-section fallback fetches on it.
+          setError("empty snapshot response");
+        }
         return s;
       })
       .catch((e) => {
@@ -39,11 +48,13 @@ export function useProfileSnapshot(connectionId, profile) {
         return null;
       })
       .finally(() => setLoading(false));
-  }, [connectionId, profile, key]);
+  }, [connectionId, profile, key, sectionsKey]);
 
   useEffect(() => {
     if (!profile) { setSnapshot(null); return undefined; }
     setSnapshot(_cache.get(key) ?? null);
+    // Stale errors from the previous key would break defer gating (consumers read `!snapshot && !error`).
+    setError(null);
     load();
     return undefined;
   }, [key, profile, load]);

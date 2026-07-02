@@ -88,6 +88,12 @@ async def _sessions_list(
     return {"sessions": sessions}
 
 
+def _coerce_count(value: Any) -> int | None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return max(0, int(value))
+
+
 async def _session_read(
     params: dict[str, Any], _server: host_server.Server,
 ) -> dict[str, Any]:
@@ -95,17 +101,33 @@ async def _session_read(
     session_id = str((params or {}).get("id") or "").strip()
     _check_id(session_id, "id")
     home = _resolve_home(profile)
-    try:
+    after_turn = _coerce_count((params or {}).get("after_turn"))
+    tail_turns = _coerce_count((params or {}).get("tail_turns"))
+
+    def _load() -> dict[str, Any]:
         data = host_sessions.read_session(home, session_id)
+        from alpi.session import turn_replayable
+        turns = data.get("turns") or []
+        total = len(turns)
+        offset = 0
+        if after_turn is not None:
+            offset = min(after_turn, total)
+        elif tail_turns is not None and tail_turns > 0:
+            offset = max(0, total - tail_turns)
+        turns = turns[offset:]
+        for t in turns:
+            if isinstance(t, dict):
+                t["unfinished"] = not turn_replayable(t)
+        data["turns"] = turns
+        # total_turns doubles as the capability marker: clients only trust partial semantics when it is present.
+        return {"session": data, "total_turns": total, "turns_offset": offset}
+
+    try:
+        return await asyncio.to_thread(_load)
     except FileNotFoundError as e:
         raise host_server.HandlerError(
             -32004, "not-found", data={"detail": str(e)},
         )
-    from alpi.session import turn_replayable
-    for t in data.get("turns") or []:
-        if isinstance(t, dict):
-            t["unfinished"] = not turn_replayable(t)
-    return {"session": data}
 
 
 _MAX_DELETE_IDS = 200

@@ -14,6 +14,13 @@ from alpi.host import handlers as data_handlers
 from alpi.host import sessions as data_sessions
 
 
+@pytest.fixture(autouse=True)
+def _fresh_row_cache():
+    data_sessions._clear_row_cache()
+    yield
+    data_sessions._clear_row_cache()
+
+
 def _seed_session(
     home: Path,
     sid: str,
@@ -510,3 +517,150 @@ async def test_profile_summaries_counts_large_sessions_without_full_parse(
     assert profile["latest_session"]["id"] == "huge"
     assert profile["latest_session"]["first_user"] == "summarize this large session"
     assert profile["latest_session"]["last_assistant"] == ""
+
+def test_list_sessions_serves_cached_rows_without_reparsing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _seed_session(tmp_path, "aaa", "first chat")
+    _seed_session(tmp_path, "bbb", "second chat")
+    first = data_sessions.list_sessions(tmp_path)
+
+    def no_parse(*_a, **_k):
+        raise AssertionError("unchanged session was re-parsed")
+
+    monkeypatch.setattr(data_sessions.json, "loads", no_parse)
+    second = data_sessions.list_sessions(tmp_path)
+    assert second == first
+
+
+def test_row_cache_invalidates_when_session_file_changes(tmp_path: Path) -> None:
+    p = _seed_session(tmp_path, "live", "hello")
+    row = next(r for r in data_sessions.list_sessions(tmp_path) if r["id"] == "live")
+    assert row["last_assistant"] == "ok"
+
+    payload = json.loads(p.read_text(encoding="utf-8"))
+    payload["turns"].append({"at": 1714000100.0, "user": "more", "assistant": "changed"})
+    p.write_text(json.dumps(payload), encoding="utf-8")
+
+    row = next(r for r in data_sessions.list_sessions(tmp_path) if r["id"] == "live")
+    assert row["last_assistant"] == "changed"
+    assert row["turn_count"] == 2
+
+
+def test_row_cache_returns_copies_not_aliases(tmp_path: Path) -> None:
+    _seed_session(tmp_path, "alias", "hello")
+    first = next(r for r in data_sessions.list_sessions(tmp_path) if r["id"] == "alias")
+    first["kind"] = "mutated"
+    second = next(r for r in data_sessions.list_sessions(tmp_path) if r["id"] == "alias")
+    assert second["kind"] == "chat"
+
+
+def _seed_large_empty_session(home: Path, sid: str = "bigempty") -> Path:
+    p = home / "sessions" / f"{sid}.json"
+    p.parent.mkdir(parents=True, exist_ok=True)
+    filler = "x" * (2 * 1024 * 1024 + 32)
+    p.write_text(
+        '{"id":"%s","started_at":1714000000.0,"filler":"%s","turns":[]}' % (sid, filler),
+        encoding="utf-8",
+    )
+    return p
+
+
+def test_large_default_kind_is_not_baked_into_the_cache(tmp_path: Path) -> None:
+    _seed_large_empty_session(tmp_path)
+    best = data_sessions.latest_chat_summary(tmp_path)
+    assert best is not None and best["kind"] == "chat"
+    row = next(r for r in data_sessions.list_sessions(tmp_path) if r["id"] == "bigempty")
+    assert row["kind"] == "empty"
+    best_again = data_sessions.latest_chat_summary(tmp_path)
+    assert best_again is not None and best_again["kind"] == "chat"
+
+
+def _seed_multi_turn(home: Path, sid: str = "multi3") -> Path:
+    p = home / "sessions" / f"{sid}.json"
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps({
+        "id": sid,
+        "started_at": 1.0,
+        "turns": [
+            {"at": 1.0, "user": "one", "assistant": "a1"},
+            {"at": 2.0, "user": "two", "assistant": "a2"},
+            {"at": 3.0, "user": "three", "assistant": "a3"},
+        ],
+    }), encoding="utf-8")
+    return p
+
+
+async def _read_rpc(home: Path, monkeypatch, params: dict) -> dict:
+    srv = host_server.Server(home=home)
+    data_handlers.register(srv)
+    monkeypatch.setattr(data_handlers, "_resolve_home", lambda p: home)
+    resp = await srv._dispatch({
+        "id": "r", "method": "host.session.read",
+        "params": {"profile": "default", **params},
+    })
+    return resp["result"]
+
+
+@pytest.mark.asyncio
+async def test_session_read_full_carries_total_turns_marker(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    _seed_multi_turn(tmp_path)
+    result = await _read_rpc(tmp_path, monkeypatch, {"id": "multi3"})
+    assert result["total_turns"] == 3
+    assert result["turns_offset"] == 0
+    assert [t["user"] for t in result["session"]["turns"]] == ["one", "two", "three"]
+
+
+@pytest.mark.asyncio
+async def test_session_read_after_turn_returns_only_new_turns(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    _seed_multi_turn(tmp_path)
+    result = await _read_rpc(tmp_path, monkeypatch, {"id": "multi3", "after_turn": 1})
+    assert result["total_turns"] == 3
+    assert result["turns_offset"] == 1
+    assert [t["user"] for t in result["session"]["turns"]] == ["two", "three"]
+    assert all("unfinished" in t for t in result["session"]["turns"])
+
+
+@pytest.mark.asyncio
+async def test_session_read_after_turn_beyond_total_returns_empty(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    _seed_multi_turn(tmp_path)
+    result = await _read_rpc(tmp_path, monkeypatch, {"id": "multi3", "after_turn": 99})
+    assert result["total_turns"] == 3
+    assert result["turns_offset"] == 3
+    assert result["session"]["turns"] == []
+
+
+@pytest.mark.asyncio
+async def test_session_read_tail_turns_returns_last_n(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    _seed_multi_turn(tmp_path)
+    result = await _read_rpc(tmp_path, monkeypatch, {"id": "multi3", "tail_turns": 1})
+    assert result["total_turns"] == 3
+    assert result["turns_offset"] == 2
+    assert [t["user"] for t in result["session"]["turns"]] == ["three"]
+
+
+@pytest.mark.asyncio
+async def test_session_read_runs_off_the_event_loop(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    import asyncio as _asyncio
+    _seed_multi_turn(tmp_path)
+    seen: list[str] = []
+    real = _asyncio.to_thread
+
+    async def spy(fn, *args, **kwargs):
+        seen.append(getattr(fn, "__name__", ""))
+        return await real(fn, *args, **kwargs)
+
+    monkeypatch.setattr(data_handlers.asyncio, "to_thread", spy)
+    result = await _read_rpc(tmp_path, monkeypatch, {"id": "multi3"})
+    assert result["total_turns"] == 3
+    assert "_load" in seen

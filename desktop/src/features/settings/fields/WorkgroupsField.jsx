@@ -11,6 +11,7 @@ export function WorkgroupsField({
   prefetched,
   onSelectWorkgroup,
   onLoadingChange = null,
+  defer = false,
 }) {
   const prefetchedMode = prefetched !== undefined;
   const [groups, setGroups] = useState(prefetchedMode ? prefetched : []);
@@ -25,6 +26,7 @@ export function WorkgroupsField({
     setGroups([]);
     setLoading(true);
     onLoadingChange?.(true);
+    if (defer) return undefined;
     invoke("workgroups", {
       profile: profile.name,
       ...(connectionId ? { connectionId } : {}),
@@ -41,7 +43,7 @@ export function WorkgroupsField({
       cancelled = true;
       onLoadingChange?.(false);
     };
-  }, [profile.name, connectionId, prefetchedMode, prefetched, onLoadingChange]);
+  }, [profile.name, connectionId, prefetchedMode, prefetched, defer, onLoadingChange]);
 
   if (groups.length === 0) {
     return <span className={styles.muted}>{loading ? "loading…" : "none"}</span>;

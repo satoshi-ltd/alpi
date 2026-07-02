@@ -104,3 +104,22 @@ def test_compute_workgroup_daily_reads_transcript(tmp_path: Path) -> None:
     assert out[-1]["tokIn"] == 700
     assert out[-1]["tokOut"] == 300
     assert out[-1]["cost"] == 0.05
+
+@pytest.mark.asyncio
+async def test_usage_daily_prices_off_the_event_loop(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import asyncio as _asyncio
+    ledger.record(tmp_path, usd=0.05, tokens=100, tokens_in=80, tokens_out=20)
+    monkeypatch.setattr(usage.home_mod, "home_for", lambda p: tmp_path)
+    seen: list[str] = []
+    real = _asyncio.to_thread
+
+    async def spy(fn, *args, **kwargs):
+        seen.append(getattr(fn, "__name__", ""))
+        return await real(fn, *args, **kwargs)
+
+    monkeypatch.setattr(usage.asyncio, "to_thread", spy)
+    resp = await usage._usage_daily({"profile": "default"}, None)
+    assert "days" in resp and "priceOut" in resp
+    assert "_daily_payload" in seen

@@ -2,10 +2,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { renderHook, waitFor } from "@testing-library/react";
 import { invoke } from "@tauri-apps/api/core";
 
-import { useContextWindow } from "./useContextWindow.js";
+import { useContextWindow, _clearCtxWindowCache } from "./useContextWindow.js";
 
 beforeEach(() => {
   vi.resetAllMocks();
+  _clearCtxWindowCache();
 });
 
 describe("useContextWindow", () => {
@@ -55,5 +56,26 @@ describe("useContextWindow", () => {
       model: "x/y",
       connectionId: "B",
     });
+  });
+
+  it("caches the resolved window per (connection, profile, model) and skips the repeat RPC", async () => {
+    invoke.mockResolvedValue(128000);
+    const first = renderHook(() => useContextWindow("forge", "x/y", "c1"));
+    await waitFor(() => expect(first.result.current).toBe(128000));
+    first.unmount();
+
+    const second = renderHook(() => useContextWindow("forge", "x/y", "c1"));
+    expect(second.result.current).toBe(128000);
+    expect(invoke).toHaveBeenCalledTimes(1);
+  });
+
+  it("a different model misses the cache and resolves independently", async () => {
+    invoke.mockResolvedValueOnce(128000).mockResolvedValueOnce(32000);
+    const first = renderHook(() => useContextWindow("forge", "m1", "c1"));
+    await waitFor(() => expect(first.result.current).toBe(128000));
+    first.unmount();
+    const second = renderHook(() => useContextWindow("forge", "m2", "c1"));
+    await waitFor(() => expect(second.result.current).toBe(32000));
+    expect(invoke).toHaveBeenCalledTimes(2);
   });
 });

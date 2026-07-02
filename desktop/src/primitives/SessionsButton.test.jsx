@@ -1,17 +1,20 @@
-import { render, screen, waitFor, act } from "@testing-library/react";
+import { render, screen, waitFor, act, fireEvent } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const invokeMock = vi.fn();
 vi.mock("@tauri-apps/api/core", () => ({ invoke: (...a) => invokeMock(...a) }));
 
-import SessionsButton from "./SessionsButton.jsx";
+import SessionsButton, { invalidateSessionsButtonCache } from "./SessionsButton.jsx";
 
 globalThis.ResizeObserver ??= class { observe() {} unobserve() {} disconnect() {} };
 
 const sessA = [{ id: "a1", kind: "chat", first_user: "hello from A", updated_at: 1780000000 }];
 const sessB = [{ id: "b1", kind: "chat", first_user: "hello from B", updated_at: 1780000000 }];
 
-beforeEach(() => invokeMock.mockReset());
+beforeEach(() => {
+  invokeMock.mockReset();
+  invalidateSessionsButtonCache();
+});
 
 describe("SessionsButton — profile switch", () => {
   it("hides the previous profile's sessions until the new profile's fetch resolves", async () => {
@@ -26,5 +29,33 @@ describe("SessionsButton — profile switch", () => {
 
     await act(async () => { resolveB(sessB); });
     await waitFor(() => expect(screen.getByText("Sessions")).toBeTruthy());
+  });
+
+  it("paints a revisited profile's cached list instantly while revalidating", async () => {
+    invokeMock.mockResolvedValueOnce(sessA);
+    const { rerender } = render(<SessionsButton profile="A" />);
+    await waitFor(() => expect(screen.getByText("Sessions")).toBeTruthy());
+
+    invokeMock.mockImplementationOnce(() => new Promise(() => {}));
+    rerender(<SessionsButton profile="B" />);
+    expect(screen.queryByText("Sessions")).toBeNull();
+
+    invokeMock.mockImplementationOnce(() => new Promise(() => {}));
+    rerender(<SessionsButton profile="A" />);
+    expect(screen.getByText("Sessions")).toBeTruthy();
+  });
+
+  it("does not refetch when the popover closes", async () => {
+    invokeMock.mockResolvedValue(sessA);
+    render(<SessionsButton profile="A" />);
+    await waitFor(() => expect(screen.getByText("Sessions")).toBeTruthy());
+    const callsAfterMount = invokeMock.mock.calls.length;
+
+    fireEvent.click(screen.getByText("Sessions"));
+    await waitFor(() => expect(invokeMock.mock.calls.length).toBe(callsAfterMount + 1));
+
+    fireEvent.click(screen.getByText("Sessions"));
+    await act(async () => { await Promise.resolve(); });
+    expect(invokeMock.mock.calls.length).toBe(callsAfterMount + 1);
   });
 });

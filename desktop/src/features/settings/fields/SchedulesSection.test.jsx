@@ -237,6 +237,39 @@ describe("SchedulesSection", () => {
     expect(invokeMock).not.toHaveBeenCalled();
   });
 
+  it("defers the standalone fetch while the snapshot is pending, then renders prefetched jobs", async () => {
+    const { rerender } = render(
+      <SchedulesSection profile={{ name: "work" }} connectionId="casa" defer />,
+    );
+    expect(screen.getByText("loading…")).toBeInTheDocument();
+    await act(async () => { await Promise.resolve(); });
+    expect(invokeMock).not.toHaveBeenCalled();
+
+    rerender(
+      <SchedulesSection
+        profile={{ name: "work" }}
+        connectionId="casa"
+        prefetched={[{ id: "j1", title: "From snapshot", prompt: "", paused: false, cron: "* * * * *" }]}
+      />,
+    );
+    expect(await screen.findByText("From snapshot")).toBeInTheDocument();
+    expect(invokeMock.mock.calls.some(([cmd]) => cmd === "schedules")).toBe(false);
+  });
+
+  it("falls back to its own fetch when defer lifts without prefetched data (snapshot failed)", async () => {
+    invokeMock.mockResolvedValueOnce([
+      { id: "j1", title: "Fallback", prompt: "", paused: false, cron: "* * * * *" },
+    ]);
+    const { rerender } = render(
+      <SchedulesSection profile={{ name: "work" }} connectionId="casa" defer />,
+    );
+    await act(async () => { await Promise.resolve(); });
+    expect(invokeMock).not.toHaveBeenCalled();
+
+    rerender(<SchedulesSection profile={{ name: "work" }} connectionId="casa" />);
+    expect(await screen.findByText("Fallback")).toBeInTheDocument();
+  });
+
   it("clears the stale list while loading the new connection so no A-job is interactive against B", async () => {
     let resolveB;
     const deferredB = new Promise((res) => { resolveB = res; });

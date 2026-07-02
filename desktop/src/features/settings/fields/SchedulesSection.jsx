@@ -27,6 +27,7 @@ export function SchedulesSection({
   prefetched,
   onSnapshotRefresh = null,
   onLoadingChange,
+  defer = false,
 }) {
   const prefetchedMode = prefetched !== undefined;
   const key = cacheKey(connectionId, profile.name);
@@ -83,15 +84,19 @@ export function SchedulesSection({
     setJobs(_jobsCache.get(key) ?? null);
     setLoadError(null);
     setBusyId(null);
+    if (defer) {
+      setLoading(true);
+      return;
+    }
     load();
-  }, [profile.name, connectionId, key, prefetchedMode, prefetched]);
+  }, [profile.name, connectionId, key, prefetchedMode, prefetched, defer]);
 
   useEffect(() => {
     onLoadingChange?.(loading);
   }, [loading, onLoadingChange]);
 
   useEffect(() => {
-    if (prefetchedMode) return undefined;
+    if (prefetchedMode || defer) return undefined;
     return subscribeDaemonEvent((event) => {
       const payload = event?.payload ?? {};
       const frame = payload.frame ?? payload;
@@ -100,7 +105,7 @@ export function SchedulesSection({
       if (connectionId && payload.connection_id && payload.connection_id !== connectionId) return;
       load();
     });
-  }, [profile.name, connectionId, prefetchedMode]);
+  }, [profile.name, connectionId, prefetchedMode, defer]);
 
   function pinnedTarget() {
     return {

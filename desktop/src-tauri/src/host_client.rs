@@ -7,7 +7,7 @@ use std::os::unix::net::UnixStream;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex, OnceLock};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -33,6 +33,8 @@ const PROBE_RETRY_DELAY_MS: u64 = 350;
 const STICKY_OFFLINE_THRESHOLD: u32 = 2;
 // Bound concurrent request/response RPCs per remote connection so a Settings fan-out (or 10 remotes) can't open a burst of sockets at once. Local socket and streams are uncapped.
 const MAX_INFLIGHT_PER_REMOTE: usize = 4;
+// Must stay under the daemon's websockets ping_interval (20s): an idle pooled socket can't answer pings, so reuse-or-drop before one goes unanswered long enough to be closed.
+const POOL_IDLE_TTL_SECS: u64 = 12;
 const CONNECTIONS_FILE: &str = "connections.json";
 pub const LOCAL_ID: &str = "local";
 
@@ -591,6 +593,7 @@ pub fn forget_connection(id: String) -> Result<(), String> {
     if let Ok(mut map) = status_map().lock() {
         map.remove(&id);
     }
+    purge_ws_pool(&id);
     Ok(())
 }
 
@@ -632,6 +635,7 @@ pub fn add_remote_connection(
     });
     state.active_id = id.clone();
     save_connections(&state)?;
+    purge_ws_pool(&id);
     Ok(id)
 }
 
@@ -652,6 +656,7 @@ pub fn mark_connection_revoked(id: &str) {
         }
         let _ = save_connections(&state);
     }
+    purge_ws_pool(id);
 }
 
 fn active_id_cache() -> &'static Mutex<Option<String>> {
@@ -747,6 +752,77 @@ fn acquire_remote_slot(connection_id: &str) -> RemoteSlot {
     RemoteSlot(Arc::clone(&gate))
 }
 
+type PoolEndpoint = (String, u16, String);
+
+struct PoolEntry<T> {
+    conn: T,
+    endpoint: PoolEndpoint,
+    idle_since: Instant,
+}
+
+struct WsPool<T> {
+    max_per_key: usize,
+    idle_ttl: Duration,
+    entries: HashMap<String, Vec<PoolEntry<T>>>,
+}
+
+impl<T> WsPool<T> {
+    fn new(max_per_key: usize, idle_ttl: Duration) -> Self {
+        Self {
+            max_per_key,
+            idle_ttl,
+            entries: HashMap::new(),
+        }
+    }
+
+    // LIFO: the most-recently-idle socket is the least likely to carry an unanswered daemon ping.
+    fn checkout(&mut self, key: &str, endpoint: &PoolEndpoint, now: Instant) -> Option<T> {
+        let list = self.entries.get_mut(key)?;
+        while let Some(entry) = list.pop() {
+            if now.duration_since(entry.idle_since) < self.idle_ttl && &entry.endpoint == endpoint {
+                return Some(entry.conn);
+            }
+        }
+        None
+    }
+
+    fn checkin(&mut self, key: &str, endpoint: PoolEndpoint, conn: T, now: Instant) {
+        let list = self.entries.entry(key.to_string()).or_default();
+        if list.len() < self.max_per_key {
+            list.push(PoolEntry {
+                conn,
+                endpoint,
+                idle_since: now,
+            });
+        }
+    }
+
+    fn purge(&mut self, key: &str) {
+        self.entries.remove(key);
+    }
+}
+
+fn ws_pool() -> &'static Mutex<WsPool<WsClient>> {
+    static POOL: OnceLock<Mutex<WsPool<WsClient>>> = OnceLock::new();
+    POOL.get_or_init(|| {
+        Mutex::new(WsPool::new(
+            MAX_INFLIGHT_PER_REMOTE,
+            Duration::from_secs(POOL_IDLE_TTL_SECS),
+        ))
+    })
+}
+
+pub fn purge_ws_pool(connection_id: &str) {
+    if let Ok(mut pool) = ws_pool().lock() {
+        pool.purge(connection_id);
+    }
+}
+
+// Only an "alp <code>: …" RPC error proves clean framing; any transport/decode error may leave a half-read frame on the socket.
+fn reusable_after_error(err: &str) -> bool {
+    err.starts_with("alp ")
+}
+
 pub fn call(method: &str, params: Value) -> Result<Value, String> {
     call_conn(&active_connection(), method, params)
 }
@@ -771,6 +847,7 @@ fn call_conn(conn: &HostConnection, method: &str, params: Value) -> Result<Value
         } => {
             let _slot = acquire_remote_slot(&id);
             call_remote_inner(
+                &id,
                 host,
                 *port,
                 token,
@@ -972,6 +1049,7 @@ where
 }
 
 fn call_remote_inner(
+    connection_id: &str,
     host: &str,
     port: u16,
     token: &str,
@@ -979,7 +1057,7 @@ fn call_remote_inner(
     params: Value,
     timeout: Duration,
 ) -> Result<Value, String> {
-    retry_remote(|| call_remote_once(host, port, token, method, params.clone(), timeout))
+    retry_remote(|| call_remote_once(connection_id, host, port, token, method, params.clone(), timeout))
 }
 
 fn retry_remote<F>(mut attempt: F) -> Result<Value, String>
@@ -1005,6 +1083,7 @@ fn should_retry_remote_ws(err: &str) -> bool {
 }
 
 fn call_remote_once(
+    connection_id: &str,
     host: &str,
     port: u16,
     token: &str,
@@ -1012,21 +1091,62 @@ fn call_remote_once(
     params: Value,
     timeout: Duration,
 ) -> Result<Value, String> {
+    let endpoint: PoolEndpoint = (host.to_string(), port, token.to_string());
+    let request = |ws: &mut WsClient| {
+        let id = next_request_id();
+        ws.request(
+            &id,
+            &json!({
+                "id": id,
+                "method": method,
+                "params": with_auth(params.clone(), token),
+            }),
+        )
+    };
+    let pooled = ws_pool()
+        .lock()
+        .ok()
+        .and_then(|mut pool| pool.checkout(connection_id, &endpoint, Instant::now()));
+    if let Some(mut ws) = pooled {
+        if ws.set_timeouts(timeout).is_ok() {
+            let result = request(&mut ws);
+            match &result {
+                Ok(_) => {
+                    pool_checkin(connection_id, endpoint, ws);
+                    return result;
+                }
+                Err(e) if reusable_after_error(e) => {
+                    pool_checkin(connection_id, endpoint, ws);
+                    return result;
+                }
+                // A dead pooled socket means the daemon likely restarted: drop the whole pool and fall through to a fresh connect within this same attempt.
+                Err(_) => purge_ws_pool(connection_id),
+            }
+        } else {
+            purge_ws_pool(connection_id);
+        }
+    }
     let mut ws = WsClient::connect(
         host,
         port,
         Duration::from_secs(WS_CONNECT_TIMEOUT_SECS),
         timeout,
     )?;
-    let id = next_request_id();
-    ws.request(
-        &id,
-        &json!({
-            "id": id,
-            "method": method,
-            "params": with_auth(params, token),
-        }),
-    )
+    let result = request(&mut ws);
+    let healthy = match &result {
+        Ok(_) => true,
+        Err(e) => reusable_after_error(e),
+    };
+    if healthy {
+        pool_checkin(connection_id, endpoint, ws);
+    }
+    result
+}
+
+fn pool_checkin(connection_id: &str, endpoint: PoolEndpoint, ws: WsClient) {
+    if let Ok(mut pool) = ws_pool().lock() {
+        pool.checkin(connection_id, endpoint, ws, Instant::now());
+    }
 }
 
 fn call_stream_remote<F>(
@@ -1212,6 +1332,15 @@ impl WsClient {
         Ok(Self { stream })
     }
 
+    fn set_timeouts(&mut self, timeout: Duration) -> Result<(), String> {
+        self.stream
+            .set_read_timeout(Some(timeout))
+            .map_err(|e| format!("set read timeout: {e}"))?;
+        self.stream
+            .set_write_timeout(Some(timeout))
+            .map_err(|e| format!("set write timeout: {e}"))
+    }
+
     fn request(&mut self, id: &str, value: &Value) -> Result<Value, String> {
         self.send_json(value)?;
         loop {
@@ -1345,6 +1474,7 @@ pub fn probe_connection(conn: &HostConnection) {
         HostConnection::Remote {
             host, port, token, ..
         } => call_remote_once(
+            &id,
             host,
             *port,
             token,
@@ -1377,6 +1507,7 @@ pub fn probe_connection(conn: &HostConnection) {
                 HostConnection::Remote {
                     host, port, token, ..
                 } => call_remote_once(
+                    &id,
                     host,
                     *port,
                     token,
@@ -1779,4 +1910,82 @@ mod tests {
         assert_eq!(*remote_gate(id).inflight.lock().unwrap(), 0);
     }
 
+    fn ep(token: &str) -> PoolEndpoint {
+        ("10.0.0.2".to_string(), 49200, token.to_string())
+    }
+
+    #[test]
+    fn ws_pool_roundtrips_a_connection_for_the_same_endpoint() {
+        let mut pool = WsPool::<u32>::new(4, Duration::from_secs(12));
+        let now = Instant::now();
+        assert!(pool.checkout("casa", &ep("t"), now).is_none());
+        pool.checkin("casa", ep("t"), 7, now);
+        assert_eq!(pool.checkout("casa", &ep("t"), now), Some(7));
+        assert!(pool.checkout("casa", &ep("t"), now).is_none());
+    }
+
+    #[test]
+    fn ws_pool_discards_entries_older_than_the_idle_ttl() {
+        let mut pool = WsPool::<u32>::new(4, Duration::from_secs(12));
+        let created = Instant::now();
+        pool.checkin("casa", ep("t"), 7, created);
+        let later = created + Duration::from_secs(13);
+        assert!(pool.checkout("casa", &ep("t"), later).is_none());
+    }
+
+    #[test]
+    fn ws_pool_discards_entries_whose_endpoint_changed() {
+        let mut pool = WsPool::<u32>::new(4, Duration::from_secs(12));
+        let now = Instant::now();
+        pool.checkin("casa", ep("old-token"), 7, now);
+        assert!(pool.checkout("casa", &ep("new-token"), now).is_none());
+        assert!(
+            pool.checkout("casa", &ep("old-token"), now).is_none(),
+            "mismatched entries must be dropped, not kept behind the new ones",
+        );
+    }
+
+    #[test]
+    fn ws_pool_caps_idle_connections_per_key() {
+        let mut pool = WsPool::<u32>::new(2, Duration::from_secs(12));
+        let now = Instant::now();
+        pool.checkin("casa", ep("t"), 1, now);
+        pool.checkin("casa", ep("t"), 2, now);
+        pool.checkin("casa", ep("t"), 3, now);
+        assert!(pool.checkout("casa", &ep("t"), now).is_some());
+        assert!(pool.checkout("casa", &ep("t"), now).is_some());
+        assert!(pool.checkout("casa", &ep("t"), now).is_none());
+    }
+
+    #[test]
+    fn ws_pool_checkout_is_lifo() {
+        let mut pool = WsPool::<u32>::new(4, Duration::from_secs(12));
+        let now = Instant::now();
+        pool.checkin("casa", ep("t"), 1, now);
+        pool.checkin("casa", ep("t"), 2, now + Duration::from_secs(1));
+        assert_eq!(pool.checkout("casa", &ep("t"), now + Duration::from_secs(2)), Some(2));
+    }
+
+    #[test]
+    fn ws_pool_purge_drops_every_entry_for_the_key() {
+        let mut pool = WsPool::<u32>::new(4, Duration::from_secs(12));
+        let now = Instant::now();
+        pool.checkin("casa", ep("t"), 1, now);
+        pool.checkin("casa", ep("t"), 2, now);
+        pool.checkin("mirai", ep("t"), 3, now);
+        pool.purge("casa");
+        assert!(pool.checkout("casa", &ep("t"), now).is_none());
+        assert_eq!(pool.checkout("mirai", &ep("t"), now), Some(3));
+    }
+
+    #[test]
+    fn only_clean_rpc_errors_keep_a_socket_reusable() {
+        assert!(reusable_after_error("alp -32004: not-found — no session"));
+        assert!(reusable_after_error("alp -32001: forbidden"));
+        assert!(!reusable_after_error("websocket read: Resource temporarily unavailable"));
+        assert!(!reusable_after_error("websocket closed by daemon"));
+        assert!(!reusable_after_error("connect ws://10.0.0.2:49200: refused"));
+        assert!(!reusable_after_error("decode: expected value at line 1"));
+        assert!(!reusable_after_error("daemon returned neither result nor error"));
+    }
 }

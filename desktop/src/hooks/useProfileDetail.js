@@ -74,14 +74,14 @@ function ensureEventListener() {
   });
 }
 
-// `connectionId` and `name` may be null/undefined — the hook stays idle.
-export function useProfileDetail(connectionId, name, { refreshOnMount = false, prefetched } = {}) {
+// `connectionId` and `name` may be null/undefined — the hook stays idle. `defer` holds the standalone fetch while an aggregate snapshot is still pending.
+export function useProfileDetail(connectionId, name, { refreshOnMount = false, prefetched, defer = false } = {}) {
   const [, setTick] = useState(0);
   const [loading, setLoading] = useState(false);
   const prefetchedMode = prefetched !== undefined;
 
   useEffect(() => {
-    if (prefetchedMode || !name) return undefined;
+    if (prefetchedMode || !name || defer) return undefined;
     ensureEventListener();
     let cancelled = false;
     setLoading(true);
@@ -99,7 +99,7 @@ export function useProfileDetail(connectionId, name, { refreshOnMount = false, p
       cancelled = true;
       _subs.delete(fn);
     };
-  }, [connectionId, name, refreshOnMount, prefetchedMode]);
+  }, [connectionId, name, refreshOnMount, prefetchedMode, defer]);
 
   const refresh = useCallback(() => {
     if (!name) return Promise.resolve(null);

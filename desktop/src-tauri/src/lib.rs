@@ -187,9 +187,13 @@ async fn profile_detail(
 async fn settings_profile_snapshot(
     profile: String,
     connection_id: Option<String>,
+    sections: Option<Vec<String>>,
 ) -> Result<serde_json::Value, String> {
     off_main(move || {
-        let params = serde_json::json!({ "profile": profile });
+        let mut params = serde_json::json!({ "profile": profile });
+        if let Some(sections) = sections {
+            params["sections"] = serde_json::json!(sections);
+        }
         match connection_id {
             Some(cid) => host_client::call_for(&cid, "host.settings.profile_snapshot", params),
             None => host_client::call("host.settings.profile_snapshot", params),
@@ -488,13 +492,18 @@ fn sessions_via_alp(profile: &str, limit: Option<usize>) -> Vec<SessionEntry> {
 }
 
 #[tauri::command]
-async fn session_detail(profile: String, id: String) -> Result<serde_json::Value, String> {
+async fn session_detail(
+    profile: String,
+    id: String,
+    after_turn: Option<u64>,
+) -> Result<serde_json::Value, String> {
     off_main(move || {
-        let result = host_client::call(
-            "host.session.read",
-            serde_json::json!({"profile": profile, "id": id}),
-        )?;
-        Ok(result.get("session").cloned().unwrap_or(serde_json::Value::Null))
+        let mut params = serde_json::json!({"profile": profile, "id": id});
+        if let Some(after) = after_turn {
+            params["after_turn"] = serde_json::json!(after);
+        }
+        // Full envelope: total_turns is the client's only signal that the daemon honored the slice.
+        host_client::call("host.session.read", params)
     })
     .await?
 }

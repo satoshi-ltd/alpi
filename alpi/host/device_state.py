@@ -5,6 +5,8 @@ import base64
 import json
 import os
 import re
+import threading
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -315,12 +317,34 @@ def _storage_rows(home: Path) -> list[dict[str, Any]]:
     return rows
 
 
+_STORAGE_TTL_S = 30.0
+_storage_cache: dict[str, tuple[float, list[dict[str, Any]]]] = {}
+_storage_cache_lock = threading.Lock()
+
+
+def _clear_storage_cache() -> None:
+    with _storage_cache_lock:
+        _storage_cache.clear()
+
+
+def _storage_rows_cached(home: Path) -> list[dict[str, Any]]:
+    key = str(home)
+    with _storage_cache_lock:
+        hit = _storage_cache.get(key)
+        if hit is not None and time.monotonic() - hit[0] < _STORAGE_TTL_S:
+            return [dict(r) for r in hit[1]]
+    rows = _storage_rows(home)
+    with _storage_cache_lock:
+        _storage_cache[key] = (time.monotonic(), rows)
+    return [dict(r) for r in rows]
+
+
 async def _profile_storage(
     params: dict[str, Any], _server: host_server.Server,
 ) -> dict[str, Any]:
     home = _resolve_home(str(params.get("profile") or ""))
     # _path_stats does os.walk over sessions/, cache/, logs/, schedule/output/ and alp/workgroups/ — easily seconds on a busy profile.
-    return {"storage": await asyncio.to_thread(_storage_rows, home)}
+    return {"storage": await asyncio.to_thread(_storage_rows_cached, home)}
 
 
 def _emit_config_changed(home: Path, scope: str) -> None:
@@ -543,26 +567,40 @@ def _safe_section(fn) -> dict[str, Any]:
         return {"error": {"code": -32603, "message": "internal-error", "data": {"detail": str(e)}}}
 
 
-def _snapshot_payload(home: Path, profile: str) -> dict[str, Any]:
+def _snapshot_payload(
+    home: Path, profile: str, wanted: frozenset[str] | None = None,
+) -> dict[str, Any]:
+    from concurrent.futures import ThreadPoolExecutor
+
     from alpi.host.usage import compute_daily, price_out
     from alpi.mail import accounts as accounts_mod
     from alpi.scheduler import jobs_store
 
-    out: dict[str, Any] = {
-        "detail": _safe_section(lambda: _profile_detail_payload(home)),
-        "usage": _safe_section(
-            lambda: {"days": compute_daily(home), "priceOut": price_out(cfg_mod.load(home).model or "")},
-        ),
-        "workgroups": _safe_section(lambda: {"workgroups": _aggregate_workgroups(profile)}),
-        "email": _safe_section(lambda: {"accounts": accounts_mod.list_accounts(home)}),
-        "storage": _safe_section(lambda: {"storage": _storage_rows(home)}),
+    def _schedules() -> dict[str, Any]:
+        try:
+            return {"jobs": jobs_store.read(home)}
+        except jobs_store.CorruptJobsFile as e:
+            return {
+                "error": {"code": -32603, "message": "internal-error", "data": {"detail": f"jobs.json corrupt: {e}"}},
+            }
+
+    sections: dict[str, Any] = {
+        "detail": lambda: _profile_detail_payload(home),
+        "usage": lambda: {"days": compute_daily(home), "priceOut": price_out(cfg_mod.load(home).model or "")},
+        "workgroups": lambda: {"workgroups": _aggregate_workgroups(profile)},
+        "email": lambda: {"accounts": accounts_mod.list_accounts(home)},
+        "storage": lambda: {"storage": _storage_rows_cached(home)},
     }
-    try:
-        out["schedules"] = {"jobs": jobs_store.read(home)}
-    except jobs_store.CorruptJobsFile as e:
-        out["schedules"] = {
-            "error": {"code": -32603, "message": "internal-error", "data": {"detail": f"jobs.json corrupt: {e}"}},
-        }
+    if wanted is not None:
+        sections = {k: fn for k, fn in sections.items() if k in wanted}
+    include_schedules = wanted is None or "schedules" in wanted
+    # Sections fan out to threads so storage's os.walk never serializes behind the cheap reads.
+    with ThreadPoolExecutor(max_workers=len(sections) + 2) as pool:
+        futures = {k: pool.submit(_safe_section, fn) for k, fn in sections.items()}
+        schedules_future = pool.submit(_schedules) if include_schedules else None
+        out: dict[str, Any] = {k: f.result() for k, f in futures.items()}
+        if schedules_future is not None:
+            out["schedules"] = schedules_future.result()
     return out
 
 
@@ -575,7 +613,11 @@ async def _profile_snapshot(
         raise host_server.HandlerError(
             -32004, "not-found", data={"detail": f"no profile {profile!r}"},
         )
-    return await asyncio.to_thread(_snapshot_payload, home, profile)
+    raw_sections = (params or {}).get("sections")
+    wanted = None
+    if isinstance(raw_sections, list) and raw_sections:
+        wanted = frozenset(str(s) for s in raw_sections)
+    return await asyncio.to_thread(_snapshot_payload, home, profile, wanted)
 
 
 async def _workgroup_members(
@@ -602,15 +644,17 @@ async def _workgroup_members(
 async def _ollama_models(
     params: dict[str, Any], _server: host_server.Server,
 ) -> dict[str, Any]:
-    # Per-server error surfacing — the original implementation swallowed every
-    # exception with `except Exception: pass`, so clients couldn't tell "no
-    # Ollama configured" apart from "configured but unreachable". Now each
-    # server is polled independently and any failure is returned in `errors`
-    # as `{name, url, detail}` so UIs can show which one failed and why.
+    home = _resolve_home(str(params.get("profile") or ""))
+    # Sync HTTP probes (1.5s timeout each) — never run them on the loop.
+    return await asyncio.to_thread(_poll_ollama_models, home)
+
+
+def _poll_ollama_models(home: Path) -> dict[str, Any]:
+    # Per-server failures go to `errors` — "no Ollama configured" must stay distinguishable from "unreachable".
     import urllib.error
     import urllib.request
 
-    cfg = cfg_mod.load(_resolve_home(str(params.get("profile") or "")))
+    cfg = cfg_mod.load(home)
     models: list[str] = []
     errors: list[dict[str, str]] = []
     for item in _ollama_providers(cfg):

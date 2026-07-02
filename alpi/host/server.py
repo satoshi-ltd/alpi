@@ -290,7 +290,8 @@ class Server:
         role = "admin"
         profile_scope: list[str] = []
         if require_token:
-            valid, role, profile_scope = _check_token_meta(body)
+            # Stale last_seen triggers a devices.yaml fsync write-back inside validate — keep it off the loop.
+            valid, role, profile_scope = await asyncio.to_thread(_check_token_meta, body)
             if not valid:
                 await send({
                     "id": body.get("id"),

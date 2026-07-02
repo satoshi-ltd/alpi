@@ -753,3 +753,47 @@ async def test_data_chat_send_releases_claim_when_setup_raises(
 
     assert dc._active == {}, dc._active
     assert dc._session_active == {}, dc._session_active
+
+@pytest.mark.asyncio
+async def test_chat_send_builds_engine_off_the_event_loop(
+    monkeypatch, short_tmp: Path,
+) -> None:
+    import threading
+
+    home = short_tmp / "h"
+    home.mkdir()
+    load_or_generate(home)
+    seen: dict = {}
+
+    class _ThreadProbeEngine(_FakeEngine):
+        def __init__(self, *, home: Path, cfg) -> None:  # noqa: ANN001
+            seen["thread"] = threading.current_thread()
+            super().__init__(home=home, cfg=cfg)
+
+    from alpi import config as cfg_mod
+    monkeypatch.setattr(cfg_mod, "load", lambda h: SimpleNamespace(model="x"))
+    import alpi.engine
+    monkeypatch.setattr(alpi.engine, "Engine", _ThreadProbeEngine)
+    from alpi.host import chat as dc
+    monkeypatch.setattr(dc, "_resolve_home", lambda profile: home)
+
+    srv = host_server.Server(home=home)
+    data_handlers.register(srv)
+    dc.register(srv)
+    await srv.start()
+    try:
+        reader, writer = await asyncio.open_unix_connection(str(srv.socket_path()))
+        writer.write((json.dumps({
+            "id": "req-thread",
+            "method": "host.chat.send",
+            "params": {"profile": "default", "text": "hi", "request_id": "req-thread"},
+        }) + "\n").encode("utf-8"))
+        await writer.drain()
+        while await reader.readline():
+            pass
+        writer.close()
+        await writer.wait_closed()
+    finally:
+        await srv.stop()
+
+    assert seen["thread"] is not threading.main_thread()

@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.10.11 — 2026-07-02 — a faster, steadier host plane for the apps
+
+- **Opening a chat no longer stalls the daemon.** Reading a session's history
+  now runs off the event loop and supports partial reads, so the apps fetch
+  only the turns they are missing instead of the full transcript every time.
+- **Profile listings stop re-reading every session from disk.** Unchanged
+  sessions are served from an in-daemon cache, making inbox and sidebar
+  refreshes much lighter on busy profiles.
+- **Settings load in one round trip.** The profile snapshot computes its
+  sections in parallel, caches storage sizes briefly, and lets clients request
+  only the sections they need.
+- **Fewer daemon-wide hiccups.** Schedule reads/writes, chat setup (including
+  MCP server startup), usage pricing, Ollama probes, and device-token
+  validation all moved off the event loop, so one slow request no longer
+  delays every connected app.
+
 ## v0.10.10 — 2026-07-02 — schedules remember their last run
 
 - **A schedule now records whether its last run succeeded or failed**, alongside

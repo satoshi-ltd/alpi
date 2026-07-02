@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import json
 import re
+import threading
+from collections import OrderedDict
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 
 _FIRST_USER_MAX = 140
@@ -75,42 +77,90 @@ def _session_files(d: Path) -> list[Path]:
     return out
 
 
+class _Stats(NamedTuple):
+    mtime: int
+    sidecar_mtime: int
+    size_bytes: int
+    main_size: int
+    sig: tuple[int, int, int, int] | None
+
+
+_ROW_CACHE_MAX = 8192
+_row_cache: OrderedDict[str, tuple[tuple[int, int, int, int], dict[str, Any]]] = OrderedDict()
+_row_cache_lock = threading.Lock()
+
+
+def _clear_row_cache() -> None:
+    with _row_cache_lock:
+        _row_cache.clear()
+
+
 def _session_row(p: Path, *, large_default_kind: str | None = None) -> dict[str, Any]:
-    mtime, sidecar_mtime, size_bytes, main_size = _session_stats(p)
-    if main_size > _LARGE_SESSION_BYTES:
+    stats = _session_stats(p)
+    row = _cached_row(p, stats)
+    if large_default_kind and stats.main_size > _LARGE_SESSION_BYTES and row.get("kind") == "empty":
+        row["kind"] = large_default_kind
+    return row
+
+
+def _cached_row(p: Path, stats: _Stats) -> dict[str, Any]:
+    key = str(p)
+    if stats.sig is not None:
+        with _row_cache_lock:
+            hit = _row_cache.get(key)
+            if hit is not None and hit[0] == stats.sig:
+                _row_cache.move_to_end(key)
+                return dict(hit[1])
+    row = _compute_row(p, stats)
+    if stats.sig is not None:
+        with _row_cache_lock:
+            _row_cache[key] = (stats.sig, dict(row))
+            _row_cache.move_to_end(key)
+            while len(_row_cache) > _ROW_CACHE_MAX:
+                _row_cache.popitem(last=False)
+    return row
+
+
+def _compute_row(p: Path, stats: _Stats) -> dict[str, Any]:
+    if stats.main_size > _LARGE_SESSION_BYTES:
         return _large_session_row(
             p,
-            mtime=mtime,
-            sidecar_mtime=sidecar_mtime,
-            size_bytes=size_bytes,
-            default_kind=large_default_kind,
+            mtime=stats.mtime,
+            sidecar_mtime=stats.sidecar_mtime,
+            size_bytes=stats.size_bytes,
         )
     try:
         data = json.loads(p.read_text(encoding="utf-8"))
     except Exception:  # noqa: BLE001
         data = {}
-    return _row_from_data(p.stem, data, mtime=mtime, size_bytes=size_bytes)
+    return _row_from_data(p.stem, data, mtime=stats.mtime, size_bytes=stats.size_bytes)
 
 
-def _session_stats(p: Path) -> tuple[int, int, int, int]:
+def _session_stats(p: Path) -> _Stats:
     try:
         st = p.stat()
         mtime = int(st.st_mtime)
         main_size = int(st.st_size)
-        size_bytes = main_size
+        main_ns = int(st.st_mtime_ns)
+        statable = True
     except OSError:
         mtime = 0
         main_size = 0
-        size_bytes = 0
+        main_ns = 0
+        statable = False
     sidecar_mtime = 0
+    sidecar_ns = 0
+    sidecar_size = 0
     sidecar = p.parent / f"_events_{p.stem}.jsonl"
     try:
         st = sidecar.stat()
         sidecar_mtime = int(st.st_mtime)
-        size_bytes += int(st.st_size)
+        sidecar_ns = int(st.st_mtime_ns)
+        sidecar_size = int(st.st_size)
     except OSError:
         pass
-    return mtime, sidecar_mtime, size_bytes, main_size
+    sig = (main_ns, main_size, sidecar_ns, sidecar_size) if statable else None
+    return _Stats(mtime, sidecar_mtime, main_size + sidecar_size, main_size, sig)
 
 
 def _row_from_data(sid: str, data: dict[str, Any], *, mtime: int, size_bytes: int) -> dict[str, Any]:
@@ -160,15 +210,12 @@ def _large_session_row(
     mtime: int,
     sidecar_mtime: int,
     size_bytes: int,
-    default_kind: str | None,
 ) -> dict[str, Any]:
     fields = _large_session_head_fields(p)
     first_user = _truncate(str(fields.get("user") or ""), _FIRST_USER_MAX)
     started_at = fields.get("started_at")
     updated_at = max(_as_ts(started_at), float(mtime), float(sidecar_mtime))
     kind = _classify(first_user)
-    if kind == "empty" and default_kind:
-        kind = default_kind
     return {
         "id": p.stem,
         "mtime": mtime,

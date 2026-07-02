@@ -106,3 +106,36 @@ describe("useProfileSnapshot", () => {
     await waitFor(() => expect(result.current.snapshot?.detail.who).toBe("B"));
   });
 });
+
+describe("useProfileSnapshot — sections + empty responses", () => {
+  it("passes the requested sections through to the command", async () => {
+    invokeMock.mockResolvedValue({ detail: {} });
+    renderHook(() => useProfileSnapshot("c1", "doc", { sections: ["detail", "usage"] }));
+    await waitFor(() =>
+      expect(invokeMock).toHaveBeenCalledWith("settings_profile_snapshot", {
+        profile: "doc", connectionId: "c1", sections: ["detail", "usage"],
+      }),
+    );
+  });
+
+  it("surfaces an empty snapshot response as an error so per-section fallbacks can fire", async () => {
+    invokeMock.mockResolvedValue(null);
+    const { result } = renderHook(() => useProfileSnapshot("c1", "doc"));
+    await waitFor(() => expect(result.current.error).toBe("empty snapshot response"));
+    expect(result.current.snapshot).toBeNull();
+  });
+
+  it("clears the previous profile's error on key switch so defer gating holds while the new snapshot loads", async () => {
+    invokeMock.mockRejectedValueOnce(new Error("read timeout"));
+    const { result, rerender } = renderHook(
+      ({ p }) => useProfileSnapshot("c1", p),
+      { initialProps: { p: "alpha" } },
+    );
+    await waitFor(() => expect(result.current.error).toBeTruthy());
+
+    invokeMock.mockImplementationOnce(() => new Promise(() => {}));
+    rerender({ p: "beta" });
+    expect(result.current.error).toBeNull();
+    expect(result.current.snapshot).toBeNull();
+  });
+});

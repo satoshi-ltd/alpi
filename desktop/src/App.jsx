@@ -25,6 +25,14 @@ import { findLatestTask } from "./lib/workgroup-tasks.js";
 import { saveCachedMessages } from "./lib/workgroup-cache.js";
 import { fetchWorkgroupTranscript, invalidateTranscriptCache } from "./lib/workgroup-fetch.js";
 import {
+  loadCachedSession,
+  saveCachedSession,
+  invalidateSessionCache,
+} from "./lib/session-cache.js";
+import { fetchFullSession, isSessionGone } from "./lib/session-fetch.js";
+import { createSessionRefresher } from "./lib/session-refresh.js";
+import { invalidateSessionsButtonCache } from "./primitives/SessionsButton.jsx";
+import {
   classifyDaemonPayload,
   fromDaemonFrame,
   isActiveWorkgroupView,
@@ -78,6 +86,10 @@ export default function App() {
     id: null,
   });
   const [sessionData, setSessionData] = useState(null);
+  const sessionDataRef = useRef(null);
+  useEffect(() => {
+    sessionDataRef.current = sessionData;
+  }, [sessionData]);
   const [rewriteDraft, setRewriteDraft] = useState(null);
   const [pendingAttachment, setPendingAttachment] = useState(null);
   const [activeTask, setActiveTask] = useState(null);
@@ -284,6 +296,7 @@ export default function App() {
     notify,
     connectionOnlineRef,
     activeConnectionIdRef,
+    sessionDataRef,
   });
 
   const {
@@ -374,16 +387,24 @@ export default function App() {
       if (prev) {
         invalidateTranscriptCache(prev);
         invalidateProfileDetailCache(prev);
+        invalidateSessionCache(prev);
       }
       invalidateTranscriptCache(hostConnections.active_id);
       invalidateProfileDetailCache(hostConnections.active_id);
+      invalidateSessionCache(hostConnections.active_id);
+      invalidateSessionsButtonCache();
     }
     prevConnectionIdRef.current = hostConnections.active_id;
   }, [hostConnections.active_id]);
 
+  const recentsConnRef = useRef(null);
   useEffect(() => {
     if (view.kind !== "empty") return;
-    setRecents([]);
+    // SWR: keep the previous list while refetching; clear only when the daemon changed.
+    if (recentsConnRef.current !== hostConnections.active_id) {
+      recentsConnRef.current = hostConnections.active_id;
+      setRecents([]);
+    }
     let cancelled = false;
     invoke("sessions", { limit: 8 })
       .then((rows) => {
@@ -474,11 +495,38 @@ export default function App() {
 
   useEffect(() => installUpdater(), []);
 
+  // A deleted/forbidden session must not survive as a cached ghost transcript.
+  const { refresh: refreshSessionData, dropDeadSession } = useMemo(
+    () =>
+      createSessionRefresher({
+        activeConnectionIdRef,
+        sessionDataRef,
+        setSessionData,
+        clearViewSession: (profile, sessionId) =>
+          setView((v) =>
+            v.kind === "profile" && v.profile === profile && v.sessionId === sessionId
+              ? { ...v, sessionId: null }
+              : v,
+          ),
+        isChatSessionData,
+      }),
+    [],
+  );
+
   useEffect(() => {
-    setSessionData(null);
-    if (view.kind !== "profile" || !view.sessionId) return;
-    invoke("session_detail", { profile: view.profile, id: view.sessionId })
+    if (view.kind !== "profile" || !view.sessionId) {
+      setSessionData(null);
+      return undefined;
+    }
+    const connId = hostConnections.active_id;
+    const cached = loadCachedSession(connId, view.profile, view.sessionId);
+    setSessionData(cached?.data ?? null);
+    let cancelled = false;
+    fetchFullSession(view.profile, view.sessionId, {
+      known: cached?.complete ? cached.data : null,
+    })
       .then((data) => {
+        if (cancelled) return;
         if (!isChatSessionData(data)) {
           setView((v) =>
             v.kind === "profile" && v.sessionId === view.sessionId
@@ -487,32 +535,31 @@ export default function App() {
           );
           return;
         }
+        saveCachedSession(connId, view.profile, view.sessionId, data);
         setSessionData(data);
       })
-      .catch(() => {});
-  }, [view]);
+      .catch((e) => {
+        if (cancelled) return;
+        if (isSessionGone(e)) dropDeadSession(connId, view.profile, view.sessionId);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [view, hostConnections.active_id, dropDeadSession]);
 
   const scheduleReload = useCoalescedCallback(() => reloadRef.current?.(), 500, 5000);
 
   const scheduleSessionRefresh = useCoalescedCallback((profile, sessionId) => {
-    invoke("session_detail", { profile, id: sessionId })
-      .then((data) => {
-        if (isChatSessionData(data)) setSessionData(data);
-      })
-      .catch(() => {});
+    refreshSessionData(profile, sessionId);
   }, 350);
 
   const onRefreshSession = useCallback(() => {
     const v = viewRef.current;
     if (v?.kind === "profile" && v.profile && v.sessionId) {
-      invoke("session_detail", { profile: v.profile, id: v.sessionId })
-        .then((data) => {
-          if (isChatSessionData(data)) setSessionData(data);
-        })
-        .catch(() => {});
+      refreshSessionData(v.profile, v.sessionId);
     }
     reloadRef.current?.();
-  }, []);
+  }, [refreshSessionData]);
 
   // Same reducer for fs-change (local watcher) and daemon-event (works on remote too).
   const applyChange = useCallback((ev) => {

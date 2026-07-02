@@ -40,7 +40,8 @@ async def _schedule_list(
     profile = str((params or {}).get("profile") or "")
     home = _resolve_home(profile)
     try:
-        jobs = jobs_store.read(home)
+        # jobs_store.read takes a blocking flock — a scheduler mid-write would stall the whole loop.
+        jobs = await asyncio.to_thread(jobs_store.read, home)
     except jobs_store.CorruptJobsFile as e:
         raise host_server.HandlerError(
             -32603, "internal-error", data={"detail": f"jobs.json corrupt: {e}"},
@@ -70,7 +71,7 @@ async def _schedule_remove(
             )
         return keep
     try:
-        jobs_store.update(home, _remove)
+        await asyncio.to_thread(jobs_store.update, home, _remove)
     except jobs_store.CorruptJobsFile as e:
         raise host_server.HandlerError(
             -32603, "internal-error", data={"detail": f"jobs.json corrupt: {e}"},
@@ -103,7 +104,7 @@ async def _schedule_set_paused(
             -32004, "not-found", data={"detail": f"no job {job_id!r}"},
         )
     try:
-        jobs_store.update(home, _set_paused)
+        await asyncio.to_thread(jobs_store.update, home, _set_paused)
     except jobs_store.CorruptJobsFile as e:
         raise host_server.HandlerError(
             -32603, "internal-error", data={"detail": f"jobs.json corrupt: {e}"},
@@ -126,7 +127,7 @@ async def _schedule_fire(
     home = _resolve_home(profile)
 
     try:
-        jobs = jobs_store.read(home)
+        jobs = await asyncio.to_thread(jobs_store.read, home)
     except jobs_store.CorruptJobsFile as e:
         raise host_server.HandlerError(
             -32603, "internal-error", data={"detail": f"jobs.json corrupt: {e}"},

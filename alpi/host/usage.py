@@ -138,11 +138,15 @@ def _profile_model(home: Path) -> str:
         return ""
 
 
+def _daily_payload(home: Path) -> dict[str, Any]:
+    return {"days": compute_daily(home), "priceOut": price_out(_profile_model(home))}
+
+
 async def _usage_daily(params: dict[str, Any], _server: host_server.Server) -> dict[str, Any]:
     profile = str((params or {}).get("profile") or "")
     home = _resolve_home(profile)
-    days = await asyncio.to_thread(compute_daily, home)
-    return {"days": days, "priceOut": price_out(_profile_model(home))}
+    # price_out imports litellm (slow first import) and may fetch OpenRouter pricing — keep it off the loop too.
+    return await asyncio.to_thread(_daily_payload, home)
 
 
 async def _workgroup_usage_daily(
@@ -155,5 +159,9 @@ async def _workgroup_usage_daily(
         raise host_server.HandlerError(
             -32602, "invalid-params", data={"detail": "wg_id fails [A-Za-z0-9_-]+"},
         )
-    days = await asyncio.to_thread(compute_workgroup_daily, home, wg_id)
-    return {"days": days, "priceOut": price_out(_profile_model(home))}
+    def _payload() -> dict[str, Any]:
+        return {
+            "days": compute_workgroup_daily(home, wg_id),
+            "priceOut": price_out(_profile_model(home)),
+        }
+    return await asyncio.to_thread(_payload)

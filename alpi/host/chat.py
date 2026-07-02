@@ -70,24 +70,35 @@ async def _data_chat_send(
         await _send_mention(home, parsed, request_id, session_id, send_frame)
         return
 
-    from alpi import config as cfg_mod
-    from alpi.cli import _continue_specific_session
-    from alpi.engine import AgentEvent, Engine
+    from alpi.engine import AgentEvent
     from alpi.tui.formatting import arg_hint
 
-    cfg = cfg_mod.load(home)
-    if isinstance(model_override, str) and model_override:
-        from alpi.providers.reasoning import apply_session_model_override
-        apply_session_model_override(cfg, model_override)
-    engine = Engine(home=home, cfg=cfg)
     if isinstance(session_id, str) and session_id:
         from alpi.host.handlers import _check_id
         _check_id(session_id, "session_id")
-        if not _continue_specific_session(engine, home, session_id):
-            await send_frame({"event": "error", "text": f"session not found: {session_id}"})
-            return
-        if rewrite_from_turn is not None:
-            _truncate_hydrated_session(engine, rewrite_from_turn)
+
+    def _prepare():
+        # cfg load + Engine() (MCP subprocess spawn) + full session hydrate are all blocking — must stay off the loop.
+        import alpi.cli as cli_mod
+        import alpi.engine as engine_mod
+        from alpi import config as cfg_mod
+
+        cfg = cfg_mod.load(home)
+        if isinstance(model_override, str) and model_override:
+            from alpi.providers.reasoning import apply_session_model_override
+            apply_session_model_override(cfg, model_override)
+        engine = engine_mod.Engine(home=home, cfg=cfg)
+        if isinstance(session_id, str) and session_id:
+            if not cli_mod._continue_specific_session(engine, home, session_id):
+                return cfg, None
+            if rewrite_from_turn is not None:
+                _truncate_hydrated_session(engine, rewrite_from_turn)
+        return cfg, engine
+
+    cfg, engine = await asyncio.to_thread(_prepare)
+    if engine is None:
+        await send_frame({"event": "error", "text": f"session not found: {session_id}"})
+        return
 
     # Pin the session id BEFORE the engine runs so replay via host.chat.events_since works even for a brand-new session whose id the client hasn't seen yet.
     effective_sid = session_id if isinstance(session_id, str) and session_id else engine.session.id
@@ -114,7 +125,7 @@ async def _data_chat_send(
         await session_lock.acquire()
         lock_acquired = True
 
-        _chat_events.reset_for_turn(home, persisted_sid, request_id)
+        await asyncio.to_thread(_chat_events.reset_for_turn, home, persisted_sid, request_id)
 
         stream_alive = True
 
@@ -122,7 +133,9 @@ async def _data_chat_send(
             nonlocal stream_alive
             # Persist FIRST: replay depends on the sidecar staying complete even after the wire is gone.
             try:
-                _chat_events.append(home, persisted_sid, request_id, frame)
+                await asyncio.to_thread(
+                    _chat_events.append, home, persisted_sid, request_id, frame,
+                )
             except Exception:  # noqa: BLE001
                 pass
             if not stream_alive:
@@ -246,19 +259,28 @@ async def _send_mention(
 ) -> None:
     """Execute an @-mention via ALP and persist the turn."""
     import time as _time
-    from alpi import config as cfg_mod
     from alpi import session as sess
     from alpi.alp import mention as alp_mention
-    from alpi.cli import _continue_specific_session
-    from alpi.engine import Engine
 
-    engine = Engine(home=home, cfg=cfg_mod.load(home))
     if isinstance(session_id, str) and session_id:
         from alpi.host.handlers import _check_id
         _check_id(session_id, "session_id")
-        if not _continue_specific_session(engine, home, session_id):
-            await send_frame({"event": "error", "text": f"session not found: {session_id}"})
-            return
+
+    def _prepare_mention():
+        import alpi.cli as cli_mod
+        import alpi.engine as engine_mod
+        from alpi import config as cfg_mod
+
+        engine = engine_mod.Engine(home=home, cfg=cfg_mod.load(home))
+        if isinstance(session_id, str) and session_id:
+            if not cli_mod._continue_specific_session(engine, home, session_id):
+                return None
+        return engine
+
+    engine = await asyncio.to_thread(_prepare_mention)
+    if engine is None:
+        await send_frame({"event": "error", "text": f"session not found: {session_id}"})
+        return
 
     tool_id = f"mention-{parsed.peer_id}-{request_id}"
     args = {"peer_id": parsed.peer_id, "prompt": parsed.prompt}
@@ -306,7 +328,7 @@ async def _send_mention(
         started_at=started,
     )
     try:
-        engine.session.save()
+        await asyncio.to_thread(engine.session.save)
     except Exception:  # noqa: BLE001
         pass
 
@@ -341,10 +363,10 @@ async def _data_chat_events_since(
     in_flight = False
     if session_id in _session_active:
         in_flight = True
-    return {
-        **_chat_events.read_since(home, session_id, after_seq=after_seq, limit=limit),
-        "in_flight": in_flight,
-    }
+    events = await asyncio.to_thread(
+        _chat_events.read_since, home, session_id, after_seq=after_seq, limit=limit,
+    )
+    return {**events, "in_flight": in_flight}
 
 
 async def _data_chat_cancel(

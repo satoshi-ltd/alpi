@@ -11,6 +11,22 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.4.13 — 2026-07-02 — remote connections get fast: pooling + caching
+
+_Works with any recent daemon; the biggest wins need alpi v0.10.11+._
+
+- **Remote requests reuse warm connections.** The app keeps a small pool of
+  open sockets per host instead of paying a fresh handshake on every call, so
+  bursts like opening Settings feel dramatically snappier over Tailscale.
+- **Chats open instantly on revisit.** Session history is cached (including a
+  short tail across restarts) and only the new turns are fetched after each
+  reply, instead of re-downloading the whole conversation.
+- **Profile settings load in one round trip.** Sections wait for the aggregated
+  snapshot instead of firing duplicate individual fetches, and slow storage
+  sizes load separately so they never hold up the rest of the page.
+- **Refresh no longer rebuilds the settings page**, and the sessions list keeps
+  its cached entries while revalidating instead of disappearing.
+
 ## v0.4.12 — 2026-07-02 — schedule health, steadier connection & profile UI
 
 _Requires alpi v0.10.10+._

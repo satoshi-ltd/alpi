@@ -40,12 +40,13 @@ export default function Settings({
     <div className={styles.wrap}>
       {selectedProfile && (
         <ProfileDetail
-          key={`${activeConnection?.id ?? "local"}:${selectedProfile.name}:${refreshTick}`}
+          key={`${activeConnection?.id ?? "local"}:${selectedProfile.name}`}
           profile={selectedProfile}
           profiles={profiles}
           activeConnection={activeConnection}
           connectionSyncing={connectionSyncing}
           intent={target?.kind === "profile" ? target.intent : undefined}
+          refreshTick={refreshTick}
           onSaved={onRefresh}
           onDelete={onDeleteProfile}
           onNavigate={setTarget}

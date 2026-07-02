@@ -47,6 +47,9 @@ import {
 import styles from "./Settings.module.css";
 import { copyText } from "../../lib/clipboard.js";
 
+// storage stays out: its os.walk dominates snapshot latency, so StorageField fetches it independently.
+const SNAPSHOT_SECTIONS = ["detail", "usage", "workgroups", "email", "schedules"];
+
 function initialDraft(profile) {
   return {
     bio: profile.bio ?? "",
@@ -67,12 +70,14 @@ export default function ProfileDetail({
   onDelete,
   onNavigate,
   onOpenChat,
+  refreshTick = 0,
 }) {
   const connId = activeConnection?.id ?? null;
   const name = profileSummary?.name ?? null;
-  // One round-trip feeds every section; a missing/errored section falls back to its individual fetch.
-  const snap = useProfileSnapshot(connId, name);
+  // One round-trip feeds every section; per-section fetches stay DEFERRED until the snapshot settles, and only fire as fallback when it errors (old daemon, offline).
+  const snap = useProfileSnapshot(connId, name, { sections: SNAPSHOT_SECTIONS });
   const sn = snap.snapshot;
+  const snapPending = !sn && !snap.error;
   const sectionData = (s) => (s && !s.error ? s : undefined);
   const detailPre = sectionData(sn?.detail);
   const usagePre = sectionData(sn?.usage);
@@ -82,14 +87,22 @@ export default function ProfileDetail({
   const storagePre = sectionData(sn?.storage)?.storage;
 
   const { detail, loading: detailLoading, refresh } = useProfileDetail(
-    connId, name, { refreshOnMount: true, prefetched: detailPre },
+    connId, name, { refreshOnMount: true, prefetched: detailPre, defer: snapPending },
   );
   const refreshDetail = detailPre !== undefined ? snap.refresh : refresh;
   const profile = useMemo(
     () => ({ ...profileSummary, ...(detail || {}) }),
     [profileSummary, detail],
   );
-  const usage = useUsageDaily(name, connId, usagePre);
+  const usage = useUsageDaily(name, connId, usagePre, snapPending);
+
+  const snapRefresh = snap.refresh;
+  const lastRefreshTickRef = useRef(refreshTick);
+  useEffect(() => {
+    if (refreshTick === lastRefreshTickRef.current) return;
+    lastRefreshTickRef.current = refreshTick;
+    snapRefresh();
+  }, [refreshTick, snapRefresh]);
   const baseline = useMemo(() => initialDraft(profile), [profile]);
   const [draft, setDraft] = useState(baseline);
   const [devicesLoading, setDevicesLoading] = useState(false);
@@ -409,6 +422,7 @@ export default function ProfileDetail({
               profiles={profiles}
               connectionId={activeConnection?.id ?? null}
               prefetched={workgroupsPre}
+              defer={snapPending}
               onSelectWorkgroup={(id) =>
                 onNavigate?.({ kind: "workgroup", id })
               }
@@ -441,6 +455,7 @@ export default function ProfileDetail({
           profile={profile}
           connectionId={activeConnection?.id ?? null}
           prefetched={schedulesPre}
+          defer={snapPending}
           onSnapshotRefresh={snap.refresh}
           onLoadingChange={setSchedulesLoading}
         />
@@ -466,6 +481,7 @@ export default function ProfileDetail({
               profile={profile}
               connectionId={activeConnection?.id ?? null}
               prefetched={emailPre}
+              defer={snapPending}
               onSnapshotRefresh={snap.refresh}
               onLoadingChange={setEmailLoading}
             />

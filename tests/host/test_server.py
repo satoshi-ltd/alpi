@@ -95,3 +95,32 @@ async def test_stream_real_crash_still_reports_internal_error(tmp_path: Path) ->
     await srv._handle_request(body, send)
 
     assert sent and sent[0]["error"]["code"] == -32603
+
+@pytest.mark.asyncio
+async def test_remote_token_validation_runs_off_the_event_loop(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import threading
+    seen: dict = {}
+
+    def fake_check(body):
+        seen["thread"] = threading.current_thread()
+        return True, "admin", []
+
+    monkeypatch.setattr(host_server, "_check_token_meta", fake_check)
+    srv = host_server.Server(home=tmp_path)
+
+    async def echo(_params, _server):
+        return {"ok": True}
+
+    srv.register("host.test.echo", echo)
+    sent: list[dict] = []
+
+    async def send(payload: dict) -> None:
+        sent.append(payload)
+
+    body = json.dumps({"id": "r", "method": "host.test.echo", "params": {"auth_token": "t" * 32}})
+    await srv._handle_request(body, send, require_token=True)
+
+    assert sent and sent[0].get("result") == {"ok": True}
+    assert seen["thread"] is not threading.main_thread()

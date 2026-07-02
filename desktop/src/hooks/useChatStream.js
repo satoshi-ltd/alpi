@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { safeUnlisten } from "../lib/tauri-listen.js";
+import { fetchFullSession } from "../lib/session-fetch.js";
+import { saveCachedSession } from "../lib/session-cache.js";
 
 const DELTA_FLUSH_MS = 50;
 // Tools that finish faster than this snap visually; floor it for legibility.
@@ -18,6 +20,7 @@ export function useChatStream({
   notify,
   connectionOnlineRef,
   activeConnectionIdRef,
+  sessionDataRef,
 }) {
   // request_id -> turn. Many chats stream at once; each frame carries its request_id, so a turn never leaks into another chat.
   const [pendingTurns, setPendingTurns] = useState({});
@@ -33,6 +36,15 @@ export function useChatStream({
   useEffect(() => {
     pendingTurnsRef.current = pendingTurns;
   }, [pendingTurns]);
+
+  const fetchFinishedSession = useCallback(async (turn, sid) => {
+    const current = sessionDataRef?.current;
+    const known = current?.id === sid ? current : null;
+    const data = await fetchFullSession(turn.profile, sid, { known });
+    // Cache under the turn's own connection — resolving the active one here would poison another daemon's cache after a mid-fetch switch.
+    saveCachedSession(turn.connectionId ?? null, turn.profile, sid, data);
+    return data;
+  }, [sessionDataRef]);
 
   const isActiveConnection = useCallback(
     (turn) =>
@@ -308,7 +320,7 @@ export function useChatStream({
         notify({ message: "Reconnected — turn recovered from disk", variant: "success" });
         const sid = finalSessionId ?? turn.sessionId;
         try {
-          const newData = await invoke("session_detail", { profile: turn.profile, id: sid });
+          const newData = await fetchFinishedSession(turn, sid);
           finishTurnView(turn, sid, newData);
         } catch (e) {
           notify({ message: String(e), variant: "error" });
@@ -326,7 +338,7 @@ export function useChatStream({
       const m = turnMetaRef.current[requestId];
       if (m) m.replaying = false;
     }
-  }, [applyReplayedEvents, dropTurnTimers, finishTurnView, notify, updateTurn]);
+  }, [applyReplayedEvents, dropTurnTimers, fetchFinishedSession, finishTurnView, notify, updateTurn]);
 
   useEffect(() => {
     if (Object.keys(pendingTurns).length === 0) return undefined;
@@ -490,7 +502,7 @@ export function useChatStream({
         if (!turn) return;
         if (!isActiveConnection(turn)) return;
         const sid = p.session_id;
-        invoke("session_detail", { profile: turn.profile, id: sid })
+        fetchFinishedSession(turn, sid)
           .then((newData) => finishTurnView(turn, sid, newData))
           .catch((e) => notify({ message: String(e), variant: "error" }));
       } else if (p.kind === "done") {
@@ -515,7 +527,7 @@ export function useChatStream({
       cancelled = true;
       safeUnlisten(unlisten);
     };
-  }, [markActivity, scheduleDeltaFlush, updateTurn, dropTurnTimers, finishTurnView, notify, isActiveConnection]);
+  }, [markActivity, scheduleDeltaFlush, updateTurn, dropTurnTimers, fetchFinishedSession, finishTurnView, notify, isActiveConnection]);
 
   return { pendingTurns, pendingTurnsRef, startTurn, removeTurn, clearTurnsForConnection, detachNewChatTurns };
 }

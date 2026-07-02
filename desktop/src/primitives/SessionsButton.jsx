@@ -36,6 +36,13 @@ function previewOf(s) {
   return `(empty · ${(s.id || "").slice(0, 6)})`;
 }
 
+const _sessionsCache = new Map();
+
+// Keyed by profile name only — App must call this on connection switch so a same-named profile on another daemon can't serve a stale list.
+export function invalidateSessionsButtonCache() {
+  _sessionsCache.clear();
+}
+
 export default function SessionsButton({
   profile,
   accent,
@@ -45,9 +52,15 @@ export default function SessionsButton({
 }) {
   const [open, setOpen] = useState(false);
   const [manageOpen, setManageOpen] = useState(false);
-  const [sessions, setSessions] = useState([]);
-  const [loadedProfile, setLoadedProfile] = useState(null);
+  const [sessions, setSessions] = useState(() => (profile ? _sessionsCache.get(profile) ?? [] : []));
+  const [loadedProfile, setLoadedProfile] = useState(() => (profile && _sessionsCache.has(profile) ? profile : null));
   const [reloadTick, setReloadTick] = useState(0);
+  const [openTick, setOpenTick] = useState(0);
+
+  // Revalidate on OPEN only — `open` as a raw dep also refired the fetch on every close.
+  useEffect(() => {
+    if (open) setOpenTick((t) => t + 1);
+  }, [open]);
 
   useEffect(() => {
     if (!profile) {
@@ -55,22 +68,29 @@ export default function SessionsButton({
       setLoadedProfile(null);
       return undefined;
     }
+    const cached = _sessionsCache.get(profile);
+    if (cached) {
+      setSessions(cached);
+      setLoadedProfile(profile);
+    }
     let cancelled = false;
     invoke("sessions", { profile, limit: RECENT_LIMIT })
       .then((all) => {
         if (cancelled) return;
-        setSessions((all || []).filter((s) => s.kind === "chat"));
+        const chats = (all || []).filter((s) => s.kind === "chat");
+        _sessionsCache.set(profile, chats);
+        setSessions(chats);
         setLoadedProfile(profile);
       })
       .catch(() => {
         if (cancelled) return;
-        setSessions([]);
+        setSessions(_sessionsCache.get(profile) ?? []);
         setLoadedProfile(profile);
       });
     return () => {
       cancelled = true;
     };
-  }, [profile, open, reloadTick]);
+  }, [profile, openTick, reloadTick]);
 
   // Never show a prior profile's list while a switch is still loading (stale on remote).
   const isFresh = loadedProfile === profile;

@@ -488,3 +488,28 @@ async def test_fire_unknown_returns_404(tmp_path: Path, monkeypatch) -> None:
         "params": {"profile": "default", "id": "ghost000"},
     })
     assert resp["error"]["code"] == -32004
+
+@pytest.mark.asyncio
+async def test_schedule_list_runs_off_the_event_loop(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    import asyncio as _asyncio
+    home = tmp_path / "h"
+    home.mkdir()
+    monkeypatch.setattr(data_handlers, "_resolve_home", lambda p: home)
+    _seed_jobs(home, {"id": "abc12345", "kind": "cron", "expression": "* * * * *", "prompt": "x"})
+    seen: list[str] = []
+    real = _asyncio.to_thread
+
+    async def spy(fn, *args, **kwargs):
+        seen.append(getattr(fn, "__name__", ""))
+        return await real(fn, *args, **kwargs)
+
+    monkeypatch.setattr(data_schedule.asyncio, "to_thread", spy)
+    srv = host_server.Server(home=home)
+    data_schedule.register(srv)
+    resp = await srv._dispatch({
+        "id": "r", "method": "host.schedule.list", "params": {"profile": "default"},
+    })
+    assert [r["id"] for r in resp["result"]["jobs"]] == ["abc12345"]
+    assert "read" in seen

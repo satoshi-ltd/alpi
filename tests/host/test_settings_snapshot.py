@@ -167,3 +167,39 @@ def test_scope_filter_prunes_snapshot_workgroups() -> None:
 
     ids = [w["id"] for w in out["workgroups"]["workgroups"]]
     assert ids == ["keep"]
+
+@pytest.mark.asyncio
+async def test_snapshot_sections_param_limits_computed_sections(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home = _bootstrap(tmp_path / "h")
+    srv = _seed(home, monkeypatch)
+    walked = {"n": 0}
+    real_rows = host_device_state._storage_rows
+
+    def counting(home_arg):
+        walked["n"] += 1
+        return real_rows(home_arg)
+
+    monkeypatch.setattr(host_device_state, "_storage_rows", counting)
+
+    resp = await srv._dispatch({
+        "id": "s", "method": "host.settings.profile_snapshot",
+        "params": {
+            "profile": "default",
+            "sections": ["detail", "usage", "workgroups", "email", "schedules"],
+        },
+    })
+    result = resp["result"]
+    assert set(result) == {"detail", "usage", "workgroups", "email", "schedules"}
+    assert walked["n"] == 0
+
+
+@pytest.mark.asyncio
+async def test_snapshot_without_sections_param_returns_everything(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home = _bootstrap(tmp_path / "h")
+    srv = _seed(home, monkeypatch)
+    result = (await _snapshot(srv))["result"]
+    assert set(result) == {"detail", "usage", "schedules", "workgroups", "email", "storage"}

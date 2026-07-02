@@ -29,6 +29,7 @@ export function EmailCell({
   prefetched,
   onSnapshotRefresh = null,
   onLoadingChange = null,
+  defer = false,
 }) {
   const prefetchedMode = prefetched !== undefined;
   const key = cacheKey(connectionId, profile.name);
@@ -53,6 +54,7 @@ export function EmailCell({
     setAccounts(_accountsCache.get(key) ?? null);
     setEditing(null);
     onLoadingChange?.(true);
+    if (defer) return undefined;
     invoke("email_status", { profile: profile.name, ...connectionArg })
       .then((s) => {
         if (requestRef.current !== requestId) return;
@@ -70,7 +72,7 @@ export function EmailCell({
       requestRef.current += 1;
       onLoadingChange?.(false);
     };
-  }, [profile.name, connectionArg, key, tick, prefetchedMode, prefetched, onLoadingChange]);
+  }, [profile.name, connectionArg, key, tick, prefetchedMode, prefetched, defer, onLoadingChange]);
 
   function refresh() {
     if (prefetchedMode && onSnapshotRefresh) {
