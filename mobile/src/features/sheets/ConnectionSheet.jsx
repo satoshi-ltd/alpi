@@ -12,6 +12,7 @@ import { useToast } from '../../components/Toast';
 import { Bold, Code, TypedConfirm } from '../../components/TypedConfirm';
 import { canUpdateConnection } from '../../lib/connectionUpdate';
 import { useEndpoint } from '../../lib/EndpointContext';
+import { sortConnectionsByRecency } from '../../lib/store';
 import { call as rpc } from '../../lib/rpc';
 import { useTheme } from '../../theme/ThemeContext';
 
@@ -83,7 +84,7 @@ export function ConnectionSheet({ open, onClose }) {
             <Text style={{ color: colors.ink3 }}>Not paired yet — tap below to scan a QR.</Text>
           </View>
         ) : (
-          connections.map((c, i) => {
+          sortConnectionsByRecency(connections).map((c, i) => {
             const status = probeState.get(c.id) ?? 'unknown';
             const version = versionState.get(c.id);
             const upd = updateState.get(c.id);

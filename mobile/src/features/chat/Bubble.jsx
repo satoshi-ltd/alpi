@@ -28,14 +28,16 @@ const S = StyleSheet.create({
     maxWidth: '82%',
     paddingHorizontal: space.s6,
     paddingVertical: space.s5,
-    borderRadius: radii.xl,
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: radii.xs,
+    borderBottomRightRadius: 18,
+    borderBottomLeftRadius: 18,
   },
   bubbleText: { fontSize: fontSizes.lg, lineHeight: fontSizes.lg * 1.45 },
   wgBubble: {
     maxWidth: '90%',
     paddingHorizontal: space.s7,
     paddingVertical: space.s6,
-    borderRadius: 14,
   },
   meta: { fontSize: fontSizes.xs, lineHeight: fontSizes.xs },
   speakerRow: { flexDirection: 'row', alignItems: 'center', gap: space.s2 },
@@ -121,9 +123,12 @@ export function WorkgroupMessage({ body, speakerName, speakerAccent, isFromHub, 
   const bubbleStyle = useCallback(
     ({ pressed }) => [
       S.wgBubble,
+      right
+        ? { borderTopLeftRadius: 18, borderTopRightRadius: radii.xs, borderBottomRightRadius: 18, borderBottomLeftRadius: 18 }
+        : { borderTopLeftRadius: radii.xs, borderTopRightRadius: 18, borderBottomRightRadius: 18, borderBottomLeftRadius: 18 },
       { backgroundColor: bg, opacity: pressed ? 0.85 : 1 },
     ],
-    [bg],
+    [bg, right],
   );
 
   return (

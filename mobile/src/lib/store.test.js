@@ -159,6 +159,41 @@ describe("store.setActiveConnection", () => {
     const state = await setActiveConnection("ghost");
     expect(state.active_id).toBe("alpha");
   });
+
+  it("stamps last_connected on the activated connection", async () => {
+    memory.set(KEY, JSON.stringify({
+      v: 1, active_id: "alpha",
+      connections: [validConn({ id: "alpha" }), validConn({ id: "beta" })],
+    }));
+    const { setActiveConnection } = await import("./store.js");
+    const before = Date.now();
+    const state = await setActiveConnection("beta");
+    const beta = state.connections.find((c) => c.id === "beta");
+    expect(beta.last_connected).toBeGreaterThanOrEqual(before);
+    expect(state.connections.find((c) => c.id === "alpha").last_connected).toBeUndefined();
+  });
+});
+
+describe("store.sortConnectionsByRecency", () => {
+  it("orders by last_connected desc, falling back to added_at, never-seen last", async () => {
+    const { sortConnectionsByRecency } = await import("./store.js");
+    const conns = [
+      validConn({ id: "old", last_connected: 100 }),
+      validConn({ id: "added-only", last_connected: undefined, added_at: 400 }),
+      validConn({ id: "new", last_connected: 900 }),
+      validConn({ id: "never", last_connected: undefined, added_at: undefined }),
+    ];
+    expect(sortConnectionsByRecency(conns).map((c) => c.id)).toEqual([
+      "new", "added-only", "old", "never",
+    ]);
+  });
+
+  it("does not mutate the input array", async () => {
+    const { sortConnectionsByRecency } = await import("./store.js");
+    const conns = [validConn({ id: "a", last_connected: 1 }), validConn({ id: "b", last_connected: 2 })];
+    sortConnectionsByRecency(conns);
+    expect(conns.map((c) => c.id)).toEqual(["a", "b"]);
+  });
 });
 
 describe("store.clearAll", () => {

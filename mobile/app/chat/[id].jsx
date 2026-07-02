@@ -16,6 +16,7 @@ import { enqueueReadAloud } from '../../src/lib/readAloud';
 import { Composer } from '../../src/features/chat/Composer';
 import { MessageActionsSheet } from '../../src/features/chat/MessageActionsSheet';
 import { retryTextFor } from '../../src/features/chat/messageActions';
+import { visibleWindow } from '../../src/lib/chatWindow';
 import { compactProducedTool } from '../../src/lib/producedAttachments';
 import { profileLabel } from '../../src/lib/profileLabel';
 import { mergeStreamingTurn, isInterruptedTurn, consumeAutoRead } from '../../src/features/chat/chatTurns';
@@ -47,6 +48,8 @@ function relativeTime(ms) {
 
 const INITIAL_PAGE = 30;
 const PAGE_STEP = 30;
+// One rendered page + one buffered — first paint ships ~60 turns instead of the whole transcript.
+const TAIL_INITIAL = INITIAL_PAGE + PAGE_STEP;
 
 const TURN_STYLES = StyleSheet.create({
   block: { gap: space.s4, paddingTop: space.s8 },
@@ -217,20 +220,16 @@ function EmptyThread({ profileName, model, accent, colors, fonts }) {
   );
 }
 
-function ChatList({ turns, pendingTurn, loading, hydrating, profileName, model, accent, onActionTarget, colors, fonts, fontSizes }) {
+function ChatList({ turns, pendingTurn, loading, hydrating, profileName, model, accent, onActionTarget, colors, fonts, fontSizes, turnsBase = 0, hasMoreRemote = false, onLoadOlder }) {
   const [pageSize, setPageSize] = useState(INITIAL_PAGE);
 
   const full = useMemo(() => mergeStreamingTurn(turns, pendingTurn), [turns, pendingTurn]);
 
-  const visible = useMemo(() => {
-    const start = Math.max(0, full.length - pageSize);
-    const out = [];
-    for (let i = full.length - 1; i >= start; i -= 1) {
-      out.push({ turn: full[i], turnIndex: i });
-    }
-    return out;
-  }, [full, pageSize]);
-  const hasMore = full.length > pageSize;
+  const visible = useMemo(
+    () => visibleWindow(full, pageSize, turnsBase),
+    [full, pageSize, turnsBase],
+  );
+  const hasMore = full.length > pageSize || hasMoreRemote;
 
   const renderItem = useCallback(
     ({ item }) => (
@@ -263,7 +262,10 @@ function ChatList({ turns, pendingTurn, loading, hydrating, profileName, model, 
       keyExtractor={(item, idx) => `${item.turn.user ?? ''}|${item.turnIndex}|${idx}`}
       renderItem={renderItem}
       contentContainerStyle={{ paddingTop: space.s5, paddingBottom: space.s5 }}
-      onEndReached={hasMore ? () => setPageSize((n) => n + PAGE_STEP) : undefined}
+      onEndReached={hasMore ? () => {
+        if (full.length <= pageSize && hasMoreRemote) onLoadOlder?.();
+        setPageSize((n) => n + PAGE_STEP);
+      } : undefined}
       onEndReachedThreshold={0.5}
       initialNumToRender={12}
       maxToRenderPerBatch={10}
@@ -367,7 +369,31 @@ function ProfileChatInner() {
     const chat = sessions.find((s) => (s.kind ?? 'chat') === 'chat');
     if (chat?.id) setSessionId(chat.id);
   }, [sessionPicked, sessionId, latestChatId, sessionsList.data]);
-  const session = useSession(id, sessionId);
+  const [tailTurns, setTailTurns] = useState(TAIL_INITIAL);
+  useEffect(() => {
+    setTailTurns(TAIL_INITIAL);
+  }, [id, sessionId]);
+  const session = useSession(id, sessionId, tailTurns);
+
+  // Growing the tail flips the cache key (data null while the bigger tail loads) — hold the last good payload so the list never flashes a skeleton mid-scroll.
+  const heldRef = useRef({ key: null, data: null, offset: 0 });
+  const sessKey = `${endpoint?.id ?? ''}|${id}|${sessionId ?? ''}`;
+  useEffect(() => {
+    if (session.data) {
+      heldRef.current = { key: sessKey, data: session.data, offset: session.turnsOffset };
+    }
+  }, [session.data, session.turnsOffset, sessKey]);
+  const held = heldRef.current.key === sessKey ? heldRef.current : null;
+  const sessionData = session.data ?? held?.data ?? null;
+  const turnsBase = session.data ? session.turnsOffset : (held?.offset ?? 0);
+  const hasMoreRemote = turnsBase > 0;
+
+  const sessionLoadingRef = useRef(false);
+  sessionLoadingRef.current = session.loading;
+  const loadOlder = useCallback(() => {
+    if (sessionLoadingRef.current) return;
+    setTailTurns((t) => t + PAGE_STEP);
+  }, []);
 
   const latestSessionTs =
     profile?.latest_session?.updated_at ??
@@ -400,7 +426,7 @@ function ProfileChatInner() {
   }, [endpoint, profile?.name, profile?.model, call]);
 
   const hydrating =
-    (sessionId && (session.loading || session.data === null)) ||
+    (sessionId && (session.loading || sessionData === null)) ||
     (!sessionId && sessionsList.loading && sessionsList.data === null);
 
   const toast = useToast();
@@ -452,11 +478,11 @@ function ProfileChatInner() {
     const now = !!pendingTurn;
     prevPendingRef.current = now;
     if (!(was && !now)) return;
-    const ts = session.data?.turns ?? [];
+    const ts = sessionData?.turns ?? [];
     const { speak, nextStreamed } = consumeAutoRead(lastPreviewRef.current, voiceCfg.autoRead, ts);
     lastPreviewRef.current = nextStreamed;
     if (speak) {
-      const idx = ts.length - 1;
+      const idx = turnsBase + ts.length - 1;
       enqueueReadAloud({
         call,
         key: `chat:${id}:${idx}`,
@@ -465,7 +491,7 @@ function ProfileChatInner() {
         accent,
       });
     }
-  }, [pendingTurn, voiceCfg, session.data, call, id, accent]);
+  }, [pendingTurn, voiceCfg, sessionData, turnsBase, call, id, accent]);
 
   const sendMessage = (text, options) => {
     if (profile?.paused) return;
@@ -559,7 +585,7 @@ function ProfileChatInner() {
     if (n < 1_000_000) return `${(n / 1000).toFixed(n < 10_000 ? 1 : 0)}K`;
     return `${(n / 1_000_000).toFixed(1)}M`;
   };
-  const ctxUsed = session.data?.last_ctx_tokens ?? 0;
+  const ctxUsed = sessionData?.last_ctx_tokens ?? 0;
   const headerMeta =
     emptyState === 'needs-provider'
       ? 'profile · no provider'
@@ -577,7 +603,7 @@ function ProfileChatInner() {
             .filter(Boolean)
             .join(' · ');
 
-  const turns = session.data?.turns ?? [];
+  const turns = sessionData?.turns ?? [];
   const paused = !!profile.paused;
 
   return (
@@ -622,6 +648,9 @@ function ProfileChatInner() {
             colors={colors}
             fonts={fonts}
             fontSizes={fontSizes}
+            turnsBase={turnsBase}
+            hasMoreRemote={hasMoreRemote}
+            onLoadOlder={loadOlder}
           />
           <Composer
             placeholder={`Message @${profileLabel(profile.name)}…`}

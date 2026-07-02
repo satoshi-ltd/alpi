@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { renderHook, act, waitFor } from "@testing-library/react";
 
 import { EndpointContext } from "../lib/EndpointContext";
-import { _resetDaemonDataCache, useProfileSnapshot, useProfileSummaries } from "./useDaemonData";
+import { _resetDaemonDataCache, useProfileSnapshot, useProfileSummaries, useSession } from "./useDaemonData";
 
 beforeEach(() => {
   _resetDaemonDataCache();
@@ -218,5 +218,74 @@ describe("useProfileSnapshot", () => {
 
     const { result } = renderHook(() => useProfileSnapshot("doc"), { wrapper: Wrapper });
     await waitFor(() => expect(result.current.unsupported).toBe(true));
+  });
+});
+
+describe("useSession tail slicing", () => {
+  function wrapperWith(call) {
+    const endpoint = { id: "ep1", name: "ep1" };
+    return function Wrapper({ children }) {
+      return (
+        <EndpointContext.Provider value={{ endpoint, call }}>
+          {children}
+        </EndpointContext.Provider>
+      );
+    };
+  }
+
+  it("passes tail_turns through and exposes total/offset from the envelope", async () => {
+    const call = vi.fn(async () => ({
+      session: { id: "s1", turns: [{ user: "u2" }] },
+      total_turns: 3,
+      turns_offset: 2,
+    }));
+    const { result } = renderHook(() => useSession("doc", "s1", 1), {
+      wrapper: wrapperWith(call),
+    });
+    await waitFor(() => expect(result.current.data?.id).toBe("s1"));
+    expect(call).toHaveBeenCalledWith("host.session.read", {
+      profile: "doc", id: "s1", tail_turns: 1,
+    });
+    expect(result.current.totalTurns).toBe(3);
+    expect(result.current.turnsOffset).toBe(2);
+  });
+
+  it("treats a daemon that ignored the slice as a full transcript (totalTurns null, offset 0)", async () => {
+    const call = vi.fn(async () => ({
+      session: { id: "s1", turns: [{ user: "u0" }, { user: "u1" }] },
+    }));
+    const { result } = renderHook(() => useSession("doc", "s1", 1), {
+      wrapper: wrapperWith(call),
+    });
+    await waitFor(() => expect(result.current.data?.turns).toHaveLength(2));
+    expect(result.current.totalTurns).toBeNull();
+    expect(result.current.turnsOffset).toBe(0);
+  });
+
+  it("omits tail_turns when not requested", async () => {
+    const call = vi.fn(async () => ({ session: { id: "s1", turns: [] } }));
+    renderHook(() => useSession("doc", "s1"), { wrapper: wrapperWith(call) });
+    await waitFor(() => expect(call).toHaveBeenCalledWith("host.session.read", {
+      profile: "doc", id: "s1",
+    }));
+  });
+});
+
+describe("useProfileSnapshot sections", () => {
+  it("requests every section except storage so the snapshot never pays the os.walk", async () => {
+    const call = vi.fn(async () => ({ detail: {} }));
+    const endpoint = { id: "ep1", name: "ep1" };
+    function Wrapper({ children }) {
+      return (
+        <EndpointContext.Provider value={{ endpoint, call }}>
+          {children}
+        </EndpointContext.Provider>
+      );
+    }
+    renderHook(() => useProfileSnapshot("doc"), { wrapper: Wrapper });
+    await waitFor(() => expect(call).toHaveBeenCalledWith("host.settings.profile_snapshot", {
+      profile: "doc",
+      sections: ["detail", "usage", "workgroups", "email", "schedules"],
+    }));
   });
 });

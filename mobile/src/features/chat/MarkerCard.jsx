@@ -1,5 +1,5 @@
 import { StyleSheet, Text, View } from 'react-native';
-import { space , fontSizes, lineHeights} from '../../theme/tokens';
+import { radii, space , fontSizes, lineHeights} from '../../theme/tokens';
 
 import { Diamond } from '../../components/Diamond';
 import { Dot } from '../../components/Dot';
@@ -15,7 +15,6 @@ const S = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: space.s2 },
   card: {
     maxWidth: '90%',
-    borderRadius: 14,
     paddingHorizontal: space.s7,
     paddingVertical: space.s6,
   },
@@ -72,6 +71,9 @@ export function MarkerCard({ variant = 'task', side = 'left', hubColor, speakerN
   const isRight = side === 'right';
   const hasBody = Boolean(children);
   const compact = !title && !hasBody;
+  const corner = isRight
+    ? { borderTopLeftRadius: 18, borderTopRightRadius: radii.xs, borderBottomRightRadius: 18, borderBottomLeftRadius: 18 }
+    : { borderTopLeftRadius: radii.xs, borderTopRightRadius: 18, borderBottomRightRadius: 18, borderBottomLeftRadius: 18 };
 
   let costStr = null;
   const tok = typeof cost?.tokens === 'number' ? cost.tokens : 0;
@@ -111,7 +113,7 @@ export function MarkerCard({ variant = 'task', side = 'left', hubColor, speakerN
           )}
         </View>
       ) : null}
-      <View style={[S.card, compact && S.cardCompact, { backgroundColor: tint }, shadow.sm]}>
+      <View style={[S.card, compact && S.cardCompact, corner, { backgroundColor: tint }, shadow.sm]}>
         <View style={[S.eyebrowRow, compact && { marginBottom: 0 }]}>
           <View style={S.iconSlot}>
             <MarkerIcon variant={variant} color={baseAccent} stale={stale} />

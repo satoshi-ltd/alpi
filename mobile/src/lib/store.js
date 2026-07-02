@@ -53,6 +53,12 @@ export async function loadConnections() {
   return normalize(state);
 }
 
+export function sortConnectionsByRecency(connections) {
+  return [...(connections ?? [])].sort(
+    (a, b) => (b.last_connected ?? b.added_at ?? 0) - (a.last_connected ?? a.added_at ?? 0),
+  );
+}
+
 export async function saveConnection(endpoint) {
   if (!endpoint?.deviceId || typeof endpoint.deviceId !== 'string') {
     throw new Error('saveConnection requires a deviceId — pair against an alpi daemon v0.6.6 or newer.');
@@ -67,6 +73,7 @@ export async function saveConnection(endpoint) {
     token: endpoint.token,
     kind: 'remote',
     added_at: Date.now(),
+    last_connected: Date.now(),
     deviceId: endpoint.deviceId,
   };
   const existingIdx = state.connections.findIndex((c) => c.id === id);
@@ -87,7 +94,9 @@ export async function removeConnection(id) {
 
 export async function setActiveConnection(id) {
   const state = await loadConnections();
-  if (!state.connections.find((c) => c.id === id)) return state;
+  const conn = state.connections.find((c) => c.id === id);
+  if (!conn) return state;
+  conn.last_connected = Date.now();
   state.active_id = id;
   await writeRaw(state);
   return state;

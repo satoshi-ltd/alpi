@@ -181,4 +181,33 @@ describe('ProfileSettings snapshot first paint', () => {
     expect(calls).not.toContain('host.schedule.list');
     expect(calls).not.toContain('host.profile.storage');
   });
+
+  it('fetches storage via host.profile.storage when the daemon honors the sections filter', async () => {
+    const calls = [];
+    const call = vi.fn(async (method, params) => {
+      calls.push(method);
+      if (method === 'host.profile.summaries') {
+        return { profiles: [{ name: 'doc', counts: { peers: 0, skills: 0 } }] };
+      }
+      if (method === 'host.settings.profile_snapshot') {
+        expect(params.sections).toEqual(['detail', 'usage', 'workgroups', 'email', 'schedules']);
+        return {
+          detail: { name: 'doc' },
+          usage: { days: [] },
+          schedules: { jobs: [] },
+          workgroups: { workgroups: [] },
+          email: { accounts: [] },
+        };
+      }
+      if (method === 'host.profile.storage') {
+        return { storage: [{ key: 'sessions', label: 'sessions', size_bytes: 4096, file_count: 3 }] };
+      }
+      throw new Error(`unexpected ${method}`);
+    });
+
+    render(<ProfileSettings />, { wrapper: wrapper(call) });
+
+    await waitFor(() => expect(screen.getByText('4 KB')).toBeTruthy());
+    expect(calls).toContain('host.profile.storage');
+  });
 });

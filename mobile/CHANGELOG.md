@@ -14,6 +14,23 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.2.3 — 2026-07-02 — chats open fast + schedule health
+
+_Requires alpi v0.10.5+; fast chat opening needs alpi v0.10.11+._
+
+- **Opening a chat now fetches only the latest turns.** Older history loads as
+  you scroll back, so a long conversation no longer ships its whole transcript
+  over Tailscale before first paint.
+- **Profile Settings skip the slow storage scan.** The snapshot returns without
+  waiting for disk sizes (they load separately), so Settings open noticeably
+  faster on busy profiles.
+- **Each schedule shows its last run** — when it ran and whether it succeeded
+  or failed — right in the schedule list.
+- **Connections are ordered by recency**, so the daemon you used last is always
+  at the top when switching.
+- **Chat bubbles got a visual refresh** with directional corners for messages,
+  workgroup posts and task markers.
+
 ## v0.2.2 — 2026-06-29 — Profile Settings open fast over remote connections
 
 _Requires alpi v0.10.5+._

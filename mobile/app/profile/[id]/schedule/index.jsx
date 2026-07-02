@@ -13,7 +13,7 @@ import { Bold, Code, TypedConfirm } from '../../../../src/components/TypedConfir
 import { useScheduleList } from '../../../../src/hooks/useDaemonData';
 import { useEventEffect } from '../../../../src/hooks/useEvents';
 import { useEndpoint } from '../../../../src/lib/EndpointContext';
-import { scheduleSummary } from '../../../../src/lib/scheduleFormat';
+import { scheduleSummary, formatLastRun } from '../../../../src/lib/scheduleFormat';
 import { useTheme } from '../../../../src/theme/ThemeContext';
 
 export default function ScheduleList() {
@@ -130,6 +130,12 @@ export default function ScheduleList() {
                     numberOfLines={2}
                   >
                     {j.title || desc}
+                  </Text>
+                  <Text
+                    style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink4 }}
+                    numberOfLines={1}
+                  >
+                    {formatLastRun(j.last_run_at, j.last_run_status)}
                   </Text>
                 </Pressable>
               </View>
