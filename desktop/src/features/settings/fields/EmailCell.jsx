@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { safeUnlisten } from "../../../lib/tauri-listen.js";
+import { createSwrCache } from "../../../lib/swr-cache.js";
+import { useSwrValue } from "../../../hooks/useSwrValue.js";
 import Button from "../../../primitives/Button.jsx";
 import Chip from "../../../primitives/Chip.jsx";
 import Dot from "../../../primitives/Dot.jsx";
@@ -17,10 +19,22 @@ function cacheKey(connectionId, profileName) {
   return `${connectionId || "local"}|${profileName}`;
 }
 
-const _accountsCache = new Map();
+const _emailCache = createSwrCache({
+  fetcher: ({ profile, connectionId }) =>
+    invoke("email_status", { profile, ...(connectionId ? { connectionId } : {}) })
+      .then((s) => (Array.isArray(s) ? s : [])),
+  events: {
+    kinds: new Set(["email_changed"]),
+    match: (key, frame, payload) => {
+      const profile = frame?.data?.profile;
+      if (!profile || !key.endsWith(`|${profile}`)) return false;
+      return !payload.connection_id || key.startsWith(`${payload.connection_id}|`);
+    },
+  },
+});
 
 export function _clearEmailAccountsCache() {
-  _accountsCache.clear();
+  _emailCache.clear();
 }
 
 export function EmailCell({
@@ -33,46 +47,24 @@ export function EmailCell({
 }) {
   const prefetchedMode = prefetched !== undefined;
   const key = cacheKey(connectionId, profile.name);
-  const [accounts, setAccounts] = useState(() => (prefetchedMode ? prefetched : _accountsCache.get(key) ?? null));
-  const [tick, setTick] = useState(0);
+  const { data, error, loading, refresh: swrRefresh } = useSwrValue(
+    _emailCache,
+    key,
+    { profile: profile.name, connectionId },
+    { defer, prefetched },
+  );
+  const accounts = data ?? (error ? [] : null);
   const [editing, setEditing] = useState(null);
   const [adding, setAdding] = useState(false);
-  const requestRef = useRef(0);
-  const connectionArg = useMemo(
-    () => (connectionId ? { connectionId } : {}),
-    [connectionId],
-  );
 
   useEffect(() => {
-    if (prefetchedMode) {
-      setAccounts(prefetched);
-      _accountsCache.set(key, Array.isArray(prefetched) ? prefetched : []);
-      onLoadingChange?.(false);
-      return undefined;
-    }
-    const requestId = ++requestRef.current;
-    setAccounts(_accountsCache.get(key) ?? null);
     setEditing(null);
-    onLoadingChange?.(true);
-    if (defer) return undefined;
-    invoke("email_status", { profile: profile.name, ...connectionArg })
-      .then((s) => {
-        if (requestRef.current !== requestId) return;
-        const next = Array.isArray(s) ? s : [];
-        _accountsCache.set(key, next);
-        setAccounts(next);
-      })
-      .catch(() => {
-        if (requestRef.current === requestId) setAccounts(_accountsCache.get(key) ?? []);
-      })
-      .finally(() => {
-        if (requestRef.current === requestId) onLoadingChange?.(false);
-      });
-    return () => {
-      requestRef.current += 1;
-      onLoadingChange?.(false);
-    };
-  }, [profile.name, connectionArg, key, tick, prefetchedMode, prefetched, defer, onLoadingChange]);
+  }, [key]);
+
+  useEffect(() => {
+    onLoadingChange?.(defer && !prefetchedMode ? true : loading);
+  }, [loading, defer, prefetchedMode, onLoadingChange]);
+  useEffect(() => () => onLoadingChange?.(false), [onLoadingChange]);
 
   function refresh() {
     if (prefetchedMode && onSnapshotRefresh) {
@@ -80,7 +72,7 @@ export function EmailCell({
       Promise.resolve(onSnapshotRefresh()).finally(() => onLoadingChange?.(false));
       return;
     }
-    setTick((t) => t + 1);
+    swrRefresh();
   }
 
   return (

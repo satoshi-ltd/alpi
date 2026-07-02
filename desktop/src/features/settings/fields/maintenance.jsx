@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { createSwrCache } from "../../../lib/swr-cache.js";
+import { useSwrValue } from "../../../hooks/useSwrValue.js";
 import Button from "../../../primitives/Button.jsx";
 import Chip from "../../../primitives/Chip.jsx";
 import { Row } from "../primitives.jsx";
@@ -12,43 +14,32 @@ function storageCacheKey(connectionId, profileName) {
   return `${connectionId || "local"}|${profileName}`;
 }
 
-const _storageCache = new Map();
+const _storageCache = createSwrCache({
+  fetcher: ({ profile, connectionId }) =>
+    invoke("profile_storage", { profile, ...(connectionId ? { connectionId } : {}) })
+      .then((rows) => (Array.isArray(rows) ? rows : [])),
+});
 
 export function _clearStorageCache() {
   _storageCache.clear();
 }
 
 export function StorageField({ profile, activeConnection, prefetched, onLoadingChange = null }) {
-  const prefetchedMode = prefetched !== undefined;
-  const key = storageCacheKey(activeConnection?.id ?? null, profile.name);
-  const [items, setItems] = useState(() => (prefetchedMode ? prefetched : _storageCache.get(key) ?? null));
+  const connectionId = activeConnection?.id ?? null;
+  const key = storageCacheKey(connectionId, profile.name);
+  const { data, error, loading } = useSwrValue(
+    _storageCache,
+    key,
+    { profile: profile.name, connectionId },
+    { prefetched },
+  );
+  const items = data ?? (error ? [] : null);
   const isLocal = activeConnection?.kind === "local";
+
   useEffect(() => {
-    if (prefetchedMode) {
-      setItems(prefetched);
-      onLoadingChange?.(false);
-      return undefined;
-    }
-    let cancelled = false;
-    setItems(_storageCache.get(key) ?? null);
-    onLoadingChange?.(true);
-    invoke("profile_storage", {
-      profile: profile.name,
-      ...(activeConnection?.id ? { connectionId: activeConnection.id } : {}),
-    })
-      .then((rows) => {
-        if (cancelled) return;
-        const next = Array.isArray(rows) ? rows : [];
-        _storageCache.set(key, next);
-        setItems(next);
-      })
-      .catch(() => { if (!cancelled) setItems(_storageCache.get(key) ?? []); })
-      .finally(() => { if (!cancelled) onLoadingChange?.(false); });
-    return () => {
-      cancelled = true;
-      onLoadingChange?.(false);
-    };
-  }, [profile.name, activeConnection?.id, key, prefetchedMode, prefetched, onLoadingChange]);
+    onLoadingChange?.(loading);
+  }, [loading, onLoadingChange]);
+  useEffect(() => () => onLoadingChange?.(false), [onLoadingChange]);
 
   const visible = (items ?? []).filter(
     (it) => it.size_bytes > 0 || it.file_count > 0,

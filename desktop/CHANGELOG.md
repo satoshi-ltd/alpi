@@ -11,6 +11,24 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.4.14 — 2026-07-02 — one cache policy everywhere
+
+_No daemon changes required._
+
+- **Settings sections now track the daemon live.** Email accounts and workgroup
+  members refresh themselves when the daemon reports a change, instead of
+  waiting for you to reopen the page.
+- **Profile data can no longer go permanently stale.** Every cached view now
+  revalidates in the background when shown again, so a daemon restart that
+  happened while you were elsewhere can't leave the chat header or settings
+  showing old values.
+- **Forgetting a connection now removes everything it stored locally** —
+  cached profiles, workgroup messages, chat history tails, pins and read
+  markers — instead of leaving orphaned data behind.
+- **All settings caches share one hardened engine** with the same rules for
+  stale data, connection switches and out-of-order responses, closing a class
+  of subtle races fixed one-by-one until now.
+
 ## v0.4.13 — 2026-07-02 — remote connections get fast: pooling + caching
 
 _Works with any recent daemon; the biggest wins need alpi v0.10.11+._

@@ -10,6 +10,7 @@ vi.mock("../../../primitives/Notification.jsx", () => ({
 }));
 
 import { EmailCell, _clearEmailAccountsCache } from "./EmailCell.jsx";
+import { _resetDaemonBus } from "../../../lib/daemon-bus.js";
 
 const profile = { name: "concierge" };
 
@@ -20,6 +21,7 @@ const TWO_ACCOUNTS = [
 
 beforeEach(() => {
   _clearEmailAccountsCache();
+  _resetDaemonBus();
   invoke.mockReset();
   notifyMock.mockReset();
   listen.mockReset();
@@ -433,5 +435,58 @@ describe("EmailCell multi-account", () => {
       );
     });
     uuid.mockRestore();
+  });
+});
+
+describe("EmailCell daemon events", () => {
+  it("refetches accounts when the daemon emits email_changed for this (connection, profile)", async () => {
+    let busCb;
+    listen.mockImplementation(async (name, cb) => {
+      if (name === "daemon-event") busCb = cb;
+      return () => {};
+    });
+    invoke
+      .mockResolvedValueOnce(TWO_ACCOUNTS)
+      .mockResolvedValueOnce([
+        ...TWO_ACCOUNTS,
+        { id: "new_inbox", type: "imap", address: "new@inbox.com", configured: true },
+      ]);
+
+    render(<EmailCell profile={profile} connectionId="casa" />);
+    expect(await screen.findByRole("button", { name: "me@work.com" })).toBeInTheDocument();
+
+    await act(async () => {
+      busCb({
+        payload: {
+          connection_id: "casa",
+          frame: { event: "email_changed", data: { profile: "concierge" } },
+        },
+      });
+    });
+    expect(await screen.findByRole("button", { name: "new@inbox.com" })).toBeInTheDocument();
+  });
+
+  it("ignores email_changed for another profile", async () => {
+    let busCb;
+    listen.mockImplementation(async (name, cb) => {
+      if (name === "daemon-event") busCb = cb;
+      return () => {};
+    });
+    invoke.mockResolvedValueOnce(TWO_ACCOUNTS);
+
+    render(<EmailCell profile={profile} connectionId="casa" />);
+    expect(await screen.findByRole("button", { name: "me@work.com" })).toBeInTheDocument();
+    invoke.mockClear();
+
+    await act(async () => {
+      busCb({
+        payload: {
+          connection_id: "casa",
+          frame: { event: "email_changed", data: { profile: "someone-else" } },
+        },
+      });
+      await new Promise((r) => setTimeout(r, 350));
+    });
+    expect(invoke).not.toHaveBeenCalled();
   });
 });

@@ -31,6 +31,7 @@ import {
 } from "./lib/session-cache.js";
 import { fetchFullSession, isSessionGone } from "./lib/session-fetch.js";
 import { createSessionRefresher } from "./lib/session-refresh.js";
+import { invalidateConnectionCaches } from "./lib/swr-cache.js";
 import { invalidateSessionsButtonCache } from "./primitives/SessionsButton.jsx";
 import {
   classifyDaemonPayload,
@@ -392,6 +393,8 @@ export default function App() {
       invalidateTranscriptCache(hostConnections.active_id);
       invalidateProfileDetailCache(hostConnections.active_id);
       invalidateSessionCache(hostConnections.active_id);
+      invalidateConnectionCaches(prev);
+      invalidateConnectionCaches(hostConnections.active_id);
       invalidateSessionsButtonCache();
     }
     prevConnectionIdRef.current = hostConnections.active_id;

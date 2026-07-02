@@ -3,6 +3,12 @@ import { invoke } from "@tauri-apps/api/core";
 
 import { pruneCachedMessages } from "../lib/workgroup-cache.js";
 import { subscribe } from "../lib/daemon-bus.js";
+import { purgeConnectionStorage } from "../lib/connection-gc.js";
+import { invalidateConnectionCaches } from "../lib/swr-cache.js";
+import { invalidateTranscriptCache } from "../lib/workgroup-fetch.js";
+import { invalidateSessionCache } from "../lib/session-cache.js";
+import { invalidateProfileDetailCache } from "./useProfileDetail.js";
+import { purgeConnectionReadState } from "./useReadState.js";
 
 const PROFILES_CACHE_PREFIX = "alf:profiles:v1:";
 const WORKGROUPS_CACHE_PREFIX = "alf:workgroups:v1:";
@@ -387,6 +393,12 @@ export function useHostConnections({
     async (id) => {
       try {
         await invoke("host_connection_forget", { id });
+        purgeConnectionStorage(id);
+        purgeConnectionReadState(id);
+        invalidateConnectionCaches(id);
+        invalidateProfileDetailCache(id);
+        invalidateTranscriptCache(id);
+        invalidateSessionCache(id);
         await reloadConnections();
         await reload();
       } catch {}

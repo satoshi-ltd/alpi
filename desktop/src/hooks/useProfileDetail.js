@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { subscribeDaemonEvent } from "../lib/daemon-bus.js";
 
-// Lazy `host.profile.detail` cache keyed by (connectionId, name) — two daemons with the same profile name must not bleed peers/models/mcps. Invalidate on connection switch via `invalidateProfileDetailCache(prev)`.
+// SWR `host.profile.detail` cache keyed by (connectionId, name) — two daemons with the same profile name must not bleed peers/models/mcps. Invalidate on connection switch via `invalidateProfileDetailCache(prev)`.
 
 function makeKey(connectionId, name) {
   return `${connectionId || "local"}|${name}`;
@@ -21,7 +21,15 @@ function notify(key) {
 function load(connectionId, name, { force = false } = {}) {
   if (!name) return Promise.resolve(null);
   const key = makeKey(connectionId, name);
-  if (!force && _cache.has(key)) return Promise.resolve(_cache.get(key));
+  if (!force && _cache.has(key)) {
+    // SWR: hand back the cached detail synchronously but still revalidate — a missed daemon event (offline restart) must not leave ChatPane stale forever.
+    _startFetch(key, connectionId, name);
+    return Promise.resolve(_cache.get(key));
+  }
+  return _startFetch(key, connectionId, name);
+}
+
+function _startFetch(key, connectionId, name) {
   if (_inflight.has(key)) return _inflight.get(key);
   const p = invoke("profile_detail", { profile: name, connectionId })
     .then((d) => {

@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import Button from "../../primitives/Button.jsx";
 import Chip from "../../primitives/Chip.jsx";
@@ -15,6 +15,8 @@ import { Diamond, Dot, Mono } from "../../primitives/index.js";
 import { BudgetEditor } from "./fields/alp.jsx";
 import { useProfileDetail } from "../../hooks/useProfileDetail.js";
 import { useWorkgroupUsageDaily } from "../../hooks/useUsage.js";
+import { useSwrValue } from "../../hooks/useSwrValue.js";
+import { createSwrCache } from "../../lib/swr-cache.js";
 import Usage from "./Usage.jsx";
 import styles from "./Settings.module.css";
 import { shortPubkey } from "../../lib/pubkey.js";
@@ -39,7 +41,22 @@ function membersCacheKey(connectionId, profile, wgId) {
   return `${connectionId || "local"}|${profile}|${wgId}`;
 }
 
-const _membersCache = new Map();
+const _membersCache = createSwrCache({
+  fetcher: ({ profile, wgId, connectionId }) =>
+    invoke("workgroup_members", {
+      profile,
+      wgId,
+      ...(connectionId ? { connectionId } : {}),
+    }).then((list) => (Array.isArray(list) ? list : [])),
+  events: {
+    kinds: new Set(["workgroup_members"]),
+    match: (key, frame, payload) => {
+      const wgId = frame?.data?.wg_id;
+      if (!wgId || !key.endsWith(`|${wgId}`)) return false;
+      return !payload.connection_id || key.startsWith(`${payload.connection_id}|`);
+    },
+  },
+});
 
 export function _clearWorkgroupMembersCache() {
   _membersCache.clear();
@@ -54,8 +71,17 @@ export default function WorkgroupDetail({
   onOpenChat,
 }) {
   const membersKey = membersCacheKey(connectionId, workgroup.profile, workgroup.id);
-  const [members, setMembers] = useState(() => _membersCache.get(membersKey) ?? null);
-  const [membersLoading, setMembersLoading] = useState(false);
+  const {
+    data: membersData,
+    error: membersError,
+    loading: membersLoading,
+    refresh: reloadMembers,
+  } = useSwrValue(_membersCache, membersKey, {
+    profile: workgroup.profile,
+    wgId: workgroup.id,
+    connectionId,
+  });
+  const members = membersData ?? (membersError ? [] : null);
   const [busyAction, setBusyAction] = useState(null);
   const [briefing, setBriefing] = useState(workgroup.briefing ?? "");
   const [stages, setStages] = useState(workgroup.pipeline ?? []);
@@ -74,44 +100,6 @@ export default function WorkgroupDetail({
       if (briefingTimer.current) clearTimeout(briefingTimer.current);
     };
   }, []);
-
-  const reloadMembers = useCallback(async () => {
-    setMembersLoading(true);
-    try {
-      const list = await invoke("workgroup_members", {
-        profile: workgroup.profile,
-        wgId: workgroup.id,
-        ...(connectionId ? { connectionId } : {}),
-      });
-      const next = Array.isArray(list) ? list : [];
-      _membersCache.set(membersKey, next);
-      setMembers(next);
-    } catch {
-      setMembers(_membersCache.get(membersKey) ?? []);
-    } finally {
-      setMembersLoading(false);
-    }
-  }, [workgroup.profile, workgroup.id, connectionId, membersKey]);
-
-  useEffect(() => {
-    let cancelled = false;
-    setMembers(_membersCache.get(membersKey) ?? null);
-    setMembersLoading(true);
-    invoke("workgroup_members", {
-      profile: workgroup.profile,
-      wgId: workgroup.id,
-      ...(connectionId ? { connectionId } : {}),
-    })
-      .then((list) => {
-        if (cancelled) return;
-        const next = Array.isArray(list) ? list : [];
-        _membersCache.set(membersKey, next);
-        setMembers(next);
-      })
-      .catch(() => { if (!cancelled) setMembers(_membersCache.get(membersKey) ?? []); })
-      .finally(() => { if (!cancelled) setMembersLoading(false); });
-    return () => { cancelled = true; };
-  }, [workgroup.profile, workgroup.id, connectionId, membersKey]);
 
   const hubName = workgroup.hub_id ?? workgroup.profile;
   const hubSummary = profiles.find((p) => p.name === hubName);

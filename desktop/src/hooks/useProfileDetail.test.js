@@ -64,14 +64,18 @@ describe("useProfileDetail", () => {
     });
   });
 
-  it("hits the cache instead of refetching across remounts with same (conn, name)", async () => {
-    invoke.mockResolvedValueOnce({ peers: ["alice"] });
+  it("serves the cached detail synchronously on remount and revalidates in the background (SWR)", async () => {
+    invoke
+      .mockResolvedValueOnce({ peers: ["alice"] })
+      .mockResolvedValueOnce({ peers: ["alice", "bob"] });
     const h1 = renderHook(() => useProfileDetail("conn-a", "doc"));
     await waitFor(() => expect(h1.result.current.detail).toEqual({ peers: ["alice"] }));
     h1.unmount();
+
     const h2 = renderHook(() => useProfileDetail("conn-a", "doc"));
-    await waitFor(() => expect(h2.result.current.detail).toEqual({ peers: ["alice"] }));
-    expect(invoke).toHaveBeenCalledTimes(1);
+    expect(h2.result.current.detail).toEqual({ peers: ["alice"] });
+    await waitFor(() => expect(h2.result.current.detail).toEqual({ peers: ["alice", "bob"] }));
+    expect(invoke).toHaveBeenCalledTimes(2);
   });
 
   it("scopes cache per (connectionId, name): same name on different daemons does NOT bleed", async () => {
@@ -131,18 +135,21 @@ describe("useProfileDetail", () => {
     invoke
       .mockResolvedValueOnce({ peers: ["alice"] })
       .mockResolvedValueOnce({ peers: ["bob"] })
-      .mockResolvedValueOnce({ peers: ["alice", "refetched"] });
+      .mockResolvedValueOnce({ peers: ["alice", "refetched"] })
+      .mockResolvedValue({ peers: ["bob"] });
     renderHook(() => useProfileDetail("conn-a", "doc"));
     renderHook(() => useProfileDetail("conn-b", "doc"));
     await waitFor(() => expect(invoke).toHaveBeenCalledTimes(2));
 
     invalidateProfileDetailCache("conn-a");
-    // re-mounting for conn-a refetches; conn-b is untouched.
-    renderHook(() => useProfileDetail("conn-a", "doc"));
-    await waitFor(() => expect(invoke).toHaveBeenCalledTimes(3));
-    renderHook(() => useProfileDetail("conn-b", "doc"));
-    await Promise.resolve();
-    expect(invoke).toHaveBeenCalledTimes(3);  // conn-b still cached
+    // conn-a lost its entry: nothing cached, the mount fetch is the only source.
+    const a = renderHook(() => useProfileDetail("conn-a", "doc"));
+    expect(a.result.current.detail).toBeNull();
+    await waitFor(() => expect(a.result.current.detail).toEqual({ peers: ["alice", "refetched"] }));
+
+    // conn-b survived: its cached detail is served synchronously (SWR revalidates behind it).
+    const b = renderHook(() => useProfileDetail("conn-b", "doc"));
+    expect(b.result.current.detail).toEqual({ peers: ["bob"] });
   });
 
   it("refresh() forces a refetch and updates the cached detail", async () => {

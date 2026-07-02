@@ -1,8 +1,12 @@
-import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { createSwrCache } from "../lib/swr-cache.js";
+import { useSwrValue } from "./useSwrValue.js";
 
 const WEEKDAY_INITIALS = ["S", "M", "T", "W", "T", "F", "S"];
-const _cache = new Map();
+
+const _cache = createSwrCache({
+  fetcher: ({ command, params }) => invoke(command, params).then((d) => d || null),
+});
 
 export function toUsageDays(rpcDays) {
   if (!Array.isArray(rpcDays)) return [];
@@ -21,39 +25,14 @@ export function toUsageDays(rpcDays) {
 }
 
 function useUsageCall(command, params, ready, prefetched, defer = false) {
-  const key = `${command}|${JSON.stringify(params)}`;
-  const [data, setData] = useState(() => _cache.get(key) ?? null);
-  const [loading, setLoading] = useState(false);
-  const prefetchedMode = prefetched !== undefined;
-  useEffect(() => {
-    if (prefetchedMode) return undefined;
-    if (!ready) {
-      setData(null);
-      setLoading(false);
-      return undefined;
-    }
-    if (defer) {
-      setData(_cache.get(key) ?? null);
-      setLoading(true);
-      return undefined;
-    }
-    let cancelled = false;
-    setData(_cache.has(key) ? _cache.get(key) : null);
-    setLoading(true);
-    invoke(command, params)
-      .then((d) => {
-        if (cancelled) return;
-        const next = d || null;
-        if (next) _cache.set(key, next);
-        setData(next ?? _cache.get(key) ?? null);
-      })
-      .catch(() => {
-        if (!cancelled) setData(_cache.get(key) ?? null);
-      })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
-  }, [command, key, ready, prefetchedMode, defer]);
-  if (prefetchedMode) {
+  const key = `${params.connectionId || "local"}|${command}|${JSON.stringify(params)}`;
+  const { data, loading } = useSwrValue(
+    _cache,
+    key,
+    { command, params },
+    { enabled: ready, defer, prefetched },
+  );
+  if (prefetched !== undefined) {
     return { days: toUsageDays(prefetched?.days), priceOut: prefetched?.priceOut, loading: false };
   }
   if (!data) return { days: [], priceOut: undefined, loading };

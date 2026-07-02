@@ -59,6 +59,22 @@ export function markWorkgroupRead(connId, profile, id, ts) {
   setKey(workgroupKey(connId, profile, id), ts);
 }
 
+export function purgeConnectionReadState(connId) {
+  if (!connId || connId === "local") return;
+  const prefix = `${connId}:`;
+  const current = load();
+  const next = {};
+  let changed = false;
+  for (const [key, value] of Object.entries(current)) {
+    if (key.startsWith(prefix)) changed = true;
+    else next[key] = value;
+  }
+  if (!changed) return;
+  cache = next;
+  persist();
+  emit();
+}
+
 export function isWorkgroupUnread(connId, profile, id, latestTs) {
   return isUnread(workgroupKey(connId, profile, id), latestTs);
 }
